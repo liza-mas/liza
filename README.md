@@ -1,58 +1,77 @@
 # Liza
 
-A disciplined peer-supervised multi-agent coding system that treats AI agents as accountable engineering peers,
-not autonomous yet unreliable assistants.
+A disciplined peer-supervised multi-agent coding system that makes AI agents accountable engineering peers,
+not just autonomous yet unreliable assistants.
 
 ## Genesis
 
-Liza grew out of a behavioral contract developed to discipline AI coding agents—turning them from eager assistants into
-reliable senior engineering peers.
+It all started with deceiving agents—tests being repeatedly altered to pass despite explicit instructions.
+A behavioral contract has been developed incrementally as a response to actually faced AI coding agent misbehaviours, to
+discipline and turn them from eager assistants into reliable senior engineering peers.
 
-The contract emerged from facing then documenting 55+ LLM failure modes observed in real-world coding sessions:
-cheerleading bias, phantom fixes, scope creep, test corruption, hallucinated completions, and dozens more.
+Going more systematical led to covering 55+ LLM failure modes documented in the literature:
+sycophancy, phantom fixes, scope creep, test corruption, hallucinated completions, and dozens more.
 Each failure mode got a countermeasure. The countermeasures became rules. The rules became a contract.
 
 The original contracts define collaboration modes (Autonomous, UserDuck, AgentDuck, Pairing, Spike), approval gates,
 execution state machines, and behavioral constraints that prevent agents from silently drifting, fabricating success,
 or corrupting tests to make code pass.
 
-For the full story: [Turning AI Coding Agents into Senior Engineering Peers](https://medium.com/@tangi.vass/turning-ai-coding-agents-into-senior-engineering-peers-c3d178621c9e).
+For the full story and detailed explanation of the contract: [Turning AI Coding Agents into Senior Engineering Peers](https://medium.com/@tangi.vass/turning-ai-coding-agents-into-senior-engineering-peers-c3d178621c9e).
 The different [contract versions](contracts/) are included here.
+
+After six months of contract-disciplined pairing, the approval gates became quite boring as violations disappeared and
+requests got fulfilled as expected most of the time. Yet these gates are load-bearing and cannot be removed without
+losing the benefits of the contract. Liza is what comes next: delegating approval to peer agents who operate under the
+same contract, so humans can observe and provide direction without bottlenecking or rubber-stamping.
 
 ## The Problems
 
-Single-agent coding works until it doesn't. The agent marks itself complete when it isn't. It "fixes" things you didn't ask for. It claims tests pass when they don't (or have been silently greenwashed). Human review catches these failures—but human review doesn't scale.
+Single-agent coding works until it doesn't. The agent marks their task complete when it isn't. It "fixes" things you
+didn't ask for. It claims tests pass when they don't (or have been silently greenwashed). At best human review catches these
+failures—but human review doesn't scale.
 
-Multi-agent systems promise coordination, but most inherit the same failure modes and add new ones: agents approve each other's mistakes, drift collectively from the goal, or converge confidently on wrong solutions.
+Multi-agent systems promise coordination, but most inherit the same failure modes and add new ones: agents approve each
+other's mistakes, drift collectively from the goal, or converge confidently on wrong solutions.
 
 Multiple autonomous yet unreliable agents thus lead to vibe coding chaos.
 Let's break down the problem:
 
-| Problem                                              | Typical solution                                | Limits                                                                                             | Our different approach                                       | Benefits                                            |
-|------------------------------------------------------|-------------------------------------------------|----------------------------------------------------------------------------------------------------|--------------------------------------------------------------|-----------------------------------------------------|
-| Coding agents are not trustworthy out of the box     | Complex prompts                                 | Prompts don't really bind the agents and are painful to use systematically                         | A behavioral contract countering the chatbot-inherited biases | Agents become trustworthy senior-level peer         |
-| The path to satisfying task completion may be painful | Ralph Wiggum loop until completion              | Focuses on mitigating symptoms. Requires upfront stable specification (back to waterfall). Costly. | An externally supervised completion validation               | The coder-reviewer pair supports more complex tasks |
-| Agents require prompts                               | Project specification frameworks (e.g. SpecKit) | Don't address agent reliability or collaboration                                                   | Specs are consumed automatically by the agents               | Structured yet autonomous execution                 |
-| Multiple agents require human coordination    | Agent coordination frameworks (e.g. BMAD)       | Don't address agent reliability or efficient convergence                                           | A blackboard mechanism supports the agent coordination       | Flexible coordination                               |
+| Problem                                               | Typical solution                                | Limits                                                                                             | Our different approach                                        | Benefits                                            |
+|-------------------------------------------------------|-------------------------------------------------|----------------------------------------------------------------------------------------------------|---------------------------------------------------------------|-----------------------------------------------------|
+| Coding agents are not trustworthy out of the box      | Complex prompts                                 | Prompts don't really bind the agents and are painful to use systematically                         | A behavioral contract countering the chatbot-inherited biases | Agents become trustworthy senior-level peer         |
+| The path to satisfying task completion may be painful | Ralph Wiggum loop until completion              | Focuses on mitigating symptoms. Requires upfront stable specification (back to waterfall). Costly. | An externally validated completion (or actionable feedback)   | The coder-reviewer pair supports more complex tasks |
+| Agents require prompts                                | Project specification frameworks (e.g. SpecKit) | Don't address agent reliability or collaboration                                                   | Specs are consumed automatically by the agents                | Structured yet autonomous execution                 |
+| Multiple agents require human coordination            | Agent coordination frameworks (e.g. BMAD)       | Don't address agent reliability or efficient convergence                                           | A blackboard mechanism supports the agent coordination        | Flexible coordination                               |
 
 ## The Approach
 
 Liza combines four ideas:
 
-- **Behavioral contracts** (from the original work) discipline individual agents. Tier 0 invariants are never violated: no unapproved state changes, no fabrication, no test corruption, no unvalidated success. Agents operate under explicit rules, not vibes, turning them into trustworthy senior-level peers. Different modes enable to pair with humans or with other agents.
+- **Behavioral contracts** (from the original work) discipline individual agents. Tier 0 invariants are never violated:
+no unapproved state changes, no fabrication, no test corruption, no unvalidated success. Agents operate under explicit
+rules, not vibes, turning them into trustworthy senior-level peers. Different modes enable pairing with humans or with
+other agents.
 
-- **Externally validated completion on Ralph-like loops** replaces self-certification. A coder agent cannot mark their own work complete. A reviewer examines the work and issues a binding verdict. Approval means merge eligibility. Rejection means specific, actionable feedback and another loop.
+- **Externally validated completion on Ralph-like loops** replaces self-certification. A coder agent cannot mark their
+own work complete. A reviewer examines the work and issues a binding verdict. Approval means merge eligibility.
+Rejection means specific, actionable feedback and another loop.
 
-- **Specification system** externalizes context to make it durable. Agents are stateless—"every restart is a new mind with old artifacts." Specs *are* those artifacts. The planner reads specs and docs to decompose goals. Coders read specs to understand tasks without asking. Reviewers validate against specs, not just tests. Without specs, agents rediscover requirements and repeat mistakes. With specs, they read shared understanding and execute.
+- **Specification system** externalizes context to make it durable. Agents are stateless—"every restart is a new mind
+with old artifacts." Specs *are* those artifacts. The planner reads specs and docs to decompose goals. Coders read specs
+to understand tasks without asking. Reviewers validate against specs, not just tests. Without specs, agents rediscover
+requirements and repeat mistakes. With specs, they read shared understanding and execute.
 
-- **Blackboard coordination** makes all state visible. A shared file tracks goals, tasks, assignments, and history. Agents claim tasks, update status, and hand off work through the blackboard. Humans can observe everything, intervene surgically, or pause the system entirely.
+- **Blackboard coordination** makes all state visible. A shared file tracks goals, tasks, assignments, and history.
+Agents claim tasks, update status, and hand off work through the blackboard. Humans can observe everything, intervene
+surgically, or pause the system entirely.
 
-The human is observer and circuit-breaker, not bottleneck. Peer agents approve. Human authority is exercised via kill switch, not approval queue.
+The human owns the intent and acts as observer and circuit-breaker, not a bottleneck. Peer agents approve.
+Human authority is exercised through a kill switch, not an approval queue.
 
 ## Design Philosophy
 
-> Liza optimizes for trust, quality and auditability, and predictable failure over brute throughput and full automation.
-> The rationale is that quality is the fastest path to real completion.
+> Systems that optimize for immediate output generate *muda*—defects, rework, and correction loops. By optimizing for trust, quality, and auditability, Liza eliminates these wasted cycles—and should reach completion sooner, not later. The contract proved it: Quality is the fastest path to real completion.
 
 This means:
 
@@ -102,75 +121,22 @@ This means:
 
 ## Key Mechanisms
 
-**Leases, not just heartbeats.** Agents hold time-bounded leases on tasks. A stale agent's task becomes reclaimable only after the lease expires. No ambiguity about ownership.
+**Leases, not just heartbeats.** Agents hold time-bounded leases on tasks. A stale agent's task becomes reclaimable only
+after the lease expires. No ambiguity about ownership.
 
 **DRAFT tasks.** Planner writes tasks as DRAFT, finalizes to UNCLAIMED. Coders cannot claim half-written tasks.
 
-**Commit SHA verification.** Coder records commit SHA when requesting review. Reviewer verifies the SHA before examining work. No reviewing stale state.
+**Commit SHA verification.** Coder records commit SHA when requesting review. Reviewer verifies the SHA before examining
+work. No reviewing stale state.
 
-**Reviewer-only merge.** Coders commit to their worktree. Only reviewers can merge to the integration branch. Authority is structural, not advisory.
+**Reviewer-only merge.** Coders commit to their worktree. Only reviewers can merge to the integration branch. Authority
+is structural, not advisory.
 
-**Hypothesis exhaustion.** If two different coders fail the same task, the task framing is presumed wrong. Planner must rescope—cannot just reassign unchanged.
+**Hypothesis exhaustion.** If two different coders fail the same task, the task framing is presumed wrong. Planner must
+rescope—cannot just reassign unchanged.
 
-**Rescoping audit trail.** When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. New tasks reference what they replace. No silent rewrites.
-
-## Durable Context
-
-### Spec Artifacts
-
-| Artifact | Purpose | Survives |
-|----------|---------|----------|
-| `specs/` | Requirements, constraints, decisions | Sessions, restarts, agent replacement |
-| `docs/` | Usage, architecture, domain knowledge | Sessions, restarts, agent replacement |
-| `COLLABORATION_CONTINUITY.md` | How we work together (patterns, calibration) | Sessions (pairing mode) |
-| `REPOSITORY.md` | Project purpose, structure, conventions | Everything |
-| Handoff notes (`.liza/`) | Task-specific context for replacement agent | Task lifetime |
-| Goal-alignment summary | Current state vs original intent | Goal lifetime |
-
-### Flow Into Multi-Agent Execution
-
-```
-Human writes/approves specs
-         │
-         ▼
-┌─────────────────────────────────────────────────────┐
-│                    specs/                           │
-│  requirements.md, architecture.md, decisions.md     │
-└─────────────────────────────────────────────────────┘
-         │
-         ├──────────────────┬──────────────────┐
-         ▼                  ▼                  ▼
-    ┌─────────┐        ┌─────────┐        ┌─────────┐
-    │ Planner │        │  Coder  │        │Reviewer │
-    │         │        │         │        │         │
-    │ Reads   │        │ Reads   │        │ Reads   │
-    │ specs → │        │ specs → │        │ specs → │
-    │ decom-  │        │ under-  │        │ vali-   │
-    │ poses   │        │ stands  │        │ dates   │
-    │ goal    │        │ task    │        │ against │
-    └─────────┘        └─────────┘        └─────────┘
-```
-
-**Planner** reads specs to decompose goals into well-scoped tasks. Bad specs → bad decomposition → cascading failure. Spec quality is upstream of everything.
-
-**Coder** reads specs to understand requirements without asking. The spec answers "what should this do?" so the coder focuses on "how do I build it?" Ambiguity in specs triggers clarification, not guessing.
-
-**Reviewer** validates against spec, not just "does it run?" A passing test that doesn't match the spec is a failure. The spec is the contract between intent and implementation.
-
-### Why This Is Load-Bearing
-
-The design philosophy states: *"Every restart is a new mind with old artifacts."*
-
-Those artifacts are:
-1. **Code** — what was built
-2. **Blackboard** — coordination state (who's doing what)
-3. **Specs** — semantic state (what we're building and why)
-
-Without specs, a restarted agent sees code but not intent. It sees tasks but not requirements. It can continue mechanically but not intelligently.
-
-The handoff notes in `.liza/` are ephemeral specs—task-scoped context for the replacement agent. The goal-alignment summary is a living spec—updated as understanding evolves.
-
-In pairing mode, `COLLABORATION_CONTINUITY.md` serves a similar function: it captures *how* collaboration works so the next session doesn't start from zero trust.
+**Rescoping audit trail.** When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. New tasks
+reference what they replace. No silent rewrites.
 
 ### Cost Gradient
 
@@ -181,7 +147,8 @@ Thought → Words → Specs → Code → Tests → Docs → Commits
   ◄─────────────── cheaper ─────────────────────────►
 ```
 
-Errors caught in specs cost less than errors caught in code. Errors caught in code cost less than errors caught in tests. The spec system front-loads understanding so agents don't discover requirements by failing tests.
+Errors caught in specs cost less than errors caught in code. Errors caught in code cost less than errors caught in tests.
+The spec system front-loads understanding so agents don't discover requirements by failing tests.
 
 ### Spec Discipline
 
@@ -202,15 +169,18 @@ In Liza multi-agent mode:
 
 **Liza** combines two references:
 
-**Lisa Simpson**—the disciplined, systematic counterpoint to Ralph Wiggum. The [Ralph Wiggum technique](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum) loops agents until they converge through sheer persistence. Lisa makes sure the work is actually right. Ralph iterates; Lisa verifies.
+**Lisa Simpson**—the disciplined, systematic counterpoint to Ralph Wiggum. The [Ralph Wiggum technique](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum) loops agents until they converge through sheer persistence. Lisa makes sure the work is actually right. Ralph iterates; Lisa thinks upfront and verifies.
 
-**ELIZA**—the 1966 chatbot that demonstrated structured dialogue patterns. Liza is about structured collaboration patterns: explicit states, binding verdicts, auditable transitions.
+**ELIZA**—the 1966 chatbot that demonstrated structured dialogue patterns. Liza is about structured collaboration patterns:
+explicit states, binding verdicts, auditable transitions.
+
+Liza is not autonomous. She is accountable.
 
 ## Status
 
 Liza is currently a **detailed implementation plan**.
 
-The contract restructuring, blackboard schema, coordination protocols, and tooling are specified. Implementation is staged over ~10 days.
+The contract restructuring, blackboard schema, coordination protocols, and tooling are specified.
 
 See `specs/liza-implementation-plan.md` for the full specification.
 
@@ -260,11 +230,12 @@ Apache 2.0
 
 ## Acknowledgments
 
-The behavioral contract draws on research into LLM failure modes, sycophancy patterns, and code generation failures. The multi-agent design incorporates ideas from:
+The behavioral contract draws on research into LLM failure modes, sycophancy patterns, and code generation failures.
+The multi-agent design incorporates ideas from:
 
 - **[Ralph Wiggum technique](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)** — iteration until convergence
 - **[SpecKit](https://github.com/github/spec-kit)** - Project specification
 - **[BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)** — role templates and workflow patterns
 - **Classical blackboard architecture** — shared state coordination
 
-Liza synthesizes these into a system optimized for trust and auditability rather than throughput.
+Liza synthesizes these into a system optimized for thoughtfulness, trust and auditability, leading to faster execution thanks to fewer cycles.
