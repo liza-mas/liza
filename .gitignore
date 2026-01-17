@@ -1,0 +1,28 @@
+# IDE and editor directories
+.idea/
+.claude/
+*.iml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*~
+
+# Environment files
+.env
+.env.local
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+
+# direnv (user-specific)
+.envrc
+
+# test reports
+.coverage
+*.lcov
