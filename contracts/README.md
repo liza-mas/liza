@@ -3,6 +3,10 @@
 Behavioral contracts that discipline AI agents into accountable engineering peers.
 Their genesis is tailed at [Turning AI Coding Agents into Senior Engineering Peers](https://medium.com/@tangi.vass/turning-ai-coding-agents-into-senior-engineering-peers-c3d178621c9e).
 
+## Status
+
+Split of CONTRACT_FOR_PAIRING_AGENTS_v3.md into multiple files yet TODO.
+
 ## Files
 
 | File | Purpose | Status |

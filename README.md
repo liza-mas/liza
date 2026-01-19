@@ -3,6 +3,10 @@
 A disciplined peer-supervised multi-agent coding system that makes AI agents accountable engineering peers,
 not just autonomous yet unreliable assistants.
 
+## Getting started
+
+See [USAGE](docs/USAGE.md)
+
 ## Genesis
 
 It all started with deceiving agents—tests being repeatedly altered to pass despite explicit instructions.

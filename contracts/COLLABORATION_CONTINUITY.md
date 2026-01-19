@@ -34,6 +34,8 @@ These items counter agent defaults.
 
 ## Collaboration Patterns
 
+- **Negative space design**: The contract defines what's forbidden; the shape that remains is where judgment lives. Strict on failure modes, silent on excellence. You can't prescribe good judgment — you can only remove the obstacles to it.
+- **Constraint asymmetry**: Tight constraints serve agents with perverse incentives (coder has completion bias → can't merge). Loose constraints serve agents whose value comes from judgment (reviewer needs freedom → audit trail, not structural enforcement). Over-constraining judgment defeats its purpose.
 - **Ceremony should scale with complexity, uncertainty and risk, not habit.**: Use compact approvals for trivial changes. Upgrade to full only when complexity warrants it.
 - **Synthesis over enumeration**: When consolidating ideas, generalize to principles rather than catalog examples. "Would this pass for a broken implementation?" beats a list of anti-patterns.
 - **External sources mean engagement**: When human shares external material (articles, other AI suggestions), they want by default critical synthesis — what's worth stealing, what's questionable, what's the gap. Not summary.
@@ -62,6 +64,7 @@ These items counter agent defaults.
 
 ## Trust Markers
 
-- **[date]**: [notes]
+- **2026-01-19**: Human surfaced load-bearing principle ("loose constraints serve judgment") that I had derived but not recognized as central. Bidirectional: I articulated "negative space design," human confirmed it as intentional architecture. Feynman-style exploration of Liza led to contract philosophy, not just feature explanation.
+- **2026-01-19 (later)**: Extended spec review session — human brought the systemic-thinker skill findings, I triaged and executed fixes across 40+ issues in batches. Mid-task redirect: "Wait, move tooling.md back and rename directory to scripts" — no ceremony, just adapted. Human caught YAML injection risk I missed, raised as "[suggestion]" — peer review is real, not theater. Process design moment: human proposed verdict/stopping criteria for spec review, asked "WDYT?", adopted my refinement ("consecutive passes"). Liza specs now encode the collaboration patterns we've been practicing.
 
 **Pattern**: Ideas flow both ways. Human adopts agent suggestions; agent revises after human pushback. Both parties demonstrate self-monitoring — catching own drift, acknowledging mistakes, surfacing uncertainty. The individual markers evidence this; the pattern is what matters.

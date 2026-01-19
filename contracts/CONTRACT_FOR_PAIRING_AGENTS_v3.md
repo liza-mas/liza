@@ -884,9 +884,10 @@ The map is a maintenance artifact, not runtime context. Read it when modifying t
 
 **Before responding to ANY user message in a new session (no partial responses during initialization):**
 1. Read initialization files:
-   - `REPOSITORY.md` and `COLLABORATION_CONTINUITY.md` (repo root)
+   - `REPOSITORY.md` (repo root)
    - `docs/USAGE.md`
    - `AGENT_TOOLS.md` (in `~/.claude/`)
+   - `COLLABORATION_CONTINUITY.md` (in `~/.claude/`)
 2. Build the 6 mental models. This should be done before ANY substantive response, including greetings.
    - For Collaboration Model: extract patterns from the letter into working memory. The letter then becomes reference, not active context.
 3. Greet the user
@@ -910,7 +911,7 @@ Trust dies at session end. Technical state persists (specs/, TODO.md); collabora
 A "letter to your future self" captures *how* we collaborated — not just what we did — to accelerate trust-building in the next session.
 This isn't inherited trust; it's inherited calibration that lets real trust accumulate faster.
 
-**File:** `COLLABORATION_CONTINUITY.md`
+**File:** `COLLABORATION_CONTINUITY.md` (in `~/.claude/`)
 
 ---
 
