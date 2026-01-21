@@ -32,6 +32,8 @@ Contracts are versioned with the project:
 | `liza-checkpoint.sh` | Create checkpoint and generate sprint summary |
 | `liza-agent.sh` | Agent supervisor (while-true wrapper) |
 | `liza-claim-task.sh` | Claim task with two-phase commit (called by supervisor) |
+| `liza-submit-for-review.sh` | Atomically set READY_FOR_REVIEW + review_commit + history |
+| `liza-submit-verdict.sh` | Atomically set APPROVED/REJECTED + review fields + history |
 | `wt-create.sh` | Create worktree for task |
 | `wt-merge.sh` | Merge approved worktree (supervisor-executed after APPROVED) |
 | `wt-delete.sh` | Clean up abandoned/merged worktree |
@@ -135,17 +137,8 @@ This pattern ensures no task is ever in CLAIMED state without a valid worktree.
 # Read current state
 ~/.claude/scripts/liza-lock.sh read
 
-# Request review (MUST be atomic - single yq command with all updates)
-~/.claude/scripts/liza-lock.sh modify "
-  yq -i '(.tasks[] | select(.id == \"task-3\")) |= (.status = \"READY_FOR_REVIEW\" | .review_commit = \"a1b2c3d\")' .liza/state.yaml
-"
-
-# Log activity
-echo "- timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-  agent: coder-1
-  action: ready_for_review
-  task: task-3
-  detail: \"iteration 2, commit a1b2c3d\"" >> .liza/log.yaml
+# Request review (MUST be atomic)
+$SCRIPT_DIR/liza-submit-for-review.sh task-3 a1b2c3d
 
 # Log spec change (when human updates specs)
 ~/.claude/scripts/liza-lock.sh modify "

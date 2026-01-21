@@ -158,8 +158,8 @@ INSTRUCTIONS:
 - Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests
 - Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
 - Use the clean-code skill at the end of the implementation
-- When complete, update task status to READY_FOR_REVIEW in the blackboard
-- Add a history entry with timestamp and "submitted_for_review" event
+- When complete, run: $SCRIPT_DIR/liza-submit-for-review.sh <task-id> <commit-sha>
+  (atomically sets READY_FOR_REVIEW, review_commit, and history)
 EOF
 }
 
@@ -192,8 +192,8 @@ INSTRUCTIONS:
 - TDD ENFORCEMENT (code tasks): REJECT if tests are missing or don't cover done_when criteria
 - Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
 - Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
-- If APPROVED: set task status to APPROVED and set approved_by to your agent ID (supervisor will handle merge)
-- If REJECTED: set task status to REJECTED, add rejection_reason field, add history entry
+- If APPROVED/REJECTED: run $SCRIPT_DIR/liza-submit-verdict.sh <task-id> <APPROVED|REJECTED> [rejection_reason]
+  (atomically updates verdict, review fields, and history; approved sets approved_by)
 - Always update your agent status to IDLE when done
 EOF
 }
