@@ -70,7 +70,7 @@ fi
 
 # --- Verify Commit SHA ---
 
-actual_commit=$(git -C "$worktree_dir" rev-parse HEAD | cut -c1-7)
+actual_commit=$(git -C "$worktree_dir" rev-parse HEAD)
 if [ "$actual_commit" != "$review_commit" ]; then
     die "Worktree HEAD ($actual_commit) != review_commit ($review_commit)
 Worktree may have been modified after review."
@@ -150,7 +150,7 @@ git worktree remove "$worktree_dir"
 git branch -d "task/$TASK_ID"
 
 # Update fields atomically to prevent observing MERGED with non-null worktree
-merge_commit=$(git rev-parse HEAD | cut -c1-7)
+merge_commit=$(git rev-parse HEAD)
 locked_yq "(.tasks[] | select(.id == \"$TASK_ID\")) |= (.status = \"MERGED\" | .worktree = null | .merge_commit = \"$merge_commit\")"
 
 # Log with drift info
