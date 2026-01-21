@@ -347,6 +347,12 @@ sprint:
 | `tasks_done` | Count of tasks with status IN (MERGED, ABANDONED, SUPERSEDED) |
 | `tasks_in_progress` | Count of tasks with status IN (CLAIMED, READY_FOR_REVIEW, REJECTED) |
 | `tasks_blocked` | Count of tasks with status = BLOCKED |
+| `review_verdict_approvals` | Count of `approved` events across task histories |
+| `review_verdict_rejections` | Count of `rejected` events across task histories |
+| `review_verdict_count` | `review_verdict_approvals + review_verdict_rejections` |
+| `review_verdict_approval_rate_percent` | `review_verdict_approvals / review_verdict_count * 100` |
+| `task_submitted_for_review_count` | Count of `ready_for_review` events across task histories |
+| `task_outcome_approval_rate_percent` | `review_verdict_approvals / task_submitted_for_review_count * 100` |
 
 For sprint state transitions, see [State Machines — Sprint State Machine](../architecture/state-machines.md#sprint-state-machine).
 

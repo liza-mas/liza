@@ -9,7 +9,7 @@
 | **Subagent support** | Within-terminal delegation in multi-agent context | Existing subagent mode works; integration can wait |
 | **Plan Reviewer role** | Dedicated agent to validate task decomposition, spec references, and success criteria before coders claim | Human review sufficient for v1; Planner self-validation gates reduce risk |
 | **Second Code Reviewer escalation** | Different Code Reviewer after N rejections | Single Code Reviewer in v1 |
-| **Merger role separation** | Separate merge authority from review authority (Code Reviewer judges, Merger/Human executes) | v1 trusts Code Reviewer discipline; separation adds ceremony without current evidence of abuse. Revisit if rubber-stamping detected. |
+| **Merger role separation** | Separate merge authority from review authority (Code Reviewer judges, Merger/Human executes) | v1 trusts Code Reviewer discipline; review verdict approval-rate monitoring detects rubber-stamping. Revisit if warnings persist. |
 | **Model heterogeneity** | Different models for different roles | Operational complexity; test with homogeneous first |
 | **SQLite backend** | Replace YAML with transactional store | YAML sufficient for small-scale; upgrade when stable |
 | **Continuous integration shadow** | Rebase/test on every intermediate state | Compute-heavy; event-based sufficient for v1 |

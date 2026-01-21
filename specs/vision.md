@@ -118,7 +118,7 @@ Quantitative signals (collect during v1 usage):
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | Contract discipline degrades under Liza mode | Medium | High | Extensive testing, circuit breaker |
-| Code Reviewer rubber-stamps coder work | Medium | High | Rejection quota monitoring, anomaly patterns |
+| Code Reviewer rubber-stamps coder work | Medium | High | Review verdict approval rate monitoring (>95% over ≥5 review verdicts triggers warning) |
 | Context exhaustion causes knowledge loss | Medium | Medium | Structured handoff, spec-first design |
 | Blackboard corruption from concurrent access | Low | High | flock, validation on every read |
 | Human forgets to check CHECKPOINT | Medium | Medium | Desktop notifications, alert log |

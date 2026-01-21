@@ -404,6 +404,13 @@ sprint:
     tasks_blocked: 1
     iterations_total: 23  # Sprint-level sum across all agents
     review_cycles_total: 6
+    # Review quality metrics (rubber-stamping detection)
+    review_verdict_approvals: 4     # Count of approved events
+    review_verdict_rejections: 1    # Count of rejected events
+    review_verdict_count: 5         # approvals + rejections
+    review_verdict_approval_rate_percent: 80  # approvals / (approvals + rejections) * 100
+    task_submitted_for_review_count: 5      # Count of ready_for_review events
+    task_outcome_approval_rate_percent: 80  # approvals / submitted_for_review * 100
   retrospective: null
 
 circuit_breaker:
