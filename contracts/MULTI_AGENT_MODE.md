@@ -232,11 +232,18 @@ done_when: |
 
 Each criterion is a test. All must pass. No more, no less.
 
+**TDD Enforcement (MANDATORY for code tasks):**
+- Each code task MUST include tests — Planner does NOT create separate "add tests" tasks
+- Coder writes tests FIRST that verify `done_when` criteria, then implements until tests pass
+- Code Reviewer REJECTS code submissions without tests covering `done_when`
+- Exempt: documentation-only, config-only, or spec-only tasks (no code = no tests required)
+- Rationale: Coder can't validate their work without tests; separate test tasks break TDD flow
+
 **scope Defines Boundaries:**
 ```yaml
 scope: |
-  IN: hello/__init__.py, hello/__main__.py
-  OUT: Tests (separate task), packaging, CI/CD
+  IN: hello/__init__.py, hello/__main__.py, tests/test_hello.py
+  OUT: packaging, CI/CD, documentation
 ```
 
 Touching OUT-scope files is a violation.

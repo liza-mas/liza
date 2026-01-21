@@ -154,7 +154,9 @@ $task_scope
 INSTRUCTIONS:
 - The task is already CLAIMED for you. Do NOT run liza-claim-task.sh.
 - Work ONLY in the worktree directory: cd $PROJECT_ROOT/$CLAIMED_WORKTREE
-- Implement the task per done_when criteria
+- TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
+- Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests
+- Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
 - Use the clean-code skill at the end of the implementation
 - When complete, update task status to READY_FOR_REVIEW in the blackboard
 - Add a history entry with timestamp and "submitted_for_review" event
@@ -187,7 +189,9 @@ INSTRUCTIONS:
 - Check the commit: git -C $PROJECT_ROOT/$REVIEW_WORKTREE show $REVIEW_COMMIT. If not, fail fast to REJECTED.
 - Review the code in the worktree $PROJECT_ROOT/$REVIEW_WORKTREE using the code-review skill
 - If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
-- Verify the done_when criteria are met
+- TDD ENFORCEMENT (code tasks): REJECT if tests are missing or don't cover done_when criteria
+- Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
+- Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
 - If APPROVED: set task status to APPROVED, then run: $SCRIPT_DIR/wt-merge.sh $REVIEW_TASK_ID (this merges and sets status to MERGED)
 - If REJECTED: set task status to REJECTED, add rejection_reason field, add history entry
 - Always update your agent status to IDLE when done
@@ -271,15 +275,24 @@ This is initial planning. Decompose the goal into tasks:
    - depends_on: [task-ids] that must be MERGED before this task can be claimed
    - spec_ref: path to relevant spec section
 
-5. Dependency guidelines:
+5. TDD ENFORCEMENT (MANDATORY for code tasks):
+   - Each code task MUST include its own tests — do NOT create separate "add tests" tasks
+   - done_when criteria must be verifiable by tests the coder writes
+   - Code Reviewer will reject code tasks without tests covering done_when
+   - Exempt: documentation-only, config-only, or spec-only tasks (no code = no tests)
+   - Rationale: Coder can't validate their work without tests; separate test tasks break TDD
+
+6. Dependency guidelines:
    - depends_on: [] for tasks with no prerequisites (can start immediately)
    - depends_on: [task-a] for tasks that need task-a's output
    - Avoid long chains — prefer wide parallelism over deep sequences
    - If A depends on B depends on C, consider if A really needs C directly
 
-6. Prefer small, independent tasks over large coupled ones
+7. Prefer small, independent tasks over large coupled ones
+   - Each task = implementation + tests (not separate tasks)
+   - A task is "small" if one coder can complete it in one session
 
-7. Write tasks to blackboard with status: UNCLAIMED
+8. Write tasks to blackboard with status: UNCLAIMED
 EOF
             ;;
         BLOCKED_TASKS)

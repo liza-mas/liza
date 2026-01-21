@@ -63,6 +63,7 @@ All roles must:
 | Success criteria | Each task must have falsifiable `done_when` statement |
 | Scope boundary | Each task must state what is explicitly IN scope |
 | Dependency check | If task depends on another, state the dependency |
+| TDD inclusion | Code tasks include tests — do NOT create separate "add tests" tasks (exempt: doc/config/spec-only) |
 
 Tasks missing any gate remain DRAFT until completed. This enables:
 - Code Reviewer validation against spec
@@ -88,6 +89,13 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 - Avoid vague terms like "works correctly" or "handles errors properly"
 - Good: `"429 responses trigger exponential backoff starting at 1s"`
 - Bad: `"Rate limiting is handled appropriately"`
+
+**TDD Enforcement (code tasks only):**
+- Each code task MUST include tests — Planner does NOT create separate "add tests" tasks
+- Coder writes tests FIRST that verify `done_when` criteria, then implements until tests pass
+- Code Reviewer REJECTS code submissions without tests covering `done_when`
+- Exempt: documentation-only, config-only, or spec-only tasks (no code = no tests required)
+- Rationale: Coder can't validate their work without tests; separate test tasks break TDD flow
 
 **`done_when` vs Tests:**
 - `done_when` is the **acceptance criterion** — what the Code Reviewer validates
