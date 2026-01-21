@@ -109,11 +109,11 @@ config:
   heartbeat_interval: 60
   lease_duration: 1800
   coder_poll_interval: 30
-  coder_max_wait: 300
+  coder_max_wait: 1800
   planner_poll_interval: 60
   planner_max_wait: 600
   reviewer_poll_interval: 30
-  reviewer_max_wait: 300
+  reviewer_max_wait: 1800
   integration_branch: integration
   escalation_webhook: null  # v1.1: URL for external notifications (not yet implemented)
 EOF

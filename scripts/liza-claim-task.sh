@@ -53,7 +53,7 @@ else
     base_commit=$(git rev-parse HEAD)
 fi
 
-lease_duration=$(yq '.config.lease_duration // 300' "$STATE" 2>/dev/null || echo 300)
+lease_duration=$(yq '.config.lease_duration // 1800' "$STATE" 2>/dev/null || echo 1800)
 lease_expires=$(date -u -d "+${lease_duration} seconds" +%Y-%m-%dT%H:%M:%SZ)
 now=$(iso_timestamp)
 

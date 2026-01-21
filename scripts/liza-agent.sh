@@ -453,7 +453,7 @@ wait_for_coder_work() {
     local poll_interval
     poll_interval=$(get_config coder_poll_interval 30)
     local max_wait
-    max_wait=$(get_config coder_max_wait 300)
+    max_wait=$(get_config coder_max_wait 1800)
     local waited=0
 
     while [ "$waited" -lt "$max_wait" ]; do
@@ -602,7 +602,7 @@ wait_for_reviewer_work() {
     local poll_interval
     poll_interval=$(get_config reviewer_poll_interval 30)
     local max_wait
-    max_wait=$(get_config reviewer_max_wait 300)
+    max_wait=$(get_config reviewer_max_wait 1800)
     local waited=0
 
     while [ "$waited" -lt "$max_wait" ]; do
