@@ -200,10 +200,9 @@ See `specs/liza-implementation-plan.md` for the full specification.
 Target structure:
 ```
 ~/.claude/
-├── CLAUDE.md                      → contracts/LOADER.md (symlink)
+├── CLAUDE.md                      → contracts/CORE.md (symlink)
 ├── contracts/
-│   ├── LOADER.md                  # Mode selection gate
-│   ├── CORE.md                    # Universal rules (Tiers, Golden Rules)
+│   ├── CORE.md                    # Universal rules + mode selection gate
 │   ├── PAIRING_MODE.md            # Human-supervised collaboration
 │   └── MULTI_AGENT_MODE.md        # Peer-supervised Liza system
 ├── schemas/

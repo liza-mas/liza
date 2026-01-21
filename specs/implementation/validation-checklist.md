@@ -116,7 +116,7 @@ Review concludes when ANY of:
 - [ ] Planner can decompose without human interaction
 - [ ] Startup order documented and tested
 - [ ] Agent invocation syntax works with current Claude Code
-- [ ] Agent reads contract chain (LOADER.md → MULTI_AGENT_MODE.md)
+- [ ] Agent reads contract chain (CORE.md → MULTI_AGENT_MODE.md)
 - [ ] Agent identifies role from prompt
 - [ ] Agent verifies identity from $LIZA_AGENT_ID
 - [ ] Agent follows role-specific startup procedure

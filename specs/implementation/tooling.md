@@ -8,8 +8,7 @@ Contracts are versioned with the project:
 
 | File | Purpose |
 |------|---------|
-| `LOADER.md` | Mode selection gate |
-| `CORE.md` | Universal rules (Tiers 0-3, Golden Rules, Security, Recovery) |
+| `CORE.md` | Universal rules + mode selection gate |
 | `PAIRING_MODE.md` | Human-supervised collaboration (extracted from current contract) |
 | `MULTI_AGENT_MODE.md` | Agent-supervised Liza system (new) |
 
@@ -17,9 +16,9 @@ Contracts are versioned with the project:
 
 | File | Purpose |
 |------|---------|
-| `CLAUDE.md` | Symlink → `<project>/contracts/LOADER.md` |
+| `CLAUDE.md` | Symlink → `<project>/contracts/CORE.md` |
 
-**Note:** Update symlink when switching projects: `ln -sf /path/to/project/contracts/LOADER.md ~/.claude/CLAUDE.md`
+**Note:** Update symlink when switching projects: `ln -sf /path/to/project/contracts/CORE.md ~/.claude/CLAUDE.md`
 
 ### Scripts (`~/.claude/scripts/`)
 
@@ -236,7 +235,7 @@ Agents can be started earlier—they'll wait/exit if no work available.
 
 When supervisor starts Claude Code, the agent:
 
-1. Reads `CLAUDE.md` → `LOADER.md` (contract loader)
+1. Reads `CLAUDE.md` → `CORE.md` (contract)
 2. Sees mode selection prompt
 3. States: `"Mode: Liza [Role]"`
 4. Follows initialization sequence from session initialization

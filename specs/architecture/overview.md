@@ -140,8 +140,7 @@ When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. 
 ```
 <project>/
 ├── contracts/                     # Versioned with project
-│   ├── LOADER.md                  # Mode selection gate
-│   ├── CORE.md                    # Universal rules (Tiers, Golden Rules)
+│   ├── CORE.md                    # Universal rules + mode selection gate
 │   ├── PAIRING_MODE.md            # Human-supervised collaboration
 │   └── MULTI_AGENT_MODE.md        # Agent-supervised Liza system
 ├── templates/
@@ -155,17 +154,17 @@ When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. 
 
 ```
 ~/.claude/
-├── CLAUDE.md                      → <project>/contracts/LOADER.md (symlink)
+├── CLAUDE.md                      → <project>/contracts/CORE.md (symlink)
 └── scripts/                       # Generic Liza tooling
 ```
 
 **Contract Loading Chain:**
 1. Agent reads `~/.claude/CLAUDE.md` (symlink)
-2. Symlink resolves to `<project>/contracts/LOADER.md`
-3. LOADER.md instructs: read CORE.md, then select mode (Pairing/Liza)
+2. Symlink resolves to `<project>/contracts/CORE.md`
+3. CORE.md contains universal rules and mode selection gate
 4. For Liza mode: read MULTI_AGENT_MODE.md
 
-Update symlink when switching projects: `ln -sf /path/to/project/contracts/LOADER.md ~/.claude/CLAUDE.md`
+Update symlink when switching projects: `ln -sf /path/to/project/contracts/CORE.md ~/.claude/CLAUDE.md`
 
 ### Global Scripts (`~/.claude/scripts/`)
 
@@ -183,7 +182,7 @@ Update symlink when switching projects: `ln -sf /path/to/project/contracts/LOADE
     └── wt-delete.sh               # Clean up worktree
 ```
 
-**Note:** `~/.claude/CLAUDE.md` symlinks to the active project's `contracts/LOADER.md`. When switching projects, update the symlink.
+**Note:** `~/.claude/CLAUDE.md` symlinks to the active project's `contracts/CORE.md`. When switching projects, update the symlink.
 
 ### Project Runtime
 

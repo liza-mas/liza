@@ -27,9 +27,9 @@ Agent receives:
 ~/.claude/CLAUDE.md (symlink)
         │
         ▼
-<project>/contracts/LOADER.md
+<project>/contracts/CORE.md
         │
-        ├── Always: read CORE.md (Tier 0 invariants, shared rules)
+        ├── Tier 0 invariants, shared rules
         │
         └── "Liza" in prompt? → read MULTI_AGENT_MODE.md
                 │
@@ -251,7 +251,7 @@ Supervisor                    Agent                         Blackboard
     │  claude "Mode: Liza coder"│                               │
     │────────────────────────>  │                               │
     │                           │                               │
-    │                           │  read CLAUDE.md → LOADER.md   │
+    │                           │  read CLAUDE.md → CORE.md     │
     │                           │  read MULTI_AGENT_MODE.md     │
     │                           │  read roles.md#coder          │
     │                           │                               │

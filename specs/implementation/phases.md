@@ -7,8 +7,7 @@
 1. Create `contracts/` directory in project repo
 2. Extract CORE.md from current contract
 3. Extract PAIRING_MODE.md from current contract
-4. Create LOADER.md
-5. Create symlink `~/.claude/CLAUDE.md -> <project>/contracts/LOADER.md`
+4. Create symlink `~/.claude/CLAUDE.md -> <project>/contracts/CORE.md`
 6. Test: verify Claude Code loads and prompts for mode selection
 
 ---

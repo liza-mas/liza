@@ -15,7 +15,6 @@ Contract split complete. Original `CONTRACT_FOR_PAIRING_AGENTS_v3.md` preserved 
 | [PAIRING_MODE.md](PAIRING_MODE.md) | Human-supervised collaboration | Complete |
 | [MULTI_AGENT_MODE.md](MULTI_AGENT_MODE.md) | Peer-supervised Liza system | Complete |
 | [CONTRACT_FOR_PAIRING_AGENTS_v3.md](CONTRACT_FOR_PAIRING_AGENTS_v3.md) | Original monolithic contract (reference) | Preserved |
-| [LOADER.md](LOADER.md) | Deprecated (merged into CORE.md) | Deprecated |
 
 ## Deployment
 

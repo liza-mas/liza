@@ -286,8 +286,8 @@ Before agents can run, human must initialize the project:
 
 ### Agent Startup Sequence
 
-1. Read `~/.claude/CLAUDE.md` → symlink to `<project>/contracts/LOADER.md`
-2. LOADER.md directs agent to read `contracts/CORE.md` (universal rules)
+1. Read `~/.claude/CLAUDE.md` → symlink to `<project>/contracts/CORE.md`
+2. CORE.md contains universal rules and mode selection
 3. State: `"Mode: Liza [role]"` (Planner/Coder/Code Reviewer)
 4. Read `contracts/MULTI_AGENT_MODE.md` (Liza-specific rules)
 5. Read project context: `REPOSITORY.md`, `specs/`, relevant docs
