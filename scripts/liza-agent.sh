@@ -812,6 +812,11 @@ while true; do
         sleep 5
     done
 
+    # Supervisor handles merge for APPROVED tasks (avoids agent permission prompts)
+    if [ "$ROLE" = "code-reviewer" ]; then
+        handle_approved_merges
+    fi
+
     # Wait for work before starting agent (saves API calls)
     if ! wait_for_work; then
         echo "No work available or pending. Supervisor exiting."
@@ -880,12 +885,6 @@ while true; do
         0)
             # Agent completed normally
             echo "Agent completed."
-
-            # Supervisor handles merge for Code Reviewer (avoids agent permission prompts)
-            if [ "$ROLE" = "code-reviewer" ]; then
-                handle_approved_merges
-            fi
-
             echo "Checking for more work..."
             ;;
         42)
