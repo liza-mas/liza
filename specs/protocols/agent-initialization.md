@@ -101,101 +101,97 @@ Role-specific decision tree for what to do first.
 
 ### Planner Startup
 
+**Planning Context:** The supervisor (`liza-agent.sh`) provides planners with computed sprint metrics and context-specific instructions. The planner receives its context in the bootstrap prompt and should follow the wake trigger's instructions.
+
 ```
-IF "Resume task:" in prompt:
-    → Error: Planner doesn't claim tasks
+1. Extract planning context from bootstrap prompt (=== PLANNING CONTEXT === section):
+   - WAKE TRIGGER: reason planner was spawned
+   - SPRINT STATE: computed metrics (total, merged, blocked, in_progress, etc.)
+   - INSTRUCTIONS: trigger-specific guidance
 
-IF goal.status == "PLANNING":
-    → Continue decomposition (DRAFT → UNCLAIMED)
+2. Wake triggers and their meanings:
+   - INITIAL_PLANNING: No tasks exist, decompose goal into tasks
+   - BLOCKED_TASKS: Tasks are blocked, analyze blockers and resolve
+   - INTEGRATION_FAILED: Merge/test failures, diagnose and plan fix
+   - HYPOTHESIS_EXHAUSTED: Multiple coders failed same task, re-evaluate approach
+   - IMMEDIATE_DISCOVERY: Urgent discoveries need triage
 
-IF any task BLOCKED or INTEGRATION_FAILED:
-    → Evaluate rescope (highest priority)
+3. Follow instructions for current wake trigger
 
-IF discoveries with urgency: immediate exist:
-    → Convert to task or dismiss with rationale
+4. General decision tree (when no specific trigger):
+   IF goal.status == "PLANNING":
+       → Continue decomposition (DRAFT → UNCLAIMED)
 
-IF all tasks in terminal state (MERGED, ABANDONED):
-    → Assess goal completion, exit or create checkpoint
+   IF all tasks in terminal state (MERGED, ABANDONED):
+       → Assess goal completion, exit or create checkpoint
 
-ELSE:
-    → Monitor mode: wait for triggers, extend lease periodically
+   ELSE:
+       → Monitor mode: wait for triggers, extend lease periodically
 ```
+
+**Note:** Planners don't claim tasks. The supervisor spawns planners when planning attention is needed (blocked tasks, discoveries, etc.).
 
 ### Coder Startup
 
+**Task Assignment:** The supervisor (`liza-agent.sh`) claims tasks and creates worktrees BEFORE spawning the agent. This avoids permission prompts in non-interactive mode. The coder receives its assigned task in the bootstrap prompt and should NOT attempt to claim tasks directly.
+
 ```
-IF "Resume task:" in prompt:
-    → Verify task exists and is claimable
-    → Skip to claim step for that specific task
+1. Extract task from bootstrap prompt (=== ASSIGNED TASK === section):
+   - TASK ID: task identifier
+   - WORKTREE: absolute path to worktree directory
+   - DESCRIPTION, DONE WHEN, SCOPE: task details
+   - INSTRUCTIONS: role-specific guidance
 
-1. Scan for claimable tasks:
-   - UNCLAIMED tasks (priority order)
-   - CLAIMED tasks with expired lease (reclaimable)
-   - REJECTED tasks assigned to self (continue iteration)
+2. Verify assignment:
+   - Read task from state.yaml
+   - Verify status is CLAIMED
+   - Verify assigned_to matches $LIZA_AGENT_ID
+   - Verify worktree directory exists
 
-2. IF no claimable tasks:
-   → Check for DRAFT tasks (Planner may finalize soon)
-   → If DRAFT exists: wait briefly, re-scan
-   → If no DRAFT: exit normally (supervisor handles)
+3. IF verification fails:
+   → Log error to handoff
+   → Exit (supervisor will investigate)
 
-3. Select task:
-   - Prefer tasks with lower priority number
-   - Prefer tasks without failed_by history
-   - Prefer tasks matching own previous work (if REJECTED)
+4. Read task's spec_ref document
 
-4. Claim task:
-   a. Acquire lock on state.yaml
-   b. Verify task still claimable (race check)
-   c. Set assigned_to: $LIZA_AGENT_ID
-   d. Set lease_expires: now + 5 minutes
-   e. Set status: CLAIMED (if was UNCLAIMED)
-   f. Set worktree: .worktrees/task-N (expected path)
-   g. Release lock
-   h. On failure: backoff 1-5s, retry up to 3x
-   Note: All fields (c-f) MUST be set atomically in single yq command.
-   See tooling.md for canonical example.
-
-5. Setup worktree (wt-create.sh records base_commit at branch time):
-   - Fresh claim: wt-create.sh task-N
-   - Reassignment (different coder): wt-create.sh --fresh task-N
-   - Same coder continuing: verify worktree exists
-
-6. Read task's spec_ref document
-
-7. Begin implementation loop (see task-lifecycle.md)
+5. Begin implementation loop (see task-lifecycle.md)
 ```
+
+**Note:** The supervisor handles task selection, claiming, and worktree creation using a two-phase commit pattern that prevents invalid intermediate states. See roles.md for task assignment details.
 
 ### Code Reviewer Startup
 
+**Review Assignment:** The supervisor (`liza-agent.sh`) assigns review tasks to Code Reviewers BEFORE spawning the agent, similar to Coder task assignment. This avoids permission prompts in non-interactive mode.
+
 ```
-IF "Resume task:" in prompt:
-    → Verify task is READY_FOR_REVIEW
-    → Skip to review claim step
+1. Extract review task from bootstrap prompt (=== REVIEW TASK === section):
+   - TASK ID: task identifier
+   - WORKTREE: absolute path to worktree directory
+   - COMMIT TO REVIEW: SHA to verify
+   - AUTHOR: original coder's agent ID
+   - DESCRIPTION, DONE WHEN: task details
+   - INSTRUCTIONS: review-specific guidance
 
-1. Scan for reviewable tasks:
-   - READY_FOR_REVIEW without reviewing_by
-   - READY_FOR_REVIEW with expired review_lease_expires
+2. Verify assignment:
+   - Read task from state.yaml
+   - Verify status is READY_FOR_REVIEW
+   - Verify reviewing_by matches $LIZA_AGENT_ID
 
-2. IF no reviewable tasks:
-   → Exit normally (supervisor restarts when work appears)
-
-3. Claim review:
-   a. Acquire lock on state.yaml
-   b. Verify task still reviewable (race check)
-   c. Set reviewing_by: $LIZA_AGENT_ID
-   d. Set review_lease_expires: now + 10 minutes
-   e. Release lock
-   f. On failure: backoff, retry
+3. IF verification fails:
+   → Log error to handoff
+   → Exit (supervisor will investigate)
 
 4. Verify commit SHA:
    - Read review_commit from task
    - Verify worktree HEAD matches
-   - If mismatch: release claim, log error, try next task
+   - If mismatch: log error, exit
 
 5. Read task's spec_ref document
 
 6. Begin review (see task-lifecycle.md#code-reviewer-protocol)
 ```
+
+**Note:** The supervisor handles review task selection and claiming. See roles.md for review assignment details.
 
 ---
 
@@ -240,38 +236,38 @@ IF error/violation detected:
 
 ---
 
-## Sequence Diagram
+## Sequence Diagram (Coder)
 
 ```
 Supervisor                    Agent                         Blackboard
     │                           │                               │
-    │  register agent           │                               │
+    │  find claimable task      │                               │
     │──────────────────────────────────────────────────────────>│
     │                           │                               │
-    │  claude "Mode: Liza coder"│                               │
+    │  liza-claim-task.sh       │                               │
+    │  (two-phase commit)       │                               │
+    │──────────────────────────────────────────────────────────>│
+    │                           │                               │
+    │  spawn claude with        │                               │
+    │  task info in prompt      │                               │
     │────────────────────────>  │                               │
     │                           │                               │
     │                           │  read CLAUDE.md → CORE.md     │
     │                           │  read MULTI_AGENT_MODE.md     │
-    │                           │  read roles.md#coder          │
     │                           │                               │
-    │                           │  read state.yaml              │
+    │                           │  extract task from prompt     │
+    │                           │  (TASK ID, WORKTREE)          │
+    │                           │                               │
+    │                           │  verify assignment            │
     │                           │<──────────────────────────────│
-    │                           │                               │
-    │                           │  verify identity              │
-    │                           │                               │
-    │                           │  scan for UNCLAIMED tasks     │
-    │                           │                               │
-    │                           │  claim task-3                 │
-    │                           │──────────────────────────────>│
-    │                           │                               │
-    │                           │  wt-create.sh task-3          │
     │                           │                               │
     │                           │  read spec_ref                │
     │                           │                               │
     │                           │  [begin implementation]       │
     │                           │                               │
 ```
+
+**Key difference from self-claiming:** The supervisor claims the task and creates the worktree BEFORE spawning the agent. The agent receives pre-claimed task info in its bootstrap prompt.
 
 ---
 

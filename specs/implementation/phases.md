@@ -23,7 +23,7 @@
 
 ## Phase 3: Blackboard Schema & Validation (Day 3)
 
-1. Write `liza-init.sh` (creates initial state.yaml structure)
+1. Write `liza-init.sh` (creates state.yaml with goal, sprint, config; requires vision.md)
 2. Write `liza-validate.sh` (enforces schema via invariant checks)
 3. Test: initialize blackboard, validate schema
 4. Test: invalid states rejected
@@ -55,12 +55,14 @@
 
 ## Phase 6: Agent Supervision (Day 6)
 
-1. Write `liza-agent.sh`
-2. Test graceful abort (exit 42) → restart
-3. Test crash → restart with backoff
-4. Test PAUSE file → wait
-5. Test ABORT file → stop
-6. Test lease verification on restart
+1. Write `liza-agent.sh` (agent supervisor)
+2. Write `liza-claim-task.sh` (two-phase task claiming)
+3. Test graceful abort (exit 42) → restart
+4. Test crash → restart with backoff
+5. Test PAUSE file → wait
+6. Test ABORT file → stop
+7. Test lease verification on restart
+8. Test two-phase claim (validate → worktree → commit)
 
 ---
 

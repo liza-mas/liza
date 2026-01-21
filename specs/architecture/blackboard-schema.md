@@ -518,10 +518,10 @@ agents:
 **Lease and Review States:**
 - Coder lease (`lease_expires`) governs CLAIMED state only
 - When task transitions to READY_FOR_REVIEW, the coder's lease becomes inactive
-- Code Reviewer must claim review with `reviewing_by` and `review_lease_expires` before examining
-- If Code Reviewer crashes, review lease expires and another Code Reviewer can reclaim
+- Supervisor assigns review by setting `reviewing_by` and `review_lease_expires` before spawning Code Reviewer
+- If Code Reviewer crashes, review lease expires and supervisor can assign to another Code Reviewer
 - Task in APPROVED or REJECTED has no active lease requirement
-- If review is REJECTED, the original coder must re-claim (acquiring a new lease) to resume work
+- If review is REJECTED, supervisor re-claims for the original coder (acquiring a new lease) to resume work
 
 **Code Reviewer Lease Fields (READY_FOR_REVIEW only):**
 
@@ -574,10 +574,10 @@ Reads do not require lock (eventual consistency acceptable for reads).
 
 | Operation | Actor | Procedure |
 |-----------|-------|-----------|
-| Claim task | Coder | Lock → verify UNCLAIMED + not DRAFT + all depends_on MERGED → write assignment + lease + worktree path → unlock |
+| Claim task | Supervisor | Two-phase: validate under lock → create worktree → re-validate and commit under lock (see tooling.md) |
 | Extend lease | Any | Lock → update heartbeat + lease_expires → unlock |
-| Request review | Coder | Lock → verify clean git status → write commit SHA + set READY_FOR_REVIEW → unlock |
-| Claim review | Code Reviewer | Lock → verify READY_FOR_REVIEW + no active review lease → write reviewing_by + review_lease_expires → unlock |
+| Request review | Coder | Lock → verify clean git status → write commit SHA + set READY_FOR_REVIEW atomically → unlock |
+| Claim review | Supervisor | Lock → verify READY_FOR_REVIEW + no active review lease → write reviewing_by + review_lease_expires → unlock |
 | Extend review lease | Code Reviewer | Lock → update review_lease_expires → unlock |
 | Submit verdict | Code Reviewer | Lock → verify commit SHA matches + reviewing_by matches self → set APPROVED/REJECTED + reason + clear review lease → unlock |
 | Execute merge | Code Reviewer | Only after APPROVED → run wt-merge.sh → update state to MERGED |

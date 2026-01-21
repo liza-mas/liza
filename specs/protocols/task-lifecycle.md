@@ -262,26 +262,21 @@ See [Worktree Management — Integration-Fix Ownership](worktree-management.md#i
 
 Before agents can run, human must initialize the project:
 
-1. **Initialize Liza state:** `liza-init.sh <project-dir>`
+1. **Write vision:** Create `specs/vision.md` from template
+   - Copy from `templates/vision-template.md`
+   - Fill in goal context and success criteria
+   - Planner cannot decompose goal without this document
+
+2. **Initialize Liza state:** `liza-init.sh "Goal description"`
+   - Requires `specs/vision.md` to exist first
    - Creates `.liza/` directory structure
-   - Creates empty `state.yaml` with config defaults
+   - Creates `state.yaml` with goal and sprint initialized
    - Creates `log.yaml`
 
-2. **Write specs:** Create `specs/vision.md` and any required specs
-   - Planner cannot decompose goal without vision document
-
-3. **Define goal:** Add goal to `state.yaml` (via script or manual edit)
-   ```yaml
-   goal:
-     id: goal-1
-     description: "..."
-     status: IN_PROGRESS
-   ```
-
-4. **Start watcher:** `liza-watch.sh` in separate terminal
+3. **Start watcher:** `liza-watch.sh` in separate terminal
    - Monitors for CHECKPOINT, anomalies, circuit breaker triggers
 
-5. **Start agents:** Launch Planner, then Coders/Code Reviewers as needed
+4. **Start agents:** Launch Planner, then Coders/Code Reviewers as needed
    - Each in separate terminal for observation
 
 ### Agent Startup Sequence
@@ -311,21 +306,23 @@ Before agents can run, human must initialize the project:
 
 ### Coder Initialization
 
-1. Read specs relevant to available tasks
-2. Check for REJECTED task assigned to self → resume
-3. Check for handoff notes for any reclaimable task → claim and resume
-4. Scan for UNCLAIMED tasks → claim first available (with backoff)
-5. If task under-specified (no clear spec) → BLOCKED with clarifying questions (see [Blocking Protocol](../architecture/roles.md#blocking-protocol))
-6. If none available: wait or exit
-7. After claim: create/enter worktree, begin iteration loop
+**Note:** The supervisor (`liza-agent.sh`) claims tasks and creates worktrees BEFORE spawning the coder. The coder receives its assigned task in the bootstrap prompt.
+
+1. Extract task ID and worktree path from bootstrap prompt
+2. Verify assignment in state.yaml (status CLAIMED, assigned_to matches self)
+3. Read specs relevant to task (using task's `spec_ref`)
+4. If task under-specified (no clear spec) → BLOCKED with clarifying questions (see [Blocking Protocol](../architecture/roles.md#blocking-protocol))
+5. Enter worktree, begin iteration loop
 
 ### Code Reviewer Initialization
 
-1. Scan for READY_FOR_REVIEW tasks
-2. If found: claim review, verify commit SHA
-3. Read specs relevant to task (using task's `spec_ref`)
-4. If none: wait for review requests or exit
-5. On claim: examine worktree, validate against spec and `done_when` criteria, run validations, produce verdict
+**Note:** The supervisor (`liza-agent.sh`) assigns review tasks BEFORE spawning the reviewer. The reviewer receives its assigned task in the bootstrap prompt.
+
+1. Extract review task ID and worktree path from bootstrap prompt
+2. Verify assignment in state.yaml (status READY_FOR_REVIEW, reviewing_by matches self)
+3. Verify commit SHA matches worktree HEAD
+4. Read specs relevant to task (using task's `spec_ref`)
+5. Examine worktree, validate against spec and `done_when` criteria, run validations, produce verdict
 6. On approval: execute merge
 
 ## Related Documents

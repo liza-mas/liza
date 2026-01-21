@@ -2,15 +2,17 @@
 
 ## Lifecycle
 
-| Event | Action |
-|-------|--------|
-| Task CLAIMED (fresh) | Create worktree: `wt-create.sh task-N` |
-| Task CLAIMED (reassignment) | Create fresh worktree: `wt-create.sh --fresh task-N` |
-| Task APPROVED | Merge eligible (Code Reviewer executes) |
-| Code Reviewer merges | `wt-merge.sh task-N` (Code Reviewer-only) |
-| Task BLOCKED | Delete worktree: `wt-delete.sh task-N` |
-| Task ABANDONED/SUPERSEDED | Delete worktree: `wt-delete.sh task-N` |
-| Task INTEGRATION_FAILED | Worktree retained for conflict resolution |
+| Event | Action | Actor |
+|-------|--------|-------|
+| Task CLAIMED (fresh) | Create worktree via `liza-claim-task.sh` | Supervisor |
+| Task CLAIMED (reassignment) | Create fresh worktree via `liza-claim-task.sh` | Supervisor |
+| Task APPROVED | Merge eligible | — |
+| Task MERGED | `wt-merge.sh task-N` | Code Reviewer |
+| Task BLOCKED | Delete worktree: `wt-delete.sh task-N` | Planner |
+| Task ABANDONED/SUPERSEDED | Delete worktree: `wt-delete.sh task-N` | Planner |
+| Task INTEGRATION_FAILED | Worktree retained for conflict resolution | — |
+
+**Note:** Worktree creation is supervisor-only (via `liza-claim-task.sh`), not agent-callable. This ensures worktrees exist before agents are spawned.
 
 **Reassignment rule:** When a different coder claims a task (after REJECTED or BLOCKED → UNCLAIMED), the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
 
@@ -63,9 +65,9 @@ When a coder's lease expires:
 
 1. **Task becomes reclaimable** — status stays CLAIMED but lease_expires is in the past
 2. **Original coder must self-abort** — if they return after expiry, they exit immediately
-3. **Worktree handling depends on who reclaims:**
+3. **Worktree handling depends on who supervisor assigns:**
    - Same coder: worktree preserved (agent returning after brief network issue)
-   - Different coder: worktree deleted and recreated fresh (`wt-create.sh --fresh`)
+   - Different coder: supervisor deletes and recreates worktree fresh
 
 **Design Rationale:**
 - Same coder reclaiming: preserve work (crash recovery)

@@ -8,7 +8,7 @@
 | UNCLAIMED | Task ready, no agent assigned | → CLAIMED |
 | CLAIMED | Coder assigned, work in progress | → READY_FOR_REVIEW, BLOCKED |
 | READY_FOR_REVIEW | Coder done, awaiting Code Reviewer | → APPROVED, REJECTED |
-| REJECTED | Code Reviewer rejected, feedback provided | → CLAIMED (same coder re-claims with new lease) |
+| REJECTED | Code Reviewer rejected, feedback provided | → CLAIMED (supervisor re-claims for same coder) |
 | APPROVED | Code Reviewer approved, merge eligible | → MERGED, INTEGRATION_FAILED |
 | MERGED | Successfully merged to integration | Terminal |
 | BLOCKED | Cannot proceed, awaiting escalation | → UNCLAIMED (rescoped), SUPERSEDED, ABANDONED |
@@ -82,7 +82,7 @@
 
 | Transition | Must Set | Must Preserve | Notes |
 |------------|----------|---------------|-------|
-| REJECTED → CLAIMED (same coder) | `lease_expires` (new) | `worktree`, `review_cycles_current`, `review_cycles_total` | Same coder re-claims with fresh lease |
+| REJECTED → CLAIMED (same coder) | `lease_expires` (new) | `worktree`, `review_cycles_current`, `review_cycles_total` | Supervisor re-claims for same coder |
 | REJECTED → CLAIMED (different coder) | `lease_expires`, `assigned_to`, `review_cycles_current: 0` | `review_cycles_total` | Worktree reset: delete old, create fresh |
 | INTEGRATION_FAILED → CLAIMED | `lease_expires`, `integration_fix: true` | `worktree` | Any coder may claim; keeps worktree for conflict resolution |
 | BLOCKED → UNCLAIMED | — | `failed_by` | Preserves failure history; worktree deleted |
@@ -117,7 +117,7 @@ Tasks in READY_FOR_REVIEW state have an independent lease for the Code Reviewer:
 ```
 READY_FOR_REVIEW
     │
-    ├── reviewing_by: null ──► Code Reviewer claims (sets reviewing_by, review_lease_expires)
+    ├── reviewing_by: null ──► Supervisor assigns review (sets reviewing_by, review_lease_expires)
     │                              │
     │                              ▼
     │                         reviewing_by: code-reviewer-1
@@ -131,14 +131,14 @@ READY_FOR_REVIEW
     │            APPROVED/REJECTED      reviewing_by: null
     │            (lease cleared)        (reclaimable)
     │
-    └── Another Code Reviewer may claim if lease expired
+    └── Supervisor may reassign if lease expired
 ```
 
 **Key invariants:**
-- Code Reviewer must claim before examining code (prevents duplicate reviews)
+- Supervisor claims review before spawning Code Reviewer (prevents duplicate reviews)
 - Code Reviewer must extend lease with heartbeats during long reviews
 - On verdict: clear `reviewing_by` and `review_lease_expires`
-- Stale review lease allows reclaim (Code Reviewer crash recovery)
+- Stale review lease allows supervisor to reassign (Code Reviewer crash recovery)
 
 See [Blackboard Schema — Lease Model](blackboard-schema.md#lease-model) for field details.
 
@@ -149,10 +149,16 @@ See [Blackboard Schema — Lease Model](blackboard-schema.md#lease-model) for fi
 | State | Description | Valid Transitions |
 |-------|-------------|-------------------|
 | STARTING | Agent registered, initializing | → IDLE |
-| IDLE | No task assigned | → WORKING |
-| WORKING | Actively processing task | → WAITING, IDLE, HANDOFF |
-| WAITING | Blocked on external (review, escalation) | → WORKING, IDLE |
-| HANDOFF | Context exhaustion, preparing handoff | → IDLE (terminated) |
+| IDLE | No task assigned | → WORKING (Coder), REVIEWING (Code Reviewer) |
+| WORKING | Coder actively implementing task | → WAITING, IDLE, HANDOFF |
+| REVIEWING | Code Reviewer actively reviewing task | → IDLE (verdict done), HANDOFF |
+| WAITING | Coder waiting for review result or escalation | → WORKING (continue after feedback), IDLE (task done) |
+| HANDOFF | Context exhaustion, preparing handoff notes | → (agent terminates, supervisor restarts fresh) |
+
+**Role-specific states:**
+- WORKING and WAITING: Coder only
+- REVIEWING: Code Reviewer only
+- STARTING, IDLE, HANDOFF: All roles
 
 ### Agent State Diagram
 
@@ -164,30 +170,46 @@ See [Blackboard Schema — Lease Model](blackboard-schema.md#lease-model) for fi
       │ registration complete
       ▼
 ┌───────────┐
-│   IDLE    │◄──────────────────┐
-│           │                   │
-└─────┬─────┘                   │
-      │ claim task              │
-      ▼                         │
-┌───────────┐                   │
-│  WORKING  │───────────────────┤
-│           │    task done/     │
-└─────┬─────┘    lost lease     │
-      │                         │
-      │ waiting for             │
-      │ review/escalation       │
-      ▼                         │
-┌───────────┐                   │
-│  WAITING  │───────────────────┤
-│           │    review done    │
-└─────┬─────┘                   │
-      │                         │
-      │ context exhaustion      │
-      ▼                         │
-┌───────────┐                   │
-│  HANDOFF  │───────────────────┘
-│           │    (terminated)
-└───────────┘
+│   IDLE    │◄──────────────────────────────┐
+│           │                               │
+└─────┬─────┘                               │
+      │                                     │
+      ├── assigned task (Coder)             │
+      │         ▼                           │
+      │   ┌───────────┐                     │
+      │   │  WORKING  │─────────────────────┤
+      │   │  (Coder)  │    task done/       │
+      │   └─────┬─────┘    lost lease       │
+      │         │                           │
+      │         │ submitted for review      │
+      │         ▼                           │
+      │   ┌───────────┐      REJECTED       │
+      │   │  WAITING  │◄────────────────────┤
+      │   │  (Coder)  │                     │
+      │   └─────┬─────┘                     │
+      │         │                           │
+      │         ├── APPROVED ───────────────┤
+      │         │                           │
+      │         │ context exhaustion        │
+      │         ▼                           │
+      │   ┌───────────┐                     │
+      │   │  HANDOFF  │─────────────────────┘
+      │   │           │    (terminated)
+      │   └───────────┘
+      │
+      └── assigned review (Code Reviewer)
+                ▼
+          ┌───────────┐
+          │ REVIEWING │─────────────────────┐
+          │(Reviewer) │    verdict done/    │
+          └─────┬─────┘    lost lease       │
+                │                           │
+                │ context exhaustion        │
+                ▼                           │
+          ┌───────────┐                     │
+          │  HANDOFF  │─────────────────────┘
+          │           │    (terminated)
+          └───────────┘
 ```
 
 **Registration Failure:** If agent registration fails (ID collision with active lease), the agent process exits immediately with error—it never enters the state machine. See [Roles — Agent Identity Protocol](roles.md#agent-identity-protocol).
@@ -330,6 +352,7 @@ agent_states:
   - STARTING
   - IDLE
   - WORKING
+  - REVIEWING  # Code Reviewer only
   - WAITING
   - HANDOFF
 

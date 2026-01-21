@@ -31,6 +31,7 @@ Contracts are versioned with the project:
 | `liza-analyze.sh` | Circuit breaker analysis (human-triggered) |
 | `liza-checkpoint.sh` | Create checkpoint and generate sprint summary |
 | `liza-agent.sh` | Agent supervisor (while-true wrapper) |
+| `liza-claim-task.sh` | Claim task with two-phase commit (called by supervisor) |
 | `wt-create.sh` | Create worktree for task |
 | `wt-merge.sh` | Merge approved worktree (Code Reviewer-only) |
 | `wt-delete.sh` | Clean up abandoned/merged worktree |
@@ -98,18 +99,35 @@ All Liza scripts use a consistent exit code taxonomy:
 
 ### How Agents Execute Blackboard Operations
 
-Agents have shell access via Claude Code's bash tool. Blackboard operations are direct script calls:
+Agents have shell access via Claude Code's bash tool. Blackboard operations are direct script calls.
+
+**Task Claiming:** The supervisor (`liza-agent.sh`) claims tasks using `liza-claim-task.sh` which implements a two-phase commit pattern to prevent invalid intermediate states:
+
+```
+Phase 1: Validate under lock (no state mutation)
+  - Verify task exists and is UNCLAIMED
+  - Verify dependencies are satisfied (all depends_on tasks MERGED)
+  - Verify agent is available
+
+Phase 2: Create worktree (outside lock)
+  - Create git worktree at .worktrees/task-N
+  - Branch from integration branch or main
+
+Phase 3: Re-validate and commit under lock
+  - Re-check all conditions (state may have changed)
+  - Set CLAIMED status with all required fields atomically
+  - On validation failure: delete worktree and exit
+
+Cleanup: If commit fails, worktree is deleted to maintain consistency
+```
+
+This pattern ensures no task is ever in CLAIMED state without a valid worktree.
+
+**State Updates:** Always combine related field updates in a single yq expression using `|=` and `|`:
 
 ```bash
-# Claim a task (MUST be atomic - single yq command with all updates)
-# Note: base_commit is set by wt-create.sh at worktree branch time, not during claim
-~/.claude/scripts/liza-lock.sh modify "
-  yq -i '(.tasks[] | select(.id == \"task-3\" and .status == \"UNCLAIMED\")) |=
-    (.status = \"CLAIMED\" | .assigned_to = \"coder-1\" | .lease_expires = \"$(date -u -d '+5 minutes' +%Y-%m-%dT%H:%M:%SZ)\" | .worktree = \".worktrees/task-3\")' .liza/state.yaml
-"
 # IMPORTANT: If yq fails mid-update, state.yaml is inconsistent.
-# Always combine related field updates in a single yq expression using |= and |
-# After claim, call wt-create.sh which sets base_commit
+# Always combine related field updates in a single yq expression
 
 # Extend lease
 ~/.claude/scripts/liza-lock.sh write '.agents.coder-1.lease_expires' '2025-01-17T15:00:00Z'
@@ -117,10 +135,9 @@ Agents have shell access via Claude Code's bash tool. Blackboard operations are 
 # Read current state
 ~/.claude/scripts/liza-lock.sh read
 
-# Request review
+# Request review (MUST be atomic - single yq command with all updates)
 ~/.claude/scripts/liza-lock.sh modify "
-  yq -i '(.tasks[] | select(.id == \"task-3\")).status = \"READY_FOR_REVIEW\"' .liza/state.yaml
-  yq -i '(.tasks[] | select(.id == \"task-3\")).review_commit = \"a1b2c3d\"' .liza/state.yaml
+  yq -i '(.tasks[] | select(.id == \"task-3\")) |= (.status = \"READY_FOR_REVIEW\" | .review_commit = \"a1b2c3d\")' .liza/state.yaml
 "
 
 # Log activity
@@ -151,25 +168,53 @@ echo "- timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 ### Script Availability
 
-All scripts in `~/.claude/scripts/` are agent-callable, not supervisor-only:
+Scripts are divided into agent-callable and supervisor-only:
+
+**Agent-Callable Scripts:**
 
 | Script | Called By | Purpose |
 |--------|-----------|---------|
 | `liza-lock.sh` | All agents | Atomic blackboard operations |
 | `liza-validate.sh` | All agents (optional) | Verify state before/after operations |
-| `wt-create.sh` | Coder | Create worktree on claim |
 | `wt-merge.sh` | Code Reviewer | Merge after approval |
 | `wt-delete.sh` | Planner | Clean up abandoned tasks |
 
+**Supervisor-Only Scripts:**
+
+| Script | Purpose |
+|--------|---------|
+| `liza-agent.sh` | Agent lifecycle management (start, restart, backoff) |
+| `liza-claim-task.sh` | Two-phase task claiming with worktree creation |
+| `wt-create.sh` | Create worktree (called by liza-claim-task.sh) |
+
 ### Supervisor-Only Operations
 
-The supervisor (`liza-agent.sh`) handles:
+**Terminology clarification:** "Supervisor" refers to the enclosing bash loop within each `liza-agent.sh` instance—not a central singleton process. Each agent role runs in its own terminal with its own supervisor loop:
+
+```
+Terminal 1                    Terminal 2                    Terminal 3
+┌─────────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
+│ liza-agent.sh       │      │ liza-agent.sh       │      │ liza-agent.sh       │
+│ (planner supervisor)│      │ (coder supervisor)  │      │ (reviewer supervisor)│
+│                     │      │                     │      │                     │
+│  while true:        │      │  while true:        │      │  while true:        │
+│    wait_for_work()  │      │    claim_task()     │      │    claim_review()   │
+│    claude -p "..."  │      │    claude -p "..."  │      │    claude -p "..."  │
+│    handle_exit()    │      │    handle_exit()    │      │    handle_exit()    │
+└─────────────────────┘      └─────────────────────┘      └─────────────────────┘
+```
+
+When specs say "supervisor claims task before spawning agent," this means the bash loop claims the task before invoking `claude`—all within the same `liza-agent.sh` process. The `claude` call blocks until the session ends.
+
+The supervisor handles:
 - Starting/restarting the Claude Code process
+- Claiming tasks before spawning Coders (via `liza-claim-task.sh`)
+- Assigning reviews before spawning Code Reviewers
 - Detecting exit codes
 - Respecting PAUSE/ABORT/CHECKPOINT files
 - Backoff timing on crashes
 
-Agents do not call `liza-agent.sh` or manage their own lifecycle.
+Agents do not call supervisor-only scripts or manage their own lifecycle.
 
 ---
 
@@ -240,11 +285,22 @@ When supervisor starts Claude Code, the agent:
 3. States: `"Mode: Liza [Role]"`
 4. Follows initialization sequence from session initialization
 
-The supervisor passes context via the initial prompt:
+The supervisor passes context via the initial prompt, including structured task assignment sections:
 
 ```bash
-claude --print "Mode: Liza Coder. Project root: $(pwd). Read blackboard and specs."
+# Coder prompt includes "=== ASSIGNED TASK ===" section with:
+# - TASK ID, WORKTREE (absolute path), DESCRIPTION, DONE WHEN, SCOPE, INSTRUCTIONS
+
+# Code Reviewer prompt includes "=== REVIEW TASK ===" section with:
+# - TASK ID, WORKTREE, COMMIT TO REVIEW, AUTHOR, DESCRIPTION, DONE WHEN, INSTRUCTIONS
+
+# Planner prompt includes "=== PLANNING CONTEXT ===" section with:
+# - WAKE TRIGGER: INITIAL_PLANNING | BLOCKED_TASKS | INTEGRATION_FAILED | HYPOTHESIS_EXHAUSTED | IMMEDIATE_DISCOVERY
+# - SPRINT STATE: total tasks, merged, in_progress, unclaimed, blocked, integration_failed, hypothesis_exhausted, immediate_discoveries
+# - INSTRUCTIONS: trigger-specific guidance (varies by wake trigger)
 ```
+
+See `liza-agent.sh` functions `build_coder_context()`, `build_reviewer_context()`, and `build_planner_context()` for exact formats.
 
 Exact CLI syntax depends on Claude Code version. The contract handles mode selection regardless of invocation method.
 
@@ -263,6 +319,7 @@ Script implementations are in the [`scripts/`](scripts/) directory:
 | `liza-analyze.sh` | Circuit breaker analysis (human-triggered) | [scripts/liza-analyze.sh](scripts/liza-analyze.sh) |
 | `liza-checkpoint.sh` | Create checkpoint and generate sprint summary | [scripts/liza-checkpoint.sh](scripts/liza-checkpoint.sh) |
 | `liza-agent.sh` | Agent supervisor (while-true wrapper) | [scripts/liza-agent.sh](scripts/liza-agent.sh) |
+| `liza-claim-task.sh` | Claim task with two-phase commit | [scripts/liza-claim-task.sh](scripts/liza-claim-task.sh) |
 | `wt-create.sh` | Create worktree for task | [scripts/wt-create.sh](scripts/wt-create.sh) |
 | `wt-merge.sh` | Merge approved worktree (Code Reviewer-only) | [scripts/wt-merge.sh](scripts/wt-merge.sh) |
 | `wt-delete.sh` | Clean up abandoned/merged worktree | [scripts/wt-delete.sh](scripts/wt-delete.sh) |
