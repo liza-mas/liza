@@ -7,6 +7,8 @@ not just autonomous yet unreliable assistants.
 
 See [USAGE](docs/USAGE.md)
 
+Then try the [DEMO](docs/DEMO.md).
+
 ## Genesis
 
 It all started with deceiving agents—tests being repeatedly altered to pass despite explicit instructions.
@@ -140,8 +142,10 @@ after the lease expires. No ambiguity about ownership.
 **Commit SHA verification.** Coder records commit SHA when requesting review. Reviewer verifies the SHA before examining
 work. No reviewing stale state.
 
-**Reviewer-only merge.** Coders commit to their worktree. Only reviewers can merge to the integration branch. Authority
-is structural, not advisory.
+**Approval-gated merge.** Coders commit to their worktree. The supervisor merges to the integration branch only after
+Code Reviewer approval. Authority is structural, not advisory.
+
+**Approval and merge traceability.** Task state records `approved_by` and `merge_commit` for auditability.
 
 **Hypothesis exhaustion.** If two different coders fail the same task, the task framing is presumed wrong. Planner must
 rescope—cannot just reassign unchanged.
@@ -193,7 +197,13 @@ Liza is currently a **detailed implementation plan**.
 
 The contract restructuring, blackboard schema, coordination protocols, and tooling are specified.
 
-See `specs/liza-implementation-plan.md` for the full specification.
+Scripts are implemented and the system runs end-to-end, with ongoing refinement of specs and operational protocols.
+See `specs/` for the full specification.
+
+Planned improvements:
+- Support of Codex
+- Full documentation (beyond specs)
+- Spec Writer / Spec Reviewer and Architect / Architecture Reviewer, Tech Writer / Doc Reviewer agent pairs + Plan Reviewer
 
 ## Typical structure of a project using Liza
 
@@ -213,8 +223,10 @@ Target structure:
     ├── liza-validate.sh           # Schema validation
     ├── liza-watch.sh              # Alarm monitor
     ├── liza-agent.sh              # Agent supervisor
+    ├── liza-submit-for-review.sh  # Atomic review submission
+    ├── liza-submit-verdict.sh     # Atomic review verdict
     ├── wt-create.sh               # Create worktree
-    ├── wt-merge.sh                # Merge (reviewer-only)
+    ├── wt-merge.sh                # Merge (supervisor after approval)
     └── wt-delete.sh               # Clean up worktree
 
 <project>/

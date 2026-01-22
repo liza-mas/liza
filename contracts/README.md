@@ -5,7 +5,7 @@ Their genesis is tailed at [Turning AI Coding Agents into Senior Engineering Pee
 
 ## Status
 
-Contract split complete. Original `CONTRACT_FOR_PAIRING_AGENTS_v3.md` preserved for reference.
+Contract split complete. Original `_archive/CONTRACT_FOR_PAIRING_AGENTS_v3.md` preserved for reference.
 
 ## Files
 
@@ -14,7 +14,7 @@ Contract split complete. Original `CONTRACT_FOR_PAIRING_AGENTS_v3.md` preserved 
 | [CORE.md](CORE.md) | Entry point + universal rules | Complete |
 | [PAIRING_MODE.md](PAIRING_MODE.md) | Human-supervised collaboration | Complete |
 | [MULTI_AGENT_MODE.md](MULTI_AGENT_MODE.md) | Peer-supervised Liza system | Complete |
-| [CONTRACT_FOR_PAIRING_AGENTS_v3.md](CONTRACT_FOR_PAIRING_AGENTS_v3.md) | Original monolithic contract (reference) | Preserved |
+| [CONTRACT_FOR_PAIRING_AGENTS_v3.md](_archive/CONTRACT_FOR_PAIRING_AGENTS_v3.md) | Original monolithic contract (reference) | Preserved |
 
 ## Deployment
 

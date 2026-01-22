@@ -10,11 +10,7 @@ This walkthrough demonstrates Liza orchestrating a multi-agent system to build a
 
 ## Prerequisites
 
-- Claude Code CLI installed and configured
-- `yq` installed (`brew install yq` or `apt install yq`)
-- Git installed
-- Liza scripts deployed to `~/.claude/scripts/`
-
+See [USAGE](USAGE.md) for the full setup.
 ---
 
 ## Step 1: Create Project Repository

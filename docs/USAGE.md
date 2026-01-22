@@ -6,7 +6,7 @@ Check [Genesis](../README.md#genesis) for the features.
 
 Create symlinks:
 ```
-- `~/.claude/CLAUDE.md` -> `~/Workspace/liza/contracts/CONTRACT_FOR_PAIRING_AGENTS_v3.md`
+- `~/.claude/CLAUDE.md` -> `~/Workspace/liza/contracts/CORE.md`
 - `~/.claude/PAIRING_MODE.md` -> `~/Workspace/liza/contracts/PAIRING_MODE.md`
 - `~/.claude/MULTI_AGENT_MODE.md` -> `~/Workspace/liza/contracts/MULTI_AGENT_MODE.md`
 - `~/.claude/AGENT_TOOLS.md` -> `~/Workspace/liza/contracts/AGENT_TOOLS.md`
@@ -16,7 +16,7 @@ Create symlinks:
 ```
 
 In `~/.claude/settings.json`:
-```
+```json
 {
   "permissions": {
     "allow": [
@@ -32,19 +32,20 @@ Verification:
 
 ## Liza
 
-WIP: still at [spec](../specs/) level.
+See [DEMO](DEMO.md) for a full example.
 
 ### Quick Start (Target Usage)
 
 **Prerequisites:**
 - Claude Code CLI installed
 - `yq` installed (YAML processor)
+- Git installed
 - Project with `specs/vision.md` describing the goal
 
 **1. Initialize**
 ```bash
 # Create .liza/ directory with blackboard
-~/.claude/scripts/liza-init.sh "Implement user authentication"
+~/.claude/scripts/liza-init.sh "[Goal description]"
 
 # Verify
 cat .liza/state.yaml
@@ -54,26 +55,28 @@ cat .liza/state.yaml
 
 Terminal 1 — Planner:
 ```bash
-~/.claude/scripts/liza-agent.sh planner
+LIZA_AGENT_ID=planner-1 ~/.claude/scripts/liza-agent.sh planner
 ```
 
 Terminal 2 — Coder:
 ```bash
-~/.claude/scripts/liza-agent.sh coder
+LIZA_AGENT_ID=coder-1 ~/.claude/scripts/liza-agent.sh coder
 ```
 
 Terminal 3 — Code Reviewer:
 ```bash
-~/.claude/scripts/liza-agent.sh code-reviewer
+LIZA_AGENT_ID=code-reviewer-1 ~/.claude/scripts/liza-agent.sh code-reviewer
 ```
 
 **3. Observe**
 ```bash
-# Watch blackboard state
-watch -n 5 'yq . .liza/state.yaml'
-
-# Or run the watcher for alerts
+# Run the watcher for alerts
 ~/.claude/scripts/liza-watch.sh
+```
+
+```bash
+# Watch blackboard state
+watch -n 2 'yq ".tasks[] | pick([\"id\", \"status\", \"description\"])" .liza/state.yaml'
 ```
 
 **4. Human Interventions**
