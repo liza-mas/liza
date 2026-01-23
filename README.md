@@ -38,6 +38,8 @@ Liza is what comes next: delegating approval to peer agents who operate under th
 same contract, so humans can observe and provide direction without bottlenecking or rubber-stamping.
 Yes, that's vibe coding—the very thing the original contract was written against.
 
+More at [I Tried to Kill Vibe Coding. I Built Adversarial Vibe Coding. Without the Vibes.](https://medium.com/@tangi.vass/i-tried-to-kill-vibe-coding-i-built-adversarial-vibe-coding-without-the-vibes-bc4a63872440)
+
 ## The Problems
 
 Single-agent coding works until it doesn't. The agent marks their task complete when it isn't. It "fixes" things you
