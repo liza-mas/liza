@@ -223,7 +223,7 @@ INSTRUCTIONS:
 - The task is already CLAIMED for you. Do NOT run liza-claim-task.sh.
 - Work ONLY in the worktree directory: cd $PROJECT_ROOT/$CLAIMED_WORKTREE
 - TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
-- Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests
+- Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Use the testing skill.
 - Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
 - Use the clean-code skill at the end of the implementation
 - When complete, run: $SCRIPT_DIR/liza-submit-for-review.sh <task-id> <commit-sha>
