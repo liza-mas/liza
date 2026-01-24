@@ -606,3 +606,77 @@ Architectural notes:
 ```
 
 Tag as `[concern]` or `[suggestion]` per code review protocol. Architectural disagreements are rarely `[blocker]` unless they create correctness/security issues.
+
+---
+
+# Persistence of Findings
+
+**ISSUES_FILE** = `docs/architectural-issues.md`
+
+Significant findings (smells, structural concerns, high-priority recommendations) should be persisted to ISSUES_FILE for long-term tracking.
+
+**What to persist:**
+- Smells with Medium or High impact
+- Structural concerns that affect system evolution
+- High-priority recommendations from Phase 3
+- Patterns that indicate systemic risk
+
+**What NOT to persist:**
+- Low-priority style issues
+- Findings already in ISSUES_FILE (check before adding)
+- Transient issues resolved in the same session
+
+## Persistence Format
+
+Each finding must include skill attribution:
+
+```markdown
+### [Issue Title]
+
+**Skill:** software-architecture-review
+**Category:** [Smell name or RECOMMENDATION]
+
+**Issue:** [Description]
+
+**Implication:** [Why it matters]
+
+**Direction:** [Suggested approach, if any]
+```
+
+## Scope Constraints
+
+The skill uses the full repo for context, but what to *raise* depends on mode:
+
+**Liza mode (multi-agent):**
+- Only raise issues **introduced by the considered commit**
+- Pre-existing issues unrelated to the changes are out of scope
+- Use repo context to evaluate *impact* of changes, not to audit the whole codebase
+- Example: If considered commit adds a new god class, raise it. If a god class already exists elsewhere, ignore it unless the changes interact with it.
+
+**Pairing mode:**
+- Do not re-raise issues already documented in ISSUES_FILE unless they have materially changed
+- Before raising an issue, check ISSUES_FILE — if already documented with same severity/scope, skip it
+- If changes worsen a documented issue or shift its nature, update the existing entry rather than adding a duplicate
+
+## Mode-Specific Behavior
+
+**Pairing mode:** Before saving findings to ISSUES_FILE, present the list and ask:
+```
+Found [N] architectural issues worth persisting:
+1. [Issue title] — [one-line summary]
+2. ...
+
+Save to docs/architectural-issues.md? (y/n/select specific)
+```
+
+Wait for user confirmation before writing.
+
+**Liza mode (multi-agent):** Save findings automatically after review completion. No confirmation required — the skill is invoked by agents operating autonomously.
+
+## Integration with Review Workflow
+
+1. Complete analysis phases as normal
+2. After Phase 3 (or Summary), identify persistable findings
+3. Check ISSUES_FILE for duplicates
+4. Apply mode-specific confirmation
+5. Append new findings to appropriate section in ISSUES_FILE

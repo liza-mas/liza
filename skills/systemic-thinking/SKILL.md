@@ -110,3 +110,72 @@ If nothing found: `No systemic issues identified.`
 - No recommendations. The owner decides what to do.
 - No hedging. "This might possibly sometimes be a concern" is forbidden. Either it's a finding or it isn't.
 - No scope creep into implementation. If you catch yourself discussing how to build something, stop.
+
+## Persistence of Findings
+
+**ISSUES_FILE** = `docs/architectural-issues.md`
+
+Findings from systemic analysis should be persisted to ISSUES_FILE for long-term tracking and follow-up.
+
+**What to persist:**
+- All findings (TENSION, ASSUMPTION, LOAD-BEARING, FEEDBACK, BLIND SPOT, CASCADE, FRAGILITY, STRESS POINT, TRAJECTORY)
+- Findings already in ISSUES_FILE should be updated if new information emerges, not duplicated
+
+**Persistence Format**
+
+Each finding must include skill attribution:
+
+```markdown
+### [Issue Title]
+
+**Skill:** systemic-thinking
+**Category:** [TENSION | ASSUMPTION | LOAD-BEARING | etc.]
+
+**Issue:** [What you observe]
+
+**Implication:** [What this means for the system's future]
+
+**Current mitigation:** [If any exists]
+
+**Future options:**
+- [Option 1]
+- [Option 2]
+```
+
+## Scope Constraints
+
+The skill uses the full system for context, but what to *raise* depends on mode:
+
+**Liza mode (multi-agent):**
+- Only raise issues **introduced or materially affected by the considered commit**
+- Pre-existing systemic issues unrelated to the changes are out of scope
+- Use system context to evaluate *impact* of changes, not to audit the whole system
+- Example: If considered commit introduces a new single point of failure, raise it. If a SPOF already exists elsewhere, ignore it unless the changes interact with it or make it worse.
+
+**Pairing mode:**
+- Do not re-raise issues already documented in ISSUES_FILE unless they have materially changed
+- Before raising an issue, check ISSUES_FILE — if already documented with same severity/scope, skip it
+- If changes worsen a documented issue or shift its nature, update the existing entry rather than adding a duplicate
+
+## Mode-Specific Behavior
+
+**Pairing mode:** Before saving findings to ISSUES_FILE, present the list and ask:
+```
+Found [N] systemic issues to persist:
+1. [Category]: [Issue title] — [one-line implication]
+2. ...
+
+Save to docs/architectural-issues.md? (y/n/select specific)
+```
+
+Wait for user confirmation before writing.
+
+**Liza mode (multi-agent):** Save findings automatically after analysis completion. No confirmation required — the skill is invoked by agents operating autonomously.
+
+## Integration with Workflow
+
+1. Complete systemic analysis as normal
+2. Present findings in standard output format
+3. Check ISSUES_FILE for existing entries on same topics
+4. Apply mode-specific confirmation
+5. Append new findings or update existing entries in ISSUES_FILE
