@@ -30,13 +30,29 @@ Any non destructive tool by default.
 | Code search | `mcp__jetbrains__search_in_files_by_text` | Grep | Regex needed, or <3 files |
 | Symbol lookup | `mcp__jetbrains__get_symbol_info` | LSP | JetBrains unavailable |
 | File edit | `mcp__morph-mcp__edit_file` | Edit | File >2000 lines |
-| Codebase exploration | `mcp__morph-mcp__warpgrep_codebase_search` | Task(Explore) | Pinpoint keyword search |
 | Web content | WebFetch | `mcp__fetch__fetch` | Need raw HTML, pagination, or blocked |
 | Current info / library discovery | `mcp__perplexity__perplexity_ask` | WebSearch | — |
 | Library API docs | `mcp__context7__query-docs` | Ref | Unknown/niche library, need tutorials |
 | Library tutorials/guides | `mcp__Ref__ref_search_documentation` | WebFetch | Ref returns nothing useful |
 | Repo architecture | `mcp__deepwiki__ask_question` | WebFetch | — |
 | Code quality check | `mcp__jetbrains__get_file_problems` | — | After edits |
+
+### Codebase Exploration
+
+| Task Type | Tool (priority order) |
+|-----------|----------------------|
+| Pinpoint keyword search | Grep directly |
+| Semantic exploration ("how does X work?") | Warp Grep (`mcp__morph-mcp__warpgrep_codebase_search`) |
+| Symbol info at position | JetBrains `get_symbol_info` > LSP hover |
+| Workspace symbol search | JetBrains `find_files_by_name_keyword` > Grep |
+| Call hierarchy (callers/callees) | LSP via Task(Explore) |
+| Cross-file definitions | LSP via Task(Explore) |
+
+**JetBrains MCP** (when IDE available): Indexed, fast. Prefer over LSP for symbol info and workspace search.
+
+**LSP prerequisite:** Language must have LSP configured (Python: `[tool.pyright]` in pyproject.toml; TS: tsconfig.json; etc.). If not configured, fall back to Warp Grep.
+
+**Fallback:** Task(Explore) without LSP when Warp Grep returns nothing useful, or external docs needed.
 
 ### Tool Details
 
@@ -46,7 +62,7 @@ Any non destructive tool by default.
 
 **Morph-MCP**:
 - *Fast Apply (`edit_file`)*: Shows only changed lines using `// ... existing code ...` placeholders. Avoids reading full files into context. Skip for files >2000 lines.
-- *Warp Grep*: Multi-turn search subagent running parallel grep/read cycles. Good: "How does auth work?", "Where is error X handled?" Bad: Pinpoint keyword searches.
+- *Warp Grep*: Multi-turn search subagent running parallel grep/read cycles. See "Codebase Exploration" section for when to use.
 
 **fetch MCP**: Exact content without summarization — use when you need raw HTML, pagination, or WebFetch is blocked.
 
