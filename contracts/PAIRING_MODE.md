@@ -140,6 +140,8 @@ Critical risks MUST appear within the first 5 lines of any approval request.
 | Deliverables | Code + tests + docs |
 | Analysis | Reasoning with tagged assumptions |
 | Scope | Files/touchlist + concise diff preview |
+| Doc Impact | Docs affected by this change (from DoR declaration) |
+| Test Impact | Tests to write/update (from DoR declaration) |
 | Commands | Exact commands in execution order |
 | Risk Assessment | Impact (security/API/schema/performance), failure mode (most plausible way still wrong), rollback path |
 | Validation | Tests to run, success verification |
@@ -151,6 +153,8 @@ Critical risks MUST appear within the first 5 lines of any approval request.
 Mode: Task (Compact)
 Intent: [one-line what + why]
 Scope: [files touched]
+Doc Impact: [none | list]
+Test Impact: [none — covered | list]
 Validation: [how success verified]
 Risk: [one-line or "None identified"]
 Proceed (P)?

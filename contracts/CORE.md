@@ -231,6 +231,19 @@ If this cannot be stated unambiguously → BLOCKED.
 
 **Atomic Intent:** Each task must have exactly one intent. If request implies multiple intents (feature + refactor), propose breakdown.
 
+**Doc Impact Declaration:** Before execution, declare:
+```
+Doc Impact: [none | list of affected docs]
+```
+Categories to check: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs.
+"None" is valid but must be stated explicitly.
+
+**Test Impact Declaration:** Before execution, declare:
+```
+Test Impact: [none — existing tests cover | list of tests to write/update]
+```
+"None" requires confidence that existing tests exercise the changed behavior. New behavior without tests requires justification.
+
 **Spec & TODO Trigger:** When clarification reveals scope ambiguity:
 - Propose adding/updating spec in `specs/` before implementation
 - Await approval before proceeding (spec first, code second, doc third)
@@ -240,9 +253,9 @@ If this cannot be stated unambiguously → BLOCKED.
 
 Task complete when ALL approved deliverables are implemented:
 - [ ] Code changes complete
-- [ ] Tests written/updated and passing
+- [ ] Test Impact addressed (declared tests implemented and passing, or "none" confirmed valid)
+- [ ] Doc Impact addressed (declared items updated, or "none" confirmed still accurate)
 - [ ] Pre-commit passes on touched files
-- [ ] Specs/docs updated (state persistence, not ceremony)
 - [ ] All tests passing (no pre-existing failures ignored)
 - [ ] Validation must exercise the changed behavior. Running unrelated green tests does not count.
 - [ ] Validation commands executed with output captured
