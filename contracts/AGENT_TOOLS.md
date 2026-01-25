@@ -39,20 +39,25 @@ Any non destructive tool by default.
 
 ### Codebase Exploration
 
-| Task Type | Tool (priority order) |
-|-----------|----------------------|
-| Pinpoint keyword search | Grep directly |
-| Semantic exploration ("how does X work?") | Warp Grep (`mcp__morph-mcp__warpgrep_codebase_search`) |
-| Symbol info at position | JetBrains `get_symbol_info` > LSP hover |
-| Workspace symbol search | JetBrains `find_files_by_name_keyword` > Grep |
-| Call hierarchy (callers/callees) | LSP via Task(Explore) |
-| Cross-file definitions | LSP via Task(Explore) |
+| Question Type | Primary Tool | Fallback |
+|-------------------------------------------|--------------|----------|
+| Exact keyword ("TODO") | Grep | — |
+| Find files by name | JetBrains `find_files_by_name_keyword` | Glob |
+| Semantic code search ("how does X work?") | Warp Grep (`mcp__morph-mcp__warpgrep_codebase_search`) | Task(Explore) if synthesis needed |
+| Symbol info at position | JetBrains `get_symbol_info` | LSP `hover` |
+| Find references | LSP `findReferences` | Grep |
+| Call hierarchy (callers/callees) | LSP `incomingCalls`/`outgoingCalls` | Task(Explore) if LSP not configured |
+| Cross-file definitions | LSP `goToDefinition` | Task(Explore) if LSP not configured |
+| Multi-file structural analysis | Task(Explore) | — |
 
-**JetBrains MCP** (when IDE available): Indexed, fast. Prefer over LSP for symbol info and workspace search.
+**Tool characteristics:**
+- **Grep**: Fastest, exact matches only, no synthesis
+- **Warp Grep**: Multi-turn search subagent, finds relevant code and returns file contents
+- **JetBrains**: Indexed, fast, includes docstrings and IDE diagnostics
+- **LSP**: Precise type info, references, call hierarchy (requires language server configured)
+- **Task(Explore)**: Subagent for broad exploration, synthesizes across many files, keeps intermediate noise out of main context
 
-**LSP prerequisite:** Language must have LSP configured (Python: `[tool.pyright]` in pyproject.toml; TS: tsconfig.json; etc.). If not configured, fall back to Warp Grep.
-
-**Fallback:** Task(Explore) without LSP when Warp Grep returns nothing useful, or external docs needed.
+**LSP prerequisite:** Language must have LSP configured (Python: `[tool.pyright]` in pyproject.toml; TS: tsconfig.json). If not configured, use Task(Explore) for call hierarchy and definitions.
 
 ### Tool Details
 
