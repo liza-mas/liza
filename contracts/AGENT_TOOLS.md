@@ -53,7 +53,7 @@ Any non destructive tool by default.
 **Tool characteristics:**
 - **Grep**: Fastest, exact matches only, no synthesis
 - **Warp Grep**: Multi-turn search subagent, finds relevant code and returns file contents
-- **JetBrains**: Indexed, fast, includes docstrings and IDE diagnostics
+- **JetBrains** (when IDE available): Indexed, fast, includes docstrings and IDE diagnostics. Prefer over LSP for symbol info and workspace search
 - **LSP**: Precise type info, references, call hierarchy (requires language server configured)
 - **Task(Explore)**: Subagent for broad exploration, synthesizes across many files, keeps intermediate noise out of main context
 
