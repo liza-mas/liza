@@ -331,6 +331,7 @@ INSTRUCTIONS:
 - Apply the code-review skill to the full diff
 - If change touches specs/, introduces new abstractions, adds state/lifecycle, or spans 3+ modules: also apply systemic-thinking skill
 - TDD ENFORCEMENT (code tasks): REJECT if tests are missing or don't cover done_when criteria
+- Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
 - Exempt: doc-only, config-only, or spec-only tasks (no code = no tests required)
 - Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
 EOF
