@@ -399,8 +399,11 @@ touch .liza/ABORT
 **Debug a stuck agent interactively**
 - Terminate the agent
 - Get its prompt from `.liza/agent-prompts/`
-- Run `claude --add-dir ~/.liza`
+- Run `LIZA_AGENT_ID=<agent-id> claude --add-dir ~/.liza`
 - Paste the prompt
+
+Codex is a nice option for debugging too because it displays everything.
+Run `LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh --cli codex coder`
 
 **Watcher alerts?**
 - `LEASE EXPIRED`: Agent crashed, supervisor will restart

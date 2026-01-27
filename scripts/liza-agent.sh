@@ -1,12 +1,32 @@
 #!/bin/bash
 # Agent supervisor - restarts agent on graceful abort
-# Usage: LIZA_AGENT_ID=coder-1 liza-agent.sh coder [initial-task-id]
+# Usage: LIZA_AGENT_ID=coder-1 liza-agent.sh [--cli claude|codex] <role> [initial-task-id]
 
 set -euo pipefail
 
 # --- Configuration ---
 readonly RESTART_DELAY=2
 readonly CRASH_DELAY=5
+
+# --- Argument Parsing ---
+CLI="claude"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --cli) CLI="$2"; shift 2 ;;
+        *) break ;;
+    esac
+done
+
+if [[ -z "${1:-}" ]]; then
+    echo "Usage: liza-agent.sh [--cli claude|codex] <role> [initial-task-id]" >&2
+    exit 1
+fi
+
+case "$CLI" in
+    claude|codex) ;;
+    *) echo "Error: --cli must be 'claude' or 'codex', got '$CLI'" >&2; exit 1 ;;
+esac
+readonly CLI
 
 # --- Path Setup ---
 # Normalize role: CODE_REVIEWER → code-reviewer, "Code Reviewer" → code-reviewer
@@ -601,8 +621,8 @@ while true; do
         echo -e "\nRESUME: Task $INITIAL_TASK" >> "$PROMPT_FILE"
     fi
 
-    echo "Starting $ROLE agent ($LIZA_AGENT_ID)..."
-    # Run Claude Code with prompt from file, then clean up
+    echo "Starting $ROLE agent ($LIZA_AGENT_ID) via $CLI..."
+    # Run agent CLI with prompt from file, then clean up
     # Add liza specs directory to allowed paths
     set +e
     prompt_dir="$LIZA_DIR/agent-prompts"
@@ -611,7 +631,14 @@ while true; do
     prompt_log="$prompt_dir/${LIZA_AGENT_ID}-${prompt_ts}.txt"
     cp "$PROMPT_FILE" "$prompt_log"
     echo "Prompt saved: $prompt_log"
-    LIZA_AGENT_ID="$LIZA_AGENT_ID" claude --add-dir "$LIZA_ROOT" -p "$(cat "$PROMPT_FILE")"
+    case "$CLI" in
+        claude)
+            LIZA_AGENT_ID="$LIZA_AGENT_ID" claude --add-dir "$LIZA_ROOT" -p "$(cat "$PROMPT_FILE")"
+            ;;
+        codex)
+            LIZA_AGENT_ID="$LIZA_AGENT_ID" codex exec --add-dir "$LIZA_ROOT" "$(cat "$PROMPT_FILE")"
+            ;;
+    esac
     EXIT_CODE=$?
     rm -f "$PROMPT_FILE"
     set -e
