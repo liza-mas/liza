@@ -34,6 +34,7 @@ OPERATIONAL RULES:
 - Exit when your current work unit is complete (task implemented, review done, etc.)
 
 HELPER SCRIPTS:
+- $LIZA_ROOT/scripts/liza-add-task.sh — Add task to blackboard (Planner only)
 - $LIZA_ROOT/scripts/liza-validate.sh <state.yaml> — Validate blackboard state
 
 FORBIDDEN:
@@ -149,7 +150,15 @@ This is initial planning. Decompose the goal into tasks:
    - Each task = implementation + tests (not separate tasks)
    - A task is "small" if one coder can complete it in one session
 
-8. Write tasks to blackboard with status: UNCLAIMED
+8. Write each task to the blackboard using the add-task script:
+   $LIZA_ROOT/scripts/liza-add-task.sh \\
+     --id <task-id> \\
+     --desc "<description>" \\
+     --spec <spec_ref> \\
+     --done "<done_when>" \\
+     --scope "<scope>" \\
+     --priority <N> \\
+     --depends "<comma-separated task-ids>"
 EOF
             ;;
         BLOCKED_TASKS)

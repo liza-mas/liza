@@ -25,6 +25,7 @@ Contracts are versioned with the project:
 | Script | Purpose |
 |--------|---------|
 | `liza-init.sh` | Initialize `.liza/` for new goal |
+| `liza-add-task.sh` | Add task to blackboard (atomic, with validation) |
 | `liza-lock.sh` | Atomic read-modify-write operations |
 | `liza-validate.sh` | Schema validation |
 | `liza-watch.sh` | Alarm monitor daemon |
@@ -140,6 +141,16 @@ This pattern ensures no task is ever in CLAIMED state without a valid worktree.
 # Request review (MUST be atomic)
 $SCRIPT_DIR/liza-submit-for-review.sh task-3 a1b2c3d
 
+# Add task (Planner operation)
+~/.liza/scripts/liza-add-task.sh \
+  --id task-3 \
+  --desc "Add retry decorator to UserAPI.get_user()" \
+  --spec specs/retry-logic.md \
+  --done "UserAPI.get_user() retries 3x on 5xx errors with exponential backoff" \
+  --scope "src/api/user.py, tests/test_user_api.py" \
+  --priority 1 \
+  --depends "task-1,task-2"
+
 # Log spec change (when human updates specs)
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ~/.liza/scripts/liza-lock.sh modify \
@@ -165,6 +176,7 @@ Scripts are divided into agent-callable and supervisor-only:
 
 | Script | Called By | Purpose |
 |--------|-----------|---------|
+| `liza-add-task.sh` | Planner | Add task atomically (validates after write) |
 | `liza-lock.sh` | All agents | Atomic blackboard operations |
 | `liza-validate.sh` | All agents (optional) | Verify state before/after operations |
 | `wt-merge.sh` | Supervisor | Merge after Code Reviewer approves |
@@ -320,6 +332,13 @@ Script implementations are in the [`scripts/`](scripts/) directory:
 **liza-init.sh** — Initialize Liza blackboard for new goal
 ```bash
 liza-init.sh "Goal description"
+```
+
+**liza-add-task.sh** — Add task to blackboard (Planner)
+```bash
+liza-add-task.sh --id TASK_ID --desc DESCRIPTION --spec SPEC_REF \
+  --done DONE_WHEN --scope SCOPE [--priority N] [--depends "task-a,task-b"]
+# Atomically adds task, updates sprint.scope.planned and goal.alignment_history, validates
 ```
 
 **liza-lock.sh** — Atomic blackboard operations
