@@ -18,23 +18,15 @@ Contract split complete. Original `_archive/CONTRACT_FOR_PAIRING_AGENTS_v3.md` p
 
 ## Deployment
 
-Symlink contracts into `~/.claude/`:
-
-```bash
-ln -sf /path/to/contracts/CORE.md ~/.claude/CLAUDE.md
-ln -sf /path/to/contracts/PAIRING_MODE.md ~/.claude/PAIRING_MODE.md
-ln -sf /path/to/contracts/MULTI_AGENT_MODE.md ~/.claude/MULTI_AGENT_MODE.md
-```
-
-Claude Code loads `~/.claude/CLAUDE.md` on session start, which triggers mode selection and loads the appropriate mode contract.
+See [COntract Activation](contract-activation.md)
 
 ## Contract Hierarchy
 
 ```
-CLAUDE.md (symlink)
+~/.claude/CLAUDE.md or ~/.codex/AGENTS.md (symlinks)
     │
     ▼
-CORE.md (entry point + universal rules)
+~/.liza/CORE.md (entry point + universal rules)
     │
     └── Mode Selection Gate (auto-detect from bootstrap)
         │

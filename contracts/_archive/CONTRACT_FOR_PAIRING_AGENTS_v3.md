@@ -625,7 +625,7 @@ Return immediately with explanation if:
 
 ## Subagent Delegation Protocol
 
-MANDATORY: When considering delegation, read and comply with ~/.claude/skills/generic-subagent/SKILL.md.
+MANDATORY: When considering delegation, read and comply with ~/.liza/skills/generic-subagent/SKILL.md.
 
 **Triggers:**
 
@@ -641,7 +641,7 @@ The main agent retains accountability. Subagent output is advisory digest.
 
 ## Debugging Protocol
 
-MANDATORY: Before any debugging, read and comply with ~/.claude/skills/debugging/SKILL.md.
+MANDATORY: Before any debugging, read and comply with ~/.liza/skills/debugging/SKILL.md.
 Self-correction during EXECUTION and expected test failure during TDD are normal implementation, not debugging.
 All other bug situations MUST trigger the debugging skill. No "quick tries" first.
 
@@ -649,13 +649,13 @@ All other bug situations MUST trigger the debugging skill. No "quick tries" firs
 
 ## Test Protocol
 
-MANDATORY: When writing or analyzing tests, read and comply with ~/.claude/skills/testing/SKILL.md.
+MANDATORY: When writing or analyzing tests, read and comply with ~/.liza/skills/testing/SKILL.md.
 
 ---
 
 ## Code Review Protocol
 
-MANDATORY: When user requests a code review (PRs or pending changes), read and comply with ~/.claude/skills/code-review/SKILL.md.
+MANDATORY: When user requests a code review (PRs or pending changes), read and comply with ~/.liza/skills/code-review/SKILL.md.
 When structural concerns are present, also apply the Software Architecture Protocol.
 Self-review during DoD is defined in Rule 3 (lighter: P0-P2 + two questions).
 
@@ -663,7 +663,7 @@ Self-review during DoD is defined in Rule 3 (lighter: P0-P2 + two questions).
 
 ## Software Architecture Protocol
 
-MANDATORY: For implementation planning, architectural evaluation, or code review with structural concerns, read and comply with ~/.claude/skills/software-architecture-review/SKILL.md.
+MANDATORY: For implementation planning, architectural evaluation, or code review with structural concerns, read and comply with ~/.liza/skills/software-architecture-review/SKILL.md.
 
 **Triggers:**
 - Implementation planning: Before significant code changes, evaluate structural implications
@@ -677,7 +677,7 @@ When overlapping with other skills (e.g., code review), apply all relevant persp
 
 ## Tools
 
-MANDATORY: read and comply with ~/.claude/AGENT_TOOLS.md.
+MANDATORY: read and comply with ~/.liza/AGENT_TOOLS.md.
 
 ---
 
@@ -886,8 +886,8 @@ The map is a maintenance artifact, not runtime context. Read it when modifying t
 1. Read initialization files:
    - `REPOSITORY.md` (repo root)
    - `docs/USAGE.md`
-   - `AGENT_TOOLS.md` (in `~/.claude/`)
-   - `COLLABORATION_CONTINUITY.md` (in `~/.claude/`)
+   - `AGENT_TOOLS.md` (in `~/.liza/`)
+   - `COLLABORATION_CONTINUITY.md` (in `~/.liza/`)
 2. Build the 6 mental models. This should be done before ANY substantive response, including greetings.
    - For Collaboration Model: extract patterns from the letter into working memory. The letter then becomes reference, not active context.
 3. Greet the user
@@ -911,7 +911,7 @@ Trust dies at session end. Technical state persists (specs/, TODO.md); collabora
 A "letter to your future self" captures *how* we collaborated — not just what we did — to accelerate trust-building in the next session.
 This isn't inherited trust; it's inherited calibration that lets real trust accumulate faster.
 
-**File:** `COLLABORATION_CONTINUITY.md` (in `~/.claude/`)
+**File:** `COLLABORATION_CONTINUITY.md` (in `~/.liza/`)
 
 ---
 

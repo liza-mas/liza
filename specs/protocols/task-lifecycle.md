@@ -139,7 +139,7 @@ When merge fails (INTEGRATION_FAILED):
 
 ```bash
 # Claim integration-fix task
-~/.claude/scripts/liza-lock.sh modify "
+~/.liza/scripts/liza-lock.sh modify "
   yq -i '(.tasks[] | select(.id == \"task-3\" and .status == \"INTEGRATION_FAILED\")) |=
     (.status = \"CLAIMED\" | .assigned_to = \"coder-2\" | .integration_fix = true |
      .lease_expires = \"$(date -u -d '+5 minutes' +%Y-%m-%dT%H:%M:%SZ)\")' .liza/state.yaml
@@ -285,7 +285,7 @@ Before agents can run, human must initialize the project:
 
 ### Agent Startup Sequence
 
-1. Read `~/.claude/CLAUDE.md` → symlink to `<project>/contracts/CORE.md`
+1. Read `~/.liza/CORE.md` → symlink to `<project>/contracts/CORE.md`
 2. CORE.md contains universal rules and mode selection
 3. State: `"Mode: Liza [role]"` (Planner/Coder/Code Reviewer)
 4. Read `contracts/MULTI_AGENT_MODE.md` (Liza-specific rules)

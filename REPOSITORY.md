@@ -39,7 +39,7 @@ Behavioral contracts that turn agents into trustworthy peers by countering LLM f
 | `CONTRACT_FAILURE_MODE_MAP.md` | Maps every clause to the failure modes it covers |
 | `README.md` | Contract navigation guide |
 
-Deployed by symlinking `CORE.md` to `~/.claude/CLAUDE.md`. Mode contracts and supporting files go under `~/.claude/`.
+Deployed by symlinking `CORE.md` to `~/.liza/CORE.md`. Mode contracts and supporting files go under `~/.liza/`.
 
 ## specs/
 
@@ -123,17 +123,16 @@ Shell scripts implementing Liza system mechanics. Agents invoke these; the scrip
 
 User-facing documentation.
 
-| File | Purpose |
-|------|---------|
-| `USAGE.md` | Quick start guide |
-| `DEMO.md` | Full end-to-end walkthrough |
-| `contract-activation.md` | How to activate the contract for pairing mode |
-| `TROUBLESHOOTING.md` | Common issues and fixes |
-| `Liza-foundation.md` | Core concepts and philosophy (internal) |
-| `Liza-summary.md` | Why behavioral contracts vs. process frameworks (internal) |
-| `architectural-issues.md` | Known architectural concerns |
-| `*-coder-reviewer-review.md` | Agent performance reviews (Claude, Codex, Mistral) |
-| `release_notes/` | Version changelogs |
+| File                                  | Purpose |
+|---------------------------------------|---------|
+| `USAGE.md`                            | Quick start guide |
+| `DEMO.md`                             | Full end-to-end walkthrough |
+| `../contracts/contract-activation.md` | How to activate the contract for pairing mode |
+| `TROUBLESHOOTING.md`                  | Common issues and fixes |
+| `Liza-foundation.md`                  | Core concepts and philosophy (internal) |
+| `Liza-summary.md`                     | Why behavioral contracts vs. process frameworks (internal) |
+| `architectural-issues.md`             | Known architectural concerns |
+| `release_notes/`                      | Version changelogs |
 
 ## templates/
 

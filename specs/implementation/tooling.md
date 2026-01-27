@@ -12,7 +12,7 @@ Contracts are versioned with the project:
 | `PAIRING_MODE.md` | Human-supervised collaboration (extracted from current contract) |
 | `MULTI_AGENT_MODE.md` | Agent-supervised Liza system (new) |
 
-### Global Symlink (`~/.claude/`)
+### Global Symlink (`~/.liza/`)
 
 | File | Purpose |
 |------|---------|
@@ -20,7 +20,7 @@ Contracts are versioned with the project:
 
 **Note:** Update symlink when switching projects: `ln -sf /path/to/project/contracts/CORE.md ~/.claude/CLAUDE.md`
 
-### Scripts (`~/.claude/scripts/`)
+### Scripts (`~/.liza/scripts/`)
 
 | Script | Purpose |
 |--------|---------|
@@ -40,7 +40,7 @@ Contracts are versioned with the project:
 | `update-sprint-metrics.sh` | Recompute sprint.metrics from task state |
 | `clear-stale-review-claims.sh` | Clear expired review claims |
 
-**Deployment Note:** All scripts above are fully implemented in `scripts/`. They must be deployed to their runtime location (`~/.claude/scripts/`) before use. Until deployed, cross-script references (e.g., `wt-merge.sh` calling `update-sprint-metrics.sh`) will silently no-op.
+**Deployment Note:** All scripts above are fully implemented in `scripts/`. They must be deployed to their runtime location (`~/.liza/scripts/`) before use. Until deployed, cross-script references (e.g., `wt-merge.sh` calling `update-sprint-metrics.sh`) will silently no-op.
 
 ### Optional Project Files
 
@@ -132,16 +132,16 @@ This pattern ensures no task is ever in CLAIMED state without a valid worktree.
 # Always combine related field updates in a single yq expression
 
 # Extend lease
-~/.claude/scripts/liza-lock.sh write '.agents.coder-1.lease_expires' '2025-01-17T15:00:00Z'
+~/.liza/scripts/liza-lock.sh write '.agents.coder-1.lease_expires' '2025-01-17T15:00:00Z'
 
 # Read current state
-~/.claude/scripts/liza-lock.sh read
+~/.liza/scripts/liza-lock.sh read
 
 # Request review (MUST be atomic)
 $SCRIPT_DIR/liza-submit-for-review.sh task-3 a1b2c3d
 
 # Log spec change (when human updates specs)
-~/.claude/scripts/liza-lock.sh modify "
+~/.liza/scripts/liza-lock.sh modify "
   yq -i '.spec_changes += [{
     \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
     \"spec\": \"specs/retry-logic.md#auth\",
@@ -151,7 +151,7 @@ $SCRIPT_DIR/liza-submit-for-review.sh task-3 a1b2c3d
 "
 
 # Finalize DRAFT → UNCLAIMED (Planner only, after defining all required fields)
-~/.claude/scripts/liza-lock.sh modify "
+~/.liza/scripts/liza-lock.sh modify "
   yq -i '(.tasks[] | select(.id == \"task-3\" and .status == \"DRAFT\")) |=
     select(.done_when != null and .spec_ref != null) |
     .status = \"UNCLAIMED\"' .liza/state.yaml
@@ -227,7 +227,7 @@ Before any agent starts:
 2. **Initialize blackboard:**
    ```bash
    cd /path/to/project
-   ~/.claude/scripts/liza-init.sh "Implement retry logic for all API calls"
+   ~/.liza/scripts/liza-init.sh "Implement retry logic for all API calls"
    ```
 
 3. **Write/verify specs:**
@@ -238,7 +238,7 @@ Before any agent starts:
 4. **Start watcher (optional but recommended):**
    ```bash
    # Dedicated terminal
-   ~/.claude/scripts/liza-watch.sh
+   ~/.liza/scripts/liza-watch.sh
    ```
 
 ### Agent Startup (Human Triggers, Agents Run)
@@ -247,13 +247,13 @@ Start agents in separate terminals. Each agent requires a unique `LIZA_AGENT_ID`
 
 ```bash
 # Terminal 1: Planner
-LIZA_AGENT_ID=planner-1 ~/.claude/scripts/liza-agent.sh planner
+LIZA_AGENT_ID=planner-1 ~/.liza/scripts/liza-agent.sh planner
 
 # Terminal 2: Coder (after planner has created tasks)
-LIZA_AGENT_ID=coder-1 ~/.claude/scripts/liza-agent.sh coder
+LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh coder
 
 # Terminal 3: Code Reviewer (after coder starts requesting reviews)
-LIZA_AGENT_ID=code-reviewer-1 ~/.claude/scripts/liza-agent.sh code_reviewer
+LIZA_AGENT_ID=code-reviewer-1 ~/.liza/scripts/liza-agent.sh code_reviewer
 ```
 
 See [Agent Identity Protocol](../architecture/roles.md#agent-identity-protocol) for identity validation and collision prevention.

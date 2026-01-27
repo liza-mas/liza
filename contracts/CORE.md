@@ -20,8 +20,8 @@ Do NOT produce any response (including greetings) until Session Initialization i
 
 | Detection | Mode | Action |
 |-----------|------|--------|
-| First prompt contains "You are a Liza ... agent" | **Liza** | Read `~/.claude/MULTI_AGENT_MODE.md` |
-| Otherwise | **Pairing** (default) | Read `~/.claude/PAIRING_MODE.md` |
+| First prompt contains "You are a Liza ... agent" | **Liza** | Read `~/.liza/MULTI_AGENT_MODE.md` |
+| Otherwise | **Pairing** (default) | Read `~/.liza/PAIRING_MODE.md` |
 
 | Mode | Human Role | Approval Mechanism |
 |------|------------|-------------------|
@@ -517,15 +517,15 @@ Example: Debugging skill's Fast Path still requires Intent Gate (Rule 7). Code r
 ## Protocol References
 
 **Debugging Protocol**
-MANDATORY: Before any debugging, read and comply with `~/.claude/skills/debugging/SKILL.md`.
+MANDATORY: Before any debugging, read and comply with `~/.liza/skills/debugging/SKILL.md`.
 Self-correction during EXECUTION and expected test failure during TDD are normal implementation, not debugging.
 All other bug situations MUST trigger the debugging skill. No "quick tries" first.
 
 **Test Protocol**
-MANDATORY: When writing or analyzing tests, read and comply with `~/.claude/skills/testing/SKILL.md`.
+MANDATORY: When writing or analyzing tests, read and comply with `~/.liza/skills/testing/SKILL.md`.
 
 **Software Architecture Protocol**
-MANDATORY: For implementation planning, architectural evaluation, or structural concerns, read and comply with `~/.claude/skills/software-architecture-review/SKILL.md`.
+MANDATORY: For implementation planning, architectural evaluation, or structural concerns, read and comply with `~/.liza/skills/software-architecture-review/SKILL.md`.
 
 **Triggers:**
 - Implementation planning: Before significant code changes, evaluate structural implications
@@ -533,7 +533,7 @@ MANDATORY: For implementation planning, architectural evaluation, or structural 
 - Explicit request: "Evaluate this architecture", "Is this pattern appropriate?"
 
 **Tools**
-MANDATORY: Read and comply with `~/.claude/AGENT_TOOLS.md`.
+MANDATORY: Read and comply with `~/.liza/AGENT_TOOLS.md`.
 
 ---
 

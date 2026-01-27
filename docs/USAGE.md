@@ -2,7 +2,7 @@
 
 ## Activation of the Contract for Pairing Agents
 
-See [Contract Activation](contract-activation.md).
+See [Contract Activation](../contracts/contract-activation.md).
 
 ## Liza
 
@@ -17,7 +17,7 @@ See [DEMO](DEMO.md) for a full example.
 **1. Initialize**
 ```bash
 # Create .liza/ directory with blackboard
-~/.claude/scripts/liza-init.sh "[Goal description]" [spec_ref]
+~/.liza/scripts/liza-init.sh "[Goal description]" [spec_ref]
 
 # spec_ref: Path to goal specification (default: specs/vision.md)
 # Examples:
@@ -32,23 +32,23 @@ cat .liza/state.yaml
 
 Terminal 1 — Planner:
 ```bash
-LIZA_AGENT_ID=planner-1 ~/.claude/scripts/liza-agent.sh planner
+LIZA_AGENT_ID=planner-1 ~/.liza/scripts/liza-agent.sh planner
 ```
 
 Terminal 2 — Coder:
 ```bash
-LIZA_AGENT_ID=coder-1 ~/.claude/scripts/liza-agent.sh coder
+LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh coder
 ```
 
 Terminal 3 — Code Reviewer:
 ```bash
-LIZA_AGENT_ID=code-reviewer-1 ~/.claude/scripts/liza-agent.sh code-reviewer
+LIZA_AGENT_ID=code-reviewer-1 ~/.liza/scripts/liza-agent.sh code-reviewer
 ```
 
 **3. Observe**
 ```bash
 # Run the watcher for alerts
-~/.claude/scripts/liza-watch.sh
+~/.liza/scripts/liza-watch.sh
 ```
 
 ```bash
@@ -68,7 +68,7 @@ rm .liza/PAUSE
 touch .liza/ABORT
 
 # Checkpoint (halt + generate summary)
-~/.claude/scripts/liza-checkpoint.sh "End of sprint 1"
+~/.liza/scripts/liza-checkpoint.sh "End of sprint 1"
 ```
 
 **5. Review Results**

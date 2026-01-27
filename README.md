@@ -211,8 +211,8 @@ Planned improvements:
 
 Target structure:
 ```
-~/.claude/
-├── CLAUDE.md                      → contracts/CORE.md (symlink)
+~/.liza/
+├── CORE.md                        → contracts/CORE.md (symlink)
 ├── contracts/
 │   ├── CORE.md                    # Universal rules + mode selection gate
 │   ├── PAIRING_MODE.md            # Human-supervised collaboration

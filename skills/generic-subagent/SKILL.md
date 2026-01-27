@@ -61,7 +61,7 @@ Use Task tool. Subagent inherits contract but operates in Subagent Mode (read-on
 # For the Subagent
 
 When receiving a `MODE: SUBAGENT` brief:
-1. Review ~/.claude/AGENT_TOOLS.md — MCP servers often provide efficient alternatives to manual tool chains
+1. Review ~/.liza/AGENT_TOOLS.md — MCP servers often provide efficient alternatives to manual tool chains
 2. Work within scope, abort if insufficient
 3. Return structured output (see below)
 

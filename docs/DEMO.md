@@ -10,7 +10,7 @@ This walkthrough demonstrates Liza orchestrating a multi-agent system to build a
 
 ## Prerequisites
 
-See [USAGE](USAGE.md#activation-of-the-contract-for-pairing-agents) for the pre-requisite setup.
+See [Contract Activation](../contracts/contract-activation.md) for the pre-requisite setup.
 
 ---
 
@@ -73,7 +73,7 @@ git commit -m "Initial commit: vision spec"
 ## Step 4: Initialize Liza
 
 ```bash
-~/.claude/scripts/liza-init.sh "Build hello CLI" specs/vision.md
+~/.liza/scripts/liza-init.sh "Build hello CLI" specs/vision.md
 ```
 
 This creates:
@@ -107,7 +107,7 @@ Open a terminal for monitoring:
 
 ```bash
 cd hello-cli
-~/.claude/scripts/liza-watch.sh
+~/.liza/scripts/liza-watch.sh
 ```
 
 This monitors for anomalies and alerts. Leave it running.
@@ -118,7 +118,7 @@ This monitors for anomalies and alerts. Leave it running.
 
 ```bash
 cd hello-cli
-LIZA_AGENT_ID=planner-1 ~/.claude/scripts/liza-agent.sh planner
+LIZA_AGENT_ID=planner-1 ~/.liza/scripts/liza-agent.sh planner
 ```
 
 The Planner will:
@@ -146,7 +146,7 @@ Once UNCLAIMED tasks appear:
 
 ```bash
 cd hello-cli
-LIZA_AGENT_ID=coder-1 ~/.claude/scripts/liza-agent.sh coder
+LIZA_AGENT_ID=coder-1 ~/.liza/scripts/liza-agent.sh coder
 ```
 
 The Coder will:
@@ -167,7 +167,7 @@ ls -la .worktrees/
 
 ```bash
 cd hello-cli
-LIZA_AGENT_ID=code-reviewer-1 ~/.claude/scripts/liza-agent.sh code-reviewer
+LIZA_AGENT_ID=code-reviewer-1 ~/.liza/scripts/liza-agent.sh code-reviewer
 ```
 
 The Code Reviewer will:
@@ -368,7 +368,7 @@ cat .liza/alerts.log
 
 **Trigger checkpoint (sprint boundary):**
 ```bash
-~/.claude/scripts/liza-checkpoint.sh "Sprint 1 complete"
+~/.liza/scripts/liza-checkpoint.sh "Sprint 1 complete"
 # Generates .liza/checkpoints/checkpoint-YYYYMMDD-HHMMSS.md
 ```
 

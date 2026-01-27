@@ -31,7 +31,7 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 3. **Use a different agent ID** — If running multiple instances:
    ```bash
-   LIZA_AGENT_ID=planner-2 ~/.claude/scripts/liza-agent.sh planner
+   LIZA_AGENT_ID=planner-2 ~/.liza/scripts/liza-agent.sh planner
    ```
 
 **Prevention:** Use `touch .liza/PAUSE` before stopping agents — they'll exit gracefully at next check.
@@ -75,7 +75,7 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 2. **Debug specific issue:**
    ```bash
-   ~/.claude/scripts/liza-validate.sh .liza/state.yaml
+   ~/.liza/scripts/liza-validate.sh .liza/state.yaml
    ```
 
 ---
@@ -187,7 +187,7 @@ git merge --abort  # if mid-merge
 2. **Reset completely:**
    ```bash
    rm -rf .liza .worktrees
-   ~/.claude/scripts/liza-init.sh "New goal description"
+   ~/.liza/scripts/liza-init.sh "New goal description"
    ```
 
 ### Error: specs/vision.md required
@@ -254,7 +254,7 @@ cp -r .liza .liza.backup.$(date +%Y%m%d-%H%M%S)
 
 # Remove and reinitialize
 rm -rf .liza
-~/.claude/scripts/liza-init.sh "Goal description"
+~/.liza/scripts/liza-init.sh "Goal description"
 
 # Manually migrate any in-progress work from backup if needed
 ```
@@ -280,5 +280,5 @@ yq -i '(.tasks[] | select(.assigned_to == "<agent-id>")).assigned_to = null' .li
 
 1. **Check alerts log:** `cat .liza/alerts.log`
 2. **Check activity log:** `cat .liza/log.yaml`
-3. **Validate state:** `~/.claude/scripts/liza-validate.sh .liza/state.yaml`
-4. **Watch live:** `~/.claude/scripts/liza-watch.sh`
+3. **Validate state:** `~/.liza/scripts/liza-validate.sh .liza/state.yaml`
+4. **Watch live:** `~/.liza/scripts/liza-watch.sh`

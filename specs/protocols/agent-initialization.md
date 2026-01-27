@@ -27,6 +27,9 @@ Agent receives:
 ~/.claude/CLAUDE.md (symlink)
         │
         ▼
+~/.liza/CORE.md (symlink)
+        │
+        ▼
 <project>/contracts/CORE.md
         │
         ├── Tier 0 invariants, shared rules

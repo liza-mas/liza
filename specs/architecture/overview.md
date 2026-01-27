@@ -153,8 +153,8 @@ When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. 
 ### Global Symlink and Contract Loading
 
 ```
-~/.claude/
-├── CLAUDE.md                      → <project>/contracts/CORE.md (symlink)
+~/.liza/
+├── CORE.md                      → <project>/contracts/CORE.md (symlink)
 └── scripts/                       # Generic Liza tooling
 ```
 
@@ -166,10 +166,10 @@ When tasks are rescoped, original task becomes SUPERSEDED with explicit reason. 
 
 Update symlink when switching projects: `ln -sf /path/to/project/contracts/CORE.md ~/.claude/CLAUDE.md`
 
-### Global Scripts (`~/.claude/scripts/`)
+### Global Scripts (`~/.liza/scripts/`)
 
 ```
-~/.claude/
+~/.liza/scripts/
     ├── liza-init.sh               # Initialize blackboard
     ├── liza-lock.sh               # Atomic operations
     ├── liza-validate.sh           # Schema validation

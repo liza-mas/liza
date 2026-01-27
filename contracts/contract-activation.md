@@ -2,15 +2,34 @@
 
 Check [Genesis](../README.md#genesis) for the features.
 
+## Central Config
+
 Create symlinks:
 ```
-- `~/.claude/CLAUDE.md` -> `~/Workspace/liza/contracts/CORE.md`
-- `~/.claude/PAIRING_MODE.md` -> `~/Workspace/liza/contracts/PAIRING_MODE.md`
-- `~/.claude/MULTI_AGENT_MODE.md` -> `~/Workspace/liza/contracts/MULTI_AGENT_MODE.md`
-- `~/.claude/AGENT_TOOLS.md` -> `~/Workspace/liza/contracts/AGENT_TOOLS.md`
-- `~/.claude/skills` -> `~/Workspace/liza/contracts/skills`
-- `~/.claude/COLLABORATION_CONTINUITY.md` -> `~/Workspace/liza/contracts/COLLABORATION_CONTINUITY.md`
-- `~/.claude/scripts` -> `~/Workspace/liza/scripts`
+LIZA_DIR=~/Workspace/liza
+mkdir -p ~/.liza
+cd ~/.liza
+ln -s $LIZA_DIR/contracts/CORE.md
+ln -s $LIZA_DIR/contracts/PAIRING_MODE.md
+ln -s $LIZA_DIR/contracts/MULTI_AGENT_MODE.md
+ln -s $LIZA_DIR/contracts/AGENT_TOOLS.md
+ln -s $LIZA_DIR/contracts/COLLABORATION_CONTINUITY.md
+ln -s $LIZA_DIR/skills
+ln -s $LIZA_DIR/scripts
+```
+
+## Claude
+
+Create symlinks:
+```
+cd ~/.claude
+ln -s ~/.liza/CORE.md CLAUDE.md
+ln -s ~/.liza/CORE.md
+ln -s ~/.liza/PAIRING_MODE.md
+ln -s ~/.liza/MULTI_AGENT_MODE.md
+ln -s ~/.liza/AGENT_TOOLS.md
+ln -s ~/.liza/COLLABORATION_CONTINUITY.md
+ln -s ~/.liza/skills
 ```
 
 In `~/.claude/settings.json`, configure global permissions for tools used across all projects:
@@ -142,8 +161,37 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
 - `WebFetch/WebSearch/LSP` — Built-in Claude tools for web and code navigation
 - Other `Bash(...)` — Safe read-only shell commands (no package managers)
 
-This enables auto-accept mode for headless agents. If agents get blocked on additional tools, add them to your global settings. Refer to "Debug a stuck agent interactively" in [DEMO.md](DEMO.md#troubleshooting) to identify blocking commands.
+This enables auto-accept mode for headless agents. If agents get blocked on additional tools, add them to your global settings. Refer to "Debug a stuck agent interactively" in [DEMO.md](../docs/DEMO.md#troubleshooting) to identify blocking commands.
 
 Verification:
 - Run `claude`
 - Prompt `hello`
+
+## Codex
+
+Create symlinks:
+```
+cd ~/.codex
+ln -s ~/.liza/CORE.md AGENTS.md
+ln -s ~/.liza/CORE.md
+ln -s ~/.liza/PAIRING_MODE.md
+ln -s ~/.liza/MULTI_AGENT_MODE.md
+ln -s ~/.liza/AGENT_TOOLS.md
+ln -s ~/.liza/COLLABORATION_CONTINUITY.md
+for i in ~/.liza/skills/* ; do ln -s $i skills/`basename $i` ; done
+```
+
+Edit ~/.codex/config.toml:
+
+```
+approval_policy = "on-failure"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = true
+writable_roots = ["/home/<USER>/.codex", "/home/<USER>/.pyenv/shims", "/home/<USER>/.cache"]
+
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/tangi/.claude", "/home/tangi/.codex", "/home/tangi/Workspace"]
+```
