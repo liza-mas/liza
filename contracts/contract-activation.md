@@ -49,7 +49,9 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
     "allow": [
       "Read(~/.claude/**)",
       "Read(~/.liza/**)",
+      "Read(/home/tangi/.liza/**)",
       "Read(~/Workspace/liza/**)",
+      "Read(/home/tangi/Workspace/liza/**)",
 
       "Skill(adr-backfill)",
       "Skill(code-cleaning)",
@@ -116,6 +118,9 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
       "LSP",
 
       "Bash(~/.liza/scripts/*)",
+      "Bash(/home/tangi/.liza/scripts/*)",
+      "Bash(~/Workspace/liza/scripts/*)",
+      "Bash(/home/tangi/Workspace/liza/scripts/*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(jq:*)",
@@ -128,6 +133,8 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
       "Bash(realpath:*)",
       "Bash(dirname:*)",
       "Bash(basename:*)",
+      "Bash(cd:*)",
+      "Bash(echo:*)",
       "Bash(which:*)",
       "Bash(file:*)",
       "Bash(tree:*)",
