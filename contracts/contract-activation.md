@@ -207,6 +207,22 @@ command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/<USER>/.claude", "/home/<USER>/.codex", "/home/<USER>/Workspace", "/home/<USER>/.liza", ]
 ```
 
+## Gemini
+
+Create symlinks:
+```bash
+mkdir -p ~/.gemini/skills
+cd ~/.gemini
+ln -s ~/.liza/CORE.md GEMINI.md
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/`basename "$i"` ; done
+```
+
+The contract is followed more strictly if the symlink is created at every repo root:
+```bash
+cd <REPO_ROOT>
+ln -s ~/.liza/CORE.md GEMINI.md
+```
+
 ## Mistral
 
 Symlink the contract as instructions and add skills:
