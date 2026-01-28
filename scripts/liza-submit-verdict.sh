@@ -31,11 +31,11 @@ if [ "$VERDICT" = "REJECTED" ] && [ -z "$REJECTION_REASON" ]; then
     exit 1
 fi
 
-SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
-SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
-PROJECT_ROOT=$(git rev-parse --show-toplevel)
+SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+source "$SCRIPT_DIR/liza-common.sh"
+PROJECT_ROOT=$(get_project_root)
 STATE="$PROJECT_ROOT/.liza/state.yaml"
-TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+TIMESTAMP=$(iso_timestamp)
 
 if [ "$VERDICT" = "APPROVED" ]; then
     verdict_patch=".status = \"APPROVED\" | .approved_by = \"$LIZA_AGENT_ID\" | .rejection_reason = null"

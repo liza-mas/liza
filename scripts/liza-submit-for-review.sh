@@ -17,11 +17,11 @@ if [ -z "${LIZA_AGENT_ID:-}" ]; then
     exit 1
 fi
 
-SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
-SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
-PROJECT_ROOT=$(git rev-parse --show-toplevel)
+SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+source "$SCRIPT_DIR/liza-common.sh"
+PROJECT_ROOT=$(get_project_root)
 STATE="$PROJECT_ROOT/.liza/state.yaml"
-TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+TIMESTAMP=$(iso_timestamp)
 
 "$SCRIPT_DIR/liza-lock.sh" modify \
   yq -i "(.tasks[] | select(.id == \"$TASK_ID\")) |= (.status = \"READY_FOR_REVIEW\" | .review_commit = \"$COMMIT_SHA\" | .history = ((.history // []) + [{\"time\": \"$TIMESTAMP\", \"event\": \"submitted_for_review\", \"agent\": \"$LIZA_AGENT_ID\"}]))" "$STATE"

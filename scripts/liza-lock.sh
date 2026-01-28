@@ -14,10 +14,8 @@
 set -euo pipefail
 
 # --- Path Setup ---
-PROJECT_ROOT=$(git rev-parse --show-toplevel)
-readonly PROJECT_ROOT
-readonly STATE="$PROJECT_ROOT/.liza/state.yaml"
-readonly LOCK="$STATE.lock"
+source "$(dirname "$0")/liza-common.sh"
+setup_liza_paths
 readonly LOCK_TIMEOUT=10
 
 # --- Helper Functions ---

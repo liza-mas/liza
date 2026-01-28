@@ -22,7 +22,8 @@ if [ -z "$TASK_ID" ] || [ -z "$AGENT_ID" ]; then
 fi
 
 # --- Path Setup ---
-PROJECT_ROOT=$(git rev-parse --show-toplevel)
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/liza-common.sh"
+PROJECT_ROOT=$(get_project_root)
 readonly PROJECT_ROOT
 readonly STATE="$PROJECT_ROOT/.liza/state.yaml"
 readonly STATE_LOCK="$STATE.lock"
@@ -33,10 +34,6 @@ readonly WORKTREE_DIR=".worktrees/$TASK_ID"
 die() {
     echo "ERROR: $*" >&2
     exit 1
-}
-
-iso_timestamp() {
-    date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
 # --- Prepare Values (outside lock - these don't depend on state) ---
@@ -100,9 +97,9 @@ validate_result=$(flock -x "$STATE_LOCK" -c "
             ;;
     esac
 
-    # Check agent isn't already working on another task
+    # Check agent isn't already working on another task (allow reclaiming same task)
     agent_task=\$(yq -r '.agents.\"$AGENT_ID\".current_task // \"\"' '$STATE' 2>/dev/null)
-    if [ -n \"\$agent_task\" ] && [ \"\$agent_task\" != 'null' ]; then
+    if [ -n \"\$agent_task\" ] && [ \"\$agent_task\" != 'null' ] && [ \"\$agent_task\" != '$TASK_ID' ]; then
         echo \"Agent busy with \$agent_task\"
         exit 4
     fi
@@ -218,9 +215,9 @@ commit_result=$(flock -x "$STATE_LOCK" -c "
         fi
     fi
 
-    # Re-check agent availability
+    # Re-check agent availability (allow reclaiming same task)
     agent_task=\$(yq -r '.agents.\"$AGENT_ID\".current_task // \"\"' '$STATE' 2>/dev/null)
-    if [ -n \"\$agent_task\" ] && [ \"\$agent_task\" != 'null' ]; then
+    if [ -n \"\$agent_task\" ] && [ \"\$agent_task\" != 'null' ] && [ \"\$agent_task\" != '$TASK_ID' ]; then
         echo \"Agent now busy with \$agent_task\"
         exit 4
     fi
