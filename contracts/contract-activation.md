@@ -5,7 +5,7 @@ Check [Genesis](../README.md#genesis) for the features.
 ## Central Config
 
 Create symlinks:
-```
+```bash
 LIZA_DIR=~/Workspace/liza
 mkdir -p ~/.liza
 cd ~/.liza
@@ -22,7 +22,7 @@ ln -s $LIZA_DIR/specs
 ## Claude
 
 Create symlinks:
-```
+```bash
 cd ~/.claude
 ln -s ~/.liza/CORE.md CLAUDE.md
 ln -s ~/.liza/CORE.md
@@ -171,7 +171,7 @@ Verification:
 ## Codex
 
 Create symlinks:
-```
+```bash
 cd ~/.codex
 ln -s ~/.liza/CORE.md AGENTS.md
 ln -s ~/.liza/CORE.md
@@ -184,7 +184,7 @@ for i in ~/.liza/skills/* ; do ln -s $i skills/`basename $i` ; done
 
 Edit ~/.codex/config.toml:
 
-```
+```toml
 approval_policy = "on-failure"
 sandbox_mode = "workspace-write"
 
@@ -196,3 +196,27 @@ writable_roots = ["/home/<USER>/.codex", "/home/<USER>/.pyenv/shims", "/home/<US
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/tangi/.claude", "/home/tangi/.codex", "/home/tangi/Workspace", "/home/tangi/.liza", ]
 ```
+
+## Mistral
+
+Symlink the contract as instructions and add skills:
+```bash
+mkdir -p ~/.vibe/skills
+cd ~/.vibe
+rm -f instructions.md
+ln -s ~/.liza/CORE.md instructions.md
+for i in ~/.liza/skills/* ; do ln -s $i skills/`basename $i` ; done
+```
+
+Add MCP filesystem server to `~/.vibe/config.toml` (replace `mcp_servers = []` with):
+```toml
+[[mcp_servers]]
+name = "filesystem"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/tangi/.vibe", "/home/tangi/Workspace", "/home/tangi/.liza"]
+```
+
+Verification:
+- Run `vibe`
+- Prompt `hello, follow ~/.vibe/instructions.md` ("hello" is not enough)

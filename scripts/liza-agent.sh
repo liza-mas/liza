@@ -1,6 +1,6 @@
 #!/bin/bash
 # Agent supervisor - restarts agent on graceful abort
-# Usage: LIZA_AGENT_ID=coder-1 liza-agent.sh [--cli claude|codex] <role> [initial-task-id]
+# Usage: LIZA_AGENT_ID=coder-1 liza-agent.sh [--cli claude|codex|mistral] <role> [initial-task-id]
 
 set -euo pipefail
 
@@ -18,13 +18,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${1:-}" ]]; then
-    echo "Usage: liza-agent.sh [--cli claude|codex] <role> [initial-task-id]" >&2
+    echo "Usage: liza-agent.sh [--cli claude|codex|mistral] <role> [initial-task-id]" >&2
     exit 1
 fi
 
 case "$CLI" in
-    claude|codex) ;;
-    *) echo "Error: --cli must be 'claude' or 'codex', got '$CLI'" >&2; exit 1 ;;
+    claude|codex|mistral) ;;
+    *) echo "Error: --cli must be 'claude', 'codex', or 'mistral', got '$CLI'" >&2; exit 1 ;;
 esac
 readonly CLI
 
@@ -654,6 +654,9 @@ while true; do
             ;;
         codex)
             LIZA_AGENT_ID="$LIZA_AGENT_ID" codex exec --add-dir "$LIZA_ROOT" "$(cat "$PROMPT_FILE")"
+            ;;
+        mistral)
+            LIZA_AGENT_ID="$LIZA_AGENT_ID" vibe -p "$(cat "$PROMPT_FILE")"
             ;;
     esac
     EXIT_CODE=$?
