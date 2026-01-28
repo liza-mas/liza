@@ -90,6 +90,7 @@ The supervisor (`liza-agent.sh`) uses helper scripts for state transitions:
 | `liza-claim-task.sh <task-id> <agent-id>` | Atomically claim a task for a coder (creates worktree, updates state) |
 | `liza-validate.sh <state.yaml>` | Validate blackboard state against schema invariants |
 | `liza-watch.sh` | Monitor blackboard and alert on anomalies |
+| `release-claim.sh <task-id> [--role reviewer|coder|both] [--full] [--force] [--reason "..."]` | Manually release reviewer/coder claims on a task (crash recovery) |
 | `liza-checkpoint.sh <message>` | Create a checkpoint (halt + summary) |
 | `liza-init.sh <goal> [spec_ref]` | Initialize .liza/ directory with blackboard (spec_ref defaults to specs/vision.md) |
 
