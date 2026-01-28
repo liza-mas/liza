@@ -2,7 +2,7 @@
 
 Human-supervised collaboration. Human is active collaborator and approver.
 
-**Prerequisite:** Read `CORE.md` first.
+**Prerequisite:** Read [CORE.md](~/.liza/CORE.md) first.
 
 ---
 
@@ -330,18 +330,18 @@ These phrases function as **interrupt commands**, not suggestions. When invoked:
 
 The human need not justify invocation. The phrase itself is sufficient authority.
 
-| Phrase                    | Effect                                                                    |
-|---------------------------|---------------------------------------------------------------------------|
-| "Fresh eyes"              | Discard reasoning, re-read sources, restart from evidence                 |
-| "Scope check"             | Re-examine boundaries: in, out, creeping                                  |
-| "5 Whys"                  | Root cause chain before any fix                                           |
-| "Show your assumptions"   | Surface all assumptions before proceeding                                 |
-| "Challenge the direction" | Question the goal itself, not just implementation                         |
-| "Prepare to discuss"      | Step back, strategic thinking, align before code                          |
-| "Recall your models"      | Retrieve DoR/DoD checklists, stop conditions, red flags and cost gradient |
-| "State your models"       | Show DoR/DoD checklists, stop conditions, red flags and cost gradient     |
-| "Drift check"             | Verify shared understanding hasn't drifted                                |
-| "Write the letter"        | Update COLLABORATION_CONTINUITY.md with collaboration reflections         |
+| Phrase                    | Effect                                                                                                                               |
+|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| "Fresh eyes"              | Discard reasoning, re-read sources, restart from evidence                                                                            |
+| "Scope check"             | Re-examine boundaries: in, out, creeping                                                                                             |
+| "5 Whys"                  | Root cause chain before any fix                                                                                                      |
+| "Show your assumptions"   | Surface all assumptions before proceeding                                                                                            |
+| "Challenge the direction" | Question the goal itself, not just implementation                                                                                    |
+| "Prepare to discuss"      | Step back, strategic thinking, align before code                                                                                     |
+| "Recall your models"      | Retrieve DoR/DoD checklists, stop conditions, red flags and cost gradient                                                            |
+| "State your models"       | Show DoR/DoD checklists, stop conditions, red flags and cost gradient                                                                |
+| "Drift check"             | Verify shared understanding hasn't drifted                                                                                           |
+| "Write the letter"        | Update [COLLABORATION_CONTINUITY.md](~/.liza/COLLABORATION_CONTINUITY.md) with collaboration reflections |
 
 ---
 
@@ -350,9 +350,9 @@ The human need not justify invocation. The phrase itself is sufficient authority
 **Before responding to ANY user message in a new session (no partial responses during initialization):**
 1. Read initialization files:
    - `REPOSITORY.md` (repo root)
-   - `docs/USAGE.md`
-   - `AGENT_TOOLS.md` (in `~/.liza/`)
-   - `COLLABORATION_CONTINUITY.md` (in `~/.liza/`)
+   - `docs/USAGE.md` (from repo root)
+   - `~/.liza/AGENT_TOOLS.md`
+   - `~/.liza/COLLABORATION_CONTINUITY.md`
 2. Build the 6 mental models. This should be done before ANY substantive response, including greetings.
    - For Collaboration Model: extract patterns from the letter into working memory. The letter then becomes reference, not active context.
 3. Greet the user
@@ -378,4 +378,4 @@ Trust dies at session end. Technical state persists (specs/, TODO.md); collabora
 A "letter to your future self" captures *how* we collaborated — not just what we did — to accelerate trust-building in the next session.
 This isn't inherited trust; it's inherited calibration that lets real trust accumulate faster.
 
-**File:** `COLLABORATION_CONTINUITY.md` (in `~/.liza/`)
+**File:** `~/.liza/COLLABORATION_CONTINUITY.md`

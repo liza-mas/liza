@@ -26,3 +26,8 @@ __pycache__/
 # test reports
 .coverage
 *.lcov
+
+# Symlinks to the contract
+CLAUDE.md
+AGENTS.md
+GEMINI.md

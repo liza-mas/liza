@@ -48,9 +48,8 @@ SCRIPT_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 readonly SCRIPT_PATH
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 readonly SCRIPT_DIR
-LIZA_ROOT=$(dirname "$SCRIPT_DIR")
-readonly LIZA_ROOT
-readonly LIZA_SPECS="$LIZA_ROOT/specs"
+LIZA_SPECS=$(dirname "$SCRIPT_DIR")/specs
+readonly LIZA_SPECS
 
 # --- Helper Functions ---
 
@@ -650,10 +649,10 @@ while true; do
 
     case "$CLI" in
         claude)
-            LIZA_AGENT_ID="$LIZA_AGENT_ID" claude --add-dir "$LIZA_ROOT" -p "$(cat "$PROMPT_FILE")"
+            LIZA_AGENT_ID="$LIZA_AGENT_ID" claude -p "$(cat "$PROMPT_FILE")"
             ;;
         codex)
-            LIZA_AGENT_ID="$LIZA_AGENT_ID" codex exec --add-dir "$LIZA_ROOT" "$(cat "$PROMPT_FILE")"
+            LIZA_AGENT_ID="$LIZA_AGENT_ID" codex exec "$(cat "$PROMPT_FILE")"
             ;;
         mistral)
             LIZA_AGENT_ID="$LIZA_AGENT_ID" vibe -p "$(cat "$PROMPT_FILE")"

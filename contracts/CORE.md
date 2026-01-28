@@ -2,6 +2,10 @@
 
 Universal rules shared between Pairing and Multi-Agent modes.
 
+**IMPORTANT**: master path is ~/.liza/CORE.md.
+Agents access it through symlinks from user home or repo root (e.g. ~/.claude/CLAUDE.md or <REPO_ROOT>/AGENTS.md).
+Yet it's a unique file. Agents SHOULD NOT consider it as distinct files to all read.
+
 ---
 
 ## Initialization Sequence

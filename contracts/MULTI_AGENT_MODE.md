@@ -2,7 +2,7 @@
 
 Peer-supervised collaboration. Agents approve each other via protocol.
 
-**Prerequisite:** Read `CORE.md` first.
+**Prerequisite:** Read [CORE.md](~/.liza/CORE.md) first.
 
 ---
 
@@ -35,7 +35,7 @@ The system runs autonomously until it can't. Human resolves specific blockages, 
 ## Role Execution
 
 Each agent has a defined role with specific capabilities and constraints.
-See [specs/architecture/roles.md](../specs/architecture/roles.md) for full definitions.
+See [specs/architecture/roles.md](~/.liza/specs/architecture/roles.md) for full definitions.
 
 | Role | Primary Function | Approval Authority |
 |------|------------------|-------------------|
@@ -94,7 +94,7 @@ Misalignment between checkpoint and implementation triggers rejection.
 
 ## Gate Semantics (Multi-Agent)
 
-The Execution State Machine is defined in CORE.md. In Multi-Agent mode:
+The Execution State Machine is defined in [CORE.md](~/.liza/CORE.md). In Multi-Agent mode:
 
 - **Gate artifact** = Pre-execution checkpoint written to blackboard (above)
 - **Gate cleared** = Checkpoint written (self-clearing — forces thinking, then proceed)
@@ -155,7 +155,7 @@ flock -x "$STATE.lock" yq -i '...' "$STATE"
 
 **State Validation:** Run `liza-validate.sh` after updates.
 
-See [specs/architecture/blackboard-schema.md](../specs/architecture/blackboard-schema.md) for schema.
+See [specs/architecture/blackboard-schema.md](~/.liza/specs/architecture/blackboard-schema.md) for schema.
 
 ---
 
@@ -186,7 +186,7 @@ On integration conflict (INTEGRATION_FAILED):
 4. Human resolves in integration branch, adds note to `human_notes`: "Conflict resolved for task-X"
 5. Code Reviewer retries merge after human resolution
 
-See [specs/protocols/worktree-protocol.md](../specs/protocols/worktree-protocol.md) for details.
+See [specs/protocols/worktree-protocol.md](~/.liza/specs/protocols/worktree-protocol.md) for details.
 
 ---
 
@@ -353,4 +353,4 @@ Automatic halt conditions:
 | Blackboard validation fails | All agents pause |
 | Integration branch conflict | INTEGRATION_FAILED |
 
-See [specs/protocols/circuit-breaker.md](../specs/protocols/circuit-breaker.md) for details.
+See [specs/protocols/circuit-breaker.md](~/.liza/specs/protocols/circuit-breaker.md) for details.

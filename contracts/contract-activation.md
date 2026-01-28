@@ -2,6 +2,10 @@
 
 Check [Genesis](../README.md#genesis) for the features.
 
+**WARNING**: Gemini and Mistral are not able to fully comply with the contract.
+It's not possible to make them comply strictly with instructions. They are not recommended models for Liza.
+Prefer Claude or Codex.
+
 ## Central Config
 
 Create symlinks:
@@ -25,22 +29,26 @@ Create symlinks:
 ```bash
 cd ~/.claude
 ln -s ~/.liza/CORE.md CLAUDE.md
-ln -s ~/.liza/CORE.md
-ln -s ~/.liza/PAIRING_MODE.md
-ln -s ~/.liza/MULTI_AGENT_MODE.md
-ln -s ~/.liza/AGENT_TOOLS.md
-ln -s ~/.liza/COLLABORATION_CONTINUITY.md
-ln -s ~/.liza/skills
+mkdir -p skills
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/`basename "$i"` ; done
+```
+
+The contract is followed more strictly if the symlink is created at every repo root:
+```bash
+cd <REPO_ROOT>
+ln -s ~/.liza/CORE.md CLAUDE.md
 ```
 
 In `~/.claude/settings.json`, configure global permissions for tools used across all projects:
 
 ```json
 {
+  "additionalDirectories": [ "~/.liza"],
   "permissions": {
     "defaultMode": "acceptEdits",
     "allow": [
       "Read(~/.claude/**)",
+      "Read(~/.liza/**)",
 
       "Skill(adr-backfill)",
       "Skill(code-cleaning)",
@@ -106,7 +114,7 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
       "WebSearch",
       "LSP",
 
-      "Bash(~/.claude/scripts/*)",
+      "Bash(~/.liza/scripts/*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(jq:*)",
@@ -155,9 +163,9 @@ In `~/.claude/settings.json`, configure global permissions for tools used across
 
 **Permission categories:**
 - `"defaultMode": "acceptEdits"` — Required for Liza agents to work headless (preferred to `"bypassPermissions"` aka YOLO mode)
-- `Read(~/.claude/**)` — Access to contract files
-- `Bash(~/.claude/scripts/*)` — Execution of Liza scripts
-- `Skill(...)` — Custom skills from `~/.claude/skills/`
+- `Read(~/.liza/**)` — Access to contract files
+- `Bash(~/.liza/scripts/*)` — Execution of Liza scripts
+- `Skill(...)` — Custom skills from `~/.liza/skills/`
 - `mcp__...` — Your configured MCP tools
 - `WebFetch/WebSearch/LSP` — Built-in Claude tools for web and code navigation
 - Other `Bash(...)` — Safe read-only shell commands (no package managers)
@@ -172,14 +180,16 @@ Verification:
 
 Create symlinks:
 ```bash
+mkdir -p ~/.codex/skills
 cd ~/.codex
 ln -s ~/.liza/CORE.md AGENTS.md
-ln -s ~/.liza/CORE.md
-ln -s ~/.liza/PAIRING_MODE.md
-ln -s ~/.liza/MULTI_AGENT_MODE.md
-ln -s ~/.liza/AGENT_TOOLS.md
-ln -s ~/.liza/COLLABORATION_CONTINUITY.md
-for i in ~/.liza/skills/* ; do ln -s $i skills/`basename $i` ; done
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/`basename "$i"` ; done
+```
+
+The contract is followed more strictly if the symlink is created at every repo root:
+```bash
+cd <REPO_ROOT>
+ln -s ~/.liza/CORE.md AGENTS.md
 ```
 
 Edit ~/.codex/config.toml:
@@ -190,33 +200,34 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 network_access = true
-writable_roots = ["/home/<USER>/.codex", "/home/<USER>/.pyenv/shims", "/home/<USER>/.cache"]
+writable_roots = ["/home/<USER>/.codex",  "/home/<USER>/.liza", "/home/<USER>/.pyenv/shims", "/home/<USER>/.cache"]
 
 [mcp_servers.filesystem]
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/tangi/.claude", "/home/tangi/.codex", "/home/tangi/Workspace", "/home/tangi/.liza", ]
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/<USER>/.claude", "/home/<USER>/.codex", "/home/<USER>/Workspace", "/home/<USER>/.liza", ]
 ```
 
 ## Mistral
 
 Symlink the contract as instructions and add skills:
 ```bash
-mkdir -p ~/.vibe/skills
+mkdir -p ~/.vibe/prompts ~/.vibe/skills
 cd ~/.vibe
-rm -f instructions.md
-ln -s ~/.liza/CORE.md instructions.md
-for i in ~/.liza/skills/* ; do ln -s $i skills/`basename $i` ; done
+ln -s ~/.liza/CORE.md prompts/liza.md
+for i in ~/.liza/skills/* ; do ln -s "$i" skills/`basename "$i"` ; done
 ```
 
-Add MCP filesystem server to `~/.vibe/config.toml` (replace `mcp_servers = []` with):
+Modify `~/.vibe/config.toml`:
+- Add `system_prompt_id = "liza"` (replace `system_prompt_id = "cli"` with)
+- Add MCP filesystem server (replace `mcp_servers = []` with):
 ```toml
 [[mcp_servers]]
 name = "filesystem"
 transport = "stdio"
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/tangi/.vibe", "/home/tangi/Workspace", "/home/tangi/.liza"]
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/<USER>/.vibe", "/home/<USER>/Workspace", "/home/<USER>/.liza"]
 ```
 
 Verification:
 - Run `vibe`
-- Prompt `hello, follow ~/.vibe/instructions.md` ("hello" is not enough)
+- Prompt `Hello. You MUST follow the contract.` ("hello" is not enough for Gemini and Mistral)
