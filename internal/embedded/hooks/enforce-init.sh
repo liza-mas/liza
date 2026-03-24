@@ -18,29 +18,24 @@ session_id=$(json_val session_id)
 
 # Fallback: $PPID is the Claude Code process PID (POSIX — the parent that forked this shell).
 # Stable for the session lifetime since all hook invocations share the same parent process.
-STATE_FILE="/tmp/liza-init-gate-${session_id:-ppid-$PPID}"
+STATE_DIR="/tmp/liza-init-gate-${session_id:-ppid-$PPID}"
+mkdir -p "$STATE_DIR" 2>/dev/null
 
 # Fast path: gate already cleared.
-if [[ -f "$STATE_FILE" ]] && grep -q "CLEARED" "$STATE_FILE"; then
+if [[ -f "$STATE_DIR/CLEARED" ]]; then
   exit 0
 fi
 
-# Initialize state file on first call.
-if [[ ! -f "$STATE_FILE" ]]; then
-  guardrails=0
-  # Auto-clear GUARDRAILS.md if absent from project root.
-  if [[ ! -f "${CLAUDE_PROJECT_DIR:-.}/GUARDRAILS.md" ]]; then
-    guardrails=1
-  fi
-  echo "AGENT_TOOLS=0 MODE=0 GUARDRAILS=$guardrails" > "$STATE_FILE"
+# Initialize: auto-clear GUARDRAILS.md if absent from project root.
+if [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]] && \
+   [[ ! -f "${CLAUDE_PROJECT_DIR:-.}/GUARDRAILS.md" ]]; then
+  touch "$STATE_DIR/GUARDRAILS.done"
 fi
 
-# Portable in-place update (no sed -i, which differs between GNU and BSD).
-update_state() {
-  local old="$1" new="$2" tmp
-  tmp="${STATE_FILE}.tmp"
-  sed "s/$old/$new/" "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
-}
+# Bootstrap tool: allow ToolSearch to load Read schema.
+if [[ "$tool_name" == "ToolSearch" ]]; then
+  exit 0
+fi
 
 # Read calls always pass through; track mandatory doc reads.
 if [[ "$tool_name" == "Read" ]]; then
@@ -48,17 +43,17 @@ if [[ "$tool_name" == "Read" ]]; then
   base=$(basename "$file_path")
 
   case "$base" in
-    AGENT_TOOLS.md)   update_state 'AGENT_TOOLS=0' 'AGENT_TOOLS=1' ;;
+    AGENT_TOOLS.md)   touch "$STATE_DIR/AGENT_TOOLS.done" ;;
     PAIRING_MODE.md|MULTI_AGENT_MODE.md|SUBAGENT_MODE.md)
-                      update_state 'MODE=0' 'MODE=1' ;;
-    GUARDRAILS.md)    update_state 'GUARDRAILS=0' 'GUARDRAILS=1' ;;
+                      touch "$STATE_DIR/MODE.done" ;;
+    GUARDRAILS.md)    touch "$STATE_DIR/GUARDRAILS.done" ;;
   esac
 
   # Check if all requirements met.
-  if grep -q "AGENT_TOOLS=1" "$STATE_FILE" && \
-     grep -q "MODE=1" "$STATE_FILE" && \
-     grep -q "GUARDRAILS=1" "$STATE_FILE"; then
-    echo "CLEARED" >> "$STATE_FILE"
+  if [[ -f "$STATE_DIR/AGENT_TOOLS.done" ]] && \
+     [[ -f "$STATE_DIR/MODE.done" ]] && \
+     [[ -f "$STATE_DIR/GUARDRAILS.done" ]]; then
+    touch "$STATE_DIR/CLEARED"
   fi
 
   exit 0
@@ -66,9 +61,9 @@ fi
 
 # Non-Read tool call: block if gate not cleared.
 missing=""
-grep -q "AGENT_TOOLS=0" "$STATE_FILE" && missing="$missing AGENT_TOOLS.md"
-grep -q "MODE=0" "$STATE_FILE" && missing="$missing (one mode contract)"
-grep -q "GUARDRAILS=0" "$STATE_FILE" && missing="$missing GUARDRAILS.md"
+[[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing AGENT_TOOLS.md"
+[[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing (one mode contract)"
+[[ ! -f "$STATE_DIR/GUARDRAILS.done" ]] && missing="$missing GUARDRAILS.md"
 
 echo "Blocked: must read mandatory docs before any other action. Missing:$missing" >&2
 exit 2
