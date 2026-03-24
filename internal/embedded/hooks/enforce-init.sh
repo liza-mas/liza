@@ -19,7 +19,10 @@ session_id=$(json_val session_id)
 # Fallback: $PPID is the Claude Code process PID (POSIX — the parent that forked this shell).
 # Stable for the session lifetime since all hook invocations share the same parent process.
 STATE_DIR="/tmp/liza-init-gate-${session_id:-ppid-$PPID}"
-mkdir -p "$STATE_DIR" 2>/dev/null
+if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+  echo "enforce-init: cannot create state dir $STATE_DIR, failing open" >&2
+  exit 0
+fi
 
 # Fast path: gate already cleared.
 if [[ -f "$STATE_DIR/CLEARED" ]]; then
