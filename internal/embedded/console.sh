@@ -2,6 +2,15 @@
 # Display a structure view of the .liza/state.yaml blackboard
 # Usage: watch -n 2 'scripts/console.sh'
 
+# Deprecation notice
+echo ""
+echo "WARNING: console.sh is deprecated and will be removed in a future release."
+echo "  Use 'liza watch' for an interactive TUI dashboard with the same information plus:"
+echo "  - Color-coded status indicators"
+echo "  - Keyboard commands (spawn, pause, resume, add task, checkpoint)"
+echo "  - Inline anomaly monitoring"
+echo ""
+
 # Display GOAL, SPRINT, SYSTEM as three columns
 liza status 2>&1 | awk '
 /^=== TASKS/   { exit }
