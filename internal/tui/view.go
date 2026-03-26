@@ -255,7 +255,206 @@ func (m Model) renderAgentPanel(height int) string {
 	content := title + "\n" + headerRow + "\n" + strings.Join(rows, "\n")
 	return m.styles.AgentPanel.Render(content)
 }
-func (m Model) renderTaskPanel(height int) string     { return "" }
+
+// renderTaskPanel renders the task panel as a bordered table.
+// Columns adapt to terminal width per spec §Task Panel column priority table.
+// Terminal tasks (MERGED, ABANDONED, SUPERSEDED) shown dimmed at bottom.
+// Panel header includes sprint metrics.
+func (m Model) renderTaskPanel(height int) string {
+	// Build title with sprint metrics
+	titleText := "✔ TASKS"
+	metrics := ""
+	if m.state != nil {
+		total := len(m.state.Sprint.Scope.Planned)
+		if total == 0 {
+			total = len(m.state.Tasks)
+		}
+		sm := m.state.Sprint.Metrics
+		metrics = fmt.Sprintf("%d/%d done │ %d blocked │ %d%% approval",
+			sm.TasksDone, total, sm.TasksBlocked, sm.TaskOutcomeApprovalRatePercent)
+	}
+
+	title := m.styles.PanelTitle.Render(titleText)
+	if metrics != "" {
+		// Right-align metrics on the title line
+		metricsStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(metrics)
+		titleWidth := lipgloss.Width(title)
+		metricsWidth := lipgloss.Width(metricsStyled)
+		// Account for panel border padding (2 chars each side)
+		availWidth := m.width - 4
+		gap := availWidth - titleWidth - metricsWidth
+		if gap < 2 {
+			gap = 2
+		}
+		title = title + strings.Repeat(" ", gap) + metricsStyled
+	}
+
+	// Handle empty/nil state
+	if m.state == nil || len(m.state.Tasks) == 0 {
+		content := title + "\n  No tasks"
+		return m.styles.TaskPanel.Render(content)
+	}
+
+	// Partition tasks into active and terminal
+	var active, terminal []models.Task
+	for _, t := range m.state.Tasks {
+		if t.Status.IsTerminal() {
+			terminal = append(terminal, t)
+		} else {
+			active = append(active, t)
+		}
+	}
+
+	// Sort active by priority (ascending) then ID
+	sort.Slice(active, func(i, j int) bool {
+		if active[i].Priority != active[j].Priority {
+			return active[i].Priority < active[j].Priority
+		}
+		return active[i].ID < active[j].ID
+	})
+
+	// Sort terminal by ID
+	sort.Slice(terminal, func(i, j int) bool {
+		return terminal[i].ID < terminal[j].ID
+	})
+
+	// Define columns per tier
+	type column struct {
+		header string
+		width  int
+		value  func(t models.Task) string
+	}
+
+	statusVal := func(t models.Task) string {
+		dot := StatusDot(string(t.Status))
+		color := StatusColor(string(t.Status))
+		return lipgloss.NewStyle().Foreground(color).Render(dot + " " + string(t.Status))
+	}
+
+	attemptVal := func(t models.Task) string {
+		return fmt.Sprintf("%d.%d", t.EffectiveAttempt(), t.Iteration)
+	}
+
+	assignedVal := func(t models.Task) string {
+		if t.AssignedTo != nil {
+			return *t.AssignedTo
+		}
+		return "—"
+	}
+
+	ageVal := func(t models.Task) string {
+		if t.Created.IsZero() {
+			return "—"
+		}
+		return render.FormatDuration(time.Since(t.Created))
+	}
+
+	descVal := func(t models.Task) string {
+		if t.Description == "" {
+			return "—"
+		}
+		return t.Description
+	}
+
+	reviewingByVal := func(t models.Task) string {
+		if t.ReviewingBy != nil {
+			return *t.ReviewingBy
+		}
+		return "—"
+	}
+
+	depsVal := func(t models.Task) string {
+		if len(t.DependsOn) == 0 {
+			return "—"
+		}
+		return strings.Join(t.DependsOn, ",")
+	}
+
+	timeInStatusVal := func(t models.Task) string {
+		// Use last history entry timestamp if available
+		if len(t.History) > 0 {
+			last := t.History[len(t.History)-1]
+			return render.FormatDuration(time.Since(last.Time))
+		}
+		// Fallback to task age
+		if t.Created.IsZero() {
+			return "—"
+		}
+		return render.FormatDuration(time.Since(t.Created))
+	}
+
+	// Build column list based on tier
+	cols := []column{
+		{"ID", 26, func(t models.Task) string { return t.ID }},
+		{"STATUS", 22, statusVal},
+	}
+
+	if m.columnTier >= ColumnTierStandard {
+		cols = append(cols,
+			column{"ATT", 6, attemptVal},
+			column{"ASSIGNED_TO", 16, assignedVal},
+		)
+	}
+
+	if m.columnTier >= ColumnTierWide {
+		cols = append(cols,
+			column{"AGE", 8, ageVal},
+			column{"DESCRIPTION", 24, descVal},
+		)
+	}
+
+	if m.columnTier >= ColumnTierFull {
+		cols = append(cols,
+			column{"REVIEWING_BY", 16, reviewingByVal},
+			column{"DEPS", 16, depsVal},
+			column{"TIME_IN_STATUS", 16, timeInStatusVal},
+		)
+	}
+
+	// Build header row
+	var headerParts []string
+	for _, c := range cols {
+		headerParts = append(headerParts, fmt.Sprintf("%-*s", c.width, c.header))
+	}
+	headerRow := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")).
+		Render("  " + strings.Join(headerParts, ""))
+
+	// Build rows from ordered tasks
+	ordered := append(active, terminal...)
+	maxRows := max(height-3, 0) // border (2) + title (1)
+
+	var rows []string
+	for i, t := range ordered {
+		if i >= maxRows {
+			break
+		}
+		isTerminal := t.Status.IsTerminal()
+		var parts []string
+		for _, c := range cols {
+			val := c.value(t)
+			if c.header == "STATUS" {
+				// STATUS value is already ANSI-styled; pad by raw text length
+				rawLen := len(StatusDot(string(t.Status))) + 1 + len(string(t.Status))
+				padding := max(c.width-rawLen, 0)
+				parts = append(parts, val+strings.Repeat(" ", padding))
+			} else {
+				// Truncate if needed
+				if len(val) > c.width-1 && c.width > 1 {
+					val = val[:c.width-2] + "…"
+				}
+				parts = append(parts, fmt.Sprintf("%-*s", c.width, val))
+			}
+		}
+		row := "  " + strings.Join(parts, "")
+		if isTerminal {
+			row = m.styles.Dimmed.Render(row)
+		}
+		rows = append(rows, row)
+	}
+
+	content := title + "\n" + headerRow + "\n" + strings.Join(rows, "\n")
+	return m.styles.TaskPanel.Render(content)
+}
 func (m Model) renderActivityPanel(height int) string { return "" }
 func (m Model) renderAlertBanner() string             { return "" }
 func (m Model) renderFooter() string                  { return "" }
