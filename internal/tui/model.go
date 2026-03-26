@@ -107,18 +107,6 @@ type errMsg struct {
 //lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
 func (e errMsg) Error() string { return e.err.Error() }
 
-// rolesMsg carries loaded role names from pipeline config for tab-completion.
-//
-//lint:ignore U1000 used by commands.go and update.go (Phase 4 Tasks 1+2)
-type rolesMsg struct {
-	Roles []string
-}
-
-// stopDoneMsg signals that StopCommand completed and the TUI should quit.
-//
-//lint:ignore U1000 used by commands.go and update.go (Phase 4 Tasks 1+2)
-type stopDoneMsg struct{}
-
 // ActivityEntry is a unified entry in the activity feed, merging log events,
 // anomaly alerts, and blackboard anomalies into a single chronological list.
 type ActivityEntry struct {
