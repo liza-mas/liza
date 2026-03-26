@@ -2,9 +2,13 @@ package tui
 
 import (
 	"fmt"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/render"
 )
 
 // View renders the complete TUI dashboard.
@@ -116,7 +120,141 @@ func (m Model) renderHeader() string {
 
 // Sub-renderer stubs — implemented by subsequent tasks.
 
-func (m Model) renderAgentPanel(height int) string    { return "" }
+// renderAgentPanel renders the agent panel as a bordered table.
+// Columns adapt to terminal width per spec §Agent Panel column priority table.
+// Agents sorted by ID for stable display order.
+func (m Model) renderAgentPanel(height int) string {
+	title := m.styles.PanelTitle.Render("● AGENTS")
+
+	// Handle empty/nil state
+	if m.state == nil || len(m.state.Agents) == 0 {
+		content := title + "\n  No agents"
+		return m.styles.AgentPanel.Render(content)
+	}
+
+	// Sort agent IDs for stable ordering
+	ids := make([]string, 0, len(m.state.Agents))
+	for id := range m.state.Agents {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	// Define columns per tier
+	type column struct {
+		header string
+		width  int
+		value  func(id string, a models.Agent) string
+	}
+
+	statusVal := func(_ string, a models.Agent) string {
+		dot := StatusDot(string(a.Status))
+		color := StatusColor(string(a.Status))
+		return lipgloss.NewStyle().Foreground(color).Render(dot + " " + string(a.Status))
+	}
+
+	currentTaskVal := func(_ string, a models.Agent) string {
+		if a.CurrentTask != nil {
+			return *a.CurrentTask
+		}
+		return "—"
+	}
+
+	timeOnTaskVal := func(_ string, a models.Agent) string {
+		if a.CurrentTask == nil {
+			return "—"
+		}
+		// Approximate using heartbeat as proxy (task creation time not directly available on Agent)
+		return render.FormatDuration(time.Since(a.Heartbeat))
+	}
+
+	heartbeatVal := func(_ string, a models.Agent) string {
+		if a.Heartbeat.IsZero() {
+			return "—"
+		}
+		return render.FormatDuration(time.Since(a.Heartbeat)) + " ago"
+	}
+
+	pidVal := func(_ string, a models.Agent) string {
+		if a.PID == 0 {
+			return "—"
+		}
+		return fmt.Sprintf("%d", a.PID)
+	}
+
+	contextVal := func(_ string, a models.Agent) string {
+		if a.ContextPercent == 0 {
+			return "—"
+		}
+		return fmt.Sprintf("%d%%", a.ContextPercent)
+	}
+
+	// Build column list based on tier
+	cols := []column{
+		{"ID", 24, func(id string, _ models.Agent) string { return id }},
+		{"STATUS", 16, statusVal},
+	}
+
+	if m.columnTier >= ColumnTierStandard {
+		cols = append(cols,
+			column{"ROLE", 18, func(_ string, a models.Agent) string { return a.Role }},
+			column{"CURRENT_TASK", 36, currentTaskVal},
+		)
+	}
+
+	if m.columnTier >= ColumnTierWide {
+		cols = append(cols,
+			column{"TIME_ON_TASK", 14, timeOnTaskVal},
+			column{"HEARTBEAT", 14, heartbeatVal},
+		)
+	}
+
+	if m.columnTier >= ColumnTierFull {
+		cols = append(cols,
+			column{"PID", 10, pidVal},
+			column{"CONTEXT", 10, contextVal},
+		)
+	}
+
+	// Build header row
+	var headerParts []string
+	for _, c := range cols {
+		headerParts = append(headerParts, fmt.Sprintf("%-*s", c.width, c.header))
+	}
+	headerRow := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")).
+		Render("  " + strings.Join(headerParts, ""))
+
+	// Build data rows
+	maxRows := max(height-3, 0) // border (2) + title (1)
+
+	var rows []string
+	for i, id := range ids {
+		if i >= maxRows {
+			break
+		}
+		agent := m.state.Agents[id]
+		var parts []string
+		for _, c := range cols {
+			val := c.value(id, agent)
+			// For STATUS column, the value is already styled (contains ANSI),
+			// so we pad based on raw text length
+			if c.header == "STATUS" {
+				rawLen := len(StatusDot(string(agent.Status))) + 1 + len(string(agent.Status))
+				padding := max(c.width-rawLen, 0)
+				parts = append(parts, val+strings.Repeat(" ", padding))
+			} else {
+				// Truncate if needed
+				if len(val) > c.width {
+					val = val[:c.width-1] + "…"
+				}
+				parts = append(parts, fmt.Sprintf("%-*s", c.width, val))
+			}
+		}
+		rows = append(rows, "  "+strings.Join(parts, ""))
+	}
+
+	content := title + "\n" + headerRow + "\n" + strings.Join(rows, "\n")
+	return m.styles.AgentPanel.Render(content)
+}
 func (m Model) renderTaskPanel(height int) string     { return "" }
 func (m Model) renderActivityPanel(height int) string { return "" }
 func (m Model) renderAlertBanner() string             { return "" }
