@@ -143,9 +143,3 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
-
-// View renders the TUI.
-// Stub: returns "Loading...". Actual implementation in view.go phase.
-func (m Model) View() string {
-	return "Loading..."
-}
