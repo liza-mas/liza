@@ -3,6 +3,8 @@ package tui
 import (
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/huh"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -17,6 +19,24 @@ const (
 	InputModeInline                  // Inline text prompt (spawn role, pause reason)
 	InputModeForm                    // Huh form overlay (add task)
 )
+
+// InlineAction identifies which command the inline input will execute on confirm.
+type InlineAction int
+
+const (
+	InlineActionNone        InlineAction = iota
+	InlineActionSpawn                    // s — collecting role name
+	InlineActionPause                    // p — collecting optional reason
+	InlineActionStopConfirm              // Q — collecting y/n confirmation
+)
+
+// rolesMsg carries loaded role names from pipeline config for tab-completion.
+type rolesMsg struct {
+	Roles []string
+}
+
+// stopDoneMsg signals that StopCommand completed and the TUI should quit.
+type stopDoneMsg struct{}
 
 // StateMsg carries a fresh state snapshot after a blackboard change.
 type StateMsg struct {
@@ -137,8 +157,15 @@ type Model struct {
 	columnTier ColumnTier // current column visibility tier
 
 	// Input
-	inputMode InputMode // current input mode
-	keys      KeyMap    // key bindings
+	inputMode        InputMode       // current input mode
+	keys             KeyMap          // key bindings
+	textInput        textinput.Model // Bubbles text input for inline prompts
+	huhForm          *huh.Form       // active Huh form (nil when no form)
+	inlineAction     InlineAction    // which action inline input serves
+	inlineLabel      string          // prompt label shown before textinput (e.g., "Role: ")
+	roleCompletions  []string        // cached role names from pipeline config for tab-completion
+	completionIdx    int             // current position in tab-completion cycle
+	completionPrefix string          // text prefix when Tab was first pressed (filters completions)
 
 	// Visual
 	styles Styles // Lipgloss styles (adapted to width)
@@ -183,6 +210,7 @@ func New(projectRoot string) (Model, error) {
 		keys:          NewKeyMap(),
 		styles:        NewStyles(0),
 		stateCache:    make(map[string]time.Time),
+		textInput:     textinput.New(),
 		projectRoot:   projectRoot,
 		watcher:       w,
 		blackboard:    bb,

@@ -169,6 +169,89 @@ func TestInputModeEnum(t *testing.T) {
 	}
 }
 
+func TestInlineActionEnum(t *testing.T) {
+	// InlineAction enum has 4 distinct values.
+	if InlineActionNone != 0 {
+		t.Errorf("InlineActionNone = %d, want 0", InlineActionNone)
+	}
+	// All action values must be distinct.
+	if InlineActionSpawn == InlineActionPause {
+		t.Error("InlineActionSpawn must differ from InlineActionPause")
+	}
+	if InlineActionPause == InlineActionStopConfirm {
+		t.Error("InlineActionPause must differ from InlineActionStopConfirm")
+	}
+	if InlineActionSpawn == InlineActionStopConfirm {
+		t.Error("InlineActionSpawn must differ from InlineActionStopConfirm")
+	}
+	// None differs from all action values.
+	if InlineActionNone == InlineActionSpawn {
+		t.Error("InlineActionNone must differ from InlineActionSpawn")
+	}
+}
+
+func TestNewTextInputInitialized(t *testing.T) {
+	tmpDir := t.TempDir()
+	lizaDir := filepath.Join(tmpDir, ".liza")
+	if err := os.MkdirAll(lizaDir, 0o755); err != nil {
+		t.Fatalf("failed to create .liza dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lizaDir, "state.yaml"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("failed to create state.yaml: %v", err)
+	}
+
+	t.Cleanup(func() { db.ResetInstances() })
+
+	m, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("New() returned unexpected error: %v", err)
+	}
+	defer m.watcher.Close()
+
+	// textInput must be initialized (non-zero value).
+	// textinput.New() sets a default Prompt ("> ") — a zero-value Model has empty Prompt.
+	// Also access Cursor field as non-zero proxy per done_when.
+	if m.textInput.Prompt == "" {
+		t.Error("textInput should be initialized by New(), got zero-value Prompt")
+	}
+	_ = m.textInput.Cursor
+
+	// Phase 4 fields that remain at zero values after New().
+	if m.huhForm != nil {
+		t.Error("huhForm should be nil by default")
+	}
+	if m.inlineAction != InlineActionNone {
+		t.Errorf("inlineAction = %d, want InlineActionNone", m.inlineAction)
+	}
+	if m.inlineLabel != "" {
+		t.Errorf("inlineLabel = %q, want empty", m.inlineLabel)
+	}
+	if m.roleCompletions != nil {
+		t.Error("roleCompletions should be nil by default")
+	}
+	if m.completionIdx != 0 {
+		t.Errorf("completionIdx = %d, want 0", m.completionIdx)
+	}
+	if m.completionPrefix != "" {
+		t.Errorf("completionPrefix = %q, want empty", m.completionPrefix)
+	}
+}
+
+func TestRolesMsgType(t *testing.T) {
+	msg := rolesMsg{Roles: []string{"coder", "reviewer"}}
+	if len(msg.Roles) != 2 {
+		t.Errorf("rolesMsg.Roles length = %d, want 2", len(msg.Roles))
+	}
+	if msg.Roles[0] != "coder" {
+		t.Errorf("rolesMsg.Roles[0] = %q, want %q", msg.Roles[0], "coder")
+	}
+}
+
+func TestStopDoneMsgType(t *testing.T) {
+	// stopDoneMsg is a signal type — just verify it can be instantiated.
+	_ = stopDoneMsg{}
+}
+
 func TestColumnTierEnum(t *testing.T) {
 	if ColumnTierMinimal != 0 {
 		t.Errorf("ColumnTierMinimal = %d, want 0", ColumnTierMinimal)
