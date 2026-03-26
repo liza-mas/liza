@@ -211,15 +211,87 @@ func (m Model) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleInlineKey handles key events in inline input mode.
-// Stub: cancels on Esc, otherwise returns model unchanged.
-// Full implementation in Task 4.
+// Delegates to textinput for character input. Handles Tab (completion),
+// Enter (confirm action), and Esc (cancel) specially.
 func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
 		m.inputMode = InputModeNormal
 		m.inlineAction = InlineActionNone
 		m.textInput.Blur()
+		return m, nil
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		value := m.textInput.Value()
+		action := m.inlineAction
+		m.inputMode = InputModeNormal
+		m.inlineAction = InlineActionNone
+		m.textInput.Blur()
+		return m.executeInlineAction(action, value)
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
+		if m.inlineAction == InlineActionSpawn {
+			m = m.cycleCompletion()
+		}
+		return m, nil
+
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		m.completionIdx = 0
+		m.completionPrefix = ""
+		return m, cmd
 	}
-	return m, nil
+}
+
+// executeInlineAction executes the appropriate command based on the inline action.
+func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model, tea.Cmd) {
+	switch action {
+	case InlineActionSpawn:
+		if value == "" {
+			return m, nil
+		}
+		return m, spawnAgentCmd(m.projectRoot, value)
+	case InlineActionPause:
+		return m, pauseSystemCmd(m.projectRoot, value)
+	case InlineActionStopConfirm:
+		if strings.HasPrefix(strings.ToLower(value), "y") {
+			return m, stopSystemCmd(m.projectRoot)
+		}
+		return m, nil
+	default:
+		return m, nil
+	}
+}
+
+// cycleCompletion cycles through role names matching the current input prefix.
+func (m Model) cycleCompletion() Model {
+	if len(m.roleCompletions) == 0 {
+		return m
+	}
+
+	// Capture prefix on first Tab press (completionIdx == 0 means fresh start)
+	if m.completionIdx == 0 {
+		m.completionPrefix = m.textInput.Value()
+	}
+
+	// Filter roles matching prefix (case-insensitive)
+	prefix := strings.ToLower(m.completionPrefix)
+	var matches []string
+	for _, role := range m.roleCompletions {
+		if prefix == "" || strings.HasPrefix(strings.ToLower(role), prefix) {
+			matches = append(matches, role)
+		}
+	}
+
+	if len(matches) == 0 {
+		return m
+	}
+
+	selected := matches[m.completionIdx%len(matches)]
+	m.textInput.SetValue(selected)
+	m.completionIdx++
+	return m
 }
 
 // handleFormKey handles key events in form mode.

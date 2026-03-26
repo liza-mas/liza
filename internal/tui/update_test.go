@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -538,5 +539,230 @@ func TestUpdate_FormKeyEscCancels(t *testing.T) {
 	}
 	if m2.huhForm != nil {
 		t.Error("Esc in form mode should clear huhForm to nil")
+	}
+}
+
+// ============================================================
+// Phase 4 Task 4: Inline input mode tests
+// ============================================================
+
+func TestHandleInlineKey_EscReturnsToNormal(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionSpawn
+	m.textInput.Focus()
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if m2.inputMode != InputModeNormal {
+		t.Errorf("inputMode = %d, want InputModeNormal(%d)", m2.inputMode, InputModeNormal)
+	}
+	if m2.inlineAction != InlineActionNone {
+		t.Errorf("inlineAction = %d, want InlineActionNone(%d)", m2.inlineAction, InlineActionNone)
+	}
+	if cmd != nil {
+		t.Error("Esc should return nil cmd")
+	}
+}
+
+func TestHandleInlineKey_EnterSpawnWithValueReturnsCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionSpawn
+	m.textInput.Focus()
+	m.textInput.SetValue("coder")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if m2.inputMode != InputModeNormal {
+		t.Errorf("inputMode = %d, want InputModeNormal after Enter", m2.inputMode)
+	}
+	if cmd == nil {
+		t.Fatal("Enter with spawn action and value 'coder' should return a non-nil tea.Cmd")
+	}
+}
+
+func TestHandleInlineKey_EnterSpawnEmptyValueReturnsNilCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionSpawn
+	m.textInput.Focus()
+	m.textInput.SetValue("")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.Update(msg)
+
+	if cmd != nil {
+		t.Error("Enter with spawn action and empty value should return nil cmd (cancelled)")
+	}
+}
+
+func TestHandleInlineKey_EnterStopConfirmYReturnsCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionStopConfirm
+	m.textInput.Focus()
+	m.textInput.SetValue("y")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("Enter with stop confirm and value 'y' should return a non-nil tea.Cmd")
+	}
+}
+
+func TestHandleInlineKey_EnterStopConfirmNReturnsNilCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionStopConfirm
+	m.textInput.Focus()
+	m.textInput.SetValue("n")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.Update(msg)
+
+	if cmd != nil {
+		t.Error("Enter with stop confirm and value 'n' should return nil cmd (cancelled)")
+	}
+}
+
+func TestHandleInlineKey_EnterPauseReturnsCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionPause
+	m.textInput.Focus()
+	m.textInput.SetValue("")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("Enter with pause action should return a non-nil tea.Cmd (even with empty reason)")
+	}
+}
+
+func TestHandleInlineKey_TabCyclesCompletion(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionSpawn
+	m.roleCompletions = []string{"coder", "code-reviewer", "orchestrator"}
+	m.textInput.Focus()
+	m.textInput.SetValue("co")
+
+	// First Tab: should set value to "coder"
+	msg := tea.KeyMsg{Type: tea.KeyTab}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+	if m2.textInput.Value() != "coder" {
+		t.Errorf("first Tab: value = %q, want %q", m2.textInput.Value(), "coder")
+	}
+
+	// Second Tab: should set value to "code-reviewer"
+	result, _ = m2.Update(msg)
+	m3 := result.(Model)
+	if m3.textInput.Value() != "code-reviewer" {
+		t.Errorf("second Tab: value = %q, want %q", m3.textInput.Value(), "code-reviewer")
+	}
+}
+
+func TestHandleInlineKey_TabEmptyPrefixCyclesAll(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionSpawn
+	m.roleCompletions = []string{"coder", "code-reviewer", "orchestrator"}
+	m.textInput.Focus()
+	m.textInput.SetValue("")
+
+	msg := tea.KeyMsg{Type: tea.KeyTab}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+	if m2.textInput.Value() != "coder" {
+		t.Errorf("first Tab with empty prefix: value = %q, want %q", m2.textInput.Value(), "coder")
+	}
+
+	result, _ = m2.Update(msg)
+	m3 := result.(Model)
+	if m3.textInput.Value() != "code-reviewer" {
+		t.Errorf("second Tab: value = %q, want %q", m3.textInput.Value(), "code-reviewer")
+	}
+
+	result, _ = m3.Update(msg)
+	m4 := result.(Model)
+	if m4.textInput.Value() != "orchestrator" {
+		t.Errorf("third Tab: value = %q, want %q", m4.textInput.Value(), "orchestrator")
+	}
+}
+
+func TestHandleInlineKey_TabWithEmptyRolesNoChange(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionSpawn
+	m.roleCompletions = nil
+	m.textInput.Focus()
+	m.textInput.SetValue("co")
+
+	msg := tea.KeyMsg{Type: tea.KeyTab}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+	if m2.textInput.Value() != "co" {
+		t.Errorf("Tab with empty roles: value = %q, want %q (unchanged)", m2.textInput.Value(), "co")
+	}
+}
+
+func TestHandleInlineKey_TypingAfterTabResetsCompletionIdx(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionSpawn
+	m.roleCompletions = []string{"coder", "code-reviewer", "orchestrator"}
+	m.textInput.Focus()
+	m.textInput.SetValue("co")
+
+	// Press Tab to trigger completion
+	tabMsg := tea.KeyMsg{Type: tea.KeyTab}
+	result, _ := m.Update(tabMsg)
+	m2 := result.(Model)
+
+	// Type a regular character
+	charMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
+	result, _ = m2.Update(charMsg)
+	m3 := result.(Model)
+
+	if m3.completionIdx != 0 {
+		t.Errorf("completionIdx = %d after typing, want 0", m3.completionIdx)
+	}
+}
+
+func TestHandleInlineKey_TabNotInSpawnModeIgnored(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionPause
+	m.roleCompletions = []string{"coder"}
+	m.textInput.Focus()
+	m.textInput.SetValue("test")
+
+	msg := tea.KeyMsg{Type: tea.KeyTab}
+	result, _ := m.Update(msg)
+	m2 := result.(Model)
+	// Tab in non-spawn mode should not cycle completion
+	if m2.textInput.Value() == "coder" {
+		t.Error("Tab in pause mode should not trigger role completion")
+	}
+}
+
+func TestRenderFooter_InlineModeShowsLabel(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineLabel = "Role: "
+	m.width = 120
+	m.styles = NewStyles(120)
+
+	output := m.renderFooter()
+	if !strings.Contains(output, "Role: ") {
+		t.Errorf("renderFooter in inline mode should contain %q, got %q", "Role: ", output)
 	}
 }

@@ -544,7 +544,9 @@ func (m Model) renderFooter() string {
 
 	switch m.inputMode {
 	case InputModeInline:
-		hints = m.renderInlineHints()
+		leftContent := m.inlineLabel + m.textInput.View()
+		rightContent := m.renderInlineHints()
+		hints = leftContent + "  " + rightContent
 	case InputModeForm:
 		hints = m.renderFormHints()
 	default:
