@@ -535,5 +535,64 @@ func (m Model) renderAlertBanner() string {
 	content := fmt.Sprintf("%s %s: %s", m.alertBanner.Level, m.alertBanner.Action, m.alertBanner.Detail)
 	return m.styles.AlertBanner.Render(content)
 }
-func (m Model) renderFooter() string                { return "" }
+
+// renderFooter renders the context-sensitive footer bar.
+// Normal mode: keybinding hints. Inline mode: input-mode hints. Form mode: form hints.
+// Includes transient command result display (3s visibility).
+func (m Model) renderFooter() string {
+	var hints string
+
+	switch m.inputMode {
+	case InputModeInline:
+		hints = m.renderInlineHints()
+	case InputModeForm:
+		hints = m.renderFormHints()
+	default:
+		hints = m.renderNormalHints()
+	}
+
+	// Append command result if active and not expired
+	if m.cmdResult != nil && time.Now().Before(m.cmdExpiry) {
+		var resultStyle lipgloss.Style
+		if m.cmdResult.Success {
+			resultStyle = lipgloss.NewStyle().Foreground(ColorApproved)
+		} else {
+			resultStyle = lipgloss.NewStyle().Foreground(ColorRejected)
+		}
+		hints += "  " + resultStyle.Render(m.cmdResult.Message)
+	}
+
+	return m.styles.FooterBar.Render(hints)
+}
+
+// renderNormalHints renders the 8 keybinding hints for normal mode.
+func (m Model) renderNormalHints() string {
+	bindings := m.keys.ShortHelp()
+	parts := make([]string, len(bindings))
+	for i, b := range bindings {
+		key := b.Help().Key
+		desc := b.Help().Desc
+		parts[i] = m.styles.FooterKey.Render("["+key+"]") + " " + m.styles.FooterDesc.Render(desc)
+	}
+	return strings.Join(parts, "  ")
+}
+
+// renderInlineHints renders hints for inline input mode.
+func (m Model) renderInlineHints() string {
+	return m.renderHints([][2]string{{"Tab", "complete"}, {"Enter", "confirm"}, {"Esc", "cancel"}})
+}
+
+// renderFormHints renders hints for form input mode.
+func (m Model) renderFormHints() string {
+	return m.renderHints([][2]string{{"Enter", "submit"}, {"Esc", "cancel"}})
+}
+
+// renderHints formats key-description pairs as styled footer hints.
+func (m Model) renderHints(hints [][2]string) string {
+	parts := make([]string, len(hints))
+	for i, h := range hints {
+		parts[i] = m.styles.FooterKey.Render("["+h[0]+"]") + " " + m.styles.FooterDesc.Render(h[1])
+	}
+	return strings.Join(parts, "  ")
+}
 func (m Model) renderHelpOverlay(height int) string { return "" }

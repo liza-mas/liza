@@ -991,3 +991,166 @@ func assertContains(t *testing.T, s, substr, msg string) {
 		t.Errorf("%s: %q not found in %q", msg, substr, s)
 	}
 }
+
+// --- Footer Tests ---
+
+func TestRenderFooter_NormalMode_ContainsAll8KeyLabels(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeNormal,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+	}
+
+	got := m.renderFooter()
+
+	// All 8 key labels per spec §Footer Bar
+	wantKeys := []string{"[s]", "[p]", "[r]", "[a]", "[c]", "[?]", "[q]", "[Q]"}
+	for _, k := range wantKeys {
+		if !strings.Contains(got, k) {
+			t.Errorf("normal mode footer should contain %s, got: %q", k, got)
+		}
+	}
+
+	// Descriptions
+	wantDescs := []string{"spawn", "pause", "resume", "add", "checkpoint", "help", "quit", "stop"}
+	for _, d := range wantDescs {
+		if !strings.Contains(got, d) {
+			t.Errorf("normal mode footer should contain %q description, got: %q", d, got)
+		}
+	}
+}
+
+func TestRenderFooter_InlineMode_ContainsInlineHints(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeInline,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+	}
+
+	got := m.renderFooter()
+
+	wantHints := []string{"[Tab]", "[Enter]", "[Esc]"}
+	for _, h := range wantHints {
+		if !strings.Contains(got, h) {
+			t.Errorf("inline mode footer should contain %s, got: %q", h, got)
+		}
+	}
+
+	// Should contain the inline-specific descriptions
+	assertContains(t, got, "complete", "inline mode should show 'complete'")
+	assertContains(t, got, "confirm", "inline mode should show 'confirm'")
+	assertContains(t, got, "cancel", "inline mode should show 'cancel'")
+}
+
+func TestRenderFooter_FormMode_ContainsFormHints(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeForm,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+	}
+
+	got := m.renderFooter()
+
+	wantHints := []string{"[Enter]", "[Esc]"}
+	for _, h := range wantHints {
+		if !strings.Contains(got, h) {
+			t.Errorf("form mode footer should contain %s, got: %q", h, got)
+		}
+	}
+
+	assertContains(t, got, "submit", "form mode should show 'submit'")
+	assertContains(t, got, "cancel", "form mode should show 'cancel'")
+}
+
+func TestRenderFooter_ActiveCmdResult_AppearsInOutput(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeNormal,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+		cmdResult: &CmdResultMsg{Success: true, Message: "System paused successfully"},
+		cmdExpiry: time.Now().Add(3 * time.Second), // not expired
+	}
+
+	got := m.renderFooter()
+	if !strings.Contains(got, "System paused successfully") {
+		t.Errorf("footer should contain active cmdResult message, got: %q", got)
+	}
+}
+
+func TestRenderFooter_ExpiredCmdResult_DoesNotAppear(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeNormal,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+		cmdResult: &CmdResultMsg{Success: true, Message: "System paused successfully"},
+		cmdExpiry: time.Now().Add(-1 * time.Second), // expired
+	}
+
+	got := m.renderFooter()
+	if strings.Contains(got, "System paused successfully") {
+		t.Errorf("footer should NOT contain expired cmdResult message, got: %q", got)
+	}
+}
+
+func TestRenderFooter_ErrorCmdResult_AppearsInOutput(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeNormal,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+		cmdResult: &CmdResultMsg{Success: false, Message: "Failed to pause"},
+		cmdExpiry: time.Now().Add(3 * time.Second),
+	}
+
+	got := m.renderFooter()
+	if !strings.Contains(got, "Failed to pause") {
+		t.Errorf("footer should contain error cmdResult message, got: %q", got)
+	}
+}
+
+func TestRenderFooter_NilCmdResult_NoResultShown(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeNormal,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+		cmdResult: nil,
+	}
+
+	got := m.renderFooter()
+	// Should just have key hints, no crash
+	if !strings.Contains(got, "[s]") {
+		t.Errorf("footer with nil cmdResult should still show key hints, got: %q", got)
+	}
+}
+
+func TestRenderFooter_InlineMode_DoesNotContainNormalKeys(t *testing.T) {
+	m := Model{
+		width:     120,
+		height:    40,
+		inputMode: InputModeInline,
+		keys:      NewKeyMap(),
+		styles:    NewStyles(120),
+	}
+
+	got := m.renderFooter()
+	// Normal-mode specific keys should not appear in inline mode
+	normalOnlyKeys := []string{"[s]", "[p]", "[r]", "[a]", "[c]", "[Q]"}
+	for _, k := range normalOnlyKeys {
+		if strings.Contains(got, k) {
+			t.Errorf("inline mode footer should NOT contain normal key %s, got: %q", k, got)
+		}
+	}
+}
