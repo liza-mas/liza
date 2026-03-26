@@ -873,6 +873,67 @@ func TestRenderActivityPanel_HasBorderedPanel(t *testing.T) {
 	}
 }
 
+// --- Alert Banner Tests ---
+
+func TestRenderAlertBanner_ActiveAlert_ReturnsStyledBanner(t *testing.T) {
+	m := Model{
+		width:  120,
+		height: 40,
+		styles: NewStyles(120),
+		alertBanner: &ActivityEntry{
+			Timestamp: time.Now(),
+			Source:    "alert",
+			Level:     "🚨",
+			Action:    "CIRCUIT BREAKER",
+			Detail:    "escalated to WARNING — 3 anomalies in 5 minutes",
+		},
+		alertExpiry: time.Now().Add(10 * time.Second), // not expired
+	}
+
+	out := m.renderAlertBanner()
+	if out == "" {
+		t.Fatal("expected non-empty output for active alert")
+	}
+	assertContains(t, out, "🚨", "banner should contain alert level icon")
+	assertContains(t, out, "CIRCUIT BREAKER", "banner should contain category")
+	assertContains(t, out, "escalated to WARNING", "banner should contain detail text")
+}
+
+func TestRenderAlertBanner_NilAlert_ReturnsEmpty(t *testing.T) {
+	m := Model{
+		width:       120,
+		height:      40,
+		styles:      NewStyles(120),
+		alertBanner: nil,
+	}
+
+	out := m.renderAlertBanner()
+	if out != "" {
+		t.Errorf("expected empty string for nil alertBanner, got: %q", out)
+	}
+}
+
+func TestRenderAlertBanner_ExpiredAlert_ReturnsEmpty(t *testing.T) {
+	m := Model{
+		width:  120,
+		height: 40,
+		styles: NewStyles(120),
+		alertBanner: &ActivityEntry{
+			Timestamp: time.Now().Add(-20 * time.Second),
+			Source:    "alert",
+			Level:     "🚨",
+			Action:    "CIRCUIT BREAKER",
+			Detail:    "escalated to WARNING",
+		},
+		alertExpiry: time.Now().Add(-5 * time.Second), // expired 5s ago
+	}
+
+	out := m.renderAlertBanner()
+	if out != "" {
+		t.Errorf("expected empty string for expired alert, got: %q", out)
+	}
+}
+
 // --- Test helpers ---
 
 func findHeaderLine(output string) string {

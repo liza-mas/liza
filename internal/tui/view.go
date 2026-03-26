@@ -521,6 +521,19 @@ func (m Model) colorLevel(level string) string {
 		return level
 	}
 }
-func (m Model) renderAlertBanner() string           { return "" }
+
+// renderAlertBanner renders the critical alert banner.
+// Returns empty string if no active alert (m.alertBanner == nil or expired).
+// Only one banner visible at a time (latest wins) per spec §Alert Banner.
+func (m Model) renderAlertBanner() string {
+	if m.alertBanner == nil {
+		return ""
+	}
+	if time.Now().After(m.alertExpiry) {
+		return ""
+	}
+	content := fmt.Sprintf("%s %s: %s", m.alertBanner.Level, m.alertBanner.Action, m.alertBanner.Detail)
+	return m.styles.AlertBanner.Render(content)
+}
 func (m Model) renderFooter() string                { return "" }
 func (m Model) renderHelpOverlay(height int) string { return "" }
