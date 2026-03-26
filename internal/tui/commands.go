@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"fmt"
 	"io"
 	"maps"
 	"os"
+	"os/exec"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +14,9 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"gopkg.in/yaml.v3"
 )
 
@@ -143,6 +149,129 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
+}
+
+// spawnAgentCmd spawns a new agent process for the given role.
+// Uses exec.Command("liza", "agent", role).Start() per spec §Keybindings.
+// The child process is detached with stdout/stderr redirected to os.DevNull.
+// Returns CmdResultMsg with success/error status.
+func spawnAgentCmd(projectRoot, role string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("liza", "agent", role)
+		cmd.Dir = projectRoot
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+		devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("spawn %s: %v", role, err)}
+		}
+		cmd.Stdout = devNull
+		cmd.Stderr = devNull
+
+		if err := cmd.Start(); err != nil {
+			devNull.Close()
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("spawn %s: %v", role, err)}
+		}
+		devNull.Close()
+		return CmdResultMsg{Success: true, Message: "Spawned " + role}
+	}
+}
+
+// pauseSystemCmd pauses the system with an optional reason.
+// Calls ops.Pause() directly (same process, no subprocess overhead).
+// Returns CmdResultMsg with result.
+func pauseSystemCmd(projectRoot, reason string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := ops.Pause(projectRoot, reason, "operator")
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("pause: %v", err)}
+		}
+		return CmdResultMsg{Success: true, Message: "System paused"}
+	}
+}
+
+// resumeSystemCmd resumes the system.
+// Calls ops.Resume() directly.
+// Returns CmdResultMsg with result.
+func resumeSystemCmd(projectRoot string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := ops.Resume(projectRoot, "operator")
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("resume: %v", err)}
+		}
+		return CmdResultMsg{Success: true, Message: "System resumed"}
+	}
+}
+
+// checkpointCmd creates a sprint checkpoint.
+// Calls ops.SprintCheckpoint() directly.
+// Returns CmdResultMsg with result.
+func checkpointCmd(projectRoot string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := ops.SprintCheckpoint(projectRoot, "")
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("checkpoint: %v", err)}
+		}
+		return CmdResultMsg{Success: true, Message: "Checkpoint created"}
+	}
+}
+
+// stopSystemCmd stops the system, then signals the TUI to quit.
+// Calls ops.Stop() directly.
+// Returns stopDoneMsg on success (triggers tea.Quit in Update).
+// Returns CmdResultMsg with error on failure.
+func stopSystemCmd(projectRoot string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := ops.Stop(projectRoot, "TUI stop", "operator")
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("stop: %v", err)}
+		}
+		return stopDoneMsg{}
+	}
+}
+
+// addTaskCmd adds a new task from form input.
+// Calls ops.AddTask() directly.
+// Returns CmdResultMsg with result.
+//
+//lint:ignore U1000 used by update.go (Phase 4 Task 4 — Huh form overlay)
+func addTaskCmd(projectRoot string, input *commands.TaskInput) tea.Cmd {
+	return func() tea.Msg {
+		p := paths.New(projectRoot)
+		opsInput := &ops.AddTaskInput{
+			ID:          input.ID,
+			Type:        input.Type,
+			RolePair:    input.RolePair,
+			Description: input.Description,
+			SpecRef:     input.SpecRef,
+			DoneWhen:    input.DoneWhen,
+			Scope:       input.Scope,
+			Priority:    input.Priority,
+			DependsOn:   input.DependsOn,
+		}
+		_, err := ops.AddTask(p.StatePath(), p.LogPath(), opsInput, "operator")
+		if err != nil {
+			return CmdResultMsg{Success: false, Message: fmt.Sprintf("add task: %v", err)}
+		}
+		return CmdResultMsg{Success: true, Message: "Task " + input.ID + " added"}
+	}
+}
+
+// loadRolesCmd loads role names from pipeline config for tab-completion.
+// Returns rolesMsg with sorted role names.
+// Returns rolesMsg with nil Roles if config not found (non-fatal).
+func loadRolesCmd(projectRoot string) tea.Cmd {
+	return func() tea.Msg {
+		resolver, err := ops.LoadResolverForModels(projectRoot)
+		if err != nil {
+			return rolesMsg{Roles: nil}
+		}
+		pr, ok := resolver.(*pipeline.Resolver)
+		if !ok {
+			return rolesMsg{Roles: nil}
+		}
+		return rolesMsg{Roles: pr.AllRoleNames()}
+	}
 }
 
 // Init returns the initial Cmd batch that starts the data flow.

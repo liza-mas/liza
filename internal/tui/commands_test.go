@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/log"
 	"gopkg.in/yaml.v3"
 )
@@ -175,6 +177,93 @@ func TestTickCmdReturnsNonNilCmd(t *testing.T) {
 		t.Fatal("tickCmd() returned nil")
 	}
 }
+
+// --- Phase 4: Action Cmd function tests ---
+
+func TestSpawnAgentCmd_ReturnsNonNilCmd(t *testing.T) {
+	cmd := spawnAgentCmd("/tmp/fake-project", "coder")
+	if cmd == nil {
+		t.Fatal("spawnAgentCmd returned nil tea.Cmd")
+	}
+}
+
+func TestSpawnAgentCmd_ReturnsCmdResultMsg(t *testing.T) {
+	// The "liza" binary likely doesn't exist in test; the Cmd should still
+	// return a CmdResultMsg (with Success: false).
+	cmd := spawnAgentCmd("/tmp/fake-project", "coder")
+	msg := cmd()
+	_, ok := msg.(CmdResultMsg)
+	if !ok {
+		t.Fatalf("expected CmdResultMsg, got %T", msg)
+	}
+}
+
+func TestLoadRolesCmd_WithPipelineConfig(t *testing.T) {
+	dir := t.TempDir()
+	lizaDir := filepath.Join(dir, ".liza")
+	if err := os.MkdirAll(lizaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(lizaDir, "pipeline.yaml"), embedded.PipelineConfigContent(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := loadRolesCmd(dir)
+	if cmd == nil {
+		t.Fatal("loadRolesCmd returned nil tea.Cmd")
+	}
+
+	msg := cmd()
+	switch v := msg.(type) {
+	case rolesMsg:
+		if len(v.Roles) == 0 {
+			t.Fatal("expected non-empty Roles from pipeline config")
+		}
+	default:
+		t.Fatalf("expected rolesMsg, got %T: %+v", msg, msg)
+	}
+}
+
+func TestLoadRolesCmd_MissingPipelineConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	cmd := loadRolesCmd(dir)
+	if cmd == nil {
+		t.Fatal("loadRolesCmd returned nil tea.Cmd")
+	}
+
+	msg := cmd()
+	roles, ok := msg.(rolesMsg)
+	if !ok {
+		t.Fatalf("expected rolesMsg, got %T (%v)", msg, msg)
+	}
+	if roles.Roles != nil {
+		t.Fatalf("expected nil Roles for missing pipeline config, got %v", roles.Roles)
+	}
+}
+
+func TestActionCmds_ReturnNonNil(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  tea.Cmd
+	}{
+		{"pauseSystemCmd", pauseSystemCmd("/tmp/fake", "test reason")},
+		{"resumeSystemCmd", resumeSystemCmd("/tmp/fake")},
+		{"checkpointCmd", checkpointCmd("/tmp/fake")},
+		{"stopSystemCmd", stopSystemCmd("/tmp/fake")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.cmd == nil {
+				t.Fatalf("%s returned nil tea.Cmd", tt.name)
+			}
+		})
+	}
+}
+
+// --- Phase 3: Data layer Cmd function tests ---
 
 func TestRunChecksCmdCacheCopy(t *testing.T) {
 	inputCache := map[string]time.Time{
