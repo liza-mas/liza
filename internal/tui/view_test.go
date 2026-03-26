@@ -1136,6 +1136,163 @@ func TestRenderFooter_NilCmdResult_NoResultShown(t *testing.T) {
 	}
 }
 
+// --- Help Overlay Tests ---
+
+func TestRenderHelpOverlay_ContainsAll8KeyLabels(t *testing.T) {
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		keys:       NewKeyMap(),
+		styles:     NewStyles(120),
+	}
+
+	got := m.renderHelpOverlay(15)
+
+	wantKeys := []string{"[s]", "[p]", "[r]", "[a]", "[c]", "[?]", "[q]", "[Q]"}
+	for _, k := range wantKeys {
+		if !strings.Contains(got, k) {
+			t.Errorf("help overlay should contain %s, got: %q", k, got)
+		}
+	}
+}
+
+func TestRenderHelpOverlay_ContainsDescriptions(t *testing.T) {
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		keys:       NewKeyMap(),
+		styles:     NewStyles(120),
+	}
+
+	got := m.renderHelpOverlay(15)
+
+	wantDescs := []string{"spawn", "pause", "resume", "add", "checkpoint", "help", "quit", "stop"}
+	for _, d := range wantDescs {
+		if !strings.Contains(got, d) {
+			t.Errorf("help overlay should contain description %q, got: %q", d, got)
+		}
+	}
+}
+
+func TestRenderHelpOverlay_UsesGroupedLayout(t *testing.T) {
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		keys:       NewKeyMap(),
+		styles:     NewStyles(120),
+	}
+
+	got := m.renderHelpOverlay(15)
+
+	// FullHelp() returns 3 groups. At 120 width, groups should be side-by-side.
+	// Verify group headers are present.
+	assertContains(t, got, "ACTIONS", "help overlay should show ACTIONS group header")
+	assertContains(t, got, "SYSTEM", "help overlay should show SYSTEM group header")
+	assertContains(t, got, "TASKS", "help overlay should show TASKS group header")
+}
+
+func TestRenderHelpOverlay_NarrowWidth_StacksVertically(t *testing.T) {
+	m := Model{
+		width:      40,
+		height:     40,
+		columnTier: ColumnTierMinimal,
+		keys:       NewKeyMap(),
+		styles:     NewStyles(40),
+	}
+
+	got := m.renderHelpOverlay(20)
+
+	// All 8 keys should still be present even at narrow width
+	wantKeys := []string{"[s]", "[p]", "[r]", "[a]", "[c]", "[?]", "[q]", "[Q]"}
+	for _, k := range wantKeys {
+		if !strings.Contains(got, k) {
+			t.Errorf("narrow help overlay should contain %s, got: %q", k, got)
+		}
+	}
+}
+
+func TestView_ShowHelpTrue_RendersHelpNotActivity(t *testing.T) {
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		keys:       NewKeyMap(),
+		styles:     NewStyles(120),
+		ready:      true,
+		showHelp:   true,
+		state: &models.State{
+			Goal:   models.Goal{Description: "Test Goal"},
+			Sprint: models.Sprint{ID: "sprint-1"},
+			Config: models.Config{Mode: models.SystemModeRunning},
+		},
+		activities: []ActivityEntry{
+			{
+				Timestamp: time.Now(),
+				Source:    "log",
+				Agent:     "agent-1",
+				Action:    "unique_activity_marker",
+				Task:      "task-1",
+				Detail:    "should not appear",
+			},
+		},
+	}
+
+	got := m.View()
+
+	// Help overlay content should be present
+	assertContains(t, got, "[s]", "View with showHelp=true should contain help key labels")
+	assertContains(t, got, "ACTIONS", "View with showHelp=true should contain help group headers")
+
+	// Activity panel content should NOT be present
+	if strings.Contains(got, "unique_activity_marker") {
+		t.Error("View with showHelp=true should NOT contain activity panel content")
+	}
+	if strings.Contains(got, "⚡ ACTIVITY") {
+		t.Error("View with showHelp=true should NOT contain activity panel title")
+	}
+}
+
+func TestView_ShowHelpFalse_RendersActivityNotHelp(t *testing.T) {
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		keys:       NewKeyMap(),
+		styles:     NewStyles(120),
+		ready:      true,
+		showHelp:   false,
+		state: &models.State{
+			Goal:   models.Goal{Description: "Test Goal"},
+			Sprint: models.Sprint{ID: "sprint-1"},
+			Config: models.Config{Mode: models.SystemModeRunning},
+		},
+		activities: []ActivityEntry{
+			{
+				Timestamp: time.Now(),
+				Source:    "log",
+				Agent:     "agent-1",
+				Action:    "unique_activity_marker",
+				Task:      "task-1",
+				Detail:    "visible detail",
+			},
+		},
+	}
+
+	got := m.View()
+
+	// Activity panel content should be present
+	assertContains(t, got, "⚡ ACTIVITY", "View with showHelp=false should contain activity panel title")
+	assertContains(t, got, "unique_activity_marker", "View with showHelp=false should contain activity content")
+
+	// Help-only content (group headers) should NOT be present
+	if strings.Contains(got, "ACTIONS") {
+		t.Error("View with showHelp=false should NOT contain help overlay group headers")
+	}
+}
+
 func TestRenderFooter_InlineMode_DoesNotContainNormalKeys(t *testing.T) {
 	m := Model{
 		width:     120,

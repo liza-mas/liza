@@ -595,4 +595,53 @@ func (m Model) renderHints(hints [][2]string) string {
 	}
 	return strings.Join(parts, "  ")
 }
-func (m Model) renderHelpOverlay(height int) string { return "" }
+
+// renderHelpOverlay renders the help overlay showing all keybindings.
+// Displayed over the activity panel area when m.showHelp is true.
+// Uses FullHelp() from KeyMap for grouped binding display.
+func (m Model) renderHelpOverlay(height int) string {
+	groups := m.keys.FullHelp()
+	groupNames := []string{"ACTIONS", "SYSTEM", "TASKS"}
+
+	// Render each group as a column
+	var columns []string
+	for i, bindings := range groups {
+		name := ""
+		if i < len(groupNames) {
+			name = groupNames[i]
+		}
+
+		var lines []string
+		lines = append(lines, m.styles.PanelTitle.Render(name))
+		for _, b := range bindings {
+			h := b.Help()
+			line := m.styles.FooterKey.Render("["+h.Key+"]") + " " + m.styles.FooterDesc.Render(h.Desc)
+			lines = append(lines, line)
+		}
+		columns = append(columns, strings.Join(lines, "\n"))
+	}
+
+	// Join side-by-side if width permits, otherwise stack vertically
+	// Each column needs ~28 chars; borders+padding take ~8
+	colWidth := 28
+	availWidth := m.width - 8
+	maxSideBySide := availWidth / colWidth
+	if maxSideBySide < 1 {
+		maxSideBySide = 1
+	}
+
+	var content string
+	if maxSideBySide >= len(columns) {
+		// All groups side-by-side
+		styled := make([]string, len(columns))
+		for i, col := range columns {
+			styled[i] = lipgloss.NewStyle().Width(colWidth).Render(col)
+		}
+		content = lipgloss.JoinHorizontal(lipgloss.Top, styled...)
+	} else {
+		// Stack vertically
+		content = strings.Join(columns, "\n\n")
+	}
+
+	return m.styles.HelpOverlay.Width(m.width).Height(height).Render(content)
+}
