@@ -455,7 +455,72 @@ func (m Model) renderTaskPanel(height int) string {
 	content := title + "\n" + headerRow + "\n" + strings.Join(rows, "\n")
 	return m.styles.TaskPanel.Render(content)
 }
-func (m Model) renderActivityPanel(height int) string { return "" }
-func (m Model) renderAlertBanner() string             { return "" }
-func (m Model) renderFooter() string                  { return "" }
-func (m Model) renderHelpOverlay(height int) string   { return "" }
+
+// renderActivityPanel renders the activity feed as a bordered panel.
+// Displays the tail of m.activities (most recent entries that fit in height).
+// Three source formats per spec §Activity Panel.
+func (m Model) renderActivityPanel(height int) string {
+	title := m.styles.PanelTitle.Render("⚡ ACTIVITY")
+
+	if len(m.activities) == 0 {
+		return m.styles.ActivityPanel.Render(title)
+	}
+
+	// Available content lines: height minus border (2) and title (1)
+	maxLines := max(height-3, 0)
+
+	// Tail: show last N entries
+	start := max(len(m.activities)-maxLines, 0)
+	visible := m.activities[start:]
+
+	var rows []string
+	for _, e := range visible {
+		rows = append(rows, m.formatActivityEntry(e))
+	}
+
+	content := title + "\n" + strings.Join(rows, "\n")
+	return m.styles.ActivityPanel.Render(content)
+}
+
+// formatActivityEntry formats a single activity entry based on its source type.
+func (m Model) formatActivityEntry(e ActivityEntry) string {
+	ts := e.Timestamp.UTC().Format("15:04:05")
+
+	switch e.Source {
+	case "alert":
+		// HH:MM:SS  {level}  {category}: {message}
+		levelStyled := m.colorLevel(e.Level)
+		return fmt.Sprintf("  %s  %s  %s: %s", ts, levelStyled, e.Action, e.Detail)
+
+	case "anomaly":
+		// HH:MM:SS  ⚠️  {reporter}: {type} [{task}]  {details}
+		levelStyled := m.colorLevel("⚠️")
+		if e.Task != "" {
+			return fmt.Sprintf("  %s  %s  %s: %s [%s]  %s", ts, levelStyled, e.Agent, e.Action, e.Task, e.Detail)
+		}
+		return fmt.Sprintf("  %s  %s  %s: %s  %s", ts, levelStyled, e.Agent, e.Action, e.Detail)
+
+	default: // "log"
+		// HH:MM:SS  {agent}  {action}  [{task}]  {detail}
+		task := ""
+		if e.Task != "" {
+			task = fmt.Sprintf("[%s]", e.Task)
+		}
+		return fmt.Sprintf("  %s  %-16s  %-14s  %-20s  %s", ts, e.Agent, e.Action, task, e.Detail)
+	}
+}
+
+// colorLevel applies color to alert level icons.
+func (m Model) colorLevel(level string) string {
+	switch level {
+	case "🚨":
+		return lipgloss.NewStyle().Foreground(ColorRejected).Render(level)
+	case "⚠️":
+		return lipgloss.NewStyle().Foreground(ColorPlanning).Render(level)
+	default:
+		return level
+	}
+}
+func (m Model) renderAlertBanner() string           { return "" }
+func (m Model) renderFooter() string                { return "" }
+func (m Model) renderHelpOverlay(height int) string { return "" }

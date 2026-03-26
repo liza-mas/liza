@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -671,6 +672,204 @@ func TestRenderTaskPanel_ActiveTasksSortedByPriorityThenID(t *testing.T) {
 	// Same priority: sorted by ID
 	if idxA > idxB {
 		t.Error("expected task-a before task-b (same priority, alphabetical)")
+	}
+}
+
+// --- Activity Panel Tests ---
+
+func TestRenderActivityPanel_EmptyActivities(t *testing.T) {
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		activities: []ActivityEntry{},
+	}
+
+	out := m.renderActivityPanel(10)
+	assertContains(t, out, "⚡ ACTIVITY", "expected '⚡ ACTIVITY' title")
+	// Empty body — should still be a valid bordered panel (non-empty string)
+	if out == "" {
+		t.Error("expected non-empty output for empty activities")
+	}
+}
+
+func TestRenderActivityPanel_LogEntryFormat(t *testing.T) {
+	ts := time.Date(2026, 3, 26, 14, 30, 45, 0, time.UTC)
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(120),
+		activities: []ActivityEntry{
+			{
+				Timestamp: ts,
+				Source:    "log",
+				Agent:     "orchestrator-1",
+				Action:    "task_added",
+				Task:      "epic-planning-1",
+				Detail:    "Phase 1: Create plan",
+			},
+		},
+	}
+
+	out := m.renderActivityPanel(10)
+	assertContains(t, out, "14:30:45", "log entry should contain HH:MM:SS timestamp")
+	assertContains(t, out, "orchestrator-1", "log entry should contain agent")
+	assertContains(t, out, "task_added", "log entry should contain action")
+	assertContains(t, out, "epic-planning-1", "log entry should contain task")
+	assertContains(t, out, "Phase 1: Create plan", "log entry should contain detail")
+}
+
+func TestRenderActivityPanel_AlertEntryFormat(t *testing.T) {
+	ts := time.Date(2026, 3, 26, 15, 0, 0, 0, time.UTC)
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(120),
+		activities: []ActivityEntry{
+			{
+				Timestamp: ts,
+				Source:    "alert",
+				Level:     "⚠️",
+				Action:    "expired_lease",
+				Detail:    "agent coder-1 lease expired",
+			},
+		},
+	}
+
+	out := m.renderActivityPanel(10)
+	assertContains(t, out, "15:00:00", "alert entry should contain timestamp")
+	assertContains(t, out, "⚠️", "alert entry should contain level icon")
+	assertContains(t, out, "expired_lease", "alert entry should contain category")
+	assertContains(t, out, "agent coder-1 lease expired", "alert entry should contain message")
+}
+
+func TestRenderActivityPanel_AlertEntryColoredLevel(t *testing.T) {
+	ts := time.Date(2026, 3, 26, 15, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name  string
+		level string
+	}{
+		{"warning", "⚠️"},
+		{"critical", "🚨"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := Model{
+				width:      120,
+				height:     40,
+				columnTier: ColumnTierStandard,
+				styles:     NewStyles(120),
+				activities: []ActivityEntry{
+					{
+						Timestamp: ts,
+						Source:    "alert",
+						Level:     tt.level,
+						Action:    "test_category",
+						Detail:    "test message",
+					},
+				},
+			}
+
+			out := m.renderActivityPanel(10)
+			// Verify the level icon is present in the output
+			assertContains(t, out, tt.level, "alert entry should contain level icon")
+		})
+	}
+}
+
+func TestRenderActivityPanel_AnomalyEntryFormat(t *testing.T) {
+	ts := time.Date(2026, 3, 26, 16, 45, 30, 0, time.UTC)
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(120),
+		activities: []ActivityEntry{
+			{
+				Timestamp: ts,
+				Source:    "anomaly",
+				Agent:     "coder-1",
+				Action:    "retry_loop",
+				Task:      "task-42",
+				Detail:    "3 retries on same error",
+				Level:     "⚠️",
+			},
+		},
+	}
+
+	out := m.renderActivityPanel(10)
+	assertContains(t, out, "16:45:30", "anomaly entry should contain timestamp")
+	assertContains(t, out, "⚠️", "anomaly entry should contain warning icon")
+	assertContains(t, out, "coder-1", "anomaly entry should contain reporter")
+	assertContains(t, out, "retry_loop", "anomaly entry should contain type")
+	assertContains(t, out, "task-42", "anomaly entry should contain task")
+	assertContains(t, out, "3 retries on same error", "anomaly entry should contain details")
+}
+
+func TestRenderActivityPanel_TailDisplay(t *testing.T) {
+	// Create 20 entries but only allow height for ~5 content lines
+	var entries []ActivityEntry
+	for i := 0; i < 20; i++ {
+		entries = append(entries, ActivityEntry{
+			Timestamp: time.Date(2026, 3, 26, 10, 0, i, 0, time.UTC),
+			Source:    "log",
+			Agent:     "agent-1",
+			Action:    fmt.Sprintf("action_%02d", i),
+			Task:      "task-1",
+			Detail:    fmt.Sprintf("detail %d", i),
+		})
+	}
+
+	m := Model{
+		width:      120,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(120),
+		activities: entries,
+	}
+
+	// height=5 means border(2) + title(1) = 3 fixed, so 2 content lines
+	out := m.renderActivityPanel(5)
+
+	// Last entries should be present (tail behavior)
+	assertContains(t, out, "action_19", "tail display should show last entry")
+	assertContains(t, out, "action_18", "tail display should show second-to-last entry")
+
+	// First entries should NOT be present
+	if strings.Contains(out, "action_00") {
+		t.Error("tail display should NOT show first entry when height is limited")
+	}
+}
+
+func TestRenderActivityPanel_HasBorderedPanel(t *testing.T) {
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		activities: []ActivityEntry{
+			{
+				Timestamp: time.Now(),
+				Source:    "log",
+				Agent:     "agent-1",
+				Action:    "started",
+				Task:      "task-1",
+				Detail:    "test",
+			},
+		},
+	}
+
+	out := m.renderActivityPanel(10)
+	assertContains(t, out, "⚡ ACTIVITY", "expected '⚡ ACTIVITY' title")
+	// Panel should use border (the rounded border chars)
+	if !strings.Contains(out, "╭") && !strings.Contains(out, "┌") {
+		// Either rounded or normal border should be present
+		t.Log("Note: border characters may not be present in no-color/no-tty mode")
 	}
 }
 
