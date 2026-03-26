@@ -24,7 +24,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 		name       string
 		state      *models.State
 		wantAlerts int
-		validate   func(*testing.T, []alert)
+		validate   func(*testing.T, []Alert)
 	}{
 		{
 			name: "expired coder lease",
@@ -45,12 +45,12 @@ func TestCheckExpiredLeases(t *testing.T) {
 				},
 			},
 			wantAlerts: 1,
-			validate: func(t *testing.T, alerts []alert) {
+			validate: func(t *testing.T, alerts []Alert) {
 				if alerts[0].Category != "LEASE EXPIRED" {
 					t.Errorf("Category = %q, want %q", alerts[0].Category, "LEASE EXPIRED")
 				}
-				if alerts[0].Level != alertLevelWarning {
-					t.Errorf("Level = %q, want %q", alerts[0].Level, alertLevelWarning)
+				if alerts[0].Level != AlertLevelWarning {
+					t.Errorf("Level = %q, want %q", alerts[0].Level, AlertLevelWarning)
 				}
 			},
 		},
@@ -71,7 +71,7 @@ func TestCheckExpiredLeases(t *testing.T) {
 				Agents: map[string]models.Agent{},
 			},
 			wantAlerts: 1,
-			validate: func(t *testing.T, alerts []alert) {
+			validate: func(t *testing.T, alerts []Alert) {
 				if alerts[0].Category != "REVIEW LEASE EXPIRED" {
 					t.Errorf("Category = %q, want %q", alerts[0].Category, "REVIEW LEASE EXPIRED")
 				}
@@ -972,8 +972,8 @@ func TestCheckSprintStalled(t *testing.T) {
 		if alerts[0].Category != "SPRINT STALLED" {
 			t.Errorf("alert[0].Category = %q, want %q", alerts[0].Category, "SPRINT STALLED")
 		}
-		if alerts[0].Level != alertLevelCritical {
-			t.Errorf("alert[0].Level = %q, want %q", alerts[0].Level, alertLevelCritical)
+		if alerts[0].Level != AlertLevelCritical {
+			t.Errorf("alert[0].Level = %q, want %q", alerts[0].Level, AlertLevelCritical)
 		}
 		if !strings.Contains(alerts[0].Message, "2 non-terminal planned tasks are BLOCKED") {
 			t.Errorf("alert[0].Message = %q, expected blocked count", alerts[0].Message)
@@ -1370,8 +1370,8 @@ func TestCheckMissingRoles(t *testing.T) {
 		if alerts[0].Category != "MISSING ROLE" {
 			t.Errorf("Category = %q, want %q", alerts[0].Category, "MISSING ROLE")
 		}
-		if alerts[0].Level != alertLevelWarning {
-			t.Errorf("Level = %q, want %q", alerts[0].Level, alertLevelWarning)
+		if alerts[0].Level != AlertLevelWarning {
+			t.Errorf("Level = %q, want %q", alerts[0].Level, AlertLevelWarning)
 		}
 		if !strings.Contains(alerts[0].Message, "coder") {
 			t.Errorf("Message = %q, expected to contain 'coder'", alerts[0].Message)
@@ -1609,8 +1609,8 @@ func TestCheckStaleSentinels(t *testing.T) {
 		if len(alerts) != 1 {
 			t.Fatalf("len(alerts) = %d, want 1", len(alerts))
 		}
-		if alerts[0].Level != alertLevelCritical {
-			t.Errorf("level = %q, want %q", alerts[0].Level, alertLevelCritical)
+		if alerts[0].Level != AlertLevelCritical {
+			t.Errorf("level = %q, want %q", alerts[0].Level, AlertLevelCritical)
 		}
 		if alerts[0].Category != "STALE SENTINEL" {
 			t.Errorf("category = %q, want %q", alerts[0].Category, "STALE SENTINEL")
@@ -1635,8 +1635,8 @@ func TestCheckStaleSentinels(t *testing.T) {
 		if len(alerts1) != 1 {
 			t.Fatalf("first poll: len(alerts) = %d, want 1", len(alerts1))
 		}
-		if alerts1[0].Level != alertLevelCritical {
-			t.Errorf("first poll: level = %q, want %q", alerts1[0].Level, alertLevelCritical)
+		if alerts1[0].Level != AlertLevelCritical {
+			t.Errorf("first poll: level = %q, want %q", alerts1[0].Level, AlertLevelCritical)
 		}
 		if alerts1[0].Category != "STALE SENTINEL" {
 			t.Errorf("first poll: category = %q, want %q", alerts1[0].Category, "STALE SENTINEL")
@@ -1647,8 +1647,8 @@ func TestCheckStaleSentinels(t *testing.T) {
 		if len(alerts2) != 1 {
 			t.Fatalf("second poll: len(alerts) = %d, want 1", len(alerts2))
 		}
-		if alerts2[0].Level != alertLevelCritical {
-			t.Errorf("second poll: level = %q, want %q", alerts2[0].Level, alertLevelCritical)
+		if alerts2[0].Level != AlertLevelCritical {
+			t.Errorf("second poll: level = %q, want %q", alerts2[0].Level, AlertLevelCritical)
 		}
 		if alerts2[0].Category != "STALE SENTINEL" {
 			t.Errorf("second poll: category = %q, want %q", alerts2[0].Category, "STALE SENTINEL")
@@ -1705,4 +1705,57 @@ func TestCheckStaleSentinels(t *testing.T) {
 			t.Error("cache entry 'sentinel:task-1' should have been cleared when sentinel resolved")
 		}
 	})
+}
+
+func TestRunChecksWithState_BlockedTask(t *testing.T) {
+	now := time.Now().UTC()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	alertsLog := paths.New(tmpDir).AlertsLogPath()
+
+	state := testhelpers.CreateValidState()
+	blockedReason := "spec ambiguity"
+	state.Tasks = []models.Task{
+		{
+			ID:            "blocked-task-1",
+			Type:          models.TaskTypeCoding,
+			Description:   "A blocked task",
+			Status:        models.TaskStatusBlocked,
+			Priority:      1,
+			Created:       now,
+			SpecRef:       "README.md",
+			DoneWhen:      "Task is complete",
+			Scope:         "Test scope",
+			BlockedReason: &blockedReason,
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	config := WatchConfig{
+		ProjectRoot: tmpDir,
+		AlertsLog:   alertsLog,
+		StateCache:  make(map[string]time.Time),
+	}
+
+	alerts := RunChecksWithState(state, config)
+
+	// Find an alert with category "BLOCKED".
+	var found bool
+	for _, a := range alerts {
+		if a.Category == "BLOCKED" {
+			found = true
+			if a.Level != AlertLevelWarning {
+				t.Errorf("BLOCKED alert level = %q, want %q", a.Level, AlertLevelWarning)
+			}
+			if !strings.Contains(a.Message, "blocked-task-1") {
+				t.Errorf("BLOCKED alert message = %q, want containing %q", a.Message, "blocked-task-1")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected alert with category BLOCKED, got %d alerts: %v", len(alerts), alerts)
+	}
 }

@@ -31,21 +31,23 @@ const (
 	StaleSentinelThreshold       = 2 * time.Minute
 )
 
-type alertLevel string
+// AlertLevel is the severity of a watch alert.
+type AlertLevel string
 
 const (
-	alertLevelWarning  alertLevel = "⚠️"
-	alertLevelCritical alertLevel = "🚨"
+	AlertLevelWarning  AlertLevel = "⚠️"
+	AlertLevelCritical AlertLevel = "🚨"
 )
 
-type alert struct {
+// Alert represents a single anomaly alert from watch checks.
+type Alert struct {
 	Timestamp time.Time
-	Level     alertLevel
+	Level     AlertLevel
 	Category  string
 	Message   string
 }
 
-func (a alert) String() string {
+func (a Alert) String() string {
 	return fmt.Sprintf("[%s] %s %s: %s",
 		a.Timestamp.UTC().Format(time.RFC3339),
 		a.Level,
@@ -110,7 +112,23 @@ func runChecks(_ context.Context, config WatchConfig) error {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
 
-	var alerts []alert
+	alerts := RunChecksWithState(state, config)
+
+	for _, a := range alerts {
+		if err := WriteAlert(config.AlertsLog, a); err != nil {
+			return fmt.Errorf("failed to write alert: %w", err)
+		}
+		fmt.Fprintln(os.Stderr, a.String())
+	}
+
+	return nil
+}
+
+// RunChecksWithState runs all 13 anomaly checks plus circuit breaker,
+// sprint stalled, and state validity checks against the provided state.
+// The config.StateCache is modified in place for alert throttling.
+func RunChecksWithState(state *models.State, config WatchConfig) []Alert {
+	var alerts []Alert
 
 	// Load pipeline resolver once for checks that need it.
 	pr, prErr := ops.LoadResolverForModels(config.ProjectRoot)
@@ -118,9 +136,9 @@ func runChecks(_ context.Context, config WatchConfig) error {
 	if prErr != nil && !errors.Is(prErr, pipeline.ErrConfigNotFound) {
 		// Malformed config: emit one-time alert, don't spam every 10s tick.
 		if _, seen := config.StateCache[pipelineCacheKey]; !seen {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: time.Now().UTC(),
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "PIPELINE CONFIG",
 				Message:   prErr.Error(),
 			})
@@ -132,21 +150,22 @@ func runChecks(_ context.Context, config WatchConfig) error {
 	}
 	// pr is nil on any error — pipeline-aware checks skip gracefully.
 
+	lizaPaths := paths.New(config.ProjectRoot)
 	logPath := lizaPaths.LogPath()
-	checks := []func() []alert{
-		func() []alert { return checkExpiredLeases(state) },
-		func() []alert { return checkBlockedTasks(state, config.StateCache) },
-		func() []alert { return checkOrphanedRejected(state, config.StateCache) },
-		func() []alert { return checkReviewLoops(state) },
-		func() []alert { return checkIntegrationFailures(state) },
-		func() []alert { return checkHypothesisExhaustion(state) },
-		func() []alert { return checkReassigned(state, config.StateCache) },
-		func() []alert { return checkApproachingLimits(state) },
-		func() []alert { return checkStaleSentinels(state, config.StateCache) },
-		func() []alert { return checkStalled(logPath, config.StateCache) },
-		func() []alert { return checkStaleDrafts(state) },
-		func() []alert { return checkImmediateDiscoveries(state) },
-		func() []alert { return checkMissingRoles(state, pr, config.StateCache) },
+	checks := []func() []Alert{
+		func() []Alert { return checkExpiredLeases(state) },
+		func() []Alert { return checkBlockedTasks(state, config.StateCache) },
+		func() []Alert { return checkOrphanedRejected(state, config.StateCache) },
+		func() []Alert { return checkReviewLoops(state) },
+		func() []Alert { return checkIntegrationFailures(state) },
+		func() []Alert { return checkHypothesisExhaustion(state) },
+		func() []Alert { return checkReassigned(state, config.StateCache) },
+		func() []Alert { return checkApproachingLimits(state) },
+		func() []Alert { return checkStaleSentinels(state, config.StateCache) },
+		func() []Alert { return checkStalled(logPath, config.StateCache) },
+		func() []Alert { return checkStaleDrafts(state) },
+		func() []Alert { return checkImmediateDiscoveries(state) },
+		func() []Alert { return checkMissingRoles(state, pr, config.StateCache) },
 	}
 	for _, check := range checks {
 		alerts = append(alerts, check()...)
@@ -155,26 +174,20 @@ func runChecks(_ context.Context, config WatchConfig) error {
 	alerts = append(alerts, checkCircuitBreakerEscalation(state, config.StateCache)...)
 	alerts = append(alerts, checkSprintStalled(state, config.StateCache)...)
 
+	statePath := lizaPaths.StatePath()
 	if err := ValidateCommand(statePath, true); err != nil {
-		alerts = append(alerts, alert{
+		alerts = append(alerts, Alert{
 			Timestamp: time.Now().UTC(),
-			Level:     alertLevelCritical,
+			Level:     AlertLevelCritical,
 			Category:  "INVALID STATE",
 			Message:   err.Error(),
 		})
 	}
 
-	for _, a := range alerts {
-		if err := writeAlert(config.AlertsLog, a); err != nil {
-			return fmt.Errorf("failed to write alert: %w", err)
-		}
-		fmt.Fprintln(os.Stderr, a.String())
-	}
-
-	return nil
+	return alerts
 }
 
-func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Time) []alert {
+func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Time) []Alert {
 	mode := state.Config.Mode
 	if mode == "" {
 		mode = models.SystemModeRunning
@@ -205,16 +218,16 @@ func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Ti
 	}
 
 	cache["circuit_breaker:alert"] = time.Now().UTC()
-	return []alert{{
+	return []Alert{{
 		Timestamp: time.Now().UTC(),
-		Level:     alertLevelCritical,
+		Level:     AlertLevelCritical,
 		Category:  "CIRCUIT BREAKER",
 		Message: fmt.Sprintf("pattern=%s severity=%s — run 'liza analyze' then 'liza sprint-checkpoint'",
 			patternResult.Pattern, patternResult.Severity),
 	}}
 }
 
-func checkSprintStalled(state *models.State, cache map[string]time.Time) []alert {
+func checkSprintStalled(state *models.State, cache map[string]time.Time) []Alert {
 	mode := state.Config.Mode
 	if mode == "" {
 		mode = models.SystemModeRunning
@@ -248,17 +261,17 @@ func checkSprintStalled(state *models.State, cache map[string]time.Time) []alert
 	}
 
 	cache["sprint_stalled:alert"] = time.Now().UTC()
-	return []alert{{
+	return []Alert{{
 		Timestamp: time.Now().UTC(),
-		Level:     alertLevelCritical,
+		Level:     AlertLevelCritical,
 		Category:  "SPRINT STALLED",
 		Message: fmt.Sprintf("all %d non-terminal planned tasks are BLOCKED",
 			blockedCount),
 	}}
 }
 
-func checkExpiredLeases(state *models.State) []alert {
-	var alerts []alert
+func checkExpiredLeases(state *models.State) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 	graceDeadline := now.Add(-models.LeaseExpiryGracePeriod)
 
@@ -270,9 +283,9 @@ func checkExpiredLeases(state *models.State) []alert {
 			continue
 		}
 		if agent.LeaseExpires.Before(graceDeadline) {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "LEASE EXPIRED",
 				Message:   fmt.Sprintf("%s on %s", agentID, *agent.CurrentTask),
 			})
@@ -290,9 +303,9 @@ func checkExpiredLeases(state *models.State) []alert {
 			continue
 		}
 		if task.ReviewLeaseExpires.Before(graceDeadline) {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "REVIEW LEASE EXPIRED",
 				Message:   fmt.Sprintf("%s on %s — review can be reclaimed", *task.ReviewingBy, task.ID),
 			})
@@ -302,8 +315,8 @@ func checkExpiredLeases(state *models.State) []alert {
 	return alerts
 }
 
-func checkBlockedTasks(state *models.State, cache map[string]time.Time) []alert {
-	var alerts []alert
+func checkBlockedTasks(state *models.State, cache map[string]time.Time) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
@@ -317,9 +330,9 @@ func checkBlockedTasks(state *models.State, cache map[string]time.Time) []alert 
 			if task.BlockedReason != nil {
 				reason = *task.BlockedReason
 			}
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "BLOCKED",
 				Message:   fmt.Sprintf("%s — %s", task.ID, reason),
 			})
@@ -330,8 +343,8 @@ func checkBlockedTasks(state *models.State, cache map[string]time.Time) []alert 
 	return alerts
 }
 
-func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []alert {
-	var alerts []alert
+func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
@@ -370,9 +383,9 @@ func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []al
 			continue
 		}
 		if now.Sub(firstSeen) > OrphanedGracePeriod {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelCritical,
+				Level:     AlertLevelCritical,
 				Category:  "ORPHANED REJECTED",
 				Message: fmt.Sprintf("%s — assigned to %s but agent is %s (orphaned %ds+)",
 					task.ID, assignee, agentStatus, int(OrphanedGracePeriod.Seconds())),
@@ -384,15 +397,15 @@ func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []al
 	return alerts
 }
 
-func checkReviewLoops(state *models.State) []alert {
-	var alerts []alert
+func checkReviewLoops(state *models.State) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
 		if task.ReviewCyclesCurrent >= 5 {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelCritical,
+				Level:     AlertLevelCritical,
 				Category:  "REVIEW LOOP",
 				Message:   fmt.Sprintf("%s — %d cycles (at cliff)", task.ID, task.ReviewCyclesCurrent),
 			})
@@ -402,15 +415,15 @@ func checkReviewLoops(state *models.State) []alert {
 	return alerts
 }
 
-func checkIntegrationFailures(state *models.State) []alert {
-	var alerts []alert
+func checkIntegrationFailures(state *models.State) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
 		if task.Status == models.TaskStatusIntegrationFailed {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelCritical,
+				Level:     AlertLevelCritical,
 				Category:  "INTEGRATION FAILED",
 				Message:   task.ID,
 			})
@@ -420,15 +433,15 @@ func checkIntegrationFailures(state *models.State) []alert {
 	return alerts
 }
 
-func checkHypothesisExhaustion(state *models.State) []alert {
-	var alerts []alert
+func checkHypothesisExhaustion(state *models.State) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
 		if len(task.FailedBy) >= 2 {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelCritical,
+				Level:     AlertLevelCritical,
 				Category:  "HYPOTHESIS EXHAUSTION",
 				Message:   fmt.Sprintf("%s — requires rescope", task.ID),
 			})
@@ -438,8 +451,8 @@ func checkHypothesisExhaustion(state *models.State) []alert {
 	return alerts
 }
 
-func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
-	var alerts []alert
+func checkReassigned(state *models.State, cache map[string]time.Time) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
@@ -449,9 +462,9 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 
 		cacheKey := "attempt2:" + task.ID
 		if _, seen := cache[cacheKey]; !seen {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "ATTEMPT",
 				Message:   fmt.Sprintf("%s — attempt 2 (final attempt)", task.ID),
 			})
@@ -462,8 +475,8 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []alert {
 	return alerts
 }
 
-func checkApproachingLimits(state *models.State) []alert {
-	var alerts []alert
+func checkApproachingLimits(state *models.State) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
@@ -477,9 +490,9 @@ func checkApproachingLimits(state *models.State) []alert {
 			} else {
 				msg = fmt.Sprintf("%s — attempt %d, iteration %d/10", task.ID, attemptNum, task.Iteration)
 			}
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "APPROACHING LIMIT",
 				Message:   msg,
 			})
@@ -493,9 +506,9 @@ func checkApproachingLimits(state *models.State) []alert {
 			} else {
 				msg = fmt.Sprintf("%s — attempt %d, review cycle %d/5", task.ID, attemptNum, task.ReviewCyclesCurrent)
 			}
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "APPROACHING LIMIT",
 				Message:   msg,
 			})
@@ -505,8 +518,8 @@ func checkApproachingLimits(state *models.State) []alert {
 	return alerts
 }
 
-func checkStaleSentinels(state *models.State, cache map[string]time.Time) []alert {
-	var alerts []alert
+func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	activeSentinels := make(map[string]bool)
@@ -524,9 +537,9 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []aler
 			continue
 		}
 		if now.Sub(firstSeen) > StaleSentinelThreshold {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelCritical,
+				Level:     AlertLevelCritical,
 				Category:  "STALE SENTINEL",
 				Message:   fmt.Sprintf("%s stuck in transition — manual repair needed", task.ID),
 			})
@@ -548,8 +561,8 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []aler
 }
 
 // Throttles stall alerts to once every 5 minutes.
-func checkStalled(logPath string, cache map[string]time.Time) []alert {
-	var alerts []alert
+func checkStalled(logPath string, cache map[string]time.Time) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	logger := log.New(logPath)
@@ -567,9 +580,9 @@ func checkStalled(logPath string, cache map[string]time.Time) []alert {
 	cacheKey := "stalled:alert"
 	lastAlert, seen := cache[cacheKey]
 	if !seen || now.Sub(lastAlert) >= 5*time.Minute {
-		alerts = append(alerts, alert{
+		alerts = append(alerts, Alert{
 			Timestamp: now,
-			Level:     alertLevelWarning,
+			Level:     AlertLevelWarning,
 			Category:  "STALLED",
 			Message:   fmt.Sprintf("no progress for %d minutes", int(age.Minutes())),
 		})
@@ -579,8 +592,8 @@ func checkStalled(logPath string, cache map[string]time.Time) []alert {
 	return alerts
 }
 
-func checkStaleDrafts(state *models.State) []alert {
-	var alerts []alert
+func checkStaleDrafts(state *models.State) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
@@ -590,9 +603,9 @@ func checkStaleDrafts(state *models.State) []alert {
 
 		age := now.Sub(task.Created)
 		if age > StaleDraftThreshold {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelWarning,
+				Level:     AlertLevelWarning,
 				Category:  "STALE DRAFT",
 				Message: fmt.Sprintf("%s — created %dmin ago, never finalized (Orchestrator crash?)",
 					task.ID, int(age.Minutes())),
@@ -603,15 +616,15 @@ func checkStaleDrafts(state *models.State) []alert {
 	return alerts
 }
 
-func checkImmediateDiscoveries(state *models.State) []alert {
-	var alerts []alert
+func checkImmediateDiscoveries(state *models.State) []Alert {
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, disc := range state.Discovered {
 		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
-			alerts = append(alerts, alert{
+			alerts = append(alerts, Alert{
 				Timestamp: now,
-				Level:     alertLevelCritical,
+				Level:     AlertLevelCritical,
 				Category:  "IMMEDIATE DISCOVERY",
 				Message:   fmt.Sprintf("%s — %s (Orchestrator should wake)", disc.ID, disc.Description),
 			})
@@ -630,7 +643,7 @@ func checkImmediateDiscoveries(state *models.State) []alert {
 // blocked by unmet deps won't trigger an alert even if the needed role is
 // missing — the alert fires later when deps resolve. This is conservative
 // (fewer false positives) at the cost of delayed detection.
-func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache map[string]time.Time) []alert {
+func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache map[string]time.Time) []Alert {
 	if pr == nil {
 		return nil
 	}
@@ -676,7 +689,7 @@ func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache ma
 	}
 
 	// Emit alerts for each missing role, throttled by cache.
-	var alerts []alert
+	var alerts []Alert
 	now := time.Now().UTC()
 
 	// Sort keys for deterministic alert order.
@@ -708,9 +721,9 @@ func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache ma
 		}
 		msg += ")"
 
-		alerts = append(alerts, alert{
+		alerts = append(alerts, Alert{
 			Timestamp: now,
-			Level:     alertLevelWarning,
+			Level:     AlertLevelWarning,
 			Category:  "MISSING ROLE",
 			Message:   msg,
 		})
@@ -735,7 +748,8 @@ func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache ma
 	return alerts
 }
 
-func writeAlert(alertsLog string, a alert) error {
+// WriteAlert appends an alert to the alerts log file.
+func WriteAlert(alertsLog string, a Alert) error {
 	f, err := os.OpenFile(alertsLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open alerts log: %w", err)
