@@ -1311,3 +1311,72 @@ func TestRenderFooter_InlineMode_DoesNotContainNormalKeys(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================
+// Phase 4 Task 5: Huh form overlay view tests
+// ============================================================
+
+func TestView_FormOverlay_ReplacesActivityPanel(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.styles = NewStyles(120)
+	m.state = &models.State{
+		Goal:   models.Goal{Description: "Test Goal"},
+		Sprint: models.Sprint{ID: "sprint-1"},
+		Config: models.Config{Mode: models.SystemModeRunning},
+	}
+	// Add a unique activity entry that should NOT appear in form mode
+	m.activities = []ActivityEntry{
+		{
+			Timestamp: time.Now(),
+			Source:    "log",
+			Agent:     "test-agent",
+			Action:    "unique_marker_12345",
+		},
+	}
+
+	// Build form and set form mode
+	form, data := m.buildAddTaskForm()
+	form.Init()
+	m.huhForm = form
+	m.formData = data
+	m.inputMode = InputModeForm
+
+	output := m.View()
+	if strings.Contains(output, "unique_marker_12345") {
+		t.Error("View() in form mode should not contain activity panel content")
+	}
+	// The form should be rendered instead — huh forms contain field titles
+	if !strings.Contains(output, "ID") {
+		t.Error("View() in form mode should contain form content (field title 'ID')")
+	}
+}
+
+func TestView_NormalMode_ContainsActivityPanel(t *testing.T) {
+	m := newTestModel()
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.styles = NewStyles(120)
+	m.state = &models.State{
+		Goal:   models.Goal{Description: "Test Goal"},
+		Sprint: models.Sprint{ID: "sprint-1"},
+		Config: models.Config{Mode: models.SystemModeRunning},
+	}
+	m.activities = []ActivityEntry{
+		{
+			Timestamp: time.Now(),
+			Source:    "log",
+			Agent:     "test-agent",
+			Action:    "unique_marker_67890",
+		},
+	}
+	m.inputMode = InputModeNormal
+
+	output := m.View()
+	if !strings.Contains(output, "unique_marker_67890") {
+		t.Error("View() in normal mode should contain activity panel content")
+	}
+}

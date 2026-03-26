@@ -2,12 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+	"github.com/liza-mas/liza/internal/commands"
 )
 
 // Update handles all incoming messages and returns the updated model + next Cmd.
@@ -180,9 +183,11 @@ func (m Model) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, resumeSystemCmd(m.projectRoot)
 
 	case key.Matches(msg, m.keys.AddTask):
-		// Form construction deferred to Task 5
+		form, data := m.buildAddTaskForm()
+		m.huhForm = form
+		m.formData = data
 		m.inputMode = InputModeForm
-		return m, nil
+		return m, m.huhForm.Init()
 
 	case key.Matches(msg, m.keys.Checkpoint):
 		return m, checkpointCmd(m.projectRoot)
@@ -294,15 +299,130 @@ func (m Model) cycleCompletion() Model {
 	return m
 }
 
+// addTaskFormData holds the bound values for the Huh add-task form fields.
+type addTaskFormData struct {
+	ID          string
+	Description string
+	SpecRef     string
+	DoneWhen    string
+	DependsOn   []string
+	Priority    int
+}
+
+// kebabCaseRe validates kebab-case identifiers.
+var kebabCaseRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// validateKebabCase returns an error if s is not valid kebab-case.
+func validateKebabCase(s string) error {
+	if !kebabCaseRe.MatchString(s) {
+		return fmt.Errorf("must be kebab-case (e.g. my-task-id)")
+	}
+	return nil
+}
+
+// validateRequired returns an error if s is empty.
+func validateRequired(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return fmt.Errorf("required")
+	}
+	return nil
+}
+
+// buildAddTaskForm creates a Huh form for adding a task with 6 fields.
+// Populates multi-select options from current state (task IDs for depends_on).
+// Returns the form and the bound data struct.
+func (m Model) buildAddTaskForm() (*huh.Form, *addTaskFormData) {
+	data := &addTaskFormData{}
+
+	// Collect existing task IDs for depends_on multi-select
+	var taskIDs []string
+	if m.state != nil {
+		for _, t := range m.state.Tasks {
+			taskIDs = append(taskIDs, t.ID)
+		}
+		sort.Strings(taskIDs)
+	}
+
+	depOptions := make([]huh.Option[string], len(taskIDs))
+	for i, id := range taskIDs {
+		depOptions[i] = huh.NewOption(id, id)
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().Title("ID").Value(&data.ID).
+				Validate(validateKebabCase),
+			huh.NewInput().Title("Description").Value(&data.Description).
+				Validate(validateRequired),
+			huh.NewInput().Title("Spec ref").Value(&data.SpecRef),
+			huh.NewInput().Title("Done when").Value(&data.DoneWhen),
+			huh.NewMultiSelect[string]().Title("Depends on").
+				Options(depOptions...).Value(&data.DependsOn),
+			huh.NewSelect[int]().Title("Priority").
+				Options(
+					huh.NewOption("0 (default)", 0),
+					huh.NewOption("1", 1),
+					huh.NewOption("2", 2),
+					huh.NewOption("3", 3),
+					huh.NewOption("4", 4),
+					huh.NewOption("5", 5),
+				).Value(&data.Priority),
+		),
+	)
+
+	return form, data
+}
+
+// extractFormData reads the Huh form's bound values and returns a TaskInput.
+func (m Model) extractFormData() *commands.TaskInput {
+	if m.formData == nil {
+		return nil
+	}
+	return &commands.TaskInput{
+		ID:          m.formData.ID,
+		Description: m.formData.Description,
+		SpecRef:     m.formData.SpecRef,
+		DoneWhen:    m.formData.DoneWhen,
+		DependsOn:   m.formData.DependsOn,
+		Priority:    m.formData.Priority,
+	}
+}
+
 // handleFormKey handles key events in form mode.
-// Stub: cancels on Esc, otherwise returns model unchanged.
-// Full implementation in Task 5.
+// Delegates to huhForm.Update(). Detects completion/cancellation via form state.
 func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Esc cancels the form
 	if msg.String() == "esc" {
 		m.inputMode = InputModeNormal
 		m.huhForm = nil
+		m.formData = nil
+		return m, nil
 	}
-	return m, nil
+
+	// Delegate to Huh form
+	form, cmd := m.huhForm.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		m.huhForm = f
+	}
+
+	// Check if form completed (submitted)
+	if m.huhForm.State == huh.StateCompleted {
+		m.inputMode = InputModeNormal
+		input := m.extractFormData()
+		m.huhForm = nil
+		m.formData = nil
+		return m, addTaskCmd(m.projectRoot, input)
+	}
+
+	// Check if form was aborted
+	if m.huhForm.State == huh.StateAborted {
+		m.inputMode = InputModeNormal
+		m.huhForm = nil
+		m.formData = nil
+		return m, nil
+	}
+
+	return m, cmd
 }
 
 // appendActivity appends an entry to the activity slice, capping at 200 entries.

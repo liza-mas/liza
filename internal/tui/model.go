@@ -157,15 +157,16 @@ type Model struct {
 	columnTier ColumnTier // current column visibility tier
 
 	// Input
-	inputMode        InputMode       // current input mode
-	keys             KeyMap          // key bindings
-	textInput        textinput.Model // Bubbles text input for inline prompts
-	huhForm          *huh.Form       // active Huh form (nil when no form)
-	inlineAction     InlineAction    // which action inline input serves
-	inlineLabel      string          // prompt label shown before textinput (e.g., "Role: ")
-	roleCompletions  []string        // cached role names from pipeline config for tab-completion
-	completionIdx    int             // current position in tab-completion cycle
-	completionPrefix string          // text prefix when Tab was first pressed (filters completions)
+	inputMode        InputMode        // current input mode
+	keys             KeyMap           // key bindings
+	textInput        textinput.Model  // Bubbles text input for inline prompts
+	huhForm          *huh.Form        // active Huh form (nil when no form)
+	formData         *addTaskFormData // bound form data for Huh form fields
+	inlineAction     InlineAction     // which action inline input serves
+	inlineLabel      string           // prompt label shown before textinput (e.g., "Role: ")
+	roleCompletions  []string         // cached role names from pipeline config for tab-completion
+	completionIdx    int              // current position in tab-completion cycle
+	completionPrefix string           // text prefix when Tab was first pressed (filters completions)
 
 	// Visual
 	styles Styles // Lipgloss styles (adapted to width)

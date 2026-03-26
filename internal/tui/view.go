@@ -69,8 +69,11 @@ func (m Model) View() string {
 	agents := m.renderAgentPanel(agentHeight)
 	tasks := m.renderTaskPanel(taskHeight)
 
+	// Activity panel slot: form overlay > help overlay > activity panel
 	var activity string
-	if m.showHelp {
+	if m.inputMode == InputModeForm && m.huhForm != nil {
+		activity = m.huhForm.View()
+	} else if m.showHelp {
 		activity = m.renderHelpOverlay(activityHeight)
 	} else {
 		activity = m.renderActivityPanel(activityHeight)

@@ -754,6 +754,157 @@ func TestHandleInlineKey_TabNotInSpawnModeIgnored(t *testing.T) {
 	}
 }
 
+// ============================================================
+// Phase 4 Task 5: Huh form overlay tests
+// ============================================================
+
+func TestBuildAddTaskForm_ReturnsNonNil(t *testing.T) {
+	m := testModel()
+	form, data := m.buildAddTaskForm()
+	if form == nil {
+		t.Fatal("buildAddTaskForm must return a non-nil *huh.Form")
+	}
+	if data == nil {
+		t.Fatal("buildAddTaskForm must return a non-nil *addTaskFormData")
+	}
+}
+
+func TestBuildAddTaskForm_IncludesTaskIDsInDependsOn(t *testing.T) {
+	m := testModel()
+	m.state = &models.State{
+		Tasks: []models.Task{
+			{ID: "task-1"},
+			{ID: "task-2"},
+		},
+	}
+	form, _ := m.buildAddTaskForm()
+	if form == nil {
+		t.Fatal("buildAddTaskForm must return a non-nil form")
+	}
+
+	// Initialize the form so it can render
+	form.Init()
+	view := form.View()
+	if !strings.Contains(view, "task-1") || !strings.Contains(view, "task-2") {
+		t.Errorf("form view should contain task IDs 'task-1' and 'task-2' in depends-on options, got:\n%s", view)
+	}
+}
+
+func TestExtractFormData_MapsToTaskInput(t *testing.T) {
+	m := testModel()
+	m.formData = &addTaskFormData{
+		ID:          "my-task",
+		Description: "test",
+		SpecRef:     "specs/test.md",
+		DoneWhen:    "it works",
+		DependsOn:   []string{"dep-1"},
+		Priority:    2,
+	}
+	input := m.extractFormData()
+	if input == nil {
+		t.Fatal("extractFormData must return a non-nil *commands.TaskInput")
+	}
+	if input.ID != "my-task" {
+		t.Errorf("ID = %q, want %q", input.ID, "my-task")
+	}
+	if input.Description != "test" {
+		t.Errorf("Description = %q, want %q", input.Description, "test")
+	}
+	if input.SpecRef != "specs/test.md" {
+		t.Errorf("SpecRef = %q, want %q", input.SpecRef, "specs/test.md")
+	}
+	if input.DoneWhen != "it works" {
+		t.Errorf("DoneWhen = %q, want %q", input.DoneWhen, "it works")
+	}
+	if len(input.DependsOn) != 1 || input.DependsOn[0] != "dep-1" {
+		t.Errorf("DependsOn = %v, want [dep-1]", input.DependsOn)
+	}
+	if input.Priority != 2 {
+		t.Errorf("Priority = %d, want %d", input.Priority, 2)
+	}
+}
+
+func TestValidateKebabCase(t *testing.T) {
+	tests := []struct {
+		input string
+		valid bool
+	}{
+		{"my-task", true},
+		{"task", true},
+		{"my-long-task-name", true},
+		{"task123", true},
+		{"a1-b2", true},
+		{"My Task", false},
+		{"MyTask", false},
+		{"my_task", false},
+		{"", false},
+		{"-leading", false},
+		{"trailing-", false},
+		{"UPPERCASE", false},
+	}
+	for _, tt := range tests {
+		err := validateKebabCase(tt.input)
+		if tt.valid && err != nil {
+			t.Errorf("validateKebabCase(%q) = error %v, want nil", tt.input, err)
+		}
+		if !tt.valid && err == nil {
+			t.Errorf("validateKebabCase(%q) = nil, want error", tt.input)
+		}
+	}
+}
+
+func TestValidateRequired(t *testing.T) {
+	if err := validateRequired("something"); err != nil {
+		t.Errorf("validateRequired(%q) = error %v, want nil", "something", err)
+	}
+	if err := validateRequired(""); err == nil {
+		t.Error("validateRequired(\"\") = nil, want error")
+	}
+}
+
+func TestHandleFormKey_EscSetsNormalModeAndNilForm(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeForm
+	form, data := m.buildAddTaskForm()
+	form.Init()
+	m.huhForm = form
+	m.formData = data
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, cmd := m.handleFormKey(msg)
+	m2 := result.(Model)
+
+	if m2.inputMode != InputModeNormal {
+		t.Errorf("inputMode = %d, want InputModeNormal(%d)", m2.inputMode, InputModeNormal)
+	}
+	if m2.huhForm != nil {
+		t.Error("Esc should set huhForm to nil")
+	}
+	if cmd != nil {
+		t.Error("Esc should return nil cmd")
+	}
+}
+
+func TestHandleNormalKey_AddTaskBuildsFormAndSetsMode(t *testing.T) {
+	m := testModel()
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if m2.inputMode != InputModeForm {
+		t.Errorf("inputMode = %d, want InputModeForm(%d)", m2.inputMode, InputModeForm)
+	}
+	if m2.huhForm == nil {
+		t.Error("pressing 'a' should set huhForm to non-nil")
+	}
+	if m2.formData == nil {
+		t.Error("pressing 'a' should set formData to non-nil")
+	}
+	if cmd == nil {
+		t.Error("pressing 'a' should return huhForm.Init() cmd (non-nil)")
+	}
+}
+
 func TestRenderFooter_InlineModeShowsLabel(t *testing.T) {
 	m := testModel()
 	m.inputMode = InputModeInline
