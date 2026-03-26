@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -43,7 +44,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.KeyMsg:
+		// Dismiss alert banner on any keypress (spec §Alert Banner)
+		if m.alertBanner != nil {
+			m.alertBanner = nil
+		}
+
+		// Route to mode-specific handler
+		switch m.inputMode {
+		case InputModeInline:
+			return m.handleInlineKey(msg)
+		case InputModeForm:
+			return m.handleFormKey(msg)
+		default:
+			return m.handleNormalKey(msg)
+		}
+
+	case CmdResultMsg:
+		m.cmdResult = &msg
+		m.cmdExpiry = time.Now().Add(3 * time.Second)
+		return m, nil
+
+	case rolesMsg:
+		m.roleCompletions = msg.Roles
+		return m, nil
+
+	case stopDoneMsg:
+		if m.watcher != nil {
+			m.watcher.Close()
+		}
+		return m, tea.Quit
+
 	case TickMsg:
+		// Clear expired command result
+		if m.cmdResult != nil && time.Now().After(m.cmdExpiry) {
+			m.cmdResult = nil
+		}
 		return m, tea.Batch(
 			readStateCmd(m.blackboard),
 			runChecksCmd(m.projectRoot, m.alertsLogPath, m.state, m.stateCache),
@@ -113,6 +149,88 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
+}
+
+// handleNormalKey dispatches key events in normal mode.
+func (m Model) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Spawn):
+		m.inputMode = InputModeInline
+		m.inlineAction = InlineActionSpawn
+		m.inlineLabel = "Role: "
+		m.textInput.Reset()
+		m.textInput.Focus()
+		m.completionIdx = 0
+		m.completionPrefix = ""
+		var cmd tea.Cmd
+		if len(m.roleCompletions) == 0 {
+			cmd = loadRolesCmd(m.projectRoot)
+		}
+		return m, cmd
+
+	case key.Matches(msg, m.keys.Pause):
+		m.inputMode = InputModeInline
+		m.inlineAction = InlineActionPause
+		m.inlineLabel = "Reason: "
+		m.textInput.Reset()
+		m.textInput.Focus()
+		return m, nil
+
+	case key.Matches(msg, m.keys.Resume):
+		return m, resumeSystemCmd(m.projectRoot)
+
+	case key.Matches(msg, m.keys.AddTask):
+		// Form construction deferred to Task 5
+		m.inputMode = InputModeForm
+		return m, nil
+
+	case key.Matches(msg, m.keys.Checkpoint):
+		return m, checkpointCmd(m.projectRoot)
+
+	case key.Matches(msg, m.keys.Quit):
+		if m.watcher != nil {
+			m.watcher.Close()
+		}
+		return m, tea.Quit
+
+	case key.Matches(msg, m.keys.Stop):
+		m.inputMode = InputModeInline
+		m.inlineAction = InlineActionStopConfirm
+		m.inlineLabel = "Stop? (y/n): "
+		m.textInput.Reset()
+		m.textInput.Focus()
+		return m, nil
+
+	case key.Matches(msg, m.keys.Help):
+		m.showHelp = !m.showHelp
+		return m, nil
+
+	default:
+		return m, nil
+	}
+}
+
+// handleInlineKey handles key events in inline input mode.
+// Stub: cancels on Esc, otherwise returns model unchanged.
+// Full implementation in Task 4.
+func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "esc" {
+		m.inputMode = InputModeNormal
+		m.inlineAction = InlineActionNone
+		m.textInput.Blur()
+	}
+	return m, nil
+}
+
+// handleFormKey handles key events in form mode.
+// Stub: cancels on Esc, otherwise returns model unchanged.
+// Full implementation in Task 5.
+func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "esc" {
+		m.inputMode = InputModeNormal
+		m.huhForm = nil
+	}
+	return m, nil
 }
 
 // appendActivity appends an entry to the activity slice, capping at 200 entries.
