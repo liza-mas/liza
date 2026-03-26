@@ -3,9 +3,10 @@ package tui
 import (
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 // InputMode represents the current input mode of the TUI.
@@ -42,8 +43,49 @@ type CmdResultMsg struct {
 
 // LogEntriesMsg carries new log entries from log.yaml.
 type LogEntriesMsg struct {
-	Entries []log.Entry
+	Entries     []log.Entry
+	NewPosition int64 // byte offset after last read entry — caller updates m.logPosition
 }
+
+// StateWatcher abstracts the fsnotify-based state watcher from internal/db.
+// Satisfied by *db.stateWatcher returned from Blackboard.WatchForChanges().
+type StateWatcher interface {
+	Events() <-chan struct{}
+	Errors() <-chan error
+	Close() error
+}
+
+// stateChangedMsg signals that the state file was modified (from fsnotify watcher).
+// Triggers a state re-read and log re-read.
+//
+//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+type stateChangedMsg struct{}
+
+// watcherClosedMsg signals the fsnotify watcher channel closed unexpectedly.
+// The TUI falls back to tick-only refresh.
+//
+//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+type watcherClosedMsg struct{}
+
+// alertsMsg carries a batch of alerts from anomaly checks.
+// Includes the updated state cache to avoid data races (cache is copied
+// before the Cmd goroutine runs, modified by checks, returned here).
+//
+//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+type alertsMsg struct {
+	Alerts     []AlertMsg
+	StateCache map[string]time.Time
+}
+
+// errMsg carries an error from an async Cmd function.
+//
+//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+type errMsg struct {
+	err error
+}
+
+//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+func (e errMsg) Error() string { return e.err.Error() }
 
 // ActivityEntry is a unified entry in the activity feed, merging log events,
 // anomaly alerts, and blackboard anomalies into a single chronological list.
@@ -115,31 +157,36 @@ type Model struct {
 	// Watch state (for anomaly throttling, same as WatchConfig.StateCache)
 	stateCache map[string]time.Time
 
+	// Data layer
+	watcher          StateWatcher   // fsnotify subscription; nil after close
+	blackboard       *db.Blackboard // for state reads
+	logPath          string         // absolute path to log.yaml
+	alertsLogPath    string         // absolute path to alerts.log
+	lastAnomalyCount int            // tracks processed state.Anomalies for incremental sync
+
 	// Lifecycle
 	ready       bool   // true after first state load
 	projectRoot string // root directory for state.yaml, log.yaml, alerts.log
 }
 
-// New creates a new Model with default state.
-// projectRoot is used to locate state.yaml, log.yaml, and alerts.log.
-func New(projectRoot string) Model {
-	return Model{
-		activities:  make([]ActivityEntry, 0),
-		keys:        NewKeyMap(),
-		styles:      NewStyles(0),
-		stateCache:  make(map[string]time.Time),
-		projectRoot: projectRoot,
+// New creates a new Model. Creates the fsnotify watcher and blackboard.
+// Returns error if watcher creation fails (e.g., non-existent project root).
+func New(projectRoot string) (Model, error) {
+	p := paths.New(projectRoot)
+	bb := db.For(p.StatePath())
+	w, err := bb.WatchForChanges()
+	if err != nil {
+		return Model{}, err
 	}
-}
-
-// Init returns the initial command.
-// Stub: returns nil. Actual implementation in commands.go phase.
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
-// Update handles messages and returns the updated model.
-// Stub: returns m, nil. Actual implementation in update.go phase.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return m, nil
+	return Model{
+		activities:    make([]ActivityEntry, 0),
+		keys:          NewKeyMap(),
+		styles:        NewStyles(0),
+		stateCache:    make(map[string]time.Time),
+		projectRoot:   projectRoot,
+		watcher:       w,
+		blackboard:    bb,
+		logPath:       p.LogPath(),
+		alertsLogPath: p.AlertsLogPath(),
+	}, nil
 }

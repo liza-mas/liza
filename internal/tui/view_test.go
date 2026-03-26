@@ -10,7 +10,7 @@ import (
 )
 
 func TestView_NotReady_ReturnsLoading(t *testing.T) {
-	m := New("/tmp/test")
+	m := newTestModel()
 	// ready defaults to false
 	got := m.View()
 	if !strings.Contains(got, "Loading...") {
@@ -19,7 +19,7 @@ func TestView_NotReady_ReturnsLoading(t *testing.T) {
 }
 
 func TestView_Ready_ContainsHeaderAndFooter(t *testing.T) {
-	m := New("/tmp/test")
+	m := newTestModel()
 	m.ready = true
 	m.width = 120
 	m.height = 40
@@ -40,7 +40,7 @@ func TestView_Ready_ContainsHeaderAndFooter(t *testing.T) {
 }
 
 func TestRenderHeader_ContainsGoalDescription(t *testing.T) {
-	m := New("/tmp/test")
+	m := newTestModel()
 	m.width = 120
 	m.styles = NewStyles(120)
 	m.state = &models.State{
@@ -58,7 +58,7 @@ func TestRenderHeader_ContainsGoalDescription(t *testing.T) {
 }
 
 func TestRenderHeader_ContainsSprintID(t *testing.T) {
-	m := New("/tmp/test")
+	m := newTestModel()
 	m.width = 120
 	m.styles = NewStyles(120)
 	m.state = &models.State{
@@ -89,7 +89,7 @@ func TestRenderHeader_StatusMatchesSystemMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := New("/tmp/test")
+			m := newTestModel()
 			m.width = 120
 			m.styles = NewStyles(120)
 			m.state = &models.State{
@@ -107,7 +107,7 @@ func TestRenderHeader_StatusMatchesSystemMode(t *testing.T) {
 }
 
 func TestRenderHeader_NilState_ReturnsLoadingFallback(t *testing.T) {
-	m := New("/tmp/test")
+	m := newTestModel()
 	m.width = 120
 	m.styles = NewStyles(120)
 	m.state = nil
@@ -122,7 +122,7 @@ func TestRenderHeader_NilState_ReturnsLoadingFallback(t *testing.T) {
 }
 
 func TestRenderHeader_CheckpointOverridesColor(t *testing.T) {
-	m := New("/tmp/test")
+	m := newTestModel()
 	m.width = 120
 	m.styles = NewStyles(120)
 	m.state = &models.State{
