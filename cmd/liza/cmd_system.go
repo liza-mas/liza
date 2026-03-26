@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -76,46 +78,50 @@ The metrics are used to track sprint progress and detect quality issues.`,
 
 var watchCmd = &cobra.Command{
 	Use:   "watch",
-	Short: "Monitor Liza blackboard and alert on conditions",
-	Long: `Continuously monitor the Liza blackboard and alert on anomalies.
+	Short: "Interactive TUI dashboard for monitoring Liza",
+	Long: `Launch an interactive TUI dashboard that monitors the Liza blackboard.
 
-Runs periodic checks (default: every 10 seconds) for:
-  - Expired leases (coder and reviewer)
-  - Blocked tasks
-  - Orphaned rejected tasks (assigned to inactive agents)
-  - Review loops (>=5 cycles)
-  - Integration failures
-  - Hypothesis exhaustion (failed_by >= 2)
-  - Reassigned tasks
-  - Approaching limits (8/10 iterations, 3/5 review cycles)
-  - Stalled progress (no log activity 30+ min)
-  - Stale drafts (>30min old)
-  - Immediate discoveries not converted to tasks
-  - Circuit breaker anomaly patterns (auto-checkpoints sprint on trigger)
-  - State validity
-  - Stale checkpoint/pause files
+The TUI provides:
+  - Live dashboard with color-coded status indicators for agents and tasks
+  - Keyboard commands to operate the system (spawn, pause, resume, add task, checkpoint, stop)
+  - Inline anomaly monitoring with alerts in the activity feed
+  - Reactive updates via fsnotify with 10s poll fallback
 
-Alerts are written to .liza/alerts.log and printed to stderr.
+Use --headless for non-interactive monitoring (alerts to stderr + alerts.log).
+This is suitable for CI, cron, or running in a secondary terminal.
 
-Press Ctrl+C to stop watching.`,
+Press '?' in the TUI for a full keybinding reference.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
 
-		interval, _ := cmd.Flags().GetInt("interval")
-		if interval <= 0 {
-			return fmt.Errorf("interval must be positive")
+		headless, _ := cmd.Flags().GetBool("headless")
+
+		if headless {
+			interval, _ := cmd.Flags().GetInt("interval")
+			if interval <= 0 {
+				return fmt.Errorf("interval must be positive")
+			}
+
+			config := commands.WatchConfig{
+				ProjectRoot:   projectRoot,
+				CheckInterval: time.Duration(interval) * time.Second,
+				StateCache:    make(map[string]time.Time),
+			}
+
+			return commands.WatchCommand(context.Background(), config)
 		}
 
-		config := commands.WatchConfig{
-			ProjectRoot:   projectRoot,
-			CheckInterval: time.Duration(interval) * time.Second,
-			StateCache:    make(map[string]time.Time),
+		model, err := tui.New(projectRoot)
+		if err != nil {
+			return fmt.Errorf("failed to initialize TUI: %w", err)
 		}
 
-		return commands.WatchCommand(context.Background(), config)
+		p := tea.NewProgram(model, tea.WithAltScreen())
+		_, err = p.Run()
+		return err
 	},
 }
 
@@ -524,6 +530,7 @@ func init() {
 	statusCmd.Flags().Bool("detailed", false, "include anomalies and circuit breaker status")
 
 	// Watch command flags
+	watchCmd.Flags().Bool("headless", false, "run in headless mode (no TUI, alerts to stderr + alerts.log)")
 	watchCmd.Flags().Int("interval", 10, "check interval in seconds")
 
 	// Pause command flags
