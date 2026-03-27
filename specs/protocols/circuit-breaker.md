@@ -168,7 +168,7 @@ The pattern conditions use pseudo-functions for matching:
 1. TRIGGER — Pattern rule matches, classify severity, log to blackboard
 2. HALT — Set config.mode to CIRCUIT_BREAKER_TRIPPED, agents stop, supervisors wait
 3. GENERATE REPORT — Write .liza/circuit_breaker_report.md
-4. CHECKPOINT — `liza watch` auto-creates sprint CHECKPOINT on trigger
+4. CHECKPOINT — `liza tui` auto-creates sprint CHECKPOINT on trigger
 5. WAIT FOR HUMAN — Human reviews, decides, documents, releases (`liza resume` or `liza stop`)
 ```
 
@@ -221,7 +221,7 @@ The pattern conditions use pseudo-functions for matching:
 - No background daemon
 
 **v2: Continuous monitoring**
-- ``liza watch`` extended with pattern detection
+- ``liza tui`` extended with pattern detection
 - Auto-trips mode and auto-creates sprint CHECKPOINT if pattern matches
 
 **Recommendation:** Start with v1. Promote to v2 if manual analysis becomes bottleneck.
@@ -268,7 +268,7 @@ When circuit breaker is triggered:
 
 1. **Automatic (`liza analyze`):** sets `status: TRIGGERED`, populates `current_trigger`
 2. **Automatic (`liza analyze`):** sets `config.mode: CIRCUIT_BREAKER_TRIPPED`
-3. **Automatic (`liza watch`):** creates sprint CHECKPOINT (`sprint.status: CHECKPOINT`)
+3. **Automatic (`liza tui`):** creates sprint CHECKPOINT (`sprint.status: CHECKPOINT`)
 4. **Human review:** Human analyzes report, takes corrective action (ADR, spec update, etc.)
 5. **Optional audit enrichment:** Human may annotate history entries with `resolution` and `resolved_at`
 6. **Human resumes:** `liza resume` (sets mode to RUNNING, clears `current_trigger`, sets status to OK)

@@ -5,7 +5,7 @@
 # Deprecation notice
 echo ""
 echo "WARNING: console.sh is deprecated and will be removed in a future release."
-echo "  Use 'liza watch' for an interactive TUI dashboard with the same information plus:"
+echo "  Use 'liza tui' for an interactive TUI dashboard with the same information plus:"
 echo "  - Color-coded status indicators"
 echo "  - Keyboard commands (spawn, pause, resume, add task, checkpoint)"
 echo "  - Inline anomaly monitoring"

@@ -25,7 +25,7 @@ Next steps:
 		content = `Liza workspace initialized
 
 Next steps:
-  1. Run the TUI:       liza watch
+  1. Run the TUI:       liza tui
   2. Spawn agents:      press [s] to spawn an orchestrator and workers`
 	}
 

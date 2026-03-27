@@ -162,7 +162,7 @@ Open a terminal for monitoring:
 
 ```bash
 cd hello-cli
-liza watch
+liza tui
 ```
 
 This monitors for anomalies, alerts, and auto-checkpoints on circuit-breaker triggers. Leave it running.

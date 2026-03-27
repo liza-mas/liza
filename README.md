@@ -202,7 +202,7 @@ Or you may choose to make it your Socratic colleague, your rubber duck, or your 
 1. `liza init "[Goal description]" --spec vision.md`. Use the `--entry-point detailed-spec` option to skip the spec phase and go coding directly.
 2. Launching agents of different roles in different terminals: `liza agent <role>`.
    Check [Quick Start](docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for list of required roles and options (using a CLI other than Claude, logging).
-3. Running `liza watch` will show alerts. Executing `watch ./console.sh` will bring you the console:
+3. Running `liza tui` will show alerts. Executing `watch ./console.sh` will bring you the console:
 
 ![Liza's Console](docs/img/liza-console.png)
 
@@ -220,7 +220,7 @@ liza agent coder                                    # Start agent supervisor
 liza validate                                       # Validate state
 liza get tasks                                      # Query tasks
 liza status                                         # Dashboard overview
-liza watch                                          # Monitor for anomalies
+liza tui                                          # Monitor for anomalies
 liza proceed                                        # Transition between pipeline phases
 liza pause / liza resume                            # Human intervention
 liza stop / liza start                              # System control

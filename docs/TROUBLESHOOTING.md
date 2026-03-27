@@ -530,5 +530,5 @@ liza agent coder --agent-id coder-1
 1. **Check alerts:** `cat .liza/alerts.log`
 2. **Check activity:** `cat .liza/log.yaml`
 3. **Validate state:** `liza validate`
-4. **Watch live:** `liza watch`
+4. **Watch live:** `liza tui`
 5. **Generate debug report** (see above)

@@ -68,7 +68,7 @@
 
 ## Phase 7: Watcher & Alarms (Day 7)
 
-1. Implement `liza watch`
+1. Implement `liza tui`
 2. Test alarm conditions:
    - Lease expired
    - Blocked task
@@ -127,7 +127,7 @@
    - Sets `sprint.status: CHECKPOINT`
    - Generates sprint summary
    - Waits for human release
-4. Update `liza watch` to detect sprint deadline
+4. Update `liza tui` to detect sprint deadline
 5. Update supervisor to respect CHECKPOINT
 6. Write retrospective template generator
 7. Test checkpoint flow: trigger → halt → review → release

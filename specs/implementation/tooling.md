@@ -29,7 +29,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza init "goal" --spec spec` | Initialize `.liza/` for new goal |
 | `liza add-task --id X ...` | Add task to blackboard (atomic, with validation) |
 | `liza validate [state]` | Schema validation |
-| `liza watch` | Alarm monitor daemon |
+| `liza tui` | Alarm monitor daemon |
 | `liza analyze` | Circuit breaker analysis (human-triggered) |
 | `liza sprint-checkpoint` | Create checkpoint and generate sprint summary |
 | `liza agent <role> --agent-id x [--cli C]` | Agent supervisor (`--cli`: claude, codex, gemini, mistral, kimi) |
@@ -247,7 +247,7 @@ Before any agent starts:
 4. **Start watcher (optional but recommended):**
    ```bash
    # Dedicated terminal
-   liza watch
+   liza tui
    ```
 
 ### Agent Startup (Human Triggers, Agents Run)
@@ -342,9 +342,9 @@ liza validate [state.yaml]
 # Returns "VALID" or "INVALID: [issue description]"
 ```
 
-**liza watch** — Monitor blackboard and alert
+**liza tui** — Monitor blackboard and alert
 ```bash
-liza watch
+liza tui
 # Runs continuously, alerts on: expired leases, blocked tasks, review loops, etc.
 ```
 
@@ -459,7 +459,7 @@ Human owns the intent and acts as observer and circuit-breaker, not approver.
 | Terminals | Watch agent output in real-time |
 | `.liza/state.yaml` | Current assignments and states |
 | `.liza/log.yaml` | Activity history (skimmable) |
-| `liza watch` output | Alarms for attention-needed conditions |
+| `liza tui` output | Alarms for attention-needed conditions |
 
 ### Override Actions
 
@@ -489,7 +489,7 @@ Agents must read `human_notes` relevant to their task before starting/resuming w
 
 ## Alarm Conditions
 
-`liza watch` monitors and alerts on:
+`liza tui` monitors and alerts on:
 
 | Condition | Threshold | Alert |
 |-----------|-----------|-------|

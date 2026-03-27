@@ -186,7 +186,7 @@ liza agent coder --agent-id coder-5   # explicit ID
 **3. Observe**
 ```bash
 # Run the watcher for alerts and automatic circuit-breaker escalation
-liza watch
+liza tui
 ```
 
 ```bash
@@ -337,7 +337,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza init <goal> --spec <spec_ref> [--branch <name>]` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md, branch defaults to integration) |
 | **Agents & Monitoring** | |
 | `liza agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted) |
-| `liza watch` | Monitor blackboard, alert on anomalies, auto-checkpoint on circuit-breaker |
+| `liza tui` | Monitor blackboard, alert on anomalies, auto-checkpoint on circuit-breaker |
 | `liza status` | Show system and task status at a glance |
 | **System Control** | |
 | `liza pause` / `liza resume` | Pause/resume system (resume also advances CHECKPOINT → COMPLETED → new sprint) |

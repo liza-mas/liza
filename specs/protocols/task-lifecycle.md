@@ -83,7 +83,7 @@ if iterations >= max_iterations and task.state != APPROVED:
 
 ### Early Warning Thresholds
 
-`liza watch` alerts before limits are hit (trajectory visibility):
+`liza tui` alerts before limits are hit (trajectory visibility):
 
 | Metric | Warning | Cliff | Condition |
 |--------|---------|-------|-----------|
@@ -329,7 +329,7 @@ Before agents can run, human must initialize the project:
    - Creates `state.yaml` with goal (including `spec_ref`) and sprint initialized
    - Creates `log.yaml`
 
-3. **Start watcher:** `liza watch` in separate terminal
+3. **Start watcher:** `liza tui` in separate terminal
    - Monitors for CHECKPOINT, anomalies, circuit breaker triggers
 
 4. **Start agents:** Launch Planner, then Coders/Code Reviewers as needed

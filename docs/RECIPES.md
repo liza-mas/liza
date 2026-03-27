@@ -6,7 +6,7 @@ Step-by-step workflows for common Liza operations. See [DEMO.md](DEMO.md) for a 
 
 ```bash
 # Start monitoring
-liza watch > watch.log 2>&1 &
+liza tui > watch.log 2>&1 &
 
 # Start agents (each in background or separate terminal)
 liza agent planner --agent-id planner-1 > planner.log 2>&1 &
@@ -129,7 +129,7 @@ liza resume
 
 ## Circuit Breaker Escalation
 
-When `liza watch` is running, circuit-breaker checks are automatic:
+When `liza tui` is running, circuit-breaker checks are automatic:
 
 ```bash
 # If pattern detected by watch:

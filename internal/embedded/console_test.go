@@ -13,9 +13,9 @@ func TestConsoleShDeprecationNotice(t *testing.T) {
 		t.Fatal("console.sh missing deprecation notice")
 	}
 
-	// Must mention liza watch as replacement
-	if !strings.Contains(script, "liza watch") {
-		t.Fatal("deprecation notice must mention 'liza watch' as replacement")
+	// Must mention liza tui as replacement
+	if !strings.Contains(script, "liza tui") {
+		t.Fatal("deprecation notice must mention 'liza tui' as replacement")
 	}
 
 	// Deprecation notice must appear before the first dashboard command

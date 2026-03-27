@@ -75,9 +75,10 @@ The metrics are used to track sprint progress and detect quality issues.`,
 	},
 }
 
-var watchCmd = &cobra.Command{
-	Use:   "watch",
-	Short: "Interactive TUI dashboard for monitoring Liza",
+var tuiCmd = &cobra.Command{
+	Use:     "tui",
+	Aliases: []string{"watch"},
+	Short:   "Interactive TUI dashboard for monitoring Liza",
 	Long: `Launch an interactive TUI dashboard that monitors the Liza blackboard.
 
 The TUI provides:
@@ -135,7 +136,7 @@ remain set. This command clears expired claims so other reviewers can claim the 
 Typically called by:
   - Code Reviewer supervisor on startup
   - Periodically by cron or monitoring
-  - liza-watch.sh (though watch shouldn't mutate state by default)
+  - liza-tui (though tui shouldn't mutate state by default)
 
 Reports the number of claims cleared and logs each cleanup action.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -503,7 +504,7 @@ Examples:
 func init() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(updateSprintMetricsCmd)
-	rootCmd.AddCommand(watchCmd)
+	rootCmd.AddCommand(tuiCmd)
 	rootCmd.AddCommand(clearStaleReviewClaimsCmd)
 	rootCmd.AddCommand(pauseCmd)
 	rootCmd.AddCommand(stopCmd)
@@ -528,9 +529,9 @@ func init() {
 	statusCmd.Flags().String("format", "", "output format: json, yaml, or dashboard (default)")
 	statusCmd.Flags().Bool("detailed", false, "include anomalies and circuit breaker status")
 
-	// Watch command flags
-	watchCmd.Flags().Bool("headless", false, "run in headless mode (no TUI, alerts to stderr + alerts.log)")
-	watchCmd.Flags().Int("interval", 10, "check interval in seconds")
+	// TUI command flags
+	tuiCmd.Flags().Bool("headless", false, "run in headless mode (no TUI, alerts to stderr + alerts.log)")
+	tuiCmd.Flags().Int("interval", 10, "check interval in seconds")
 
 	// Pause command flags
 	pauseCmd.Flags().String("reason", "", "reason for pausing the system")

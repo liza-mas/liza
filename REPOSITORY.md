@@ -131,7 +131,7 @@ Key command groups:
 
 **Initialization & validation:** `liza init`, `liza validate`
 
-**Agent supervision:** `liza agent`, `liza watch`, `liza analyze`, `liza sprint-checkpoint`, `liza handoff`, `liza delete`
+**Agent supervision:** `liza agent`, `liza tui`, `liza analyze`, `liza sprint-checkpoint`, `liza handoff`, `liza delete`
 
 **Task management:** `liza add-task`, `liza claim-task`, `liza mark-blocked`, `liza supersede-task`, `liza cancel-task`
 

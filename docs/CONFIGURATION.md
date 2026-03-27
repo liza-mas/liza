@@ -163,7 +163,7 @@ Worktrees are bare checkouts — they lack build artifacts like `node_modules/`,
 | `RUNNING` | Work normally | Yes | `liza resume` / `liza start` |
 | `PAUSED` | Block, don't claim | Yes | `liza pause` |
 | `STOPPED` | Exit cleanly | Stop | `liza stop` |
-| `CIRCUIT_BREAKER_TRIPPED` | Halt | Yes | `liza analyze` or `liza watch` (auto on pattern trigger) |
+| `CIRCUIT_BREAKER_TRIPPED` | Halt | Yes | `liza analyze` or `liza tui` (auto on pattern trigger) |
 
 **PAUSED**: Agents stay alive, resume instantly. Use for manual edits.
 **STOPPED**: Agents exit. Must restart manually. Use for end of session.
@@ -175,9 +175,9 @@ STOPPED -> RUNNING (liza start, then restart agents)
 CIRCUIT_BREAKER_TRIPPED -> RUNNING (liza resume, after fixing root cause)
 ```
 
-When `liza watch` triggers the circuit breaker, it also sets `sprint.status` to `CHECKPOINT`.
+When `liza tui` triggers the circuit breaker, it also sets `sprint.status` to `CHECKPOINT`.
 
-`liza watch` also auto-checkpoints when all non-terminal planned tasks are BLOCKED (sprint stalled), since no agent can make further progress without human intervention.
+`liza tui` also auto-checkpoints when all non-terminal planned tasks are BLOCKED (sprint stalled), since no agent can make further progress without human intervention.
 
 ## Task Lifecycle States
 

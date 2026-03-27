@@ -37,7 +37,7 @@ Chose **Option 3**: Replace all bash scripts with a single Go binary (`liza`) us
 | `scripts/liza-init.sh "goal" [spec]` | `liza init "goal" --spec spec` |
 | `scripts/liza-validate.sh [state]` | `liza validate [state]` |
 | `scripts/liza-lock.sh read\|write\|modify` | *(internal to binary)* |
-| `scripts/liza-watch.sh` | `liza watch` |
+| `scripts/liza-watch.sh` | `liza tui` |
 | `scripts/liza-analyze.sh` | `liza analyze` |
 | `scripts/liza-add-task.sh --id X ...` | `liza add-task --id X ...` |
 | `scripts/liza-claim-task.sh <task> <agent>` | `liza claim-task <task> <agent>` |

@@ -4,10 +4,10 @@ import (
 	"testing"
 )
 
-func TestWatchCmd_HeadlessFlag(t *testing.T) {
-	flag := watchCmd.Flags().Lookup("headless")
+func TestTuiCmd_HeadlessFlag(t *testing.T) {
+	flag := tuiCmd.Flags().Lookup("headless")
 	if flag == nil {
-		t.Fatal("watchCmd missing --headless flag")
+		t.Fatal("tuiCmd missing --headless flag")
 	}
 	if flag.DefValue != "false" {
 		t.Errorf("--headless default = %q, want %q", flag.DefValue, "false")
@@ -17,16 +17,16 @@ func TestWatchCmd_HeadlessFlag(t *testing.T) {
 	}
 }
 
-func TestWatchCmd_IntervalFlag(t *testing.T) {
-	flag := watchCmd.Flags().Lookup("interval")
+func TestTuiCmd_IntervalFlag(t *testing.T) {
+	flag := tuiCmd.Flags().Lookup("interval")
 	if flag == nil {
-		t.Fatal("watchCmd missing --interval flag (needed for headless backward compatibility)")
+		t.Fatal("tuiCmd missing --interval flag (needed for headless backward compatibility)")
 	}
 }
 
-func TestWatchCmd_ShortDescription(t *testing.T) {
+func TestTuiCmd_ShortDescription(t *testing.T) {
 	want := "Interactive TUI dashboard for monitoring Liza"
-	if watchCmd.Short != want {
-		t.Errorf("watchCmd.Short = %q, want %q", watchCmd.Short, want)
+	if tuiCmd.Short != want {
+		t.Errorf("tuiCmd.Short = %q, want %q", tuiCmd.Short, want)
 	}
 }
