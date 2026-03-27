@@ -172,6 +172,7 @@ func spawnAgentCmd(projectRoot, role string) tea.Cmd {
 			devNull.Close()
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("spawn %s: %v", role, err)}
 		}
+		go cmd.Wait() // Reap child to prevent zombie accumulation
 		devNull.Close()
 		return CmdResultMsg{Success: true, Message: "Spawned " + role}
 	}
