@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/render"
+	"github.com/mattn/go-runewidth"
 )
 
 // View renders the complete TUI dashboard.
@@ -238,18 +239,15 @@ func (m Model) renderAgentPanel(height int) string {
 		var parts []string
 		for _, c := range cols {
 			val := c.value(id, agent)
-			// For STATUS column, the value is already styled (contains ANSI),
-			// so we pad based on raw text length
 			if c.header == "STATUS" {
-				rawLen := len(StatusDot(string(agent.Status))) + 1 + len(string(agent.Status))
-				padding := max(c.width-rawLen, 0)
+				// STATUS value is ANSI-styled; pad by visual width of raw text
+				rawText := StatusDot(string(agent.Status)) + " " + string(agent.Status)
+				rawWidth := runewidth.StringWidth(rawText)
+				padding := max(c.width-rawWidth, 0)
 				parts = append(parts, val+strings.Repeat(" ", padding))
 			} else {
-				// Truncate if needed
-				if len(val) > c.width {
-					val = val[:c.width-1] + "…"
-				}
-				parts = append(parts, fmt.Sprintf("%-*s", c.width, val))
+				val = truncateVisual(val, c.width-1)
+				parts = append(parts, padRight(val, c.width))
 			}
 		}
 		rows = append(rows, "  "+strings.Join(parts, ""))
@@ -436,16 +434,14 @@ func (m Model) renderTaskPanel(height int) string {
 		for _, c := range cols {
 			val := c.value(t)
 			if c.header == "STATUS" {
-				// STATUS value is already ANSI-styled; pad by raw text length
-				rawLen := len(StatusDot(string(t.Status))) + 1 + len(string(t.Status))
-				padding := max(c.width-rawLen, 0)
+				// STATUS value is ANSI-styled; pad by visual width of raw text
+				rawText := StatusDot(string(t.Status)) + " " + string(t.Status)
+				rawWidth := runewidth.StringWidth(rawText)
+				padding := max(c.width-rawWidth, 0)
 				parts = append(parts, val+strings.Repeat(" ", padding))
 			} else {
-				// Truncate if needed
-				if len(val) > c.width-1 && c.width > 1 {
-					val = val[:c.width-2] + "…"
-				}
-				parts = append(parts, fmt.Sprintf("%-*s", c.width, val))
+				val = truncateVisual(val, c.width-1)
+				parts = append(parts, padRight(val, c.width))
 			}
 		}
 		row := "  " + strings.Join(parts, "")
@@ -511,6 +507,23 @@ func (m Model) formatActivityEntry(e ActivityEntry) string {
 		}
 		return fmt.Sprintf("  %s  %-16s  %-14s  %-20s  %s", ts, e.Agent, e.Action, task, e.Detail)
 	}
+}
+
+// truncateVisual truncates s to at most maxWidth visual cells, appending "…" if truncated.
+func truncateVisual(s string, maxWidth int) string {
+	if runewidth.StringWidth(s) <= maxWidth {
+		return s
+	}
+	return runewidth.Truncate(s, maxWidth-1, "…")
+}
+
+// padRight pads s with spaces to reach the given visual width.
+func padRight(s string, width int) string {
+	visWidth := runewidth.StringWidth(s)
+	if visWidth >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-visWidth)
 }
 
 // colorLevel applies color to alert level icons.
