@@ -69,9 +69,9 @@ Add to ~/.gemini/settings.json:
 
 ## Mistral
 
-Modify `~/.vibe/config.toml`:
-- Add `system_prompt_id = "liza"` (replace `system_prompt_id = "cli"` with)
-- Add MCP filesystem server (replace `mcp_servers = []` with):
+`liza setup --mistral` and `liza init --mistral` handle contract activation automatically (`system_prompt_id` and prompt symlink).
+
+Manually add the MCP filesystem server to `~/.vibe/config.toml` (replace `mcp_servers = []` with):
 ```toml
 [[mcp_servers]]
 name = "filesystem"

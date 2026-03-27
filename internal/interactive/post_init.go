@@ -25,9 +25,8 @@ Next steps:
 		content = `Liza workspace initialized
 
 Next steps:
-  1. Start the orchestrator:    liza agent orchestrator
-  2. Monitor progress:          liza status
-  3. Review tasks:              liza get tasks`
+  1. Run the TUI:       liza watch
+  2. Spawn agents:      press [s] to spawn an orchestrator and workers`
 	}
 
 	style := lipgloss.NewStyle().

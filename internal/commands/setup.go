@@ -124,7 +124,7 @@ func SetupCommand(params SetupParams) error {
 		}
 	}
 
-	printSetupSummary(params.TargetDir, written, skipFiles, autoReplaced)
+	printSetupSummary(params.TargetDir, written, skipFiles, autoReplaced, params.Agents)
 	return nil
 }
 
@@ -209,7 +209,7 @@ func confirmOverwrites(existing, fresh []string, force bool, targetDir string, r
 
 // printSetupSummary prints the final setup results to stdout.
 // autoReplaced tracks files replaced by custom versions (not "kept existing").
-func printSetupSummary(targetDir string, written []string, skipFiles map[string]bool, autoReplaced []string) {
+func printSetupSummary(targetDir string, written []string, skipFiles map[string]bool, autoReplaced []string, agents []string) {
 	fmt.Printf("Liza global config written to %s (%d files + pipeline.yaml):\n", targetDir, len(written))
 	for _, p := range written {
 		fmt.Printf("  %s\n", relDisplay(targetDir, p))
@@ -232,8 +232,18 @@ func printSetupSummary(targetDir string, written []string, skipFiles map[string]
 		fmt.Printf("Replaced %d files with custom versions.\n", len(autoReplaced))
 	}
 
-	fmt.Printf("\nNext: configure global permissions in ~/.claude/settings.json\n")
-	fmt.Printf("See: contracts/contract-activation.md § Claude\n")
+	// Show manual config instructions only for agents that need it.
+	hasNonClaude := false
+	for _, a := range agents {
+		if a != "claude" {
+			hasNonClaude = true
+			break
+		}
+	}
+	if hasNonClaude {
+		fmt.Printf("\nSome agents require manual configuration.\n")
+		fmt.Printf("See: https://github.com/liza-mas/liza/blob/main/contracts/contract-activation.md\n")
+	}
 }
 
 // backupFile copies src to src.bak using streaming I/O.
