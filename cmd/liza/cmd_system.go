@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -111,7 +110,7 @@ Press '?' in the TUI for a full keybinding reference.`,
 				StateCache:    make(map[string]time.Time),
 			}
 
-			return commands.WatchCommand(context.Background(), config)
+			return commands.WatchCommand(cmd.Context(), config)
 		}
 
 		model, err := tui.New(projectRoot)
