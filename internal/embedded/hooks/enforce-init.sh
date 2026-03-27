@@ -63,10 +63,21 @@ if [[ "$tool_name" == "Read" ]]; then
 fi
 
 # Non-Read tool call: block if gate not cleared.
+# Stdout is shown to the agent as the block reason; stderr is swallowed.
 missing=""
-[[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing AGENT_TOOLS.md"
-[[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing (one mode contract)"
-[[ ! -f "$STATE_DIR/GUARDRAILS.done" ]] && missing="$missing GUARDRAILS.md"
+[[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
+  - ~/.liza/AGENT_TOOLS.md"
+[[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing
+  - One of: ~/.liza/PAIRING_MODE.md, ~/.liza/MULTI_AGENT_MODE.md, or ~/.liza/SUBAGENT_MODE.md"
+[[ ! -f "$STATE_DIR/GUARDRAILS.done" ]] && missing="$missing
+  - GUARDRAILS.md (project root, or confirm absent)"
 
-echo "Blocked: must read mandatory docs before any other action. Missing:$missing" >&2
+cat <<EOF
+BLOCKED — session initialization incomplete.
+
+You must Read these files before using any other tool:
+$missing
+
+Use the Read tool on each path above, then retry your action.
+EOF
 exit 2
