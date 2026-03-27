@@ -235,7 +235,7 @@ func stopSystemCmd(projectRoot string) tea.Cmd {
 // Calls ops.AddTask() directly.
 // Returns CmdResultMsg with result.
 //
-//lint:ignore U1000 used by update.go (Phase 4 Task 4 — Huh form overlay)
+//lint:ignore U1000 used by update.go
 func addTaskCmd(projectRoot string, input *commands.TaskInput) tea.Cmd {
 	return func() tea.Msg {
 		p := paths.New(projectRoot)

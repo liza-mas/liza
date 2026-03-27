@@ -78,20 +78,20 @@ type StateWatcher interface {
 // stateChangedMsg signals that the state file was modified (from fsnotify watcher).
 // Triggers a state re-read and log re-read.
 //
-//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+//lint:ignore U1000 used by commands.go and update.go
 type stateChangedMsg struct{}
 
 // watcherClosedMsg signals the fsnotify watcher channel closed unexpectedly.
 // The TUI falls back to tick-only refresh.
 //
-//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+//lint:ignore U1000 used by commands.go and update.go
 type watcherClosedMsg struct{}
 
 // alertsMsg carries a batch of alerts from anomaly checks.
 // Includes the updated state cache to avoid data races (cache is copied
 // before the Cmd goroutine runs, modified by checks, returned here).
 //
-//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+//lint:ignore U1000 used by commands.go and update.go
 type alertsMsg struct {
 	Alerts     []AlertMsg
 	StateCache map[string]time.Time
@@ -99,12 +99,12 @@ type alertsMsg struct {
 
 // errMsg carries an error from an async Cmd function.
 //
-//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+//lint:ignore U1000 used by commands.go and update.go
 type errMsg struct {
 	err error
 }
 
-//lint:ignore U1000 used by commands.go and update.go (Phase 3 Tasks 3+4)
+//lint:ignore U1000 used by commands.go and update.go
 func (e errMsg) Error() string { return e.err.Error() }
 
 // ActivityEntry is a unified entry in the activity feed, merging log events,
