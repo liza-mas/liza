@@ -85,7 +85,7 @@ func (m Model) View() string {
 	if alertBanner != "" {
 		sections = append(sections, alertBanner)
 	}
-	sections = append(sections, agents, tasks, activity, footer)
+	sections = append(sections, tasks, agents, activity, footer)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
@@ -300,27 +300,11 @@ func (m Model) renderTaskPanel(height int) string {
 		return m.styles.TaskPanel.Render(content)
 	}
 
-	// Partition tasks into active and terminal
-	var active, terminal []models.Task
-	for _, t := range m.state.Tasks {
-		if t.Status.IsTerminal() {
-			terminal = append(terminal, t)
-		} else {
-			active = append(active, t)
-		}
-	}
-
-	// Sort active by priority (ascending) then ID
-	sort.Slice(active, func(i, j int) bool {
-		if active[i].Priority != active[j].Priority {
-			return active[i].Priority < active[j].Priority
-		}
-		return active[i].ID < active[j].ID
-	})
-
-	// Sort terminal by ID
-	sort.Slice(terminal, func(i, j int) bool {
-		return terminal[i].ID < terminal[j].ID
+	// Sort tasks by created timestamp (oldest first), preserving creation order
+	tasks := make([]models.Task, len(m.state.Tasks))
+	copy(tasks, m.state.Tasks)
+	sort.SliceStable(tasks, func(i, j int) bool {
+		return tasks[i].Created.Before(tasks[j].Created)
 	})
 
 	// Define columns per tier
@@ -391,29 +375,43 @@ func (m Model) renderTaskPanel(height int) string {
 	// Build column list based on tier
 	cols := []column{
 		{"ID", 26, func(t models.Task) string { return t.ID }},
-		{"STATUS", 22, statusVal},
+		{"STATUS", 26, statusVal},
 	}
 
 	if m.columnTier >= ColumnTierStandard {
 		cols = append(cols,
 			column{"ATT", 6, attemptVal},
 			column{"ASSIGNED_TO", 16, assignedVal},
+			column{"REVIEWING_BY", 16, reviewingByVal},
 		)
 	}
 
 	if m.columnTier >= ColumnTierWide {
 		cols = append(cols,
-			column{"AGE", 8, ageVal},
-			column{"DESCRIPTION", 24, descVal},
+			column{"DESCRIPTION", 0, descVal}, // flex: computed below
 		)
 	}
 
 	if m.columnTier >= ColumnTierFull {
 		cols = append(cols,
-			column{"REVIEWING_BY", 16, reviewingByVal},
 			column{"DEPS", 16, depsVal},
+			column{"AGE", 8, ageVal},
 			column{"TIME_IN_STATUS", 16, timeInStatusVal},
 		)
+	}
+
+	// Compute flex width for DESCRIPTION: remaining space after fixed columns
+	fixedWidth := 4 // "  " prefix + panel borders
+	for i := range cols {
+		if cols[i].width == 0 {
+			continue
+		}
+		fixedWidth += cols[i].width
+	}
+	for i := range cols {
+		if cols[i].width == 0 {
+			cols[i].width = max(m.width-fixedWidth, 16)
+		}
 	}
 
 	// Build header row
@@ -424,12 +422,11 @@ func (m Model) renderTaskPanel(height int) string {
 	headerRow := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")).
 		Render("  " + strings.Join(headerParts, ""))
 
-	// Build rows from ordered tasks
-	ordered := append(active, terminal...)
+	// Build rows
 	maxRows := max(height-3, 0) // border (2) + title (1)
 
 	var rows []string
-	for i, t := range ordered {
+	for i, t := range tasks {
 		if i >= maxRows {
 			break
 		}

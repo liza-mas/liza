@@ -503,11 +503,12 @@ func TestRenderTaskPanel_ColumnTierStandard(t *testing.T) {
 		t.Fatal("no header line found")
 	}
 	colCount := countTaskHeaderColumns(header)
-	if colCount != 4 {
-		t.Errorf("expected 4 columns at standard tier, got %d (header: %q)", colCount, header)
+	if colCount != 5 {
+		t.Errorf("expected 5 columns at standard tier, got %d (header: %q)", colCount, header)
 	}
 	assertContains(t, header, "ATT", "header should contain ATT")
 	assertContains(t, header, "ASSIGNED_TO", "header should contain ASSIGNED_TO")
+	assertContains(t, header, "REVIEWING_BY", "header should contain REVIEWING_BY")
 }
 
 func TestRenderTaskPanel_ColumnTierWide(t *testing.T) {
@@ -530,7 +531,6 @@ func TestRenderTaskPanel_ColumnTierWide(t *testing.T) {
 	if colCount != 6 {
 		t.Errorf("expected 6 columns at wide tier, got %d (header: %q)", colCount, header)
 	}
-	assertContains(t, header, "AGE", "header should contain AGE")
 	assertContains(t, header, "DESCRIPTION", "header should contain DESCRIPTION")
 }
 
@@ -557,36 +557,41 @@ func TestRenderTaskPanel_ColumnTierFull(t *testing.T) {
 	assertContains(t, header, "REVIEWING_BY", "header should contain REVIEWING_BY")
 	assertContains(t, header, "DEPS", "header should contain DEPS")
 	assertContains(t, header, "TIME_IN_STATUS", "header should contain TIME_IN_STATUS")
+	assertContains(t, header, "AGE", "header should contain AGE")
 }
 
-func TestRenderTaskPanel_TerminalTasksAfterActive(t *testing.T) {
+func TestRenderTaskPanel_SortedByCreatedTime(t *testing.T) {
+	now := time.Now()
+	t1 := makeTask("first-task", models.TaskStatusMerged, 1)
+	t1.Created = now.Add(-3 * time.Hour)
+	t2 := makeTask("second-task", models.TaskStatusImplementing, 1)
+	t2.Created = now.Add(-2 * time.Hour)
+	t3 := makeTask("third-task", models.TaskStatusAbandoned, 1)
+	t3.Created = now.Add(-1 * time.Hour)
+
 	m := Model{
 		width:      100,
 		height:     40,
 		columnTier: ColumnTierStandard,
 		styles:     NewStyles(100),
 		state: &models.State{
-			Tasks: []models.Task{
-				makeTask("merged-task", models.TaskStatusMerged, 1),
-				makeTask("active-task", models.TaskStatusImplementing, 1),
-				makeTask("abandoned-task", models.TaskStatusAbandoned, 1),
-			},
+			Tasks: []models.Task{t3, t1, t2}, // shuffled input
 		},
 	}
 
 	out := m.renderTaskPanel(15)
-	idxActive := strings.Index(out, "active-task")
-	idxMerged := strings.Index(out, "merged-task")
-	idxAbandoned := strings.Index(out, "abandoned-task")
+	idx1 := strings.Index(out, "first-task")
+	idx2 := strings.Index(out, "second-task")
+	idx3 := strings.Index(out, "third-task")
 
-	if idxActive == -1 || idxMerged == -1 || idxAbandoned == -1 {
+	if idx1 == -1 || idx2 == -1 || idx3 == -1 {
 		t.Fatalf("expected all task IDs in output, got:\n%s", out)
 	}
-	if idxActive > idxMerged {
-		t.Error("expected active-task before merged-task (active first)")
+	if idx1 > idx2 {
+		t.Error("expected first-task (oldest) before second-task")
 	}
-	if idxActive > idxAbandoned {
-		t.Error("expected active-task before abandoned-task (active first)")
+	if idx2 > idx3 {
+		t.Error("expected second-task before third-task (newest)")
 	}
 }
 
@@ -639,18 +644,22 @@ func TestRenderTaskPanel_TerminalTasksDimmed(t *testing.T) {
 	}
 }
 
-func TestRenderTaskPanel_ActiveTasksSortedByPriorityThenID(t *testing.T) {
+func TestRenderTaskPanel_ActiveTasksSortedByCreatedTime(t *testing.T) {
+	now := time.Now()
+	taskA := makeTask("task-a", models.TaskStatusImplementing, 1)
+	taskA.Created = now.Add(-3 * time.Hour) // oldest
+	taskB := makeTask("task-b", models.TaskStatusBlocked, 1)
+	taskB.Created = now.Add(-2 * time.Hour)
+	taskC := makeTask("task-c", models.TaskStatusImplementing, 2)
+	taskC.Created = now.Add(-1 * time.Hour) // newest
+
 	m := Model{
 		width:      100,
 		height:     40,
 		columnTier: ColumnTierStandard,
 		styles:     NewStyles(100),
 		state: &models.State{
-			Tasks: []models.Task{
-				makeTask("task-c", models.TaskStatusImplementing, 2),
-				makeTask("task-a", models.TaskStatusImplementing, 1),
-				makeTask("task-b", models.TaskStatusBlocked, 1),
-			},
+			Tasks: []models.Task{taskC, taskA, taskB}, // shuffled input
 		},
 	}
 
@@ -662,16 +671,11 @@ func TestRenderTaskPanel_ActiveTasksSortedByPriorityThenID(t *testing.T) {
 	if idxA == -1 || idxB == -1 || idxC == -1 {
 		t.Fatalf("expected all task IDs in output, got:\n%s", out)
 	}
-	// Priority 1 before priority 2
-	if idxA > idxC {
-		t.Error("expected task-a (priority 1) before task-c (priority 2)")
+	if idxA > idxB {
+		t.Error("expected task-a (oldest) before task-b")
 	}
 	if idxB > idxC {
-		t.Error("expected task-b (priority 1) before task-c (priority 2)")
-	}
-	// Same priority: sorted by ID
-	if idxA > idxB {
-		t.Error("expected task-a before task-b (same priority, alphabetical)")
+		t.Error("expected task-b before task-c (newest)")
 	}
 }
 
