@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -683,43 +682,32 @@ func TestCheckApproachingLimits(t *testing.T) {
 }
 
 func TestCheckStalled(t *testing.T) {
-	now := time.Now().UTC()
-
 	tests := []struct {
 		name       string
-		setupLog   func(string) error
+		setup      func(string)
 		wantAlerts int
 	}{
 		{
-			name: "stalled - no activity for 31 minutes",
-			setupLog: func(logPath string) error {
-				logger := log.New(logPath)
-				return logger.Append(log.Entry{
-					Timestamp: now.Add(-31 * time.Minute),
-					Agent:     "test-agent",
-					Action:    "test_action",
-					Detail:    "test",
-				})
+			name: "stalled - state.yaml not modified for 31 minutes",
+			setup: func(statePath string) {
+				os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
+				staleTime := time.Now().Add(-31 * time.Minute)
+				os.Chtimes(statePath, staleTime, staleTime)
 			},
 			wantAlerts: 1,
 		},
 		{
-			name: "not stalled - recent activity",
-			setupLog: func(logPath string) error {
-				logger := log.New(logPath)
-				return logger.Append(log.Entry{
-					Timestamp: now.Add(-5 * time.Minute),
-					Agent:     "test-agent",
-					Action:    "test_action",
-					Detail:    "test",
-				})
+			name: "not stalled - state.yaml recently modified",
+			setup: func(statePath string) {
+				os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
+				// mtime is now — no stall
 			},
 			wantAlerts: 0,
 		},
 		{
-			name: "no log file",
-			setupLog: func(logPath string) error {
-				return nil // Don't create log
+			name: "no state file",
+			setup: func(statePath string) {
+				// Don't create the file
 			},
 			wantAlerts: 0,
 		},
@@ -728,14 +716,12 @@ func TestCheckStalled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			logPath := filepath.Join(tmpDir, "log.yaml")
+			statePath := filepath.Join(tmpDir, "state.yaml")
 
-			if err := tt.setupLog(logPath); err != nil {
-				t.Fatalf("Failed to setup log: %v", err)
-			}
+			tt.setup(statePath)
 
 			cache := make(map[string]time.Time)
-			alerts := checkStalled(logPath, cache)
+			alerts := checkStalled(statePath, cache)
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
@@ -747,29 +733,23 @@ func TestCheckStalled(t *testing.T) {
 func TestCheckStalledThrottling(t *testing.T) {
 	now := time.Now().UTC()
 	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "log.yaml")
+	statePath := filepath.Join(tmpDir, "state.yaml")
 
-	// Setup log with stale timestamp (31 minutes old)
-	logger := log.New(logPath)
-	if err := logger.Append(log.Entry{
-		Timestamp: now.Add(-31 * time.Minute),
-		Agent:     "test-agent",
-		Action:    "test_action",
-		Detail:    "test",
-	}); err != nil {
-		t.Fatalf("Failed to setup log: %v", err)
-	}
+	// Create state.yaml with stale mtime (31 minutes old)
+	os.WriteFile(statePath, []byte("tasks: []\n"), 0644)
+	staleTime := now.Add(-31 * time.Minute)
+	os.Chtimes(statePath, staleTime, staleTime)
 
 	cache := make(map[string]time.Time)
 
 	// First call - should generate alert
-	alerts := checkStalled(logPath, cache)
+	alerts := checkStalled(statePath, cache)
 	if len(alerts) != 1 {
 		t.Errorf("First call: len(alerts) = %d, want 1", len(alerts))
 	}
 
 	// Second call immediately after - should be throttled
-	alerts = checkStalled(logPath, cache)
+	alerts = checkStalled(statePath, cache)
 	if len(alerts) != 0 {
 		t.Errorf("Second call (throttled): len(alerts) = %d, want 0", len(alerts))
 	}
@@ -778,7 +758,7 @@ func TestCheckStalledThrottling(t *testing.T) {
 	cache["stalled:alert"] = now.Add(-6 * time.Minute)
 
 	// Third call after 5 minutes - should generate alert again
-	alerts = checkStalled(logPath, cache)
+	alerts = checkStalled(statePath, cache)
 	if len(alerts) != 1 {
 		t.Errorf("Third call (after 5 min): len(alerts) = %d, want 1", len(alerts))
 	}

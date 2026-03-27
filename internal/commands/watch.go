@@ -11,7 +11,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/analysis"
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -151,7 +150,6 @@ func RunChecksWithState(state *models.State, config WatchConfig) []Alert {
 	// pr is nil on any error — pipeline-aware checks skip gracefully.
 
 	lizaPaths := paths.New(config.ProjectRoot)
-	logPath := lizaPaths.LogPath()
 	checks := []func() []Alert{
 		func() []Alert { return checkExpiredLeases(state) },
 		func() []Alert { return checkBlockedTasks(state, config.StateCache) },
@@ -162,7 +160,7 @@ func RunChecksWithState(state *models.State, config WatchConfig) []Alert {
 		func() []Alert { return checkReassigned(state, config.StateCache) },
 		func() []Alert { return checkApproachingLimits(state) },
 		func() []Alert { return checkStaleSentinels(state, config.StateCache) },
-		func() []Alert { return checkStalled(logPath, config.StateCache) },
+		func() []Alert { return checkStalled(lizaPaths.StatePath(), config.StateCache) },
 		func() []Alert { return checkStaleDrafts(state) },
 		func() []Alert { return checkImmediateDiscoveries(state) },
 		func() []Alert { return checkMissingRoles(state, pr, config.StateCache) },
@@ -560,18 +558,20 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Aler
 	return alerts
 }
 
-// Throttles stall alerts to once every 5 minutes.
-func checkStalled(logPath string, cache map[string]time.Time) []Alert {
+// checkStalled detects stalled progress by checking the state.yaml modification
+// time. Any state modification (task claims, verdicts, status transitions) updates
+// the mtime, making this more reliable than log.yaml which only captures a subset
+// of operations. Throttles alerts to once every 5 minutes.
+func checkStalled(statePath string, cache map[string]time.Time) []Alert {
 	var alerts []Alert
 	now := time.Now().UTC()
 
-	logger := log.New(logPath)
-	lastTimestamp, err := logger.GetLastTimestamp()
-	if err != nil || lastTimestamp.IsZero() {
+	info, err := os.Stat(statePath)
+	if err != nil {
 		return alerts
 	}
 
-	age := time.Since(lastTimestamp)
+	age := time.Since(info.ModTime())
 	if age <= StallThreshold {
 		delete(cache, "stalled:alert")
 		return alerts
