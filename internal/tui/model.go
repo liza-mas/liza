@@ -30,9 +30,10 @@ const (
 	InlineActionStopConfirm              // Q — collecting y/n confirmation
 )
 
-// rolesMsg carries loaded role names from pipeline config for tab-completion.
+// rolesMsg carries loaded role and role-pair names from pipeline config.
 type rolesMsg struct {
-	Roles []string
+	Roles     []string
+	RolePairs []string
 }
 
 // stopDoneMsg signals that StopCommand completed and the TUI should quit.
@@ -165,6 +166,7 @@ type Model struct {
 	inlineAction     InlineAction     // which action inline input serves
 	inlineLabel      string           // prompt label shown before textinput (e.g., "Role: ")
 	roleCompletions  []string         // cached role names from pipeline config for tab-completion
+	rolePairNames    []string         // cached role-pair names from pipeline config for add-task form
 	completionIdx    int              // current position in tab-completion cycle
 	completionPrefix string           // text prefix when Tab was first pressed (filters completions)
 

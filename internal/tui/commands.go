@@ -258,20 +258,23 @@ func addTaskCmd(projectRoot string, input *commands.TaskInput) tea.Cmd {
 	}
 }
 
-// loadRolesCmd loads role names from pipeline config for tab-completion.
-// Returns rolesMsg with sorted role names.
-// Returns rolesMsg with nil Roles if config not found (non-fatal).
+// loadRolesCmd loads role and role-pair names from pipeline config.
+// Returns rolesMsg with sorted names.
+// Returns rolesMsg with nil fields if config not found (non-fatal).
 func loadRolesCmd(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
 		resolver, err := ops.LoadResolverForModels(projectRoot)
 		if err != nil {
-			return rolesMsg{Roles: nil}
+			return rolesMsg{}
 		}
 		pr, ok := resolver.(*pipeline.Resolver)
 		if !ok {
-			return rolesMsg{Roles: nil}
+			return rolesMsg{}
 		}
-		return rolesMsg{Roles: pr.AllRoleNames()}
+		return rolesMsg{
+			Roles:     pr.AllRoleNames(),
+			RolePairs: pr.RolePairNames(),
+		}
 	}
 }
 
@@ -281,6 +284,7 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		readStateCmd(m.blackboard),
 		readLogCmd(m.logPath, m.logPosition),
+		loadRolesCmd(m.projectRoot),
 		tickCmd(),
 	}
 	if m.watcher != nil {

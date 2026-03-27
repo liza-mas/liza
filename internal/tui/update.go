@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/models"
 )
 
 // Update handles all incoming messages and returns the updated model + next Cmd.
@@ -70,6 +72,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case rolesMsg:
 		m.roleCompletions = msg.Roles
+		m.rolePairNames = msg.RolePairs
 		return m, nil
 
 	case stopDoneMsg:
@@ -150,6 +153,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	default:
+		if m.inputMode == InputModeForm && m.huhForm != nil {
+			return m.handleFormUpdate(msg)
+		}
 		return m, nil
 	}
 }
@@ -256,6 +262,11 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 		if value == "" {
 			return m, nil
 		}
+		if len(m.roleCompletions) > 0 && !slices.Contains(m.roleCompletions, value) {
+			return m, func() tea.Msg {
+				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown role %q", value)}
+			}
+		}
 		return m, spawnAgentCmd(m.projectRoot, value)
 	case InlineActionPause:
 		return m, pauseSystemCmd(m.projectRoot, value)
@@ -302,9 +313,12 @@ func (m Model) cycleCompletion() Model {
 // addTaskFormData holds the bound values for the Huh add-task form fields.
 type addTaskFormData struct {
 	ID          string
+	Type        string
+	RolePair    string
 	Description string
 	SpecRef     string
 	DoneWhen    string
+	Scope       string
 	DependsOn   []string
 	Priority    int
 }
@@ -328,16 +342,21 @@ func validateRequired(s string) error {
 	return nil
 }
 
-// buildAddTaskForm creates a Huh form for adding a task with 6 fields.
-// Populates multi-select options from current state (task IDs for depends_on).
-// Returns the form and the bound data struct.
+// buildAddTaskForm creates a Huh form for adding a task.
+// All fields required by ops.AddTask are collected here with inline validation
+// so errors are surfaced before the form exits.
 func (m Model) buildAddTaskForm() (*huh.Form, *addTaskFormData) {
-	data := &addTaskFormData{}
+	data := &addTaskFormData{
+		Type:     string(models.TaskTypeCoding),
+		Priority: 1,
+	}
 
-	// Collect existing task IDs for depends_on multi-select
+	// Collect existing task IDs for duplicate check and depends_on
+	existingIDs := make(map[string]bool)
 	var taskIDs []string
 	if m.state != nil {
 		for _, t := range m.state.Tasks {
+			existingIDs[t.ID] = true
 			taskIDs = append(taskIDs, t.ID)
 		}
 		sort.Strings(taskIDs)
@@ -348,20 +367,51 @@ func (m Model) buildAddTaskForm() (*huh.Form, *addTaskFormData) {
 		depOptions[i] = huh.NewOption(id, id)
 	}
 
+	// Role pair options from pipeline config
+	rpOptions := []huh.Option[string]{huh.NewOption("(none loaded)", "")}
+	if len(m.rolePairNames) > 0 {
+		rpOptions = make([]huh.Option[string], len(m.rolePairNames))
+		for i, name := range m.rolePairNames {
+			rpOptions[i] = huh.NewOption(name, name)
+		}
+	}
+
+	// Task type options
+	typeNames := models.ValidTaskTypeNames()
+	typeOptions := make([]huh.Option[string], len(typeNames))
+	for i, name := range typeNames {
+		typeOptions[i] = huh.NewOption(name, name)
+	}
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().Title("ID").Value(&data.ID).
-				Validate(validateKebabCase),
+				Validate(func(s string) error {
+					if err := validateKebabCase(s); err != nil {
+						return err
+					}
+					if existingIDs[s] {
+						return fmt.Errorf("task %q already exists", s)
+					}
+					return nil
+				}),
 			huh.NewInput().Title("Description").Value(&data.Description).
 				Validate(validateRequired),
-			huh.NewInput().Title("Spec ref").Value(&data.SpecRef),
-			huh.NewInput().Title("Done when").Value(&data.DoneWhen),
+			huh.NewSelect[string]().Title("Type").
+				Options(typeOptions...).Value(&data.Type),
+			huh.NewSelect[string]().Title("Role pair").
+				Options(rpOptions...).Value(&data.RolePair),
+			huh.NewInput().Title("Spec ref").Value(&data.SpecRef).
+				Validate(validateRequired),
+			huh.NewInput().Title("Done when").Value(&data.DoneWhen).
+				Validate(validateRequired),
+			huh.NewInput().Title("Scope").Value(&data.Scope).
+				Validate(validateRequired),
 			huh.NewMultiSelect[string]().Title("Depends on").
 				Options(depOptions...).Value(&data.DependsOn),
 			huh.NewSelect[int]().Title("Priority").
 				Options(
-					huh.NewOption("0 (default)", 0),
-					huh.NewOption("1", 1),
+					huh.NewOption("1 (default)", 1),
 					huh.NewOption("2", 2),
 					huh.NewOption("3", 3),
 					huh.NewOption("4", 4),
@@ -380,16 +430,19 @@ func (m Model) extractFormData() *commands.TaskInput {
 	}
 	return &commands.TaskInput{
 		ID:          m.formData.ID,
+		Type:        m.formData.Type,
+		RolePair:    m.formData.RolePair,
 		Description: m.formData.Description,
 		SpecRef:     m.formData.SpecRef,
 		DoneWhen:    m.formData.DoneWhen,
+		Scope:       m.formData.Scope,
 		DependsOn:   m.formData.DependsOn,
 		Priority:    m.formData.Priority,
 	}
 }
 
 // handleFormKey handles key events in form mode.
-// Delegates to huhForm.Update(). Detects completion/cancellation via form state.
+// Intercepts Esc for cancellation, then delegates to handleFormUpdate.
 func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Esc cancels the form
 	if msg.String() == "esc" {
@@ -399,7 +452,13 @@ func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Delegate to Huh form
+	return m.handleFormUpdate(msg)
+}
+
+// handleFormUpdate forwards any tea.Msg to the Huh form and checks for
+// completion/cancellation. Called from handleFormKey for key events and
+// from Update's default case for Huh internal messages (focus, blink, etc.).
+func (m Model) handleFormUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	form, cmd := m.huhForm.Update(msg)
 	if f, ok := form.(*huh.Form); ok {
 		m.huhForm = f
