@@ -39,6 +39,11 @@ var exactStatusColors = map[string]lipgloss.Color{
 	"CHECKPOINT": ColorHandoff,
 	"STOPPED":    ColorRejected,
 
+	// Sprint statuses
+	"COMPLETED":   ColorApproved,
+	"IN_PROGRESS": ColorActive,
+	"ABORTED":     ColorRejected,
+
 	// Task statuses (exact)
 	"MERGED":             ColorApproved,
 	"BLOCKED":            ColorRejected,
@@ -123,6 +128,7 @@ type Styles struct {
 	// Header bar: full-width, background-colored
 	HeaderBar    lipgloss.Style
 	HeaderTitle  lipgloss.Style
+	HeaderLabel  lipgloss.Style // bold white — survives ANSI resets from colored substrings
 	HeaderStatus lipgloss.Style
 
 	// Panel borders: rounded border, full-width
@@ -174,6 +180,9 @@ func NewStyles(width int) Styles {
 			Padding(0, 1),
 		HeaderTitle: lipgloss.NewStyle().
 			Foreground(ColorActive).
+			Bold(true),
+		HeaderLabel: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("15")).
 			Bold(true),
 		HeaderStatus: lipgloss.NewStyle().
 			Bold(true),

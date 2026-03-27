@@ -121,7 +121,7 @@ func TestRenderHeader_NilState_ReturnsLoadingFallback(t *testing.T) {
 	}
 }
 
-func TestRenderHeader_CheckpointOverridesColor(t *testing.T) {
+func TestRenderHeader_ShowsSprintStatus(t *testing.T) {
 	m := newTestModel()
 	m.width = 120
 	m.styles = NewStyles(120)
@@ -134,12 +134,12 @@ func TestRenderHeader_CheckpointOverridesColor(t *testing.T) {
 		Config: models.Config{Mode: models.SystemModeRunning},
 	}
 
-	// The header should still show RUNNING (the system mode text) but the
-	// color should be checkpoint/magenta. We verify the text is present;
-	// color verification would require inspecting ANSI codes which is brittle.
 	got := m.renderHeader()
+	if !strings.Contains(got, "CHECKPOINT") {
+		t.Errorf("renderHeader() should contain sprint status CHECKPOINT, got: %q", got)
+	}
 	if !strings.Contains(got, "RUNNING") {
-		t.Errorf("renderHeader() with CHECKPOINT sprint should still show system mode text, got: %q", got)
+		t.Errorf("renderHeader() should contain system mode RUNNING, got: %q", got)
 	}
 }
 

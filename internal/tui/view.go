@@ -92,7 +92,7 @@ func (m Model) View() string {
 
 // renderHeader renders the header bar:
 //
-//	⚡  LIZA  |  {goal.description}  |  sprint: {sprint.id}  |  {STATUS}
+//	⚡  LIZA  |  {goal.description}  |  sprint: {sprint.id} {sprint.status}  |  system: {STATUS}
 //
 // Full-width, background-colored. STATUS colored per system mode.
 // If m.state is nil, renders "⚡  LIZA  |  Loading..."
@@ -101,22 +101,26 @@ func (m Model) renderHeader() string {
 		return m.styles.HeaderBar.Render("⚡  LIZA  |  Loading...")
 	}
 
-	statusText := string(m.state.Config.Mode)
-	statusColor := StatusColor(statusText)
+	sprintStatusText := strings.ToUpper(string(m.state.Sprint.Status))
+	coloredSprintStatus := m.styles.HeaderStatus.
+		Foreground(StatusColor(sprintStatusText)).
+		Render(sprintStatusText)
 
-	// Sprint checkpoint overrides color to magenta
-	if m.state.Sprint.Status == models.SprintStatusCheckpoint {
-		statusColor = ColorHandoff
-	}
+	systemStatusText := string(m.state.Config.Mode)
+	coloredSystemStatus := m.styles.HeaderStatus.
+		Foreground(StatusColor(systemStatusText)).
+		Render(systemStatusText)
 
-	coloredStatus := m.styles.HeaderStatus.
-		Foreground(statusColor).
-		Render(statusText)
+	sprintLabel := m.styles.HeaderLabel.Render("sprint:")
+	systemLabel := m.styles.HeaderLabel.Render("system:")
 
-	content := fmt.Sprintf("⚡  LIZA  |  %s  |  sprint: %s  |  %s",
+	content := fmt.Sprintf("⚡  LIZA  |  %s  |  %s %s %s  |  %s %s",
 		m.state.Goal.Description,
+		sprintLabel,
 		m.state.Sprint.ID,
-		coloredStatus,
+		coloredSprintStatus,
+		systemLabel,
+		coloredSystemStatus,
 	)
 
 	return m.styles.HeaderBar.Render(content)
