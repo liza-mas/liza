@@ -95,7 +95,7 @@ func readLogCmd(logPath string, offset int64) tea.Cmd {
 
 		return LogEntriesMsg{
 			Entries:     entries,
-			NewPosition: info.Size(),
+			NewPosition: offset + int64(len(data)),
 		}
 	}
 }
