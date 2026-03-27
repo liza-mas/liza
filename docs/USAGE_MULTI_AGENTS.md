@@ -128,7 +128,9 @@ Operational reference content (blackboard fields, anomaly types, etc.) is inline
 
 **3. Start Agents**
 
-Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `LIZA_AGENT_ID` environment variable.
+The TUI (`liza tui`) is the primary way to spawn and monitor agents. Press `s` to spawn — role names autocomplete from the pipeline config.
+
+Alternatively, spawn agents from the CLI: `liza agent <role>`. Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `LIZA_AGENT_ID` environment variable.
 
 Roles are organized into two phases. Which agents you need depends on your entry point:
 
@@ -149,29 +151,14 @@ Roles:
   code-reviewer       - Reviews coding tasks and submits verdicts
 ```
 
-**Minimal setup (detailed-spec entry point) — 5 terminals:**
-```bash
-liza agent orchestrator
-liza agent code-planner
-liza agent code-plan-reviewer
-liza agent coder
-liza agent code-reviewer
-```
+**Minimal setup (detailed-spec entry point) — 5 agents:**
+Spawn from the TUI (`s`): orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer.
 
-**Full pipeline (general-objective entry point) — 9 terminals:**
-```bash
-liza agent orchestrator
-liza agent epic-planner
-liza agent epic-plan-reviewer
-liza agent us-writer
-liza agent us-reviewer
-liza agent code-planner
-liza agent code-plan-reviewer
-liza agent coder
-liza agent code-reviewer
-```
+**Full pipeline (general-objective entry point) — 9 agents:**
+All of the above plus: epic-planner, epic-plan-reviewer, us-writer, us-reviewer.
 
 Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --cli gemini`.
+Selecting alternative agent CLI from the TUI is not supported yet.
 
 Agent output is automatically persisted to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Pass `--no-log` to disable. Persisted files are automatically masked — secret values from environment variables (API keys, tokens, passwords) are replaced with `***`. Live terminal output remains unmasked. Logging is automatically disabled in `-i` (interactive) mode.
 See [Analyzing Agent Logs](#analyzing-agent-logs) for analysis tools.
@@ -183,20 +170,13 @@ liza agent coder              # auto-assigns coder-2
 liza agent coder --agent-id coder-5   # explicit ID
 ```
 
-**3. Observe**
-```bash
-# Run the watcher for alerts and automatic circuit-breaker escalation
-liza tui
-```
+**3. Observe and control**
 
-```bash
-# Watch blackboard state
-watch -n 2 'liza get tasks --format table'
-# or:
-watch -n 2 './console.sh'
-```
+`liza tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn, `p` pause, `r` resume, `a` add task, `c` checkpoint, `Q` stop.
 
-**4. Human Interventions**
+`./console.sh` is deprecated.
+
+From the CLI:
 ```bash
 # Pause all agents
 liza pause
@@ -209,15 +189,15 @@ liza stop
 
 # Checkpoint (halt + generate summary)
 liza sprint-checkpoint
+
+# Activity log
+cat .liza/log.yaml
 ```
 
 **Signal handling:** Agents cleanly exit on `Ctrl+C` (SIGINT) or `kill` (SIGTERM). On exit, the agent unregisters and atomically releases any active task claim — the task returns to its initial state (doer, e.g. DRAFT_CODE) or submitted state (reviewer, e.g. CODE_READY_FOR_REVIEW) — so no orphaned claims are left behind.
 
-**5. Review Results**
+**4. Review Results**
 ```bash
-# Activity log
-cat .liza/log.yaml
-
 # Integration branch
 git log integration --oneline
 ```
@@ -255,20 +235,19 @@ Each transition between pairs is a **human gate**: the sprint completes, the hum
 #### Sprint Phases
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│ Doer Sprint                                                   │
-│                                                               │
-│  1. Orchestrator creates task for current pair                │
-│  2. Doer claims task, does work, populates output[]           │
-│  3. Reviewer approves → task merges                           │
-│  4. All tasks done → SPRINT_COMPLETE                          │
-│  5. Sprint checkpoints → HUMAN GATE                           │
-│                                                               │
-│  Human reviews results, then:                                 │
-│    liza proceed <task-id> <transition>  (if next pair exists) │
-│    liza resume                          (start next sprint)   │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│  1. Orchestrator creates task for current pair          │
+│  2. Doer claims task, does work, populates output[]     │
+│  3. Reviewer approves → task merges                     │
+│  4. All tasks done → SPRINT_COMPLETE                    │
+│  5. Sprint checkpoints → HUMAN GATE                     │
+│                                                         │
+│  Human reviews results, then:                           │
+│    liza resume                       (complete strint)  │
+│    liza resume                     (start next sprint)  │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
 
 Transitions create child tasks from the parent's `output[]` entries (per-subtask cardinality) or from the parent task itself (one-to-one cardinality). Available transitions are defined in `.liza/pipeline.yaml`.
@@ -278,13 +257,13 @@ Transitions create child tasks from the parent's `output[]` entries (per-subtask
 When a sprint checkpoints (status: CHECKPOINT), all agents pause.
 The human reviews the sprint summary and decides:
 
-| Action | Command | When |
-|--------|---------|------|
-| Accept & resume | `liza resume` | Satisfied with planner output, continue the sprint |
-| Amend & replan | Edit plan file, commit, then `liza replan` | Want to change a planner's output before proceeding |
-| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for the next role-pair from output[] |
-| Pause for manual work | (no command) | Want to make manual changes before continuing |
-| Abort | `liza stop` | Want to stop entirely |
+| Action | Command | When                                                                                                 |
+|--------|---------|------------------------------------------------------------------------------------------------------|
+| Accept & resume | `liza resume` | Satisfied with planner output, continue the sprint, start next sprint                                |
+| Amend & replan | Edit plan file, commit, then `liza replan` | Want to change a planner's output before proceeding                                                  |
+| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for the next role-pair from output[]. Automatically done in batch by `liza resume` |
+| Pause for manual work | (no command) | Want to make manual changes before continuing                                                        |
+| Abort | `liza stop` | Want to stop entirely                                                                                |
 
 **`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent). Use `liza status` to see available transitions for tasks at terminal states. After `proceed`, run `liza resume` to start the next sprint.
 
@@ -311,7 +290,6 @@ The old task's output is preserved for audit (not cleared), just marked as super
 #### Sprint Status Flow
 
 ```
-# rippletide-override: user approved
 IN_PROGRESS → CHECKPOINT ──→ COMPLETED ──→ (new sprint) IN_PROGRESS
                   │  ↑            ↑              ↑
                   │  │            │              └── liza resume (2nd: archive & advance)
@@ -337,7 +315,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza init <goal> --spec <spec_ref> [--branch <name>]` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md, branch defaults to integration) |
 | **Agents & Monitoring** | |
 | `liza agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted) |
-| `liza tui` | Monitor blackboard, alert on anomalies, auto-checkpoint on circuit-breaker |
+| `liza tui` | Live TUI: spawn agents, monitor state, manage system |
 | `liza status` | Show system and task status at a glance |
 | **System Control** | |
 | `liza pause` / `liza resume` | Pause/resume system (resume also advances CHECKPOINT → COMPLETED → new sprint) |

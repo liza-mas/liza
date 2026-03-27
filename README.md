@@ -4,6 +4,8 @@
 
 The full **[hardening inventory](docs/liza-hardened-mas.md)** to push to production with peace of mind.
 
+![Liza's TUI](docs/img/liza-tui.png)
+
 **[Demo video](https://drive.google.com/drive/folders/1Iea-nNxAazBHeLXL7IElXnG5r1i1E-Ha?usp=sharing)** (45min).
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/liza-mas/liza)
@@ -37,7 +39,7 @@ Liza bets on time-to-quality and durable codebase maintainability through automa
     that are AI generated but human reviewed.
   - Automatic task decomposition based on complexity with dependency management for parallel execution.
   - Multi-sprints: agents are fully autonomous within a sprint, user steers between sprints via Liza CLI - review of produced artifacts, continuous improvement, and steering of the next sprint
-  - A console displays a full real-time view of the execution.
+  - A TUI (`liza tui`) displays live system state and lets you spawn agents, pause/resume, add tasks, and trigger checkpoints.
 - **Adversarial architecture:**
   - One Orchestrator role + 8 others. More to come (Architect, ...).
   - Every activity is dual — a doer and a reviewer: epic planning, epic writing, US writing, code planning, coding - everything.
@@ -160,7 +162,7 @@ liza version
 
 ```bash
 liza setup  # initial install or liza upgrade: installs contracts + skills to ~/.liza/
-# With: agent-specific activation (skill symlinks)
+# With: agent-specific activation (skill symlinks, contract config)
 liza setup --claude --codex --gemini --mistral
 ```
 
@@ -179,7 +181,7 @@ liza init
 # Or with explicit flags:
 liza init --claude --codex --gemini --mistral
 ```
-The interactive wizard walks through mode selection (pairing vs full MAS), agent selection, and handles existing `CLAUDE.md` conflicts automatically. See [contract activation](contracts/contract-activation.md) for the additional required steps for CLIs other than Claude.
+The interactive wizard walks through mode selection (pairing vs full MAS), agent selection, and handles existing `CLAUDE.md` conflicts automatically. Claude is fully automated; for other CLIs see [contract activation](https://github.com/liza-mas/liza/blob/main/contracts/contract-activation.md) for additional manual steps.
 
 ### Pairing and MAS Modes
 
@@ -200,11 +202,8 @@ Or you may choose to make it your Socratic colleague, your rubber duck, or your 
 
 **Multi-agent mode** — autonomous spec-to-code pipeline:
 1. `liza init "[Goal description]" --spec vision.md`. Use the `--entry-point detailed-spec` option to skip the spec phase and go coding directly.
-2. Launching agents of different roles in different terminals: `liza agent <role>`.
-   Check [Quick Start](docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for list of required roles and options (using a CLI other than Claude, logging).
-3. Running `liza tui` will show alerts. Executing `watch ./console.sh` will bring you the console:
-
-![Liza's Console](docs/img/liza-console.png)
+2. `liza tui` — the TUI shows live system state (agents, tasks, alerts, sprint metrics). From it you can spawn agents with role autocompletion (`s`), pause/resume the system, add tasks, and trigger sprint checkpoints.
+   Check [Quick Start](docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for required roles and options (using a CLI other than Claude, logging).
 
 ### Common Commands
 
@@ -216,11 +215,11 @@ liza init "Goal" --spec s.md \
   --config pipeline.yaml --entry-point epic-planning # Pipeline-configured init
 liza add-task --id t1 --desc "..." --spec "..." \
   --done "..." --scope "..."                        # Add tasks
-liza agent coder                                    # Start agent supervisor
+liza tui                                            # Live TUI (spawn agents, monitor, manage)
+liza agent coder                                    # Start agent supervisor (or spawn from TUI)
 liza validate                                       # Validate state
 liza get tasks                                      # Query tasks
 liza status                                         # Dashboard overview
-liza tui                                          # Monitor for anomalies
 liza proceed                                        # Transition between pipeline phases
 liza pause / liza resume                            # Human intervention
 liza stop / liza start                              # System control
@@ -417,11 +416,7 @@ See [Release Notes](docs/release_notes/) for version history and [RELEASE.md](RE
 
 **Where Liza works today:**
 - **Pairing mode** is battle-tested — agents write **~90% of production code** under human supervision
-- **Multi-agent mode** produces solid code through the full spec-to-merge pipeline with 9 roles across 2 phases
-
-**Where it's headed:**
-- Integration sub-pipeline to validate a batch of merged work before promoting to main. For now, an extra pass of LLM-assisted review before merging to main is recommended.
-- Countering LLM coding habits that slip through review — unstructured code, magic literals, inconsistent naming — and still require user vigilance as of today.
+- **Multi-agent mode** produces solid code through the full spec-to-merge pipeline with 9 roles across 2 phases — starting from release v0.4.0, all major Liza changes are implemented using this mode
 
 **Implemented roles:**
 - Orchestrator (decomposes goal into tasks)
@@ -436,7 +431,7 @@ See [Release Notes](docs/release_notes/) for version history and [RELEASE.md](RE
 - Security Auditor / Security Audit Reviewer — review the security of the code
 
 **Roadmap:**
-- Integration sub-pipeline — validate a batch of commits so it can be safely merged to main
+- Integration sub-pipeline — validate a batch of commits so it can be safely merged to main. For now, an extra pass of LLM-assisted review before merging to main is recommended.
 - Context handoff as blackboard event — structured positive/negative findings on every task completion
 - Deterministic pre/post hooks at role transitions — mechanical checks before spawning agents and before their handoff
 - Orchestrator-routed model selection — assign tasks to models based on estimated complexity
