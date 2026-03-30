@@ -141,6 +141,20 @@ func TestIsClaimable(t *testing.T) {
 		}
 	})
 
+	t.Run("reviewer not claimable when ReviewingBy is set", func(t *testing.T) {
+		rc := "abc123"
+		reviewer := "reviewer-1"
+		task := &Task{
+			RolePair:     "coding-pair",
+			Status:       "CODE_READY_FOR_REVIEW",
+			ReviewCommit: &rc,
+			ReviewingBy:  &reviewer,
+		}
+		if task.IsClaimable("code-reviewer", nil, pr) {
+			t.Error("reviewer should not be claimable when ReviewingBy is set")
+		}
+	})
+
 	t.Run("unknown role not claimable", func(t *testing.T) {
 		task := &Task{
 			RolePair: "coding-pair",
