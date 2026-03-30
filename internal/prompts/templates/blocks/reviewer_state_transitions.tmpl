@@ -20,4 +20,10 @@ US REVIEWER STATE TRANSITIONS:
 - REVIEWING_US → US_APPROVED
 - REVIEWING_US → US_REJECTED
 {{- end}}
+
+After REJECTED verdict (non-terminal):
+  Call liza_await_resubmission to wait for the doer's resubmission.
+  - RESUBMITTED: task is reclaimed for review — review the new changes
+  - TERMINAL, TIMEOUT, or ABORTED: exit normally
+  Do NOT call if verdict result shows EscalatedToBlocked or NewAttemptTriggered.
 {{- end -}}

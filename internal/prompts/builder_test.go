@@ -978,6 +978,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"CODE_APPROVED",
 			"REVIEWER TOOL (resolve AFTER initialization:",
 			"liza_submit_verdict",
+			"liza_await_resubmission",
 			"ANOMALY LOGGING:",
 			"WORKTREE RULES:",
 			"REVIEW SCOPE:",
@@ -1097,6 +1098,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"REVIEWING_CODING_PLAN",
 			"CODE PLAN REVIEWER TOOLS (resolve AFTER initialization:",
 			"liza_submit_verdict",
+			"liza_await_resubmission",
 			"REVIEW CHECKLIST:",
 			"TIMESTAMP-task-cpr",           // interpolated task ID in reviewer gate
 			"Plan file location",           // gate label present in checklist
@@ -1172,6 +1174,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"REVIEWING_EPIC_PLAN",
 			"EPIC PLAN REVIEWER TOOLS (resolve AFTER initialization:",
 			"liza_submit_verdict",
+			"liza_await_resubmission",
 			"EPIC-WRITING SKILL:",
 			"REVIEW CHECKLIST:",
 			"VERDICT SUBMISSION",
@@ -1256,6 +1259,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"REVIEWING_US",
 			"US REVIEWER TOOLS (resolve AFTER initialization:",
 			"liza_submit_verdict",
+			"liza_await_resubmission",
 			"SPEC-REVIEW SKILL:",
 			"USER-STORY ANTI-PATTERNS",
 			"QUALITY GATES:",

@@ -1,16 +1,18 @@
 {{- define "reviewer-tools" -}}
 {{- if eq .Role "code-reviewer"}}
 
-REVIEWER TOOL (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
+REVIEWER TOOL (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
 - liza_submit_verdict — Submit review verdict (see VERDICT SUBMISSION below for params)
+- liza_await_resubmission — Block until doer resubmits after rejection (call after submit_verdict REJECTED)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 {{- else}}
 
 {{- if eq .Role "code-plan-reviewer"}}
-CODE PLAN REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
+CODE PLAN REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
 {{- else if eq .Role "epic-plan-reviewer"}}
-EPIC PLAN REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
+EPIC PLAN REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
 {{- else if eq .Role "us-reviewer"}}
-US REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict):
+US REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_verdict,mcp__liza__liza_await_resubmission):
 {{- end}}
 - liza_get — Query task state to inspect output[] entries
   {"query": "tasks/{{.TaskID}}"}
@@ -18,5 +20,7 @@ US REVIEWER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__li
   ⚠️  Do NOT use `go run`, `liza submit-verdict`, or any shell command.
   APPROVED: call tool liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "APPROVED", "agent_id": "{{.AgentID}}"}
   REJECTED: call tool liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "REJECTED", "agent_id": "{{.AgentID}}", "reason": "<detailed rejection reason>"}
+- liza_await_resubmission — Block until doer resubmits after rejection (call after submit_verdict REJECTED)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 {{- end}}
 {{- end -}}
