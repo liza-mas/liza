@@ -42,6 +42,7 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+        - await-verdict
       context-sections:
         - assigned-task
         - worktree-rules
@@ -101,6 +102,7 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+        - await-verdict
       context-sections:
         - assigned-task
         - worktree-rules
@@ -158,6 +160,7 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+        - await-verdict
       context-sections:
         - assigned-task
         - worktree-rules
@@ -216,6 +219,7 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+        - await-verdict
       context-sections:
         - assigned-task
         - worktree-rules

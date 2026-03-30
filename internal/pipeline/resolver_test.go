@@ -260,7 +260,7 @@ func TestAllowedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllowedOperations(coder): %v", err)
 	}
-	want := []string{"write-checkpoint", "submit-for-review", "mark-blocked", "handoff", "set-task-output"}
+	want := []string{"write-checkpoint", "submit-for-review", "mark-blocked", "handoff", "set-task-output", "await-verdict"}
 	if len(got) != len(want) {
 		t.Fatalf("AllowedOperations(coder) = %v, want %v", got, want)
 	}
