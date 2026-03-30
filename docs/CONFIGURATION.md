@@ -74,6 +74,18 @@ Block until a review verdict arrives for a submitted task. Budget-aware: refuses
 
 Returns a verdict: `APPROVED`, `REJECTED` (with reason and auto-reclaim), `NEW_ATTEMPT`, `TERMINAL`, `TIMEOUT`, or `ABORTED`.
 
+#### `liza_await_resubmission`
+
+Block until the doer resubmits after a rejection. Preserves reviewer session and review ownership. Call after `liza_submit_verdict` with REJECTED verdict (non-terminal).
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | string | Yes | — | Task ID to await resubmission for |
+| `agent_id` | string | Yes | — | Agent ID (for authorization) |
+| `timeout_seconds` | integer | No | 1500 | Max wait time in seconds (must be < `MCP_TIMEOUT`, which defaults to 1800s / 30 min) |
+
+Returns a verdict: `RESUBMITTED` (with new commit SHA and review cycle count), `TERMINAL` (with reason), `TIMEOUT`, or `ABORTED`.
+
 ### CLI vs MCP
 
 Both interfaces operate on the same `state.yaml` with proper locking.
