@@ -312,6 +312,143 @@ func TestClearStaleReviewingTwo(t *testing.T) {
 	})
 }
 
+func TestClearStaleReviewClaims_OrphanedOnRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// REJECTED task with ReviewingBy set and expired lease — orphaned from await_resubmission crash
+	expiredLease := now.Add(-5 * time.Minute)
+	reviewer := "code-reviewer-1"
+	state.Tasks = []models.Task{
+		{
+			ID: "t1", Description: "Rejected with orphaned reviewer", Status: models.TaskStatusRejected,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:    "coding-pair",
+			ReviewingBy: &reviewer, ReviewLeaseExpires: &expiredLease,
+			History: []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 1 {
+		t.Errorf("cleared = %d, want 1", cleared)
+	}
+
+	readState := readStateForTest(t, stateFile)
+	task := readState.FindTask("t1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusRejected {
+		t.Errorf("Status = %v, want CODE_REJECTED (status should not change)", task.Status)
+	}
+	if task.ReviewingBy != nil {
+		t.Errorf("ReviewingBy should be nil, got %v", *task.ReviewingBy)
+	}
+	if task.ReviewLeaseExpires != nil {
+		t.Error("ReviewLeaseExpires should be nil")
+	}
+}
+
+func TestClearStaleReviewClaims_OrphanedOnSubmitted(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// SUBMITTED task with ReviewingBy set and expired lease — orphaned from await_resubmission crash
+	expiredLease := now.Add(-5 * time.Minute)
+	reviewer := "code-reviewer-1"
+	state.Tasks = []models.Task{
+		{
+			ID: "t1", Description: "Submitted with orphaned reviewer", Status: models.TaskStatusReadyForReview,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:    "coding-pair",
+			ReviewingBy: &reviewer, ReviewLeaseExpires: &expiredLease,
+			History: []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 1 {
+		t.Errorf("cleared = %d, want 1", cleared)
+	}
+
+	readState := readStateForTest(t, stateFile)
+	task := readState.FindTask("t1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusReadyForReview {
+		t.Errorf("Status = %v, want CODE_READY_FOR_REVIEW (status should not change)", task.Status)
+	}
+	if task.ReviewingBy != nil {
+		t.Errorf("ReviewingBy should be nil, got %v", *task.ReviewingBy)
+	}
+	if task.ReviewLeaseExpires != nil {
+		t.Error("ReviewLeaseExpires should be nil")
+	}
+}
+
+func TestClearStaleReviewClaims_ActiveLeaseOnRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	setupLogFile(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+
+	// REJECTED task with ReviewingBy set and valid (future) lease — should NOT be cleared
+	futureLease := now.Add(30 * time.Minute)
+	reviewer := "code-reviewer-1"
+	state.Tasks = []models.Task{
+		{
+			ID: "t1", Description: "Rejected with active reviewer", Status: models.TaskStatusRejected,
+			Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Done", Scope: "Test",
+			RolePair:    "coding-pair",
+			ReviewingBy: &reviewer, ReviewLeaseExpires: &futureLease,
+			History: []models.TaskHistoryEntry{},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	cleared, err := ClearStaleReviewClaims(tmpDir)
+	if err != nil {
+		t.Fatalf("ClearStaleReviewClaims() error: %v", err)
+	}
+	if cleared != 0 {
+		t.Errorf("cleared = %d, want 0 (active lease should not be cleared)", cleared)
+	}
+
+	readState := readStateForTest(t, stateFile)
+	task := readState.FindTask("t1")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.ReviewingBy == nil {
+		t.Error("ReviewingBy should still be set")
+	} else if *task.ReviewingBy != reviewer {
+		t.Errorf("ReviewingBy = %v, want %v", *task.ReviewingBy, reviewer)
+	}
+}
+
 // setupLogFile creates the log.yaml file that ClearStaleReviewClaims needs.
 func setupLogFile(t *testing.T, tmpDir string) {
 	t.Helper()
