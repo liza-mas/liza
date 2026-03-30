@@ -41,16 +41,51 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 				return err
 			}
 			if match == nil {
+				// Not in a reviewing state — check for orphaned ReviewingBy
+				// from an await_resubmission crash.
+				if task.ReviewingBy != nil {
+					var expiredAt string
+					switch {
+					case task.ReviewLeaseExpires == nil:
+						expiredAt = "unknown (lease missing)"
+					case !task.ReviewLeaseExpires.After(now):
+						expiredAt = task.ReviewLeaseExpires.Format(time.RFC3339)
+					default:
+						continue // lease still valid
+					}
+
+					staleReviewer := *task.ReviewingBy
+					task.ReviewingBy = nil
+					task.ReviewLeaseExpires = nil
+
+					if a, ok := state.Agents[staleReviewer]; ok {
+						if a.CurrentTask != nil && *a.CurrentTask == task.ID {
+							state.ReleaseAgent(staleReviewer)
+						}
+					}
+
+					detail := fmt.Sprintf("Orphaned ReviewingBy cleared (expired at %s, reviewer: %s, task status: %s)",
+						expiredAt, staleReviewer, task.Status)
+					logEntry := log.Entry{
+						Timestamp: now,
+						Agent:     "system",
+						Action:    "stale_review_cleared",
+						Task:      &task.ID,
+						Detail:    detail,
+					}
+					if err := logger.Append(logEntry); err != nil {
+						return fmt.Errorf("failed to log orphaned ReviewingBy cleanup for %s: %w", task.ID, err)
+					}
+					cleared++
+				}
 				continue
 			}
 
-			// Skip if no reviewing_by
+			// Task is in a reviewing state — handle stale review claim.
 			if task.ReviewingBy == nil {
 				continue
 			}
 
-			// Determine expiry. If lease is nil but reviewing_by is set,
-			// treat as malformed/expired.
 			var expiredAt string
 			switch {
 			case task.ReviewLeaseExpires == nil:
@@ -61,7 +96,6 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 				continue
 			}
 
-			// Capture reviewer before clearing the claim.
 			staleReviewer := *task.ReviewingBy
 
 			// Revert to submitted state and clear the stale claim.
@@ -71,7 +105,6 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
 
-			// Release the reviewer agent if still assigned to this task.
 			if a, ok := state.Agents[staleReviewer]; ok {
 				if a.CurrentTask != nil && *a.CurrentTask == task.ID {
 					state.ReleaseAgent(staleReviewer)
