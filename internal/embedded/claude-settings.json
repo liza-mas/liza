@@ -40,6 +40,7 @@
       "mcp__liza__liza_claim_task",
       "mcp__liza__liza_submit_for_review",
       "mcp__liza__liza_await_verdict",
+      "mcp__liza__liza_await_resubmission",
       "mcp__liza__liza_handoff",
       "mcp__liza__liza_submit_verdict",
       "mcp__liza__liza_mark_blocked",

@@ -245,6 +245,26 @@ func (s *Server) registerMutationTools() {
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_await_verdict"),
 		},
 
+		// liza_await_resubmission tool
+		{
+			tool: protocol.Tool{
+				Name: "liza_await_resubmission",
+				Description: "Block until doer resubmits after a rejection. Call after " +
+					"liza_submit_verdict with REJECTED. Preserves review ownership.",
+				InputSchema: protocol.InputSchema{
+					Type: "object",
+					Properties: map[string]protocol.Property{
+						"task_id":         {Type: "string", Description: "Task ID to await resubmission for"},
+						"agent_id":        {Type: "string", Description: "Agent ID (for authorization)"},
+						"timeout_seconds": {Type: "integer", Description: "Max wait time in seconds (default: 1500, must be < MCP_TIMEOUT)"},
+					},
+					Required: []string{"task_id", "agent_id"},
+				},
+			},
+			handler:     s.handleAwaitResubmission,
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_await_resubmission"),
+		},
+
 		// liza_handoff tool
 		{
 			tool: protocol.Tool{
