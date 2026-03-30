@@ -52,7 +52,7 @@ func AwaitVerdict(projectRoot, taskID, agentID string, timeout time.Duration) (*
 	bb := db.For(lp.StatePath())
 
 	// Read state and find task.
-	_, task, err := readTaskState(bb, taskID)
+	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,22 @@ func AwaitVerdict(projectRoot, taskID, agentID string, timeout time.Duration) (*
 		return nil, err
 	}
 
-	// Placeholder: event loop and budget gate added in subsequent tasks.
+	// Budget gate: simulate what would happen on rejection. If limits are
+	// already at capacity, release ownership and return immediately rather
+	// than blocking for up to 25 minutes only to discover we can't iterate.
+	iterLimit := effectiveCoderIterationLimit(task, state.Config)
+	reviewLimit := effectiveReviewCycleLimit(state.Config)
+	_, shouldEscalate := classifyLimitEscalation(
+		task.ReviewCyclesCurrent, reviewLimit,
+		task.Iteration, iterLimit,
+		task.EffectiveAttempt(),
+	)
+	if shouldEscalate {
+		releaseOwnership(bb, agentID)
+		return nil, ErrBudgetExhausted
+	}
+
+	// Placeholder: event loop added in subsequent task.
 	return nil, fmt.Errorf("await-verdict event loop not yet implemented")
 }
 
@@ -147,6 +162,19 @@ func acquireAwaitOwnership(bb *db.Blackboard, agentID, taskID string) error {
 		agent.Status = models.AgentStatusWaiting
 		agent.CurrentTask = &taskID
 		s.Agents[agentID] = agent
+		return nil
+	})
+}
+
+// releaseOwnership clears the agent's CurrentTask, relinquishing ownership
+// of the task. Status is left unchanged — the supervisor's resetAgentAfterExit
+// handles status transitions when the CLI session ends.
+func releaseOwnership(bb *db.Blackboard, agentID string) error {
+	return bb.Modify(func(s *models.State) error {
+		if agent, ok := s.Agents[agentID]; ok {
+			agent.CurrentTask = nil
+			s.Agents[agentID] = agent
+		}
 		return nil
 	})
 }

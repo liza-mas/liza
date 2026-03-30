@@ -187,3 +187,112 @@ func TestAwaitVerdict_ReviewingStatus(t *testing.T) {
 		t.Error("ownership not acquired for REVIEWING status")
 	}
 }
+
+func TestAwaitVerdict_BudgetExhausted_IterationLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	})
+	// Set iteration at the limit so classifyLimitEscalation returns shouldEscalate=true.
+	task.Iteration = 4
+	state.Config.MaxCoderIterations = 4
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusWaiting,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := AwaitVerdict(tmpDir, "task-1", "coder-1", 30*time.Second)
+	if !stderrors.Is(err, ErrBudgetExhausted) {
+		t.Fatalf("expected ErrBudgetExhausted, got %v", err)
+	}
+
+	// Verify ownership was released: agent.CurrentTask should be nil.
+	bb := db.For(stateFile)
+	s, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("failed to read state: %v", readErr)
+	}
+	agent := s.Agents["coder-1"]
+	if agent.CurrentTask != nil {
+		t.Errorf("expected CurrentTask=nil after budget exhaustion, got %q", *agent.CurrentTask)
+	}
+}
+
+func TestAwaitVerdict_BudgetExhausted_ReviewCycleLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	})
+	// Set review cycles at the limit.
+	task.ReviewCyclesCurrent = 5
+	state.Config.MaxReviewCycles = 5
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusWaiting,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := AwaitVerdict(tmpDir, "task-1", "coder-1", 30*time.Second)
+	if !stderrors.Is(err, ErrBudgetExhausted) {
+		t.Fatalf("expected ErrBudgetExhausted, got %v", err)
+	}
+
+	// Verify ownership was released.
+	bb := db.For(stateFile)
+	s, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("failed to read state: %v", readErr)
+	}
+	agent := s.Agents["coder-1"]
+	if agent.CurrentTask != nil {
+		t.Errorf("expected CurrentTask=nil after budget exhaustion, got %q", *agent.CurrentTask)
+	}
+}
+
+func TestAwaitVerdict_BudgetWithinLimits(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventSubmittedForReview,
+		Agent: strPtr("coder-1"),
+	})
+	// Well within limits — budget gate should NOT fire.
+	task.Iteration = 1
+	task.ReviewCyclesCurrent = 0
+	state.Config.MaxCoderIterations = 10
+	state.Config.MaxReviewCycles = 5
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role:   "coder",
+		Status: models.AgentStatusWaiting,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := AwaitVerdict(tmpDir, "task-1", "coder-1", 30*time.Second)
+	// Should NOT be ErrBudgetExhausted — should proceed to the event loop placeholder.
+	if stderrors.Is(err, ErrBudgetExhausted) {
+		t.Fatal("expected budget gate to pass (within limits), but got ErrBudgetExhausted")
+	}
+}
