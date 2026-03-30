@@ -73,6 +73,70 @@ func TestMigrateOperations_NoopWhenPresent(t *testing.T) {
 	}
 }
 
+func TestMigrateOperations_AddsAwaitResubmission(t *testing.T) {
+	frozen := frozenConfigWithout(t, "await-resubmission")
+
+	// Verify precondition: code-reviewer role lacks await-resubmission.
+	cr := frozen.Pipeline.Roles["code-reviewer"]
+	if slices.Contains(cr.AllowedOperations, "await-resubmission") {
+		t.Fatal("precondition: frozen code-reviewer should not have await-resubmission")
+	}
+	originalOps := make([]string, len(cr.AllowedOperations))
+	copy(originalOps, cr.AllowedOperations)
+
+	ref, err := LoadEmbeddedReference()
+	if err != nil {
+		t.Fatalf("LoadEmbeddedReference: %v", err)
+	}
+
+	changed := MigrateOperations(frozen, ref)
+	if !changed {
+		t.Error("MigrateOperations returned false, want true")
+	}
+
+	cr = frozen.Pipeline.Roles["code-reviewer"]
+	if !slices.Contains(cr.AllowedOperations, "await-resubmission") {
+		t.Error("await-resubmission not added to frozen code-reviewer role")
+	}
+
+	// All original operations must still be present.
+	for _, op := range originalOps {
+		if !slices.Contains(cr.AllowedOperations, op) {
+			t.Errorf("original operation %q was removed", op)
+		}
+	}
+}
+
+func TestMigrateOperations_AllReviewerRoles_AwaitResubmission(t *testing.T) {
+	frozen := frozenConfigWithout(t, "await-resubmission")
+	ref, err := LoadEmbeddedReference()
+	if err != nil {
+		t.Fatalf("LoadEmbeddedReference: %v", err)
+	}
+
+	reviewerRoles := []string{"code-reviewer", "code-plan-reviewer", "epic-plan-reviewer", "us-reviewer"}
+
+	// Verify precondition: none of the reviewer roles have await-resubmission.
+	for _, role := range reviewerRoles {
+		r := frozen.Pipeline.Roles[role]
+		if slices.Contains(r.AllowedOperations, "await-resubmission") {
+			t.Fatalf("precondition: frozen %s should not have await-resubmission", role)
+		}
+	}
+
+	changed := MigrateOperations(frozen, ref)
+	if !changed {
+		t.Fatal("MigrateOperations returned false, want true")
+	}
+
+	for _, role := range reviewerRoles {
+		r := frozen.Pipeline.Roles[role]
+		if !slices.Contains(r.AllowedOperations, "await-resubmission") {
+			t.Errorf("await-resubmission not added to frozen %s role", role)
+		}
+	}
+}
+
 func TestMigrateOperations_AllDoerRoles(t *testing.T) {
 	frozen := frozenConfigWithout(t, "await-verdict")
 	ref, err := LoadEmbeddedReference()

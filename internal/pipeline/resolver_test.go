@@ -270,6 +270,21 @@ func TestAllowedOperations(t *testing.T) {
 		}
 	}
 
+	// Reviewer operations
+	gotR, errR := r.AllowedOperations("code-reviewer")
+	if errR != nil {
+		t.Fatalf("AllowedOperations(code-reviewer): %v", errR)
+	}
+	wantR := []string{"submit-verdict", "await-resubmission"}
+	if len(gotR) != len(wantR) {
+		t.Fatalf("AllowedOperations(code-reviewer) = %v, want %v", gotR, wantR)
+	}
+	for i := range gotR {
+		if gotR[i] != wantR[i] {
+			t.Errorf("AllowedOperations(code-reviewer)[%d] = %q, want %q", i, gotR[i], wantR[i])
+		}
+	}
+
 	// Unknown role returns error.
 	_, err = r.AllowedOperations("unknown-role")
 	if err == nil {

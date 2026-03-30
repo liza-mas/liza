@@ -70,6 +70,7 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+        - await-resubmission
       context-sections:
         - review-task
         - worktree-rules
@@ -129,6 +130,7 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+        - await-resubmission
       context-sections:
         - review-task
         - worktree-rules
@@ -187,6 +189,7 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+        - await-resubmission
       context-sections:
         - review-task
         - worktree-rules
@@ -253,6 +256,7 @@ pipeline:
         max-wait: 30m
       allowed-operations:
         - submit-verdict
+        - await-resubmission
       context-sections:
         - review-task
         - worktree-rules
