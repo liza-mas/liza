@@ -1,10 +1,12 @@
 {{- define "doer-tools" -}}
 {{- if eq .Role "coder"}}
 
-CODER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_handoff,mcp__liza__liza_mark_blocked,mcp__liza__liza_write_checkpoint):
+CODER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_await_verdict,mcp__liza__liza_handoff,mcp__liza__liza_mark_blocked,mcp__liza__liza_write_checkpoint):
 - liza_submit_for_review — Submit completed work for review
   {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 - liza_handoff — Context near exhaustion (~90%)
   {"task_id": "{{.TaskID}}", "summary": "<what is done>", "next_action": "<exact next step>", "agent_id": "{{.AgentID}}"}
   Optional structured fields: "succeeded" (array), "failed" (array), "hypothesis" (string), "key_files" (array), "dead_ends" (array)
@@ -18,10 +20,12 @@ CODER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get
   If you need to modify a file outside the task scope, declare it as a scope_extension — not as an assumption.
 {{- else if eq .Role "code-planner"}}
 
-CODE PLANNER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_write_checkpoint,mcp__liza__liza_set_task_output,mcp__liza__liza_mark_blocked):
+CODE PLANNER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_await_verdict,mcp__liza__liza_write_checkpoint,mcp__liza__liza_set_task_output,mcp__liza__liza_mark_blocked):
 - liza_submit_for_review — Submit code plan for review
   {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 - liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
 - liza_set_task_output — Persist structured task definitions for downstream task creation
@@ -34,10 +38,12 @@ CODE PLANNER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__l
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
 {{- else if eq .Role "epic-planner"}}
 
-EPIC PLANNER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_write_checkpoint,mcp__liza__liza_set_task_output,mcp__liza__liza_mark_blocked):
+EPIC PLANNER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_await_verdict,mcp__liza__liza_write_checkpoint,mcp__liza__liza_set_task_output,mcp__liza__liza_mark_blocked):
 - liza_submit_for_review — Submit epic plan for review
   {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 - liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
 - liza_set_task_output — Persist one entry per capability for downstream US Writer tasks
@@ -49,10 +55,12 @@ EPIC PLANNER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__l
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
 {{- else if eq .Role "us-writer"}}
 
-US WRITER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_write_checkpoint,mcp__liza__liza_mark_blocked):
+US WRITER TOOLS (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_submit_for_review,mcp__liza__liza_await_verdict,mcp__liza__liza_write_checkpoint,mcp__liza__liza_mark_blocked):
 - liza_submit_for_review — Submit user stories for review
   {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
+- liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
+  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
 - liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
 - liza_mark_blocked — Cannot proceed
