@@ -2634,3 +2634,144 @@ func TestHandleRoleEnforcement(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleAwaitVerdict_Validation verifies parameter validation for handleAwaitVerdict.
+func TestHandleAwaitVerdict_Validation(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	tests := []struct {
+		name    string
+		params  map[string]any
+		wantErr string
+	}{
+		{
+			name:    "missing task_id",
+			params:  map[string]any{"agent_id": "coder-1"},
+			wantErr: "task_id",
+		},
+		{
+			name:    "missing agent_id",
+			params:  map[string]any{"task_id": "task-1"},
+			wantErr: "agent_id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := server.handleAwaitVerdict(tt.params)
+			if err == nil {
+				t.Fatal("Expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("Expected error containing %q, got: %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestHandleAwaitVerdict_RoleCheck verifies non-doer roles are rejected by the role checker.
+func TestHandleAwaitVerdict_RoleCheck(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	handler := server.handlers["liza_await_verdict"]
+	if handler == nil {
+		t.Fatal("no handler registered for liza_await_verdict")
+	}
+
+	_, err := handler(map[string]any{
+		"task_id":  "task-1",
+		"agent_id": "orchestrator-1",
+	})
+	if err == nil {
+		t.Fatal("Expected role enforcement error for orchestrator, got nil")
+	}
+	if !strings.Contains(err.Error(), "not allowed for role orchestrator") {
+		t.Errorf("Expected role enforcement error, got: %v", err)
+	}
+}
+
+// TestHandleAwaitVerdict_Success verifies a successful call returns formatted output
+// containing "Verdict:" and "Status:".
+func TestHandleAwaitVerdict_Success(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Overwrite state: task-1 in CODE_READY_FOR_REVIEW with submission history.
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	agentStr := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.History = []models.TaskHistoryEntry{
+		{
+			Time:  now.Add(-1 * time.Minute),
+			Event: models.TaskEventSubmittedForReview,
+			Agent: &agentStr,
+		},
+	}
+	state.Tasks = []models.Task{task}
+	state.Agents = map[string]models.Agent{
+		"coder-1": {
+			Role:      "coder",
+			Status:    models.AgentStatusIdle,
+			Heartbeat: now,
+		},
+		"code-reviewer-1": {
+			Role:      "code-reviewer",
+			Status:    models.AgentStatusIdle,
+			Heartbeat: now,
+		},
+	}
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// In a goroutine, transition the task to approved after a short delay.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		if err := bb.Modify(func(s *models.State) error {
+			for i := range s.Tasks {
+				if s.Tasks[i].ID == "task-1" {
+					reviewer := "code-reviewer-1"
+					s.Tasks[i].Status = models.TaskStatusApproved
+					s.Tasks[i].ApprovedBy = &reviewer
+					s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{
+						Time:  time.Now().UTC(),
+						Event: models.TaskEventApproved,
+						Agent: &reviewer,
+					})
+				}
+			}
+			return nil
+		}); err != nil {
+			// Can't t.Fatal from goroutine; test will timeout if this fails.
+			return
+		}
+	}()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+	result, err := server.handleAwaitVerdict(map[string]any{
+		"task_id":         "task-1",
+		"agent_id":        "coder-1",
+		"timeout_seconds": float64(10),
+	})
+	if err != nil {
+		t.Fatalf("handleAwaitVerdict returned error: %v", err)
+	}
+
+	// Extract text from the MCP result format.
+	content := result.(map[string]any)["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	if !strings.Contains(text, "Verdict:") {
+		t.Errorf("Expected result to contain 'Verdict:', got: %s", text)
+	}
+	if !strings.Contains(text, "Status:") {
+		t.Errorf("Expected result to contain 'Status:', got: %s", text)
+	}
+}
