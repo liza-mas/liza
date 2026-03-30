@@ -318,7 +318,7 @@ func TestAwaitVerdict_Approved(t *testing.T) {
 		tk.ApprovedBy = &reviewer
 		tk.History = append(tk.History, models.TaskHistoryEntry{
 			Time:  time.Now().UTC(),
-			Event: models.TaskEventReviewVerdictApproved,
+			Event: models.TaskEventApproved,
 			Agent: &reviewer,
 		})
 		return nil
@@ -392,7 +392,7 @@ func TestAwaitVerdict_Rejected_SameAttempt(t *testing.T) {
 		reviewer := "code-reviewer-1"
 		tk.History = append(tk.History, models.TaskHistoryEntry{
 			Time:  time.Now().UTC(),
-			Event: models.TaskEventReviewVerdictRejected,
+			Event: models.TaskEventRejected,
 			Agent: &reviewer,
 		})
 		return nil
@@ -483,7 +483,7 @@ func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
 		reviewer := "code-reviewer-1"
 		tk.History = append(tk.History, models.TaskHistoryEntry{
 			Time:  time.Now().UTC(),
-			Event: models.TaskEventReviewVerdictRejected,
+			Event: models.TaskEventRejected,
 			Agent: &reviewer,
 		})
 		return nil
@@ -720,7 +720,7 @@ func TestAwaitVerdict_PartiallyApproved(t *testing.T) {
 		tk.ApprovedBy = &reviewer
 		tk.History = append(tk.History, models.TaskHistoryEntry{
 			Time:  time.Now().UTC(),
-			Event: models.TaskEventReviewVerdictApproved,
+			Event: models.TaskEventApproved,
 			Agent: &reviewer,
 		})
 		return nil
@@ -790,7 +790,7 @@ func TestAwaitVerdict_RaceGuard(t *testing.T) {
 		reviewer := "code-reviewer-1"
 		tk.History = append(tk.History, models.TaskHistoryEntry{
 			Time:  time.Now().UTC(),
-			Event: models.TaskEventReviewVerdictRejected,
+			Event: models.TaskEventRejected,
 			Agent: &reviewer,
 		})
 		return nil

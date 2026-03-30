@@ -150,7 +150,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 						},
 						{
 							Time:  time.Now(),
-							Event: "review_verdict_rejected",
+							Event: "rejected",
 						},
 						{
 							Time:  time.Now(),
@@ -158,7 +158,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 						},
 						{
 							Time:  time.Now(),
-							Event: "review_verdict_approved",
+							Event: "approved",
 						},
 						{
 							Time:  time.Now(),
@@ -179,7 +179,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 						},
 						{
 							Time:  time.Now(),
-							Event: "review_verdict_approved",
+							Event: "approved",
 						},
 					},
 				},
@@ -211,7 +211,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 					Created:           time.Now(),
 					History: []models.TaskHistoryEntry{
 						{Event: "submitted_for_review"},
-						{Event: "review_verdict_approved"},
+						{Event: "approved"},
 					},
 				},
 				{
@@ -222,7 +222,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 					Created:           time.Now(),
 					History: []models.TaskHistoryEntry{
 						{Event: "submitted_for_review"},
-						{Event: "review_verdict_approved"},
+						{Event: "approved"},
 					},
 				},
 				{
@@ -233,7 +233,7 @@ func TestUpdateSprintMetricsCommand(t *testing.T) {
 					Created:           time.Now(),
 					History: []models.TaskHistoryEntry{
 						{Event: "submitted_for_review"},
-						{Event: "review_verdict_approved"},
+						{Event: "approved"},
 					},
 				},
 			},

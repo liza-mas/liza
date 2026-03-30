@@ -414,7 +414,10 @@ func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
 			return false
 		}
 		if t.ReviewingBy != nil {
-			return false // another reviewer is awaiting resubmission
+			if t.ReviewLeaseExpires == nil || t.ReviewLeaseExpires.After(time.Now()) {
+				return false // another reviewer is actively awaiting resubmission
+			}
+			// Lease expired — stale claim, allow reclaiming
 		}
 		submitted, err := pr.SubmittedStatus(t.RolePair)
 		if err != nil {

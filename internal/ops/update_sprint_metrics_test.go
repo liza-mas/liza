@@ -68,7 +68,7 @@ func TestComputeSprintMetrics_ReviewVerdicts(t *testing.T) {
 			Scope:       "Test",
 			History: []models.TaskHistoryEntry{
 				{Time: now, Event: models.TaskEventSubmittedForReview},
-				{Time: now, Event: models.TaskEventReviewVerdictApproved},
+				{Time: now, Event: models.TaskEventApproved},
 			},
 		},
 		{
@@ -82,9 +82,9 @@ func TestComputeSprintMetrics_ReviewVerdicts(t *testing.T) {
 			Scope:       "Test",
 			History: []models.TaskHistoryEntry{
 				{Time: now, Event: models.TaskEventSubmittedForReview},
-				{Time: now, Event: models.TaskEventReviewVerdictRejected},
+				{Time: now, Event: models.TaskEventRejected},
 				{Time: now, Event: models.TaskEventSubmittedForReview},
-				{Time: now, Event: models.TaskEventReviewVerdictRejected},
+				{Time: now, Event: models.TaskEventRejected},
 			},
 		},
 	}

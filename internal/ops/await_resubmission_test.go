@@ -84,7 +84,7 @@ func TestAwaitResubmission_WrongAgent(t *testing.T) {
 	// Add rejection history from reviewer-1.
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -114,7 +114,7 @@ func TestAwaitResubmission_OwnershipAcquired(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -164,7 +164,7 @@ func TestAwaitResubmission_Resubmitted(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -245,7 +245,7 @@ func TestAwaitResubmission_Terminal_Blocked(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -309,7 +309,7 @@ func TestAwaitResubmission_Terminal_Superseded(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -367,7 +367,7 @@ func TestAwaitResubmission_Terminal_Approved(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -427,7 +427,7 @@ func TestAwaitResubmission_TaskDisappears(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -485,7 +485,7 @@ func TestAwaitResubmission_Timeout(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -529,7 +529,7 @@ func TestAwaitResubmission_Aborted(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -591,7 +591,7 @@ func TestAwaitResubmission_EarlyResubmission(t *testing.T) {
 	// Need a rejection history entry from this agent to pass precondition.
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now.Add(-time.Minute),
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	newCommit := "earlycommit789"
@@ -648,7 +648,7 @@ func TestAwaitResubmission_RaceGuard(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}
@@ -729,7 +729,7 @@ func TestAwaitResubmission_ReviewLeaseExpires(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
-		Event: models.TaskEventReviewVerdictRejected,
+		Event: models.TaskEventRejected,
 		Agent: strPtr("reviewer-1"),
 	})
 	state.Tasks = []models.Task{task}

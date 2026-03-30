@@ -408,8 +408,8 @@ func buildRejectionGuidance(reason string, task *models.Task) string {
 func extractReviewerFromHistory(task *models.Task) string {
 	for i := len(task.History) - 1; i >= 0; i-- {
 		entry := task.History[i]
-		if entry.Event == models.TaskEventReviewVerdictApproved ||
-			entry.Event == models.TaskEventReviewVerdictRejected {
+		if entry.Event == models.TaskEventApproved ||
+			entry.Event == models.TaskEventRejected {
 			if entry.Agent != nil {
 				return *entry.Agent
 			}
