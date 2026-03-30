@@ -172,7 +172,6 @@ Add `"mcp__liza__liza_await_verdict"` to the `permissions.allow` array alongside
 |------|--------|
 | `specs/build/1.3.1 - Claim-to-Verdict Task Lifecycle.md` | Add await-verdict to the submission lifecycle |
 | `specs/build/3 - Declarative Role Definitions.md` | Add `await-verdict` to doer role allowed operations |
-| `contracts/MULTI_AGENT_MODE.md` | Update Iteration Protocol — await-verdict as recommended post-submit flow |
 | `docs/USAGE_MULTI_AGENTS.md` | Document submit → await → handle verdict workflow |
 | `docs/CONFIGURATION.md` | Add tool to MCP tools listing |
 
