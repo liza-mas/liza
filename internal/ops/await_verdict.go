@@ -1,14 +1,18 @@
 package ops
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // Verdict constants for AwaitVerdictResult.Verdict.
@@ -37,10 +41,9 @@ type AwaitVerdictResult struct {
 
 // AwaitVerdict blocks until a review verdict arrives for a submitted task.
 // It validates preconditions, acquires ownership (agent status=WAITING,
-// CurrentTask=taskID), then waits for the verdict. The event loop and
-// result mapping are added in subsequent tasks; this implementation
-// returns a placeholder error after ownership acquisition.
-func AwaitVerdict(projectRoot, taskID, agentID string, timeout time.Duration) (*AwaitVerdictResult, error) {
+// CurrentTask=taskID), checks budget, then blocks on an event loop until
+// the task status leaves the submitted/reviewing/partially-approved set.
+func AwaitVerdict(ctx context.Context, projectRoot, taskID, agentID string, timeout time.Duration) (*AwaitVerdictResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -96,8 +99,69 @@ func AwaitVerdict(projectRoot, taskID, agentID string, timeout time.Duration) (*
 		return nil, ErrBudgetExhausted
 	}
 
-	// Placeholder: event loop added in subsequent task.
-	return nil, fmt.Errorf("await-verdict event loop not yet implemented")
+	// --- Event loop: block until verdict arrives ---
+	rolePair := task.RolePair
+
+	watcher, watchErr := bb.WatchForChanges()
+	if watchErr != nil {
+		return awaitVerdictPolling(ctx, bb, taskID, agentID, timeout, resolver, rolePair, projectRoot)
+	}
+	defer watcher.Close()
+
+	deadline := time.Now().Add(timeout)
+	deadlineTimer := time.NewTimer(time.Until(deadline))
+	defer deadlineTimer.Stop()
+
+	abortTicker := time.NewTicker(1 * time.Second)
+	defer abortTicker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			releaseOwnership(bb, agentID)
+			return nil, ctx.Err()
+
+		case <-abortTicker.C:
+			abortState, abortErr := bb.ReadCached()
+			if abortErr != nil {
+				continue
+			}
+			if abortState.Config.Mode == models.SystemModeStopped {
+				releaseOwnership(bb, agentID)
+				return &AwaitVerdictResult{Verdict: VerdictAborted, TaskStatus: task.Status}, nil
+			}
+
+		case <-watcher.Events():
+			evState, evErr := bb.ReadCached()
+			if evErr != nil {
+				continue
+			}
+			if evState.Config.Mode == models.SystemModeStopped {
+				releaseOwnership(bb, agentID)
+				return &AwaitVerdictResult{Verdict: VerdictAborted, TaskStatus: task.Status}, nil
+			}
+			currentTask := evState.FindTask(taskID)
+			if currentTask == nil {
+				releaseOwnership(bb, agentID)
+				return &AwaitVerdictResult{
+					Verdict: VerdictTerminal,
+					Reason:  "task disappeared from state",
+				}, nil
+			}
+			if vc := checkVerdictStatus(currentTask, resolver, rolePair); vc != nil {
+				return handleVerdictResult(bb, currentTask, agentID, projectRoot, resolver, rolePair)
+			}
+
+		case watcherErr := <-watcher.Errors():
+			log.Printf("Watcher error, falling back to polling: %v", watcherErr)
+			watcher.Close()
+			return awaitVerdictPolling(ctx, bb, taskID, agentID, timeout, resolver, rolePair, projectRoot)
+
+		case <-deadlineTimer.C:
+			releaseOwnership(bb, agentID)
+			return &AwaitVerdictResult{Verdict: VerdictTimeout, TaskStatus: task.Status}, nil
+		}
+	}
 }
 
 // checkAwaitableStatus verifies the task is in a status where awaiting a
@@ -177,4 +241,180 @@ func releaseOwnership(bb *db.Blackboard, agentID string) error {
 		}
 		return nil
 	})
+}
+
+// verdictCheck holds the result of checking whether a verdict has arrived.
+type verdictCheck struct {
+	status models.TaskStatus
+}
+
+// checkVerdictStatus determines if the task has left the awaitable set
+// (submitted/reviewing/partially-approved). Returns nil if still waiting;
+// returns the observed status if a verdict has arrived.
+func checkVerdictStatus(task *models.Task, resolver *pipeline.Resolver, rolePair string) *verdictCheck {
+	submitted, _ := resolver.SubmittedStatus(rolePair)
+	reviewing, _ := resolver.ReviewingStatus(rolePair)
+
+	if task.Status == submitted || task.Status == reviewing {
+		return nil
+	}
+
+	// PartiallyApproved keeps waiting — quorum not yet met.
+	partiallyApproved, paErr := resolver.PartiallyApprovedStatus(rolePair)
+	if paErr == nil && task.Status == partiallyApproved {
+		return nil
+	}
+
+	return &verdictCheck{status: task.Status}
+}
+
+// handleVerdictResult maps the final task status to an AwaitVerdictResult.
+// For rejections within budget, it attempts auto-reclaim via ClaimTask.
+func handleVerdictResult(bb *db.Blackboard, task *models.Task, agentID, projectRoot string, resolver *pipeline.Resolver, rolePair string) (*AwaitVerdictResult, error) {
+	approved, _ := resolver.ApprovedStatus(rolePair)
+	rejected, _ := resolver.RejectedStatus(rolePair)
+
+	switch task.Status {
+	case approved:
+		releaseOwnership(bb, agentID)
+		return &AwaitVerdictResult{
+			Verdict:       VerdictApproved,
+			TaskStatus:    task.Status,
+			ReviewerAgent: extractReviewerFromHistory(task),
+		}, nil
+
+	case rejected:
+		reviewer := extractReviewerFromHistory(task)
+		reason := ""
+		if task.RejectionReason != nil {
+			reason = *task.RejectionReason
+		}
+
+		// Attempt auto-reclaim via ClaimTask. ClaimTask internally checks
+		// limits via classifyLimitEscalation — AwaitVerdict doesn't need
+		// its own same-vs-new-attempt detection.
+		_, claimErr := ClaimTask(projectRoot, task.ID, agentID)
+		if claimErr != nil {
+			var pe *PreconditionError
+			if stderrors.As(claimErr, &pe) {
+				if strings.Contains(pe.Reason, "transitioned to attempt") {
+					releaseOwnership(bb, agentID)
+					return &AwaitVerdictResult{
+						Verdict:       VerdictNewAttempt,
+						Reason:        reason,
+						ReviewerAgent: reviewer,
+						TaskStatus:    task.Status,
+					}, nil
+				}
+				// Blocked or other limit exhaustion.
+				releaseOwnership(bb, agentID)
+				return &AwaitVerdictResult{
+					Verdict:       VerdictTerminal,
+					Reason:        reason,
+					ReviewerAgent: reviewer,
+					TaskStatus:    task.Status,
+				}, nil
+			}
+			// Infrastructure error during reclaim.
+			releaseOwnership(bb, agentID)
+			return nil, fmt.Errorf("auto-reclaim failed: %w", claimErr)
+		}
+
+		// Reclaim succeeded — re-read task to get updated iteration.
+		_, updatedTask, readErr := readTaskState(bb, task.ID)
+		iteration := task.Iteration
+		if readErr == nil && updatedTask != nil {
+			iteration = updatedTask.Iteration
+		}
+
+		return &AwaitVerdictResult{
+			Verdict:       VerdictRejected,
+			Reason:        reason,
+			ReviewerAgent: reviewer,
+			TaskStatus:    task.Status,
+			Iteration:     iteration,
+			Guidance:      buildRejectionGuidance(reason, task),
+		}, nil
+
+	default:
+		// BLOCKED, SUPERSEDED, INTEGRATION_FAILED, etc.
+		releaseOwnership(bb, agentID)
+		return &AwaitVerdictResult{
+			Verdict:    VerdictTerminal,
+			TaskStatus: task.Status,
+			Reason:     fmt.Sprintf("task entered terminal status: %s", task.Status),
+		}, nil
+	}
+}
+
+// awaitVerdictPolling is the polling fallback for when fsnotify is unavailable.
+// It checks state every 5 seconds until a verdict arrives or the deadline expires.
+func awaitVerdictPolling(ctx context.Context, bb *db.Blackboard, taskID, agentID string, timeout time.Duration, resolver *pipeline.Resolver, rolePair, projectRoot string) (*AwaitVerdictResult, error) {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			releaseOwnership(bb, agentID)
+			return nil, ctx.Err()
+
+		case <-ticker.C:
+			state, err := bb.ReadCached()
+			if err != nil {
+				continue
+			}
+			if state.Config.Mode == models.SystemModeStopped {
+				releaseOwnership(bb, agentID)
+				return &AwaitVerdictResult{Verdict: VerdictAborted}, nil
+			}
+			currentTask := state.FindTask(taskID)
+			if currentTask == nil {
+				releaseOwnership(bb, agentID)
+				return &AwaitVerdictResult{
+					Verdict: VerdictTerminal,
+					Reason:  "task disappeared from state",
+				}, nil
+			}
+			if vc := checkVerdictStatus(currentTask, resolver, rolePair); vc != nil {
+				return handleVerdictResult(bb, currentTask, agentID, projectRoot, resolver, rolePair)
+			}
+			if time.Now().After(deadline) {
+				releaseOwnership(bb, agentID)
+				return &AwaitVerdictResult{Verdict: VerdictTimeout, TaskStatus: currentTask.Status}, nil
+			}
+		}
+	}
+}
+
+// buildRejectionGuidance constructs inline guidance for the agent on rejection,
+// equivalent to the prior_rejection.tmpl content.
+func buildRejectionGuidance(reason string, task *models.Task) string {
+	var b strings.Builder
+	b.WriteString("## Rejection Feedback\n\n")
+	b.WriteString("You MUST ADDRESS the following rejection feedback before resubmitting:\n\n")
+	b.WriteString(reason)
+	b.WriteString("\n\n")
+	if task.Scope != "" {
+		b.WriteString("If the fix requires changes outside your declared scope, use scope_extensions in your checkpoint.\n\n")
+	}
+	fmt.Fprintf(&b, "Current iteration: %d\n", task.Iteration)
+	return b.String()
+}
+
+// extractReviewerFromHistory scans task history in reverse for the most recent
+// review verdict and returns the reviewer agent ID.
+func extractReviewerFromHistory(task *models.Task) string {
+	for i := len(task.History) - 1; i >= 0; i-- {
+		entry := task.History[i]
+		if entry.Event == models.TaskEventReviewVerdictApproved ||
+			entry.Event == models.TaskEventReviewVerdictRejected {
+			if entry.Agent != nil {
+				return *entry.Agent
+			}
+			return ""
+		}
+	}
+	return ""
 }
