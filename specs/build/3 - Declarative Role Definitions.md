@@ -118,6 +118,7 @@ pipeline:
         - mark-blocked
         - handoff
         - set-task-output
+        - await-verdict
       skills:                  # skills with affinity to this role
         - debugging
         - testing
@@ -181,6 +182,13 @@ pipeline:
       type: doer
       display-name: "Epic Planner"
       # ... (inherits doer defaults for timeouts, uses epic-planner-specific context-sections)
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+        - await-verdict
 
     epic-plan-reviewer:
       type: reviewer
@@ -191,6 +199,13 @@ pipeline:
       type: doer
       display-name: "US Writer"
       # ...
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+        - await-verdict
 
     us-reviewer:
       type: reviewer
@@ -201,6 +216,13 @@ pipeline:
       type: doer
       display-name: "Code Planner"
       # ...
+      allowed-operations:
+        - write-checkpoint
+        - submit-for-review
+        - mark-blocked
+        - handoff
+        - set-task-output
+        - await-verdict
 
     code-plan-reviewer:
       type: reviewer
