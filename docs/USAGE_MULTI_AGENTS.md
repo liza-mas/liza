@@ -408,7 +408,8 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
       "mcp__liza__liza_sprint_checkpoint",
       "mcp__liza__liza_write_checkpoint",
       "mcp__liza__liza_delete_agent",
-      "mcp__liza__liza_await_verdict"
+      "mcp__liza__liza_await_verdict",
+      "mcp__liza__liza_await_resubmission"
     ]
   }
 }
@@ -482,6 +483,18 @@ Doer agents (coders, planners, writers) use a blocking workflow for review cycle
    - **APPROVED** / **NEW_ATTEMPT** / **TIMEOUT** / **ABORTED**: Exit normally
 
 This reduces per-rejection overhead from ~47s (cold restart) to near-zero. The call is budget-aware — it refuses if the iteration limit would be exceeded on rejection.
+
+### Review, Reject, Await Resubmission
+
+Reviewer agents use a blocking workflow after non-terminal rejections:
+
+1. `liza_submit_verdict` — issue REJECTED verdict with feedback
+2. `liza_await_resubmission` — block until doer resubmits
+3. Handle result:
+   - **RESUBMITTED**: Review the new changes (session stays alive — no cold restart)
+   - **TERMINAL** / **TIMEOUT** / **ABORTED**: Exit normally
+
+This mirrors the doer-side `liza_await_verdict` flow, reducing per-rejection overhead from ~47s (cold restart) to near-zero for reviewers. Do not call after terminal rejections (`EscalatedToBlocked` or `NewAttemptTriggered`).
 
 ### Differences from Pairing Mode
 
