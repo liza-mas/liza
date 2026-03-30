@@ -413,6 +413,9 @@ func (t *Task) isClaimablePipeline(role string, pr PipelineResolver) bool {
 		if t.ReviewCommit == nil {
 			return false
 		}
+		if t.ReviewingBy != nil {
+			return false // another reviewer is awaiting resubmission
+		}
 		submitted, err := pr.SubmittedStatus(t.RolePair)
 		if err != nil {
 			return false
