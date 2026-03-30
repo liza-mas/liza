@@ -2775,3 +2775,114 @@ func TestHandleAwaitVerdict_Success(t *testing.T) {
 		t.Errorf("Expected result to contain 'Status:', got: %s", text)
 	}
 }
+
+// TestHandleAwaitResubmission_RoleCheck verifies non-reviewer roles are rejected by the role checker.
+func TestHandleAwaitResubmission_RoleCheck(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+
+	handler := server.handlers["liza_await_resubmission"]
+	if handler == nil {
+		t.Fatal("no handler registered for liza_await_resubmission")
+	}
+
+	_, err := handler(map[string]any{
+		"task_id":  "task-1",
+		"agent_id": "coder-1",
+	})
+	if err == nil {
+		t.Fatal("Expected role enforcement error for coder, got nil")
+	}
+	if !strings.Contains(err.Error(), "not allowed for role coder") {
+		t.Errorf("Expected role enforcement error, got: %v", err)
+	}
+}
+
+// TestHandleAwaitResubmission_Success verifies a successful call returns formatted output
+// containing "Verdict: RESUBMITTED" and "Review the changes at commit".
+func TestHandleAwaitResubmission_Success(t *testing.T) {
+	projectRoot, cleanup := setupTestWorkspaceWithGit(t)
+	defer cleanup()
+
+	// Overwrite state: task-1 in CODE_REJECTED with rejection history by code-reviewer-1.
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	reviewerAgent := "code-reviewer-1"
+	coderAgent := "coder-1"
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.History = []models.TaskHistoryEntry{
+		{
+			Time:  now.Add(-2 * time.Minute),
+			Event: models.TaskEventSubmittedForReview,
+			Agent: &coderAgent,
+		},
+		{
+			Time:  now.Add(-1 * time.Minute),
+			Event: models.TaskEventRejected,
+			Agent: &reviewerAgent,
+		},
+	}
+	state.Tasks = []models.Task{task}
+	state.Agents = map[string]models.Agent{
+		"coder-1": {
+			Role:      "coder",
+			Status:    models.AgentStatusIdle,
+			Heartbeat: now,
+		},
+		"code-reviewer-1": {
+			Role:      "code-reviewer",
+			Status:    models.AgentStatusIdle,
+			Heartbeat: now,
+		},
+	}
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// In a goroutine, simulate the doer resubmitting after a short delay.
+	go func() {
+		testhelpers.WaitForAsyncSetup()
+		if err := bb.Modify(func(s *models.State) error {
+			for i := range s.Tasks {
+				if s.Tasks[i].ID == "task-1" {
+					s.Tasks[i].Status = models.TaskStatusReadyForReview
+					reviewCommit := "newcommit456"
+					s.Tasks[i].ReviewCommit = &reviewCommit
+					s.Tasks[i].ReviewCyclesCurrent = 2
+					s.Tasks[i].History = append(s.Tasks[i].History, models.TaskHistoryEntry{
+						Time:  time.Now().UTC(),
+						Event: models.TaskEventSubmittedForReview,
+						Agent: &coderAgent,
+					})
+				}
+			}
+			return nil
+		}); err != nil {
+			// Can't t.Fatal from goroutine; test will timeout if this fails.
+			return
+		}
+	}()
+
+	server := NewServer(projectRoot, filepath.Join(projectRoot, ".liza", "log.yaml"))
+	result, err := server.handleAwaitResubmission(map[string]any{
+		"task_id":         "task-1",
+		"agent_id":        "code-reviewer-1",
+		"timeout_seconds": float64(10),
+	})
+	if err != nil {
+		t.Fatalf("handleAwaitResubmission returned error: %v", err)
+	}
+
+	// Extract text from the MCP result format.
+	content := result.(map[string]any)["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	if !strings.Contains(text, "Verdict: RESUBMITTED") {
+		t.Errorf("Expected result to contain 'Verdict: RESUBMITTED', got: %s", text)
+	}
+	if !strings.Contains(text, "Review the changes at commit") {
+		t.Errorf("Expected result to contain 'Review the changes at commit', got: %s", text)
+	}
+}
