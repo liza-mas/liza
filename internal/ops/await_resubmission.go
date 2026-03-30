@@ -181,7 +181,7 @@ func checkResubmissionPrecondition(task *models.Task, resolver *pipeline.Resolve
 func checkLastRejectingReviewer(task *models.Task, agentID string) error {
 	for i := len(task.History) - 1; i >= 0; i-- {
 		entry := task.History[i]
-		if entry.Event == models.TaskEventReviewVerdictRejected {
+		if entry.Event == models.TaskEventRejected {
 			if entry.Agent != nil && *entry.Agent == agentID {
 				return nil
 			}
