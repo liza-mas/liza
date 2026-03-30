@@ -117,6 +117,19 @@ If 2 different Code Reviewers fail to issue a verdict on the same task (exit wit
 - Task is marked BLOCKED with `blocked_reason: "review_exhaustion"`
 - Orchestrator evaluates: spec unclear? done_when untestable?
 
+**Await Verdict (recommended post-submit flow):**
+After `liza_submit_for_review`, call `liza_await_verdict` to block until the review verdict arrives. This eliminates cold-restart overhead (~47s) between review cycles and preserves accumulated context.
+
+The call is budget-aware: it refuses with `ErrBudgetExhausted` if the iteration limit would be exceeded on rejection.
+
+| Verdict | Agent action |
+|---------|-------------|
+| **REJECTED** | Task auto-reclaimed — read reason, fix, resubmit (same session) |
+| **APPROVED** | Exit normally — task moves to merge |
+| **NEW_ATTEMPT** | Exit normally — fresh doer spawns for new attempt |
+| **TERMINAL** | Exit normally — task blocked/superseded |
+| **TIMEOUT** / **ABORTED** | Exit normally |
+
 ---
 
 ## Scope Discipline (Liza-Specific)

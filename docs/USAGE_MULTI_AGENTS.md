@@ -407,7 +407,8 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
       "mcp__liza__liza_update_sprint_metrics",
       "mcp__liza__liza_sprint_checkpoint",
       "mcp__liza__liza_write_checkpoint",
-      "mcp__liza__liza_delete_agent"
+      "mcp__liza__liza_delete_agent",
+      "mcp__liza__liza_await_verdict"
     ]
   }
 }
@@ -469,6 +470,18 @@ jq -c 'select(.item) | .item | {type, text, command, tool, usage}
 jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' \
   .liza/agent-outputs/orchestrator-1-*.txt
 ```
+
+### Submit, Await Verdict, Handle Result
+
+Doer agents (coders, planners, writers) use a blocking workflow for review cycles:
+
+1. `liza_submit_for_review` — submit completed work
+2. `liza_await_verdict` — block until reviewer issues verdict
+3. Handle verdict:
+   - **REJECTED**: Fix issues, resubmit (session stays alive — no cold restart)
+   - **APPROVED** / **NEW_ATTEMPT** / **TIMEOUT** / **ABORTED**: Exit normally
+
+This reduces per-rejection overhead from ~47s (cold restart) to near-zero. The call is budget-aware — it refuses if the iteration limit would be exceeded on rejection.
 
 ### Differences from Pairing Mode
 

@@ -60,6 +60,20 @@ For global settings setup and provider-specific config (Claude, Codex, Gemini), 
 - Verify project initialized: `liza validate`
 - Check: `ls -la .liza/state.yaml`
 
+### MCP Tools Reference
+
+#### `liza_await_verdict`
+
+Block until a review verdict arrives for a submitted task. Budget-aware: refuses if the iteration limit would be exceeded on rejection. Call after `liza_submit_for_review`.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | string | Yes | — | Task ID to await verdict for |
+| `agent_id` | string | Yes | — | Agent ID (for authorization) |
+| `timeout_seconds` | integer | No | 1500 | Max wait time in seconds (must be < `MCP_TIMEOUT`, which defaults to 1800s / 30 min) |
+
+Returns a verdict: `APPROVED`, `REJECTED` (with reason and auto-reclaim), `NEW_ATTEMPT`, `TERMINAL`, `TIMEOUT`, or `ABORTED`.
+
 ### CLI vs MCP
 
 Both interfaces operate on the same `state.yaml` with proper locking.
