@@ -5,6 +5,11 @@ After implementation and tests pass, you MUST submit for review:
 1. Get commit SHA: git -C {{.Worktree}} rev-parse HEAD
 2. Execute liza_submit_for_review: {"task_id": "{{.TaskID}}", "commit_sha": "<SHA from step 1>", "agent_id": "{{.AgentID}}"}
 3. Verify confirmation: status changed to CODE_READY_FOR_REVIEW
+4. Call liza_await_verdict to wait for the review verdict:
+   {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
+   - If REJECTED: task is already reclaimed — read the rejection reason, fix, and resubmit
+   - If APPROVED, NEW_ATTEMPT, TIMEOUT, or ABORTED: exit normally
+   - If budget error: exit normally (at iteration limit)
 
 ❌ FAILURE MODE: Completing work, saying "ready for review", then exiting WITHOUT calling the tool.
 The tool call IS the deliverable. Work without tool execution = nothing happened.
