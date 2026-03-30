@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -121,6 +124,43 @@ func (s *Server) handleSubmitForReview(params map[string]any) (any, error) {
 	}
 
 	return textResult(fmt.Sprintf("Task %s submitted for review (commit: %s)", result.TaskID, result.ReviewCommit))
+}
+
+// handleAwaitVerdict implements the liza_await_verdict tool.
+// Blocks until a review verdict arrives for a submitted task.
+func (s *Server) handleAwaitVerdict(params map[string]any) (any, error) {
+	taskID, err := requireString(params, "task_id")
+	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+
+	// Optional timeout with default 1500s (25 min, within Claude Code's 30 min MCP_TIMEOUT)
+	timeoutSeconds := 1500
+	if v, ok := params["timeout_seconds"].(float64); ok && v > 0 {
+		timeoutSeconds = int(v)
+	}
+	timeout := time.Duration(timeoutSeconds) * time.Second
+
+	result, err := ops.AwaitVerdict(context.Background(), s.projectRoot, taskID, agentID, timeout)
+	if err != nil {
+		if errors.Is(err, ops.ErrBudgetExhausted) {
+			return textResult("Budget exhausted: iteration or review-cycle limit reached. Exit normally.")
+		}
+		return nil, fmt.Errorf("await verdict failed: %w", err)
+	}
+
+	msg := fmt.Sprintf("Verdict: %s\nStatus: %s\nReason: %s\nReviewer: %s",
+		result.Verdict, result.TaskStatus, result.Reason, result.ReviewerAgent)
+	if result.Guidance != "" {
+		msg += fmt.Sprintf("\n\n%s", result.Guidance)
+	}
+
+	return textResult(msg)
 }
 
 // handleHandoff implements the liza_handoff tool

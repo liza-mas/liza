@@ -217,6 +217,34 @@ func (s *Server) registerMutationTools() {
 			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_submit_for_review"),
 		},
 
+		// liza_await_verdict tool
+		{
+			tool: protocol.Tool{
+				Name:        "liza_await_verdict",
+				Description: "Block until review verdict arrives for a submitted task. Budget-aware: refuses if iteration limit would be exceeded on rejection. Call after liza_submit_for_review.",
+				InputSchema: protocol.InputSchema{
+					Type: "object",
+					Properties: map[string]protocol.Property{
+						"task_id": {
+							Type:        "string",
+							Description: "Task ID to await verdict for",
+						},
+						"agent_id": {
+							Type:        "string",
+							Description: "Agent ID (for authorization)",
+						},
+						"timeout_seconds": {
+							Type:        "integer",
+							Description: "Max wait time in seconds (default: 1500, must be < MCP_TIMEOUT)",
+						},
+					},
+					Required: []string{"task_id", "agent_id"},
+				},
+			},
+			handler:     s.handleAwaitVerdict,
+			roleChecker: operationChecker(s.resolver, s.pipelineLoadErr, "liza_await_verdict"),
+		},
+
 		// liza_handoff tool
 		{
 			tool: protocol.Tool{
