@@ -147,6 +147,7 @@ pipeline:
         - verdict-submission
       allowed-operations:
         - submit-verdict
+        - await-resubmission
       skills:
         - code-review
         - systemic-thinking
