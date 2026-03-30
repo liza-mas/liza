@@ -2733,7 +2733,7 @@ func TestHandleAwaitVerdict_Success(t *testing.T) {
 
 	// In a goroutine, transition the task to approved after a short delay.
 	go func() {
-		time.Sleep(100 * time.Millisecond)
+		testhelpers.WaitForAsyncSetup()
 		if err := bb.Modify(func(s *models.State) error {
 			for i := range s.Tasks {
 				if s.Tasks[i].ID == "task-1" {

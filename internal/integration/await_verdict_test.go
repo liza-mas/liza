@@ -100,7 +100,7 @@ func TestAwaitVerdict_RejectionFlow(t *testing.T) {
 	}()
 
 	// Let AwaitVerdict start watching before reviewer acts
-	time.Sleep(300 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 
 	// --- Phase 3: Reviewer rejects ---
 	testhelpers.TransitionToReviewing(t, bb, "task-1", reviewerID)

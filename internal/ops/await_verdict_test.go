@@ -310,7 +310,7 @@ func TestAwaitVerdict_Approved(t *testing.T) {
 		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
 		tk.Status = models.TaskStatusApproved
@@ -383,7 +383,7 @@ func TestAwaitVerdict_Rejected_SameAttempt(t *testing.T) {
 		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
 		tk.Status = models.TaskStatusRejected
@@ -472,7 +472,7 @@ func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
 		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 	// Simulate reviewer rejection: increment ReviewCyclesCurrent (as submit_verdict does).
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
@@ -537,7 +537,7 @@ func TestAwaitVerdict_Terminal(t *testing.T) {
 		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
 		tk.Status = models.TaskStatusBlocked
@@ -639,7 +639,7 @@ func TestAwaitVerdict_Aborted(t *testing.T) {
 		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 	if err := bb.Modify(func(s *models.State) error {
 		s.Config.Mode = models.SystemModeStopped
 		return nil
@@ -694,7 +694,7 @@ func TestAwaitVerdict_PartiallyApproved(t *testing.T) {
 	}()
 
 	// Phase 1: transition to partially approved (quorum not met).
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
 		tk.Status = models.TaskStatusPartiallyApproved
@@ -704,7 +704,7 @@ func TestAwaitVerdict_PartiallyApproved(t *testing.T) {
 	}
 
 	// Phase 2: verify AwaitVerdict is still waiting.
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 	select {
 	case <-done:
 		t.Fatal("AwaitVerdict should not have returned at partially approved")
@@ -773,7 +773,7 @@ func TestAwaitVerdict_RaceGuard(t *testing.T) {
 		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	testhelpers.WaitForAsyncSetup()
 
 	// While coder-1 awaits, coder-2 cannot claim the task (still READY_FOR_REVIEW).
 	_, claimErr := ClaimTask(tmpDir, "task-1", "coder-2")
