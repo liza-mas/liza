@@ -163,6 +163,45 @@ func (s *Server) handleAwaitVerdict(params map[string]any) (any, error) {
 	return textResult(msg)
 }
 
+// handleAwaitResubmission implements the liza_await_resubmission tool.
+// Blocks until a doer resubmits after a rejection, preserving review ownership.
+//
+//lint:ignore U1000 Registered by registerMutationTools in server_registration.go (sibling task)
+func (s *Server) handleAwaitResubmission(params map[string]any) (any, error) {
+	taskID, err := requireString(params, "task_id")
+	if err != nil {
+		return nil, err
+	}
+
+	agentID, err := requireString(params, "agent_id")
+	if err != nil {
+		return nil, err
+	}
+
+	// Optional timeout with default 1500s (25 min, within Claude Code's 30 min MCP_TIMEOUT)
+	timeoutSeconds := 1500
+	if v, ok := params["timeout_seconds"].(float64); ok && v > 0 {
+		timeoutSeconds = int(v)
+	}
+	timeout := time.Duration(timeoutSeconds) * time.Second
+
+	result, err := ops.AwaitResubmission(context.Background(), s.projectRoot, taskID, agentID, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("await resubmission failed: %w", err)
+	}
+
+	msg := fmt.Sprintf("Verdict: %s\nStatus: %s", result.Verdict, result.TaskStatus)
+	if result.Verdict == ops.ResubmissionResubmitted {
+		msg += fmt.Sprintf("\nNew submission received. Review the changes at commit %s. Review cycle %d.",
+			result.ReviewCommit, result.ReviewCycle)
+	}
+	if result.Reason != "" {
+		msg += fmt.Sprintf("\nReason: %s", result.Reason)
+	}
+
+	return textResult(msg)
+}
+
 // handleHandoff implements the liza_handoff tool
 // Maps to: liza handoff
 func (s *Server) handleHandoff(params map[string]any) (any, error) {
