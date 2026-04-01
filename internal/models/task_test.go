@@ -211,6 +211,20 @@ func TestIsClaimable(t *testing.T) {
 			t.Error("met dependency should allow claim")
 		}
 	})
+
+	t.Run("superseded dependency satisfies claim", func(t *testing.T) {
+		allTasks := []Task{
+			{ID: "dep-1", Status: TaskStatusSuperseded},
+		}
+		task := &Task{
+			RolePair:  "coding-pair",
+			Status:    "DRAFT_CODE",
+			DependsOn: []string{"dep-1"},
+		}
+		if !task.IsClaimable("coder", allTasks, pr) {
+			t.Error("superseded dependency should allow claim")
+		}
+	})
 }
 
 func TestIsClaimable_SentinelAssignedToReturnsFalse(t *testing.T) {

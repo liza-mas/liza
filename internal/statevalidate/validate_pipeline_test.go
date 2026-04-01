@@ -342,3 +342,45 @@ func TestValidateDependencies_ExecutingUnmetDeps(t *testing.T) {
 		t.Errorf("Error = %q, want to contain 'unmet dependencies'", err.Error())
 	}
 }
+
+func TestValidateDependencies_SupersededDepSatisfied(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+	state := testhelpers.CreateValidState()
+	now := time.Now().UTC()
+	assignee := "coder-1"
+	worktree := ".worktrees/task-exec"
+	baseCommit := "abc123"
+	leaseExpires := now.Add(30 * time.Minute)
+
+	// dep-task is SUPERSEDED — should satisfy dependency
+	state.Tasks = []models.Task{
+		{
+			ID:          "dep-task",
+			Description: "Superseded dependency task",
+			Status:      models.TaskStatusSuperseded,
+			Priority:    1,
+			Created:     now,
+			RolePair:    "coding-pair",
+		},
+		{
+			ID:           "task-exec",
+			Description:  "Executing task depending on superseded task",
+			Status:       models.TaskStatus("IMPLEMENTING_CODE"),
+			Priority:     1,
+			Created:      now,
+			RolePair:     "coding-pair",
+			AssignedTo:   &assignee,
+			Worktree:     &worktree,
+			BaseCommit:   &baseCommit,
+			LeaseExpires: &leaseExpires,
+			DependsOn:    []string{"dep-task"},
+		},
+	}
+	state.Sprint.Scope.Planned = []string{"dep-task", "task-exec"}
+
+	err := validateDependencies(state, "", true, resolver, cfg)
+	if err != nil {
+		t.Fatalf("SUPERSEDED dependency should satisfy requirement, got: %v", err)
+	}
+}

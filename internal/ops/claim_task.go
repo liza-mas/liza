@@ -327,7 +327,7 @@ func unmetDependencies(task *models.Task, state *models.State) []string {
 	var unmet []string
 	for _, depID := range task.DependsOn {
 		depTask := state.FindTask(depID)
-		if depTask == nil || depTask.Status != models.TaskStatusMerged {
+		if depTask == nil || (depTask.Status != models.TaskStatusMerged && depTask.Status != models.TaskStatusSuperseded) {
 			unmet = append(unmet, depID)
 		}
 	}

@@ -41,17 +41,17 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 	blockedByDeps := 0
 	inProgress := 0
 
-	mergedIDs := make(map[string]bool)
+	satisfiedIDs := make(map[string]bool)
 	for _, task := range state.Tasks {
-		if task.Status == TaskStatusMerged {
-			mergedIDs[task.ID] = true
+		if task.Status == TaskStatusMerged || task.Status == TaskStatusSuperseded {
+			satisfiedIDs[task.ID] = true
 		}
 	}
 
 	for _, task := range state.Tasks {
 		// Pipeline path: use resolver to classify statuses dynamically.
 		if task.RolePair != "" && pr != nil {
-			if isBlockedByDepsPipeline(&task, pr, mergedIDs) {
+			if isBlockedByDepsPipeline(&task, pr, satisfiedIDs) {
 				blockedByDeps++
 			}
 			if isInProgressPipeline(&task, pr) {
@@ -66,7 +66,7 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 			task.Status == TaskStatusIntegrationFailed {
 			hasUnsatisfiedDeps := false
 			for _, depID := range task.DependsOn {
-				if !mergedIDs[depID] {
+				if !satisfiedIDs[depID] {
 					hasUnsatisfiedDeps = true
 					break
 				}
@@ -97,7 +97,7 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 
 // isBlockedByDepsPipeline checks if a pipeline task is in an initial/rejected status
 // with unsatisfied dependencies.
-func isBlockedByDepsPipeline(task *Task, pr PipelineResolver, mergedIDs map[string]bool) bool {
+func isBlockedByDepsPipeline(task *Task, pr PipelineResolver, satisfiedIDs map[string]bool) bool {
 	initial, err := pr.InitialStatus(task.RolePair)
 	if err != nil {
 		return false
@@ -110,7 +110,7 @@ func isBlockedByDepsPipeline(task *Task, pr PipelineResolver, mergedIDs map[stri
 		return false
 	}
 	for _, depID := range task.DependsOn {
-		if !mergedIDs[depID] {
+		if !satisfiedIDs[depID] {
 			return true
 		}
 	}

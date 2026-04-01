@@ -465,13 +465,15 @@ func IsExecutingStatus(task *Task, pr PipelineResolver) bool {
 	return err == nil && task.Status == executing
 }
 
-// checkDependencies returns true if all dependencies of the task are satisfied (MERGED).
+// checkDependencies returns true if all dependencies of the task are satisfied
+// (MERGED or SUPERSEDED). ABANDONED is terminal but not satisfying — the work
+// was dropped, not completed or replaced.
 func checkDependencies(t *Task, allTasks []Task) bool {
 	if allTasks != nil && len(t.DependsOn) > 0 {
 		for _, depID := range t.DependsOn {
 			depSatisfied := false
 			for _, task := range allTasks {
-				if task.ID == depID && task.Status == TaskStatusMerged {
+				if task.ID == depID && (task.Status == TaskStatusMerged || task.Status == TaskStatusSuperseded) {
 					depSatisfied = true
 					break
 				}

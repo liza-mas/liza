@@ -10,10 +10,10 @@ import (
 
 // validateDependencies checks referential integrity and ordering constraints
 // for task dependencies: every depends_on entry must reference an existing task,
-// executing tasks must have all dependencies in MERGED status, and the
-// dependency graph must be acyclic. Prevents agents from starting work on tasks
-// whose prerequisites are incomplete and detects dependency cycles that would
-// deadlock the scheduler.
+// executing tasks must have all dependencies in MERGED or SUPERSEDED status, and
+// the dependency graph must be acyclic. Prevents agents from starting work on
+// tasks whose prerequisites are incomplete and detects dependency cycles that
+// would deadlock the scheduler.
 func validateDependencies(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) error {
 	taskIDs := buildTaskIDSet(state.Tasks)
 	sc := newStatusClassifier(resolver, cfg)
@@ -30,17 +30,17 @@ func validateDependencies(state *models.State, projectRoot string, skipSpecFileC
 			}
 		}
 
-		// Executing tasks must have all dependencies MERGED
+		// Executing tasks must have all dependencies satisfied (MERGED or SUPERSEDED)
 		if sc.IsExecuting(task.Status) {
 			var unmet []string
 			for _, depID := range task.DependsOn {
 				depTask := state.FindTask(depID)
-				if depTask != nil && depTask.Status != models.TaskStatusMerged {
+				if depTask != nil && depTask.Status != models.TaskStatusMerged && depTask.Status != models.TaskStatusSuperseded {
 					unmet = append(unmet, depID)
 				}
 			}
 			if len(unmet) > 0 {
-				return fmt.Errorf("executing task %s has unmet dependencies: %s (must be MERGED)", task.ID, strings.Join(unmet, ", "))
+				return fmt.Errorf("executing task %s has unmet dependencies: %s (must be MERGED or SUPERSEDED)", task.ID, strings.Join(unmet, ", "))
 			}
 		}
 	}
