@@ -3,6 +3,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -26,10 +27,24 @@ func New(projectRoot string) *Git {
 	}
 }
 
+// gitEnv returns the current environment with LC_ALL=C forced, so git output
+// is always in English regardless of the system locale.
+func gitEnv() []string {
+	env := os.Environ()
+	for i, e := range env {
+		if strings.HasPrefix(e, "LC_ALL=") {
+			env[i] = "LC_ALL=C"
+			return env
+		}
+	}
+	return append(env, "LC_ALL=C")
+}
+
 // exec runs a git command in the project root and returns output
 func (g *Git) exec(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = g.projectRoot
+	cmd.Env = gitEnv()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %v failed: %w\nOutput: %s", args, err, output)
@@ -41,6 +56,7 @@ func (g *Git) exec(args ...string) (string, error) {
 func (g *Git) execInDir(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Env = gitEnv()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %v failed: %w\nOutput: %s", args, err, output)

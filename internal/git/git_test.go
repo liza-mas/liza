@@ -7,6 +7,22 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+func TestGitEnv_ForcesLCAllC(t *testing.T) {
+	t.Setenv("LC_ALL", "fr_FR.UTF-8")
+
+	env := gitEnv()
+
+	var lcAll string
+	for _, e := range env {
+		if strings.HasPrefix(e, "LC_ALL=") {
+			lcAll = e
+		}
+	}
+	if lcAll != "LC_ALL=C" {
+		t.Errorf("gitEnv() LC_ALL = %q, want %q", lcAll, "LC_ALL=C")
+	}
+}
+
 func TestNew(t *testing.T) {
 	repoDir := setupTestRepo(t)
 
@@ -76,6 +92,25 @@ func TestBranchExists(t *testing.T) {
 	}
 	if exists {
 		t.Error("BranchExists(nonexistent) = true, want false")
+	}
+}
+
+func TestBranchExists_NonEnglishLocale(t *testing.T) {
+	// Regression test: BranchExists must return (false, nil) for a missing branch
+	// even when the parent process has a non-English locale set. gitEnv() forces
+	// LC_ALL=C on the git subprocess so the error message is always in English.
+	t.Setenv("LC_ALL", "fr_FR.UTF-8")
+	t.Setenv("LANG", "fr_FR.UTF-8")
+
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	exists, err := git.BranchExists("nonexistent-branch")
+	if err != nil {
+		t.Fatalf("BranchExists() error = %v (locale may not be forced to C)", err)
+	}
+	if exists {
+		t.Error("BranchExists() = true, want false")
 	}
 }
 
