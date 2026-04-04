@@ -31,6 +31,7 @@ func (g *Git) FetchFromLocal(wtPath string, branch string) error {
 func (g *Git) RebaseOnto(wtPath string, baseBranch string) error {
 	cmd := exec.Command("git", "rebase", baseBranch)
 	cmd.Dir = wtPath
+	cmd.Env = gitEnv()
 	rawOutput, err := cmd.CombinedOutput()
 	if err != nil {
 		out := string(rawOutput)
