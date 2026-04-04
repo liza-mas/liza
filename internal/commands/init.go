@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
+	gitpkg "github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -731,7 +731,7 @@ func InitCommandWithConfig(params InitParams) error {
 
 // validateBranchName checks that name is a valid git branch name.
 func validateBranchName(name string) error {
-	cmd := exec.Command("git", "check-ref-format", "--branch", name)
+	cmd := gitpkg.Command("check-ref-format", "--branch", name)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("not a valid git branch name: %s", strings.TrimSpace(string(output)))
 	}
@@ -739,12 +739,12 @@ func validateBranchName(name string) error {
 }
 
 func createIntegrationBranch(name string) error {
-	cmd := exec.Command("git", "rev-parse", "--verify", name)
+	cmd := gitpkg.Command("rev-parse", "--verify", name)
 	if err := cmd.Run(); err == nil {
 		return nil
 	}
 
-	cmd = exec.Command("git", "branch", name, "HEAD")
+	cmd = gitpkg.Command("branch", name, "HEAD")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git branch failed: %w: %s", err, string(output))

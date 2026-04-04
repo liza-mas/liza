@@ -4,13 +4,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestGitEnv_ForcesLCAllC(t *testing.T) {
 	t.Setenv("LC_ALL", "fr_FR.UTF-8")
 
-	env := gitEnv()
+	env := gitenv.Env()
 
 	var lcAll string
 	for _, e := range env {
@@ -19,7 +20,7 @@ func TestGitEnv_ForcesLCAllC(t *testing.T) {
 		}
 	}
 	if lcAll != "LC_ALL=C" {
-		t.Errorf("gitEnv() LC_ALL = %q, want %q", lcAll, "LC_ALL=C")
+		t.Errorf("gitenv.Env() LC_ALL = %q, want %q", lcAll, "LC_ALL=C")
 	}
 }
 
@@ -97,7 +98,7 @@ func TestBranchExists(t *testing.T) {
 
 func TestBranchExists_NonEnglishLocale(t *testing.T) {
 	// Regression test: BranchExists must return (false, nil) for a missing branch
-	// even when the parent process has a non-English locale set. gitEnv() forces
+	// even when the parent process has a non-English locale set. Env() forces
 	// LC_ALL=C on the git subprocess so the error message is always in English.
 	t.Setenv("LC_ALL", "fr_FR.UTF-8")
 	t.Setenv("LANG", "fr_FR.UTF-8")
