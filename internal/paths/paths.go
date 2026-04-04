@@ -3,11 +3,12 @@ package paths
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/liza-mas/liza/internal/gitenv"
 )
 
 // Standard path components used throughout Liza
@@ -164,7 +165,7 @@ func GlobalLizaDir() (string, error) {
 // In a worktree: returns the main repo directory (parent of .git common dir)
 func GetProjectRoot() (string, error) {
 	// Get the toplevel directory
-	toplevelCmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	toplevelCmd := gitenv.Command("rev-parse", "--show-toplevel")
 	toplevelOut, err := toplevelCmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("not a git repository or git command failed: %w", err)
@@ -172,7 +173,7 @@ func GetProjectRoot() (string, error) {
 	toplevel := strings.TrimSpace(string(toplevelOut))
 
 	// Get the common git directory
-	commonDirCmd := exec.Command("git", "rev-parse", "--git-common-dir")
+	commonDirCmd := gitenv.Command("rev-parse", "--git-common-dir")
 	commonDirOut, err := commonDirCmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get git common dir: %w", err)

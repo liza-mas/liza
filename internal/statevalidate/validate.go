@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 )
@@ -106,7 +106,7 @@ func checkSpecFileExists(projectRoot, specRef, integrationBranch string) error {
 	// If git is not on PATH or the branch doesn't exist, this falls through
 	// gracefully to the "file not found" error below.
 	if integrationBranch != "" && projectRoot != "" && !filepath.IsAbs(specFile) {
-		cmd := exec.Command("git", "cat-file", "-e", integrationBranch+":"+specFile)
+		cmd := gitenv.Command("cat-file", "-e", integrationBranch+":"+specFile)
 		cmd.Dir = projectRoot
 		if err := cmd.Run(); err == nil {
 			return nil

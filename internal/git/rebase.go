@@ -2,8 +2,9 @@ package git
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/gitenv"
 )
 
 // RebaseConflictError indicates a merge conflict during git rebase.
@@ -29,9 +30,8 @@ func (g *Git) FetchFromLocal(wtPath string, branch string) error {
 // Must be called from within a worktree context.
 // Returns *RebaseConflictError for merge conflicts, generic error for other failures.
 func (g *Git) RebaseOnto(wtPath string, baseBranch string) error {
-	cmd := exec.Command("git", "rebase", baseBranch)
+	cmd := gitenv.Command("rebase", baseBranch)
 	cmd.Dir = wtPath
-	cmd.Env = gitEnv()
 	rawOutput, err := cmd.CombinedOutput()
 	if err != nil {
 		out := string(rawOutput)
