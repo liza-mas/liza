@@ -216,6 +216,10 @@ func (s *Server) classifyError(err error) *protocol.JSONRPCError {
 	if errors.As(err, &roleErr) {
 		return protocol.NewError(protocol.ValidationError, roleErr.Error(), nil)
 	}
+	var inputShapeErr *InputShapeError
+	if errors.As(err, &inputShapeErr) {
+		return protocol.NewError(protocol.ValidationError, inputShapeErr.Message, nil)
+	}
 	var intErr *ops.IntegrationFailedError
 	if errors.As(err, &intErr) {
 		return protocol.NewError(protocol.ValidationError,

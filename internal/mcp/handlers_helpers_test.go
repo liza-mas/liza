@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -300,6 +301,45 @@ func TestExtractOutputEntries_WithArchRef(t *testing.T) {
 	}
 	if entries[1].ArchRef != "" {
 		t.Errorf("entries[1].ArchRef = %q, want empty", entries[1].ArchRef)
+	}
+}
+
+func TestExtractOutputEntries_RejectsStringArray(t *testing.T) {
+	raw := []any{
+		`{"desc": "Setup DB", "done_when": "DB ready", "scope": "db"}`,
+		`{"desc": "Build API", "done_when": "API works", "scope": "api"}`,
+	}
+
+	_, err := extractOutputEntries(raw)
+	if err == nil {
+		t.Fatal("expected error for string array input")
+	}
+
+	var shapeErr *InputShapeError
+	if !errors.As(err, &shapeErr) {
+		t.Fatalf("expected InputShapeError, got %T: %v", err, err)
+	}
+	if !strings.Contains(shapeErr.Message, "must be an object") {
+		t.Errorf("message = %q, want substring %q", shapeErr.Message, "must be an object")
+	}
+}
+
+func TestExtractTaskInputs_RejectsStringArray(t *testing.T) {
+	raw := []any{
+		`{"id": "t1", "desc": "Do something", "spec": "specs/v.md", "done": "Done", "scope": "s"}`,
+	}
+
+	_, err := extractTaskInputs(raw)
+	if err == nil {
+		t.Fatal("expected error for string array input")
+	}
+
+	var shapeErr *InputShapeError
+	if !errors.As(err, &shapeErr) {
+		t.Fatalf("expected InputShapeError, got %T: %v", err, err)
+	}
+	if !strings.Contains(shapeErr.Message, "must be an object") {
+		t.Errorf("message = %q, want substring %q", shapeErr.Message, "must be an object")
 	}
 }
 

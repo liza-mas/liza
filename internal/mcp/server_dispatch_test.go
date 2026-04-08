@@ -737,6 +737,22 @@ func TestClassifyError_PreconditionErrorExposesReason(t *testing.T) {
 	}
 }
 
+func TestClassifyError_InputShapeErrorExposesMessage(t *testing.T) {
+	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
+
+	msg := "output[0] must be an object, got string"
+	inputErr := &InputShapeError{Message: msg}
+
+	jerr := server.classifyError(inputErr)
+
+	if jerr.Code != protocol.ValidationError {
+		t.Errorf("code = %d, want %d (ValidationError)", jerr.Code, protocol.ValidationError)
+	}
+	if jerr.Message != msg {
+		t.Errorf("message = %q, want %q", jerr.Message, msg)
+	}
+}
+
 func TestHandleNotification(t *testing.T) {
 	server := NewServer("/tmp/test", "/tmp/test/.liza/log.yaml")
 

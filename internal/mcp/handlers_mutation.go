@@ -23,7 +23,7 @@ func (s *Server) resolveOrchestratorID(params map[string]any) (string, error) {
 	if present {
 		agentID, ok := raw.(string)
 		if !ok || agentID == "" {
-			return "", fmt.Errorf("agent_id must be a non-empty string")
+			return "", &InputShapeError{Message: "agent_id must be a non-empty string"}
 		}
 		return agentID, nil
 	}
@@ -48,7 +48,7 @@ func (s *Server) handleAddTasks(params map[string]any) (any, error) {
 
 	rawTasks, ok := params["tasks"].([]any)
 	if !ok {
-		return nil, fmt.Errorf("tasks parameter must be an array")
+		return nil, &InputShapeError{Message: "tasks parameter must be an array"}
 	}
 	if len(rawTasks) == 0 {
 		return nil, fmt.Errorf("tasks array must not be empty")

@@ -120,6 +120,17 @@ func requireTaskAndAgent(params map[string]any) (taskID, agentID string, err err
 	return taskID, agentID, nil
 }
 
+// InputShapeError indicates the client sent a structurally invalid input
+// (e.g. an array of strings instead of an array of objects).
+// The message is intentionally client-facing so agents can self-correct.
+type InputShapeError struct {
+	Message string
+}
+
+func (e *InputShapeError) Error() string {
+	return e.Message
+}
+
 // RoleError indicates an agent does not have the required role for an operation.
 // The message is intentionally client-facing so agents receive actionable feedback.
 type RoleError struct {
@@ -172,7 +183,7 @@ func extractTaskInputs(raw []any) ([]ops.AddTaskInput, error) {
 	for i, v := range raw {
 		m, ok := v.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("tasks[%d]: must be an object, got %T", i, v)
+			return nil, &InputShapeError{Message: fmt.Sprintf("tasks[%d]: must be an object, got %T", i, v)}
 		}
 
 		id := stringFromMap(m, "id")
@@ -255,7 +266,7 @@ func extractOutputEntries(raw []any) ([]models.OutputEntry, error) {
 	for i, v := range raw {
 		m, ok := v.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("output[%d] must be an object, got %T", i, v)
+			return nil, &InputShapeError{Message: fmt.Sprintf("output[%d] must be an object, got %T", i, v)}
 		}
 		entry := models.OutputEntry{
 			Desc:      stringFromMap(m, "desc"),

@@ -156,7 +156,23 @@ func (s *Server) registerMutationTools() {
 					Properties: map[string]protocol.Property{
 						"tasks": {
 							Type:        "array",
-							Description: "Array of task objects. Each object has: id (string, required), desc (string, required), spec (string, required), done (string, required), scope (string, required), priority (number, default 1), depends (array of strings), type (string, default 'coding'), role_pair (string), plan_ref (string, optional)",
+							Description: "Array of task definition objects",
+							Items: &protocol.Property{
+								Type: "object",
+								Properties: map[string]protocol.Property{
+									"id":        {Type: "string", Description: "Unique task ID"},
+									"desc":      {Type: "string", Description: "Task description"},
+									"spec":      {Type: "string", Description: "Reference to specification file"},
+									"done":      {Type: "string", Description: "Completion criteria"},
+									"scope":     {Type: "string", Description: "Task scope description"},
+									"priority":  {Type: "number", Description: "Task priority (default: 1)", Default: 1},
+									"depends":   {Type: "array", Description: "Task IDs this task depends on", Items: &protocol.Property{Type: "string"}},
+									"type":      {Type: "string", Description: "Task type (default: coding)", Default: "coding"},
+									"role_pair": {Type: "string", Description: "Role pair for the task"},
+									"plan_ref":  {Type: "string", Description: "Path to the plan artifact that spawned this task"},
+								},
+								Required: []string{"id", "desc", "spec", "done", "scope"},
+							},
 						},
 						"agent_id": {
 							Type:        "string",
@@ -184,7 +200,7 @@ func (s *Server) registerMutationTools() {
 						"done":      {Type: "string", Description: "Completion criteria"},
 						"scope":     {Type: "string", Description: "Task scope description"},
 						"priority":  {Type: "number", Description: "Task priority (default: 1)", Default: 1},
-						"depends":   {Type: "array", Description: "List of task IDs this task depends on"},
+						"depends":   {Type: "array", Description: "List of task IDs this task depends on", Items: &protocol.Property{Type: "string"}},
 						"type":      {Type: "string", Description: "Task type (default: coding)", Default: "coding"},
 						"role_pair": {Type: "string", Description: "Role pair for the task (e.g. 'code-planning-pair')"},
 						"plan_ref":  {Type: "string", Description: "Path to the plan artifact that spawned this task"},
@@ -333,10 +349,12 @@ func (s *Server) registerMutationTools() {
 						"succeeded": {
 							Type:        "array",
 							Description: "What was attempted and worked (overrides summary when provided)",
+							Items:       &protocol.Property{Type: "string"},
 						},
 						"failed": {
 							Type:        "array",
 							Description: "What was tried and failed, and why",
+							Items:       &protocol.Property{Type: "string"},
 						},
 						"hypothesis": {
 							Type:        "string",
@@ -345,10 +363,12 @@ func (s *Server) registerMutationTools() {
 						"key_files": {
 							Type:        "array",
 							Description: "Files that matter for continuing the task",
+							Items:       &protocol.Property{Type: "string"},
 						},
 						"dead_ends": {
 							Type:        "array",
 							Description: "Approaches that were tried and should be avoided",
+							Items:       &protocol.Property{Type: "string"},
 						},
 					},
 					Required: []string{"task_id", "summary", "next_action", "agent_id"},
@@ -421,6 +441,7 @@ func (s *Server) registerMutationTools() {
 						"questions": {
 							Type:        "array",
 							Description: "1-3 clarifying questions that would unblock if answered",
+							Items:       &protocol.Property{Type: "string"},
 						},
 					},
 					Required: []string{"task_id", "agent_id", "reason", "questions"},
@@ -538,6 +559,7 @@ func (s *Server) registerMutationTools() {
 						"replacement_ids": {
 							Type:        "array",
 							Description: "List of replacement task IDs (optional — omit when task was completed externally)",
+							Items:       &protocol.Property{Type: "string"},
 						},
 						"reason": {
 							Type:        "string",
@@ -812,10 +834,12 @@ func (s *Server) registerComplexOperations() {
 						"files_to_modify": {
 							Type:        "array",
 							Description: "List of files that will be modified",
+							Items:       &protocol.Property{Type: "string"},
 						},
 						"assumptions": {
 							Type:        "array",
 							Description: "Tagged assumptions (optional)",
+							Items:       &protocol.Property{Type: "string"},
 						},
 						"risks": {
 							Type:        "string",
@@ -827,7 +851,15 @@ func (s *Server) registerComplexOperations() {
 						},
 						"scope_extensions": {
 							Type:        "array",
-							Description: "Files outside task scope that must be modified, with justification. Each entry: {\"file\": \"path\", \"justification\": \"why\"}",
+							Description: "Files outside task scope that must be modified, with justification",
+							Items: &protocol.Property{
+								Type: "object",
+								Properties: map[string]protocol.Property{
+									"file":          {Type: "string", Description: "File path"},
+									"justification": {Type: "string", Description: "Why this file must be modified"},
+								},
+								Required: []string{"file", "justification"},
+							},
 						},
 						"impact": {
 							Type:        "string",
@@ -860,7 +892,24 @@ func (s *Server) registerComplexOperations() {
 						},
 						"output": {
 							Type:        "array",
-							Description: "Array of output entries, each with: desc (string), done_when (string), scope (string), spec_ref (string, optional), plan_ref (string, optional — path to the plan artifact), arch_ref (string, optional — path to the architecture document), depends_on (array of index strings referencing other entries, optional)",
+							Description: "Array of output entry objects defining downstream tasks",
+							Items: &protocol.Property{
+								Type: "object",
+								Properties: map[string]protocol.Property{
+									"desc":      {Type: "string", Description: "Task description"},
+									"done_when": {Type: "string", Description: "Completion criteria"},
+									"scope":     {Type: "string", Description: "Task scope"},
+									"spec_ref":  {Type: "string", Description: "Path to specification file"},
+									"plan_ref":  {Type: "string", Description: "Path to plan artifact"},
+									"arch_ref":  {Type: "string", Description: "Path to architecture document"},
+									"depends_on": {
+										Type:        "array",
+										Description: "Index strings referencing other entries in this array",
+										Items:       &protocol.Property{Type: "string"},
+									},
+								},
+								Required: []string{"desc", "done_when", "scope"},
+							},
 						},
 					},
 					Required: []string{"task_id", "agent_id", "output"},
