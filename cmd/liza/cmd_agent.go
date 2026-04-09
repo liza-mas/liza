@@ -55,12 +55,12 @@ LIZA_AGENT_ID.
 Example:
   # Auto-assigned agent ID (simplest)
   liza agent coder
-  liza agent code-reviewer --cli claude
+  liza agent code-reviewer --cli codex
   liza agent orchestrator --interactive
 
   # Explicit agent ID
   liza agent coder --agent-id coder-1
-  liza agent code-reviewer --agent-id code-reviewer-2 --cli claude
+  liza agent code-reviewer --agent-id code-reviewer-2 --cli gemini
 
   # Disable saving agent output to .liza/agent-outputs/
   liza agent coder --no-log
@@ -109,6 +109,21 @@ Example:
 		interactive, _ := cmd.Flags().GetBool("interactive")
 		noLog, _ := cmd.Flags().GetBool("no-log")
 
+		statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+
+		// Resolve default CLI from state config when --cli is not explicitly set
+		flagChanged := cmd.Flags().Changed("cli")
+		var stateConfigCLI string
+		if !flagChanged {
+			bb := db.For(statePath)
+			if state, err := bb.Read(); err == nil {
+				stateConfigCLI = state.Config.DefaultCLI
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: could not read state for default CLI: %v\n", err)
+			}
+		}
+		cliName = agent.ResolveCLIFromState(flagChanged, cliName, stateConfigCLI)
+
 		if !slices.Contains(agent.ValidCLIs(), cliName) {
 			return fmt.Errorf("invalid CLI: %s (must be %s)", cliName, strings.Join(agent.ValidCLIs(), ", "))
 		}
@@ -136,8 +151,6 @@ Example:
 			lizaPaths := paths.New(projectRoot)
 			outputsDir = lizaPaths.AgentOutputsDir()
 		}
-
-		statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -264,7 +277,7 @@ func init() {
 
 	// Agent command flags
 	addAgentIDFlag(agentCmd)
-	agentCmd.Flags().String("cli", agent.DefaultCLI, "CLI to use ("+strings.Join(agent.ValidCLIs(), ", ")+")")
+	agentCmd.Flags().String("cli", "", "CLI to use; defaults to config default_cli, then LIZA_DEFAULT_CLI env, then claude ("+strings.Join(agent.ValidCLIs(), ", ")+")")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
 	agentCmd.Flags().Bool("no-log", false, "Disable saving agent output to .liza/agent-outputs/")
 

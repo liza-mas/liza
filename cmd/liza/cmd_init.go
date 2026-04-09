@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/paths"
@@ -84,6 +87,10 @@ symlinks needed for pairing (no .liza/ workspace):
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agents := collectAgentFlags(cmd)
 		autoResume, _ := cmd.Flags().GetBool("auto-resume")
+		defaultCLI, _ := cmd.Flags().GetString("default-cli")
+		if defaultCLI != "" && !slices.Contains(agent.ValidCLIs(), defaultCLI) {
+			return fmt.Errorf("invalid --default-cli: %s (must be %s)", defaultCLI, strings.Join(agent.ValidCLIs(), ", "))
+		}
 
 		// Interactive wizard: no args, no agent flags, no explicit workspace flags, TTY
 		if len(args) == 0 && len(agents) == 0 && !hasExplicitInitFlags(cmd) {
@@ -133,6 +140,7 @@ symlinks needed for pairing (no .liza/ workspace):
 				Branch:          branch,
 				PostWorktreeCmd: postWorktreeCmd,
 				AutoResume:      autoResume,
+				DefaultCLI:      defaultCLI,
 				Agents:          result.Agents,
 				Stdin:           os.Stdin,
 				ContractAction:  result.ContractAction,
@@ -152,7 +160,7 @@ symlinks needed for pairing (no .liza/ workspace):
 				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
 			}
 			if hasExplicitInitFlags(cmd) {
-				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd) require a description argument for full workspace init")
+				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --default-cli) require a description argument for full workspace init")
 			}
 			if err := commands.InitPairingCommand(commands.InitPairingParams{
 				Agents: agents,
@@ -179,6 +187,7 @@ symlinks needed for pairing (no .liza/ workspace):
 			Branch:          branch,
 			PostWorktreeCmd: postCreateCmd,
 			AutoResume:      autoResume,
+			DefaultCLI:      defaultCLI,
 			Agents:          agents,
 			Stdin:           os.Stdin,
 		}); err != nil {
@@ -254,7 +263,7 @@ var agentFlagNames = []string{"claude", "codex", "gemini", "mistral"}
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
 func hasExplicitInitFlags(cmd *cobra.Command) bool {
-	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd"} {
+	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "default-cli"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}
@@ -295,6 +304,7 @@ func init() {
 	initCmd.Flags().String("branch", "integration", "integration branch name")
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
 	initCmd.Flags().Bool("auto-resume", false, "automatically resume at checkpoint and sprint completion")
+	initCmd.Flags().String("default-cli", "", "default CLI for agent spawning ("+strings.Join(agent.ValidCLIs(), ", ")+")")
 	initCmd.Flags().Bool("claude", false, "create CLAUDE.md symlink to ~/.liza/CORE.md")
 	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md")
 	initCmd.Flags().Bool("gemini", false, "create GEMINI.md symlink to ~/.liza/CORE.md")

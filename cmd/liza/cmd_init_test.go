@@ -48,6 +48,21 @@ func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 			args:    []string{"init", "--claude", "--branch", "foo"},
 			wantErr: "workspace flags",
 		},
+		{
+			name:    "default-cli without description errors",
+			args:    []string{"init", "--default-cli", "codex"},
+			wantErr: "requires a description argument",
+		},
+		{
+			name:    "agent flag with default-cli and no description errors",
+			args:    []string{"init", "--codex", "--default-cli", "codex"},
+			wantErr: "workspace flags",
+		},
+		{
+			name:    "invalid default-cli value errors",
+			args:    []string{"init", "--default-cli", "invalid", "Goal"},
+			wantErr: "invalid --default-cli",
+		},
 	}
 
 	for _, tt := range tests {

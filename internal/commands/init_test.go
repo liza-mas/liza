@@ -1915,3 +1915,81 @@ func TestInitCommandWithConfig_EntryPointWithoutConfig(t *testing.T) {
 		t.Errorf("state.Goal.EntryPoint = %q, want %q", state.Goal.EntryPoint, "detailed-spec")
 	}
 }
+
+func TestInitCommandWithConfig_DefaultCLI(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Goal with default CLI",
+		SpecRef:     "specs/vision.md",
+		DefaultCLI:  "codex",
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.DefaultCLI != "codex" {
+		t.Errorf("state.Config.DefaultCLI = %q, want %q", state.Config.DefaultCLI, "codex")
+	}
+}
+
+func TestInitCommandWithConfig_DefaultCLIOmittedWhenEmpty(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Goal without default CLI",
+		SpecRef:     "specs/vision.md",
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	bb := db.New(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.DefaultCLI != "" {
+		t.Errorf("state.Config.DefaultCLI = %q, want empty", state.Config.DefaultCLI)
+	}
+
+	// Verify omitempty: default_cli should not appear in YAML
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".liza", "state.yaml"))
+	if err != nil {
+		t.Fatalf("Failed to read state.yaml: %v", err)
+	}
+	if strings.Contains(string(data), "default_cli") {
+		t.Error("state.yaml contains default_cli key, want omitted when empty")
+	}
+}

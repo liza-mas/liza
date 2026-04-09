@@ -125,6 +125,7 @@ type Config struct {
 	Exit42MaxBackoffSeconds  int            `yaml:"exit42_max_backoff_seconds,omitempty"`
 	CrashRestartThreshold    int            `yaml:"crash_restart_threshold,omitempty"`
 	SpinningRestartThreshold int            `yaml:"spinning_restart_threshold,omitempty"`
+	DefaultCLI               string         `yaml:"default_cli,omitempty"`
 	IntegrationBranch        string         `yaml:"integration_branch"`
 	EscalationWebhook        *string        `yaml:"escalation_webhook,omitempty"`
 	Mode                     SystemMode     `yaml:"mode,omitempty"`

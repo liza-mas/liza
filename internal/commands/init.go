@@ -27,6 +27,7 @@ type InitParams struct {
 	Branch           string   // --branch: integration branch name (default: "integration")
 	PostWorktreeCmd  string   // --post-worktree-cmd: shell command to run after worktree creation
 	AutoResume       bool     // --auto-resume: automatically resume at checkpoint and sprint completion
+	DefaultCLI       string   // --default-cli: default CLI for agent spawning
 	Agents           []string // --claude, --codex, --gemini, --mistral
 	Stdin            io.Reader
 	ForceInteractive bool   // bypass TTY check (for testing)
@@ -699,6 +700,7 @@ func InitCommandWithConfig(params InitParams) error {
 			OrchestratorMaxWait:      7200,
 			ReviewerPollInterval:     30,
 			ReviewerMaxWait:          7200,
+			DefaultCLI:               params.DefaultCLI,
 			IntegrationBranch:        branch,
 			EscalationWebhook:        nil,
 			Mode:                     models.SystemModeRunning,

@@ -176,7 +176,7 @@ cd hello-cli
 liza agent orchestrator
 ```
 
-Agent output is automatically persisted to `.liza/agent-outputs/` for later analysis (see [Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Pass `--no-log` to disable. Each agent command also accepts a `--cli` flag to select the coding agent: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`.
+Agent output is automatically persisted to `.liza/agent-outputs/` for later analysis (see [Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Pass `--no-log` to disable. Each agent command also accepts a `--cli` flag to select the coding agent (`claude`, `codex`, `gemini`, `mistral`, or `kimi`). When omitted, the default is resolved from `config.default_cli` in `state.yaml`, then `LIZA_DEFAULT_CLI` env var, then `claude`.
 
 The Orchestrator will:
 1. Read `specs/vision.md`

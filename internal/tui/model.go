@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/huh"
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -205,6 +206,15 @@ type Model struct {
 	// Lifecycle
 	ready       bool   // true after first state load
 	projectRoot string // root directory for state.yaml, log.yaml, alerts.log
+}
+
+// resolvedDefaultCLI returns the effective default CLI from config, with nil-safe fallback.
+// Uses the full resolution chain (config → LIZA_DEFAULT_CLI env → const) even when state is nil.
+func (m Model) resolvedDefaultCLI() string {
+	if m.state == nil {
+		return agent.ResolveDefaultCLI("")
+	}
+	return agent.ResolveDefaultCLI(m.state.Config.DefaultCLI)
 }
 
 // New creates a new Model. Creates the fsnotify watcher and blackboard.

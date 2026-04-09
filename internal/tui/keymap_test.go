@@ -52,8 +52,8 @@ func TestNewKeyMap_HelpTextMatchesSpec(t *testing.T) {
 		wantKey  string
 		wantDesc string
 	}{
-		{"Spawn", km.Spawn, "s", "spawn"},
-		{"SpawnWith", km.SpawnWith, "S", "spawn+cli"},
+		{"Spawn", km.Spawn, "s", "spawn (default cli)"},
+		{"SpawnWith", km.SpawnWith, "S", "spawn (pick cli)"},
 		{"Terminate", km.Terminate, "t", "terminate"},
 		{"Pause", km.Pause, "p", "pause"},
 		{"Resume", km.Resume, "r", "resume"},

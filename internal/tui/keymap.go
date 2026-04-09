@@ -23,11 +23,11 @@ func NewKeyMap() KeyMap {
 	return KeyMap{
 		Spawn: key.NewBinding(
 			key.WithKeys("s"),
-			key.WithHelp("s", "spawn"),
+			key.WithHelp("s", "spawn (default cli)"),
 		),
 		SpawnWith: key.NewBinding(
 			key.WithKeys("S"),
-			key.WithHelp("S", "spawn+cli"),
+			key.WithHelp("S", "spawn (pick cli)"),
 		),
 		Terminate: key.NewBinding(
 			key.WithKeys("t"),

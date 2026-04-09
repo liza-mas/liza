@@ -140,7 +140,7 @@ Operational reference content (blackboard fields, anomaly types, etc.) is inline
 
 **3. Start Agents**
 
-The TUI (`liza tui`) is the primary way to spawn and monitor agents. Press `s` to spawn — role names autocomplete from the pipeline config.
+The TUI (`liza tui`) is the primary way to spawn and monitor agents. Press `s` to spawn with the configured default CLI (role names autocomplete from the pipeline config), or `S` to pick a specific CLI.
 
 Alternatively, spawn agents from the CLI: `liza agent <role>`. Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `LIZA_AGENT_ID` environment variable.
 
@@ -180,8 +180,8 @@ All of the above plus: epic-planner, epic-plan-reviewer, us-writer, us-reviewer.
 
 **Integration phase** agents (integration-analyst, integration-reviewer) are spawned by the orchestrator after all coding tasks for a goal complete. They are not needed at startup — spawn them when the orchestrator triggers the integration sub-pipeline.
 
-Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude` (default), `codex`, `gemini`, `mistral`, or `kimi`. For example: `liza agent coder --cli gemini`.
-Selecting alternative agent CLI from the TUI is not supported yet.
+Each agent command accepts a `--cli` flag to select the coding agent CLI: `claude`, `codex`, `gemini`, `mistral`, or `kimi`. When `--cli` is omitted, the default is resolved from `config.default_cli` in `state.yaml`, then `LIZA_DEFAULT_CLI` env var, then `claude`. Set the default at init time with `liza init --default-cli codex "..."`, or edit `state.yaml` directly.
+In the TUI, `s` spawns with the configured default CLI; `S` prompts for CLI selection.
 
 Agent output is automatically persisted to `.liza/agent-outputs/` (stdout as `.txt`, stderr as `.err`). Pass `--no-log` to disable. Persisted files are automatically masked — secret values from environment variables (API keys, tokens, passwords) are replaced with `***`. Live terminal output remains unmasked. Logging is automatically disabled in `-i` (interactive) mode.
 See [Analyzing Agent Logs](#analyzing-agent-logs) for analysis tools.
@@ -195,7 +195,7 @@ liza agent coder --agent-id coder-5   # explicit ID
 
 **3. Observe and control**
 
-`liza tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn, `p` pause, `r` resume, `a` add task, `c` checkpoint, `y` yolo (toggle auto-resume), `Q` stop.
+`liza tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn (default cli), `S` spawn (pick cli), `p` pause, `r` resume, `a` add task, `c` checkpoint, `y` yolo (toggle auto-resume), `Q` stop.
 
 `./console.sh` is deprecated.
 

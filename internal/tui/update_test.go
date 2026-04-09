@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -1183,5 +1184,51 @@ func TestHandleInlineKey_TabCyclesAgentCompletion(t *testing.T) {
 
 	if m2.textInput.Value() != "coder-1" {
 		t.Errorf("first Tab got %q, want %q", m2.textInput.Value(), "coder-1")
+	}
+}
+
+// ============================================================
+// resolvedDefaultCLI tests
+// ============================================================
+
+func TestResolvedDefaultCLI_NilState(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_CLI", "")
+	m := testModel()
+	// m.state is nil
+	got := m.resolvedDefaultCLI()
+	if got != agent.DefaultCLI {
+		t.Errorf("resolvedDefaultCLI() with nil state = %q, want %q", got, agent.DefaultCLI)
+	}
+}
+
+func TestResolvedDefaultCLI_NilStateWithEnv(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_CLI", "codex")
+	m := testModel()
+	// m.state is nil but env var set
+	got := m.resolvedDefaultCLI()
+	if got != "codex" {
+		t.Errorf("resolvedDefaultCLI() with nil state + env = %q, want %q", got, "codex")
+	}
+}
+
+func TestResolvedDefaultCLI_EmptyConfig(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_CLI", "")
+	m := testModel()
+	m.state = &models.State{}
+	got := m.resolvedDefaultCLI()
+	if got != agent.DefaultCLI {
+		t.Errorf("resolvedDefaultCLI() with empty config = %q, want %q", got, agent.DefaultCLI)
+	}
+}
+
+func TestResolvedDefaultCLI_ConfigSet(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_CLI", "")
+	m := testModel()
+	m.state = &models.State{
+		Config: models.Config{DefaultCLI: "codex"},
+	}
+	got := m.resolvedDefaultCLI()
+	if got != "codex" {
+		t.Errorf("resolvedDefaultCLI() with config codex = %q, want %q", got, "codex")
 	}
 }

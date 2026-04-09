@@ -164,7 +164,7 @@ func spawnAgentCmd(projectRoot, role, cli string) tea.Cmd {
 		if _, err := process.SpawnAgent(projectRoot, role, cli); err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("spawn %s: %v", role, err)}
 		}
-		return CmdResultMsg{Success: true, Message: "Spawned " + role}
+		return CmdResultMsg{Success: true, Message: "Spawned " + role + " (" + cli + ")"}
 	}
 }
 

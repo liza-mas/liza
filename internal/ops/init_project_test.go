@@ -271,3 +271,57 @@ func TestInitProject_AutoResumeFlag(t *testing.T) {
 		t.Error("AutoResume = false, want true")
 	}
 }
+
+func TestInitProject_DefaultCLI(t *testing.T) {
+	projectRoot, specFile := setupInitTestDir(t)
+
+	err := InitProject(projectRoot, InitProjectParams{
+		Description: "Test project",
+		SpecRef:     specFile,
+		DefaultCLI:  "codex",
+	})
+	if err != nil {
+		t.Fatalf("InitProject() error: %v", err)
+	}
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.For(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.DefaultCLI != "codex" {
+		t.Errorf("DefaultCLI = %q, want %q", state.Config.DefaultCLI, "codex")
+	}
+}
+
+func TestInitProject_DefaultCLIEmpty(t *testing.T) {
+	projectRoot, specFile := setupInitTestDir(t)
+
+	err := InitProject(projectRoot, InitProjectParams{
+		Description: "Test project",
+		SpecRef:     specFile,
+	})
+	if err != nil {
+		t.Fatalf("InitProject() error: %v", err)
+	}
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.For(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if state.Config.DefaultCLI != "" {
+		t.Errorf("DefaultCLI = %q, want empty", state.Config.DefaultCLI)
+	}
+
+	// Verify omitempty
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("Failed to read state.yaml: %v", err)
+	}
+	if strings.Contains(string(data), "default_cli") {
+		t.Error("state.yaml contains default_cli, want omitted when empty")
+	}
+}

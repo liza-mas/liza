@@ -327,7 +327,7 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown role %q", value)}
 			}
 		}
-		return m, spawnAgentCmd(m.projectRoot, value, agent.DefaultCLI)
+		return m, spawnAgentCmd(m.projectRoot, value, m.resolvedDefaultCLI())
 	case InlineActionSpawnWith:
 		if value == "" {
 			return m, nil
@@ -341,7 +341,7 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 		m.spawnRole = value
 		m.inputMode = InputModeInline
 		m.inlineAction = InlineActionSpawnCLI
-		m.inlineLabel = fmt.Sprintf("CLI (%s): ", agent.DefaultCLI)
+		m.inlineLabel = fmt.Sprintf("CLI (%s): ", m.resolvedDefaultCLI())
 		m.textInput.Reset()
 		m.textInput.Focus()
 		m.completionIdx = 0
@@ -350,7 +350,7 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 	case InlineActionSpawnCLI:
 		cli := value
 		if cli == "" {
-			cli = agent.DefaultCLI
+			cli = m.resolvedDefaultCLI()
 		}
 		if !slices.Contains(agent.ValidCLIs(), cli) {
 			m.spawnRole = ""

@@ -24,6 +24,7 @@ type InitProjectParams struct {
 	Branch          string // default "integration" if empty
 	EntryPoint      string // optional
 	PostWorktreeCmd string // optional
+	DefaultCLI      string // optional; default CLI for agent spawning
 	AutoResume      bool
 	PipelineConfig  []byte // optional raw YAML; nil = use embedded default
 }
@@ -193,6 +194,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 			OrchestratorMaxWait:      7200,
 			ReviewerPollInterval:     30,
 			ReviewerMaxWait:          7200,
+			DefaultCLI:               params.DefaultCLI,
 			IntegrationBranch:        branch,
 			EscalationWebhook:        nil,
 			Mode:                     models.SystemModeRunning,
