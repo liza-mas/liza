@@ -38,7 +38,7 @@ The Go binary embeds contracts and skills via `go:embed`. The `sync-embedded` st
 `internal/embedded` fails to compile.
 
 ```bash
-make build          # Build liza and liza-mcp
+make build          # Build liza
 make test           # Unit tests (includes sync + testhelpers check)
 make test-e2e       # End-to-end tests (~40s)
 make lint           # Format + vet + static analysis

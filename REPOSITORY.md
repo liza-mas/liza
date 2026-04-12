@@ -7,7 +7,7 @@ This document is a navigation aid: where to find things and why they're organize
 ## Structure
 
 ```
-├── cmd/                    # Go CLI entry points (liza, liza-mcp)
+├── cmd/                    # Go CLI entry point (liza)
 ├── internal/               # Go internal packages (implementation)
 ├── contracts/              # Behavioral contracts governing agents
 ├── specs/                  # Specifications (durable agent context)
@@ -126,7 +126,7 @@ Skills execute within contract constraints — contract gates are non-negotiable
 
 All Liza system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](specs/architecture/ADR/0012-go-cli-replaces-bash-scripts.md).
 
-**Build requirement:** The Go binary embeds contracts, skills, and config files via `//go:embed`. Contracts and skills are copied from the repo root by `make sync-embedded` (a prerequisite of `make build` and `make test`). Config files (`claude-settings.json`, `mcp.json`) and hooks are mastered directly in `internal/embedded/`. Always use `make test` instead of bare `go test ./...` — without the sync step, the `internal/embedded` package fails to compile.
+**Build requirement:** The Go binary embeds contracts, skills, and config files via `//go:embed`. Contracts and skills are copied from the repo root by `make sync-embedded` (a prerequisite of `make build` and `make test`). Config files (`claude-settings.json`) and hooks are mastered directly in `internal/embedded/`. Always use `make test` instead of bare `go test ./...` — without the sync step, the `internal/embedded` package fails to compile.
 
 Key command groups:
 

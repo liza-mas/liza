@@ -12,7 +12,7 @@ This walkthrough demonstrates Liza orchestrating a multi-agent system to build a
 
 - Claude Code CLI and git installed
 - Go >= 1.25.5 installed
-- `liza` and `liza-mcp` Go binaries in PATH (see `make install`)
+- `liza` Go binary in PATH (see `make install`)
 
 See [Contract Activation](../contracts/contract-activation.md) for the agent settings setup (Claude Code, Codex, Gemini, etc.).
 
@@ -131,7 +131,6 @@ This creates:
 - `.liza/log.yaml` — activity log
 - `.liza/alerts.log` — watcher alerts
 - `.claude/settings.json` — Claude Code project permissions
-- `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
 - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — symlinks to `~/.liza/CORE.md`
 - `GUARDRAILS.md` — project-specific constraints template
 - `integration` branch — where approved work lands

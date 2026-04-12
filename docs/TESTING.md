@@ -33,7 +33,6 @@ go tool cover -func=coverage.out            # Coverage by function
 ```bash
 go test -race ./...                # All packages
 go test -race ./internal/db/       # Specific package (db has locks)
-go test -race ./internal/mcp/      # MCP server (concurrent handlers)
 ```
 
 ### Benchmarks

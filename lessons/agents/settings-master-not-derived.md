@@ -1,7 +1,7 @@
 ---
 title: "Update master files, not derived copies"
-trigger: "When modifying claude-settings.json, .mcp.json, hooks, or any file that has a master/embedded source and derived copies"
-keywords: [claude-settings.json, .claude/settings.json, embedded, liza init, permissions, MCP tools, hooks]
+trigger: "When modifying claude-settings.json, hooks, or any file that has a master/embedded source and derived copies"
+keywords: [claude-settings.json, .claude/settings.json, embedded, liza init, permissions, hooks]
 date: 2026-03-06
 ---
 
@@ -12,7 +12,7 @@ Configuration files like `claude-settings.json` exist in two places:
 1. **Master**: `internal/embedded/claude-settings.json` — source of truth, compiled into the binary via `go:embed`
 2. **Derived**: `.claude/settings.json` — project-active copy, created by `liza init`
 
-Similarly: `internal/embedded/mcp.json` → `.mcp.json`, and `internal/embedded/hooks/enforce-init.sh` → `.claude/hooks/enforce-init.sh`.
+Similarly: `internal/embedded/hooks/enforce-init.sh` → `.claude/hooks/enforce-init.sh`.
 
 ## Failure Mode
 
@@ -28,7 +28,6 @@ Always update the master in `internal/embedded/`, then re-run `liza init` or man
 ## References
 
 - `internal/embedded/claude-settings.json` — master
-- `internal/embedded/mcp.json` — master
 - `internal/embedded/hooks/enforce-init.sh` — master
 - `internal/embedded/hooks/git-guard.sh` — master
 - `internal/embedded/embedded.go:WriteClaudeSettings()` — settings merge logic

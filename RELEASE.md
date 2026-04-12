@@ -15,7 +15,7 @@ git push origin v1.0.0
 ```
 
 This will automatically:
-1. Build binaries for all supported platforms (liza + liza-mcp)
+1. Build binaries for all supported platforms (liza)
 2. Create checksums
 3. Generate a changelog
 4. Create a GitHub release with all artifacts

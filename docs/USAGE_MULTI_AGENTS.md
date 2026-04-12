@@ -61,8 +61,7 @@ See [DEMO](DEMO.md) for a full example.
 **Prerequisites:**
 - Claude Code CLI and git installed
 - Go >= 1.25.5 installed
-- `liza` and `liza-mcp` Go binaries in PATH
-- When using `--cli codex`: Codex CLI > 0.118.0 (0.117.0–0.118.0 have a [regression](https://github.com/openai/codex/issues/16685) that cancels MCP tool calls in exec mode; 0.116.0 also works)
+- `liza` Go binary in PATH (see `make install`)
 
 **Installing the Liza CLI:**
 
@@ -129,8 +128,7 @@ cat .liza/state.yaml
 - `.liza/state.yaml` — Blackboard state
 - `.liza/pipeline.yaml` — Frozen pipeline config (validated copy of the selected `--config`, default: `~/.liza/pipeline.yaml`)
 - `.liza/log.yaml` — Activity log
-- `.claude/settings.json` — Claude Code project permissions (Liza MCP tools, skills, git/build commands)
-- `.mcp.json` — MCP server configuration (tells Claude Code how to start liza-mcp)
+- `.claude/settings.json` — Claude Code project permissions (Liza CLI, skills, git/build commands)
 - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — Symlinks to `~/.liza/CORE.md`
 - `GUARDRAILS.md` — Project-specific constraints template (if not already present)
 - Integration branch (default `integration`, configurable via `--branch`) — For merging completed work
@@ -389,55 +387,19 @@ The `liza` binary provides all system operations. Key commands:
 
 See [Architecture Overview](../specs/architecture/overview.md) for detailed component descriptions.
 
-### Configuring Claude Code (MCP)
+### Configuring Claude Code
 
-Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza init` creates the configuration automatically:
+`liza init` creates the Claude Code configuration automatically:
 
-**`.mcp.json`** — MCP server configuration:
-```json
-{
-  "mcpServers": {
-    "liza": {
-      "command": "liza-mcp",
-      "args": ["--project-root", "."]
-    }
-  }
-}
-```
-
-**`.claude/settings.json`** — Permissions for Claude Code agents (MCP tools shown in full, other categories truncated):
+**`.claude/settings.json`** — Permissions for Claude Code agents (Liza CLI permissions shown, other categories truncated):
 ```json
 {
   "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": ["liza"],
   "permissions": {
     "defaultMode": "acceptEdits",
     "allow": [
       "Read(~/.claude/**)",
-      "mcp__liza__liza_get",
-      "mcp__liza__liza_status",
-      "mcp__liza__liza_validate",
-      "mcp__liza__liza_version",
-      "mcp__liza__liza_add_tasks",
-      "mcp__liza__liza_claim_task",
-      "mcp__liza__liza_submit_for_review",
-      "mcp__liza__liza_handoff",
-      "mcp__liza__liza_submit_verdict",
-      "mcp__liza__liza_mark_blocked",
-      "mcp__liza__liza_assess_blocked",
-      "mcp__liza__liza_release_claim",
-      "mcp__liza__liza_supersede_task",
-      "mcp__liza__liza_set_task_output",
-      "mcp__liza__liza_wt_create",
-      "mcp__liza__liza_wt_delete",
-      "mcp__liza__liza_wt_merge",
-      "mcp__liza__liza_analyze",
-      "mcp__liza__liza_update_sprint_metrics",
-      "mcp__liza__liza_sprint_checkpoint",
-      "mcp__liza__liza_write_checkpoint",
-      "mcp__liza__liza_delete_agent",
-      "mcp__liza__liza_await_verdict",
-      "mcp__liza__liza_await_resubmission"
+      "Bash(liza:*)"
     ]
   }
 }
@@ -445,9 +407,9 @@ Liza integrates with Claude Code through the Model Context Protocol (MCP). `liza
 
 The full template also pre-approves skills (code-review, testing, debugging, etc.), git read/write commands, build tools (go, make, python), shell utilities, and web access (WebFetch, WebSearch, LSP). See `internal/embedded/claude-settings.json` for the complete list.
 
-Both CLI commands (e.g., `liza add-task`) and MCP tools (e.g., `liza_add_tasks`) operate on the same `.liza/state.yaml` file. Claude Code agents use MCP tools for better error handling; the CLI is for manual use. `liza-mcp` starts gracefully even without `.liza/` — only `liza_version` works; all other tools return `NotInitializedError`.
+CLI commands (e.g., `liza add-task`) operate on `.liza/state.yaml` with proper locking. Agents use CLI commands via Bash with `--json` for structured output.
 
-The templates are embedded into the binary. `liza init` writes the active copies to `.claude/settings.json` and `.mcp.json` in the project directory.
+The settings template is embedded into the binary. `liza init` writes the active copy to `.claude/settings.json` in the project directory.
 
 ### Analyzing Agent Logs
 
@@ -500,7 +462,7 @@ jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' 
   .liza/agent-outputs/orchestrator-1-*.txt
 ```
 
-**Interactive diagnosis** — open a regular coding agent session (`claude`, `codex`, etc.) in the project directory. It picks up Liza's MCP tools from `.mcp.json` and can read `.liza/state.yaml`, agent logs, and prompts — everything needed to diagnose issues interactively. The `/liza-logs` skill works this way.
+**Interactive diagnosis** — open a regular coding agent session (`claude`, `codex`, etc.) in the project directory. It can read `.liza/state.yaml`, agent logs, and prompts — everything needed to diagnose issues interactively. The `/liza-logs` skill works this way.
 
 ### Submit, Await Verdict, Handle Result
 

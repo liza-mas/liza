@@ -152,8 +152,8 @@ Most tools either expect the detailed spec already done (OpenSpec, GSD) or have 
 
 ### Installation
 
-Liza relies on two executables: `liza` and `liza-mcp`:
-- By default they install to `~/.local/bin` (created automatically, no sudo needed).
+Liza provides a single executable: `liza`:
+- By default it installs to `~/.local/bin` (created automatically, no sudo needed).
 - Set the `INSTALL_DIR` environment variable to override.
 - If upgrading from a previous install in `/usr/local/bin`, old binaries are removed automatically.
 

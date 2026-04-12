@@ -2,32 +2,15 @@
 
 System configuration, tuning parameters, and environment variables.
 
-## MCP Server Setup
+## Claude Code Settings
 
-Liza provides an MCP server (`liza-mcp`) for Claude Code integration. `liza init` creates both configuration files automatically. If they already exist, `liza init` prompts to merge Liza-specific configuration.
+**`.claude/settings.json`** — project-level permissions for Liza CLI commands, skills, git operations, and build commands.
 
-### What Gets Created
-
-**`.mcp.json`** — tells Claude Code how to start the Liza MCP server:
-
-```json
-{
-  "mcpServers": {
-    "liza": {
-      "command": "liza-mcp",
-      "args": ["--project-root", "."]
-    }
-  }
-}
-```
-
-**`.claude/settings.json`** — project-level permissions for Liza MCP tools, skills, git operations, and build commands.
-
-`liza init` writes this file automatically from the embedded [`claude-settings.json`](../internal/embedded/claude-settings.json). The master defines all Liza MCP tools, skills, and the full set of bash permissions agents need. **Do not hand-craft a subset** — agents will be blocked on any missing permission.
+`liza init` writes this file automatically from the embedded [`claude-settings.json`](../internal/embedded/claude-settings.json). The master defines all Liza CLI permissions, skills, and the full set of bash permissions agents need. **Do not hand-craft a subset** — agents will be blocked on any missing permission.
 
 **Key elements:**
-- **`enableAllProjectMcpServers`** / **`enabledMcpjsonServers`** — enables the Liza MCP server defined in `.mcp.json`
-- **`mcp__liza__*`** — grants permission to invoke specific MCP tools (format: `mcp__<server>__<tool>`). These are also the tool identifiers agents must resolve at runtime (e.g. via `ToolSearch select:mcp__liza__liza_get,...`) before calling Liza MCP tools.
+- **`enableAllProjectMcpServers`** — enables any project MCP servers (for non-Liza tools like JetBrains, filesystem, etc.)
+- **`Bash(liza:*)`** — grants permission for agents to invoke Liza CLI commands
 - **`Skill(...)`** — contract skills from `~/.liza/skills/` (installed by `liza setup`)
 - **`defaultMode: acceptEdits`** — required for headless agent operation
 
@@ -37,64 +20,18 @@ Claude Code unions permissions from global and project settings:
 
 | Layer | File | Managed by | Contains |
 |-------|------|-----------|----------|
-| **Project** | `<project>/.claude/settings.json` | `liza init` (automatic) | Liza MCP tools, skills, git/build commands |
+| **Project** | `<project>/.claude/settings.json` | `liza init` (automatic) | Liza CLI permissions, skills, git/build commands |
 | **Global** | `~/.claude/settings.json` | Manual (one-time) | Personal MCP tools (IDE, search, etc.), `additionalDirectories`, `Read(~/.liza/**)` |
 
 The project layer is portable (team-shared). The global layer is machine-specific (personal tools and paths). Neither alone is sufficient — both are needed.
 
 For global settings setup and provider-specific config (Claude, Codex, Gemini), see [Contract Activation](../contracts/contract-activation.md).
 
-### Troubleshooting MCP
-
-**Server won't start:**
-- Verify `liza-mcp` is in PATH: `which liza-mcp`
-- Check `.mcp.json` exists in project root
-- Ensure `.liza/` directory exists
-
-**Permission denied:**
-- Verify `settings.json` includes MCP tool permissions (e.g., `"mcp__liza__liza_add_tasks"`)
-- Ensure `enableAllProjectMcpServers: true` is set
-- Ensure `enabledMcpjsonServers: ["liza"]` is set
+### Troubleshooting
 
 **State file errors:**
 - Verify project initialized: `liza validate`
 - Check: `ls -la .liza/state.yaml`
-
-### MCP Tools Reference
-
-#### `liza_await_verdict`
-
-Block until a review verdict arrives for a submitted task. Budget-aware: refuses if the iteration limit would be exceeded on rejection. Call after `liza_submit_for_review`.
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `task_id` | string | Yes | — | Task ID to await verdict for |
-| `agent_id` | string | Yes | — | Agent ID (for authorization) |
-| `timeout_seconds` | integer | No | 1500 | Max wait time in seconds (must be < `MCP_TIMEOUT`, which defaults to 1800s / 30 min) |
-
-Returns a verdict: `APPROVED`, `REJECTED` (with reason and auto-reclaim), `NEW_ATTEMPT`, `TERMINAL`, `TIMEOUT`, or `ABORTED`.
-
-#### `liza_await_resubmission`
-
-Block until the doer resubmits after a rejection. Preserves reviewer session and review ownership. Call after `liza_submit_verdict` with REJECTED verdict (non-terminal).
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `task_id` | string | Yes | — | Task ID to await resubmission for |
-| `agent_id` | string | Yes | — | Agent ID (for authorization) |
-| `timeout_seconds` | integer | No | 1500 | Max wait time in seconds (must be < `MCP_TIMEOUT`, which defaults to 1800s / 30 min) |
-
-Returns a verdict: `RESUBMITTED` (with new commit SHA and review cycle count), `TERMINAL` (with reason), `TIMEOUT`, or `ABORTED`.
-
-### CLI vs MCP
-
-Both interfaces operate on the same `state.yaml` with proper locking.
-
-| | CLI (`liza add-task`) | MCP (`liza_add_tasks`) |
-|---|---|---|
-| Use case | Manual / interactive | Programmatic / agent |
-| Output | Human-readable text | Structured JSON |
-| Error handling | Exit codes + stderr | JSON error responses |
 
 ## Configuration Matrix
 
