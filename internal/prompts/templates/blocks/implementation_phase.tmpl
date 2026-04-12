@@ -20,7 +20,7 @@ Read the architecture document at {{.ArchRef}} for structural context and compon
    must be preserved.
 7. Invoke skill: clean-code at the end of the implementation
 8. Validate ALL done_when criteria are met
-9. If context exhaustion is near (~90%): run {{.ToolPrefix}}liza_handoff with summary + next_action (or structured fields), then exit with code 42
+9. If context exhaustion is near (~90%): run liza handoff --json with summary + next_action (or structured fields), then exit with code 42
 {{- else if eq .Role "code-planner"}}
 
 IMPLEMENTATION PHASE:
@@ -35,7 +35,7 @@ Read the architecture document for structural context before planning.
    Save your plan to: {{.Worktree}}/specs/plans/TIMESTAMP-{{.TaskID}}.md
    All later references to "the plan file" mean the exact path chosen here.
    (Include a "## Spec Compliance Matrix" section — see step 6c.)
-3. For EACH coding task in your plan, call {{.ToolPrefix}}liza_set_task_output with structured entries.
+3. For EACH coding task in your plan, call liza set-task-output --json with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source),
    plan_ref (repo-relative path to the plan file — set to the plan file path from step 2 for all entries),
@@ -43,7 +43,7 @@ Read the architecture document for structural context before planning.
    Extract each field verbatim from the plan file — do not compose from memory or paraphrase.
 4. Update worktree artifacts required by DONE WHEN.
 5. Validate done_when criteria with concrete checks.
-6. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{.ToolPrefix}}liza_submit_for_review until all pass):
+6. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
    a. Each output[] entry passes TASK DECOMPOSITION PRINCIPLE checks above.
    b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       ("tests pass" is vague; "TestFoo in pkg/bar passes asserting X" is falsifiable.)
@@ -82,7 +82,7 @@ Read the architecture document for structural context before planning.
       and confirm the referenced task explicitly states that responsibility,
       dependency, or exclusion. If any reference points to a task that does not claim it,
       fix the plan before submitting.
-7. Submit using {{.ToolPrefix}}liza_submit_for_review only after all checks in step 6 pass.
+7. Submit using liza submit-for-review --json only after all checks in step 6 pass.
 {{- else if eq .Role "epic-planner"}}
 
 IMPLEMENTATION PHASE:
@@ -90,7 +90,7 @@ IMPLEMENTATION PHASE:
 2. Invoke skill: epic-writing FIRST.
 3. Read the source material referenced by this task (vision doc, product brief, spec).
 4. Follow the skill protocol: Size → Parse → Decompose → Write → Self-Review.
-5. For EACH capability in the epic, call {{.ToolPrefix}}liza_set_task_output with structured entries.
+5. For EACH capability in the epic, call liza set-task-output --json with structured entries.
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
    Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
    spec_ref (goal spec reference — preserves traceability to the original requirements),
@@ -104,7 +104,7 @@ IMPLEMENTATION PHASE:
    for the specific capability heading (e.g., specs/plans/EP-001.md#capability-cap-001---task-creation).
 6. Update worktree artifacts required by DONE WHEN.
 7. Validate done_when criteria with concrete checks.
-8. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{.ToolPrefix}}liza_submit_for_review until all pass):
+8. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
    a. output[] completeness: one entry per capability in the epic, each with all five fields
       (desc, done_when, scope, spec_ref, plan_ref) populated.
    b. output[] parity: re-read the epic document in the worktree and verify:
@@ -114,7 +114,7 @@ IMPLEMENTATION PHASE:
       - spec_ref equals {{.SpecRef}} (the goal spec reference, same for all entries).
       - plan_ref is the epic document path with a #section-anchor matching the capability heading.
    c. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
-9. Submit using {{.ToolPrefix}}liza_submit_for_review only after all checks in step 8 pass.
+9. Submit using liza submit-for-review --json only after all checks in step 8 pass.
 {{- else if eq .Role "us-writer"}}
 
 IMPLEMENTATION PHASE:
@@ -126,7 +126,7 @@ IMPLEMENTATION PHASE:
 4. Follow the skill protocol: Parse → Write → Self-Review.
 5. Write user stories to the output file path specified by the task.
 6. Validate done_when criteria with concrete checks.
-7. Submit using {{.ToolPrefix}}liza_submit_for_review when complete.
+7. Submit using liza submit-for-review --json when complete.
 {{- else if eq .Role "architect"}}
 
 IMPLEMENTATION PHASE:
@@ -148,7 +148,7 @@ IMPLEMENTATION PHASE:
    - Data flow and structural decisions
    - Cross-cutting concerns and how they are addressed
    - Decomposition into code-planning scopes (each becomes a downstream task)
-6. For EACH code-planning scope in your architecture, call {{.ToolPrefix}}liza_set_task_output with structured entries.
+6. For EACH code-planning scope in your architecture, call liza set-task-output --json with structured entries.
    Each entry becomes a code-planning child task after merge. The Architecture Reviewer will verify these.
    Fields: desc (scope boundary), done_when (falsifiable), scope (what the code-planner covers),
    spec_ref (goal spec — same for all entries), arch_ref (repo-relative path to the arch doc from step 5),
@@ -156,13 +156,13 @@ IMPLEMENTATION PHASE:
    Extract each field verbatim from the arch doc — do not compose from memory or paraphrase.
 7. Update worktree artifacts required by DONE WHEN.
 8. Validate done_when criteria with concrete checks.
-9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{.ToolPrefix}}liza_submit_for_review until all pass):
+9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
    a. Each output[] entry has a single, well-scoped code-planning intent.
    b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
    c. Verify the arch doc contains a decomposition section mapping to each output[] entry.
    d. All output[] entries have arch_ref set to the arch doc path.
    e. Spec compliance: the decomposition covers the full scope of the goal spec.
    f. Shared-file audit: if two output[] entries may touch the same files, add depends_on.
-10. Submit using {{.ToolPrefix}}liza_submit_for_review only after all checks in step 9 pass.
+10. Submit using liza submit-for-review --json only after all checks in step 9 pass.
 {{- end}}
 {{- end -}}

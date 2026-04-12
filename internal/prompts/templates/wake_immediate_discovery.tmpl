@@ -3,12 +3,12 @@ Urgent discoveries need immediate action:
 
 1. Read discovered[] entries with urgency=immediate
 2. For each, execute decision NOW:
-   - Convert to task → execute {{.ToolPrefix}}liza_add_tasks tool NOW, then execute {{.ToolPrefix}}liza_set_discovery_disposition with disposition=<new-task-id>
-   - Defer → execute {{.ToolPrefix}}liza_set_discovery_disposition with disposition="deferred"
-   - Dismiss → execute {{.ToolPrefix}}liza_set_discovery_disposition with disposition="dismissed"
+   - Convert to task → run liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW, then run liza set-discovery-disposition <id> --disposition <new-task-id> --json
+   - Defer → run liza set-discovery-disposition <id> --disposition deferred --json
+   - Dismiss → run liza set-discovery-disposition <id> --disposition dismissed --json
 3. Prioritize new tasks appropriately (may be high priority)
 4. Check if discoveries invalidate existing tasks — supersede them if needed
-5. All tools must be executed in this session.
+5. All commands must be executed in this session.
 
-Do NOT call {{.ToolPrefix}}liza_sprint_checkpoint. Process all discovered[] entries and exit. If a discovery cannot be resolved, defer it with rationale.
+Do NOT call liza sprint-checkpoint. Process all discovered[] entries and exit. If a discovery cannot be resolved, defer it with rationale.
 {{- end -}}

@@ -2,7 +2,7 @@
 This is initial planning. Read the goal spec, assess complexity, and create planning task(s).
 
 ⚠️  AUTONOMY NOTICE ⚠️
-You have FULL autonomy to execute MCP tools immediately.
+You have FULL autonomy to run CLI commands immediately.
 Do NOT wait for permission.
 
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
@@ -26,7 +26,7 @@ Simple goals (default): one task, no depends_on.
 
 Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch to {{.ResolvedDisplayName}}.
 
-Use {{.ToolPrefix}}liza_add_tasks once with ALL tasks:
+Run liza add-tasks once with ALL tasks in a JSON file:
 {
   "tasks": [
     {
@@ -54,6 +54,7 @@ Use {{.ToolPrefix}}liza_add_tasks once with ALL tasks:
   ],
   "agent_id": "{{.AgentID}}"
 }
+Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
@@ -75,7 +76,7 @@ CLASSIFICATION GUIDANCE:
 - Choose "general-objective" for vision documents, broad objectives, or when uncertain.
   Default to "general-objective" — skipping the spec phase is riskier than redundant refinement.
 
-After classifying, use {{.ToolPrefix}}liza_add_tasks once with the chosen role_pair:
+After classifying, write a JSON file with the chosen role_pair and run liza add-tasks:
 {
   "tasks": [
     {
@@ -103,6 +104,7 @@ After classifying, use {{.ToolPrefix}}liza_add_tasks once with the chosen role_p
   ],
   "agent_id": "{{.AgentID}}"
 }
+Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
@@ -111,7 +113,7 @@ SUCCESS CRITERIA:
 - Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
 {{- else }}
 
-Use {{.ToolPrefix}}liza_add_tasks once with:
+Write a JSON file with the tasks and run liza add-tasks:
 {
   "tasks": [
     {
@@ -139,6 +141,7 @@ Use {{.ToolPrefix}}liza_add_tasks once with:
   ],
   "agent_id": "{{.AgentID}}"
 }
+Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
@@ -152,7 +155,7 @@ EXPECTED BEHAVIOR EXAMPLES:
 ✅ Complex goal: N planning tasks with sequential depends_on chain, confirm success, exit.
 
 ❌ INCORRECT (DO NOT DO THIS):
-1. Plan but do not execute {{.ToolPrefix}}liza_add_tasks
+1. Plan but do not execute liza add-tasks
 2. Exit without creating the task(s)
 3. Create downstream implementation tasks — only planning tasks belong here
 {{- end -}}

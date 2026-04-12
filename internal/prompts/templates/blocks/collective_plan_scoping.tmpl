@@ -40,7 +40,7 @@ This task depends on prior planning phase(s):
 - {{.ID}} [{{.Status}}]{{if ne .PlanRef ""}} — plan: {{.PlanRef}}{{end}}
 {{- end}}{{end}}{{end}}
 If your plan CANNOT be made consistent with those prior plans:
-- Do NOT iterate with the reviewer — mark BLOCKED immediately via {{.ToolPrefix}}liza_mark_blocked.
+- Do NOT iterate with the reviewer — mark BLOCKED immediately via liza mark-blocked --json.
 - blocked_reason: which prior phase constraint conflicts and why.
 - blocked_questions: what needs to change in prior plans to resolve.
 {{- end}}

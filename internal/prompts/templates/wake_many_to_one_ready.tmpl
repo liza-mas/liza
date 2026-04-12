@@ -5,14 +5,14 @@ Pipeline transitions will execute automatically after checkpoint and human resum
 No manual task creation is needed.
 
 ⚠️  AUTONOMY NOTICE ⚠️
-You have FULL autonomy to execute MCP tools immediately.
+You have FULL autonomy to run CLI commands immediately.
 Do NOT wait for permission.
 
 --- MANY-TO-ONE COHORT READY. NOW EXECUTE. ---
 
-1. Run {{.ToolPrefix}}liza_update_sprint_metrics with {"agent_id": "{{.AgentID}}"}.
+1. Run: liza update-sprint-metrics --agent-id {{.AgentID}} --json
 
-2. Create checkpoint for human review: execute {{.ToolPrefix}}liza_sprint_checkpoint with {"agent_id": "{{.AgentID}}", "trigger": "PLANNING_COMPLETE"}.
+2. Create checkpoint for human review: liza sprint-checkpoint --agent-id {{.AgentID}} --json
    The checkpoint will pause all agents and generate a sprint summary.
 
 SUCCESS CRITERIA:

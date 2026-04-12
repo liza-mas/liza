@@ -4,10 +4,10 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
 1. Read task history — understand what was tried and why it failed
 2. Determine if:
    - Task is impossible as specified → supersede with revised tasks:
-     a. Re-read the task via {{.ToolPrefix}}liza_get tasks/<task-id> to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY).
+     a. Re-read the task via liza get tasks/<task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY).
         If status changed (e.g., task was claimed), skip supersede — the task is being actively worked.
-     b. Use {{.ToolPrefix}}liza_add_tasks tool with {"tasks": [...], "agent_id": "{{.AgentID}}"} (create replacement tasks)
-     c. Use {{.ToolPrefix}}liza_supersede_task tool with {"task_id": "<old-id>", "replacement_ids": ["<new-ids>"], "reason": "<reason>", "agent_id": "{{.AgentID}}"}
+     b. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
+     c. Run: liza supersede-task <old-id> --replacement-ids "<new-ids>" --reason "<reason>" --agent-id {{.AgentID}} --json
    - Missing context/docs → add to task description (update NOW)
    - Needs different approach → update scope/guidance (execute NOW)
    - Spec is wrong → fix spec first (update NOW)
@@ -15,10 +15,10 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
 4. If breaking into smaller tasks — create them all in this session
 5. After analyzing each hypothesis-exhausted task:
    - If you resolved it (superseded, updated guidance, fixed spec): no further action needed for that task
-   - If you CANNOT resolve it now: call {{.ToolPrefix}}liza_assess_hypothesis_exhausted to record your assessment
-     Execute tool: {{.ToolPrefix}}liza_assess_hypothesis_exhausted with {"task_id": "<task-id>", "note": "<why it cannot be resolved now>"}
+   - If you CANNOT resolve it now: run liza assess-hypothesis-exhausted to record your assessment
+     Run: liza assess-hypothesis-exhausted <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
      This prevents re-waking for the same exhausted task. The task will trigger again only when new information arrives (new failures, human notes).
 6. All state modifications must be executed before you exit.
 
-Do NOT call {{.ToolPrefix}}liza_sprint_checkpoint. You must either supersede the task, update its guidance, or assess it. Do NOT defer.
+Do NOT call liza sprint-checkpoint. You must either supersede the task, update its guidance, or assess it. Do NOT defer.
 {{- end -}}

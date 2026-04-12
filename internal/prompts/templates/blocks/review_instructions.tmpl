@@ -49,10 +49,11 @@ Include this assessment in your rejection reason if rejecting.
 {{- end}}
 
 POST-VERDICT (MANDATORY for REJECTED):
-After submitting a REJECTED verdict, MUST call {{.ToolPrefix}}liza_await_resubmission immediately.
+After submitting a REJECTED verdict, MUST run liza await-resubmission immediately:
+   liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
 Do NOT exit. It blocks ~100s per call, returning POLL with remaining timeout_seconds.
 - RESUBMITTED: re-review the new changes
-- POLL: call await_resubmission again with the timeout_seconds from the response
+- POLL: call await-resubmission again with the timeout_seconds from the response
 - TERMINAL/TIMEOUT/ABORTED: exit normally
 {{- else if eq .Role "code-plan-reviewer"}}
 
@@ -65,7 +66,7 @@ REVIEW CHECKLIST:
 | Dependency order | Tasks have circular or missing dependencies |
 | Shared-file dependency | Two tasks modify the same file but lack depends_on between them — parallel coders will hit merge conflicts |
 | Spec compliance matrix | Plan has no "## Spec Compliance Matrix" section, or matrix has GAP rows, or matrix omits spec requirements, or matrix task mappings are inaccurate |
-| output[] populated | Task has no output[] entries (planner must call {{.ToolPrefix}}liza_set_task_output) |
+| output[] populated | Task has no output[] entries (planner must call liza set-task-output --json) |
 | Plan file location | Plan artifact not in diff at specs/plans/TIMESTAMP-{{.TaskID}}.md |
 | output[] matches plan | For each output[] entry, compare desc, done_when, scope, and spec_ref against the plan artifact in the worktree — they must be identical, not paraphrased or extended |
 | Cross-reference consistency | For every cross-reference in the plan ("owned by CPx", "depends on CPx", "out of scope for CPx"), the referenced task must explicitly state that responsibility, dependency, or exclusion. Reject if any dangling reference. |
@@ -100,10 +101,10 @@ REVIEW PHASE:
    d. Task mappings correct (listed task(s) actually address the requirement).
    Do NOT trust the matrix at face value — independently verify against the spec.
 4. Validate done_when criteria are satisfied.
-5. Verify output[] entries: run {{.ToolPrefix}}liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
+5. Verify output[] entries: run liza get tasks/{{.TaskID}} --json and confirm
    output[] has one entry per planned coding task with valid desc, done_when, scope, spec_ref.
 6. Verify each proposed coding task passes the review checklist above.
-7. Submit verdict with {{.ToolPrefix}}liza_submit_verdict.
+7. Submit verdict with liza submit-verdict.
 {{- else if eq .Role "epic-plan-reviewer"}}
 
 EPIC-WRITING SKILL:
@@ -144,12 +145,12 @@ REVIEW PHASE:
 2. Invoke skill: epic-writing for reviewing specifications.
 3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 4. Validate done_when criteria are satisfied.
-5. Verify output[] entries: run {{.ToolPrefix}}liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
+5. Verify output[] entries: run liza get tasks/{{.TaskID}} --json and confirm
    output[] has one entry per capability with valid desc, done_when, scope, spec_ref, plan_ref.
    Verify: spec_ref equals the task's own spec_ref (goal spec reference, same for all entries).
    Verify: each plan_ref is the epic document path with a #section-anchor matching the capability heading.
 6. Check each proposed capability against the review checklist and anti-pattern table above.
-7. Submit verdict with {{.ToolPrefix}}liza_submit_verdict.
+7. Submit verdict with liza submit-verdict.
 {{- else if eq .Role "us-reviewer"}}
 
 SPEC-REVIEW SKILL:
@@ -210,7 +211,7 @@ REVIEW PHASE:
 
 DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- end}}
-9. Submit verdict with {{.ToolPrefix}}liza_submit_verdict.
+9. Submit verdict with liza submit-verdict.
 {{- else if eq .Role "architecture-reviewer"}}
 
 REVIEW CHECKLIST:
@@ -247,10 +248,10 @@ REVIEW PHASE:
 3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 4. Read the architecture document in the worktree (look for the arch doc in specs/arch-plan/).
 5. Validate the decomposition: does it cover the full scope of the goal spec?
-6. Verify output[] entries: run {{.ToolPrefix}}liza_get with {"query": "tasks/{{.TaskID}}"} and confirm
+6. Verify output[] entries: run liza get tasks/{{.TaskID}} --json and confirm
    output[] has one entry per code-planning scope with valid desc, done_when, scope, spec_ref, arch_ref.
 7. Check each proposed scope against the review checklist above.
-8. Submit verdict with {{.ToolPrefix}}liza_submit_verdict.
+8. Submit verdict with liza submit-verdict.
 {{- else if eq .Role "integration-reviewer"}}
 
 REVIEW SCOPE:
@@ -261,7 +262,7 @@ Enrich with systemic analysis: interaction effects across fixes, architectural d
 INSTRUCTIONS:
 1. Invoke skill: systemic-thinking for systemic analysis framing.
 2. Read the branch diff: git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD
-3. Review the analyst's output[]: {{.ToolPrefix}}liza_get {"query": "tasks/{{.TaskID}}"}
+3. Review the analyst's output[]: liza get tasks/{{.TaskID}} --json
    For each proposed fix-task:
    a. Verify the finding is real (confirmed by the diff, not fabricated)
    b. Verify the fix-task is well-formed: single intent, falsifiable done_when, correct scope
@@ -283,10 +284,11 @@ Include this assessment in your rejection reason if rejecting.
 {{- end}}
 
 POST-VERDICT (MANDATORY for REJECTED):
-After submitting a REJECTED verdict, MUST call {{.ToolPrefix}}liza_await_resubmission immediately.
+After submitting a REJECTED verdict, MUST run liza await-resubmission immediately:
+   liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
 Do NOT exit. It blocks ~100s per call, returning POLL with remaining timeout_seconds.
 - RESUBMITTED: re-review the new changes
-- POLL: call await_resubmission again with the timeout_seconds from the response
+- POLL: call await-resubmission again with the timeout_seconds from the response
 - TERMINAL/TIMEOUT/ABORTED: exit normally
 {{- end}}
 {{- end -}}

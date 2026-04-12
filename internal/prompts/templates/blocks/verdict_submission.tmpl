@@ -1,12 +1,11 @@
 {{- define "verdict-submission" -}}
 
 --- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---
-⚠️  {{.ToolPrefix}}liza_submit_verdict is an MCP tool — call it as a tool, NEVER via shell/CLI.
-You MUST call the MCP tool {{.ToolPrefix}}liza_submit_verdict IN THIS SAME SESSION:
-  APPROVED: call tool {{.ToolPrefix}}liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "APPROVED", "agent_id": "{{.AgentID}}"}
-  REJECTED: call tool {{.ToolPrefix}}liza_submit_verdict with params {"task_id": "{{.TaskID}}", "verdict": "REJECTED", "agent_id": "{{.AgentID}}", "reason": "<detailed rejection>"}
+⚠️  You MUST execute the liza submit-verdict CLI command IN THIS SAME SESSION:
+  APPROVED: liza submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json
+  REJECTED: liza submit-verdict {{.TaskID}} REJECTED "<detailed rejection>" --agent-id {{.AgentID}} --json
 After submitting verdict, EXIT immediately. Your work is complete.
 
-❌ FAILURE MODE: Completing review, saying "I recommend APPROVED", then exiting WITHOUT calling the tool.
-The tool call IS the deliverable. Analysis without tool execution = nothing happened.
+❌ FAILURE MODE: Completing review, saying "I recommend APPROVED", then exiting WITHOUT running the command.
+The CLI command IS the deliverable. Analysis without command execution = nothing happened.
 {{- end -}}

@@ -27,7 +27,7 @@ ARCHITECTURE REVIEWER STATE TRANSITIONS:
 {{- end}}
 
 After REJECTED verdict (non-terminal):
-  Call {{.ToolPrefix}}liza_await_resubmission to wait for the doer's resubmission.
+  Run liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json to wait for the doer's resubmission.
   - RESUBMITTED: task is reclaimed for review — review the new changes
   - TERMINAL, TIMEOUT, or ABORTED: exit normally
   Do NOT call if verdict result shows EscalatedToBlocked or NewAttemptTriggered.

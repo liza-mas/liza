@@ -1,88 +1,91 @@
 {{- define "doer-tools" -}}
 {{- if eq .Role "coder"}}
 
-CODER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_for_review,liza_await_verdict,liza_handoff,liza_mark_blocked,liza_write_checkpoint"}}:
-- {{.ToolPrefix}}liza_submit_for_review — Submit completed work for review
-  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+CODER TOOLS:
+- liza submit-for-review — Submit completed work for review
+  liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
-- {{.ToolPrefix}}liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
-- {{.ToolPrefix}}liza_handoff — Context near exhaustion (~90%)
-  {"task_id": "{{.TaskID}}", "summary": "<what is done>", "next_action": "<exact next step>", "agent_id": "{{.AgentID}}"}
-  Optional structured fields: "succeeded" (array), "failed" (array), "hypothesis" (string), "key_files" (array), "dead_ends" (array)
+- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
+  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+- liza handoff — Context near exhaustion (~90%)
+  liza handoff {{.TaskID}} --agent-id {{.AgentID}} --summary "<what is done>" --next-action "<exact next step>" --json
+  Optional structured fields: --succeeded, --failed, --hypothesis, --key-files, --dead-ends
   When provided, structured fields override summary/next_action for richer handoff context.
-- {{.ToolPrefix}}liza_mark_blocked — Cannot proceed (spec ambiguity, missing dependency)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
-- {{.ToolPrefix}}liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
-  Optional: "assumptions", "risks", "tdd_not_required", "scope_extensions"
+- liza mark-blocked — Cannot proceed (spec ambiguity, missing dependency)
+  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
+- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+  Optional: --assumptions, --risks, --tdd-not-required, --scope-extensions
   scope_extensions: [{"file": "<path>", "justification": "<why this out-of-scope file must change>"}]
   If you need to modify a file outside the task scope, declare it as a scope_extension — not as an assumption.
 {{- else if eq .Role "code-planner"}}
 
-CODE PLANNER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_for_review,liza_await_verdict,liza_write_checkpoint,liza_set_task_output,liza_mark_blocked"}}:
-- {{.ToolPrefix}}liza_submit_for_review — Submit code plan for review
-  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+CODE PLANNER TOOLS:
+- liza submit-for-review — Submit code plan for review
+  liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
-- {{.ToolPrefix}}liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
-- {{.ToolPrefix}}liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
-- {{.ToolPrefix}}liza_set_task_output — Persist structured task definitions for downstream task creation
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "output": [
+- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
+  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- liza set-task-output — Persist structured task definitions for downstream task creation
+  liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
+  JSON file contains: [
     {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "plan_ref": "...", "depends_on": ["0", "2"]}
-  ]}
+  ]
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.
-- {{.ToolPrefix}}liza_mark_blocked — Cannot proceed
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+- liza mark-blocked — Cannot proceed
+  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
 {{- else if eq .Role "epic-planner"}}
 
-EPIC PLANNER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_for_review,liza_await_verdict,liza_write_checkpoint,liza_set_task_output,liza_mark_blocked"}}:
-- {{.ToolPrefix}}liza_submit_for_review — Submit epic plan for review
-  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+EPIC PLANNER TOOLS:
+- liza submit-for-review — Submit epic plan for review
+  liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
-- {{.ToolPrefix}}liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
-- {{.ToolPrefix}}liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
-- {{.ToolPrefix}}liza_set_task_output — Persist one entry per capability for downstream US Writer tasks
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "output": [
+- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
+  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- liza set-task-output — Persist one entry per capability for downstream US Writer tasks
+  liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
+  JSON file contains: [
     {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "plan_ref": "...", "depends_on": ["0"]}
-  ]}
+  ]
   depends_on: optional array of sibling index strings for ordering capabilities.
-- {{.ToolPrefix}}liza_mark_blocked — Cannot proceed
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+- liza mark-blocked — Cannot proceed
+  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
 {{- else if eq .Role "us-writer"}}
 
-US WRITER TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_for_review,liza_await_verdict,liza_write_checkpoint,liza_mark_blocked"}}:
-- {{.ToolPrefix}}liza_submit_for_review — Submit user stories for review
-  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+US WRITER TOOLS:
+- liza submit-for-review — Submit user stories for review
+  liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
-- {{.ToolPrefix}}liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
-- {{.ToolPrefix}}liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
-- {{.ToolPrefix}}liza_mark_blocked — Cannot proceed
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
+  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- liza mark-blocked — Cannot proceed
+  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
 {{- else if eq .Role "architect"}}
 
-ARCHITECT TOOLS{{toolSearchHint .ToolPrefix "liza_get,liza_submit_for_review,liza_await_verdict,liza_write_checkpoint,liza_set_task_output,liza_mark_blocked"}}:
-- {{.ToolPrefix}}liza_submit_for_review — Submit architecture plan for review
-  {"task_id": "{{.TaskID}}", "commit_sha": "<SHA>", "agent_id": "{{.AgentID}}"}
+ARCHITECT TOOLS:
+- liza submit-for-review — Submit architecture plan for review
+  liza submit-for-review {{.TaskID}} <SHA> --agent-id {{.AgentID}} --json
   Get SHA first: git -C {{.Worktree}} rev-parse HEAD
-- {{.ToolPrefix}}liza_await_verdict — Block until review verdict arrives (call after submit_for_review; budget-aware)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}"}
-- {{.ToolPrefix}}liza_write_checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "intent": "<what>", "validation_plan": "<how to verify>", "files_to_modify": ["<file1>"]}
-- {{.ToolPrefix}}liza_set_task_output — Persist code-planning task definitions for downstream creation
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "output": [
+- liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
+  liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
+- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- liza set-task-output — Persist code-planning task definitions for downstream creation
+  liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
+  JSON file contains: [
     {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "arch_ref": "specs/arch-plan/<doc>.md", "depends_on": ["0", "2"]}
-  ]}
+  ]
   arch_ref: path to the architecture document (this task's primary artifact).
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.
-- {{.ToolPrefix}}liza_mark_blocked — Cannot proceed
-  {"task_id": "{{.TaskID}}", "agent_id": "{{.AgentID}}", "reason": "<what is blocking>", "questions": ["<q1>", "<q2>"]}
+- liza mark-blocked — Cannot proceed
+  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
 {{- end}}
 {{- end -}}

@@ -7,26 +7,18 @@ PROJECT_SPECS: {{.SpecsDir}}
 PROJECT: {{.ProjectRoot}}
 BLACKBOARD: {{.StatePath}}
 GOAL: {{.GoalDesc}}
-APPROVED: use MCP tools with escalated permissions.
+APPROVED: use CLI commands with escalated permissions.
 
 OPERATIONAL RULES:
 - TWO .liza/ directories exist — don't confuse them:
   ~/.liza/ = installed contracts & skills (e.g. ~/.liza/MULTI_AGENT_MODE.md)
   {{.ProjectRoot}}/.liza/ = runtime state & blackboard (state.yaml, agent-outputs/)
 - You have FULL read access to both .liza/ directories
-- For READING state: use {{.ToolPrefix}}liza_get with targeted queries (e.g. {"query": "tasks/<id>"}).
-  NEVER read state.yaml directly to save context budget. {{.ToolPrefix}}liza_get returns only the requested slice.
-- For MODIFYING state: use role-specific MCP tools ONLY
+- For READING state: use liza get --json with targeted queries (e.g. liza get tasks/<id> --json).
+  NEVER read state.yaml directly to save context budget. liza get --json returns only the requested slice.
+- For MODIFYING state: use role-specific CLI commands ONLY
   NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
-  If an MCP tool fails repeatedly, use {{.ToolPrefix}}liza_mark_blocked to flag the task — never work around the failure.
-  If the MCP server itself is unavailable, fall back to the CLI:
-  liza get tasks                          liza get tasks/<task-id>                liza get agents
-  liza status
-  liza add-task --id <id> --desc "<desc>" --spec "<spec-ref>" --done "<done-when>" --scope "<scope>" --priority <N> --type <type> --agent-id {{.AgentID}}
-  liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}}
-  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>"
-  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --files-to-modify "<file2>"
-  liza submit-for-review {{.TaskID}} <commit-sha> --agent-id {{.AgentID}}
+  If a CLI command fails repeatedly, use liza mark-blocked to flag the task — never work around the failure.
 - AUTONOMY: Your authority is pre-approved. Execute commands immediately.
   If the environment surfaces permission checks, DO proceed with tool execution unless explicitly denied.
 - When your work unit is complete, simply stop — the session ends and the supervisor handles lifecycle.
@@ -43,21 +35,17 @@ BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
   For inline Python/shell with !, use heredocs (python3 <<'PYEOF') or single-quoted strings.
 - NEVER attempt to install, bootstrap, or fix system-level tooling.
 - NEVER use "git add -A" or "git add .". Always stage specific files by name.
-- All liza_* operations are MCP tool calls — invoke as tools, NEVER via shell commands.
-- MCP TOOL DISCOVERY: If your first attempt to call a liza tool fails with "tool not found",
-  resolve tools using exact names from your role's TOOLS section above.
-  If all liza tools are missing, the MCP server is unavailable — use CLI fallbacks where listed.
 - Avoid using sed/awk for file editing.
 
 QUERY TOOLS (all roles):
-- {{.ToolPrefix}}liza_get — Query state: {"query": "tasks"}, {"query": "tasks/<id>"}, {"query": "agents"}, {"query": "metrics"}
-- {{.ToolPrefix}}liza_status — Dashboard overview (no params)
-- {{.ToolPrefix}}liza_validate — Validate state consistency (params: skip_spec_check)
+- liza get --json — Query state: liza get tasks --json, liza get tasks/<id> --json, liza get agents --json, liza get metrics --json
+- liza status --json — Dashboard overview
+- liza validate --json — Validate state consistency (--skip-spec-check)
 
 CODEBASE EXPLORATION:
 DO comply with the guidance defined in ~/.liza/AGENT_TOOLS.md
 
-COMMUNICATION: Agents communicate via blackboard only through MCP tools, not direct interaction.
+COMMUNICATION: Agents communicate via blackboard only through CLI commands, not direct interaction.
 
 FORBIDDEN:
 {{- if ne .Role "orchestrator"}}
@@ -84,9 +72,9 @@ FIRST ACTIONS:
    b. ~/.liza/AGENT_TOOLS.md
    c. {{.ProjectRoot}}/GUARDRAILS.md (if it exists — skip if absent)
 {{- if .TaskID}}
-2. Query your assigned task: {{.ToolPrefix}}liza_get {"query": "tasks/{{.TaskID}}"}
+2. Query your assigned task: liza get tasks/{{.TaskID}} --json
 {{- else}}
-2. Query workspace state: {{.ToolPrefix}}liza_get {"query": "tasks"}
+2. Query workspace state: liza get tasks --json
 {{- end}}
 3. Read the goal spec: {{.GoalSpecRef}}
 4. Execute your role's protocol

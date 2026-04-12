@@ -3,24 +3,24 @@ Tasks are BLOCKED. Analyze and resolve immediately:
 
 1. Read blocked tasks from blackboard — understand blocker_reason
 2. Determine if blocker is:
-   - Missing dependency → create prerequisite task (execute {{.ToolPrefix}}liza_add_tasks tool NOW)
+   - Missing dependency → create prerequisite task (run liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW)
    - Spec ambiguity → clarify spec, then supersede with corrected task
    - External dependency → document, possibly supersede task
-   - Wrong approach → supersede task, create alternative (execute tools NOW)
+   - Wrong approach → supersede task, create alternative (run commands NOW)
 3. For each blocked task, decide action:
    - To supersede (create clean replacement):
    Example supersede workflow:
-   a. Re-read the task via {{.ToolPrefix}}liza_get tasks/<task-id> to confirm it is still BLOCKED.
+   a. Re-read the task via liza get tasks/<task-id> --json to confirm it is still BLOCKED.
       If status changed (e.g., task was claimed), skip — the task is being actively worked.
-   b. Execute tool: {{.ToolPrefix}}liza_add_tasks with {"tasks": [{"id": "task-4", ...}], "agent_id": "{{.AgentID}}"} (create replacement tasks)
-   c. Execute tool: {{.ToolPrefix}}liza_supersede_task with {"task_id": "task-3", "replacement_ids": ["task-4", "task-5"], "reason": "Split due to complexity", "agent_id": "{{.AgentID}}"}
-   d. Execute tool: {{.ToolPrefix}}liza_wt_delete with {"task_id": "task-3", "agent_id": "{{.AgentID}}"} (if worktree exists)
+   b. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
+   c. Run: liza supersede-task <task-id> --replacement-ids "<new-ids>" --reason "Split due to complexity" --agent-id {{.AgentID}} --json
+   d. Run: liza wt-delete <task-id> --agent-id {{.AgentID}} --json (if worktree exists)
 4. After analyzing each blocked task:
    - If you resolved it (superseded): no further action needed for that task
-   - If you CANNOT resolve it (genuine spec ambiguity, external dependency): call {{.ToolPrefix}}liza_assess_blocked to record your assessment
-     Execute tool: {{.ToolPrefix}}liza_assess_blocked with {"task_id": "<task-id>", "note": "<why it cannot be resolved now>"}
+   - If you CANNOT resolve it (genuine spec ambiguity, external dependency): run liza assess-blocked to record your assessment
+     Run: liza assess-blocked <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
      This prevents re-waking for the same unresolvable block. The task will trigger again only when new information arrives (dependency changes, human notes).
-5. Execute all state-modifying tools in this session. Do NOT defer.
+5. Execute all state-modifying commands in this session. Do NOT defer.
 
-Do NOT call {{.ToolPrefix}}liza_sprint_checkpoint. If you cannot resolve a blocker, assess it and exit. Other tasks must continue uninterrupted.
+Do NOT call liza sprint-checkpoint. If you cannot resolve a blocker, assess it and exit. Other tasks must continue uninterrupted.
 {{- end -}}
