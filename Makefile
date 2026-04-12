@@ -1,8 +1,7 @@
 .PHONY: build test test-e2e clean install lint check-testhelpers check-embedded release package build-all tidy run coverage help
 
-# Binary names
+# Binary name
 BINARY_NAME=liza
-MCP_BINARY_NAME=liza-mcp
 
 # Build variables
 VERSION?=0.2.0
@@ -28,8 +27,6 @@ sync-embedded:
 build: sync-embedded
 	@echo "Building $(BINARY_NAME) (version=$(VERSION), commit=$(GIT_COMMIT), date=$(BUILD_DATE))"
 	@go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/liza
-	@echo "Building $(MCP_BINARY_NAME) (version=$(VERSION), commit=$(GIT_COMMIT), date=$(BUILD_DATE))"
-	@go build $(LDFLAGS) -o $(MCP_BINARY_NAME) ./cmd/liza-mcp
 
 # Run tests
 # IMPORTANT: Always use `make test`, not bare `go test ./...`.
@@ -50,8 +47,6 @@ coverage: test
 clean:
 	rm -f $(BINARY_NAME)
 	rm -f $(BINARY_NAME)-*
-	rm -f $(MCP_BINARY_NAME)
-	rm -f $(MCP_BINARY_NAME)-*
 	rm -f coverage.out
 	rm -rf dist
 	rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/docs internal/embedded/specs
@@ -64,9 +59,8 @@ SUDO := $(shell test -w $(INSTALL_DIR) && echo "" || echo "sudo")
 install: build
 	@mkdir -p $(INSTALL_DIR)
 	$(SUDO) install -m 755 $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	$(SUDO) install -m 755 $(MCP_BINARY_NAME) $(INSTALL_DIR)/$(MCP_BINARY_NAME)
 	@if [ "$(INSTALL_DIR)" != "/usr/local/bin" ] && [ -f /usr/local/bin/liza ]; then \
-		echo "Warning: old liza binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/liza /usr/local/bin/liza-mcp' to avoid shadowing"; \
+		echo "Warning: old liza binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/liza' to avoid shadowing"; \
 	fi
 
 # Check that testhelpers package is not imported in production code
@@ -110,10 +104,6 @@ build-all: sync-embedded
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-amd64 ./cmd/liza
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-arm64 ./cmd/liza
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-windows-amd64.exe ./cmd/liza
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(MCP_BINARY_NAME)-linux-amd64 ./cmd/liza-mcp
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(MCP_BINARY_NAME)-darwin-amd64 ./cmd/liza-mcp
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(MCP_BINARY_NAME)-darwin-arm64 ./cmd/liza-mcp
-	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(MCP_BINARY_NAME)-windows-amd64.exe ./cmd/liza-mcp
 
 # Create release artifacts
 release: clean lint test
@@ -125,12 +115,6 @@ release: clean lint test
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-darwin-amd64 ./cmd/liza
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-darwin-arm64 ./cmd/liza
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-windows-amd64.exe ./cmd/liza
-	@# Build liza-mcp for all platforms
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(MCP_BINARY_NAME)-linux-amd64 ./cmd/liza-mcp
-	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o dist/$(MCP_BINARY_NAME)-linux-arm64 ./cmd/liza-mcp
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(MCP_BINARY_NAME)-darwin-amd64 ./cmd/liza-mcp
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(MCP_BINARY_NAME)-darwin-arm64 ./cmd/liza-mcp
-	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(MCP_BINARY_NAME)-windows-amd64.exe ./cmd/liza-mcp
 	@# Create checksums
 	@cd dist && sha256sum * > checksums.txt
 	@echo "✓ Release artifacts created in dist/"
@@ -145,28 +129,28 @@ release: clean lint test
 package: release
 	@echo "Creating distribution packages..."
 	@cd dist && \
-		tar -czf $(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz $(BINARY_NAME)-linux-amd64 $(MCP_BINARY_NAME)-linux-amd64 && \
-		tar -czf $(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz $(BINARY_NAME)-linux-arm64 $(MCP_BINARY_NAME)-linux-arm64 && \
-		tar -czf $(BINARY_NAME)-$(VERSION)-darwin-amd64.tar.gz $(BINARY_NAME)-darwin-amd64 $(MCP_BINARY_NAME)-darwin-amd64 && \
-		tar -czf $(BINARY_NAME)-$(VERSION)-darwin-arm64.tar.gz $(BINARY_NAME)-darwin-arm64 $(MCP_BINARY_NAME)-darwin-arm64 && \
-		zip -q $(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(BINARY_NAME)-windows-amd64.exe $(MCP_BINARY_NAME)-windows-amd64.exe
+		tar -czf $(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz $(BINARY_NAME)-linux-amd64 && \
+		tar -czf $(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz $(BINARY_NAME)-linux-arm64 && \
+		tar -czf $(BINARY_NAME)-$(VERSION)-darwin-amd64.tar.gz $(BINARY_NAME)-darwin-amd64 && \
+		tar -czf $(BINARY_NAME)-$(VERSION)-darwin-arm64.tar.gz $(BINARY_NAME)-darwin-arm64 && \
+		zip -q $(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(BINARY_NAME)-windows-amd64.exe
 	@echo "✓ Distribution packages created"
 	@ls -lh dist/*.tar.gz dist/*.zip
 
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  build              - Build liza and liza-mcp binaries"
+	@echo "  build              - Build liza binary"
 	@echo "  test               - Run tests (includes testhelpers check)"
 	@echo "  test-e2e           - Run e2e full sprint test (~40s, requires -tags e2e)"
 	@echo "  coverage           - Run tests with coverage report"
 	@echo "  clean              - Clean build artifacts"
-	@echo "  install            - Install liza and liza-mcp binaries"
+	@echo "  install            - Install liza binary"
 	@echo "  lint               - Run linters (includes testhelpers check)"
 	@echo "  check-testhelpers  - Verify testhelpers not in production code"
 	@echo "  check-embedded     - Verify embedded copies match repo masters"
 	@echo "  tidy               - Tidy dependencies"
 	@echo "  run                - Build and run the liza binary"
-	@echo "  build-all          - Build both binaries for multiple platforms"
+	@echo "  build-all          - Build liza for multiple platforms"
 	@echo "  release            - Create release artifacts (run tests, build all platforms, create checksums)"
 	@echo "  package            - Create distribution packages (tarballs and zip files)"
