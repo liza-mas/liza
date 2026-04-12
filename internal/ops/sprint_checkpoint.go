@@ -16,8 +16,8 @@ var ErrSprintAlreadyCheckpoint = errors.New("sprint is already at CHECKPOINT")
 
 // SprintCheckpointResult contains the outcome of creating a sprint checkpoint.
 type SprintCheckpointResult struct {
-	CheckpointAt time.Time
-	ReportPath   string
+	CheckpointAt time.Time `json:"checkpoint_at"`
+	ReportPath   string    `json:"report_path"`
 }
 
 // SprintCheckpoint transitions sprint status to CHECKPOINT, causing agents to pause,

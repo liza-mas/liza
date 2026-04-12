@@ -12,8 +12,8 @@ import (
 
 // MarkBlockedResult contains the outcome of marking a task as blocked.
 type MarkBlockedResult struct {
-	TaskID string
-	Reason string
+	TaskID string `json:"task_id"`
+	Reason string `json:"reason"`
 }
 
 // MarkBlocked transitions a task from an executing status to BLOCKED. Only the

@@ -16,13 +16,13 @@ import (
 
 // VerdictResult contains the outcome of a successful verdict submission.
 type VerdictResult struct {
-	TaskID              string
-	Verdict             string // "APPROVED" or "REJECTED"
-	AgentID             string
-	Reason              string // non-empty for rejections
-	EscalatedToBlocked  bool
-	BlockedReason       string
-	NewAttemptTriggered bool
+	TaskID              string `json:"task_id"`
+	Verdict             string `json:"verdict"` // "APPROVED" or "REJECTED"
+	AgentID             string `json:"agent_id"`
+	Reason              string `json:"reason"` // non-empty for rejections
+	EscalatedToBlocked  bool   `json:"escalated_to_blocked"`
+	BlockedReason       string `json:"blocked_reason"`
+	NewAttemptTriggered bool   `json:"new_attempt_triggered"`
 }
 
 // impactOrder defines the ordering for impact levels.

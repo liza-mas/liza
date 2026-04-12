@@ -14,10 +14,10 @@ import (
 
 // SupersedeResult contains the outcome of superseding a task.
 type SupersedeResult struct {
-	TaskID         string
-	OriginalStatus models.TaskStatus
-	ReplacementIDs []string
-	Warnings       []string
+	TaskID         string            `json:"task_id"`
+	OriginalStatus models.TaskStatus `json:"original_status"`
+	ReplacementIDs []string          `json:"replacement_ids"`
+	Warnings       []string          `json:"warnings"`
 }
 
 // SupersedeTask transitions a BLOCKED, REJECTED, or READY task to SUPERSEDED,

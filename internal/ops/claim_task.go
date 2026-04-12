@@ -18,16 +18,16 @@ import (
 
 // ClaimResult contains the outcome of a successful task claim.
 type ClaimResult struct {
-	TaskID            string
-	AgentID           string
-	SourceStatus      models.TaskStatus
-	WorktreeRel       string
-	BaseCommit        string
-	LeaseExpires      time.Time
-	IntegrationFix    bool
-	PreviousAssignee  string // empty if none
-	WorktreeRecreated bool   // true if old worktree was deleted and new one created
-	Warnings          []string
+	TaskID            string            `json:"task_id"`
+	AgentID           string            `json:"agent_id"`
+	SourceStatus      models.TaskStatus `json:"source_status"`
+	WorktreeRel       string            `json:"worktree_rel"`
+	BaseCommit        string            `json:"base_commit"`
+	LeaseExpires      time.Time         `json:"lease_expires"`
+	IntegrationFix    bool              `json:"integration_fix"`
+	PreviousAssignee  string            `json:"previous_assignee"`  // empty if none
+	WorktreeRecreated bool              `json:"worktree_recreated"` // true if old worktree was deleted and new one created
+	Warnings          []string          `json:"warnings"`
 }
 
 type claimWorktreePhaseResult struct {

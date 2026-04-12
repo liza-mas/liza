@@ -70,18 +70,18 @@ type SprintTimeline struct {
 
 // SprintMetrics tracks sprint progress and quality
 type SprintMetrics struct {
-	TasksDone                        int            `yaml:"tasks_done"`
-	TasksInProgress                  int            `yaml:"tasks_in_progress"`
-	TasksBlocked                     int            `yaml:"tasks_blocked"`
-	IterationsTotal                  int            `yaml:"iterations_total"`
-	ReviewCyclesTotal                int            `yaml:"review_cycles_total"`
-	ReviewVerdictApprovals           int            `yaml:"review_verdict_approvals"`
-	ReviewVerdictRejections          int            `yaml:"review_verdict_rejections"`
-	ReviewVerdictCount               int            `yaml:"review_verdict_count"`
-	ReviewVerdictApprovalRatePercent int            `yaml:"review_verdict_approval_rate_percent"`
-	TaskSubmittedForReviewCount      int            `yaml:"task_submitted_for_review_count"`
-	TaskOutcomeApprovalRatePercent   int            `yaml:"task_outcome_approval_rate_percent"`
-	Extra                            map[string]any `yaml:",inline"`
+	TasksDone                        int            `yaml:"tasks_done" json:"tasks_done"`
+	TasksInProgress                  int            `yaml:"tasks_in_progress" json:"tasks_in_progress"`
+	TasksBlocked                     int            `yaml:"tasks_blocked" json:"tasks_blocked"`
+	IterationsTotal                  int            `yaml:"iterations_total" json:"iterations_total"`
+	ReviewCyclesTotal                int            `yaml:"review_cycles_total" json:"review_cycles_total"`
+	ReviewVerdictApprovals           int            `yaml:"review_verdict_approvals" json:"review_verdict_approvals"`
+	ReviewVerdictRejections          int            `yaml:"review_verdict_rejections" json:"review_verdict_rejections"`
+	ReviewVerdictCount               int            `yaml:"review_verdict_count" json:"review_verdict_count"`
+	ReviewVerdictApprovalRatePercent int            `yaml:"review_verdict_approval_rate_percent" json:"review_verdict_approval_rate_percent"`
+	TaskSubmittedForReviewCount      int            `yaml:"task_submitted_for_review_count" json:"task_submitted_for_review_count"`
+	TaskOutcomeApprovalRatePercent   int            `yaml:"task_outcome_approval_rate_percent" json:"task_outcome_approval_rate_percent"`
+	Extra                            map[string]any `yaml:",inline" json:"-"`
 }
 
 // AllPlannedTasksTerminal returns true if the sprint has planned tasks and all of

@@ -13,9 +13,9 @@ import (
 
 // CancelResult contains the outcome of cancelling a task.
 type CancelResult struct {
-	TaskID         string
-	OriginalStatus models.TaskStatus
-	Warnings       []string
+	TaskID         string            `json:"task_id"`
+	OriginalStatus models.TaskStatus `json:"original_status"`
+	Warnings       []string          `json:"warnings"`
 }
 
 // CancelTask transitions a task to ABANDONED with a reason, preserving full audit trail.

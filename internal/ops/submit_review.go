@@ -17,9 +17,9 @@ import (
 
 // SubmitForReviewResult contains the outcome of submitting a task for review.
 type SubmitForReviewResult struct {
-	TaskID       string
-	ReviewCommit string
-	AgentID      string
+	TaskID       string `json:"task_id"`
+	ReviewCommit string `json:"review_commit"`
+	AgentID      string `json:"agent_id"`
 }
 
 // SubmitForReview validates that commitSHA matches the worktree HEAD before rebase,

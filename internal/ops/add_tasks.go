@@ -32,8 +32,8 @@ type AddTaskInput struct {
 
 // AddTaskResult contains the outcome of adding a task.
 type AddTaskResult struct {
-	TaskID   string
-	Warnings []string
+	TaskID   string   `json:"task_id"`
+	Warnings []string `json:"warnings"`
 }
 
 // PostWriteValidationError indicates the mutation succeeded but state
@@ -194,15 +194,15 @@ type AddTasksInput struct {
 
 // AddTasksResult contains the outcome of batch task creation.
 type AddTasksResult struct {
-	Results []AddTaskItemResult
+	Results []AddTaskItemResult `json:"results"`
 }
 
 // AddTaskItemResult contains the outcome of adding a single task in a batch.
 type AddTaskItemResult struct {
-	TaskID   string
-	Success  bool
-	Error    string // empty on success
-	Warnings []string
+	TaskID   string   `json:"task_id"`
+	Success  bool     `json:"success"`
+	Error    string   `json:"error"` // empty on success
+	Warnings []string `json:"warnings"`
 }
 
 // AddTasks adds multiple tasks in a single call. Each task is added

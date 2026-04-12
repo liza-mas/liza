@@ -32,12 +32,12 @@ var ErrBudgetExhausted = stderrors.New("budget exhausted: iteration or review-cy
 
 // AwaitVerdictResult holds the outcome of blocking on a review verdict.
 type AwaitVerdictResult struct {
-	Verdict       string            // One of the Verdict* constants
-	Reason        string            // Rejection reason or terminal explanation
-	ReviewerAgent string            // Agent ID that issued the verdict (empty if timeout/abort)
-	TaskStatus    models.TaskStatus // Final observed task status
-	Iteration     int               // Current iteration number (post-reclaim if rejected)
-	Guidance      string            // Inline guidance for the agent on rejection
+	Verdict       string            `json:"verdict"`        // One of the Verdict* constants
+	Reason        string            `json:"reason"`         // Rejection reason or terminal explanation
+	ReviewerAgent string            `json:"reviewer_agent"` // Agent ID that issued the verdict (empty if timeout/abort)
+	TaskStatus    models.TaskStatus `json:"task_status"`    // Final observed task status
+	Iteration     int               `json:"iteration"`      // Current iteration number (post-reclaim if rejected)
+	Guidance      string            `json:"guidance"`       // Inline guidance for the agent on rejection
 }
 
 // AwaitVerdict blocks until a review verdict arrives for a submitted task.

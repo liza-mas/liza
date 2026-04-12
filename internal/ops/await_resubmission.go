@@ -24,11 +24,11 @@ const (
 
 // AwaitResubmissionResult holds the outcome of blocking on a doer resubmission.
 type AwaitResubmissionResult struct {
-	Verdict      string            // One of the Resubmission* constants
-	TaskStatus   models.TaskStatus // Final observed task status
-	Reason       string            // Terminal explanation (empty on RESUBMITTED)
-	ReviewCommit string            // New commit SHA to review (on RESUBMITTED)
-	ReviewCycle  int               // Current review cycle count
+	Verdict      string            `json:"verdict"`       // One of the Resubmission* constants
+	TaskStatus   models.TaskStatus `json:"task_status"`   // Final observed task status
+	Reason       string            `json:"reason"`        // Terminal explanation (empty on RESUBMITTED)
+	ReviewCommit string            `json:"review_commit"` // New commit SHA to review (on RESUBMITTED)
+	ReviewCycle  int               `json:"review_cycle"`  // Current review cycle count
 }
 
 // reviewOwnershipLeaseMargin is added beyond the await deadline so the lease

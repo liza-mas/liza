@@ -13,8 +13,8 @@ import (
 
 // HandoffResult contains the outcome of a successful handoff initiation.
 type HandoffResult struct {
-	TaskID  string
-	AgentID string
+	TaskID  string `json:"task_id"`
+	AgentID string `json:"agent_id"`
 }
 
 // HandoffInput carries all parameters for a handoff operation.

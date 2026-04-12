@@ -16,11 +16,11 @@ import (
 
 // CreateWorktreeResult contains the outcome of creating a worktree.
 type CreateWorktreeResult struct {
-	TaskID         string
-	WorktreeDir    string
-	BaseCommit     string
-	AlreadyExisted bool // true if worktree existed and fresh was false
-	Warnings       []string
+	TaskID         string   `json:"task_id"`
+	WorktreeDir    string   `json:"worktree_dir"`
+	BaseCommit     string   `json:"base_commit"`
+	AlreadyExisted bool     `json:"already_existed"` // true if worktree existed and fresh was false
+	Warnings       []string `json:"warnings"`
 }
 
 // CreateWorktree provisions a git worktree from the integration branch for a

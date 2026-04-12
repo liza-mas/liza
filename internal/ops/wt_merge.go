@@ -62,13 +62,13 @@ func (e *IntegrationFailedError) Error() string {
 
 // MergeResult contains the outcome of a successful worktree merge.
 type MergeResult struct {
-	TaskID            string
-	MergeCommit       string
-	FastForward       bool
-	TestsRan          bool
-	NoTestScriptFound bool     // true when integration test script was missing (distinguishes from "tests ran")
-	TestOutput        string   // captured stdout+stderr from integration tests (if any)
-	Warnings          []string // non-fatal warnings from cleanup/metrics
+	TaskID            string   `json:"task_id"`
+	MergeCommit       string   `json:"merge_commit"`
+	FastForward       bool     `json:"fast_forward"`
+	TestsRan          bool     `json:"tests_ran"`
+	NoTestScriptFound bool     `json:"no_test_script_found"` // true when integration test script was missing (distinguishes from "tests ran")
+	TestOutput        string   `json:"test_output"`          // captured stdout+stderr from integration tests (if any)
+	Warnings          []string `json:"warnings"`             // non-fatal warnings from cleanup/metrics
 }
 
 // appendUniqueAgentID adds an agent ID to failed_by if not already present

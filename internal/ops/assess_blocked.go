@@ -14,7 +14,7 @@ import (
 
 // AssessBlockedResult contains the outcome of recording an orchestrator assessment.
 type AssessBlockedResult struct {
-	TaskID string
+	TaskID string `json:"task_id"`
 }
 
 // AssessBlocked records that the orchestrator has assessed a BLOCKED task.

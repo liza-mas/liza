@@ -12,10 +12,10 @@ import (
 
 // DeleteWorktreeResult contains the outcome of deleting a worktree.
 type DeleteWorktreeResult struct {
-	TaskID         string
-	PreviousStatus models.TaskStatus
-	Existed        bool
-	Warnings       []string
+	TaskID         string            `json:"task_id"`
+	PreviousStatus models.TaskStatus `json:"previous_status"`
+	Existed        bool              `json:"existed"`
+	Warnings       []string          `json:"warnings"`
 }
 
 // DeleteWorktree removes a task's git worktree. For SUPERSEDED tasks, the branch

@@ -14,7 +14,7 @@ import (
 
 // AssessHypothesisExhaustedResult contains the outcome of recording an orchestrator assessment.
 type AssessHypothesisExhaustedResult struct {
-	TaskID string
+	TaskID string `json:"task_id"`
 }
 
 // AssessHypothesisExhausted records that the orchestrator has assessed a hypothesis-exhausted task.

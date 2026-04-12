@@ -15,10 +15,10 @@ import (
 
 // ReleaseClaimResult contains the outcome of releasing a claim.
 type ReleaseClaimResult struct {
-	TaskID           string
-	Role             string
-	ReleasedReviewer bool
-	ReleasedDoer     bool
+	TaskID           string `json:"task_id"`
+	Role             string `json:"role"`
+	ReleasedReviewer bool   `json:"released_reviewer"`
+	ReleasedDoer     bool   `json:"released_doer"`
 }
 
 // claimRelease describes the field access pattern for one role's claim on a task.

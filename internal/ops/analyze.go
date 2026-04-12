@@ -13,11 +13,11 @@ import (
 
 // AnalyzeResult contains the outcome of a circuit breaker analysis.
 type AnalyzeResult struct {
-	Triggered  bool
-	Pattern    string
-	Severity   string
-	Evidence   string
-	ReportPath string
+	Triggered  bool   `json:"triggered"`
+	Pattern    string `json:"pattern"`
+	Severity   string `json:"severity"`
+	Evidence   string `json:"evidence"`
+	ReportPath string `json:"report_path"`
 }
 
 // Analyze detects circuit breaker patterns from blackboard anomalies. Generates
