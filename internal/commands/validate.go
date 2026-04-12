@@ -13,6 +13,11 @@ import (
 // monkey-patching the global stderr (which is not goroutine-safe).
 var warnWriter io.Writer = os.Stderr
 
+// SetWarnWriter sets the destination for non-fatal validation warnings.
+func SetWarnWriter(w io.Writer) {
+	warnWriter = w
+}
+
 // ValidateCommand validates the state.yaml file against all schema rules.
 // Returns an error with detailed description if validation fails.
 func ValidateCommand(statePath string, skipSpecFileCheck bool) error {

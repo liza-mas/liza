@@ -702,3 +702,22 @@ func TestValidateAnomalies_RequestedTypeBranchesPassWithValidDetails(t *testing.
 		})
 	}
 }
+
+func TestSetWarnWriter(t *testing.T) {
+	// Save and restore original writer
+	original := warnWriter
+	defer func() { warnWriter = original }()
+
+	var buf bytes.Buffer
+	SetWarnWriter(&buf)
+
+	if warnWriter != &buf {
+		t.Fatal("SetWarnWriter did not update warnWriter")
+	}
+
+	// Restore to stderr
+	SetWarnWriter(os.Stderr)
+	if warnWriter != os.Stderr {
+		t.Fatal("SetWarnWriter did not restore warnWriter to os.Stderr")
+	}
+}

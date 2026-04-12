@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/interactive"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -18,6 +23,15 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Run: func(cmd *cobra.Command, args []string) {
+		if isJSON(cmd) {
+			result := map[string]string{
+				"version": Version,
+				"commit":  GitCommit,
+				"built":   BuildDate,
+			}
+			jsonout.WriteResult(os.Stdout, result, nil, nil)
+			return
+		}
 		fmt.Printf("liza version %s\n", Version)
 		fmt.Printf("  commit: %s\n", GitCommit)
 		fmt.Printf("  built:  %s\n", BuildDate)
@@ -209,7 +223,7 @@ var validateCmd = &cobra.Command{
 - Spec file reference validation
 Returns detailed error messages if validation fails.`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		statePath := ""
 		if len(args) > 0 {
 			statePath = args[0]
@@ -218,6 +232,36 @@ Returns detailed error messages if validation fails.`,
 		}
 
 		skipSpecCheck, _ := cmd.Flags().GetBool("skip-spec-check")
+
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+
+			var warnBuf bytes.Buffer
+			commands.SetWarnWriter(&warnBuf)
+			defer commands.SetWarnWriter(os.Stderr)
+
+			err := commands.ValidateCommand(statePath, skipSpecCheck)
+			var warnings []string
+			if warnBuf.Len() > 0 {
+				for _, line := range strings.Split(strings.TrimSpace(warnBuf.String()), "\n") {
+					if line != "" {
+						warnings = append(warnings, line)
+					}
+				}
+			}
+			if err != nil {
+				return err // deferred guard classifies as validation error
+			}
+			return jsonout.WriteResult(os.Stdout, map[string]bool{"valid": true}, warnings, nil)
+		}
+
 		err := commands.ValidateCommand(statePath, skipSpecCheck)
 		if err != nil {
 			return err
@@ -312,4 +356,8 @@ func init() {
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")
+
+	// JSON output flags
+	addJSONFlag(versionCmd)
+	addJSONFlag(validateCmd)
 }
