@@ -41,6 +41,14 @@ Updates:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "submit-for-review"); err != nil {
+			return err
+		}
+
 		return commands.SubmitForReviewCommand(projectRoot, taskID, commitSHA, agentID)
 	},
 }
@@ -73,6 +81,14 @@ Updates:
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "handoff"); err != nil {
 			return err
 		}
 
@@ -126,6 +142,14 @@ For REJECTED verdict:
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "submit-verdict"); err != nil {
 			return err
 		}
 
@@ -210,6 +234,14 @@ Possible outcomes:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "await-verdict"); err != nil {
+			return err
+		}
+
 		timeoutSec, _ := cmd.Flags().GetInt("timeout-seconds")
 		timeout := time.Duration(timeoutSec) * time.Second
 
@@ -244,6 +276,14 @@ Possible outcomes:
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "await-resubmission"); err != nil {
 			return err
 		}
 
