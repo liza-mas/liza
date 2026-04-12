@@ -815,21 +815,20 @@ func TestWriteClaudeSettings_NewFile(t *testing.T) {
 		t.Errorf("Expected non-empty permissions.allow array")
 	}
 
-	// Verify liza MCP tools are in allow array (explicit tool format)
-	foundLizaMCP := false
+	// Verify liza CLI permission is in allow array
+	foundLizaCLI := false
 	for _, perm := range allow {
 		permStr, ok := perm.(string)
 		if !ok {
 			continue
 		}
-		// Check for explicit tool format: mcp__liza__liza_add_tasks
-		if strings.HasPrefix(permStr, "mcp__liza__") {
-			foundLizaMCP = true
+		if permStr == "Bash(liza:*)" {
+			foundLizaCLI = true
 			break
 		}
 	}
-	if !foundLizaMCP {
-		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_tasks)")
+	if !foundLizaCLI {
+		t.Errorf("Expected Bash(liza:*) in allow array")
 	}
 }
 
