@@ -189,6 +189,53 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 	})
 
+	t.Run("claim-task rejects orchestrator agent via RBAC", func(t *testing.T) {
+		projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-claim-rbac", models.TaskStatusReady, now),
+			}
+		})
+
+		err := executeRootCommand(t, projectRoot, "claim-task", "task-claim-rbac", "orchestrator-1")
+		if err == nil {
+			t.Fatalf("expected RBAC error for orchestrator calling claim-task, got nil")
+		}
+		if !strings.Contains(err.Error(), "command requires role type [doer]") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("submit-verdict rejects coder agent via RBAC", func(t *testing.T) {
+		projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-verdict-rbac", models.TaskStatusReviewing, now),
+			}
+		})
+
+		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-verdict-rbac", "APPROVED", "--agent-id", "coder-1")
+		if err == nil {
+			t.Fatalf("expected RBAC error for coder calling submit-verdict, got nil")
+		}
+		if !strings.Contains(err.Error(), `operation "submit-verdict" not allowed for role "coder"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("add-task rejects non-orchestrator via env-var RBAC", func(t *testing.T) {
+		projectRoot, _ := setupMutationTestProject(t, nil)
+
+		t.Setenv("LIZA_AGENT_ID", "coder-1")
+		err := executeRootCommand(t, projectRoot, "add-task", "--id", "new-task", "--desc", "test", "--spec", "s", "--done", "d", "--scope", "sc")
+		if err == nil {
+			t.Fatalf("expected RBAC error for coder calling add-task via env-var, got nil")
+		}
+		if !strings.Contains(err.Error(), "command requires role type [orchestrator]") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("release-claim uses --changed-by over env fallback", func(t *testing.T) {
 		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 			now := time.Now().UTC()
