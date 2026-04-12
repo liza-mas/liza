@@ -429,38 +429,3 @@ func TestRoleContextData_PlanRefAndValidationPlan(t *testing.T) {
 		t.Errorf("Reviewer ValidationPlan = %q, want %q", reviewerData.ValidationPlan, "run go test ./... and verify all pass")
 	}
 }
-
-func TestMCPToolPrefix(t *testing.T) {
-	tests := []struct {
-		cli  string
-		want string
-	}{
-		{"claude", "mcp__liza__"},
-		{"gemini", "mcp__liza__"},
-		{"kimi", "mcp__liza__"},
-		{"mistral", "mcp__liza__"},
-		{"codex", ""},
-	}
-	for _, tt := range tests {
-		if got := MCPToolPrefix(tt.cli); got != tt.want {
-			t.Errorf("MCPToolPrefix(%q) = %q, want %q", tt.cli, got, tt.want)
-		}
-	}
-}
-
-func TestToolSearchHint(t *testing.T) {
-	t.Run("claude prefix generates ToolSearch instruction", func(t *testing.T) {
-		got := toolSearchHint("mcp__liza__", "liza_get,liza_status")
-		want := " (resolve AFTER initialization: ToolSearch select:mcp__liza__liza_get,mcp__liza__liza_status)"
-		if got != want {
-			t.Errorf("toolSearchHint with prefix:\ngot  %q\nwant %q", got, want)
-		}
-	})
-
-	t.Run("empty prefix returns empty string", func(t *testing.T) {
-		got := toolSearchHint("", "liza_get,liza_status")
-		if got != "" {
-			t.Errorf("toolSearchHint with empty prefix = %q, want empty", got)
-		}
-	})
-}

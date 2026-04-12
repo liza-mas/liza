@@ -19,7 +19,6 @@ type BasePromptConfig struct {
 	StatePath   string
 	GoalDesc    string
 	GoalSpecRef string
-	ToolPrefix  string // MCP tool name prefix (provider-dependent)
 }
 
 // SiblingTaskSummary provides minimal context about sibling tasks in the same sprint
@@ -38,8 +37,7 @@ func BuildBasePrompt(config BasePromptConfig) (string, error) {
 
 // RenderOrchestratorDashboard pre-renders the orchestrator dashboard and wake instruction
 // strings for use as RoleContextData.DashboardOutput and RoleContextData.WakeInstruction.
-// toolPrefix is the provider-specific MCP tool name prefix (e.g. "mcp__liza__" or "").
-func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID, toolPrefix string) (dashboard, wakeInstruction string, err error) {
+func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID string) (dashboard, wakeInstruction string, err error) {
 	totalTasks := len(state.Tasks)
 	merged := countTasksByStatus(state.Tasks, models.TaskStatusMerged)
 	blocked := countTasksByStatus(state.Tasks, models.TaskStatusBlocked)
@@ -86,7 +84,7 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID, tool
 		return "", "", fmt.Errorf("building wake template data: %w", wakeErr)
 	}
 
-	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, toolPrefix, wakeData, planningTasks)
+	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeData, planningTasks)
 	if instrErr != nil {
 		return "", "", fmt.Errorf("building wake instructions: %w", instrErr)
 	}
@@ -117,20 +115,19 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID, tool
 		b.WriteString(fmt.Sprintf("- Cycle-blocked planning: %d\n", cycleBlocked))
 	}
 
-	orchToolHint := toolSearchHint(toolPrefix, "liza_get,liza_status,liza_add_tasks,liza_supersede_task,liza_assess_blocked,liza_wt_delete,liza_sprint_checkpoint,liza_update_sprint_metrics")
-	b.WriteString(fmt.Sprintf("\nORCHESTRATOR COMMANDS%s:\n", orchToolHint))
-	b.WriteString(fmt.Sprintf(`- %sliza_add_tasks — Add one or more tasks to blackboard (atomic per task, with validation)
-  Tool parameters: {"tasks": [{"id": "...", "desc": "...", "spec": "...", "done": "...", "scope": "...", "priority": N, "depends": [...]}], "agent_id": "%s"}
-- %sliza_supersede_task — Supersede task (replacement_ids optional — omit when work completed externally)
-  Tool parameters: {"task_id": "...", "replacement_ids": [...], "reason": "...", "agent_id": "%s"}
-- %sliza_assess_blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
-  Tool parameters: {"task_id": "...", "note": "...", "agent_id": "%s"}
-- %sliza_wt_delete — Delete worktree for abandoned/superseded/blocked tasks
-  Tool parameters: {"task_id": "...", "agent_id": "%s"}
-- %sliza_sprint_checkpoint — Create sprint checkpoint for human review (pauses all agents)
-  Tool parameters: {"agent_id": "%s"}
-- %sliza_update_sprint_metrics — Recompute sprint metrics from current state
-  Tool parameters: {"agent_id": "%s"}
+	b.WriteString("\nORCHESTRATOR COMMANDS:\n")
+	b.WriteString(fmt.Sprintf(`- liza add-tasks — Add one or more tasks to blackboard (atomic per task, with validation)
+  liza add-tasks --tasks-file <path.json> --agent-id "%s" --json
+- liza supersede-task — Supersede task (replacement_ids optional — omit when work completed externally)
+  liza supersede-task <task-id> --replacement-ids "..." --reason "..." --agent-id "%s" --json
+- liza assess-blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
+  liza assess-blocked <task-id> --note "..." --agent-id "%s" --json
+- liza wt-delete — Delete worktree for abandoned/superseded/blocked tasks
+  liza wt-delete <task-id> --agent-id "%s" --json
+- liza sprint-checkpoint — Create sprint checkpoint for human review (pauses all agents)
+  liza sprint-checkpoint --agent-id "%s" --json
+- liza update-sprint-metrics — Recompute sprint metrics from current state
+  liza update-sprint-metrics --agent-id "%s" --json
 
 ANOMALY LOGGING:
 | Event | Type | Required Fields |
@@ -156,14 +153,14 @@ FIELD FORMAT GUIDELINES:
 - spec: path to spec optionally with #anchor
 
 TASK CREATION ORDER:
-When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. %sliza_add_tasks validates that all `+"`depends`"+` IDs already exist; creating a task that references a not-yet-created dependency will fail.
+When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. liza add-tasks validates that all `+"`depends`"+` IDs already exist; creating a task that references a not-yet-created dependency will fail.
 
 ERROR RECOVERY:
-On MCP tool errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.
+On CLI command errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.
 
 MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
-Work unit = all planned state changes executed. Do NOT exit until all tools have been called.
-`, toolPrefix, agentID, toolPrefix, agentID, toolPrefix, agentID, toolPrefix, agentID, toolPrefix, agentID, toolPrefix, agentID, toolPrefix))
+Work unit = all planned state changes executed. Do NOT exit until all commands have been run.
+`, agentID, agentID, agentID, agentID, agentID, agentID))
 
 	// Wake instruction is rendered separately by the wake-instructions block
 	wakeInstr := fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions)

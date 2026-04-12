@@ -1,36 +1,8 @@
 package prompts
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/liza-mas/liza/internal/models"
 )
-
-// MCPToolPrefix returns the MCP tool name prefix for the given CLI provider.
-// Claude Code, Gemini, Kimi, and Mistral/Vibe are assumed to follow the
-// mcp__<server>__<tool> convention. Codex exposes MCP tools without a prefix.
-// Add cases here if a future provider uses a different convention.
-func MCPToolPrefix(cliName string) string {
-	if cliName == "codex" {
-		return ""
-	}
-	return "mcp__liza__"
-}
-
-// toolSearchHint builds a ToolSearch instruction for the given tool prefix and
-// comma-separated bare tool names. Returns empty string when prefix is empty
-// (provider exposes tools directly without deferred resolution).
-func toolSearchHint(prefix, bareTools string) string {
-	if prefix == "" {
-		return ""
-	}
-	names := strings.Split(bareTools, ",")
-	for i, n := range names {
-		names[i] = prefix + strings.TrimSpace(n)
-	}
-	return fmt.Sprintf(" (resolve AFTER initialization: ToolSearch select:%s)", strings.Join(names, ","))
-}
 
 // CompletedTaskSummary provides context about completed tasks for integration analysis.
 type CompletedTaskSummary struct {
@@ -117,8 +89,6 @@ type RoleContextData struct {
 	StatePath   string
 	SpecsDir    string
 	GoalDesc    string
-	ToolPrefix  string // MCP tool name prefix — provider-dependent (e.g. "mcp__liza__" for Claude Code, "" for Codex)
-
 	// Declarative (from pipeline YAML)
 	MandatoryDocs []string
 	Skills        []string

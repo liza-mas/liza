@@ -24,7 +24,6 @@ func baseConfigFrom(state *models.State, config SupervisorConfig, taskID string)
 		StatePath:   config.StatePath,
 		GoalDesc:    state.Goal.Description,
 		GoalSpecRef: state.Goal.SpecRef,
-		ToolPrefix:  prompts.MCPToolPrefix(config.CLIName),
 	}
 }
 
@@ -75,8 +74,7 @@ func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig
 		return "", fmt.Errorf("context sections for role %q: %w", config.Role, err)
 	}
 
-	toolPrefix := prompts.MCPToolPrefix(config.CLIName)
-	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID, toolPrefix)
+	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
 	if err != nil {
 		return "", err
 	}
@@ -94,7 +92,6 @@ func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig
 		StatePath:       config.StatePath,
 		SpecsDir:        config.SpecsDir,
 		GoalDesc:        state.Goal.Description,
-		ToolPrefix:      toolPrefix,
 		Skills:          skills,
 		MandatoryDocs:   mandatoryDocs,
 	}
@@ -120,10 +117,9 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 
 	data := &prompts.RoleContextData{
 		// Identity
-		Role:       config.Role,
-		AgentID:    config.AgentID,
-		RoleType:   roleType,
-		ToolPrefix: prompts.MCPToolPrefix(config.CLIName),
+		Role:     config.Role,
+		AgentID:  config.AgentID,
+		RoleType: roleType,
 
 		// Task
 		TaskID:       task.ID,
