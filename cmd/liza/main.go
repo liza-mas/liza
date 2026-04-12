@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/liza-mas/liza/internal/identity"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -124,6 +126,17 @@ func addAgentIDFlag(cmd *cobra.Command) {
 	cmd.Flags().String("agent-id", "", "agent identifier (overrides LIZA_AGENT_ID env var)")
 }
 
+// addJSONFlag registers --json on a specific command.
+func addJSONFlag(cmd *cobra.Command) {
+	cmd.Flags().Bool("json", false, "output result as structured JSON")
+}
+
+// isJSON returns true if --json flag is set on the command.
+func isJSON(cmd *cobra.Command) bool {
+	v, _ := cmd.Flags().GetBool("json")
+	return v
+}
+
 // addChangedByFlag registers --changed-by on a specific command.
 func addChangedByFlag(cmd *cobra.Command) {
 	cmd.Flags().String("changed-by", "", "identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')")
@@ -131,7 +144,9 @@ func addChangedByFlag(cmd *cobra.Command) {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if !errors.Is(err, jsonout.ErrAlreadyWritten) {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
