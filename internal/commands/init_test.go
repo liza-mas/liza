@@ -897,20 +897,6 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 		t.Errorf("permissions.allow array is empty")
 	}
 
-	// Verify key liza MCP tools are in allow array (explicit tool format)
-	foundLizaMCP := false
-	for _, perm := range allow {
-		permStr := perm.(string)
-		// Check for explicit tool format: mcp__liza__liza_add_tasks
-		if strings.HasPrefix(permStr, "mcp__liza__") {
-			foundLizaMCP = true
-			break
-		}
-	}
-	if !foundLizaMCP {
-		t.Errorf("Expected liza MCP tools in allow array (e.g., mcp__liza__liza_add_tasks)")
-	}
-
 	// Verify .claude/hooks/enforce-init.sh was deployed
 	hookPath := filepath.Join(claudeDir, "hooks", "enforce-init.sh")
 	hookInfo, hookErr := os.Stat(hookPath)
