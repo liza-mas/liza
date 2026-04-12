@@ -2,12 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -30,9 +34,20 @@ Phase 3: Re-validate and commit under lock (atomic state update)
 
 This pattern prevents TOCTOU races in multi-agent scenarios.`,
 	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		taskID := args[0]
 		agentID := args[1]
+
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
@@ -47,6 +62,10 @@ This pattern prevents TOCTOU races in multi-agent scenarios.`,
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.ClaimTask(projectRoot, taskID, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.ClaimTaskCommand(projectRoot, taskID, agentID)
 	},
 }
@@ -71,7 +90,18 @@ Example YAML file format:
   priority: 1
   depends_on:
     - task-0`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		statePath, _ := cmd.Flags().GetString("state")
 		logPath, _ := cmd.Flags().GetString("log")
 
@@ -149,6 +179,21 @@ Example YAML file format:
 			return err
 		}
 
+		if isJSON(cmd) {
+			opsInput := &ops.AddTaskInput{
+				ID:          input.ID,
+				Type:        input.Type,
+				RolePair:    input.RolePair,
+				Description: input.Description,
+				SpecRef:     input.SpecRef,
+				DoneWhen:    input.DoneWhen,
+				Scope:       input.Scope,
+				Priority:    input.Priority,
+				DependsOn:   input.DependsOn,
+			}
+			result, err := ops.AddTask(statePath, logPath, opsInput, orchestratorID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.AddTaskCommand(statePath, logPath, input, orchestratorID)
 	},
 }
@@ -172,7 +217,18 @@ Examples:
   liza supersede-task task-3 task-4,task-5 --reason "Split into smaller tasks"
   liza supersede-task task-3 --reason "Work already merged in prior sprint"`,
 	Args: cobra.RangeArgs(1, 2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		reason, _ := cmd.Flags().GetString("reason")
@@ -202,6 +258,10 @@ Examples:
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.SupersedeTask(projectRoot, taskID, replacementIDs, reason, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.SupersedeTaskCommand(projectRoot, taskID, replacementIDs, reason, agentID)
 	},
 }
@@ -231,7 +291,18 @@ Effects:
   - Add history entry with event "blocked"
   - Triggers orchestrator wake`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		reason, _ := cmd.Flags().GetString("reason")
@@ -255,6 +326,10 @@ Effects:
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.MarkBlocked(projectRoot, taskID, reason, questions, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.MarkBlockedCommand(projectRoot, taskID, reason, questions, agentID)
 	},
 }
@@ -274,7 +349,18 @@ Requirements:
   - Agent ID must be provided (via --agent-id flag)
   - Task must be in BLOCKED status`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		note, _ := cmd.Flags().GetString("note")
@@ -297,6 +383,10 @@ Requirements:
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.AssessBlocked(projectRoot, taskID, note, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.AssessBlockedCommand(projectRoot, taskID, note, agentID)
 	},
 }
@@ -317,7 +407,18 @@ Requirements:
   - Agent ID must be provided (via --agent-id flag)
   - Task must have 2+ entries in failed_by and not be in terminal status`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		note, _ := cmd.Flags().GetString("note")
@@ -340,6 +441,10 @@ Requirements:
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.AssessHypothesisExhausted(projectRoot, taskID, note, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.AssessHypothesisExhaustedCommand(projectRoot, taskID, note, agentID)
 	},
 }
@@ -362,7 +467,18 @@ Not cancellable: executing, submitted, reviewing, approved, or terminal states.
 Example:
   liza cancel-task task-3 "Requirements no longer valid"`,
 	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 		reason := args[1]
 
@@ -384,6 +500,10 @@ Example:
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.CancelTask(projectRoot, taskID, reason, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.CancelTaskCommand(projectRoot, taskID, reason, agentID)
 	},
 }
@@ -423,7 +543,18 @@ Updates:
   - Appends pre_execution_checkpoint event to task history
   - Does not change task status`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		agentID, err := requireAgentID(cmd)
@@ -473,6 +604,10 @@ Updates:
 			input.ScopeExtensions = entries
 		}
 
+		if isJSON(cmd) {
+			err := ops.WriteCheckpoint(projectRoot, input)
+			return jsonout.WriteResult(os.Stdout, nil, nil, err)
+		}
 		return commands.WriteCheckpointCommand(projectRoot, input)
 	},
 }
@@ -503,7 +638,18 @@ Example:
   EOF
   liza set-task-output task-1 --output outputs.json`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		taskID := args[0]
 
 		agentID, err := requireAgentID(cmd)
@@ -539,11 +685,17 @@ Example:
 			return fmt.Errorf("parsing output file: %w", err)
 		}
 
-		return commands.SetTaskOutputCommand(projectRoot, &ops.SetTaskOutputInput{
+		input := &ops.SetTaskOutputInput{
 			TaskID:  taskID,
 			AgentID: agentID,
 			Output:  entries,
-		})
+		}
+
+		if isJSON(cmd) {
+			err := ops.SetTaskOutput(projectRoot, input)
+			return jsonout.WriteResult(os.Stdout, nil, nil, err)
+		}
+		return commands.SetTaskOutputCommand(projectRoot, input)
 	},
 }
 
@@ -565,7 +717,18 @@ Example:
   ]
   EOF
   liza add-tasks --tasks-file tasks.json`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		filePath, _ := cmd.Flags().GetString("tasks-file")
 		if filePath == "" {
 			return fmt.Errorf("--tasks-file is required")
@@ -597,10 +760,16 @@ Example:
 			return err
 		}
 
-		return commands.AddTasksCommand(statePath, logPath, &ops.AddTasksInput{
+		input := &ops.AddTasksInput{
 			Tasks:          tasks,
 			OrchestratorID: orchestratorID,
-		})
+		}
+
+		if isJSON(cmd) {
+			result, err := ops.AddTasks(statePath, logPath, input)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
+		return commands.AddTasksCommand(statePath, logPath, input)
 	},
 }
 
@@ -614,7 +783,18 @@ Disposition values:
   - "deferred": defer for later consideration
   - "dismissed": dismiss the discovery`,
 	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		discoveryID := args[0]
 		disposition := args[1]
 
@@ -623,6 +803,10 @@ Disposition values:
 			return err
 		}
 
+		if isJSON(cmd) {
+			err := ops.SetDiscoveryDisposition(projectRoot, discoveryID, disposition)
+			return jsonout.WriteResult(os.Stdout, nil, nil, err)
+		}
 		return commands.SetDiscoveryDispositionCommand(projectRoot, discoveryID, disposition)
 	},
 }
@@ -640,6 +824,18 @@ func init() {
 	rootCmd.AddCommand(setTaskOutputCmd)
 	rootCmd.AddCommand(setDiscoveryDispositionCmd)
 	deleteCmd.AddCommand(deleteTaskCmd)
+
+	addJSONFlag(claimTaskCmd)
+	addJSONFlag(addTaskCmd)
+	addJSONFlag(addTasksCmd)
+	addJSONFlag(supersedeTaskCmd)
+	addJSONFlag(cancelTaskCmd)
+	addJSONFlag(markBlockedCmd)
+	addJSONFlag(assessBlockedCmd)
+	addJSONFlag(assessHypothesisExhaustedCmd)
+	addJSONFlag(writeCheckpointCmd)
+	addJSONFlag(setTaskOutputCmd)
+	addJSONFlag(setDiscoveryDispositionCmd)
 
 	addAgentIDFlag(addTaskCmd)
 	addAgentIDFlag(supersedeTaskCmd)
