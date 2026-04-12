@@ -728,7 +728,6 @@ func InitCommandWithConfig(params InitParams) error {
 
 	fmt.Printf("Liza initialized at %s\n", lizaPaths.LizaDir())
 	fmt.Printf("Integration branch: %s\n", branch)
-	fmt.Println("\nNote: MCP tools and personal permissions belong in ~/.claude/settings.json (global).")
 
 	hasNonClaude := false
 	for _, a := range params.Agents {

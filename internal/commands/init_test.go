@@ -1979,3 +1979,53 @@ func TestInitCommandWithConfig_DefaultCLIOmittedWhenEmpty(t *testing.T) {
 		t.Error("state.yaml contains default_cli key, want omitted when empty")
 	}
 }
+
+func TestInitCommand_WorkspaceInit(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	// Capture stdout to verify init output
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "CLI-only workspace",
+		SpecRef:     "specs/vision.md",
+	})
+
+	w.Close()
+	stdoutBytes, _ := io.ReadAll(r)
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	stdout := string(stdoutBytes)
+
+	// Must contain expected CLI-only output
+	if !strings.Contains(stdout, "Liza initialized at") {
+		t.Errorf("Expected 'Liza initialized at' in stdout, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Integration branch:") {
+		t.Errorf("Expected 'Integration branch:' in stdout, got: %s", stdout)
+	}
+
+	// Must NOT contain stale MCP wording
+	if strings.Contains(stdout, "MCP tools and personal permissions") {
+		t.Error("stdout still contains stale MCP note after MCP removal")
+	}
+}
