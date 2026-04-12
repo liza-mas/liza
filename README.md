@@ -289,13 +289,12 @@ Reliability is built into every component.
 
 ```mermaid
 graph TB
-    AP["Doer / Reviewer LLM Agent Pairs · <small>judgment layer</small>"]
     H["User"] -->|commands| CLI["Go CLI · <i>liza</i>"]
+    AP["Doer / Reviewer LLM Agent Pairs · <small>judgment layer</small>"]
     CLI -->|spawns| S["Supervisor · <small>deterministic Go</small>"]
 
     CLI --> BB["YAML Blackboard<br><small>state.yaml</small>"]
-    MCP --> BB
-    MCP --> WT["Git Worktrees<br><small>isolated workspaces</small>"]
+    CLI --> WT["Git Worktrees<br><small>isolated workspaces</small>"]
 
     S -->|wraps| AP
     PL["YAML Pipeline & Roles"] --> |specializes| S
@@ -304,11 +303,10 @@ graph TB
     PB["Prompt Builder"] -->|bootstrap prompt| AP
     SK["Skills"] -->|empowers| AP
     SP["Specs"] <-->|drives / produces| AP
-    AP -->|calls| MCP["MCP Tools · <small>deterministic Go</small>"]
+    AP -->|calls| CLI
 
     style CLI fill:#4a90d9,stroke:#2c5ea0,color:#fff
     style S fill:#4a90d9,stroke:#2c5ea0,color:#fff
-    style MCP fill:#4a90d9,stroke:#2c5ea0,color:#fff
     style AP fill:#e8833a,stroke:#c0652a,color:#fff
     style PB fill:#5bb87d,stroke:#3d8a5a,color:#fff
     style BC fill:#5bb87d,stroke:#3d8a5a,color:#fff
