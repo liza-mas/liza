@@ -31,7 +31,7 @@ build: sync-embedded
 # Run tests
 # IMPORTANT: Always use `make test`, not bare `go test ./...`.
 # The sync-embedded step copies contracts/ and skills/ into internal/embedded/ for go:embed.
-# claude-settings.json, mcp.json, and hooks/ are mastered directly in internal/embedded/.
+# claude-settings.json and hooks/ are mastered directly in internal/embedded/.
 test: sync-embedded check-testhelpers
 	go test -v -race -coverprofile=coverage.out ./...
 

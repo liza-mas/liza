@@ -36,10 +36,8 @@ internal/embedded/*
 !internal/embedded/pipeline.yaml
 !internal/embedded/support.md
 !internal/embedded/claude-settings.json
-!internal/embedded/mcp.json
 !internal/embedded/hooks/
 /liza
-/liza-mcp
 dist/
 
 # Symlinks to the contract

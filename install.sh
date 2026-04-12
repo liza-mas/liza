@@ -72,7 +72,7 @@ get_latest_version() {
 # Remove old binaries from /usr/local/bin if installing elsewhere
 cleanup_old_binaries() {
     if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
-        for old_bin in liza liza-mcp; do
+        for old_bin in liza; do
             old_path="/usr/local/bin/$old_bin"
             if [ -f "$old_path" ]; then
                 echo -e "${YELLOW}Removing old $old_bin from /usr/local/bin...${NC}"
@@ -120,7 +120,6 @@ install_liza() {
 
     # Make executable
     chmod +x "${tmp_dir}/${BINARY_NAME}"
-    [ -f "${tmp_dir}/liza-mcp" ] && chmod +x "${tmp_dir}/liza-mcp"
 
     # Verify the binary works
     echo "Verifying binary..."
@@ -140,11 +139,9 @@ install_liza() {
     # Check if we need sudo
     if [ -w "$INSTALL_DIR" ]; then
         mv "${tmp_dir}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
-        [ -f "${tmp_dir}/liza-mcp" ] && mv "${tmp_dir}/liza-mcp" "${INSTALL_DIR}/liza-mcp"
     else
         echo "Note: Sudo access required to install to ${INSTALL_DIR}"
         sudo mv "${tmp_dir}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
-        [ -f "${tmp_dir}/liza-mcp" ] && sudo mv "${tmp_dir}/liza-mcp" "${INSTALL_DIR}/liza-mcp"
     fi
 
     cleanup_old_binaries
