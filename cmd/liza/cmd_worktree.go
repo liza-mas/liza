@@ -1,11 +1,7 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/liza-mas/liza/internal/commands"
-	"github.com/liza-mas/liza/internal/identity"
-	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/spf13/cobra"
 )
 
@@ -96,27 +92,17 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 			return err
 		}
 
-		role, err := identity.ExtractRole(agentID)
-		if err != nil {
-			return err
-		}
-
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
 
-		cfg, cfgErr := pipeline.LoadFrozen(projectRoot)
-		if cfgErr != nil {
-			return fmt.Errorf("load pipeline config: %w", cfgErr)
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
 		}
-		resolver := pipeline.NewResolver(cfg)
-		roleType, rtErr := resolver.RoleType(role)
-		if rtErr != nil {
-			return fmt.Errorf("unknown role %q: %w", role, rtErr)
-		}
-		if roleType != "reviewer" {
-			return fmt.Errorf("wt-merge requires a reviewer role (got: %s)", role)
+		if err := validateRoleType(resolver, agentID, "reviewer"); err != nil {
+			return err
 		}
 
 		return commands.WtMergeCommand(projectRoot, taskID, agentID)
