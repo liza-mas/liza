@@ -1,12 +1,21 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log"
+	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/interactive"
+	"github.com/liza-mas/liza/internal/jsonout"
+	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -33,12 +42,27 @@ If a pattern is detected:
 If no patterns are detected:
   - Updates circuit_breaker.status to OK
   - Continues normal operation`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.Analyze(projectRoot)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.AnalyzeCommand(projectRoot)
 	},
 }
@@ -66,12 +90,31 @@ Warnings:
   - Alerts if task outcome approval rate >95% (suspiciously high)
 
 The metrics are used to track sprint progress and detect quality issues.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
 
+		if isJSON(cmd) {
+			metrics, err := ops.UpdateSprintMetrics(projectRoot)
+			if err != nil {
+				return err // deferred guard handles JSON
+			}
+			warnings := ops.CheckSuspiciousRates(metrics)
+			return jsonout.WriteResult(os.Stdout, metrics, warnings, nil)
+		}
 		return commands.UpdateSprintMetricsCommand(projectRoot)
 	},
 }
@@ -145,7 +188,18 @@ Typically called by:
   - liza-tui (though tui shouldn't mutate state by default)
 
 Reports the number of claims cleared and logs each cleanup action.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
@@ -154,6 +208,10 @@ Reports the number of claims cleared and logs each cleanup action.`,
 		cleared, err := commands.ClearStaleReviewClaimsCommand(projectRoot)
 		if err != nil {
 			return err
+		}
+
+		if isJSON(cmd) {
+			return jsonout.WriteResult(os.Stdout, map[string]int{"cleared": cleared}, nil, nil)
 		}
 
 		if cleared > 0 {
@@ -382,12 +440,27 @@ This is useful for:
 - Progress assessment
 - Decision points (continue vs pivot)
 - Coordinated team synchronization`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.SprintCheckpoint(projectRoot, "")
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.SprintCheckpointCommand(projectRoot)
 	},
 }
@@ -435,12 +508,37 @@ Examples:
   liza get metrics
   liza get anomalies`,
 	Args: cobra.MinimumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		format, _ := cmd.Flags().GetString("format")
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
+		}
+
+		if isJSON(cmd) {
+			opts := commands.InspectOptions{
+				Format:      "json",
+				ProjectRoot: projectRoot,
+			}
+			resultStr, err := commands.InspectCommand(args, opts)
+			if err != nil {
+				return err // deferred guard handles JSON
+			}
+			var parsed any
+			_ = json.Unmarshal([]byte(resultStr), &parsed)
+			return jsonout.WriteResult(os.Stdout, parsed, nil, nil)
 		}
 
 		opts := commands.InspectOptions{
@@ -482,13 +580,40 @@ Examples:
   liza status --format yaml
   liza status --detailed`,
 	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
 		format, _ := cmd.Flags().GetString("format")
 		detailed, _ := cmd.Flags().GetBool("detailed")
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
+		}
+
+		if isJSON(cmd) {
+			statePath := paths.New(projectRoot).StatePath()
+			bb := db.For(statePath)
+			state, err := bb.Read()
+			if err != nil {
+				return err // deferred guard handles JSON
+			}
+			pr, prErr := ops.LoadResolverForModels(projectRoot)
+			var warnings []string
+			if prErr != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to load pipeline resolver: %v", prErr))
+			}
+			data := commands.BuildStatusData(state, detailed, projectRoot, pr, warnings)
+			return jsonout.WriteResult(os.Stdout, data, warnings, nil)
 		}
 
 		opts := commands.StatusOptions{
@@ -527,6 +652,14 @@ func init() {
 	addChangedByFlag(startCmd)
 	addChangedByFlag(replanCmd)
 	addChangedByFlag(resumeCmd)
+
+	// JSON output flags
+	addJSONFlag(analyzeCmd)
+	addJSONFlag(updateSprintMetricsCmd)
+	addJSONFlag(clearStaleReviewClaimsCmd)
+	addJSONFlag(sprintCheckpointCmd)
+	addJSONFlag(getCmd)
+	addJSONFlag(statusCmd)
 
 	// Get command flags
 	getCmd.Flags().String("format", "", "output format: json, yaml, table, value (default varies by query type)")
