@@ -17,6 +17,12 @@ import (
 func setupAgentTestProject(t *testing.T, defaultCLI string) string {
 	t.Helper()
 
+	// Neutralize ambient LIZA_AGENT_ID so tests are hermetic inside real
+	// agent sessions (where the env var is set to the running agent's ID).
+	// Without this, identity.Resolve picks up the ambient value, causing a
+	// role-mismatch error before CLI validation is reached.
+	t.Setenv("LIZA_AGENT_ID", "")
+
 	testhelpers.SetupGlobalLiza(t)
 	projectRoot := t.TempDir()
 
