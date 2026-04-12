@@ -11,7 +11,7 @@
 | [Roles](architecture/roles.md)                         | Planner, Coder, Code Reviewer responsibilities |
 | [State Machines](architecture/state-machines.md)       | Task states, agent states, exit codes |
 | [Blackboard Schema](architecture/blackboard-schema.md) | state.yaml structure, locking, operations |
-| [Supervision Model](architecture/supervision-model.md) | Action responsibility: supervisor vs agent via MCP tools |
+| [Supervision Model](architecture/supervision-model.md) | Action responsibility: supervisor vs agent via CLI commands |
 | [Architecture Review](architecture/architecture-review.md) | Architecture review and analysis |
 | [Architectural Issues](architecture/architectural-issues.md) | Persistent record of issues from architectural analysis |
 | [ADR/](architecture/ADR/)                              | Architecture Decision Records (created as decisions arise) |

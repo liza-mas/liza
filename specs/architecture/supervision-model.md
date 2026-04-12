@@ -1,6 +1,6 @@
 # Supervision Model: Action Responsibility
 
-Who does what — supervisor vs agent via MCP tools.
+Who does what — supervisor vs agent via CLI commands.
 
 ## Multiple Agents Per Role
 
@@ -29,7 +29,7 @@ See [Role Definitions](roles.md) for supported agent combinations.
 
 ## Design Principle
 
-The supervisor (Go process wrapping the agent CLI) **guarantees** infrastructure actions that agents might forget or do partially. MCP tools provide agent-initiated workflow actions and manual fallback paths for supervisor actions. No action that was supervisor-guaranteed has been delegated to agents.
+The supervisor (Go process wrapping the agent CLI) **guarantees** infrastructure actions that agents might forget or do partially. CLI commands provide agent-initiated workflow actions and manual fallback paths for supervisor actions. No action that was supervisor-guaranteed has been delegated to agents.
 
 This continues the principle from [ADR-0006](ADR/0006-supervisor-assigns-work.md) (supervisor assigns work) and [ADR-0011](ADR/0011-script-enforced-agent-status.md) (structural enforcement over behavioral compliance).
 
@@ -46,54 +46,51 @@ This continues the principle from [ADR-0006](ADR/0006-supervisor-assigns-work.md
 | Orchestrator status setup | Before orchestrator launch | Sets WORKING atomically before agent sees blackboard |
 | Handoff resume detection | Before fresh claim | Supervisor checks for `handoff_pending` tasks to resume |
 
-### Supervisor-Guaranteed + MCP Fallback
+### Supervisor-Guaranteed + CLI Fallback
 
-These actions are **automatically triggered by the supervisor loop**. The MCP tool exists as a manual/administrative path but is not required for normal operation.
+These actions are **automatically triggered by the supervisor loop**. The CLI command exists as a manual/administrative path but is not required for normal operation.
 
-| Action | Supervisor Trigger | MCP Tool | Shared Code |
-|--------|-------------------|----------|-------------|
-| Coder task claim | Before launch (`claimCoderTask`) | `liza_claim_task` | `commands.ClaimTaskCommand` |
+| Action | Supervisor Trigger | CLI Command | Shared Code |
+|--------|-------------------|-------------|-------------|
+| Coder task claim | Before launch (`claimCoderTask`) | `liza claim-task` | `commands.ClaimTaskCommand` |
 | Reviewer task claim | Before launch (`claimReviewerTask`) | *(none)* | *(inline in supervisor)* |
-| Worktree merge | Reviewer loop (`handleApprovedMerges`) | `liza_wt_merge` | `commands.WtMergeCommand` |
-| Stale review clearing | Reviewer startup (`registerAgent`) | `liza_clear_stale_review_claims` | `commands.ClearStaleReviewClaimsCommand` |
+| Worktree merge | Reviewer loop (`handleApprovedMerges`) | `liza wt-merge` | `commands.WtMergeCommand` |
+| Stale review clearing | Reviewer startup (`registerAgent`) | `liza clear-stale-review-claims` | `commands.ClearStaleReviewClaimsCommand` |
 
-**Why MCP fallback exists:** Orchestrators or humans may need to trigger these manually (e.g., merge a task approved outside the normal reviewer flow, or clear a stale claim without restarting).
+**Why CLI fallback exists:** Orchestrators or humans may need to trigger these manually (e.g., merge a task approved outside the normal reviewer flow, or clear a stale claim without restarting).
 
-### Agent-Initiated (via MCP tools)
+### Agent-Initiated (via CLI commands)
 
 These are workflow actions that only the agent can trigger — they represent the agent's work output.
 
-| Action | MCP Tool | State Transition |
-|--------|----------|------------------|
-| Submit work for review | `liza_submit_for_review` | task: IMPLEMENTING -> READY_FOR_REVIEW, agent: WORKING -> WAITING |
-| Submit review verdict | `liza_submit_verdict` | task: -> APPROVED or -> IMPLEMENTING (rejection), agent: REVIEWING -> IDLE |
-| Initiate handoff | `liza_handoff` | task: sets `handoff_pending`, agent: WORKING -> HANDOFF |
-| Mark task blocked | `liza_mark_blocked` | task: -> BLOCKED |
-| Add task(s) | `liza_add_tasks` | Creates new task(s) (orchestrator) |
-| Supersede task | `liza_supersede_task` | task: -> SUPERSEDED (orchestrator) |
-| Release claim | `liza_release_claim` | task: -> READY, agent: -> IDLE |
+| Action | CLI Command | State Transition |
+|--------|-------------|------------------|
+| Submit work for review | `liza submit-for-review` | task: IMPLEMENTING -> READY_FOR_REVIEW, agent: WORKING -> WAITING |
+| Submit review verdict | `liza submit-verdict` | task: -> APPROVED or -> IMPLEMENTING (rejection), agent: REVIEWING -> IDLE |
+| Initiate handoff | `liza handoff` | task: sets `handoff_pending`, agent: WORKING -> HANDOFF |
+| Mark task blocked | `liza mark-blocked` | task: -> BLOCKED |
+| Add task(s) | `liza add-tasks` | Creates new task(s) (orchestrator) |
+| Supersede task | `liza supersede-task` | task: -> SUPERSEDED (orchestrator) |
+| Release claim | `liza release-claim` | task: -> READY, agent: -> IDLE |
 
-### Administrative (MCP tools, not part of normal flow)
+### Administrative (CLI commands, not part of normal flow)
 
-| Action | MCP Tool | Use Case |
-|--------|----------|----------|
-| Create worktree | `liza_wt_create` | Re-create worktree for a claimed task (e.g., `--fresh` after reassignment) |
-| Delete worktree | `liza_wt_delete` | Manual cleanup |
-| Delete agent | `liza_delete_agent` | Remove stale agent entry |
-| Update sprint metrics | `liza_update_sprint_metrics` | Recompute metrics on demand |
-| Circuit breaker analysis | `liza_analyze` | Trigger analysis manually |
+| Action | CLI Command | Use Case |
+|--------|-------------|----------|
+| Create worktree | `liza wt-create` | Re-create worktree for a claimed task (e.g., `--fresh` after reassignment) |
+| Delete worktree | `liza wt-delete` | Manual cleanup |
+| Delete agent | `liza delete agent` | Remove stale agent entry |
+| Update sprint metrics | `liza update-sprint-metrics` | Recompute metrics on demand |
+| Circuit breaker analysis | `liza analyze` | Trigger analysis manually |
 
-### Read-Only (MCP tools + resources)
+### Read-Only (CLI commands)
 
-| Tool/Resource | Purpose |
-|---------------|---------|
-| `liza_get` | Query blackboard (tasks, agents, logs, config) |
-| `liza_status` | System status summary |
-| `liza_validate` | State consistency check |
-| `liza_version` | Version info |
-| `liza://state` | Raw state.yaml (MCP resource) |
-| `liza://tasks` | All tasks as JSON (MCP resource) |
-| `liza://agents` | All agents as JSON (MCP resource) |
+| CLI Command | Purpose |
+|-------------|---------|
+| `liza get` | Query blackboard (tasks, agents, logs, config) |
+| `liza status` | System status summary |
+| `liza validate` | State consistency check |
+| `liza version` | Version info |
 
 ## Architecture
 
@@ -107,11 +104,11 @@ build bootstrap prompt
 spawn CLI ──────────────────────────────▶ receives pre-claimed work
   │                                        │
   │ heartbeat ticks (background)           │ does work in worktree
-  │                                        │ calls MCP tools:
-  │                                        │   submit-for-review
-  │                                        │   submit-verdict
-  │                                        │   mark-blocked
-  │                                        │   handoff
+  │                                        │ runs CLI commands:
+  │                                        │   liza submit-for-review
+  │                                        │   liza submit-verdict
+  │                                        │   liza mark-blocked
+  │                                        │   liza handoff
   │                                        │
 CLI exits ◀─────────────────────────────── agent completes/aborts
 reset agent status
@@ -119,7 +116,7 @@ handle approved merges (reviewer)
 loop: wait for work → claim → spawn
 ```
 
-The `commands` package is the shared implementation layer. Both supervisor and MCP handlers call the same `commands.*` functions, ensuring identical logic regardless of caller.
+The `commands` package is the shared implementation layer. Both supervisor and CLI commands call the same `commands.*` functions, ensuring identical logic regardless of caller.
 
 ## Related
 
