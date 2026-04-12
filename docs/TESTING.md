@@ -62,10 +62,6 @@ internal/
 │   └── ... (each command has its test)
 ├── models/
 │   └── state.go / state_test.go
-├── mcp/
-│   ├── server.go / server_test.go
-│   ├── handlers.go / handlers_test.go
-│   └── concurrency_test.go
 ├── git/
 │   └── worktree.go / worktree_test.go
 ├── testhelpers/               # Shared test utilities
