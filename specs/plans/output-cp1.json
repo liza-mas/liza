@@ -1,0 +1,9 @@
+[
+  {
+    "Desc": "Replace Liza MCP references with CLI equivalents in `contracts/MULTI_AGENT_MODE.md` (Blackboard Protocol and Context Exhaustion Handoff sections), `contracts/contract-activation.md` (remove `[mcp_servers.liza]` TOML block, update settings descriptions), and `internal/embedded/support.md` (replace MCP tools reference with CLI commands).",
+    "DoneWhen": "`contracts/MULTI_AGENT_MODE.md` contains no `Liza MCP tools` or `MCP tool` in Liza-specific context (line 90 says `Liza CLI commands`, line ~113 says `liza handoff CLI command`). `contracts/contract-activation.md` contains no `mcp_servers.liza` or `liza-mcp`. `internal/embedded/support.md` contains no `MCP tools`. All three files are valid markdown.",
+    "Scope": "Modify `contracts/MULTI_AGENT_MODE.md`, `contracts/contract-activation.md`, `internal/embedded/support.md`.",
+    "SpecRef": "specs/goals/20260412-cli-native-access-control.md",
+    "PlanRef": "specs/plans/20260412-141805-architecture-4a-architecture-to-code-plan-1.md"
+  }
+]
