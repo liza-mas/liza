@@ -52,7 +52,7 @@ Violating role boundaries is a Tier 1 violation — process integrity, not data/
 
 ## Pre-Execution Checkpoint
 
-Before implementation, write a checkpoint via `liza_write_checkpoint`:
+Before implementation, write a checkpoint via `liza write-checkpoint`:
 intent, assumptions, risks, validation plan, files to modify.
 Submission is rejected without a checkpoint. The reviewer verifies
 implementation matches checkpoint intent.
@@ -87,7 +87,7 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 **History is Immutable:** Never delete history entries. Append only.
 
-**Do NOT edit state.yaml directly.** All state transitions MUST go through Liza MCP tools (`liza_submit_for_review`, `liza_claim_task`, etc.). Direct edits bypass invariant checks and can corrupt state irreversibly. If an MCP tool fails repeatedly, set the task BLOCKED via `liza_mark_blocked` — never work around the failure by editing state.yaml.
+**Do NOT edit state.yaml directly.** All state transitions MUST go through Liza CLI commands (`liza submit-for-review`, `liza claim-task`, etc.). Direct edits bypass invariant checks and can corrupt state irreversibly. If a CLI command fails repeatedly, set the task BLOCKED via `liza mark-blocked` — never work around the failure by editing state.yaml.
 
 **Do NOT use TodoWrite.** The blackboard already tracks task state and checkpoints.
 
@@ -109,7 +109,7 @@ Iteration and review cycle limits are enforced by the blackboard (see `config.ma
 At ~90% context (heuristic: many tool calls, re-reading files, difficulty holding state):
 1. STOP at next safe point
 2. Commit pending changes
-3. Use `liza_handoff` MCP tool with summary + next_action
+3. Run `liza handoff` CLI command with summary + next_action
 4. Exit with code 42
 
 **Review Exhaustion:**

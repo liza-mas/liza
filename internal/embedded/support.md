@@ -90,7 +90,7 @@ IN_PROGRESS → CHECKPOINT → COMPLETED → (new sprint) IN_PROGRESS
 
 ## Reading state.yaml
 
-Prefer `liza_*` MCP tools and CLI commands for all state mutations. If a needed operation isn't covered, edit `.liza/state.yaml` directly but: write atomically (write to temp file, then rename), use ISO 8601 UTC timestamps (`YYYY-MM-DDTHH:MM:SSZ`), and run `liza validate` afterward to verify invariants.
+Use `liza` CLI commands for all state mutations. If a needed operation isn't covered, edit `.liza/state.yaml` directly but: write atomically (write to temp file, then rename), use ISO 8601 UTC timestamps (`YYYY-MM-DDTHH:MM:SSZ`), and run `liza validate` afterward to verify invariants.
 
 Key task fields:
 - `status` — current state

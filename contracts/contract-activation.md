@@ -10,7 +10,7 @@ Claude Code unions permissions from **global** and **project** settings:
 
 | Layer | File | Managed by                  | Contains                             |
 |-------|------|-----------------------------|--------------------------------------|
-| **Project** | `<project>/.claude/settings.json` | `liza init` (automatic) | Liza MCP tools, skills, git/build commands |
+| **Project** | `<project>/.claude/settings.json` | `liza init` (automatic) | Liza CLI permissions, skills, git/build commands |
 | **Global** | `~/.claude/settings.json` | Optional (user preferences) | Personal MCP tools and settings |
 
 ## Central Config
@@ -47,10 +47,7 @@ writable_roots = ["/home/<USER>/.codex", "/home/<USER>/.liza", "/home/<USER>/.ca
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/<USER>/.claude", "/home/<USER>/.codex", "/home/<USER>/Workspace", "/home/<USER>/.liza"]
 
-[mcp_servers.liza]
-type = "stdio"
-command = "liza-mcp"
-args = ["--project-root", "/home/<USER>/Workspace/liza"]
+# Codex agents access Liza via `liza` CLI commands through Bash — no MCP server needed.
 ```
 
 ## Gemini
