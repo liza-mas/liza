@@ -60,9 +60,9 @@ Liza is a **frontier Multi-Agent System**:
   - LLM agents wrapped by code-enforced supervisors and working on isolated git worktrees.
   - The supervisor does the **deterministic code-enforced actions** (worktree management, merges, TDD enforcement, etc),
     leaving the **judgment to the agent**. Strict task state machine with 43+ validation rules.
-  - Agents communicate and act through Liza's **MCP tools**.
+  - Agents communicate and act through Liza's **CLI**.
   - 35k LOC of Go (+92k of tests). Liza is not a prompt collection.
-  - Agent logs recording for automatic analysis and continuous improvements (token optimization, MCP server usage analysis, ...)
+  - Agent logs recording for automatic analysis and continuous improvements (token optimization, tool usage analysis, ...)
 - **Multi-model:**
   - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
   - BYOM: Claude Code, Codex CLI, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
@@ -197,7 +197,7 @@ liza setup --claude --codex --gemini --mistral
 
 > **️⚠️ Customize your tool setup:**<br>
 > The installed `~/.liza/AGENT_TOOLS.md` ships with a default
-> MCP server and tool configuration. It defines which tools agents prefer (IDE integrations,
+> tool configuration. It defines which tools agents prefer (IDE integrations,
 > search providers, documentation sources, etc.) and is specific to each user's environment.<br>
 > Context management is of paramount importance. Make sure you use tools that reduce token usage.<br>
 > Recos: [RTK](https://github.com/rtk-ai/rtk), filesystem MCP, MorphLLM MCP, Perplexity MCP.<br>
