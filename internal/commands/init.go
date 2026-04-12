@@ -557,13 +557,6 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
 	}
 
-	// Write/merge MCP server configuration to .mcp.json
-	// This is non-fatal - if it fails, just warn
-	// Note: This may prompt user for input if settings file exists
-	if err := embedded.WriteMCPSettings(lizaPaths.ProjectRoot(), stdin); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write .mcp.json: %v\n", err)
-	}
-
 	// Create contract symlinks only for explicitly requested providers
 	if len(params.Agents) > 0 {
 		var names []string
