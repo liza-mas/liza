@@ -370,20 +370,13 @@ func cliSupportsStdin(cliName string) bool {
 }
 
 func buildCodexArgs(projectRoot, prompt string, useStdin bool, outputsDir string) []string {
-	args := []string{
-		"-c", fmt.Sprintf("mcp_servers.liza.command=%q", "liza-mcp"),
-		"-c", fmt.Sprintf("mcp_servers.liza.args=[%q,%q]", "--project-root", projectRoot),
-	}
+	var args []string
 	if useStdin {
 		args = append(args, "exec", "-")
 	} else {
 		args = append(args, "exec", prompt)
 	}
-	// Codex exec mode auto-cancels MCP elicitation prompts for tools with
-	// destructiveHint=true (the default). Liza MCP tools declare
-	// destructiveHint=false, so --full-auto lets them through while keeping
-	// the OS-enforced sandbox.
-	// Requires Codex >0.118.0: https://github.com/openai/codex/issues/16685
+	// --full-auto enables Codex's auto-approval mode within the OS-enforced sandbox.
 	args = append(args, "--full-auto")
 	if outputsDir != "" {
 		args = append(args, "--json")
@@ -469,7 +462,7 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 		return 0, fmt.Errorf("unknown CLI: %s", cliName)
 	}
 
-	// Set working directory to project root so claude can find .mcp.json and .claude/settings.json
+	// Set working directory to project root so claude can find .claude/settings.json
 	cmd.Dir = projectRoot
 
 	// When the CLI supports stdin, pipe the prompt through it. Otherwise, don't
@@ -481,7 +474,7 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 		cmd.Stdin = nil
 	}
 
-	// Ensure LIZA_AGENT_ID is available to child processes (hooks, MCP servers).
+	// Ensure LIZA_AGENT_ID is available to child processes (hooks).
 	// The agent ID may have been resolved from --agent-id flag rather than the
 	// env var, so we set it explicitly to guarantee availability.
 	cmd.Env = append(os.Environ(), "LIZA_AGENT_ID="+agentID)

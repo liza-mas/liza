@@ -593,6 +593,11 @@ func TestBuildCodexArgs(t *testing.T) {
 		if slices.Contains(args, "--json") {
 			t.Fatalf("args = %v, did not expect --json without logging", args)
 		}
+		for _, a := range args {
+			if strings.Contains(a, "mcp_servers") {
+				t.Fatalf("args = %v, did not expect mcp_servers config", args)
+			}
+		}
 	})
 
 	t.Run("prompt with logging emits json", func(t *testing.T) {
@@ -606,6 +611,11 @@ func TestBuildCodexArgs(t *testing.T) {
 		}
 		if !slices.Contains(args, "--full-auto") {
 			t.Fatalf("args = %v, want --full-auto flag", args)
+		}
+		for _, a := range args {
+			if strings.Contains(a, "mcp_servers") {
+				t.Fatalf("args = %v, did not expect mcp_servers config", args)
+			}
 		}
 	})
 }
