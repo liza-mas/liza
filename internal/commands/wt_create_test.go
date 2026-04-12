@@ -424,14 +424,10 @@ func TestWtCreateCommand_ProvisionClaudeConfig(t *testing.T) {
 	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	// Create Claude Code config files in the project root.
-	mcpContent := []byte(`{"mcpServers":{"liza":{"command":"liza-mcp"}}}`)
 	settingsContent := []byte(`{"permissions":{"defaultMode":"acceptEdits"}}`)
 	localContent := []byte(`{"alwaysThinkingEnabled":true}`)
 	hookContent := []byte("#!/bin/sh\necho ok\n")
 
-	if err := os.WriteFile(filepath.Join(tmpDir, ".mcp.json"), mcpContent, 0644); err != nil {
-		t.Fatal(err)
-	}
 	claudeDir := filepath.Join(tmpDir, ".claude")
 	if err := os.MkdirAll(filepath.Join(claudeDir, "hooks"), 0755); err != nil {
 		t.Fatal(err)
@@ -516,7 +512,6 @@ func TestWtCreateCommand_ProvisionClaudeConfig(t *testing.T) {
 		content []byte
 		mode    os.FileMode
 	}{
-		{".mcp.json", mcpContent, 0644},
 		{filepath.Join(".claude", "settings.json"), settingsContent, 0644},
 		{filepath.Join(".claude", "settings.local.json"), localContent, 0644},
 		{filepath.Join(".claude", "hooks", "enforce-init.sh"), hookContent, 0755},
@@ -613,9 +608,9 @@ func TestWtCreateCommand_ProvisionClaudeConfig_NoFiles(t *testing.T) {
 		t.Fatalf("WtCreateCommand failed: %v", err)
 	}
 
-	// Verify no .mcp.json or .claude/ leaked into the worktree.
+	// Verify no .claude/ leaked into the worktree.
 	wtDir := filepath.Join(tmpDir, ".worktrees", "task-noconfig")
-	for _, rel := range []string{".mcp.json", ".claude"} {
+	for _, rel := range []string{".claude"} {
 		if _, err := os.Stat(filepath.Join(wtDir, rel)); err == nil {
 			t.Errorf("%s should not exist in worktree when absent from project root", rel)
 		}
