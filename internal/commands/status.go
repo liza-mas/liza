@@ -114,7 +114,11 @@ func StatusCommand(opts StatusOptions) (string, error) {
 		return "", fmt.Errorf("failed to read state: %w", err)
 	}
 
-	status := buildStatusData(state, opts.Detailed, opts.ProjectRoot)
+	pr, prErr := ops.LoadResolverForModels(opts.ProjectRoot)
+	if prErr != nil {
+		log.Printf("WARNING: status: failed to load pipeline resolver: %v", prErr)
+	}
+	status := BuildStatusData(state, opts.Detailed, opts.ProjectRoot, pr, nil)
 
 	switch opts.Format {
 	case "json":
@@ -126,8 +130,11 @@ func StatusCommand(opts StatusOptions) (string, error) {
 	}
 }
 
-// buildStatusData populates the statusData structure from state
-func buildStatusData(state *models.State, detailed bool, projectRoot string) statusData {
+// BuildStatusData populates the statusData structure from state.
+// The caller is responsible for loading the pipeline resolver and passing it in.
+// prWarnings is not used internally — it exists so JSON callers can thread
+// resolver-load warnings through the response envelope.
+func BuildStatusData(state *models.State, detailed bool, projectRoot string, pr models.PipelineResolver, prWarnings []string) statusData {
 	data := statusData{}
 
 	data.Goal = goalStatus{
@@ -152,10 +159,6 @@ func buildStatusData(state *models.State, detailed bool, projectRoot string) sta
 		data.Config.PausedBy = state.Config.ModeChangedBy
 	}
 
-	pr, prErr := ops.LoadResolverForModels(projectRoot)
-	if prErr != nil {
-		log.Printf("WARNING: status: failed to load pipeline resolver: %v", prErr)
-	}
 	data.Tasks = buildTaskStatus(state, pr)
 	data.Agents = buildAgentStatuses(state)
 	data.OrchestratorState = buildOrchestratorStatus(state, projectRoot)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -20,12 +21,14 @@ func setupPipelineRoot(t *testing.T) string {
 func TestBuildStatusData(t *testing.T) {
 	now := time.Now().UTC()
 	pipelineRoot := setupPipelineRoot(t)
+	pr, _ := ops.LoadResolverForModels(pipelineRoot)
 
 	tests := []struct {
 		name        string
 		state       *models.State
 		detailed    bool
 		projectRoot string
+		pr          models.PipelineResolver
 		validate    func(t *testing.T, data statusData)
 	}{
 		{
@@ -61,6 +64,7 @@ func TestBuildStatusData(t *testing.T) {
 			}(),
 			detailed:    false,
 			projectRoot: pipelineRoot,
+			pr:          pr,
 			validate: func(t *testing.T, data statusData) {
 				if data.Tasks.Total != 5 {
 					t.Errorf("expected 5 total tasks, got %d", data.Tasks.Total)
@@ -226,6 +230,7 @@ func TestBuildStatusData(t *testing.T) {
 			}(),
 			detailed:    false,
 			projectRoot: pipelineRoot,
+			pr:          pr,
 			validate: func(t *testing.T, data statusData) {
 				if data.WorkQueues.Coder.Available != 1 {
 					t.Errorf("expected 1 available coder task, got %d", data.WorkQueues.Coder.Available)
@@ -378,7 +383,7 @@ func TestBuildStatusData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data := buildStatusData(tt.state, tt.detailed, tt.projectRoot)
+			data := BuildStatusData(tt.state, tt.detailed, tt.projectRoot, tt.pr, nil)
 			tt.validate(t, data)
 		})
 	}
@@ -398,7 +403,7 @@ func TestBuildStatusData_ByStatusMap(t *testing.T) {
 		testhelpers.BuildTaskByStatus("task-7", models.TaskStatusMerged, now),
 	}
 
-	data := buildStatusData(state, false, "")
+	data := BuildStatusData(state, false, "", nil, nil)
 
 	// Check ByStatus map
 	if data.Tasks.ByStatus == nil {
@@ -433,7 +438,7 @@ func TestBuildStatusData_AgentProcessStatus(t *testing.T) {
 		},
 	}
 
-	data := buildStatusData(state, false, "")
+	data := BuildStatusData(state, false, "", nil, nil)
 
 	if len(data.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(data.Agents))
@@ -466,11 +471,13 @@ func TestBuildStatusData_AgentProcessStatus(t *testing.T) {
 func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 	now := time.Now().UTC()
 	pipelineRoot := setupPipelineRoot(t)
+	pr, _ := ops.LoadResolverForModels(pipelineRoot)
 
 	tests := []struct {
 		name           string
 		state          *models.State
 		projectRoot    string
+		pr             models.PipelineResolver
 		expectCoderMsg string
 	}{
 		{
@@ -483,6 +490,7 @@ func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 				return state
 			}(),
 			projectRoot:    pipelineRoot,
+			pr:             pr,
 			expectCoderMsg: "No claimable tasks",
 		},
 		{
@@ -495,13 +503,14 @@ func TestBuildStatusData_WorkQueuesReason(t *testing.T) {
 				return state
 			}(),
 			projectRoot:    pipelineRoot,
+			pr:             pr,
 			expectCoderMsg: "Found 1 claimable task(s)",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data := buildStatusData(tt.state, false, tt.projectRoot)
+			data := BuildStatusData(tt.state, false, tt.projectRoot, tt.pr, nil)
 
 			if !strings.Contains(data.WorkQueues.Coder.Reason, tt.expectCoderMsg) {
 				t.Errorf("expected coder reason to contain %q, got %q", tt.expectCoderMsg, data.WorkQueues.Coder.Reason)
