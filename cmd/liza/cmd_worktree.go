@@ -1,7 +1,14 @@
 package main
 
 import (
+	"errors"
+	"io"
+	"log"
+	"os"
+
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/jsonout"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -18,15 +25,30 @@ If the worktree already exists and --fresh is not specified, the command succeed
 without error. With --fresh, any existing worktree is deleted before creating
 a new one (useful for task reassignment).`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		taskID := args[0]
 		fresh, _ := cmd.Flags().GetBool("fresh")
+
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.CreateWorktree(projectRoot, taskID, fresh)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.WtCreateCommand(projectRoot, taskID, fresh)
 	},
 }
@@ -48,14 +70,29 @@ actively working in the worktree.
 
 The worktree directory and branch are removed, and task.worktree is set to null.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		taskID := args[0]
+
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.DeleteWorktree(projectRoot, taskID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.WtDeleteCommand(projectRoot, taskID)
 	},
 }
@@ -84,8 +121,19 @@ Process:
 
 The worktree and branch are automatically cleaned up after a successful merge.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		taskID := args[0]
+
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
 
 		agentID, err := requireAgentID(cmd)
 		if err != nil {
@@ -105,6 +153,10 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 			return err
 		}
 
+		if isJSON(cmd) {
+			result, err := ops.MergeWorktree(projectRoot, taskID, agentID)
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
+		}
 		return commands.WtMergeCommand(projectRoot, taskID, agentID)
 	},
 }
@@ -118,4 +170,9 @@ func init() {
 
 	// Wt-create command flags
 	wtCreateCmd.Flags().Bool("fresh", false, "delete existing worktree before creating (for task reassignment)")
+
+	// JSON output flags
+	addJSONFlag(wtCreateCmd)
+	addJSONFlag(wtDeleteCmd)
+	addJSONFlag(wtMergeCmd)
 }
