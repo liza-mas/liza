@@ -39,6 +39,14 @@ This pattern prevents TOCTOU races in multi-agent scenarios.`,
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateRoleType(resolver, agentID, "doer"); err != nil {
+			return err
+		}
+
 		return commands.ClaimTaskCommand(projectRoot, taskID, agentID)
 	},
 }
@@ -133,6 +141,14 @@ Example YAML file format:
 			return err
 		}
 
+		resolver, err := loadResolverFromDir(filepath.Dir(statePath))
+		if err != nil {
+			return err
+		}
+		if err := validateRoleType(resolver, orchestratorID, "orchestrator"); err != nil {
+			return err
+		}
+
 		return commands.AddTaskCommand(statePath, logPath, input, orchestratorID)
 	},
 }
@@ -175,6 +191,14 @@ Examples:
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "supersede-task"); err != nil {
 			return err
 		}
 
@@ -223,6 +247,14 @@ Effects:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "mark-blocked"); err != nil {
+			return err
+		}
+
 		return commands.MarkBlockedCommand(projectRoot, taskID, reason, questions, agentID)
 	},
 }
@@ -254,6 +286,14 @@ Requirements:
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateRoleType(resolver, agentID, "orchestrator"); err != nil {
 			return err
 		}
 
@@ -292,6 +332,14 @@ Requirements:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateRoleType(resolver, agentID, "orchestrator"); err != nil {
+			return err
+		}
+
 		return commands.AssessHypothesisExhaustedCommand(projectRoot, taskID, note, agentID)
 	},
 }
@@ -325,6 +373,14 @@ Example:
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "cancel-task"); err != nil {
 			return err
 		}
 
@@ -377,6 +433,14 @@ Updates:
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "write-checkpoint"); err != nil {
 			return err
 		}
 
@@ -452,6 +516,14 @@ Example:
 			return err
 		}
 
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, agentID, "set-task-output"); err != nil {
+			return err
+		}
+
 		outputFile, _ := cmd.Flags().GetString("output")
 		if outputFile == "" {
 			return fmt.Errorf("--output is required")
@@ -516,6 +588,14 @@ Example:
 
 		statePath := filepath.Join(paths.LizaDirName, paths.StateFileName)
 		logPath := filepath.Join(paths.LizaDirName, paths.LogFileName)
+
+		resolver, err := loadResolverFromDir(filepath.Dir(statePath))
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, orchestratorID, "add-tasks"); err != nil {
+			return err
+		}
 
 		return commands.AddTasksCommand(statePath, logPath, &ops.AddTasksInput{
 			Tasks:          tasks,
