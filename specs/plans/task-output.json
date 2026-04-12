@@ -15,7 +15,7 @@
   },
   {
     "Desc": "Remove .mcp.json from worktree provisioning: remove \".mcp.json\" from ProvisionClaudeConfig files slice in wt_create.go, update function doc and inline comment to remove MCP references, remove .mcp.json fixture setup and copy-verification from TestWtCreateCommand_ProvisionClaudeConfig, remove .mcp.json from absent-file assertion in TestWtCreateCommand_ProvisionClaudeConfig_NoFiles",
-    "DoneWhen": "`go build ./cmd/liza` succeeds. `go test ./internal/ops/... ./internal/commands/...` passes. `grep -c '.mcp.json' internal/ops/wt_create.go` returns 0. `ProvisionClaudeConfig` function doc in `wt_create.go` does not contain \"MCP\". `grep -c '.mcp.json' internal/commands/wt_create_test.go` returns 0.",
+    "DoneWhen": "`go build ./cmd/liza` succeeds. `go test ./internal/ops/... ./internal/commands/...` passes. `grep -c '\\.mcp\\.json' internal/ops/wt_create.go` returns 0. The `ProvisionClaudeConfig` function doc in `wt_create.go` does not contain \"MCP\". `grep -c '\\.mcp\\.json' internal/commands/wt_create_test.go` returns 0.",
     "Scope": "Modify `internal/ops/wt_create.go`, `internal/commands/wt_create_test.go`.",
     "SpecRef": "Architecture plan IP-3 section.",
     "PlanRef": "specs/plans/20260412-135917-architecture-3a-architecture-to-code-plan-0.md"
