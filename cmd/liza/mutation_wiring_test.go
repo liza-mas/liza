@@ -172,6 +172,23 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 	})
 
+	t.Run("handoff rejects code-reviewer agent via RBAC", func(t *testing.T) {
+		projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-handoff-rbac", models.TaskStatusImplementing, now),
+			}
+		})
+
+		err := executeRootCommand(t, projectRoot, "handoff", "task-handoff-rbac", "summary", "next", "--agent-id", "code-reviewer-1")
+		if err == nil {
+			t.Fatalf("expected RBAC error for code-reviewer calling handoff, got nil")
+		}
+		if !strings.Contains(err.Error(), `operation "handoff" not allowed for role "code-reviewer"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("release-claim uses --changed-by over env fallback", func(t *testing.T) {
 		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 			now := time.Now().UTC()
