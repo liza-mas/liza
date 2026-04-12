@@ -17,7 +17,7 @@ US REVIEWER TOOLS:
 ARCHITECTURE REVIEWER TOOLS:
 {{- end}}
 - liza get — Query task state to inspect output[] entries
-  liza get tasks/{{.TaskID}} --json
+  liza get {{.TaskID}} --json
 - liza submit-verdict — Submit review verdict
   ⚠️  You MUST run this CLI command in this session:
   APPROVED: liza submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json

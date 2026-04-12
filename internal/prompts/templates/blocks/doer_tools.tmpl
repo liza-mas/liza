@@ -8,9 +8,7 @@ CODER TOOLS:
 - liza await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
   liza await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
 - liza handoff — Context near exhaustion (~90%)
-  liza handoff {{.TaskID}} --agent-id {{.AgentID}} --summary "<what is done>" --next-action "<exact next step>" --json
-  Optional structured fields: --succeeded, --failed, --hypothesis, --key-files, --dead-ends
-  When provided, structured fields override summary/next_action for richer handoff context.
+  liza handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
 - liza mark-blocked — Cannot proceed (spec ambiguity, missing dependency)
   liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
 - liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)

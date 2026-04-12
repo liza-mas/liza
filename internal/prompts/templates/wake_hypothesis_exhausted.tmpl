@@ -4,10 +4,10 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
 1. Read task history — understand what was tried and why it failed
 2. Determine if:
    - Task is impossible as specified → supersede with revised tasks:
-     a. Re-read the task via liza get tasks/<task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY).
+     a. Re-read the task via liza get <task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY).
         If status changed (e.g., task was claimed), skip supersede — the task is being actively worked.
      b. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
-     c. Run: liza supersede-task <old-id> --replacement-ids "<new-ids>" --reason "<reason>" --agent-id {{.AgentID}} --json
+     c. Run: liza supersede-task <old-id> <new-ids> --reason "<reason>" --agent-id {{.AgentID}} --json
    - Missing context/docs → add to task description (update NOW)
    - Needs different approach → update scope/guidance (execute NOW)
    - Spec is wrong → fix spec first (update NOW)

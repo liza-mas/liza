@@ -10,11 +10,11 @@ Tasks are BLOCKED. Analyze and resolve immediately:
 3. For each blocked task, decide action:
    - To supersede (create clean replacement):
    Example supersede workflow:
-   a. Re-read the task via liza get tasks/<task-id> --json to confirm it is still BLOCKED.
+   a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED.
       If status changed (e.g., task was claimed), skip — the task is being actively worked.
    b. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
-   c. Run: liza supersede-task <task-id> --replacement-ids "<new-ids>" --reason "Split due to complexity" --agent-id {{.AgentID}} --json
-   d. Run: liza wt-delete <task-id> --agent-id {{.AgentID}} --json (if worktree exists)
+   c. Run: liza supersede-task <task-id> <new-ids> --reason "Split due to complexity" --agent-id {{.AgentID}} --json
+   d. Run: liza wt-delete <task-id> --json (if worktree exists)
 4. After analyzing each blocked task:
    - If you resolved it (superseded): no further action needed for that task
    - If you CANNOT resolve it (genuine spec ambiguity, external dependency): run liza assess-blocked to record your assessment

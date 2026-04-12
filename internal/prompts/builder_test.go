@@ -62,7 +62,7 @@ func TestBuildBasePrompt(t *testing.T) {
 				"SESSION EXIT CODES",
 				"TIMESTAMPS:",
 				"FIRST ACTIONS:",
-				`Query your assigned task: liza get tasks/task-1 --json`,
+				`Query your assigned task: liza get task-1 --json`,
 				"Read the goal spec: specs/vision.md",
 				"lessons/agents/",
 				"GUARDRAILS.md",
@@ -586,7 +586,7 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 	// --- FIRST ACTIONS: boot sequence ---
 	assertSection("first-actions", []string{
 		"FIRST ACTIONS:",
-		`Query your assigned task: liza get tasks/task-42 --json`,
+		`Query your assigned task: liza get task-42 --json`,
 		"Read the goal spec: specs/vision.md",
 		"lessons/agents/",
 		"GUARDRAILS.md",

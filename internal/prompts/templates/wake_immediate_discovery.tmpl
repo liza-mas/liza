@@ -3,9 +3,9 @@ Urgent discoveries need immediate action:
 
 1. Read discovered[] entries with urgency=immediate
 2. For each, execute decision NOW:
-   - Convert to task → run liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW, then run liza set-discovery-disposition <id> --disposition <new-task-id> --json
-   - Defer → run liza set-discovery-disposition <id> --disposition deferred --json
-   - Dismiss → run liza set-discovery-disposition <id> --disposition dismissed --json
+   - Convert to task → run liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW, then run liza set-discovery-disposition <id> <new-task-id> --json
+   - Defer → run liza set-discovery-disposition <id> deferred --json
+   - Dismiss → run liza set-discovery-disposition <id> dismissed --json
 3. Prioritize new tasks appropriately (may be high priority)
 4. Check if discoveries invalidate existing tasks — supersede them if needed
 5. All commands must be executed in this session.

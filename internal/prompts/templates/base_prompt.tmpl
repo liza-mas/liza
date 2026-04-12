@@ -14,7 +14,7 @@ OPERATIONAL RULES:
   ~/.liza/ = installed contracts & skills (e.g. ~/.liza/MULTI_AGENT_MODE.md)
   {{.ProjectRoot}}/.liza/ = runtime state & blackboard (state.yaml, agent-outputs/)
 - You have FULL read access to both .liza/ directories
-- For READING state: use liza get --json with targeted queries (e.g. liza get tasks/<id> --json).
+- For READING state: use liza get --json with targeted queries (e.g. liza get <id> --json).
   NEVER read state.yaml directly to save context budget. liza get --json returns only the requested slice.
 - For MODIFYING state: use role-specific CLI commands ONLY
   NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
@@ -38,7 +38,7 @@ BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
 - Avoid using sed/awk for file editing.
 
 QUERY TOOLS (all roles):
-- liza get --json — Query state: liza get tasks --json, liza get tasks/<id> --json, liza get agents --json, liza get metrics --json
+- liza get --json — Query state: liza get tasks --json, liza get <id> --json, liza get agents --json, liza get metrics --json
 - liza status --json — Dashboard overview
 - liza validate --json — Validate state consistency (--skip-spec-check)
 
@@ -72,7 +72,7 @@ FIRST ACTIONS:
    b. ~/.liza/AGENT_TOOLS.md
    c. {{.ProjectRoot}}/GUARDRAILS.md (if it exists — skip if absent)
 {{- if .TaskID}}
-2. Query your assigned task: liza get tasks/{{.TaskID}} --json
+2. Query your assigned task: liza get {{.TaskID}} --json
 {{- else}}
 2. Query workspace state: liza get tasks --json
 {{- end}}

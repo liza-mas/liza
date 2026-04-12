@@ -101,7 +101,7 @@ REVIEW PHASE:
    d. Task mappings correct (listed task(s) actually address the requirement).
    Do NOT trust the matrix at face value — independently verify against the spec.
 4. Validate done_when criteria are satisfied.
-5. Verify output[] entries: run liza get tasks/{{.TaskID}} --json and confirm
+5. Verify output[] entries: run liza get {{.TaskID}} --json and confirm
    output[] has one entry per planned coding task with valid desc, done_when, scope, spec_ref.
 6. Verify each proposed coding task passes the review checklist above.
 7. Submit verdict with liza submit-verdict.
@@ -145,7 +145,7 @@ REVIEW PHASE:
 2. Invoke skill: epic-writing for reviewing specifications.
 3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 4. Validate done_when criteria are satisfied.
-5. Verify output[] entries: run liza get tasks/{{.TaskID}} --json and confirm
+5. Verify output[] entries: run liza get {{.TaskID}} --json and confirm
    output[] has one entry per capability with valid desc, done_when, scope, spec_ref, plan_ref.
    Verify: spec_ref equals the task's own spec_ref (goal spec reference, same for all entries).
    Verify: each plan_ref is the epic document path with a #section-anchor matching the capability heading.
@@ -248,7 +248,7 @@ REVIEW PHASE:
 3. Inspect worktree changes: git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}}
 4. Read the architecture document in the worktree (look for the arch doc in specs/arch-plan/).
 5. Validate the decomposition: does it cover the full scope of the goal spec?
-6. Verify output[] entries: run liza get tasks/{{.TaskID}} --json and confirm
+6. Verify output[] entries: run liza get {{.TaskID}} --json and confirm
    output[] has one entry per code-planning scope with valid desc, done_when, scope, spec_ref, arch_ref.
 7. Check each proposed scope against the review checklist above.
 8. Submit verdict with liza submit-verdict.
@@ -262,7 +262,7 @@ Enrich with systemic analysis: interaction effects across fixes, architectural d
 INSTRUCTIONS:
 1. Invoke skill: systemic-thinking for systemic analysis framing.
 2. Read the branch diff: git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD
-3. Review the analyst's output[]: liza get tasks/{{.TaskID}} --json
+3. Review the analyst's output[]: liza get {{.TaskID}} --json
    For each proposed fix-task:
    a. Verify the finding is real (confirmed by the diff, not fabricated)
    b. Verify the fix-task is well-formed: single intent, falsifiable done_when, correct scope
