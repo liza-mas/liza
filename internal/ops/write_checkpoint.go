@@ -45,9 +45,7 @@ func WriteCheckpoint(projectRoot string, input *WriteCheckpointInput) error {
 	if input.ValidationPlan == "" {
 		return &PreconditionError{Reason: "validation_plan is required"}
 	}
-	if len(input.FilesToModify) == 0 {
-		return &PreconditionError{Reason: "files_to_modify is required (at least one file)"}
-	}
+	// files_to_modify may be empty for read-only analysis tasks (e.g. integration-analyst)
 	if !IsValidImpact(input.Impact) {
 		return &PreconditionError{Reason: fmt.Sprintf("invalid impact value %q: must be empty, standard, significant, or architecture", input.Impact)}
 	}

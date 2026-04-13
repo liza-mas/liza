@@ -880,7 +880,7 @@ func init() {
 	addAgentIDFlag(writeCheckpointCmd)
 	writeCheckpointCmd.Flags().String("intent", "", "specific, observable intent of implementation (required)")
 	writeCheckpointCmd.Flags().String("validation-plan", "", "concrete validation command and expected output (required)")
-	writeCheckpointCmd.Flags().StringSlice("files-to-modify", nil, "files that will be modified (required, at least one)")
+	writeCheckpointCmd.Flags().StringSlice("files-to-modify", nil, "files that will be modified (omit for read-only analysis tasks)")
 	writeCheckpointCmd.Flags().StringSlice("assumptions", nil, "tagged assumptions")
 	writeCheckpointCmd.Flags().String("risks", "", "identified risks")
 	writeCheckpointCmd.Flags().String("tdd-not-required", "", "justification for skipping new test files")
@@ -888,7 +888,6 @@ func init() {
 	writeCheckpointCmd.Flags().String("scope-extensions", "", `scope extensions as JSON array, e.g. [{"file":"path","justification":"why"}]`)
 	writeCheckpointCmd.MarkFlagRequired("intent")
 	writeCheckpointCmd.MarkFlagRequired("validation-plan")
-	writeCheckpointCmd.MarkFlagRequired("files-to-modify")
 
 	// Set-task-output command flags
 	addAgentIDFlag(setTaskOutputCmd)

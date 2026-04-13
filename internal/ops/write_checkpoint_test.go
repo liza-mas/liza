@@ -35,11 +35,7 @@ func TestWriteCheckpoint_Validation(t *testing.T) {
 			input:       WriteCheckpointInput{TaskID: "t1", AgentID: "coder-1", Intent: "i", FilesToModify: []string{"f"}},
 			errContains: "validation_plan is required",
 		},
-		{
-			name:        "empty files to modify",
-			input:       WriteCheckpointInput{TaskID: "t1", AgentID: "coder-1", Intent: "i", ValidationPlan: "v"},
-			errContains: "files_to_modify is required",
-		},
+		// files_to_modify is optional (read-only analysis tasks modify no files)
 	}
 
 	for _, tt := range tests {
