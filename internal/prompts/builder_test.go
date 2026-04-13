@@ -310,8 +310,8 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"- Total tasks: 2",
 				"- Merged: 2",
 				"All planned sprint tasks have reached terminal state",
-				`liza update-sprint-metrics --agent-id orchestrator-1 --json`,
-				`liza sprint-checkpoint --agent-id orchestrator-1 --json`,
+				`liza update-sprint-metrics --json`,
+				`liza sprint-checkpoint --json`,
 			},
 		},
 	}

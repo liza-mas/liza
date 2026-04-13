@@ -125,9 +125,9 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 - liza wt-delete — Delete worktree for abandoned/superseded/blocked tasks
   liza wt-delete <task-id> --agent-id "%s" --json
 - liza sprint-checkpoint — Create sprint checkpoint for human review (pauses all agents)
-  liza sprint-checkpoint --agent-id "%s" --json
+  liza sprint-checkpoint --json
 - liza update-sprint-metrics — Recompute sprint metrics from current state
-  liza update-sprint-metrics --agent-id "%s" --json
+  liza update-sprint-metrics --json
 
 ANOMALY LOGGING:
 | Event | Type | Required Fields |
@@ -160,7 +160,7 @@ On CLI command errors, diagnose the root cause before retrying. Read the error m
 
 MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
 Work unit = all planned state changes executed. Do NOT exit until all commands have been run.
-`, agentID, agentID, agentID, agentID, agentID, agentID))
+`, agentID, agentID, agentID, agentID))
 
 	// Wake instruction is rendered separately by the wake-instructions block
 	wakeInstr := fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions)

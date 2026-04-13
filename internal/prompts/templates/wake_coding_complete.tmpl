@@ -17,7 +17,7 @@ Spawn a single integration-analyst task scoped to the full branch diff since goa
      "scope": "Full branch diff analysis from goal.base_commit to integration HEAD. Read-only analysis producing fix-task definitions, not code changes.",
      "priority": 1
    }], "agent_id": "{{.AgentID}}"}
-3. Update sprint metrics: liza update-sprint-metrics --agent-id {{.AgentID}} --json
+3. Update sprint metrics: liza update-sprint-metrics --json
 
 BLOCKED ESCALATION:
 If a fix task is BLOCKED by a coder because the fix requires non-trivial work (e.g., type alignment across many files, new error type + propagation), you will wake on BLOCKED_TASKS. At that point, supersede the fix task and create a full code-planning task in the coding sub-pipeline.
