@@ -6,8 +6,8 @@ Spawn a single integration-analyst task scoped to the full branch diff since goa
 1. Read the goal spec: liza get goal --json
 2. Create integration task — write a JSON file and run:
    liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
-   JSON file contains:
-   {"tasks": [{
+   ⚠️  The file must contain a bare JSON array — NOT a wrapper object.
+   [{
      "id": "<unique-id>",  {{/* e.g., "integration-auth-refactor-1" — must be unique across sprints, avoid static IDs */}}
      "type": "integration",
      "role_pair": "integration-pair",
@@ -16,7 +16,7 @@ Spawn a single integration-analyst task scoped to the full branch diff since goa
      "done": "Branch diff from goal.base_commit analyzed. Either: (a) fix-task definitions produced as output[] entries, each with single intent, falsifiable done_when, and correct scope; or (b) clean scan confirmed with empty output[] and INTEGRATION_ANALYSIS_CLEAN terminal state.",
      "scope": "Full branch diff analysis from goal.base_commit to integration HEAD. Read-only analysis producing fix-task definitions, not code changes.",
      "priority": 1
-   }], "agent_id": "{{.AgentID}}"}
+   }]
 3. Update sprint metrics: liza update-sprint-metrics --json
 
 BLOCKED ESCALATION:

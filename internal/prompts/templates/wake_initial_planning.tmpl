@@ -26,34 +26,32 @@ Simple goals (default): one task, no depends_on.
 
 Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch to {{.ResolvedDisplayName}}.
 
-Run liza add-tasks once with ALL tasks in a JSON file:
-{
-  "tasks": [
-    {
-      "id": "{{.ResolvedTaskIDPrefix}}-1",
-      "desc": "Phase 1: <boundary description>",
-      "spec": "{{.GoalSpecRef}}",
-      "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
-      "scope": "Planning only: <phase 1 boundary>. No implementation.",
-      "priority": 1,
-      "depends": [],
-      "type": "{{.ResolvedTaskType}}",
-      "role_pair": "{{.ResolvedRolePair}}"
-    },
-    {
-      "id": "{{.ResolvedTaskIDPrefix}}-2",
-      "desc": "Phase 2: <boundary description>",
-      "spec": "{{.GoalSpecRef}}",
-      "done": "...",
-      "scope": "Planning only: <phase 2 boundary>. No implementation.",
-      "priority": 2,
-      "depends": ["{{.ResolvedTaskIDPrefix}}-1"],
-      "type": "{{.ResolvedTaskType}}",
-      "role_pair": "{{.ResolvedRolePair}}"
-    }
-  ],
-  "agent_id": "{{.AgentID}}"
-}
+Run liza add-tasks once with ALL tasks in a JSON file.
+⚠️  The file must contain a bare JSON array — NOT a wrapper object.
+[
+  {
+    "id": "{{.ResolvedTaskIDPrefix}}-1",
+    "desc": "Phase 1: <boundary description>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
+    "scope": "Planning only: <phase 1 boundary>. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "{{.ResolvedTaskType}}",
+    "role_pair": "{{.ResolvedRolePair}}"
+  },
+  {
+    "id": "{{.ResolvedTaskIDPrefix}}-2",
+    "desc": "Phase 2: <boundary description>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "...",
+    "scope": "Planning only: <phase 2 boundary>. No implementation.",
+    "priority": 2,
+    "depends": ["{{.ResolvedTaskIDPrefix}}-1"],
+    "type": "{{.ResolvedTaskType}}",
+    "role_pair": "{{.ResolvedRolePair}}"
+  }
+]
 Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 For simple goals, use a single task (omit the second entry, empty depends).
 
@@ -76,34 +74,32 @@ CLASSIFICATION GUIDANCE:
 - Choose "general-objective" for vision documents, broad objectives, or when uncertain.
   Default to "general-objective" — skipping the spec phase is riskier than redundant refinement.
 
-After classifying, write a JSON file with the chosen role_pair and run liza add-tasks:
-{
-  "tasks": [
-    {
-      "id": "<chosen-prefix>-1",
-      "desc": "Phase 1: <boundary description>",
-      "spec": "{{.GoalSpecRef}}",
-      "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
-      "scope": "Planning only: <phase 1 boundary>. No implementation.",
-      "priority": 1,
-      "depends": [],
-      "type": "<chosen-type>",
-      "role_pair": "<chosen-role-pair>"
-    },
-    {
-      "id": "<chosen-prefix>-2",
-      "desc": "Phase 2: <boundary description>",
-      "spec": "{{.GoalSpecRef}}",
-      "done": "...",
-      "scope": "Planning only: <phase 2 boundary>. No implementation.",
-      "priority": 2,
-      "depends": ["<chosen-prefix>-1"],
-      "type": "<chosen-type>",
-      "role_pair": "<chosen-role-pair>"
-    }
-  ],
-  "agent_id": "{{.AgentID}}"
-}
+After classifying, write a JSON file with the chosen role_pair and run liza add-tasks.
+⚠️  The file must contain a bare JSON array — NOT a wrapper object.
+[
+  {
+    "id": "<chosen-prefix>-1",
+    "desc": "Phase 1: <boundary description>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for review",
+    "scope": "Planning only: <phase 1 boundary>. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "<chosen-type>",
+    "role_pair": "<chosen-role-pair>"
+  },
+  {
+    "id": "<chosen-prefix>-2",
+    "desc": "Phase 2: <boundary description>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "...",
+    "scope": "Planning only: <phase 2 boundary>. No implementation.",
+    "priority": 2,
+    "depends": ["<chosen-prefix>-1"],
+    "type": "<chosen-type>",
+    "role_pair": "<chosen-role-pair>"
+  }
+]
 Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 For simple goals, use a single task (omit the second entry, empty depends).
 
@@ -113,34 +109,32 @@ SUCCESS CRITERIA:
 - Complex goals: sequential depends_on chain, each task scoped to a natural boundary.
 {{- else }}
 
-Write a JSON file with the tasks and run liza add-tasks:
-{
-  "tasks": [
-    {
-      "id": "code-planning-1",
-      "desc": "Phase 1: <boundary description>",
-      "spec": "{{.GoalSpecRef}}",
-      "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for code-plan-review",
-      "scope": "Planning only: <phase 1 boundary>. No implementation.",
-      "priority": 1,
-      "depends": [],
-      "type": "coding",
-      "role_pair": "code-planning-pair"
-    },
-    {
-      "id": "code-planning-2",
-      "desc": "Phase 2: <boundary description>",
-      "spec": "{{.GoalSpecRef}}",
-      "done": "...",
-      "scope": "Planning only: <phase 2 boundary>. No implementation.",
-      "priority": 2,
-      "depends": ["code-planning-1"],
-      "type": "coding",
-      "role_pair": "code-planning-pair"
-    }
-  ],
-  "agent_id": "{{.AgentID}}"
-}
+Write a JSON file with the tasks and run liza add-tasks.
+⚠️  The file must contain a bare JSON array — NOT a wrapper object.
+[
+  {
+    "id": "code-planning-1",
+    "desc": "Phase 1: <boundary description>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Implementation plan for <boundary> is complete, reviewable, and submitted for code-plan-review",
+    "scope": "Planning only: <phase 1 boundary>. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "coding",
+    "role_pair": "code-planning-pair"
+  },
+  {
+    "id": "code-planning-2",
+    "desc": "Phase 2: <boundary description>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "...",
+    "scope": "Planning only: <phase 2 boundary>. No implementation.",
+    "priority": 2,
+    "depends": ["code-planning-1"],
+    "type": "coding",
+    "role_pair": "code-planning-pair"
+  }
+]
 Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 For simple goals, use a single task (omit the second entry, empty depends).
 

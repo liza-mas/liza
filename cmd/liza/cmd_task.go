@@ -599,7 +599,8 @@ Updates:
 		if scopeJSON, _ := cmd.Flags().GetString("scope-extensions"); scopeJSON != "" {
 			var entries []ops.ScopeExtensionEntry
 			if err := json.Unmarshal([]byte(scopeJSON), &entries); err != nil {
-				return fmt.Errorf("invalid --scope-extensions JSON: %w", err)
+				return &ops.PreconditionError{Reason: fmt.Sprintf(
+					"--scope-extensions must be a JSON array: %v", err)}
 			}
 			input.ScopeExtensions = entries
 		}
@@ -682,7 +683,11 @@ Example:
 
 		var entries []models.OutputEntry
 		if err := json.Unmarshal(data, &entries); err != nil {
-			return fmt.Errorf("parsing output file: %w", err)
+			hint := "output file must contain a JSON array [...]"
+			if len(data) > 0 && data[0] == '{' {
+				hint += "; got a JSON object — remove the wrapper and pass a bare array"
+			}
+			return &ops.PreconditionError{Reason: fmt.Sprintf("%s: %v", hint, err)}
 		}
 
 		input := &ops.SetTaskOutputInput{
@@ -741,7 +746,11 @@ Example:
 
 		var tasks []ops.AddTaskInput
 		if err := json.Unmarshal(data, &tasks); err != nil {
-			return fmt.Errorf("parsing tasks file: %w", err)
+			hint := "tasks file must contain a JSON array [...]"
+			if len(data) > 0 && data[0] == '{' {
+				hint += "; got a JSON object — remove the wrapper and pass a bare array"
+			}
+			return &ops.PreconditionError{Reason: fmt.Sprintf("%s: %v", hint, err)}
 		}
 
 		orchestratorID, err := resolveOrchestratorID(cmd)
