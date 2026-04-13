@@ -256,13 +256,13 @@ func (t *Task) CohortParentID() string {
 // OutputEntry represents a structured subtask definition produced by a doer role.
 // When a task completes with output[], each entry defines a downstream child task.
 type OutputEntry struct {
-	Desc      string   `yaml:"desc"`
-	DoneWhen  string   `yaml:"done_when"`
-	Scope     string   `yaml:"scope"`
-	SpecRef   string   `yaml:"spec_ref"`
-	PlanRef   string   `yaml:"plan_ref,omitempty"`
-	ArchRef   string   `yaml:"arch_ref,omitempty"`
-	DependsOn []string `yaml:"depends_on,omitempty"`
+	Desc      string   `yaml:"desc" json:"desc"`
+	DoneWhen  string   `yaml:"done_when" json:"done_when"`
+	Scope     string   `yaml:"scope" json:"scope"`
+	SpecRef   string   `yaml:"spec_ref" json:"spec_ref"`
+	PlanRef   string   `yaml:"plan_ref,omitempty" json:"plan_ref,omitempty"`
+	ArchRef   string   `yaml:"arch_ref,omitempty" json:"arch_ref,omitempty"`
+	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 }
 
 // ValidateDependsOn checks that DependsOn indices are valid references within

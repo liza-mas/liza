@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -557,4 +558,49 @@ func TestApprovalHelpers(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestOutputEntry_JSONUnmarshal(t *testing.T) {
+	// Wire format documented in doer_tools.tmpl and set-task-output CLI help.
+	input := `[
+		{
+			"desc": "Implement auth middleware",
+			"done_when": "GET /protected returns 401 without token",
+			"scope": "internal/auth",
+			"spec_ref": "specs/auth.md",
+			"plan_ref": "specs/plans/plan-1.md",
+			"arch_ref": "specs/arch-plan/arch-1.md",
+			"depends_on": ["0", "2"]
+		}
+	]`
+
+	var entries []OutputEntry
+	if err := json.Unmarshal([]byte(input), &entries); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+	e := entries[0]
+	if e.Desc != "Implement auth middleware" {
+		t.Errorf("Desc = %q", e.Desc)
+	}
+	if e.DoneWhen != "GET /protected returns 401 without token" {
+		t.Errorf("DoneWhen = %q", e.DoneWhen)
+	}
+	if e.Scope != "internal/auth" {
+		t.Errorf("Scope = %q", e.Scope)
+	}
+	if e.SpecRef != "specs/auth.md" {
+		t.Errorf("SpecRef = %q", e.SpecRef)
+	}
+	if e.PlanRef != "specs/plans/plan-1.md" {
+		t.Errorf("PlanRef = %q", e.PlanRef)
+	}
+	if e.ArchRef != "specs/arch-plan/arch-1.md" {
+		t.Errorf("ArchRef = %q", e.ArchRef)
+	}
+	if len(e.DependsOn) != 2 || e.DependsOn[0] != "0" || e.DependsOn[1] != "2" {
+		t.Errorf("DependsOn = %v", e.DependsOn)
+	}
 }

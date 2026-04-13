@@ -18,16 +18,16 @@ import (
 
 // AddTaskInput represents the input parameters for adding a task.
 type AddTaskInput struct {
-	ID          string
-	Type        string
-	RolePair    string
-	Description string
-	SpecRef     string
-	PlanRef     string
-	DoneWhen    string
-	Scope       string
-	Priority    int
-	DependsOn   []string
+	ID          string   `json:"id"`
+	Type        string   `json:"type,omitempty"`
+	RolePair    string   `json:"role_pair,omitempty"`
+	Description string   `json:"desc"`
+	SpecRef     string   `json:"spec"`
+	PlanRef     string   `json:"plan_ref,omitempty"`
+	DoneWhen    string   `json:"done"`
+	Scope       string   `json:"scope"`
+	Priority    int      `json:"priority"`
+	DependsOn   []string `json:"depends,omitempty"`
 }
 
 // AddTaskResult contains the outcome of adding a task.

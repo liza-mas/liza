@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -625,5 +626,62 @@ func TestAddTasks_EmptyInput(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "at least one task") {
 		t.Errorf("error = %q, want 'at least one task'", err.Error())
+	}
+}
+
+func TestAddTaskInput_JSONUnmarshal(t *testing.T) {
+	// Wire format documented in add-tasks CLI help and wake_initial_planning.tmpl.
+	input := `[
+		{
+			"id": "task-auth-1",
+			"desc": "Implement auth",
+			"spec": "specs/auth.md",
+			"done": "GET /protected returns 401",
+			"scope": "internal/auth",
+			"priority": 2,
+			"depends": ["task-base-1"],
+			"type": "code",
+			"role_pair": "coding-pair",
+			"plan_ref": "specs/plans/plan-1.md"
+		}
+	]`
+
+	var tasks []AddTaskInput
+	if err := json.Unmarshal([]byte(input), &tasks); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("got %d tasks, want 1", len(tasks))
+	}
+	task := tasks[0]
+	if task.ID != "task-auth-1" {
+		t.Errorf("ID = %q", task.ID)
+	}
+	if task.Description != "Implement auth" {
+		t.Errorf("Description = %q", task.Description)
+	}
+	if task.SpecRef != "specs/auth.md" {
+		t.Errorf("SpecRef = %q", task.SpecRef)
+	}
+	if task.DoneWhen != "GET /protected returns 401" {
+		t.Errorf("DoneWhen = %q", task.DoneWhen)
+	}
+	if task.Scope != "internal/auth" {
+		t.Errorf("Scope = %q", task.Scope)
+	}
+	if task.Priority != 2 {
+		t.Errorf("Priority = %d", task.Priority)
+	}
+	if len(task.DependsOn) != 1 || task.DependsOn[0] != "task-base-1" {
+		t.Errorf("DependsOn = %v", task.DependsOn)
+	}
+	if task.Type != "code" {
+		t.Errorf("Type = %q", task.Type)
+	}
+	if task.RolePair != "coding-pair" {
+		t.Errorf("RolePair = %q", task.RolePair)
+	}
+	if task.PlanRef != "specs/plans/plan-1.md" {
+		t.Errorf("PlanRef = %q", task.PlanRef)
 	}
 }
