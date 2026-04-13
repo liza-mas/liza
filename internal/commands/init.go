@@ -119,6 +119,13 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 	}
 
+	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
+	if projectRoot != "" {
+		if err := embedded.CleanStaleMCPEntry(projectRoot); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to clean stale .mcp.json entry: %v\n", err)
+		}
+	}
+
 	if hasMistral {
 		if err := setupMistralContract(coreFile, stdin); err != nil {
 			return fmt.Errorf("mistral setup failed: %w", err)
@@ -555,6 +562,11 @@ func InitCommandWithConfig(params InitParams) error {
 	// Note: This may prompt user for input if settings file exists
 	if err := embedded.WriteClaudeSettings(lizaPaths.ProjectRoot(), stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
+	}
+
+	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
+	if err := embedded.CleanStaleMCPEntry(lizaPaths.ProjectRoot()); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to clean stale .mcp.json entry: %v\n", err)
 	}
 
 	// Create contract symlinks only for explicitly requested providers

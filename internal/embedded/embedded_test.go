@@ -1077,3 +1077,74 @@ func TestWriteHooks_Overwrites(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanStaleMCPEntry(t *testing.T) {
+	t.Run("no file", func(t *testing.T) {
+		if err := CleanStaleMCPEntry(t.TempDir()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("removes liza entry", func(t *testing.T) {
+		dir := t.TempDir()
+		mcpPath := filepath.Join(dir, ".mcp.json")
+		os.WriteFile(mcpPath, []byte(`{
+  "mcpServers": {
+    "liza": {"command": "liza-mcp", "args": ["--project-root", "."]},
+    "other": {"command": "other-server"}
+  }
+}`), 0644)
+
+		if err := CleanStaleMCPEntry(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		data, err := os.ReadFile(mcpPath)
+		if err != nil {
+			t.Fatalf("file should still exist: %v", err)
+		}
+		var doc map[string]any
+		json.Unmarshal(data, &doc)
+		servers := doc["mcpServers"].(map[string]any)
+		if _, hasLiza := servers["liza"]; hasLiza {
+			t.Error("liza entry should have been removed")
+		}
+		if _, hasOther := servers["other"]; !hasOther {
+			t.Error("other entry should be preserved")
+		}
+	})
+
+	t.Run("deletes file when only liza entry", func(t *testing.T) {
+		dir := t.TempDir()
+		mcpPath := filepath.Join(dir, ".mcp.json")
+		os.WriteFile(mcpPath, []byte(`{
+  "mcpServers": {
+    "liza": {"command": "liza-mcp", "args": ["--project-root", "."]}
+  }
+}`), 0644)
+
+		if err := CleanStaleMCPEntry(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if _, err := os.Stat(mcpPath); !os.IsNotExist(err) {
+			t.Error("file should have been deleted")
+		}
+	})
+
+	t.Run("no liza entry is no-op", func(t *testing.T) {
+		dir := t.TempDir()
+		mcpPath := filepath.Join(dir, ".mcp.json")
+		original := `{"mcpServers": {"other": {"command": "x"}}}`
+		os.WriteFile(mcpPath, []byte(original), 0644)
+
+		if err := CleanStaleMCPEntry(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		data, _ := os.ReadFile(mcpPath)
+		if string(data) != original {
+			t.Errorf("file should be unchanged, got %s", data)
+		}
+	})
+}
