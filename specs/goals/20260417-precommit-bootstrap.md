@@ -10,19 +10,23 @@
 
 This is a **proactive hardening** change. The failure modes are mechanical consequences of an absent file plus an instruction that assumes its presence — they do not require empirical reproduction to justify the goal-level design.
 
-**Rule 5 waiver (goal spec only):** the implementation spec must reproduce a greenfield run and capture observed failure modes before specifying remediation. At the goal level, hypothesized modes drive scope:
+**Rule 5 waiver (goal spec only):** implementation must reproduce a greenfield run and capture observed failure modes before code lands (hard gate — see Acceptance Criteria). At the goal level, hypothesized modes drive scope:
 - Coders inventing `.pre-commit-config.yaml` ad-hoc inside an unrelated coding task.
 - Parallel coders producing conflicting configs.
 - Coders silently skipping pre-commit when it errors with "no config".
 - DoD step "Pre-commit passes on touched files" (CORE.md Rule 3) becoming vacuous.
 
-If reproduction shows the actual failure mode is different from any of the above, the implementation spec re-scopes — this spec does not bind it.
+If reproduction shows the actual failure mode is different from any of the above, the ratified design is revisited before implementation proceeds — this spec does not bind the implementation against reality.
 
 ## Preconditions
 
 ### Prompt wording to narrow
 
-`internal/prompts/templates/base_prompt.tmpl:36` says: *"NEVER attempt to install, bootstrap, or fix system-level tooling."* The line sits under the BASH CONSTRAINTS block (alongside "NEVER use $()…", "NEVER combine cd and git…") — the original intent targets system package installs, language runtimes, and IDE setup, not project config files. Implementation spec narrows the wording to make the system/project boundary explicit. `base_prompt.tmpl` is on the implementation surface.
+`internal/prompts/templates/base_prompt.tmpl:36` says: *"NEVER attempt to install, bootstrap, or fix system-level tooling."* The line sits under the BASH CONSTRAINTS block (alongside "NEVER use $()…", "NEVER combine cd and git…") — the original intent targets system package installs, language runtimes, and IDE setup, not project config files. Replacement text:
+
+> NEVER install OS packages, language runtimes, IDE tooling, or global developer tools by default. Project-level config files (`.pre-commit-config.yaml`, `.editorconfig`, lint configs) are project work. Tools required to run those configs may be provisioned only when the task's explicit scope authorizes a project-scoped setup path; otherwise mark BLOCKED rather than mutating the host environment.
+
+`base_prompt.tmpl` is on the implementation surface.
 
 ### Composition with post-submit commit guard
 
@@ -30,7 +34,17 @@ The post-submit commit guard (`fcb7edc7`, `f840debe`) and project pre-commit are
 
 ### `pre-commit` binary install
 
-The chain spec assumes `pre-commit` is on PATH; bootstrap's `done_when` (`pre-commit run --all-files`) requires the same. Greenfield projects may not have it installed. Implementation spec must resolve this — recommended approach: extend the `base_prompt.tmpl:36` narrowing to explicitly permit `pre-commit` install (e.g. `pip install pre-commit` / `uv tool install pre-commit` / `brew install pre-commit`) inside the bootstrap coding task. This keeps `liza init`'s preconditions minimal and avoids forking another goal spec, at the cost of one carve-out in the no-system-tooling rule. Alternatives: (a) document `pre-commit` as a `liza init` precondition, or (b) defer to a separate goal.
+The chain spec assumes `pre-commit` is on PATH; bootstrap's `done_when` (`pre-commit run --all-files`) requires the same. Greenfield projects may not have it installed.
+
+**Resolution: project-scoped provisioning only.** The bootstrap task may install `pre-commit` only via a project-scoped mechanism — a project dep-manager entry (e.g. `uv add --dev pre-commit`, `npm install --save-dev pre-commit`, requirements-dev.txt + venv), a script in the repo, a devcontainer manifest. Host-level installs (`brew install`, `pip install --user`, `uv tool install`, `apt-get install`) are forbidden — they are exactly what the narrowed `base_prompt.tmpl:36` fences off.
+
+Bootstrap task's `desc` includes:
+
+> This task may provision `pre-commit` only via a project-scoped mechanism already available in the repo or explicitly defined by the task/config. Do not install OS packages or unrelated global tooling. If no authorized project-scoped path exists, mark BLOCKED.
+
+If no project-scoped path exists, the coder marks BLOCKED. Planner-orchestrator may rescope by emitting a prerequisite `setup-dep-manager` task and re-emitting bootstrap with the new dep — this rescope is allowed but not mandated by this spec. Collapsing dep-manager and pre-commit bootstrap into one task is rejected (breaks idempotency and muddies failure diagnosis).
+
+**Rationale:** the architect authorizes scope, not host-mutation policy. Permitting host-level installs as a base-prompt carve-out would set a precedent that erodes the contract every time a tool is missing.
 
 ## Design
 
@@ -50,31 +64,54 @@ The architect's `output[]` becomes M code-planning task definitions per ADR-0036
 - *Code-planner emits bootstrap.* ADR-0056 created the architecture step explicitly to prevent code-planners from making cross-scope structural decisions. Bootstrap is repo-wide, not per-scope. M parallel code-planners each emitting bootstrap reintroduces the failure mode ADR-0056 fixed.
 - *Pipeline-injected bootstrap (new task-creation path in `proceed.go`).* Would require a new task-creation primitive: review parity for a task without `output[]` provenance, `parent_task` linkage, `transitions_executed` bookkeeping, checkpoint visibility, replan handling, and a deviation from the ADR-0036 invariant that tasks come from agent `output[]`. Substantially heavier than reusing `output[]` + phase-gate inheritance.
 
-### Q2: Idempotency — plan-time and execution-time
+### Q2: Idempotency — plan-time, dedup, execution-time
 
-Detection happens at two points:
-- **Plan-time** (architect): the architect's prompt context must include a rendered field (e.g. `.PreCommitConfigExists`) populated by `internal/prompts/role_context.go` from a resolver-side check against integration-branch HEAD. When true, the architect omits the bootstrap entry entirely. Implementation spec specifies the resolver primitive; precedent for "exists" semantics is `checkSpecFileExists` in `internal/statevalidate/validate.go:92`.
-- **Execution-time** (coder): when claiming the bootstrap task, re-check worktree disk + integration branch. If the file appeared after planning (human added it, or another in-flight task merged), the coder calls `liza mark-blocked` with reason "config already present at execution time". The planner-orchestrator handles via standard rescope flow (`SUPERSEDED`, per `specs/architecture/roles.md:111`). Coders cannot mark tasks SUPERSEDED themselves (`internal/prompts/templates/base_prompt.tmpl:54`).
+Three detection points, backed by one new typed marker.
+
+**New primitive: `kind: bootstrap-precommit`.** A typed field on `OutputEntry` (`internal/models/task.go`) AND propagated to the persisted `Task`. This is the stable dedup key — string-matching on description/scope is rejected as too brittle.
+
+**ADR-0036 impact.** ADR-0036 currently defines `OutputEntry` as a fixed four-field schema ("no extensibility beyond the four fields"). Adding `kind` extends that schema. Implementation must either amend ADR-0036 or write a superseding ADR; leaving it untouched would make the architecture docs immediately stale.
+
+**Plan-time existence check (architect prompt context).** Two booleans added to the existing `RoleContextData` in `internal/prompts/role_context.go`, populated only for the architect role:
+- `PreCommitConfigExists` — integration-branch HEAD has `.pre-commit-config.yaml`.
+- `PreCommitBootstrapInFlight` — any non-terminal task repo-wide carries `kind: bootstrap-precommit`.
+
+Architect omits the bootstrap entry when either is true. Backed by helpers in a new `internal/precommit/` package:
+- `precommit.ConfigExistsOnIntegration(projectRoot, branch) (bool, error)` — uses git plumbing (e.g. `git cat-file -e <branch>:.pre-commit-config.yaml`), not direct filesystem read of the main working tree (which may include uncommitted human drift). Precedent: `checkSpecFileExists` in `internal/statevalidate/validate.go:92`.
+- `precommit.BootstrapInFlight(state *models.State) bool` — repo-wide scan of non-terminal tasks by typed marker. "Non-terminal" includes BLOCKED (a blocked bootstrap will eventually merge once rescoped, so it genuinely is in flight).
+
+**Rescope invariant.** When the planner-orchestrator rescopes a BLOCKED bootstrap task (e.g. after it blocks waiting for a prerequisite like `setup-dep-manager`), it MUST mark the blocked task `SUPERSEDED` as part of that rescope, before or simultaneous with emitting a replacement. Without the SUPERSEDE, `BootstrapInFlight` stays true and the replacement is correctly suppressed by dedup — so forgetting the SUPERSEDE surfaces as a dedup mis-fire, not silent success with two parallel bootstraps. This aligns with the existing rescope-via-SUPERSEDED convention in `specs/architecture/roles.md:111`.
+
+**Terminology**: this is prompt-context enrichment / repo-state inspection. It is **not** a `pipeline.Resolver` responsibility — keep it out of `pipeline.Resolver` to avoid muddying that boundary.
+
+**Failure handling**: if either helper errors (e.g. git lookup failure), the context builder returns the error; the supervisor/orchestrator converts it to an explicit task-blocking outcome. Not silent omission, not opaque crash.
+
+**Authoritative dedup at proceed-time (`proceed.go`).** B (planning-time omission) is not sufficient on its own — uniqueness cannot depend on prompt compliance, and there is a render-to-proceed race. `proceed.go` performs a final dedup check on `kind: bootstrap-precommit` before creating children: if a non-terminal sibling/repo-wide task with that marker exists, skip child creation for that entry.
+
+**Execution-time** (coder): when claiming the bootstrap task, re-check worktree disk + integration branch. If the file appeared after planning (human added it, or another in-flight task merged), the coder calls `liza mark-blocked` with reason "config already present at execution time". The planner-orchestrator handles via standard rescope flow (`SUPERSEDED`, per `specs/architecture/roles.md:111`). Coders cannot mark tasks SUPERSEDED themselves (`internal/prompts/templates/base_prompt.tmpl:54`).
 
 "Exists" rule: file presence is sufficient. Content adequacy is the project's responsibility — empty or malformed config still counts as "present". Coders fail fast on `pre-commit run`, surfacing the bad config as a normal task failure rather than silently re-bootstrapping.
 
-### Q3: Hook content
+### Q3: Hook content — α (stack-derived) with constraints
 
-**Option α — Stack-derived.** Architect narrates the hooks in the `output[0]` description (free-form, based on `arch_ref` ecosystem). **Constraint:** hook content must be narrated by the architect at plan time, never templated in prompts (G1.1 — no Liza-specific stack hardcoding).
-- Pro: useful immediately.
-- Con: relies on architect prompt judgment; bad picks land in the config until reviewed.
+Architect specifies a stack-appropriate hook set in free-form plan output, **never via prompt-template defaults or runtime heuristics**.
 
-**Option β — Minimal universal only.** Bootstrap emits `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-merge-conflict`. Stack-specific hooks added later by the first task that exercises the stack.
-- Pro: stack-agnostic.
-- Con: defers stack-specific protection indefinitely.
+**Constraints:**
+- Architect picks hook *categories* and *concrete hooks*. Version-selection policy remains out of scope (defer to hook-selection task or ADR).
+- Worked example for at least one greenfield stack class lives in this spec / docs only — **never in prompts**. A concrete example in the architect prompt would anchor output too hard and drift toward a de facto default, eroding G1.1 even when labeled "illustrative."
+- The architect prompt requires include of the install-authorization clause when emitting `kind: bootstrap-precommit` (per Preconditions / `pre-commit` binary install).
 
-**Option γ — Hybrid.** Universal at bootstrap; architect emits a second `output[]` entry `add-stack-precommit-hooks` at index 1 with `depends_on: ["0"]`. **Indexing impact:** if γ is chosen, all other architect entries shift to indices 2+ and must declare `depends_on: ["0", "1"]` (both bootstrap entries are gating). Implementation spec must specify this explicitly to avoid silently relying on `["0"]` only.
+**Rationale (chosen):** best alignment with existing role boundaries (architect already makes repo-wide structural decisions per goal) and strongest day-1 protection. Not "least ceremony."
 
-Implementation spec picks one and justifies.
+**Blast radius (acknowledged):** a bad α choice can stall the whole coding cohort until the bootstrap chain is fixed or respecified. Phase-gate inheritance gates downstream tasks on bootstrap approval, so a broken bootstrap is not a local coder problem — it is a cohort-wide block. Acceptable, but explicit.
+
+**Ruled out:**
+- *β minimal universal:* "add stack hooks later" has no clean trigger in the current pipeline; in practice it becomes "maybe never."
+- *γ hybrid:* doubles ceremony (two bootstrap chains, four review pairs) and complicates dependency indexing for marginal benefit over α.
 
 ### Replan interaction
 
-If the goal is re-planned after bootstrap is approved but before integration merge, the second architect invocation re-runs the plan-time existence check. The check reads integration-branch HEAD; if the bootstrap task's worktree hasn't merged yet, integration HEAD still lacks the config, and the architect re-emits `output[0]`. The orchestrator must deduplicate by detecting the existing in-flight bootstrap task — implementation spec specifies the dedup mechanism (likely a check on sibling tasks in the cohort with matching scope).
+If the goal is re-planned after bootstrap is approved but before integration merge, the second architect invocation re-runs the plan-time checks (Q2). The integration-HEAD check still returns "config absent"; the `BootstrapInFlight` check returns true (the prior bootstrap task has not yet reached a terminal state), so the architect omits the entry. Belt-and-braces: even if the architect emits anyway, `proceed.go`'s authoritative `kind`-based dedup (Q2) skips child creation. Cross-goal parallelism (two goals racing on bootstrap) is handled by the same repo-wide scan.
 
 ### Brownfield indexing
 
@@ -90,14 +127,40 @@ No degraded "no-hooks" mode. The contract requires pre-commit; failing to bootst
 
 ## Acceptance Criteria
 
-The implementation spec is "done" when:
-1. Greenfield run reproduced; observed failure modes captured (replaces hypothesized list above).
-2. Q3 (hook content) has a chosen design with rationale.
-3. Resolver primitive for plan-time existence check is specified, including which integration-branch ref is read and how the rendered field reaches the architect prompt context.
-4. Orchestrator dedup mechanism for replan-while-in-flight is specified. **This is a new primitive** — no current sibling-task lookup at architect emission time exists. Implementation spec must scope this explicitly (sibling-task scan? scope-based dedup? cohort-scoped lock?), not treat it as trivial. Cross-goal parallelism (two goals racing on bootstrap) is a flavor of the same dedup problem and must be covered.
-5. `base_prompt.tmpl:36` wording narrowed with a concrete edit; touch list explicitly includes that file plus the architect template and the bootstrap task's `done_when` phrasing.
-6. Worked example for one greenfield stack (e.g. Python: vision doc → architect output → bootstrap task → resulting `.pre-commit-config.yaml`).
-7. Statement of dependency on `20260417-precommit-hook-composition.md`.
+Implementation is "done" when:
+1. **Greenfield run reproduced**; observed failure modes captured (replaces hypothesized list above). **Hard gate** — implementation may not land without this.
+2. Q3 design (α with constraints) implemented; architect prompt requires the install-authorization clause when emitting `kind: bootstrap-precommit`.
+3. `internal/precommit/` package added with `ConfigExistsOnIntegration` and `BootstrapInFlight` helpers; `RoleContextData` extended with the two booleans, populated only for the architect role.
+4. `kind` field added to `OutputEntry` and persisted `Task`; `proceed.go` performs authoritative `kind`-based dedup before child creation; cross-goal parallelism covered by repo-wide scan.
+5. `base_prompt.tmpl:36` replaced with the narrowed wording (see Preconditions / Prompt wording to narrow). Touch list: `base_prompt.tmpl`, architect prompt template, bootstrap task's `done_when` phrasing, and `specs/architecture/ADR/0036-structured-task-output-and-scope-extensions.md` (amend or supersede to cover the `kind` field extension).
+6. Context-builder errors surface as task-blocking outcomes via the orchestrator (not silent omission, not opaque crash).
+
+## Worked Example (Python + uv)
+
+For a greenfield Python project whose vision doc selects `uv` as the dep manager, the architect's `output[0]` might look like (free-form prose, not templated):
+
+```
+{
+  "kind": "bootstrap-precommit",
+  "desc": "Bootstrap pre-commit for this Python+uv project. Add pre-commit
+    as a dev dependency via `uv add --dev pre-commit`. Write
+    .pre-commit-config.yaml at repo root with hooks: trailing-whitespace,
+    end-of-file-fixer, check-yaml, check-merge-conflict, ruff (lint+format),
+    and mypy (type check). Validate with `uv run pre-commit run --all-files`.
+
+    This task may provision pre-commit only via a project-scoped mechanism
+    already available in the repo or explicitly defined by the task. Do not
+    install OS packages or unrelated global tooling. If no authorized
+    project-scoped path exists, mark BLOCKED.",
+  "done_when": "uv run pre-commit run --all-files exits 0 against an empty
+    repo state, and pyproject.toml records pre-commit as a dev dependency.",
+  "scope": ".pre-commit-config.yaml, pyproject.toml, uv.lock"
+}
+```
+
+Other architect `output[]` entries declare `depends_on: ["0"]`. Phase-gate inheritance gates downstream coding tasks on bootstrap merge.
+
+This example lives in this spec for documentation; **it is never surfaced in agent prompts** (would anchor architect output and erode G1.1).
 
 ## Out of Scope
 
@@ -105,7 +168,8 @@ The implementation spec is "done" when:
 - Choice of specific hook *versions* per ecosystem (defer to hook-selection task or ADR).
 - Brownfield migration of partial/broken existing `.pre-commit-config.yaml`. Brownfield with any config no-ops.
 - Bootstrap of other contract-assumed tooling (`.editorconfig`, lint config). The pattern may generalize; not addressed here.
+- Mandating a separate dep-manager bootstrap step. Absence of a project-scoped provisioning path is a valid BLOCKED outcome; planner-orchestrator may rescope by emitting a prerequisite setup task, but this is allowed, not required.
 
 ## Status
 
-Draft 2026-04-17. Pending implementation spec.
+Design ratified 2026-04-17. **Implementation gated on greenfield reproduction** (acceptance criterion #1).
