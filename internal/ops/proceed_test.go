@@ -4201,3 +4201,758 @@ func TestProceed_TaskSlug_CrashRecoveryUsesSlug(t *testing.T) {
 		t.Errorf("recovered child = %q, want %q", result.ChildTaskIDs[0], expectedRecovered)
 	}
 }
+
+// --- Kind-based dedup (per-subtask) ---
+
+// makeKindDedupTriggerTask builds a trigger task in CODING_PLAN_APPROVED state
+// suitable for firing the per-subtask code-plan-to-coding transition.
+func makeKindDedupTriggerTask(id string, output []models.OutputEntry, now time.Time) models.Task {
+	reviewCommit := "trigger-rev"
+	return models.Task{
+		ID:           id,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Kind-dedup trigger",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "dedup scope",
+		ReviewCommit: &reviewCommit,
+		Output:       output,
+		History:      []models.TaskHistoryEntry{},
+	}
+}
+
+// findTransitionExecutedEvent returns the last TransitionExecuted history entry
+// for the given task, or nil if none exist.
+func findTransitionExecutedEvent(task *models.Task) *models.TaskHistoryEntry {
+	for i := len(task.History) - 1; i >= 0; i-- {
+		if task.History[i].Event == models.TaskEventTransitionExecuted {
+			return &task.History[i]
+		}
+	}
+	return nil
+}
+
+// extractSkippedEntries normalizes the skipped_entries extra into a canonical
+// []map[string]any. After YAML round-trip the slice is []any of map[string]any.
+func extractSkippedEntries(extra map[string]any) []map[string]any {
+	v, ok := extra["skipped_entries"]
+	if !ok {
+		return nil
+	}
+	switch typed := v.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		out := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if m, ok := item.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// skippedIndex returns the output_index field as int, normalizing YAML round-trip.
+func skippedIndex(entry map[string]any) int {
+	switch v := entry["output_index"].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	}
+	return -1
+}
+
+func TestProceed_PerSubtask_KindDedup_Hit(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	incumbentDeps := []string{"some-prior-dep"}
+	incumbent := models.Task{
+		ID:          "bootstrap-incumbent",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "Existing bootstrap",
+		Status:      models.TaskStatusReady, // DRAFT_CODE (non-terminal)
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "bootstrap done",
+		Scope:       "bootstrap scope",
+		Kind:        "bootstrap-precommit",
+		DependsOn:   slices.Clone(incumbentDeps),
+		History:     []models.TaskHistoryEntry{},
+	}
+
+	triggerID := "plan-hit"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "Bootstrap child", DoneWhen: "boot", Scope: "boot", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		{Desc: "Follow-up", DoneWhen: "follow", Scope: "follow", SpecRef: "README.md", DependsOn: []string{"0"}},
+	}, now)
+
+	state.Tasks = append(state.Tasks, incumbent, trigger)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1 (entry 0 dedup'd)", len(result.ChildTaskIDs))
+	}
+	expectedEntry1ID := "plan-hit-code-plan-to-coding-1"
+	if result.ChildTaskIDs[0] != expectedEntry1ID {
+		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], expectedEntry1ID)
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read state: %v", err)
+	}
+
+	if readState.FindTask("plan-hit-code-plan-to-coding-0") != nil {
+		t.Error("entry 0 child should NOT exist (dedup'd to incumbent)")
+	}
+
+	entry1Child := readState.FindTask(expectedEntry1ID)
+	if entry1Child == nil {
+		t.Fatal("entry 1 child not found")
+	}
+	if !slices.Contains(entry1Child.DependsOn, "bootstrap-incumbent") {
+		t.Errorf("entry 1 DependsOn = %v, want to contain incumbent ID %q", entry1Child.DependsOn, "bootstrap-incumbent")
+	}
+
+	// Incumbent must not be mutated.
+	gotIncumbent := readState.FindTask("bootstrap-incumbent")
+	if gotIncumbent == nil {
+		t.Fatal("incumbent task disappeared")
+	}
+	if !slices.Equal(gotIncumbent.DependsOn, incumbentDeps) {
+		t.Errorf("incumbent DependsOn mutated: got %v, want %v", gotIncumbent.DependsOn, incumbentDeps)
+	}
+	if gotIncumbent.Status != models.TaskStatusReady {
+		t.Errorf("incumbent status changed: got %v, want DRAFT_CODE", gotIncumbent.Status)
+	}
+
+	trig := readState.FindTask(triggerID)
+	if !trig.TransitionsExecuted["code-plan-to-coding"] {
+		t.Error("trigger transitions_executed[code-plan-to-coding] must be true")
+	}
+	ev := findTransitionExecutedEvent(trig)
+	if ev == nil {
+		t.Fatal("no TransitionExecuted history event found")
+	}
+	if children, _ := ev.Extra["children"].(int); children != 1 {
+		t.Errorf("history children = %v, want 1", ev.Extra["children"])
+	}
+	skipped := extractSkippedEntries(ev.Extra)
+	if len(skipped) != 1 {
+		t.Fatalf("skipped_entries count = %d, want 1", len(skipped))
+	}
+	if got := skippedIndex(skipped[0]); got != 0 {
+		t.Errorf("skipped[0].output_index = %d, want 0", got)
+	}
+	if kind, _ := skipped[0]["kind"].(string); kind != "bootstrap-precommit" {
+		t.Errorf("skipped[0].kind = %q, want bootstrap-precommit", skipped[0]["kind"])
+	}
+	if rm, _ := skipped[0]["remapped_to"].(string); rm != "bootstrap-incumbent" {
+		t.Errorf("skipped[0].remapped_to = %q, want bootstrap-incumbent", skipped[0]["remapped_to"])
+	}
+	if reason, _ := skipped[0]["reason"].(string); reason == "" {
+		t.Error("skipped[0].reason should be non-empty")
+	}
+}
+
+func TestProceed_PerSubtask_KindDedup_Miss(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	// Three terminal-status bootstraps — all ignored by collectNonTerminalByKind.
+	terminals := []models.TaskStatus{models.TaskStatusMerged, models.TaskStatusAbandoned, models.TaskStatusSuperseded}
+	for i, st := range terminals {
+		state.Tasks = append(state.Tasks, models.Task{
+			ID:          fmt.Sprintf("boot-terminal-%d", i),
+			Type:        models.TaskTypeCoding,
+			RolePair:    "coding-pair",
+			Description: "terminal bootstrap",
+			Status:      st,
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "README.md",
+			DoneWhen:    "done",
+			Scope:       "scope",
+			Kind:        "bootstrap-precommit",
+			History:     []models.TaskHistoryEntry{},
+		})
+	}
+
+	triggerID := "plan-miss"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "Boot", DoneWhen: "b", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		{Desc: "Other", DoneWhen: "o", Scope: "s", SpecRef: "README.md"},
+	}, now)
+	state.Tasks = append(state.Tasks, trigger)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+	if len(result.ChildTaskIDs) != 2 {
+		t.Fatalf("ChildTaskIDs count = %d, want 2 (no dedup)", len(result.ChildTaskIDs))
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read state: %v", err)
+	}
+	entry0 := readState.FindTask("plan-miss-code-plan-to-coding-0")
+	if entry0 == nil {
+		t.Fatal("entry 0 child missing")
+	}
+	if entry0.Kind != "bootstrap-precommit" {
+		t.Errorf("entry 0 Kind = %q, want bootstrap-precommit", entry0.Kind)
+	}
+
+	trig := readState.FindTask(triggerID)
+	ev := findTransitionExecutedEvent(trig)
+	if ev == nil {
+		t.Fatal("no TransitionExecuted event")
+	}
+	if _, ok := ev.Extra["skipped_entries"]; ok {
+		t.Errorf("skipped_entries key should be ABSENT when no skips, got %v", ev.Extra["skipped_entries"])
+	}
+	if children, _ := ev.Extra["children"].(int); children != 2 {
+		t.Errorf("history children = %v, want 2", ev.Extra["children"])
+	}
+}
+
+func TestProceed_PerSubtask_KindDedup_BlockedInFlight(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	blockedReason := "awaiting external dep"
+	blockedDeps := []string{"external-dep"}
+	blocked := models.Task{
+		ID:            "boot-blocked",
+		Type:          models.TaskTypeCoding,
+		RolePair:      "coding-pair",
+		Description:   "blocked bootstrap",
+		Status:        models.TaskStatusBlocked,
+		Priority:      1,
+		Created:       now,
+		SpecRef:       "README.md",
+		DoneWhen:      "done",
+		Scope:         "scope",
+		Kind:          "bootstrap-precommit",
+		BlockedReason: &blockedReason,
+		DependsOn:     slices.Clone(blockedDeps),
+		History:       []models.TaskHistoryEntry{},
+	}
+
+	triggerID := "plan-blocked"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "Boot", DoneWhen: "b", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		{Desc: "After boot", DoneWhen: "a", Scope: "s", SpecRef: "README.md", DependsOn: []string{"0"}},
+	}, now)
+	state.Tasks = append(state.Tasks, blocked, trigger)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+	if len(result.ChildTaskIDs) != 1 {
+		t.Fatalf("ChildTaskIDs count = %d, want 1 (BLOCKED is non-terminal → in-flight)", len(result.ChildTaskIDs))
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read state: %v", err)
+	}
+	follower := readState.FindTask("plan-blocked-code-plan-to-coding-1")
+	if follower == nil {
+		t.Fatal("follower child missing")
+	}
+	if !slices.Contains(follower.DependsOn, "boot-blocked") {
+		t.Errorf("follower DependsOn = %v, want to contain boot-blocked", follower.DependsOn)
+	}
+
+	got := readState.FindTask("boot-blocked")
+	if got.Status != models.TaskStatusBlocked {
+		t.Errorf("blocked task status changed: got %v", got.Status)
+	}
+	if !slices.Equal(got.DependsOn, blockedDeps) {
+		t.Errorf("blocked task DependsOn mutated: got %v, want %v", got.DependsOn, blockedDeps)
+	}
+
+	// BLOCKED is neither MERGED nor SUPERSEDED, so downstream cannot be
+	// claimed until the blocker resolves. Express the invariant directly:
+	// the follower's DependsOn includes a non-satisfying dep.
+	if got.Status == models.TaskStatusMerged || got.Status == models.TaskStatusSuperseded {
+		t.Errorf("invariant broken: BLOCKED should not count as dependency-satisfying")
+	}
+}
+
+func TestProceed_PerSubtask_KindDedup_SupersededUnblocks(t *testing.T) {
+	t.Run("only_superseded", func(t *testing.T) {
+		tmpDir, stateFile := setupPipelineProceedTest(t)
+		state := testhelpers.CreateValidState()
+		state.PipelineVersion = 2
+		state.Sprint.Status = models.SprintStatusCompleted
+		now := time.Now().UTC()
+
+		oldBoot := models.Task{
+			ID:          "boot-old",
+			Type:        models.TaskTypeCoding,
+			RolePair:    "coding-pair",
+			Description: "old bootstrap",
+			Status:      models.TaskStatusSuperseded,
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "README.md",
+			DoneWhen:    "done",
+			Scope:       "scope",
+			Kind:        "bootstrap-precommit",
+			History:     []models.TaskHistoryEntry{},
+		}
+		triggerID := "plan-supersede"
+		trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+			{Desc: "Fresh boot", DoneWhen: "b", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		}, now)
+		state.Tasks = append(state.Tasks, oldBoot, trigger)
+		state.Sprint.Scope.Planned = []string{triggerID}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+		if err != nil {
+			t.Fatalf("Proceed() error: %v", err)
+		}
+		if len(result.ChildTaskIDs) != 1 {
+			t.Fatalf("ChildTaskIDs count = %d, want 1 (SUPERSEDED is terminal)", len(result.ChildTaskIDs))
+		}
+		readState, err := db.New(stateFile).Read()
+		if err != nil {
+			t.Fatalf("Read state: %v", err)
+		}
+		fresh := readState.FindTask("plan-supersede-code-plan-to-coding-0")
+		if fresh == nil {
+			t.Fatal("fresh bootstrap child missing")
+		}
+		if fresh.Kind != "bootstrap-precommit" {
+			t.Errorf("fresh Kind = %q, want bootstrap-precommit", fresh.Kind)
+		}
+		trig := readState.FindTask(triggerID)
+		ev := findTransitionExecutedEvent(trig)
+		if _, ok := ev.Extra["skipped_entries"]; ok {
+			t.Errorf("skipped_entries should be absent when SUPERSEDED is the only incumbent")
+		}
+	})
+
+	t.Run("two_superseded_plus_one_live", func(t *testing.T) {
+		tmpDir, stateFile := setupPipelineProceedTest(t)
+		state := testhelpers.CreateValidState()
+		state.PipelineVersion = 2
+		state.Sprint.Status = models.SprintStatusCompleted
+		now := time.Now().UTC()
+
+		var tasks []models.Task
+		for i := 0; i < 2; i++ {
+			tasks = append(tasks, models.Task{
+				ID:          fmt.Sprintf("boot-old-%d", i),
+				Type:        models.TaskTypeCoding,
+				RolePair:    "coding-pair",
+				Description: "old bootstrap",
+				Status:      models.TaskStatusSuperseded,
+				Priority:    1,
+				Created:     now,
+				SpecRef:     "README.md",
+				DoneWhen:    "done",
+				Scope:       "scope",
+				Kind:        "bootstrap-precommit",
+				History:     []models.TaskHistoryEntry{},
+			})
+		}
+		live := models.Task{
+			ID:          "boot-live",
+			Type:        models.TaskTypeCoding,
+			RolePair:    "coding-pair",
+			Description: "live bootstrap",
+			Status:      models.TaskStatusReady,
+			Priority:    1,
+			Created:     now,
+			SpecRef:     "README.md",
+			DoneWhen:    "done",
+			Scope:       "scope",
+			Kind:        "bootstrap-precommit",
+			History:     []models.TaskHistoryEntry{},
+		}
+		tasks = append(tasks, live)
+
+		triggerID := "plan-mixed"
+		trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+			{Desc: "Boot", DoneWhen: "b", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		}, now)
+		tasks = append(tasks, trigger)
+		state.Tasks = append(state.Tasks, tasks...)
+		state.Sprint.Scope.Planned = []string{triggerID}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+		if err != nil {
+			t.Fatalf("Proceed() error: %v", err)
+		}
+		if len(result.ChildTaskIDs) != 0 {
+			t.Fatalf("ChildTaskIDs count = %d, want 0 (live bootstrap wins over superseded)", len(result.ChildTaskIDs))
+		}
+		readState, err := db.New(stateFile).Read()
+		if err != nil {
+			t.Fatalf("Read state: %v", err)
+		}
+		trig := readState.FindTask(triggerID)
+		ev := findTransitionExecutedEvent(trig)
+		skipped := extractSkippedEntries(ev.Extra)
+		if len(skipped) != 1 {
+			t.Fatalf("skipped_entries count = %d, want 1", len(skipped))
+		}
+		if rm, _ := skipped[0]["remapped_to"].(string); rm != "boot-live" {
+			t.Errorf("remapped_to = %q, want boot-live", rm)
+		}
+	})
+}
+
+func TestProceed_PerSubtask_KindDedup_DuplicateWithinBatch(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	triggerID := "plan-dupbatch"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "Boot A", DoneWhen: "a", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		{Desc: "Boot B", DoneWhen: "b", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		{Desc: "After boot", DoneWhen: "c", Scope: "s", SpecRef: "README.md", DependsOn: []string{"0"}},
+	}, now)
+	state.Tasks = append(state.Tasks, trigger)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+	if len(result.ChildTaskIDs) != 2 {
+		t.Fatalf("ChildTaskIDs count = %d, want 2 (entry 1 dedup'd)", len(result.ChildTaskIDs))
+	}
+	firstBootID := "plan-dupbatch-code-plan-to-coding-0"
+	if result.ChildTaskIDs[0] != firstBootID {
+		t.Errorf("ChildTaskIDs[0] = %q, want %q", result.ChildTaskIDs[0], firstBootID)
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read state: %v", err)
+	}
+	if readState.FindTask("plan-dupbatch-code-plan-to-coding-1") != nil {
+		t.Error("entry 1 should NOT exist (dedup'd within batch)")
+	}
+	after := readState.FindTask("plan-dupbatch-code-plan-to-coding-2")
+	if after == nil {
+		t.Fatal("after-boot child missing")
+	}
+	if !slices.Contains(after.DependsOn, firstBootID) {
+		t.Errorf("after.DependsOn = %v, want to contain %q (first-occurrence remap)", after.DependsOn, firstBootID)
+	}
+
+	trig := readState.FindTask(triggerID)
+	ev := findTransitionExecutedEvent(trig)
+	skipped := extractSkippedEntries(ev.Extra)
+	if len(skipped) != 1 {
+		t.Fatalf("skipped_entries count = %d, want 1", len(skipped))
+	}
+	if got := skippedIndex(skipped[0]); got != 1 {
+		t.Errorf("skipped[0].output_index = %d, want 1", got)
+	}
+	if rm, _ := skipped[0]["remapped_to"].(string); rm != firstBootID {
+		t.Errorf("skipped[0].remapped_to = %q, want %q", rm, firstBootID)
+	}
+}
+
+func TestProceed_PerSubtask_KindDedup_CrossGoal(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	// Goal A bootstrap: distinct SpecRef / parent chain.
+	goalABoot := models.Task{
+		ID:          "goalA-boot",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "goal A bootstrap",
+		Status:      models.TaskStatusReady,
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "specs/goals/goal-A.md",
+		ParentTasks: []string{"goalA-arch"},
+		DoneWhen:    "done",
+		Scope:       "scope",
+		Kind:        "bootstrap-precommit",
+		DependsOn:   []string{"goalA-arch"},
+		History:     []models.TaskHistoryEntry{},
+	}
+	originalA := slices.Clone(goalABoot.DependsOn)
+
+	triggerID := "goalB-plan"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "goal B boot", DoneWhen: "b", Scope: "s", SpecRef: "specs/goals/goal-B.md", Kind: "bootstrap-precommit"},
+	}, now)
+	trigger.SpecRef = "specs/goals/goal-B.md"
+	trigger.ParentTasks = []string{"goalB-arch"}
+
+	state.Tasks = append(state.Tasks, goalABoot, trigger)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+	if len(result.ChildTaskIDs) != 0 {
+		t.Fatalf("ChildTaskIDs count = %d, want 0 (cross-goal skip)", len(result.ChildTaskIDs))
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read state: %v", err)
+	}
+	gotA := readState.FindTask("goalA-boot")
+	if gotA == nil {
+		t.Fatal("goal A bootstrap vanished")
+	}
+	if !slices.Equal(gotA.DependsOn, originalA) {
+		t.Errorf("cross-goal mutation: goalA-boot.DependsOn = %v, want %v", gotA.DependsOn, originalA)
+	}
+
+	trig := readState.FindTask(triggerID)
+	ev := findTransitionExecutedEvent(trig)
+	skipped := extractSkippedEntries(ev.Extra)
+	if len(skipped) != 1 {
+		t.Fatalf("skipped_entries count = %d, want 1", len(skipped))
+	}
+	if rm, _ := skipped[0]["remapped_to"].(string); rm != "goalA-boot" {
+		t.Errorf("remapped_to = %q, want goalA-boot", rm)
+	}
+}
+
+func TestProceed_PerSubtask_KindDedup_CrashRecovery(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	foreignDeps := []string{"goalA-arch", "extra-prior"}
+	foreign := models.Task{
+		ID:          "foreign-boot",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "foreign bootstrap",
+		Status:      models.TaskStatusReady,
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "specs/goals/goal-A.md",
+		ParentTasks: []string{"goalA-arch"},
+		DoneWhen:    "done",
+		Scope:       "scope",
+		Kind:        "bootstrap-precommit",
+		DependsOn:   slices.Clone(foreignDeps),
+		History:     []models.TaskHistoryEntry{},
+	}
+
+	triggerID := "goalB-plan-crash"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "Boot dedup'd", DoneWhen: "b", Scope: "s", SpecRef: "README.md", Kind: "bootstrap-precommit"},
+		{Desc: "Pre-crash child", DoneWhen: "p", Scope: "s", SpecRef: "README.md"},
+		{Desc: "Missing after crash", DoneWhen: "m", Scope: "s", SpecRef: "README.md"},
+	}, now)
+	trigger.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+	trigger.SpecRef = "specs/goals/goal-B.md"
+	trigger.ParentTasks = []string{"goalB-arch"}
+
+	preCrashChild := models.Task{
+		ID:          "goalB-plan-crash-code-plan-to-coding-1",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "Pre-crash child",
+		Status:      models.TaskStatusReady,
+		Priority:    1,
+		Created:     now,
+		ParentTasks: []string{triggerID},
+		SpecRef:     "README.md",
+		DoneWhen:    "p",
+		Scope:       "s",
+		History:     []models.TaskHistoryEntry{},
+	}
+
+	state.Tasks = append(state.Tasks, foreign, trigger, preCrashChild)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error (crash recovery): %v", err)
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read state: %v", err)
+	}
+
+	// Entry 0 child must NOT exist — skip decision re-applied.
+	if readState.FindTask("goalB-plan-crash-code-plan-to-coding-0") != nil {
+		t.Error("entry 0 child exists but should have been skipped in recovery")
+	}
+	// Entry 1 child must still exist (was pre-crash).
+	if readState.FindTask("goalB-plan-crash-code-plan-to-coding-1") == nil {
+		t.Error("pre-crash entry 1 child missing after recovery")
+	}
+	// Entry 2 child must now exist (recovered).
+	if readState.FindTask("goalB-plan-crash-code-plan-to-coding-2") == nil {
+		t.Error("entry 2 child not recovered")
+	}
+	if len(result.ChildTaskIDs) != 1 || result.ChildTaskIDs[0] != "goalB-plan-crash-code-plan-to-coding-2" {
+		t.Errorf("ChildTaskIDs = %v, want [goalB-plan-crash-code-plan-to-coding-2]", result.ChildTaskIDs)
+	}
+
+	// SAFETY INVARIANT: the foreign incumbent's DependsOn must be byte-equal
+	// before and after recovery. This witnesses the skipped? → existing? →
+	// create? precedence: a swap would call patchInheritedDeps on the foreign
+	// task and append inheritedDeps into its DependsOn list.
+	gotForeign := readState.FindTask("foreign-boot")
+	if gotForeign == nil {
+		t.Fatal("foreign bootstrap vanished")
+	}
+	if !slices.Equal(gotForeign.DependsOn, foreignDeps) {
+		t.Errorf("foreign.DependsOn mutated by recovery: got %v, want %v (patchInheritedDeps was called on foreign incumbent)", gotForeign.DependsOn, foreignDeps)
+	}
+
+	// History has TransitionCrashRecov with recovered_children == 1.
+	trig := readState.FindTask(triggerID)
+	var recovEv *models.TaskHistoryEntry
+	for i := len(trig.History) - 1; i >= 0; i-- {
+		if trig.History[i].Event == models.TaskEventTransitionCrashRecov {
+			recovEv = &trig.History[i]
+			break
+		}
+	}
+	if recovEv == nil {
+		t.Fatal("no TransitionCrashRecov history event")
+	}
+	switch rc := recovEv.Extra["recovered_children"].(type) {
+	case int:
+		if rc != 1 {
+			t.Errorf("recovered_children = %d, want 1", rc)
+		}
+	case int64:
+		if rc != 1 {
+			t.Errorf("recovered_children = %d, want 1", rc)
+		}
+	default:
+		t.Errorf("recovered_children has unexpected type %T (%v)", recovEv.Extra["recovered_children"], recovEv.Extra["recovered_children"])
+	}
+}
+
+func TestProceed_PerSubtask_NoKind_UnaffectedByDedup(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	otherDeps := []string{"upstream-a"}
+	somethingElse := models.Task{
+		ID:          "boot-unrelated",
+		Type:        models.TaskTypeCoding,
+		RolePair:    "coding-pair",
+		Description: "unrelated bootstrap",
+		Status:      models.TaskStatusReady,
+		Priority:    1,
+		Created:     now,
+		SpecRef:     "README.md",
+		DoneWhen:    "done",
+		Scope:       "scope",
+		Kind:        "bootstrap-precommit",
+		DependsOn:   slices.Clone(otherDeps),
+		History:     []models.TaskHistoryEntry{},
+	}
+
+	triggerID := "plan-nokind"
+	trigger := makeKindDedupTriggerTask(triggerID, []models.OutputEntry{
+		{Desc: "A", DoneWhen: "a", Scope: "s", SpecRef: "README.md"},
+		{Desc: "B", DoneWhen: "b", Scope: "s", SpecRef: "README.md"},
+		{Desc: "C", DoneWhen: "c", Scope: "s", SpecRef: "README.md"},
+	}, now)
+	state.Tasks = append(state.Tasks, somethingElse, trigger)
+	state.Sprint.Scope.Planned = []string{triggerID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, triggerID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+	if len(result.ChildTaskIDs) != 3 {
+		t.Fatalf("ChildTaskIDs count = %d, want 3 (no-kind entries never dedup)", len(result.ChildTaskIDs))
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read state: %v", err)
+	}
+	trig := readState.FindTask(triggerID)
+	ev := findTransitionExecutedEvent(trig)
+	if _, ok := ev.Extra["skipped_entries"]; ok {
+		t.Errorf("skipped_entries must be absent when all entries have empty Kind")
+	}
+
+	gotUnrelated := readState.FindTask("boot-unrelated")
+	if gotUnrelated == nil {
+		t.Fatal("unrelated bootstrap vanished")
+	}
+	if !slices.Equal(gotUnrelated.DependsOn, otherDeps) {
+		t.Errorf("unrelated DependsOn mutated: got %v, want %v", gotUnrelated.DependsOn, otherDeps)
+	}
+	if gotUnrelated.Status != models.TaskStatusReady {
+		t.Errorf("unrelated status changed: got %v", gotUnrelated.Status)
+	}
+}

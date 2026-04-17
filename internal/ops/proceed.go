@@ -38,6 +38,69 @@ func manyToOneChildID(cohortParentID, transitionName string) string {
 	return fmt.Sprintf("%s-%s", cohortParentID, transitionName)
 }
 
+// collectNonTerminalByKind scans s.Tasks repo-wide (all goals, all sprints) and
+// returns a map of non-empty Kind → canonical non-terminal task ID. "Canonical"
+// = lexicographically smallest ID among candidates, for determinism across
+// crash-recovery runs. Tasks with empty Kind are ignored. Tasks whose
+// Status.IsTerminal() returns true (MERGED | ABANDONED | SUPERSEDED) are
+// ignored; BLOCKED is non-terminal and counts as in-flight.
+func collectNonTerminalByKind(s *models.State) map[string]string {
+	byKind := map[string][]string{}
+	for i := range s.Tasks {
+		t := &s.Tasks[i]
+		if t.Kind == "" {
+			continue
+		}
+		if t.Status.IsTerminal() {
+			continue
+		}
+		byKind[t.Kind] = append(byKind[t.Kind], t.ID)
+	}
+	out := map[string]string{}
+	for k, ids := range byKind {
+		slices.Sort(ids)
+		out[k] = ids[0]
+	}
+	return out
+}
+
+// resolveKindDedup walks output entries in order and classifies each by Kind:
+//   - empty Kind                    -> no effect.
+//   - Kind in inFlight              -> skipped; remap[i] points at the in-flight task.
+//   - Kind seen earlier in batch    -> skipped; remap[i] points at the first
+//     occurrence's deterministic child ID.
+//
+// taskID and transitionName let the helper synthesize the first-occurrence
+// sibling ID via perSubtaskChildID, so within-batch duplicates remap to the
+// child that WILL be created this batch (not yet in s.Tasks when this runs).
+// Return keys in skip and remap always match: every skipped entry is remapped.
+func resolveKindDedup(
+	entries []models.OutputEntry,
+	inFlight map[string]string,
+	taskID, transitionName string,
+) (skip map[int]string, remap map[int]string) {
+	skip = map[int]string{}
+	remap = map[int]string{}
+	emittedThisBatch := map[string]string{}
+	for i, e := range entries {
+		if e.Kind == "" {
+			continue
+		}
+		if existingID, hit := inFlight[e.Kind]; hit {
+			skip[i] = fmt.Sprintf("kind %q already in flight on task %s", e.Kind, existingID)
+			remap[i] = existingID
+			continue
+		}
+		if firstID, dup := emittedThisBatch[e.Kind]; dup {
+			skip[i] = fmt.Sprintf("kind %q emitted earlier in same output[] at sibling %s", e.Kind, firstID)
+			remap[i] = firstID
+			continue
+		}
+		emittedThisBatch[e.Kind] = perSubtaskChildID(taskID, transitionName, i)
+	}
+	return
+}
+
 // ProceedResult contains the outcome of executing a manual inter-pair transition.
 type ProceedResult struct {
 	SourceTaskID   string
@@ -332,6 +395,16 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
 	}
 
+	// Compute Kind-based dedup decision for per-subtask. skipEntry[i] present =>
+	// entry i is dedup'd; remapSibling[i] is the incumbent or first-occurrence
+	// task ID that takes entry i's place for downstream dep resolution.
+	var skipEntry map[int]string
+	var remapSibling map[int]string
+	if tDef.cardinality == "per-subtask" {
+		inFlightByKind := collectNonTerminalByKind(s)
+		skipEntry, remapSibling = resolveKindDedup(task.Output, inFlightByKind, taskID, transitionName)
+	}
+
 	// Write this first for crash recovery
 	if task.TransitionsExecuted == nil {
 		task.TransitionsExecuted = make(map[string]bool)
@@ -347,6 +420,14 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	switch tDef.cardinality {
 	case "per-subtask":
 		for i, entry := range task.Output {
+			if reID, dedupd := remapSibling[i]; dedupd {
+				// Dep resolution still needs an ID; point at the incumbent so
+				// that downstream siblings with depends_on: [i] resolve to the
+				// real in-flight (or first-of-batch) task. Do NOT append a
+				// child for i.
+				siblingIDs[i] = reID
+				continue
+			}
 			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, inheritedDeps, task.EpicRef, task.ArchRef, now)
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[i])
@@ -358,13 +439,32 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
 	}
 
+	histExtra := map[string]any{
+		"transition": transitionName,
+		"children":   len(result.ChildTaskIDs),
+	}
+	if len(skipEntry) > 0 {
+		skipped := make([]map[string]any, 0, len(skipEntry))
+		for i, reason := range skipEntry {
+			skipped = append(skipped, map[string]any{
+				"output_index": i,
+				"kind":         task.Output[i].Kind,
+				"reason":       reason,
+				"remapped_to":  remapSibling[i],
+			})
+		}
+		slices.SortFunc(skipped, func(a, b map[string]any) int {
+			return a["output_index"].(int) - b["output_index"].(int)
+		})
+		histExtra["skipped_entries"] = skipped
+	}
+	// Re-fetch the task pointer: s.Tasks appends above may have reallocated
+	// the backing array, invalidating the original pointer.
+	task = s.FindTask(taskID)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:  now,
 		Event: models.TaskEventTransitionExecuted,
-		Extra: map[string]any{
-			"transition": transitionName,
-			"children":   len(result.ChildTaskIDs),
-		},
+		Extra: histExtra,
 	})
 
 	return nil
@@ -381,13 +481,28 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		for i := range task.Output {
 			siblingIDs[i] = perSubtaskChildID(taskID, tDef.taskSlug, i)
 		}
+		// Re-compute dedup decision against current repo-wide state. For skipped
+		// entries, siblingIDs[i] must point at the foreign incumbent so downstream
+		// dep resolution remaps correctly — mirrors proceedInner's per-subtask path.
+		inFlightByKind := collectNonTerminalByKind(s)
+		skipEntry, remapSibling := resolveKindDedup(task.Output, inFlightByKind, taskID, transitionName)
+		for i, reID := range remapSibling {
+			siblingIDs[i] = reID
+		}
 		var missingChildren []int
 		for i := range task.Output {
+			// (1) SKIPPED — short-circuit BEFORE any FindTask / patchInheritedDeps.
+			//     siblingIDs[i] points at a FOREIGN incumbent for skipped entries.
+			//     Touching its DependsOn would corrupt a cross-goal task.
+			if _, skipped := skipEntry[i]; skipped {
+				continue
+			}
+			// (2) EXISTING — patch our OWN child's inherited deps.
 			existing := s.FindTask(siblingIDs[i])
 			if existing == nil {
+				// (3) CREATE — flagged for creation below.
 				missingChildren = append(missingChildren, i)
 			} else {
-				// Patch inherited deps on existing children (created before crash, may lack inherited deps)
 				patchInheritedDeps(existing, inheritedDeps)
 			}
 		}
@@ -399,6 +514,9 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			s.Tasks = append(s.Tasks, child)
 			result.ChildTaskIDs = append(result.ChildTaskIDs, siblingIDs[idx])
 		}
+		// Re-fetch: the appends above may have reallocated s.Tasks, leaving
+		// the incoming task pointer stale.
+		task = s.FindTask(taskID)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
 			Event: models.TaskEventTransitionCrashRecov,
