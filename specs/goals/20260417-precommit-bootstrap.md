@@ -15,6 +15,7 @@ This is a **proactive hardening** change. The failure modes are mechanical conse
 - Parallel coders producing conflicting configs.
 - Coders silently skipping pre-commit when it errors with "no config".
 - DoD step "Pre-commit passes on touched files" (CORE.md Rule 3) becoming vacuous.
+Observed modes recorded in §Observed Failure Modes — Reproduction Run after reproduction lands.
 
 If reproduction shows the actual failure mode is different from any of the above, the ratified design is revisited before implementation proceeds — this spec does not bind the implementation against reality.
 
@@ -161,6 +162,74 @@ For a greenfield Python project whose vision doc selects `uv` as the dep manager
 Other architect `output[]` entries declare `depends_on: ["0"]`. Phase-gate inheritance gates downstream coding tasks on bootstrap merge.
 
 This example lives in this spec for documentation; **it is never surfaced in agent prompts** (would anchor architect output and erode G1.1).
+
+## Greenfield Reproduction Procedure
+
+### Setup
+
+1. Choose a scratch directory path outside any liza-managed worktree and export it. Recommended pattern: a date-suffixed path under `/tmp` or another writable scratch area. Example: `export REPRO_ROOT=/tmp/liza-precommit-repro-20260417-001`. Use any unique path; do NOT use command substitution to derive it. Create both project roots: `mkdir -p "$REPRO_ROOT/proj/specs/vision"` then `mkdir -p "$REPRO_ROOT/proj-parallel/specs/vision"`.
+2. Initialize the primary greenfield project (no `cd`; use `git -C` and absolute paths throughout):
+   - `git init "$REPRO_ROOT/proj"`
+   - Use a file-writing tool (not shell heredoc) to create `"$REPRO_ROOT/proj/README.md"` (single line, e.g. "greenfield repro project") and `"$REPRO_ROOT/proj/specs/vision/greenfield.md"` (vision describing one trivial feature, e.g. "add a `hello` script printing 'hi'").
+   - Stage explicitly by name: `git -C "$REPRO_ROOT/proj" add README.md specs/vision/greenfield.md`
+   - Commit using a heredoc on stdin (the contract-permitted form for git commits):
+     ```
+     git -C "$REPRO_ROOT/proj" commit -F - <<'EOF'
+     initial: README + greenfield vision
+     EOF
+     ```
+   - Repeat the four bullets above for `"$REPRO_ROOT/proj-parallel"` (substituting `proj-parallel` for `proj` in every path).
+3. Initialize liza in each project: `liza init "$REPRO_ROOT/proj"` then `liza init "$REPRO_ROOT/proj-parallel"`. Verify each project's state independently (one `test` invocation per assertion — do NOT chain with `&&` across the boundary):
+   - `test -f "$REPRO_ROOT/proj/.liza/state.yaml"` (exit 0 expected)
+   - `test ! -f "$REPRO_ROOT/proj/.pre-commit-config.yaml"` (exit 0 expected)
+   - Same two `test` commands against `"$REPRO_ROOT/proj-parallel"`.
+   - Confirm `command -v pre-commit` outside any project-scoped venv either returns nothing (exit 1) or returns a path the procedure agrees to ignore for this run.
+4. Configure verbose logging for both supervisor cycles: `export LIZA_LOG_LEVEL=debug` and `export LIZA_TEE_AGENT_OUTPUT=1` (or the current equivalent — `liza --help` lists the active env-var names; the capture script in §5.4 picks up whichever log/tee paths the supervisor wrote to).
+
+### Execution
+
+5. Start the supervisor for the primary cycle: `liza supervise "$REPRO_ROOT/proj"` (consult `liza --help` for the current subcommand name; substitute the equivalent if `supervise` is renamed). Run it under a separate terminal or as a background job (`liza supervise "$REPRO_ROOT/proj" > "$REPRO_ROOT/proj/supervisor.stdout.log" 2>&1 &`). Allow it to run until either (a) the integration task reaches a terminal state, or (b) any task transitions to BLOCKED with a reason mentioning pre-commit, missing config, or install authorization.
+6. Start the parallel cycle the same way: `liza supervise "$REPRO_ROOT/proj-parallel" > "$REPRO_ROOT/proj-parallel/supervisor.stdout.log" 2>&1 &`. The two supervisor processes operate against fully independent project trees (separate `state.yaml`, separate `.worktrees/`) so they cannot cooperate.
+7. Wait for both cycles to reach a terminal state. Inspection commands (each is a single contract-compliant invocation — no chaining):
+   - `liza --project "$REPRO_ROOT/proj" status --json`
+   - `liza --project "$REPRO_ROOT/proj-parallel" status --json`
+   - Repeat at intervals (operator's discretion) until both report a terminal sprint state or all tasks BLOCKED.
+
+### Capture
+
+8. Run the capture script once per cycle, passing `REPRO_ROOT` and the project subdirectory name as separate arguments: `bash scripts/repro/precommit-bootstrap-greenfield.sh "$REPRO_ROOT" proj` then `bash scripts/repro/precommit-bootstrap-greenfield.sh "$REPRO_ROOT" proj-parallel`. Each invocation is a single shell command — internal multi-step capture happens inside the script, so BASH CONSTRAINTS apply only to the invocation form (which is plain).
+9. The script writes per-cycle artifacts under `"$REPRO_ROOT/observations/<cycle>/"` (where `<cycle>` is `proj` or `proj-parallel`), containing at minimum:
+   - `state-snapshots/state-postinit.yaml`, `state-snapshots/state-postarchitect.yaml`, `state-snapshots/state-final.yaml` (the script copies `.liza/state.yaml` at three checkpoints — operator triggers the snapshots by re-running the script with a snapshot subcommand, OR the supervisor's own audit hooks if available).
+   - `agent-outputs/` — full copy of `<cycle>/.liza/agent-outputs/`.
+   - `supervisor.stdout.log` — copy of the supervisor's stdout/stderr capture from step 5/6.
+   - `worktree-git-logs/<worktree-id>.log` — output of `git -C "$REPRO_ROOT/<cycle>/.worktrees/<worktree-id>" log --all --oneline --graph` for each worktree.
+   - `prompts/` — copies of any rendered-prompt files the supervisor wrote (e.g. under `.liza/agent-prompts/` if `LIZA_TEE_AGENT_OUTPUT=1`).
+   - `precommit-config-presence.txt` — output of `git -C "$REPRO_ROOT/<cycle>" ls-tree HEAD -- .pre-commit-config.yaml` (empty stdout = absent at HEAD; non-empty = present).
+
+### Observation Recording
+
+Populated after the run — see §Observed Failure Modes — Reproduction Run YYYY-MM-DD.
+
+### Confirm-or-Divert Decision
+
+Populated after the run — see the corresponding subsection under §Observed Failure Modes.
+
+## Observed Failure Modes — Reproduction Run YYYY-MM-DD
+
+Reproduction artifacts: `<path under repo, e.g. specs/goals/precommit-bootstrap-repro-artifacts/>` (committed as part of this run).
+
+| # | Hypothesized mode (goal spec §Evidence, lines 14-17) | Observed? (yes/no/partial) | Evidence pointer | Notes |
+|---|---|---|---|---|
+| 1 | Coders inventing `.pre-commit-config.yaml` ad-hoc inside an unrelated coding task | … | … | … |
+| 2 | Parallel coders producing conflicting configs | … | … | … |
+| 3 | Coders silently skipping pre-commit when it errors with "no config" | … | … | … |
+| 4 | DoD step "Pre-commit passes on touched files" (CORE.md Rule 3) becoming vacuous | … | … | … |
+
+### Newly observed modes (not in the hypothesized list)
+<list of any additional failure modes discovered during reproduction; if none, write "None observed.">
+
+### Confirm-or-Divert Decision
+<one paragraph: either "Hypothesized modes confirmed; design ratified as written" or "Observed modes diverge from hypothesis: <summary>; design revisited at <link to revised section / new spec>.">
 
 ## Out of Scope
 
