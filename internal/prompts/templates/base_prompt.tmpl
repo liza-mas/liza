@@ -33,7 +33,7 @@ BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
   For git commits use heredoc on stdin: git -C <path> commit -F - <<'EOF'\n<message>\nEOF
 - NEVER use ! inside double-quoted strings — bash history expansion mangles it.
   For inline Python/shell with !, use heredocs (python3 <<'PYEOF') or single-quoted strings.
-- NEVER attempt to install, bootstrap, or fix system-level tooling.
+- NEVER install OS packages, language runtimes, IDE tooling, or global developer tools by default. Project-level config files (`.pre-commit-config.yaml`, `.editorconfig`, lint configs) are project work. Tools required to run those configs may be provisioned only when the task's explicit scope authorizes a project-scoped setup path; otherwise mark BLOCKED rather than mutating the host environment.
 - NEVER use "git add -A" or "git add .". Always stage specific files by name.
 - Avoid using sed/awk for file editing.
 
