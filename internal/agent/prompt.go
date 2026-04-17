@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/precommit"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/roles"
 )
@@ -45,7 +46,10 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 		return "", fmt.Errorf("context sections for role %q: %w", config.Role, err)
 	}
 
-	data := buildTaskRoleContextData(task, state, config, resolver)
+	data, err := buildTaskRoleContextData(task, state, config, resolver)
+	if err != nil {
+		return "", err
+	}
 
 	context, err := prompts.BuildRoleContext(config.Role, sections, data)
 	if err != nil {
@@ -110,7 +114,7 @@ func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig
 }
 
 // buildTaskRoleContextData constructs RoleContextData for task-based roles (doers and reviewers).
-func buildTaskRoleContextData(task *models.Task, state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) *prompts.RoleContextData {
+func buildTaskRoleContextData(task *models.Task, state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) (*prompts.RoleContextData, error) {
 	roleType, _ := resolver.RoleType(config.Role)
 
 	siblingTasks, totalPlanTasks, taskOrdinal := collectSiblingTasks(state, task.ID)
@@ -229,7 +233,18 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		}
 	}
 
-	return data
+	// Architect-specific: pre-commit bootstrap context
+	if config.Role == roles.Architect {
+		exists, err := precommit.ConfigExistsOnIntegration(config.ProjectRoot, state.Config.IntegrationBranch)
+		if err != nil {
+			return nil, fmt.Errorf("precommit config check: %w", err)
+		}
+		data.PreCommitConfigExists = exists
+		data.PreCommitBootstrapInFlight = precommit.BootstrapInFlight(state)
+		data.PreCommitKind = precommit.Kind
+	}
+
+	return data, nil
 }
 
 // collectCompletedTasks returns summaries of all MERGED tasks for integration context.

@@ -18,6 +18,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/precommit"
 )
 
 // SupervisorConfig contains all configuration for the agent supervisor
@@ -816,6 +817,16 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		prompt, err := strategy.BuildPrompt(stateBefore, config, taskID)
 		if err != nil {
+			if claimedTaskID != "" && errors.Is(err, precommit.ErrContextBuild) {
+				reason := fmt.Sprintf("prompt context build failed: %v", err)
+				GetLogger().Warn("Task blocked due to prompt-context build failure",
+					"agent_id", config.AgentID,
+					"task_id", claimedTaskID,
+					"error", err)
+				blockTaskFromSupervisor(bb, config.ProjectRoot, claimedTaskID, config.AgentID, reason)
+				spinTracker.reset(effectiveTask)
+				continue
+			}
 			return fmt.Errorf("failed to build prompt: %w", err)
 		}
 

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/precommit"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -977,14 +979,20 @@ func TestBuildTaskRoleContextData_AttemptNum_UsesEffectiveAttempt(t *testing.T) 
 
 	// Attempt: 2 → AttemptNum == 2
 	state := makeState(2)
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 	if data.AttemptNum != 2 {
 		t.Errorf("AttemptNum = %d, want 2 (Attempt=2)", data.AttemptNum)
 	}
 
 	// Attempt: 0 → AttemptNum == 1 (backward compat via EffectiveAttempt)
 	state = makeState(0)
-	data = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData (second call): %v", err)
+	}
 	if data.AttemptNum != 1 {
 		t.Errorf("AttemptNum = %d, want 1 (Attempt=0, backward compat)", data.AttemptNum)
 	}
@@ -1033,14 +1041,20 @@ func TestBuildTaskRoleContextData_PriorAttemptOutcome_Attempt2(t *testing.T) {
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 	if data.PriorAttemptOutcome != reason {
 		t.Errorf("PriorAttemptOutcome = %q, want %q", data.PriorAttemptOutcome, reason)
 	}
 
 	// Attempt 1 → PriorAttemptOutcome empty (even with history)
 	state.Tasks[0].Attempt = 1
-	data = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData (second call): %v", err)
+	}
 	if data.PriorAttemptOutcome != "" {
 		t.Errorf("PriorAttemptOutcome = %q, want empty for attempt 1", data.PriorAttemptOutcome)
 	}
@@ -1085,7 +1099,10 @@ func TestBuildTaskRoleContextData_PriorRejectionGate_Attempt2Iteration1_Empty(t 
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 	if data.PriorRejection != "" {
 		t.Errorf("PriorRejection = %q, want empty at attempt 2 iteration 1", data.PriorRejection)
 	}
@@ -1334,7 +1351,10 @@ func TestBuildTaskRoleContextData_PriorAttemptRejection_Attempt2(t *testing.T) {
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 	if data.PriorAttemptRejection != "Needs improvement" {
 		t.Errorf("PriorAttemptRejection = %q, want %q", data.PriorAttemptRejection, "Needs improvement")
 	}
@@ -1381,7 +1401,10 @@ func TestBuildTaskRoleContextData_PriorAttemptRejection_Attempt2_NilNote(t *test
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 	if data.PriorAttemptRejection != "" {
 		t.Errorf("PriorAttemptRejection = %q, want empty for nil Note", data.PriorAttemptRejection)
 	}
@@ -1564,7 +1587,10 @@ func TestBuildTaskRoleContextData_IntegrationAnalyst(t *testing.T) {
 		AgentID: "integration-analyst-1",
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 
 	if data.GoalBaseCommit != baseCommit {
 		t.Errorf("GoalBaseCommit = %q, want %q", data.GoalBaseCommit, baseCommit)
@@ -1648,7 +1674,10 @@ func TestBuildTaskRoleContextData_IntegrationReviewer(t *testing.T) {
 		AgentID: "integration-reviewer-1",
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 
 	if data.GoalBaseCommit != baseCommit {
 		t.Errorf("GoalBaseCommit = %q, want %q", data.GoalBaseCommit, baseCommit)
@@ -1714,7 +1743,10 @@ func TestBuildTaskRoleContextData_CoderNoIntegrationFields(t *testing.T) {
 		AgentID: "coder-1",
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 
 	if data.GoalBaseCommit != "" {
 		t.Errorf("GoalBaseCommit = %q, want empty for coder role", data.GoalBaseCommit)
@@ -1821,16 +1853,21 @@ func TestBuildTaskRoleContextData_ArchRef(t *testing.T) {
 	worktree := ".worktrees/arch-task-1"
 	state.Tasks[0].Worktree = &worktree
 
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	config := SupervisorConfig{
 		Role:        "architect",
 		AgentID:     "architect-1",
-		ProjectRoot: "/project",
+		ProjectRoot: tmpDir,
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 
 	// ArchRef should be worktree-prefixed
-	want := "/project/.worktrees/arch-task-1/specs/arch-plan/feature-x.md"
+	want := tmpDir + "/.worktrees/arch-task-1/specs/arch-plan/feature-x.md"
 	if data.ArchRef != want {
 		t.Errorf("ArchRef = %q, want %q", data.ArchRef, want)
 	}
@@ -1886,13 +1923,18 @@ func TestBuildTaskRoleContextData_ParentTaskContexts(t *testing.T) {
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	config := SupervisorConfig{
 		Role:        "architect",
 		AgentID:     "architect-1",
-		ProjectRoot: "/project",
+		ProjectRoot: tmpDir,
 	}
 
-	data := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData: %v", err)
+	}
 
 	// Should have 2 parent task contexts
 	if len(data.ParentTaskContexts) != 2 {
@@ -1941,7 +1983,10 @@ func TestBuildTaskRoleContextData_ParentTaskContexts(t *testing.T) {
 		AgentID:     "coder-1",
 		ProjectRoot: "/project",
 	}
-	coderData := buildTaskRoleContextData(&state.Tasks[0], state, coderConfig, resolver)
+	coderData, err := buildTaskRoleContextData(&state.Tasks[0], state, coderConfig, resolver)
+	if err != nil {
+		t.Fatalf("buildTaskRoleContextData (coder): %v", err)
+	}
 	if len(coderData.ParentTaskContexts) != 0 {
 		t.Errorf("ParentTaskContexts for coder = %d, want 0", len(coderData.ParentTaskContexts))
 	}
@@ -2091,6 +2136,7 @@ func TestBuildPromptWithContext_Architect(t *testing.T) {
 	state.Tasks[0].Worktree = &worktree
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	config := SupervisorConfig{
 		Role:        "architect",
 		AgentID:     "architect-1",
@@ -2232,6 +2278,236 @@ func TestBuildPromptWithContext_ArchitectureReviewer(t *testing.T) {
 		if strings.Contains(prompt, s) {
 			t.Errorf("prompt should NOT contain %q", s)
 		}
+	}
+}
+
+// TestBuildTaskRoleContextData_PreCommitFields_Architect asserts that for
+// the architect role, all three PreCommit* fields are populated from the
+// precommit helpers (config presence via git plumbing on the integration
+// branch; in-flight detection via Kind-marker repo-wide scan; the
+// canonical marker string).
+func TestBuildTaskRoleContextData_PreCommitFields_Architect(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, architectTestPipelineYAML)
+
+	makeBaseState := func() *models.State {
+		return &models.State{
+			Version: 1,
+			Goal: models.Goal{
+				ID:          "goal-1",
+				Description: "Test goal",
+				SpecRef:     "spec.md",
+				Status:      models.GoalStatusInProgress,
+				Created:     now,
+			},
+			Tasks: []models.Task{
+				{
+					ID:          "arch-task-1",
+					Description: "Design feature X",
+					Status:      models.TaskStatusImplementing,
+					Priority:    1,
+					Iteration:   1,
+					DoneWhen:    "Architecture document produced",
+					Created:     now,
+				},
+			},
+			Agents: make(map[string]models.Agent),
+			Config: models.Config{IntegrationBranch: "main"},
+		}
+	}
+
+	t.Run("bootstrap-in-flight-config-absent", func(t *testing.T) {
+		state := makeBaseState()
+		state.Tasks = append(state.Tasks, models.Task{
+			ID:       "bootstrap-1",
+			Kind:     "bootstrap-precommit",
+			Status:   models.TaskStatusImplementing,
+			Priority: 1,
+			Created:  now,
+		})
+
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		config := SupervisorConfig{
+			Role:        "architect",
+			AgentID:     "architect-1",
+			ProjectRoot: tmpDir,
+		}
+
+		data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+		if err != nil {
+			t.Fatalf("buildTaskRoleContextData: %v", err)
+		}
+		if data.PreCommitConfigExists {
+			t.Errorf("PreCommitConfigExists = true, want false (no config committed)")
+		}
+		if !data.PreCommitBootstrapInFlight {
+			t.Errorf("PreCommitBootstrapInFlight = false, want true (one non-terminal bootstrap task planted)")
+		}
+		if data.PreCommitKind != "bootstrap-precommit" {
+			t.Errorf("PreCommitKind = %q, want %q", data.PreCommitKind, "bootstrap-precommit")
+		}
+	})
+
+	t.Run("config-present-no-bootstrap-in-flight", func(t *testing.T) {
+		state := makeBaseState()
+
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		cfg := filepath.Join(tmpDir, ".pre-commit-config.yaml")
+		if err := os.WriteFile(cfg, []byte("repos: []\n"), 0644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+		testhelpers.MustGit(t, tmpDir, "add", ".pre-commit-config.yaml")
+		testhelpers.MustGit(t, tmpDir, "commit", "-m", "add precommit config")
+
+		config := SupervisorConfig{
+			Role:        "architect",
+			AgentID:     "architect-1",
+			ProjectRoot: tmpDir,
+		}
+
+		data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+		if err != nil {
+			t.Fatalf("buildTaskRoleContextData: %v", err)
+		}
+		if !data.PreCommitConfigExists {
+			t.Errorf("PreCommitConfigExists = false, want true (config committed on main)")
+		}
+		if data.PreCommitBootstrapInFlight {
+			t.Errorf("PreCommitBootstrapInFlight = true, want false (no bootstrap task)")
+		}
+		if data.PreCommitKind != "bootstrap-precommit" {
+			t.Errorf("PreCommitKind = %q, want %q", data.PreCommitKind, "bootstrap-precommit")
+		}
+	})
+}
+
+// TestBuildTaskRoleContextData_PreCommitFields_NonArchitect asserts that
+// for non-architect roles, the architect-gated block is skipped: all
+// three PreCommit* fields remain at zero and the precommit helper is
+// NOT invoked. The gating proof uses a ProjectRoot pointing at a path
+// without a .git directory — if the helper ran, git rev-parse would
+// fail and buildTaskRoleContextData would return a non-nil error.
+func TestBuildTaskRoleContextData_PreCommitFields_NonArchitect(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, architectTestPipelineYAML)
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "task-1",
+				Description: "Test task",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Done",
+				Created:     now,
+			},
+			{
+				ID:       "bootstrap-1",
+				Kind:     "bootstrap-precommit",
+				Status:   models.TaskStatusImplementing,
+				Priority: 1,
+				Created:  now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+
+	// A path without .git — if the helper were called, rev-parse would fail.
+	nonGitDir := t.TempDir()
+
+	for _, role := range []string{"coder", "code-reviewer"} {
+		t.Run(role, func(t *testing.T) {
+			config := SupervisorConfig{
+				Role:        role,
+				AgentID:     role + "-1",
+				ProjectRoot: nonGitDir,
+			}
+
+			data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+			if err != nil {
+				t.Fatalf("buildTaskRoleContextData: %v (unexpected — helper must not run for non-architect)", err)
+			}
+			if data.PreCommitConfigExists {
+				t.Errorf("PreCommitConfigExists = true, want false for role %q", role)
+			}
+			if data.PreCommitBootstrapInFlight {
+				t.Errorf("PreCommitBootstrapInFlight = true, want false for role %q", role)
+			}
+			if data.PreCommitKind != "" {
+				t.Errorf("PreCommitKind = %q, want empty for role %q", data.PreCommitKind, role)
+			}
+		})
+	}
+}
+
+// TestBuildTaskRoleContextData_PreCommitFields_HelperError asserts that
+// a helper failure (e.g. invalid integration branch) is surfaced through
+// buildTaskRoleContextData with the outer "precommit config check" wrap
+// while preserving the inner ErrContextBuild sentinel.
+func TestBuildTaskRoleContextData_PreCommitFields_HelperError(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := loadTestResolver(t, architectTestPipelineYAML)
+
+	state := &models.State{
+		Version: 1,
+		Goal: models.Goal{
+			ID:          "goal-1",
+			Description: "Test goal",
+			SpecRef:     "spec.md",
+			Status:      models.GoalStatusInProgress,
+			Created:     now,
+		},
+		Tasks: []models.Task{
+			{
+				ID:          "arch-task-1",
+				Description: "Design feature X",
+				Status:      models.TaskStatusImplementing,
+				Priority:    1,
+				Iteration:   1,
+				DoneWhen:    "Architecture document produced",
+				Created:     now,
+			},
+		},
+		Agents: make(map[string]models.Agent),
+		Config: models.Config{IntegrationBranch: "does-not-exist"},
+	}
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	config := SupervisorConfig{
+		Role:        "architect",
+		AgentID:     "architect-1",
+		ProjectRoot: tmpDir,
+	}
+
+	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	if err == nil {
+		t.Fatalf("expected error, got nil (data=%+v)", data)
+	}
+	if data != nil {
+		t.Errorf("data = %+v, want nil on error", data)
+	}
+	if !stderrors.Is(err, precommit.ErrContextBuild) {
+		t.Errorf("errors.Is(err, precommit.ErrContextBuild) = false; err=%v", err)
+	}
+	msg := err.Error()
+	if !strings.HasPrefix(msg, "precommit config check") {
+		t.Errorf("error message %q does not start with %q", msg, "precommit config check")
+	}
+	if !strings.Contains(msg, "integration branch") {
+		t.Errorf("error message %q missing inner %q phrase", msg, "integration branch")
 	}
 }
 

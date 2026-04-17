@@ -67,7 +67,10 @@ type RoleContextData struct {
 	TaskRolePair   string
 
 	// Architecture-specific (populated for architect role)
-	ParentTaskContexts []ParentTaskContext
+	ParentTaskContexts         []ParentTaskContext
+	PreCommitConfigExists      bool
+	PreCommitBootstrapInFlight bool
+	PreCommitKind              string // canonical marker string, mirrors precommit.Kind
 
 	// Integration-specific (populated for integration-analyst and integration-reviewer)
 	GoalBaseCommit string
