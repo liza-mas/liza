@@ -1014,6 +1014,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		EpicRef:     paths.NormalizeSpecRef(epicRef),
 		PlanRef:     paths.NormalizeSpecRef(entry.PlanRef),
 		ArchRef:     paths.NormalizeSpecRef(archRef),
+		Kind:        entry.Kind,
 		DoneWhen:    entry.DoneWhen,
 		Scope:       entry.Scope,
 		DependsOn:   deps,

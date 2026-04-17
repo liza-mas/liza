@@ -137,6 +137,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			EpicRef:     task.EpicRef,
 			PlanRef:     task.PlanRef,
 			ArchRef:     task.ArchRef,
+			Kind:        task.Kind,
 			DoneWhen:    task.DoneWhen,
 			Scope:       task.Scope,
 			DependsOn:   slices.Clone(task.DependsOn),

@@ -3,8 +3,12 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // claimTestResolver is a minimal PipelineResolver for IsClaimable tests.
@@ -602,5 +606,158 @@ func TestOutputEntry_JSONUnmarshal(t *testing.T) {
 	}
 	if len(e.DependsOn) != 2 || e.DependsOn[0] != "0" || e.DependsOn[1] != "2" {
 		t.Errorf("DependsOn = %v", e.DependsOn)
+	}
+}
+
+func TestOutputEntry_KindYAMLRoundTrip(t *testing.T) {
+	t.Run("populated kind round-trips", func(t *testing.T) {
+		original := OutputEntry{
+			Desc:     "x",
+			DoneWhen: "y",
+			Scope:    "z",
+			SpecRef:  "s",
+			Kind:     "bootstrap-precommit",
+		}
+		data, err := yaml.Marshal(&original)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var decoded OutputEntry
+		if err := yaml.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if !reflect.DeepEqual(original, decoded) {
+			t.Errorf("round-trip mismatch:\noriginal = %#v\ndecoded  = %#v", original, decoded)
+		}
+	})
+
+	t.Run("empty kind omitted from YAML", func(t *testing.T) {
+		entry := OutputEntry{
+			Desc:     "x",
+			DoneWhen: "y",
+			Scope:    "z",
+			SpecRef:  "s",
+			Kind:     "",
+		}
+		data, err := yaml.Marshal(&entry)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), "kind:") {
+			t.Errorf("empty Kind should be omitted from YAML, got:\n%s", string(data))
+		}
+	})
+}
+
+func TestOutputEntry_KindJSONRoundTrip(t *testing.T) {
+	t.Run("populated kind round-trips", func(t *testing.T) {
+		original := OutputEntry{
+			Desc:     "x",
+			DoneWhen: "y",
+			Scope:    "z",
+			SpecRef:  "s",
+			Kind:     "bootstrap-precommit",
+		}
+		data, err := json.Marshal(&original)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var decoded OutputEntry
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if !reflect.DeepEqual(original, decoded) {
+			t.Errorf("round-trip mismatch:\noriginal = %#v\ndecoded  = %#v", original, decoded)
+		}
+	})
+
+	t.Run("empty kind omitted from JSON", func(t *testing.T) {
+		entry := OutputEntry{
+			Desc:     "x",
+			DoneWhen: "y",
+			Scope:    "z",
+			SpecRef:  "s",
+			Kind:     "",
+		}
+		data, err := json.Marshal(&entry)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), `"kind"`) {
+			t.Errorf("empty Kind should be omitted from JSON, got: %s", string(data))
+		}
+	})
+}
+
+func TestTask_KindYAMLRoundTrip(t *testing.T) {
+	now := time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC)
+
+	t.Run("populated kind round-trips", func(t *testing.T) {
+		original := Task{
+			ID:          "task-1",
+			Description: "do the thing",
+			Status:      "DRAFT_CODE",
+			Priority:    1,
+			SpecRef:     "specs/x.md",
+			Kind:        "bootstrap-precommit",
+			DoneWhen:    "tests pass",
+			Scope:       "internal/",
+			Created:     now,
+			History:     []TaskHistoryEntry{},
+		}
+		data, err := yaml.Marshal(&original)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var decoded Task
+		if err := yaml.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if decoded.Kind != "bootstrap-precommit" {
+			t.Errorf("decoded Kind = %q, want %q", decoded.Kind, "bootstrap-precommit")
+		}
+	})
+
+	t.Run("empty kind omitted from YAML", func(t *testing.T) {
+		task := Task{
+			ID:          "task-1",
+			Description: "do the thing",
+			Status:      "DRAFT_CODE",
+			Priority:    1,
+			SpecRef:     "specs/x.md",
+			Kind:        "",
+			DoneWhen:    "tests pass",
+			Scope:       "internal/",
+			Created:     now,
+			History:     []TaskHistoryEntry{},
+		}
+		data, err := yaml.Marshal(&task)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), "kind:") {
+			t.Errorf("empty Kind should be omitted from YAML, got:\n%s", string(data))
+		}
+	})
+}
+
+func TestTask_KindBackwardCompat(t *testing.T) {
+	// Represents a Task persisted before the Kind field existed — no `kind:` key.
+	legacy := `id: task-legacy
+description: legacy task
+status: DRAFT_CODE
+priority: 1
+spec_ref: specs/x.md
+done_when: tests pass
+scope: internal/
+created: 2026-04-17T12:00:00Z
+history: []
+`
+	var task Task
+	if err := yaml.Unmarshal([]byte(legacy), &task); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if task.Kind != "" {
+		t.Errorf("legacy Task without kind: should decode to Kind == \"\", got %q", task.Kind)
 	}
 }

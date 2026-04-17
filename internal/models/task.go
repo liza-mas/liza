@@ -213,6 +213,7 @@ type Task struct {
 	EpicRef             string             `yaml:"epic_ref,omitempty"`
 	PlanRef             string             `yaml:"plan_ref,omitempty"`
 	ArchRef             string             `yaml:"arch_ref,omitempty"`
+	Kind                string             `yaml:"kind,omitempty"`
 	DoneWhen            string             `yaml:"done_when"`
 	Scope               string             `yaml:"scope"`
 	RejectionReason     *string            `yaml:"rejection_reason,omitempty"`
@@ -268,6 +269,7 @@ type OutputEntry struct {
 	EpicRef   string   `yaml:"epic_ref,omitempty" json:"epic_ref,omitempty"`
 	PlanRef   string   `yaml:"plan_ref,omitempty" json:"plan_ref,omitempty"`
 	ArchRef   string   `yaml:"arch_ref,omitempty" json:"arch_ref,omitempty"`
+	Kind      string   `yaml:"kind,omitempty" json:"kind,omitempty"`
 	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 }
 

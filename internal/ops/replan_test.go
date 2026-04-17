@@ -283,6 +283,57 @@ func TestReplan_TransitionsAlreadyExecuted(t *testing.T) {
 	testhelpers.RequireErrorContains(t, err, "child tasks already created")
 }
 
+func TestReplan_PropagatesKind(t *testing.T) {
+	tmpDir, stateFile := setupReplanTest(t)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
+
+	planningTask := buildMergedPlanningTask("code-planning-1", now)
+	planningTask.Kind = "bootstrap-precommit"
+	state.Tasks = []models.Task{planningTask}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{
+		TaskID:    "code-planning-1",
+		ChangedBy: "human",
+	})
+	if err != nil {
+		t.Fatalf("Replan() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	// Old task invalidated (mirror TestReplan_HappyPath).
+	oldTask := readState.FindTask("code-planning-1")
+	if oldTask == nil {
+		t.Fatal("Old task not found")
+	}
+	if !oldTask.TransitionsExecuted["replanned"] {
+		t.Error("Old task TransitionsExecuted should have replanned=true")
+	}
+
+	// New task created with Kind propagated and Supersedes pointing at old.
+	newTask := readState.FindTask(result.NewTaskID)
+	if newTask == nil {
+		t.Fatalf("New task %q not found", result.NewTaskID)
+	}
+	if newTask.Kind != "bootstrap-precommit" {
+		t.Errorf("New task Kind = %q, want %q", newTask.Kind, "bootstrap-precommit")
+	}
+	if newTask.Supersedes == nil || *newTask.Supersedes != "code-planning-1" {
+		t.Errorf("New task Supersedes = %v, want code-planning-1", newTask.Supersedes)
+	}
+}
+
 func TestReplan_NoOutput(t *testing.T) {
 	tmpDir, stateFile := setupReplanTest(t)
 
