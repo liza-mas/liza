@@ -181,6 +181,26 @@ IMPLEMENTATION PHASE:
    spec_ref (goal spec — same for all entries), arch_ref (repo-relative path to the arch doc from step 5),
    depends_on (optional array of sibling index strings for ordering constraints).
    Extract each field verbatim from the arch doc — do not compose from memory or paraphrase.
+
+BOOTSTRAP-PRECOMMIT REQUIREMENTS:
+{{- if eq .Role "architect"}}
+A bootstrap-precommit entry is the typed marker the pipeline uses to dedup pre-commit-config bootstrap across replans, parallel architect invocations, and cross-goal races. Emit at most one such entry per architect invocation, and only when neither omission condition below holds.
+
+OMISSION RULES (skip the bootstrap entry when either is true):
+- PreCommitConfigExists = {{.PreCommitConfigExists}}: integration branch HEAD already has .pre-commit-config.yaml.
+- PreCommitBootstrapInFlight = {{.PreCommitBootstrapInFlight}}: a non-terminal task repo-wide already carries kind: {{.PreCommitKind}}.
+If either flag is true, do NOT emit a bootstrap entry. Other output entries declare depends_on relative to the surviving entry indices (no synthetic depends_on: ["0"] is added when bootstrap is omitted).
+
+EMIT RULES (when both flags are false and the project lacks a pre-commit config):
+- Set "kind": "{{.PreCommitKind}}" on the bootstrap entry. Place it as output[0]; all other architect output entries declare depends_on: ["0"]. Phase-gate inheritance propagates the dependency to coding tasks.
+- desc MUST include the install-authorization clause verbatim or substantively equivalent (single source of truth: specs/goals/20260417-precommit-bootstrap.md#preconditions, lines 41-44):
+    "This task may provision pre-commit only via a project-scoped mechanism already available in the repo or explicitly defined by the task/config. Do not install OS packages or unrelated global tooling. If no authorized project-scoped path exists, mark BLOCKED."
+- done_when MUST assert two invariants, specialized for the chosen stack (phrase each invariant in stack-appropriate terms — concrete runner names, manifest filenames, and worked phrasings live in the goal spec, not here):
+    (a) pre-commit runs cleanly against the bootstrap commit, invoked through whatever mechanism the project's dep manager uses to run tooling it owns, and exits 0;
+    (b) the project's dep-manager manifest (whichever file or lockfile records dev dependencies for the chosen stack) records pre-commit as a dev dependency.
+- Hook-set selection: the architect picks stack-appropriate hook categories and concrete hooks in free-form prose inside desc. Do NOT defer to a default hook list — there is no default. Do NOT include version pins (deferred to a later hook-selection task per goal-spec Out of Scope).
+- Stack-specific runners, manifest filenames, and worked done_when phrasings live in the goal spec (see Worked Example), never in this prompt (G1.1: prompt is stack-agnostic).
+{{- end}}
 7. Update worktree artifacts required by DONE WHEN.
 8. Validate done_when criteria with concrete checks.
 9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):

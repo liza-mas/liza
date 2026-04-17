@@ -11,7 +11,7 @@ ARCHITECT TOOLS:
   liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
   Create <path.json> with a file-writing tool, not a Bash heredoc (heredoc with JSON triggers a shell safety block).
   JSON file contains: [
-    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "arch_ref": "specs/arch-plan/{{.GoalSlug}}/<doc>.md", "depends_on": ["0", "2"]}
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "arch_ref": "specs/arch-plan/{{.GoalSlug}}/<doc>.md", "depends_on": ["0", "2"], "kind": "<optional typed marker — see BOOTSTRAP-PRECOMMIT REQUIREMENTS in IMPLEMENTATION PHASE>"}
   ]
   arch_ref: path to the architecture document (this task's primary artifact).
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".

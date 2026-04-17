@@ -2170,6 +2170,10 @@ func TestBuildPromptWithContext_Architect(t *testing.T) {
 		"Submission requires a new worktree commit for this task",
 		"Do NOT submit the pre-change HEAD",
 		"Submission proof: `liza submit-for-review` must actually run successfully after step 9g",
+		"BOOTSTRAP-PRECOMMIT REQUIREMENTS",
+		`Set "kind": "bootstrap-precommit"`,
+		`"kind": "<optional typed marker — see BOOTSTRAP-PRECOMMIT REQUIREMENTS in IMPLEMENTATION PHASE>"`,
+		"This task may provision pre-commit only via a project-scoped mechanism",
 	}
 	for _, s := range mustContain {
 		if !strings.Contains(prompt, s) {
@@ -2273,6 +2277,7 @@ func TestBuildPromptWithContext_ArchitectureReviewer(t *testing.T) {
 		"ARCHITECT TOOLS",
 		"ARCHITECT STATE TRANSITIONS",
 		"CODER TOOLS",
+		"BOOTSTRAP-PRECOMMIT REQUIREMENTS",
 	}
 	for _, s := range mustNotContain {
 		if strings.Contains(prompt, s) {
