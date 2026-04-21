@@ -1,17 +1,11 @@
 ---
 name: spec-review
-description: Specification Review Protocol
+description: "Reviews technical specifications for inconsistencies, gaps, contradictions, ambiguities, undefined terms, and missing references. Produces a severity-ranked report with file-level locations and fix suggestions — without proposing design changes. Use when the user asks to review specs, audit documentation, find inconsistencies, or validate technical designs."
 ---
 
 ## Purpose
 
-Review technical specifications for inconsistencies, gaps, contradictions, and ambiguities. This skill is for finding specification issues, not proposing design changes.
-
-## Trigger
-
-Use this skill when:
-- User asks to review specs, documentation, or technical designs
-- User asks to find inconsistencies or gaps in documentation
+Find specification issues, not propose design changes.
 
 ## Inputs
 
@@ -89,53 +83,28 @@ Review against these categories. For each issue found, record:
 Apply these checks to the specification corpus:
 
 #### 1. Cross-Document Consistency
-- [ ] Same term defined identically everywhere
-- [ ] State/status names match across all documents
-- [ ] Field names in examples match schema definitions
-- [ ] File/script/component names consistent across documents
-- [ ] Path formats consistent (relative vs absolute, directory conventions)
+- [ ] Terms, state/status names, field names, file/component names, and path formats consistent across all documents
+- [ ] Examples match schema definitions
 
 #### 2. Completeness
-- [ ] Every state has defined entry conditions and exit transitions
-- [ ] Every role/actor has defined: purpose, capabilities, constraints
-- [ ] Every operation has: trigger, steps, success/failure outcomes
-- [ ] Every data type/field has: purpose, format, valid values
-- [ ] Cross-references resolve (no broken links)
-- [ ] Error conditions documented with recovery paths
+- [ ] Every state, role, operation, and data type fully defined (entry/exit conditions, capabilities, constraints, triggers, outcomes, valid values)
+- [ ] Cross-references resolve; error conditions have recovery paths
 
 #### 3. Logical Consistency
-- [ ] No circular dependencies in sequences or phases
-- [ ] State transitions are deterministic (no ambiguous branches)
-- [ ] Constraints don't contradict capabilities
-- [ ] Numeric limits/thresholds align across documents
-- [ ] Default values documented and consistent
+- [ ] No circular dependencies; state transitions deterministic
+- [ ] Constraints don't contradict capabilities; numeric limits align across documents
 
 #### 4. Edge Cases
-- [ ] What happens on component/process failure mid-operation?
-- [ ] What happens on data corruption?
-- [ ] What happens on race conditions (concurrent access)?
-- [ ] What happens on resource exhaustion?
-- [ ] What happens when humans don't respond?
-- [ ] What happens when external dependencies fail?
+- [ ] Failure mid-operation, data corruption, race conditions, resource exhaustion, unresponsive humans, and external dependency failures all addressed
 
 #### 5. Undefined or Ambiguous Terms
-- [ ] All field/property names documented
-- [ ] All states/statuses have clear definitions
-- [ ] Functions/operations have precise semantics
-- [ ] Format specifications are explicit (dates, IDs, paths)
-- [ ] "Magic values" or special cases explained
+- [ ] All fields, states, operations, and formats explicitly defined; magic values explained
 
 #### 6. Error Handling
-- [ ] Each operation specifies possible errors
-- [ ] Error propagation paths documented
-- [ ] Partial failure handling specified
-- [ ] Recovery procedures defined
+- [ ] Each operation specifies possible errors, propagation paths, partial failure handling, and recovery
 
 #### 7. Testability
-- [ ] Success criteria are measurable
-- [ ] Validation items can be objectively verified
-- [ ] Timeouts/thresholds are specific numbers, not vague terms
-- [ ] Examples are concrete and verifiable
+- [ ] Success criteria measurable; thresholds are specific numbers; examples are concrete and verifiable
 
 ### Phase 4: Report
 

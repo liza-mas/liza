@@ -1,15 +1,9 @@
 ---
 name: have-you-considered
-description: Surface alternatives — different ways to address the same need.
+description: "Surfaces alternative approaches the author may not have considered — different libraries, simpler designs, scope reductions, or process changes. Every suggestion requires a demonstrable, verifiable benefit. Use when the user asks for options, alternatives, different approaches, tradeoffs, or says 'what are my options' or 'is there a better way.'"
 ---
 
-Open doors, don't fix bugs. This skill suggests what *could be* different, not what *is* wrong.
-
-# Posture
-
-"Have you considered..." is a mentor's question, not a reviewer's finding. The goal is to surface options the author may not have seen — a library that already does this, a simpler way to meet the user need, a different decomposition of the work.
-
-This skill is orthogonal to review and validation. It doesn't judge correctness; it expands the solution space.
+This skill suggests what *could be* different, not what *is* wrong. It is orthogonal to review and validation — it expands the solution space, not judges correctness.
 
 # Scope
 

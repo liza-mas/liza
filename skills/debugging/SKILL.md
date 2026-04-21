@@ -1,11 +1,9 @@
 ---
 name: debugging
-description: Debugging Protocol
+description: "Systematic bug diagnosis through hypothesis-driven narrowing. Triages with quick-win checks, then escalates through fast-path or full analysis with structured qualification, root-cause gating, and falsification. Use when the user reports a bug, error, exception, or unexpected behavior, or asks to troubleshoot, debug, or fix failing code."
 ---
 
-Debugging optimizes for certainty, not speed. Speed is a byproduct of certainty.
-Debugging always starts by ruling out trivial causes.
-If not sufficient, there are two different paths to pursue: Fast Path and Normal Path.
+Debugging optimizes for certainty, not speed. Always start by ruling out trivial causes, then escalate to Fast Path or Normal Path.
 
 # Quick Wins (30 seconds max)
 

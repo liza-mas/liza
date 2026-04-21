@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Test Protocol
+description: "Governs test writing, test failure analysis, and test modification discipline. Encodes a truth table for code-vs-test correctness, enforces approval gates before weakening assertions, and defines quality standards for deterministic behavioral testing. Use when writing tests, analyzing test failures, modifying existing tests, or assessing test coverage."
 ---
 
 Tests are the immune system — they reject bugs, not document them.
