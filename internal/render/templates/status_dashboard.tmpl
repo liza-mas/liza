@@ -24,6 +24,7 @@ Wake Trigger: {{.OrchestratorState.Trigger}}
 {{- if gt .OrchestratorState.TriggerCount 0}} (count: {{.OrchestratorState.TriggerCount}}){{end}}
 Explanation: {{.OrchestratorState.Reason}}
 
+{{.HandoffSection -}}
 === WORK QUEUES ===
 Coder: {{.WorkQueues.Coder.Available}} available - {{.WorkQueues.Coder.Reason}}
 Reviewer: {{.WorkQueues.Reviewer.Available}} available - {{.WorkQueues.Reviewer.Reason}}

@@ -34,6 +34,7 @@ type statusData struct {
 	OrchestratorState  orchestratorStatus    `json:"orchestrator_state"`
 	WorkQueues         workQueuesStatus      `json:"work_queues"`
 	PendingTransitions []pendingTransition   `json:"pending_transitions,omitempty"`
+	PhaseHandoff       *phaseHandoffStatus   `json:"phase_handoff,omitempty"`
 	Anomalies          *[]string             `json:"anomalies,omitempty"`
 	CircuitBreaker     *circuitBreakerStatus `json:"circuit_breaker,omitempty"`
 }
@@ -41,6 +42,24 @@ type statusData struct {
 type pendingTransition struct {
 	TaskID      string   `json:"task_id"`
 	Transitions []string `json:"transitions"`
+}
+
+type phaseHandoffStatus struct {
+	State               string             `json:"state"`
+	Explanation         string             `json:"explanation"`
+	ReadyPlanningTasks  []string           `json:"ready_planning_tasks"`
+	BlockingTasks       []phaseHandoffTask `json:"blocking_tasks,omitempty"`
+	StaleAssignedAgents []phaseHandoffTask `json:"stale_assigned_agents,omitempty"`
+}
+
+type phaseHandoffTask struct {
+	ID                 string `json:"id"`
+	Status             string `json:"status"`
+	RolePair           string `json:"role_pair,omitempty"`
+	AssignedTo         string `json:"assigned_to,omitempty"`
+	AgentStatus        string `json:"agent_status,omitempty"`
+	AgentProcessStatus string `json:"agent_process_status,omitempty"`
+	LeaseExpires       string `json:"lease_expires,omitempty"`
 }
 
 type goalStatus struct {
@@ -163,6 +182,7 @@ func BuildStatusData(state *models.State, detailed bool, projectRoot string, pr 
 	data.Agents = buildAgentStatuses(state)
 	data.OrchestratorState = buildOrchestratorStatus(state, projectRoot)
 	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.Claimable, data.Tasks.Reviewable, pr)
+	data.PhaseHandoff = buildPhaseHandoffStatus(state, projectRoot)
 
 	for i := range state.Tasks {
 		avail := ops.AvailableManualTransitions(&state.Tasks[i], projectRoot)
@@ -248,6 +268,96 @@ func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus
 	ts.Reviewable = models.CountReviewableTasks(state, models.RoleCodeReviewer, pr)
 
 	return ts
+}
+
+func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHandoffStatus {
+	detCtx, err := ops.LoadDetectionContext(projectRoot)
+	if err != nil {
+		return nil
+	}
+
+	var ready []string
+	var blockers []phaseHandoffTask
+	var stale []phaseHandoffTask
+	seenStale := make(map[string]bool)
+
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if task == nil {
+			blockers = append(blockers, phaseHandoffTask{ID: taskID, Status: "MISSING"})
+			continue
+		}
+
+		if ops.IsPlanningCompleteEligible(task, detCtx.PlanningPairs, state) {
+			ready = append(ready, task.ID)
+		}
+
+		if isSprintTerminal(task, detCtx.SprintTerminals) {
+			continue
+		}
+
+		blocker := phaseHandoffTask{
+			ID:       task.ID,
+			Status:   string(task.Status),
+			RolePair: task.RolePair,
+		}
+		if task.AssignedTo != nil {
+			blocker.AssignedTo = *task.AssignedTo
+			if task.LeaseExpires != nil {
+				blocker.LeaseExpires = task.LeaseExpires.Format(time.RFC3339)
+			}
+			if assignedAgent, ok := state.Agents[*task.AssignedTo]; ok {
+				blocker.AgentStatus = string(assignedAgent.Status)
+				blocker.AgentProcessStatus = getProcessStatus(assignedAgent.PID)
+				if assignedAgent.CurrentTask != nil &&
+					*assignedAgent.CurrentTask == task.ID &&
+					assignedAgent.Status != models.AgentStatusIdle &&
+					blocker.AgentProcessStatus != "running" &&
+					!seenStale[*task.AssignedTo] {
+					stale = append(stale, blocker)
+					seenStale[*task.AssignedTo] = true
+				}
+			}
+		}
+		blockers = append(blockers, blocker)
+	}
+
+	if len(ready) == 0 {
+		return nil
+	}
+
+	stateName := "READY"
+	explanation := fmt.Sprintf("%d merged planning task(s) have unconsumed output and are ready for transition execution.", len(ready))
+	if len(blockers) > 0 {
+		stateName = "PARTIAL_READY"
+		explanation = fmt.Sprintf("%d merged planning task(s) have unconsumed output; %d non-terminal planned task(s) are still active. Liza can checkpoint PLANNING_COMPLETE and create implementation tasks after resume without waiting for the active tasks to finish.", len(ready), len(blockers))
+	}
+	if state.Sprint.Status == models.SprintStatusCheckpoint {
+		stateName = "CHECKPOINTED"
+		explanation = fmt.Sprintf("%d merged planning task(s) are waiting behind a checkpoint; resume the sprint to execute their pipeline transitions.", len(ready))
+	}
+	if state.Sprint.Status == models.SprintStatusCompleted {
+		stateName = "COMPLETED"
+		explanation = fmt.Sprintf("%d merged planning task(s) are waiting in a completed sprint; resume/advance to execute their pipeline transitions.", len(ready))
+	}
+
+	return &phaseHandoffStatus{
+		State:               stateName,
+		Explanation:         explanation,
+		ReadyPlanningTasks:  ready,
+		BlockingTasks:       blockers,
+		StaleAssignedAgents: stale,
+	}
+}
+
+func isSprintTerminal(task *models.Task, pipelineTerminals []models.TaskStatus) bool {
+	if task == nil {
+		return false
+	}
+	if task.RolePair != "" {
+		return task.Status.IsPipelineSprintTerminal(pipelineTerminals)
+	}
+	return task.Status.IsSprintTerminal()
 }
 
 // buildAgentStatuses converts agent map to agent status list
@@ -413,11 +523,72 @@ func writeAgentsSection(b *strings.Builder, agents []agentStatus) {
 	b.WriteString("\n\n")
 }
 
+func writePhaseHandoffSection(b *strings.Builder, handoff *phaseHandoffStatus) {
+	if handoff == nil {
+		return
+	}
+	b.WriteString("=== PHASE HANDOFF ===\n")
+	fmt.Fprintf(b, "State: %s\n", handoff.State)
+	fmt.Fprintf(b, "Explanation: %s\n", handoff.Explanation)
+	if len(handoff.ReadyPlanningTasks) > 0 {
+		b.WriteString("Ready planning tasks:\n")
+		for _, taskID := range handoff.ReadyPlanningTasks {
+			fmt.Fprintf(b, "  - %s\n", taskID)
+		}
+	}
+	if len(handoff.BlockingTasks) > 0 {
+		b.WriteString("Non-terminal planned tasks:\n")
+		b.WriteString(render.FormatTable(
+			[]string{"ID", "Status", "Role Pair", "Agent", "Process"},
+			phaseHandoffTaskRows(handoff.BlockingTasks),
+		))
+		b.WriteString("\n")
+	}
+	if len(handoff.StaleAssignedAgents) > 0 {
+		b.WriteString("Stale assigned agents:\n")
+		b.WriteString(render.FormatTable(
+			[]string{"Task", "Agent", "Agent Status", "Process", "Lease Expires"},
+			phaseHandoffStaleRows(handoff.StaleAssignedAgents),
+		))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+}
+
+func phaseHandoffTaskRows(tasks []phaseHandoffTask) [][]string {
+	rows := make([][]string, 0, len(tasks))
+	for _, task := range tasks {
+		rows = append(rows, []string{
+			task.ID,
+			task.Status,
+			task.RolePair,
+			task.AssignedTo,
+			task.AgentProcessStatus,
+		})
+	}
+	return rows
+}
+
+func phaseHandoffStaleRows(tasks []phaseHandoffTask) [][]string {
+	rows := make([][]string, 0, len(tasks))
+	for _, task := range tasks {
+		rows = append(rows, []string{
+			task.ID,
+			task.AssignedTo,
+			task.AgentStatus,
+			task.AgentProcessStatus,
+			task.LeaseExpires,
+		})
+	}
+	return rows
+}
+
 // statusDashboardData is the template data for status_dashboard.tmpl
 type statusDashboardData struct {
 	statusData
 	TasksSection       string
 	AgentsSection      string
+	HandoffSection     string
 	AnomalyList        []string
 	TransitionsSection string
 }
@@ -428,6 +599,8 @@ func formatStatusDashboard(data statusData) (string, error) {
 	var tasksBuf, agentsBuf strings.Builder
 	writeTasksSection(&tasksBuf, data.Tasks)
 	writeAgentsSection(&agentsBuf, data.Agents)
+	var handoffBuf strings.Builder
+	writePhaseHandoffSection(&handoffBuf, data.PhaseHandoff)
 
 	var anomalyList []string
 	if data.Anomalies != nil {
@@ -449,6 +622,7 @@ func formatStatusDashboard(data statusData) (string, error) {
 		statusData:         data,
 		TasksSection:       tasksBuf.String(),
 		AgentsSection:      agentsBuf.String(),
+		HandoffSection:     handoffBuf.String(),
 		AnomalyList:        anomalyList,
 		TransitionsSection: transitionsBuf.String(),
 	}

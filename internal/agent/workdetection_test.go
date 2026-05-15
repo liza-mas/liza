@@ -796,6 +796,24 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   1,
 		},
 		{
+			name: "planning complete fires with unrelated active planned task",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				readyPlan := testhelpers.BuildTaskByStatus("plan-ready", models.TaskStatusMerged, now)
+				readyPlan.RolePair = "code-planning-pair"
+				readyPlan.Output = []models.OutputEntry{
+					{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+				}
+				activePlan := testhelpers.BuildTaskByStatus("plan-active", models.TaskStatusCodePlanning, now)
+				activePlan.RolePair = "code-planning-pair"
+				state.Sprint.Scope.Planned = []string{"plan-ready", "plan-active"}
+				state.Tasks = []models.Task{readyPlan, activePlan}
+				return state
+			}(),
+			wantTrigger: WakeTriggerPlanningComplete,
+			wantCount:   1,
+		},
+		{
 			name: "merged planning task with TransitionsExecuted triggers sprint complete not planning complete",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()

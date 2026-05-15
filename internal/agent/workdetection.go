@@ -75,14 +75,35 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // 2. Blocked tasks
 // 3. Hypothesis exhausted (2+ failed_by)
 // 4. Immediate discoveries (not yet converted to tasks)
-// 5. Planning complete (all planned tasks terminal, merged tasks have output[])
-// 6. Sprint complete (all planned tasks terminal)
+// 5. Planning complete (merged planning tasks have output[])
+// 6. Many-to-one transition ready
+// 7. Sprint complete (all planned tasks terminal)
 func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if count := triggerSpec.Count(state); count > 0 {
 			return OrchestratorWakeResult{
 				Trigger: triggerSpec.Trigger,
 				Count:   count,
+			}
+		}
+	}
+
+	// Partial handoff: a merged planning task with unconsumed output is enough
+	// to wake the orchestrator, even when unrelated planned tasks are still
+	// active. The checkpoint/resume gate still controls when transitions run,
+	// but ready design work no longer waits for the entire sprint to finish.
+	if state.Sprint.Status != models.SprintStatusCheckpoint &&
+		state.Sprint.Status != models.SprintStatusCompleted {
+		if n := countMergedPlanningTasksWithOutput(state, planningPairs); n > 0 {
+			return OrchestratorWakeResult{
+				Trigger: WakeTriggerPlanningComplete,
+				Count:   n,
+			}
+		}
+		if n := countReadyManyToOneCohorts(state, m2oTransitions); n > 0 {
+			return OrchestratorWakeResult{
+				Trigger: WakeTriggerManyToOneReady,
+				Count:   n,
 			}
 		}
 	}
@@ -96,20 +117,6 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 		if state.Sprint.Status == models.SprintStatusCheckpoint ||
 			state.Sprint.Status == models.SprintStatusCompleted {
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
-		}
-		// Distinguish planning completion (merged tasks with output[]) from sprint completion.
-		if n := countMergedPlanningTasksWithOutput(state, planningPairs); n > 0 {
-			return OrchestratorWakeResult{
-				Trigger: WakeTriggerPlanningComplete,
-				Count:   n,
-			}
-		}
-		// Check for ready many-to-one cohorts
-		if n := countReadyManyToOneCohorts(state, m2oTransitions); n > 0 {
-			return OrchestratorWakeResult{
-				Trigger: WakeTriggerManyToOneReady,
-				Count:   n,
-			}
 		}
 		// Detect coding completion: all tasks terminal, coding happened (base_commit set),
 		// but no integration task exists yet.

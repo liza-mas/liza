@@ -159,6 +159,45 @@ func TestResumeCommand_WarnsOnProviderSignalClearFailure(t *testing.T) {
 	}
 }
 
+func TestResumeCommand_PrintsMidSprintTransitions(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
+
+	readyPlan := testhelpers.BuildTaskByStatus("plan-ready", models.TaskStatusMerged, now)
+	readyPlan.Type = models.TaskTypePlanning
+	readyPlan.RolePair = "code-planning-pair"
+	readyPlan.Output = []models.OutputEntry{{
+		Desc:     "Implement X",
+		DoneWhen: "tests pass",
+		Scope:    "pkg/x",
+		SpecRef:  "specs/x.md",
+	}}
+	activePlan := testhelpers.BuildTaskByStatus("plan-active", models.TaskStatusCodePlanning, now)
+	activePlan.Type = models.TaskTypePlanning
+	activePlan.RolePair = "code-planning-pair"
+	state.Tasks = []models.Task{readyPlan, activePlan}
+	state.Sprint.Scope.Planned = []string{"plan-ready", "plan-active"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	stdout := captureStdout(t, func() {
+		if err := ResumeCommand(tmpDir, "human"); err != nil {
+			t.Fatalf("ResumeCommand() error = %v", err)
+		}
+	})
+
+	if !strings.Contains(stdout, "Transitions executed: 1 (child tasks created)") {
+		t.Fatalf("stdout missing transition count:\n%s", stdout)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 

@@ -241,6 +241,59 @@ func TestBuildStatusData(t *testing.T) {
 			},
 		},
 		{
+			name: "phase handoff identifies partial planning output and stale assigned blocker",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				readyPlan := testhelpers.BuildTaskByStatus("plan-ready", models.TaskStatusMerged, now)
+				readyPlan.RolePair = "code-planning-pair"
+				readyPlan.Output = []models.OutputEntry{
+					{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"},
+				}
+
+				activePlan := testhelpers.BuildTaskByStatus("plan-active", models.TaskStatusCodePlanning, now)
+				activePlan.RolePair = "code-planning-pair"
+				activePlan.AssignedTo = stringPtr("code-planner-2")
+				lease := now.Add(30 * time.Minute)
+				activePlan.LeaseExpires = &lease
+
+				state.Tasks = []models.Task{readyPlan, activePlan}
+				state.Sprint.Scope.Planned = []string{"plan-ready", "plan-active"}
+				state.Agents = map[string]models.Agent{
+					"code-planner-2": {
+						Role:        models.RoleCodePlanner,
+						Status:      models.AgentStatusWorking,
+						CurrentTask: stringPtr("plan-active"),
+						Heartbeat:   now.Add(-10 * time.Second),
+						PID:         999999,
+					},
+				}
+				return state
+			}(),
+			detailed:    false,
+			projectRoot: pipelineRoot,
+			pr:          pr,
+			validate: func(t *testing.T, data statusData) {
+				if data.PhaseHandoff == nil {
+					t.Fatal("expected phase handoff diagnostic")
+				}
+				if data.PhaseHandoff.State != "PARTIAL_READY" {
+					t.Fatalf("handoff state = %q, want PARTIAL_READY", data.PhaseHandoff.State)
+				}
+				if len(data.PhaseHandoff.ReadyPlanningTasks) != 1 || data.PhaseHandoff.ReadyPlanningTasks[0] != "plan-ready" {
+					t.Fatalf("ready planning tasks = %v, want [plan-ready]", data.PhaseHandoff.ReadyPlanningTasks)
+				}
+				if len(data.PhaseHandoff.BlockingTasks) != 1 || data.PhaseHandoff.BlockingTasks[0].ID != "plan-active" {
+					t.Fatalf("blocking tasks = %+v, want plan-active", data.PhaseHandoff.BlockingTasks)
+				}
+				if len(data.PhaseHandoff.StaleAssignedAgents) != 1 {
+					t.Fatalf("stale assigned agents = %+v, want one stale assignment", data.PhaseHandoff.StaleAssignedAgents)
+				}
+				if !strings.Contains(data.PhaseHandoff.Explanation, "create implementation tasks after resume") {
+					t.Fatalf("handoff explanation did not describe implementation handoff: %q", data.PhaseHandoff.Explanation)
+				}
+			},
+		},
+		{
 			name: "goal and sprint information",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
@@ -800,6 +853,65 @@ func TestFormatStatusDashboard(t *testing.T) {
 			},
 			notExpect: []string{
 				"Unknown trigger",
+			},
+		},
+		{
+			name: "phase handoff section",
+			data: statusData{
+				Goal: goalStatus{
+					Description: "Test",
+					Status:      "IN_PROGRESS",
+					SpecRef:     "spec.md",
+				},
+				Sprint: sprintStatus{
+					ID:         "sprint-1",
+					Status:     "IN_PROGRESS",
+					StartTime:  now.Format(time.RFC3339),
+					TasksDone:  1,
+					TasksTotal: 2,
+				},
+				Config: configStatus{Mode: "RUNNING"},
+				Tasks: taskStatus{
+					Total:    2,
+					Active:   1,
+					Terminal: 1,
+					ByStatus: map[string]int{"CODE_PLANNING": 1, "MERGED": 1},
+				},
+				Agents:            []agentStatus{},
+				OrchestratorState: orchestratorStatus{Trigger: "PLANNING_COMPLETE", TriggerCount: 1, Reason: "1 planning task(s) merged with output[]; ready for coding task expansion"},
+				WorkQueues: workQueuesStatus{
+					Coder:    queueStatus{Available: 0, Reason: "No claimable tasks"},
+					Reviewer: queueStatus{Available: 0, Reason: "No reviewable tasks"},
+				},
+				PhaseHandoff: &phaseHandoffStatus{
+					State:              "PARTIAL_READY",
+					Explanation:        "1 merged planning task(s) have unconsumed output; 1 non-terminal planned task(s) are still active.",
+					ReadyPlanningTasks: []string{"plan-ready"},
+					BlockingTasks: []phaseHandoffTask{{
+						ID:                 "plan-active",
+						Status:             "CODE_PLANNING",
+						RolePair:           "code-planning-pair",
+						AssignedTo:         "code-planner-2",
+						AgentProcessStatus: "stopped",
+					}},
+					StaleAssignedAgents: []phaseHandoffTask{{
+						ID:                 "plan-active",
+						AssignedTo:         "code-planner-2",
+						AgentStatus:        "WORKING",
+						AgentProcessStatus: "stopped",
+						LeaseExpires:       "2026-05-15T20:00:00Z",
+					}},
+				},
+			},
+			expectSections: []string{
+				"=== PHASE HANDOFF ===",
+				"State: PARTIAL_READY",
+				"Ready planning tasks:",
+				"plan-ready",
+				"Non-terminal planned tasks:",
+				"plan-active",
+				"Stale assigned agents:",
+				"code-planner-2",
 			},
 		},
 	}
