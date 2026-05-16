@@ -393,33 +393,48 @@ func TestFullSprintSequence(t *testing.T) {
 		t.Logf("  ✓ %s exited normally", agentID)
 	}
 
-	// simulateOrchestratorTransitions drives the real checkpoint-resume-advance
-	// cycle that production uses to fire pipeline transitions after planning
-	// work is merged. When all planned tasks are terminal (the typical case
-	// after a planning phase completes), the production sequence is:
-	//   1. SprintCheckpoint — auto-detects PLANNING_COMPLETE trigger
-	//   2. Resume (1st) — CHECKPOINT → COMPLETED (all planned tasks terminal)
-	//   3. Resume (2nd) — advance sprint + ExecuteAvailableTransitions
+	// simulateOrchestratorTransitions drives the real checkpoint-resume cycle
+	// that production uses to fire pipeline transitions after planning work is
+	// merged. Transition checkpoints resume directly to IN_PROGRESS and execute
+	// available transitions immediately; older completion checkpoints still need
+	// a second resume to advance the sprint and fire transitions.
 	simulateOrchestratorTransitions := func(phase string) {
 		t.Helper()
-		t.Logf("▶ Running checkpoint-resume-advance cycle (%s)", phase)
+		t.Logf("▶ Running checkpoint-resume transition cycle (%s)", phase)
 
-		// 1. Create a real checkpoint. Auto-detection finds merged planning
-		//    tasks with unconsumed output[] and sets trigger=PLANNING_COMPLETE.
 		cpResult, err := ops.SprintCheckpoint(projectDir, "")
 		if err != nil {
 			t.Fatalf("SprintCheckpoint(%s) failed: %v", phase, err)
 		}
 		t.Logf("  Checkpoint created at %s", cpResult.CheckpointAt.Format(time.RFC3339))
 
-		// 2. First resume: CHECKPOINT → COMPLETED (all planned tasks terminal).
 		res1, err := ops.Resume(projectDir, "test-human")
 		if err != nil {
 			t.Fatalf("Resume[1](%s) failed: %v", phase, err)
 		}
 		t.Logf("  Resumed from: %s", res1.ResumedFrom)
+		if res1.TransitionsExecuted > 0 {
+			stateAfterResume, readErr := db.For(statePath).Read()
+			if readErr != nil {
+				t.Fatalf("Read state after Resume[1](%s) failed: %v", phase, readErr)
+			}
+			if stateAfterResume.Sprint.Status != models.SprintStatusInProgress {
+				t.Fatalf("Resume[1](%s): expected sprint IN_PROGRESS after transition checkpoint, got %s",
+					phase, stateAfterResume.Sprint.Status)
+			}
+			t.Logf("  Transitions executed: %d", res1.TransitionsExecuted)
+			return
+		}
 
-		// 3. Second resume: COMPLETED → advance sprint + fire transitions.
+		stateAfterResume, readErr := db.For(statePath).Read()
+		if readErr != nil {
+			t.Fatalf("Read state after Resume[1](%s) failed: %v", phase, readErr)
+		}
+		if stateAfterResume.Sprint.Status != models.SprintStatusCompleted {
+			t.Fatalf("Resume[1](%s): expected transitions or COMPLETED sprint, got status %s",
+				phase, stateAfterResume.Sprint.Status)
+		}
+
 		res2, err := ops.Resume(projectDir, "test-human")
 		if err != nil {
 			t.Fatalf("Resume[2](%s) failed: %v", phase, err)
