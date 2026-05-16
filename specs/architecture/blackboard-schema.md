@@ -623,7 +623,7 @@ sprint:
     checkpoint_at: null
     ended: null
   status: IN_PROGRESS  # Sprint status: IN_PROGRESS, CHECKPOINT, COMPLETED, ABORTED (differs from goal status)
-  checkpoint_trigger: ""  # Why last checkpoint was created: PLANNING_COMPLETE, SPRINT_COMPLETE, or empty (manual/other)
+  checkpoint_trigger: ""  # Why last checkpoint was created: PLANNING_COMPLETE, MANY_TO_ONE_READY, SPRINT_COMPLETE, or empty (manual/other)
   metrics:
     tasks_done: 2
     tasks_in_progress: 1

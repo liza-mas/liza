@@ -316,21 +316,21 @@ artifact yourself and surfaces unflagged decisions agents baked in without marki
 
 | Action | Command | When                                                                                                 |
 |--------|---------|------------------------------------------------------------------------------------------------------|
-| Accept & resume | `liza resume` | Satisfied with planner output, continue the sprint, start next sprint                                |
+| Accept & resume | `liza resume` | Satisfied with planner output or fan-in readiness, continue the sprint, start next sprint            |
 | Amend & replan | Edit plan file, commit, then `liza replan` | Want to change a planner's output before proceeding                                                  |
-| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for the next role-pair from output[]. Automatically done in batch by `liza resume` |
+| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for the next role-pair from output or a ready cohort. Automatically done in batch by `liza resume` |
 | Pause for manual work | (no command) | Want to make manual changes before continuing                                                        |
 | Abort | `liza stop` | Want to stop entirely                                                                                |
 
-**`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent, `many-to-one`: all sibling tasks in a cohort must reach approved status, then one child is created linked to all parents — used by the `us-to-coding` transition to fan N approved user stories into one architecture task). Use `liza status` to see available transitions for tasks at terminal states. After `proceed`, run `liza resume` to start the next sprint.
+**`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent, `many-to-one`: all sibling tasks in a cohort must reach approved status, then one child is created linked to all parents — used by the `us-to-coding` transition to fan N approved user stories into one architecture task). Use `liza status` to see available transitions for tasks at terminal states. Transition checkpoints run this in batch during `liza resume`; manual use is for explicit one-off transition execution.
 
 For `per-subtask` output, `depends_on` names sibling output indexes (`"0"` means `output[0]`). Use `task_depends_on` when the generated child must depend on existing concrete task IDs outside the current `output[]`.
 
 #### Replanning at Checkpoint
 
-When a planning sprint checkpoints (trigger: `PLANNING_COMPLETE`), the planner's `output[]` entries represent the proposed task breakdown. The human may:
+When a transition checkpoint fires, the human reviews the proposed downstream work before child tasks are created. `PLANNING_COMPLETE` means planner `output[]` entries represent the proposed task breakdown; `MANY_TO_ONE_READY` means a fan-in cohort is ready to create its consolidated child task. The human may:
 
-1. **Accept the plan** — run `liza resume` to continue
+1. **Accept the transition** — run `liza resume` to continue
 2. **Amend the plan** — edit the plan markdown file, commit, then run `liza replan`
 
 `liza replan` invalidates the old planning task's output and creates a new planning task with the same role-pair and spec. The sprint returns to IN_PROGRESS and the planner agent picks up the new task, re-reads the amended plan, and regenerates `output[]`.

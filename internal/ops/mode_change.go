@@ -130,6 +130,15 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 		}, nil
 
 	case models.SprintStatusCheckpoint:
+		if models.IsTransitionCheckpointTrigger(s.Sprint.CheckpointTrigger) {
+			// Transition checkpoints are review gates for downstream task creation,
+			// even when every current planned task is terminal. Resume the same
+			// sprint so post-resume transition execution can add child work before
+			// sprint-completion handling runs.
+			s.Sprint.Status = models.SprintStatusInProgress
+			return "CHECKPOINT", nil, nil
+		}
+
 		allTerminal, termErr := allPlannedTasksTerminalForProject(s, projectRoot)
 		if termErr != nil {
 			return "", nil, termErr
@@ -191,8 +200,8 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 			return &PreconditionError{Reason: fmt.Sprintf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)}
 		}
 
-		wasPlanningCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint &&
-			s.Sprint.CheckpointTrigger == models.CheckpointTriggerPlanningComplete
+		wasTransitionCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint &&
+			models.IsTransitionCheckpointTrigger(s.Sprint.CheckpointTrigger)
 
 		resumedFrom = resumeSystemMode(s, timestamp, changedBy)
 
@@ -202,7 +211,7 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 		}
 		advanceResult = advResult
 		runTransitionsAfterResume = advResult != nil ||
-			(wasPlanningCheckpoint && s.Sprint.Status == models.SprintStatusInProgress)
+			(wasTransitionCheckpoint && s.Sprint.Status == models.SprintStatusInProgress)
 		if sprintDesc != "" {
 			if resumedFrom != "" {
 				resumedFrom += " and " + sprintDesc
@@ -221,11 +230,10 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 	// After sprint advance, execute available transitions so child tasks are
 	// created in the new sprint. This handles merged planning tasks with
 	// unconsumed output[] (e.g., epic → US writing, code plan → coding).
-	// Mid-sprint PLANNING_COMPLETE checkpoints use the same path so ready
-	// planning output can hand off to implementation without waiting for a
-	// separate orchestrator PreWork cycle. The human already reviewed by
-	// resuming from the checkpoint/COMPLETED state; transitions are idempotent
-	// via TransitionsExecuted.
+	// Mid-sprint transition checkpoints use the same path so ready planning or
+	// many-to-one output can hand off without waiting for a separate orchestrator
+	// PreWork cycle. The human already reviewed by resuming from the
+	// checkpoint/COMPLETED state; transitions are idempotent via TransitionsExecuted.
 	var transitionsExecuted int
 	var transitionError string
 	if runTransitionsAfterResume {
@@ -233,7 +241,7 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 			transitionError = err.Error()
 		} else {
 			transitionsExecuted = len(results)
-			if err := clearPlanningCheckpointTrigger(projectRoot); err != nil {
+			if err := clearTransitionCheckpointTrigger(projectRoot); err != nil {
 				transitionError = err.Error()
 			}
 		}
@@ -248,11 +256,11 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 	}, nil
 }
 
-func clearPlanningCheckpointTrigger(projectRoot string) error {
+func clearTransitionCheckpointTrigger(projectRoot string) error {
 	statePath := paths.New(projectRoot).StatePath()
 	blackboard := db.For(statePath)
 	return blackboard.Modify(func(s *models.State) error {
-		if s.Sprint.CheckpointTrigger == models.CheckpointTriggerPlanningComplete {
+		if models.IsTransitionCheckpointTrigger(s.Sprint.CheckpointTrigger) {
 			s.Sprint.CheckpointTrigger = ""
 		}
 		return nil

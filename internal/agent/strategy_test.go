@@ -828,11 +828,12 @@ func TestOrchestratorPreWork_PlanningComplete_Resumed(t *testing.T) {
 func TestOrchestratorPreWork_ManyToOneCohort(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 	state.Sprint.Status = models.SprintStatusInProgress
-	state.Sprint.CheckpointTrigger = "PLANNING_COMPLETE"
+	state.Sprint.CheckpointTrigger = models.CheckpointTriggerManyToOneReady
 
 	// Build m2o-ready tasks: MERGED us-writing-pair tasks sharing a parent, no output
 	parentID := "epic-1"
@@ -867,6 +868,14 @@ func TestOrchestratorPreWork_ManyToOneCohort(t *testing.T) {
 	}
 	if readState.Sprint.CheckpointTrigger != "" {
 		t.Errorf("CheckpointTrigger = %q after PreWork, want empty (gate should have fired and cleared it)", readState.Sprint.CheckpointTrigger)
+	}
+	childID := "epic-1-architecture"
+	child := readState.FindTask(childID)
+	if child == nil {
+		t.Fatalf("child task %q not found", childID)
+	}
+	if child.RolePair != "architecture-pair" {
+		t.Errorf("child role_pair = %q, want architecture-pair", child.RolePair)
 	}
 }
 

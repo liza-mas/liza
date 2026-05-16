@@ -160,6 +160,37 @@ func TestSprintCheckpoint_AutoDetectsPlanningComplete(t *testing.T) {
 	}
 }
 
+func TestSprintCheckpoint_AutoDetectsManyToOneReady(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Timeline.Started = now.Add(-1 * time.Hour)
+	state.Sprint.Timeline.Deadline = now.Add(5 * time.Hour)
+
+	cohort := makeManyToOneCohort("epic-plan-1", "us-writing-pair", models.TaskStatusMerged, "README.md", 2)
+	state.Tasks = []models.Task{cohort[0], cohort[1]}
+	state.Sprint.Scope.Planned = []string{cohort[0].ID, cohort[1].ID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := SprintCheckpoint(tmpDir, "")
+	if err != nil {
+		t.Fatalf("SprintCheckpoint() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.Sprint.CheckpointTrigger != models.CheckpointTriggerManyToOneReady {
+		t.Errorf("CheckpointTrigger = %q, want %q (auto-detect)", readState.Sprint.CheckpointTrigger, models.CheckpointTriggerManyToOneReady)
+	}
+}
+
 func TestSprintCheckpoint_AlreadyAtCheckpoint(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

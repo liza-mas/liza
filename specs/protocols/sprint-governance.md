@@ -74,6 +74,7 @@ Checkpoints are **mandatory human review points** unless auto-resume is enabled 
 | Trigger | Automatic? | `checkpoint_trigger` | Notes |
 |---------|------------|---------------------|-------|
 | Planning tasks merged with output | Yes | `PLANNING_COMPLETE` | Human reviews planning output before coding begins (skipped when auto-resume enabled) |
+| Many-to-one cohort ready | Yes | `MANY_TO_ONE_READY` | Human reviews fan-in readiness before the consolidated child task is created |
 | Sprint tasks complete | Yes | `SPRINT_COMPLETE` | Normal completion |
 | Sprint deadline reached | Yes | _(empty)_ | Time box enforced |
 | Circuit breaker fired | Yes | _(empty)_ | Systemic issue detected |
@@ -179,13 +180,13 @@ This is acceptable for v1 because:
 
 ### Planning Transition Gate
 
-When planning tasks (epic-planner, code-planner) are merged, the orchestrator checkpoints the sprint with `checkpoint_trigger: PLANNING_COMPLETE` instead of immediately creating child tasks. This gives the human a chance to review planning output before coding begins (unless auto-resume is enabled, in which case agents resume automatically).
+When planning tasks (epic-planner, code-planner) are merged, the orchestrator checkpoints the sprint with `checkpoint_trigger: PLANNING_COMPLETE` instead of immediately creating child tasks. When a many-to-one transition cohort is ready, it checkpoints with `checkpoint_trigger: MANY_TO_ONE_READY`. This gives the human a chance to review planning output or fan-in readiness before downstream work begins (unless auto-resume is enabled, in which case agents resume automatically).
 
 **Two-wake model:**
 
-1. **Wake 1:** Orchestrator detects merged planning tasks with unconsumed `output[]` → creates checkpoint with `trigger: PLANNING_COMPLETE` → agents pause (or auto-resume)
-2. **Human reviews** planning output in the sprint summary → runs `liza resume` (skipped when auto-resume is enabled)
-3. **Wake 2 (PreWork):** Orchestrator's PreWork checks `checkpoint_trigger == "PLANNING_COMPLETE" && status == IN_PROGRESS` with unconsumed output → executes `ExecuteAvailableTransitions` → child tasks created → doers can claim
+1. **Wake 1:** Orchestrator detects merged planning tasks with unconsumed `output[]` or a ready many-to-one cohort → creates checkpoint with `trigger: PLANNING_COMPLETE` or `MANY_TO_ONE_READY` → agents pause (or auto-resume)
+2. **Human reviews** planning output or fan-in readiness in the sprint summary → runs `liza resume` (skipped when auto-resume is enabled)
+3. **Wake 2 (PreWork):** Orchestrator's PreWork checks for a transition checkpoint with `status == IN_PROGRESS` and ready transitions → executes `ExecuteAvailableTransitions` → child tasks created → doers can claim
 
 **Gate correctness:**
 - Fresh sprint (trigger empty) → gate does not fire

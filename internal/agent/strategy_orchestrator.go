@@ -44,11 +44,11 @@ func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, con
 		return false, nil
 	}
 
-	// Gate: checkpoint was for planning completion AND sprint has been resumed.
-	// checkpoint_trigger == models.CheckpointTriggerPlanningComplete rules out manual/sprint-complete checkpoints.
+	// Gate: checkpoint was for a pipeline transition AND sprint has been resumed.
+	// The checkpoint trigger rules out manual/sprint-complete checkpoints.
 	// status == IN_PROGRESS means the human reviewed and resumed.
-	if state.Sprint.CheckpointTrigger != models.CheckpointTriggerPlanningComplete ||
-		state.Sprint.Status != models.SprintStatusInProgress {
+	if state.Sprint.Status != models.SprintStatusInProgress ||
+		!models.IsTransitionCheckpointTrigger(state.Sprint.CheckpointTrigger) {
 		return false, nil
 	}
 
@@ -155,8 +155,11 @@ func selfHealCheckpoint(projectRoot string, trigger OrchestratorWakeTrigger) boo
 	}
 
 	triggerStr := ""
-	if trigger == WakeTriggerPlanningComplete {
+	switch trigger {
+	case WakeTriggerPlanningComplete:
 		triggerStr = models.CheckpointTriggerPlanningComplete
+	case WakeTriggerManyToOneReady:
+		triggerStr = models.CheckpointTriggerManyToOneReady
 	}
 	_, err := ops.SprintCheckpoint(projectRoot, triggerStr)
 	if err != nil {

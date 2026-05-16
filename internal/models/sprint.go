@@ -15,8 +15,16 @@ const (
 // CheckpointTrigger values record why a checkpoint was created.
 const (
 	CheckpointTriggerPlanningComplete = "PLANNING_COMPLETE"
+	CheckpointTriggerManyToOneReady   = "MANY_TO_ONE_READY"
 	CheckpointTriggerSprintComplete   = "SPRINT_COMPLETE"
 )
+
+// IsTransitionCheckpointTrigger reports whether a checkpoint should execute
+// pending pipeline transitions after human resume.
+func IsTransitionCheckpointTrigger(trigger string) bool {
+	return trigger == CheckpointTriggerPlanningComplete ||
+		trigger == CheckpointTriggerManyToOneReady
+}
 
 // IsValid checks if the sprint status is valid
 func (ss SprintStatus) IsValid() bool {

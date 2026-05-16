@@ -107,15 +107,15 @@ When a sprint checkpoints (status: CHECKPOINT), all agents pause. The human deci
 
 | Action | Command | When |
 |--------|---------|------|
-| Accept & resume | `liza resume` | Satisfied with output, continue |
+| Accept & resume | `liza resume` | Satisfied with planner output or fan-in readiness, continue |
 | Amend & replan | Edit plan, commit, `liza replan` | Want to change planner output |
-| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks for next pair (auto-done by `liza resume` in batch) |
+| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks from output or a ready cohort (auto-done by `liza resume` in batch) |
 | Pause for manual work | (no command) | Make manual changes first |
 | Abort | `liza stop` | Stop entirely |
 
 ### Replanning
 
-When a planning sprint checkpoints (trigger: `PLANNING_COMPLETE`), the planner's `output[]` represents the proposed task breakdown.
+When a transition checkpoint fires, the human reviews proposed downstream work before child tasks are created. `PLANNING_COMPLETE` means planner `output[]` represents the proposed task breakdown; `MANY_TO_ONE_READY` means a fan-in cohort is ready to create its consolidated child task.
 
 ```bash
 # Typical replan workflow

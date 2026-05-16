@@ -22,7 +22,7 @@ type SprintCheckpointResult struct {
 
 // SprintCheckpoint transitions sprint status to CHECKPOINT, causing agents to pause,
 // and writes a sprint summary report. The trigger parameter records why the checkpoint
-// was created (e.g. "PLANNING_COMPLETE", "SPRINT_COMPLETE", or "" for manual). No terminal I/O.
+// was created (e.g. "PLANNING_COMPLETE", "MANY_TO_ONE_READY", "SPRINT_COMPLETE", or "" for manual). No terminal I/O.
 func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResult, error) {
 	lizaPaths := paths.New(projectRoot)
 	statePath := lizaPaths.StatePath()
@@ -44,7 +44,7 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 		return nil, &PreconditionError{Reason: "cannot checkpoint: sprint is ABORTED"}
 	}
 
-	// Auto-detect PLANNING_COMPLETE when trigger is empty.
+	// Auto-detect transition checkpoints when trigger is empty.
 	// This makes the system resilient to LLM omission of the trigger parameter.
 	if trigger == "" {
 		if detCtx, detErr := LoadDetectionContext(projectRoot); detErr == nil {
@@ -54,6 +54,9 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 					trigger = models.CheckpointTriggerPlanningComplete
 					break
 				}
+			}
+			if trigger == "" && CountReadyManyToOneCohorts(state, detCtx.ManyToOneTransitions) > 0 {
+				trigger = models.CheckpointTriggerManyToOneReady
 			}
 		}
 		// If LoadDetectionContext fails (no pipeline config), trigger stays empty.
