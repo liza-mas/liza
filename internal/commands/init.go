@@ -44,6 +44,7 @@ var InitAgentRepoSymlinks = map[string]string{
 	"claude": "CLAUDE.md",
 	"codex":  "AGENTS.md",
 	"gemini": "GEMINI.md",
+	"pi":     "AGENTS.md",
 }
 
 // globalFallbacks maps repo-root filenames to their CLI global fallback paths
@@ -100,6 +101,8 @@ func InitPairingCommand(params InitPairingParams) error {
 			hasMistral = true
 		case "gemini":
 			// handled by repoRootNames above
+		case "pi":
+			// handled by repoRootNames above; pi auto-discovers AGENTS.md
 		default:
 			return fmt.Errorf("unknown agent: %s", agent)
 		}

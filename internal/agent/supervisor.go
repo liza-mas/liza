@@ -608,6 +608,15 @@ func (d *DefaultCLIExecutor) Execute(ctx context.Context, cliName string, agentI
 			args = append(args, "--verbose", "--output-format", "stream-json")
 		}
 		cmd = exec.CommandContext(ctx, "kimi", args...)
+	case "pi":
+		args := []string{"-p"}
+		if !useStdin {
+			args = append(args, prompt)
+		}
+		if d.outputsDir != "" {
+			args = append(args, "--mode", "json")
+		}
+		cmd = exec.CommandContext(ctx, "pi", args...)
 	default:
 		return CLIExecutionResult{}, fmt.Errorf("unknown CLI: %s", cliName)
 	}

@@ -341,7 +341,7 @@ Reports whether any changes were made.`,
 }
 
 // agentFlagNames is the canonical list of supported agent flag names.
-var agentFlagNames = []string{"claude", "codex", "gemini", "mistral"}
+var agentFlagNames = []string{"claude", "codex", "gemini", "mistral", "pi"}
 
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
@@ -404,6 +404,7 @@ func init() {
 	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md and configure repo hooks")
 	initCmd.Flags().Bool("gemini", false, "create GEMINI.md symlink to ~/.liza/CORE.md")
 	initCmd.Flags().Bool("mistral", false, "set up ~/.vibe/ for Liza contract")
+	initCmd.Flags().Bool("pi", false, "create AGENTS.md symlink to ~/.liza/CORE.md for pi CLI")
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")
