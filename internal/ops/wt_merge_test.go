@@ -863,6 +863,13 @@ func TestMergeWorktree_RejectsFastForwardDeletingReferencedArtifactBeforeRefUpda
 	if err == nil {
 		t.Fatal("MergeWorktree() error = nil, want candidate artifact rejection")
 	}
+	var intErr *IntegrationFailedError
+	if !errors.As(err, &intErr) {
+		t.Fatalf("MergeWorktree() error = %T %v, want *IntegrationFailedError", err, err)
+	}
+	if intErr.Reason != IntegrationReasonStateInvalid {
+		t.Fatalf("IntegrationFailedError.Reason = %q, want %q", intErr.Reason, IntegrationReasonStateInvalid)
+	}
 	assertCandidateArtifactError(t, err, scenario.artifactRef, "arch_ref", "downstream-code-plan")
 	assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
 
@@ -871,8 +878,14 @@ func TestMergeWorktree_RejectsFastForwardDeletingReferencedArtifactBeforeRefUpda
 	if task == nil {
 		t.Fatal("Task not found after rejected merge")
 	}
-	if task.Status != models.TaskStatusApproved {
-		t.Fatalf("Task status = %v, want CODE_APPROVED because guard rejected before post-merge transition", task.Status)
+	if task.Status != models.TaskStatusIntegrationFailed {
+		t.Fatalf("Task status = %v, want INTEGRATION_FAILED", task.Status)
+	}
+	detail, _ := latestIntegrationFailureDiagnostic(t, task)["detail"].(string)
+	for _, want := range []string{scenario.artifactRef, "arch_ref", "downstream-code-plan"} {
+		if !strings.Contains(detail, want) {
+			t.Fatalf("diagnostic detail = %q, want %q", detail, want)
+		}
 	}
 }
 

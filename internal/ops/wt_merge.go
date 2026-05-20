@@ -73,13 +73,22 @@ type IntegrationFailedError struct {
 	Reason        string
 	TestOutput    string // non-empty when failure is from integration tests
 	RollbackError error  // non-nil if rollback (ResetHard) also failed — integration branch may contain failing code
+	Cause         error  // non-nil when the integration failure wraps an underlying cause
 }
 
 func (e *IntegrationFailedError) Error() string {
-	if e.RollbackError != nil {
-		return fmt.Sprintf("integration failed: %s (rollback also failed: %v)", e.Reason, e.RollbackError)
+	msg := fmt.Sprintf("integration failed: %s", e.Reason)
+	if e.Cause != nil {
+		msg = fmt.Sprintf("%s: %v", msg, e.Cause)
 	}
-	return fmt.Sprintf("integration failed: %s", e.Reason)
+	if e.RollbackError != nil {
+		return fmt.Sprintf("%s (rollback also failed: %v)", msg, e.RollbackError)
+	}
+	return msg
+}
+
+func (e *IntegrationFailedError) Unwrap() error {
+	return e.Cause
 }
 
 // MergeResult contains the outcome of a successful worktree merge.
@@ -283,8 +292,23 @@ func rollbackMergedCommit(gitWrapper *git.Git, integrationRef, preMergeHEAD, mer
 
 func buildArtifactGuardHook(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git) func(candidateTreeish string) error {
 	return func(candidateTreeish string) error {
-		return validateCandidateArtifactRefsWithFreshState(bb.Read, projectRoot, gitWrapper, candidateTreeish)
+		if err := validateCandidateArtifactRefsWithFreshState(bb.Read, projectRoot, gitWrapper, candidateTreeish); err != nil {
+			return &candidateArtifactGuardError{err: err}
+		}
+		return nil
 	}
+}
+
+type candidateArtifactGuardError struct {
+	err error
+}
+
+func (e *candidateArtifactGuardError) Error() string {
+	return e.err.Error()
+}
+
+func (e *candidateArtifactGuardError) Unwrap() error {
+	return e.err
 }
 
 func validateCandidateArtifactRefsWithFreshState(
@@ -539,6 +563,14 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 	artifactGuardHook := buildArtifactGuardHook(bb, projectRoot, gitWrapper)
 	outcome, err := performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, artifactGuardHook)
 	if err != nil {
+		var artifactErr *candidateArtifactGuardError
+		if errors.As(err, &artifactErr) {
+			diagnostic := integrationFailureDiagnosticWithDetail(IntegrationReasonStateInvalid, err.Error(), "", "", nil)
+			if updateErr := markIntegrationFailedWithDiagnostic(bb, taskID, agentID, IntegrationReasonStateInvalid, "", pb, diagnostic); updateErr != nil {
+				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
+			}
+			return nil, &IntegrationFailedError{Reason: IntegrationReasonStateInvalid, Cause: err}
+		}
 		return nil, err
 	}
 	if outcome.conflict {
