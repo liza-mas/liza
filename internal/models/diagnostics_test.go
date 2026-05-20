@@ -240,6 +240,16 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			wantContains: []string{"No claimable tasks", "1 blocked by dependencies"},
 		},
 		{
+			name: "explicit blocked tasks reported",
+			state: &State{
+				Tasks: []Task{
+					{ID: "t1", Status: TaskStatusBlocked, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t2", Status: TaskStatusBlocked, Type: TaskTypeCoding, RolePair: "coding-pair"},
+				},
+			},
+			wantContains: []string{"No claimable tasks", "2 blocked tasks"},
+		},
+		{
 			name: "in-progress tasks reported",
 			state: &State{
 				Tasks: []Task{
@@ -271,15 +281,17 @@ func TestGetCoderWorkDiagnostics(t *testing.T) {
 			wantContains: []string{"Found 1 claimable task(s)"},
 		},
 		{
-			name: "both blocked and in-progress reported",
+			name: "blocked by dependencies, explicit blocked, and in-progress reported",
 			state: &State{
 				Tasks: []Task{
 					{ID: "t1", Status: TaskStatusReady, Type: TaskTypeCoding, RolePair: "coding-pair", DependsOn: []string{"t3"}},
 					{ID: "t2", Status: TaskStatusImplementing, Type: TaskTypeCoding, RolePair: "coding-pair"},
 					{ID: "t3", Status: TaskStatusReadyForReview, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t4", Status: TaskStatusBlocked, Type: TaskTypeCoding, RolePair: "coding-pair"},
+					{ID: "t5", Status: TaskStatusBlocked, Type: TaskTypeCoding, RolePair: "coding-pair"},
 				},
 			},
-			wantContains: []string{"No claimable tasks", "1 blocked by dependencies", "2 in progress"},
+			wantContains: []string{"No claimable tasks", "2 blocked tasks", "1 blocked by dependencies", "2 in progress"},
 		},
 	}
 

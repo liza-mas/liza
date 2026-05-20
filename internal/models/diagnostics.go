@@ -39,14 +39,19 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 	}
 
 	blockedByDeps := 0
+	blocked := 0
 	inProgress := 0
 
 	depResolver := NewDependencyResolver(state)
 
 	for _, task := range state.Tasks {
+		if task.Status == TaskStatusBlocked {
+			blocked++
+		}
+
 		// Pipeline path: use resolver to classify statuses dynamically.
 		if task.RolePair != "" && pr != nil {
-			if isBlockedByDepsPipeline(&task, pr, depResolver) {
+			if IsBlockedByDepsPipeline(&task, pr, depResolver) {
 				blockedByDeps++
 			}
 			if isInProgressPipeline(&task, pr) {
@@ -80,6 +85,9 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 	}
 
 	parts := []string{"No claimable tasks"}
+	if blocked > 0 {
+		parts = append(parts, fmt.Sprintf("%d blocked tasks", blocked))
+	}
 	if blockedByDeps > 0 {
 		parts = append(parts, fmt.Sprintf("%d blocked by dependencies", blockedByDeps))
 	}
@@ -90,9 +98,9 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 	return strings.Join(parts, "; ")
 }
 
-// isBlockedByDepsPipeline checks if a pipeline task is in an initial/rejected status
+// IsBlockedByDepsPipeline checks if a pipeline task is in an initial/rejected status
 // with unsatisfied dependencies.
-func isBlockedByDepsPipeline(task *Task, pr PipelineResolver, depResolver *DependencyResolver) bool {
+func IsBlockedByDepsPipeline(task *Task, pr PipelineResolver, depResolver *DependencyResolver) bool {
 	initial, err := pr.InitialStatus(task.RolePair)
 	if err != nil {
 		return false

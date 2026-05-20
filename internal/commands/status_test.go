@@ -102,8 +102,35 @@ func TestBuildStatusData(t *testing.T) {
 				if data.Tasks.BlockedByDeps != 2 {
 					t.Errorf("expected 2 tasks blocked by deps, got %d", data.Tasks.BlockedByDeps)
 				}
+				if data.Tasks.Blocked != 0 {
+					t.Errorf("expected 0 explicit blocked tasks, got %d", data.Tasks.Blocked)
+				}
 				if data.Tasks.Claimable != 0 {
 					t.Errorf("expected 0 claimable tasks (all blocked), got %d", data.Tasks.Claimable)
+				}
+			},
+		},
+		{
+			name: "explicit blocked tasks counted separately from dependency blockers",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				blocked1 := testhelpers.BuildTaskByStatus("blocked-1", models.TaskStatusBlocked, now)
+				blocked2 := testhelpers.BuildTaskByStatus("blocked-2", models.TaskStatusBlocked, now)
+				blockedByDep := testhelpers.BuildTaskByStatus("blocked-by-dep", models.TaskStatusReady, now)
+				blockedByDep.DependsOn = []string{"missing-dep"}
+				state.Tasks = []models.Task{blocked1, blocked2, blockedByDep}
+				return state
+			}(),
+			detailed: false,
+			validate: func(t *testing.T, data statusData) {
+				if data.Tasks.Blocked != 2 {
+					t.Errorf("expected 2 explicit blocked tasks, got %d", data.Tasks.Blocked)
+				}
+				if data.Tasks.BlockedByDeps != 1 {
+					t.Errorf("expected 1 task blocked by deps, got %d", data.Tasks.BlockedByDeps)
+				}
+				if data.Tasks.Claimable != 0 {
+					t.Errorf("expected 0 claimable tasks, got %d", data.Tasks.Claimable)
 				}
 			},
 		},
@@ -859,12 +886,13 @@ func TestFormatStatusDashboard(t *testing.T) {
 				},
 				Config: configStatus{Mode: "RUNNING"},
 				Tasks: taskStatus{
-					Total:         3,
-					Active:        3,
+					Total:         5,
+					Active:        5,
 					Terminal:      0,
-					ByStatus:      map[string]int{"DRAFT_CODE": 3},
+					ByStatus:      map[string]int{"BLOCKED": 2, "DRAFT_CODE": 3},
 					Claimable:     0,
 					Reviewable:    0,
+					Blocked:       2,
 					BlockedByDeps: 3,
 				},
 				Agents:            []agentStatus{},
@@ -875,6 +903,7 @@ func TestFormatStatusDashboard(t *testing.T) {
 				},
 			},
 			expectSections: []string{
+				"Blocked: 2 tasks",
 				"Blocked by dependencies: 3 tasks",
 			},
 		},
@@ -1041,6 +1070,27 @@ func TestWriteTasksSection(t *testing.T) {
 				"\nClaimable: 0 tasks\n" +
 				"Reviewable: 0 tasks\n" +
 				"Blocked by dependencies: 2 tasks\n" +
+				"\n",
+		},
+		{
+			name: "blocked line appears separately from dependency blockers",
+			tasks: taskStatus{
+				Total: 5, Active: 5, Terminal: 0,
+				ByStatus:      map[string]int{"BLOCKED": 2, "DRAFT_CODE": 3},
+				Claimable:     0,
+				Reviewable:    0,
+				Blocked:       2,
+				BlockedByDeps: 3,
+			},
+			expect: "=== TASKS ===\n" +
+				"Total: 5 (5 active, 0 terminal)\n" +
+				"\nBy Status:\n" +
+				"  BLOCKED: 2\n" +
+				"  DRAFT_CODE: 3\n" +
+				"\nClaimable: 0 tasks\n" +
+				"Reviewable: 0 tasks\n" +
+				"Blocked: 2 tasks\n" +
+				"Blocked by dependencies: 3 tasks\n" +
 				"\n",
 		},
 		{

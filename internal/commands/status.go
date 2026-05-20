@@ -96,6 +96,7 @@ type taskStatus struct {
 	ByStatus      map[string]int `json:"by_status"`
 	Claimable     int            `json:"claimable"`
 	Reviewable    int            `json:"reviewable"`
+	Blocked       int            `json:"blocked"`
 	BlockedByDeps int            `json:"blocked_by_deps"`
 }
 
@@ -240,15 +241,13 @@ func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus
 		ByStatus: make(map[string]int),
 	}
 
-	mergedIDs := make(map[string]bool)
-	for _, task := range state.Tasks {
-		if task.Status == models.TaskStatusMerged {
-			mergedIDs[task.ID] = true
-		}
-	}
+	depResolver := models.NewDependencyResolver(state)
 
 	for _, task := range state.Tasks {
 		ts.ByStatus[string(task.Status)]++
+		if task.Status == models.TaskStatusBlocked {
+			ts.Blocked++
+		}
 
 		if task.Status.IsTerminal() {
 			ts.Terminal++
@@ -256,19 +255,8 @@ func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus
 			ts.Active++
 		}
 
-		if task.Status == models.TaskStatusReady ||
-			task.Status == models.TaskStatusRejected ||
-			task.Status == models.TaskStatusIntegrationFailed {
-			hasUnsatisfiedDeps := false
-			for _, depID := range task.DependsOn {
-				if !mergedIDs[depID] {
-					hasUnsatisfiedDeps = true
-					break
-				}
-			}
-			if hasUnsatisfiedDeps {
-				ts.BlockedByDeps++
-			}
+		if taskBlockedByDependencies(&task, pr, depResolver) {
+			ts.BlockedByDeps++
 		}
 	}
 
@@ -276,6 +264,21 @@ func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus
 	ts.Reviewable = models.CountReviewableTasks(state, models.RoleCodeReviewer, pr)
 
 	return ts
+}
+
+func taskBlockedByDependencies(task *models.Task, pr models.PipelineResolver, depResolver *models.DependencyResolver) bool {
+	if task == nil {
+		return false
+	}
+	if task.RolePair != "" && pr != nil {
+		return models.IsBlockedByDepsPipeline(task, pr, depResolver)
+	}
+	if task.Status != models.TaskStatusReady &&
+		task.Status != models.TaskStatusRejected &&
+		task.Status != models.TaskStatusIntegrationFailed {
+		return false
+	}
+	return len(depResolver.UnmetDependencies(task)) > 0
 }
 
 func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHandoffStatus {
@@ -572,6 +575,9 @@ func writeTasksSection(b *strings.Builder, tasks taskStatus) {
 
 	fmt.Fprintf(b, "\nClaimable: %d tasks\n", tasks.Claimable)
 	fmt.Fprintf(b, "Reviewable: %d tasks\n", tasks.Reviewable)
+	if tasks.Blocked > 0 {
+		fmt.Fprintf(b, "Blocked: %d tasks\n", tasks.Blocked)
+	}
 	if tasks.BlockedByDeps > 0 {
 		fmt.Fprintf(b, "Blocked by dependencies: %d tasks\n", tasks.BlockedByDeps)
 	}
