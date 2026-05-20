@@ -9,7 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
-	"github.com/liza-mas/liza/internal/gitenv"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statehygiene"
@@ -17,6 +17,7 @@ import (
 
 const artifactRefMultipleRefsCause = "multiple_refs_not_supported"
 const artifactRefNotFoundCause = "file_not_found"
+const artifactRefInvalidModeCause = "invalid_artifact_mode"
 const artifactRefEmptyPathCause = "empty_ref_path"
 const artifactRefPathTraversalCause = "path_traversal_outside_repo"
 const artifactRefAbsoluteOutsideRepoCause = "absolute_path_outside_repo"
@@ -26,6 +27,7 @@ type ArtifactRefError struct {
 	Field       string
 	Value       string
 	Path        string
+	Mode        string
 	TaskID      string
 	OutputIndex *int
 	Cause       string
@@ -45,6 +47,16 @@ func (e *ArtifactRefError) Error() string {
 		return formatArtifactRefError(field, "points outside repository", e.Value, e.TaskID, e.OutputIndex)
 	case artifactRefAbsoluteOutsideRepoCause:
 		return formatArtifactRefError(field, "absolute path outside repository", e.Value, e.TaskID, e.OutputIndex)
+	case artifactRefInvalidModeCause:
+		value := e.Value
+		if e.Path != "" {
+			value = e.Path
+		}
+		reason := "is not a regular file"
+		if e.Mode != "" {
+			reason += fmt.Sprintf(" (mode %s)", e.Mode)
+		}
+		return formatArtifactRefError(field, reason, value, e.TaskID, e.OutputIndex)
 	default:
 		value := e.Value
 		if e.Path != "" {
@@ -65,6 +77,9 @@ func (e *ArtifactRefError) SafeDetails() map[string]any {
 	}
 	if e.Path != "" {
 		details["path"] = e.Path
+	}
+	if e.Mode != "" {
+		details["mode"] = e.Mode
 	}
 	if e.OutputIndex != nil {
 		details["output_index"] = *e.OutputIndex
@@ -241,8 +256,18 @@ func ValidateArtifactRefs(state *models.State, projectRoot string) error {
 }
 
 func checkCollectedArtifactRefFileExists(projectRoot string, ref ArtifactRef, integrationBranch string) error {
-	if artifactRefFileExists(projectRoot, ref.Path, integrationBranch) {
+	if exists, invalidMode := artifactRefFileExists(projectRoot, ref.Path, integrationBranch); exists {
 		return nil
+	} else if invalidMode != "" {
+		return &ArtifactRefError{
+			Field:       ref.Owner.Field,
+			Value:       ref.Raw,
+			Path:        ref.Path,
+			Mode:        invalidMode,
+			TaskID:      ref.Owner.TaskID,
+			OutputIndex: cloneInt(ref.Owner.OutputIndex),
+			Cause:       artifactRefInvalidModeCause,
+		}
 	}
 	return &ArtifactRefError{
 		Field:       ref.Owner.Field,
@@ -270,40 +295,80 @@ func checkArtifactRefFileExists(projectRoot, field, ref, integrationBranch, task
 	if !filepath.IsAbs(refPath) {
 		refPath = filepath.Join(projectRoot, refFile)
 	}
-	if _, err := os.Stat(refPath); err == nil {
+	if exists, invalidMode := artifactRefWorkingTreeFileExists(refPath); exists {
 		return nil
+	} else if invalidMode != "" {
+		return &ArtifactRefError{
+			Field:  field,
+			Value:  ref,
+			Path:   refFile,
+			Mode:   invalidMode,
+			TaskID: taskID,
+			Cause:  artifactRefInvalidModeCause,
+		}
 	}
-	// Fallback: file may exist on integration branch but not on the repo-root
-	// filesystem (e.g. merged by a sibling worktree). Try git cat-file -e.
-	// If git is not on PATH or the branch doesn't exist, this falls through
-	// gracefully to the "file not found" error below.
 	if integrationBranch != "" && projectRoot != "" && !filepath.IsAbs(refFile) {
-		if _, err := gitenv.CombinedOutput(projectRoot, "cat-file", "-e", integrationBranch+":"+refFile); err == nil {
+		if exists, invalidMode := artifactRefIntegrationFileExists(projectRoot, integrationBranch, refFile); exists {
 			return nil
+		} else if invalidMode != "" {
+			return &ArtifactRefError{
+				Field:  field,
+				Value:  ref,
+				Path:   refFile,
+				Mode:   invalidMode,
+				TaskID: taskID,
+				Cause:  artifactRefInvalidModeCause,
+			}
 		}
 	}
 	return &ArtifactRefError{
 		Field:  field,
 		Value:  ref,
+		Path:   refFile,
 		TaskID: taskID,
 		Cause:  artifactRefNotFoundCause,
 	}
 }
 
-func artifactRefFileExists(projectRoot, repoRelativePath, integrationBranch string) bool {
-	refPath := repoRelativePath
-	if !filepath.IsAbs(refPath) {
-		refPath = filepath.Join(projectRoot, filepath.FromSlash(repoRelativePath))
-	}
-	if _, err := os.Stat(refPath); err == nil {
-		return true
-	}
-	if integrationBranch != "" && projectRoot != "" && !filepath.IsAbs(repoRelativePath) {
-		if _, err := gitenv.CombinedOutput(projectRoot, "cat-file", "-e", integrationBranch+":"+repoRelativePath); err == nil {
-			return true
+func artifactRefFileExists(projectRoot, repoRelativePath, integrationBranch string) (exists bool, invalidMode string) {
+	var workingTreeMode string
+	if projectRoot != "" {
+		refPath := filepath.Join(projectRoot, filepath.FromSlash(repoRelativePath))
+		if exists, invalidMode := artifactRefWorkingTreeFileExists(refPath); exists {
+			return true, ""
+		} else if invalidMode != "" {
+			workingTreeMode = invalidMode
 		}
 	}
-	return false
+	if integrationBranch != "" && projectRoot != "" {
+		if exists, invalidMode := artifactRefIntegrationFileExists(projectRoot, integrationBranch, repoRelativePath); exists {
+			return true, ""
+		} else if invalidMode != "" {
+			return false, invalidMode
+		}
+	}
+	return false, workingTreeMode
+}
+
+func artifactRefWorkingTreeFileExists(path string) (exists bool, invalidMode string) {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode().IsRegular() {
+			return true, ""
+		}
+		return false, info.Mode().String()
+	}
+	return false, ""
+}
+
+func artifactRefIntegrationFileExists(projectRoot, integrationBranch, repoRelativePath string) (exists bool, invalidMode string) {
+	mode, present, err := git.New(projectRoot).TreePathMode(integrationBranch, repoRelativePath)
+	if err != nil || !present {
+		return false, ""
+	}
+	if isRegularArtifactGitMode(mode) {
+		return true, ""
+	}
+	return false, mode
 }
 
 // buildTaskIDSet creates a lookup set of all task IDs for O(1) existence

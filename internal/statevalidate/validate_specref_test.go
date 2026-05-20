@@ -330,6 +330,87 @@ func TestValidateArtifactRefs_MergedTaskMissingRefStillFails(t *testing.T) {
 	}
 }
 
+func TestValidateArtifactRefs_RejectsNonRegularArtifacts(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(t *testing.T, repoDir string)
+		ref       string
+	}{
+		{
+			name: "working tree directory",
+			configure: func(t *testing.T, repoDir string) {
+				t.Helper()
+				if err := os.MkdirAll(filepath.Join(repoDir, "specs", "dir-artifact"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+			ref: "specs/dir-artifact",
+		},
+		{
+			name: "working tree symlink",
+			configure: func(t *testing.T, repoDir string) {
+				t.Helper()
+				target := filepath.Join(repoDir, "specs", "target.md")
+				if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(target, []byte("# target\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("target.md", filepath.Join(repoDir, "specs", "linked.md")); err != nil {
+					t.Skipf("symlink creation unsupported: %v", err)
+				}
+			},
+			ref: "specs/linked.md",
+		},
+		{
+			name: "integration branch directory",
+			configure: func(t *testing.T, repoDir string) {
+				t.Helper()
+			},
+			ref: "specs",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
+			tt.configure(t, repoDir)
+			state := &models.State{
+				Config: models.Config{IntegrationBranch: "integration"},
+				Tasks: []models.Task{
+					{
+						ID:      "task-1",
+						Status:  models.TaskStatusMerged,
+						ArchRef: tt.ref,
+					},
+				},
+			}
+
+			err := ValidateArtifactRefs(state, repoDir)
+			if err == nil {
+				t.Fatal("ValidateArtifactRefs returned nil error")
+			}
+			var refErr *ArtifactRefError
+			if !errors.As(err, &refErr) {
+				t.Fatalf("error type = %T, want *ArtifactRefError", err)
+			}
+			if refErr.Cause != artifactRefInvalidModeCause {
+				t.Fatalf("Cause = %q, want %q; error = %v", refErr.Cause, artifactRefInvalidModeCause, err)
+			}
+			if refErr.Mode == "" {
+				t.Fatalf("Mode = empty, want invalid artifact mode detail")
+			}
+			if got := refErr.SafeDetails()["mode"]; got != refErr.Mode {
+				t.Fatalf("SafeDetails mode = %v, want %q", got, refErr.Mode)
+			}
+			if !strings.Contains(err.Error(), refErr.Mode) {
+				t.Fatalf("Error = %q, want mode %q", err.Error(), refErr.Mode)
+			}
+		})
+	}
+}
+
 func TestValidateTaskInvariants_IgnoresRetiredTaskArtifactRefs(t *testing.T) {
 	repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
 	now := time.Now().UTC()

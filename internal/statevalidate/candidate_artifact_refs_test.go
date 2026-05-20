@@ -119,6 +119,7 @@ func TestValidateCandidateArtifactRefsRejectsMissingAndNonRegularModes(t *testin
 			assertCandidateArtifactRefError(t, err, candidateErrorWant{
 				cause:       tt.wantCause,
 				path:        "specs/artifact.md",
+				value:       "specs/artifact.md#section",
 				mode:        tt.wantMode,
 				text:        tt.wantText,
 				requirement: tt.requirement,
@@ -156,6 +157,32 @@ func TestValidateCandidateArtifactRefsReportsOwnersDeterministically(t *testing.
 		owners: []ownerWant{
 			{field: "arch_ref", taskID: "task-a"},
 			{field: "output[0].plan_ref", taskID: "task-b", outputIndex: &outputIndex},
+		},
+	})
+}
+
+func TestValidateCandidateArtifactRefsIncludesRawRefValue(t *testing.T) {
+	refs := []ArtifactRef{
+		{
+			Path: "specs/a.md",
+			Raw:  "specs/a.md#flow",
+			Owner: ArtifactRefOwner{
+				Field:  "arch_ref",
+				TaskID: "task-a",
+			},
+		},
+	}
+	lookup := &fakeCandidateTreeLookup{}
+
+	err := ValidateCandidateArtifactRefs("candidate", refs, lookup)
+	assertCandidateArtifactRefError(t, err, candidateErrorWant{
+		cause:       candidateArtifactRefMissingCause,
+		path:        "specs/a.md",
+		value:       "specs/a.md#flow",
+		requirement: "FR-001-11 diagnostics preserve raw ref values",
+		text:        []string{"specs/a.md", "specs/a.md#flow", "arch_ref", "task-a"},
+		owners: []ownerWant{
+			{field: "arch_ref", taskID: "task-a"},
 		},
 	})
 }
@@ -260,7 +287,7 @@ func assertCandidateArtifactRefError(t *testing.T, err error, want candidateErro
 	if candidateErr.Path != want.path {
 		t.Errorf("%s: Path = %q, want %q", want.requirement, candidateErr.Path, want.path)
 	}
-	if candidateErr.Value != want.value {
+	if want.value != "" && candidateErr.Value != want.value {
 		t.Errorf("%s: Value = %q, want %q", want.requirement, candidateErr.Value, want.value)
 	}
 	if candidateErr.Mode != want.mode {

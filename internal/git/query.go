@@ -12,7 +12,7 @@ func (g *Git) TreePathMode(treeish, path string) (mode string, present bool, err
 		return "", false, fmt.Errorf("tree path mode requires a non-empty path")
 	}
 
-	output, err := g.exec("ls-tree", "--full-tree", "-z", treeish, "--", path)
+	output, err := g.exec("ls-tree", "--full-tree", "-z", treeish, "--", literalPathspec(path))
 	if err != nil {
 		return "", false, fmt.Errorf("failed to query tree path mode for %q at %q: %w", path, treeish, err)
 	}
@@ -30,6 +30,10 @@ func (g *Git) TreePathMode(treeish, path string) (mode string, present bool, err
 		return "", false, fmt.Errorf("malformed tree entry for %q at %q: %q", path, treeish, records[0])
 	}
 	return mode, true, nil
+}
+
+func literalPathspec(path string) string {
+	return ":(literal)" + path
 }
 
 // CalculateDrift returns the number of commits between baseCommit and targetBranch

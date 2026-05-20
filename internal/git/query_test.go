@@ -134,6 +134,12 @@ func TestTreePathMode(t *testing.T) {
 			path:        "missing.txt",
 			wantPresent: false,
 		},
+		{
+			name:        "pathspec magic treated literally",
+			requirement: "artifact refs are exact repo-relative paths",
+			path:        ":(top)README.md",
+			wantPresent: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -117,22 +117,27 @@ func ValidateCandidateArtifactRefs(candidateTreeish string, refs []ArtifactRef, 
 			return fmt.Errorf("candidate artifact ref lookup failed for %q at %q: %w", ref.Path, candidateTreeish, err)
 		}
 		if !present {
-			return newCandidateArtifactRefError(candidateTreeish, ref.Path, "", candidateArtifactRefMissingCause, refs)
+			return newCandidateArtifactRefError(candidateTreeish, ref, "", candidateArtifactRefMissingCause, refs)
 		}
-		if mode != "100644" && mode != "100755" {
-			return newCandidateArtifactRefError(candidateTreeish, ref.Path, mode, candidateArtifactRefInvalidModeCause, refs)
+		if !isRegularArtifactGitMode(mode) {
+			return newCandidateArtifactRefError(candidateTreeish, ref, mode, candidateArtifactRefInvalidModeCause, refs)
 		}
 	}
 	return nil
 }
 
-func newCandidateArtifactRefError(candidateTreeish, path, mode, cause string, refs []ArtifactRef) error {
+func isRegularArtifactGitMode(mode string) bool {
+	return mode == "100644" || mode == "100755"
+}
+
+func newCandidateArtifactRefError(candidateTreeish string, ref ArtifactRef, mode, cause string, refs []ArtifactRef) error {
 	return &CandidateArtifactRefError{
 		CandidateTreeish: candidateTreeish,
-		Path:             path,
+		Path:             ref.Path,
+		Value:            ref.Raw,
 		Mode:             mode,
 		Cause:            cause,
-		Owners:           candidateOwnersForPath(refs, path),
+		Owners:           candidateOwnersForPath(refs, ref.Path),
 	}
 }
 
