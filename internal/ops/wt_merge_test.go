@@ -14,6 +14,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -251,6 +252,120 @@ func setupMergeTestRepo(t *testing.T, taskID, agentID string) (string, string) {
 	testhelpers.WriteInitialState(t, stateFile, initialState)
 
 	return tmpDir, stateFile
+}
+
+func TestPerformCASMergePreUpdateHookSkipsAlreadyMerged(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+
+	hookCalls := 0
+	outcome, err := performCASMerge(git.New(tmpDir), "refs/heads/integration", expectedCommit, "hook-noop", func(candidateTreeish string) error {
+		hookCalls++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("performCASMerge() unexpected error: %v", err)
+	}
+	if hookCalls != 0 {
+		t.Fatalf("hook calls = %d, want 0", hookCalls)
+	}
+	if outcome.mergeCommit != expectedCommit {
+		t.Fatalf("mergeCommit = %s, want %s", outcome.mergeCommit, expectedCommit)
+	}
+}
+
+func TestPerformCASMergePreUpdateHookFastForwardCandidate(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	preMergeHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "task/hook-fast-forward")
+
+	fastForwardFile := filepath.Join(tmpDir, "hook-fast-forward.txt")
+	if err := os.WriteFile(fastForwardFile, []byte("fast-forward candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write fast-forward file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-fast-forward.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Fast-forward candidate")
+	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+
+	var hookTreeishes []string
+	outcome, err := performCASMerge(git.New(tmpDir), "refs/heads/integration", expectedCommit, "hook-fast-forward", func(candidateTreeish string) error {
+		hookTreeishes = append(hookTreeishes, candidateTreeish)
+		currentHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+		if currentHEAD != preMergeHEAD {
+			t.Fatalf("integration ref advanced before hook: got %s, want %s", currentHEAD, preMergeHEAD)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("performCASMerge() unexpected error: %v", err)
+	}
+	if len(hookTreeishes) != 1 {
+		t.Fatalf("hook calls = %d, want 1", len(hookTreeishes))
+	}
+	if hookTreeishes[0] != expectedCommit {
+		t.Fatalf("hook treeish = %s, want expectedCommit %s", hookTreeishes[0], expectedCommit)
+	}
+	if outcome.mergeCommit != expectedCommit {
+		t.Fatalf("mergeCommit = %s, want %s", outcome.mergeCommit, expectedCommit)
+	}
+	if !outcome.fastForward {
+		t.Fatal("fastForward = false, want true")
+	}
+}
+
+func TestPerformCASMergePreUpdateHookTrueMergeCandidate(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "task/hook-true-merge")
+
+	taskFile := filepath.Join(tmpDir, "hook-task.txt")
+	if err := os.WriteFile(taskFile, []byte("task candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write task file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-task.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Task candidate")
+	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	integrationFile := filepath.Join(tmpDir, "hook-integration.txt")
+	if err := os.WriteFile(integrationFile, []byte("integration candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write integration file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-integration.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Integration candidate")
+	preMergeHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+
+	var hookTreeishes []string
+	outcome, err := performCASMerge(git.New(tmpDir), "refs/heads/integration", expectedCommit, "hook-true-merge", func(candidateTreeish string) error {
+		hookTreeishes = append(hookTreeishes, candidateTreeish)
+		currentHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+		if currentHEAD != preMergeHEAD {
+			t.Fatalf("integration ref advanced before hook: got %s, want %s", currentHEAD, preMergeHEAD)
+		}
+		testhelpers.MustGit(t, tmpDir, "cat-file", "-e", candidateTreeish+":hook-task.txt")
+		testhelpers.MustGit(t, tmpDir, "cat-file", "-e", candidateTreeish+":hook-integration.txt")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("performCASMerge() unexpected error: %v", err)
+	}
+	if len(hookTreeishes) != 1 {
+		t.Fatalf("hook calls = %d, want 1", len(hookTreeishes))
+	}
+	if hookTreeishes[0] != outcome.mergeCommit {
+		t.Fatalf("hook treeish = %s, want mergeCommit %s", hookTreeishes[0], outcome.mergeCommit)
+	}
+	if hookTreeishes[0] == expectedCommit {
+		t.Fatalf("hook treeish = expectedCommit %s, want candidate merge commit", expectedCommit)
+	}
+	if outcome.fastForward {
+		t.Fatal("fastForward = true, want false")
+	}
 }
 
 func TestMergeWorktree_Validation(t *testing.T) {

@@ -295,7 +295,7 @@ type casMergeOutcome struct {
 // performCASMerge merges expectedCommit into integrationRef using a compare-and-swap
 // retry loop to handle concurrent merges. Returns conflict=true when merge-tree
 // detects conflicts (caller is responsible for the INTEGRATION_FAILED transition).
-func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string) (*casMergeOutcome, error) {
+func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string, preUpdateHook func(candidateTreeish string) error) (*casMergeOutcome, error) {
 	var mergeCommit, preMergeHEAD string
 	var fastForward bool
 
@@ -335,6 +335,11 @@ func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string)
 			return nil, fmt.Errorf("failed to check fast-forward: %w", err)
 		}
 		if isFF {
+			if preUpdateHook != nil {
+				if err := preUpdateHook(expectedCommit); err != nil {
+					return nil, err
+				}
+			}
 			if err := gw.UpdateRef(integrationRef, expectedCommit, preMergeHEAD); err != nil {
 				var casErr *git.RefConflictError
 				if errors.As(err, &casErr) {
@@ -368,6 +373,11 @@ func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string)
 		}
 		fastForward = false
 
+		if preUpdateHook != nil {
+			if err := preUpdateHook(mergeCommit); err != nil {
+				return nil, err
+			}
+		}
 		if err := gw.UpdateRef(integrationRef, mergeCommit, preMergeHEAD); err != nil {
 			var casErr *git.RefConflictError
 			if errors.As(err, &casErr) {
@@ -467,7 +477,7 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 
 	integrationRef := "refs/heads/" + integrationBranch
 
-	outcome, err := performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID)
+	outcome, err := performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, nil)
 	if err != nil {
 		return nil, err
 	}
