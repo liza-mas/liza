@@ -16,6 +16,7 @@ import (
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -849,68 +850,435 @@ func TestMergeWorktree_SyncsDeletedFiles(t *testing.T) {
 	}
 }
 
-func TestMergeWorktree_RejectsDeletingReferencedArtifact(t *testing.T) {
-	taskID := "merge-delete-arch-ref"
+func TestMergeWorktree_RejectsFastForwardDeletingReferencedArtifactBeforeRefUpdate(t *testing.T) {
+	scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
+		taskID:      "merge-delete-arch-ref",
+		artifactRef: "specs/arch-plan/readme/architecture.md",
+		configureState: func(state *models.State, taskID, artifactRef string) {
+			state.Tasks = append(state.Tasks, protectedRefTask("downstream-code-plan", "arch_ref", artifactRef))
+		},
+	})
+
+	_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.reviewerID)
+	if err == nil {
+		t.Fatal("MergeWorktree() error = nil, want candidate artifact rejection")
+	}
+	assertCandidateArtifactError(t, err, scenario.artifactRef, "arch_ref", "downstream-code-plan")
+	assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
+
+	afterState := readStateForTest(t, scenario.stateFile)
+	task := afterState.FindTask(scenario.taskID)
+	if task == nil {
+		t.Fatal("Task not found after rejected merge")
+	}
+	if task.Status != models.TaskStatusApproved {
+		t.Fatalf("Task status = %v, want CODE_APPROVED because guard rejected before post-merge transition", task.Status)
+	}
+}
+
+func TestMergeWorktree_RejectsTrueMergeProtectedArtifactDeletionBeforeRefUpdate(t *testing.T) {
+	tests := []struct {
+		name       string
+		field      string
+		ownerTask  string
+		outputMode bool
+	}{
+		{name: "task arch_ref", field: "arch_ref", ownerTask: "downstream-arch"},
+		{name: "task plan_ref", field: "plan_ref", ownerTask: "downstream-plan"},
+		{name: "task spec_ref", field: "spec_ref", ownerTask: "downstream-spec"},
+		{name: "task epic_ref", field: "epic_ref", ownerTask: "downstream-epic"},
+		{name: "output arch_ref", field: "output[0].arch_ref", ownerTask: "producer-arch", outputMode: true},
+		{name: "output plan_ref", field: "output[0].plan_ref", ownerTask: "producer-plan", outputMode: true},
+		{name: "output spec_ref", field: "output[0].spec_ref", ownerTask: "producer-spec", outputMode: true},
+		{name: "output epic_ref", field: "output[0].epic_ref", ownerTask: "producer-epic", outputMode: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			artifactRef := "specs/protected/" + strings.ReplaceAll(tt.name, " ", "-") + ".md"
+			scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
+				taskID:      "true-merge-" + strings.ReplaceAll(tt.name, " ", "-"),
+				artifactRef: artifactRef,
+				trueMerge:   true,
+				configureState: func(state *models.State, taskID, artifactRef string) {
+					if tt.outputMode {
+						state.Tasks = append(state.Tasks, protectedOutputRefTask(tt.ownerTask, tt.field, artifactRef))
+						return
+					}
+					state.Tasks = append(state.Tasks, protectedRefTask(tt.ownerTask, tt.field, artifactRef))
+				},
+			})
+
+			_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.reviewerID)
+			if err == nil {
+				t.Fatal("MergeWorktree() error = nil, want candidate artifact rejection")
+			}
+			assertCandidateArtifactError(t, err, artifactRef, tt.field, tt.ownerTask)
+			assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
+		})
+	}
+}
+
+func TestMergeWorktree_RejectsGoalSpecRefDeletionAndRenameBeforeRefUpdate(t *testing.T) {
+	tests := []struct {
+		name       string
+		mutateTask func(t *testing.T, wtDir, artifactRef string)
+	}{
+		{
+			name: "delete",
+			mutateTask: func(t *testing.T, wtDir, artifactRef string) {
+				t.Helper()
+				testhelpers.MustGit(t, wtDir, "rm", artifactRef)
+			},
+		},
+		{
+			name: "rename",
+			mutateTask: func(t *testing.T, wtDir, artifactRef string) {
+				t.Helper()
+				testhelpers.MustGit(t, wtDir, "mv", artifactRef, artifactRef+".moved")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
+				taskID:      "goal-spec-" + tt.name,
+				artifactRef: "specs/goals/protected-" + tt.name + ".md",
+				mutateTask:  tt.mutateTask,
+				configureState: func(state *models.State, taskID, artifactRef string) {
+					state.Goal.SpecRef = artifactRef
+				},
+			})
+
+			_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.reviewerID)
+			if err == nil {
+				t.Fatal("MergeWorktree() error = nil, want candidate artifact rejection")
+			}
+			assertCandidateArtifactError(t, err, scenario.artifactRef, "goal.spec_ref", "")
+			assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
+		})
+	}
+}
+
+func TestMergeWorktree_RejectsNonRegularArtifactReplacementBeforeRefUpdate(t *testing.T) {
+	tests := []struct {
+		name       string
+		mutateTask func(t *testing.T, wtDir, artifactRef string)
+		wantMode   string
+	}{
+		{
+			name: "directory",
+			mutateTask: func(t *testing.T, wtDir, artifactRef string) {
+				t.Helper()
+				testhelpers.MustGit(t, wtDir, "rm", artifactRef)
+				nested := filepath.Join(wtDir, artifactRef, "nested.md")
+				if err := os.MkdirAll(filepath.Dir(nested), 0755); err != nil {
+					t.Fatalf("Failed to create replacement directory: %v", err)
+				}
+				if err := os.WriteFile(nested, []byte("nested\n"), 0644); err != nil {
+					t.Fatalf("Failed to write nested replacement: %v", err)
+				}
+				testhelpers.MustGit(t, wtDir, "add", artifactRef)
+			},
+			wantMode: "040000",
+		},
+		{
+			name: "symlink",
+			mutateTask: func(t *testing.T, wtDir, artifactRef string) {
+				t.Helper()
+				testhelpers.MustGit(t, wtDir, "rm", artifactRef)
+				if err := os.Symlink("README.md", filepath.Join(wtDir, artifactRef)); err != nil {
+					t.Skipf("symlink creation unsupported: %v", err)
+				}
+				testhelpers.MustGit(t, wtDir, "add", artifactRef)
+			},
+			wantMode: "120000",
+		},
+		{
+			name: "submodule",
+			mutateTask: func(t *testing.T, wtDir, artifactRef string) {
+				t.Helper()
+				testhelpers.MustGit(t, wtDir, "rm", artifactRef)
+				submoduleDir := t.TempDir()
+				testhelpers.SetupTestGitRepo(t, submoduleDir)
+				testhelpers.MustGit(t, wtDir, "-c", "protocol.file.allow=always", "submodule", "add", submoduleDir, artifactRef)
+			},
+			wantMode: "160000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
+				taskID:      "replace-" + tt.name,
+				artifactRef: "specs/replacements/" + tt.name + ".md",
+				mutateTask:  tt.mutateTask,
+				configureState: func(state *models.State, taskID, artifactRef string) {
+					state.Tasks = append(state.Tasks, protectedRefTask("downstream-"+tt.name, "arch_ref", artifactRef))
+				},
+			})
+
+			_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.reviewerID)
+			if err == nil {
+				t.Fatal("MergeWorktree() error = nil, want candidate artifact rejection")
+			}
+			assertCandidateArtifactError(t, err, scenario.artifactRef, "arch_ref", "downstream-"+tt.name)
+			if !strings.Contains(err.Error(), tt.wantMode) {
+				t.Fatalf("MergeWorktree() error = %q, want mode %s", err.Error(), tt.wantMode)
+			}
+			assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
+		})
+	}
+}
+
+func TestMergeWorktree_RejectsInvalidArtifactRefBeforeRefUpdate(t *testing.T) {
+	scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
+		taskID:      "invalid-artifact-ref",
+		artifactRef: "specs/still-present.md",
+		mutateTask: func(t *testing.T, wtDir, artifactRef string) {
+			t.Helper()
+			taskFile := filepath.Join(wtDir, "task-change.txt")
+			if err := os.WriteFile(taskFile, []byte("task\n"), 0644); err != nil {
+				t.Fatalf("Failed to write task file: %v", err)
+			}
+			testhelpers.MustGit(t, wtDir, "add", "task-change.txt")
+		},
+		configureState: func(state *models.State, taskID, artifactRef string) {
+			state.Goal.SpecRef = "#empty"
+		},
+	})
+
+	_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.reviewerID)
+	if err == nil {
+		t.Fatal("MergeWorktree() error = nil, want invalid artifact ref rejection")
+	}
+	if !strings.Contains(err.Error(), "empty_ref_path") || !strings.Contains(err.Error(), "goal.spec_ref") {
+		t.Fatalf("MergeWorktree() error = %q, want invalid goal.spec_ref diagnostic", err.Error())
+	}
+	assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
+}
+
+func TestArtifactGuardHookConfirmsFreshStateBeforeRejecting(t *testing.T) {
+	firstState := testhelpers.CreateValidState()
+	firstState.Goal.SpecRef = "README.md"
+	firstState.Tasks = []models.Task{protectedRefTask("stale-owner", "arch_ref", "specs/stale.md")}
+	confirmedState := testhelpers.CreateValidState()
+	confirmedState.Goal.SpecRef = "README.md"
+
+	reader := &sequenceStateReader{states: []*models.State{firstState, confirmedState}}
+	lookup := &recordingCandidateLookup{
+		entries: map[string]candidateLookupEntry{
+			"README.md": {mode: "100644", present: true},
+		},
+	}
+
+	err := validateCandidateArtifactRefsWithFreshState(reader.read, t.TempDir(), lookup, "candidate")
+	if err != nil {
+		t.Fatalf("validateCandidateArtifactRefsWithFreshState() error = %v, want nil", err)
+	}
+	if reader.calls != 2 {
+		t.Fatalf("state reads = %d, want 2", reader.calls)
+	}
+	for _, treeish := range lookup.treeishes {
+		if treeish != "candidate" {
+			t.Fatalf("lookup treeishes = %v, want same candidate revalidated", lookup.treeishes)
+		}
+	}
+}
+
+func TestArtifactGuardHookFailsClosedWhenConfirmationStateReadFails(t *testing.T) {
+	firstState := testhelpers.CreateValidState()
+	firstState.Goal.SpecRef = "README.md"
+	firstState.Tasks = []models.Task{protectedRefTask("owner", "arch_ref", "specs/missing.md")}
+	readErr := errors.New("state read failed")
+	reader := &sequenceStateReader{
+		states: []*models.State{firstState},
+		errs:   []error{nil, readErr},
+	}
+
+	lookup := &recordingCandidateLookup{
+		entries: map[string]candidateLookupEntry{
+			"README.md": {mode: "100644", present: true},
+		},
+	}
+
+	err := validateCandidateArtifactRefsWithFreshState(reader.read, t.TempDir(), lookup, "candidate")
+	if err == nil {
+		t.Fatal("validateCandidateArtifactRefsWithFreshState() error = nil, want fail-closed composite error")
+	}
+	var candidateErr *statevalidate.CandidateArtifactRefError
+	if !errors.As(err, &candidateErr) {
+		t.Fatalf("error does not preserve candidate artifact failure: %v", err)
+	}
+	for _, want := range []string{"specs/missing.md", "state freshness could not be verified", readErr.Error()} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+	if reader.calls != 2 {
+		t.Fatalf("state reads = %d, want 2", reader.calls)
+	}
+}
+
+func TestArtifactGuardHookReturnsFreshestValidationDiagnostics(t *testing.T) {
+	firstState := testhelpers.CreateValidState()
+	firstState.Goal.SpecRef = "README.md"
+	firstState.Tasks = []models.Task{protectedRefTask("stale-owner", "arch_ref", "specs/stale.md")}
+	confirmedState := testhelpers.CreateValidState()
+	confirmedState.Goal.SpecRef = "README.md"
+	confirmedState.Tasks = []models.Task{protectedRefTask("fresh-owner", "plan_ref", "specs/fresh.md")}
+	reader := &sequenceStateReader{states: []*models.State{firstState, confirmedState}}
+
+	lookup := &recordingCandidateLookup{
+		entries: map[string]candidateLookupEntry{
+			"README.md": {mode: "100644", present: true},
+		},
+	}
+
+	err := validateCandidateArtifactRefsWithFreshState(reader.read, t.TempDir(), lookup, "candidate")
+	if err == nil {
+		t.Fatal("validateCandidateArtifactRefsWithFreshState() error = nil, want confirmed validation error")
+	}
+	for _, want := range []string{"specs/fresh.md", "plan_ref", "fresh-owner"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want freshest diagnostic %q", err.Error(), want)
+		}
+	}
+	if strings.Contains(err.Error(), "specs/stale.md") || strings.Contains(err.Error(), "stale-owner") {
+		t.Fatalf("error = %q, should not return stale first-snapshot diagnostic", err.Error())
+	}
+}
+
+func TestMergeWorktree_RetainsPostMergeArtifactValidationBackstop(t *testing.T) {
+	scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
+		taskID:      "post-merge-backstop",
+		artifactRef: "specs/preserved.md",
+		mutateTask: func(t *testing.T, wtDir, artifactRef string) {
+			t.Helper()
+			taskFile := filepath.Join(wtDir, "task-change.txt")
+			if err := os.WriteFile(taskFile, []byte("task\n"), 0644); err != nil {
+				t.Fatalf("Failed to write task file: %v", err)
+			}
+			testhelpers.MustGit(t, wtDir, "add", "task-change.txt")
+		},
+		configureState: func(state *models.State, taskID, artifactRef string) {
+			state.Tasks = append(state.Tasks, protectedRefTask("initial-owner", "arch_ref", artifactRef))
+		},
+	})
+
+	artifactGuardPostUpdateTestHook = func() error {
+		state := readStateForTest(t, scenario.stateFile)
+		state.Tasks = append(state.Tasks, protectedRefTask("late-owner", "arch_ref", "specs/late-missing.md"))
+		testhelpers.WriteInitialState(t, scenario.stateFile, state)
+		return nil
+	}
+	defer func() { artifactGuardPostUpdateTestHook = nil }()
+
+	_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.reviewerID)
+	if err == nil {
+		t.Fatal("MergeWorktree() error = nil, want post-merge artifact validation failure")
+	}
+	var intErr *IntegrationFailedError
+	if !errors.As(err, &intErr) {
+		t.Fatalf("MergeWorktree() error = %T %v, want *IntegrationFailedError", err, err)
+	}
+	if intErr.Reason != IntegrationReasonStateInvalid {
+		t.Fatalf("Reason = %q, want %q", intErr.Reason, IntegrationReasonStateInvalid)
+	}
+	assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
+	afterState := readStateForTest(t, scenario.stateFile)
+	task := afterState.FindTask(scenario.taskID)
+	if task == nil {
+		t.Fatal("Task not found after failed merge")
+	}
+	if task.Status != models.TaskStatusIntegrationFailed {
+		t.Fatalf("Task status = %v, want INTEGRATION_FAILED", task.Status)
+	}
+	detail, _ := latestIntegrationFailureDiagnostic(t, task)["detail"].(string)
+	if !strings.Contains(detail, "specs/late-missing.md") || !strings.Contains(detail, "late-owner") {
+		t.Fatalf("diagnostic detail = %q, want late missing artifact detail", detail)
+	}
+}
+
+type artifactGuardMergeOptions struct {
+	taskID         string
+	artifactRef    string
+	trueMerge      bool
+	mutateTask     func(t *testing.T, wtDir, artifactRef string)
+	configureState func(state *models.State, taskID, artifactRef string)
+}
+
+type artifactGuardMergeScenario struct {
+	projectRoot  string
+	stateFile    string
+	taskID       string
+	reviewerID   string
+	artifactRef  string
+	preMergeHEAD string
+}
+
+func setupArtifactGuardMergeScenario(t *testing.T, opts artifactGuardMergeOptions) artifactGuardMergeScenario {
+	t.Helper()
+	if opts.mutateTask == nil {
+		opts.mutateTask = func(t *testing.T, wtDir, artifactRef string) {
+			t.Helper()
+			testhelpers.MustGit(t, wtDir, "rm", artifactRef)
+		}
+	}
 	reviewerID := "code-reviewer-1"
 	coderID := "coder-1"
-	artifactRef := "specs/arch-plan/readme/architecture.md"
 	tmpDir := t.TempDir()
 
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-
-	branchFile := "branch-owned.txt"
-	branchFilePath := filepath.Join(tmpDir, branchFile)
-	testhelpers.MustGit(t, tmpDir, "checkout", "main")
-	if err := os.WriteFile(branchFilePath, []byte("main\n"), 0644); err != nil {
-		t.Fatalf("Failed to write main branch file: %v", err)
-	}
-	testhelpers.MustGit(t, tmpDir, "add", branchFile)
-	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add main branch file")
-
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
-	artifactPath := filepath.Join(tmpDir, artifactRef)
+	artifactPath := filepath.Join(tmpDir, opts.artifactRef)
 	if err := os.MkdirAll(filepath.Dir(artifactPath), 0755); err != nil {
 		t.Fatalf("Failed to create artifact directory: %v", err)
 	}
-	if err := os.WriteFile(artifactPath, []byte("# Architecture\n"), 0644); err != nil {
+	if err := os.WriteFile(artifactPath, []byte("# Protected\n"), 0644); err != nil {
 		t.Fatalf("Failed to write artifact: %v", err)
 	}
-	if err := os.WriteFile(branchFilePath, []byte("integration\n"), 0644); err != nil {
-		t.Fatalf("Failed to write integration branch file: %v", err)
-	}
-	testhelpers.MustGit(t, tmpDir, "add", artifactRef, branchFile)
-	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add architecture artifact")
-	preMergeHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+	testhelpers.MustGit(t, tmpDir, "add", opts.artifactRef)
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add protected artifact")
+	baseCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
 
-	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
-	testhelpers.MustGit(t, tmpDir, "worktree", "add", wtDir, "integration", "-b", "task/"+taskID)
-	testhelpers.MustGit(t, wtDir, "rm", artifactRef)
-	if err := os.WriteFile(filepath.Join(wtDir, branchFile), []byte("task\n"), 0644); err != nil {
-		t.Fatalf("Failed to write task branch file: %v", err)
-	}
-	testhelpers.MustGit(t, wtDir, "add", branchFile)
-	testhelpers.MustGit(t, wtDir, "commit", "-m", "Delete unrelated architecture artifact")
+	wtDir := filepath.Join(tmpDir, ".worktrees", opts.taskID)
+	testhelpers.MustGit(t, tmpDir, "worktree", "add", wtDir, "integration", "-b", "task/"+opts.taskID)
+	opts.mutateTask(t, wtDir, opts.artifactRef)
+	testhelpers.MustGit(t, wtDir, "commit", "-m", "Change task candidate")
 	reviewCommit := testhelpers.MustGit(t, wtDir, "rev-parse", "HEAD")
+
+	preMergeHEAD := baseCommit
+	if opts.trueMerge {
+		testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+		competingFile := "competing-" + opts.taskID + ".txt"
+		if err := os.WriteFile(filepath.Join(tmpDir, competingFile), []byte("competing\n"), 0644); err != nil {
+			t.Fatalf("Failed to write competing file: %v", err)
+		}
+		testhelpers.MustGit(t, tmpDir, "add", competingFile)
+		testhelpers.MustGit(t, tmpDir, "commit", "-m", "Advance integration")
+		preMergeHEAD = testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+	}
 	testhelpers.MustGit(t, tmpDir, "checkout", "main")
 
 	now := time.Now().UTC()
-	worktreePath := filepath.Join(".worktrees", taskID)
-	baseCommit := preMergeHEAD
+	worktreePath := filepath.Join(".worktrees", opts.taskID)
 	approvedBy := reviewerID
 	state := testhelpers.CreateValidState()
 	state.Config.IntegrationBranch = "integration"
 	state.Goal.SpecRef = "README.md"
 	state.Tasks = []models.Task{
 		{
-			ID:           taskID,
-			Description:  "Delete unrelated artifact",
+			ID:           opts.taskID,
+			Description:  "Artifact guard candidate",
 			Status:       models.TaskStatusApproved,
 			Priority:     1,
 			Created:      now,
 			SpecRef:      "README.md",
-			DoneWhen:     "Cleanup approved",
-			Scope:        "cleanup",
+			DoneWhen:     "Candidate checked",
+			Scope:        "artifact guard",
 			RolePair:     "coding-pair",
 			Worktree:     &worktreePath,
 			AssignedTo:   &coderID,
@@ -919,69 +1287,133 @@ func TestMergeWorktree_RejectsDeletingReferencedArtifact(t *testing.T) {
 			ApprovedBy:   &approvedBy,
 			History:      []models.TaskHistoryEntry{},
 		},
-		{
-			ID:          "downstream-code-plan",
-			Description: "Needs architecture artifact",
-			Status:      models.TaskStatusDraftCodingPlan,
-			Priority:    1,
-			Created:     now,
-			SpecRef:     "README.md",
-			DoneWhen:    "Plan work",
-			Scope:       "planning",
-			RolePair:    "code-planning-pair",
-			ArchRef:     artifactRef,
-		},
+	}
+	if opts.configureState != nil {
+		opts.configureState(state, opts.taskID, opts.artifactRef)
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := MergeWorktree(tmpDir, taskID, reviewerID)
-	if err == nil {
-		t.Fatal("Expected post-merge state validation failure, got nil")
+	return artifactGuardMergeScenario{
+		projectRoot:  tmpDir,
+		stateFile:    stateFile,
+		taskID:       opts.taskID,
+		reviewerID:   reviewerID,
+		artifactRef:  opts.artifactRef,
+		preMergeHEAD: preMergeHEAD,
 	}
+}
 
-	var intErr *IntegrationFailedError
-	if !errors.As(err, &intErr) {
-		t.Fatalf("Expected *IntegrationFailedError, got %T: %v", err, err)
+func protectedRefTask(taskID, field, artifactRef string) models.Task {
+	task := models.Task{
+		ID:          taskID,
+		Description: "Protect artifact",
+		Status:      models.TaskStatusDraftCodingPlan,
+		Priority:    1,
+		Created:     time.Now().UTC(),
+		SpecRef:     "README.md",
+		DoneWhen:    "Protect",
+		Scope:       "artifact",
+		RolePair:    "code-planning-pair",
 	}
-	if intErr.Reason != IntegrationReasonStateInvalid {
-		t.Fatalf("Reason = %q, want %q", intErr.Reason, IntegrationReasonStateInvalid)
-	}
-	if intErr.RollbackError != nil {
-		t.Fatalf("RollbackError = %v, want nil", intErr.RollbackError)
-	}
+	setProtectedRef(&task, field, artifactRef)
+	return task
+}
 
-	integrationHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
-	if integrationHEAD != preMergeHEAD {
-		t.Fatalf("integration HEAD = %s, want rollback to %s", integrationHEAD, preMergeHEAD)
+func protectedOutputRefTask(taskID, field, artifactRef string) models.Task {
+	task := protectedRefTask(taskID, "", "")
+	entry := models.OutputEntry{
+		Desc:     "Child",
+		DoneWhen: "Done",
+		Scope:    "Scope",
+		SpecRef:  "README.md",
 	}
-	if _, statErr := os.Stat(artifactPath); !os.IsNotExist(statErr) {
-		t.Fatalf("artifact should match checked-out main branch after rollback and be absent, Stat: %v", statErr)
+	switch field {
+	case "output[0].spec_ref":
+		entry.SpecRef = artifactRef
+	case "output[0].epic_ref":
+		entry.EpicRef = artifactRef
+	case "output[0].plan_ref":
+		entry.PlanRef = artifactRef
+	case "output[0].arch_ref":
+		entry.ArchRef = artifactRef
 	}
-	if content, readErr := os.ReadFile(branchFilePath); readErr != nil {
-		t.Fatalf("branch file should exist after rollback: %v", readErr)
-	} else if string(content) != "main\n" {
-		t.Fatalf("branch file content = %q, want main branch content", string(content))
-	}
-	if err := exec.Command("git", "-C", tmpDir, "cat-file", "-e", "integration:"+artifactRef).Run(); err != nil {
-		t.Fatalf("artifact should still exist on rolled-back integration branch: %v", err)
-	}
+	task.Output = []models.OutputEntry{entry}
+	return task
+}
 
-	afterState := readStateForTest(t, stateFile)
-	task := afterState.FindTask(taskID)
-	if task == nil {
-		t.Fatal("Task not found after failed merge")
+func setProtectedRef(task *models.Task, field, artifactRef string) {
+	switch field {
+	case "spec_ref":
+		task.SpecRef = artifactRef
+	case "epic_ref":
+		task.EpicRef = artifactRef
+	case "plan_ref":
+		task.PlanRef = artifactRef
+	case "arch_ref":
+		task.ArchRef = artifactRef
 	}
-	if task.Status != models.TaskStatusIntegrationFailed {
-		t.Fatalf("Task status = %v, want INTEGRATION_FAILED", task.Status)
+}
+
+func assertCandidateArtifactError(t *testing.T, err error, path, field, taskID string) {
+	t.Helper()
+	var candidateErr *statevalidate.CandidateArtifactRefError
+	if !errors.As(err, &candidateErr) {
+		t.Fatalf("error does not preserve *CandidateArtifactRefError: %T %v", err, err)
 	}
-	diagnostic := latestIntegrationFailureDiagnostic(t, task)
-	if diagnostic["reason"] != IntegrationReasonStateInvalid {
-		t.Errorf("diagnostic reason = %v, want %q", diagnostic["reason"], IntegrationReasonStateInvalid)
+	for _, want := range []string{path, field} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
 	}
-	detail, _ := diagnostic["detail"].(string)
-	if !strings.Contains(detail, "arch_ref file not found") || !strings.Contains(detail, "downstream-code-plan") {
-		t.Errorf("diagnostic detail = %q, want missing arch_ref task detail", detail)
+	if taskID != "" && !strings.Contains(err.Error(), taskID) {
+		t.Fatalf("error = %q, want task owner %q", err.Error(), taskID)
 	}
+}
+
+func assertIntegrationHead(t *testing.T, projectRoot, want string) {
+	t.Helper()
+	got := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
+	if got != want {
+		t.Fatalf("integration HEAD = %s, want %s", got, want)
+	}
+}
+
+type sequenceStateReader struct {
+	states []*models.State
+	errs   []error
+	calls  int
+}
+
+func (r *sequenceStateReader) read() (*models.State, error) {
+	index := r.calls
+	r.calls++
+	if index < len(r.errs) && r.errs[index] != nil {
+		return nil, r.errs[index]
+	}
+	if index >= len(r.states) {
+		return nil, fmt.Errorf("unexpected state read %d", index+1)
+	}
+	return r.states[index], nil
+}
+
+type recordingCandidateLookup struct {
+	entries   map[string]candidateLookupEntry
+	treeishes []string
+}
+
+type candidateLookupEntry struct {
+	mode    string
+	present bool
+	err     error
+}
+
+func (l *recordingCandidateLookup) TreePathMode(treeish, path string) (string, bool, error) {
+	l.treeishes = append(l.treeishes, treeish)
+	if l.entries == nil {
+		return "", false, nil
+	}
+	entry := l.entries[path]
+	return entry.mode, entry.present, entry.err
 }
 
 func TestMergeWorktree_RollbackSyncsRenamedFiles(t *testing.T) {

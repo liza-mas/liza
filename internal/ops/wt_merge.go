@@ -49,6 +49,11 @@ var DefaultIntegrationTestTimeout = 10 * time.Minute
 // Production code leaves this nil.
 var mergeCASRetryTestHook func(attempt int, integrationRef, preMergeHEAD string) error
 
+// artifactGuardPostUpdateTestHook is a test-only hook invoked after a successful
+// CAS merge and before the retained post-merge artifact validation backstop.
+// Production code leaves this nil.
+var artifactGuardPostUpdateTestHook func() error
+
 // Integration failure reason constants.
 const (
 	IntegrationReasonHEADMismatch           = "worktree HEAD mismatch"
@@ -276,6 +281,40 @@ func rollbackMergedCommit(gitWrapper *git.Git, integrationRef, preMergeHEAD, mer
 	return nil
 }
 
+func buildArtifactGuardHook(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git) func(candidateTreeish string) error {
+	return func(candidateTreeish string) error {
+		return validateCandidateArtifactRefsWithFreshState(bb.Read, projectRoot, gitWrapper, candidateTreeish)
+	}
+}
+
+func validateCandidateArtifactRefsWithFreshState(
+	readState func() (*models.State, error),
+	projectRoot string,
+	lookup statevalidate.CandidateTreeLookup,
+	candidateTreeish string,
+) error {
+	state, err := readState()
+	if err != nil {
+		return fmt.Errorf("candidate artifact guard failed to read state: %w", err)
+	}
+
+	firstErr := statevalidate.ValidateCandidateStateArtifactRefs(candidateTreeish, state, projectRoot, lookup)
+	if firstErr == nil {
+		return nil
+	}
+
+	confirmationState, confirmationReadErr := readState()
+	if confirmationReadErr != nil {
+		freshnessErr := fmt.Errorf("failed to re-read state for candidate artifact guard freshness: %w", confirmationReadErr)
+		return fmt.Errorf("candidate artifact guard failed and state freshness could not be verified: %w", errors.Join(firstErr, freshnessErr))
+	}
+
+	if confirmationErr := statevalidate.ValidateCandidateStateArtifactRefs(candidateTreeish, confirmationState, projectRoot, lookup); confirmationErr != nil {
+		return confirmationErr
+	}
+	return nil
+}
+
 // shortSHA truncates a SHA to 7 characters for log messages.
 func shortSHA(s string) string {
 	if len(s) > 7 {
@@ -497,7 +536,8 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 
 	integrationRef := "refs/heads/" + integrationBranch
 
-	outcome, err := performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, nil)
+	artifactGuardHook := buildArtifactGuardHook(bb, projectRoot, gitWrapper)
+	outcome, err := performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, artifactGuardHook)
 	if err != nil {
 		return nil, err
 	}
@@ -533,6 +573,12 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 	rollbackRestoreRef := ""
 	if branchErr == nil && currentBranch != integrationBranch {
 		rollbackRestoreRef = "HEAD"
+	}
+
+	if artifactGuardPostUpdateTestHook != nil {
+		if err := artifactGuardPostUpdateTestHook(); err != nil {
+			return nil, fmt.Errorf("artifact guard post-update test hook failed: %w", err)
+		}
 	}
 
 	currentState, err := bb.Read()
