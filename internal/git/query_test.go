@@ -46,6 +46,70 @@ func TestCalculateDrift(t *testing.T) {
 	}
 }
 
+func TestTreePathMode(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	files := map[string]struct {
+		content string
+		mode    os.FileMode
+	}{
+		"regular.txt":        {content: "regular\n", mode: 0644},
+		"script.sh":          {content: "#!/bin/sh\nexit 0\n", mode: 0755},
+		"path with space.md": {content: "# spaces\n", mode: 0644},
+		"docs/readme.md":     {content: "# docs\n", mode: 0644},
+	}
+	for path, file := range files {
+		fullPath := filepath.Join(repoDir, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(fullPath), err)
+		}
+		if err := os.WriteFile(fullPath, []byte(file.content), file.mode); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", fullPath, err)
+		}
+	}
+	if err := os.Symlink("regular.txt", filepath.Join(repoDir, "regular.link")); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	testhelpers.MustGit(t, repoDir, "add", "regular.txt", "script.sh", "path with space.md", "docs/readme.md", "regular.link")
+	testhelpers.MustGit(t, repoDir, "update-index", "--chmod=+x", "script.sh")
+	gitlinkCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, repoDir, "update-index", "--add", "--cacheinfo", "160000,"+gitlinkCommit+",vendor/module")
+	testhelpers.MustGit(t, repoDir, "commit", "-m", "Add tree path mode fixtures")
+
+	treeish := "HEAD"
+	tests := []struct {
+		name        string
+		path        string
+		wantMode    string
+		wantPresent bool
+	}{
+		{name: "regular file", path: "regular.txt", wantMode: "100644", wantPresent: true},
+		{name: "executable file", path: "script.sh", wantMode: "100755", wantPresent: true},
+		{name: "directory", path: "docs", wantMode: "040000", wantPresent: true},
+		{name: "symlink", path: "regular.link", wantMode: "120000", wantPresent: true},
+		{name: "gitlink", path: "vendor/module", wantMode: "160000", wantPresent: true},
+		{name: "path with spaces", path: "path with space.md", wantMode: "100644", wantPresent: true},
+		{name: "missing path", path: "missing.txt", wantPresent: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mode, present, err := git.TreePathMode(treeish, tt.path)
+			if err != nil {
+				t.Fatalf("TreePathMode(%q, %q) error = %v", treeish, tt.path, err)
+			}
+			if present != tt.wantPresent {
+				t.Fatalf("TreePathMode(%q, %q) present = %v, want %v", treeish, tt.path, present, tt.wantPresent)
+			}
+			if mode != tt.wantMode {
+				t.Errorf("TreePathMode(%q, %q) mode = %q, want %q", treeish, tt.path, mode, tt.wantMode)
+			}
+		})
+	}
+}
+
 func TestGetWorktreeHEAD(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	git := New(repoDir)
