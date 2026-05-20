@@ -283,7 +283,9 @@ Artifact reference fields are scalar repo-relative refs, optionally with a
 `spec_ref`, `epic_ref`, `plan_ref`, and `arch_ref`; and `output[]` entry
 `spec_ref`, `epic_ref`, `plan_ref`, and `arch_ref`. Delimiter-joined multi-refs
 such as `specs/a.md; specs/b.md` are invalid; use scope text or a future
-structured multi-ref field instead.
+structured multi-ref field instead. Artifact refs also fail closed when fragment
+stripping leaves an empty path, the path traverses outside the repository, or an
+absolute ref cannot be safely normalized to a repo-relative path.
 
 Candidate integration validation strips the optional fragment and checks the
 repo-relative path against the candidate Git tree before integration ref
@@ -992,6 +994,7 @@ invariants:
   - "Task parent_task/parent_tasks must reference existing task IDs"
   - "Task output entries must have all required fields (desc, done_when, scope, spec_ref)"
   - "Artifact reference fields are scalar repo-relative refs with optional #fragment anchors; semicolon-joined multi-refs are rejected"
+  - "Artifact refs fail closed when fragment stripping leaves an empty path, the path traverses outside the repository, or an absolute ref cannot be safely normalized to repo-relative"
   - "Protected artifact fields are goal spec_ref; task spec_ref, epic_ref, plan_ref, arch_ref; and output entry spec_ref, epic_ref, plan_ref, arch_ref"
   - "Candidate-tree artifact validation strips fragments and rejects missing paths, directories, submodules/gitlinks, symlinks, and non-regular object modes; valid paths resolve to Git file modes 100644 or 100755"
   - "Artifact-ref diagnostics include deterministic invalid path and owner provenance: field name, task ID when applicable, and output index when applicable"

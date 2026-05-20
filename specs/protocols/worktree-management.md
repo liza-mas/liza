@@ -160,8 +160,11 @@ entries. Each protected ref is a scalar repo-relative path with an optional
 `#fragment` anchor; validation strips the fragment before checking the Git tree.
 The candidate tree must contain the path as a regular Git file mode `100644` or
 `100755`. Missing paths, directories, submodules/gitlinks, symlinks, and other
-non-regular object modes are rejected. Diagnostics are deterministic and name
-the invalid path plus owner provenance: field name, task ID when the owner is a
+non-regular object modes are rejected. Invalid artifact refs fail closed,
+including semicolon-joined refs, empty paths after stripping `#fragment`, paths
+that traverse outside the repository, and absolute refs that cannot be safely
+normalized to repo-relative paths. Diagnostics are deterministic and name the
+invalid path plus owner provenance: field name, task ID when the owner is a
 task, and output index when the owner is an `output[]` entry.
 
 Post-merge `ValidateArtifactRefs` remains a rollback backstop after successful

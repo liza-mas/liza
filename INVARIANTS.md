@@ -191,7 +191,10 @@ The candidate-tree artifact guard protects goal `spec_ref`; task `spec_ref`,
 entries. Refs are scalar repo-relative paths with optional `#fragment` anchors
 and must resolve in the candidate tree to regular Git file modes `100644` or
 `100755`. Missing paths, directories, submodules/gitlinks, symlinks, and other
-non-regular object modes are rejected with deterministic diagnostics naming the
+non-regular object modes are rejected. Invalid artifact refs fail closed,
+including semicolon-joined refs, empty paths after stripping `#fragment`, paths
+that traverse outside the repository, and absolute refs that cannot be safely
+normalized to repo-relative paths. Diagnostics deterministically name the
 invalid path plus owner provenance: field name, task ID when applicable, and
 output index when applicable.
 
