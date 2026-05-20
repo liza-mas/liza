@@ -1,0 +1,27 @@
+[
+  {
+    "desc": "Candidate-Tree Artifact Guard Acceptance Matrix",
+    "done_when": "A code plan is ready for implementation that, when implemented, adds or updates tests mapping AC-001-1 through AC-001-16, NFR-000-1 through NFR-000-5, and NFR-001-1 through NFR-001-3 to concrete assertions; rejected-candidate tests prove the integration ref does not advance; boundary tests cover protected field owners, invalid refs, non-regular Git object modes, owner provenance, deterministic diagnostics, state freshness confirmation, CAS staleness/retry behavior, already-merged no-op behavior, and retained post-merge `ValidateArtifactRefs` rollback behavior.",
+    "scope": "Plan acceptance and regression test changes for candidate-tree artifact reference protection across goal, task, and output artifact fields; true merge and fast-forward paths; deletion, rename, directory, submodule, symlink, invalid-ref, freshness, CAS retry, no-op, post-merge backstop, and deterministic diagnostic cases. Out of scope: production implementation, documentation edits, changing artifact-ref semantics, and replacing sibling implementation plans.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "arch_ref": "specs/arch-plan/20260520-artifact-ref-protection/20260520-121639-architecture-4.md",
+    "task_depends_on": [
+      "architecture-3-code-planning-0",
+      "architecture-3-code-planning-1"
+    ]
+  },
+  {
+    "desc": "Artifact Reference Protection Documentation Updates",
+    "done_when": "A code plan is ready for implementation that, when implemented, updates `INVARIANTS.md`, `specs/protocols/worktree-management.md`, and `specs/architecture/blackboard-schema.md` so durable docs describe candidate artifact validation before integration ref advancement, the retained post-merge `ValidateArtifactRefs` rollback backstop, protected goal/task/output artifact fields, scalar repo-relative refs with optional fragments, rejection of missing directories/submodules/symlinks/non-regular modes, and deterministic diagnostics with path plus owner provenance.",
+    "scope": "Plan documentation updates for the pre-update candidate-tree artifact guard, retained post-merge validation backstop, protected artifact field set, regular-file object-mode requirement, invalid-ref behavior, and deterministic diagnostics. Out of scope: production implementation, test implementation, unrelated protocol rewrites, and new standalone documentation.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "arch_ref": "specs/arch-plan/20260520-artifact-ref-protection/20260520-121639-architecture-4.md",
+    "depends_on": [
+      "0"
+    ],
+    "task_depends_on": [
+      "architecture-3-code-planning-0",
+      "architecture-3-code-planning-1"
+    ]
+  }
+]
