@@ -1,0 +1,8 @@
+[
+  {
+    "desc": "Transition task to INTEGRATION_FAILED when candidate artifact guard rejects before ref update, so the reviewer loop does not retry indefinitely against unchanged state.",
+    "done_when": "When performCASMerge returns a pre-update hook error, MergeWorktree wraps it in IntegrationFailedError after marking the task INTEGRATION_FAILED (matching the post-merge backstop and merge-conflict error paths). The claiming.go retry loop observes IntegrationFailedError and continues without retrying. Tests verify: (1) task status transitions to INTEGRATION_FAILED, (2) error type is *IntegrationFailedError, (3) diagnostic includes candidate artifact ref details.",
+    "scope": "internal/ops/wt_merge.go (MergeWorktree error handling for performCASMerge failures, lines ~540-543), internal/ops/wt_merge_test.go (update existing guard rejection tests to assert IntegrationFailedError wrapping and INTEGRATION_FAILED status transition)",
+    "spec_ref": "specs/protocols/worktree-management.md"
+  }
+]
