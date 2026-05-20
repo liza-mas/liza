@@ -1,0 +1,10 @@
+[
+  {
+    "desc": "Wire `MergeWorktree` to pass a fresh-state artifact guard hook into `performCASMerge` while retaining the post-merge artifact validation backstop.",
+    "done_when": "`MergeWorktree` constructs and passes a real artifact guard hook to `performCASMerge`; every hook invocation reads the latest blackboard state, collects protected artifact refs from that snapshot, and validates those refs against the provided candidate treeish before `UpdateRef`; any first collection or candidate validation failure triggers exactly one confirmation state read and revalidation of the same candidate; the hook returns success when the confirmation snapshot validates, fails closed with a composite diagnostic when confirmation state cannot be read, returns freshest-state diagnostics when confirmation validation still fails, and the existing post-merge `statevalidate.ValidateArtifactRefs` rollback backstop remains after successful ref update; `internal/ops/wt_merge_test.go` covers FR-001-8, FR-001-12 through FR-001-16, FR-001-28, AC-001-1 through AC-001-10, AC-001-15, and AC-001-16 at the `MergeWorktree`/pre-update guard boundary.",
+    "scope": "Modify `internal/ops/wt_merge.go` and `internal/ops/wt_merge_test.go`; consume the candidate validator API from `architecture-3-code-planning-0-coding-1`, the collector-backed artifact refs from `artifact-ref-validator-coding-1`, and the `performCASMerge` hook boundary from `cas-hook-conflict-retry-coding-2`. Out of scope: changing collector normalization or provenance internals, changing candidate tree path mode policy in `internal/statevalidate` or `internal/git`, changing `performCASMerge` hook contract mechanics or CAS retry behavior, adding submit-for-review diagnostics, and removing or weakening post-merge `ValidateArtifactRefs`.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-135305-architecture-3-code-planning-1.md",
+    "task_depends_on": ["architecture-3-code-planning-0-coding-1", "cas-hook-conflict-retry-coding-2"]
+  }
+]
