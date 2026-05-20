@@ -448,6 +448,75 @@ func TestPerformCASMergePreUpdateHookFailureChangedHeadRetries(t *testing.T) {
 	testhelpers.MustGit(t, tmpDir, "merge-base", "--is-ancestor", competingCommit, "integration")
 }
 
+func TestPerformCASMergePreUpdateHookCASConflictRerunsHook(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	preMergeHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "task/hook-cas-conflict")
+	taskFile := filepath.Join(tmpDir, "hook-cas-conflict-task.txt")
+	if err := os.WriteFile(taskFile, []byte("task candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write task file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-cas-conflict-task.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Task candidate")
+	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "competing/hook-cas-conflict", preMergeHEAD)
+	competingFile := filepath.Join(tmpDir, "hook-cas-conflict-competing.txt")
+	if err := os.WriteFile(competingFile, []byte("competing candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write competing file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-cas-conflict-competing.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Competing candidate")
+	competingCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+
+	gw := git.New(tmpDir)
+	previousHook := mergeCASRetryTestHook
+	mergeCASRetryTestHook = func(attempt int, integrationRef, preMergeHEAD string) error {
+		if attempt != 0 {
+			return nil
+		}
+		if err := gw.UpdateRef(integrationRef, competingCommit, preMergeHEAD); err != nil {
+			return fmt.Errorf("failed to force CAS conflict: %w", err)
+		}
+		return nil
+	}
+	defer func() { mergeCASRetryTestHook = previousHook }()
+
+	var hookTreeishes []string
+	outcome, err := performCASMerge(gw, "refs/heads/integration", expectedCommit, "hook-cas-conflict", func(candidateTreeish string) error {
+		hookTreeishes = append(hookTreeishes, candidateTreeish)
+		testhelpers.MustGit(t, tmpDir, "cat-file", "-e", candidateTreeish+":hook-cas-conflict-task.txt")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("performCASMerge() unexpected error: %v", err)
+	}
+	if len(hookTreeishes) < 2 {
+		t.Fatalf("hook calls = %d, want at least 2", len(hookTreeishes))
+	}
+	if hookTreeishes[0] == hookTreeishes[1] {
+		t.Fatalf("hook treeishes were not recomputed across CAS retry: %v", hookTreeishes)
+	}
+	if err := exec.Command("git", "-C", tmpDir, "cat-file", "-e", hookTreeishes[0]+":hook-cas-conflict-competing.txt").Run(); err == nil {
+		t.Fatalf("first hook candidate unexpectedly contains competing file: %s", hookTreeishes[0])
+	}
+	testhelpers.MustGit(t, tmpDir, "cat-file", "-e", hookTreeishes[1]+":hook-cas-conflict-competing.txt")
+	if outcome == nil {
+		t.Fatal("outcome = nil, want merge outcome")
+	}
+	if outcome.preMergeHEAD != competingCommit {
+		t.Fatalf("outcome preMergeHEAD = %s, want competing commit %s", outcome.preMergeHEAD, competingCommit)
+	}
+
+	integrationHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+	testhelpers.MustGit(t, tmpDir, "merge-base", "--is-ancestor", expectedCommit, integrationHEAD)
+	testhelpers.MustGit(t, tmpDir, "merge-base", "--is-ancestor", competingCommit, integrationHEAD)
+}
+
 func TestPerformCASMergePreUpdateHookFailureUnreadableHeadReturnsCompositeError(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
