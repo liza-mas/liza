@@ -1,0 +1,22 @@
+[
+  {
+    "desc": "Update durable artifact-reference protection documentation.",
+    "done_when": "`INVARIANTS.md`, `specs/protocols/worktree-management.md`, and `specs/architecture/blackboard-schema.md` describe candidate artifact validation before integration ref advancement, the retained post-merge `ValidateArtifactRefs` rollback backstop, protected goal/task/output artifact fields, scalar repo-relative refs with optional `#fragment` anchors, rejection of missing paths, directories, submodules/gitlinks, symlinks, and other non-regular Git object modes, and deterministic diagnostics that name the invalid path plus owner provenance including field name, task ID when applicable, and output index when applicable.",
+    "scope": "Modify only `INVARIANTS.md`, `specs/protocols/worktree-management.md`, and `specs/architecture/blackboard-schema.md`. Update existing invariant, integration protocol, validation rules, and artifact-field sections; do not create standalone documentation, change production code, change tests, rewrite unrelated protocols, weaken the retained post-merge `ValidateArtifactRefs` backstop, or redefine artifact-ref semantics beyond the approved candidate-tree protection contract.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-141346-architecture-4-code-planning-1.md",
+    "task_depends_on": [
+      "artifact-ref-collector-coding-0",
+      "artifact-ref-validator-coding-1",
+      "cas-preupdate-hook-coding-0",
+      "cas-hook-staleness-coding-1",
+      "cas-hook-conflict-retry-coding-2",
+      "architecture-3-code-planning-0-coding-0",
+      "architecture-3-code-planning-0-coding-1",
+      "architecture-3-code-planning-1-coding-0",
+      "architecture-4-code-planning-0-coding-0",
+      "architecture-4-code-planning-0-coding-1",
+      "architecture-4-code-planning-0-coding-2"
+    ]
+  }
+]
