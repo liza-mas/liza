@@ -1,0 +1,19 @@
+[
+  {
+    "desc": "Add the reusable statevalidate artifact-ref collector API with normalization, deterministic owner provenance, invalid-ref diagnostics, and unit tests.",
+    "done_when": "`internal/statevalidate` exposes a collector callable from package tests that returns one normalized repo-relative fragment-free `ArtifactRef` per goal/task/output artifact owner; owner metadata includes field name, task ID when applicable, and output index when applicable; collector output is sorted by path and owner metadata; semicolon-joined refs, fragment-only or empty refs after fragment stripping, traversal outside the repo, and unsafe absolute refs fail closed with owner-aware `ArtifactRefError` diagnostics; valid absolute refs under `projectRoot` normalize to repo-relative paths; and focused statevalidate tests assert FR-001-1 through FR-001-4, FR-001-6, FR-001-7, and the invalid-ref portion of FR-001-11.",
+    "scope": "Create `internal/statevalidate/artifact_refs.go` and `internal/statevalidate/artifact_refs_test.go`; update `internal/statevalidate/validate.go` only as needed to extend `ArtifactRefError` fields, cause constants, formatting, and `SafeDetails`; use existing `internal/paths` helpers where appropriate without changing candidate-tree or CAS merge behavior. Out of scope: modifying `internal/ops/wt_merge.go`, adding Git tree mode checks, changing state lifecycle rules, or wiring a pre-update hook.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-111928-architecture-1-code-planning-0.md"
+  },
+  {
+    "desc": "Refactor ValidateArtifactRefs to consume the artifact-ref collector and preserve collector-backed post-merge diagnostics.",
+    "done_when": "`ValidateArtifactRefs(state, projectRoot)` calls the collector as the single traversal source, checks each collected normalized path against the working tree and integration-branch fallback, passes only repo-relative normalized paths to Git fallback checks, preserves the existing nil-state error and post-merge backstop call shape, returns deterministic owner-aware diagnostics for missing artifacts, and statevalidate tests prove FR-001-5 plus the missing-artifact portion of FR-001-11 for goal, task, and output refs.",
+    "scope": "Modify `internal/statevalidate/validate.go` and statevalidate tests such as `internal/statevalidate/validate_specref_test.go`; add or adjust helper functions only inside `internal/statevalidate`; preserve existing `checkSpecFileExists`, `checkArtifactRefFileExists`, and `ValidateArtifactRefScalar` compatibility for current callers unless a narrower internal wrapper is required. Out of scope: changing `internal/ops/wt_merge.go`, changing `performCASMerge`, adding candidate-tree `git ls-tree` validation, changing task-output mutation commands, or altering unrelated state invariants.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-111928-architecture-1-code-planning-0.md",
+    "depends_on": [
+      "0"
+    ]
+  }
+]
