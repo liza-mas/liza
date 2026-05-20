@@ -1,0 +1,18 @@
+[
+  {
+    "desc": "Add a policy-free Git tree path mode query for candidate treeish validation.",
+    "done_when": "`internal/git` exposes a query such as `TreePathMode(treeish, path)` that runs a Git tree lookup for one repo-relative path, distinguishes missing paths from present entries, returns the raw Git mode for present entries, uses `--` before the path, and focused git tests prove mode detection for regular files `100644`, executable files `100755`, directories `040000`, symlinks `120000`, submodules or gitlinks `160000` where feasible, missing paths, and paths containing spaces.",
+    "scope": "Modify `internal/git/query.go` and `internal/git/query_test.go`; reuse existing Git command helpers and test repository helpers. Out of scope: artifact-ref owner diagnostics, statevalidate policy, collector integration, `internal/ops/wt_merge.go`, `performCASMerge`, and blackboard state reads.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-134347-architecture-3-code-planning-0.md"
+  },
+  {
+    "desc": "Validate collected artifact refs against candidate Git tree modes with deterministic owner-aware diagnostics.",
+    "done_when": "`internal/statevalidate` exposes a candidate-tree artifact validator that consumes collected `ArtifactRef` values and a candidate tree lookup, accepts only modes `100644` and `100755`, rejects missing paths, directories, submodules/gitlinks, symlinks with mode `120000`, and any other non-regular mode, propagates collector invalid-ref failures as candidate validation failures, and statevalidate tests assert deterministic diagnostics naming the invalid path, cause, mode when present, and owner provenance for FR-001-9 through FR-001-11 plus the path/mode classification and diagnostic portions of FR-001-8, AC-001-7, AC-001-8, and AC-001-16.",
+    "scope": "Add a candidate validator in `internal/statevalidate` and focused tests such as `internal/statevalidate/candidate_artifact_refs_test.go`; adjust `internal/statevalidate/validate.go` or artifact-ref error helpers only as needed for stable candidate diagnostics; consume the Git query shape from Task 1 through a small interface or function dependency. Out of scope: modifying `internal/ops/wt_merge.go`, wiring the validator into `MergeWorktree`, reading latest state per hook invocation, second-snapshot confirmation, CAS retry behavior, post-merge rollback behavior, and changing collector normalization internals owned by `artifact-ref-validator-coding-1`.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-134347-architecture-3-code-planning-0.md",
+    "depends_on": ["0"],
+    "task_depends_on": ["artifact-ref-validator-coding-1"]
+  }
+]
