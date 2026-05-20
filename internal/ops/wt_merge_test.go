@@ -1033,6 +1033,7 @@ func TestMergeWorktree_RejectsNonRegularArtifactReplacementBeforeRefUpdate(t *te
 }
 
 func TestMergeWorktree_RejectsInvalidArtifactRefBeforeRefUpdate(t *testing.T) {
+	invalidRef := "#empty"
 	scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
 		taskID:      "invalid-artifact-ref",
 		artifactRef: "specs/still-present.md",
@@ -1045,7 +1046,7 @@ func TestMergeWorktree_RejectsInvalidArtifactRefBeforeRefUpdate(t *testing.T) {
 			testhelpers.MustGit(t, wtDir, "add", "task-change.txt")
 		},
 		configureState: func(state *models.State, taskID, artifactRef string) {
-			state.Goal.SpecRef = "#empty"
+			state.Goal.SpecRef = invalidRef
 		},
 	})
 
@@ -1053,9 +1054,7 @@ func TestMergeWorktree_RejectsInvalidArtifactRefBeforeRefUpdate(t *testing.T) {
 	if err == nil {
 		t.Fatal("MergeWorktree() error = nil, want invalid artifact ref rejection")
 	}
-	if !strings.Contains(err.Error(), "empty_ref_path") || !strings.Contains(err.Error(), "goal.spec_ref") {
-		t.Fatalf("MergeWorktree() error = %q, want invalid goal.spec_ref diagnostic", err.Error())
-	}
+	assertInvalidCandidateArtifactError(t, err, invalidRef, "goal.spec_ref", "")
 	assertIntegrationHead(t, scenario.projectRoot, scenario.preMergeHEAD)
 }
 
@@ -1361,6 +1360,25 @@ func assertCandidateArtifactError(t *testing.T, err error, path, field, taskID s
 		t.Fatalf("error does not preserve *CandidateArtifactRefError: %T %v", err, err)
 	}
 	for _, want := range []string{path, field} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+	if taskID != "" && !strings.Contains(err.Error(), taskID) {
+		t.Fatalf("error = %q, want task owner %q", err.Error(), taskID)
+	}
+}
+
+func assertInvalidCandidateArtifactError(t *testing.T, err error, value, field, taskID string) {
+	t.Helper()
+	var candidateErr *statevalidate.CandidateArtifactRefError
+	if !errors.As(err, &candidateErr) {
+		t.Fatalf("error does not preserve *CandidateArtifactRefError: %T %v", err, err)
+	}
+	if candidateErr.Value != value {
+		t.Fatalf("CandidateArtifactRefError.Value = %q, want %q", candidateErr.Value, value)
+	}
+	for _, want := range []string{value, "empty_ref_path", field} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want %q", err.Error(), want)
 		}
