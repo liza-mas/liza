@@ -1079,9 +1079,25 @@ func TestArtifactGuardHookConfirmsFreshStateBeforeRejecting(t *testing.T) {
 	if reader.calls != 2 {
 		t.Fatalf("state reads = %d, want 2", reader.calls)
 	}
-	for _, treeish := range lookup.treeishes {
-		if treeish != "candidate" {
-			t.Fatalf("lookup treeishes = %v, want same candidate revalidated", lookup.treeishes)
+	wantLookups := []string{
+		"candidate:README.md",
+		"candidate:README.md",
+		"candidate:specs/stale.md",
+		"candidate:README.md",
+	}
+	if len(lookup.lookups) != len(wantLookups) {
+		t.Fatalf("lookups = %v, want %v", lookup.lookups, wantLookups)
+	}
+	counts := make(map[string]int)
+	for _, got := range lookup.lookups {
+		counts[got]++
+	}
+	for _, want := range wantLookups {
+		counts[want]--
+	}
+	for key, count := range counts {
+		if count != 0 {
+			t.Fatalf("lookups = %v, want one stale check and one fresh confirmation against same candidate; %s count delta = %d", lookup.lookups, key, count)
 		}
 	}
 }
@@ -1167,6 +1183,10 @@ func TestMergeWorktree_RetainsPostMergeArtifactValidationBackstop(t *testing.T) 
 	})
 
 	artifactGuardPostUpdateTestHook = func() error {
+		currentHEAD := testhelpers.MustGit(t, scenario.projectRoot, "rev-parse", "integration")
+		if currentHEAD == scenario.preMergeHEAD {
+			t.Fatalf("post-update hook ran before integration ref update: HEAD = %s", currentHEAD)
+		}
 		state := readStateForTest(t, scenario.stateFile)
 		state.Tasks = append(state.Tasks, protectedRefTask("late-owner", "arch_ref", "specs/late-missing.md"))
 		testhelpers.WriteInitialState(t, scenario.stateFile, state)
@@ -1415,8 +1435,8 @@ func (r *sequenceStateReader) read() (*models.State, error) {
 }
 
 type recordingCandidateLookup struct {
-	entries   map[string]candidateLookupEntry
-	treeishes []string
+	entries map[string]candidateLookupEntry
+	lookups []string
 }
 
 type candidateLookupEntry struct {
@@ -1426,7 +1446,7 @@ type candidateLookupEntry struct {
 }
 
 func (l *recordingCandidateLookup) TreePathMode(treeish, path string) (string, bool, error) {
-	l.treeishes = append(l.treeishes, treeish)
+	l.lookups = append(l.lookups, treeish+":"+path)
 	if l.entries == nil {
 		return "", false, nil
 	}
