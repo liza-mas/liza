@@ -10,68 +10,101 @@ import (
 )
 
 func TestValidateCandidateArtifactRefsAcceptsRegularFileModes(t *testing.T) {
-	refs := []ArtifactRef{
-		candidateRef("specs/plain.md", "spec_ref", "task-1", nil),
-		candidateRef("specs/executable.sh", "plan_ref", "task-2", nil),
-	}
-	lookup := &fakeCandidateTreeLookup{
-		entries: map[string]fakeCandidateTreeEntry{
-			"specs/plain.md":      {mode: "100644", present: true},
-			"specs/executable.sh": {mode: "100755", present: true},
+	tests := []struct {
+		name        string
+		requirement string
+		ref         ArtifactRef
+		mode        string
+	}{
+		{
+			name:        "regular file",
+			requirement: "FR-001-9 accepts mode 100644",
+			ref:         candidateRef("specs/plain.md", "spec_ref", "task-1", nil),
+			mode:        "100644",
+		},
+		{
+			name:        "executable file",
+			requirement: "FR-001-9 accepts mode 100755",
+			ref:         candidateRef("specs/executable.sh", "plan_ref", "task-2", nil),
+			mode:        "100755",
 		},
 	}
 
-	if err := ValidateCandidateArtifactRefs("candidate", refs, lookup); err != nil {
-		t.Fatalf("ValidateCandidateArtifactRefs returned error: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := &fakeCandidateTreeLookup{
+				entries: map[string]fakeCandidateTreeEntry{
+					tt.ref.Path: {mode: tt.mode, present: true},
+				},
+			}
 
-	wantCalls := []string{"candidate|specs/plain.md", "candidate|specs/executable.sh"}
-	if got := strings.Join(lookup.calls, ","); got != strings.Join(wantCalls, ",") {
-		t.Fatalf("lookup calls = %v, want %v", lookup.calls, wantCalls)
+			if err := ValidateCandidateArtifactRefs("candidate", []ArtifactRef{tt.ref}, lookup); err != nil {
+				t.Fatalf("%s: ValidateCandidateArtifactRefs returned error: %v", tt.requirement, err)
+			}
+
+			wantCalls := []string{"candidate|" + tt.ref.Path}
+			if got := strings.Join(lookup.calls, ","); got != strings.Join(wantCalls, ",") {
+				t.Fatalf("%s: lookup calls = %v, want %v", tt.requirement, lookup.calls, wantCalls)
+			}
+		})
 	}
 }
 
 func TestValidateCandidateArtifactRefsRejectsMissingAndNonRegularModes(t *testing.T) {
 	tests := []struct {
-		name      string
-		entry     fakeCandidateTreeEntry
-		wantCause string
-		wantMode  string
-		wantText  []string
+		name        string
+		entry       fakeCandidateTreeEntry
+		wantCause   string
+		wantMode    string
+		wantText    []string
+		requirement string
 	}{
 		{
-			name:      "missing path",
-			entry:     fakeCandidateTreeEntry{},
-			wantCause: candidateArtifactRefMissingCause,
-			wantText:  []string{"specs/artifact.md", candidateArtifactRefMissingCause, "arch_ref", "task-1"},
+			name:        "missing path",
+			entry:       fakeCandidateTreeEntry{},
+			wantCause:   candidateArtifactRefMissingCause,
+			wantText:    []string{"specs/artifact.md", candidateArtifactRefMissingCause, "arch_ref", "task-1"},
+			requirement: "FR-001-10 rejects missing paths",
 		},
 		{
-			name:      "directory",
-			entry:     fakeCandidateTreeEntry{mode: "040000", present: true},
-			wantCause: candidateArtifactRefInvalidModeCause,
-			wantMode:  "040000",
-			wantText:  []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "040000", "arch_ref", "task-1"},
+			name:        "directory",
+			entry:       fakeCandidateTreeEntry{mode: "040000", present: true},
+			wantCause:   candidateArtifactRefInvalidModeCause,
+			wantMode:    "040000",
+			wantText:    []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "040000", "arch_ref", "task-1"},
+			requirement: "FR-001-10 rejects directories",
 		},
 		{
-			name:      "submodule gitlink",
-			entry:     fakeCandidateTreeEntry{mode: "160000", present: true},
-			wantCause: candidateArtifactRefInvalidModeCause,
-			wantMode:  "160000",
-			wantText:  []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "160000", "arch_ref", "task-1"},
+			name:        "submodule gitlink",
+			entry:       fakeCandidateTreeEntry{mode: "160000", present: true},
+			wantCause:   candidateArtifactRefInvalidModeCause,
+			wantMode:    "160000",
+			wantText:    []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "160000", "arch_ref", "task-1"},
+			requirement: "FR-001-10 rejects submodules/gitlinks",
 		},
 		{
-			name:      "symlink",
-			entry:     fakeCandidateTreeEntry{mode: "120000", present: true},
-			wantCause: candidateArtifactRefInvalidModeCause,
-			wantMode:  "120000",
-			wantText:  []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "120000", "arch_ref", "task-1"},
+			name:        "symlink",
+			entry:       fakeCandidateTreeEntry{mode: "120000", present: true},
+			wantCause:   candidateArtifactRefInvalidModeCause,
+			wantMode:    "120000",
+			wantText:    []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "120000", "arch_ref", "task-1"},
+			requirement: "FR-001-10 rejects symlinks",
 		},
 		{
-			name:      "unknown mode",
-			entry:     fakeCandidateTreeEntry{mode: "100600", present: true},
-			wantCause: candidateArtifactRefInvalidModeCause,
-			wantMode:  "100600",
-			wantText:  []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "100600", "arch_ref", "task-1"},
+			name:        "unknown mode",
+			entry:       fakeCandidateTreeEntry{mode: "100600", present: true},
+			wantCause:   candidateArtifactRefInvalidModeCause,
+			wantMode:    "100600",
+			wantText:    []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "100600", "arch_ref", "task-1"},
+			requirement: "FR-001-9 only exact regular modes are accepted",
+		},
+		{
+			name:        "unsupported regular-like mode",
+			entry:       fakeCandidateTreeEntry{mode: "100640", present: true},
+			wantCause:   candidateArtifactRefInvalidModeCause,
+			wantMode:    "100640",
+			wantText:    []string{"specs/artifact.md", candidateArtifactRefInvalidModeCause, "100640", "arch_ref", "task-1"},
+			requirement: "FR-001-9 rejects modes other than 100644 and 100755",
 		},
 	}
 
@@ -84,10 +117,11 @@ func TestValidateCandidateArtifactRefsRejectsMissingAndNonRegularModes(t *testin
 
 			err := ValidateCandidateArtifactRefs("candidate", refs, lookup)
 			assertCandidateArtifactRefError(t, err, candidateErrorWant{
-				cause: tt.wantCause,
-				path:  "specs/artifact.md",
-				mode:  tt.wantMode,
-				text:  tt.wantText,
+				cause:       tt.wantCause,
+				path:        "specs/artifact.md",
+				mode:        tt.wantMode,
+				text:        tt.wantText,
+				requirement: tt.requirement,
 				owners: []ownerWant{
 					{field: "arch_ref", taskID: "task-1"},
 				},
@@ -107,8 +141,9 @@ func TestValidateCandidateArtifactRefsReportsOwnersDeterministically(t *testing.
 
 	err := ValidateCandidateArtifactRefs("candidate", refs, lookup)
 	assertCandidateArtifactRefError(t, err, candidateErrorWant{
-		cause: candidateArtifactRefMissingCause,
-		path:  "specs/a.md",
+		cause:       candidateArtifactRefMissingCause,
+		path:        "specs/a.md",
+		requirement: "FR-001-11 deterministic owner provenance ordering",
 		text: []string{
 			"specs/a.md",
 			candidateArtifactRefMissingCause,
@@ -133,9 +168,10 @@ func TestValidateCandidateStateArtifactRefsPropagatesCollectorInvalidRef(t *test
 
 	err := ValidateCandidateStateArtifactRefs("candidate", state, t.TempDir(), lookup)
 	assertCandidateArtifactRefError(t, err, candidateErrorWant{
-		cause: artifactRefEmptyPathCause,
-		value: "#intro",
-		text:  []string{"candidate artifact ref", artifactRefEmptyPathCause, "#intro", "goal.spec_ref", "empty path"},
+		cause:       artifactRefEmptyPathCause,
+		value:       "#intro",
+		text:        []string{"candidate artifact ref", artifactRefEmptyPathCause, "#intro", "goal.spec_ref", "empty path"},
+		requirement: "FR-001-6 invalid refs fail closed before candidate lookup",
 		owners: []ownerWant{
 			{field: "goal.spec_ref"},
 		},
@@ -193,12 +229,13 @@ func candidateRef(path, field, taskID string, outputIndex *int) ArtifactRef {
 }
 
 type candidateErrorWant struct {
-	cause  string
-	path   string
-	value  string
-	mode   string
-	text   []string
-	owners []ownerWant
+	cause       string
+	path        string
+	value       string
+	mode        string
+	text        []string
+	owners      []ownerWant
+	requirement string
 }
 
 type ownerWant struct {
@@ -218,36 +255,39 @@ func assertCandidateArtifactRefError(t *testing.T, err error, want candidateErro
 		t.Fatalf("error type = %T, want *CandidateArtifactRefError", err)
 	}
 	if candidateErr.Cause != want.cause {
-		t.Errorf("Cause = %q, want %q", candidateErr.Cause, want.cause)
+		t.Errorf("%s: Cause = %q, want %q", want.requirement, candidateErr.Cause, want.cause)
 	}
 	if candidateErr.Path != want.path {
-		t.Errorf("Path = %q, want %q", candidateErr.Path, want.path)
+		t.Errorf("%s: Path = %q, want %q", want.requirement, candidateErr.Path, want.path)
 	}
 	if candidateErr.Value != want.value {
-		t.Errorf("Value = %q, want %q", candidateErr.Value, want.value)
+		t.Errorf("%s: Value = %q, want %q", want.requirement, candidateErr.Value, want.value)
 	}
 	if candidateErr.Mode != want.mode {
-		t.Errorf("Mode = %q, want %q", candidateErr.Mode, want.mode)
+		t.Errorf("%s: Mode = %q, want %q", want.requirement, candidateErr.Mode, want.mode)
 	}
 	assertCandidateOwners(t, candidateErr.Owners, want.owners)
 	for _, text := range want.text {
 		if !strings.Contains(err.Error(), text) {
-			t.Errorf("Error = %q, want to contain %q", err.Error(), text)
+			t.Errorf("%s: Error = %q, want to contain %q", want.requirement, err.Error(), text)
 		}
 	}
 
 	details := candidateErr.SafeDetails()
 	if details["cause"] != want.cause {
-		t.Errorf("SafeDetails cause = %v, want %q", details["cause"], want.cause)
+		t.Errorf("%s: SafeDetails cause = %v, want %q", want.requirement, details["cause"], want.cause)
+	}
+	if details["candidate_treeish"] != "candidate" {
+		t.Errorf("%s: SafeDetails candidate_treeish = %v, want %q", want.requirement, details["candidate_treeish"], "candidate")
 	}
 	if want.path != "" && details["path"] != want.path {
-		t.Errorf("SafeDetails path = %v, want %q", details["path"], want.path)
+		t.Errorf("%s: SafeDetails path = %v, want %q", want.requirement, details["path"], want.path)
 	}
 	if want.value != "" && details["value"] != want.value {
-		t.Errorf("SafeDetails value = %v, want %q", details["value"], want.value)
+		t.Errorf("%s: SafeDetails value = %v, want %q", want.requirement, details["value"], want.value)
 	}
 	if want.mode != "" && details["mode"] != want.mode {
-		t.Errorf("SafeDetails mode = %v, want %q", details["mode"], want.mode)
+		t.Errorf("%s: SafeDetails mode = %v, want %q", want.requirement, details["mode"], want.mode)
 	}
 	assertOwnerDetails(t, details["owners"], want.owners)
 }

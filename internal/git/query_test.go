@@ -81,30 +81,72 @@ func TestTreePathMode(t *testing.T) {
 	treeish := "HEAD"
 	tests := []struct {
 		name        string
+		requirement string
 		path        string
 		wantMode    string
 		wantPresent bool
 	}{
-		{name: "regular file", path: "regular.txt", wantMode: "100644", wantPresent: true},
-		{name: "executable file", path: "script.sh", wantMode: "100755", wantPresent: true},
-		{name: "directory", path: "docs", wantMode: "040000", wantPresent: true},
-		{name: "symlink", path: "regular.link", wantMode: "120000", wantPresent: true},
-		{name: "gitlink", path: "vendor/module", wantMode: "160000", wantPresent: true},
-		{name: "path with spaces", path: "path with space.md", wantMode: "100644", wantPresent: true},
-		{name: "missing path", path: "missing.txt", wantPresent: false},
+		{
+			name:        "regular file",
+			requirement: "NFR-001-1 distinguishes regular files",
+			path:        "regular.txt",
+			wantMode:    "100644",
+			wantPresent: true,
+		},
+		{
+			name:        "executable file",
+			requirement: "NFR-001-1 distinguishes executable regular files",
+			path:        "script.sh",
+			wantMode:    "100755",
+			wantPresent: true,
+		},
+		{
+			name:        "directory",
+			requirement: "FR-001-10 distinguishes directories",
+			path:        "docs",
+			wantMode:    "040000",
+			wantPresent: true,
+		},
+		{
+			name:        "symlink",
+			requirement: "FR-001-10 distinguishes symlinks",
+			path:        "regular.link",
+			wantMode:    "120000",
+			wantPresent: true,
+		},
+		{
+			name:        "gitlink",
+			requirement: "FR-001-10 distinguishes submodules/gitlinks",
+			path:        "vendor/module",
+			wantMode:    "160000",
+			wantPresent: true,
+		},
+		{
+			name:        "path with spaces",
+			requirement: "NFR-001-1 preserves exact repo-relative path queries",
+			path:        "path with space.md",
+			wantMode:    "100644",
+			wantPresent: true,
+		},
+		{
+			name:        "missing path",
+			requirement: "NFR-001-1 distinguishes missing paths",
+			path:        "missing.txt",
+			wantPresent: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mode, present, err := git.TreePathMode(treeish, tt.path)
 			if err != nil {
-				t.Fatalf("TreePathMode(%q, %q) error = %v", treeish, tt.path, err)
+				t.Fatalf("%s: TreePathMode(%q, %q) error = %v", tt.requirement, treeish, tt.path, err)
 			}
 			if present != tt.wantPresent {
-				t.Fatalf("TreePathMode(%q, %q) present = %v, want %v", treeish, tt.path, present, tt.wantPresent)
+				t.Fatalf("%s: TreePathMode(%q, %q) present = %v, want %v", tt.requirement, treeish, tt.path, present, tt.wantPresent)
 			}
 			if mode != tt.wantMode {
-				t.Errorf("TreePathMode(%q, %q) mode = %q, want %q", treeish, tt.path, mode, tt.wantMode)
+				t.Errorf("%s: TreePathMode(%q, %q) mode = %q, want %q", tt.requirement, treeish, tt.path, mode, tt.wantMode)
 			}
 		})
 	}
