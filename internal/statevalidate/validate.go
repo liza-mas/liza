@@ -17,13 +17,18 @@ import (
 
 const artifactRefMultipleRefsCause = "multiple_refs_not_supported"
 const artifactRefNotFoundCause = "file_not_found"
+const artifactRefEmptyPathCause = "empty_ref_path"
+const artifactRefPathTraversalCause = "path_traversal_outside_repo"
+const artifactRefAbsoluteOutsideRepoCause = "absolute_path_outside_repo"
 
 // ArtifactRefError carries safe diagnostics for invalid artifact references.
 type ArtifactRefError struct {
-	Field  string
-	Value  string
-	TaskID string
-	Cause  string
+	Field       string
+	Value       string
+	Path        string
+	TaskID      string
+	OutputIndex *int
+	Cause       string
 }
 
 func (e *ArtifactRefError) Error() string {
@@ -33,9 +38,15 @@ func (e *ArtifactRefError) Error() string {
 	}
 	switch e.Cause {
 	case artifactRefMultipleRefsCause:
-		return formatArtifactRefError(field, "contains multiple refs; use one repo-relative ref", e.Value, e.TaskID)
+		return formatArtifactRefError(field, "contains multiple refs; use one repo-relative ref", e.Value, e.TaskID, e.OutputIndex)
+	case artifactRefEmptyPathCause:
+		return formatArtifactRefError(field, "has empty path after fragment stripping", e.Value, e.TaskID, e.OutputIndex)
+	case artifactRefPathTraversalCause:
+		return formatArtifactRefError(field, "points outside repository", e.Value, e.TaskID, e.OutputIndex)
+	case artifactRefAbsoluteOutsideRepoCause:
+		return formatArtifactRefError(field, "absolute path outside repository", e.Value, e.TaskID, e.OutputIndex)
 	default:
-		return formatArtifactRefError(field, "file not found", e.Value, e.TaskID)
+		return formatArtifactRefError(field, "file not found", e.Value, e.TaskID, e.OutputIndex)
 	}
 }
 
@@ -48,14 +59,32 @@ func (e *ArtifactRefError) SafeDetails() map[string]any {
 	if e.TaskID != "" {
 		details["task_id"] = e.TaskID
 	}
+	if e.Path != "" {
+		details["path"] = e.Path
+	}
+	if e.OutputIndex != nil {
+		details["output_index"] = *e.OutputIndex
+	}
 	return details
 }
 
-func formatArtifactRefError(field, reason, value, taskID string) string {
+func formatArtifactRefError(field, reason, value, taskID string, outputIndex *int) string {
+	suffix := ""
 	if taskID != "" {
-		return fmt.Sprintf("%s %s: %s (task: %s)", field, reason, value, taskID)
+		suffix = fmt.Sprintf(" (task: %s", taskID)
 	}
-	return fmt.Sprintf("%s %s: %s", field, reason, value)
+	if outputIndex != nil {
+		if suffix == "" {
+			suffix = " ("
+		} else {
+			suffix += ", "
+		}
+		suffix += fmt.Sprintf("output: %d", *outputIndex)
+	}
+	if suffix != "" {
+		suffix += ")"
+	}
+	return fmt.Sprintf("%s %s: %s%s", field, reason, value, suffix)
 }
 
 // ValidateArtifactRefScalar rejects delimiter-joined refs. Artifact ref fields
