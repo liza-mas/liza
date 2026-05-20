@@ -49,31 +49,16 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 			blocked++
 		}
 
+		if BlockedByDependencies(&task, pr, depResolver) {
+			blockedByDeps++
+		}
+
 		// Pipeline path: use resolver to classify statuses dynamically.
 		if task.RolePair != "" && pr != nil {
-			if IsBlockedByDepsPipeline(&task, pr, depResolver) {
-				blockedByDeps++
-			}
 			if isInProgressPipeline(&task, pr) {
 				inProgress++
 			}
 			continue
-		}
-
-		// Fallback: hardcoded status checks when resolver is unavailable.
-		if task.Status == TaskStatusReady ||
-			task.Status == TaskStatusRejected ||
-			task.Status == TaskStatusIntegrationFailed {
-			hasUnsatisfiedDeps := false
-			for _, depID := range task.DependsOn {
-				if !depResolver.Resolve(depID).Satisfied() {
-					hasUnsatisfiedDeps = true
-					break
-				}
-			}
-			if hasUnsatisfiedDeps {
-				blockedByDeps++
-			}
 		}
 
 		if task.Status == TaskStatusImplementing ||
@@ -98,9 +83,26 @@ func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 	return strings.Join(parts, "; ")
 }
 
-// IsBlockedByDepsPipeline checks if a pipeline task is in an initial/rejected status
+// BlockedByDependencies reports whether a task is in a claimable/reclaimable
+// status but held back by dependencies that the resolver does not satisfy.
+func BlockedByDependencies(task *Task, pr PipelineResolver, depResolver *DependencyResolver) bool {
+	if task == nil || depResolver == nil {
+		return false
+	}
+	if task.RolePair != "" && pr != nil {
+		return isBlockedByDepsPipeline(task, pr, depResolver)
+	}
+	if task.Status != TaskStatusReady &&
+		task.Status != TaskStatusRejected &&
+		task.Status != TaskStatusIntegrationFailed {
+		return false
+	}
+	return len(depResolver.UnmetDependencies(task)) > 0
+}
+
+// isBlockedByDepsPipeline checks if a pipeline task is in an initial/rejected status
 // with unsatisfied dependencies.
-func IsBlockedByDepsPipeline(task *Task, pr PipelineResolver, depResolver *DependencyResolver) bool {
+func isBlockedByDepsPipeline(task *Task, pr PipelineResolver, depResolver *DependencyResolver) bool {
 	initial, err := pr.InitialStatus(task.RolePair)
 	if err != nil {
 		return false

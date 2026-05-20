@@ -255,7 +255,7 @@ func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus
 			ts.Active++
 		}
 
-		if taskBlockedByDependencies(&task, pr, depResolver) {
+		if models.BlockedByDependencies(&task, pr, depResolver) {
 			ts.BlockedByDeps++
 		}
 	}
@@ -264,21 +264,6 @@ func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus
 	ts.Reviewable = models.CountReviewableTasks(state, models.RoleCodeReviewer, pr)
 
 	return ts
-}
-
-func taskBlockedByDependencies(task *models.Task, pr models.PipelineResolver, depResolver *models.DependencyResolver) bool {
-	if task == nil {
-		return false
-	}
-	if task.RolePair != "" && pr != nil {
-		return models.IsBlockedByDepsPipeline(task, pr, depResolver)
-	}
-	if task.Status != models.TaskStatusReady &&
-		task.Status != models.TaskStatusRejected &&
-		task.Status != models.TaskStatusIntegrationFailed {
-		return false
-	}
-	return len(depResolver.UnmetDependencies(task)) > 0
 }
 
 func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHandoffStatus {

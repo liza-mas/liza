@@ -135,6 +135,31 @@ func TestBuildStatusData(t *testing.T) {
 			},
 		},
 		{
+			name: "legacy dependency blockers follow superseded replacement resolution",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				waiting := testhelpers.BuildTaskByStatus("waiting", models.TaskStatusReady, now)
+				waiting.RolePair = ""
+				waiting.DependsOn = []string{"old-dep"}
+				oldDep := testhelpers.BuildTaskByStatus("old-dep", models.TaskStatusSuperseded, now)
+				oldDep.RolePair = ""
+				oldDep.SupersededBy = []string{"new-dep"}
+				newDep := testhelpers.BuildTaskByStatus("new-dep", models.TaskStatusMerged, now)
+				newDep.RolePair = ""
+				state.Tasks = []models.Task{waiting, oldDep, newDep}
+				return state
+			}(),
+			detailed: false,
+			validate: func(t *testing.T, data statusData) {
+				if data.Tasks.BlockedByDeps != 0 {
+					t.Errorf("expected superseded dependency with merged replacement not to block, got %d", data.Tasks.BlockedByDeps)
+				}
+				if data.Tasks.Blocked != 0 {
+					t.Errorf("expected 0 explicit blocked tasks, got %d", data.Tasks.Blocked)
+				}
+			},
+		},
+		{
 			name: "state with active agents",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
