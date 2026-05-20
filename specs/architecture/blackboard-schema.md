@@ -279,8 +279,21 @@ Optional:
 `task_depends_on` must be legal for every per-subtask transition target that can consume the output. A dependency is illegal when the referenced task's `role_pair` is downstream of the generated child's `role_pair` in the configured transition graph; same-role-pair dependencies are allowed. Supersession chains are checked as dependency paths, so a dependency that resolves through `superseded_by` to a downstream role-pair is also invalid.
 
 Artifact reference fields are scalar repo-relative refs, optionally with a
-`#fragment` anchor. Delimiter-joined multi-refs such as `specs/a.md; specs/b.md`
-are invalid; use scope text or a future structured multi-ref field instead.
+`#fragment` anchor. The protected artifact fields are goal `spec_ref`; task
+`spec_ref`, `epic_ref`, `plan_ref`, and `arch_ref`; and `output[]` entry
+`spec_ref`, `epic_ref`, `plan_ref`, and `arch_ref`. Delimiter-joined multi-refs
+such as `specs/a.md; specs/b.md` are invalid; use scope text or a future
+structured multi-ref field instead.
+
+Candidate integration validation strips the optional fragment and checks the
+repo-relative path against the candidate Git tree before integration ref
+advancement. Valid protected artifact refs must resolve to regular Git files
+with mode `100644` or `100755`. Missing paths, directories,
+submodules/gitlinks, symlinks, and other non-regular Git object modes are
+rejected. Diagnostics are deterministic and include the invalid path plus owner
+provenance: field name, task ID when the owner is a task, and output index when
+the owner is an `output[]` entry. Post-merge `ValidateArtifactRefs` still runs
+after a successful ref update as the rollback backstop.
 
 **`arch_ref` Propagation:**
 
@@ -978,7 +991,10 @@ invariants:
   - "Task failed_by list must contain unique agent IDs"
   - "Task parent_task/parent_tasks must reference existing task IDs"
   - "Task output entries must have all required fields (desc, done_when, scope, spec_ref)"
-  - "Artifact reference fields are scalar repo-relative refs; semicolon-joined multi-refs are rejected"
+  - "Artifact reference fields are scalar repo-relative refs with optional #fragment anchors; semicolon-joined multi-refs are rejected"
+  - "Protected artifact fields are goal spec_ref; task spec_ref, epic_ref, plan_ref, arch_ref; and output entry spec_ref, epic_ref, plan_ref, arch_ref"
+  - "Candidate-tree artifact validation strips fragments and rejects missing paths, directories, submodules/gitlinks, symlinks, and non-regular object modes; valid paths resolve to Git file modes 100644 or 100755"
+  - "Artifact-ref diagnostics include deterministic invalid path and owner provenance: field name, task ID when applicable, and output index when applicable"
   - "Task arch_ref must not contain worktree prefix (.worktrees/) — must be repo-relative"
   - "Task arch_ref must reference an existing file (checked via checkSpecFileExists against project root then integration branch)"
   - "Task output entry arch_ref must not contain worktree prefix (.worktrees/) — must be repo-relative"

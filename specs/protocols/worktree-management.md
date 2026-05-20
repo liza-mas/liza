@@ -144,13 +144,28 @@ After APPROVED, **Code Reviewer** executes:
 3. Script performs working-tree-less merge:
    - Read integration HEAD without checkout (`git rev-parse refs/heads/integration`)
    - Detect fast-forward (task commit is descendant of integration)
-   - For true merge: compute tree via `git merge-tree`, create commit via `git commit-tree`, update ref via `git update-ref`
+   - For fast-forward: validate candidate artifact refs against the task commit before `git update-ref`
+   - For true merge: compute tree via `git merge-tree`, create commit via `git commit-tree`, validate candidate artifact refs against the merge tree or commit tree before `git update-ref`, then update the ref
    - Working tree files are transiently synced for integration test correctness, then restored if checked-out branch differs from integration
 4. If conflict: task → INTEGRATION_FAILED, Code Reviewer reports
-5. Validate post-merge blackboard artifact references against the synced tree and integration branch. Retired task refs (`SUPERSEDED`, `ABANDONED`) are non-blocking until supersede-time artifact retirement is implemented; active and `MERGED` refs remain protected.
-6. If validation fails: rollback via `git update-ref` to pre-merge HEAD, task → INTEGRATION_FAILED
-7. If integration tests fail: rollback via `git update-ref` to pre-merge HEAD, task → INTEGRATION_FAILED
-8. On success: working tree restored to checked-out branch HEAD (unless on integration, where no restore needed), task → MERGED, worktree deleted
+5. If candidate artifact validation fails: reject before integration ref advancement, task → INTEGRATION_FAILED
+6. Validate post-merge blackboard artifact references with `ValidateArtifactRefs` against the synced tree and integration branch. Retired task refs (`SUPERSEDED`, `ABANDONED`) are non-blocking until supersede-time artifact retirement is implemented; active and `MERGED` refs remain protected.
+7. If post-merge artifact validation fails: rollback via `git update-ref` to pre-merge HEAD, task → INTEGRATION_FAILED
+8. If integration tests fail: rollback via `git update-ref` to pre-merge HEAD, task → INTEGRATION_FAILED
+9. On success: working tree restored to checked-out branch HEAD (unless on integration, where no restore needed), task → MERGED, worktree deleted
+
+Candidate artifact validation protects goal `spec_ref`; task `spec_ref`,
+`epic_ref`, `plan_ref`, and `arch_ref`; and the same fields on `output[]`
+entries. Each protected ref is a scalar repo-relative path with an optional
+`#fragment` anchor; validation strips the fragment before checking the Git tree.
+The candidate tree must contain the path as a regular Git file mode `100644` or
+`100755`. Missing paths, directories, submodules/gitlinks, symlinks, and other
+non-regular object modes are rejected. Diagnostics are deterministic and name
+the invalid path plus owner provenance: field name, task ID when the owner is a
+task, and output index when the owner is an `output[]` entry.
+
+Post-merge `ValidateArtifactRefs` remains a rollback backstop after successful
+ref advancement; it is not replaced by the candidate-tree guard.
 
 ---
 

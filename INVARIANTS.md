@@ -178,12 +178,22 @@ Agent registration/unregistration, heartbeat, post-exit IDLE reset, orchestrator
 | Coders cannot commit to or merge to integration branch; only supervisor after reviewer approval | Uncontrolled integration branch | spec (`worktree-management.md`) |
 | Merge uses working-tree-less operations (merge-tree, commit-tree, update-ref) | Race conditions, checkout conflicts | spec, code (`wt_merge.go`) |
 | If merge conflict detected → INTEGRATION_FAILED (must be reclaimed) | Silent conflict resolution | spec, code |
+| Candidate-tree artifact guard validates protected blackboard artifact refs before `update-ref`; invalid candidates do not advance integration | Broken durable artifact refs propagating through normal merge control flow | spec (`worktree-management.md`), code (`wt_merge.go`, `validate.go`) |
 | If integration tests fail → rollback via `update-ref` to pre-merge HEAD | Failed integrations propagating | spec, code |
-| If post-merge artifact-reference validation fails → rollback via `update-ref` to pre-merge HEAD | Broken blackboard artifact refs propagating | spec, code (`wt_merge.go`, `validate.go`) |
+| If post-merge `ValidateArtifactRefs` fails → rollback via `update-ref` to pre-merge HEAD | Backstop for broken blackboard artifact refs after ref advancement | spec, code (`wt_merge.go`, `validate.go`) |
 | Worktree path is deterministic: `.worktrees/{taskID}` | Directory traversal, path confusion | code (`claim_task.go`, `wt_create.go`) |
 | BLOCKED/ABANDONED/SUPERSEDED/MERGED tasks: worktree must be deleted | Stale worktrees, resource leaks | spec (`worktree-management.md`) |
 | Different coder reclaiming REJECTED task → delete and recreate fresh worktree | Context contamination from failed work | spec |
 | Rebase onto integration branch before submission; conflict → abort and restore clean state | Merge conflicts discovered late | code (`submit_review.go`) |
+
+The candidate-tree artifact guard protects goal `spec_ref`; task `spec_ref`,
+`epic_ref`, `plan_ref`, and `arch_ref`; and the same fields on `output[]`
+entries. Refs are scalar repo-relative paths with optional `#fragment` anchors
+and must resolve in the candidate tree to regular Git file modes `100644` or
+`100755`. Missing paths, directories, submodules/gitlinks, symlinks, and other
+non-regular object modes are rejected with deterministic diagnostics naming the
+invalid path plus owner provenance: field name, task ID when applicable, and
+output index when applicable.
 
 ---
 
