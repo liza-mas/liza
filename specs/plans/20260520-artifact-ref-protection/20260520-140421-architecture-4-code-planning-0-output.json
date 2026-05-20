@@ -1,0 +1,41 @@
+[
+  {
+    "desc": "Add MergeWorktree acceptance coverage for protected artifact owners and candidate path mutations.",
+    "done_when": "`internal/ops/wt_merge_test.go` contains table-driven `MergeWorktree` acceptance tests that cover true-merge deletion of another task's `arch_ref`, task `plan_ref`, `spec_ref`, and `epic_ref`, output `arch_ref`, `plan_ref`, `spec_ref`, and `epic_ref`, `goal.spec_ref` deletion or removal, fast-forward deletion of a protected artifact, rename of a protected artifact without state rewrite, directory and symlink replacement plus at least one practical non-regular replacement, and one invalid-ref rejection; each rejected candidate captures the integration ref before `MergeWorktree`, asserts the ref is unchanged afterward, and asserts deterministic diagnostics name the invalid path plus owner provenance with task ID, artifact field, and output index where applicable.",
+    "scope": "Modify `internal/ops/wt_merge_test.go` only; reuse existing temp Git repository, state fixture, and `MergeWorktree` helpers or add local test helpers in that file when they reduce duplicated setup for the acceptance matrix. Out of scope: production code, `performCASMerge` hook mechanics, guard freshness and CAS retry tests owned by Task 2, exhaustive `internal/git` or `internal/statevalidate` boundary matrices owned by Task 3, documentation edits, and submit-for-review diagnostics.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-140421-architecture-4-code-planning-0.md",
+    "task_depends_on": [
+      "architecture-3-code-planning-1-coding-0"
+    ]
+  },
+  {
+    "desc": "Add MergeWorktree and performCASMerge regression coverage for guard freshness, CAS retry, no-op, and post-merge backstop behavior.",
+    "done_when": "`internal/ops/wt_merge_test.go` contains tests proving candidate validation failure is confirmed against exactly one fresh state snapshot, the hook returns success when the confirmation snapshot no longer protects the failing path and validates the same candidate, confirmation state read failure returns an error preserving both the candidate failure and freshness failure, hook failure after a changed integration HEAD is treated as stale and retried, hook failure with unreadable integration HEAD preserves both hook and staleness-read failures, a hook that passes before an `UpdateRef` CAS conflict is re-run against the recomputed retry candidate, the already-merged no-op path does not invoke the hook, `performCASMerge` remains artifact-policy agnostic by asserting only opaque hook behavior at the CAS boundary, and a successful ref update still runs post-merge `ValidateArtifactRefs` so rollback and `INTEGRATION_FAILED` remain available when full-state artifact validation fails afterward.",
+    "scope": "Modify `internal/ops/wt_merge_test.go` only; extend existing CAS retry, hook, and rollback tests or add focused tests in that file. Out of scope: production code, protected owner/path mutation matrix owned by Task 1, exhaustive collector/validator/Git boundary tests owned by Task 3, documentation edits, and changing retry limits or rollback semantics.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-140421-architecture-4-code-planning-0.md",
+    "depends_on": [
+      "0"
+    ],
+    "task_depends_on": [
+      "cas-preupdate-hook-coding-0",
+      "cas-hook-staleness-coding-1",
+      "cas-hook-conflict-retry-coding-2",
+      "architecture-3-code-planning-1-coding-0"
+    ]
+  },
+  {
+    "desc": "Add boundary coverage audit tests for artifact-ref owner provenance, invalid refs, Git object modes, and deterministic diagnostics.",
+    "done_when": "`internal/statevalidate` and `internal/git` tests contain a requirement-mapped boundary matrix proving collector output covers goal, task, and output artifact owners with normalized repo-relative fragment-free paths and deterministic owner ordering; invalid refs fail closed for semicolon-joined refs, empty paths after fragment stripping, traversal outside the repository, and unsafe absolute refs while valid absolute refs under `projectRoot` normalize or are rejected with actionable diagnostics as implemented; Git tree path mode tests distinguish missing paths from present regular files `100644`, executable files `100755`, directories `040000`, submodules/gitlinks `160000` where feasible, symlinks `120000`, and unknown non-regular modes; candidate validator tests accept only `100644` and `100755`, reject every missing or non-regular mode, propagate collector invalid-ref failures, and assert deterministic diagnostics include invalid path, cause, mode when present, and owner provenance without relying on map iteration order.",
+    "scope": "Modify or add tests under `internal/statevalidate` and `internal/git`, including files such as `internal/statevalidate/artifact_refs_test.go`, `internal/statevalidate/candidate_artifact_refs_test.go`, `internal/statevalidate/validate_specref_test.go`, and `internal/git/query_test.go` as needed. Out of scope: production code, `internal/ops/wt_merge_test.go`, `MergeWorktree` hook wiring, CAS retry behavior, post-merge rollback behavior, documentation edits, and changing artifact-ref semantics beyond asserting the approved implementation contracts.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-140421-architecture-4-code-planning-0.md",
+    "task_depends_on": [
+      "artifact-ref-collector-coding-0",
+      "artifact-ref-validator-coding-1",
+      "architecture-3-code-planning-0-coding-0",
+      "architecture-3-code-planning-0-coding-1"
+    ]
+  }
+]
