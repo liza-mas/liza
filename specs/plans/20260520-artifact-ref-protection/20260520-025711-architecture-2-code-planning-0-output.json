@@ -1,0 +1,29 @@
+[
+  {
+    "desc": "Add the optional `performCASMerge` pre-update hook parameter and invoke it with the correct candidate treeish for no-op, fast-forward, and true-merge paths.",
+    "done_when": "`performCASMerge` accepts a nil-safe `func(candidateTreeish string) error` hook; `MergeWorktree` passes nil; already-merged no-op returns without calling the hook; fast-forward attempts call the hook with `expectedCommit` before `UpdateRef`; true-merge attempts call the hook with the candidate merge commit before `UpdateRef`; tests in `internal/ops/wt_merge_test.go` assert hook call counts and treeish values for already-merged, fast-forward, and true-merge scenarios.",
+    "scope": "Modify `internal/ops/wt_merge.go` and `internal/ops/wt_merge_test.go` only. Do not add artifact-ref collection, candidate artifact validation policy, state reads inside the hook boundary, blackboard coupling, or CLI-facing behavior.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-025711-architecture-2-code-planning-0.md"
+  },
+  {
+    "desc": "Add hook-failure staleness handling so `performCASMerge` retries stale hook errors and preserves hook plus staleness-read errors when freshness cannot be checked.",
+    "done_when": "When the pre-update hook returns an error, `performCASMerge` re-reads `integrationRef`; if the ref changed from the attempt's `preMergeHEAD`, it discards that stale hook error and retries; if the ref is unchanged, it returns the original hook error; if the ref cannot be re-read, it returns an error that preserves the original hook error and reports the staleness read failure; tests assert unchanged-head return, changed-head retry, and unreadable-head composite error behavior.",
+    "scope": "Modify `internal/ops/wt_merge.go` and `internal/ops/wt_merge_test.go` only. Do not inspect hook error types for artifact semantics and do not add artifact-guard state freshness logic.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-025711-architecture-2-code-planning-0.md",
+    "depends_on": [
+      "0"
+    ]
+  },
+  {
+    "desc": "Preserve existing CAS conflict retry semantics so a hook that passes before a conflicting `UpdateRef` is re-run against the recomputed candidate on the retry.",
+    "done_when": "If the pre-update hook succeeds but `UpdateRef` returns `git.RefConflictError`, `performCASMerge` retries from a fresh integration HEAD and calls the hook again with the recomputed candidate treeish; tests extend the deterministic CAS conflict scenario to assert at least two hook invocations, distinct retry candidates when applicable, and final integration ancestry for both the competing commit and task commit.",
+    "scope": "Modify `internal/ops/wt_merge.go` and `internal/ops/wt_merge_test.go` only. Do not change `git.UpdateRef`, retry limits, merge conflict handling, or post-merge artifact validation.",
+    "spec_ref": "specs/goals/20260520-artifact-ref-protection.md",
+    "plan_ref": "specs/plans/20260520-artifact-ref-protection/20260520-025711-architecture-2-code-planning-0.md",
+    "depends_on": [
+      "1"
+    ]
+  }
+]
