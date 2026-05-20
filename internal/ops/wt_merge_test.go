@@ -368,6 +368,122 @@ func TestPerformCASMergePreUpdateHookTrueMergeCandidate(t *testing.T) {
 	}
 }
 
+func TestPerformCASMergePreUpdateHookFailureUnchangedHeadReturnsHookError(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "task/hook-unchanged-head")
+
+	taskFile := filepath.Join(tmpDir, "hook-unchanged-head.txt")
+	if err := os.WriteFile(taskFile, []byte("task candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write task file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-unchanged-head.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Task candidate")
+	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+
+	hookErr := errors.New("artifact guard rejected candidate")
+	outcome, err := performCASMerge(git.New(tmpDir), "refs/heads/integration", expectedCommit, "hook-unchanged-head", func(candidateTreeish string) error {
+		return hookErr
+	})
+	if err != hookErr {
+		t.Fatalf("performCASMerge() error = %v, want original hook error %v", err, hookErr)
+	}
+	if outcome != nil {
+		t.Fatalf("outcome = %#v, want nil", outcome)
+	}
+}
+
+func TestPerformCASMergePreUpdateHookFailureChangedHeadRetries(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	preMergeHEAD := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "task/hook-stale-retry")
+	taskFile := filepath.Join(tmpDir, "hook-stale-retry-task.txt")
+	if err := os.WriteFile(taskFile, []byte("task candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write task file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-stale-retry-task.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Task candidate")
+	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "competing/hook-stale-retry", preMergeHEAD)
+	competingFile := filepath.Join(tmpDir, "hook-stale-retry-competing.txt")
+	if err := os.WriteFile(competingFile, []byte("competing candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write competing file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-stale-retry-competing.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Competing candidate")
+	competingCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+
+	hookErr := errors.New("stale artifact guard rejection")
+	hookCalls := 0
+	outcome, err := performCASMerge(git.New(tmpDir), "refs/heads/integration", expectedCommit, "hook-stale-retry", func(candidateTreeish string) error {
+		hookCalls++
+		if hookCalls == 1 {
+			if err := git.New(tmpDir).UpdateRef("refs/heads/integration", competingCommit, preMergeHEAD); err != nil {
+				t.Fatalf("Failed to advance integration ref from hook: %v", err)
+			}
+			return hookErr
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("performCASMerge() unexpected error: %v", err)
+	}
+	if hookCalls != 2 {
+		t.Fatalf("hook calls = %d, want 2", hookCalls)
+	}
+	if outcome == nil {
+		t.Fatal("outcome = nil, want merge outcome")
+	}
+	if outcome.preMergeHEAD != competingCommit {
+		t.Fatalf("outcome preMergeHEAD = %s, want competing commit %s", outcome.preMergeHEAD, competingCommit)
+	}
+	testhelpers.MustGit(t, tmpDir, "merge-base", "--is-ancestor", expectedCommit, "integration")
+	testhelpers.MustGit(t, tmpDir, "merge-base", "--is-ancestor", competingCommit, "integration")
+}
+
+func TestPerformCASMergePreUpdateHookFailureUnreadableHeadReturnsCompositeError(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	testhelpers.MustGit(t, tmpDir, "checkout", "-b", "task/hook-unreadable-head")
+
+	taskFile := filepath.Join(tmpDir, "hook-unreadable-head.txt")
+	if err := os.WriteFile(taskFile, []byte("task candidate\n"), 0644); err != nil {
+		t.Fatalf("Failed to write task file: %v", err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "hook-unreadable-head.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Task candidate")
+	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+
+	hookErr := errors.New("artifact guard rejected candidate")
+	outcome, err := performCASMerge(git.New(tmpDir), "refs/heads/integration", expectedCommit, "hook-unreadable-head", func(candidateTreeish string) error {
+		testhelpers.MustGit(t, tmpDir, "update-ref", "-d", "refs/heads/integration")
+		return hookErr
+	})
+	if err == nil {
+		t.Fatal("performCASMerge() error = nil, want composite error")
+	}
+	if !errors.Is(err, hookErr) {
+		t.Fatalf("performCASMerge() error does not preserve hook error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "staleness could not be verified") {
+		t.Fatalf("performCASMerge() error = %q, want staleness verification failure", err.Error())
+	}
+	if !strings.Contains(err.Error(), "failed to re-read integration HEAD") {
+		t.Fatalf("performCASMerge() error = %q, want integration HEAD read failure", err.Error())
+	}
+	if outcome != nil {
+		t.Fatalf("outcome = %#v, want nil", outcome)
+	}
+}
+
 func TestMergeWorktree_Validation(t *testing.T) {
 	tests := []struct {
 		name        string

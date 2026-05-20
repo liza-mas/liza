@@ -337,7 +337,11 @@ func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string,
 		if isFF {
 			if preUpdateHook != nil {
 				if err := preUpdateHook(expectedCommit); err != nil {
-					return nil, err
+					retry, hookErr := handlePreUpdateHookFailure(gw, integrationRef, preMergeHEAD, err)
+					if retry {
+						continue
+					}
+					return nil, hookErr
 				}
 			}
 			if err := gw.UpdateRef(integrationRef, expectedCommit, preMergeHEAD); err != nil {
@@ -375,7 +379,11 @@ func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string,
 
 		if preUpdateHook != nil {
 			if err := preUpdateHook(mergeCommit); err != nil {
-				return nil, err
+				retry, hookErr := handlePreUpdateHookFailure(gw, integrationRef, preMergeHEAD, err)
+				if retry {
+					continue
+				}
+				return nil, hookErr
 			}
 		}
 		if err := gw.UpdateRef(integrationRef, mergeCommit, preMergeHEAD); err != nil {
@@ -396,6 +404,18 @@ func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string,
 		preMergeHEAD: preMergeHEAD,
 		fastForward:  fastForward,
 	}, nil
+}
+
+func handlePreUpdateHookFailure(gw *git.Git, integrationRef, preMergeHEAD string, hookErr error) (bool, error) {
+	currentHEAD, err := gw.GetCommitSHA(integrationRef)
+	if err != nil {
+		stalenessErr := fmt.Errorf("failed to re-read integration HEAD: %w", err)
+		return false, fmt.Errorf("pre-update hook failed and staleness could not be verified: %w", errors.Join(hookErr, stalenessErr))
+	}
+	if currentHEAD != preMergeHEAD {
+		return true, nil
+	}
+	return false, hookErr
 }
 
 // MergeWorktree merges an approved task into the integration branch.
