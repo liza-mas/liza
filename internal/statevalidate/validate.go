@@ -46,7 +46,11 @@ func (e *ArtifactRefError) Error() string {
 	case artifactRefAbsoluteOutsideRepoCause:
 		return formatArtifactRefError(field, "absolute path outside repository", e.Value, e.TaskID, e.OutputIndex)
 	default:
-		return formatArtifactRefError(field, "file not found", e.Value, e.TaskID, e.OutputIndex)
+		value := e.Value
+		if e.Path != "" {
+			value = e.Path
+		}
+		return formatArtifactRefError(field, "file not found", value, e.TaskID, e.OutputIndex)
 	}
 }
 
@@ -223,57 +227,31 @@ func checkSpecFileExists(projectRoot, specRef, integrationBranch string) error {
 // gates use it after a candidate integration update to catch commits that delete
 // durable artifacts still referenced by the blackboard.
 func ValidateArtifactRefs(state *models.State, projectRoot string) error {
-	if state == nil {
-		return fmt.Errorf("state is nil")
+	refs, err := CollectArtifactRefs(state, projectRoot)
+	if err != nil {
+		return err
 	}
 	integrationBranch := state.Config.IntegrationBranch
-	if state.Goal.SpecRef != "" {
-		if err := checkArtifactRefFileExists(projectRoot, "goal spec_ref", state.Goal.SpecRef, integrationBranch, ""); err != nil {
+	for _, ref := range refs {
+		if err := checkCollectedArtifactRefFileExists(projectRoot, ref, integrationBranch); err != nil {
 			return err
 		}
 	}
-	for _, task := range state.Tasks {
-		if artifactRefsRetired(task) {
-			continue
-		}
-		refs := []struct {
-			field string
-			value string
-		}{
-			{field: "spec_ref", value: task.SpecRef},
-			{field: "epic_ref", value: task.EpicRef},
-			{field: "plan_ref", value: task.PlanRef},
-			{field: "arch_ref", value: task.ArchRef},
-		}
-		for _, ref := range refs {
-			if ref.value == "" {
-				continue
-			}
-			if err := checkArtifactRefFileExists(projectRoot, ref.field, ref.value, integrationBranch, task.ID); err != nil {
-				return err
-			}
-		}
-		for i, entry := range task.Output {
-			outputRefs := []struct {
-				field string
-				value string
-			}{
-				{field: fmt.Sprintf("output[%d].spec_ref", i), value: entry.SpecRef},
-				{field: fmt.Sprintf("output[%d].epic_ref", i), value: entry.EpicRef},
-				{field: fmt.Sprintf("output[%d].plan_ref", i), value: entry.PlanRef},
-				{field: fmt.Sprintf("output[%d].arch_ref", i), value: entry.ArchRef},
-			}
-			for _, ref := range outputRefs {
-				if ref.value == "" {
-					continue
-				}
-				if err := checkArtifactRefFileExists(projectRoot, ref.field, ref.value, integrationBranch, task.ID); err != nil {
-					return err
-				}
-			}
-		}
-	}
 	return nil
+}
+
+func checkCollectedArtifactRefFileExists(projectRoot string, ref ArtifactRef, integrationBranch string) error {
+	if artifactRefFileExists(projectRoot, ref.Path, integrationBranch) {
+		return nil
+	}
+	return &ArtifactRefError{
+		Field:       ref.Owner.Field,
+		Value:       ref.Raw,
+		Path:        ref.Path,
+		TaskID:      ref.Owner.TaskID,
+		OutputIndex: cloneInt(ref.Owner.OutputIndex),
+		Cause:       artifactRefNotFoundCause,
+	}
 }
 
 func artifactRefsRetired(task models.Task) bool {
@@ -310,6 +288,22 @@ func checkArtifactRefFileExists(projectRoot, field, ref, integrationBranch, task
 		TaskID: taskID,
 		Cause:  artifactRefNotFoundCause,
 	}
+}
+
+func artifactRefFileExists(projectRoot, repoRelativePath, integrationBranch string) bool {
+	refPath := repoRelativePath
+	if !filepath.IsAbs(refPath) {
+		refPath = filepath.Join(projectRoot, filepath.FromSlash(repoRelativePath))
+	}
+	if _, err := os.Stat(refPath); err == nil {
+		return true
+	}
+	if integrationBranch != "" && projectRoot != "" && !filepath.IsAbs(repoRelativePath) {
+		if _, err := gitenv.CombinedOutput(projectRoot, "cat-file", "-e", integrationBranch+":"+repoRelativePath); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // buildTaskIDSet creates a lookup set of all task IDs for O(1) existence

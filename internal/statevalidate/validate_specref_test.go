@@ -1,6 +1,7 @@
 package statevalidate
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -365,6 +366,138 @@ func TestValidateArtifactRefScalarRejectsSemicolonJoinedRefs(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "multiple refs") {
 		t.Errorf("Error = %q, want multiple refs message", err.Error())
+	}
+}
+
+func TestValidateArtifactRefs_NormalizesCollectedRefsBeforeGitFallback(t *testing.T) {
+	repoDir := initGitRepo(t, "integration", "specs/auth.md", "# Auth spec")
+	state := testhelpers.CreateValidState()
+	state.Config.IntegrationBranch = "integration"
+	state.Goal.SpecRef = ""
+	state.Tasks = []models.Task{
+		artifactRefTask("task-absolute", filepath.Join(repoDir, "specs", "auth.md")+"#login"),
+	}
+
+	if err := ValidateArtifactRefs(state, repoDir); err != nil {
+		t.Fatalf("ValidateArtifactRefs returned error for absolute ref available on integration branch: %v", err)
+	}
+}
+
+func TestValidateArtifactRefs_MissingArtifactsUseCollectorOwnerDiagnostics(t *testing.T) {
+	tests := []struct {
+		name       string
+		configure  func(*models.State)
+		wantField  string
+		wantPath   string
+		wantTaskID string
+		wantOutput *int
+	}{
+		{
+			name: "goal spec ref",
+			configure: func(state *models.State) {
+				state.Goal.SpecRef = "specs/missing-goal.md#intro"
+			},
+			wantField: "goal.spec_ref",
+			wantPath:  "specs/missing-goal.md",
+		},
+		{
+			name: "task artifact ref",
+			configure: func(state *models.State) {
+				state.Tasks = []models.Task{
+					{
+						ID:       "task-1",
+						ArchRef:  "specs/missing-task-arch.md#design",
+						Priority: 1,
+					},
+				}
+			},
+			wantField:  "arch_ref",
+			wantPath:   "specs/missing-task-arch.md",
+			wantTaskID: "task-1",
+		},
+		{
+			name: "output artifact ref",
+			configure: func(state *models.State) {
+				state.Tasks = []models.Task{
+					{
+						ID:       "task-2",
+						Priority: 1,
+						Output: []models.OutputEntry{
+							{
+								PlanRef: "specs/missing-output-plan.md#plan",
+							},
+						},
+					},
+				}
+			},
+			wantField:  "output[0].plan_ref",
+			wantPath:   "specs/missing-output-plan.md",
+			wantTaskID: "task-2",
+			wantOutput: intPtr(0),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := testhelpers.CreateValidState()
+			state.Goal.SpecRef = ""
+			state.Tasks = nil
+			tt.configure(state)
+
+			err := ValidateArtifactRefs(state, t.TempDir())
+			if err == nil {
+				t.Fatal("ValidateArtifactRefs returned nil error")
+			}
+
+			var refErr *ArtifactRefError
+			if !errors.As(err, &refErr) {
+				t.Fatalf("error type = %T, want *ArtifactRefError", err)
+			}
+			if refErr.Cause != artifactRefNotFoundCause {
+				t.Errorf("Cause = %q, want %q", refErr.Cause, artifactRefNotFoundCause)
+			}
+			if refErr.Field != tt.wantField {
+				t.Errorf("Field = %q, want %q", refErr.Field, tt.wantField)
+			}
+			if refErr.Path != tt.wantPath {
+				t.Errorf("Path = %q, want %q", refErr.Path, tt.wantPath)
+			}
+			if refErr.TaskID != tt.wantTaskID {
+				t.Errorf("TaskID = %q, want %q", refErr.TaskID, tt.wantTaskID)
+			}
+			if !sameOutputIndex(refErr.OutputIndex, tt.wantOutput) {
+				t.Errorf("OutputIndex = %v, want %v", refErr.OutputIndex, tt.wantOutput)
+			}
+			for _, want := range []string{tt.wantField, tt.wantPath} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("Error = %q, want to contain %q", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateArtifactRefs_ReportsMissingArtifactInCollectorOrder(t *testing.T) {
+	state := testhelpers.CreateValidState()
+	state.Goal.SpecRef = "specs/z-missing-goal.md"
+	state.Tasks = []models.Task{
+		artifactRefTask("task-a", "specs/a-missing-task.md"),
+	}
+
+	err := ValidateArtifactRefs(state, t.TempDir())
+	if err == nil {
+		t.Fatal("ValidateArtifactRefs returned nil error")
+	}
+
+	var refErr *ArtifactRefError
+	if !errors.As(err, &refErr) {
+		t.Fatalf("error type = %T, want *ArtifactRefError", err)
+	}
+	if refErr.Path != "specs/a-missing-task.md" {
+		t.Errorf("Path = %q, want first missing ref in sorted collector order", refErr.Path)
+	}
+	if refErr.TaskID != "task-a" {
+		t.Errorf("TaskID = %q, want task-a", refErr.TaskID)
 	}
 }
 

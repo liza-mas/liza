@@ -36,6 +36,9 @@ func CollectArtifactRefs(state *models.State, projectRoot string) ([]ArtifactRef
 		return nil, err
 	}
 	for _, task := range state.Tasks {
+		if artifactRefsRetired(task) {
+			continue
+		}
 		if err := collector.add("spec_ref", task.SpecRef, task.ID, nil); err != nil {
 			return nil, err
 		}
