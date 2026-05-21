@@ -100,4 +100,27 @@ FIRST ACTIONS:
 {{- end}}
 3. Read the goal spec: {{.GoalSpecRef}}
 4. Execute your role's protocol
+
+{{- if .ScipSearchIndexes }}
+
+=== SCIP-SEARCH INDEXES ===
+Generated SCIP indexes are snapshots; they will not reflect subsequent agent edits.
+
+{{- range .ScipSearchIndexes }}
+
+{{ .DisplayLanguage }} index: {{ .IndexPath }}
+```bash
+scip-search symbols --index {{ .IndexPath }} --name Foo --name Bar
+scip-search references --index {{ .IndexPath }} --symbol '<exact-foo>' --symbol '<exact-bar>' --location-only
+{{ if .ShowImplementationCommand -}}
+scip-search implementations --index {{ .IndexPath }} --symbol '<exact-symbol>'
+{{ end -}}
+nl -ba <result-path> | sed -n '<first-line>,<last-line>p'
+```
+{{ .CapabilitySummary }}
+{{ .ImplementationGuidance }}
+{{- end }}
+
+Use `--name` for symbol substring search and `--symbol` for exact symbols. That's the full file-open loop for code exploration.
+{{- end }}
 {{- end -}}

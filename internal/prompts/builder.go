@@ -3,6 +3,7 @@ package prompts
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -19,6 +20,27 @@ type BasePromptConfig struct {
 	StatePath   string
 	GoalDesc    string
 	GoalSpecRef string
+
+	ScipSearchIndexes []ScipSearchIndex
+}
+
+// ScipSearchIndex is prompt-safe metadata for one successful generated SCIP index.
+type ScipSearchIndex struct {
+	Language  string
+	IndexPath string
+}
+
+type basePromptTemplateData struct {
+	BasePromptConfig
+	ScipSearchIndexes []scipSearchPromptIndex
+}
+
+type scipSearchPromptIndex struct {
+	DisplayLanguage           string
+	IndexPath                 string
+	CapabilitySummary         string
+	ImplementationGuidance    string
+	ShowImplementationCommand bool
 }
 
 // SiblingTaskSummary provides minimal context about sibling tasks in the same sprint
@@ -32,7 +54,79 @@ type SiblingTaskSummary struct {
 
 // BuildBasePrompt creates the base bootstrap prompt for all agents
 func BuildBasePrompt(config BasePromptConfig) (string, error) {
-	return executeTemplate("base_prompt", config)
+	data := basePromptTemplateData{
+		BasePromptConfig:  config,
+		ScipSearchIndexes: buildScipSearchPromptIndexes(config.ScipSearchIndexes),
+	}
+	return executeTemplate("base_prompt", data)
+}
+
+func buildScipSearchPromptIndexes(indexes []ScipSearchIndex) []scipSearchPromptIndex {
+	ordered := append([]ScipSearchIndex(nil), indexes...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left := scipSearchLanguageOrder(ordered[i].Language)
+		right := scipSearchLanguageOrder(ordered[j].Language)
+		if left != right {
+			return left < right
+		}
+		return ordered[i].Language < ordered[j].Language
+	})
+
+	promptIndexes := make([]scipSearchPromptIndex, 0, len(ordered))
+	for _, index := range ordered {
+		if index.Language == "" || index.IndexPath == "" {
+			continue
+		}
+		promptIndexes = append(promptIndexes, scipSearchPromptIndexFor(index))
+	}
+	return promptIndexes
+}
+
+func scipSearchLanguageOrder(language string) int {
+	switch strings.ToLower(language) {
+	case "go":
+		return 0
+	case "typescript":
+		return 1
+	case "python":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
+	switch strings.ToLower(index.Language) {
+	case "go":
+		return scipSearchPromptIndex{
+			DisplayLanguage:           "Go",
+			IndexPath:                 index.IndexPath,
+			CapabilitySummary:         "Go symbols, references, and implementations are supported.",
+			ImplementationGuidance:    "Use implementations for Go implementation lookups.",
+			ShowImplementationCommand: true,
+		}
+	case "typescript":
+		return scipSearchPromptIndex{
+			DisplayLanguage:           "TypeScript",
+			IndexPath:                 index.IndexPath,
+			CapabilitySummary:         "TypeScript symbols and references are supported.",
+			ImplementationGuidance:    "TypeScript implementations are upstream-supported by scip-search but not locally verified; verify results in files before relying on them.",
+			ShowImplementationCommand: true,
+		}
+	case "python":
+		return scipSearchPromptIndex{
+			DisplayLanguage:        "Python",
+			IndexPath:              index.IndexPath,
+			CapabilitySummary:      "Python symbols are supported and references may be incomplete.",
+			ImplementationGuidance: "scip-search implementations is not supported for Python.",
+		}
+	default:
+		return scipSearchPromptIndex{
+			DisplayLanguage:   index.Language,
+			IndexPath:         index.IndexPath,
+			CapabilitySummary: "Symbols and references are available for this supplied SCIP index.",
+		}
+	}
 }
 
 // RenderOrchestratorDashboard pre-renders the orchestrator dashboard and wake instruction
