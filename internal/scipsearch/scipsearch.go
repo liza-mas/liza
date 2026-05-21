@@ -2,6 +2,7 @@ package scipsearch
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -98,6 +99,13 @@ func ParseEnvGate(value string) bool {
 	default:
 		return false
 	}
+}
+
+// RuntimeEnabled reports whether runtime scip-search behavior is active for the
+// current process. It is true only when LIZA_ENABLE_SCIP_SEARCH is truthy and at
+// least one configured language from Config.ScipSearch remains available.
+func RuntimeEnabled(configuredLanguages []string) bool {
+	return ParseEnvGate(os.Getenv(EnvEnableScipSearch)) && len(configuredLanguages) > 0
 }
 
 func selectLanguages(opts InitOptions, gitFiles GitFilesFunc) ([]string, error) {

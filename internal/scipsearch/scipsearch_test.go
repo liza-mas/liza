@@ -2,6 +2,11 @@ package scipsearch
 
 import (
 	"errors"
+	"go/ast"
+	"go/doc"
+	"go/parser"
+	"go/token"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,6 +18,91 @@ func TestParseEnvGate(t *testing.T) {
 		if got := ParseEnvGate(value); got != want {
 			t.Fatalf("ParseEnvGate(%q) = %v, want %v", value, got, want)
 		}
+	}
+}
+
+func TestRuntimeEnabled(t *testing.T) {
+	tests := []struct {
+		name      string
+		envSet    bool
+		envValue  string
+		languages []string
+		want      bool
+	}{
+		{name: "env unset disables configured languages", languages: []string{"go"}},
+		{name: "env empty disables configured languages", envSet: true, envValue: "", languages: []string{"go"}},
+		{name: "env zero disables configured languages", envSet: true, envValue: "0", languages: []string{"go"}},
+		{name: "env false disables configured languages", envSet: true, envValue: " false ", languages: []string{"go"}},
+		{name: "truthy env disables absent config", envSet: true, envValue: "true"},
+		{name: "truthy env disables empty config", envSet: true, envValue: "true", languages: []string{}},
+		{name: "truthy env enables at least one configured language", envSet: true, envValue: " TRUE ", languages: []string{"go"}, want: true},
+		{name: "truthy numeric env enables at least one configured language", envSet: true, envValue: "1", languages: []string{"python"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envSet {
+				t.Setenv(EnvEnableScipSearch, tt.envValue)
+			} else {
+				unsetEnvForTest(t, EnvEnableScipSearch)
+			}
+
+			if got := RuntimeEnabled(tt.languages); got != tt.want {
+				t.Fatalf("RuntimeEnabled(%v) with env %q set=%v = %v, want %v", tt.languages, tt.envValue, tt.envSet, got, tt.want)
+			}
+		})
+	}
+}
+
+func unsetEnvForTest(t *testing.T, key string) {
+	t.Helper()
+
+	previous, wasSet := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Unsetenv(%q) error = %v", key, err)
+	}
+	t.Cleanup(func() {
+		if wasSet {
+			if err := os.Setenv(key, previous); err != nil {
+				t.Fatalf("Setenv(%q) cleanup error = %v", key, err)
+			}
+			return
+		}
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("Unsetenv(%q) cleanup error = %v", key, err)
+		}
+	})
+}
+
+func TestRuntimeActivationContractIsDocumented(t *testing.T) {
+	fset := token.NewFileSet()
+	files := make([]*ast.File, 0, 2)
+	for _, path := range []string{"doc.go", "scipsearch.go"} {
+		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("ParseFile(%q) error = %v", path, err)
+		}
+		files = append(files, file)
+	}
+
+	pkg, err := doc.NewFromFiles(fset, files, "./internal/scipsearch")
+	if err != nil {
+		t.Fatalf("NewFromFiles() error = %v", err)
+	}
+	packageDoc := pkg.Doc
+	if !strings.Contains(packageDoc, "RuntimeEnabled") || !strings.Contains(packageDoc, EnvEnableScipSearch) || !strings.Contains(packageDoc, "Config.ScipSearch") {
+		t.Fatalf("package doc = %q, want runtime activation contract for later callers", packageDoc)
+	}
+
+	var runtimeEnabledDoc string
+	for _, fn := range pkg.Funcs {
+		if fn.Name == "RuntimeEnabled" {
+			runtimeEnabledDoc = fn.Doc
+			break
+		}
+	}
+	if !strings.Contains(runtimeEnabledDoc, EnvEnableScipSearch) || !strings.Contains(runtimeEnabledDoc, "configured language") {
+		t.Fatalf("RuntimeEnabled doc = %q, want env and configured-language contract", runtimeEnabledDoc)
 	}
 }
 
