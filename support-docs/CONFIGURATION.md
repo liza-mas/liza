@@ -119,6 +119,74 @@ All configuration lives in `.liza/state.yaml` under the `config` section.
 | `codex_package_version` | (none) | — | — | npm package version | Pins headless Codex agents to `@openai/codex@<version>` |
 | `codex_legacy_landlock` | false | — | — | boolean | Adds Codex `use_legacy_landlock` and `workspace-write` flags for headless MAS agents |
 | `post_worktree_cmd` | (none) | — | — | shell cmd | Command run after worktree creation (e.g. `npm install`) |
+| `scip_search` | (none) | — | — | language list | Durable allowlist of SCIP languages Liza may index when `LIZA_ENABLE_SCIP_SEARCH` is truthy |
+
+### SCIP Search (`config.scip_search`)
+
+`scip-search` is an optional external repository-navigation tool for MAS
+worktrees. It is strict opt-in: Liza generates SCIP indexes and injects
+`scip-search` prompt guidance only when `LIZA_ENABLE_SCIP_SEARCH` is truthy and
+`config.scip_search` contains at least one supported language.
+
+`LIZA_ENABLE_SCIP_SEARCH` is process-local activation, not durable project
+state. Values are trimmed and compared case-insensitively:
+
+| Value | Meaning |
+|-------|---------|
+| `1`, `true` | Enable MAS SCIP indexing and prompt guidance when `config.scip_search` allows a detected language |
+| unset, empty, `0`, `false` | Disable MAS SCIP indexing and prompt guidance, even when `config.scip_search` exists |
+
+`config.scip_search` is the durable language allowlist written under
+`.liza/state.yaml` by `liza init`. It does not activate MAS indexing by itself;
+it only limits which detected languages Liza may index after the environment
+gate is truthy.
+
+Use repeated `--scip-search <language>` options during init to set an explicit
+allowlist:
+
+```bash
+LIZA_ENABLE_SCIP_SEARCH=1 liza init --spec goal.md --scip-search go --scip-search typescript --scip-search python
+```
+
+Supported `--scip-search <language>` values are exactly `go`, `typescript`, and
+`python`. When no explicit `--scip-search` value is supplied and
+`LIZA_ENABLE_SCIP_SEARCH` is truthy, Liza auto-detects supported languages from
+git-tracked code and writes the detected allowlist to `config.scip_search`.
+
+`scip-search` and the language indexers are separate external prerequisites.
+Installing `scip-search` does not install the indexers:
+
+| Language | Indexer |
+|----------|---------|
+| `go` | `scip-go` |
+| `typescript` | `scip-typescript` |
+| `python` | `scip-python` |
+
+Generated task indexes live under the task worktree:
+
+```text
+<worktree>/.liza/scip/
+```
+
+Project-root orchestrator indexes live under:
+
+```text
+<project_root>/.liza/scip/
+```
+
+Indexes are snapshots generated at controlled lifecycle points. They reflect the
+source tree when Liza created or refreshed them, not later edits made by an
+agent during the same task.
+
+Indexing failures degrade gracefully at runtime. If one enabled language fails
+to index, Liza still spawns the agent and omits that failed language from the
+`scip-search` prompt guidance. If no index is available, Liza omits the
+`scip-search` prompt section entirely.
+
+Explicit non-goals: Liza does not build, vendor, auto-install, daemonize, watch,
+cache, or wrap `scip-search` or its language indexers. Operators install and
+maintain `scip-search`, `scip-go`, `scip-typescript`, and `scip-python`
+separately.
 
 ### Agent Execution Timeouts
 
@@ -301,6 +369,7 @@ project configuration belongs in `.liza/state.yaml`.
 |----------|----------|---------|---------|
 | `LIZA_AGENT_ID` | For agent commands | -- | Agent identifier (format: `{role}-{number}`) |
 | `LIZA_DISABLE_CLAUDE_SUBAGENTS` | No | unset | Set to `1` to launch Claude Code agents with `--disallowedTools Task`, disabling Claude subagent delegation. Use only when intentionally waiving Claude subagent delegation; agents may be unable to satisfy contract delegation triggers while this is set. |
+| `LIZA_ENABLE_SCIP_SEARCH` | No | unset | Strict opt-in MAS activation gate for SCIP indexing and `scip-search` prompt guidance. Truthy values are `1` and `true`; unset, empty, `0`, and `false` disable it. Values are trimmed and parsed case-insensitively. |
 | `LIZA_CODEX_VERSION` | No | unset | Process-local fallback for `config.codex_package_version` when launching headless Codex agents |
 | `LIZA_CODEX_LEGACY_LANDLOCK` | No | unset | Process-local fallback enabling legacy Landlock for headless Codex agents when `config.codex_legacy_landlock` is false |
 | `LIZA_SPECS` | No | `specs/` | Path to specs directory (relative to project root) |
