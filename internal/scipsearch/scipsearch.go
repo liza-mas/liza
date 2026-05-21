@@ -14,6 +14,8 @@ import (
 
 const EnvEnableScipSearch = "LIZA_ENABLE_SCIP_SEARCH"
 
+const maxFailureDiagnosticBytes = 1024
+
 var supportedLanguages = []string{"go", "typescript", "python"}
 
 var languageIndexers = map[string]string{
@@ -56,6 +58,36 @@ type RuntimeCommandPlan struct {
 	Args       []string
 	Dir        string
 	OutputPath string
+}
+
+// RuntimeRunner executes one runtime indexer command plan.
+type RuntimeRunner func(RuntimeCommandPlan) (string, error)
+
+// RefreshOptions configures one best-effort runtime index refresh.
+type RefreshOptions struct {
+	TargetRoot          string
+	ConfiguredLanguages []string
+	GitFiles            GitFilesFunc
+	Runner              RuntimeRunner
+}
+
+// RefreshResult contains successful indexes and isolated language failures from
+// one refresh attempt.
+type RefreshResult struct {
+	Successes []IndexRef
+	Failures  []RefreshFailure
+}
+
+// IndexRef identifies one prompt-safe generated index file.
+type IndexRef struct {
+	Language string
+	Path     string
+}
+
+// RefreshFailure contains bounded diagnostics for one failed language indexer.
+type RefreshFailure struct {
+	Language   string
+	Diagnostic string
 }
 
 var (
@@ -146,6 +178,84 @@ func PlanRuntimeCommands(opts RuntimePlanOptions) ([]RuntimeCommandPlan, error) 
 	}
 
 	return buildRuntimeCommandPlans(targetRoot, filterRuntimeLanguages(opts.ConfiguredLanguages, detectLanguages(files))), nil
+}
+
+// RefreshIndexes executes selected runtime indexer command plans and reports
+// per-language results. Indexer failures are isolated to their language.
+func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
+	plans, err := PlanRuntimeCommands(RuntimePlanOptions{
+		TargetRoot:          opts.TargetRoot,
+		ConfiguredLanguages: opts.ConfiguredLanguages,
+		GitFiles:            opts.GitFiles,
+	})
+	if err != nil {
+		return RefreshResult{}, err
+	}
+	if len(plans) == 0 {
+		return RefreshResult{}, nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(plans[0].OutputPath), 0o755); err != nil {
+		return RefreshResult{}, fmt.Errorf("create scip-search index directory: %w", err)
+	}
+
+	runner := opts.Runner
+	if runner == nil {
+		runner = runRuntimeCommandPlan
+	}
+
+	var result RefreshResult
+	for _, plan := range plans {
+		if err := removeStaleIndex(plan.OutputPath); err != nil {
+			result.Failures = append(result.Failures, RefreshFailure{
+				Language:   plan.Language,
+				Diagnostic: boundedFailureDiagnostic(err, ""),
+			})
+			continue
+		}
+		output, err := runner(plan)
+		if err != nil {
+			result.Failures = append(result.Failures, RefreshFailure{
+				Language:   plan.Language,
+				Diagnostic: boundedFailureDiagnostic(err, output),
+			})
+			continue
+		}
+		if _, err := os.Stat(plan.OutputPath); err != nil {
+			result.Failures = append(result.Failures, RefreshFailure{
+				Language:   plan.Language,
+				Diagnostic: boundedFailureDiagnostic(fmt.Errorf("indexer did not write %s: %w", plan.OutputPath, err), output),
+			})
+			continue
+		}
+		result.Successes = append(result.Successes, IndexRef{Language: plan.Language, Path: plan.OutputPath})
+	}
+	return result, nil
+}
+
+// AvailableIndexes returns existing absolute index paths for selected runtime
+// languages. Missing files are omitted rather than reported as failures.
+func AvailableIndexes(opts RuntimePlanOptions) ([]IndexRef, error) {
+	plans, err := PlanRuntimeCommands(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	indexes := make([]IndexRef, 0, len(plans))
+	for _, plan := range plans {
+		info, err := os.Stat(plan.OutputPath)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("inspect scip-search index %q: %w", plan.OutputPath, err)
+		}
+		if info.IsDir() {
+			continue
+		}
+		indexes = append(indexes, IndexRef{Language: plan.Language, Path: plan.OutputPath})
+	}
+	return indexes, nil
 }
 
 func selectLanguages(opts InitOptions, gitFiles GitFilesFunc) ([]string, error) {
@@ -277,6 +387,20 @@ func runCommand(name string, args ...string) (string, error) {
 	return string(output), err
 }
 
+func runRuntimeCommandPlan(plan RuntimeCommandPlan) (string, error) {
+	cmd := exec.Command(plan.Name, plan.Args...)
+	cmd.Dir = plan.Dir
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func removeStaleIndex(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale scip-search index %q: %w", path, err)
+	}
+	return nil
+}
+
 func listGitFiles(projectRoot string) ([]string, error) {
 	output, err := gitenv.Output(projectRoot, "ls-files")
 	if err != nil {
@@ -299,4 +423,15 @@ func outputSuffix(output string) string {
 		return ""
 	}
 	return ": " + output
+}
+
+func boundedFailureDiagnostic(err error, output string) string {
+	diagnostic := err.Error()
+	if output = strings.TrimSpace(output); output != "" {
+		diagnostic += ": " + output
+	}
+	if len(diagnostic) <= maxFailureDiagnosticBytes {
+		return diagnostic
+	}
+	return diagnostic[:maxFailureDiagnosticBytes]
 }

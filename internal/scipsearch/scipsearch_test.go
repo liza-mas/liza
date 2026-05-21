@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -328,6 +329,156 @@ func TestRuntimeCommandPlanningBuildsExactCommandPlans(t *testing.T) {
 	}
 }
 
+func TestRuntimeRefreshCreatesParentAndRunsExactCommandPlans(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	target := t.TempDir()
+	var calls []RuntimeCommandPlan
+
+	result, err := RefreshIndexes(RefreshOptions{
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"go", "typescript"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod", "web/app.ts"}, nil
+		},
+		Runner: func(plan RuntimeCommandPlan) (string, error) {
+			calls = append(calls, cloneRuntimeCommandPlan(plan))
+			if err := os.WriteFile(plan.OutputPath, []byte(plan.Language), 0o644); err != nil {
+				t.Fatalf("WriteFile(%q) error = %v", plan.OutputPath, err)
+			}
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RefreshIndexes() error = %v", err)
+	}
+
+	goPath := filepath.Join(target, ".liza", "scip", "go.scip")
+	tsPath := filepath.Join(target, ".liza", "scip", "typescript.scip")
+	wantCalls := []RuntimeCommandPlan{
+		{
+			Language:   "go",
+			Name:       "scip-go",
+			Args:       []string{"index", "--module-root", target, "--skip-tests", "--output", goPath},
+			Dir:        target,
+			OutputPath: goPath,
+		},
+		{
+			Language:   "typescript",
+			Name:       "scip-typescript",
+			Args:       []string{"index", "--cwd", target, "--output", tsPath, target},
+			Dir:        target,
+			OutputPath: tsPath,
+		},
+	}
+	if !reflect.DeepEqual(calls, wantCalls) {
+		t.Fatalf("runner calls = %#v, want %#v", calls, wantCalls)
+	}
+	if !reflect.DeepEqual(result.Successes, []IndexRef{{Language: "go", Path: goPath}, {Language: "typescript", Path: tsPath}}) {
+		t.Fatalf("successes = %#v, want go/typescript paths", result.Successes)
+	}
+	if len(result.Failures) != 0 {
+		t.Fatalf("failures = %#v, want none", result.Failures)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".liza", "scip")); err != nil {
+		t.Fatalf("Stat(.liza/scip) error = %v", err)
+	}
+}
+
+func TestRuntimeRefreshReportsBoundedFailureWithoutSuppressingSuccesses(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	target := t.TempDir()
+	longOutput := strings.Repeat("x", maxFailureDiagnosticBytes+100)
+	staleGoPath := filepath.Join(target, ".liza", "scip", "go.scip")
+	if err := os.MkdirAll(filepath.Dir(staleGoPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(staleGoPath, []byte("stale go"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", staleGoPath, err)
+	}
+
+	result, err := RefreshIndexes(RefreshOptions{
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"go", "typescript"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod", "web/app.ts"}, nil
+		},
+		Runner: func(plan RuntimeCommandPlan) (string, error) {
+			if plan.Language == "go" {
+				return longOutput, errors.New("go index failed")
+			}
+			if err := os.WriteFile(plan.OutputPath, []byte("typescript"), 0o644); err != nil {
+				t.Fatalf("WriteFile(%q) error = %v", plan.OutputPath, err)
+			}
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RefreshIndexes() error = %v", err)
+	}
+
+	tsPath := filepath.Join(target, ".liza", "scip", "typescript.scip")
+	if !reflect.DeepEqual(result.Successes, []IndexRef{{Language: "typescript", Path: tsPath}}) {
+		t.Fatalf("successes = %#v, want only typescript", result.Successes)
+	}
+	if len(result.Failures) != 1 {
+		t.Fatalf("failures = %#v, want one go failure", result.Failures)
+	}
+	failure := result.Failures[0]
+	if failure.Language != "go" {
+		t.Fatalf("failure language = %q, want go", failure.Language)
+	}
+	if len(failure.Diagnostic) > maxFailureDiagnosticBytes {
+		t.Fatalf("failure diagnostic length = %d, want <= %d", len(failure.Diagnostic), maxFailureDiagnosticBytes)
+	}
+	if !strings.Contains(failure.Diagnostic, "go index failed") {
+		t.Fatalf("failure diagnostic = %q, want runner error", failure.Diagnostic)
+	}
+
+	indexes, err := AvailableIndexes(RuntimePlanOptions{
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"go", "typescript"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod", "web/app.ts"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("AvailableIndexes() error = %v", err)
+	}
+	if !reflect.DeepEqual(indexes, []IndexRef{{Language: "typescript", Path: tsPath}}) {
+		t.Fatalf("AvailableIndexes() = %#v, want only successful typescript index", indexes)
+	}
+}
+
+func TestRuntimeAvailableIndexesReturnsOnlyExistingAbsolutePaths(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	target := t.TempDir()
+	goPath := filepath.Join(target, ".liza", "scip", "go.scip")
+	if err := os.MkdirAll(filepath.Dir(goPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(goPath, []byte("go"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", goPath, err)
+	}
+
+	indexes, err := AvailableIndexes(RuntimePlanOptions{
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"go", "typescript", "python"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod", "web/app.ts", "pyproject.toml"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("AvailableIndexes() error = %v", err)
+	}
+
+	if !reflect.DeepEqual(indexes, []IndexRef{{Language: "go", Path: goPath}}) {
+		t.Fatalf("AvailableIndexes() = %#v, want only existing go index", indexes)
+	}
+	if !filepath.IsAbs(indexes[0].Path) {
+		t.Fatalf("AvailableIndexes path = %q, want absolute", indexes[0].Path)
+	}
+}
+
 func runnerFunc(calls *[]string, fn func(name, argString string) (string, error)) CommandRunner {
 	return func(name string, args ...string) (string, error) {
 		argString := strings.Join(args, " ")
@@ -365,4 +516,9 @@ func planLanguages(plans []RuntimeCommandPlan) []string {
 		languages = append(languages, plan.Language)
 	}
 	return languages
+}
+
+func cloneRuntimeCommandPlan(plan RuntimeCommandPlan) RuntimeCommandPlan {
+	plan.Args = slices.Clone(plan.Args)
+	return plan
 }
