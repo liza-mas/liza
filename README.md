@@ -223,6 +223,20 @@ liza init --claude --codex --gemini --mistral
 ```
 The interactive wizard walks through mode selection (pairing vs full MAS), agent selection, and handles existing `CLAUDE.md` conflicts automatically. Claude is fully automated; for other CLIs see [contract activation](https://github.com/liza-mas/liza/blob/main/contracts/contract-activation.md) for additional manual steps.
 
+For repository-navigation-heavy MAS runs, `scip-search` is highly recommended
+but strictly opt-in. Liza does not install `scip-search` or language indexers
+automatically; install the external tools you need, set
+`LIZA_ENABLE_SCIP_SEARCH=1` for the MAS process, and initialize with repeated
+language allowlist flags when you want explicit selection:
+
+```bash
+LIZA_ENABLE_SCIP_SEARCH=1 liza init "Project goal" --spec specs/vision.md \
+  --scip-search go --scip-search typescript
+```
+
+See [Configuration](support-docs/CONFIGURATION.md) for supported languages,
+indexer prerequisites, auto-detection behavior, and detailed opt-in setup.
+
 ### Pairing and MAS Modes
 
 > **New to Liza?** Start with Pairing mode — it's the fastest way to experience how the behavioral contract changes agent behavior. The trust you build watching agents pause at gates, surface assumptions, and validate before claiming done is what makes letting them run autonomously in Multi-Agent mode a comfortable next step.<br>
@@ -301,7 +315,8 @@ Liza optimizes cost-to-quality, not cost-to-lets-cross-fingers. These tools redu
 | [RTK](https://github.com/rtk-ai/rtk) | CLI proxy that compresses tool output (git, go, pytest, ...) — ~90% token savings on command results | Fewer tokens per tool call, more budget for reasoning |
 | [MorphLLM MCP](https://www.morphllm.com/) (WarpGrep) | Fast Apply edits via `// ... existing code ...` placeholders + semantic codebase search | Avoids reading full files into context for edits |
 | [claude-usage](https://github.com/phuryn/claude-usage) | Tracks Claude subscription usage with cost breakdown | Visibility into where tokens go — essential for optimizing agent configurations |
-| [ast-grep](https://ast-grep.github.io/) | AST-aware structural search/replace — matches code structure, not text | Finds patterns regex can't express (function signatures, call shapes, nested expressions) |
+| [scip-search](https://github.com/liza-mas/scip-search/) | Highly recommended for MAS repository navigation with explicit SCIP indexes | Saves agent tokens on symbol, package, reference, and implementation lookups in worktrees |
+| [ast-grep](https://ast-grep.github.io/) | Complementary AST-aware structural pattern search/rewrite — matches code structure, not text | Finds patterns indexes cannot express (function signatures, call shapes, nested expressions) |
 | [mdq](https://github.com/yshavit/mdq) | Extract specific sections from Markdown files — like `jq` for Markdown | Reads only the section you need from large `.md` files, reducing context noise |
 | [jq](https://jqlang.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | Query and extract fields from JSON / YAML / TOML | Avoids reading full structured data files into context |
 | [GitHub CLI](https://cli.github.com/) | GitHub issues, PRs, releases, and API access from the shell | Avoids raw API calls and keeps GitHub workflows authenticated and structured |
