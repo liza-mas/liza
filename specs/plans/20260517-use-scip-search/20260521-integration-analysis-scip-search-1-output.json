@@ -1,0 +1,14 @@
+[
+  {
+    "desc": "Fix the red full test suite caused by `internal/ops.TestAwaitResubmission_TaskDisappears`: `AwaitResubmission` can return `failed to acquire review ownership: modification function failed: task not found: task-1` when the task disappears between the initial rejected-task read and ownership acquisition, instead of returning the terminal disappearance verdict and releasing reviewer ownership.",
+    "done_when": "`make -C /home/tangi/Workspace/liza/.worktrees/<task-id> test` passes without `TestAwaitResubmission_TaskDisappears` failing; a focused test covers task disappearance before or during review ownership acquisition and asserts `Verdict == ResubmissionTerminal`, a non-empty reason, and no lingering reviewer `CurrentTask`.",
+    "scope": "In scope: `internal/ops/await_resubmission.go` and focused tests in `internal/ops/await_resubmission_test.go` for the disappearance race around `acquireReviewOwnership`. Out of scope: scip-search lifecycle behavior, prompt rendering, init configuration, reviewer recovery indexing, and unrelated await-verdict or submit-for-review behavior.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md"
+  },
+  {
+    "desc": "Make scip-search init tests hermetic: the new explicit-persistence tests for `liza init --scip-search` currently exercise `ResolveInitConfig` through the default process runner, so their expected `config.scip_search` values depend on real `scip-search`, `scip-go`, and `scip-typescript` binaries being installed on the host.",
+    "done_when": "The scip-search init tests in `cmd/liza` and `internal/commands` use fakeable command runners or lower-level seams for every `scip-search --help`, `scip-search --version`, and language-indexer `--help` validation they rely on; the tests assert the expected persisted `config.scip_search` and runner calls without requiring real external scip tools; `go test ./cmd/liza ./internal/commands -run 'ScipSearch|FullInitValidates' -count=1` passes.",
+    "scope": "In scope: hermeticity fixes to `cmd/liza/cmd_init_test.go`, `internal/commands/init_test.go`, and minimal test-helper seams if needed. Out of scope: changing production init semantics, changing `ResolveInitConfig` language validation behavior, installing scip tools in the environment, and runtime indexing lifecycle code.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md#configuration-shape"
+  }
+]
