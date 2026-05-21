@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/scipsearch"
 )
 
 // orchestratorStrategy handles the orchestrator role.
@@ -19,6 +20,8 @@ type orchestratorStrategy struct {
 	yamlPollSec      int                // from YAML; 0 = use type default
 	yamlMaxWaitSec   int                // from YAML; 0 = use type default
 }
+
+var orchestratorScipRefresh = scipsearch.RefreshIndexes
 
 const defaultOrchestratorTimeout = 4 * time.Hour
 
@@ -104,7 +107,11 @@ func (s *orchestratorStrategy) ClaimTask(_ SupervisorConfig, _ *db.Blackboard) (
 }
 
 func (s *orchestratorStrategy) PreExecution(bb *db.Blackboard, config SupervisorConfig) error {
-	return setAgentToOrchestratingStatus(bb, config.AgentID)
+	if err := setAgentToOrchestratingStatus(bb, config.AgentID); err != nil {
+		return err
+	}
+	refreshOrchestratorProjectRootScipIndexes(bb, config)
+	return nil
 }
 
 func (s *orchestratorStrategy) BuildPrompt(state *models.State, config SupervisorConfig, _ string) (string, error) {
@@ -170,4 +177,33 @@ func selfHealCheckpoint(projectRoot string, trigger OrchestratorWakeTrigger) boo
 		return false
 	}
 	return true
+}
+
+func refreshOrchestratorProjectRootScipIndexes(bb *db.Blackboard, config SupervisorConfig) {
+	logger := GetLogger()
+	state, err := bb.Read()
+	if err != nil {
+		logger.Warn("Failed to read state for orchestrator SCIP refresh", "error", err)
+		return
+	}
+
+	configuredLanguages := state.Config.ScipSearch
+	if !scipsearch.RuntimeEnabled(configuredLanguages) {
+		return
+	}
+
+	result, err := orchestratorScipRefresh(scipsearch.RefreshOptions{
+		TargetRoot:          config.ProjectRoot,
+		TargetKind:          scipsearch.TargetKindProjectRoot,
+		ConfiguredLanguages: configuredLanguages,
+	})
+	if err != nil {
+		logger.Warn("Orchestrator SCIP refresh failed", "error", err)
+		return
+	}
+	for _, failure := range result.Failures {
+		logger.Warn("Orchestrator SCIP indexer failed",
+			"language", failure.Language,
+			"diagnostic", failure.Diagnostic)
+	}
 }
