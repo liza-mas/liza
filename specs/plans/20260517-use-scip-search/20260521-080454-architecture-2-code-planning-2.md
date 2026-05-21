@@ -36,11 +36,11 @@ No assumptions are required.
 
 **done_when:** Submit-for-review tests prove a successful submission refreshes enabled detected task-local SCIP indexes from the post-rebase review candidate under `<worktree>/.liza/scip/` before the submitted-state transition is committed, failed indexers appear in `SubmitForReviewResult.Warnings` and `liza submit-for-review --json` warnings while the task still reaches the submitted status, failed languages are absent from available prompt indexes, and regenerated indexes leave `git status --porcelain` clean.
 
-**scope:** In scope: `internal/ops/submit_review.go` wiring to the runtime scip-search refresh service, submit warning fields/accessors, `cmd/liza/cmd_review.go` JSON warning propagation, `internal/commands/submit_review.go` non-JSON warning output, and focused tests in `internal/ops/submit_review_test.go`, `cmd/liza/cmd_review_test.go`, `cmd/liza/json_wiring_test.go`, or equivalent existing submit-for-review test files. Out of scope: `internal/agent/worktree_check.go`, task claim/create indexing, orchestrator refresh, prompt wording, README, Claude settings, automatic indexer installation, and `.liza/agent-outputs/`.
+**scope:** In scope: `internal/ops/submit_review.go` wiring to the runtime scip-search refresh service, submit warning fields/accessors, `cmd/liza/cmd_review.go` JSON warning propagation, `internal/commands/submit_review.go` non-JSON warning output, and focused tests in `internal/ops/submit_review_test.go`, `cmd/liza/cmd_review_test.go`, `cmd/liza/json_wiring_test.go`, or equivalent existing submit-for-review test files. Out of scope: `internal/agent/worktree_check.go`, `internal/agent/strategy_reviewer.go`, task claim/create indexing, orchestrator refresh, prompt wording, README, Claude settings, automatic indexer installation, and `.liza/agent-outputs/`.
 
 **spec_ref:** specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#submit-for-review-regeneration-internalopssubmit_reviewgo-cmdliza-cmd_reviewgo
 
-**depends_on:** inherited upstream runtime service outputs from `architecture-2-code-planning-0`
+**task_depends_on:** architecture-2-code-planning-0
 
 ### Task 2: Reviewer Worktree Recovery SCIP Refresh
 
@@ -48,30 +48,30 @@ No assumptions are required.
 
 **done_when:** Reviewer recovery tests prove a missing reviewer worktree recreated from the task branch runs optional `PostWorktreeCmd` before refreshing enabled detected task-local SCIP indexes under `<worktree>/.liza/scip/`, an existing reviewer worktree is not redundantly refreshed by recovery, failed recovery indexers are logged as warnings without blocking `ensureReviewerWorktree`, failed languages are absent from available prompt indexes, and regenerated indexes leave `git status --porcelain` clean.
 
-**scope:** In scope: `internal/agent/worktree_check.go` reviewer recovery wiring to the runtime scip-search refresh service after branch attach and post-worktree setup, warning-only logging for recovery indexing failures, and focused tests in `internal/agent/worktree_check_test.go` or equivalent reviewer recovery tests using git-backed worktrees and fake indexers. Out of scope: `internal/ops/submit_review.go`, `cmd/liza/cmd_review.go`, task claim/create indexing, orchestrator refresh, prompt wording, README, Claude settings, automatic indexer installation, and `.liza/agent-outputs/`.
+**scope:** In scope: `internal/agent/worktree_check.go` reviewer recovery wiring to the runtime scip-search refresh service after branch attach and post-worktree setup, warning-only logging for recovery indexing failures, and focused tests in `internal/agent/worktree_check_test.go` or equivalent reviewer recovery tests using git-backed worktrees and fake indexers. Out of scope: `internal/agent/strategy_reviewer.go`, `internal/ops/submit_review.go`, `cmd/liza/cmd_review.go`, task claim/create indexing, orchestrator refresh, prompt wording, README, Claude settings, automatic indexer installation, and `.liza/agent-outputs/`.
 
 **spec_ref:** specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#reviewer-worktree-recovery-indexing-internalagentworktree_checkgo
 
-**depends_on:** inherited upstream runtime service outputs from `architecture-2-code-planning-0`
+**task_depends_on:** architecture-2-code-planning-0
 
 ## Dependency Graph
 
-Task 1 and Task 2 can run in parallel after inherited upstream runtime service outputs from `architecture-2-code-planning-0` are available.
+Task 1 and Task 2 can run in parallel after `task_depends_on: architecture-2-code-planning-0` is satisfied.
 
-No dependency is required between Task 1 and Task 2 because they modify disjoint production files and disjoint primary test files. Both consume the runtime scip-search service planned upstream.
+No sibling dependency is required between Task 1 and Task 2 because they modify disjoint production files and disjoint primary test files. Both output entries carry `task_depends_on: ["architecture-2-code-planning-0"]` to encode their upstream runtime scip-search service dependency.
 
 ## Shared-File Audit
 
 | File/Area | Task 1 | Task 2 | Ordering |
 |---|---|---|---|
-| `internal/scipsearch` runtime service | consume refresh and available-index APIs | consume refresh and available-index APIs | inherited upstream runtime service outputs from `architecture-2-code-planning-0` |
+| `internal/scipsearch` runtime service | consume refresh and available-index APIs | consume refresh and available-index APIs | `task_depends_on: ["architecture-2-code-planning-0"]` |
 | `internal/ops/submit_review.go` | call refresh after rebase/review-boundary validation and before state transition; add result warnings | none | none |
 | `cmd/liza/cmd_review.go` | pass submit warnings to JSON envelope | none | none |
 | `internal/commands/submit_review.go` | print non-JSON submit warnings | none | none |
 | `internal/ops/submit_review_test.go` and submit CLI tests | submit regeneration, warning, available-index, clean-status coverage | none | none |
 | `internal/agent/worktree_check.go` | none | refresh recovered reviewer worktree after branch attach and post-worktree setup | none |
 | `internal/agent/worktree_check_test.go` | none | recovery refresh, warning-only failure, existing-worktree no-op, available-index, clean-status coverage | none |
-| `internal/agent/strategy_reviewer.go` | no planned production edit; existing claim flow calls `ensureReviewerWorktree` before prompt construction | no planned production edit unless tests show the recovery warning boundary must be surfaced there | Task 2 owns any required reviewer-claim adjustment |
+| `internal/agent/strategy_reviewer.go` | out of scope | out of scope; existing claim flow calls `ensureReviewerWorktree` before prompt construction | no task may edit it in this plan |
 | `.liza/agent-outputs/` | no task | no task | out of scope |
 
 ## Spec Compliance Matrix
@@ -110,7 +110,7 @@ The final submit/recovery implementation should also run the full touched packag
 ## Pre-Submit Self-Check
 
 - Task decomposition: two coding tasks, each with one observable lifecycle intent.
-- Output dependency parity: no sibling `depends_on` is needed because Task 1 and Task 2 do not share production files; both inherit upstream runtime service dependencies from `architecture-2-code-planning-0`.
+- Output dependency parity: no sibling `depends_on` is needed because Task 1 and Task 2 do not share production files; both output entries include `task_depends_on: ["architecture-2-code-planning-0"]`.
 - Shared-file audit: every file appearing in both task considerations is consume-only or explicitly owned by one task.
 - Scope boundaries: no task claim/create indexing, orchestrator refresh, prompt wording, README, Claude settings, automatic tool installation, or `.liza/agent-outputs/` changes are planned.
 - Cross-references: every responsibility named in the compliance matrix is owned by a task heading above.
