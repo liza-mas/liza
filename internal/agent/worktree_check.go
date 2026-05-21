@@ -12,12 +12,15 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/scipsearch"
 )
 
 // errTaskBlocked is a sentinel indicating that blockReviewerTask already
 // handled claim release and agent state cleanup. The supervisor must NOT
 // call releaseReviewerClaimQuietly when this error is returned.
 var errTaskBlocked = errors.New("task blocked")
+
+var reviewerWorktreeRefreshIndexes = scipsearch.RefreshIndexes
 
 // ensureReviewerWorktree verifies the worktree exists for a reviewer task.
 // Returns (true, nil) if the worktree was recovered from an existing branch.
@@ -74,6 +77,23 @@ func ensureReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID, agent
 		if postErr := ops.RunPostWorktreeCmd(*state.Config.PostWorktreeCmd, wtPath); postErr != nil {
 			logger.Warn("post-worktree-cmd failed after worktree recovery", "task_id", taskID, "error", postErr)
 		}
+	}
+
+	refreshResult, refreshErr := reviewerWorktreeRefreshIndexes(scipsearch.RefreshOptions{
+		TargetRoot:          wtPath,
+		TargetKind:          scipsearch.TargetKindTaskWorktree,
+		ConfiguredLanguages: state.Config.ScipSearch,
+	})
+	if refreshErr != nil {
+		logger.Warn("scip-search refresh failed after worktree recovery", "task_id", taskID, "error", refreshErr)
+	}
+	for _, failure := range refreshResult.Failures {
+		logger.Warn(
+			"scip-search indexer failed after worktree recovery",
+			"task_id", taskID,
+			"language", failure.Language,
+			"diagnostic", failure.Diagnostic,
+		)
 	}
 
 	// Record recovery in history.
