@@ -133,6 +133,7 @@ type Config struct {
 	DefaultCLI               string         `yaml:"default_cli,omitempty"`
 	DefaultDoerCLI           string         `yaml:"default_doer_cli,omitempty"`
 	DefaultReviewerCLI       string         `yaml:"default_reviewer_cli,omitempty"`
+	ScipSearch               []string       `yaml:"scip_search,omitempty"`
 	CodexPackageVersion      string         `yaml:"codex_package_version,omitempty"`
 	CodexLegacyLandlock      bool           `yaml:"codex_legacy_landlock,omitempty"`
 	IntegrationBranch        string         `yaml:"integration_branch"`

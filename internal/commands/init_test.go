@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1450,6 +1451,54 @@ func TestInitCommandWithConfig_PostWorktreeCmd(t *testing.T) {
 	}
 	if *state.Config.PostWorktreeCmd != "make sync-embedded" {
 		t.Errorf("state.Config.PostWorktreeCmd = %q, want %q", *state.Config.PostWorktreeCmd, "make sync-embedded")
+	}
+}
+
+func TestInitCommandWithConfig_ScipSearchPersistsConfig(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Goal with scip-search config",
+		SpecRef:     "specs/vision.md",
+		ScipSearch:  []string{"go", "typescript"},
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	statePath := filepath.Join(tmpDir, ".liza", "state.yaml")
+	bb := db.New(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	want := []string{"go", "typescript"}
+	if !slices.Equal(state.Config.ScipSearch, want) {
+		t.Errorf("state.Config.ScipSearch = %v, want %v", state.Config.ScipSearch, want)
+	}
+
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("Failed to read state.yaml: %v", err)
+	}
+	content := string(data)
+	for _, want := range []string{"scip_search:\n", "- go\n", "- typescript\n"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("state.yaml missing %q in config.scip_search serialization; content:\n%s", want, content)
+		}
 	}
 }
 

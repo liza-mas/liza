@@ -32,6 +32,7 @@ type InitParams struct {
 	DefaultCLI         string   // --default-cli: default CLI for agent spawning
 	DefaultDoerCLI     string   // --default-doer-cli: default CLI for doer and orchestrator agent spawning
 	DefaultReviewerCLI string   // --default-reviewer-cli: default CLI for reviewer agent spawning
+	ScipSearch         []string // --scip-search: enabled SCIP languages
 	Agents             []string // --claude, --codex, --gemini, --mistral
 	Stdin              io.Reader
 	ForceInteractive   bool   // bypass TTY check (for testing)
@@ -748,6 +749,7 @@ func InitCommandWithConfig(params InitParams) error {
 			DefaultCLI:               params.DefaultCLI,
 			DefaultDoerCLI:           params.DefaultDoerCLI,
 			DefaultReviewerCLI:       params.DefaultReviewerCLI,
+			ScipSearch:               params.ScipSearch,
 			IntegrationBranch:        branch,
 			EscalationWebhook:        nil,
 			Mode:                     models.SystemModeRunning,
