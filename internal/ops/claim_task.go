@@ -62,6 +62,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	var baseCommit string
 	var integrationBranch string
 	var postWorktreeCmd *string
+	var scipSearchLanguages []string
 	var leaseDuration int
 	var maxCoderIterations int
 	var strategy claimStrategy
@@ -137,6 +138,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 	taskStatus = task.Status
 	integrationBranch = state.Config.IntegrationBranch
 	postWorktreeCmd = state.Config.PostWorktreeCmd
+	scipSearchLanguages = append([]string(nil), state.Config.ScipSearch...)
 	leaseDuration = state.Config.LeaseDuration
 	if leaseDuration == 0 {
 		leaseDuration = models.DefaultLeaseDurationSeconds
@@ -220,6 +222,10 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 			postCmdWarnings = append(postCmdWarnings, warning)
 			log.Printf("WARNING: claim-task %s: %s", taskID, warning)
 		}
+	}
+	scipWarnings := refreshTaskWorktreeScipIndexes(worktreeDir, scipSearchLanguages)
+	for _, warning := range scipWarnings {
+		log.Printf("WARNING: claim-task %s: %s", taskID, warning)
 	}
 
 	// --- Phase 3: Re-validate and Commit ---
@@ -321,7 +327,7 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 		IntegrationFix:    taskStatus == models.TaskStatusIntegrationFailed,
 		PreviousAssignee:  claimCtx.previousAssignee,
 		WorktreeRecreated: worktreeDeleted && worktreeCreated,
-		Warnings:          postCmdWarnings,
+		Warnings:          append(postCmdWarnings, scipWarnings...),
 	}, nil
 }
 

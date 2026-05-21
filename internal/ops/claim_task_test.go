@@ -2,11 +2,13 @@ package ops
 
 import (
 	stderrors "errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -1075,6 +1078,222 @@ func TestClaimTask_PostWorktreeCmdRunsOnSameCoderReclaim(t *testing.T) {
 	}
 }
 
+func TestClaimTask_ScipIndexesEnabledWorktreeAfterPostWorktreeCmd(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForClaimScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	markerPath := filepath.Join(tmpDir, "post-worktree-ran")
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimTaskTestAgents(state)
+	state.Config.ScipSearch = []string{"go"}
+	postCmd := fmt.Sprintf("touch %s", markerPath)
+	state.Config.PostWorktreeCmd = &postCmd
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	var calls []scipsearch.RuntimeCommandPlan
+	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		if _, err := os.Stat(markerPath); err != nil {
+			return "", fmt.Errorf("post-worktree marker not present before indexing: %w", err)
+		}
+		calls = append(calls, plan)
+		return writeClaimScipIndex(plan, []byte(plan.Dir))
+	})
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("ClaimTask() warnings = %v, want none", result.Warnings)
+	}
+	if len(calls) != 1 || calls[0].Language != "go" {
+		t.Fatalf("indexer calls = %#v, want one go call", calls)
+	}
+
+	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
+	wantIndexPath := filepath.Join(worktreeDir, ".liza", "scip", "go.scip")
+	indexes := availableClaimScipIndexes(t, worktreeDir, []string{"go"})
+	if len(indexes) != 1 || indexes[0].Language != "go" || indexes[0].Path != wantIndexPath {
+		t.Fatalf("AvailableIndexes() = %#v, want go index at %s", indexes, wantIndexPath)
+	}
+	if !filepath.IsAbs(indexes[0].Path) {
+		t.Fatalf("index path %q is not absolute", indexes[0].Path)
+	}
+	assertGitStatusClean(t, worktreeDir)
+}
+
+func TestClaimTask_ScipDisabledActivationNoop(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForClaimScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "false")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimTaskTestAgents(state)
+	state.Config.ScipSearch = []string{"go"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		t.Fatalf("unexpected indexer call when scip-search activation is disabled: %#v", plan)
+		return "", nil
+	})
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("ClaimTask() warnings = %v, want none", result.Warnings)
+	}
+
+	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
+	if _, err := os.Stat(filepath.Join(worktreeDir, ".liza", "scip")); !os.IsNotExist(err) {
+		t.Fatalf(".liza/scip stat error = %v, want not exist", err)
+	}
+	if indexes := availableClaimScipIndexes(t, worktreeDir, []string{"go"}); len(indexes) != 0 {
+		t.Fatalf("AvailableIndexes() = %#v, want none", indexes)
+	}
+}
+
+func TestClaimTask_ScipFailedIndexerWarningOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForClaimScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimTaskTestAgents(state)
+	state.Config.ScipSearch = []string{"go"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		return "indexer stderr", stderrors.New("boom")
+	})
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() should succeed on indexer failure, got: %v", err)
+	}
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "scip-search go:") || !strings.Contains(result.Warnings[0], "boom") {
+		t.Fatalf("ClaimTask() warnings = %v, want scip-search go warning with diagnostic", result.Warnings)
+	}
+
+	readState := readClaimStateForTest(t, stateFile)
+	task := readState.FindTask("task-1")
+	if task == nil {
+		t.Fatal("task not found after claim")
+	}
+	if task.Status != models.TaskStatusImplementing {
+		t.Fatalf("task status = %s, want IMPLEMENTING", task.Status)
+	}
+
+	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
+	if indexes := availableClaimScipIndexes(t, worktreeDir, []string{"go"}); len(indexes) != 0 {
+		t.Fatalf("AvailableIndexes() = %#v, want none after failed indexer", indexes)
+	}
+	assertGitStatusClean(t, worktreeDir)
+}
+
+func TestClaimTask_ScipConcurrentClaimsUseIsolatedIndexes(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForClaimScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimTaskTestAgents(state)
+	state.Config.ScipSearch = []string{"go"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	var mu sync.Mutex
+	outputs := map[string]string{}
+	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		mu.Lock()
+		outputs[plan.OutputPath] = plan.Dir
+		mu.Unlock()
+		return writeClaimScipIndex(plan, []byte(plan.Dir))
+	})
+
+	type claimOutcome struct {
+		result *ClaimResult
+		err    error
+	}
+	results := make(chan claimOutcome, 2)
+	for _, claim := range []struct {
+		taskID  string
+		agentID string
+	}{
+		{taskID: "task-1", agentID: "coder-1"},
+		{taskID: "task-2", agentID: "coder-2"},
+	} {
+		go func() {
+			result, err := ClaimTask(tmpDir, claim.taskID, claim.agentID)
+			results <- claimOutcome{result: result, err: err}
+		}()
+	}
+
+	for range 2 {
+		outcome := <-results
+		if outcome.err != nil {
+			t.Fatalf("ClaimTask() concurrent claim error: %v", outcome.err)
+		}
+		if len(outcome.result.Warnings) != 0 {
+			t.Fatalf("ClaimTask() warnings = %v, want none", outcome.result.Warnings)
+		}
+	}
+
+	task1Index := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1", ".liza", "scip", "go.scip")
+	task2Index := filepath.Join(tmpDir, paths.WorktreesDirName, "task-2", ".liza", "scip", "go.scip")
+	if task1Index == task2Index {
+		t.Fatal("concurrent claims produced identical index paths")
+	}
+	for _, indexPath := range []string{task1Index, task2Index} {
+		if !filepath.IsAbs(indexPath) {
+			t.Fatalf("index path %q is not absolute", indexPath)
+		}
+		content, err := os.ReadFile(indexPath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error: %v", indexPath, err)
+		}
+		mu.Lock()
+		want := outputs[indexPath]
+		mu.Unlock()
+		if string(content) != want {
+			t.Fatalf("index %s content = %q, want its own worktree dir %q", indexPath, content, want)
+		}
+	}
+	if task1Content, err := os.ReadFile(task1Index); err != nil {
+		t.Fatalf("ReadFile(%s) error: %v", task1Index, err)
+	} else if task2Content, err := os.ReadFile(task2Index); err != nil {
+		t.Fatalf("ReadFile(%s) error: %v", task2Index, err)
+	} else if string(task1Content) == string(task2Content) {
+		t.Fatalf("concurrent claims shared output content: %q", task1Content)
+	}
+	assertGitStatusClean(t, filepath.Join(tmpDir, paths.WorktreesDirName, "task-1"))
+	assertGitStatusClean(t, filepath.Join(tmpDir, paths.WorktreesDirName, "task-2"))
+}
+
 // TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn verifies
 // that when a REJECTED task hits iteration limit and transitions to BLOCKED,
 // it does NOT reset a coder who has already claimed a different task.
@@ -1332,6 +1551,66 @@ func readClaimStateForTest(t *testing.T, stateFile string) *models.State {
 		t.Fatalf("Failed to read state: %v", err)
 	}
 	return state
+}
+
+func withClaimTaskScipRuntimeRunner(t *testing.T, runner scipsearch.RuntimeRunner) {
+	t.Helper()
+	scipRuntimeRunnerMu.Lock()
+	previous := scipRuntimeRunner
+	scipRuntimeRunner = runner
+	scipRuntimeRunnerMu.Unlock()
+
+	t.Cleanup(func() {
+		scipRuntimeRunnerMu.Lock()
+		scipRuntimeRunner = previous
+		scipRuntimeRunnerMu.Unlock()
+	})
+}
+
+func addTrackedGoSourceForClaimScipTest(t *testing.T, projectRoot string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(projectRoot, "go.mod"), []byte("module example.com/scipclaim\n\ngo 1.22\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(go.mod) error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(main.go) error: %v", err)
+	}
+	testhelpers.MustGit(t, projectRoot, "add", "go.mod", "main.go")
+	testhelpers.MustGit(t, projectRoot, "commit", "-m", "Add Go source")
+	testhelpers.MustGit(t, projectRoot, "branch", "-f", "integration", "HEAD")
+}
+
+func writeClaimScipIndex(plan scipsearch.RuntimeCommandPlan, content []byte) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(plan.OutputPath), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(plan.OutputPath, content, 0o644); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
+func availableClaimScipIndexes(t *testing.T, worktreeDir string, languages []string) []scipsearch.IndexRef {
+	t.Helper()
+	indexes, err := scipsearch.AvailableIndexes(scipsearch.RuntimePlanOptions{
+		TargetRoot:          worktreeDir,
+		ConfiguredLanguages: languages,
+	})
+	if err != nil {
+		t.Fatalf("AvailableIndexes() error: %v", err)
+	}
+	return indexes
+}
+
+func assertGitStatusClean(t *testing.T, worktreeDir string) {
+	t.Helper()
+	output, err := exec.Command("git", "-C", worktreeDir, "status", "--porcelain").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git status --porcelain error: %v: %s", err, output)
+	}
+	if strings.TrimSpace(string(output)) != "" {
+		t.Fatalf("git status --porcelain = %q, want clean", output)
+	}
 }
 
 func registerClaimTaskTestAgents(state *models.State) {
