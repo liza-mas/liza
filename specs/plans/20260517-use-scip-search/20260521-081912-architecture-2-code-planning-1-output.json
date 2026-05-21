@@ -5,6 +5,7 @@
     "scope": "In scope: `internal/ops/claim_task.go`, an ops-local helper for invoking runtime task-worktree refresh and converting per-language failures to existing warning strings, `ClaimResult.Warnings` propagation, and claim lifecycle tests in `internal/ops/claim_task_test.go` using fakeable runtime indexing seams and git-backed temp worktrees. Out of scope: direct `ops.CreateWorktree` wiring, submit-for-review regeneration, reviewer recovery, orchestrator refresh, prompt wording/rendering, README, Claude settings, init-time validation, and `.liza/agent-outputs/`.",
     "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#task-worktree-creation-indexing-internalopsclaim_taskgo-internalopswt_creatego",
     "plan_ref": "specs/plans/20260517-use-scip-search/20260521-081912-architecture-2-code-planning-1.md",
+    "depends_on": [],
     "task_depends_on": [
       "architecture-2-code-planning-0-coding-2"
     ]

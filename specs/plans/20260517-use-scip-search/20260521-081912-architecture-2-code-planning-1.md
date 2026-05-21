@@ -41,9 +41,9 @@ This plan must not reimplement language detection, environment parsing, indexer 
 
 **spec_ref:** specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#task-worktree-creation-indexing-internalopsclaim_taskgo-internalopswt_creatego
 
-**depends_on:** none
+**depends_on:** []
 
-**task_depends_on:** architecture-2-code-planning-0-coding-2
+**task_depends_on:** ["architecture-2-code-planning-0-coding-2"]
 
 **Validation:** `go test ./internal/ops -run 'TestClaimTask_.*Scip|TestClaimTask_.*Index|TestClaimTask_.*Concurrent'` plus `git -C <worktree> status --porcelain` assertions inside the new tests.
 
@@ -57,9 +57,9 @@ This plan must not reimplement language detection, environment parsing, indexer 
 
 **spec_ref:** specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#task-worktree-creation-indexing-internalopsclaim_taskgo-internalopswt_creatego
 
-**depends_on:** Task 1
+**depends_on:** ["0"]
 
-**task_depends_on:** architecture-2-code-planning-0-coding-2
+**task_depends_on:** ["architecture-2-code-planning-0-coding-2"]
 
 **Validation:** `go test ./internal/ops -run 'TestCreateWorktree_.*Scip|TestCreateWorktree_.*Index|TestCreateWorktree_.*Existing|TestCreateWorktree_.*Concurrent'` plus `git -C <worktree> status --porcelain` assertions inside the new tests.
 
