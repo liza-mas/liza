@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/precommit"
+	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -185,6 +186,106 @@ func TestBuildPrompt(t *testing.T) {
 				t.Error("buildPrompt() returned empty prompt")
 			}
 		})
+	}
+}
+
+func TestBuildOrchestratorRoleContextDataScipIndexesUseProjectRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	writePromptTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/project\n")
+	writePromptTestFile(t, filepath.Join(tmpDir, "web.ts"), "export const value = 1\n")
+	writePromptTestFile(t, filepath.Join(tmpDir, "tool.py"), "value = 1\n")
+	testhelpers.MustGit(t, tmpDir, "add", "go.mod", "web.ts", "tool.py")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add language fixtures")
+
+	projectGoIndex := filepath.Join(tmpDir, ".liza", "scip", "go.scip")
+	writePromptTestFile(t, projectGoIndex, "go index")
+	taskTypescriptIndex := filepath.Join(tmpDir, ".worktrees", "task-1", ".liza", "scip", "typescript.scip")
+	writePromptTestFile(t, taskTypescriptIndex, "task typescript index")
+
+	state := &models.State{
+		Goal: models.Goal{
+			Description: "Test goal",
+			SpecRef:     "specs/goal.md",
+		},
+		Config: models.Config{
+			ScipSearch: []string{"go", "typescript", "python"},
+		},
+	}
+	config := SupervisorConfig{
+		Role:        "orchestrator",
+		AgentID:     "orchestrator-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, ".liza", "state.yaml"),
+	}
+
+	data, err := buildOrchestratorRoleContextData(state, config, testResolver(t))
+	if err != nil {
+		t.Fatalf("buildOrchestratorRoleContextData() error = %v", err)
+	}
+
+	if len(data.ScipIndexes) != 1 {
+		t.Fatalf("ScipIndexes length = %d, want 1: %#v", len(data.ScipIndexes), data.ScipIndexes)
+	}
+	got := data.ScipIndexes[0]
+	if got.Language != "go" {
+		t.Errorf("ScipIndexes[0].Language = %q, want go", got.Language)
+	}
+	if got.Path != projectGoIndex {
+		t.Errorf("ScipIndexes[0].Path = %q, want project-root index %q", got.Path, projectGoIndex)
+	}
+	if !filepath.IsAbs(got.Path) {
+		t.Errorf("ScipIndexes[0].Path = %q, want absolute path", got.Path)
+	}
+	if strings.Contains(got.Path, filepath.Join(".worktrees", "task-1")) {
+		t.Errorf("ScipIndexes[0].Path = %q, must not use task worktree index %q", got.Path, taskTypescriptIndex)
+	}
+}
+
+func TestBuildOrchestratorPromptContextScipIndexesDoNotRenderInThisSlice(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	writePromptTestFile(t, filepath.Join(tmpDir, "go.mod"), "module example.com/project\n")
+	testhelpers.MustGit(t, tmpDir, "add", "go.mod")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add go module")
+
+	projectGoIndex := filepath.Join(tmpDir, ".liza", "scip", "go.scip")
+	writePromptTestFile(t, projectGoIndex, "go index")
+
+	state := &models.State{
+		Goal: models.Goal{
+			Description: "Test goal",
+			SpecRef:     "specs/goal.md",
+		},
+		Config: models.Config{
+			ScipSearch: []string{"go"},
+		},
+	}
+	config := SupervisorConfig{
+		Role:        "orchestrator",
+		AgentID:     "orchestrator-1",
+		ProjectRoot: tmpDir,
+		SpecsDir:    filepath.Join(tmpDir, "specs"),
+		StatePath:   filepath.Join(tmpDir, ".liza", "state.yaml"),
+	}
+
+	prompt, err := buildOrchestratorPromptContext(state, config, testResolver(t))
+	if err != nil {
+		t.Fatalf("buildOrchestratorPromptContext() error = %v", err)
+	}
+
+	if strings.Contains(prompt, projectGoIndex) {
+		t.Fatalf("prompt contains SCIP index path %q; prompt wording/rendering is out of scope for this slice", projectGoIndex)
+	}
+	if strings.Contains(prompt, "scip-search symbols") {
+		t.Fatalf("prompt contains scip-search command guidance; prompt wording is out of scope for this slice")
 	}
 }
 
@@ -2820,6 +2921,16 @@ func TestBuildTaskRoleContextData_PreCommitFields_HelperError(t *testing.T) {
 	}
 	if !strings.Contains(msg, "integration branch") {
 		t.Errorf("error message %q missing inner %q phrase", msg, "integration branch")
+	}
+}
+
+func writePromptTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", path, err)
 	}
 }
 

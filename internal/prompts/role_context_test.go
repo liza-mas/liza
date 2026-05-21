@@ -254,6 +254,9 @@ func TestRoleContextData_OrchestratorPopulation(t *testing.T) {
 		BlockedTasks:      "task-99: missing spec",
 		CheckpointSummary: "Last checkpoint: 2h ago",
 		PipelineConfig:    "pipeline v2 loaded",
+		ScipIndexes: []ScipIndexRef{
+			{Language: "go", Path: "/project/.liza/scip/go.scip"},
+		},
 
 		// Config/state
 		ProjectRoot: "/project",
@@ -298,6 +301,15 @@ func TestRoleContextData_OrchestratorPopulation(t *testing.T) {
 	}
 	if data.PipelineConfig != "pipeline v2 loaded" {
 		t.Errorf("PipelineConfig = %q, want %q", data.PipelineConfig, "pipeline v2 loaded")
+	}
+	if len(data.ScipIndexes) != 1 {
+		t.Fatalf("ScipIndexes length = %d, want 1", len(data.ScipIndexes))
+	}
+	if data.ScipIndexes[0].Language != "go" {
+		t.Errorf("ScipIndexes[0].Language = %q, want go", data.ScipIndexes[0].Language)
+	}
+	if data.ScipIndexes[0].Path != "/project/.liza/scip/go.scip" {
+		t.Errorf("ScipIndexes[0].Path = %q, want project-root SCIP path", data.ScipIndexes[0].Path)
 	}
 
 	// Verify task fields are zero-valued for orchestrator

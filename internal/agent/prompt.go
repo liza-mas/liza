@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/precommit"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/roles"
+	"github.com/liza-mas/liza/internal/scipsearch"
 )
 
 // baseConfigFrom constructs the BasePromptConfig shared by all roles.
@@ -79,26 +80,9 @@ func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig
 		return "", fmt.Errorf("context sections for role %q: %w", config.Role, err)
 	}
 
-	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
+	data, err := buildOrchestratorRoleContextData(state, config, resolver)
 	if err != nil {
 		return "", err
-	}
-
-	skills, _ := resolver.Skills(config.Role)
-	mandatoryDocs, _ := resolver.MandatoryDocs(config.Role)
-
-	data := &prompts.RoleContextData{
-		Role:            config.Role,
-		AgentID:         config.AgentID,
-		RoleType:        "orchestrator",
-		DashboardOutput: dashboard,
-		WakeInstruction: wakeInstruction,
-		ProjectRoot:     config.ProjectRoot,
-		StatePath:       config.StatePath,
-		SpecsDir:        config.SpecsDir,
-		GoalDesc:        state.Goal.Description,
-		Skills:          skills,
-		MandatoryDocs:   mandatoryDocs,
 	}
 
 	context, err := prompts.BuildRoleContext(config.Role, sections, data)
@@ -112,6 +96,53 @@ func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig
 	}
 
 	return prompt, nil
+}
+
+func buildOrchestratorRoleContextData(state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) (*prompts.RoleContextData, error) {
+	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
+	if err != nil {
+		return nil, err
+	}
+
+	availableIndexes, err := scipsearch.AvailableIndexes(scipsearch.RuntimePlanOptions{
+		TargetRoot:          config.ProjectRoot,
+		ConfiguredLanguages: state.Config.ScipSearch,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("available scip-search indexes: %w", err)
+	}
+
+	skills, _ := resolver.Skills(config.Role)
+	mandatoryDocs, _ := resolver.MandatoryDocs(config.Role)
+
+	return &prompts.RoleContextData{
+		Role:            config.Role,
+		AgentID:         config.AgentID,
+		RoleType:        "orchestrator",
+		DashboardOutput: dashboard,
+		WakeInstruction: wakeInstruction,
+		ScipIndexes:     toPromptScipIndexRefs(availableIndexes),
+		ProjectRoot:     config.ProjectRoot,
+		StatePath:       config.StatePath,
+		SpecsDir:        config.SpecsDir,
+		GoalDesc:        state.Goal.Description,
+		Skills:          skills,
+		MandatoryDocs:   mandatoryDocs,
+	}, nil
+}
+
+func toPromptScipIndexRefs(indexes []scipsearch.IndexRef) []prompts.ScipIndexRef {
+	if len(indexes) == 0 {
+		return nil
+	}
+	refs := make([]prompts.ScipIndexRef, 0, len(indexes))
+	for _, index := range indexes {
+		refs = append(refs, prompts.ScipIndexRef{
+			Language: index.Language,
+			Path:     index.Path,
+		})
+	}
+	return refs
 }
 
 // buildTaskRoleContextData constructs RoleContextData for task-based roles (doers and reviewers).

@@ -48,6 +48,12 @@ type ParentTaskContext struct {
 	PlanRef     string
 }
 
+// ScipIndexRef carries prompt-safe metadata for one available SCIP index.
+type ScipIndexRef struct {
+	Language string
+	Path     string
+}
+
 // RoleContextData is the unified template data type for all role template blocks.
 // Each field group is populated as appropriate for the role being rendered.
 // Fields not relevant to a particular role remain at their zero value.
@@ -119,6 +125,7 @@ type RoleContextData struct {
 	BlockedTasks      string
 	CheckpointSummary string
 	PipelineConfig    string
+	ScipIndexes       []ScipIndexRef
 
 	// Config/state
 	ProjectRoot string
