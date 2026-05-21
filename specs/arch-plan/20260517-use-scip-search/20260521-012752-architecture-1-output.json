@@ -1,0 +1,29 @@
+[
+  {
+    "desc": "State Config and CLI Surface: repeated `--scip-search` flag plumbing, `InitParams.ScipSearch`, `models.Config.ScipSearch`, workspace-flag detection, init help text, and state persistence wiring. Out of scope: `scip-search --help` probing, `--version` diagnostics, language autodetection, indexer validation, lifecycle indexing, prompt injection, README, and Claude settings.",
+    "done_when": "`liza init --spec ... --scip-search go --scip-search typescript` can carry both values into `InitCommandWithConfig` and successful init persists `config.scip_search` through the typed `models.Config` field; tests cover repeated flag parsing, `--scip-search` workspace-flag rejection without a description, and YAML persistence.",
+    "scope": "In scope: repeated `--scip-search` flag plumbing, `InitParams.ScipSearch`, `models.Config.ScipSearch`, workspace-flag detection, init help text, and state persistence wiring. Out of scope: `scip-search --help` probing, `--version` diagnostics, language autodetection, indexer validation, lifecycle indexing, prompt injection, README, and Claude settings.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md",
+    "arch_ref": "specs/arch-plan/20260517-use-scip-search/20260521-012752-architecture-1.md"
+  },
+  {
+    "desc": "Init-Time Setup Validation and Language Resolution: unconditional full-init `scip-search --help` validation, best-effort `scip-search --version` diagnostics, `LIZA_ENABLE_SCIP_SEARCH` parsing, supported-language validation, duplicate de-duplication, git-tracked autodetection, per-language indexer validation, warnings that drop missing indexers, and integration into init before state creation. Out of scope: generating SCIP index files and modifying agent prompts.",
+    "done_when": "init-time tests prove every full `liza init --spec` path invokes `scip-search --help` and fails clearly when unavailable or unsuccessful, reports `scip-search --version` when available, treats version failure as non-fatal after help succeeds, parses truthy and false `LIZA_ENABLE_SCIP_SEARCH` values, rejects unsupported languages, de-duplicates duplicate languages, auto-detects Go/TypeScript/Python from git-tracked files when no explicit languages are provided and the env gate is truthy, warns and drops languages with missing indexers, and persists only validated languages to `config.scip_search`.",
+    "scope": "In scope: unconditional full-init `scip-search --help` validation, best-effort `scip-search --version` diagnostics, `LIZA_ENABLE_SCIP_SEARCH` parsing, supported-language validation, duplicate de-duplication, git-tracked autodetection, per-language indexer validation, warnings that drop missing indexers, and integration into init before state creation. Out of scope: generating SCIP index files and modifying agent prompts.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md",
+    "arch_ref": "specs/arch-plan/20260517-use-scip-search/20260521-012752-architecture-1.md",
+    "depends_on": [
+      "0"
+    ]
+  },
+  {
+    "desc": "Runtime Activation Contract for Supervisors: a read-only helper/interface that later supervisor, worktree, reviewer, and orchestrator prompt scopes can call to combine `LIZA_ENABLE_SCIP_SEARCH` with `config.scip_search`. Out of scope: actual indexing, index storage, prompt rendering, reviewer regeneration, orchestrator refresh, README, and Claude settings.",
+    "done_when": "tests prove runtime activation is false when env is unset/empty/`0`/`false`, false when `config.scip_search` is absent or empty, true only for truthy env plus at least one configured language, and later callers have a documented package-level contract instead of duplicating env parsing.",
+    "scope": "In scope: a read-only helper/interface that later supervisor, worktree, reviewer, and orchestrator prompt scopes can call to combine `LIZA_ENABLE_SCIP_SEARCH` with `config.scip_search`. Out of scope: actual indexing, index storage, prompt rendering, reviewer regeneration, orchestrator refresh, README, and Claude settings.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md",
+    "arch_ref": "specs/arch-plan/20260517-use-scip-search/20260521-012752-architecture-1.md",
+    "depends_on": [
+      "1"
+    ]
+  }
+]
