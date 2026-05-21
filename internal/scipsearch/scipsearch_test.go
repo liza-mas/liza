@@ -404,6 +404,9 @@ func TestRuntimeRefreshReportsBoundedFailureWithoutSuppressingSuccesses(t *testi
 		},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			if plan.Language == "go" {
+				if err := os.WriteFile(plan.OutputPath, []byte("partial go"), 0o644); err != nil {
+					t.Fatalf("WriteFile(%q) error = %v", plan.OutputPath, err)
+				}
 				return longOutput, errors.New("go index failed")
 			}
 			if err := os.WriteFile(plan.OutputPath, []byte("typescript"), 0o644); err != nil {
@@ -432,6 +435,9 @@ func TestRuntimeRefreshReportsBoundedFailureWithoutSuppressingSuccesses(t *testi
 	}
 	if !strings.Contains(failure.Diagnostic, "go index failed") {
 		t.Fatalf("failure diagnostic = %q, want runner error", failure.Diagnostic)
+	}
+	if _, err := os.Stat(staleGoPath); !os.IsNotExist(err) {
+		t.Fatalf("Stat(%q) error = %v, want missing failed index", staleGoPath, err)
 	}
 
 	indexes, err := AvailableIndexes(RuntimePlanOptions{

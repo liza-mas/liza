@@ -215,9 +215,13 @@ func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
 		}
 		output, err := runner(plan)
 		if err != nil {
+			diagnosticErr := err
+			if cleanupErr := removeStaleIndex(plan.OutputPath); cleanupErr != nil {
+				diagnosticErr = fmt.Errorf("%w; additionally %v", err, cleanupErr)
+			}
 			result.Failures = append(result.Failures, RefreshFailure{
 				Language:   plan.Language,
-				Diagnostic: boundedFailureDiagnostic(err, output),
+				Diagnostic: boundedFailureDiagnostic(diagnosticErr, output),
 			})
 			continue
 		}
