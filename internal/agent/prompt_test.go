@@ -522,7 +522,7 @@ func TestBuildOrchestratorPromptContextScipIndexesRenderFromProjectRoot(t *testi
 	if !strings.Contains(prompt, projectGoIndex) {
 		t.Fatalf("prompt missing project-root SCIP index path %q", projectGoIndex)
 	}
-	if !strings.Contains(prompt, "scip-search symbols --index "+projectGoIndex+" --name Foo --name Bar") {
+	if !strings.Contains(prompt, "scip-search symbols --index '"+projectGoIndex+"' --name Foo --name Bar") {
 		t.Fatalf("prompt missing scip-search symbols command for project-root index")
 	}
 	if !strings.Contains(prompt, "Go symbols, references, and implementations are supported.") {

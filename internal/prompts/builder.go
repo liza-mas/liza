@@ -38,6 +38,7 @@ type basePromptTemplateData struct {
 type scipSearchPromptIndex struct {
 	DisplayLanguage           string
 	IndexPath                 string
+	ShellIndexPath            string
 	CapabilitySummary         string
 	ImplementationGuidance    string
 	ShowImplementationCommand bool
@@ -101,6 +102,7 @@ func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
 		return scipSearchPromptIndex{
 			DisplayLanguage:           "Go",
 			IndexPath:                 index.IndexPath,
+			ShellIndexPath:            shellQuote(index.IndexPath),
 			CapabilitySummary:         "Go symbols, references, and implementations are supported.",
 			ImplementationGuidance:    "Use implementations for Go implementation lookups.",
 			ShowImplementationCommand: true,
@@ -109,6 +111,7 @@ func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
 		return scipSearchPromptIndex{
 			DisplayLanguage:           "TypeScript",
 			IndexPath:                 index.IndexPath,
+			ShellIndexPath:            shellQuote(index.IndexPath),
 			CapabilitySummary:         "TypeScript symbols and references are supported.",
 			ImplementationGuidance:    "TypeScript implementations are upstream-supported by scip-search but not locally verified; verify results in files before relying on them.",
 			ShowImplementationCommand: true,
@@ -117,6 +120,7 @@ func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
 		return scipSearchPromptIndex{
 			DisplayLanguage:        "Python",
 			IndexPath:              index.IndexPath,
+			ShellIndexPath:         shellQuote(index.IndexPath),
 			CapabilitySummary:      "Python symbols are supported and references may be incomplete.",
 			ImplementationGuidance: "scip-search implementations is not supported for Python.",
 		}
@@ -124,9 +128,14 @@ func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
 		return scipSearchPromptIndex{
 			DisplayLanguage:   index.Language,
 			IndexPath:         index.IndexPath,
+			ShellIndexPath:    shellQuote(index.IndexPath),
 			CapabilitySummary: "Symbols and references are available for this supplied SCIP index.",
 		}
 	}
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 // RenderOrchestratorDashboard pre-renders the orchestrator dashboard and wake instruction

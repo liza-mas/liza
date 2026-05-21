@@ -104,16 +104,16 @@ FIRST ACTIONS:
 {{- if .ScipSearchIndexes }}
 
 === SCIP-SEARCH INDEXES ===
-Generated SCIP indexes are snapshots; they will not reflect subsequent agent edits.
+Generated SCIP indexes were refreshed before this prompt was built and reflect the current target tree at prompt construction time; they will not reflect subsequent agent edits.
 
 {{- range .ScipSearchIndexes }}
 
 {{ .DisplayLanguage }} index: {{ .IndexPath }}
 ```bash
-scip-search symbols --index {{ .IndexPath }} --name Foo --name Bar
-scip-search references --index {{ .IndexPath }} --symbol '<exact-foo>' --symbol '<exact-bar>' --location-only
+scip-search symbols --index {{ .ShellIndexPath }} --name Foo --name Bar
+scip-search references --index {{ .ShellIndexPath }} --symbol '<exact-foo>' --symbol '<exact-bar>' --location-only
 {{ if .ShowImplementationCommand -}}
-scip-search implementations --index {{ .IndexPath }} --symbol '<exact-symbol>'
+scip-search implementations --index {{ .ShellIndexPath }} --symbol '<exact-symbol>'
 {{ end -}}
 nl -ba <result-path> | sed -n '<first-line>,<last-line>p'
 ```

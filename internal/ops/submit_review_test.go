@@ -1299,6 +1299,14 @@ func TestSubmitForReview_TDDEnforcement_UsesRolePairOverStaleCodingType(t *testi
 		},
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, initialState)
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver() error = %v", err)
+	}
+	wantSubmittedStatus, err := resolver.SubmittedStatus("us-writing-pair")
+	if err != nil {
+		t.Fatalf("SubmittedStatus(us-writing-pair) error = %v", err)
+	}
 
 	if _, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID); err != nil {
 		t.Fatalf("SubmitForReview() unexpected error: %v", err)
@@ -1310,8 +1318,8 @@ func TestSubmitForReview_TDDEnforcement_UsesRolePairOverStaleCodingType(t *testi
 	if task == nil {
 		t.Fatal("task not found after submission")
 	}
-	if task.Status != "US_READY_FOR_REVIEW" {
-		t.Errorf("Status = %v, want US_READY_FOR_REVIEW", task.Status)
+	if task.Status != wantSubmittedStatus {
+		t.Errorf("Status = %v, want %s", task.Status, wantSubmittedStatus)
 	}
 }
 

@@ -1,12 +1,14 @@
 package scipsearch
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"go/ast"
 	"go/doc"
 	"go/parser"
 	"go/token"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -496,6 +498,15 @@ func TestRuntimeTaskWorktreeIgnoreIsPrivateIdempotentAndClean(t *testing.T) {
 	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
 	commonBefore := readFileString(t, commonExclude)
 	var runnerCalls int
+	var logOutput bytes.Buffer
+	previousLogOutput := log.Writer()
+	previousLogFlags := log.Flags()
+	log.SetOutput(&logOutput)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(previousLogOutput)
+		log.SetFlags(previousLogFlags)
+	}()
 
 	for i := 0; i < 2; i++ {
 		result, err := RefreshIndexes(RefreshOptions{
@@ -531,6 +542,12 @@ func TestRuntimeTaskWorktreeIgnoreIsPrivateIdempotentAndClean(t *testing.T) {
 
 	if runnerCalls != 2 {
 		t.Fatalf("runner calls = %d, want 2", runnerCalls)
+	}
+	if count := strings.Count(logOutput.String(), "enabled git extensions.worktreeConfig for scip-search task worktree excludes"); count != 1 {
+		t.Fatalf("worktreeConfig log count = %d, want 1; logs: %q", count, logOutput.String())
+	}
+	if got := gitOutput(t, worktree, "config", "--get", "extensions.worktreeConfig"); got != "true" {
+		t.Fatalf("extensions.worktreeConfig = %q, want true", got)
 	}
 	assertIgnoreEntryInstalled(t, privateExclude)
 	if got := readFileString(t, commonExclude); got != commonBefore {

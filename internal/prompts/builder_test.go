@@ -179,9 +179,12 @@ func TestBuildBasePromptScipSearchOmittedWhenNoIndexes(t *testing.T) {
 }
 
 func TestBuildBasePromptScipSearchRendersSuppliedIndexes(t *testing.T) {
-	goPath := "/abs/worktree/.liza/scip/go.scip"
+	goPath := "/abs/worktree with spaces/.liza/scip/go.scip"
 	tsPath := "/abs/worktree/.liza/scip/typescript.scip"
 	pythonPath := "/abs/worktree/.liza/scip/python.scip"
+	quotedGoPath := "'/abs/worktree with spaces/.liza/scip/go.scip'"
+	quotedTSPath := "'/abs/worktree/.liza/scip/typescript.scip'"
+	quotedPythonPath := "'/abs/worktree/.liza/scip/python.scip'"
 	config := BasePromptConfig{
 		Role:        "code-coder",
 		AgentID:     "coder-1",
@@ -211,24 +214,24 @@ func TestBuildBasePromptScipSearchRendersSuppliedIndexes(t *testing.T) {
 	}
 
 	assertContains("=== SCIP-SEARCH INDEXES ===")
-	assertContains("Generated SCIP indexes are snapshots; they will not reflect subsequent agent edits.")
+	assertContains("Generated SCIP indexes were refreshed before this prompt was built and reflect the current target tree at prompt construction time; they will not reflect subsequent agent edits.")
 	assertContains("scip-search symbols")
 	assertContains("scip-search references --index")
-	assertContains("scip-search references --index " + goPath + " --symbol '<exact-foo>' --symbol '<exact-bar>' --location-only")
+	assertContains("scip-search references --index " + quotedGoPath + " --symbol '<exact-foo>' --symbol '<exact-bar>' --location-only")
 	assertContains("nl -ba <result-path> | sed -n '<first-line>,<last-line>p'")
 	assertContains("Go symbols, references, and implementations are supported.")
 	assertContains("TypeScript implementations are upstream-supported by scip-search but not locally verified; verify results in files before relying on them.")
 	assertContains("Python symbols are supported and references may be incomplete.")
 	assertContains("scip-search implementations is not supported for Python.")
 
-	for _, path := range []string{goPath, tsPath, pythonPath} {
+	for _, path := range []string{quotedGoPath, quotedTSPath, quotedPythonPath} {
 		assertContains("scip-search symbols --index " + path + " --name Foo --name Bar")
 		assertContains("scip-search references --index " + path + " --symbol '<exact-foo>' --symbol '<exact-bar>' --location-only")
 	}
-	assertContains("scip-search implementations --index " + goPath + " --symbol '<exact-symbol>'")
-	assertContains("scip-search implementations --index " + tsPath + " --symbol '<exact-symbol>'")
+	assertContains("scip-search implementations --index " + quotedGoPath + " --symbol '<exact-symbol>'")
+	assertContains("scip-search implementations --index " + quotedTSPath + " --symbol '<exact-symbol>'")
 
-	if strings.Contains(prompt, "scip-search implementations --index "+pythonPath) {
+	if strings.Contains(prompt, "scip-search implementations --index "+quotedPythonPath) {
 		t.Fatalf("BuildBasePrompt() rendered a Python implementations command:\n%s", prompt)
 	}
 	if strings.Contains(prompt, "--index <") {

@@ -3,6 +3,7 @@ package scipsearch
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -478,11 +479,22 @@ func configureTaskWorktreeExclude(targetRoot, excludePath string) error {
 
 	// Linked worktrees do not consult their private info/exclude unless
 	// worktree-specific config points core.excludesFile at it.
+	worktreeConfigEnabled := false
+	output, err := gitenv.Output(targetRoot, "config", "--get", "extensions.worktreeConfig")
+	if err == nil {
+		worktreeConfigEnabled = strings.EqualFold(strings.TrimSpace(string(output)), "true")
+	} else if !gitConfigUnset(err) {
+		return fmt.Errorf("inspect task worktree config extension: %w", err)
+	}
+
 	if output, err := gitenv.CombinedOutput(targetRoot, "config", "extensions.worktreeConfig", "true"); err != nil {
 		return fmt.Errorf("enable task worktree config for scip-search exclude: %w%s", err, outputSuffix(string(output)))
 	}
+	if !worktreeConfigEnabled {
+		log.Printf("INFO: enabled git extensions.worktreeConfig for scip-search task worktree excludes in %s", targetRoot)
+	}
 
-	output, err := gitenv.Output(targetRoot, "config", "--worktree", "--get", "core.excludesFile")
+	output, err = gitenv.Output(targetRoot, "config", "--worktree", "--get", "core.excludesFile")
 	if err == nil {
 		current := strings.TrimSpace(string(output))
 		if current != "" && filepath.Clean(current) != filepath.Clean(excludePath) {
