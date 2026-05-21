@@ -35,6 +35,32 @@ Agents treat `AGENT_TOOLS.md` as an operational contract:
 Some support tools are a poor fit, or outright incompatible, with Liza multi-agent
 mode.
 
+### Worktree-Local SCIP Indexes
+
+When Liza supplies an explicit SCIP index path in an agent prompt, prefer
+`scip-search` for indexed repository navigation in that worktree:
+
+- `scip-search symbols --index <path>` for symbol lookup
+- `scip-search packages --index <path>` for indexed package discovery
+- `scip-search references --index <path>` for callers and references
+- `scip-search implementations --index <path>` for implementation navigation
+  when the indexed language supports it
+
+This is the MAS-safe path for symbol/package/reference/implementation questions
+because the query is tied to a caller-supplied worktree index instead of an IDE,
+LSP, or branch-global index that may describe another checkout.
+
+Keep `rg` as the default for exact text search and path discovery, including
+`rg --files`. Keep `ast-grep` as the default for syntax-pattern structural search
+and rewrite workflows, such as finding call shapes, function signatures, or
+struct literals that an index query cannot express.
+
+Agents should not search for default SCIP indexes, infer index locations from
+worktree paths, or rely on `scip-search` daemon, global-index, cache, watch, or
+auto-discovery behavior. Treat the explicit `--index <path>` supplied by Liza as
+the authority. If no explicit index path is available, fall back to `rg`,
+`ast-grep`, exact reads, and other worktree-safe tools.
+
 ### Per-Worktree Servers
 
 Language servers are tied to a specific worktree. In multi-agent mode, Liza may
@@ -48,7 +74,9 @@ Examples:
 
 - LSP servers such as `gopls`, `pyright`, `tsserver`
 
-Prefer `rg` for exact search, `ast-grep` for structural search, and
+Prefer `scip-search` when Liza supplies an explicit `--index` path for indexed
+symbols, packages, references, and implementations; `rg` for exact text/path
+search; `ast-grep` for syntax-pattern structural search and rewrites; and
 workspace-aware tools such as `morph-mcp` or Task(Explore) for broader semantic
 or cross-file analysis in multi-agent worktrees.
 
@@ -99,8 +127,10 @@ Exception:
 
 Prefer tools that remain correct across divergent worktrees:
 
+- `scip-search` with explicit `--index` paths supplied by Liza, for indexed
+  symbols, packages, references, and implementations
 - `rg` and related search tools
-- `ast-grep` for structural search
+- `ast-grep` for syntax-pattern structural search and rewrite workflows
 - workspace-aware tools such as `morph-mcp`
 - `glob`
 - exact file reads and narrowly scoped fetch tools
