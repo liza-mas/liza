@@ -1,0 +1,29 @@
+[
+  {
+    "desc": "Runtime SCIP language selection and command planning: extend `internal/scipsearch` with runtime target-root language detection from git-tracked files, enabled-language filtering against `config.scip_search` through the existing activation contract, deterministic language ordering, `.liza/scip/<language>.scip` output path construction, fixed argv command specifications for `scip-go`, `scip-typescript`, and `scip-python`, and fakeable runtime command-plan seams. Out of scope: executing indexers, linked-worktree ignore setup, lifecycle call-site wiring, prompt wording, README, and Claude settings.",
+    "done_when": "Unit tests in `internal/scipsearch` prove runtime target selection is a no-op when `LIZA_ENABLE_SCIP_SEARCH` is false or `config.scip_search` is empty, includes only languages that are both git-detected in the target root and configured, preserves deterministic `go`, `typescript`, `python` order, constructs absolute `<target>/.liza/scip/<language>.scip` output paths, and produces exact argv/working-directory command plans for `scip-go index --module-root <target> --skip-tests --output <path>`, `scip-typescript index --cwd <target> --output <path> <target>`, and `scip-python index --cwd <target> --output <path>`.",
+    "scope": "In scope: `internal/scipsearch` runtime target selection, reuse of existing `RuntimeEnabled` and git-file detection semantics, deterministic enabled-language filtering, runtime command-plan types, absolute output path construction, and unit tests for selection and command mapping. Out of scope: command execution, index file writes, private gitdir ignore setup, lifecycle call-site wiring, init-time validation, prompt wording, README, Claude settings, and `.liza/agent-outputs/`.",
+    "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#runtime-scip-indexing-service-internalscipsearch-or-equivalent",
+    "plan_ref": "specs/plans/20260517-use-scip-search/20260521-073929-architecture-2-code-planning-0.md"
+  },
+  {
+    "desc": "Runtime SCIP refresh execution and available index discovery: extend `internal/scipsearch` with a refresh operation that executes selected runtime command plans through a fakeable runner, writes successful index outputs under `<target>/.liza/scip/`, returns structured per-language successes and failures without suppressing other languages, bounds failure diagnostics for logs, and exposes a read-only available-index query that returns only existing successful absolute index paths. Out of scope: linked-worktree private ignore setup, lifecycle call-site wiring, prompt wording, README, and Claude settings.",
+    "done_when": "Unit tests in `internal/scipsearch` prove refresh creates the `.liza/scip` parent directory, invokes the fake runtime runner once per selected language with the exact command plan from Task 1, reports each successful language with an absolute `<target>/.liza/scip/<language>.scip` path, reports a bounded per-language failure when one indexer fails while still returning other language successes, and available-index discovery returns only existing successful absolute paths while omitting missing files and failed languages.",
+    "scope": "In scope: `internal/scipsearch` refresh execution for task-worktree and project-root targets, fakeable runtime runner interface with explicit working directory and argv fields, parent directory creation, structured `RefreshResult`/success/failure data, bounded diagnostics, available-index discovery, and unit tests using fake runners and temp roots. Out of scope: linked-worktree private gitdir exclude mutation, lifecycle call-site wiring, init-time validation, prompt wording, README, Claude settings, and `.liza/agent-outputs/`.",
+    "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#runtime-scip-indexing-service-internalscipsearch-or-equivalent",
+    "plan_ref": "specs/plans/20260517-use-scip-search/20260521-073929-architecture-2-code-planning-0.md",
+    "depends_on": [
+      "0"
+    ]
+  },
+  {
+    "desc": "Task worktree private ignore and concurrent isolation: extend `internal/scipsearch` task-worktree refresh to resolve the linked worktree private gitdir, install an idempotent `.liza/scip/` entry in that gitdir's `info/exclude` before writing indexes, avoid the common repository `.git/info/exclude`, and prove concurrent task-worktree refreshes use distinct output files and private exclude files. Out of scope: lifecycle call-site wiring, init-time validation, prompt wording, README, and Claude settings.",
+    "done_when": "Git-backed tests in `internal/scipsearch` prove task-worktree refresh resolves the private linked-worktree gitdir with `git rev-parse --git-dir`, appends `.liza/scip/` exactly once to each task worktree private `info/exclude` before index files are written, never modifies the common repository `.git/info/exclude`, leaves `git status --porcelain` clean after generated task indexes, and concurrently refreshing two linked task worktrees creates distinct absolute index paths with no shared output files or path collisions.",
+    "scope": "In scope: `internal/scipsearch` task-worktree ignore helper, integration of ignore setup into task-kind refresh before index generation, git-backed temp-repository tests for linked worktree private gitdir behavior, clean status, idempotency, common-exclude non-mutation, and concurrent two-worktree isolation. Out of scope: project-root ignore mutation, lifecycle call-site wiring, init-time validation, prompt wording, README, Claude settings, and `.liza/agent-outputs/`.",
+    "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#runtime-scip-indexing-service-internalscipsearch-or-equivalent",
+    "plan_ref": "specs/plans/20260517-use-scip-search/20260521-073929-architecture-2-code-planning-0.md",
+    "depends_on": [
+      "1"
+    ]
+  }
+]
