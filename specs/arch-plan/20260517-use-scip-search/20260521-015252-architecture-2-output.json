@@ -1,0 +1,42 @@
+[
+  {
+    "desc": "Runtime SCIP Indexing Service: runtime index refresh service, target-root language detection, enabled-language filtering against `config.scip_search`, fixed argv command mapping for `scip-go`, `scip-typescript`, and `scip-python`, output path construction under `.liza/scip`, task-worktree ignore setup through the linked worktree private gitdir exclude file, structured success/failure results, fakeable command runner seams, and read-only available-index discovery for prompt consumers. Out of scope: lifecycle call-site wiring, init-time validation, prompt wording, README, and Claude settings.",
+    "done_when": "Tests prove the service indexes only languages that are both detected in the target root and enabled in `config.scip_search`, writes successful outputs under `<target>/.liza/scip/<language>.scip`, installs an idempotent private linked-worktree gitdir ignore entry so generated task indexes leave `git status --porcelain` clean, proves two linked worktrees resolve distinct private gitdirs and do not write the common `.git/info/exclude`, returns per-language failures without suppressing other languages, exposes only existing successful absolute index paths to prompt consumers, and can refresh two task worktrees concurrently without path collisions or shared output files.",
+    "scope": "In scope: runtime index refresh service, target-root language detection, enabled-language filtering against `config.scip_search`, fixed argv command mapping for `scip-go`, `scip-typescript`, and `scip-python`, output path construction under `.liza/scip`, task-worktree ignore setup through the linked worktree private gitdir exclude file, structured success/failure results, fakeable command runner seams, and read-only available-index discovery for prompt consumers. Out of scope: lifecycle call-site wiring, init-time validation, prompt wording, README, and Claude settings.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md",
+    "arch_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md",
+    "task_depends_on": [
+      "architecture-1-code-planning-2"
+    ]
+  },
+  {
+    "desc": "Task Worktree Creation Indexing: wiring the runtime indexing service into `ops.ClaimTask` and `ops.CreateWorktree` after worktree provisioning, Claude/pre-commit setup, and optional `PostWorktreeCmd`; warning propagation through existing claim/create result warnings; tests for initial task worktree indexing, existing-worktree idempotent refresh, disabled activation no-op, graceful indexer failure, clean git status, and concurrent worktree isolation through the claim/create lifecycle. Out of scope: submit-for-review regeneration, orchestrator project-root refresh, prompt wording, README, and Claude settings.",
+    "done_when": "Claim/create lifecycle tests prove an enabled detected language is indexed under `<worktree>/.liza/scip/` before the doer prompt would be built, disabled activation creates no index directory and emits no prompt-available indexes, a failing indexer produces a warning while the task remains claimed/created, generated indexes do not dirty `git status --porcelain`, existing worktrees refresh idempotently, and two concurrently created task worktrees receive independent index files with no path collision.",
+    "scope": "In scope: wiring the runtime indexing service into `ops.ClaimTask` and `ops.CreateWorktree` after worktree provisioning, Claude/pre-commit setup, and optional `PostWorktreeCmd`; warning propagation through existing claim/create result warnings; tests for initial task worktree indexing, existing-worktree idempotent refresh, disabled activation no-op, graceful indexer failure, clean git status, and concurrent worktree isolation through the claim/create lifecycle. Out of scope: submit-for-review regeneration, orchestrator project-root refresh, prompt wording, README, and Claude settings.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md",
+    "arch_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md",
+    "depends_on": [
+      "0"
+    ]
+  },
+  {
+    "desc": "Review Submission and Reviewer Recovery Indexing: wiring the runtime indexing service into `ops.SubmitForReview` after successful rebase/review-boundary validation and before submitted-state transition; extending submit warnings so failed indexers are observable without blocking review; wiring recovered reviewer worktrees to refresh indexes after branch attach and post-worktree setup; tests for submit-for-review regeneration, reviewer recovery refresh, graceful failure, omitted failed-language availability, and clean git status. Out of scope: initial task claim indexing, orchestrator refresh, prompt wording, README, and Claude settings.",
+    "done_when": "Submit/recovery tests prove `submit-for-review` regenerates task-local indexes from the post-rebase review candidate before reviewer spawning can occur, regenerated indexes remain under `<worktree>/.liza/scip/`, indexer failure is surfaced as a warning but does not block the submitted-state transition or reviewer recovery, failed languages are absent from available prompt indexes, and generated or regenerated indexes leave `git status --porcelain` clean.",
+    "scope": "In scope: wiring the runtime indexing service into `ops.SubmitForReview` after successful rebase/review-boundary validation and before submitted-state transition; extending submit warnings so failed indexers are observable without blocking review; wiring recovered reviewer worktrees to refresh indexes after branch attach and post-worktree setup; tests for submit-for-review regeneration, reviewer recovery refresh, graceful failure, omitted failed-language availability, and clean git status. Out of scope: initial task claim indexing, orchestrator refresh, prompt wording, README, and Claude settings.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md",
+    "arch_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md",
+    "depends_on": [
+      "0"
+    ]
+  },
+  {
+    "desc": "Orchestrator Project-Root Refresh: wiring the runtime indexing service into orchestrator `PreExecution` so every orchestrator wake refreshes project-root indexes before prompt construction; ensuring prompt data construction can read successful project-root index paths through the service boundary; tests for refresh on orchestrator wakeup, disabled activation no-op, graceful indexer failure, storage under `<project_root>/.liza/scip/`, and no dependency on task worktree indexes. Out of scope: prompt wording/capability text, README, Claude settings, task worktree claim indexing, and submit-for-review regeneration.",
+    "done_when": "Orchestrator strategy tests prove every orchestrator wake path invokes project-root refresh before prompt construction, successful indexes are stored under `<project_root>/.liza/scip/`, disabled activation and empty allowlist are no-ops, indexer failures do not prevent orchestrator execution, no task worktree path is used for orchestrator indexes, and prompt data receives only successful absolute project-root index paths.",
+    "scope": "In scope: wiring the runtime indexing service into orchestrator `PreExecution` so every orchestrator wake refreshes project-root indexes before prompt construction; ensuring prompt data construction can read successful project-root index paths through the service boundary; tests for refresh on orchestrator wakeup, disabled activation no-op, graceful indexer failure, storage under `<project_root>/.liza/scip/`, and no dependency on task worktree indexes. Out of scope: prompt wording/capability text, README, Claude settings, task worktree claim indexing, and submit-for-review regeneration.",
+    "spec_ref": "specs/goals/20260517-use-scip-search.md",
+    "arch_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md",
+    "depends_on": [
+      "0"
+    ]
+  }
+]
