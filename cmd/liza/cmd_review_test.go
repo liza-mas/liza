@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,6 +53,47 @@ func TestSubmitForReviewCLI_CommitRefHandling(t *testing.T) {
 				t.Fatalf("ReviewCommit = %v, want non-empty", task.ReviewCommit)
 			}
 		})
+	}
+}
+
+func TestSubmitForReviewCLI_JSONIncludesScipWarnings(t *testing.T) {
+	t.Setenv("LIZA_ENABLE_SCIP_SEARCH", "true")
+	projectRoot, statePath, taskID, agentID := setupSubmitForReviewCLIProject(t)
+	installFailingSubmitReviewCLIIndexer(t)
+
+	if err := db.For(statePath).Modify(func(state *models.State) error {
+		state.Config.ScipSearch = []string{"go"}
+		return nil
+	}); err != nil {
+		t.Fatalf("set scip config: %v", err)
+	}
+
+	stdout, err := executeRootCommandCapture(t, projectRoot, "submit-for-review", taskID, "HEAD", "--agent-id", agentID, "--json")
+	if err != nil {
+		t.Fatalf("submit-for-review --json failed: %v\n%s", err, stdout)
+	}
+	var env map[string]any
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("unmarshal json: %v\n%s", err, stdout)
+	}
+	warnings, ok := env["warnings"].([]any)
+	if !ok || len(warnings) != 1 {
+		t.Fatalf("warnings = %#v, want one scip warning", env["warnings"])
+	}
+	if !strings.Contains(warnings[0].(string), "scip-search go:") || !strings.Contains(warnings[0].(string), "fake scip-go failed") {
+		t.Fatalf("warning = %q, want scip-search go failure", warnings[0])
+	}
+
+	state, err := db.For(statePath).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatalf("task %s not found", taskID)
+	}
+	if task.Status != models.TaskStatusReadyForReview {
+		t.Fatalf("task status = %s, want READY_FOR_REVIEW", task.Status)
 	}
 }
 
@@ -129,4 +172,17 @@ func setupSubmitForReviewCLIProject(t *testing.T) (projectRoot, statePath, taskI
 	testhelpers.WriteInitialState(t, statePath, initialState)
 
 	return projectRoot, statePath, taskID, agentID
+}
+
+func installFailingSubmitReviewCLIIndexer(t *testing.T) {
+	t.Helper()
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\necho fake scip-go failed >&2\nexit 3\n"
+	if err := os.WriteFile(filepath.Join(binDir, "scip-go"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

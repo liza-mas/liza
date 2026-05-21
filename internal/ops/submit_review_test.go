@@ -2,6 +2,7 @@ package ops
 
 import (
 	stderrors "errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,8 +14,17 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+func replaceSubmitReviewScipRefreshForTest(refresh func(scipsearch.RefreshOptions) (scipsearch.RefreshResult, error)) func() {
+	previous := submitReviewRefreshIndexes
+	submitReviewRefreshIndexes = refresh
+	return func() {
+		submitReviewRefreshIndexes = previous
+	}
+}
 
 func TestSubmitForReview_Validation(t *testing.T) {
 	tests := []struct {
@@ -654,6 +664,206 @@ func TestSubmitForReview_RebaseRewriteUsesPostRebaseHead(t *testing.T) {
 	}
 	if claimResult.ReviewCommit != postRebaseHead {
 		t.Fatalf("claim ReviewCommit = %s, want %s", claimResult.ReviewCommit, postRebaseHead)
+	}
+}
+
+func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransition(t *testing.T) {
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	g := git.New(tmpDir)
+	taskID := "task-submit-scip-refresh"
+	baseCommit, err := g.CreateWorktree(taskID, "integration")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	wtPath := g.GetWorktreePath(taskID)
+
+	if err := os.WriteFile(filepath.Join(wtPath, "feature.go"), []byte("package main\n\nfunc Feature() string { return \"post-rebase\" }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtPath, "feature_test.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "feature.go", "feature_test.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add scip-indexed feature")
+	preRebaseCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	if err := os.WriteFile(filepath.Join(tmpDir, "integration.txt"), []byte("integration advanced\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "integration.txt")
+	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Advance integration")
+
+	agentID := "coder-1"
+	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+	worktree := g.GetWorktreeRelPath(taskID)
+	initialState := &models.State{
+		Config: models.Config{
+			IntegrationBranch: "integration",
+			LeaseDuration:     1800,
+			ScipSearch:        []string{"go"},
+		},
+		Tasks: []models.Task{
+			{
+				ID:           taskID,
+				Type:         models.TaskTypeCoding,
+				Description:  "Task whose submit refreshes scip indexes",
+				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
+				AssignedTo:   &agentID,
+				LeaseExpires: &leaseExpires,
+				Worktree:     &worktree,
+				BaseCommit:   &baseCommit,
+				Iteration:    1,
+				Created:      time.Now().UTC(),
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: models.TaskEventPreExecutionCheckpoint,
+						Agent: &agentID,
+						Extra: map[string]any{
+							"intent":          "exercise submit scip refresh",
+							"validation_plan": "index contains post-rebase candidate before submitted transition",
+							"files_to_modify": []string{"feature.go", "feature_test.go"},
+						},
+					},
+				},
+			},
+		},
+		Agents: map[string]models.Agent{
+			agentID: {Role: "coder", Status: models.AgentStatusWorking, CurrentTask: &taskID},
+		},
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, initialState)
+
+	refreshCalls := 0
+	restore := replaceSubmitReviewScipRefreshForTest(func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
+		refreshCalls++
+		if opts.TargetRoot != wtPath {
+			t.Errorf("TargetRoot = %q, want %q", opts.TargetRoot, wtPath)
+		}
+		if opts.TargetKind != scipsearch.TargetKindTaskWorktree {
+			t.Errorf("TargetKind = %q, want task worktree", opts.TargetKind)
+		}
+		state, err := bb.Read()
+		if err != nil {
+			t.Fatalf("bb.Read() during refresh: %v", err)
+		}
+		task := state.FindTask(taskID)
+		if task == nil {
+			t.Fatal("task not found during refresh")
+		}
+		if task.Status != models.TaskStatusImplementing {
+			t.Fatalf("refresh ran after submitted transition: status = %s", task.Status)
+		}
+		opts.Runner = func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+			postRebaseHead := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+			if postRebaseHead == preRebaseCommit {
+				t.Fatal("refresh saw pre-rebase HEAD")
+			}
+			source, err := os.ReadFile(filepath.Join(wtPath, "feature.go"))
+			if err != nil {
+				return "", err
+			}
+			content := fmt.Sprintf("%s\n%s", postRebaseHead, source)
+			if err := os.WriteFile(plan.OutputPath, []byte(content), 0644); err != nil {
+				return "", err
+			}
+			return "", nil
+		}
+		return scipsearch.RefreshIndexes(opts)
+	})
+	defer restore()
+
+	result, err := SubmitForReview(tmpDir, taskID, preRebaseCommit, agentID)
+	if err != nil {
+		t.Fatalf("SubmitForReview() unexpected error: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("Warnings = %v, want none", result.Warnings)
+	}
+	if refreshCalls != 1 {
+		t.Fatalf("refresh calls = %d, want 1", refreshCalls)
+	}
+
+	postRebaseHead := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+	indexPath := filepath.Join(wtPath, ".liza", "scip", "go.scip")
+	indexContent, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("read regenerated index: %v", err)
+	}
+	if !strings.Contains(string(indexContent), postRebaseHead) || !strings.Contains(string(indexContent), "post-rebase") {
+		t.Fatalf("index content = %q, want post-rebase review candidate", indexContent)
+	}
+	available, err := scipsearch.AvailableIndexes(scipsearch.RuntimePlanOptions{
+		TargetRoot:          wtPath,
+		ConfiguredLanguages: []string{"go"},
+	})
+	if err != nil {
+		t.Fatalf("AvailableIndexes() error = %v", err)
+	}
+	if len(available) != 1 || available[0].Language != "go" || available[0].Path != indexPath {
+		t.Fatalf("AvailableIndexes() = %#v, want regenerated go index", available)
+	}
+	if status := testhelpers.MustGit(t, wtPath, "status", "--porcelain"); status != "" {
+		t.Fatalf("git status --porcelain = %q, want clean", status)
+	}
+}
+
+func TestSubmitForReview_ScipFailureWarnsAndOmitsFailedLanguage(t *testing.T) {
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+	tmpDir, taskID, wtCommit, agentID, bb := setupSuccessfulSubmitScenario(t)
+	g := git.New(tmpDir)
+	wtPath := g.GetWorktreePath(taskID)
+
+	if err := bb.Modify(func(state *models.State) error {
+		state.Config.ScipSearch = []string{"go"}
+		return nil
+	}); err != nil {
+		t.Fatalf("set scip config: %v", err)
+	}
+
+	restore := replaceSubmitReviewScipRefreshForTest(func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
+		opts.Runner = func(scipsearch.RuntimeCommandPlan) (string, error) {
+			return "compiler exploded", stderrors.New("scip-go failed")
+		}
+		return scipsearch.RefreshIndexes(opts)
+	})
+	defer restore()
+
+	result, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID)
+	if err != nil {
+		t.Fatalf("SubmitForReview() unexpected error: %v", err)
+	}
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "scip-search go:") || !strings.Contains(result.Warnings[0], "scip-go failed") {
+		t.Fatalf("Warnings = %v, want go scip-search failure", result.Warnings)
+	}
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("bb.Read() error = %v", err)
+	}
+	task := state.FindTask(taskID)
+	if task == nil {
+		t.Fatal("task not found after submission")
+	}
+	if task.Status != models.TaskStatusReadyForReview {
+		t.Fatalf("task status = %s, want READY_FOR_REVIEW", task.Status)
+	}
+	available, err := scipsearch.AvailableIndexes(scipsearch.RuntimePlanOptions{
+		TargetRoot:          wtPath,
+		ConfiguredLanguages: []string{"go"},
+	})
+	if err != nil {
+		t.Fatalf("AvailableIndexes() error = %v", err)
+	}
+	if len(available) != 0 {
+		t.Fatalf("AvailableIndexes() = %#v, want failed go language omitted", available)
 	}
 }
 

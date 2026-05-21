@@ -14,16 +14,20 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/scipsearch"
 )
 
 const integrationOperationSubmitForReview = "submit-for-review"
 
 // SubmitForReviewResult contains the outcome of submitting a task for review.
 type SubmitForReviewResult struct {
-	TaskID       string `json:"task_id"`
-	ReviewCommit string `json:"review_commit"`
-	AgentID      string `json:"agent_id"`
+	TaskID       string   `json:"task_id"`
+	ReviewCommit string   `json:"review_commit"`
+	AgentID      string   `json:"agent_id"`
+	Warnings     []string `json:"warnings,omitempty"`
 }
+
+var submitReviewRefreshIndexes = scipsearch.RefreshIndexes
 
 // SubmitForReview validates that commitRef resolves to the worktree HEAD before rebase,
 // rebases the task branch onto the integration branch to catch conflicts early,
@@ -256,6 +260,8 @@ func SubmitForReview(projectRoot, taskID, commitRef, agentID string) (*SubmitFor
 		return nil, err
 	}
 
+	indexWarnings := refreshSubmitReviewScipIndexes(wtPath, state.Config.ScipSearch)
+
 	// Phase 3: Atomic update with new commit SHA
 	now := time.Now().UTC()
 
@@ -327,7 +333,29 @@ func SubmitForReview(projectRoot, taskID, commitRef, agentID string) (*SubmitFor
 		TaskID:       taskID,
 		ReviewCommit: postRebaseCommit,
 		AgentID:      agentID,
+		Warnings:     indexWarnings,
 	}, nil
+}
+
+func refreshSubmitReviewScipIndexes(worktreePath string, configuredLanguages []string) []string {
+	result, err := submitReviewRefreshIndexes(scipsearch.RefreshOptions{
+		TargetRoot:          worktreePath,
+		TargetKind:          scipsearch.TargetKindTaskWorktree,
+		ConfiguredLanguages: configuredLanguages,
+	})
+	warnings := scipRefreshWarnings(result)
+	if err != nil {
+		warnings = append(warnings, fmt.Sprintf("scip-search: %v", err))
+	}
+	return warnings
+}
+
+func scipRefreshWarnings(result scipsearch.RefreshResult) []string {
+	warnings := make([]string, 0, len(result.Failures))
+	for _, failure := range result.Failures {
+		warnings = append(warnings, fmt.Sprintf("scip-search %s: %s", failure.Language, failure.Diagnostic))
+	}
+	return warnings
 }
 
 func taskRequiresTDD(task *models.Task, resolver models.PipelineResolver) (bool, error) {

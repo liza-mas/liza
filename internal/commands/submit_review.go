@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/liza-mas/liza/internal/ops"
 )
@@ -17,5 +18,8 @@ func SubmitForReviewCommand(projectRoot, taskID, commitRef, agentID string) erro
 	fmt.Printf("SUBMITTED FOR REVIEW: %s\n", result.TaskID)
 	fmt.Printf("  review_commit: %s\n", result.ReviewCommit)
 	fmt.Printf("  submitted_by: %s\n", result.AgentID)
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+	}
 	return nil
 }

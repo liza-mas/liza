@@ -72,7 +72,11 @@ Updates:
 
 		if isJSON(cmd) {
 			result, err := ops.SubmitForReview(projectRoot, taskID, commitRef, agentID)
-			return jsonout.WriteResult(os.Stdout, result, nil, err)
+			var warnings []string
+			if result != nil {
+				warnings = result.Warnings
+			}
+			return jsonout.WriteResult(os.Stdout, result, warnings, err)
 		}
 		return commands.SubmitForReviewCommand(projectRoot, taskID, commitRef, agentID)
 	},

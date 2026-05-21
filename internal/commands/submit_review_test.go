@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -302,6 +304,91 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 	}
 }
 
+func TestSubmitForReviewCommand_PrintsScipWarnings(t *testing.T) {
+	t.Setenv("LIZA_ENABLE_SCIP_SEARCH", "true")
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	installFailingSubmitReviewIndexer(t)
+
+	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
+	g := git.New(tmpDir)
+	taskID := "task-submit-scip-warning"
+	baseCommit, err := g.CreateWorktree(taskID, "integration")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	wtPath := g.GetWorktreePath(taskID)
+
+	if err := os.WriteFile(filepath.Join(wtPath, "feature.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtPath, "feature_test.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, wtPath, "add", "feature.go", "feature_test.go")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add feature with tests")
+	wtCommit := testhelpers.MustGit(t, wtPath, "rev-parse", "HEAD")
+
+	agentID := "coder-1"
+	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+	worktree := g.GetWorktreeRelPath(taskID)
+	currentTask := taskID
+	initialState := &models.State{
+		Config: models.Config{
+			IntegrationBranch: "integration",
+			LeaseDuration:     1800,
+			ScipSearch:        []string{"go"},
+		},
+		Tasks: []models.Task{
+			{
+				ID:           taskID,
+				Description:  "Test task with scip warning",
+				Status:       models.TaskStatusImplementing,
+				RolePair:     "coding-pair",
+				AssignedTo:   &agentID,
+				LeaseExpires: &leaseExpires,
+				Worktree:     &worktree,
+				BaseCommit:   &baseCommit,
+				Iteration:    1,
+				Created:      time.Now().UTC(),
+				History: []models.TaskHistoryEntry{
+					{
+						Time:  time.Now().UTC(),
+						Event: models.TaskEventPreExecutionCheckpoint,
+						Agent: &agentID,
+						Extra: map[string]any{
+							"intent":          "test scip warning output",
+							"validation_plan": "submit succeeds while warning is printed",
+							"files_to_modify": []string{"feature.go", "feature_test.go"},
+						},
+					},
+				},
+			},
+		},
+		Agents: map[string]models.Agent{
+			agentID: {
+				Role:         "coder",
+				Status:       models.AgentStatusWorking,
+				CurrentTask:  &currentTask,
+				LeaseExpires: &leaseExpires,
+				Heartbeat:    time.Now().UTC(),
+			},
+		},
+	}
+	testhelpers.WriteInitialState(t, statePath, initialState)
+
+	stderr, err := captureSubmitReviewStderr(t, func() error {
+		return SubmitForReviewCommand(tmpDir, taskID, wtCommit, agentID)
+	})
+	testhelpers.AssertNoError(t, err)
+	if !strings.Contains(stderr, "warning: scip-search go:") || !strings.Contains(stderr, "fake scip-go failed") {
+		t.Fatalf("stderr = %q, want scip-search warning", stderr)
+	}
+}
+
 func TestSubmitForReview_RebaseConflict(t *testing.T) {
 	// Setup test git repository
 	tmpDir := t.TempDir()
@@ -408,6 +495,38 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 	if task.AssignedTo != nil {
 		t.Errorf("expected agent to be released after integration failure, got %v", *task.AssignedTo)
 	}
+}
+
+func installFailingSubmitReviewIndexer(t *testing.T) {
+	t.Helper()
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\necho fake scip-go failed >&2\nexit 3\n"
+	if err := os.WriteFile(filepath.Join(binDir, "scip-go"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func captureSubmitReviewStderr(t *testing.T, fn func() error) (string, error) {
+	t.Helper()
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stderr pipe: %v", err)
+	}
+	os.Stderr = w
+	runErr := fn()
+	_ = w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("failed to read stderr pipe: %v", err)
+	}
+	return buf.String(), runErr
 }
 
 func TestSubmitForReview_ResolveIntegrationBranchFailure(t *testing.T) {
