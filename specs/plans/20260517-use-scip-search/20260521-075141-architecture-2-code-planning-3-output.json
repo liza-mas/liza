@@ -1,0 +1,22 @@
+[
+  {
+    "desc": "Orchestrator PreExecution project-root SCIP refresh: wire the runtime SCIP indexing service into `orchestratorStrategy.PreExecution` after `setAgentToOrchestratingStatus` succeeds so every orchestrator wake refreshes project-root indexes before the supervisor re-reads state and builds the prompt; keep refresh failures warning-only; and test enabled refresh, disabled activation, empty allowlist, graceful indexer failure, and project-root output paths. Out of scope: prompt wording/capability text, README, Claude settings, task worktree claim indexing, submit-for-review regeneration, and task-worktree prompt data.",
+    "done_when": "Orchestrator strategy or supervisor tests prove `PreExecution` invokes project-root SCIP refresh before prompt construction for each orchestrator wake trigger covered by `DetectOrchestratorWakeTriggers`, stores successful indexes under `<project_root>/.liza/scip/`, performs no refresh and creates no index paths when activation is disabled or `config.scip_search` is empty, logs or surfaces indexer failure without preventing orchestrator execution, and never uses a task worktree path for orchestrator index output.",
+    "scope": "In scope: `internal/agent/strategy_orchestrator.go`, focused tests under `internal/agent` for orchestrator `PreExecution` or supervisor wake execution, consumption of the runtime `internal/scipsearch` refresh service planned by `architecture-2-code-planning-0`, warning-only error handling, and verification that refresh targets `config.ProjectRoot`. Out of scope: prompt template wording, `internal/embedded/claude-settings.json`, README/operator docs, task worktree lifecycle wiring, submit-for-review lifecycle wiring, and `.liza/agent-outputs/`.",
+    "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#orchestrator-project-root-refresh-internalagentstrategy_orchestratorgo",
+    "plan_ref": "specs/plans/20260517-use-scip-search/20260521-075141-architecture-2-code-planning-3.md",
+    "task_depends_on": [
+      "architecture-2-code-planning-0"
+    ]
+  },
+  {
+    "desc": "Orchestrator prompt data project-root index availability: extend orchestrator prompt context data so prompt construction can read successful project-root SCIP index paths through the runtime service boundary and carry only language plus absolute index path metadata for later rendering. Out of scope: prompt wording/capability text, base-prompt section rendering, README, Claude settings, task-worktree prompt data, task worktree claim indexing, and submit-for-review regeneration.",
+    "done_when": "Prompt data tests prove orchestrator context construction queries available indexes for `config.ProjectRoot`, includes only successful existing absolute project-root index paths, omits failed or missing language indexes, ignores task worktree `.liza/scip/` paths even when they exist, and leaves prompt wording/template rendering unchanged for this slice.",
+    "scope": "In scope: `internal/agent/prompt.go`, `internal/prompts/role_context.go`, focused tests under `internal/agent` and `internal/prompts` as needed, a role-context data field or helper for successful SCIP index references, and consumption of the runtime `internal/scipsearch` available-index query planned by `architecture-2-code-planning-0`. Out of scope: scip-search command-loop wording, Python capability caveat text, `internal/prompts/templates/base_prompt.tmpl`, `internal/embedded/claude-settings.json`, README/operator docs, task worktree lifecycle wiring, submit-for-review lifecycle wiring, and `.liza/agent-outputs/`.",
+    "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#prompt-index-availability-boundary-internalagentpromptgo-internalprompts",
+    "plan_ref": "specs/plans/20260517-use-scip-search/20260521-075141-architecture-2-code-planning-3.md",
+    "task_depends_on": [
+      "architecture-2-code-planning-0"
+    ]
+  }
+]
