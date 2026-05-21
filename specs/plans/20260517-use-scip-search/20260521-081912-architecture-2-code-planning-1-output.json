@@ -1,0 +1,25 @@
+[
+  {
+    "desc": "ClaimTask task-worktree SCIP indexing: wire the runtime SCIP indexing service into `ops.ClaimTask` after worktree provisioning and optional `PostWorktreeCmd`, append warning-only indexer failures to `ClaimResult.Warnings`, and test initial doer-claim indexing, disabled activation no-op, failed-indexer graceful claim, clean git status, and concurrent claim isolation. Out of scope: direct `ops.CreateWorktree` wiring, submit-for-review regeneration, orchestrator project-root refresh, prompt wording, README, and Claude settings.",
+    "done_when": "Claim lifecycle tests in `internal/ops` prove `ops.ClaimTask` refreshes enabled detected task worktree indexes under `<worktree>/.liza/scip/` after optional `PostWorktreeCmd` and before supervisor prompt construction would read claim results, disabled activation creates no `.liza/scip/` directory and yields no available task indexes, a failing indexer appends a `scip-search <language>:` warning while the task still transitions to its executing status, generated indexes leave `git status --porcelain` clean, and two concurrent successful claims for different tasks produce distinct absolute index paths with no shared output files.",
+    "scope": "In scope: `internal/ops/claim_task.go`, an ops-local helper for invoking runtime task-worktree refresh and converting per-language failures to existing warning strings, `ClaimResult.Warnings` propagation, and claim lifecycle tests in `internal/ops/claim_task_test.go` using fakeable runtime indexing seams and git-backed temp worktrees. Out of scope: direct `ops.CreateWorktree` wiring, submit-for-review regeneration, reviewer recovery, orchestrator refresh, prompt wording/rendering, README, Claude settings, init-time validation, and `.liza/agent-outputs/`.",
+    "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#task-worktree-creation-indexing-internalopsclaim_taskgo-internalopswt_creatego",
+    "plan_ref": "specs/plans/20260517-use-scip-search/20260521-081912-architecture-2-code-planning-1.md",
+    "task_depends_on": [
+      "architecture-2-code-planning-0-coding-2"
+    ]
+  },
+  {
+    "desc": "CreateWorktree task-worktree SCIP indexing: wire the runtime SCIP indexing helper into `ops.CreateWorktree` after Claude config provisioning, pre-commit hook setup, and optional `PostWorktreeCmd` for both new and existing healthy worktrees, preserving warning-only failures and idempotent refresh behavior. Out of scope: `ops.ClaimTask` wiring, submit-for-review regeneration, orchestrator project-root refresh, prompt wording, README, and Claude settings.",
+    "done_when": "CreateWorktree lifecycle tests in `internal/ops` prove `ops.CreateWorktree` refreshes enabled detected task worktree indexes under `<worktree>/.liza/scip/` after Claude config provisioning, pre-commit hook setup, and optional `PostWorktreeCmd` for newly created and already-existing healthy worktrees; repeated calls refresh idempotently without duplicate ignore entries or stale path reuse; disabled activation creates no `.liza/scip/` directory and yields no available task indexes; a failing indexer appends a `scip-search <language>:` warning while creation returns success; generated indexes leave `git status --porcelain` clean; and two concurrently created task worktrees receive independent absolute index files with no path collision.",
+    "scope": "In scope: `internal/ops/wt_create.go`, reuse of the ops-local runtime indexing helper from Task 1, `CreateWorktreeResult.Warnings` propagation, and direct worktree lifecycle tests in `internal/ops/wt_create_test.go` covering new worktrees, existing healthy worktrees, warning-only failures, disabled activation, clean status, and concurrent create isolation. Out of scope: `ops.ClaimTask` wiring, submit-for-review regeneration, reviewer recovery, orchestrator refresh, prompt wording/rendering, README, Claude settings, init-time validation, and `.liza/agent-outputs/`.",
+    "spec_ref": "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md#task-worktree-creation-indexing-internalopsclaim_taskgo-internalopswt_creatego",
+    "plan_ref": "specs/plans/20260517-use-scip-search/20260521-081912-architecture-2-code-planning-1.md",
+    "depends_on": [
+      "0"
+    ],
+    "task_depends_on": [
+      "architecture-2-code-planning-0-coding-2"
+    ]
+  }
+]
