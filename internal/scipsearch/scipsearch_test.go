@@ -2,15 +2,18 @@ package scipsearch
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/doc"
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -485,6 +488,146 @@ func TestRuntimeAvailableIndexesReturnsOnlyExistingAbsolutePaths(t *testing.T) {
 	}
 }
 
+func TestRuntimeTaskWorktreeIgnoreIsPrivateIdempotentAndClean(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	repo := newGitRepoWithWorktrees(t, "task-one")
+	worktree := repo.worktrees["task-one"]
+	privateExclude := filepath.Join(revParseGitDir(t, worktree), "info", "exclude")
+	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
+	commonBefore := readFileString(t, commonExclude)
+	var runnerCalls int
+
+	for i := 0; i < 2; i++ {
+		result, err := RefreshIndexes(RefreshOptions{
+			TargetRoot:          worktree,
+			TargetKind:          TargetKindTaskWorktree,
+			ConfiguredLanguages: []string{"go"},
+			Runner: func(plan RuntimeCommandPlan) (string, error) {
+				runnerCalls++
+				assertIgnoreEntryInstalled(t, privateExclude)
+				if _, err := os.Stat(plan.OutputPath); !os.IsNotExist(err) {
+					t.Fatalf("Stat(%q) before index write error = %v, want missing", plan.OutputPath, err)
+				}
+				if got := readFileString(t, commonExclude); got != commonBefore {
+					t.Fatalf("common exclude changed before index write: %q, want %q", got, commonBefore)
+				}
+				if err := os.WriteFile(plan.OutputPath, []byte("go"), 0o644); err != nil {
+					t.Fatalf("WriteFile(%q) error = %v", plan.OutputPath, err)
+				}
+				return "", nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("RefreshIndexes() iteration %d error = %v", i+1, err)
+		}
+		wantPath := filepath.Join(worktree, ".liza", "scip", "go.scip")
+		if !reflect.DeepEqual(result.Successes, []IndexRef{{Language: "go", Path: wantPath}}) {
+			t.Fatalf("successes iteration %d = %#v, want go index at %q", i+1, result.Successes, wantPath)
+		}
+		if len(result.Failures) != 0 {
+			t.Fatalf("failures iteration %d = %#v, want none", i+1, result.Failures)
+		}
+	}
+
+	if runnerCalls != 2 {
+		t.Fatalf("runner calls = %d, want 2", runnerCalls)
+	}
+	assertIgnoreEntryInstalled(t, privateExclude)
+	if got := readFileString(t, commonExclude); got != commonBefore {
+		t.Fatalf("common exclude = %q, want unchanged %q", got, commonBefore)
+	}
+	if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
+		t.Fatalf("git status --porcelain = %q, want clean", status)
+	}
+}
+
+func TestRuntimeConcurrentTaskWorktreeRefreshesUsePrivateOutputsAndExcludes(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	repo := newGitRepoWithWorktrees(t, "task-one", "task-two")
+	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
+	commonBefore := readFileString(t, commonExclude)
+	privateExcludes := map[string]string{
+		"task-one": filepath.Join(revParseGitDir(t, repo.worktrees["task-one"]), "info", "exclude"),
+		"task-two": filepath.Join(revParseGitDir(t, repo.worktrees["task-two"]), "info", "exclude"),
+	}
+	var (
+		mu      sync.Mutex
+		outputs []string
+		results = make(map[string]RefreshResult)
+	)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, len(repo.worktrees))
+	for name, worktree := range repo.worktrees {
+		name := name
+		worktree := worktree
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := RefreshIndexes(RefreshOptions{
+				TargetRoot:          worktree,
+				TargetKind:          TargetKindTaskWorktree,
+				ConfiguredLanguages: []string{"go"},
+				Runner: func(plan RuntimeCommandPlan) (string, error) {
+					if !filepath.IsAbs(plan.OutputPath) {
+						return "", errors.New("output path is not absolute")
+					}
+					if !strings.HasPrefix(plan.OutputPath, worktree+string(os.PathSeparator)) {
+						return "", errors.New("output path is outside task worktree")
+					}
+					if err := ignoreEntryError(privateExcludes[name]); err != nil {
+						return "", err
+					}
+					if err := os.WriteFile(plan.OutputPath, []byte(name), 0o644); err != nil {
+						return "", err
+					}
+					mu.Lock()
+					outputs = append(outputs, plan.OutputPath)
+					mu.Unlock()
+					return "", nil
+				},
+			})
+			if err != nil {
+				errs <- err
+				return
+			}
+			mu.Lock()
+			results[name] = result
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent refresh error = %v", err)
+		}
+	}
+
+	if len(outputs) != 2 || outputs[0] == outputs[1] {
+		t.Fatalf("outputs = %v, want two distinct output paths", outputs)
+	}
+	if privateExcludes["task-one"] == privateExcludes["task-two"] {
+		t.Fatalf("private excludes share path %q", privateExcludes["task-one"])
+	}
+	for name, worktree := range repo.worktrees {
+		wantPath := filepath.Join(worktree, ".liza", "scip", "go.scip")
+		if !reflect.DeepEqual(results[name].Successes, []IndexRef{{Language: "go", Path: wantPath}}) {
+			t.Fatalf("%s successes = %#v, want %q", name, results[name].Successes, wantPath)
+		}
+		if len(results[name].Failures) != 0 {
+			t.Fatalf("%s failures = %#v, want none", name, results[name].Failures)
+		}
+		assertIgnoreEntryInstalled(t, privateExcludes[name])
+		if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
+			t.Fatalf("%s git status --porcelain = %q, want clean", name, status)
+		}
+	}
+	if got := readFileString(t, commonExclude); got != commonBefore {
+		t.Fatalf("common exclude = %q, want unchanged %q", got, commonBefore)
+	}
+}
+
 func runnerFunc(calls *[]string, fn func(name, argString string) (string, error)) CommandRunner {
 	return func(name string, args ...string) (string, error) {
 		argString := strings.Join(args, " ")
@@ -527,4 +670,101 @@ func planLanguages(plans []RuntimeCommandPlan) []string {
 func cloneRuntimeCommandPlan(plan RuntimeCommandPlan) RuntimeCommandPlan {
 	plan.Args = slices.Clone(plan.Args)
 	return plan
+}
+
+type gitRepoFixture struct {
+	root      string
+	worktrees map[string]string
+}
+
+func newGitRepoWithWorktrees(t *testing.T, names ...string) gitRepoFixture {
+	t.Helper()
+
+	parent := t.TempDir()
+	repo := filepath.Join(parent, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", repo, err)
+	}
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.email", "liza@example.invalid")
+	runGit(t, repo, "config", "user.name", "Liza Test")
+	if err := os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module example.test/repo\n\ngo 1.22\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(go.mod) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(main.go) error = %v", err)
+	}
+	runGit(t, repo, "add", "go.mod", "main.go")
+	runGit(t, repo, "commit", "-m", "initial")
+	runGit(t, repo, "branch", "-M", "main")
+
+	fixture := gitRepoFixture{root: repo, worktrees: make(map[string]string, len(names))}
+	for _, name := range names {
+		worktree := filepath.Join(parent, name)
+		runGit(t, repo, "worktree", "add", "-b", name, worktree, "main")
+		fixture.worktrees[name] = worktree
+	}
+	return fixture
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s in %s failed: %v\n%s", strings.Join(args, " "), dir, err, output)
+	}
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %s in %s failed: %v", strings.Join(args, " "), dir, err)
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func revParseGitDir(t *testing.T, worktree string) string {
+	t.Helper()
+
+	gitDir := gitOutput(t, worktree, "rev-parse", "--git-dir")
+	if filepath.IsAbs(gitDir) {
+		return gitDir
+	}
+	return filepath.Clean(filepath.Join(worktree, gitDir))
+}
+
+func readFileString(t *testing.T, path string) string {
+	t.Helper()
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+	return string(content)
+}
+
+func assertIgnoreEntryInstalled(t *testing.T, excludePath string) {
+	t.Helper()
+
+	if err := ignoreEntryError(excludePath); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func ignoreEntryError(excludePath string) error {
+	content, err := os.ReadFile(excludePath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", excludePath, err)
+	}
+	if count := strings.Count(string(content), ".liza/scip/"); count != 1 {
+		return fmt.Errorf("%s contains .liza/scip/ %d times, want exactly once; content: %q", excludePath, count, content)
+	}
+	return nil
 }
