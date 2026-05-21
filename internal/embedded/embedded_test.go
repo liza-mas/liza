@@ -1085,6 +1085,130 @@ func TestWriteClaudeSettings_JSONValidity(t *testing.T) {
 	}
 }
 
+func TestEmbeddedClaudeSettingsScipSearchPermissions(t *testing.T) {
+	var settings map[string]any
+	if err := json.Unmarshal(claudeSettingsContent, &settings); err != nil {
+		t.Fatalf("embedded claude-settings.json is invalid JSON: %v", err)
+	}
+
+	allow := claudeSettingsAllowPermissions(t, settings)
+	assertClaudeSettingsToolPermissions(t, allow)
+}
+
+func TestWriteClaudeSettings_InheritsScipSearchPermission(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	err := WriteClaudeSettings(tmpDir, bufio.NewReader(strings.NewReader("")))
+	if err != nil {
+		t.Fatalf("WriteClaudeSettings failed: %v", err)
+	}
+
+	settingsPath := filepath.Join(tmpDir, ".claude", "settings.json")
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to read generated settings.json: %v", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(content, &settings); err != nil {
+		t.Fatalf("generated settings.json is invalid JSON: %v", err)
+	}
+
+	allow := claudeSettingsAllowPermissions(t, settings)
+	assertClaudeSettingsToolPermissions(t, allow)
+}
+
+func TestWriteClaudeSettings_MergeInheritsScipSearchPermission(t *testing.T) {
+	tmpDir := t.TempDir()
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatalf("Failed to create .claude dir: %v", err)
+	}
+
+	existingSettings := map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{
+				"Bash(git:*)",
+			},
+		},
+	}
+	existingJSON, err := json.MarshalIndent(existingSettings, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal existing settings: %v", err)
+	}
+	if err := os.WriteFile(settingsPath, existingJSON, 0644); err != nil {
+		t.Fatalf("Failed to write existing settings: %v", err)
+	}
+
+	err = WriteClaudeSettings(tmpDir, bufio.NewReader(strings.NewReader("y\n")))
+	if err != nil {
+		t.Fatalf("WriteClaudeSettings failed: %v", err)
+	}
+
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to read merged settings.json: %v", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(content, &settings); err != nil {
+		t.Fatalf("merged settings.json is invalid JSON: %v", err)
+	}
+
+	allow := claudeSettingsAllowPermissions(t, settings)
+	assertClaudeSettingsToolPermissions(t, allow)
+}
+
+func claudeSettingsAllowPermissions(t *testing.T, settings map[string]any) []string {
+	t.Helper()
+
+	perms, ok := settings["permissions"].(map[string]any)
+	if !ok {
+		t.Fatalf("permissions field missing or invalid")
+	}
+
+	allowValues, ok := perms["allow"].([]any)
+	if !ok {
+		t.Fatalf("permissions.allow missing or invalid")
+	}
+
+	allow := make([]string, 0, len(allowValues))
+	for _, value := range allowValues {
+		permission, ok := value.(string)
+		if !ok {
+			t.Fatalf("permissions.allow contains non-string value %T", value)
+		}
+		allow = append(allow, permission)
+	}
+
+	return allow
+}
+
+func assertClaudeSettingsToolPermissions(t *testing.T, allow []string) {
+	t.Helper()
+
+	counts := make(map[string]int, len(allow))
+	for _, permission := range allow {
+		counts[permission]++
+	}
+
+	required := []string{
+		"Bash(rg:*)",
+		"Bash(ast-grep:*)",
+	}
+	for _, permission := range required {
+		if counts[permission] == 0 {
+			t.Errorf("Expected %s in permissions.allow", permission)
+		}
+	}
+
+	if count := counts["Bash(scip-search:*)"]; count != 1 {
+		t.Errorf("Bash(scip-search:*) count = %d, want 1", count)
+	}
+}
+
 func TestWriteCodexProjectPermissions_NewFile(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)

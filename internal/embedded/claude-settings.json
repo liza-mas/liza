@@ -186,6 +186,7 @@
       "Bash(grep:*)",
       "Bash(rg:*)",
       "Bash(ast-grep:*)",
+      "Bash(scip-search:*)",
       "Bash(go fmt:*)",
       "Bash(go test:*)",
       "Bash(go mod:*)",
