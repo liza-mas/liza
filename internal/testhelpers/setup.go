@@ -102,7 +102,28 @@ func SetupGlobalLiza(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(globalLiza, "CORE.md"), []byte("# CORE\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	InstallFakeScipSearchTools(t, fakeHome)
 	return fakeHome
+}
+
+// InstallFakeScipSearchTools adds fake scip-search and first-milestone indexers
+// to PATH so init tests validate wiring without depending on host-installed tools.
+func InstallFakeScipSearchTools(t *testing.T, root string) string {
+	t.Helper()
+
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"$0 0.0.0\" ;;\n  *) echo \"usage\" ;;\nesac\n"
+	for _, name := range []string{"scip-search", "scip-go", "scip-typescript", "scip-python"} {
+		path := filepath.Join(binDir, name)
+		if err := os.WriteFile(path, []byte(script), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return binDir
 }
 
 // CreateTestWorktree creates a real git worktree for a task.

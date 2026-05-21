@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -150,6 +151,42 @@ func TestInitDispatch_ScipSearchRepeatableFlagPersistsConfig(t *testing.T) {
 	want := []string{"go", "typescript"}
 	if !slices.Equal(state.Config.ScipSearch, want) {
 		t.Fatalf("state.Config.ScipSearch = %v, want %v", state.Config.ScipSearch, want)
+	}
+}
+
+func TestInitDispatch_FullInitValidatesScipSearchHelp(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	testhelpers.SetupGlobalLiza(t)
+	testhelpers.CreateCommittedSpecFile(t, projectRoot, "vision.md", "# Vision\n")
+
+	var calls []string
+	restore := scipsearch.SetCommandRunnerForTest(func(name string, args ...string) (string, error) {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return "missing\n", os.ErrNotExist
+	})
+	defer restore()
+
+	err := executeRootCommand(
+		t,
+		projectRoot,
+		"init",
+		"--spec",
+		"specs/vision.md",
+		"Goal with missing scip-search",
+	)
+	if err == nil {
+		t.Fatal("init succeeded, want scip-search setup failure")
+	}
+	if !strings.Contains(err.Error(), "scip-search --help") {
+		t.Fatalf("error = %v, want scip-search --help context", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(projectRoot, ".liza")); !os.IsNotExist(statErr) {
+		t.Fatalf(".liza exists after setup validation failure: stat err = %v", statErr)
+	}
+	wantCalls := []string{"scip-search --help"}
+	if !slices.Equal(calls, wantCalls) {
+		t.Fatalf("calls = %v, want %v", calls, wantCalls)
 	}
 }
 
