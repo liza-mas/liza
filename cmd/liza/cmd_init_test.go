@@ -3,8 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
@@ -36,6 +40,11 @@ func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 		{
 			name:    "entry-point without description errors",
 			args:    []string{"init", "--entry-point", "detailed-spec"},
+			wantErr: "requires a description argument",
+		},
+		{
+			name:    "scip-search without description errors",
+			args:    []string{"init", "--scip-search", "go"},
 			wantErr: "requires a description argument",
 		},
 		{
@@ -74,6 +83,11 @@ func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 			wantErr: "workspace flags",
 		},
 		{
+			name:    "agent flag with scip-search and no description errors",
+			args:    []string{"init", "--codex", "--scip-search", "go"},
+			wantErr: "workspace flags",
+		},
+		{
 			name:    "invalid default-cli value errors",
 			args:    []string{"init", "--default-cli", "invalid", "Goal"},
 			wantErr: "invalid --default-cli",
@@ -103,6 +117,39 @@ func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 				t.Fatalf("error %q does not contain %q", err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestInitDispatch_ScipSearchRepeatableFlagPersistsConfig(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	testhelpers.SetupGlobalLiza(t)
+	testhelpers.CreateCommittedSpecFile(t, projectRoot, "vision.md", "# Vision\n")
+
+	err := executeRootCommand(
+		t,
+		projectRoot,
+		"init",
+		"--spec",
+		"specs/vision.md",
+		"--scip-search",
+		"go",
+		"--scip-search",
+		"typescript",
+		"Goal with scip-search",
+	)
+	if err != nil {
+		t.Fatalf("init with repeated --scip-search failed: %v", err)
+	}
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	state, err := db.New(statePath).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	want := []string{"go", "typescript"}
+	if !slices.Equal(state.Config.ScipSearch, want) {
+		t.Fatalf("state.Config.ScipSearch = %v, want %v", state.Config.ScipSearch, want)
 	}
 }
 

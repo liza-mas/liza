@@ -96,6 +96,28 @@ func TestResetRootCmdForTestClearsHelpFlagState(t *testing.T) {
 	}
 }
 
+func TestResetRootCmdForTestClearsScipSearchFlagState(t *testing.T) {
+	if err := initCmd.Flags().Set("scip-search", "go"); err != nil {
+		t.Fatalf("set --scip-search failed: %v", err)
+	}
+	if err := initCmd.Flags().Set("scip-search", "typescript"); err != nil {
+		t.Fatalf("set --scip-search failed: %v", err)
+	}
+
+	resetRootCmdForTest(t)
+
+	values, err := initCmd.Flags().GetStringArray("scip-search")
+	if err != nil {
+		t.Fatalf("get --scip-search failed: %v", err)
+	}
+	if len(values) != 0 {
+		t.Fatalf("--scip-search = %v, want empty", values)
+	}
+	if initCmd.Flags().Changed("scip-search") {
+		t.Fatal("expected --scip-search changed state to be reset")
+	}
+}
+
 func resetRootCmdForTest(t *testing.T) {
 	t.Helper()
 
@@ -119,7 +141,7 @@ func resetRootCmdForTest(t *testing.T) {
 			resetFlagIfPresent(child, name)
 		}
 		// Init command workspace flags — must reset Changed state between tests.
-		for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "auto-resume", "default-cli", "default-doer-cli", "default-reviewer-cli", "cli", "claude", "codex", "gemini", "mistral"} {
+		for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "auto-resume", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "cli", "claude", "codex", "gemini", "mistral"} {
 			resetFlagIfPresent(child, name)
 		}
 		for _, name := range []string{"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file"} {
