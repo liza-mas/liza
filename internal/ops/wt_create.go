@@ -54,6 +54,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 
 	integrationBranch := state.Config.IntegrationBranch
 	postCmd := state.Config.PostWorktreeCmd
+	scipSearchLanguages := append([]string(nil), state.Config.ScipSearch...)
 
 	gitWrapper := git.New(lp.ProjectRoot())
 
@@ -79,6 +80,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 					result.Warnings = append(result.Warnings, fmt.Sprintf("post-worktree-cmd: %v", err))
 				}
 			}
+			result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(worktreeDir, scipSearchLanguages)...)
 			return result, nil
 		}
 	}
@@ -129,6 +131,7 @@ func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 			result.Warnings = append(result.Warnings, fmt.Sprintf("post-worktree-cmd: %v", err))
 		}
 	}
+	result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(worktreeDir, scipSearchLanguages)...)
 
 	return result, nil
 }

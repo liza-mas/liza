@@ -6,12 +6,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -108,6 +111,260 @@ func TestCreateWorktree_AlreadyExists(t *testing.T) {
 	if result.TaskID != "task-1" {
 		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-1")
 	}
+}
+
+func TestCreateWorktree_ScipIndexesEnabledNewWorktreeAfterSetup(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeClaudeSettingsForCreateWorktreeScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	markerPath := filepath.Join(tmpDir, "post-worktree-ran")
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.ScipSearch = []string{"go"}
+	postCmd := fmt.Sprintf("touch %s", markerPath)
+	state.Config.PostWorktreeCmd = &postCmd
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	var calls []scipsearch.RuntimeCommandPlan
+	withCreateWorktreeScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		if _, err := os.Stat(filepath.Join(plan.Dir, ".claude", "settings.json")); err != nil {
+			return "", fmt.Errorf("claude config not provisioned before indexing: %w", err)
+		}
+		if _, err := os.Stat(filepath.Join(plan.Dir, ".liza-hooks", "pre-commit")); err != nil {
+			return "", fmt.Errorf("pre-commit hook not installed before indexing: %w", err)
+		}
+		if _, err := os.Stat(markerPath); err != nil {
+			return "", fmt.Errorf("post-worktree marker not present before indexing: %w", err)
+		}
+		calls = append(calls, plan)
+		return writeCreateWorktreeScipIndex(plan, []byte(plan.Dir))
+	})
+
+	result, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("CreateWorktree() warnings = %v, want none", result.Warnings)
+	}
+	if len(calls) != 1 || calls[0].Language != "go" {
+		t.Fatalf("indexer calls = %#v, want one go call", calls)
+	}
+
+	wantIndexPath := filepath.Join(result.WorktreeDir, ".liza", "scip", "go.scip")
+	indexes := availableCreateWorktreeScipIndexes(t, result.WorktreeDir, []string{"go"})
+	if len(indexes) != 1 || indexes[0].Language != "go" || indexes[0].Path != wantIndexPath {
+		t.Fatalf("AvailableIndexes() = %#v, want go index at %s", indexes, wantIndexPath)
+	}
+	if !filepath.IsAbs(indexes[0].Path) {
+		t.Fatalf("index path %q is not absolute", indexes[0].Path)
+	}
+	assertGitStatusClean(t, result.WorktreeDir)
+}
+
+func TestCreateWorktree_ScipExistingWorktreeRefreshesIdempotently(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.ScipSearch = []string{"go"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	call := 0
+	var outputPaths []string
+	withCreateWorktreeScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		call++
+		outputPaths = append(outputPaths, plan.OutputPath)
+		content := fmt.Sprintf("refresh-%d:%s", call, plan.Dir)
+		return writeCreateWorktreeScipIndex(plan, []byte(content))
+	})
+
+	first, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("first CreateWorktree() error: %v", err)
+	}
+	second, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("second CreateWorktree() error: %v", err)
+	}
+	if !second.AlreadyExisted {
+		t.Fatal("second CreateWorktree() AlreadyExisted = false, want true")
+	}
+	if call != 2 {
+		t.Fatalf("indexer call count = %d, want 2", call)
+	}
+	wantPath := filepath.Join(first.WorktreeDir, ".liza", "scip", "go.scip")
+	if len(outputPaths) != 2 || outputPaths[0] != wantPath || outputPaths[1] != wantPath {
+		t.Fatalf("output paths = %#v, want repeated refresh of %s", outputPaths, wantPath)
+	}
+	content, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error: %v", wantPath, err)
+	}
+	wantContent := "refresh-2:" + first.WorktreeDir
+	if string(content) != wantContent {
+		t.Fatalf("index content = %q, want %q", content, wantContent)
+	}
+	assertCreateWorktreeScipExcludeCount(t, first.WorktreeDir, 1)
+	assertGitStatusClean(t, first.WorktreeDir)
+}
+
+func TestCreateWorktree_ScipDisabledActivationNoop(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "false")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.ScipSearch = []string{"go"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	withCreateWorktreeScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		t.Fatalf("unexpected indexer call when scip-search activation is disabled: %#v", plan)
+		return "", nil
+	})
+
+	result, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("CreateWorktree() warnings = %v, want none", result.Warnings)
+	}
+	if _, err := os.Stat(filepath.Join(result.WorktreeDir, ".liza", "scip")); !os.IsNotExist(err) {
+		t.Fatalf(".liza/scip stat error = %v, want not exist", err)
+	}
+	if indexes := availableCreateWorktreeScipIndexes(t, result.WorktreeDir, []string{"go"}); len(indexes) != 0 {
+		t.Fatalf("AvailableIndexes() = %#v, want none", indexes)
+	}
+}
+
+func TestCreateWorktree_ScipFailedIndexerWarningOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.ScipSearch = []string{"go"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	withCreateWorktreeScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		return "indexer stderr", fmt.Errorf("boom")
+	})
+
+	result, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("CreateWorktree() should succeed on indexer failure, got: %v", err)
+	}
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "scip-search go:") || !strings.Contains(result.Warnings[0], "boom") {
+		t.Fatalf("CreateWorktree() warnings = %v, want scip-search go warning with diagnostic", result.Warnings)
+	}
+	if indexes := availableCreateWorktreeScipIndexes(t, result.WorktreeDir, []string{"go"}); len(indexes) != 0 {
+		t.Fatalf("AvailableIndexes() = %#v, want none after failed indexer", indexes)
+	}
+	assertGitStatusClean(t, result.WorktreeDir)
+}
+
+func TestCreateWorktree_ScipConcurrentCreatesUseIsolatedIndexes(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.ScipSearch = []string{"go"}
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	var mu sync.Mutex
+	outputs := map[string]string{}
+	withCreateWorktreeScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		mu.Lock()
+		outputs[plan.OutputPath] = plan.Dir
+		mu.Unlock()
+		return writeCreateWorktreeScipIndex(plan, []byte(plan.Dir))
+	})
+
+	type createOutcome struct {
+		result *CreateWorktreeResult
+		err    error
+	}
+	results := make(chan createOutcome, 2)
+	for _, taskID := range []string{"task-1", "task-2"} {
+		taskID := taskID
+		go func() {
+			result, err := CreateWorktree(tmpDir, taskID, false)
+			results <- createOutcome{result: result, err: err}
+		}()
+	}
+
+	for range 2 {
+		outcome := <-results
+		if outcome.err != nil {
+			t.Fatalf("CreateWorktree() concurrent create error: %v", outcome.err)
+		}
+		if len(outcome.result.Warnings) != 0 {
+			t.Fatalf("CreateWorktree() warnings = %v, want none", outcome.result.Warnings)
+		}
+	}
+
+	task1Index := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1", ".liza", "scip", "go.scip")
+	task2Index := filepath.Join(tmpDir, paths.WorktreesDirName, "task-2", ".liza", "scip", "go.scip")
+	if task1Index == task2Index {
+		t.Fatal("concurrent creates produced identical index paths")
+	}
+	for _, indexPath := range []string{task1Index, task2Index} {
+		if !filepath.IsAbs(indexPath) {
+			t.Fatalf("index path %q is not absolute", indexPath)
+		}
+		content, err := os.ReadFile(indexPath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error: %v", indexPath, err)
+		}
+		mu.Lock()
+		want := outputs[indexPath]
+		mu.Unlock()
+		if string(content) != want {
+			t.Fatalf("index %s content = %q, want its own worktree dir %q", indexPath, content, want)
+		}
+	}
+	if task1Content, err := os.ReadFile(task1Index); err != nil {
+		t.Fatalf("ReadFile(%s) error: %v", task1Index, err)
+	} else if task2Content, err := os.ReadFile(task2Index); err != nil {
+		t.Fatalf("ReadFile(%s) error: %v", task2Index, err)
+	} else if string(task1Content) == string(task2Content) {
+		t.Fatalf("concurrent creates shared output content: %q", task1Content)
+	}
+	assertGitStatusClean(t, filepath.Join(tmpDir, paths.WorktreesDirName, "task-1"))
+	assertGitStatusClean(t, filepath.Join(tmpDir, paths.WorktreesDirName, "task-2"))
 }
 
 func TestCreateWorktree_ExistingWorktreeWithUnresolvableHEADFails(t *testing.T) {
@@ -560,5 +817,83 @@ func TestHook_FailSafeOnUnknownGuardExitFallsThroughToChain(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Errorf("pre-commit stub was not invoked despite fail-safe fall-through: %v\noutput:\n%s", err, out)
+	}
+}
+
+func withCreateWorktreeScipRuntimeRunner(t *testing.T, runner scipsearch.RuntimeRunner) {
+	t.Helper()
+	scipRuntimeRunnerMu.Lock()
+	previous := scipRuntimeRunner
+	scipRuntimeRunner = runner
+	scipRuntimeRunnerMu.Unlock()
+
+	t.Cleanup(func() {
+		scipRuntimeRunnerMu.Lock()
+		scipRuntimeRunner = previous
+		scipRuntimeRunnerMu.Unlock()
+	})
+}
+
+func addTrackedGoSourceForCreateWorktreeScipTest(t *testing.T, projectRoot string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(".claude/\n.liza-hooks/\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(.gitignore) error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "go.mod"), []byte("module example.com/scipcreate\n\ngo 1.22\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(go.mod) error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectRoot, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(main.go) error: %v", err)
+	}
+	testhelpers.MustGit(t, projectRoot, "add", ".gitignore", "go.mod", "main.go")
+	testhelpers.MustGit(t, projectRoot, "commit", "-m", "Add Go source")
+	testhelpers.MustGit(t, projectRoot, "branch", "-f", "integration", "HEAD")
+}
+
+func writeClaudeSettingsForCreateWorktreeScipTest(t *testing.T, projectRoot string) {
+	t.Helper()
+	settingsDir := filepath.Join(projectRoot, ".claude")
+	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(.claude) error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(settingsDir, "settings.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(.claude/settings.json) error: %v", err)
+	}
+}
+
+func writeCreateWorktreeScipIndex(plan scipsearch.RuntimeCommandPlan, content []byte) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(plan.OutputPath), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(plan.OutputPath, content, 0o644); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
+func availableCreateWorktreeScipIndexes(t *testing.T, worktreeDir string, languages []string) []scipsearch.IndexRef {
+	t.Helper()
+	indexes, err := scipsearch.AvailableIndexes(scipsearch.RuntimePlanOptions{
+		TargetRoot:          worktreeDir,
+		ConfiguredLanguages: languages,
+	})
+	if err != nil {
+		t.Fatalf("AvailableIndexes() error: %v", err)
+	}
+	return indexes
+}
+
+func assertCreateWorktreeScipExcludeCount(t *testing.T, worktreeDir string, want int) {
+	t.Helper()
+	gitDir := runGitInDir(t, worktreeDir, "rev-parse", "--git-dir")
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(worktreeDir, gitDir)
+	}
+	content, err := os.ReadFile(filepath.Join(gitDir, "info", "exclude"))
+	if err != nil {
+		t.Fatalf("ReadFile(worktree exclude) error: %v", err)
+	}
+	if got := strings.Count(string(content), ".liza/scip/"); got != want {
+		t.Fatalf("worktree exclude contains .liza/scip/ %d times, want %d; content: %q", got, want, content)
 	}
 }
