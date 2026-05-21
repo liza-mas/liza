@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -199,6 +202,7 @@ func TestOrchestratorPreExecutionScipRefreshFailureIsWarningOnly(t *testing.T) {
 	projectRoot := t.TempDir()
 	bb := newOrchestratorScipTestBlackboard(t, projectRoot, nil)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+	logs := captureAgentLogsForTest(t)
 
 	restore := replaceOrchestratorScipRefreshForTest(t, func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
 		assertOrchestratorRefreshOptions(t, opts, projectRoot, []string{"go"})
@@ -215,12 +219,14 @@ func TestOrchestratorPreExecutionScipRefreshFailureIsWarningOnly(t *testing.T) {
 	if got := mustReadState(t, bb).Agents["orchestrator-1"].Status; got != models.AgentStatusPlanning {
 		t.Fatalf("agent status = %s, want %s", got, models.AgentStatusPlanning)
 	}
+	assertLogContains(t, logs, "Orchestrator SCIP indexer failed", "language=go", "diagnostic=\"indexer failed\"")
 }
 
 func TestOrchestratorPreExecutionScipRefreshErrorDoesNotPreventExecution(t *testing.T) {
 	projectRoot := t.TempDir()
 	bb := newOrchestratorScipTestBlackboard(t, projectRoot, nil)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+	logs := captureAgentLogsForTest(t)
 
 	restore := replaceOrchestratorScipRefreshForTest(t, func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
 		assertOrchestratorRefreshOptions(t, opts, projectRoot, []string{"go"})
@@ -235,6 +241,7 @@ func TestOrchestratorPreExecutionScipRefreshErrorDoesNotPreventExecution(t *test
 	if got := mustReadState(t, bb).Agents["orchestrator-1"].Status; got != models.AgentStatusPlanning {
 		t.Fatalf("agent status = %s, want %s", got, models.AgentStatusPlanning)
 	}
+	assertLogContains(t, logs, "Orchestrator SCIP refresh failed", "git ls-files failed")
 }
 
 func TestOrchestratorPreExecutionScipRefreshUsesProjectRootNotTaskWorktree(t *testing.T) {
@@ -321,6 +328,29 @@ func replaceOrchestratorScipRefreshForTest(t *testing.T, refresh func(scipsearch
 	orchestratorScipRefresh = refresh
 	return func() {
 		orchestratorScipRefresh = previous
+	}
+}
+
+func captureAgentLogsForTest(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var logs bytes.Buffer
+	previous := logger
+	logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	t.Cleanup(func() {
+		logger = previous
+	})
+	return &logs
+}
+
+func assertLogContains(t *testing.T, logs *bytes.Buffer, fragments ...string) {
+	t.Helper()
+
+	output := logs.String()
+	for _, fragment := range fragments {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("log output %q does not contain %q", output, fragment)
+		}
 	}
 }
 
