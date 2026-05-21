@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -194,6 +195,139 @@ func TestResolveInitConfigWarnsAndDropsMissingIndexers(t *testing.T) {
 	}
 }
 
+func TestRuntimeCommandPlanningNoOpWhenDisabledOrUnconfigured(t *testing.T) {
+	t.Run("env gate false skips git detection", func(t *testing.T) {
+		t.Setenv(EnvEnableScipSearch, "false")
+
+		plans, err := PlanRuntimeCommands(RuntimePlanOptions{
+			TargetRoot:          t.TempDir(),
+			ConfiguredLanguages: []string{"go"},
+			GitFiles:            failGitFiles(t),
+		})
+		if err != nil {
+			t.Fatalf("PlanRuntimeCommands() error = %v", err)
+		}
+		if len(plans) != 0 {
+			t.Fatalf("PlanRuntimeCommands() = %v, want no plans", plans)
+		}
+	})
+
+	t.Run("empty config skips git detection", func(t *testing.T) {
+		t.Setenv(EnvEnableScipSearch, "true")
+
+		plans, err := PlanRuntimeCommands(RuntimePlanOptions{
+			TargetRoot:          t.TempDir(),
+			ConfiguredLanguages: nil,
+			GitFiles:            failGitFiles(t),
+		})
+		if err != nil {
+			t.Fatalf("PlanRuntimeCommands() error = %v", err)
+		}
+		if len(plans) != 0 {
+			t.Fatalf("PlanRuntimeCommands() = %v, want no plans", plans)
+		}
+	})
+}
+
+func TestRuntimeCommandPlanningFiltersDetectedConfiguredLanguagesInDeterministicOrder(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	target := t.TempDir()
+
+	plans, err := PlanRuntimeCommands(RuntimePlanOptions{
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"python", "go", "typescript"},
+		GitFiles: func(root string) ([]string, error) {
+			if root != target {
+				t.Fatalf("GitFiles root = %q, want %q", root, target)
+			}
+			return []string{
+				"web/app.tsx",
+				"README.md",
+				"cmd/liza/main.go",
+				"pyproject.toml",
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("PlanRuntimeCommands() error = %v", err)
+	}
+
+	if got, want := planLanguages(plans), []string{"go", "typescript", "python"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("plan languages = %v, want %v", got, want)
+	}
+	for _, plan := range plans {
+		wantOutput := filepath.Join(target, ".liza", "scip", plan.Language+".scip")
+		if plan.OutputPath != wantOutput {
+			t.Fatalf("%s OutputPath = %q, want %q", plan.Language, plan.OutputPath, wantOutput)
+		}
+		if !filepath.IsAbs(plan.OutputPath) {
+			t.Fatalf("%s OutputPath = %q, want absolute path", plan.Language, plan.OutputPath)
+		}
+	}
+}
+
+func TestRuntimeCommandPlanningIncludesOnlyConfiguredDetectedLanguages(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+
+	plans, err := PlanRuntimeCommands(RuntimePlanOptions{
+		TargetRoot:          t.TempDir(),
+		ConfiguredLanguages: []string{"typescript", "python"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod", "cmd/main.go", "pkg/runtime.ts"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("PlanRuntimeCommands() error = %v", err)
+	}
+
+	if got, want := planLanguages(plans), []string{"typescript"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("plan languages = %v, want %v", got, want)
+	}
+}
+
+func TestRuntimeCommandPlanningBuildsExactCommandPlans(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	target := t.TempDir()
+
+	plans, err := PlanRuntimeCommands(RuntimePlanOptions{
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"go", "typescript", "python"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod", "tsconfig.json", "pyproject.toml"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("PlanRuntimeCommands() error = %v", err)
+	}
+
+	want := []RuntimeCommandPlan{
+		{
+			Language:   "go",
+			Name:       "scip-go",
+			Args:       []string{"index", "--module-root", target, "--skip-tests", "--output", filepath.Join(target, ".liza", "scip", "go.scip")},
+			Dir:        target,
+			OutputPath: filepath.Join(target, ".liza", "scip", "go.scip"),
+		},
+		{
+			Language:   "typescript",
+			Name:       "scip-typescript",
+			Args:       []string{"index", "--cwd", target, "--output", filepath.Join(target, ".liza", "scip", "typescript.scip"), target},
+			Dir:        target,
+			OutputPath: filepath.Join(target, ".liza", "scip", "typescript.scip"),
+		},
+		{
+			Language:   "python",
+			Name:       "scip-python",
+			Args:       []string{"index", "--cwd", target, "--output", filepath.Join(target, ".liza", "scip", "python.scip")},
+			Dir:        target,
+			OutputPath: filepath.Join(target, ".liza", "scip", "python.scip"),
+		},
+	}
+	if !reflect.DeepEqual(plans, want) {
+		t.Fatalf("PlanRuntimeCommands() = %#v, want %#v", plans, want)
+	}
+}
+
 func runnerFunc(calls *[]string, fn func(name, argString string) (string, error)) CommandRunner {
 	return func(name string, args ...string) (string, error) {
 		argString := strings.Join(args, " ")
@@ -214,4 +348,21 @@ func hasCall(calls []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func failGitFiles(t *testing.T) GitFilesFunc {
+	t.Helper()
+
+	return func(string) ([]string, error) {
+		t.Fatal("git files must not be consulted")
+		return nil, nil
+	}
+}
+
+func planLanguages(plans []RuntimeCommandPlan) []string {
+	languages := make([]string, 0, len(plans))
+	for _, plan := range plans {
+		languages = append(languages, plan.Language)
+	}
+	return languages
 }

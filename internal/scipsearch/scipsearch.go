@@ -42,6 +42,22 @@ type InitResult struct {
 	Warnings    []string
 }
 
+// RuntimePlanOptions configures runtime command planning for one target root.
+type RuntimePlanOptions struct {
+	TargetRoot          string
+	ConfiguredLanguages []string
+	GitFiles            GitFilesFunc
+}
+
+// RuntimeCommandPlan describes one fixed language-indexer invocation.
+type RuntimeCommandPlan struct {
+	Language   string
+	Name       string
+	Args       []string
+	Dir        string
+	OutputPath string
+}
+
 var (
 	runnerMu      sync.Mutex
 	defaultRunner CommandRunner = runCommand
@@ -108,6 +124,30 @@ func RuntimeEnabled(configuredLanguages []string) bool {
 	return ParseEnvGate(os.Getenv(EnvEnableScipSearch)) && len(configuredLanguages) > 0
 }
 
+// PlanRuntimeCommands selects detected configured languages for a target root
+// and returns fixed command plans without executing indexers or writing files.
+func PlanRuntimeCommands(opts RuntimePlanOptions) ([]RuntimeCommandPlan, error) {
+	if !RuntimeEnabled(opts.ConfiguredLanguages) {
+		return nil, nil
+	}
+
+	targetRoot, err := filepath.Abs(opts.TargetRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve scip-search target root: %w", err)
+	}
+
+	gitFiles := opts.GitFiles
+	if gitFiles == nil {
+		gitFiles = listGitFiles
+	}
+	files, err := gitFiles(targetRoot)
+	if err != nil {
+		return nil, fmt.Errorf("detect runtime scip-search languages: %w", err)
+	}
+
+	return buildRuntimeCommandPlans(targetRoot, filterRuntimeLanguages(opts.ConfiguredLanguages, detectLanguages(files))), nil
+}
+
 func selectLanguages(opts InitOptions, gitFiles GitFilesFunc) ([]string, error) {
 	if len(opts.ExplicitLanguages) > 0 {
 		return canonicalizeExplicit(opts.ExplicitLanguages)
@@ -163,6 +203,52 @@ func detectLanguages(files []string) []string {
 		}
 	}
 	return out
+}
+
+func filterRuntimeLanguages(configuredLanguages, detectedLanguages []string) []string {
+	configured := make(map[string]bool, len(configuredLanguages))
+	for _, language := range configuredLanguages {
+		configured[language] = true
+	}
+	detected := make(map[string]bool, len(detectedLanguages))
+	for _, language := range detectedLanguages {
+		detected[language] = true
+	}
+
+	var out []string
+	for _, language := range supportedLanguages {
+		if configured[language] && detected[language] {
+			out = append(out, language)
+		}
+	}
+	return out
+}
+
+func buildRuntimeCommandPlans(targetRoot string, languages []string) []RuntimeCommandPlan {
+	plans := make([]RuntimeCommandPlan, 0, len(languages))
+	for _, language := range languages {
+		outputPath := filepath.Join(targetRoot, ".liza", "scip", language+".scip")
+		plans = append(plans, runtimeCommandPlan(targetRoot, language, outputPath))
+	}
+	return plans
+}
+
+func runtimeCommandPlan(targetRoot, language, outputPath string) RuntimeCommandPlan {
+	plan := RuntimeCommandPlan{
+		Language:   language,
+		Name:       languageIndexers[language],
+		Dir:        targetRoot,
+		OutputPath: outputPath,
+	}
+	switch language {
+	case "go":
+		plan.Args = []string{"index", "--module-root", targetRoot, "--skip-tests", "--output", outputPath}
+	case "typescript":
+		plan.Args = []string{"index", "--cwd", targetRoot, "--output", outputPath, targetRoot}
+	case "python":
+		plan.Args = []string{"index", "--cwd", targetRoot, "--output", outputPath}
+	}
+	return plan
 }
 
 func validateIndexers(languages []string, runner CommandRunner) ([]string, []string) {

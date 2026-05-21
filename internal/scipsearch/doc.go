@@ -3,8 +3,9 @@
 //
 // Init callers use ResolveInitConfig to validate external tools and persist a
 // Config.ScipSearch language allowlist. Runtime lifecycle callers use
-// RuntimeEnabled to combine that allowlist with LIZA_ENABLE_SCIP_SEARCH before
-// generating indexes or injecting prompt guidance. The runtime contract is
-// read-only: it does not validate tools, inspect worktrees, generate indexes,
-// or render prompts.
+// RuntimeEnabled and PlanRuntimeCommands to combine that allowlist with
+// LIZA_ENABLE_SCIP_SEARCH, detect target-root languages from git-tracked files,
+// and build fixed indexer command plans before later execution or prompt
+// guidance. The runtime planning contract does not validate tools, execute
+// indexers, write index files, or render prompts.
 package scipsearch
