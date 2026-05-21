@@ -127,6 +127,13 @@ func TestInitDispatch_ScipSearchRepeatableFlagPersistsConfig(t *testing.T) {
 	testhelpers.SetupGlobalLiza(t)
 	testhelpers.CreateCommittedSpecFile(t, projectRoot, "vision.md", "# Vision\n")
 
+	var calls []string
+	restore := scipsearch.SetCommandRunnerForTest(func(name string, args ...string) (string, error) {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return "ok\n", nil
+	})
+	defer restore()
+
 	err := executeRootCommand(
 		t,
 		projectRoot,
@@ -151,6 +158,15 @@ func TestInitDispatch_ScipSearchRepeatableFlagPersistsConfig(t *testing.T) {
 	want := []string{"go", "typescript"}
 	if !slices.Equal(state.Config.ScipSearch, want) {
 		t.Fatalf("state.Config.ScipSearch = %v, want %v", state.Config.ScipSearch, want)
+	}
+	wantCalls := []string{
+		"scip-search --help",
+		"scip-search --version",
+		"scip-go --help",
+		"scip-typescript --help",
+	}
+	if !slices.Equal(calls, wantCalls) {
+		t.Fatalf("calls = %v, want %v", calls, wantCalls)
 	}
 }
 

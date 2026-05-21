@@ -1471,6 +1471,13 @@ func TestInitCommandWithConfig_ScipSearchPersistsConfig(t *testing.T) {
 
 	testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
 
+	var calls []string
+	restore := scipsearch.SetCommandRunnerForTest(func(name string, args ...string) (string, error) {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return "ok\n", nil
+	})
+	defer restore()
+
 	err = InitCommandWithConfig(InitParams{
 		Description: "Goal with scip-search config",
 		SpecRef:     "specs/vision.md",
@@ -1489,6 +1496,15 @@ func TestInitCommandWithConfig_ScipSearchPersistsConfig(t *testing.T) {
 	want := []string{"go", "typescript"}
 	if !slices.Equal(state.Config.ScipSearch, want) {
 		t.Errorf("state.Config.ScipSearch = %v, want %v", state.Config.ScipSearch, want)
+	}
+	wantCalls := []string{
+		"scip-search --help",
+		"scip-search --version",
+		"scip-go --help",
+		"scip-typescript --help",
+	}
+	if !slices.Equal(calls, wantCalls) {
+		t.Fatalf("calls = %v, want %v", calls, wantCalls)
 	}
 
 	data, err := os.ReadFile(statePath)
@@ -1525,7 +1541,9 @@ func TestInitCommandWithConfig_AutodetectsAndPersistsValidatedScipSearchLanguage
 	testhelpers.MustGit(t, tmpDir, "add", "go.mod", "web/app.tsx", "api/app_test.py")
 	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add tracked code")
 
+	var calls []string
 	restore := scipsearch.SetCommandRunnerForTest(func(name string, args ...string) (string, error) {
+		calls = append(calls, name+" "+strings.Join(args, " "))
 		if name == "scip-typescript" {
 			return "", os.ErrNotExist
 		}
@@ -1573,6 +1591,16 @@ func TestInitCommandWithConfig_AutodetectsAndPersistsValidatedScipSearchLanguage
 	want := []string{"go", "python"}
 	if !slices.Equal(state.Config.ScipSearch, want) {
 		t.Fatalf("state.Config.ScipSearch = %v, want %v", state.Config.ScipSearch, want)
+	}
+	wantCalls := []string{
+		"scip-search --help",
+		"scip-search --version",
+		"scip-go --help",
+		"scip-typescript --help",
+		"scip-python --help",
+	}
+	if !slices.Equal(calls, wantCalls) {
+		t.Fatalf("calls = %v, want %v", calls, wantCalls)
 	}
 }
 
