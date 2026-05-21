@@ -101,6 +101,14 @@ liza setup --agent-tools ~/my-agent-tools.md  # use custom AGENT_TOOLS.md
 > before your first run. If needed, install your own version directly with
 > `liza setup --agent-tools ~/my-agent-tools.md`.
 
+> **Optional but highly recommended:** enable `scip-search` for
+> repository-navigation-heavy MAS runs. `LIZA_ENABLE_SCIP_SEARCH` is the MAS
+> activation gate; use repeated `--scip-search <language>` init options when you
+> want an explicit allowlist. See [Configuration Reference](CONFIGURATION.md) for
+> the canonical details on `config.scip_search`, repeated
+> `--scip-search <language>` values, indexer prerequisites, and `.liza/scip/`
+> snapshot index locations.
+
 **2. Initialize Project**
 
 > **Commit your spec file before running `liza init`.** Worktrees are created from the current branch — uncommitted files won't be visible to agents.
