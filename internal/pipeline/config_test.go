@@ -1903,6 +1903,115 @@ func assertContains(t *testing.T, got, want string) {
 	}
 }
 
+func decompositionRootYAML(from, trigger, cardinality, extraTransitions string) string {
+	transitionBlock := "      transitions: []"
+	if from != "" {
+		transitionBlock = `
+      transitions:
+        - name: root-to-leaf
+          from: ` + from + `
+          to: leaf-pair.initial
+          trigger: ` + trigger + `
+          cardinality: ` + cardinality + extraTransitions
+	}
+	return `
+pipeline:
+  roles:
+    doer:
+      type: doer
+      display-name: "Doer"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    root-pair:
+      doer: doer
+      reviewer: reviewer
+      decomposition-root: true
+      states:
+        initial: ROOT_INITIAL
+        executing: ROOT_EXECUTING
+        submitted: ROOT_SUBMITTED
+        reviewing: ROOT_REVIEWING
+        approved: ROOT_APPROVED
+        rejected: ROOT_REJECTED
+    leaf-pair:
+      doer: doer
+      reviewer: reviewer
+      states:
+        initial: LEAF_INITIAL
+        executing: LEAF_EXECUTING
+        submitted: LEAF_SUBMITTED
+        reviewing: LEAF_REVIEWING
+        approved: LEAF_APPROVED
+        rejected: LEAF_REJECTED
+    extra-pair:
+      doer: doer
+      reviewer: reviewer
+      states:
+        initial: EXTRA_INITIAL
+        executing: EXTRA_EXECUTING
+        submitted: EXTRA_SUBMITTED
+        reviewing: EXTRA_REVIEWING
+        approved: EXTRA_APPROVED
+        rejected: EXTRA_REJECTED
+  sub-pipelines:
+    main:
+      steps: [root-pair, leaf-pair, extra-pair]
+` + transitionBlock + `
+  entry-points: {}
+`
+}
+
+func decompositionRootCrossSubPipelineYAML() string {
+	return `
+pipeline:
+  roles:
+    doer:
+      type: doer
+      display-name: "Doer"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    root-pair:
+      doer: doer
+      reviewer: reviewer
+      decomposition-root: true
+      states:
+        initial: ROOT_INITIAL
+        executing: ROOT_EXECUTING
+        submitted: ROOT_SUBMITTED
+        reviewing: ROOT_REVIEWING
+        approved: ROOT_APPROVED
+        rejected: ROOT_REJECTED
+    leaf-pair:
+      doer: doer
+      reviewer: reviewer
+      states:
+        initial: LEAF_INITIAL
+        executing: LEAF_EXECUTING
+        submitted: LEAF_SUBMITTED
+        reviewing: LEAF_REVIEWING
+        approved: LEAF_APPROVED
+        rejected: LEAF_REJECTED
+  sub-pipelines:
+    root-sp:
+      steps: [root-pair]
+      transitions: []
+    leaf-sp:
+      steps: [leaf-pair]
+      transitions: []
+  pipeline-transitions:
+    - name: root-to-leaf
+      from: root-sp.root-pair.approved
+      to: leaf-sp.leaf-pair.initial
+      trigger: auto
+      cardinality: per-subtask
+  entry-points: {}
+`
+}
+
 func TestResolver_PartiallyApprovedStatus(t *testing.T) {
 	r := NewResolver(loadTestConfig(t))
 
@@ -2119,6 +2228,84 @@ func TestLoad_CleanState_BackwardCompat(t *testing.T) {
 		if rp.States.Clean != "" {
 			t.Errorf("role-pair %q: Clean = %q, want empty", name, rp.States.Clean)
 		}
+	}
+}
+
+func TestLoad_DecompositionRootAbsentBackwardCompat(t *testing.T) {
+	cfg, err := Load("testdata/valid-coding-subpipeline.yaml")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	for name, rp := range cfg.Pipeline.RolePairs {
+		if rp.DecompositionRoot {
+			t.Errorf("role-pair %q: DecompositionRoot = true, want false", name)
+		}
+	}
+}
+
+func TestLoad_DecompositionRootValidTopology(t *testing.T) {
+	yaml := decompositionRootYAML("root-pair.approved", "auto", "per-subtask", "")
+	cfg, err := LoadFromBytes([]byte(yaml))
+	if err != nil {
+		t.Fatalf("LoadFromBytes failed: %v", err)
+	}
+	if !cfg.Pipeline.RolePairs["root-pair"].DecompositionRoot {
+		t.Fatal("root-pair DecompositionRoot = false, want true")
+	}
+}
+
+func TestLoad_DecompositionRootRejectsInvalidTopology(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "zero outgoing decomposition transition",
+			yaml: decompositionRootYAML("", "", "", ""),
+			want: "exactly one outgoing decomposition transition",
+		},
+		{
+			name: "multiple outgoing decomposition transitions",
+			yaml: decompositionRootYAML("root-pair.approved", "auto", "per-subtask", `
+        - name: root-to-extra
+          from: root-pair.approved
+          to: extra-pair.initial
+          trigger: auto
+          cardinality: per-subtask`),
+			want: "exactly one outgoing decomposition transition",
+		},
+		{
+			name: "non-auto trigger",
+			yaml: decompositionRootYAML("root-pair.approved", "manual", "per-subtask", ""),
+			want: "trigger must be auto",
+		},
+		{
+			name: "non-per-subtask cardinality",
+			yaml: decompositionRootYAML("root-pair.approved", "auto", "one-to-one", ""),
+			want: "cardinality must be per-subtask",
+		},
+		{
+			name: "cross-subpipeline target",
+			yaml: decompositionRootCrossSubPipelineYAML(),
+			want: "same sub-pipeline",
+		},
+		{
+			name: "non-approved source phase",
+			yaml: decompositionRootYAML("root-pair.submitted", "auto", "per-subtask", ""),
+			want: "from phase must be approved",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadFromBytes([]byte(tt.yaml))
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+			assertContains(t, err.Error(), "decomposition-root")
+			assertContains(t, err.Error(), tt.want)
+		})
 	}
 }
 
