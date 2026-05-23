@@ -18,6 +18,144 @@ func loadPhase2Config(t *testing.T) *PipelineConfig {
 	return cfg
 }
 
+func loadDecompositionRootResolverConfig(t *testing.T) *PipelineConfig {
+	t.Helper()
+	cfg, err := LoadFromBytes([]byte(`
+pipeline:
+  roles:
+    planner:
+      type: doer
+      display-name: "Planner"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    epic-planning-main-pair:
+      doer: planner
+      reviewer: reviewer
+      decomposition-root: true
+      states:
+        initial: DRAFT_EPIC_PLAN_MAIN
+        executing: EPIC_PLANNING_MAIN
+        submitted: EPIC_PLAN_MAIN_TO_REVIEW
+        reviewing: REVIEWING_EPIC_PLAN_MAIN
+        approved: EPIC_PLAN_MAIN_APPROVED
+        rejected: EPIC_PLAN_MAIN_REJECTED
+    epic-planning-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: DRAFT_EPIC_PLAN
+        executing: EPIC_PLANNING
+        submitted: EPIC_PLAN_TO_REVIEW
+        reviewing: REVIEWING_EPIC_PLAN
+        approved: EPIC_PLAN_APPROVED
+        rejected: EPIC_PLAN_REJECTED
+    us-writing-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: DRAFT_USER_STORIES
+        executing: WRITING_USER_STORIES
+        submitted: USER_STORIES_TO_REVIEW
+        reviewing: REVIEWING_USER_STORIES
+        approved: USER_STORIES_APPROVED
+        rejected: USER_STORIES_REJECTED
+    architecture-main-pair:
+      doer: planner
+      reviewer: reviewer
+      decomposition-root: true
+      states:
+        initial: DRAFT_ARCHITECTURE_MAIN
+        executing: ARCHITECTING_MAIN
+        submitted: ARCHITECTURE_MAIN_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE_MAIN
+        approved: ARCHITECTURE_MAIN_APPROVED
+        rejected: ARCHITECTURE_MAIN_REJECTED
+    architecture-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: DRAFT_ARCHITECTURE
+        executing: ARCHITECTING
+        submitted: ARCHITECTURE_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE
+        approved: ARCHITECTURE_APPROVED
+        rejected: ARCHITECTURE_REJECTED
+    code-planning-main-pair:
+      doer: planner
+      reviewer: reviewer
+      decomposition-root: true
+      states:
+        initial: DRAFT_CODING_PLAN_MAIN
+        executing: CODE_PLANNING_MAIN
+        submitted: CODING_PLAN_MAIN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN_MAIN
+        approved: CODING_PLAN_MAIN_APPROVED
+        rejected: CODING_PLAN_MAIN_REJECTED
+    code-planning-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: DRAFT_CODING_PLAN
+        executing: CODE_PLANNING
+        submitted: CODING_PLAN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN
+        approved: CODING_PLAN_APPROVED
+        rejected: CODING_PLAN_REJECTED
+    coding-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_TO_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    epic-spec-subpipeline:
+      steps: [epic-planning-main-pair, epic-planning-pair, us-writing-pair]
+      transitions:
+        - name: epic-decompose
+          from: epic-planning-main-pair.approved
+          to: epic-planning-pair.initial
+          trigger: auto
+          cardinality: per-subtask
+        - name: epic-to-us
+          from: epic-planning-pair.approved
+          to: us-writing-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+    architecture-subpipeline:
+      steps: [architecture-main-pair, architecture-pair]
+      transitions:
+        - name: arch-decompose
+          from: architecture-main-pair.approved
+          to: architecture-pair.initial
+          trigger: auto
+          cardinality: per-subtask
+    coding-subpipeline:
+      steps: [code-planning-main-pair, code-planning-pair, coding-pair]
+      transitions:
+        - name: code-plan-decompose
+          from: code-planning-main-pair.approved
+          to: code-planning-pair.initial
+          trigger: auto
+          cardinality: per-subtask
+        - name: code-plan-to-coding
+          from: code-planning-pair.approved
+          to: coding-pair.initial
+          trigger: manual
+          cardinality: per-subtask
+  entry-points: {}
+`))
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	return cfg
+}
+
 func TestResolver_Transition_PipelineTransition(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 
@@ -273,6 +411,198 @@ func TestResolver_OutputConsumerRolePairs(t *testing.T) {
 				t.Fatalf("OutputConsumerRolePairs(%q) = %v, want %v", tt.rolePair, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolver_IsDecompositionRoot(t *testing.T) {
+	r := NewResolver(loadDecompositionRootResolverConfig(t))
+
+	tests := []struct {
+		rolePair string
+		want     bool
+	}{
+		{rolePair: "epic-planning-main-pair", want: true},
+		{rolePair: "architecture-main-pair", want: true},
+		{rolePair: "code-planning-main-pair", want: true},
+		{rolePair: "epic-planning-pair", want: false},
+		{rolePair: "coding-pair", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.rolePair, func(t *testing.T) {
+			got, err := r.IsDecompositionRoot(tt.rolePair)
+			if err != nil {
+				t.Fatalf("IsDecompositionRoot(%q): %v", tt.rolePair, err)
+			}
+			if got != tt.want {
+				t.Fatalf("IsDecompositionRoot(%q) = %v, want %v", tt.rolePair, got, tt.want)
+			}
+		})
+	}
+
+	_, err := r.IsDecompositionRoot("unknown-pair")
+	if err == nil {
+		t.Fatal("IsDecompositionRoot(unknown-pair): expected error, got nil")
+	}
+}
+
+func TestResolver_DecompositionRootForTarget(t *testing.T) {
+	r := NewResolver(loadDecompositionRootResolverConfig(t))
+
+	tests := []struct {
+		target    string
+		wantRoot  string
+		wantFound bool
+	}{
+		{target: "epic-planning-pair", wantRoot: "epic-planning-main-pair", wantFound: true},
+		{target: "architecture-pair", wantRoot: "architecture-main-pair", wantFound: true},
+		{target: "code-planning-pair", wantRoot: "code-planning-main-pair", wantFound: true},
+		{target: "coding-pair", wantFound: false},
+		{target: "us-writing-pair", wantFound: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.target, func(t *testing.T) {
+			gotRoot, gotFound, err := r.DecompositionRootForTarget(tt.target)
+			if err != nil {
+				t.Fatalf("DecompositionRootForTarget(%q): %v", tt.target, err)
+			}
+			if gotFound != tt.wantFound || gotRoot != tt.wantRoot {
+				t.Fatalf("DecompositionRootForTarget(%q) = (%q, %v), want (%q, %v)",
+					tt.target, gotRoot, gotFound, tt.wantRoot, tt.wantFound)
+			}
+		})
+	}
+
+	_, _, err := r.DecompositionRootForTarget("unknown-pair")
+	if err == nil {
+		t.Fatal("DecompositionRootForTarget(unknown-pair): expected error, got nil")
+	}
+}
+
+func TestResolver_DecompositionRootForTarget_DoesNotInferFromUnmarkedPair(t *testing.T) {
+	cfg, err := LoadFromBytes([]byte(`
+pipeline:
+  roles:
+    planner:
+      type: doer
+      display-name: "Planner"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    unmarked-main-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: MAIN_INITIAL
+        executing: MAIN_EXECUTING
+        submitted: MAIN_SUBMITTED
+        reviewing: MAIN_REVIEWING
+        approved: MAIN_APPROVED
+        rejected: MAIN_REJECTED
+    specialized-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: SPECIALIZED_INITIAL
+        executing: SPECIALIZED_EXECUTING
+        submitted: SPECIALIZED_SUBMITTED
+        reviewing: SPECIALIZED_REVIEWING
+        approved: SPECIALIZED_APPROVED
+        rejected: SPECIALIZED_REJECTED
+  sub-pipelines:
+    planning:
+      steps: [unmarked-main-pair, specialized-pair]
+      transitions:
+        - name: unmarked-decompose
+          from: unmarked-main-pair.approved
+          to: specialized-pair.initial
+          trigger: auto
+          cardinality: per-subtask
+  entry-points: {}
+`))
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	gotRoot, gotFound, err := r.DecompositionRootForTarget("specialized-pair")
+	if err != nil {
+		t.Fatalf("DecompositionRootForTarget: %v", err)
+	}
+	if gotFound || gotRoot != "" {
+		t.Fatalf("DecompositionRootForTarget = (%q, %v), want no root", gotRoot, gotFound)
+	}
+}
+
+func TestResolver_DecompositionRootForTarget_DuplicateRootAmbiguity(t *testing.T) {
+	cfg, err := LoadFromBytes([]byte(`
+pipeline:
+  roles:
+    planner:
+      type: doer
+      display-name: "Planner"
+    reviewer:
+      type: reviewer
+      display-name: "Reviewer"
+  role-pairs:
+    root-one-pair:
+      doer: planner
+      reviewer: reviewer
+      decomposition-root: true
+      states:
+        initial: ROOT_ONE_INITIAL
+        executing: ROOT_ONE_EXECUTING
+        submitted: ROOT_ONE_SUBMITTED
+        reviewing: ROOT_ONE_REVIEWING
+        approved: ROOT_ONE_APPROVED
+        rejected: ROOT_ONE_REJECTED
+    root-two-pair:
+      doer: planner
+      reviewer: reviewer
+      decomposition-root: true
+      states:
+        initial: ROOT_TWO_INITIAL
+        executing: ROOT_TWO_EXECUTING
+        submitted: ROOT_TWO_SUBMITTED
+        reviewing: ROOT_TWO_REVIEWING
+        approved: ROOT_TWO_APPROVED
+        rejected: ROOT_TWO_REJECTED
+    specialized-pair:
+      doer: planner
+      reviewer: reviewer
+      states:
+        initial: SPECIALIZED_INITIAL
+        executing: SPECIALIZED_EXECUTING
+        submitted: SPECIALIZED_SUBMITTED
+        reviewing: SPECIALIZED_REVIEWING
+        approved: SPECIALIZED_APPROVED
+        rejected: SPECIALIZED_REJECTED
+  sub-pipelines:
+    planning:
+      steps: [root-one-pair, root-two-pair, specialized-pair]
+      transitions:
+        - name: root-one-decompose
+          from: root-one-pair.approved
+          to: specialized-pair.initial
+          trigger: auto
+          cardinality: per-subtask
+        - name: root-two-decompose
+          from: root-two-pair.approved
+          to: specialized-pair.initial
+          trigger: auto
+          cardinality: per-subtask
+  entry-points: {}
+`))
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	r := NewResolver(cfg)
+
+	_, _, err = r.DecompositionRootForTarget("specialized-pair")
+	if err == nil {
+		t.Fatal("DecompositionRootForTarget: expected duplicate-root error, got nil")
 	}
 }
 
