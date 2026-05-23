@@ -18,22 +18,37 @@ type planningTaskData struct {
 
 // wakeEntryPointData describes an available entry-point for the orchestrator template.
 type wakeEntryPointData struct {
-	Name        string // e.g., "general-objective"
-	RolePair    string // e.g., "epic-planning-pair"
-	DisplayName string // doer's display name, e.g., "Epic Planner"
-	TaskType    string // e.g., "coding", "architecture"
+	Name               string // e.g., "general-objective"
+	SimpleRolePair     string // e.g., "epic-planning-pair"
+	SimpleDisplayName  string // simple target doer's display name, e.g., "Epic Planner"
+	SimpleTaskType     string // e.g., "epic-planning", "architecture"
+	SimpleTaskIDPrefix string // e.g., "epic-planning"
+	HasFanOutTarget    bool
+	FanOutRolePair     string // e.g., "epic-planning-main-pair"
+	FanOutDisplayName  string // fan-out target doer's display name
+	FanOutTaskType     string
+	FanOutTaskIDPrefix string
+	RolePair           string // legacy alias for SimpleRolePair while templates migrate
+	DisplayName        string // legacy alias for SimpleDisplayName while templates migrate
+	TaskType           string // legacy alias for SimpleTaskType while templates migrate
 }
 
 // wakeTemplateData is used by wake trigger templates that need GoalSpecRef
 type wakeTemplateData struct {
-	AgentID              string
-	GoalSpecRef          string
-	GoalEntryPoint       string               // set if --entry-point was specified
-	ResolvedRolePair     string               // role-pair resolved from GoalEntryPoint
-	ResolvedDisplayName  string               // display name of the resolved role-pair's doer
-	ResolvedTaskIDPrefix string               // task ID prefix, e.g., "epic-planning" (role-pair without "-pair" suffix)
-	ResolvedTaskType     string               // resolved from doer role → TaskTypeForRole
-	EntryPoints          []wakeEntryPointData // available entry-points for LLM classification
+	AgentID                    string
+	GoalSpecRef                string
+	GoalEntryPoint             string             // set if --entry-point was specified
+	ResolvedRolePair           string             // role-pair resolved from GoalEntryPoint
+	ResolvedDisplayName        string             // display name of the resolved role-pair's doer
+	ResolvedTaskIDPrefix       string             // task ID prefix, e.g., "epic-planning" (role-pair without "-pair" suffix)
+	ResolvedTaskType           string             // resolved from doer role → TaskTypeForRole
+	ResolvedEntryPoint         wakeEntryPointData // resolved route data for GoalEntryPoint
+	ResolvedHasFanOutTarget    bool
+	ResolvedFanOutRolePair     string
+	ResolvedFanOutDisplayName  string
+	ResolvedFanOutTaskIDPrefix string
+	ResolvedFanOutTaskType     string
+	EntryPoints                []wakeEntryPointData // available entry-points for LLM classification
 }
 
 // wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template
@@ -108,40 +123,83 @@ func buildWakeTemplateData(goalSpecRef, goalEntryPoint, projectRoot string) (wak
 
 	// Build sorted entry-point list for deterministic template output.
 	var eps []wakeEntryPointData
+	entryPointsByName := make(map[string]wakeEntryPointData, len(cfg.Pipeline.EntryPoints))
 	for epName, epValue := range cfg.Pipeline.EntryPoints {
-		parts := strings.SplitN(epValue, ".", 2)
-		if len(parts) != 2 {
+		rolePair, ok := entryPointRolePair(epValue)
+		if !ok {
 			continue
 		}
-		rolePair := parts[1]
-		displayName := resolveDoerDisplayName(resolver, rolePair)
-		taskType := resolveTaskType(resolver, rolePair)
-		eps = append(eps, wakeEntryPointData{
-			Name:        epName,
-			RolePair:    rolePair,
-			DisplayName: displayName,
-			TaskType:    taskType,
-		})
+		ep, err := buildWakeEntryPointData(resolver, epName, rolePair)
+		if err != nil {
+			return data, err
+		}
+		eps = append(eps, ep)
+		entryPointsByName[epName] = ep
 	}
 	sort.Slice(eps, func(i, j int) bool { return eps[i].Name < eps[j].Name })
 	data.EntryPoints = eps
 
 	// If entry-point is explicitly set, resolve it.
 	if goalEntryPoint != "" {
-		epValue, ok := cfg.Pipeline.EntryPoints[goalEntryPoint]
+		ep, ok := entryPointsByName[goalEntryPoint]
 		if !ok {
 			return data, fmt.Errorf("unknown entry-point %q; available: %v", goalEntryPoint, entryPointNames(cfg))
 		}
-		parts := strings.SplitN(epValue, ".", 2)
-		if len(parts) == 2 {
-			data.ResolvedRolePair = parts[1]
-			data.ResolvedDisplayName = resolveDoerDisplayName(resolver, parts[1])
-			data.ResolvedTaskIDPrefix = strings.TrimSuffix(parts[1], "-pair")
-			data.ResolvedTaskType = resolveTaskType(resolver, parts[1])
-		}
+		data.ResolvedEntryPoint = ep
+		data.ResolvedRolePair = ep.SimpleRolePair
+		data.ResolvedDisplayName = ep.SimpleDisplayName
+		data.ResolvedTaskIDPrefix = ep.SimpleTaskIDPrefix
+		data.ResolvedTaskType = ep.SimpleTaskType
+		data.ResolvedHasFanOutTarget = ep.HasFanOutTarget
+		data.ResolvedFanOutRolePair = ep.FanOutRolePair
+		data.ResolvedFanOutDisplayName = ep.FanOutDisplayName
+		data.ResolvedFanOutTaskIDPrefix = ep.FanOutTaskIDPrefix
+		data.ResolvedFanOutTaskType = ep.FanOutTaskType
 	}
 
 	return data, nil
+}
+
+func entryPointRolePair(entryPointValue string) (string, bool) {
+	parts := strings.SplitN(entryPointValue, ".", 2)
+	if len(parts) != 2 {
+		return "", false
+	}
+	return parts[1], true
+}
+
+func buildWakeEntryPointData(resolver *pipeline.Resolver, name, simpleRolePair string) (wakeEntryPointData, error) {
+	simpleDisplayName := resolveDoerDisplayName(resolver, simpleRolePair)
+	simpleTaskType := resolveTaskType(resolver, simpleRolePair)
+	ep := wakeEntryPointData{
+		Name:               name,
+		SimpleRolePair:     simpleRolePair,
+		SimpleDisplayName:  simpleDisplayName,
+		SimpleTaskType:     simpleTaskType,
+		SimpleTaskIDPrefix: taskIDPrefixForRolePair(simpleRolePair),
+		RolePair:           simpleRolePair,
+		DisplayName:        simpleDisplayName,
+		TaskType:           simpleTaskType,
+	}
+
+	fanOutRolePair, found, err := resolver.DecompositionRootForTarget(simpleRolePair)
+	if err != nil {
+		return ep, fmt.Errorf("entry-point %q target %q: %w", name, simpleRolePair, err)
+	}
+	if !found {
+		return ep, nil
+	}
+
+	ep.HasFanOutTarget = true
+	ep.FanOutRolePair = fanOutRolePair
+	ep.FanOutDisplayName = resolveDoerDisplayName(resolver, fanOutRolePair)
+	ep.FanOutTaskType = resolveTaskType(resolver, fanOutRolePair)
+	ep.FanOutTaskIDPrefix = taskIDPrefixForRolePair(fanOutRolePair)
+	return ep, nil
+}
+
+func taskIDPrefixForRolePair(rolePair string) string {
+	return strings.TrimSuffix(rolePair, "-pair")
 }
 
 // entryPointNames returns sorted entry-point names from a pipeline config for error messages.
