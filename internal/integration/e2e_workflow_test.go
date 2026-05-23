@@ -1521,11 +1521,11 @@ func TestManyToOneTransitionLifecycle(t *testing.T) {
 
 	// Step 9: Assert correct role_pair, status, spec_ref
 	t.Log("Step 9: Verify grandchild properties")
-	if grandchild.RolePair != "architecture-pair" {
-		t.Errorf("Expected role_pair architecture-pair, got %s", grandchild.RolePair)
+	if grandchild.RolePair != "architecture-main-pair" {
+		t.Errorf("Expected role_pair architecture-main-pair, got %s", grandchild.RolePair)
 	}
-	if grandchild.Status != "DRAFT_ARCHITECTURE" {
-		t.Errorf("Expected status DRAFT_ARCHITECTURE, got %s", grandchild.Status)
+	if grandchild.Status != "DRAFT_ARCHITECTURE_MAIN" {
+		t.Errorf("Expected status DRAFT_ARCHITECTURE_MAIN, got %s", grandchild.Status)
 	}
 	if grandchild.SpecRef != "specs/feature.md" {
 		t.Errorf("Expected spec_ref specs/feature.md, got %s", grandchild.SpecRef)
@@ -1607,8 +1607,8 @@ func TestManyToOneTransitionLifecycle(t *testing.T) {
 	if len(recoveredGrandchild.ParentTasks) != 3 {
 		t.Errorf("Recovered grandchild: expected 3 ParentTasks, got %d", len(recoveredGrandchild.ParentTasks))
 	}
-	if recoveredGrandchild.RolePair != "architecture-pair" {
-		t.Errorf("Recovered grandchild: expected architecture-pair, got %s", recoveredGrandchild.RolePair)
+	if recoveredGrandchild.RolePair != "architecture-main-pair" {
+		t.Errorf("Recovered grandchild: expected architecture-main-pair, got %s", recoveredGrandchild.RolePair)
 	}
 
 	t.Log("TestManyToOneTransitionLifecycle passed")

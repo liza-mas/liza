@@ -1936,11 +1936,11 @@ func TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks(t *testing.T)
 	if child == nil {
 		t.Fatal("Child task not found in state.Tasks")
 	}
-	if child.RolePair != "architecture-pair" {
-		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-pair")
+	if child.RolePair != "architecture-main-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-main-pair")
 	}
-	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
-		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE", child.Status)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE_MAIN") {
+		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE_MAIN", child.Status)
 	}
 
 	// Children MUST be in Sprint.Scope.Planned
@@ -5687,7 +5687,7 @@ func TestExecuteAvailableTransitions_SkipsReplannedTasks(t *testing.T) {
 
 	var archTasks []string
 	for _, task := range readState.Tasks {
-		if task.RolePair == "architecture-pair" {
+		if task.RolePair == "architecture-main-pair" {
 			archTasks = append(archTasks, task.ID)
 		}
 	}

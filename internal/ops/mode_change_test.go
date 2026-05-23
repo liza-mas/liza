@@ -461,11 +461,11 @@ func TestResume_ManyToOneCheckpointExecutesTransitionsMidSprint(t *testing.T) {
 	if child == nil {
 		t.Fatalf("child task %q not found", childID)
 	}
-	if child.RolePair != "architecture-pair" {
-		t.Errorf("child role_pair = %q, want architecture-pair", child.RolePair)
+	if child.RolePair != "architecture-main-pair" {
+		t.Errorf("child role_pair = %q, want architecture-main-pair", child.RolePair)
 	}
-	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
-		t.Errorf("child status = %s, want DRAFT_ARCHITECTURE", child.Status)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE_MAIN") {
+		t.Errorf("child status = %s, want DRAFT_ARCHITECTURE_MAIN", child.Status)
 	}
 	for _, member := range cohort {
 		source := readState.FindTask(member.ID)
@@ -523,11 +523,11 @@ func TestResume_ManyToOneCheckpointExecutesTransitionsWhenAllPlannedTerminal(t *
 	if child == nil {
 		t.Fatalf("child task %q not found", childID)
 	}
-	if child.RolePair != "architecture-pair" {
-		t.Errorf("child role_pair = %q, want architecture-pair", child.RolePair)
+	if child.RolePair != "architecture-main-pair" {
+		t.Errorf("child role_pair = %q, want architecture-main-pair", child.RolePair)
 	}
-	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
-		t.Errorf("child status = %s, want DRAFT_ARCHITECTURE", child.Status)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE_MAIN") {
+		t.Errorf("child status = %s, want DRAFT_ARCHITECTURE_MAIN", child.Status)
 	}
 	if !slices.Contains(readState.Sprint.Scope.Planned, childID) {
 		t.Errorf("child %q not in sprint scope: %v", childID, readState.Sprint.Scope.Planned)
