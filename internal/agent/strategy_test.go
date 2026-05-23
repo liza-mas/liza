@@ -892,8 +892,8 @@ func TestOrchestratorPreWork_ManyToOneCohort(t *testing.T) {
 	if child == nil {
 		t.Fatalf("child task %q not found", childID)
 	}
-	if child.RolePair != "architecture-pair" {
-		t.Errorf("child role_pair = %q, want architecture-pair", child.RolePair)
+	if child.RolePair != "architecture-main-pair" {
+		t.Errorf("child role_pair = %q, want architecture-main-pair", child.RolePair)
 	}
 }
 

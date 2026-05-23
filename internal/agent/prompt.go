@@ -53,6 +53,10 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 	if err != nil {
 		return "", fmt.Errorf("context sections for role %q: %w", config.Role, err)
 	}
+	sections, err = taskContextSections(sections, task, data, resolver)
+	if err != nil {
+		return "", err
+	}
 
 	context, err := prompts.BuildRoleContext(config.Role, sections, data)
 	if err != nil {
@@ -312,6 +316,42 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 	}
 
 	return data, nil
+}
+
+func taskContextSections(base []string, task *models.Task, data *prompts.RoleContextData, resolver *pipeline.Resolver) ([]string, error) {
+	sections := append([]string(nil), base...)
+	if data.RoleType != "doer" || task.RolePair == "" {
+		return sections, nil
+	}
+
+	isRoot, err := resolver.IsDecompositionRoot(task.RolePair)
+	if err != nil {
+		return nil, err
+	}
+	if !isRoot {
+		return sections, nil
+	}
+
+	refField, ok := masterOutputRefField(task.RolePair)
+	if !ok {
+		return nil, fmt.Errorf("decomposition-root doer role-pair %q required output artifact ref field cannot be determined", task.RolePair)
+	}
+
+	data.DecompositionRoot = true
+	data.MasterOutputRefField = refField
+	sections = append(sections, "master-decomposition-mandate")
+	return sections, nil
+}
+
+func masterOutputRefField(rolePair string) (string, bool) {
+	switch rolePair {
+	case "epic-planning-main-pair", "code-planning-main-pair":
+		return "plan_ref", true
+	case "architecture-main-pair":
+		return "arch_ref", true
+	default:
+		return "", false
+	}
 }
 
 // collectCompletedTasks returns summaries of all MERGED tasks for integration context.

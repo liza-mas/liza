@@ -97,6 +97,8 @@ type RoleContextData struct {
 	TaskOrdinal          int // 1-based position in visible sprint plan
 	DependsOn            []string
 	TaskRolePair         string
+	DecompositionRoot    bool
+	MasterOutputRefField string
 	PhaseDependencyTasks []SiblingTaskSummary
 	TaskGraph            TaskGraphDigest
 

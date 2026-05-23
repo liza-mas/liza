@@ -1214,6 +1214,46 @@ func TestBlockParentTasksContext_EmptySlice(t *testing.T) {
 	}
 }
 
+func TestBuildRoleContext_MasterDecompositionMandate(t *testing.T) {
+	data := &RoleContextData{
+		Role:                 "architect",
+		RoleType:             "doer",
+		DecompositionRoot:    true,
+		MasterOutputRefField: "arch_ref",
+	}
+
+	output, err := BuildRoleContext("architect", []string{"master-decomposition-mandate"}, data)
+	if err != nil {
+		t.Fatalf("BuildRoleContext: %v", err)
+	}
+
+	for _, want := range []string{
+		"=== MASTER DECOMPOSITION MANDATE ===",
+		"Master Output Contract properties 1-6",
+		"1. Non-overlapping scopes.",
+		"2. Interface ownership.",
+		"3. Shared-file ownership.",
+		"4. Dependency ordering.",
+		"5. Inherited constraints.",
+		"6. Completeness.",
+		"`arch_ref`",
+		"`Systemic Decomposition Review`",
+		"systemic-thinking",
+		"before `liza set-task-output` or submission",
+		"owned_files",
+		"owned_modules",
+		"read_only_depends_on",
+		"read_only_task_depends_on",
+		"interfaces_owned",
+		"interfaces_consumed",
+		"coverage_notes",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q", want)
+		}
+	}
+}
+
 // TestBuildRoleContext_AllRoles verifies that BuildRoleContext produces expected key
 // content strings for each of the 9 standard roles using block templates.
 // Section lists are loaded from the embedded pipeline YAML via the resolver,
