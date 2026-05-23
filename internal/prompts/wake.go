@@ -28,9 +28,6 @@ type wakeEntryPointData struct {
 	FanOutDisplayName  string // fan-out target doer's display name
 	FanOutTaskType     string
 	FanOutTaskIDPrefix string
-	RolePair           string // legacy alias for SimpleRolePair while templates migrate
-	DisplayName        string // legacy alias for SimpleDisplayName while templates migrate
-	TaskType           string // legacy alias for SimpleTaskType while templates migrate
 }
 
 // wakeTemplateData is used by wake trigger templates that need GoalSpecRef
@@ -177,9 +174,6 @@ func buildWakeEntryPointData(resolver *pipeline.Resolver, name, simpleRolePair s
 		SimpleDisplayName:  simpleDisplayName,
 		SimpleTaskType:     simpleTaskType,
 		SimpleTaskIDPrefix: taskIDPrefixForRolePair(simpleRolePair),
-		RolePair:           simpleRolePair,
-		DisplayName:        simpleDisplayName,
-		TaskType:           simpleTaskType,
 	}
 
 	fanOutRolePair, found, err := resolver.DecompositionRootForTarget(simpleRolePair)

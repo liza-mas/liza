@@ -133,7 +133,8 @@ func TestWakeInitialPlanningClassificationRendersResolvedRouteData(t *testing.T)
 }
 
 func TestWakeInitialPlanningMissingMasterRendersSpecializedFallback(t *testing.T) {
-	content := strings.ReplaceAll(string(embedded.PipelineConfigContent()), "      decomposition-root: true\n", "")
+	content := strings.ReplaceAll(string(embedded.PipelineConfigContent()), "      decomposition-root: true\n      decomposition-output-ref: plan_ref\n", "")
+	content = strings.ReplaceAll(content, "      decomposition-root: true\n      decomposition-output-ref: arch_ref\n", "")
 	projectRoot := setupPipelineConfigContent(t, []byte(content))
 	data, err := buildWakeTemplateData("specs/goal.md", "functional-spec", projectRoot)
 	if err != nil {

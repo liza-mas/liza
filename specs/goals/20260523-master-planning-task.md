@@ -230,6 +230,7 @@ epic-planning-main-pair:
   doer: epic-planner
   reviewer: epic-plan-reviewer
   decomposition-root: true
+  decomposition-output-ref: plan_ref
   review-policy:
     quorum: 2
     provider-diversity: preferred
@@ -247,6 +248,7 @@ architecture-main-pair:
   doer: architect
   reviewer: architecture-reviewer
   decomposition-root: true
+  decomposition-output-ref: arch_ref
   review-policy:
     quorum: 2
     provider-diversity: preferred
@@ -264,6 +266,7 @@ code-planning-main-pair:
   doer: code-planner
   reviewer: code-plan-reviewer
   decomposition-root: true
+  decomposition-output-ref: plan_ref
   review-policy:
     quorum: 2
     provider-diversity: preferred
@@ -309,8 +312,9 @@ construction appends fixed master sections for that role side.
   interface contracts, and coverage. Each master reviewer must run
   `systemic-thinking` before submitting a verdict.
 
-No `RolePairDef.context-sections` field is introduced. The only new prompt
-configuration surface is `decomposition-root: true`.
+No `RolePairDef.context-sections` field is introduced. Master prompt selection
+uses `decomposition-root: true`; required output artifact refs come from
+`decomposition-output-ref`.
 
 ### Master Output Contract
 
@@ -411,6 +415,8 @@ The `INITIAL_PLANNING` wake changes from "create 1-5 parallel tasks" to:
 **Detection mechanism:** The pipeline resolver reads explicit
 `decomposition-root: true` metadata and maps each specialized entry role-pair to
 the decomposition-root role-pair whose auto `*-decompose` transition targets it.
+The same role-pair declares `decomposition-output-ref` so prompt rendering and
+`set-task-output` validation use one configured required framework ref.
 When the orchestrator's complexity assessment would previously create multiple
 parallel planning tasks, the wake template instructs it to create exactly 1 task
 in the mapped master role-pair. Do not infer this from outgoing `per-subtask`
@@ -519,11 +525,12 @@ constraint, not as a starting point to modify.
    handling continues to create exactly 1 specialized planning task.
 
 8. **Decomposition-root mapping.** Add explicit `decomposition-root: true`
-   metadata to `RolePairDef`. Pipeline resolver method: given an entry role-pair,
-   return the decomposition-root role-pair whose auto `per-subtask` transition
-   targets it, if one exists. Expose this mapping in template data. Do not infer
-   master behavior from outgoing `per-subtask` transitions on the entry role-pair;
-   regular specialized planning steps also fan out.
+   metadata and `decomposition-output-ref` to `RolePairDef`. Pipeline resolver
+   method: given an entry role-pair, return the decomposition-root role-pair
+   whose auto `per-subtask` transition targets it, if one exists. Expose this
+   mapping in template data. Do not infer master behavior from outgoing
+   `per-subtask` transitions on the entry role-pair; regular specialized
+   planning steps also fan out.
    Validation: `decomposition-root: true` is valid only when the role-pair has
    exactly one outgoing intra-subpipeline auto `per-subtask` transition whose
    target is another role-pair in the same subpipeline. Reject configs where the

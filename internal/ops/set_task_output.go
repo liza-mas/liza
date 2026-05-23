@@ -147,7 +147,11 @@ func validateDecompositionRootOutput(state *models.State, resolver decomposition
 		return nil
 	}
 
-	requiredRef, err := requiredDecompositionRootOutputRef(rolePair)
+	refField, err := resolver.DecompositionOutputRef(rolePair)
+	if err != nil {
+		return err
+	}
+	requiredRef, err := requiredDecompositionRootOutputRef(refField)
 	if err != nil {
 		return err
 	}
@@ -183,6 +187,7 @@ func validateDecompositionRootOutput(state *models.State, resolver decomposition
 
 type decompositionRootResolver interface {
 	IsDecompositionRoot(rolePair string) (bool, error)
+	DecompositionOutputRef(rolePair string) (string, error)
 }
 
 type decompositionRootOutputRef struct {
@@ -190,20 +195,30 @@ type decompositionRootOutputRef struct {
 	value func(models.OutputEntry) string
 }
 
-func requiredDecompositionRootOutputRef(rolePair string) (decompositionRootOutputRef, error) {
-	switch rolePair {
-	case "epic-planning-main-pair", "code-planning-main-pair":
+func requiredDecompositionRootOutputRef(refField string) (decompositionRootOutputRef, error) {
+	switch refField {
+	case "plan_ref":
 		return decompositionRootOutputRef{
 			field: "plan_ref",
 			value: func(entry models.OutputEntry) string { return entry.PlanRef },
 		}, nil
-	case "architecture-main-pair":
+	case "arch_ref":
 		return decompositionRootOutputRef{
 			field: "arch_ref",
 			value: func(entry models.OutputEntry) string { return entry.ArchRef },
 		}, nil
+	case "epic_ref":
+		return decompositionRootOutputRef{
+			field: "epic_ref",
+			value: func(entry models.OutputEntry) string { return entry.EpicRef },
+		}, nil
+	case "spec_ref":
+		return decompositionRootOutputRef{
+			field: "spec_ref",
+			value: func(entry models.OutputEntry) string { return entry.SpecRef },
+		}, nil
 	default:
-		return decompositionRootOutputRef{}, &PreconditionError{Reason: fmt.Sprintf("decomposition-root role-pair %q has no required output artifact ref mapping", rolePair)}
+		return decompositionRootOutputRef{}, &PreconditionError{Reason: fmt.Sprintf("decomposition-root output ref %q is unsupported", refField)}
 	}
 }
 
@@ -317,6 +332,9 @@ func validateDependsOnAcyclic(output []models.OutputEntry) error {
 			depIndex, err := strconv.Atoi(depRef)
 			if err != nil {
 				return err
+			}
+			if depIndex < 0 || depIndex >= len(output) {
+				return &PreconditionError{Reason: fmt.Sprintf("output[%d].depends_on reference %q out of range [0, %d)", index, depRef, len(output))}
 			}
 			if err := visit(depIndex); err != nil {
 				return err

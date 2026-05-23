@@ -34,6 +34,7 @@ pipeline:
       doer: planner
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: DRAFT_EPIC_PLAN_MAIN
         executing: EPIC_PLANNING_MAIN
@@ -65,6 +66,7 @@ pipeline:
       doer: planner
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: arch_ref
       states:
         initial: DRAFT_ARCHITECTURE_MAIN
         executing: ARCHITECTING_MAIN
@@ -86,6 +88,7 @@ pipeline:
       doer: planner
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: DRAFT_CODING_PLAN_MAIN
         executing: CODE_PLANNING_MAIN
@@ -462,6 +465,35 @@ func TestResolver_IsDecompositionRoot(t *testing.T) {
 	}
 }
 
+func TestResolver_DecompositionOutputRef(t *testing.T) {
+	r := NewResolver(loadDecompositionRootResolverConfig(t))
+
+	tests := []struct {
+		rolePair string
+		want     string
+	}{
+		{rolePair: "epic-planning-main-pair", want: "plan_ref"},
+		{rolePair: "architecture-main-pair", want: "arch_ref"},
+		{rolePair: "code-planning-main-pair", want: "plan_ref"},
+	}
+	for _, tt := range tests {
+		got, err := r.DecompositionOutputRef(tt.rolePair)
+		if err != nil {
+			t.Fatalf("DecompositionOutputRef(%q): %v", tt.rolePair, err)
+		}
+		if got != tt.want {
+			t.Fatalf("DecompositionOutputRef(%q) = %q, want %q", tt.rolePair, got, tt.want)
+		}
+	}
+
+	if _, err := r.DecompositionOutputRef("code-planning-pair"); err == nil {
+		t.Fatal("DecompositionOutputRef(non-root): expected error, got nil")
+	}
+	if _, err := r.DecompositionOutputRef("unknown-pair"); err == nil {
+		t.Fatal("DecompositionOutputRef(unknown): expected error, got nil")
+	}
+}
+
 func TestResolver_DecompositionRootForTarget(t *testing.T) {
 	r := NewResolver(loadDecompositionRootResolverConfig(t))
 
@@ -567,6 +599,7 @@ pipeline:
       doer: planner
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: ROOT_ONE_INITIAL
         executing: ROOT_ONE_EXECUTING
@@ -578,6 +611,7 @@ pipeline:
       doer: planner
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: ROOT_TWO_INITIAL
         executing: ROOT_TWO_EXECUTING

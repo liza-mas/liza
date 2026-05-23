@@ -503,7 +503,7 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
 
 ### Master planning role-pairs
 
-Planning fan-out is represented as a master role-pair followed by the specialized role-pair inside the same sub-pipeline. The master and specialized pairs reuse the same roles; `decomposition-root: true` selects the master prompt behavior and output validation.
+Planning fan-out is represented as a master role-pair followed by the specialized role-pair inside the same sub-pipeline. The master and specialized pairs reuse the same roles; `decomposition-root: true` selects the master prompt behavior and output validation, and `decomposition-output-ref` declares which artifact ref each master output entry must inherit.
 
 ```yaml
 role-pairs:
@@ -511,6 +511,7 @@ role-pairs:
     doer: architect
     reviewer: architecture-reviewer
     decomposition-root: true
+    decomposition-output-ref: arch_ref
     review-policy:
       quorum: 2
       provider-diversity: preferred
@@ -549,9 +550,9 @@ sub-pipelines:
         cardinality: per-subtask
 ```
 
-`decomposition-root: true` is valid only when the role-pair has exactly one outgoing same-subpipeline `trigger: auto`, `cardinality: per-subtask` transition to another role-pair. It is invalid on terminal steps, non-auto transitions, non-`per-subtask` transitions, or multiple outgoing decomposition transitions.
+`decomposition-root: true` is valid only when the role-pair has a valid `decomposition-output-ref` and exactly one outgoing same-subpipeline `trigger: auto`, `cardinality: per-subtask` transition to another role-pair. It is invalid without a supported output ref, on terminal steps, non-auto transitions, non-`per-subtask` transitions, or multiple outgoing decomposition transitions.
 
-`INITIAL_PLANNING` uses entry points as specialized targets, then resolves the mapped master role-pair from the `decomposition-root` transition. It creates exactly one task: the specialized target for simple work, or the mapped master target when the goal would otherwise fan out or when boundary placement is uncertain. Existing frozen `.liza/pipeline.yaml` files are not migrated; users must run a new `liza init` to receive master role-pairs, auto-decompose transitions, and updated entry-point routing.
+`INITIAL_PLANNING` uses entry points as specialized targets, then resolves the mapped master role-pair from the `decomposition-root` transition. It creates exactly one task: the specialized target for simple work, or the mapped master target when the goal would otherwise fan out or when boundary placement is uncertain. Existing frozen `.liza/pipeline.yaml` files are not rewritten when embedded topology changes; known legacy master role-pairs missing `decomposition-output-ref` are backfilled in memory at load time. To adopt new role-pairs, auto-decompose transitions, or updated entry-point routing in an existing workspace, manually update `.liza/pipeline.yaml` from the current embedded pipeline or start a fresh workspace.
 
 `architecture-to-code-plan` remains the Case A bypass. It targets `coding-subpipeline.code-planning-pair.initial` from specialized `architecture-pair.approved` output and does not route through `code-planning-main-pair`.
 
@@ -575,7 +576,7 @@ output:
       coverage_notes: "Owns authentication behavior while consuming user lookup read-only."
 ```
 
-`epic-planning-main-pair` and `code-planning-main-pair` require `plan_ref`; `architecture-main-pair` requires `arch_ref`. `read_only_depends_on` and `read_only_task_depends_on` document read-only consumption and must be mirrored in scheduler-facing `depends_on` and `task_depends_on`. Specialized epic outputs keep the existing downstream `epic_ref` behavior for `us-writing-pair`; the epic master framework uses `plan_ref`.
+Master role-pairs require the inherited framework artifact ref configured by `decomposition-output-ref`; the default pipeline uses `plan_ref` for `epic-planning-main-pair` and `code-planning-main-pair`, and `arch_ref` for `architecture-main-pair`. `read_only_depends_on` and `read_only_task_depends_on` document read-only consumption and must be mirrored in scheduler-facing `depends_on` and `task_depends_on`. Specialized epic outputs keep the existing downstream `epic_ref` behavior for `us-writing-pair`; the epic master framework uses `plan_ref`.
 
 ---
 

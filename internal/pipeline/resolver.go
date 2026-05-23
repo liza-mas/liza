@@ -494,6 +494,22 @@ func (r *Resolver) IsDecompositionRoot(rolePair string) (bool, error) {
 	return rp.DecompositionRoot, nil
 }
 
+// DecompositionOutputRef returns the output-entry artifact ref field required
+// for a decomposition-root role-pair.
+func (r *Resolver) DecompositionOutputRef(rolePair string) (string, error) {
+	rp, ok := r.config.Pipeline.RolePairs[rolePair]
+	if !ok {
+		return "", fmt.Errorf("unknown role-pair %q", rolePair)
+	}
+	if !rp.DecompositionRoot {
+		return "", fmt.Errorf("role-pair %q is not a decomposition-root role-pair", rolePair)
+	}
+	if rp.DecompositionOutputRef == "" {
+		return "", fmt.Errorf("decomposition-root role-pair %q has no decomposition-output-ref configured", rolePair)
+	}
+	return rp.DecompositionOutputRef, nil
+}
+
 // DecompositionRootForTarget returns the explicit decomposition-root role-pair
 // whose auto per-subtask transition targets targetRolePair.
 func (r *Resolver) DecompositionRootForTarget(targetRolePair string) (string, bool, error) {
@@ -507,14 +523,17 @@ func (r *Resolver) DecompositionRootForTarget(targetRolePair string) (string, bo
 		if !rp.DecompositionRoot {
 			continue
 		}
-		rootTarget, found, err := r.decompositionRootTarget(rootRolePair)
+		rootTargets, err := decompositionRootTransitionTargets(&r.config.Pipeline, rootRolePair)
 		if err != nil {
 			return "", false, err
 		}
-		if !found {
+		if len(rootTargets) == 0 {
 			return "", false, fmt.Errorf("decomposition-root role-pair %q has no decomposition target", rootRolePair)
 		}
-		if rootTarget == targetRolePair {
+		if len(rootTargets) > 1 {
+			return "", false, fmt.Errorf("decomposition-root role-pair %q has multiple decomposition targets: %v", rootRolePair, rootTargets)
+		}
+		if rootTargets[0] == targetRolePair {
 			roots = append(roots, rootRolePair)
 		}
 	}
@@ -526,50 +545,6 @@ func (r *Resolver) DecompositionRootForTarget(targetRolePair string) (string, bo
 		return roots[0], true, nil
 	default:
 		return "", false, fmt.Errorf("role-pair %q has multiple decomposition roots: %v", targetRolePair, roots)
-	}
-}
-
-func (r *Resolver) decompositionRootTarget(rootRolePair string) (string, bool, error) {
-	var targets []string
-	for spName, sp := range r.config.Pipeline.SubPipelines {
-		if !slices.Contains(sp.Steps, rootRolePair) {
-			continue
-		}
-		for _, t := range sp.Transitions {
-			fromPair, fromPhase, err := parseRef(t.From)
-			if err != nil {
-				return "", false, fmt.Errorf("decomposition-root role-pair %q transition %q: invalid from reference: %w", rootRolePair, t.Name, err)
-			}
-			if fromPair != rootRolePair {
-				continue
-			}
-			if fromPhase != "approved" {
-				return "", false, fmt.Errorf("decomposition-root role-pair %q transition %q: from phase must be approved, got %q", rootRolePair, t.Name, fromPhase)
-			}
-			if t.Trigger != "auto" {
-				return "", false, fmt.Errorf("decomposition-root role-pair %q transition %q: trigger must be auto, got %q", rootRolePair, t.Name, t.Trigger)
-			}
-			if t.Cardinality != "per-subtask" {
-				return "", false, fmt.Errorf("decomposition-root role-pair %q transition %q: cardinality must be per-subtask, got %q", rootRolePair, t.Name, t.Cardinality)
-			}
-			toPair, _, err := parseRef(t.To)
-			if err != nil {
-				return "", false, fmt.Errorf("decomposition-root role-pair %q transition %q: invalid to reference: %w", rootRolePair, t.Name, err)
-			}
-			if !slices.Contains(sp.Steps, toPair) {
-				return "", false, fmt.Errorf("decomposition-root role-pair %q transition %q: target role-pair %q must be in the same sub-pipeline %q", rootRolePair, t.Name, toPair, spName)
-			}
-			targets = append(targets, toPair)
-		}
-	}
-
-	switch len(targets) {
-	case 0:
-		return "", false, nil
-	case 1:
-		return targets[0], true, nil
-	default:
-		return "", false, fmt.Errorf("decomposition-root role-pair %q has multiple decomposition targets: %v", rootRolePair, targets)
 	}
 }
 

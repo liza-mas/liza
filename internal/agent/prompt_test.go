@@ -650,9 +650,9 @@ func TestBuildPromptWithContext_NonRootReviewersRenderNoMasterReview(t *testing.
 	}
 }
 
-func TestBuildPromptWithContext_DecompositionRootDoerUnknownArtifactRefFailsClosed(t *testing.T) {
+func TestBuildPromptWithContext_CustomDecompositionRootDoerUsesConfiguredArtifactRef(t *testing.T) {
 	projectRoot := t.TempDir()
-	resolver := loadTestResolver(t, unknownMasterRefPromptPipelineYAML)
+	resolver := loadTestResolver(t, customMasterRefPromptPipelineYAML)
 	state := &models.State{
 		Goal: models.Goal{
 			Description: "Unknown master goal",
@@ -678,18 +678,16 @@ func TestBuildPromptWithContext_DecompositionRootDoerUnknownArtifactRefFailsClos
 		StatePath:   filepath.Join(projectRoot, ".liza", "state.yaml"),
 	}
 
-	_, err := buildPromptWithContext(state, config, "task-1", resolver)
-	if err == nil {
-		t.Fatal("buildPromptWithContext() error = nil, want fail-closed artifact-ref error")
+	prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+	if err != nil {
+		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "required output artifact ref field cannot be determined") {
-		t.Fatalf("buildPromptWithContext() error = %q, want required output artifact ref field context", err)
-	}
+	assertContainsAll(t, prompt, "=== MASTER DECOMPOSITION MANDATE ===", "plan_ref")
 }
 
-func TestBuildPromptWithContext_DecompositionRootReviewerUnknownArtifactRefFailsClosed(t *testing.T) {
+func TestBuildPromptWithContext_CustomDecompositionRootReviewerUsesConfiguredArtifactRef(t *testing.T) {
 	projectRoot := t.TempDir()
-	resolver := loadTestResolver(t, unknownMasterRefPromptPipelineYAML)
+	resolver := loadTestResolver(t, customMasterRefPromptPipelineYAML)
 	state := &models.State{
 		Goal: models.Goal{
 			Description: "Unknown master goal",
@@ -718,13 +716,11 @@ func TestBuildPromptWithContext_DecompositionRootReviewerUnknownArtifactRefFails
 		StatePath:   filepath.Join(projectRoot, ".liza", "state.yaml"),
 	}
 
-	_, err := buildPromptWithContext(state, config, "task-1", resolver)
-	if err == nil {
-		t.Fatal("buildPromptWithContext() error = nil, want fail-closed artifact-ref error")
+	prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+	if err != nil {
+		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "required output artifact ref field cannot be determined") {
-		t.Fatalf("buildPromptWithContext() error = %q, want required output artifact ref field context", err)
-	}
+	assertContainsAll(t, prompt, "=== MASTER DECOMPOSITION REVIEW ===", "missing `plan_ref`")
 }
 
 func assertContainsAll(t *testing.T, got string, wants ...string) {
@@ -756,7 +752,7 @@ func embeddedPipelineResolver(t *testing.T) *pipeline.Resolver {
 	return pipeline.NewResolver(cfg)
 }
 
-var unknownMasterRefPromptPipelineYAML = `pipeline:
+var customMasterRefPromptPipelineYAML = `pipeline:
   roles:
     code-planner:
       type: doer
@@ -770,6 +766,7 @@ var unknownMasterRefPromptPipelineYAML = `pipeline:
       doer: code-planner
       reviewer: code-plan-reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states: {initial: DRAFT_CUSTOM_MAIN, executing: CUSTOM_PLANNING_MAIN, submitted: CUSTOM_MAIN_TO_REVIEW, reviewing: REVIEWING_CUSTOM_MAIN, approved: CUSTOM_MAIN_APPROVED, rejected: CUSTOM_MAIN_REJECTED}
     code-planning-pair:
       doer: code-planner

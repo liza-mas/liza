@@ -148,7 +148,7 @@ liza init "[Goal description]" --spec [spec_ref]
 #   # Add --no-follow-up to execute only the entry-point sub-pipeline.
 #   # Simple entry-point work creates one specialized planning task.
 #   # Fan-out or uncertain work creates one mapped master planning task first.
-#   # Existing frozen .liza/pipeline.yaml files are not migrated; re-run liza init to receive new topology.
+#   # Existing frozen .liza/pipeline.yaml files are not rewritten; manually update them to receive new topology.
 #   # If omitted, the orchestrator auto-classifies from the spec content.
 
 # Verify
@@ -360,7 +360,7 @@ artifact yourself and surfaces unflagged decisions agents baked in without marki
 
 For `per-subtask` output, `depends_on` names sibling output indexes (`"0"` means `output[0]`). Use `task_depends_on` when the generated child must depend on existing concrete task IDs outside the current `output[]`. Concrete dependencies must follow pipeline direction: a generated child cannot depend on a task whose role-pair is downstream from the child's role-pair, including through `superseded_by` resolution paths.
 
-Master planning output entries also carry `decomposition` metadata. `read_only_depends_on` and `read_only_task_depends_on` describe read-only use only; scheduling still comes from mirrored `depends_on` and `task_depends_on` entries. Master outputs must include the inherited framework ref for their children: `plan_ref` for `epic-planning-main-pair`, `arch_ref` for `architecture-main-pair`, and `plan_ref` for `code-planning-main-pair`.
+Master planning output entries also carry `decomposition` metadata. `read_only_depends_on` and `read_only_task_depends_on` describe read-only use only; scheduling still comes from mirrored `depends_on` and `task_depends_on` entries. Master outputs must include the inherited framework ref configured by the role-pair's `decomposition-output-ref`: `plan_ref` for `epic-planning-main-pair`, `arch_ref` for `architecture-main-pair`, and `plan_ref` for `code-planning-main-pair`.
 
 #### Replanning at Checkpoint
 

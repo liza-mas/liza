@@ -6,10 +6,29 @@ import (
 	"github.com/liza-mas/liza/internal/embedded"
 )
 
+var legacyDecompositionOutputRefs = map[string]string{
+	"epic-planning-main-pair": "plan_ref",
+	"architecture-main-pair":  "arch_ref",
+	"code-planning-main-pair": "plan_ref",
+}
+
 // LoadEmbeddedReference loads and parses the embedded default pipeline config.
 // Used as the reference for operation migration.
 func LoadEmbeddedReference() (*PipelineConfig, error) {
 	return LoadFromBytes(embedded.PipelineConfigContent())
+}
+
+// applyCompatibilityDefaults patches in-memory defaults for configs that were
+// valid under an older schema but need derived fields before validation.
+func applyCompatibilityDefaults(cfg *PipelineConfig) {
+	for rolePair, outputRef := range legacyDecompositionOutputRefs {
+		rp, ok := cfg.Pipeline.RolePairs[rolePair]
+		if !ok || !rp.DecompositionRoot || rp.DecompositionOutputRef != "" {
+			continue
+		}
+		rp.DecompositionOutputRef = outputRef
+		cfg.Pipeline.RolePairs[rolePair] = rp
+	}
 }
 
 // MigrateOperations patches missing allowed-operations from the reference config

@@ -120,7 +120,8 @@ func TestBuildWakeTemplateDataRouteData(t *testing.T) {
 }
 
 func TestBuildWakeTemplateDataMissingFanOutMapping(t *testing.T) {
-	content := strings.ReplaceAll(string(embedded.PipelineConfigContent()), "      decomposition-root: true\n", "")
+	content := strings.ReplaceAll(string(embedded.PipelineConfigContent()), "      decomposition-root: true\n      decomposition-output-ref: plan_ref\n", "")
+	content = strings.ReplaceAll(content, "      decomposition-root: true\n      decomposition-output-ref: arch_ref\n", "")
 	projectRoot := setupPipelineConfigContent(t, []byte(content))
 
 	data, err := buildWakeTemplateData("specs/goal.md", "functional-spec", projectRoot)
@@ -162,6 +163,7 @@ pipeline:
       doer: planner
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: ROOT_ONE_INITIAL
         executing: ROOT_ONE_EXECUTING
@@ -173,6 +175,7 @@ pipeline:
       doer: planner
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: ROOT_TWO_INITIAL
         executing: ROOT_TWO_EXECUTING
@@ -242,15 +245,6 @@ func assertWakeRouteData(t *testing.T, ep wakeEntryPointData, simpleRolePair, si
 	}
 	if ep.SimpleTaskIDPrefix != simpleIDPrefix {
 		t.Errorf("SimpleTaskIDPrefix = %q, want %q", ep.SimpleTaskIDPrefix, simpleIDPrefix)
-	}
-	if ep.RolePair != simpleRolePair {
-		t.Errorf("RolePair alias = %q, want %q", ep.RolePair, simpleRolePair)
-	}
-	if ep.TaskType != simpleTaskType {
-		t.Errorf("TaskType alias = %q, want %q", ep.TaskType, simpleTaskType)
-	}
-	if ep.DisplayName != simpleDisplay {
-		t.Errorf("DisplayName alias = %q, want %q", ep.DisplayName, simpleDisplay)
 	}
 	if !ep.HasFanOutTarget {
 		t.Fatal("HasFanOutTarget = false, want true")

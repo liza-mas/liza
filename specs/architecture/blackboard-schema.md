@@ -264,7 +264,7 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
     code-plan-to-coding: true
 ```
 
-Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role-pair schema supports `role-pairs.<name>.decomposition-root: true` for master planning pairs. That marker is read-only runtime metadata: it selects master prompt sections, output validation, and INITIAL_PLANNING's specialized-to-master mapping. Existing frozen workspaces are not rewritten when the embedded topology changes; users must re-run `liza init` to receive new role-pairs or transitions.
+Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role-pair schema supports `role-pairs.<name>.decomposition-root: true` for master planning pairs, with required `decomposition-output-ref` (`spec_ref`, `epic_ref`, `plan_ref`, or `arch_ref`) naming the framework ref each master output must provide. That marker is read-only runtime metadata: it selects master prompt sections, output validation, and INITIAL_PLANNING's specialized-to-master mapping. Existing frozen workspaces are not rewritten when the embedded topology changes; known legacy master role-pairs missing `decomposition-output-ref` are backfilled in memory at load time, while new role-pairs or transitions require manually updating `.liza/pipeline.yaml` or starting a fresh workspace.
 
 | Field | Type | Set By | Purpose |
 |-------|------|--------|---------|
@@ -307,10 +307,10 @@ Optional:
 
 Generated child tasks also persist task-level `decomposition` metadata copied from the source `output[]` entry. Task-level metadata is read-only context for the child and does not change dependency scheduling.
 
-For decomposition-root outputs, `liza set-task-output` requires a role-appropriate framework ref on every entry:
+For decomposition-root outputs, `liza set-task-output` requires the configured `decomposition-output-ref` framework ref on every entry:
 
-| Master role-pair | Required output ref | Child target |
-|------------------|---------------------|--------------|
+| Master role-pair | `decomposition-output-ref` | Child target |
+|------------------|----------------------------|--------------|
 | `epic-planning-main-pair` | `plan_ref` | `epic-planning-pair` |
 | `architecture-main-pair` | `arch_ref` | `architecture-pair` |
 | `code-planning-main-pair` | `plan_ref` | `code-planning-pair` |

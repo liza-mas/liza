@@ -867,6 +867,37 @@ func TestSetTaskOutput_DecompositionRootAcceptsValidOutput(t *testing.T) {
 	}
 }
 
+func TestValidateDecompositionRootOutput_UsesConfiguredOutputRef(t *testing.T) {
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("existing-plan", models.TaskStatusMerged, time.Now().UTC()),
+	}
+	output := validDecompositionRootOutput("specs/plans/master.md")
+
+	err := validateDecompositionRootOutput(state, stubDecompositionRootResolver{
+		root:      true,
+		outputRef: "plan_ref",
+	}, "custom-main-pair", output)
+	if err != nil {
+		t.Fatalf("validateDecompositionRootOutput() unexpected error: %v", err)
+	}
+}
+
+func TestValidateDependsOnAcyclicRejectsOutOfRangeReference(t *testing.T) {
+	output := []models.OutputEntry{
+		{
+			Desc:      "Plan storage",
+			DoneWhen:  "storage plan is complete",
+			Scope:     "internal/storage",
+			SpecRef:   "specs/master.md",
+			DependsOn: []string{"99"},
+		},
+	}
+
+	err := validateDependsOnAcyclic(output)
+	testhelpers.RequireErrorContains(t, err, `output[0].depends_on reference "99" out of range`)
+}
+
 func TestSetTaskOutput_NonRootAllowsOutputWithoutDecomposition(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -892,6 +923,19 @@ func TestSetTaskOutput_NonRootAllowsOutputWithoutDecomposition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetTaskOutput() unexpected error: %v", err)
 	}
+}
+
+type stubDecompositionRootResolver struct {
+	root      bool
+	outputRef string
+}
+
+func (r stubDecompositionRootResolver) IsDecompositionRoot(string) (bool, error) {
+	return r.root, nil
+}
+
+func (r stubDecompositionRootResolver) DecompositionOutputRef(string) (string, error) {
+	return r.outputRef, nil
 }
 
 func setupSetTaskOutputRootTask(t *testing.T, rolePair string, status models.TaskStatus) string {

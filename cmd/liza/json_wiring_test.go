@@ -757,7 +757,8 @@ func TestJSON_InitialPlanningMissingMasterRendersOneSpecializedFallback(t *testi
 	if err != nil {
 		t.Fatalf("read pipeline.yaml: %v", err)
 	}
-	withoutMasterMarkers := strings.ReplaceAll(string(content), "      decomposition-root: true\n", "")
+	withoutMasterMarkers := strings.ReplaceAll(string(content), "      decomposition-root: true\n      decomposition-output-ref: plan_ref\n", "")
+	withoutMasterMarkers = strings.ReplaceAll(withoutMasterMarkers, "      decomposition-root: true\n      decomposition-output-ref: arch_ref\n", "")
 	if err := os.WriteFile(pipelinePath, []byte(withoutMasterMarkers), 0644); err != nil {
 		t.Fatalf("write pipeline.yaml: %v", err)
 	}

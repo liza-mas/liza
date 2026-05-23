@@ -98,7 +98,7 @@ Master planning tasks are role-pair specializations, not new roles. The same doe
 | `architecture-main-pair` | `architecture-pair` | `architect` | `architecture-reviewer` |
 | `code-planning-main-pair` | `code-planning-pair` | `code-planner` | `code-plan-reviewer` |
 
-When a task's role-pair has `decomposition-root: true`, the doer must define the general approach before specialized work starts: boundaries, interface contracts, shared-file ownership, dependency ordering, required `plan_ref` or `arch_ref`, and one typed `output[]` entry per specialized scope. The master doer must prove coverage of the goal without writing the detailed specialized plan.
+When a task's role-pair has `decomposition-root: true`, the doer must define the general approach before specialized work starts: boundaries, interface contracts, shared-file ownership, dependency ordering, the configured `decomposition-output-ref` artifact, and one typed `output[]` entry per specialized scope. The master doer must prove coverage of the goal without writing the detailed specialized plan.
 
 The master reviewer validates decomposition coherence rather than implementation detail. Approval requires the Master Output Contract: non-overlapping scopes, exactly-one interface ownership, explicit shared-file ownership, real scheduling dependencies, inherited artifact refs, and complete coverage. `decomposition.read_only_depends_on` and `decomposition.read_only_task_depends_on` are descriptive metadata; the scheduler dependency must also be mirrored in `depends_on` or `task_depends_on`.
 

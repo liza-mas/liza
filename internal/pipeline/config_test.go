@@ -696,6 +696,39 @@ func TestLoadFrozen_ValidFile(t *testing.T) {
 	}
 }
 
+func TestLoadFrozen_BackfillsLegacyMasterDecompositionOutputRefs(t *testing.T) {
+	dir := t.TempDir()
+	lizaDir := filepath.Join(dir, ".liza")
+	if err := os.MkdirAll(lizaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("testdata/valid-phase2-full.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := strings.ReplaceAll(string(data), "      decomposition-output-ref: plan_ref\n", "")
+	content = strings.ReplaceAll(content, "      decomposition-output-ref: arch_ref\n", "")
+	if err := os.WriteFile(filepath.Join(lizaDir, "pipeline.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFrozen(dir)
+	if err != nil {
+		t.Fatalf("LoadFrozen failed: %v", err)
+	}
+
+	tests := map[string]string{
+		"epic-planning-main-pair": "plan_ref",
+		"architecture-main-pair":  "arch_ref",
+		"code-planning-main-pair": "plan_ref",
+	}
+	for rolePair, want := range tests {
+		if got := cfg.Pipeline.RolePairs[rolePair].DecompositionOutputRef; got != want {
+			t.Fatalf("%s DecompositionOutputRef = %q, want %q", rolePair, got, want)
+		}
+	}
+}
+
 // --- Resolver tests ---
 
 func loadTestConfig(t *testing.T) *PipelineConfig {
@@ -1252,6 +1285,7 @@ func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig) {
 		name       string
 		doer       string
 		reviewer   string
+		outputRef  string
 		states     RolePairStates
 		sub        string
 		steps      []string
@@ -1259,9 +1293,10 @@ func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig) {
 	}
 	masters := []masterPair{
 		{
-			name:     "epic-planning-main-pair",
-			doer:     "epic-planner",
-			reviewer: "epic-plan-reviewer",
+			name:      "epic-planning-main-pair",
+			doer:      "epic-planner",
+			reviewer:  "epic-plan-reviewer",
+			outputRef: "plan_ref",
 			states: RolePairStates{
 				Initial: "DRAFT_EPIC_PLAN_MAIN", Executing: "EPIC_PLANNING_MAIN",
 				Submitted: "EPIC_PLAN_MAIN_TO_REVIEW", Reviewing: "REVIEWING_EPIC_PLAN_MAIN",
@@ -1277,9 +1312,10 @@ func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig) {
 			},
 		},
 		{
-			name:     "architecture-main-pair",
-			doer:     "architect",
-			reviewer: "architecture-reviewer",
+			name:      "architecture-main-pair",
+			doer:      "architect",
+			reviewer:  "architecture-reviewer",
+			outputRef: "arch_ref",
 			states: RolePairStates{
 				Initial: "DRAFT_ARCHITECTURE_MAIN", Executing: "ARCHITECTING_MAIN",
 				Submitted: "ARCHITECTURE_MAIN_TO_REVIEW", Reviewing: "REVIEWING_ARCHITECTURE_MAIN",
@@ -1295,9 +1331,10 @@ func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig) {
 			},
 		},
 		{
-			name:     "code-planning-main-pair",
-			doer:     "code-planner",
-			reviewer: "code-plan-reviewer",
+			name:      "code-planning-main-pair",
+			doer:      "code-planner",
+			reviewer:  "code-plan-reviewer",
+			outputRef: "plan_ref",
 			states: RolePairStates{
 				Initial: "DRAFT_CODING_PLAN_MAIN", Executing: "CODE_PLANNING_MAIN",
 				Submitted: "CODING_PLAN_MAIN_TO_REVIEW", Reviewing: "REVIEWING_CODING_PLAN_MAIN",
@@ -1328,6 +1365,9 @@ func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig) {
 		}
 		if !rp.DecompositionRoot {
 			t.Errorf("%s DecompositionRoot = false, want true", want.name)
+		}
+		if rp.DecompositionOutputRef != want.outputRef {
+			t.Errorf("%s DecompositionOutputRef = %q, want %q", want.name, rp.DecompositionOutputRef, want.outputRef)
 		}
 		if rp.ReviewPolicy == nil {
 			t.Errorf("%s ReviewPolicy = nil", want.name)
@@ -2060,6 +2100,7 @@ pipeline:
       doer: doer
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: ROOT_INITIAL
         executing: ROOT_EXECUTING
@@ -2110,6 +2151,7 @@ pipeline:
       doer: doer
       reviewer: reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       states:
         initial: ROOT_INITIAL
         executing: ROOT_EXECUTING
@@ -2384,6 +2426,9 @@ func TestLoad_DecompositionRootValidTopology(t *testing.T) {
 	if !cfg.Pipeline.RolePairs["root-pair"].DecompositionRoot {
 		t.Fatal("root-pair DecompositionRoot = false, want true")
 	}
+	if cfg.Pipeline.RolePairs["root-pair"].DecompositionOutputRef != "plan_ref" {
+		t.Fatalf("root-pair DecompositionOutputRef = %q, want plan_ref", cfg.Pipeline.RolePairs["root-pair"].DecompositionOutputRef)
+	}
 }
 
 func TestLoad_DecompositionRootRejectsInvalidTopology(t *testing.T) {
@@ -2396,6 +2441,21 @@ func TestLoad_DecompositionRootRejectsInvalidTopology(t *testing.T) {
 			name: "zero outgoing decomposition transition",
 			yaml: decompositionRootYAML("", "", "", ""),
 			want: "exactly one outgoing decomposition transition",
+		},
+		{
+			name: "missing output ref",
+			yaml: strings.ReplaceAll(decompositionRootYAML("root-pair.approved", "auto", "per-subtask", ""), "      decomposition-output-ref: plan_ref\n", ""),
+			want: "decomposition-output-ref must be one of",
+		},
+		{
+			name: "invalid output ref",
+			yaml: strings.ReplaceAll(decompositionRootYAML("root-pair.approved", "auto", "per-subtask", ""), "decomposition-output-ref: plan_ref", "decomposition-output-ref: bad_ref"),
+			want: "decomposition-output-ref must be one of",
+		},
+		{
+			name: "output ref without root marker",
+			yaml: strings.ReplaceAll(decompositionRootYAML("root-pair.approved", "auto", "per-subtask", ""), "      decomposition-root: true\n", ""),
+			want: "decomposition-output-ref requires decomposition-root",
 		},
 		{
 			name: "multiple outgoing decomposition transitions",

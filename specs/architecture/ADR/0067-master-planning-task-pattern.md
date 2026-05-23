@@ -41,7 +41,7 @@ Trade-offs:
 - Fan-out work pays an additional planning review cycle before specialized planners start.
 - Poor master decomposition becomes a high-impact single point of failure, mitigated by quorum 2 and master-specific reviewer criteria.
 - Output-entry schema is heavier for decomposition-root tasks.
-- Existing frozen `.liza/pipeline.yaml` workspaces are not migrated; users must run a new `liza init` to receive the new topology.
+- Existing frozen `.liza/pipeline.yaml` workspaces are not rewritten when embedded topology changes. Known legacy master role-pairs missing `decomposition-output-ref` are backfilled in memory at load time; adopting new role-pairs or transitions requires manually updating `.liza/pipeline.yaml` or starting a fresh workspace.
 
 ## Alternatives Considered
 

@@ -405,6 +405,7 @@ pipeline:
       doer: epic-planner
       reviewer: epic-plan-reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       review-policy:
         quorum: 2
         provider-diversity: preferred
@@ -444,6 +445,7 @@ pipeline:
       doer: code-planner
       reviewer: code-plan-reviewer
       decomposition-root: true
+      decomposition-output-ref: plan_ref
       review-policy:
         quorum: 2
         provider-diversity: preferred
@@ -487,6 +489,7 @@ pipeline:
       doer: architect
       reviewer: architecture-reviewer
       decomposition-root: true
+      decomposition-output-ref: arch_ref
       review-policy:
         quorum: 2
         provider-diversity: preferred

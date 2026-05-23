@@ -332,9 +332,9 @@ func taskContextSections(base []string, task *models.Task, data *prompts.RoleCon
 		return sections, nil
 	}
 
-	refField, ok := masterOutputRefField(task.RolePair)
-	if !ok {
-		return nil, fmt.Errorf("decomposition-root role-pair %q required output artifact ref field cannot be determined", task.RolePair)
+	refField, err := resolver.DecompositionOutputRef(task.RolePair)
+	if err != nil {
+		return nil, err
 	}
 
 	data.DecompositionRoot = true
@@ -345,17 +345,6 @@ func taskContextSections(base []string, task *models.Task, data *prompts.RoleCon
 		sections = append(sections, "master-decomposition-review")
 	}
 	return sections, nil
-}
-
-func masterOutputRefField(rolePair string) (string, bool) {
-	switch rolePair {
-	case "epic-planning-main-pair", "code-planning-main-pair":
-		return "plan_ref", true
-	case "architecture-main-pair":
-		return "arch_ref", true
-	default:
-		return "", false
-	}
 }
 
 // collectCompletedTasks returns summaries of all MERGED tasks for integration context.
