@@ -679,3 +679,279 @@ func TestSetTaskOutput_CodePlanningStatus(t *testing.T) {
 		t.Fatalf("SetTaskOutput() for CODE_PLANNING task: unexpected error: %v", err)
 	}
 }
+
+func TestSetTaskOutput_DecompositionRootRequiresRoleArtifactRef(t *testing.T) {
+	tests := []struct {
+		name        string
+		rolePair    string
+		status      models.TaskStatus
+		output      []models.OutputEntry
+		errContains string
+	}{
+		{
+			name:        "epic planning root requires plan_ref",
+			rolePair:    "epic-planning-main-pair",
+			status:      models.TaskStatus("EPIC_PLANNING_MAIN"),
+			output:      validDecompositionRootOutput(""),
+			errContains: "output[0].plan_ref is required",
+		},
+		{
+			name:        "architecture root requires arch_ref",
+			rolePair:    "architecture-main-pair",
+			status:      models.TaskStatus("ARCHITECTING_MAIN"),
+			output:      validArchitectureRootOutput(""),
+			errContains: "output[0].arch_ref is required",
+		},
+		{
+			name:        "code planning root requires plan_ref",
+			rolePair:    "code-planning-main-pair",
+			status:      models.TaskStatus("CODE_PLANNING_MAIN"),
+			output:      validDecompositionRootOutput(""),
+			errContains: "output[0].plan_ref is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := setupSetTaskOutputRootTask(t, tt.rolePair, tt.status)
+			err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+				TaskID:  "root-task",
+				AgentID: "master-agent",
+				Output:  tt.output,
+			})
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
+func TestSetTaskOutput_DecompositionRootValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func([]models.OutputEntry) []models.OutputEntry
+		errContains string
+	}{
+		{
+			name: "missing decomposition",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition = nil
+				return output
+			},
+			errContains: "output[0].decomposition is required",
+		},
+		{
+			name: "duplicate owned files across siblings",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[1].Decomposition.OwnedFiles = []string{" internal/a.go "}
+				return output
+			},
+			errContains: "owned_files duplicates",
+		},
+		{
+			name: "duplicate owned interfaces across siblings",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[1].Decomposition.InterfacesOwned = []string{"PlanContract"}
+				return output
+			},
+			errContains: "interfaces_owned duplicates",
+		},
+		{
+			name: "empty ownership declaration",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition.OwnedFiles = nil
+				output[0].Decomposition.OwnedModules = nil
+				output[0].Decomposition.InterfacesOwned = nil
+				return output
+			},
+			errContains: "must declare ownership",
+		},
+		{
+			name: "catch-all ownership declaration",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition.OwnedModules = []string{"everything else"}
+				return output
+			},
+			errContains: "catch-all ownership",
+		},
+		{
+			name: "read-only sibling dependency out of range",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition.ReadOnlyDependsOn = []int{2}
+				return output
+			},
+			errContains: "read_only_depends_on reference 2 out of range",
+		},
+		{
+			name: "read-only sibling dependency self reference",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[1].Decomposition.ReadOnlyDependsOn = []int{1}
+				return output
+			},
+			errContains: "read_only_depends_on references itself",
+		},
+		{
+			name: "read-only sibling dependency not mirrored",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[1].DependsOn = nil
+				return output
+			},
+			errContains: `read_only_depends_on reference 0 must also appear in depends_on`,
+		},
+		{
+			name: "invalid read-only task dependency ID",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition.ReadOnlyTaskDependsOn = []string{"../bad"}
+				return output
+			},
+			errContains: "read_only_task_depends_on contains invalid task ID",
+		},
+		{
+			name: "empty read-only task dependency ID",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition.ReadOnlyTaskDependsOn = []string{" "}
+				return output
+			},
+			errContains: "read_only_task_depends_on contains invalid task ID",
+		},
+		{
+			name: "missing read-only task dependency target",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition.ReadOnlyTaskDependsOn = []string{"missing-task"}
+				output[0].TaskDependsOn = []string{"missing-task"}
+				return output
+			},
+			errContains: `read_only_task_depends_on references non-existent task "missing-task"`,
+		},
+		{
+			name: "read-only task dependency not mirrored",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].Decomposition.ReadOnlyTaskDependsOn = []string{"existing-plan"}
+				output[0].TaskDependsOn = nil
+				return output
+			},
+			errContains: `read_only_task_depends_on reference "existing-plan" must also appear in task_depends_on`,
+		},
+		{
+			name: "sibling dependency cycle",
+			mutate: func(output []models.OutputEntry) []models.OutputEntry {
+				output[0].DependsOn = []string{"1"}
+				return output
+			},
+			errContains: "depends_on cycle",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := setupSetTaskOutputRootTask(t, "code-planning-main-pair", models.TaskStatus("CODE_PLANNING_MAIN"))
+			output := tt.mutate(validDecompositionRootOutput("specs/plans/master.md"))
+			err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+				TaskID:  "root-task",
+				AgentID: "master-agent",
+				Output:  output,
+			})
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
+func TestSetTaskOutput_DecompositionRootAcceptsValidOutput(t *testing.T) {
+	tmpDir := setupSetTaskOutputRootTask(t, "code-planning-main-pair", models.TaskStatus("CODE_PLANNING_MAIN"))
+
+	err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+		TaskID:  "root-task",
+		AgentID: "master-agent",
+		Output:  validDecompositionRootOutput("specs/plans/master.md"),
+	})
+	if err != nil {
+		t.Fatalf("SetTaskOutput() unexpected error: %v", err)
+	}
+}
+
+func TestSetTaskOutput_NonRootAllowsOutputWithoutDecomposition(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusCodePlanning, now)
+	task.AssignedTo = testhelpers.StringPtr("code-planner-1")
+	state.Tasks = []models.Task{
+		task,
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	err := SetTaskOutput(tmpDir, &SetTaskOutputInput{
+		TaskID:  "task-1",
+		AgentID: "code-planner-1",
+		Output: []models.OutputEntry{{
+			Desc:     "Plan a scoped change",
+			DoneWhen: "plan is reviewed",
+			Scope:    "internal/ops",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SetTaskOutput() unexpected error: %v", err)
+	}
+}
+
+func setupSetTaskOutputRootTask(t *testing.T, rolePair string, status models.TaskStatus) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+
+	root := testhelpers.BuildTaskByStatus("root-task", status, now)
+	root.RolePair = rolePair
+	root.AssignedTo = testhelpers.StringPtr("master-agent")
+	existingPlan := testhelpers.BuildTaskByStatus("existing-plan", models.TaskStatusMerged, now)
+	existingPlan.RolePair = "code-planning-pair"
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{root, existingPlan}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	return tmpDir
+}
+
+func validDecompositionRootOutput(planRef string) []models.OutputEntry {
+	return []models.OutputEntry{
+		{
+			Desc:     "Plan storage boundaries",
+			DoneWhen: "storage plan is complete",
+			Scope:    "internal/storage",
+			SpecRef:  "specs/master.md",
+			PlanRef:  planRef,
+			TaskDependsOn: []string{
+				"existing-plan",
+			},
+			Decomposition: &models.DecompositionManifest{
+				OwnedFiles:            []string{"internal/a.go"},
+				ReadOnlyTaskDependsOn: []string{"existing-plan"},
+				InterfacesOwned:       []string{"PlanContract"},
+				CoverageNotes:         "Storage scope is bounded.",
+			},
+		},
+		{
+			Desc:      "Plan ops boundaries",
+			DoneWhen:  "ops plan is complete",
+			Scope:     "internal/ops",
+			SpecRef:   "specs/master.md",
+			PlanRef:   planRef,
+			DependsOn: []string{"0"},
+			Decomposition: &models.DecompositionManifest{
+				OwnedFiles:        []string{"internal/b.go"},
+				ReadOnlyDependsOn: []int{0},
+				CoverageNotes:     "Ops scope is bounded.",
+			},
+		},
+	}
+}
+
+func validArchitectureRootOutput(archRef string) []models.OutputEntry {
+	output := validDecompositionRootOutput("specs/plans/master.md")
+	for i := range output {
+		output[i].PlanRef = ""
+		output[i].ArchRef = archRef
+	}
+	return output
+}

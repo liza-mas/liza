@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -104,6 +105,10 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}
 		}
 
+		if err := validateDecompositionRootOutput(state, resolver, task.RolePair, input.Output); err != nil {
+			return err
+		}
+
 		for i, entry := range input.Output {
 			for _, depID := range entry.TaskDependsOn {
 				depTask := state.FindTask(depID)
@@ -131,6 +136,203 @@ func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 		task.Output = input.Output
 		return nil
 	})
+}
+
+func validateDecompositionRootOutput(state *models.State, resolver decompositionRootResolver, rolePair string, output []models.OutputEntry) error {
+	isRoot, err := resolver.IsDecompositionRoot(rolePair)
+	if err != nil {
+		return err
+	}
+	if !isRoot {
+		return nil
+	}
+
+	requiredRef, err := requiredDecompositionRootOutputRef(rolePair)
+	if err != nil {
+		return err
+	}
+
+	ownedFiles := map[string]int{}
+	interfacesOwned := map[string]int{}
+	for i, entry := range output {
+		if strings.TrimSpace(requiredRef.value(entry)) == "" {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].%s is required for decomposition-root role-pair %q", i, requiredRef.field, rolePair)}
+		}
+		if entry.Decomposition == nil {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition is required for decomposition-root role-pair %q", i, rolePair)}
+		}
+		if err := validateOwnershipDeclaration(i, entry.Decomposition); err != nil {
+			return err
+		}
+		if err := rejectDuplicateOwnership("owned_files", i, entry.Decomposition.OwnedFiles, ownedFiles); err != nil {
+			return err
+		}
+		if err := rejectDuplicateOwnership("interfaces_owned", i, entry.Decomposition.InterfacesOwned, interfacesOwned); err != nil {
+			return err
+		}
+		if err := validateReadOnlyDependsOn(i, len(output), entry.DependsOn, entry.Decomposition.ReadOnlyDependsOn); err != nil {
+			return err
+		}
+		if err := validateReadOnlyTaskDependsOn(state, i, entry.TaskDependsOn, entry.Decomposition.ReadOnlyTaskDependsOn); err != nil {
+			return err
+		}
+	}
+
+	return validateDependsOnAcyclic(output)
+}
+
+type decompositionRootResolver interface {
+	IsDecompositionRoot(rolePair string) (bool, error)
+}
+
+type decompositionRootOutputRef struct {
+	field string
+	value func(models.OutputEntry) string
+}
+
+func requiredDecompositionRootOutputRef(rolePair string) (decompositionRootOutputRef, error) {
+	switch rolePair {
+	case "epic-planning-main-pair", "code-planning-main-pair":
+		return decompositionRootOutputRef{
+			field: "plan_ref",
+			value: func(entry models.OutputEntry) string { return entry.PlanRef },
+		}, nil
+	case "architecture-main-pair":
+		return decompositionRootOutputRef{
+			field: "arch_ref",
+			value: func(entry models.OutputEntry) string { return entry.ArchRef },
+		}, nil
+	default:
+		return decompositionRootOutputRef{}, &PreconditionError{Reason: fmt.Sprintf("decomposition-root role-pair %q has no required output artifact ref mapping", rolePair)}
+	}
+}
+
+func validateOwnershipDeclaration(entryIndex int, manifest *models.DecompositionManifest) error {
+	ownershipFields := [][]string{
+		manifest.OwnedFiles,
+		manifest.OwnedModules,
+		manifest.InterfacesOwned,
+	}
+	hasOwnership := false
+	for _, values := range ownershipFields {
+		for _, value := range values {
+			trimmed := strings.TrimSpace(value)
+			if trimmed == "" {
+				continue
+			}
+			if isCatchAllOwnership(trimmed) {
+				return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition contains catch-all ownership declaration %q", entryIndex, value)}
+			}
+			hasOwnership = true
+		}
+	}
+	if !hasOwnership {
+		return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition must declare ownership in owned_files, owned_modules, or interfaces_owned", entryIndex)}
+	}
+	return nil
+}
+
+func isCatchAllOwnership(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "*", "everything", "everything else", "all", "all files", "all remaining", "remaining":
+		return true
+	default:
+		return false
+	}
+}
+
+func rejectDuplicateOwnership(field string, entryIndex int, values []string, seen map[string]int) error {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if previousIndex, ok := seen[trimmed]; ok && previousIndex != entryIndex {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.%s duplicates output[%d] ownership %q", entryIndex, field, previousIndex, trimmed)}
+		}
+		if _, ok := seen[trimmed]; !ok {
+			seen[trimmed] = entryIndex
+		}
+	}
+	return nil
+}
+
+func validateReadOnlyDependsOn(entryIndex, outputCount int, dependsOn []string, readOnlyDependsOn []int) error {
+	schedulerDeps := map[string]struct{}{}
+	for _, dep := range dependsOn {
+		schedulerDeps[dep] = struct{}{}
+	}
+	for _, dep := range readOnlyDependsOn {
+		if dep < 0 || dep >= outputCount {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_depends_on reference %d out of range [0, %d)", entryIndex, dep, outputCount)}
+		}
+		if dep == entryIndex {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_depends_on references itself", entryIndex)}
+		}
+		depRef := strconv.Itoa(dep)
+		if _, ok := schedulerDeps[depRef]; !ok {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_depends_on reference %d must also appear in depends_on", entryIndex, dep)}
+		}
+	}
+	return nil
+}
+
+func validateReadOnlyTaskDependsOn(state *models.State, entryIndex int, taskDependsOn []string, readOnlyTaskDependsOn []string) error {
+	taskDeps := map[string]struct{}{}
+	for _, dep := range taskDependsOn {
+		taskDeps[dep] = struct{}{}
+	}
+	for _, depID := range readOnlyTaskDependsOn {
+		trimmed := strings.TrimSpace(depID)
+		if trimmed == "" {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_task_depends_on contains invalid task ID %q", entryIndex, depID)}
+		}
+		if err := paths.ValidateTaskID(trimmed); err != nil {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_task_depends_on contains invalid task ID %q: %v", entryIndex, depID, err)}
+		}
+		if state.FindTask(trimmed) == nil {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_task_depends_on references non-existent task %q", entryIndex, trimmed)}
+		}
+		if _, ok := taskDeps[trimmed]; !ok {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_task_depends_on reference %q must also appear in task_depends_on", entryIndex, trimmed)}
+		}
+	}
+	return nil
+}
+
+func validateDependsOnAcyclic(output []models.OutputEntry) error {
+	visiting := make([]bool, len(output))
+	visited := make([]bool, len(output))
+
+	var visit func(int) error
+	visit = func(index int) error {
+		if visiting[index] {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].depends_on cycle detected", index)}
+		}
+		if visited[index] {
+			return nil
+		}
+		visiting[index] = true
+		for _, depRef := range output[index].DependsOn {
+			depIndex, err := strconv.Atoi(depRef)
+			if err != nil {
+				return err
+			}
+			if err := visit(depIndex); err != nil {
+				return err
+			}
+		}
+		visiting[index] = false
+		visited[index] = true
+		return nil
+	}
+
+	for i := range output {
+		if err := visit(i); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateTaskDependsOn(deps []string, entryIndex int) error {
