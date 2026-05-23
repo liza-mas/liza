@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -641,6 +643,170 @@ func TestJSON_Validate_Valid(t *testing.T) {
 	}
 	if result["valid"] != true {
 		t.Errorf("expected valid=true, got %v", result["valid"])
+	}
+}
+
+func TestJSON_Validate_MasterPlanningEmbeddedPipeline(t *testing.T) {
+	projectRoot, _ := setupMutationTestProject(t, nil)
+	specDir := filepath.Join(projectRoot, "specs")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatalf("failed to create specs dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "vision.md"), []byte("# Vision\n"), 0644); err != nil {
+		t.Fatalf("failed to create vision spec: %v", err)
+	}
+
+	assertMasterPlanningTopology(t, projectRoot)
+
+	stdout, err := executeRootCommandCapture(t, projectRoot, "validate", "--json")
+	if err != nil {
+		t.Fatalf("validate --json failed: %v", err)
+	}
+
+	env := parseEnvelope(t, stdout)
+	if env["ok"] != true {
+		t.Fatalf("expected ok=true, got %v", env["ok"])
+	}
+	result, ok := env["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result to be object, got %T", env["result"])
+	}
+	if result["valid"] != true {
+		t.Fatalf("expected valid=true, got %v", result["valid"])
+	}
+}
+
+func TestJSON_InitialPlanningRoutesRenderOneTaskContractsFromInitializedCLIState(t *testing.T) {
+	tests := []struct {
+		name           string
+		entryPoint     string
+		simpleRolePair string
+		simpleTaskType string
+		fanOutRolePair string
+		fanOutTaskType string
+	}{
+		{
+			name:           "general objective",
+			entryPoint:     "general-objective",
+			simpleRolePair: "epic-planning-pair",
+			simpleTaskType: "epic-planning",
+			fanOutRolePair: "epic-planning-main-pair",
+			fanOutTaskType: "epic-planning",
+		},
+		{
+			name:           "functional spec",
+			entryPoint:     "functional-spec",
+			simpleRolePair: "architecture-pair",
+			simpleTaskType: "architecture",
+			fanOutRolePair: "architecture-main-pair",
+			fanOutTaskType: "architecture",
+		},
+		{
+			name:           "detailed spec",
+			entryPoint:     "detailed-spec",
+			simpleRolePair: "architecture-pair",
+			simpleTaskType: "architecture",
+			fanOutRolePair: "architecture-main-pair",
+			fanOutTaskType: "architecture",
+		},
+		{
+			name:           "technical spec",
+			entryPoint:     "technical-spec",
+			simpleRolePair: "code-planning-pair",
+			simpleTaskType: "planning",
+			fanOutRolePair: "code-planning-main-pair",
+			fanOutTaskType: "planning",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot, statePath := setupInitializedProjectWithEntryPoint(t, tt.entryPoint)
+			state := readState(t, statePath)
+
+			dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+			if err != nil {
+				t.Fatalf("RenderOrchestratorDashboard: %v", err)
+			}
+			rendered := dashboard + "\n" + wakeInstruction
+
+			assertNotContainsAny(t, rendered, []string{
+				"MULTI-TASK PLANNING",
+				"Create up to",
+				"Create multiple parallel planning tasks",
+				"multiple specialized planning tasks",
+				"Domain A",
+				"Domain B",
+				"domain-a",
+				"domain-b",
+			})
+
+			simpleTasks := extractInitialPlanningExampleTasks(t, rendered, "SIMPLE GOAL TASK EXAMPLE:")
+			assertOneInitialPlanningTask(t, simpleTasks, tt.simpleRolePair, tt.simpleTaskType)
+
+			fanOutTasks := extractInitialPlanningExampleTasks(t, rendered, "FAN-OUT GOAL TASK EXAMPLE:")
+			assertOneInitialPlanningTask(t, fanOutTasks, tt.fanOutRolePair, tt.fanOutTaskType)
+		})
+	}
+}
+
+func TestJSON_InitialPlanningMissingMasterRendersOneSpecializedFallback(t *testing.T) {
+	projectRoot, statePath := setupInitializedProjectWithEntryPoint(t, "functional-spec")
+	pipelinePath := filepath.Join(projectRoot, ".liza", "pipeline.yaml")
+	content, err := os.ReadFile(pipelinePath)
+	if err != nil {
+		t.Fatalf("read pipeline.yaml: %v", err)
+	}
+	withoutMasterMarkers := strings.ReplaceAll(string(content), "      decomposition-root: true\n", "")
+	if err := os.WriteFile(pipelinePath, []byte(withoutMasterMarkers), 0644); err != nil {
+		t.Fatalf("write pipeline.yaml: %v", err)
+	}
+
+	state := readState(t, statePath)
+	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+	if err != nil {
+		t.Fatalf("RenderOrchestratorDashboard: %v", err)
+	}
+	rendered := dashboard + "\n" + wakeInstruction
+
+	if strings.Contains(rendered, "FAN-OUT GOAL TASK EXAMPLE") {
+		t.Fatalf("missing-master rendering included fan-out example:\n%s", rendered)
+	}
+	assertNotContainsAny(t, rendered, []string{
+		"architecture-main-pair",
+		"epic-planning-main-pair",
+		"code-planning-main-pair",
+		"\"id\": \"architecture-2\"",
+		"MULTI-TASK PLANNING",
+		"Create up to",
+		"multiple specialized planning tasks",
+	})
+
+	simpleTasks := extractInitialPlanningExampleTasks(t, rendered, "SIMPLE GOAL TASK EXAMPLE:")
+	assertOneInitialPlanningTask(t, simpleTasks, "architecture-pair", "architecture")
+}
+
+func TestJSON_InitialPlanningValidationMatrixDocumentsMasterPlanningCoverage(t *testing.T) {
+	planPath := filepath.Join("..", "..", "specs", "plans", "20260523-master-planning-task", "20260523-171755-architecture-5-code-planning-0.md")
+	content, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatalf("read validation matrix plan: %v", err)
+	}
+	plan := string(content)
+
+	for _, want := range []string{
+		"| 1. Pipeline validation passes |",
+		"| 2. Entry-point routing |",
+		"| 8. Orchestrator simplification |",
+		"`liza validate --json`",
+		"`go test ./cmd/liza -run 'TestJSON_Validate.*MasterPlanning|TestInitDispatch_.*InitialPlanning|TestJSON_.*InitialPlanning'`",
+		"`go test ./cmd/liza -run 'TestJSON_Validate.*MasterPlanning'`",
+		"`go test ./cmd/liza -run 'TestInitDispatch_.*InitialPlanning|TestJSON_.*InitialPlanning'`",
+		"`go test ./internal/prompts/...`",
+	} {
+		if !strings.Contains(plan, want) {
+			t.Fatalf("validation matrix missing %q", want)
+		}
 	}
 }
 
@@ -1439,6 +1605,185 @@ func TestJSON_LogSuppression(t *testing.T) {
 
 	if stderrBuf.Len() != 0 {
 		t.Errorf("expected empty stderr when --json is set, got: %s", stderrBuf.String())
+	}
+}
+
+func assertMasterPlanningTopology(t *testing.T, projectRoot string) {
+	t.Helper()
+
+	cfg, err := pipeline.LoadFrozen(projectRoot)
+	if err != nil {
+		t.Fatalf("LoadFrozen: %v", err)
+	}
+
+	tests := []struct {
+		root       string
+		target     string
+		from       string
+		to         string
+		taskSlug   string
+		transition string
+	}{
+		{
+			root:       "epic-planning-main-pair",
+			target:     "epic-planning-pair",
+			from:       "epic-planning-main-pair.approved",
+			to:         "epic-planning-pair.initial",
+			taskSlug:   "epic-planning",
+			transition: "epic-decompose",
+		},
+		{
+			root:       "architecture-main-pair",
+			target:     "architecture-pair",
+			from:       "architecture-main-pair.approved",
+			to:         "architecture-pair.initial",
+			taskSlug:   "architecture",
+			transition: "arch-decompose",
+		},
+		{
+			root:       "code-planning-main-pair",
+			target:     "code-planning-pair",
+			from:       "code-planning-main-pair.approved",
+			to:         "code-planning-pair.initial",
+			taskSlug:   "code-planning",
+			transition: "code-plan-decompose",
+		},
+	}
+
+	for _, tt := range tests {
+		rolePair, ok := cfg.Pipeline.RolePairs[tt.root]
+		if !ok {
+			t.Fatalf("missing master role-pair %q", tt.root)
+		}
+		if !rolePair.DecompositionRoot {
+			t.Fatalf("%s decomposition-root = false, want true", tt.root)
+		}
+		assertHasMasterPlanningTransition(t, cfg, tt.transition, tt.from, tt.to, tt.taskSlug)
+		resolver := pipeline.NewResolver(cfg)
+		gotRoot, found, err := resolver.DecompositionRootForTarget(tt.target)
+		if err != nil {
+			t.Fatalf("DecompositionRootForTarget(%q): %v", tt.target, err)
+		}
+		if !found || gotRoot != tt.root {
+			t.Fatalf("DecompositionRootForTarget(%q) = (%q, %v), want (%q, true)", tt.target, gotRoot, found, tt.root)
+		}
+	}
+
+	foundUSToCoding := false
+	for _, transition := range cfg.Pipeline.PipelineTransitions {
+		if transition.Name == "us-to-coding" {
+			foundUSToCoding = true
+			if transition.To != "architecture-subpipeline.architecture-main-pair.initial" {
+				t.Fatalf("us-to-coding target = %q, want architecture-subpipeline.architecture-main-pair.initial", transition.To)
+			}
+		}
+	}
+	if !foundUSToCoding {
+		t.Fatal("missing us-to-coding pipeline transition")
+	}
+}
+
+func assertHasMasterPlanningTransition(t *testing.T, cfg *pipeline.PipelineConfig, name, from, to, taskSlug string) {
+	t.Helper()
+
+	for _, subPipeline := range cfg.Pipeline.SubPipelines {
+		for _, transition := range subPipeline.Transitions {
+			if transition.Name != name {
+				continue
+			}
+			if transition.From != from || transition.To != to || transition.Trigger != "auto" || transition.Cardinality != "per-subtask" || transition.TaskSlug != taskSlug {
+				t.Fatalf("%s transition = %+v, want from=%s to=%s trigger=auto cardinality=per-subtask task-slug=%s", name, transition, from, to, taskSlug)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing master planning transition %q", name)
+}
+
+func setupInitializedProjectWithEntryPoint(t *testing.T, entryPoint string) (string, string) {
+	t.Helper()
+
+	projectRoot := t.TempDir()
+	resolvedRoot, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		t.Fatalf("failed to resolve temp project root: %v", err)
+	}
+	projectRoot = resolvedRoot
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	testhelpers.SetupGlobalLiza(t)
+	testhelpers.CreateCommittedSpecFile(t, projectRoot, "vision.md", "# Vision\n")
+	embeddedPipelinePath, err := filepath.Abs(filepath.Join("..", "..", "internal", "embedded", "pipeline.yaml"))
+	if err != nil {
+		t.Fatalf("resolve embedded pipeline path: %v", err)
+	}
+
+	if err := executeRootCommand(t, projectRoot, "init", "--config", embeddedPipelinePath, "--spec", "specs/vision.md", "--entry-point", entryPoint, "Master planning route goal"); err != nil {
+		t.Fatalf("init with entry-point %q failed: %v", entryPoint, err)
+	}
+
+	return projectRoot, filepath.Join(projectRoot, ".liza", "state.yaml")
+}
+
+func extractInitialPlanningExampleTasks(t *testing.T, rendered, label string) []map[string]any {
+	t.Helper()
+
+	labelStart := strings.Index(rendered, label)
+	if labelStart < 0 {
+		t.Fatalf("missing example label %q\n%s", label, rendered)
+	}
+	afterLabel := rendered[labelStart+len(label):]
+	arrayOffset := strings.Index(afterLabel, "[")
+	if arrayOffset < 0 {
+		t.Fatalf("missing JSON array after %q\n%s", label, rendered)
+	}
+
+	arrayStart := labelStart + len(label) + arrayOffset
+	depth := 0
+	arrayEnd := -1
+	for i := arrayStart; i < len(rendered); i++ {
+		switch rendered[i] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				arrayEnd = i + 1
+				i = len(rendered)
+			}
+		}
+	}
+	if arrayEnd < 0 {
+		t.Fatalf("unterminated JSON array after %q\n%s", label, rendered)
+	}
+
+	var tasks []map[string]any
+	if err := json.Unmarshal([]byte(rendered[arrayStart:arrayEnd]), &tasks); err != nil {
+		t.Fatalf("example %q is not a JSON task array: %v\n%s", label, err, rendered[arrayStart:arrayEnd])
+	}
+	return tasks
+}
+
+func assertOneInitialPlanningTask(t *testing.T, tasks []map[string]any, wantRolePair, wantType string) {
+	t.Helper()
+
+	if len(tasks) != 1 {
+		t.Fatalf("example task count = %d, want 1: %#v", len(tasks), tasks)
+	}
+	task := tasks[0]
+	if task["role_pair"] != wantRolePair {
+		t.Fatalf("role_pair = %v, want %s", task["role_pair"], wantRolePair)
+	}
+	if task["type"] != wantType {
+		t.Fatalf("type = %v, want %s", task["type"], wantType)
+	}
+}
+
+func assertNotContainsAny(t *testing.T, s string, notWants []string) {
+	t.Helper()
+	for _, notWant := range notWants {
+		if strings.Contains(s, notWant) {
+			t.Fatalf("unexpected content %q\n%s", notWant, s)
+		}
 	}
 }
 
