@@ -5685,14 +5685,16 @@ func TestExecuteAvailableTransitions_SkipsReplannedTasks(t *testing.T) {
 		t.Fatalf("Failed to read state: %v", err)
 	}
 
-	var archTasks []string
+	var archTasks []models.Task
 	for _, task := range readState.Tasks {
 		if task.RolePair == "architecture-main-pair" {
-			archTasks = append(archTasks, task.ID)
+			archTasks = append(archTasks, task)
 		}
 	}
 	if len(archTasks) != 1 {
 		t.Errorf("Expected 1 architecture task, got %d: %v", len(archTasks), archTasks)
+	} else if archTasks[0].Status != models.TaskStatus("DRAFT_ARCHITECTURE_MAIN") {
+		t.Errorf("Architecture task status = %v, want DRAFT_ARCHITECTURE_MAIN", archTasks[0].Status)
 	}
 }
 
