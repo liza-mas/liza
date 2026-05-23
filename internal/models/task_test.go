@@ -719,6 +719,100 @@ func TestOutputEntry_KindJSONRoundTrip(t *testing.T) {
 	})
 }
 
+func TestOutputEntry_DecompositionYAMLRoundTrip(t *testing.T) {
+	t.Run("populated decomposition round-trips", func(t *testing.T) {
+		original := OutputEntry{
+			Desc:          "Implement auth middleware",
+			DoneWhen:      "middleware tests pass",
+			Scope:         "internal/auth",
+			SpecRef:       "specs/auth.md",
+			Decomposition: testDecompositionManifest(),
+		}
+		data, err := yaml.Marshal(&original)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		assertYAMLDecompositionKeys(t, string(data))
+		var decoded OutputEntry
+		if err := yaml.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if !reflect.DeepEqual(original, decoded) {
+			t.Errorf("round-trip mismatch:\noriginal = %#v\ndecoded  = %#v", original, decoded)
+		}
+	})
+
+	t.Run("omitted decomposition remains absent", func(t *testing.T) {
+		entry := OutputEntry{
+			Desc:     "Implement auth middleware",
+			DoneWhen: "middleware tests pass",
+			Scope:    "internal/auth",
+			SpecRef:  "specs/auth.md",
+		}
+		data, err := yaml.Marshal(&entry)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), "decomposition:") {
+			t.Errorf("nil Decomposition should be omitted from YAML, got:\n%s", string(data))
+		}
+		var decoded OutputEntry
+		if err := yaml.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if decoded.Decomposition != nil {
+			t.Errorf("decoded Decomposition = %#v, want nil", decoded.Decomposition)
+		}
+	})
+}
+
+func TestOutputEntry_DecompositionJSONRoundTrip(t *testing.T) {
+	t.Run("populated decomposition round-trips", func(t *testing.T) {
+		original := OutputEntry{
+			Desc:          "Implement auth middleware",
+			DoneWhen:      "middleware tests pass",
+			Scope:         "internal/auth",
+			SpecRef:       "specs/auth.md",
+			Decomposition: testDecompositionManifest(),
+		}
+		data, err := json.Marshal(&original)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		assertJSONDecompositionKeys(t, string(data))
+		var decoded OutputEntry
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if !reflect.DeepEqual(original, decoded) {
+			t.Errorf("round-trip mismatch:\noriginal = %#v\ndecoded  = %#v", original, decoded)
+		}
+	})
+
+	t.Run("omitted decomposition remains absent", func(t *testing.T) {
+		entry := OutputEntry{
+			Desc:     "Implement auth middleware",
+			DoneWhen: "middleware tests pass",
+			Scope:    "internal/auth",
+			SpecRef:  "specs/auth.md",
+		}
+		data, err := json.Marshal(&entry)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), `"decomposition"`) {
+			t.Errorf("nil Decomposition should be omitted from JSON, got: %s", string(data))
+		}
+		var decoded OutputEntry
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if decoded.Decomposition != nil {
+			t.Errorf("decoded Decomposition = %#v, want nil", decoded.Decomposition)
+		}
+	})
+}
+
 func TestValidateKind(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -793,6 +887,172 @@ func TestTask_KindYAMLRoundTrip(t *testing.T) {
 			t.Errorf("empty Kind should be omitted from YAML, got:\n%s", string(data))
 		}
 	})
+}
+
+func TestTask_DecompositionYAMLRoundTrip(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+
+	t.Run("populated decomposition round-trips", func(t *testing.T) {
+		original := Task{
+			ID:            "task-1",
+			Description:   "do the thing",
+			Status:        "DRAFT_CODE",
+			Priority:      1,
+			SpecRef:       "specs/x.md",
+			Decomposition: testDecompositionManifest(),
+			DoneWhen:      "tests pass",
+			Scope:         "internal/",
+			Created:       now,
+			History:       []TaskHistoryEntry{},
+		}
+		data, err := yaml.Marshal(&original)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		assertYAMLDecompositionKeys(t, string(data))
+		var decoded Task
+		if err := yaml.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if !reflect.DeepEqual(original.Decomposition, decoded.Decomposition) {
+			t.Errorf("decoded Decomposition = %#v, want %#v", decoded.Decomposition, original.Decomposition)
+		}
+	})
+
+	t.Run("omitted decomposition remains absent", func(t *testing.T) {
+		task := Task{
+			ID:          "task-1",
+			Description: "do the thing",
+			Status:      "DRAFT_CODE",
+			Priority:    1,
+			SpecRef:     "specs/x.md",
+			DoneWhen:    "tests pass",
+			Scope:       "internal/",
+			Created:     now,
+			History:     []TaskHistoryEntry{},
+		}
+		data, err := yaml.Marshal(&task)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), "decomposition:") {
+			t.Errorf("nil Decomposition should be omitted from YAML, got:\n%s", string(data))
+		}
+		var decoded Task
+		if err := yaml.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if decoded.Decomposition != nil {
+			t.Errorf("decoded Decomposition = %#v, want nil", decoded.Decomposition)
+		}
+	})
+}
+
+func TestTask_DecompositionJSONRoundTrip(t *testing.T) {
+	now := time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)
+
+	t.Run("populated decomposition round-trips", func(t *testing.T) {
+		original := Task{
+			ID:            "task-1",
+			Description:   "do the thing",
+			Status:        "DRAFT_CODE",
+			Priority:      1,
+			SpecRef:       "specs/x.md",
+			Decomposition: testDecompositionManifest(),
+			DoneWhen:      "tests pass",
+			Scope:         "internal/",
+			Created:       now,
+			History:       []TaskHistoryEntry{},
+		}
+		data, err := json.Marshal(&original)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		assertJSONDecompositionKeys(t, string(data))
+		var decoded Task
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if !reflect.DeepEqual(original.Decomposition, decoded.Decomposition) {
+			t.Errorf("decoded Decomposition = %#v, want %#v", decoded.Decomposition, original.Decomposition)
+		}
+	})
+
+	t.Run("omitted decomposition remains absent", func(t *testing.T) {
+		task := Task{
+			ID:          "task-1",
+			Description: "do the thing",
+			Status:      "DRAFT_CODE",
+			Priority:    1,
+			SpecRef:     "specs/x.md",
+			DoneWhen:    "tests pass",
+			Scope:       "internal/",
+			Created:     now,
+			History:     []TaskHistoryEntry{},
+		}
+		data, err := json.Marshal(&task)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), `"decomposition"`) {
+			t.Errorf("nil Decomposition should be omitted from JSON, got: %s", string(data))
+		}
+		var decoded Task
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if decoded.Decomposition != nil {
+			t.Errorf("decoded Decomposition = %#v, want nil", decoded.Decomposition)
+		}
+	})
+}
+
+func assertYAMLDecompositionKeys(t *testing.T, data string) {
+	t.Helper()
+	for _, key := range []string{
+		"decomposition:",
+		"owned_files:",
+		"owned_modules:",
+		"read_only_depends_on:",
+		"read_only_task_depends_on:",
+		"interfaces_owned:",
+		"interfaces_consumed:",
+		"coverage_notes:",
+	} {
+		if !strings.Contains(data, key) {
+			t.Errorf("YAML output missing %q:\n%s", key, data)
+		}
+	}
+}
+
+func assertJSONDecompositionKeys(t *testing.T, data string) {
+	t.Helper()
+	for _, key := range []string{
+		`"decomposition"`,
+		`"owned_files"`,
+		`"owned_modules"`,
+		`"read_only_depends_on"`,
+		`"read_only_task_depends_on"`,
+		`"interfaces_owned"`,
+		`"interfaces_consumed"`,
+		`"coverage_notes"`,
+	} {
+		if !strings.Contains(data, key) {
+			t.Errorf("JSON output missing %q: %s", key, data)
+		}
+	}
+}
+
+func testDecompositionManifest() *DecompositionManifest {
+	return &DecompositionManifest{
+		OwnedFiles:            []string{"internal/auth/middleware.go"},
+		OwnedModules:          []string{"internal/auth"},
+		ReadOnlyDependsOn:     []int{0, 2},
+		ReadOnlyTaskDependsOn: []string{"architecture-auth"},
+		InterfacesOwned:       []string{"auth.Middleware"},
+		InterfacesConsumed:    []string{"sessions.Store"},
+		CoverageNotes:         "Auth middleware boundary is complete.",
+	}
 }
 
 func TestTask_KindBackwardCompat(t *testing.T) {
