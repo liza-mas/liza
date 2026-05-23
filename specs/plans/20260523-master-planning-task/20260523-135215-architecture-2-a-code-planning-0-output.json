@@ -1,0 +1,19 @@
+[
+  {
+    "desc": "Add resolver-backed INITIAL_PLANNING route-data construction so each configured entry-point exposes a specialized simple target plus an optional decomposition-root fan-out target, and explicit Goal.EntryPoint resolution reuses the same entry-point data as classification rendering.",
+    "done_when": "`wakeEntryPointData` or an equivalent prompt data type exposes, for every configured entry-point, simple target role-pair, task type, display name, and task ID prefix plus fan-out target role-pair, task type, display name, task ID prefix, and availability when `pipeline.Resolver.DecompositionRootForTarget` finds a mapping; `buildWakeTemplateData` uses the resolver lookup instead of topology traversal, propagates lookup errors as render errors, treats a clean missing mapping as no fan-out target, and resolves explicit `Goal.EntryPoint` from the same entry-point data used by the classification list; focused tests cover route-data construction for `general-objective`, `functional-spec`, `detailed-spec`, and `technical-spec`, a missing-master fallback fixture with no invented master role-pair, and a resolver-error path; `go test ./internal/prompts/...` passes.",
+    "scope": "`internal/prompts/wake.go` and focused prompt helper tests in `internal/prompts/builder_test.go` or a new `_test.go` file under `internal/prompts`. Consume `pipeline.Resolver.DecompositionRootForTarget` and existing role/task display helpers; do not modify pipeline YAML/schema/validation, resolver topology implementation beyond API consumption, master prompt sections, output-entry manifest validation, artifact propagation, docs, ADRs, broad end-to-end scenario tests, or unrelated prompt prose.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-135215-architecture-2-a-code-planning-0.md"
+  },
+  {
+    "desc": "Render INITIAL_PLANNING from the resolved route data so simple examples target the specialized planning role-pair, fan-out examples target the mapped master role-pair when available, and missing-master rendering falls back to one specialized planning task.",
+    "done_when": "`wake_initial_planning.tmpl` consumes the resolved simple and fan-out target fields from wake data for both explicit entry-point and classification rendering; rendered simple-goal examples contain exactly one task using the specialized role-pair, task type, display name, and task ID prefix; rendered fan-out examples contain exactly one task using the mapped master role-pair, task type, display name, and task ID prefix when `HasFanOutTarget` is true; rendered missing-master fallback contains exactly one specialized planning task and no invented master role-pair; prompt tests cover explicit `general-objective`, `functional-spec`, `detailed-spec`, and `technical-spec` routes, classification data, mapped master targets, and missing-master fallback; `go test ./internal/prompts/...` passes.",
+    "scope": "`internal/prompts/templates/wake_initial_planning.tmpl`, `internal/prompts/builder_test.go`, and focused prompt helper tests needed to assert rendered INITIAL_PLANNING output. Use the route data produced by Task 1; do not implement resolver/topology traversal, modify pipeline YAML/schema/validation, change master prompt sections, output-entry manifest validation, artifact propagation, docs, ADRs, broad end-to-end scenario tests, or unrelated prompt prose.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-135215-architecture-2-a-code-planning-0.md",
+    "depends_on": [
+      "0"
+    ]
+  }
+]
