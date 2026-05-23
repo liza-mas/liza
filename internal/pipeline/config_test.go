@@ -1161,15 +1161,25 @@ func TestLoad_Phase2ValidConfig(t *testing.T) {
 		t.Fatal("expected non-nil config")
 	}
 
-	// Verify 5 role-pairs parsed.
-	if len(cfg.Pipeline.RolePairs) != 5 {
-		t.Fatalf("expected 5 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
+	// Verify 8 role-pairs parsed.
+	if len(cfg.Pipeline.RolePairs) != 8 {
+		t.Fatalf("expected 8 role-pairs, got %d", len(cfg.Pipeline.RolePairs))
 	}
-	for _, name := range []string{"epic-planning-pair", "us-writing-pair", "code-planning-pair", "coding-pair", "architecture-pair"} {
+	for _, name := range []string{
+		"epic-planning-main-pair",
+		"epic-planning-pair",
+		"us-writing-pair",
+		"architecture-main-pair",
+		"architecture-pair",
+		"code-planning-main-pair",
+		"code-planning-pair",
+		"coding-pair",
+	} {
 		if _, ok := cfg.Pipeline.RolePairs[name]; !ok {
 			t.Errorf("missing role-pair %s", name)
 		}
 	}
+	assertMasterPlanningTopology(t, cfg)
 
 	// Verify 11 roles (10 agent roles + orchestrator).
 	if len(cfg.Pipeline.Roles) != 11 {
@@ -1189,7 +1199,7 @@ func TestLoad_Phase2ValidConfig(t *testing.T) {
 	if pt.From != "epic-spec-subpipeline.us-writing-pair.approved" {
 		t.Errorf("pipeline-transition from = %q, want 3-part ref", pt.From)
 	}
-	if pt.To != "architecture-subpipeline.architecture-pair.initial" {
+	if pt.To != "architecture-subpipeline.architecture-main-pair.initial" {
 		t.Errorf("pipeline-transition to = %q, want 3-part ref", pt.To)
 	}
 	if pt.Trigger != "manual" {
@@ -1234,6 +1244,127 @@ func requirePipelineTransition(t *testing.T, cfg *PipelineConfig, name string) T
 	}
 	t.Fatalf("missing pipeline-transition %q", name)
 	return TransitionDef{}
+}
+
+func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig) {
+	t.Helper()
+	type masterPair struct {
+		name       string
+		doer       string
+		reviewer   string
+		states     RolePairStates
+		sub        string
+		steps      []string
+		transition TransitionDef
+	}
+	masters := []masterPair{
+		{
+			name:     "epic-planning-main-pair",
+			doer:     "epic-planner",
+			reviewer: "epic-plan-reviewer",
+			states: RolePairStates{
+				Initial: "DRAFT_EPIC_PLAN_MAIN", Executing: "EPIC_PLANNING_MAIN",
+				Submitted: "EPIC_PLAN_MAIN_TO_REVIEW", Reviewing: "REVIEWING_EPIC_PLAN_MAIN",
+				Approved: "EPIC_PLAN_MAIN_APPROVED", Rejected: "EPIC_PLAN_MAIN_REJECTED",
+				PartiallyApproved: "EPIC_PLAN_MAIN_PARTIALLY_APPROVED", Reviewing2: "REVIEWING_EPIC_PLAN_MAIN_2",
+			},
+			sub:   "epic-spec-subpipeline",
+			steps: []string{"epic-planning-main-pair", "epic-planning-pair", "us-writing-pair"},
+			transition: TransitionDef{
+				Name: "epic-decompose", TaskSlug: "epic-planning",
+				From: "epic-planning-main-pair.approved", To: "epic-planning-pair.initial",
+				Trigger: "auto", Cardinality: "per-subtask",
+			},
+		},
+		{
+			name:     "architecture-main-pair",
+			doer:     "architect",
+			reviewer: "architecture-reviewer",
+			states: RolePairStates{
+				Initial: "DRAFT_ARCHITECTURE_MAIN", Executing: "ARCHITECTING_MAIN",
+				Submitted: "ARCHITECTURE_MAIN_TO_REVIEW", Reviewing: "REVIEWING_ARCHITECTURE_MAIN",
+				Approved: "ARCHITECTURE_MAIN_APPROVED", Rejected: "ARCHITECTURE_MAIN_REJECTED",
+				PartiallyApproved: "ARCHITECTURE_MAIN_PARTIALLY_APPROVED", Reviewing2: "REVIEWING_ARCHITECTURE_MAIN_2",
+			},
+			sub:   "architecture-subpipeline",
+			steps: []string{"architecture-main-pair", "architecture-pair"},
+			transition: TransitionDef{
+				Name: "arch-decompose", TaskSlug: "architecture",
+				From: "architecture-main-pair.approved", To: "architecture-pair.initial",
+				Trigger: "auto", Cardinality: "per-subtask",
+			},
+		},
+		{
+			name:     "code-planning-main-pair",
+			doer:     "code-planner",
+			reviewer: "code-plan-reviewer",
+			states: RolePairStates{
+				Initial: "DRAFT_CODING_PLAN_MAIN", Executing: "CODE_PLANNING_MAIN",
+				Submitted: "CODING_PLAN_MAIN_TO_REVIEW", Reviewing: "REVIEWING_CODING_PLAN_MAIN",
+				Approved: "CODING_PLAN_MAIN_APPROVED", Rejected: "CODING_PLAN_MAIN_REJECTED",
+				PartiallyApproved: "CODING_PLAN_MAIN_PARTIALLY_APPROVED", Reviewing2: "REVIEWING_CODING_PLAN_MAIN_2",
+			},
+			sub:   "coding-subpipeline",
+			steps: []string{"code-planning-main-pair", "code-planning-pair", "coding-pair"},
+			transition: TransitionDef{
+				Name: "code-plan-decompose", TaskSlug: "code-planning",
+				From: "code-planning-main-pair.approved", To: "code-planning-pair.initial",
+				Trigger: "auto", Cardinality: "per-subtask",
+			},
+		},
+	}
+
+	for _, want := range masters {
+		rp, ok := cfg.Pipeline.RolePairs[want.name]
+		if !ok {
+			t.Errorf("missing role-pair %q", want.name)
+			continue
+		}
+		if rp.Doer != want.doer {
+			t.Errorf("%s doer = %q, want %q", want.name, rp.Doer, want.doer)
+		}
+		if rp.Reviewer != want.reviewer {
+			t.Errorf("%s reviewer = %q, want %q", want.name, rp.Reviewer, want.reviewer)
+		}
+		if !rp.DecompositionRoot {
+			t.Errorf("%s DecompositionRoot = false, want true", want.name)
+		}
+		if rp.ReviewPolicy == nil {
+			t.Errorf("%s ReviewPolicy = nil", want.name)
+		} else {
+			if rp.ReviewPolicy.Quorum != 2 {
+				t.Errorf("%s quorum = %d, want 2", want.name, rp.ReviewPolicy.Quorum)
+			}
+			if rp.ReviewPolicy.ProviderDiversity != "preferred" {
+				t.Errorf("%s provider-diversity = %q, want preferred", want.name, rp.ReviewPolicy.ProviderDiversity)
+			}
+		}
+		if rp.States != want.states {
+			t.Errorf("%s states = %+v, want %+v", want.name, rp.States, want.states)
+		}
+
+		sp, ok := cfg.Pipeline.SubPipelines[want.sub]
+		if !ok {
+			t.Errorf("missing sub-pipeline %q", want.sub)
+			continue
+		}
+		if !slices.Equal(sp.Steps, want.steps) {
+			t.Errorf("%s steps = %v, want %v", want.sub, sp.Steps, want.steps)
+		}
+		var got []TransitionDef
+		for _, transition := range sp.Transitions {
+			if transition.From == want.transition.From {
+				got = append(got, transition)
+			}
+		}
+		if len(got) != 1 {
+			t.Errorf("%s transitions from %s: got %d, want 1", want.sub, want.transition.From, len(got))
+			continue
+		}
+		if got[0] != want.transition {
+			t.Errorf("%s decompose transition = %+v, want %+v", want.sub, got[0], want.transition)
+		}
+	}
 }
 
 func TestParse3PartRef(t *testing.T) {
@@ -1813,6 +1944,7 @@ func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
 	if len(cfg.Pipeline.Roles) != 13 {
 		t.Fatalf("expected 13 roles, got %d", len(cfg.Pipeline.Roles))
 	}
+	assertMasterPlanningTopology(t, cfg)
 
 	expectedRoles := map[string]string{
 		"coder":                 "doer",

@@ -401,6 +401,23 @@ pipeline:
       mandatory-docs: []
 
   role-pairs:
+    epic-planning-main-pair:
+      doer: epic-planner
+      reviewer: epic-plan-reviewer
+      decomposition-root: true
+      review-policy:
+        quorum: 2
+        provider-diversity: preferred
+      states:
+        initial: DRAFT_EPIC_PLAN_MAIN
+        executing: EPIC_PLANNING_MAIN
+        submitted: EPIC_PLAN_MAIN_TO_REVIEW
+        reviewing: REVIEWING_EPIC_PLAN_MAIN
+        approved: EPIC_PLAN_MAIN_APPROVED
+        rejected: EPIC_PLAN_MAIN_REJECTED
+        partially-approved: EPIC_PLAN_MAIN_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_EPIC_PLAN_MAIN_2
+
     epic-planning-pair:
       doer: epic-planner
       reviewer: epic-plan-reviewer
@@ -422,6 +439,23 @@ pipeline:
         reviewing: REVIEWING_US
         approved: US_APPROVED
         rejected: US_REJECTED
+
+    code-planning-main-pair:
+      doer: code-planner
+      reviewer: code-plan-reviewer
+      decomposition-root: true
+      review-policy:
+        quorum: 2
+        provider-diversity: preferred
+      states:
+        initial: DRAFT_CODING_PLAN_MAIN
+        executing: CODE_PLANNING_MAIN
+        submitted: CODING_PLAN_MAIN_TO_REVIEW
+        reviewing: REVIEWING_CODING_PLAN_MAIN
+        approved: CODING_PLAN_MAIN_APPROVED
+        rejected: CODING_PLAN_MAIN_REJECTED
+        partially-approved: CODING_PLAN_MAIN_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_CODING_PLAN_MAIN_2
 
     code-planning-pair:
       doer: code-planner
@@ -449,6 +483,23 @@ pipeline:
         partially-approved: CODE_PARTIALLY_APPROVED
         reviewing-2: REVIEWING_CODE_2
 
+    architecture-main-pair:
+      doer: architect
+      reviewer: architecture-reviewer
+      decomposition-root: true
+      review-policy:
+        quorum: 2
+        provider-diversity: preferred
+      states:
+        initial: DRAFT_ARCHITECTURE_MAIN
+        executing: ARCHITECTING_MAIN
+        submitted: ARCHITECTURE_MAIN_TO_REVIEW
+        reviewing: REVIEWING_ARCHITECTURE_MAIN
+        approved: ARCHITECTURE_MAIN_APPROVED
+        rejected: ARCHITECTURE_MAIN_REJECTED
+        partially-approved: ARCHITECTURE_MAIN_PARTIALLY_APPROVED
+        reviewing-2: REVIEWING_ARCHITECTURE_MAIN_2
+
     architecture-pair:
       doer: architect
       reviewer: architecture-reviewer
@@ -475,9 +526,16 @@ pipeline:
   sub-pipelines:
     epic-spec-subpipeline:
       steps:
+        - epic-planning-main-pair
         - epic-planning-pair
         - us-writing-pair
       transitions:
+        - name: epic-decompose
+          task-slug: epic-planning
+          from: epic-planning-main-pair.approved
+          to: epic-planning-pair.initial
+          trigger: auto
+          cardinality: per-subtask
         - name: epic-to-us
           task-slug: us-writing
           from: epic-planning-pair.approved
@@ -487,13 +545,28 @@ pipeline:
 
     architecture-subpipeline:
       steps:
+        - architecture-main-pair
         - architecture-pair
+      transitions:
+        - name: arch-decompose
+          task-slug: architecture
+          from: architecture-main-pair.approved
+          to: architecture-pair.initial
+          trigger: auto
+          cardinality: per-subtask
 
     coding-subpipeline:
       steps:
+        - code-planning-main-pair
         - code-planning-pair
         - coding-pair
       transitions:
+        - name: code-plan-decompose
+          task-slug: code-planning
+          from: code-planning-main-pair.approved
+          to: code-planning-pair.initial
+          trigger: auto
+          cardinality: per-subtask
         - name: code-plan-to-coding
           task-slug: coding
           from: code-planning-pair.approved
@@ -517,7 +590,7 @@ pipeline:
     - name: us-to-coding
       task-slug: architecture
       from: epic-spec-subpipeline.us-writing-pair.approved
-      to: architecture-subpipeline.architecture-pair.initial
+      to: architecture-subpipeline.architecture-main-pair.initial
       trigger: manual
       cardinality: many-to-one  # N approved US → 1 architecture task
     - name: architecture-to-code-plan

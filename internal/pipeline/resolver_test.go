@@ -170,7 +170,7 @@ func TestResolver_Transition_PipelineTransition(t *testing.T) {
 	if tr.From != "epic-spec-subpipeline.us-writing-pair.approved" {
 		t.Errorf("from = %q, want 3-part ref", tr.From)
 	}
-	if tr.To != "architecture-subpipeline.architecture-pair.initial" {
+	if tr.To != "architecture-subpipeline.architecture-main-pair.initial" {
 		t.Errorf("to = %q, want 3-part ref", tr.To)
 	}
 	if tr.Trigger != "manual" {
@@ -300,15 +300,18 @@ func TestResolver_SprintTerminalStates_Phase2(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.SprintTerminalStates()
 
-	// Pipeline-transition sources: us-writing-pair.approved (US_APPROVED)
-	// Sub-pipeline transition sources: epic-planning-pair.approved (EPIC_PLAN_APPROVED),
-	//   architecture-pair.approved (ARCHITECTURE_APPROVED),
-	//   code-planning-pair.approved (CODING_PLAN_APPROVED)
+	// Pipeline-transition sources: us-writing-pair.approved (US_APPROVED),
+	//   architecture-pair.approved (ARCHITECTURE_APPROVED)
+	// Sub-pipeline transition sources: main planning pairs plus specialized
+	//   epic-planning-pair and code-planning-pair.
 	// Plus MERGED always included.
 	want := []models.TaskStatus{
 		"ARCHITECTURE_APPROVED",
+		"ARCHITECTURE_MAIN_APPROVED",
 		"CODING_PLAN_APPROVED",
+		"CODING_PLAN_MAIN_APPROVED",
 		"EPIC_PLAN_APPROVED",
+		"EPIC_PLAN_MAIN_APPROVED",
 		"MERGED",
 		"US_APPROVED",
 	}
@@ -328,7 +331,16 @@ func TestResolver_RolePairNames(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.RolePairNames()
 
-	want := []string{"architecture-pair", "code-planning-pair", "coding-pair", "epic-planning-pair", "us-writing-pair"}
+	want := []string{
+		"architecture-main-pair",
+		"architecture-pair",
+		"code-planning-main-pair",
+		"code-planning-pair",
+		"coding-pair",
+		"epic-planning-main-pair",
+		"epic-planning-pair",
+		"us-writing-pair",
+	}
 	if len(got) != len(want) {
 		t.Fatalf("RolePairNames() = %v, want %v", got, want)
 	}
@@ -343,13 +355,17 @@ func TestResolver_TransitionSourcePairs_Phase2(t *testing.T) {
 	r := NewResolver(loadPhase2Config(t))
 	got := r.TransitionSourcePairs()
 
-	// Sub-pipeline transition sources: epic-planning-pair, architecture-pair, code-planning-pair
-	// Pipeline-transition sources: us-writing-pair
+	// Sub-pipeline transition sources: main planning pairs plus specialized
+	// epic-planning-pair and code-planning-pair.
+	// Pipeline-transition sources: us-writing-pair and architecture-pair.
 	want := map[string]bool{
-		"epic-planning-pair": true,
-		"architecture-pair":  true,
-		"code-planning-pair": true,
-		"us-writing-pair":    true,
+		"epic-planning-main-pair": true,
+		"epic-planning-pair":      true,
+		"architecture-main-pair":  true,
+		"architecture-pair":       true,
+		"code-planning-main-pair": true,
+		"code-planning-pair":      true,
+		"us-writing-pair":         true,
 	}
 
 	if len(got) != len(want) {
@@ -766,8 +782,8 @@ func TestResolver_TransitionTargetRolePair_PipelineTransition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TransitionTargetRolePair(us-to-coding): %v", err)
 	}
-	if rp != "architecture-pair" {
-		t.Errorf("TransitionTargetRolePair = %q, want %q", rp, "architecture-pair")
+	if rp != "architecture-main-pair" {
+		t.Errorf("TransitionTargetRolePair = %q, want %q", rp, "architecture-main-pair")
 	}
 
 	// Sub-pipeline transition target role-pair should still work.
@@ -1580,9 +1596,9 @@ func TestResolver_AllTransitions(t *testing.T) {
 
 	all := r.AllTransitions()
 
-	// The phase2 fixture has 3 sub-pipeline transitions + 1 pipeline-transition = 4 total.
-	if len(all) != 4 {
-		t.Fatalf("AllTransitions() returned %d transitions, want 4", len(all))
+	// The phase2 fixture has 5 sub-pipeline transitions + 2 pipeline-transitions = 7 total.
+	if len(all) != 7 {
+		t.Fatalf("AllTransitions() returned %d transitions, want 7", len(all))
 	}
 
 	for i, td := range all {
