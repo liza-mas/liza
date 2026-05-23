@@ -11,6 +11,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/taskkind"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -1310,7 +1311,7 @@ func TestProceed_PipelineRejectsAutoTransition(t *testing.T) {
 // --- Phase 2 pipeline test helpers ---
 
 // setupPhase2PipelineProceedTest creates a test dir with the full Phase 2 pipeline config
-// (including pipeline-transitions with us-to-coding one-to-one transition).
+// (including pipeline-transitions with us-to-coding many-to-one transition).
 func setupPhase2PipelineProceedTest(t *testing.T) (string, string) {
 	t.Helper()
 	tmpDir := t.TempDir()
@@ -1389,13 +1390,13 @@ func TestProceed_OneToOne_CreatesSingleChild(t *testing.T) {
 		t.Fatal("Child task not found")
 	}
 
-	// Child has correct status (architecture-pair initial)
-	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
-		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE", child.Status)
+	// Child has correct status (architecture-main-pair initial)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE_MAIN") {
+		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE_MAIN", child.Status)
 	}
-	// Child has correct role_pair (architecture-pair)
-	if child.RolePair != "architecture-pair" {
-		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-pair")
+	// Child has correct role_pair (architecture-main-pair)
+	if child.RolePair != "architecture-main-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-main-pair")
 	}
 	// Child has parent_tasks set
 	if !slices.Contains(child.ParentTasks, taskID) {
@@ -2634,6 +2635,164 @@ func TestProceed_ChildTasksGetPlanRefFromOutputEntry(t *testing.T) {
 	}
 }
 
+func TestProceed_PerSubtask_PropagatesDecompositionKindAndDirectRefs(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-decomposition-1"
+	reviewCommit := "abc123"
+	decomposition := &models.DecompositionManifest{
+		OwnedFiles:            []string{"internal/auth/login.go"},
+		OwnedModules:          []string{"internal/auth"},
+		ReadOnlyDependsOn:     []int{0},
+		ReadOnlyTaskDependsOn: []string{"architecture-4-code-planning-0-b-repair-0-coding-1"},
+		InterfacesOwned:       []string{"LoginHandler"},
+		InterfacesConsumed:    []string{"SessionStore"},
+		CoverageNotes:         "Owns login handler implementation boundary.",
+	}
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with decomposition metadata",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{
+				Desc:          "Implement login",
+				DoneWhen:      "Login works",
+				Scope:         "login",
+				SpecRef:       "specs/auth.md#login",
+				EpicRef:       "specs/epics/auth.md",
+				PlanRef:       "specs/plans/auth-plan.md",
+				ArchRef:       "specs/arch-plan/auth-arch.md",
+				Kind:          taskkind.PreCommitBootstrap,
+				Decomposition: decomposition,
+			},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	child := readState.FindTask(result.ChildTaskIDs[0])
+	if child == nil {
+		t.Fatal("Child task not found")
+	}
+	if child.Kind != taskkind.PreCommitBootstrap {
+		t.Errorf("child.Kind = %q, want %q", child.Kind, taskkind.PreCommitBootstrap)
+	}
+	if child.EpicRef != "specs/epics/auth.md" {
+		t.Errorf("child.EpicRef = %q, want specs/epics/auth.md", child.EpicRef)
+	}
+	if child.PlanRef != "specs/plans/auth-plan.md" {
+		t.Errorf("child.PlanRef = %q, want specs/plans/auth-plan.md", child.PlanRef)
+	}
+	if child.ArchRef != "specs/arch-plan/auth-arch.md" {
+		t.Errorf("child.ArchRef = %q, want specs/arch-plan/auth-arch.md", child.ArchRef)
+	}
+	if child.Decomposition == nil {
+		t.Fatal("child.Decomposition is nil")
+	}
+	if !slices.Equal(child.Decomposition.OwnedFiles, decomposition.OwnedFiles) {
+		t.Errorf("OwnedFiles = %v, want %v", child.Decomposition.OwnedFiles, decomposition.OwnedFiles)
+	}
+	if !slices.Equal(child.Decomposition.OwnedModules, decomposition.OwnedModules) {
+		t.Errorf("OwnedModules = %v, want %v", child.Decomposition.OwnedModules, decomposition.OwnedModules)
+	}
+	if !slices.Equal(child.Decomposition.ReadOnlyDependsOn, decomposition.ReadOnlyDependsOn) {
+		t.Errorf("ReadOnlyDependsOn = %v, want %v", child.Decomposition.ReadOnlyDependsOn, decomposition.ReadOnlyDependsOn)
+	}
+	if !slices.Equal(child.Decomposition.ReadOnlyTaskDependsOn, decomposition.ReadOnlyTaskDependsOn) {
+		t.Errorf("ReadOnlyTaskDependsOn = %v, want %v", child.Decomposition.ReadOnlyTaskDependsOn, decomposition.ReadOnlyTaskDependsOn)
+	}
+	if !slices.Equal(child.Decomposition.InterfacesOwned, decomposition.InterfacesOwned) {
+		t.Errorf("InterfacesOwned = %v, want %v", child.Decomposition.InterfacesOwned, decomposition.InterfacesOwned)
+	}
+	if !slices.Equal(child.Decomposition.InterfacesConsumed, decomposition.InterfacesConsumed) {
+		t.Errorf("InterfacesConsumed = %v, want %v", child.Decomposition.InterfacesConsumed, decomposition.InterfacesConsumed)
+	}
+	if child.Decomposition.CoverageNotes != decomposition.CoverageNotes {
+		t.Errorf("CoverageNotes = %q, want %q", child.Decomposition.CoverageNotes, decomposition.CoverageNotes)
+	}
+}
+
+func TestProceed_PerSubtask_DoesNotFallbackToParentPlanRef(t *testing.T) {
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+
+	now := time.Now().UTC()
+	parentID := "plan-no-planref-fallback"
+	reviewCommit := "abc123"
+	task := models.Task{
+		ID:           parentID,
+		Type:         models.TaskTypeCoding,
+		RolePair:     "code-planning-pair",
+		Description:  "Plan with parent plan_ref only",
+		Status:       models.TaskStatus("CODING_PLAN_APPROVED"),
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		PlanRef:      "specs/plans/parent-plan.md",
+		DoneWhen:     "Plan approved",
+		Scope:        "auth module",
+		ReviewCommit: &reviewCommit,
+		Output: []models.OutputEntry{
+			{Desc: "Task A", DoneWhen: "A works", Scope: "a", SpecRef: "specs/a.md"},
+			{Desc: "Task B", DoneWhen: "B works", Scope: "b", SpecRef: "specs/b.md"},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
+	state.Tasks = append(state.Tasks, task)
+	state.Sprint.Scope.Planned = []string{parentID}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Proceed(tmpDir, parentID, "code-plan-to-coding")
+	if err != nil {
+		t.Fatalf("Proceed() error: %v", err)
+	}
+
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+
+	for _, childID := range result.ChildTaskIDs {
+		child := readState.FindTask(childID)
+		if child == nil {
+			t.Fatalf("Child task %s not found", childID)
+		}
+		if child.PlanRef != "" {
+			t.Errorf("child %s PlanRef = %q, want empty", childID, child.PlanRef)
+		}
+	}
+}
+
 func TestProceed_OneToOne_InheritsPlanRefFromParent(t *testing.T) {
 	// us-to-coding is now many-to-one (CP1). Many-to-one creates architecture
 	// tasks which don't inherit PlanRef — they produce arch_ref instead.
@@ -3671,6 +3830,59 @@ func TestProceedInner_InheritedDepsAppendedAfterSiblingDeps(t *testing.T) {
 	}
 }
 
+func TestProceedInner_PerSubtaskDedupesDependenciesInStableOrder(t *testing.T) {
+	now := time.Now().UTC()
+	siblingID := perSubtaskChildID("plan-1", "code-plan-to-coding", 0)
+
+	s := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:       "plan-1",
+				Status:   models.TaskStatusMerged,
+				RolePair: "code-planning-pair",
+				Output: []models.OutputEntry{
+					{Desc: "a", DoneWhen: "a", Scope: "a", SpecRef: "s.md"},
+					{
+						Desc:          "b",
+						DoneWhen:      "b",
+						Scope:         "b",
+						SpecRef:       "s.md",
+						DependsOn:     []string{"0"},
+						TaskDependsOn: []string{siblingID, "external-task"},
+					},
+				},
+			},
+		},
+	}
+
+	tDef := transitionDef{
+		sourceRolePair: "code-planning-pair",
+		requiredStatus: models.TaskStatusMerged,
+		targetStatus:   models.TaskStatus("DRAFT_CODE"),
+		cardinality:    "per-subtask",
+		targetRolePair: "coding-pair",
+		taskSlug:       "code-plan-to-coding",
+	}
+
+	inheritedDeps := []string{"external-task", "inherited-task", siblingID}
+	result := &ProceedResult{SourceTaskID: "plan-1", TransitionName: "code-plan-to-coding"}
+
+	err := proceedInner(s, "plan-1", "code-plan-to-coding", tDef, inheritedDeps, nil, now, result)
+	if err != nil {
+		t.Fatalf("proceedInner: %v", err)
+	}
+
+	child1 := s.FindTask(result.ChildTaskIDs[1])
+	if child1 == nil {
+		t.Fatal("child 1 not found")
+	}
+
+	want := []string{siblingID, "external-task", "inherited-task"}
+	if !slices.Equal(child1.DependsOn, want) {
+		t.Errorf("child1.DependsOn = %v, want %v", child1.DependsOn, want)
+	}
+}
+
 func TestProceed_InheritedDepsViaManualPath(t *testing.T) {
 	tmpDir, stateFile := setupPipelineProceedTest(t)
 
@@ -4378,14 +4590,14 @@ func TestProceedManyToOne_HappyPath(t *testing.T) {
 		}
 	}
 
-	// Child has correct status (DRAFT_ARCHITECTURE)
-	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
-		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE", child.Status)
+	// Child has correct status (DRAFT_ARCHITECTURE_MAIN)
+	if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE_MAIN") {
+		t.Errorf("Child status = %v, want DRAFT_ARCHITECTURE_MAIN", child.Status)
 	}
 
 	// Child has correct role_pair
-	if child.RolePair != "architecture-pair" {
-		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-pair")
+	if child.RolePair != "architecture-main-pair" {
+		t.Errorf("Child role_pair = %q, want %q", child.RolePair, "architecture-main-pair")
 	}
 
 	// Child has correct task type
