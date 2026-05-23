@@ -163,6 +163,37 @@ func TestWakeInitialPlanningMissingMasterRendersSpecializedFallback(t *testing.T
 	})
 }
 
+func TestWakeInitialPlanningRejectsOldMultiTaskGuidance(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
+	for _, entryPoint := range []string{"", "general-objective", "functional-spec", "detailed-spec", "technical-spec"} {
+		t.Run(entryPoint, func(t *testing.T) {
+			data, err := buildWakeTemplateData("specs/goal.md", entryPoint, projectRoot)
+			if err != nil {
+				t.Fatalf("buildWakeTemplateData: %v", err)
+			}
+			rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil)
+			if err != nil {
+				t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
+			}
+
+			assertNotContainsAny(t, rendered, []string{
+				"MULTI-TASK PLANNING",
+				"Create up to",
+				"Create multiple parallel planning tasks",
+				"multiple specialized planning tasks",
+				"same role-pair",
+				"Domain A",
+				"Domain B",
+				"domain-a",
+				"domain-b",
+				"\"id\": \"architecture-2\"",
+				"\"id\": \"code-planning-2\"",
+				"\"id\": \"epic-planning-2\"",
+			})
+		})
+	}
+}
+
 func assertContainsAll(t *testing.T, s string, wants []string) {
 	t.Helper()
 	for _, want := range wants {
