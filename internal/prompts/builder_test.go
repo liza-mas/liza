@@ -295,9 +295,9 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"This is initial planning",
 				"Classify the input document and choose the appropriate entry-point",
 				"AVAILABLE ENTRY-POINTS:",
-				"Tasks must partition the goal",
-				"role-pair-derived prefix with sequential suffixes",
-				"All tasks use the chosen role_pair matching the entry-point",
+				"Create exactly one planning task",
+				"Choose the chosen entry-point's fan-out target for a fan-out or uncertain goal when it is listed.",
+				"Fan-out or uncertain goals use the chosen fan-out role_pair when available.",
 			},
 			wantNotContain: []string{
 				`--replacement-ids`,

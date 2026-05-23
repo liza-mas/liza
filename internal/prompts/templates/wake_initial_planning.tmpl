@@ -1,71 +1,91 @@
 {{- define "wake_initial_planning" -}}
-This is initial planning. Read the goal spec, assess complexity, and create planning task(s).
+This is initial planning. Read the goal spec, assess complexity, and create exactly one planning task.
 
-⚠️  AUTONOMY NOTICE ⚠️
+AUTONOMY NOTICE:
 You have FULL autonomy to run CLI commands immediately.
 Do NOT wait for permission.
 
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
 
 1. Read the goal spec ({{.GoalSpecRef}}) thoroughly.
-2. Assess complexity: count distinct functional areas, estimate output entries.
-3. Decide: single task (simple) or multiple tasks (complex).
+2. Assess whether the goal is simple or fan-out.
+3. Create exactly one planning task.
 
-MULTI-TASK PLANNING:
-When a goal is complex (>3 distinct functional areas, >~8 estimated output entries,
-or cross-cutting concerns that benefit from sequential refinement):
-- Create up to ~5 planning tasks, each scoped to a domain or sub-domain boundary in the spec.
-- Tasks must partition the goal: non-overlapping scopes that together cover the full planning scope.
-- Use the SAME role-pair for all tasks.
-- Task IDs use the role-pair-derived prefix with sequential suffixes: <prefix>-1, <prefix>-2, etc.
-- Add depends_on only where one domain genuinely requires another's output — independent domains run in parallel.
-Simple goals (default): one task, no depends_on.
+SIMPLE GOAL:
+Use the specialized planning target when the goal has one coherent planning scope: one functional area, no shared file/schema/interface ownership question, no migration or cross-cutting contract needing explicit ownership, and no expected downstream split into independent specialized scopes.
+
+FAN-OUT OR UNCERTAIN GOAL:
+Use the mapped master planning target when available if multiple functional areas need separate ownership, shared files or interfaces require explicit boundary assignment, independent downstream workstreams could run in parallel after planning, the goal would likely produce more than 8 downstream output entries, or boundary placement is uncertain.
 
 --- EXECUTION PHASE (MANDATORY - DO NOT SKIP) ---
 {{- if .GoalEntryPoint }}
 
-Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch to {{.ResolvedDisplayName}}.
+Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch simple goals to {{.ResolvedDisplayName}}.
 
-Run liza add-tasks once with ALL tasks in a JSON file.
-⚠️  The file must contain a bare JSON array — NOT a wrapper object.
+Run liza add-tasks once with exactly one task in a JSON file.
+The file must contain a bare JSON array -- NOT a wrapper object.
+
+SIMPLE GOAL TASK EXAMPLE:
 [
   {
     "id": "{{.ResolvedTaskIDPrefix}}-1",
-    "desc": "<domain A>: <boundary description>",
+    "desc": "<single planning scope>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan for <domain A> is complete, reviewable, and submitted for review",
-    "scope": "Planning only: <domain A boundary>. No implementation.",
+    "done": "Implementation plan for <single planning scope> is complete, reviewable, and submitted for review",
+    "scope": "Planning only: <single planning scope>. No implementation.",
     "priority": 1,
-    "depends": [],
-    "type": "{{.ResolvedTaskType}}",
-    "role_pair": "{{.ResolvedRolePair}}"
-  },
-  {
-    "id": "{{.ResolvedTaskIDPrefix}}-2",
-    "desc": "<domain B>: <boundary description>",
-    "spec": "{{.GoalSpecRef}}",
-    "done": "...",
-    "scope": "Planning only: <domain B boundary>. No implementation.",
-    "priority": 2,
     "depends": [],
     "type": "{{.ResolvedTaskType}}",
     "role_pair": "{{.ResolvedRolePair}}"
   }
 ]
+{{- if .ResolvedHasFanOutTarget }}
+
+Fan-out goals dispatch to {{.ResolvedFanOutDisplayName}} through the mapped master target.
+
+FAN-OUT GOAL TASK EXAMPLE:
+[
+  {
+    "id": "{{.ResolvedFanOutTaskIDPrefix}}-1",
+    "desc": "Master planning: define the shared approach and decomposition boundaries for {{.GoalEntryPoint}}",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Master planning decomposition is complete, reviewable, and submitted for review",
+    "scope": "Planning only: define boundaries, interface contracts, ownership, and specialized follow-up scopes. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "{{.ResolvedFanOutTaskType}}",
+    "role_pair": "{{.ResolvedFanOutRolePair}}"
+  }
+]
+{{- else }}
+
+No mapped master planning role-pair is configured for this entry-point.
+Specialized fallback remains claimable by {{.ResolvedDisplayName}}.
+For fan-out or uncertain goals, still create exactly one specialized planning task using the simple goal example above. Do not invent a master role-pair.
+{{- end }}
+
 Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
-For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
-- All tasks use role_pair {{.ResolvedRolePair}}.
-- Tasks are claimable by the {{.ResolvedDisplayName}}.
-- Complex goals: each task scoped to a domain boundary. depends_on only where one domain requires another's output.
+- Exactly one task is created.
+- Simple goals use role_pair {{.ResolvedRolePair}}.
+{{- if .ResolvedHasFanOutTarget }}
+- Fan-out or uncertain goals use role_pair {{.ResolvedFanOutRolePair}}.
+{{- else }}
+- Missing master mapping falls back to one task in role_pair {{.ResolvedRolePair}}.
+{{- end }}
+- The task is claimable by the target planning role.
 {{- else if .EntryPoints }}
 
 No entry-point was specified. Classify the input document and choose the appropriate entry-point.
 
 AVAILABLE ENTRY-POINTS:
 {{- range .EntryPoints }}
-- "{{.Name}}" → role_pair: "{{.RolePair}}", type: "{{.TaskType}}" (dispatches to {{.DisplayName}})
+{{- if .HasFanOutTarget }}
+- "{{.Name}}": simple role_pair "{{.SimpleRolePair}}", type "{{.SimpleTaskType}}", display "{{.SimpleDisplayName}}", id prefix "{{.SimpleTaskIDPrefix}}"; fan-out role_pair "{{.FanOutRolePair}}", type "{{.FanOutTaskType}}", display "{{.FanOutDisplayName}}", id prefix "{{.FanOutTaskIDPrefix}}"
+{{- else }}
+- "{{.Name}}": simple role_pair "{{.SimpleRolePair}}", type "{{.SimpleTaskType}}", display "{{.SimpleDisplayName}}", id prefix "{{.SimpleTaskIDPrefix}}"; fan-out unavailable, use the simple target as fallback
+{{- end }}
 {{- end }}
 
 CLASSIFICATION GUIDANCE:
@@ -75,84 +95,83 @@ CLASSIFICATION GUIDANCE:
   with architecture, boundaries, and interfaces settled enough to start code planning directly.
 - "detailed-spec" is a legacy alias for "functional-spec"; prefer "functional-spec" for new work.
 - Choose "general-objective" for vision documents, broad objectives, or when uncertain.
-  Default to "general-objective" — skipping the spec phase is riskier than redundant refinement.
+  Default to "general-objective" -- skipping the spec phase is riskier than redundant refinement.
 
-After classifying, write a JSON file with the chosen role_pair and run liza add-tasks.
-⚠️  The file must contain a bare JSON array — NOT a wrapper object.
+Choose the chosen entry-point's simple target for a simple goal.
+Choose the chosen entry-point's fan-out target for a fan-out or uncertain goal when it is listed.
+If no fan-out target is listed for the chosen entry-point, create exactly one task using its simple target.
+
+SIMPLE GOAL TASK EXAMPLE:
 [
   {
-    "id": "<chosen-prefix>-1",
-    "desc": "<domain A>: <boundary description>",
+    "id": "<chosen-simple-prefix>-1",
+    "desc": "<single planning scope>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan for <domain A> is complete, reviewable, and submitted for review",
-    "scope": "Planning only: <domain A boundary>. No implementation.",
+    "done": "Implementation plan for <single planning scope> is complete, reviewable, and submitted for review",
+    "scope": "Planning only: <single planning scope>. No implementation.",
     "priority": 1,
     "depends": [],
-    "type": "<chosen-type>",
-    "role_pair": "<chosen-role-pair>"
-  },
-  {
-    "id": "<chosen-prefix>-2",
-    "desc": "<domain B>: <boundary description>",
-    "spec": "{{.GoalSpecRef}}",
-    "done": "...",
-    "scope": "Planning only: <domain B boundary>. No implementation.",
-    "priority": 2,
-    "depends": [],
-    "type": "<chosen-type>",
-    "role_pair": "<chosen-role-pair>"
+    "type": "<chosen-simple-type>",
+    "role_pair": "<chosen-simple-role-pair>"
   }
 ]
+
+FAN-OUT GOAL TASK EXAMPLE:
+[
+  {
+    "id": "<chosen-fan-out-prefix>-1",
+    "desc": "Master planning: define the shared approach and decomposition boundaries for <chosen-entry-point>",
+    "spec": "{{.GoalSpecRef}}",
+    "done": "Master planning decomposition is complete, reviewable, and submitted for review",
+    "scope": "Planning only: define boundaries, interface contracts, ownership, and specialized follow-up scopes. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "type": "<chosen-fan-out-type>",
+    "role_pair": "<chosen-fan-out-role-pair>"
+  }
+]
+
 Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
-For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
-- All tasks use the chosen role_pair matching the entry-point.
-- Classification reasoning is stated before creating the task(s).
-- Complex goals: each task scoped to a domain boundary. depends_on only where one domain requires another's output.
+- Exactly one task is created.
+- Classification reasoning is stated before creating the task.
+- Simple goals use the chosen simple role_pair.
+- Fan-out or uncertain goals use the chosen fan-out role_pair when available.
+- Missing master mappings fall back to one task in the chosen simple role_pair.
 {{- else }}
 
-Write a JSON file with the tasks and run liza add-tasks.
-⚠️  The file must contain a bare JSON array — NOT a wrapper object.
+Write a JSON file with exactly one planning task and run liza add-tasks.
+The file must contain a bare JSON array -- NOT a wrapper object.
 [
   {
     "id": "code-planning-1",
-    "desc": "<domain A>: <boundary description>",
+    "desc": "<single planning scope>: <boundary description>",
     "spec": "{{.GoalSpecRef}}",
-    "done": "Implementation plan for <domain A> is complete, reviewable, and submitted for code-plan-review",
-    "scope": "Planning only: <domain A boundary>. No implementation.",
+    "done": "Implementation plan for <single planning scope> is complete, reviewable, and submitted for code-plan-review",
+    "scope": "Planning only: <single planning scope>. No implementation.",
     "priority": 1,
-    "depends": [],
-    "type": "planning",
-    "role_pair": "code-planning-pair"
-  },
-  {
-    "id": "code-planning-2",
-    "desc": "<domain B>: <boundary description>",
-    "spec": "{{.GoalSpecRef}}",
-    "done": "...",
-    "scope": "Planning only: <domain B boundary>. No implementation.",
-    "priority": 2,
     "depends": [],
     "type": "planning",
     "role_pair": "code-planning-pair"
   }
 ]
 Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
-For simple goals, use a single task (omit the second entry, empty depends).
 
 SUCCESS CRITERIA:
-- All tasks use role_pair code-planning-pair.
-- Tasks enter DRAFT_CODING_PLAN and are claimable by code-planner.
-- Complex goals: each task scoped to a domain boundary. depends_on only where one domain requires another's output.
+- Exactly one task is created.
+- The task uses role_pair code-planning-pair.
+- The task enters DRAFT_CODING_PLAN and is claimable by code-planner.
 {{- end }}
 
 EXPECTED BEHAVIOR EXAMPLES:
-✅ Simple goal: one planning task, no depends_on, confirm success, exit.
-✅ Complex goal: N planning tasks scoped to domain boundaries, depends_on only where needed, confirm success, exit.
+- Simple goal: one specialized planning task, no depends_on, confirm success, exit.
+- Fan-out goal with a mapped master target: one master planning task, no specialized fan-out here, confirm success, exit.
+- Fan-out goal without a mapped master target: one specialized planning task, no invented master role-pair, confirm success, exit.
 
-❌ INCORRECT (DO NOT DO THIS):
+INCORRECT:
 1. Plan but do not execute liza add-tasks
-2. Exit without creating the task(s)
-3. Create downstream implementation tasks — only planning tasks belong here
+2. Exit without creating the task
+3. Create multiple parallel planning tasks from INITIAL_PLANNING
+4. Create downstream implementation tasks -- only planning tasks belong here
 {{- end -}}
