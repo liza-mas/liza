@@ -245,6 +245,15 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
       done_when: "Auth middleware rejects invalid tokens"
       scope: "src/middleware/auth.go"
       spec_ref: specs/auth.md
+      plan_ref: specs/plans/auth-master-plan.md
+      decomposition:
+        owned_files: ["src/middleware/auth.go"]
+        owned_modules: ["auth middleware"]
+        read_only_depends_on: []
+        read_only_task_depends_on: []
+        interfaces_owned: ["auth middleware contract"]
+        interfaces_consumed: []
+        coverage_notes: "Owns request authentication boundary."
     - desc: "Add token refresh logic"
       done_when: "Expired tokens trigger refresh flow"
       scope: "src/auth/refresh.go"
@@ -254,6 +263,8 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
   transitions_executed:            # Tracks which transitions have been applied
     code-plan-to-coding: true
 ```
+
+Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role-pair schema supports `role-pairs.<name>.decomposition-root: true` for master planning pairs. That marker is read-only runtime metadata: it selects master prompt sections, output validation, and INITIAL_PLANNING's specialized-to-master mapping. Existing frozen workspaces are not rewritten when the embedded topology changes; users must re-run `liza init` to receive new role-pairs or transitions.
 
 | Field | Type | Set By | Purpose |
 |-------|------|--------|---------|
@@ -274,9 +285,37 @@ Required:
 Optional:
 - `plan_ref` (`string`): Path to the plan artifact (repo-relative). Set by doer via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped).
 - `arch_ref` (`string`): Path to the architecture document (repo-relative). Set by architect via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped). Propagated to child tasks by `proceed.go` during transitions.
+- `epic_ref` (`string`): Path to a concrete epic artifact (repo-relative). Specialized `epic-planning-pair` outputs use this for `us-writing-pair` children; epic master framework refs use `plan_ref`, not `epic_ref`.
 - `task_depends_on` (`[]string`): Existing concrete task IDs outside this `output[]`. Set by doer via `set-task-output`; copied to generated child tasks as scheduler-facing `depends_on`.
+- `decomposition` (`DecompositionManifest`): Typed decomposition metadata. Required on `output[]` entries produced by `decomposition-root` role-pairs and optional elsewhere.
 
 `task_depends_on` must be legal for every per-subtask transition target that can consume the output. A dependency is illegal when the referenced task's `role_pair` is downstream of the generated child's `role_pair` in the configured transition graph; same-role-pair dependencies are allowed. Supersession chains are checked as dependency paths, so a dependency that resolves through `superseded_by` to a downstream role-pair is also invalid.
+
+**DecompositionManifest fields:**
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `owned_files` | `[]string` | Exact files this output entry owns when knowable |
+| `owned_modules` | `[]string` | Modules, packages, components, or functional areas owned by this entry |
+| `read_only_depends_on` | `[]int` | Sibling `output[]` indexes consumed read-only |
+| `read_only_task_depends_on` | `[]string` | Existing concrete task IDs consumed read-only |
+| `interfaces_owned` | `[]string` | Named interfaces or contracts this entry defines |
+| `interfaces_consumed` | `[]string` | Named interfaces or contracts this entry consumes |
+| `coverage_notes` | `string` | Why this entry is bounded and how it contributes to full goal coverage |
+
+`read_only_depends_on` and `read_only_task_depends_on` do not schedule work by themselves. They must be mirrored in scheduler-facing `depends_on` and `task_depends_on`; validation rejects decomposition-root output where the read-only metadata and scheduling dependency fields diverge.
+
+Generated child tasks also persist task-level `decomposition` metadata copied from the source `output[]` entry. Task-level metadata is read-only context for the child and does not change dependency scheduling.
+
+For decomposition-root outputs, `liza set-task-output` requires a role-appropriate framework ref on every entry:
+
+| Master role-pair | Required output ref | Child target |
+|------------------|---------------------|--------------|
+| `epic-planning-main-pair` | `plan_ref` | `epic-planning-pair` |
+| `architecture-main-pair` | `arch_ref` | `architecture-pair` |
+| `code-planning-main-pair` | `plan_ref` | `code-planning-pair` |
+
+Task-level inherited refs and output-entry produced refs have different meanings. A specialized child reads task-level `plan_ref` or `arch_ref` as the master framework it must respect, then may emit its own output-entry `plan_ref`, `arch_ref`, or `epic_ref` for downstream children. `architecture-to-code-plan` remains the Case A bypass: specialized `architecture-pair` entries produce `arch_ref` for `code-planning-pair` children and do not route through `code-planning-main-pair`.
 
 Artifact reference fields are scalar repo-relative refs, optionally with a
 `#fragment` anchor. The protected artifact fields are goal `spec_ref`; task
@@ -348,7 +387,10 @@ The `parent-tasks-context` template block renders upstream parent task metadata 
 
 | Name | Source Status | Cardinality | Effect |
 |------|-------------|-------------|--------|
-| `us-to-coding` | `US_APPROVED` | `many-to-one` | When all cohort siblings reach approved, creates **one** child architecture task linked to all N parents |
+| `epic-decompose` | `EPIC_PLAN_MAIN_APPROVED` | `per-subtask` | Auto-creates specialized epic-planning tasks from master output |
+| `arch-decompose` | `ARCHITECTURE_MAIN_APPROVED` | `per-subtask` | Auto-creates specialized architecture tasks from master output |
+| `code-plan-decompose` | `CODING_PLAN_MAIN_APPROVED` | `per-subtask` | Auto-creates specialized code-planning tasks from master output |
+| `us-to-coding` | `US_APPROVED` | `many-to-one` | When all cohort siblings reach approved, creates **one** child architecture master task linked to all N parents |
 | `architecture-to-code-plan` | `ARCHITECTURE_APPROVED` | `per-subtask` | Creates child code-planning tasks at DRAFT from `output[]` |
 | `code-plan-to-coding` | `CODING_PLAN_APPROVED` | `per-subtask` | Creates child coding tasks at DRAFT from `output[]` |
 

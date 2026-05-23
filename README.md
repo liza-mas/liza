@@ -258,6 +258,8 @@ Or you may choose to make it your Socratic colleague, your rubber duck, or your 
 
 **Multi-agent mode** — autonomous spec-to-code pipeline:
 1. `liza init "[Goal description]" --spec vision.md` (this file needs to be committed). Use `--entry-point functional-spec` to skip the epic/user-story spec phase and start at architecture, or `--entry-point technical-spec` to start at code planning when architecture is already settled. Add `--no-follow-up` to run only the entry-point sub-pipeline. `detailed-spec` remains as a legacy alias for `functional-spec`.
+   `INITIAL_PLANNING` always creates one first task: simple entry-point work starts in the specialized planning pair, while fan-out or uncertain work starts in the mapped master planning pair for the same phase.
+   Existing frozen `.liza/pipeline.yaml` workspaces are not migrated; run a new `liza init` to receive updated role-pairs, transitions, and routing.
 2. `liza tui` — the TUI shows live system state (agents, tasks, alerts, sprint metrics). From it you can spawn agents with role autocompletion (`s` uses configured default CLI, `S` lets you pick). Pause/resume the system, add tasks, and trigger sprint checkpoints.
    Check [Quick Start](support-docs/USAGE_MULTI_AGENTS.md#quick-start-target-usage) for required roles and options (configuring default CLI, logging).
 
@@ -416,6 +418,8 @@ Liza has 13 roles organized in four pipeline phases:
 - **Coding phase**: orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer
 - **Integration phase**: integration-analyst, integration-reviewer, coder, code-reviewer
 
+Master planning role-pairs do not add roles. They reuse the same doer and reviewer roles with `decomposition-root: true` when planning would otherwise fan out.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         Human                               │
@@ -427,6 +431,7 @@ Liza has 13 roles organized in four pipeline phases:
     │                                          │
     │  Orchestrator (decomposes & rescopes)    │
     │  Epic Planner ←→ Epic Plan Reviewer      │
+    │  (master pair first only for fan-out)    │
     │  US Writer    ←→ US Reviewer             │
     │                                          │
     └──────────────────┬───────────────────────┘
@@ -435,12 +440,14 @@ Liza has 13 roles organized in four pipeline phases:
     │                                          │
     │  Orchestrator (decomposes & rescopes)    │
     │  Architect    ←→ Architecture Reviewer   │
+    │  (master pair first only for fan-out)    │
     │                                          │
     └──────────────────┬───────────────────────┘
                        │ liza proceed (architecture-to-code-plan)
     ┌──────────── Coding Phase ────────────────┐
     │                                          │
     │  Code Planner ←→ Code Plan Reviewer      │
+    │  (master pair first only for fan-out)    │
     │  Coder        ←→ Code Reviewer           │
     │                                          │
     └──────────────────┬───────────────────────┘
@@ -487,18 +494,19 @@ initial → executing → submitted → reviewing → approved → MERGED
              └──> initial (release claim)
 ```
 
-Inter-pair transitions (`liza proceed`) create downstream tasks between sprints:
+Inter-pair transitions (`liza proceed`) create downstream tasks between sprints. Case A remains direct: `architecture-to-code-plan` starts `code-planning-pair` children from specialized architecture outputs and bypasses `code-planning-main-pair`.
 
 ```
-  Spec phase                           Architecture phase                    Coding phase
+  Spec phase                                  Architecture phase                    Coding phase
 
-  Epic Planner ─approved─► MERGED      Architect ─approved─► MERGED          Code Planner ─approved─► MERGED
-       │ epic-to-us (per-subtask)           │ arch-to-code-plan (per-subtask)      │ code-plan-to-coding (per-subtask)
-       ▼                                    └───────────────────────────────►      ▼
-  US Writer ─approved─► MERGED                                                Coder ─approved─► MERGED
-       │ us-to-coding (many-to-one)                                                │ all tasks merged
-       ▼                                                                          ▼
-  Architect                                                                  Integration Analyst (auto)
+  Epic Master ─auto─► Epic Planner      Arch Master ─auto─► Architect          Code Plan Master ─auto─► Code Planner
+      ▲ fan-out only      │ epic-to-us       ▲ fan-out only    │ arch-to-code      ▲ fan-out only       │ code-plan-to-code
+      │                   ▼                  │                 └──────────────►    │                    ▼
+  simple entry ─────► Epic Planner      simple entry ─────► Architect          simple entry ─────► Code Planner
+                           │ us-to-coding (many-to-one)                                             Coder
+                           ▼                                                                        │ all tasks merged
+                      Architecture phase                                                            ▼
+                                                                                               Integration Analyst (auto)
 ```
 
 Example of a task on the blackboard:

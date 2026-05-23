@@ -93,6 +93,14 @@ For pipeline-configured goals, `role_pair` determines which roles participate in
 | `integration` | integration-analyst → integration-reviewer | DRAFT_INTEGRATION_ANALYSIS, INTEGRATION_ANALYSIS_REJECTED | INTEGRATION_ANALYSIS_TO_REVIEW |
 | `architecture` | architect → architecture-reviewer | DRAFT_ARCHITECTURE, ARCHITECTURE_REJECTED | ARCHITECTURE_TO_REVIEW |
 
+Master planning role-pairs use the same role workflows but different configured states and quorum claimability:
+
+| Role-pair | Doer Claims | Reviewer Claims |
+|-----------|-------------|-----------------|
+| `epic-planning-main-pair` | DRAFT_EPIC_PLAN_MAIN, EPIC_PLAN_MAIN_REJECTED | EPIC_PLAN_MAIN_TO_REVIEW, EPIC_PLAN_MAIN_PARTIALLY_APPROVED |
+| `architecture-main-pair` | DRAFT_ARCHITECTURE_MAIN, ARCHITECTURE_MAIN_REJECTED | ARCHITECTURE_MAIN_TO_REVIEW, ARCHITECTURE_MAIN_PARTIALLY_APPROVED |
+| `code-planning-main-pair` | DRAFT_CODING_PLAN_MAIN, CODING_PLAN_MAIN_REJECTED | CODING_PLAN_MAIN_TO_REVIEW, CODING_PLAN_MAIN_PARTIALLY_APPROVED |
+
 Claimability rule:
 ```
 claimable(task, role) =
@@ -130,6 +138,29 @@ When new task types are added (e.g., `specification`, `architecture`), they defi
 > **Note:** The `task.type` field and type registry are superseded by the `role_pair` field
 > for claimability and state resolution — see [Sub-pipelines spec](../build/2%20-%20Sub-pipelines and spec writing.md)
 > §Task model extension. The `type` field may remain as a human-readable category.
+
+### Master Planning Pair State Machines
+
+Master planning pairs follow the ordinary doer/reviewer lifecycle with two quorum states:
+
+```text
+initial -> executing -> submitted -> reviewing -> partially-approved -> reviewing-2 -> approved
+              |              |             |                |                |
+              |              |             v                |                v
+              |              |          rejected <----------+------------- rejected
+              v
+           BLOCKED
+```
+
+Configured embedded states:
+
+| Role-pair | Initial | Executing | Submitted | Reviewing | Partially approved | Reviewing 2 | Approved | Rejected |
+|-----------|---------|-----------|-----------|-----------|--------------------|-------------|----------|----------|
+| `epic-planning-main-pair` | DRAFT_EPIC_PLAN_MAIN | EPIC_PLANNING_MAIN | EPIC_PLAN_MAIN_TO_REVIEW | REVIEWING_EPIC_PLAN_MAIN | EPIC_PLAN_MAIN_PARTIALLY_APPROVED | REVIEWING_EPIC_PLAN_MAIN_2 | EPIC_PLAN_MAIN_APPROVED | EPIC_PLAN_MAIN_REJECTED |
+| `architecture-main-pair` | DRAFT_ARCHITECTURE_MAIN | ARCHITECTING_MAIN | ARCHITECTURE_MAIN_TO_REVIEW | REVIEWING_ARCHITECTURE_MAIN | ARCHITECTURE_MAIN_PARTIALLY_APPROVED | REVIEWING_ARCHITECTURE_MAIN_2 | ARCHITECTURE_MAIN_APPROVED | ARCHITECTURE_MAIN_REJECTED |
+| `code-planning-main-pair` | DRAFT_CODING_PLAN_MAIN | CODE_PLANNING_MAIN | CODING_PLAN_MAIN_TO_REVIEW | REVIEWING_CODING_PLAN_MAIN | CODING_PLAN_MAIN_PARTIALLY_APPROVED | REVIEWING_CODING_PLAN_MAIN_2 | CODING_PLAN_MAIN_APPROVED | CODING_PLAN_MAIN_REJECTED |
+
+Quorum 2 means two approval events. The first approved verdict records the approval and transitions `reviewing` to `partially-approved`. A reviewer can then claim the partially approved task; claim moves it to `reviewing-2`. The second approved verdict transitions to `approved`, which unlocks the master-to-specialized auto transition. Rejection from either review pass returns to the configured rejected state for the same role-pair.
 
 ### Code-Planning Pair State Machine
 
@@ -569,6 +600,33 @@ task_states:
     - REVIEWING_CODING_PLAN
     - CODING_PLAN_APPROVED
     - CODING_PLAN_REJECTED
+    # Master epic-planning pair states
+    - DRAFT_EPIC_PLAN_MAIN
+    - EPIC_PLANNING_MAIN
+    - EPIC_PLAN_MAIN_TO_REVIEW
+    - REVIEWING_EPIC_PLAN_MAIN
+    - EPIC_PLAN_MAIN_PARTIALLY_APPROVED
+    - REVIEWING_EPIC_PLAN_MAIN_2
+    - EPIC_PLAN_MAIN_APPROVED
+    - EPIC_PLAN_MAIN_REJECTED
+    # Master architecture pair states
+    - DRAFT_ARCHITECTURE_MAIN
+    - ARCHITECTING_MAIN
+    - ARCHITECTURE_MAIN_TO_REVIEW
+    - REVIEWING_ARCHITECTURE_MAIN
+    - ARCHITECTURE_MAIN_PARTIALLY_APPROVED
+    - REVIEWING_ARCHITECTURE_MAIN_2
+    - ARCHITECTURE_MAIN_APPROVED
+    - ARCHITECTURE_MAIN_REJECTED
+    # Master code-planning pair states
+    - DRAFT_CODING_PLAN_MAIN
+    - CODE_PLANNING_MAIN
+    - CODING_PLAN_MAIN_TO_REVIEW
+    - REVIEWING_CODING_PLAN_MAIN
+    - CODING_PLAN_MAIN_PARTIALLY_APPROVED
+    - REVIEWING_CODING_PLAN_MAIN_2
+    - CODING_PLAN_MAIN_APPROVED
+    - CODING_PLAN_MAIN_REJECTED
     # Integration-pair states
     - DRAFT_INTEGRATION_ANALYSIS
     - ANALYZING_INTEGRATION

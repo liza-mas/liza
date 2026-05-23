@@ -11,6 +11,12 @@ from the YAML at load time — no hardcoded role constants.
 | Canonical Name | YAML Key | Agent ID Prefix | Agent Name Pattern |
 |----------------|----------|-----------------|-------------------|
 | Orchestrator | `orchestrator` | `orchestrator-` | `orchestrator-1` |
+| Epic Planner | `epic-planner` | `epic-planner-` | `epic-planner-1`, `epic-planner-2` |
+| Epic Plan Reviewer | `epic-plan-reviewer` | `epic-plan-reviewer-` | `epic-plan-reviewer-1`, `epic-plan-reviewer-2` |
+| US Writer | `us-writer` | `us-writer-` | `us-writer-1`, `us-writer-2` |
+| US Reviewer | `us-reviewer` | `us-reviewer-` | `us-reviewer-1`, `us-reviewer-2` |
+| Architect | `architect` | `architect-` | `architect-1`, `architect-2` |
+| Architecture Reviewer | `architecture-reviewer` | `architecture-reviewer-` | `architecture-reviewer-1`, `architecture-reviewer-2` |
 | Code Planner | `code-planner` | `code-planner-` | `code-planner-1`, `code-planner-2` |
 | Code Plan Reviewer | `code-plan-reviewer` | `code-plan-reviewer-` | `code-plan-reviewer-1`, `code-plan-reviewer-2` |
 | Coder | `coder` | `coder-` | `coder-1`, `coder-2` |
@@ -24,7 +30,7 @@ from the YAML at load time — no hardcoded role constants.
 - **Agent IDs:** Use prefix form (`code-reviewer-1`, `coder-2`)
 - **Single name form:** The YAML key is the canonical identifier — used in pipeline YAML, task model, agent IDs, and CLI. There is no separate "workflow" form.
 
-**ID Validation Regex:** `^(coder|code-reviewer|orchestrator|code-planner|code-plan-reviewer|integration-analyst|integration-reviewer)-[0-9]+$`
+**ID Validation Regex:** `^(orchestrator|epic-planner|epic-plan-reviewer|us-writer|us-reviewer|architect|architecture-reviewer|code-planner|code-plan-reviewer|coder|code-reviewer|integration-analyst|integration-reviewer)-[0-9]+$`
 
 ## Multiple Agents Per Role
 
@@ -32,6 +38,14 @@ Running multiple agents of the same role is fully supported:
 
 | Role | Multiple Agents Supported | Notes |
 |------|--------------------------|-------|
+| Epic Planner | Yes | Claims independent epic-planning or epic-planning-main tasks |
+| Epic Plan Reviewer | Yes | Claims independent epic plan reviews, including second reviews for master quorum |
+| US Writer | Yes | Claims independent user-story tasks |
+| US Reviewer | Yes | Claims independent user-story reviews |
+| Architect | Yes | Claims independent architecture or architecture-main tasks |
+| Architecture Reviewer | Yes | Claims independent architecture reviews, including second reviews for master quorum |
+| Code Planner | Yes | Claims independent code-planning or code-planning-main tasks |
+| Code Plan Reviewer | Yes | Claims independent code-plan reviews, including second reviews for master quorum |
 | Coder | Yes | Each coder claims independent tasks; no coordination needed |
 | Code Reviewer | Yes | Reviewers claim independent review tasks; merge safety via working-tree-less `liza wt-merge` |
 | Orchestrator | No (`max-instances: 1`) | Singular orchestrator enforced at registration (see [Declarative Role Definitions](../build/3%20-%20Declarative%20Role%20Definitions.md#constraints)) |
@@ -73,6 +87,22 @@ All roles must:
 - Treat protocol gaps the same as spec gaps: explicit escalation, not creative interpretation
 
 **Rationale:** Specs are complex and imperfect. Silent workarounds compound into systemic drift. Orchestrator escalates to human via CHECKPOINT if system-level clarification needed.
+
+## Master Planning Responsibilities
+
+Master planning tasks are role-pair specializations, not new roles. The same doer/reviewer roles are reused by both the master and specialized pairs:
+
+| Master role-pair | Specialized role-pair | Doer | Reviewer |
+|------------------|-----------------------|------|----------|
+| `epic-planning-main-pair` | `epic-planning-pair` | `epic-planner` | `epic-plan-reviewer` |
+| `architecture-main-pair` | `architecture-pair` | `architect` | `architecture-reviewer` |
+| `code-planning-main-pair` | `code-planning-pair` | `code-planner` | `code-plan-reviewer` |
+
+When a task's role-pair has `decomposition-root: true`, the doer must define the general approach before specialized work starts: boundaries, interface contracts, shared-file ownership, dependency ordering, required `plan_ref` or `arch_ref`, and one typed `output[]` entry per specialized scope. The master doer must prove coverage of the goal without writing the detailed specialized plan.
+
+The master reviewer validates decomposition coherence rather than implementation detail. Approval requires the Master Output Contract: non-overlapping scopes, exactly-one interface ownership, explicit shared-file ownership, real scheduling dependencies, inherited artifact refs, and complete coverage. `decomposition.read_only_depends_on` and `decomposition.read_only_task_depends_on` are descriptive metadata; the scheduler dependency must also be mirrored in `depends_on` or `task_depends_on`.
+
+Master role-pairs use quorum 2. A first approval moves the task to the configured `partially-approved` state; a second reviewer claims from that state, transitions through `reviewing-2`, and the second approval reaches the configured `approved` state.
 
 ### Loop Detection Self-Abort
 

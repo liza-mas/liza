@@ -68,3 +68,4 @@
 | [0064 — Review Boundary Recovery](0064-review-boundary-recovery.md) | Treat review commit/worktree HEAD mismatch as a hard boundary failure and recover stale candidates through integration failure. |
 | [0065 — Recursive Superseded Dependency Resolution](0065-recursive-superseded-dependency-resolution.md) | Resolve dependencies through supersession chains so replacement work, not superseded tasks, controls downstream claimability. |
 | [0066 — Architecture Sub-Pipeline and Spec Entry Points](0066-architecture-subpipeline-entry-points.md) | Extract architecture into its own sub-pipeline and distinguish functional-spec, technical-spec, and legacy detailed-spec entry points. |
+| [0067 — Master Planning Task Pattern](0067-master-planning-task-pattern.md) | Add reviewed master planning tasks before fan-out while preserving simple specialized entry routing and ADR-0066's architecture-to-code-plan bypass. |

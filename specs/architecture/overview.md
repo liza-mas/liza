@@ -119,6 +119,23 @@ Agents hold time-bounded leases on tasks. A stale agent's task becomes reclaimab
 
 Orchestrator writes tasks as DRAFT, finalizes to READY. Coders cannot claim half-written tasks.
 
+### Master Planning Tasks
+
+Planning fan-out is gated by a reviewed master task when no upstream step has already supplied the decomposition. `INITIAL_PLANNING` still starts from the configured specialized entry point, but it creates exactly one first task:
+
+- simple work: one specialized planning task in `epic-planning-pair`, `architecture-pair`, or `code-planning-pair`
+- fan-out or uncertain work: one mapped master task in `epic-planning-main-pair`, `architecture-main-pair`, or `code-planning-main-pair`
+
+Master role-pairs reuse the same doer/reviewer roles as their specialized counterparts and are selected by `decomposition-root: true`. Their job is to define the general approach, ownership boundaries, interface contracts, required artifact refs, and typed `output[]` decomposition. After quorum approval, auto per-subtask transitions create specialized planning children:
+
+```text
+epic-planning-main-pair -> epic-planning-pair -> us-writing-pair
+architecture-main-pair  -> architecture-pair
+code-planning-main-pair -> code-planning-pair -> coding-pair
+```
+
+Case A remains direct: `architecture-to-code-plan` consumes specialized `architecture-pair` output and targets `coding-subpipeline.code-planning-pair.initial`, bypassing `code-planning-main-pair`.
+
 ### Commit SHA Verification
 
 Coder records commit SHA when requesting review. Code Reviewer verifies the SHA before examining work. No reviewing stale state.

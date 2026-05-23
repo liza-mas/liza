@@ -228,7 +228,7 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
 
    **Trigger modes:**
    - `manual`: requires the human to run `liza proceed <task-id> <transition-name>`. Used for quality gates where human judgment is needed before the next pipeline stage begins (e.g. reviewing a plan before committing to implementation).
-   - `auto` *(RESERVED — not yet implemented)*: the Orchestrator's supervisor transitions the task automatically when it detects the `from` state with no human gate. Preconditions beyond state match: for `per-subtask`, `output[]` must be non-empty and validated (each entry has `desc`, `done_when`, `scope`); for `one-to-one`, parent artifact must exist. No current transitions use `auto`. Note: the Planning Transition Gate (see sprint-governance.md) is checkpoint-gated, not fully automatic — the orchestrator creates a `PLANNING_COMPLETE` checkpoint and waits for human resume before executing transitions.
+   - `auto`: the supervisor executes the transition automatically when the source task reaches the configured `from` state and transition-specific validation passes. Master planning uses `auto` for intra-subpipeline decomposition after quorum approval. Preconditions beyond state match: for `per-subtask`, `output[]` must be non-empty and validated; for `one-to-one`, parent artifact must exist. Planning Transition Gate behavior still applies to manual phase gates.
 
 6. ✅ Make the Task state machine configured via the yaml file.
 
@@ -500,6 +500,82 @@ Phase 1 prepares Phase 2 (the adding of a new US Writing Sub-pipeline) by:
    ```
    The Orchestrator is an agent but doesn't appear in the config file because it is mandatory, unique and doesn't belong to any pipeline.
    It reads the entry-points and the input material, then dispatches to the appropriate sub-pipeline, creating the initial task for its planner.
+
+### Master planning role-pairs
+
+Planning fan-out is represented as a master role-pair followed by the specialized role-pair inside the same sub-pipeline. The master and specialized pairs reuse the same roles; `decomposition-root: true` selects the master prompt behavior and output validation.
+
+```yaml
+role-pairs:
+  architecture-main-pair:
+    doer: architect
+    reviewer: architecture-reviewer
+    decomposition-root: true
+    review-policy:
+      quorum: 2
+      provider-diversity: preferred
+    states:
+      initial: DRAFT_ARCHITECTURE_MAIN
+      executing: ARCHITECTING_MAIN
+      submitted: ARCHITECTURE_MAIN_TO_REVIEW
+      reviewing: REVIEWING_ARCHITECTURE_MAIN
+      approved: ARCHITECTURE_MAIN_APPROVED
+      rejected: ARCHITECTURE_MAIN_REJECTED
+      partially-approved: ARCHITECTURE_MAIN_PARTIALLY_APPROVED
+      reviewing-2: REVIEWING_ARCHITECTURE_MAIN_2
+
+  architecture-pair:
+    doer: architect
+    reviewer: architecture-reviewer
+    states:
+      initial: DRAFT_ARCHITECTURE
+      executing: ARCHITECTING
+      submitted: ARCHITECTURE_TO_REVIEW
+      reviewing: REVIEWING_ARCHITECTURE
+      approved: ARCHITECTURE_APPROVED
+      rejected: ARCHITECTURE_REJECTED
+
+sub-pipelines:
+  architecture-subpipeline:
+    steps:
+      - architecture-main-pair
+      - architecture-pair
+    transitions:
+      - name: arch-decompose
+        task-slug: architecture
+        from: architecture-main-pair.approved
+        to: architecture-pair.initial
+        trigger: auto
+        cardinality: per-subtask
+```
+
+`decomposition-root: true` is valid only when the role-pair has exactly one outgoing same-subpipeline `trigger: auto`, `cardinality: per-subtask` transition to another role-pair. It is invalid on terminal steps, non-auto transitions, non-`per-subtask` transitions, or multiple outgoing decomposition transitions.
+
+`INITIAL_PLANNING` uses entry points as specialized targets, then resolves the mapped master role-pair from the `decomposition-root` transition. It creates exactly one task: the specialized target for simple work, or the mapped master target when the goal would otherwise fan out or when boundary placement is uncertain. Existing frozen `.liza/pipeline.yaml` files are not migrated; users must run a new `liza init` to receive master role-pairs, auto-decompose transitions, and updated entry-point routing.
+
+`architecture-to-code-plan` remains the Case A bypass. It targets `coding-subpipeline.code-planning-pair.initial` from specialized `architecture-pair.approved` output and does not route through `code-planning-main-pair`.
+
+Master output entries must carry typed decomposition metadata and the framework artifact ref consumed by generated specialized children:
+
+```yaml
+output:
+  - desc: "Plan authentication implementation"
+    done_when: "Auth implementation plan is reviewed and decomposes coding work"
+    scope: "auth module"
+    spec_ref: specs/auth.md
+    plan_ref: specs/plans/auth-master-plan.md
+    task_depends_on: ["architecture-1"]
+    decomposition:
+      owned_files: ["internal/auth/service.go"]
+      owned_modules: ["auth"]
+      read_only_depends_on: []
+      read_only_task_depends_on: ["architecture-1"]
+      interfaces_owned: ["AuthService"]
+      interfaces_consumed: ["UserRepository"]
+      coverage_notes: "Owns authentication behavior while consuming user lookup read-only."
+```
+
+`epic-planning-main-pair` and `code-planning-main-pair` require `plan_ref`; `architecture-main-pair` requires `arch_ref`. `read_only_depends_on` and `read_only_task_depends_on` document read-only consumption and must be mirrored in scheduler-facing `depends_on` and `task_depends_on`. Specialized epic outputs keep the existing downstream `epic_ref` behavior for `us-writing-pair`; the epic master framework uses `plan_ref`.
 
 ---
 

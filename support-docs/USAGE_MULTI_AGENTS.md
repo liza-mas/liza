@@ -146,7 +146,9 @@ liza init "[Goal description]" --spec [spec_ref]
 #   liza init "Implement from technical spec" --entry-point technical-spec    # code-plan → code
 #   # detailed-spec is a legacy alias for functional-spec.
 #   # Add --no-follow-up to execute only the entry-point sub-pipeline.
-#   # New entry-point names require a newly initialized workspace or manually updated .liza/pipeline.yaml.
+#   # Simple entry-point work creates one specialized planning task.
+#   # Fan-out or uncertain work creates one mapped master planning task first.
+#   # Existing frozen .liza/pipeline.yaml files are not migrated; re-run liza init to receive new topology.
 #   # If omitted, the orchestrator auto-classifies from the spec content.
 
 # Verify
@@ -182,19 +184,19 @@ Roles:
   orchestrator            - Creates and manages task breakdown
 
   Specification phase (general-objective entry point):
-  epic-planner            - Decomposes vision into epics
-  epic-plan-reviewer      - Reviews epic decomposition
+  epic-planner            - Decomposes vision into epics; in the master pair, defines the epic-level decomposition framework
+  epic-plan-reviewer      - Reviews epic decomposition; in the master pair, verifies boundaries, refs, and manifest coverage
   us-writer               - Writes user stories from epics
   us-reviewer             - Reviews user stories
 
   Architecture phase (general-objective, functional-spec, detailed-spec):
   architect               - Defines component boundaries, interfaces, and structural decisions
-                            (receives parent task context from upstream US tasks or goal spec)
-  architecture-reviewer   - Reviews architectural coherence and structural soundness
+                            (receives parent task context from upstream US tasks or goal spec; in the master pair, owns architectural decomposition)
+  architecture-reviewer   - Reviews architectural coherence and structural soundness; in the master pair, verifies decomposition coherence
 
   Coding phase (all entry points):
-  code-planner            - Claims and produces coding plans
-  code-plan-reviewer      - Reviews coding plans and submits verdicts
+  code-planner            - Claims and produces coding plans; in the master pair, defines implementation workstream boundaries
+  code-plan-reviewer      - Reviews coding plans and submits verdicts; in the master pair, verifies typed decomposition and artifact refs
   coder                   - Claims and implements coding tasks
   code-reviewer           - Reviews coding tasks and submits verdicts
 
@@ -288,13 +290,16 @@ The pipeline defines which role-pairs execute and how tasks flow between them:
 
 ```
 general-objective entry point (full pipeline):
-  epic-planning-pair → us-writing-pair → architecture-pair → code-planning-pair → coding-pair
+  simple: epic-planning-pair → us-writing-pair → architecture-main-pair → architecture-pair → code-planning-pair → coding-pair
+  fan-out or uncertain: epic-planning-main-pair → epic-planning-pair → us-writing-pair → architecture-main-pair → architecture-pair → code-planning-pair → coding-pair
 
 functional-spec entry point (architecture pipeline):
-  architecture-pair → code-planning-pair → coding-pair
+  simple: architecture-pair → code-planning-pair → coding-pair
+  fan-out or uncertain: architecture-main-pair → architecture-pair → code-planning-pair → coding-pair
 
 technical-spec entry point (coding pipeline):
-  code-planning-pair → coding-pair
+  simple: code-planning-pair → coding-pair
+  fan-out or uncertain: code-planning-main-pair → code-planning-pair → coding-pair
 
 detailed-spec entry point:
   legacy alias for functional-spec
@@ -303,7 +308,11 @@ integration sub-pipeline (post-coding, orchestrator-triggered):
   integration-pair → coding-pair (fix tasks)
 ```
 
+The configured entry points still name the specialized planning pairs. During `INITIAL_PLANNING`, Liza resolves the mapped `decomposition-root` role-pair and creates exactly one first task: the specialized task for simple work, or the master task when the work would otherwise fan out. The master task's quorum-approved `output[]` entries create the specialized children.
+
 Each transition between pairs is a **human gate** (unless auto-resume is enabled): the sprint completes, the human reviews, then runs `liza proceed <task-id> <transition>` followed by `liza resume`. With auto-resume, these transitions happen automatically.
+
+The intra-subpipeline master-to-specialized transitions (`epic-decompose`, `arch-decompose`, `code-plan-decompose`) are `trigger: auto` and run after the master task reaches its quorum-approved state. `architecture-to-code-plan` is still Case A: specialized `architecture-pair` output goes directly to `code-planning-pair` children and does not create a `code-planning-main-pair` task. Specialized epic outputs still use `epic_ref` for `us-writing-pair`; the epic master framework uses `plan_ref`.
 
 Use `liza init --no-follow-up` to suppress top-level `pipeline-transitions`. The selected entry-point sub-pipeline still runs normally, but Liza will not show, auto-execute, or allow manual `liza proceed` for cross-sub-pipeline follow-up transitions.
 
@@ -350,6 +359,8 @@ artifact yourself and surfaces unflagged decisions agents baked in without marki
 **`liza proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent, `many-to-one`: all sibling tasks in a cohort must reach approved status, then one child is created linked to all parents — used by the `us-to-coding` transition to fan N approved user stories into one architecture task). Use `liza status` to see available transitions for tasks at terminal states. Transition checkpoints run this in batch during `liza resume`; manual use is for explicit one-off transition execution.
 
 For `per-subtask` output, `depends_on` names sibling output indexes (`"0"` means `output[0]`). Use `task_depends_on` when the generated child must depend on existing concrete task IDs outside the current `output[]`. Concrete dependencies must follow pipeline direction: a generated child cannot depend on a task whose role-pair is downstream from the child's role-pair, including through `superseded_by` resolution paths.
+
+Master planning output entries also carry `decomposition` metadata. `read_only_depends_on` and `read_only_task_depends_on` describe read-only use only; scheduling still comes from mirrored `depends_on` and `task_depends_on` entries. Master outputs must include the inherited framework ref for their children: `plan_ref` for `epic-planning-main-pair`, `arch_ref` for `architecture-main-pair`, and `plan_ref` for `code-planning-main-pair`.
 
 #### Replanning at Checkpoint
 
