@@ -1,0 +1,12 @@
+[
+  {
+    "desc": "Enforce the decomposition-root output contract in `set-task-output` by requiring typed decomposition metadata and the role-appropriate produced artifact ref on decomposition-root outputs while preserving non-root compatibility.",
+    "done_when": "`internal/ops/set_task_output.go` detects whether the producing task role-pair is a decomposition root through the resolver `IsDecompositionRoot` API; decomposition-root output entries require `decomposition` and the role-appropriate produced artifact ref (`plan_ref` for `epic-planning-main-pair`, `arch_ref` for `architecture-main-pair`, `plan_ref` for `code-planning-main-pair`); non-root output entries remain valid without `decomposition`; validation rejects duplicate sibling `decomposition.owned_files`, duplicate sibling `decomposition.interfaces_owned`, empty ownership declarations, catch-all ownership declarations, invalid or self `decomposition.read_only_depends_on`, `decomposition.read_only_depends_on` entries not mirrored in `depends_on`, invalid or missing `decomposition.read_only_task_depends_on` targets, `decomposition.read_only_task_depends_on` entries not mirrored in `task_depends_on`, invalid sibling `depends_on`, and sibling `depends_on` cycles; validation continues to use existing artifact-ref scalar checks for output refs and existing dependency-direction checks for `task_depends_on`; focused tests in `internal/ops/set_task_output_test.go` prove each rejection path plus non-root compatibility; `go test ./internal/ops -run 'TestSetTaskOutput'` passes.",
+    "scope": "Modify only `internal/ops/set_task_output.go` and focused tests in `internal/ops/set_task_output_test.go`. Consume `models.DecompositionManifest` from the model-surface task and the resolver decomposition-root API from the merged resolver work. Reuse existing artifact-ref scalar validation, `models.ValidateDependsOn`, `validateTaskDependsOn`, existing task existence checks, and dependency-direction validation. Do not modify `internal/models/task.go`, `internal/ops/proceed.go`, command projections, pipeline topology, prompt templates, docs, ADRs, end-to-end tests, or unrelated ops behavior.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-144938-architecture-4-code-planning-0-b-repair-0.md",
+    "task_depends_on": [
+      "architecture-4-code-planning-0-a-coding-0-repair-0"
+    ]
+  }
+]
