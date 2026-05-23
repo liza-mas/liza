@@ -230,6 +230,7 @@ func TestInspectTasksSummaryActive(t *testing.T) {
 				Created:             now,
 				DoneWhen:            strings.Repeat("verbose done when ", 20),
 				Scope:               strings.Repeat("verbose scope ", 20),
+				Decomposition:       inspectTasksTestDecomposition(),
 				Output: []models.OutputEntry{
 					{Kind: "code-task", Desc: "child 1"},
 					{Kind: "code-task", Desc: "child 2"},
@@ -310,6 +311,50 @@ func TestInspectTasksSummaryActive(t *testing.T) {
 	if _, exists := raw[0]["output"]; exists {
 		t.Errorf("summary output includes full output field: %v", raw[0])
 	}
+	if _, exists := raw[0]["decomposition"]; exists {
+		t.Errorf("summary output includes decomposition: %v", raw[0])
+	}
+}
+
+func TestInspectTasksFullTaskDecomposition(t *testing.T) {
+	state := &models.State{
+		Tasks: []models.Task{{
+			ID:            "task-with-decomposition",
+			Description:   "Task description",
+			Status:        models.TaskStatusMerged,
+			Priority:      1,
+			Created:       time.Now(),
+			Decomposition: inspectTasksTestDecomposition(),
+		}},
+	}
+
+	result, err := inspectTask(state, "task-with-decomposition", inspectTasksOptions{
+		Format: "json",
+	})
+	if err != nil {
+		t.Fatalf("inspectTask() error = %v", err)
+	}
+
+	var task map[string]any
+	if err := json.Unmarshal([]byte(result.(string)), &task); err != nil {
+		t.Fatalf("task JSON invalid: %v", err)
+	}
+
+	decomposition, ok := task["decomposition"].(map[string]any)
+	if !ok {
+		t.Fatalf("decomposition = %T, want object: %v", task["decomposition"], task["decomposition"])
+	}
+	if got := decomposition["coverage_notes"]; got != "covers the inspect projection boundary" {
+		t.Errorf("coverage_notes = %v, want inspect coverage note", got)
+	}
+	ownedFiles, ok := decomposition["owned_files"].([]any)
+	if !ok || len(ownedFiles) != 1 || ownedFiles[0] != "internal/commands/inspect_tasks.go" {
+		t.Errorf("owned_files = %v, want inspect_tasks.go", decomposition["owned_files"])
+	}
+	interfacesOwned, ok := decomposition["interfaces_owned"].([]any)
+	if !ok || len(interfacesOwned) != 1 || interfacesOwned[0] != "inspect-task-json" {
+		t.Errorf("interfaces_owned = %v, want inspect-task-json", decomposition["interfaces_owned"])
+	}
 }
 
 func TestInspectTasksOutputSummary(t *testing.T) {
@@ -351,6 +396,7 @@ func TestInspectTasksOutputSummary(t *testing.T) {
 						Kind:          "code-task",
 						DependsOn:     []string{"0"},
 						TaskDependsOn: []string{"existing-task"},
+						Decomposition: inspectTasksTestDecomposition(),
 					},
 				},
 			},
@@ -419,9 +465,32 @@ func TestInspectTasksOutputSummary(t *testing.T) {
 	if got := entry["task_depends_on"].([]any); len(got) != 1 || got[0] != "existing-task" {
 		t.Errorf("task_depends_on = %v, want [existing-task]", got)
 	}
+	decomposition, ok := entry["decomposition"].(map[string]any)
+	if !ok {
+		t.Fatalf("decomposition = %T, want object: %v", entry["decomposition"], entry["decomposition"])
+	}
+	if got := decomposition["coverage_notes"]; got != "covers the inspect projection boundary" {
+		t.Errorf("coverage_notes = %v, want inspect coverage note", got)
+	}
+	ownedFiles, ok := decomposition["owned_files"].([]any)
+	if !ok || len(ownedFiles) != 1 || ownedFiles[0] != "internal/commands/inspect_tasks.go" {
+		t.Errorf("owned_files = %v, want inspect_tasks.go", decomposition["owned_files"])
+	}
 	if strings.Contains(output, "Parent done_when") || strings.Contains(output, "Parent scope") ||
 		strings.Contains(output, "Child done_when") || strings.Contains(output, "Child scope") {
 		t.Fatalf("output summary leaked verbose blobs:\n%s", output)
+	}
+}
+
+func inspectTasksTestDecomposition() *models.DecompositionManifest {
+	return &models.DecompositionManifest{
+		OwnedFiles:            []string{"internal/commands/inspect_tasks.go"},
+		OwnedModules:          []string{"internal/commands"},
+		ReadOnlyDependsOn:     []int{0},
+		ReadOnlyTaskDependsOn: []string{"architecture-4-code-planning-0-a-coding-0-repair-2"},
+		InterfacesOwned:       []string{"inspect-task-json"},
+		InterfacesConsumed:    []string{"task-model"},
+		CoverageNotes:         "covers the inspect projection boundary",
 	}
 }
 
