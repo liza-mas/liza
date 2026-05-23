@@ -1,0 +1,12 @@
+[
+  {
+    "desc": "Add decomposition metadata to inspect task JSON projections so full task inspection exposes task-level metadata and output-summary inspection exposes output-entry metadata.",
+    "done_when": "`internal/commands/inspect_tasks.go` exposes optional top-level `decomposition` metadata in full task JSON projections by copying `Task.Decomposition` into `taskInfo`; output-summary JSON projections expose optional `output[].decomposition` metadata by copying `OutputEntry.Decomposition` into `outputEntrySummaryInfo`; compact task summaries from `--summary` remain unchanged and do not expose decomposition metadata; focused tests in `internal/commands/inspect_tasks_test.go` prove full task JSON includes `Task.Decomposition`, output-summary JSON includes `output[].decomposition`, and compact summary JSON stays compact; `go test ./internal/commands -run 'TestInspectTasks.*Decomposition|TestInspectTasksOutputSummary'` passes.",
+    "scope": "Modify only `internal/commands/inspect_tasks.go` and focused tests in `internal/commands/inspect_tasks_test.go`. Consume `models.DecompositionManifest`, `Task.Decomposition`, and `OutputEntry.Decomposition` from the model-surface task; do not modify model schema, `set-task-output` validation, child-task creation, prompt templates, docs, ADRs, end-to-end tests, or compact summary fields except as required to assert they remain absent.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-143720-architecture-4-code-planning-0-d-repair-0.md",
+    "task_depends_on": [
+      "architecture-4-code-planning-0-a-coding-0"
+    ]
+  }
+]
