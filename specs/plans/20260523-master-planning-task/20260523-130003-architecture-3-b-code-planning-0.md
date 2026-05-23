@@ -99,8 +99,8 @@ For this code-planning artifact:
 1. Re-read this plan and the output JSON.
 2. Verify the output JSON contains exactly one entry and that `desc`, `done_when`, `scope`, `spec_ref`, and `plan_ref` match Task 1.
 3. Validate JSON syntax with `jq`.
-4. Run `liza set-task-output architecture-3-b-code-planning-0 --output /home/tangi/Workspace/liza/.worktrees/architecture-3-b-code-planning-0/specs/plans/20260523-master-planning-task/20260523-130003-architecture-3-b-code-planning-0-output.json --agent-id code-planner-2 --json`.
-5. Run pre-commit on the two generated plan artifacts.
-6. Commit only the two generated artifacts.
+4. Run `liza set-task-output architecture-3-b-code-planning-0 --output /home/tangi/Workspace/liza/.worktrees/architecture-3-b-code-planning-0/specs/plans/20260523-master-planning-task/20260523-130003-architecture-3-b-code-planning-0-output.json --agent-id code-planner-3 --json`.
+5. Run pre-commit on the touched plan artifact and verify the existing output JSON still matches Task 1.
+6. Commit only the refreshed plan artifact.
 7. Confirm `git -C /home/tangi/Workspace/liza/.worktrees/architecture-3-b-code-planning-0 status --short` is clean.
-8. Submit `HEAD` with `liza submit-for-review architecture-3-b-code-planning-0 HEAD --agent-id code-planner-2 --json`.
+8. Submit `HEAD` with `liza submit-for-review architecture-3-b-code-planning-0 HEAD --agent-id code-planner-3 --json`.
