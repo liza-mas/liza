@@ -40,7 +40,7 @@ scope: Modify only `internal/ops/proceed_test.go`. Reuse existing proceed helper
 
 spec_ref: specs/goals/20260523-master-planning-task.md
 
-task_depends_on: `architecture-4-code-planning-0-a-coding-0-repair-0`, `architecture-4-code-planning-0-b-repair-0-coding-1`, `architecture-4-code-planning-0-c-repair-0-coding-1`
+task_depends_on: `architecture-4-code-planning-0-a-coding-0-repair-1`, `architecture-4-code-planning-0-b-repair-0-coding-1`, `architecture-4-code-planning-0-c-repair-0-coding-1`
 
 ### Task 3: Integration Quorum, Prompt, And Full Sprint Validation
 
@@ -52,7 +52,7 @@ scope: Modify only `internal/integration/e2e_workflow_test.go` and `internal/int
 
 spec_ref: specs/goals/20260523-master-planning-task.md
 
-task_depends_on: `architecture-2-b-code-planning-0-repair-0-coding-0-repair-0`, `architecture-3-b-code-planning-0-coding-0-repair-1`, `architecture-4-code-planning-0-b-repair-0-coding-1`, `architecture-4-code-planning-0-c-repair-0-coding-1`
+task_depends_on: `architecture-2-b-code-planning-0-repair-0-coding-0-repair-0`, `architecture-3-b-code-planning-0-coding-0-repair-2b`, `architecture-4-code-planning-0-b-repair-0-coding-1`, `architecture-4-code-planning-0-c-repair-0-coding-1`
 
 ## Dependency And Shared-File Audit
 
