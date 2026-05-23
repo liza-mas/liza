@@ -1,0 +1,9 @@
+[
+  {
+    "desc": "Add typed decomposition manifest model persistence on `OutputEntry` and `Task`, with focused JSON/YAML round-trip tests for populated and omitted decomposition metadata.",
+    "done_when": "`internal/models/task.go` defines `DecompositionManifest` with JSON/YAML fields `owned_files`, `owned_modules`, `read_only_depends_on`, `read_only_task_depends_on`, `interfaces_owned`, `interfaces_consumed`, and `coverage_notes`; `OutputEntry` and `Task` both persist optional `decomposition` metadata without changing legacy entries; `internal/models/task_test.go` covers JSON and YAML round trips for populated and omitted decomposition metadata on `OutputEntry` and `Task`; `go test ./internal/models` passes.",
+    "scope": "Modify only `internal/models/task.go` and focused tests in `internal/models/task_test.go`. Do not add validation behavior, child-task propagation, inspect projections, pipeline topology, prompt templates, docs, ADRs, or end-to-end tests.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-134951-architecture-4-code-planning-0-a.md"
+  }
+]
