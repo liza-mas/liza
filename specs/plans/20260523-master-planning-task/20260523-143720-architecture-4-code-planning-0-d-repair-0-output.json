@@ -6,7 +6,7 @@
     "spec_ref": "specs/goals/20260523-master-planning-task.md",
     "plan_ref": "specs/plans/20260523-master-planning-task/20260523-143720-architecture-4-code-planning-0-d-repair-0.md",
     "task_depends_on": [
-      "architecture-4-code-planning-0-a-coding-0"
+      "architecture-4-code-planning-0-a-coding-0-repair-0"
     ]
   }
 ]

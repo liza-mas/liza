@@ -35,7 +35,7 @@ specs/plans/20260523-master-planning-task/20260523-143720-architecture-4-code-pl
 
 ## Dependency Plan
 
-Task 1 has no sibling dependencies because this plan emits a single coding task. It has an external task dependency on `architecture-4-code-planning-0-a-coding-0` because that generated coding task introduces `models.DecompositionManifest`, `Task.Decomposition`, and `OutputEntry.Decomposition`.
+Task 1 has no sibling dependencies because this plan emits a single coding task. It has an external task dependency on `architecture-4-code-planning-0-a-coding-0-repair-0` because that active replacement coding task introduces `models.DecompositionManifest`, `Task.Decomposition`, and `OutputEntry.Decomposition`.
 
 ## Shared-File Audit
 
