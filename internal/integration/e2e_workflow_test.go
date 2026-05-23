@@ -11,12 +11,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -1112,6 +1115,196 @@ func walkTaskToMerged(t *testing.T, projectDir string, bb *db.Blackboard, taskID
 	}
 }
 
+func TestMasterPlanningLifecycleAcceptance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration tests in short mode")
+	}
+
+	projectDir, cleanup := setupTestProject(t)
+	defer cleanup()
+
+	testhelpers.CreateCommittedSpecFileOnIntegration(t, projectDir, "master.md", "# Master Planning Feature")
+	if err := commands.InitCommand("Master planning acceptance", "specs/master.md", nil); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	statePath := filepath.Join(projectDir, ".liza", "state.yaml")
+	logPath := filepath.Join(projectDir, ".liza", "log.yaml")
+	bb := db.New(statePath)
+
+	masterID := "architecture-master-1"
+	if err := commands.AddTaskCommand(statePath, logPath, &commands.TaskInput{
+		ID:          masterID,
+		Type:        "architecture",
+		RolePair:    "architecture-main-pair",
+		Description: "Decompose architecture work",
+		DoneWhen:    "Specialized architecture tasks are defined",
+		Scope:       "Architecture decomposition",
+		Priority:    1,
+		SpecRef:     "specs/master.md",
+	}, "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask master failed: %v", err)
+	}
+
+	architectID := "architect-1"
+	testhelpers.RegisterTestAgent(t, bb, architectID, "architect")
+	if err := commands.ClaimTaskCommand(projectDir, masterID, architectID); err != nil {
+		t.Fatalf("ClaimTask master failed: %v", err)
+	}
+
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	masterDoerPrompt := buildIntegrationTaskPrompt(t, projectDir, state, masterID, "architect", architectID)
+	assertContainsAll(t, masterDoerPrompt,
+		"=== MASTER DECOMPOSITION MANDATE ===",
+		"Master Output Contract properties 1-6",
+		"1. Non-overlapping scopes.",
+		"2. Interface ownership.",
+		"3. Shared-file ownership.",
+		"4. Dependency ordering.",
+		"5. Inherited constraints.",
+		"6. Completeness.",
+		"Systemic Decomposition Review",
+		"systemic-thinking",
+		"arch_ref",
+	)
+	assertNotContains(t, masterDoerPrompt, "=== MASTER DECOMPOSITION REVIEW ===")
+
+	archRef := "specs/arch-plan/master-architecture.md"
+	if err := ops.SetTaskOutput(projectDir, &ops.SetTaskOutputInput{
+		TaskID:  masterID,
+		AgentID: architectID,
+		Output:  masterArchitectureOutput(archRef),
+	}); err != nil {
+		t.Fatalf("SetTaskOutput master failed: %v", err)
+	}
+
+	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
+		TaskID:         masterID,
+		AgentID:        architectID,
+		Intent:         "Architecture decomposition",
+		ValidationPlan: "Review decomposition",
+		FilesToModify:  []string{"specs/arch-plan/master-architecture.md"},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint master failed: %v", err)
+	}
+
+	reviewCommit := commitTaskWorktreeFile(t, projectDir, bb, masterID, filepath.Join("specs", "arch-plan", "master-architecture.md"), "# Master Architecture\n")
+	if err := commands.SubmitForReviewCommand(projectDir, masterID, reviewCommit, architectID); err != nil {
+		t.Fatalf("SubmitForReview master failed: %v", err)
+	}
+
+	firstReviewerID := "architecture-reviewer-1"
+	testhelpers.RegisterTestAgent(t, bb, firstReviewerID, "architecture-reviewer")
+	claimReviewManually(t, bb, masterID, firstReviewerID, models.TaskStatus("REVIEWING_ARCHITECTURE_MAIN"))
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	masterReviewerPrompt := buildIntegrationTaskPrompt(t, projectDir, state, masterID, "architecture-reviewer", firstReviewerID)
+	assertContainsAll(t, masterReviewerPrompt,
+		"=== MASTER DECOMPOSITION REVIEW ===",
+		"Invoke `systemic-thinking` before submitting a verdict",
+		"missing `arch_ref`",
+		"missing typed decomposition metadata",
+		"missing systemic-thinking evidence",
+		"violates any Master Output Contract property",
+		"1. Non-overlapping scopes.",
+		"2. Interface ownership.",
+		"3. Shared-file ownership.",
+		"4. Dependency ordering.",
+		"5. Inherited constraints.",
+		"6. Completeness.",
+	)
+	assertNotContains(t, masterReviewerPrompt, "=== MASTER DECOMPOSITION MANDATE ===")
+
+	if err := commands.SubmitVerdictCommand(projectDir, masterID, "APPROVED", "", firstReviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict first approval failed: %v", err)
+	}
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	masterTask := findTask(state.Tasks, masterID)
+	if masterTask.Status != models.TaskStatus("ARCHITECTURE_MAIN_PARTIALLY_APPROVED") {
+		t.Fatalf("first approval status = %s, want ARCHITECTURE_MAIN_PARTIALLY_APPROVED", masterTask.Status)
+	}
+
+	secondReviewerID := "architecture-reviewer-2"
+	testhelpers.RegisterTestAgent(t, bb, secondReviewerID, "architecture-reviewer")
+	claimReviewManually(t, bb, masterID, secondReviewerID, models.TaskStatus("REVIEWING_ARCHITECTURE_MAIN_2"))
+	if err := commands.SubmitVerdictCommand(projectDir, masterID, "APPROVED", "", secondReviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict second approval failed: %v", err)
+	}
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	masterTask = findTask(state.Tasks, masterID)
+	if masterTask.Status != models.TaskStatus("ARCHITECTURE_MAIN_APPROVED") {
+		t.Fatalf("second approval status = %s, want ARCHITECTURE_MAIN_APPROVED", masterTask.Status)
+	}
+	if len(masterTask.Approvals) != 2 {
+		t.Fatalf("approval count = %d, want 2", len(masterTask.Approvals))
+	}
+
+	os.Setenv("LIZA_AGENT_ID", secondReviewerID)
+	if err := commands.WtMergeCommand(projectDir, masterID, secondReviewerID); err != nil {
+		t.Fatalf("WtMerge master failed: %v", err)
+	}
+	os.Unsetenv("LIZA_AGENT_ID")
+
+	results, err := ops.ExecuteAvailableTransitions(projectDir, "auto")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions auto failed: %v", err)
+	}
+	var decomposeResult *ops.ProceedResult
+	for i := range results {
+		if results[i].TransitionName == "arch-decompose" {
+			decomposeResult = &results[i]
+			break
+		}
+	}
+	if decomposeResult == nil {
+		t.Fatalf("arch-decompose transition not executed; results=%v", results)
+	}
+	if len(decomposeResult.ChildTaskIDs) != 2 {
+		t.Fatalf("arch-decompose child count = %d, want 2", len(decomposeResult.ChildTaskIDs))
+	}
+
+	state, err = bb.Read()
+	testhelpers.AssertNoError(t, err)
+	for i, childID := range decomposeResult.ChildTaskIDs {
+		child := findTask(state.Tasks, childID)
+		if child == nil {
+			t.Fatalf("child %s not found", childID)
+		}
+		if child.RolePair != "architecture-pair" {
+			t.Errorf("child %s role_pair = %q, want architecture-pair", childID, child.RolePair)
+		}
+		if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
+			t.Errorf("child %s status = %s, want DRAFT_ARCHITECTURE", childID, child.Status)
+		}
+		if child.ArchRef != archRef {
+			t.Errorf("child %s arch_ref = %q, want %q", childID, child.ArchRef, archRef)
+		}
+		if child.Decomposition == nil {
+			t.Fatalf("child %s decomposition is nil", childID)
+		}
+		if child.Decomposition.CoverageNotes != masterArchitectureOutput(archRef)[i].Decomposition.CoverageNotes {
+			t.Errorf("child %s coverage notes = %q", childID, child.Decomposition.CoverageNotes)
+		}
+	}
+
+	specializedDoerPrompt := buildIntegrationTaskPrompt(t, projectDir, state, decomposeResult.ChildTaskIDs[0], "architect", "architect-specialized-1")
+	assertNotContains(t, specializedDoerPrompt, "=== MASTER DECOMPOSITION MANDATE ===")
+	assertNotContains(t, specializedDoerPrompt, "=== MASTER DECOMPOSITION REVIEW ===")
+	assertNotContains(t, specializedDoerPrompt, "Master Output Contract properties 1-6")
+	assertNotContains(t, specializedDoerPrompt, "Systemic Decomposition Review")
+
+	specializedReviewerPrompt := buildIntegrationTaskPrompt(t, projectDir, state, decomposeResult.ChildTaskIDs[0], "architecture-reviewer", "architecture-reviewer-specialized-1")
+	assertNotContains(t, specializedReviewerPrompt, "=== MASTER DECOMPOSITION REVIEW ===")
+	assertNotContains(t, specializedReviewerPrompt, "=== MASTER DECOMPOSITION MANDATE ===")
+	assertNotContains(t, specializedReviewerPrompt, "Master Output Contract properties 1-6")
+}
+
 func TestManyToOneTransitionLifecycle(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration tests in short mode")
@@ -1789,6 +1982,136 @@ func TestArchRefPropagation(t *testing.T) {
 	}
 
 	t.Log("TestArchRefPropagation passed — first hop and second hop arch_ref propagation verified")
+}
+
+func masterArchitectureOutput(archRef string) []models.OutputEntry {
+	return []models.OutputEntry{
+		{
+			Desc:     "Design API boundary",
+			DoneWhen: "API boundary architecture is approved",
+			Scope:    "internal/api",
+			SpecRef:  "specs/master.md",
+			ArchRef:  archRef,
+			Decomposition: &models.DecompositionManifest{
+				OwnedFiles:         []string{"internal/api/handler.go"},
+				OwnedModules:       []string{"internal/api"},
+				InterfacesOwned:    []string{"api.Handler"},
+				InterfacesConsumed: []string{"storage.Repository"},
+				CoverageNotes:      "Owns API boundary and consumes storage contracts.",
+			},
+		},
+		{
+			Desc:      "Design storage boundary",
+			DoneWhen:  "Storage boundary architecture is approved",
+			Scope:     "internal/storage",
+			SpecRef:   "specs/master.md",
+			ArchRef:   archRef,
+			DependsOn: []string{"0"},
+			Decomposition: &models.DecompositionManifest{
+				OwnedFiles:        []string{"internal/storage/repository.go"},
+				OwnedModules:      []string{"internal/storage"},
+				ReadOnlyDependsOn: []int{0},
+				InterfacesOwned:   []string{"storage.Repository"},
+				CoverageNotes:     "Owns storage contract after reading the API boundary.",
+			},
+		},
+	}
+}
+
+func buildIntegrationTaskPrompt(t *testing.T, projectDir string, state *models.State, taskID, role, agentID string) string {
+	t.Helper()
+
+	pipeCfg, err := pipeline.LoadFrozen(projectDir)
+	if err != nil {
+		t.Fatalf("LoadFrozen failed: %v", err)
+	}
+	resolver := pipeline.NewResolver(pipeCfg)
+	strategy, err := agent.NewRoleStrategy(role, resolver)
+	if err != nil {
+		t.Fatalf("NewRoleStrategy(%s) failed: %v", role, err)
+	}
+
+	prompt, err := strategy.BuildPrompt(state, agent.SupervisorConfig{
+		AgentID:     agentID,
+		Role:        role,
+		ProjectRoot: projectDir,
+		StatePath:   filepath.Join(projectDir, ".liza", "state.yaml"),
+		SpecsDir:    filepath.Join(projectDir, "specs"),
+	}, taskID)
+	if err != nil {
+		t.Fatalf("BuildPrompt(%s, %s) failed: %v", role, taskID, err)
+	}
+	return prompt
+}
+
+func commitTaskWorktreeFile(t *testing.T, projectDir string, bb *db.Blackboard, taskID, relPath, content string) string {
+	t.Helper()
+
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	task := findTask(state.Tasks, taskID)
+	if task == nil || task.Worktree == nil {
+		t.Fatalf("task %s has no worktree", taskID)
+	}
+	worktreePath := filepath.Join(projectDir, *task.Worktree)
+	fullPath := filepath.Join(worktreePath, relPath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		t.Fatalf("mkdir %s failed: %v", filepath.Dir(fullPath), err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s failed: %v", fullPath, err)
+	}
+	if err := exec.Command("git", "-C", worktreePath, "add", filepath.ToSlash(relPath)).Run(); err != nil {
+		t.Fatalf("git add %s failed: %v", relPath, err)
+	}
+	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "Master planning output").Run(); err != nil {
+		t.Fatalf("git commit %s failed: %v", taskID, err)
+	}
+	output, err := exec.Command("git", "-C", worktreePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse %s failed: %v", taskID, err)
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func claimReviewManually(t *testing.T, bb *db.Blackboard, taskID, reviewerID string, reviewingStatus models.TaskStatus) {
+	t.Helper()
+
+	state, err := bb.Read()
+	testhelpers.AssertNoError(t, err)
+	leaseExpires := state.Agents[reviewerID].LeaseExpires
+	err = bb.Modify(func(s *models.State) error {
+		task := s.FindTask(taskID)
+		if task == nil {
+			return fmt.Errorf("task %s not found", taskID)
+		}
+		task.Status = reviewingStatus
+		task.ReviewingBy = &reviewerID
+		task.ReviewLeaseExpires = leaseExpires
+		if agent, ok := s.Agents[reviewerID]; ok {
+			agent.Status = models.AgentStatusWorking
+			agent.CurrentTask = &taskID
+			s.Agents[reviewerID] = agent
+		}
+		return nil
+	})
+	testhelpers.AssertNoError(t, err)
+}
+
+func assertContainsAll(t *testing.T, got string, wants ...string) {
+	t.Helper()
+	for _, want := range wants {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected prompt to contain %q", want)
+		}
+	}
+}
+
+func assertNotContains(t *testing.T, got, unwanted string) {
+	t.Helper()
+	if strings.Contains(got, unwanted) {
+		t.Errorf("expected prompt not to contain %q", unwanted)
+	}
 }
 
 // findTask is a helper function to find a task by ID in a slice of tasks

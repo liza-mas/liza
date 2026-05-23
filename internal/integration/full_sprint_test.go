@@ -3,8 +3,9 @@
 package integration
 
 // full_sprint_test.go contains an end-to-end integration test that exercises
-// the full sprint pipeline (epic-planning → US-writing → code-planning → coding)
-// using the real RunSupervisor loop with a mock CLI executor.
+// the full sprint pipeline (epic-planning → US-writing → architecture-main →
+// architecture → code-planning → coding) using the real RunSupervisor loop with
+// a mock CLI executor.
 //
 // The SmartMockCLIExecutor replaces the LLM CLI by calling ops.* functions
 // directly to simulate what each agent role does, without any real LLM calls.
@@ -85,12 +86,16 @@ func (m *SmartMockCLIExecutor) Execute(ctx context.Context, cliName, agentID, pr
 	}
 
 	var taskID string
+	var taskRolePair string
+	var taskArchRef string
 	isReviewer := roleType == "reviewer"
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if isReviewer {
 			if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
 				taskID = task.ID
+				taskRolePair = task.RolePair
+				taskArchRef = task.ArchRef
 				break
 			}
 		} else {
@@ -98,6 +103,8 @@ func (m *SmartMockCLIExecutor) Execute(ctx context.Context, cliName, agentID, pr
 			// submitted for review that still have AssignedTo set.
 			if task.AssignedTo != nil && *task.AssignedTo == agentID && models.IsExecutingStatus(task, pr) {
 				taskID = task.ID
+				taskRolePair = task.RolePair
+				taskArchRef = task.ArchRef
 				break
 			}
 		}
@@ -107,7 +114,7 @@ func (m *SmartMockCLIExecutor) Execute(ctx context.Context, cliName, agentID, pr
 	}
 
 	if roleType == "doer" {
-		if err := m.executeDoer(ctx, projectRoot, agentID, taskID, runtimeRole); err != nil {
+		if err := m.executeDoer(ctx, projectRoot, agentID, taskID, runtimeRole, taskRolePair, taskArchRef); err != nil {
 			return agent.CLIExecutionResult{ExitCode: 1}, err
 		}
 	} else if roleType == "reviewer" {
@@ -130,7 +137,7 @@ func (m *SmartMockCLIExecutor) ExecuteInteractive(_ context.Context, _, _ string
 //  2. Set task output (planners only — needed for per-subtask transitions)
 //  3. Create a file and commit in the worktree
 //  4. Submit the task for review
-func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, agentID, taskID, role string) error {
+func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, agentID, taskID, role, rolePair, archRef string) error {
 	// 1. Write checkpoint
 	if err := ops.WriteCheckpoint(projectRoot, &ops.WriteCheckpointInput{
 		TaskID:         taskID,
@@ -171,24 +178,25 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 		}); err != nil {
 			return fmt.Errorf("SetTaskOutput: %w", err)
 		}
+	} else if role == "architect" && rolePair == "architecture-main-pair" {
+		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
+			TaskID:  taskID,
+			AgentID: agentID,
+			Output:  fullSprintMasterArchitectureOutput(),
+		}); err != nil {
+			return fmt.Errorf("SetTaskOutput: %w", err)
+		}
 	} else if role == "architect" {
 		if err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
 			TaskID:  taskID,
 			AgentID: agentID,
-			Output: []models.OutputEntry{
-				{
-					Desc:     fmt.Sprintf("Code plan 1 from %s", taskID),
-					DoneWhen: "Implementation plan complete",
-					Scope:    "Component A",
-					SpecRef:  "specs/feature.md",
-				},
-				{
-					Desc:     fmt.Sprintf("Code plan 2 from %s", taskID),
-					DoneWhen: "Implementation plan complete",
-					Scope:    "Component B",
-					SpecRef:  "specs/feature.md",
-				},
-			},
+			Output: []models.OutputEntry{{
+				Desc:     fmt.Sprintf("Code plan from %s", taskID),
+				DoneWhen: "Implementation plan complete",
+				Scope:    "Component architecture",
+				SpecRef:  "specs/feature.md",
+				ArchRef:  archRef,
+			}},
 		}); err != nil {
 			return fmt.Errorf("SetTaskOutput: %w", err)
 		}
@@ -225,6 +233,17 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 			return fmt.Errorf("write epic doc: %w", err)
 		}
 		filesToAdd = append(filesToAdd, filepath.ToSlash(epicDocRel))
+	}
+	if role == "architect" && rolePair == "architecture-main-pair" {
+		archDocRel := filepath.Join("specs", "arch-plan", "full-sprint-architecture.md")
+		archDoc := filepath.Join(wtPath, archDocRel)
+		if err := os.MkdirAll(filepath.Dir(archDoc), 0755); err != nil {
+			return fmt.Errorf("create architecture doc directory: %w", err)
+		}
+		if err := os.WriteFile(archDoc, []byte("# Full Sprint Architecture\n"), 0644); err != nil {
+			return fmt.Errorf("write architecture doc: %w", err)
+		}
+		filesToAdd = append(filesToAdd, filepath.ToSlash(archDocRel))
 	}
 
 	mockFileName := fmt.Sprintf("mock-%s.txt", taskID)
@@ -285,20 +304,53 @@ func (m *SmartMockCLIExecutor) executeReviewer(projectRoot, agentID, taskID, rol
 	return nil
 }
 
+func fullSprintMasterArchitectureOutput() []models.OutputEntry {
+	return []models.OutputEntry{
+		{
+			Desc:     "Authentication architecture",
+			DoneWhen: "Authentication architecture is approved",
+			Scope:    "internal/auth",
+			SpecRef:  "specs/feature.md",
+			ArchRef:  "specs/arch-plan/full-sprint-architecture.md",
+			Decomposition: &models.DecompositionManifest{
+				OwnedFiles:         []string{"internal/auth/handler.go"},
+				OwnedModules:       []string{"internal/auth"},
+				InterfacesOwned:    []string{"auth.Handler"},
+				InterfacesConsumed: []string{"storage.Repository"},
+				CoverageNotes:      "Owns authentication request handling.",
+			},
+		},
+		{
+			Desc:     "Authorization architecture",
+			DoneWhen: "Authorization architecture is approved",
+			Scope:    "internal/authz",
+			SpecRef:  "specs/feature.md",
+			ArchRef:  "specs/arch-plan/full-sprint-architecture.md",
+			Decomposition: &models.DecompositionManifest{
+				OwnedFiles:      []string{"internal/authz/policy.go"},
+				OwnedModules:    []string{"internal/authz"},
+				InterfacesOwned: []string{"authz.Policy"},
+				CoverageNotes:   "Owns authorization policy decisions.",
+			},
+		},
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TestFullSprintSequence
 // ---------------------------------------------------------------------------
 
 // TestFullSprintSequence runs the real RunSupervisor loop through a complete
-// pipeline: epic-planning → US-writing → architecture → code-planning → coding.
+// pipeline: epic-planning → US-writing → architecture-main → architecture →
+// code-planning → coding.
 //
 // Each supervisor is run sequentially. Each claims one task, the mock executor
 // does the work (checkpoint, commit, submit/verdict), the supervisor loops
 // back, finds no more work, and exits after a short timeout.
 //
 // The test verifies:
-//   - All 8 tasks reach MERGED status
-//   - 7 child tasks are created by pipeline transitions
+//   - All 10 tasks reach MERGED status
+//   - 9 child tasks are created by pipeline transitions
 //   - Each mock CLI was called the expected number of times per role
 func TestFullSprintSequence(t *testing.T) {
 	// ── Setup ──────────────────────────────────────────────────────────
@@ -476,20 +528,63 @@ func TestFullSprintSequence(t *testing.T) {
 	runSupervisor("us-reviewer-1", "us-reviewer")
 	simulateOrchestratorTransitions("US → architecture")
 
-	// ── Phase 3: Architecture ──────────────────────────────────────────
-	t.Log("=== Phase 3: Architecture ===")
+	// ── Phase 3: Architecture Master ───────────────────────────────────
+	t.Log("=== Phase 3: Architecture Master ===")
 	runSupervisor("architect-1", "architect")
-	runSupervisor("architecture-reviewer-1", "architecture-reviewer")
+
+	registerReviewer := func(agentID, provider string) {
+		t.Helper()
+		testhelpers.RegisterTestAgent(t, bb, agentID, "architecture-reviewer")
+		if err := bb.Modify(func(s *models.State) error {
+			agent := s.Agents[agentID]
+			agent.Provider = provider
+			s.Agents[agentID] = agent
+			return nil
+		}); err != nil {
+			t.Fatalf("set provider for %s failed: %v", agentID, err)
+		}
+	}
+	approveArchitectureMaster := func(agentID string, reviewingStatus models.TaskStatus) {
+		t.Helper()
+		claimReviewManually(t, bb, "epic-1-architecture", agentID, reviewingStatus)
+		if err := commands.SubmitVerdictCommand(projectDir, "epic-1-architecture", "APPROVED", "", agentID, ""); err != nil {
+			t.Fatalf("SubmitVerdict architecture master by %s failed: %v", agentID, err)
+		}
+	}
+
+	registerReviewer("architecture-reviewer-1", "codex")
+	approveArchitectureMaster("architecture-reviewer-1", models.TaskStatus("REVIEWING_ARCHITECTURE_MAIN"))
+	stateAfterFirstArchitectureReview, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read after first architecture master approval failed: %v", err)
+	}
+	if task := stateAfterFirstArchitectureReview.FindTask("epic-1-architecture"); task == nil || task.Status != models.TaskStatus("ARCHITECTURE_MAIN_PARTIALLY_APPROVED") {
+		t.Fatalf("first architecture master approval status = %v, want ARCHITECTURE_MAIN_PARTIALLY_APPROVED", task)
+	}
+
+	registerReviewer("architecture-reviewer-2", "test")
+	approveArchitectureMaster("architecture-reviewer-2", models.TaskStatus("REVIEWING_ARCHITECTURE_MAIN_2"))
+	os.Setenv("LIZA_AGENT_ID", "architecture-reviewer-2")
+	if err := commands.WtMergeCommand(projectDir, "epic-1-architecture", "architecture-reviewer-2"); err != nil {
+		t.Fatalf("WtMerge architecture master failed: %v", err)
+	}
+	os.Unsetenv("LIZA_AGENT_ID")
+	simulateOrchestratorTransitions("architecture master → specialized architecture")
+
+	// ── Phase 4: Architecture ──────────────────────────────────────────
+	t.Log("=== Phase 4: Architecture ===")
+	runSupervisor("architect-2", "architect")
+	runSupervisor("architecture-reviewer-3", "architecture-reviewer")
 	simulateOrchestratorTransitions("architecture → code-planning")
 
-	// ── Phase 4: Code Planning ─────────────────────────────────────────
-	t.Log("=== Phase 4: Code Planning ===")
+	// ── Phase 5: Code Planning ─────────────────────────────────────────
+	t.Log("=== Phase 5: Code Planning ===")
 	runSupervisor("code-planner-1", "code-planner")
 	runSupervisor("code-plan-reviewer-1", "code-plan-reviewer")
 	simulateOrchestratorTransitions("code-planning → coding")
 
-	// ── Phase 5: Coding ────────────────────────────────────────────────
-	t.Log("=== Phase 5: Coding ===")
+	// ── Phase 6: Coding ────────────────────────────────────────────────
+	t.Log("=== Phase 6: Coding ===")
 	runSupervisor("coder-1", "coder")
 	runSupervisor("code-reviewer-1", "code-reviewer")
 
@@ -506,18 +601,19 @@ func TestFullSprintSequence(t *testing.T) {
 		t.Logf("  Task %-55s  status=%-25s  role_pair=%s", task.ID, task.Status, task.RolePair)
 	}
 
-	// Expected tasks (1 original + 7 created by transitions):
-	// The epic planner produces 2 capability entries, the architect produces 2 code plans:
-	//   epic-1                                                                          (epic-planning-pair)
-	//   epic-1-epic-to-us-0                                                             (us-writing-pair, CAP-001)
-	//   epic-1-epic-to-us-1                                                             (us-writing-pair, CAP-002)
-	//   epic-1-us-to-coding                                                             (architecture-pair, many-to-one)
-	//   epic-1-us-to-coding-architecture-to-code-plan-0                                 (code-planning-pair)
-	//   epic-1-us-to-coding-architecture-to-code-plan-1                                 (code-planning-pair)
-	//   epic-1-us-to-coding-architecture-to-code-plan-0-code-plan-to-coding-0           (coding-pair)
-	//   epic-1-us-to-coding-architecture-to-code-plan-1-code-plan-to-coding-0           (coding-pair)
-	if len(state.Tasks) != 8 {
-		t.Errorf("Expected 8 tasks, got %d", len(state.Tasks))
+	// Expected tasks (1 original + 9 created by transitions):
+	//   epic-1                                                                  (epic-planning-pair)
+	//   epic-1-us-writing-0                                                     (us-writing-pair, CAP-001)
+	//   epic-1-us-writing-1                                                     (us-writing-pair, CAP-002)
+	//   epic-1-architecture                                                     (architecture-main-pair)
+	//   epic-1-architecture-architecture-0                                      (architecture-pair)
+	//   epic-1-architecture-architecture-1                                      (architecture-pair)
+	//   epic-1-architecture-architecture-0-code-planning-0                      (code-planning-pair)
+	//   epic-1-architecture-architecture-1-code-planning-0                      (code-planning-pair)
+	//   epic-1-architecture-architecture-0-code-planning-0-coding-0             (coding-pair)
+	//   epic-1-architecture-architecture-1-code-planning-0-coding-0             (coding-pair)
+	if len(state.Tasks) != 10 {
+		t.Errorf("Expected 10 tasks, got %d", len(state.Tasks))
 	}
 
 	// All tasks should be MERGED.
@@ -527,8 +623,8 @@ func TestFullSprintSequence(t *testing.T) {
 			mergedCount++
 		}
 	}
-	if mergedCount != 8 {
-		t.Errorf("Expected 8 MERGED tasks, got %d", mergedCount)
+	if mergedCount != 10 {
+		t.Errorf("Expected 10 MERGED tasks, got %d", mergedCount)
 	}
 
 	// Verify transitions_executed on source tasks.
@@ -540,13 +636,36 @@ func TestFullSprintSequence(t *testing.T) {
 		assertTransitionExecuted(t, state, usTaskID, "us-to-coding")
 	}
 
-	// Architecture task fans out to code-planning tasks.
-	archTaskID := "epic-1-architecture"
-	assertTransitionExecuted(t, state, archTaskID, "architecture-to-code-plan")
+	// Architecture master requires quorum 2 and auto-decomposes to specialized architecture tasks.
+	archMasterTaskID := "epic-1-architecture"
+	archMasterTask := state.FindTask(archMasterTaskID)
+	if archMasterTask == nil {
+		t.Fatalf("architecture master task %s not found", archMasterTaskID)
+	}
+	if archMasterTask.RolePair != "architecture-main-pair" {
+		t.Errorf("Architecture master role_pair = %q, want architecture-main-pair", archMasterTask.RolePair)
+	}
+	if len(archMasterTask.Approvals) != 2 {
+		t.Errorf("Architecture master approvals = %d, want 2", len(archMasterTask.Approvals))
+	}
+	assertTransitionExecuted(t, state, archMasterTaskID, "arch-decompose")
+
+	// Specialized architecture tasks bypass code-planning-main-pair and create code-planning-pair tasks.
+	for _, suffix := range []string{"0", "1"} {
+		archTaskID := archMasterTaskID + "-architecture-" + suffix
+		archTask := state.FindTask(archTaskID)
+		if archTask == nil {
+			t.Fatalf("specialized architecture task %s not found", archTaskID)
+		}
+		if archTask.RolePair != "architecture-pair" {
+			t.Errorf("Specialized architecture task %s role_pair = %q, want architecture-pair", archTaskID, archTask.RolePair)
+		}
+		assertTransitionExecuted(t, state, archTaskID, "architecture-to-code-plan")
+	}
 
 	// Each code-planning task fans out to a coding task.
 	for _, suffix := range []string{"0", "1"} {
-		codePlanTaskID := archTaskID + "-code-planning-" + suffix
+		codePlanTaskID := archMasterTaskID + "-architecture-" + suffix + "-code-planning-0"
 		assertTransitionExecuted(t, state, codePlanTaskID, "code-plan-to-coding")
 	}
 
@@ -577,24 +696,55 @@ func TestFullSprintSequence(t *testing.T) {
 		}
 	}
 
-	// Verify EpicRef propagation across many-to-one boundary:
-	// Architecture task inherits doc-only EpicRef (section anchor stripped).
-	archTask := state.FindTask(archTaskID)
-	if archTask != nil {
+	// Verify EpicRef propagation across many-to-one and master decomposition boundaries.
+	if archMasterTask != nil {
 		wantEpicRef := "specs/epics/ep-001-auth.md"
-		if archTask.EpicRef != wantEpicRef {
-			t.Errorf("Architecture task epic_ref = %q, want %q (section should be stripped at many-to-one)", archTask.EpicRef, wantEpicRef)
+		if archMasterTask.EpicRef != wantEpicRef {
+			t.Errorf("Architecture master epic_ref = %q, want %q (section should be stripped at many-to-one)", archMasterTask.EpicRef, wantEpicRef)
 		}
 	}
 
-	// Verify EpicRef propagates to code-planning tasks (per-subtask, inherited from parent).
+	// Verify EpicRef and ArchRef propagate to specialized architecture, code-planning, and coding tasks.
+	wantArchRef := "specs/arch-plan/full-sprint-architecture.md"
 	for _, suffix := range []string{"0", "1"} {
-		cpTask := state.FindTask(archTaskID + "-code-planning-" + suffix)
+		archTaskID := archMasterTaskID + "-architecture-" + suffix
+		archTask := state.FindTask(archTaskID)
+		if archTask != nil {
+			wantEpicRef := "specs/epics/ep-001-auth.md"
+			if archTask.EpicRef != wantEpicRef {
+				t.Errorf("Architecture task %s epic_ref = %q, want %q", archTask.ID, archTask.EpicRef, wantEpicRef)
+			}
+			if archTask.ArchRef != wantArchRef {
+				t.Errorf("Architecture task %s arch_ref = %q, want %q", archTask.ID, archTask.ArchRef, wantArchRef)
+			}
+			if archTask.Decomposition == nil {
+				t.Errorf("Architecture task %s decomposition is nil", archTask.ID)
+			}
+		}
+
+		cpTask := state.FindTask(archTaskID + "-code-planning-0")
 		if cpTask != nil {
 			wantEpicRef := "specs/epics/ep-001-auth.md"
 			if cpTask.EpicRef != wantEpicRef {
 				t.Errorf("Code-plan task %s epic_ref = %q, want %q", cpTask.ID, cpTask.EpicRef, wantEpicRef)
 			}
+			if cpTask.RolePair != "code-planning-pair" {
+				t.Errorf("Code-plan task %s role_pair = %q, want code-planning-pair", cpTask.ID, cpTask.RolePair)
+			}
+			if cpTask.ArchRef != wantArchRef {
+				t.Errorf("Code-plan task %s arch_ref = %q, want %q", cpTask.ID, cpTask.ArchRef, wantArchRef)
+			}
+		}
+
+		codingTask := state.FindTask(archTaskID + "-code-planning-0-coding-0")
+		if codingTask != nil && codingTask.ArchRef != wantArchRef {
+			t.Errorf("Coding task %s arch_ref = %q, want %q", codingTask.ID, codingTask.ArchRef, wantArchRef)
+		}
+	}
+
+	for _, task := range state.Tasks {
+		if task.RolePair == "code-planning-main-pair" {
+			t.Fatalf("unexpected code-planning-main-pair task created: %s", task.ID)
 		}
 	}
 
@@ -602,23 +752,24 @@ func TestFullSprintSequence(t *testing.T) {
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
 
-	// 2 (epic) + 4 (US x2) + 2 (arch) + 4 (code-plan x2) + 4 (coding x2) = 16
-	if len(mock.calls) != 16 {
-		t.Errorf("Expected 16 mock calls, got %d", len(mock.calls))
+	// 2 (epic) + 4 (US x2) + 3 (architecture doers) +
+	// 2 (specialized architecture reviewers) + 4 (code-plan x2) + 4 (coding x2) = 19.
+	if len(mock.calls) != 19 {
+		t.Errorf("Expected 19 mock calls, got %d", len(mock.calls))
 		for i, call := range mock.calls {
 			t.Logf("  Call %d: %s (%s) on %s [%s]", i, call.AgentID, call.Role, call.TaskID, call.Action)
 		}
 	}
 
-	// Epic roles called once; architect called once (many-to-one consolidation);
-	// all other downstream roles called twice (one per capability / code plan).
+	// Epic roles called once; architecture includes one master doer plus two
+	// specialized architecture doer/reviewer calls; downstream roles run twice.
 	expectedRoleCounts := map[string]int{
 		"epic-planner":          1,
 		"epic-plan-reviewer":    1,
 		"us-writer":             2,
 		"us-reviewer":           2,
-		"architect":             1,
-		"architecture-reviewer": 1,
+		"architect":             3,
+		"architecture-reviewer": 2,
 		"code-planner":          2,
 		"code-plan-reviewer":    2,
 		"coder":                 2,
