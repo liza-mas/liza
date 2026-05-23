@@ -1,0 +1,12 @@
+[
+  {
+    "desc": "Propagate typed decomposition metadata from per-subtask output entries into generated child tasks while preserving existing ref, kind, dependency, and fallback behavior.",
+    "done_when": "`internal/ops/proceed.go` copies `models.OutputEntry.Decomposition` into generated child `models.Task.Decomposition` for per-subtask transitions; per-subtask child creation still copies `Kind`, direct `PlanRef`, direct `ArchRef`, direct `EpicRef`, sibling `depends_on` IDs, external `task_depends_on`, and inherited phase-gate dependencies; duplicate dependencies from sibling, external, and inherited sources are removed without changing stable ordering; parent `arch_ref` and `epic_ref` fallback behavior remains covered; parent `plan_ref` fallback is not introduced and a focused test proves output entries without `plan_ref` still create per-subtask children with empty `Task.PlanRef`; focused tests in `internal/ops/proceed_test.go` prove decomposition propagation, ref propagation, dependency merge behavior, inherited phase-gate dependencies, preserved parent `arch_ref`/`epic_ref` fallback, and empty parent `plan_ref` fallback; `go test ./internal/ops -run 'TestProceed'` passes.",
+    "scope": "Modify only `internal/ops/proceed.go` and focused tests in `internal/ops/proceed_test.go`. Consume `models.DecompositionManifest`, `models.OutputEntry.Decomposition`, and `models.Task.Decomposition` from the model-surface task. Keep validation responsibility in `set-task-output`; do not add set-task-output validation, command projection changes, pipeline topology, prompt templates, docs, ADRs, end-to-end tests, model schema changes, or unrelated proceed behavior.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-145900-architecture-4-code-planning-0-c-repair-0.md",
+    "task_depends_on": [
+      "architecture-4-code-planning-0-a-coding-0-repair-0"
+    ]
+  }
+]
