@@ -1,0 +1,39 @@
+[
+  {
+    "desc": "Add CLI-level acceptance tests and validation matrix coverage proving the embedded master-planning pipeline validates, all four entry points expose one specialized simple route and one mapped master fan-out route, and INITIAL_PLANNING rendering remains a one-task contract.",
+    "done_when": "`cmd/liza/json_wiring_test.go` includes a focused `validate --json` regression that initializes from the embedded pipeline and asserts the JSON envelope is successful after the master role-pairs, decomposition-root metadata, auto decompose transitions, and `us-to-coding` retargeting are present; `cmd/liza/cmd_init_test.go` or `cmd/liza/json_wiring_test.go` includes table-driven coverage for `general-objective`, `functional-spec`, `detailed-spec`, and `technical-spec` showing each entry point has exactly one specialized simple target and exactly one mapped master fan-out target; the test renders or inspects the same INITIAL_PLANNING route data used by the CLI path and fails if simple, fan-out, or missing-master examples contain multiple task objects, old multi-task fan-out text, an invented master route, or the wrong role-pair/task type; the validation matrix in this plan maps success criteria 1, 2, and 8 to these tests and records `liza validate --json`, `go test ./cmd/liza -run 'TestJSON_Validate.*MasterPlanning|TestInitDispatch_.*InitialPlanning|TestJSON_.*InitialPlanning'`, and `go test ./internal/prompts/...` as required commands.",
+    "scope": "Modify only focused CLI tests in `cmd/liza/cmd_init_test.go` and `cmd/liza/json_wiring_test.go`, plus test-local helpers in those files if needed. The tests may call existing prompt or pipeline APIs to inspect route data, but must not modify `internal/prompts`, `internal/pipeline`, embedded pipeline YAML, production init logic, docs, ADRs, ops transition code, or integration test files.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-171755-architecture-5-code-planning-0.md",
+    "task_depends_on": [
+      "architecture-2-a-code-planning-0-coding-0-repair-0",
+      "architecture-2-a-code-planning-0-coding-1",
+      "architecture-2-b-code-planning-0-repair-0-coding-0-repair-0"
+    ]
+  },
+  {
+    "desc": "Add ops-layer acceptance tests proving approved master planning tasks auto-decompose into specialized children with dependency, artifact, and typed decomposition metadata propagation, while `architecture-to-code-plan` continues to bypass `code-planning-main-pair`.",
+    "done_when": "`internal/ops/proceed_test.go` includes table-driven coverage for `epic-planning-main-pair`, `architecture-main-pair`, and `code-planning-main-pair` approved or merged master tasks where `ExecuteAvailableTransitions` or `Proceed` fires the auto decompose transition and creates exactly one specialized child per `output[]` entry; each generated child assertion verifies role-pair, initial status, `depends_on` sibling ID resolution, external `task_depends_on`, copied `decomposition` metadata, copied `kind`, copied `plan_ref` or `arch_ref` from the master output entry according to the propagation table, and preserved parent/task relationships; the same file includes a Case A regression proving an `architecture-pair` source executing `architecture-to-code-plan` creates only `code-planning-pair` children and no `code-planning-main-pair` task; downstream ref assertions prove coding children inherit relevant `plan_ref` or `arch_ref` behavior and story-writing children still consume specialized epic `epic_ref`; the validation matrix maps success criteria 3, 4, and 6 to these tests and records `go test ./internal/ops -run 'TestProceed.*MasterPlanning|TestExecuteAvailableTransitions.*MasterPlanning|TestProceed.*ArchitectureToCodePlan'` as a required command.",
+    "scope": "Modify only `internal/ops/proceed_test.go`. Reuse existing proceed helpers, fixture pipeline setup, `models.OutputEntry`, and `models.DecompositionManifest`; do not modify `internal/ops/proceed.go`, `internal/ops/set_task_output.go`, models, command projections, prompt templates, embedded pipeline YAML, docs, ADRs, CLI tests, or integration tests.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-171755-architecture-5-code-planning-0.md",
+    "task_depends_on": [
+      "architecture-4-code-planning-0-a-coding-0-repair-0",
+      "architecture-4-code-planning-0-b-repair-0-coding-1",
+      "architecture-4-code-planning-0-c-repair-0-coding-1"
+    ]
+  },
+  {
+    "desc": "Add integration acceptance tests proving master planning review quorum, prompt differentiation, and full sprint transition behavior compose with master decomposition without regressing specialized prompt or downstream artifact behavior.",
+    "done_when": "`internal/integration/e2e_workflow_test.go` includes a master planning lifecycle test that creates a decomposition-root task, sets valid typed master outputs, submits it, drives two approved verdicts, asserts the first approval reaches the configured partially-approved state and the second reaches the approved state, merges or resumes as appropriate, and verifies the auto decompose transition creates specialized children; the test captures or renders master doer and reviewer prompts and asserts `master-decomposition-mandate`, `master-decomposition-review`, Master Output Contract properties 1-6, role-appropriate artifact refs, and systemic-thinking obligations appear only for decomposition-root tasks, while specialized tasks using the same doer/reviewer roles do not contain those sections; `internal/integration/full_sprint_test.go` is updated so the full sprint flow reflects the new `us-to-coding` architecture master step, quorum-2 master review behavior, auto decomposition into specialized architecture tasks, Case A `architecture-to-code-plan` bypass into `code-planning-pair`, and unchanged downstream `epic_ref` and `arch_ref` propagation; the validation matrix maps success criteria 5, 6, and 7 to these tests and records `go test ./internal/integration -run 'TestMasterPlanning|TestFullSprintSequence'` as a required command.",
+    "scope": "Modify only `internal/integration/e2e_workflow_test.go` and `internal/integration/full_sprint_test.go`. Reuse existing integration setup, supervisor mock, lifecycle helpers, command/ops APIs, and prompt capture patterns; do not modify production agent, prompt, pipeline, ops, CLI, model, docs, ADR, or lower-level unit test files.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md",
+    "plan_ref": "specs/plans/20260523-master-planning-task/20260523-171755-architecture-5-code-planning-0.md",
+    "task_depends_on": [
+      "architecture-2-b-code-planning-0-repair-0-coding-0-repair-0",
+      "architecture-3-b-code-planning-0-coding-0-repair-1",
+      "architecture-4-code-planning-0-b-repair-0-coding-1",
+      "architecture-4-code-planning-0-c-repair-0-coding-1"
+    ]
+  }
+]
