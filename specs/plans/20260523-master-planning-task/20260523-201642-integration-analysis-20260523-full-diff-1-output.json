@@ -1,0 +1,8 @@
+[
+  {
+    "desc": "Update stale ops transition tests for us-to-coding master-target routing",
+    "done_when": "`make test` passes, and `TestResume_ManyToOneCheckpointExecutesTransitionsMidSprint`, `TestResume_ManyToOneCheckpointExecutesTransitionsWhenAllPlannedTerminal`, `TestExecuteAvailableTransitions_CreatesChildrenForMergedTasks`, and `TestExecuteAvailableTransitions_SkipsReplannedTasks` assert that `us-to-coding` creates an `architecture-main-pair` child at `DRAFT_ARCHITECTURE_MAIN` in accordance with the master planning spec.",
+    "scope": "Modify only the stale assertions and role-pair filters in `internal/ops/mode_change_test.go` and `internal/ops/proceed_test.go` for the `us-to-coding` many-to-one transition. Do not change production transition behavior; the current embedded pipeline target is `architecture-subpipeline.architecture-main-pair.initial` and matches the goal spec. Evidence: `make test` failed in `./internal/ops` with four failures expecting `architecture-pair` or `DRAFT_ARCHITECTURE` while observed children were `architecture-main-pair` and `DRAFT_ARCHITECTURE_MAIN`.",
+    "spec_ref": "specs/goals/20260523-master-planning-task.md"
+  }
+]
