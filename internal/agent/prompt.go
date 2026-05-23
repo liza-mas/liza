@@ -320,7 +320,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 
 func taskContextSections(base []string, task *models.Task, data *prompts.RoleContextData, resolver *pipeline.Resolver) ([]string, error) {
 	sections := append([]string(nil), base...)
-	if data.RoleType != "doer" || task.RolePair == "" {
+	if task.RolePair == "" || (data.RoleType != "doer" && data.RoleType != "reviewer") {
 		return sections, nil
 	}
 
@@ -334,12 +334,16 @@ func taskContextSections(base []string, task *models.Task, data *prompts.RoleCon
 
 	refField, ok := masterOutputRefField(task.RolePair)
 	if !ok {
-		return nil, fmt.Errorf("decomposition-root doer role-pair %q required output artifact ref field cannot be determined", task.RolePair)
+		return nil, fmt.Errorf("decomposition-root role-pair %q required output artifact ref field cannot be determined", task.RolePair)
 	}
 
 	data.DecompositionRoot = true
 	data.MasterOutputRefField = refField
-	sections = append(sections, "master-decomposition-mandate")
+	if data.RoleType == "doer" {
+		sections = append(sections, "master-decomposition-mandate")
+	} else {
+		sections = append(sections, "master-decomposition-review")
+	}
 	return sections, nil
 }
 

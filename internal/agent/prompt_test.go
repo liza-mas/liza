@@ -470,6 +470,76 @@ func TestBuildPromptWithContext_DecompositionRootDoerMandate(t *testing.T) {
 	}
 }
 
+func TestBuildPromptWithContext_DecompositionRootReviewerReview(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     string
+		rolePair string
+		refField string
+	}{
+		{name: "epic planning master reviewer", role: "epic-plan-reviewer", rolePair: "epic-planning-main-pair", refField: "plan_ref"},
+		{name: "architecture master reviewer", role: "architecture-reviewer", rolePair: "architecture-main-pair", refField: "arch_ref"},
+		{name: "code planning master reviewer", role: "code-plan-reviewer", rolePair: "code-planning-main-pair", refField: "plan_ref"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, projectRoot)
+			resolver := embeddedPipelineResolver(t)
+			state := &models.State{
+				Goal: models.Goal{
+					Description: "Master planning goal",
+					SpecRef:     "specs/goals/master.md",
+				},
+				Tasks: []models.Task{
+					{
+						ID:           "task-1",
+						Description:  "Review master decomposition",
+						Status:       models.TaskStatus("REVIEWING"),
+						DoneWhen:     "Master decomposition is reviewed",
+						Scope:        "Master decomposition scope",
+						RolePair:     tt.rolePair,
+						BaseCommit:   ptrString("base-sha"),
+						ReviewCommit: ptrString("review-sha"),
+						AssignedTo:   ptrString("planner-1"),
+					},
+				},
+				Config: models.Config{IntegrationBranch: "main"},
+			}
+			config := SupervisorConfig{
+				Role:        tt.role,
+				AgentID:     tt.role + "-1",
+				ProjectRoot: projectRoot,
+				SpecsDir:    filepath.Join(projectRoot, "specs"),
+				StatePath:   filepath.Join(projectRoot, ".liza", "state.yaml"),
+			}
+
+			prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+			if err != nil {
+				t.Fatalf("buildPromptWithContext() error = %v", err)
+			}
+
+			assertContainsAll(t, prompt,
+				"=== MASTER DECOMPOSITION REVIEW ===",
+				"Invoke `systemic-thinking` before submitting a verdict",
+				"missing `"+tt.refField+"`",
+				"missing typed decomposition metadata",
+				"missing systemic-thinking evidence",
+				"violates any Master Output Contract property",
+				"1. Non-overlapping scopes.",
+				"2. Interface ownership.",
+				"3. Shared-file ownership.",
+				"4. Dependency ordering.",
+				"5. Inherited constraints.",
+				"6. Completeness.",
+			)
+			assertNotContains(t, prompt, "MASTER DECOMPOSITION MANDATE")
+			assertNotContains(t, prompt, "master-decomposition-mandate")
+		})
+	}
+}
+
 func TestBuildPromptWithContext_NonRootDoersRenderNoMasterMandate(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -524,6 +594,62 @@ func TestBuildPromptWithContext_NonRootDoersRenderNoMasterMandate(t *testing.T) 
 	}
 }
 
+func TestBuildPromptWithContext_NonRootReviewersRenderNoMasterReview(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     string
+		rolePair string
+	}{
+		{name: "specialized epic plan reviewer", role: "epic-plan-reviewer", rolePair: "epic-planning-pair"},
+		{name: "specialized architecture reviewer", role: "architecture-reviewer", rolePair: "architecture-pair"},
+		{name: "specialized code plan reviewer", role: "code-plan-reviewer", rolePair: "code-planning-pair"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, projectRoot)
+			resolver := embeddedPipelineResolver(t)
+			state := &models.State{
+				Goal: models.Goal{
+					Description: "Specialized planning goal",
+					SpecRef:     "specs/goals/specialized.md",
+				},
+				Tasks: []models.Task{
+					{
+						ID:           "task-1",
+						Description:  "Review specialized scope",
+						Status:       models.TaskStatus("REVIEWING"),
+						DoneWhen:     "Specialized plan is reviewed",
+						Scope:        "Specialized scope",
+						RolePair:     tt.rolePair,
+						BaseCommit:   ptrString("base-sha"),
+						ReviewCommit: ptrString("review-sha"),
+						AssignedTo:   ptrString("planner-1"),
+					},
+				},
+				Config: models.Config{IntegrationBranch: "main"},
+			}
+			config := SupervisorConfig{
+				Role:        tt.role,
+				AgentID:     tt.role + "-1",
+				ProjectRoot: projectRoot,
+				SpecsDir:    filepath.Join(projectRoot, "specs"),
+				StatePath:   filepath.Join(projectRoot, ".liza", "state.yaml"),
+			}
+
+			prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+			if err != nil {
+				t.Fatalf("buildPromptWithContext() error = %v", err)
+			}
+
+			assertNotContains(t, prompt, "MASTER DECOMPOSITION REVIEW")
+			assertNotContains(t, prompt, "MASTER DECOMPOSITION MANDATE")
+			assertNotContains(t, prompt, "Master Output Contract properties 1-6")
+		})
+	}
+}
+
 func TestBuildPromptWithContext_DecompositionRootDoerUnknownArtifactRefFailsClosed(t *testing.T) {
 	projectRoot := t.TempDir()
 	resolver := loadTestResolver(t, unknownMasterRefPromptPipelineYAML)
@@ -561,6 +687,46 @@ func TestBuildPromptWithContext_DecompositionRootDoerUnknownArtifactRefFailsClos
 	}
 }
 
+func TestBuildPromptWithContext_DecompositionRootReviewerUnknownArtifactRefFailsClosed(t *testing.T) {
+	projectRoot := t.TempDir()
+	resolver := loadTestResolver(t, unknownMasterRefPromptPipelineYAML)
+	state := &models.State{
+		Goal: models.Goal{
+			Description: "Unknown master goal",
+			SpecRef:     "specs/goals/unknown.md",
+		},
+		Tasks: []models.Task{
+			{
+				ID:           "task-1",
+				Description:  "Review custom master decomposition",
+				Status:       models.TaskStatus("REVIEWING"),
+				DoneWhen:     "Custom decomposition is reviewed",
+				Scope:        "Custom master scope",
+				RolePair:     "custom-main-pair",
+				BaseCommit:   ptrString("base-sha"),
+				ReviewCommit: ptrString("review-sha"),
+				AssignedTo:   ptrString("planner-1"),
+			},
+		},
+		Config: models.Config{IntegrationBranch: "main"},
+	}
+	config := SupervisorConfig{
+		Role:        "code-plan-reviewer",
+		AgentID:     "code-plan-reviewer-1",
+		ProjectRoot: projectRoot,
+		SpecsDir:    filepath.Join(projectRoot, "specs"),
+		StatePath:   filepath.Join(projectRoot, ".liza", "state.yaml"),
+	}
+
+	_, err := buildPromptWithContext(state, config, "task-1", resolver)
+	if err == nil {
+		t.Fatal("buildPromptWithContext() error = nil, want fail-closed artifact-ref error")
+	}
+	if !strings.Contains(err.Error(), "required output artifact ref field cannot be determined") {
+		t.Fatalf("buildPromptWithContext() error = %q, want required output artifact ref field context", err)
+	}
+}
+
 func assertContainsAll(t *testing.T, got string, wants ...string) {
 	t.Helper()
 	for _, want := range wants {
@@ -575,6 +741,10 @@ func assertNotContains(t *testing.T, got, unwanted string) {
 	if strings.Contains(got, unwanted) {
 		t.Fatalf("prompt contains %q", unwanted)
 	}
+}
+
+func ptrString(value string) *string {
+	return &value
 }
 
 func embeddedPipelineResolver(t *testing.T) *pipeline.Resolver {

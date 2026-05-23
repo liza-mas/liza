@@ -1254,6 +1254,39 @@ func TestBuildRoleContext_MasterDecompositionMandate(t *testing.T) {
 	}
 }
 
+func TestBuildRoleContext_MasterDecompositionReview(t *testing.T) {
+	data := &RoleContextData{
+		Role:                 "architecture-reviewer",
+		RoleType:             "reviewer",
+		DecompositionRoot:    true,
+		MasterOutputRefField: "arch_ref",
+	}
+
+	output, err := BuildRoleContext("architecture-reviewer", []string{"master-decomposition-review"}, data)
+	if err != nil {
+		t.Fatalf("BuildRoleContext: %v", err)
+	}
+
+	for _, want := range []string{
+		"=== MASTER DECOMPOSITION REVIEW ===",
+		"Invoke `systemic-thinking` before submitting a verdict",
+		"missing `arch_ref`",
+		"missing typed decomposition metadata",
+		"missing systemic-thinking evidence",
+		"violates any Master Output Contract property",
+		"1. Non-overlapping scopes.",
+		"2. Interface ownership.",
+		"3. Shared-file ownership.",
+		"4. Dependency ordering.",
+		"5. Inherited constraints.",
+		"6. Completeness.",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q", want)
+		}
+	}
+}
+
 // TestBuildRoleContext_AllRoles verifies that BuildRoleContext produces expected key
 // content strings for each of the 9 standard roles using block templates.
 // Section lists are loaded from the embedded pipeline YAML via the resolver,

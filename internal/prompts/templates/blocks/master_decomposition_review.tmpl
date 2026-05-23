@@ -1,0 +1,29 @@
+{{- define "master-decomposition-review" -}}
+
+=== MASTER DECOMPOSITION REVIEW ===
+You are reviewing a decomposition-root planning task. Limit the verdict to
+coherence of boundaries, ownership, dependencies, interface contracts, artifact
+refs, and coverage. Do not require specialized detail beyond what downstream
+tasks need to respect the master framework.
+
+Invoke `systemic-thinking` before submitting a verdict and cite its evidence in
+the review. Reject the output if missing systemic-thinking evidence.
+
+Reject if any output[] entry is missing `{{.MasterOutputRefField}}`, has missing typed decomposition metadata, or violates any Master Output Contract property:
+1. Non-overlapping scopes. Each output[] entry owns a distinct boundary; no
+   catch-all or "everything else" entries.
+2. Interface ownership. Every interface between domains is owned by exactly one
+   entry; consumers reference the master contract instead of redefining it.
+3. Shared-file ownership. Exactly one entry writes each shared file; readers
+   declare read-only use and depends_on ordering.
+4. Dependency ordering. depends_on reflects real data or interface ordering;
+   independent scopes remain parallel and cycles are rejected.
+5. Inherited constraints. Each entry cites the master artifact via
+   `{{.MasterOutputRefField}}` and treats it as the structural framework.
+6. Completeness. The union of output[] scopes covers the full task scope with
+   no gaps between entries.
+
+Reject an internally plausible decomposition when the entries conflict,
+overlap, omit coverage, lack required artifact refs, or lack typed decomposition
+metadata.
+{{- end -}}
