@@ -258,8 +258,9 @@ func (m *SmartMockCLIExecutor) executeDoer(ctx context.Context, projectRoot, age
 	if err := exec.CommandContext(ctx, "git", gitAddArgs...).Run(); err != nil {
 		return fmt.Errorf("git add in worktree %s: %w", wtPath, err)
 	}
-	if err := exec.CommandContext(ctx, "git", "-C", wtPath, "commit", "-m", fmt.Sprintf("Mock work by %s", agentID)).Run(); err != nil {
-		return fmt.Errorf("git commit in worktree %s: %w", wtPath, err)
+	commitOut, err := exec.CommandContext(ctx, "git", "-C", wtPath, "commit", "--no-verify", "-m", fmt.Sprintf("Mock work by %s", agentID)).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git commit in worktree %s: %w\n%s", wtPath, err, string(commitOut))
 	}
 
 	// 4. Get HEAD SHA and submit for review.
