@@ -2187,8 +2187,12 @@ func TestExecuteAvailableTransitions_MasterPlanningAutoDecompose(t *testing.T) {
 				task.MergeCommit = &mergeCommit
 			}
 
-			state.Tasks = append(state.Tasks, task)
-			state.Sprint.Scope.Planned = []string{tt.parentID}
+			state.Tasks = append(state.Tasks,
+				buildExternalDependencyTask("external-foundation-task", tt.targetRolePair, now),
+				buildExternalDependencyTask("external-review-task", tt.targetRolePair, now),
+				task,
+			)
+			state.Sprint.Scope.Planned = []string{"external-foundation-task", "external-review-task", tt.parentID}
 			testhelpers.WriteInitialState(t, stateFile, state)
 
 			results, err := ExecuteAvailableTransitions(tmpDir, "auto")
@@ -2294,8 +2298,11 @@ func TestProceed_ArchitectureToCodePlanBypassesMasterPlanning(t *testing.T) {
 		Output:       output,
 		History:      []models.TaskHistoryEntry{},
 	}
-	state.Tasks = append(state.Tasks, task)
-	state.Sprint.Scope.Planned = []string{parentID}
+	state.Tasks = append(state.Tasks,
+		buildExternalDependencyTask("external-contract-task", "code-planning-pair", now),
+		task,
+	)
+	state.Sprint.Scope.Planned = []string{"external-contract-task", parentID}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	result, err := Proceed(tmpDir, parentID, "architecture-to-code-plan")
@@ -2519,6 +2526,12 @@ func masterPlanningOutputEntries(refField, planRef, archRef string) []models.Out
 	}
 
 	return output
+}
+
+func buildExternalDependencyTask(id, rolePair string, now time.Time) models.Task {
+	task := testhelpers.BuildTaskByStatus(id, models.TaskStatusMerged, now)
+	task.RolePair = rolePair
+	return task
 }
 
 func assertMasterPlanningChild(t *testing.T, child *models.Task, parentID string, entry models.OutputEntry, targetRolePair string, targetStatus models.TaskStatus, expectedPlanRef, expectedArchRef string) {
