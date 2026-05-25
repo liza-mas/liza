@@ -829,6 +829,123 @@ func TestClaimReviewerTask_PartiallyApproved(t *testing.T) {
 	}
 }
 
+func TestClaimReviewerTask_SkipsTaskAlreadyApprovedByClaimer(t *testing.T) {
+	// Verifies the independent-review filter: a reviewer that already approved
+	// a task in round 1 must not be allowed to claim the same partially_approved
+	// task for round 2. Without this filter, the agent loop polling for
+	// partially_approved tasks would happily self-rubber-stamp the quorum.
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimReviewerTaskTestAgents(state)
+	reviewCommit := "abc123"
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-pa",
+			Status:       models.TaskStatusPartiallyApproved,
+			RolePair:     "coding-pair",
+			Priority:     1,
+			ReviewCommit: &reviewCommit,
+			History:      []models.TaskHistoryEntry{},
+			Created:      now,
+			// Reviewer-1 already approved — must NOT be eligible for round 2.
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-1", Provider: "anthropic", Timestamp: now},
+			},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-1",
+		LeaseDuration: 1800,
+	})
+	if err == nil {
+		t.Fatal("expected error when prior approver tries to re-claim, got nil")
+	}
+	if !strings.Contains(err.Error(), "already approved by claimer") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "already approved by claimer")
+	}
+
+	// Verify task state is unchanged — still partially_approved, no new
+	// ReviewingBy assignment.
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	task := readState.FindTask("task-pa")
+	if task == nil {
+		t.Fatal("Task not found")
+	}
+	if task.Status != models.TaskStatusPartiallyApproved {
+		t.Errorf("status = %v, want unchanged PARTIALLY_APPROVED", task.Status)
+	}
+	if task.ReviewingBy != nil {
+		t.Errorf("ReviewingBy = %v, want nil (no claim should have occurred)", *task.ReviewingBy)
+	}
+}
+
+func TestClaimReviewerTask_Round2GoesToDifferentReviewer(t *testing.T) {
+	// End-to-end claim-filter check: when reviewer-1 has approved and
+	// reviewer-2 polls, reviewer-2 picks up the partially_approved task
+	// for round 2 even though reviewer-1's loop would have rejected it.
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimReviewerTaskTestAgents(state)
+	reviewCommit := "abc123"
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-pa",
+			Status:       models.TaskStatusPartiallyApproved,
+			RolePair:     "coding-pair",
+			Priority:     1,
+			ReviewCommit: &reviewCommit,
+			History:      []models.TaskHistoryEntry{},
+			Created:      now,
+			Approvals: []models.Approval{
+				{Agent: "code-reviewer-1", Provider: "anthropic", Timestamp: now},
+			},
+		},
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// reviewer-2 (a different reviewer) must succeed in claiming.
+	result, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-2",
+		LeaseDuration: 1800,
+	})
+	if err != nil {
+		t.Fatalf("ClaimReviewerTask() error: %v", err)
+	}
+	if result.TaskID != "task-pa" {
+		t.Errorf("TaskID = %q, want %q", result.TaskID, "task-pa")
+	}
+
+	// Status should now be REVIEWING_CODE_2 with reviewer-2 holding the lease.
+	bb := db.New(stateFile)
+	readState, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	task := readState.FindTask("task-pa")
+	if task.Status != models.TaskStatusReviewingCode2 {
+		t.Errorf("status = %v, want REVIEWING_CODE_2", task.Status)
+	}
+	if task.ReviewingBy == nil || *task.ReviewingBy != "code-reviewer-2" {
+		t.Errorf("ReviewingBy = %v, want code-reviewer-2", task.ReviewingBy)
+	}
+}
+
 func TestClaimReviewerTask_ClaimPriority_PartiallyApprovedOverSubmitted(t *testing.T) {
 	// Verifies that partially_approved tasks are selected before submitted tasks
 	// at the same priority level.

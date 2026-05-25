@@ -439,6 +439,36 @@ func TestDiagnosticsQuorumStates(t *testing.T) {
 		}
 	})
 
+	t.Run("CountReviewableTasksForAgent excludes prior approver", func(t *testing.T) {
+		// reviewer-1 already approved this task — for them it must not be
+		// reviewable any more, but reviewer-2 should still see it.
+		approver := "code-reviewer-1"
+		state := &State{
+			Tasks: []Task{
+				{
+					ID:           "t1",
+					Status:       "CODE_PARTIALLY_APPROVED",
+					Type:         TaskTypeCoding,
+					RolePair:     "coding-pair",
+					ReviewCommit: strPtr("rc"),
+					Approvals: []Approval{
+						{Agent: approver, Provider: "anthropic", Timestamp: now},
+					},
+				},
+			},
+		}
+		if got := CountReviewableTasksForAgent(state, "code-reviewer", approver, pr); got != 0 {
+			t.Errorf("CountReviewableTasksForAgent(prior approver) = %d, want 0", got)
+		}
+		if got := CountReviewableTasksForAgent(state, "code-reviewer", "code-reviewer-2", pr); got != 1 {
+			t.Errorf("CountReviewableTasksForAgent(other reviewer) = %d, want 1", got)
+		}
+		// Sanity: role-level count is still 1 (it's claimable for the role).
+		if got := CountReviewableTasks(state, "code-reviewer", pr); got != 1 {
+			t.Errorf("CountReviewableTasks(role) = %d, want 1", got)
+		}
+	})
+
 	t.Run("diagnostics reports partially_approved as awaiting second review", func(t *testing.T) {
 		state := &State{
 			Tasks: []Task{

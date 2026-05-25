@@ -30,6 +30,25 @@ func CountReviewableTasks(state *State, role string, pr PipelineResolver) int {
 	return count
 }
 
+// CountReviewableTasksForAgent is the agent-aware variant of CountReviewableTasks:
+// it excludes tasks that the given agent has already approved. The reviewer
+// supervisor's wait loop uses this so an agent that just approved doesn't
+// spin "found 1 reviewable task" → claim → reject (self-approval) → repeat.
+func CountReviewableTasksForAgent(state *State, role, agentID string, pr PipelineResolver) int {
+	count := 0
+	for i := range state.Tasks {
+		t := &state.Tasks[i]
+		if !t.IsClaimable(role, state.Tasks, pr) {
+			continue
+		}
+		if t.HasApprovalFromAgent(agentID) {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 // GetCoderWorkDiagnostics returns detailed diagnostic information about task availability for coders.
 func GetCoderWorkDiagnostics(state *State, pr PipelineResolver) string {
 	claimable := CountClaimableTasks(state, RoleCoder, pr)

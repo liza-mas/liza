@@ -145,5 +145,10 @@ type Config struct {
 	AutoResume               bool           `yaml:"auto_resume,omitempty"`
 	NoFollowUp               bool           `yaml:"no_follow_up,omitempty"`
 	PostWorktreeCmd          *string        `yaml:"post_worktree_cmd,omitempty"`
-	Extra                    map[string]any `yaml:",inline"`
+	// AutoCheckpointSummary controls whether Liza auto-invokes the
+	// checkpoint-summary skill against a task that just reached MERGED and
+	// writes the result to docs/checkpoint-summary.md. Default (nil) is ON.
+	// Set explicitly to false to opt out.
+	AutoCheckpointSummary *bool          `yaml:"auto_checkpoint_summary,omitempty"`
+	Extra                 map[string]any `yaml:",inline"`
 }

@@ -105,7 +105,10 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 	pr := loadResolver(config.ProjectRoot)
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
-			count := models.CountReviewableTasks(state, s.role, pr)
+			// Use agent-aware count so a reviewer that just approved a task
+			// doesn't keep seeing it as "reviewable" — round-2 must go to a
+			// different reviewer (see filterAlreadyApprovedByAgent in ops).
+			count := models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr)
 			if count > 0 {
 				return true, fmt.Sprintf("Found %d %s-reviewable task(s)", count, s.role)
 			}

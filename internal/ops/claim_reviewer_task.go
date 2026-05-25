@@ -95,6 +95,14 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 			return &PreconditionError{Reason: "no reviewable tasks found"}
 		}
 
+		// Independent-review filter: skip tasks the claiming agent already
+		// approved. Without this, a reviewer-1 polling loop would re-claim
+		// its own partially_approved task and self-rubber-stamp the quorum.
+		candidates = filterAlreadyApprovedByAgent(candidates, input.AgentID)
+		if len(candidates) == 0 {
+			return &PreconditionError{Reason: "no reviewable tasks found (all candidates already approved by claimer)"}
+		}
+
 		// Filter out candidates in claim cooldown to prevent claim-release spin.
 		candidates = filterReviewClaimCooldown(candidates, input.AgentID, defaultReviewClaimCooldown, now)
 		if len(candidates) == 0 {
@@ -338,6 +346,26 @@ func isDiversitySatisfiable(
 		}
 	}
 	return false
+}
+
+// filterAlreadyApprovedByAgent removes candidates where the given agent has
+// already recorded an approval. A reviewer must not be allowed to re-claim a
+// task they already approved — the round-2 verdict has to come from an
+// independent reviewer (quorum > 1 contract). Without this filter, the
+// agent loop happily picks up its own partially_approved task during round
+// 2 polling and double-counts the same approval.
+func filterAlreadyApprovedByAgent(candidates []*models.Task, agentID string) []*models.Task {
+	if agentID == "" {
+		return candidates
+	}
+	var filtered []*models.Task
+	for _, t := range candidates {
+		if t.HasApprovalFromAgent(agentID) {
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+	return filtered
 }
 
 // filterReviewClaimCooldown removes candidates where the claiming agent has a

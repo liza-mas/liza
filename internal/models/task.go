@@ -480,6 +480,22 @@ func (t *Task) LastApprover() string {
 	return t.Approvals[len(t.Approvals)-1].Agent
 }
 
+// HasApprovalFromAgent reports whether the given agent has already recorded
+// an approval on this task. Used to prevent a reviewer from re-claiming
+// (and double-approving) a task they previously voted on — the second
+// review must come from a different agent to satisfy independent review.
+func (t *Task) HasApprovalFromAgent(agentID string) bool {
+	if agentID == "" {
+		return false
+	}
+	for _, a := range t.Approvals {
+		if a.Agent == agentID {
+			return true
+		}
+	}
+	return false
+}
+
 // TransitionWith validates and applies a status transition using a transition map
 // built from pipeline config. The target status must exist as a key in the
 // transition map (i.e., be a declared state).
