@@ -7,15 +7,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
 )
 
 // CheckpointSummaryRelPath is the location, relative to the project root,
-// where the auto-generated checkpoint summary is written.
-const CheckpointSummaryRelPath = "docs/checkpoint-summary.md"
+// where the auto-generated checkpoint summary is written. Keep it under
+// .liza/ so Liza does not overwrite user-owned project documentation.
+const CheckpointSummaryRelPath = ".liza/checkpoint-summary.md"
 
 // checkpointSummaryDefaultTimeout bounds how long the spawned CLI is allowed
 // to run before being terminated. Checkpoint summaries are short reads + a
@@ -31,7 +34,8 @@ const checkpointSummaryDefaultTimeout = 5 * time.Minute
 //   - cliName: resolved default CLI (claude, codex, gemini, ...)
 //   - prompt: the message handed to the CLI; instructs it to use the
 //     checkpoint-summary skill against .liza/state.yaml and write the report
-//     to docs/checkpoint-summary.md.
+//     to .liza/checkpoint-summary.md.
+//   - cfg: runtime config used to preserve per-CLI launch settings.
 //
 // Returns nil on a successful spawn that wrote the report. Any error is
 // non-fatal at the call site — the merge itself has already succeeded.
@@ -43,7 +47,7 @@ var checkpointSummaryRunner = runCheckpointSummaryCLI
 //
 // Behavior:
 //   - opt-out via Config.AutoCheckpointSummary == false
-//   - report is written to <projectRoot>/docs/checkpoint-summary.md
+//   - report is written to <projectRoot>/.liza/checkpoint-summary.md
 //   - CLI is resolved through ResolveDefaultCLI (state.yaml > env > const)
 func emitCheckpointSummary(projectRoot string, taskID string, cfg models.Config) {
 	logger := GetLogger()
@@ -56,7 +60,7 @@ func emitCheckpointSummary(projectRoot string, taskID string, cfg models.Config)
 	cliName := ResolveDefaultCLI(cfg.DefaultCLI)
 	prompt := buildCheckpointSummaryPrompt(taskID)
 
-	if err := checkpointSummaryRunner(projectRoot, cliName, prompt); err != nil {
+	if err := checkpointSummaryRunner(projectRoot, cliName, prompt, cfg); err != nil {
 		logger.Warn("Auto checkpoint-summary failed",
 			"task_id", taskID,
 			"cli", cliName,
@@ -79,7 +83,8 @@ func buildCheckpointSummaryPrompt(taskID string) string {
 
 Context: task %s just merged into the integration branch. Read .liza/state.yaml,
 apply the checkpoint-summary skill protocol, and write the report to
-%s (overwrite if it already exists). Do not ask follow-up questions.
+%s (overwrite if it already exists). Do not create, edit, or delete any other
+file. Do not ask follow-up questions.
 `, taskID, CheckpointSummaryRelPath)
 }
 
@@ -88,24 +93,31 @@ apply the checkpoint-summary skill protocol, and write the report to
 // stdin, captures combined output for the logger, and lets the CLI write
 // the markdown report itself (the skill knows where to put it).
 //
-// This intentionally does NOT use the rich DefaultCLIExecutor pipeline used
-// for normal agent runs: this is a side-effect emitter, not a full agent
-// session, and should not depend on agent state (heartbeat, output dir,
-// secret masker) or hijack the same per-agent semantics.
-func runCheckpointSummaryCLI(projectRoot, cliName, prompt string) error {
-	args, useStdin, err := checkpointSummaryCLIArgs(cliName, prompt)
+// The runner reuses the same per-CLI argv builders as normal agent runs where
+// practical, but keeps output discarded because this is a best-effort side
+// effect rather than a supervised agent session.
+func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Config) error {
+	beforeStatus, err := gitStatusSnapshot(projectRoot)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to snapshot git status before checkpoint-summary: %w", err)
 	}
+
+	reportPath := filepath.Join(projectRoot, CheckpointSummaryRelPath)
+	if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
+		return fmt.Errorf("failed to prepare checkpoint-summary directory: %w", err)
+	}
+
+	env := filterAPIKeyEnv(os.Environ())
 
 	ctx, cancel := context.WithTimeout(context.Background(), checkpointSummaryDefaultTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, cliName, args...)
+	cmd, useStdin, err := checkpointSummaryCLICommand(ctx, projectRoot, cliName, prompt, cfg, env)
+	if err != nil {
+		return err
+	}
 	cmd.Dir = projectRoot
-	// Strip ANTHROPIC_API_KEY to avoid conflict with OAuth flow when
-	// the configured CLI is claude — see CLAUDE.md Claude Auth rule.
-	cmd.Env = filterAPIKeyEnv(os.Environ())
+	cmd.Env = env
 
 	if useStdin {
 		cmd.Stdin = strings.NewReader(prompt)
@@ -118,16 +130,23 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string) error {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 
-	if err := cmd.Run(); err != nil {
+	runErr := cmd.Run()
+	statusErr := validateCheckpointSummaryStatus(projectRoot, beforeStatus)
+	if runErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("checkpoint-summary CLI %q timed out after %s", cliName, checkpointSummaryDefaultTimeout)
 		}
-		return fmt.Errorf("checkpoint-summary CLI %q failed: %w", cliName, err)
+		if statusErr != nil {
+			return fmt.Errorf("checkpoint-summary CLI %q failed: %w; %v", cliName, runErr, statusErr)
+		}
+		return fmt.Errorf("checkpoint-summary CLI %q failed: %w", cliName, runErr)
+	}
+	if statusErr != nil {
+		return statusErr
 	}
 
 	// Sanity: confirm the report was actually written. If the CLI exited 0
 	// but never wrote the file, surface that as an error so callers can warn.
-	reportPath := filepath.Join(projectRoot, CheckpointSummaryRelPath)
 	info, statErr := os.Stat(reportPath)
 	if statErr != nil {
 		return fmt.Errorf("checkpoint-summary CLI exited 0 but report missing at %s: %w", reportPath, statErr)
@@ -138,15 +157,46 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string) error {
 	return nil
 }
 
+func checkpointSummaryCLICommand(
+	ctx context.Context,
+	projectRoot, cliName, prompt string,
+	cfg models.Config,
+	env []string,
+) (*exec.Cmd, bool, error) {
+	actualCLI := cliName
+	if cliName == "mistral" {
+		actualCLI = "vibe"
+	}
+
+	args, useStdin, err := checkpointSummaryCLIArgs(actualCLI, projectRoot, prompt, cfg, env)
+	if err != nil {
+		return nil, false, err
+	}
+
+	switch actualCLI {
+	case "codex":
+		codexConfig := resolveCodexLaunchConfig(cfg, env)
+		cmd, err := codexCommandContext(ctx, codexConfig.PackageVersion, args)
+		if err != nil {
+			return nil, false, err
+		}
+		return cmd, useStdin, nil
+	default:
+		return exec.CommandContext(ctx, actualCLI, args...), useStdin, nil
+	}
+}
+
 // checkpointSummaryCLIArgs returns the argv tail and whether stdin should be
-// piped, for each supported CLI. Mirrors the per-CLI dispatch in the main
-// supervisor without pulling in agent output logging concerns.
-func checkpointSummaryCLIArgs(cliName, prompt string) ([]string, bool, error) {
+// piped for each supported CLI. It mirrors the normal supervisor's per-CLI
+// argv builders so checkpoint summaries honor the same launch semantics.
+func checkpointSummaryCLIArgs(cliName, projectRoot, prompt string, cfg models.Config, env []string) ([]string, bool, error) {
 	switch cliName {
 	case "claude":
-		return []string{"--print", "--permission-mode", "acceptEdits"}, true, nil
+		disableSubagents := envValue(env, "LIZA_DISABLE_CLAUDE_SUBAGENTS") == "1"
+		return buildClaudeArgs(prompt, true, "", disableSubagents), true, nil
 	case "codex":
-		return []string{"exec", "--skip-git-repo-check", "-"}, true, nil
+		codexConfig := resolveCodexLaunchConfig(cfg, env)
+		return buildCodexArgs(projectRoot, prompt, true, "", nil, codexConfig.LegacyLandlock), true, nil
 	case "gemini":
 		return []string{"-p"}, true, nil
 	case "vibe", "mistral":
@@ -156,6 +206,111 @@ func checkpointSummaryCLIArgs(cliName, prompt string) ([]string, bool, error) {
 	default:
 		return nil, false, fmt.Errorf("unsupported CLI for checkpoint-summary: %q", cliName)
 	}
+}
+
+type checkpointStatusEntry struct {
+	status      string
+	fingerprint string
+}
+
+func gitStatusSnapshot(projectRoot string) (map[string]checkpointStatusEntry, error) {
+	output, err := gitenv.Output(projectRoot, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if err != nil {
+		return nil, err
+	}
+
+	entries := parseGitStatusPorcelainZ(output)
+	snapshot := make(map[string]checkpointStatusEntry, len(entries))
+	for _, entry := range entries {
+		snapshot[entry.path] = checkpointStatusEntry{
+			status:      entry.status,
+			fingerprint: checkpointPathFingerprint(projectRoot, entry.path),
+		}
+	}
+	return snapshot, nil
+}
+
+type gitStatusEntry struct {
+	status string
+	path   string
+}
+
+func parseGitStatusPorcelainZ(output []byte) []gitStatusEntry {
+	records := strings.Split(string(output), "\x00")
+	var entries []gitStatusEntry
+	for i := 0; i < len(records); i++ {
+		record := records[i]
+		if record == "" {
+			continue
+		}
+		if len(record) < 4 {
+			continue
+		}
+		status := record[:2]
+		entries = append(entries, gitStatusEntry{
+			status: status,
+			path:   filepath.ToSlash(record[3:]),
+		})
+		if strings.ContainsAny(status, "RC") && i+1 < len(records) {
+			i++ // porcelain -z includes the source path as a separate record.
+		}
+	}
+	return entries
+}
+
+func checkpointPathFingerprint(projectRoot, relPath string) string {
+	info, err := os.Lstat(filepath.Join(projectRoot, filepath.FromSlash(relPath)))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "missing"
+		}
+		return "stat-error:" + err.Error()
+	}
+	return fmt.Sprintf("mode=%s size=%d mod=%d", info.Mode().String(), info.Size(), info.ModTime().UnixNano())
+}
+
+func validateCheckpointSummaryStatus(projectRoot string, before map[string]checkpointStatusEntry) error {
+	after, err := gitStatusSnapshot(projectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to snapshot git status after checkpoint-summary: %w", err)
+	}
+	unexpected := unexpectedCheckpointSummaryStatusChanges(before, after)
+	if len(unexpected) > 0 {
+		return fmt.Errorf("checkpoint-summary CLI modified unexpected paths: %s", strings.Join(unexpected, ", "))
+	}
+	return nil
+}
+
+func unexpectedCheckpointSummaryStatusChanges(before, after map[string]checkpointStatusEntry) []string {
+	var unexpected []string
+	for path, afterEntry := range after {
+		if path == filepath.ToSlash(CheckpointSummaryRelPath) {
+			continue
+		}
+		beforeEntry, existed := before[path]
+		if existed && beforeEntry == afterEntry {
+			continue
+		}
+		unexpected = append(unexpected, formatCheckpointStatusEntry(afterEntry, path))
+	}
+
+	for path, beforeEntry := range before {
+		if path == filepath.ToSlash(CheckpointSummaryRelPath) {
+			continue
+		}
+		if _, stillPresent := after[path]; !stillPresent {
+			unexpected = append(unexpected, formatCheckpointStatusEntry(beforeEntry, path)+" (removed)")
+		}
+	}
+	sort.Strings(unexpected)
+	return unexpected
+}
+
+func formatCheckpointStatusEntry(entry checkpointStatusEntry, path string) string {
+	if entry.status == "" {
+		return path
+	}
+	return entry.status + " " + path
 }
 
 // filterAPIKeyEnv removes ANTHROPIC_API_KEY from the env list. The user's

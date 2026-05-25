@@ -119,6 +119,7 @@ All configuration lives in `.liza/state.yaml` under the `config` section.
 | `codex_package_version` | (none) | — | — | npm package version | Pins headless Codex agents to `@openai/codex@<version>` |
 | `codex_legacy_landlock` | false | — | — | boolean | Adds Codex `use_legacy_landlock` and `workspace-write` flags for headless MAS agents |
 | `post_worktree_cmd` | (none) | — | — | shell cmd | Command run after worktree creation (e.g. `npm install`) |
+| `auto_checkpoint_summary` | true | — | — | boolean | Auto-runs checkpoint-summary after successful merges and writes `.liza/checkpoint-summary.md` |
 | `scip_search` | (none) | — | — | language list | Durable allowlist of SCIP languages Liza may index when `LIZA_ENABLE_SCIP_SEARCH` is truthy |
 
 ### SCIP Search (`config.scip_search`)
@@ -299,6 +300,18 @@ CIRCUIT_BREAKER_TRIPPED -> RUNNING (liza resume, after fixing root cause)
 When `liza tui` triggers the circuit breaker, it also sets `sprint.status` to `CHECKPOINT`.
 
 `liza tui` also auto-checkpoints when all non-terminal planned tasks are BLOCKED (sprint stalled), since no agent can make further progress without human intervention.
+
+## Checkpoint Summary
+
+After a successful merge, Liza auto-invokes the configured default CLI with the
+`checkpoint-summary` skill and writes the latest report to
+`.liza/checkpoint-summary.md`. The operation is best-effort: merge success does
+not depend on the report being created. Set `auto_checkpoint_summary: false` in
+`.liza/state.yaml` to disable it.
+
+The summary emitter snapshots git status paths and filesystem metadata before
+and after the CLI run. Changes outside `.liza/checkpoint-summary.md` are logged
+as an auto-summary failure and do not block the completed merge.
 
 ## Task Lifecycle States
 

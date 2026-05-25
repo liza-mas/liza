@@ -325,8 +325,8 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 
 			logger.Info("Successfully merged task", "task_id", task.ID)
 
-			// Auto-emit checkpoint-summary so humans get a fresh report at
-			// docs/checkpoint-summary.md without manually invoking the skill.
+			// Auto-emit checkpoint-summary so humans get a fresh report under
+			// .liza/ without manually invoking the skill.
 			// Best-effort: failures are logged inside the helper and never
 			// block the merge cycle. Re-read state here so the config flag
 			// reflects the post-merge view, not a stale snapshot.

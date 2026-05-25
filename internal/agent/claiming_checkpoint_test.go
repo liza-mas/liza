@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
-	"os"
 )
 
 // TestHandleApprovedMerges_AutoEmitsCheckpointSummary is the end-to-end wiring
@@ -25,7 +25,7 @@ func TestHandleApprovedMerges_AutoEmitsCheckpointSummary(t *testing.T) {
 
 	var runnerCalled bool
 	var gotProjectRoot, gotPrompt string
-	withFakeCheckpointSummaryRunner(t, func(projectRoot, cliName, prompt string) error {
+	withFakeCheckpointSummaryRunner(t, func(projectRoot, cliName, prompt string, _ models.Config) error {
 		runnerCalled = true
 		gotProjectRoot = projectRoot
 		gotPrompt = prompt
@@ -96,7 +96,7 @@ func TestHandleApprovedMerges_RespectsAutoCheckpointOptOut(t *testing.T) {
 	}
 
 	called := false
-	withFakeCheckpointSummaryRunner(t, func(string, string, string) error {
+	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
 		called = true
 		return nil
 	})

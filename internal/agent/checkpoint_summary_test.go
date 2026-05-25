@@ -3,15 +3,17 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // withFakeCheckpointSummaryRunner swaps in a deterministic runner for the
 // duration of a sub-test and restores the previous one on cleanup.
-func withFakeCheckpointSummaryRunner(t *testing.T, fn func(projectRoot, cliName, prompt string) error) {
+func withFakeCheckpointSummaryRunner(t *testing.T, fn func(projectRoot, cliName, prompt string, cfg models.Config) error) {
 	t.Helper()
 	prev := checkpointSummaryRunner
 	checkpointSummaryRunner = fn
@@ -23,7 +25,7 @@ func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
 	var called bool
 	var gotCLI, gotPrompt string
 
-	withFakeCheckpointSummaryRunner(t, func(projectRoot, cliName, prompt string) error {
+	withFakeCheckpointSummaryRunner(t, func(projectRoot, cliName, prompt string, _ models.Config) error {
 		called = true
 		gotCLI = cliName
 		gotPrompt = prompt
@@ -57,7 +59,7 @@ func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
 func TestEmitCheckpointSummary_OptOut(t *testing.T) {
 	tmp := t.TempDir()
 	called := false
-	withFakeCheckpointSummaryRunner(t, func(string, string, string) error {
+	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
 		called = true
 		return nil
 	})
@@ -73,7 +75,7 @@ func TestEmitCheckpointSummary_OptOut(t *testing.T) {
 func TestEmitCheckpointSummary_ExplicitOn(t *testing.T) {
 	tmp := t.TempDir()
 	called := false
-	withFakeCheckpointSummaryRunner(t, func(string, string, string) error {
+	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
 		called = true
 		return nil
 	})
@@ -87,7 +89,7 @@ func TestEmitCheckpointSummary_ExplicitOn(t *testing.T) {
 
 func TestEmitCheckpointSummary_RunnerErrorIsSwallowed(t *testing.T) {
 	tmp := t.TempDir()
-	withFakeCheckpointSummaryRunner(t, func(string, string, string) error {
+	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
 		return os.ErrNotExist
 	})
 
@@ -98,7 +100,7 @@ func TestEmitCheckpointSummary_RunnerErrorIsSwallowed(t *testing.T) {
 func TestEmitCheckpointSummary_HonoursConfiguredCLI(t *testing.T) {
 	tmp := t.TempDir()
 	var gotCLI string
-	withFakeCheckpointSummaryRunner(t, func(_, cliName, _ string) error {
+	withFakeCheckpointSummaryRunner(t, func(_, cliName, _ string, _ models.Config) error {
 		gotCLI = cliName
 		return nil
 	})
@@ -115,7 +117,7 @@ func TestCheckpointSummaryCLIArgs_Supported(t *testing.T) {
 		stdin    bool
 		argHints []string
 	}{
-		{cli: "claude", stdin: true, argHints: []string{"--print"}},
+		{cli: "claude", stdin: true, argHints: []string{"-p"}},
 		{cli: "codex", stdin: true, argHints: []string{"exec"}},
 		{cli: "gemini", stdin: true, argHints: []string{"-p"}},
 		{cli: "vibe", stdin: false, argHints: []string{"-p"}},
@@ -123,7 +125,7 @@ func TestCheckpointSummaryCLIArgs_Supported(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		args, useStdin, err := checkpointSummaryCLIArgs(c.cli, "prompt")
+		args, useStdin, err := checkpointSummaryCLIArgs(c.cli, "/tmp/project", "prompt", models.Config{}, nil)
 		if err != nil {
 			t.Errorf("%s: unexpected error: %v", c.cli, err)
 			continue
@@ -147,7 +149,7 @@ func TestCheckpointSummaryCLIArgs_Supported(t *testing.T) {
 }
 
 func TestCheckpointSummaryCLIArgs_Unsupported(t *testing.T) {
-	if _, _, err := checkpointSummaryCLIArgs("not-a-cli", "x"); err == nil {
+	if _, _, err := checkpointSummaryCLIArgs("not-a-cli", "/tmp/project", "x", models.Config{}, nil); err == nil {
 		t.Fatal("expected error for unsupported CLI")
 	}
 }
@@ -169,21 +171,115 @@ func TestFilterAPIKeyEnv_StripsAnthropicKey(t *testing.T) {
 	}
 }
 
-// TestRunCheckpointSummaryCLI_ReportMissing exercises the post-run sanity
-// check: a CLI that exits 0 but never writes the report must be surfaced
-// as an error rather than silently swallowed.
+func TestRunCheckpointSummaryCLI_WritesLizaOwnedReport(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"mkdir -p .liza",
+		"printf '# checkpoint summary\\n' > .liza/checkpoint-summary.md",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err != nil {
+		t.Fatalf("runCheckpointSummaryCLI() error = %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(tmp, CheckpointSummaryRelPath)); statErr != nil {
+		t.Errorf("expected report at %s: %v", CheckpointSummaryRelPath, statErr)
+	}
+}
+
 func TestRunCheckpointSummaryCLI_ReportMissing(t *testing.T) {
 	tmp := t.TempDir()
-	// `true` exits 0, writes nothing, takes no input — perfect stand-in
-	// for a CLI that fails to honour its instructions.
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt")
-	// The real "claude" binary may or may not exist on the test runner;
-	// we accept either the "report missing" sanity error or a spawn
-	// failure. Both are valid outcomes — we just don't want a panic.
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", nil)
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
 	if err == nil {
-		// If by miracle a report was written, ensure the file is there.
-		if _, statErr := os.Stat(filepath.Join(tmp, CheckpointSummaryRelPath)); statErr != nil {
-			t.Errorf("returned nil but report missing: %v", statErr)
-		}
+		t.Fatal("expected report missing error, got nil")
 	}
+	if !strings.Contains(err.Error(), "report missing") {
+		t.Fatalf("error = %q, want report missing", err.Error())
+	}
+}
+
+func TestRunCheckpointSummaryCLI_RejectsUnexpectedProjectMutation(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"mkdir -p .liza",
+		"printf '# checkpoint summary\\n' > .liza/checkpoint-summary.md",
+		"printf 'unexpected\\n' > unexpected.txt",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err == nil {
+		t.Fatal("expected unexpected mutation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "modified unexpected paths") {
+		t.Fatalf("error = %q, want unexpected paths", err.Error())
+	}
+	if !strings.Contains(err.Error(), "unexpected.txt") {
+		t.Fatalf("error = %q, want unexpected.txt", err.Error())
+	}
+}
+
+func TestRunCheckpointSummaryCLI_RejectsUnexpectedLizaMutation(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"mkdir -p .liza",
+		"printf '# checkpoint summary\\n' > .liza/checkpoint-summary.md",
+		"printf 'unexpected\\n' > .liza/other.md",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err == nil {
+		t.Fatal("expected unexpected .liza mutation error, got nil")
+	}
+	if !strings.Contains(err.Error(), ".liza/other.md") {
+		t.Fatalf("error = %q, want .liza/other.md", err.Error())
+	}
+}
+
+func TestRunCheckpointSummaryCLI_RejectsAlreadyDirtyMutation(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	if err := os.WriteFile(filepath.Join(tmp, "notes.md"), []byte("clean\n"), 0o644); err != nil {
+		t.Fatalf("write notes.md: %v", err)
+	}
+	testhelpers.MustGit(t, tmp, "add", "notes.md")
+	testhelpers.MustGit(t, tmp, "commit", "-m", "Add notes")
+	if err := os.WriteFile(filepath.Join(tmp, "notes.md"), []byte("human draft\n"), 0o644); err != nil {
+		t.Fatalf("dirty notes.md: %v", err)
+	}
+
+	installFakeCLI(t, "claude", []string{
+		"mkdir -p .liza",
+		"printf '# checkpoint summary\\n' > .liza/checkpoint-summary.md",
+		"printf 'cli overwrite with different size\\n' > notes.md",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err == nil {
+		t.Fatal("expected already-dirty mutation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "notes.md") {
+		t.Fatalf("error = %q, want notes.md", err.Error())
+	}
+}
+
+func installFakeCLI(t *testing.T, name string, body []string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell CLI helper is Unix-only")
+	}
+
+	binDir := t.TempDir()
+	path := filepath.Join(binDir, name)
+	lines := []string{"#!/bin/sh", "set -eu"}
+	lines = append(lines, body...)
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o755); err != nil {
+		t.Fatalf("write fake CLI: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
