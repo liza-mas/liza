@@ -125,8 +125,8 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 		cmd.Stdin = nil
 	}
 
-	// Capture output — we don't surface it to the user, but log it for
-	// triage if the report ends up empty or missing.
+	// Discard subprocess output. Auto-summary is best-effort, and persisted
+	// agent output handling belongs to the normal supervised agent pipeline.
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 

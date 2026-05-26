@@ -327,9 +327,10 @@ func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr mod
 
 			// Auto-emit checkpoint-summary so humans get a fresh report under
 			// .liza/ without manually invoking the skill.
-			// Best-effort: failures are logged inside the helper and never
-			// block the merge cycle. Re-read state here so the config flag
-			// reflects the post-merge view, not a stale snapshot.
+			// Best-effort: failures are logged inside the helper and do not
+			// fail or roll back the completed merge. Re-read state here so
+			// the config flag reflects the post-merge view, not a stale
+			// snapshot.
 			if freshState, readErr := bb.Read(); readErr == nil {
 				emitCheckpointSummary(projectRoot, task.ID, freshState.Config)
 			} else {
