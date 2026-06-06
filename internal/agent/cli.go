@@ -3,7 +3,7 @@ package agent
 import "os"
 
 // validCLIs is the canonical list of supported CLI backends.
-var validCLIs = []string{"claude", "codex", "gemini", "mistral", "kimi"}
+var validCLIs = []string{"claude", "codex", "gemini", "mistral", "kimi", "pi"}
 
 // ValidCLIs returns the supported CLI backends. Returns a fresh copy to prevent mutation.
 func ValidCLIs() []string {
