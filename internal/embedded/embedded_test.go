@@ -2384,10 +2384,11 @@ func TestOpenCodeExecToolBoundsAccumulatedOutput(t *testing.T) {
 	content := string(OpenCodeExecToolContent())
 	for _, want := range []string{
 		"function appendLimited",
-		"OUTPUT_LIMIT - value.length",
+		"OUTPUT_LIMIT_BYTES - usedBytes",
+		"Buffer.isBuffer(chunk)",
 		"stdoutTruncated += truncated",
 		"stderrTruncated += truncated",
-		"truncated ${truncated} characters",
+		"truncated ${truncated} bytes",
 		"formatOutput(\"stdout\", stdout, stdoutTruncated)",
 		"formatOutput(\"stderr\", stderr, stderrTruncated)",
 	} {

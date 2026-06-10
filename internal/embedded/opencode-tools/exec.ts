@@ -1,26 +1,28 @@
 // LIZA MANAGED FILE: OpenCode exec compatibility tool. Safe for Liza to overwrite.
+import { Buffer } from "node:buffer"
 import { spawn } from "node:child_process"
 import process from "node:process"
 import { tool } from "@opencode-ai/plugin"
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const FORCE_KILL_DELAY_MS = 2_000
-const OUTPUT_LIMIT = 20_000
+const OUTPUT_LIMIT_BYTES = 20_000
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
-function appendLimited(value: string, chunk: unknown): [string, number] {
-  const text = String(chunk)
-  const available = Math.max(OUTPUT_LIMIT - value.length, 0)
-  if (available === 0) return [value, text.length]
-  return [value + text.slice(0, available), Math.max(text.length - available, 0)]
+function appendLimited(value: string, usedBytes: number, chunk: unknown): [string, number, number] {
+  const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
+  const available = Math.max(OUTPUT_LIMIT_BYTES - usedBytes, 0)
+  if (available === 0) return [value, usedBytes, bytes.length]
+  const kept = bytes.subarray(0, available)
+  return [value + kept.toString("utf8"), usedBytes + kept.length, Math.max(bytes.length - available, 0)]
 }
 
 function formatOutput(label: string, value: string, truncated: number): string | undefined {
   if (value.trim().length === 0 && truncated === 0) return undefined
-  const suffix = truncated > 0 ? `\n[truncated ${truncated} characters]` : ""
+  const suffix = truncated > 0 ? `\n[truncated ${truncated} bytes]` : ""
   return `${label}:\n${value.trimEnd()}${suffix}`
 }
 
@@ -72,6 +74,8 @@ export default tool({
     return await new Promise<string>((resolve) => {
       let stdout = ""
       let stderr = ""
+      let stdoutBytes = 0
+      let stderrBytes = 0
       let stdoutTruncated = 0
       let stderrTruncated = 0
       let timedOut = false
@@ -93,13 +97,15 @@ export default tool({
       }, timeoutMs)
 
       child.stdout?.on("data", (chunk) => {
-        const [next, truncated] = appendLimited(stdout, chunk)
+        const [next, used, truncated] = appendLimited(stdout, stdoutBytes, chunk)
         stdout = next
+        stdoutBytes = used
         stdoutTruncated += truncated
       })
       child.stderr?.on("data", (chunk) => {
-        const [next, truncated] = appendLimited(stderr, chunk)
+        const [next, used, truncated] = appendLimited(stderr, stderrBytes, chunk)
         stderr = next
+        stderrBytes = used
         stderrTruncated += truncated
       })
 
