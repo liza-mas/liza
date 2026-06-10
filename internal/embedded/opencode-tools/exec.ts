@@ -20,8 +20,20 @@ function appendLimited(value: string, chunk: unknown): [string, number] {
 
 function formatOutput(label: string, value: string, truncated: number): string | undefined {
   if (value.trim().length === 0 && truncated === 0) return undefined
-  const suffix = truncated > 0 ? `\n[truncated ${truncated} bytes]` : ""
+  const suffix = truncated > 0 ? `\n[truncated ${truncated} characters]` : ""
   return `${label}:\n${value.trimEnd()}${suffix}`
+}
+
+function killChildTree(child: ReturnType<typeof spawn>, signal: "SIGTERM" | "SIGKILL") {
+  if (process.platform !== "win32" && typeof child.pid === "number") {
+    try {
+      process.kill(-child.pid, signal)
+      return
+    } catch {
+      // Fall back to the shell process if process-group signaling is unavailable.
+    }
+  }
+  child.kill(signal)
 }
 
 function defaultWorkdir(context: unknown): string {
@@ -67,15 +79,16 @@ export default tool({
 
       const child = spawn(args.cmd, {
         cwd,
+        detached: process.platform !== "win32",
         env: process.env,
         shell: true,
       })
 
       const timeout = setTimeout(() => {
         timedOut = true
-        child.kill("SIGTERM")
+        killChildTree(child, "SIGTERM")
         forceKill = setTimeout(() => {
-          child.kill("SIGKILL")
+          killChildTree(child, "SIGKILL")
         }, FORCE_KILL_DELAY_MS)
       }, timeoutMs)
 

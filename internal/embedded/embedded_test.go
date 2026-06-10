@@ -2387,6 +2387,7 @@ func TestOpenCodeExecToolBoundsAccumulatedOutput(t *testing.T) {
 		"OUTPUT_LIMIT - value.length",
 		"stdoutTruncated += truncated",
 		"stderrTruncated += truncated",
+		"truncated ${truncated} characters",
 		"formatOutput(\"stdout\", stdout, stdoutTruncated)",
 		"formatOutput(\"stderr\", stderr, stderrTruncated)",
 	} {
@@ -2400,8 +2401,11 @@ func TestOpenCodeExecToolForceKillsTimedOutCommands(t *testing.T) {
 	content := string(OpenCodeExecToolContent())
 	for _, want := range []string{
 		"const FORCE_KILL_DELAY_MS",
-		"child.kill(\"SIGTERM\")",
-		"child.kill(\"SIGKILL\")",
+		"function killChildTree",
+		"detached: process.platform !== \"win32\"",
+		"process.kill(-child.pid, signal)",
+		"killChildTree(child, \"SIGTERM\")",
+		"killChildTree(child, \"SIGKILL\")",
 		"if (forceKill) clearTimeout(forceKill)",
 	} {
 		if !strings.Contains(content, want) {
