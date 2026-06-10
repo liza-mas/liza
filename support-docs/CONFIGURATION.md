@@ -803,6 +803,8 @@ Headless watch automatically runs the repair-agent-pool behavior when a task is 
 | `claude` | Claude Code (fallback default when no config is set) |
 | `codex` | OpenAI Codex CLI |
 | `codex-acp` | OpenAI Codex through ACPX. Requires the `acpx` executable on the spawned agent's `PATH`; install it with `npm install -g acpx`. Liza preflights this prerequisite before direct `liza agent` execution and before TUI/API agent spawning. `codex-acp` reuses Codex `AGENTS.md` contract setup and runs ACPX with non-interactive auto-approval inside Liza task worktrees. During `acpx prompt`, streams stdout JSON-RPC and stderr diagnostics to `.liza/agent-outputs/`, returns parsed message chunks to the supervisor, and logs lifecycle/usage metadata. Short ACPX session control calls are not transcript-logged. |
+| `opencode` | OpenCode CLI through `opencode run`. Requires `liza setup --opencode` and `liza init --opencode` for contract and skill activation. Logged runs add JSON output. |
+| `opencode-acp` | OpenCode through ACPX. Requires `acpx` on `PATH`, reuses OpenCode `AGENTS.md` contract setup, and selects the ACPX OpenCode target; it is not an OpenCode executable name. |
 | `gemini` | Google Gemini CLI |
 | `mistral` | Mistral Le Chat CLI |
 | `kimi` | Kimi (alias to claude with Kimi-specific env vars) |

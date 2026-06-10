@@ -152,12 +152,7 @@ Example:
 
 		// Warn if no Liza contract symlink is configured for this CLI
 		if commands.CheckContractConfigured(projectRoot, cliName) == "" {
-			initFlag := cliName
-			if cliName == "kimi" {
-				initFlag = "claude" // kimi uses Claude's config
-			} else if cliName == "codex-acp" {
-				initFlag = "codex" // codex-acp uses Codex's config
-			}
+			initFlag := contractInitFlagForCLI(cliName)
 			fmt.Fprintf(os.Stderr, "Warning: no Liza contract symlink found for %s. Agents may not find the behavioral contract.\n", cliName)
 			fmt.Fprintf(os.Stderr, "  Run 'liza init --%s' to create one.\n", initFlag)
 		}
@@ -213,6 +208,19 @@ Example:
 
 		return agent.RunSupervisor(ctx, config)
 	},
+}
+
+func contractInitFlagForCLI(cliName string) string {
+	switch cliName {
+	case "kimi":
+		return "claude" // kimi uses Claude's config
+	case "codex-acp":
+		return "codex" // codex-acp uses Codex's config
+	case "opencode-acp":
+		return "opencode" // opencode-acp uses OpenCode's config
+	default:
+		return cliName
+	}
 }
 
 var recoverTaskCmd = &cobra.Command{

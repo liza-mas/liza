@@ -22,3 +22,20 @@ func TestAgentHelpListsAllRuntimeRoles(t *testing.T) {
 		}
 	}
 }
+
+func TestContractInitFlagForCLI(t *testing.T) {
+	tests := map[string]string{
+		"claude":       "claude",
+		"codex":        "codex",
+		"codex-acp":    "codex",
+		"opencode":     "opencode",
+		"opencode-acp": "opencode",
+		"kimi":         "claude",
+	}
+
+	for cliName, want := range tests {
+		if got := contractInitFlagForCLI(cliName); got != want {
+			t.Fatalf("contractInitFlagForCLI(%q) = %q, want %q", cliName, got, want)
+		}
+	}
+}

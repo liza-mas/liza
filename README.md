@@ -67,7 +67,7 @@ Liza is a **frontier Multi-Agent System**:
   - Agent logs and prompts recording for automatic analysis and continuous improvements (token optimization, tool usage analysis, context quality, ...). The `/liza-logs` skill cross-correlates logs across agents to identify frictions — from misconfiguration in early setups to regressions from provider CLI updates in mature ones. The `/context-engineering` skill audits prompt payload shape, context bloat, cacheability, and handoff fit.
 - **Multi-model:**
   - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
-  - BYOM: Claude Code, Codex CLI, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
+  - BYOM: Claude Code, Codex CLI, OpenCode, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
 - **Structured workflow:**
   - Defined as a composable and customizable YAML pipeline with declarative sub-pipelines (e.g. specification, coding).
   - Coordination is performed via an auditable YAML **blackboard** that acts as both the Kanban board of the agents with full historized state details and the support for PR-like comments made by the reviewer agents.
