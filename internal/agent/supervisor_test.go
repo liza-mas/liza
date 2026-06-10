@@ -656,6 +656,62 @@ printf 'stderr with no log\n' >&2
 	}
 }
 
+func TestCLIAgentRunsOpenCodePromptAsArgument(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake CLI shell script test requires /bin/sh")
+	}
+
+	projectRoot := t.TempDir()
+	outputsDir := filepath.Join(projectRoot, ".liza", "agent-outputs")
+	binDir := t.TempDir()
+	fakeOpenCode := filepath.Join(binDir, "opencode")
+	script := `#!/bin/sh
+for arg in "$@"; do
+  printf 'arg:%s\n' "$arg"
+done
+stdin="$(cat)"
+if [ -n "$stdin" ]; then
+  printf 'stdin:%s\n' "$stdin"
+else
+  printf 'stdin-empty\n'
+fi
+`
+	if err := os.WriteFile(fakeOpenCode, []byte(script), 0755); err != nil {
+		t.Fatalf("write fake opencode: %v", err)
+	}
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	result, err := NewCLIAgent(outputsDir).Run(context.Background(), LLMAgentRunRequest{
+		BackendName: "opencode",
+		AgentID:     "coder-1",
+		TaskID:      "task-opencode",
+		Prompt:      "prompt body",
+		ProjectRoot: projectRoot,
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+	for _, want := range []string{
+		"arg:run",
+		"arg:prompt body",
+		"arg:--dangerously-skip-permissions",
+		"arg:--format",
+		"arg:json",
+		"stdin-empty",
+	} {
+		if !strings.Contains(result.Output, want) {
+			t.Fatalf("Output missing %q:\n%s", want, result.Output)
+		}
+	}
+	if strings.Contains(result.Output, "stdin:prompt body") {
+		t.Fatalf("prompt should not be passed via stdin: %q", result.Output)
+	}
+}
+
 func TestDefaultCLIExecutorDisallowsClaudeSubagentToolsWhenEnvEnabled(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake CLI shell script test requires /bin/sh")
@@ -1339,6 +1395,66 @@ func TestRunSupervisor_CodexCommandRuntimeFailureBlocksWithoutGenericSpin(t *tes
 	}
 }
 
+func TestRunSupervisor_OpenCodeSuccessfulNoProgressBlocksAsSpinning(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+
+	now := time.Now().UTC()
+	taskID := "task-opencode-spin"
+	state := testhelpers.CreateValidState()
+	state.Config.CoderPollInterval = 1
+	state.Config.DoerMaxWait = 1
+	state.Config.LeaseDuration = 300
+	state.Config.SpinningRestartThreshold = 1
+	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReady, now)}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	opencodeOutput := `{"type":"tool","name":"exec","input":{"cmd":"printf BRIDGE_EXEC_OK"},"output":"exit_code: 0\nstdout:\nBRIDGE_EXEC_OK"}`
+	mock := &MockCLIExecutor{ExitCode: 0, Output: opencodeOutput}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := RunSupervisor(ctx, SupervisorConfig{
+		AgentID:          "coder-1",
+		Role:             models.RoleCoder,
+		ProjectRoot:      projectRoot,
+		StatePath:        statePath,
+		LogPath:          filepath.Join(projectRoot, ".liza", "log.yaml"),
+		SpecsDir:         filepath.Join(projectRoot, "specs"),
+		CLIName:          "opencode",
+		Executor:         mock,
+		ExecutionTimeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("RunSupervisor() error = %v", err)
+	}
+
+	if calls := mock.GetCalls(); len(calls) != 2 {
+		t.Fatalf("Execute calls = %d, want 2 before no-progress guard blocks retry", len(calls))
+	}
+
+	updated, err := bb.Read()
+	if err != nil {
+		t.Fatalf("bb.Read: %v", err)
+	}
+	task := updated.FindTask(taskID)
+	if task == nil {
+		t.Fatalf("task %q not found", taskID)
+	}
+	if task.Status != models.TaskStatusBlocked {
+		t.Fatalf("task status = %s, want BLOCKED", task.Status)
+	}
+	if task.BlockedReason == nil {
+		t.Fatal("BlockedReason = nil, want no-progress reason")
+	}
+	if !strings.Contains(*task.BlockedReason, "successful no-progress loop detected") {
+		t.Fatalf("BlockedReason = %q, want successful no-progress loop", *task.BlockedReason)
+	}
+}
+
 func TestRunAgent_ExtractedOps_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1596,6 +1712,7 @@ func TestCLISupportsStdin(t *testing.T) {
 		{"codex", true},
 		{"gemini", true},
 		{"vibe", false},
+		{"opencode", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.cli, func(t *testing.T) {
@@ -1745,6 +1862,25 @@ func TestBuildCodexArgs(t *testing.T) {
 		assertNoObsoleteCodexOverrides(t, args)
 		if args[len(args)-1] != "-" {
 			t.Fatalf("args = %v, want stdin prompt marker last", args)
+		}
+	})
+}
+
+func TestBuildOpenCodeArgs(t *testing.T) {
+	t.Run("prompt argument with permissions bypass", func(t *testing.T) {
+		args := buildOpenCodeArgs("do the thing", "")
+
+		want := []string{"run", "do the thing", "--dangerously-skip-permissions"}
+		if !slices.Equal(args, want) {
+			t.Fatalf("args = %v, want %v", args, want)
+		}
+	})
+
+	t.Run("logging requests json format", func(t *testing.T) {
+		args := buildOpenCodeArgs("do the thing", "/tmp/logs")
+
+		if !containsAdjacent(args, "--format", "json") {
+			t.Fatalf("args = %v, want json format flags", args)
 		}
 	})
 }

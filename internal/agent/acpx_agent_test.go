@@ -91,6 +91,39 @@ func TestACPXAgentRunUsesPersistentCodexSession(t *testing.T) {
 	}
 }
 
+func TestACPXAgentRunUsesOpenCodeTarget(t *testing.T) {
+	binDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "acpx.log")
+	writeFakeACPX(t, filepath.Join(binDir, "acpx"), logPath)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	req := LLMAgentRunRequest{
+		BackendName: "opencode-acp",
+		AgentID:     "coder-1",
+		Prompt:      "implement the requested change",
+		ProjectRoot: t.TempDir(),
+	}
+
+	result, err := NewACPXAgent("").Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+
+	log := readTextForTest(t, logPath)
+	for _, want := range []string{
+		"ARGS:--cwd " + req.ProjectRoot + " opencode sessions ensure --name liza-coder-1",
+		"ARGS:--cwd " + req.ProjectRoot + " --format json --approve-all opencode prompt -s liza-coder-1 --file -",
+		"STDIN:implement the requested change",
+	} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("fake acpx log missing %q:\n%s", want, log)
+		}
+	}
+}
+
 func TestACPXAgentMasksReturnedOutputAndEvents(t *testing.T) {
 	binDir := t.TempDir()
 	logPath := filepath.Join(t.TempDir(), "acpx.log")

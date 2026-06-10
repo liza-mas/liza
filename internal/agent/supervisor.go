@@ -541,6 +541,22 @@ func detectLizaCommandContext(output string) string {
 	return unknownLizaJSONCommand
 }
 
+const successfulTurnOutputSignatureLimit = 16000
+
+func successfulTurnProgressSignature(cliName, output, taskSnapshot string) string {
+	switch cliName {
+	case "opencode", "opencode-acp":
+		trimmed := strings.TrimSpace(output)
+		if trimmed != "" {
+			if len(trimmed) > successfulTurnOutputSignatureLimit {
+				trimmed = trimmed[:successfulTurnOutputSignatureLimit]
+			}
+			return "provider:" + cliName + "\noutput:" + trimmed
+		}
+	}
+	return taskSnapshot
+}
+
 func handleObservedRuntimeFailureRetry(
 	bb *db.Blackboard,
 	config SupervisorConfig,
@@ -719,7 +735,19 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	exit42Tracker := newExit42RestartTracker()
 	crashTracker := newCrashRestartTracker()
 	spinTracker := newSpinningTracker()
+	successNoProgressTracker := newSpinningTracker()
 	runtimeFailureTracker := newRuntimeFailureTracker()
+	readSuccessProgressSnapshot := func(taskID string) (string, bool) {
+		if taskID == "" {
+			return "", false
+		}
+		sig, eligible, err := readTaskStateWorktreeProgressSnapshot(config.ProjectRoot, bb, taskID)
+		if err != nil {
+			GetLogger().Warn("Successful no-progress snapshot failed", "error", err, "task_id", taskID)
+			return "", false
+		}
+		return sig, eligible
+	}
 
 	for {
 		if err := checkHeartbeat(); err != nil {
@@ -871,6 +899,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 					"error", err)
 				blockTaskFromSupervisor(bb, config.ProjectRoot, claimedTaskID, config.AgentID, reason)
 				spinTracker.reset(effectiveTask)
+				successNoProgressTracker.reset(effectiveTask)
 				continue
 			}
 			return fmt.Errorf("failed to build prompt: %w", err)
@@ -894,6 +923,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		if exitCode == 0 && effectiveTask != "" {
 			if failure := detectObservedRuntimeFailure(currentOutput); failure != nil {
 				handleObservedRuntimeFailureRetry(bb, config, effectiveTask, stateBefore.Config, *failure, runtimeFailureTracker, spinTracker)
+				successNoProgressTracker.reset(effectiveTask)
 				if err := resetAgentAfterExit(bb, config.AgentID, config.ProjectRoot); err != nil {
 					GetLogger().Warn("Failed to reset agent status after runtime failure", "error", err, "agent_id", config.AgentID)
 				}
@@ -921,6 +951,31 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			GetLogger().Info("Agent completed, checking for more work")
 			if err := strategy.PostExecution(bb, config, taskID, claimedTaskID, stateBefore); err != nil {
 				GetLogger().Warn("Post-execution error", "error", err)
+			}
+			if effectiveTask != "" {
+				postSuccessSnapshot, postSuccessEligible := readSuccessProgressSnapshot(effectiveTask)
+				successSignature := successfulTurnProgressSignature(config.CLIName, currentOutput, postSuccessSnapshot)
+				if postSuccessEligible && successSignature != "" {
+					noProgressCount := successNoProgressTracker.Track(effectiveTask, successSignature)
+					spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
+					if noProgressCount > spinThreshold {
+						reason := fmt.Sprintf("successful no-progress loop detected: %d consecutive successful executions for task %s without task, state, or worktree progress (threshold=%d)",
+							noProgressCount, effectiveTask, spinThreshold)
+						GetLogger().Error("Successful no-progress loop detected, blocking task",
+							"task_id", effectiveTask,
+							"agent_id", config.AgentID,
+							"count", noProgressCount)
+						if alertErr := LogAlert(config.ProjectRoot, "🚨", "SUCCESSFUL NO-PROGRESS LOOP", reason); alertErr != nil {
+							GetLogger().Warn("Failed to write no-progress alert", "error", alertErr)
+						}
+						blockTaskFromSupervisor(bb, config.ProjectRoot, effectiveTask, config.AgentID, reason)
+						successNoProgressTracker.reset(effectiveTask)
+						spinTracker.reset(effectiveTask)
+						continue
+					}
+				} else {
+					successNoProgressTracker.reset(effectiveTask)
+				}
 			}
 			exit42Tracker.reset(taskID)
 			crashTracker.reset(effectiveTask)

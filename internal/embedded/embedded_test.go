@@ -2283,6 +2283,100 @@ func TestWriteCodexHooks_Overwrites(t *testing.T) {
 	assertHookScripts(t, hooksDir)
 }
 
+func TestWriteOpenCodeExecTool_NewFile(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	if err := WriteOpenCodeExecTool(projectRoot); err != nil {
+		t.Fatalf("WriteOpenCodeExecTool failed: %v", err)
+	}
+
+	toolPath := filepath.Join(projectRoot, ".opencode", "tools", "exec.ts")
+	content, err := os.ReadFile(toolPath)
+	if err != nil {
+		t.Fatalf("failed to read opencode exec tool: %v", err)
+	}
+	if !bytes.HasPrefix(content, []byte(OpenCodeExecToolManagedHeader)) {
+		t.Fatalf("exec tool missing managed header:\n%s", string(content))
+	}
+}
+
+func TestWriteOpenCodeExecTool_PreservesUserFile(t *testing.T) {
+	projectRoot := t.TempDir()
+	toolPath := filepath.Join(projectRoot, ".opencode", "tools", "exec.ts")
+	original := []byte("// user-owned exec tool\nexport default {}\n")
+	if err := os.MkdirAll(filepath.Dir(toolPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolPath, original, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteOpenCodeExecTool(projectRoot); err != nil {
+		t.Fatalf("WriteOpenCodeExecTool failed: %v", err)
+	}
+
+	content, err := os.ReadFile(toolPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != string(original) {
+		t.Fatalf("user-owned exec tool was overwritten:\n%s", string(content))
+	}
+}
+
+func TestWriteOpenCodeExecTool_OverwritesManagedFile(t *testing.T) {
+	projectRoot := t.TempDir()
+	toolPath := filepath.Join(projectRoot, ".opencode", "tools", "exec.ts")
+	if err := os.MkdirAll(filepath.Dir(toolPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolPath, []byte(OpenCodeExecToolManagedHeader+"\n// old\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteOpenCodeExecTool(projectRoot); err != nil {
+		t.Fatalf("WriteOpenCodeExecTool failed: %v", err)
+	}
+
+	content, err := os.ReadFile(toolPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(content), "// old") {
+		t.Fatalf("managed exec tool was not overwritten:\n%s", string(content))
+	}
+}
+
+func TestOpenCodeExecToolSchemaAllowsOmittedAndNullOptionals(t *testing.T) {
+	content := string(OpenCodeExecToolContent())
+	for _, want := range []string{
+		"cmd: tool.schema.string()",
+		".string()\n      .nullable()\n      .optional()",
+		".number()\n      .nullable()\n      .optional()",
+		"const cwd = args.workdir ?? defaultWorkdir(context)",
+		"typeof args.timeout_ms === \"number\"",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("exec tool content missing %q:\n%s", want, content)
+		}
+	}
+}
+
+func TestOpenCodeExecToolInstructionsMentionExecAndAntiLoop(t *testing.T) {
+	content := string(OpenCodeExecToolContent())
+	for _, want := range []string{
+		"Prefer this exec tool",
+		"Omit optional fields",
+		"null is tolerated",
+		"Do not repeat the same successful command",
+		"move to the next Liza protocol step",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("exec tool instructions missing %q:\n%s", want, content)
+		}
+	}
+}
+
 func assertHookScripts(t *testing.T, hooksDir string) {
 	t.Helper()
 	for name, wantContent := range hookScriptContents() {

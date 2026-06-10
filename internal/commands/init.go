@@ -46,7 +46,7 @@ type InitParams struct {
 	DefaultReviewerCLI   string   // --default-reviewer-cli: default CLI for reviewer agent spawning
 	ScipSearch           []string // --scip-search: enabled SCIP languages
 	ScipSearchPlans      []string // --scip-search-plan: pairing SCIP root overrides
-	Agents               []string // --claude, --codex, --gemini, --mistral
+	Agents               []string // --claude, --codex, --opencode, --gemini, --mistral
 	Stdin                io.Reader
 	ForceInteractive     bool   // bypass TTY check (for testing)
 	ContractAction       string // "global", "rename", "skip", or "" (default behavior)
@@ -55,22 +55,24 @@ type InitParams struct {
 // InitAgentRepoSymlinks maps agent flag names to the repo-root symlink filename.
 // These symlinks point to ~/.liza/CORE.md and enable pairing mode.
 var InitAgentRepoSymlinks = map[string]string{
-	"claude": "CLAUDE.md",
-	"codex":  "AGENTS.md",
-	"gemini": "GEMINI.md",
+	"claude":   "CLAUDE.md",
+	"codex":    "AGENTS.md",
+	"opencode": "AGENTS.md",
+	"gemini":   "GEMINI.md",
 }
 
-// globalFallbacks maps repo-root filenames to their CLI global fallback paths
+// InitAgentGlobalFallbacks maps agent flag names to their CLI global fallback paths
 // (relative to home directory). Used when the repo root already has a non-Liza file.
-var globalFallbacks = map[string]string{
-	"CLAUDE.md": filepath.Join(".claude", "CLAUDE.md"),
-	"AGENTS.md": filepath.Join(".codex", "AGENTS.md"),
-	"GEMINI.md": filepath.Join(".gemini", "GEMINI.md"),
+var InitAgentGlobalFallbacks = map[string]string{
+	"claude":   filepath.Join(".claude", "CLAUDE.md"),
+	"codex":    filepath.Join(".codex", "AGENTS.md"),
+	"opencode": filepath.Join(".config", "opencode", "AGENTS.md"),
+	"gemini":   filepath.Join(".gemini", "GEMINI.md"),
 }
 
 // InitPairingParams holds the parameters for InitPairingCommand.
 type InitPairingParams struct {
-	Agents          []string  // agent names (e.g. "claude", "codex", "gemini", "mistral")
+	Agents          []string  // agent names (e.g. "claude", "codex", "opencode", "gemini", "mistral")
 	ScipSearch      []string  // --scip-search: enabled pairing SCIP languages
 	ScipSearchPlans []string  // --scip-search-plan: pairing SCIP root overrides
 	Stdin           io.Reader // input for interactive prompts (nil = os.Stdin)
@@ -99,23 +101,26 @@ func InitPairingCommand(params InitPairingParams) error {
 	}
 
 	// Classify agents
-	var repoRootNames []string
+	var repoRootAgents []string
 	hasClaude := false
 	hasCodex := false
+	hasOpenCode := false
 	hasMistral := false
 	for _, agent := range params.Agents {
-		if name, ok := InitAgentRepoSymlinks[agent]; ok {
-			repoRootNames = append(repoRootNames, name)
+		if _, ok := InitAgentRepoSymlinks[agent]; ok {
+			repoRootAgents = append(repoRootAgents, agent)
 		}
 		switch agent {
 		case "claude":
 			hasClaude = true
 		case "codex":
 			hasCodex = true
+		case "opencode":
+			hasOpenCode = true
 		case "mistral":
 			hasMistral = true
 		case "gemini":
-			// handled by repoRootNames above
+			// handled by repoRootAgents above
 		default:
 			return fmt.Errorf("unknown agent: %s", agent)
 		}
@@ -126,7 +131,7 @@ func InitPairingCommand(params InitPairingParams) error {
 	stacklitEnabled := stacklit.RuntimeEnabled()
 	scipEnabled := pairingScipEnabled()
 	sembleEnabled := semble.RuntimeEnabled()
-	if len(repoRootNames) > 0 || hasClaude {
+	if len(repoRootAgents) > 0 || hasClaude {
 		lizaPaths, err := paths.LizaPathsFromGit()
 		if err != nil {
 			return fmt.Errorf("failed to determine project root: %w", err)
@@ -172,8 +177,8 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 	}
 
-	if len(repoRootNames) > 0 {
-		createContractSymlinksFiltered(projectRoot, coreFile, repoRootNames, params.ContractAction)
+	if len(repoRootAgents) > 0 {
+		createContractSymlinksForAgents(projectRoot, coreFile, repoRootAgents, params.ContractAction)
 	}
 
 	// Write/merge .claude/settings.json and deploy hooks
@@ -189,6 +194,12 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 		if err := embedded.WriteCodexProjectHooks(projectRoot, stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write codex hooks: %v\n", err)
+		}
+	}
+
+	if hasOpenCode {
+		if err := embedded.WriteOpenCodeExecTool(projectRoot); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
 		}
 	}
 
@@ -277,6 +288,8 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 		effectiveCLI = "claude"
 	} else if cliName == "codex-acp" {
 		effectiveCLI = "codex"
+	} else if cliName == "opencode-acp" {
+		effectiveCLI = "opencode"
 	}
 
 	fileName, ok := InitAgentRepoSymlinks[effectiveCLI]
@@ -317,7 +330,7 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 	}
 
 	// Check global fallback
-	if globalRel, ok := globalFallbacks[fileName]; ok {
+	if globalRel, ok := InitAgentGlobalFallbacks[effectiveCLI]; ok {
 		globalPath := filepath.Join(homeDir, globalRel)
 		if isLizaSymlink(globalPath, contractTarget) {
 			return globalPath
@@ -327,23 +340,27 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 	return ""
 }
 
-// createContractSymlinksFiltered creates repo-root symlinks to the contract.
+// createContractSymlinksForAgents creates repo-root symlinks to the contract.
 // When a non-Liza file already exists at the repo root, it falls back to the
 // CLI's global config directory (e.g. ~/.claude/CLAUDE.md).
 //
 // The contractAction parameter controls conflict resolution when set by the
 // interactive wizard: "rename" backs up the existing file, "global" uses the
 // global fallback, "skip" skips creation. Empty string uses default behavior.
-func createContractSymlinksFiltered(projectRoot, contractTarget string, names []string, contractAction string) {
+func createContractSymlinksForAgents(projectRoot, contractTarget string, agents []string, contractAction string) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cannot determine home directory: %v\n", err)
 		return
 	}
 
-	for _, name := range names {
+	for _, agent := range agents {
+		name, ok := InitAgentRepoSymlinks[agent]
+		if !ok {
+			continue
+		}
 		repoPath := filepath.Join(projectRoot, name)
-		globalRel, hasGlobal := globalFallbacks[name]
+		globalRel, hasGlobal := InitAgentGlobalFallbacks[agent]
 		globalPath := filepath.Join(homeDir, globalRel)
 
 		// Step 1: Liza symlink already exists at either location?
@@ -759,6 +776,12 @@ func InitCommandWithConfig(params InitParams) error {
 		}
 	}
 
+	if slices.Contains(params.Agents, "opencode") {
+		if err := embedded.WriteOpenCodeExecTool(lizaPaths.ProjectRoot()); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
+		}
+	}
+
 	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
 	if err := embedded.CleanStaleMCPEntry(lizaPaths.ProjectRoot()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to clean stale .mcp.json entry: %v\n", err)
@@ -766,14 +789,14 @@ func InitCommandWithConfig(params InitParams) error {
 
 	// Create contract symlinks only for explicitly requested providers
 	if len(params.Agents) > 0 {
-		var names []string
+		var agents []string
 		for _, agent := range params.Agents {
-			if name, ok := InitAgentRepoSymlinks[agent]; ok {
-				names = append(names, name)
+			if _, ok := InitAgentRepoSymlinks[agent]; ok {
+				agents = append(agents, agent)
 			}
 		}
-		if len(names) > 0 {
-			createContractSymlinksFiltered(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), names, params.ContractAction)
+		if len(agents) > 0 {
+			createContractSymlinksForAgents(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), agents, params.ContractAction)
 		}
 	}
 

@@ -46,6 +46,7 @@ func RunInitWizard(projectRoot string) (*InitWizardResult, error) {
 		Options(
 			huh.NewOption("Claude  (creates CLAUDE.md)", "claude").Selected(true),
 			huh.NewOption("Codex   (creates AGENTS.md)", "codex"),
+			huh.NewOption("OpenCode (creates AGENTS.md)", "opencode"),
 			huh.NewOption("Gemini  (creates GEMINI.md)", "gemini"),
 			huh.NewOption("Mistral (sets up ~/.vibe/)", "mistral"),
 		).

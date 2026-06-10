@@ -15,15 +15,17 @@ System configuration, tuning parameters, and environment variables.
 
 Bare `liza setup` is the default global install path. It does not require a
 provider flag. Provider flags add provider-specific integrations in the user's
-CLI config directories. For Claude, Codex, and Gemini, setup creates skill
-symlinks under `~/.claude/skills/`, `~/.codex/skills/`, or `~/.gemini/skills/`
-pointing to `~/.liza/skills/`. Mistral/Vibe also gets its prompt link under
+CLI config directories. For Claude, Codex, OpenCode, and Gemini, setup creates
+skill symlinks under `~/.claude/skills/`, `~/.codex/skills/`,
+`~/.config/opencode/skills/`, or `~/.gemini/skills/` pointing to
+`~/.liza/skills/`. Mistral/Vibe also gets its prompt link under
 `~/.vibe/prompts/`. Project hooks and runtime provider settings are handled by
 `liza init`:
 
 ```bash
 liza setup --claude
 liza setup --codex
+liza setup --opencode
 liza setup --gemini
 liza setup --mistral
 ```
@@ -53,7 +55,7 @@ Depending on selected providers and options, `liza init` writes or updates:
   directory, support/cache writable roots, and noninteractive workspace baseline
 - global fallback contract symlinks such as `~/.claude/CLAUDE.md` or
   `~/.codex/AGENTS.md` when brownfield repo-root files prevent local symlink
-  creation
+  creation. OpenCode uses `~/.config/opencode/AGENTS.md`.
 - `.claudeignore` when absent or explicitly refreshed
 - `GUARDRAILS.md` when absent
 - `.liza/state.yaml`, `.liza/log.yaml`, and `.liza/pipeline.yaml` for a MAS
@@ -69,7 +71,8 @@ provider global fallback when possible:
 | Repo root file | Global fallback |
 |---------------|-----------------|
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` |
-| `AGENTS.md` | `~/.codex/AGENTS.md` |
+| `AGENTS.md` (Codex) | `~/.codex/AGENTS.md` |
+| `AGENTS.md` (OpenCode) | `~/.config/opencode/AGENTS.md` |
 | `GEMINI.md` | `~/.gemini/GEMINI.md` |
 
 If both the repo-root file and the global fallback are non-Liza files, `liza
@@ -177,6 +180,54 @@ writable_roots = [
 `liza init --codex` manages the active project entries and preserves unrelated
 settings when merging an existing config.
 
+## OpenCode
+
+`liza setup --opencode` installs Liza skill symlinks under
+`~/.config/opencode/skills/`.
+
+`liza init --opencode` activates the Liza contract through the shared
+`AGENTS.md` discovery file. It does not write Codex hooks or Codex settings. If
+the repository already has a non-Liza `AGENTS.md`, Liza uses the OpenCode
+fallback symlink at `~/.config/opencode/AGENTS.md`.
+
+Init also installs Liza's managed `.opencode/tools/exec.ts` compatibility tool.
+The tool exposes a simple `exec` schema with required `cmd` plus nullable
+optional `workdir` and `timeout_ms` fields. OpenCode agents are instructed to
+prefer this tool for shell and file operations, omit optional fields when not
+needed, avoid repeating successful commands, inspect command results, and move
+to the next Liza protocol step. Liza only overwrites this file when its managed
+header is present; user-owned OpenCode files are preserved.
+
+Headless MAS runs with `--cli opencode` execute:
+
+```bash
+opencode run "<prompt>" --dangerously-skip-permissions
+```
+
+Logged runs add `--format json`. OpenCode has
+[native ACP support](https://opencode.ai/docs/acp/). If another ACP-capable
+tool needs an OpenCode agent server, configure it to run the `opencode acp`
+command, not an `opencode-acp` executable:
+
+```json
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Within Liza, `--cli opencode-acp` is the selector for the ACPX-backed runtime
+that targets OpenCode. It is not an OpenCode command name.
+
+For Groq-backed OpenCode runs, prefer a stable tool-calling model such as
+Llama 3.3 70B over GPT-OSS 120B until Harmony/tool-call behavior is proven
+reliable in this path. Always validate the selected model against a real Liza
+task before relying on it for unattended work.
+
 ### Troubleshooting
 
 **State file errors:**
@@ -192,6 +243,8 @@ settings when merging an existing config.
 ## Configuration Matrix
 
 All configuration lives in `.liza/state.yaml` under the `config` section.
+Supported CLI names are `claude`, `codex`, `codex-acp`, `opencode`,
+`opencode-acp`, `gemini`, `mistral`, and `kimi`.
 
 | Parameter | Default | Min | Max | Unit | Purpose |
 |-----------|---------|-----|-----|------|---------|

@@ -476,6 +476,32 @@ func TestSetupCommand_AgentClaude(t *testing.T) {
 	}
 }
 
+func TestSetupCommand_AgentOpenCode(t *testing.T) {
+	lizaDir, homeDir := setupWithAgents(t, []string{"opencode"})
+
+	skillsDir := filepath.Join(homeDir, ".config", "opencode", "skills")
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		t.Fatalf("failed to read OpenCode skills dir: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("no OpenCode skill symlinks created")
+	}
+
+	for _, entry := range entries {
+		linkPath := filepath.Join(skillsDir, entry.Name())
+		target, err := os.Readlink(linkPath)
+		if err != nil {
+			t.Errorf("%s is not a symlink: %v", entry.Name(), err)
+			continue
+		}
+		expectedTarget := filepath.Join(lizaDir, "skills", entry.Name())
+		if target != expectedTarget {
+			t.Errorf("symlink %s points to %s, want %s", entry.Name(), target, expectedTarget)
+		}
+	}
+}
+
 func TestSetupCommand_AgentMistral(t *testing.T) {
 	lizaDir, homeDir := setupWithAgents(t, []string{"mistral"})
 

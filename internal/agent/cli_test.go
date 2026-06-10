@@ -12,14 +12,26 @@ func TestValidCLIsIncludesCodexACP(t *testing.T) {
 	if !slices.Contains(ValidCLIs(), "codex-acp") {
 		t.Fatalf("ValidCLIs() = %v, want codex-acp", ValidCLIs())
 	}
+	if !slices.Contains(ValidCLIs(), "opencode") {
+		t.Fatalf("ValidCLIs() = %v, want opencode", ValidCLIs())
+	}
+	if !slices.Contains(ValidCLIs(), "opencode-acp") {
+		t.Fatalf("ValidCLIs() = %v, want opencode-acp", ValidCLIs())
+	}
 }
 
 func TestNewLLMAgentForCLI(t *testing.T) {
 	if _, ok := NewLLMAgentForCLI("codex-acp", "").(*ACPXAgent); !ok {
 		t.Fatalf("NewLLMAgentForCLI(codex-acp) did not return *ACPXAgent")
 	}
+	if _, ok := NewLLMAgentForCLI("opencode-acp", "").(*ACPXAgent); !ok {
+		t.Fatalf("NewLLMAgentForCLI(opencode-acp) did not return *ACPXAgent")
+	}
 	if _, ok := NewLLMAgentForCLI("codex", "").(*CLIAgent); !ok {
 		t.Fatalf("NewLLMAgentForCLI(codex) did not return *CLIAgent")
+	}
+	if _, ok := NewLLMAgentForCLI("opencode", "").(*CLIAgent); !ok {
+		t.Fatalf("NewLLMAgentForCLI(opencode) did not return *CLIAgent")
 	}
 }
 
@@ -29,20 +41,27 @@ func TestCheckCLIPrerequisitesIgnoresPlainCLIs(t *testing.T) {
 	if err := CheckCLIPrerequisites("codex"); err != nil {
 		t.Fatalf("CheckCLIPrerequisites(codex) error = %v, want nil", err)
 	}
+	if err := CheckCLIPrerequisites("opencode"); err != nil {
+		t.Fatalf("CheckCLIPrerequisites(opencode) error = %v, want nil", err)
+	}
 }
 
 func TestCheckCLIPrerequisitesRequiresACPXForCodexACP(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	err := CheckCLIPrerequisites("codex-acp")
-	if err == nil {
-		t.Fatal("CheckCLIPrerequisites(codex-acp) error = nil, want missing acpx error")
-	}
-	if !strings.Contains(err.Error(), "codex-acp requires acpx on PATH") {
-		t.Fatalf("error = %q, want codex-acp PATH prerequisite", err)
-	}
-	if !strings.Contains(err.Error(), "npm install -g acpx") {
-		t.Fatalf("error = %q, want install hint", err)
+	for _, cliName := range []string{"codex-acp", "opencode-acp"} {
+		t.Run(cliName, func(t *testing.T) {
+			err := CheckCLIPrerequisites(cliName)
+			if err == nil {
+				t.Fatalf("CheckCLIPrerequisites(%s) error = nil, want missing acpx error", cliName)
+			}
+			if !strings.Contains(err.Error(), cliName+" requires acpx on PATH") {
+				t.Fatalf("error = %q, want %s PATH prerequisite", err, cliName)
+			}
+			if !strings.Contains(err.Error(), "npm install -g acpx") {
+				t.Fatalf("error = %q, want install hint", err)
+			}
+		})
 	}
 }
 

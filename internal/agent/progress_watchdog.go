@@ -156,6 +156,29 @@ func readExecutionProgressSnapshot(projectRoot string, bb *db.Blackboard, taskID
 	return exit42TaskProgressSignature(task) + "\nworktree:" + worktreeSignature, true, nil
 }
 
+func readTaskStateWorktreeProgressSnapshot(projectRoot string, bb *db.Blackboard, taskID string) (string, bool, error) {
+	state, err := bb.Read()
+	if err != nil {
+		return "", false, err
+	}
+	task := state.FindTask(taskID)
+	if task == nil {
+		return "", false, nil
+	}
+
+	worktreeSignature := "none"
+	if task.Worktree != nil && *task.Worktree != "" {
+		sig, sigErr := lizagit.New(projectRoot).WorktreeProgressSignature(taskID)
+		if sigErr != nil {
+			worktreeSignature = "error:" + sigErr.Error()
+		} else {
+			worktreeSignature = sig
+		}
+	}
+
+	return exit42TaskProgressSignature(task) + "\nworktree:" + worktreeSignature, true, nil
+}
+
 func progressPollInterval(timeout time.Duration) time.Duration {
 	interval := timeout / 4
 	if interval < 100*time.Millisecond {

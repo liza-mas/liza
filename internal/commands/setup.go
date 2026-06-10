@@ -25,7 +25,7 @@ type SetupParams struct {
 	TargetDir      string    // target directory (typically ~/.liza/)
 	Force          bool      // overwrite existing files
 	AgentToolsPath string    // path to custom AGENT_TOOLS.md (empty = use embedded)
-	Agents         []string  // agent names to create skill symlinks for (e.g. "claude", "codex")
+	Agents         []string  // agent names to create skill symlinks for (e.g. "claude", "codex", "opencode")
 	HomeDir        string    // home directory override (empty = os.UserHomeDir())
 	Stdin          io.Reader // input for interactive prompts (nil = os.Stdin)
 }
@@ -287,9 +287,10 @@ type agentConfig struct {
 
 // agentConfigs maps agent flag names to their configuration.
 var agentConfigs = map[string]agentConfig{
-	"claude": {configDir: ".claude", skillsDir: "skills"},
-	"codex":  {configDir: ".codex", skillsDir: "skills"},
-	"gemini": {configDir: ".gemini", skillsDir: "skills"},
+	"claude":   {configDir: ".claude", skillsDir: "skills"},
+	"codex":    {configDir: ".codex", skillsDir: "skills"},
+	"opencode": {configDir: filepath.Join(".config", "opencode"), skillsDir: "skills"},
+	"gemini":   {configDir: ".gemini", skillsDir: "skills"},
 	"mistral": {
 		configDir: ".vibe",
 		skillsDir: "skills",

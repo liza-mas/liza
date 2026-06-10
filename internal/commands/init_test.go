@@ -892,6 +892,108 @@ func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
 	verifyCodexHooks(t, gitDir)
 }
 
+func TestInitCommand_OpenCodeCreatesAgentsContractWithoutCodexHooks(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(gitDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateCommittedSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"opencode"},
+	})
+	if err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+	agentsPath := filepath.Join(gitDir, "AGENTS.md")
+	target, err := os.Readlink(agentsPath)
+	if err != nil {
+		t.Fatalf("AGENTS.md symlink not created: %v", err)
+	}
+	if target != coreFile {
+		t.Errorf("AGENTS.md → %q, want %q", target, coreFile)
+	}
+
+	if _, err := os.Stat(filepath.Join(gitDir, ".codex", "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("OpenCode init should not create Codex hooks, stat error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(fakeHome, ".codex", "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("OpenCode init should not create Codex config, stat error = %v", err)
+	}
+
+	execToolPath := filepath.Join(gitDir, ".opencode", "tools", "exec.ts")
+	execTool, err := os.ReadFile(execToolPath)
+	if err != nil {
+		t.Fatalf("OpenCode exec tool not created at %s: %v", execToolPath, err)
+	}
+	for _, want := range []string{
+		"LIZA MANAGED FILE",
+		"Prefer this exec tool",
+		"Do not repeat the same successful command",
+	} {
+		if !strings.Contains(string(execTool), want) {
+			t.Fatalf("OpenCode exec tool missing %q:\n%s", want, string(execTool))
+		}
+	}
+}
+
+func TestInitCommand_OpenCodePreservesUserExecTool(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(gitDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateCommittedSpecFile(t, gitDir, "vision.md", "# Vision\n")
+	execToolPath := filepath.Join(gitDir, ".opencode", "tools", "exec.ts")
+	originalExecTool := "// user OpenCode exec tool\nexport default {}\n"
+	if err := os.MkdirAll(filepath.Dir(execToolPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(execToolPath, []byte(originalExecTool), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"opencode"},
+	})
+	if err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	execTool, err := os.ReadFile(execToolPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(execTool) != originalExecTool {
+		t.Fatalf("user OpenCode exec tool was overwritten:\n%s", string(execTool))
+	}
+}
+
 func TestInitCommand_SkipsCorrectSymlinks(t *testing.T) {
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
@@ -990,6 +1092,103 @@ func TestInitCommand_BrownfieldFallsBackToGlobal(t *testing.T) {
 		linkPath := filepath.Join(gitDir, name)
 		if _, err := os.Readlink(linkPath); err != nil {
 			t.Errorf("Symlink %s not created: %v", name, err)
+		}
+	}
+}
+
+func TestInitCommand_OpenCodeBrownfieldFallsBackToOpenCodeGlobal(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(gitDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateCommittedSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	existingContent := "# Existing agents contract\n"
+	agentsPath := filepath.Join(gitDir, "AGENTS.md")
+	if err := os.WriteFile(agentsPath, []byte(existingContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"opencode"},
+	})
+	if err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	content, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("Failed to read AGENTS.md: %v", err)
+	}
+	if string(content) != existingContent {
+		t.Errorf("AGENTS.md was modified; got %q, want %q", string(content), existingContent)
+	}
+
+	globalOpenCode := filepath.Join(fakeHome, ".config", "opencode", "AGENTS.md")
+	target, err := os.Readlink(globalOpenCode)
+	if err != nil {
+		t.Fatalf("OpenCode global fallback symlink not created at %s: %v", globalOpenCode, err)
+	}
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+	if target != coreFile {
+		t.Errorf("OpenCode global fallback → %q, want %q", target, coreFile)
+	}
+}
+
+func TestInitCommand_CodexAndOpenCodeBrownfieldCreateBothFallbacks(t *testing.T) {
+	gitDir := setupGitRepo(t)
+	defer os.RemoveAll(gitDir)
+
+	fakeHome := setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(gitDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateCommittedSpecFile(t, gitDir, "vision.md", "# Vision\n")
+
+	agentsPath := filepath.Join(gitDir, "AGENTS.md")
+	if err := os.WriteFile(agentsPath, []byte("# Existing agents contract\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = InitCommandWithConfig(InitParams{
+		Description: "Test goal",
+		SpecRef:     "specs/vision.md",
+		Agents:      []string{"codex", "opencode"},
+	})
+	if err != nil {
+		t.Fatalf("InitCommand failed: %v", err)
+	}
+
+	coreFile := filepath.Join(fakeHome, ".liza", "CORE.md")
+	for _, path := range []string{
+		filepath.Join(fakeHome, ".codex", "AGENTS.md"),
+		filepath.Join(fakeHome, ".config", "opencode", "AGENTS.md"),
+	} {
+		target, err := os.Readlink(path)
+		if err != nil {
+			t.Fatalf("fallback symlink not created at %s: %v", path, err)
+		}
+		if target != coreFile {
+			t.Errorf("%s → %q, want %q", path, target, coreFile)
 		}
 	}
 }
@@ -1228,6 +1427,37 @@ func TestCheckContractConfigured_CodexACPUsesCodexContract(t *testing.T) {
 	}
 	if filepath.Base(got) != "AGENTS.md" {
 		t.Errorf("found %q, expected AGENTS.md", got)
+	}
+}
+
+func TestCheckContractConfigured_OpenCodeUsesAgentsContract(t *testing.T) {
+	dir := t.TempDir()
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	lizaDir := filepath.Join(fakeHome, ".liza")
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	coreFile := filepath.Join(lizaDir, "CORE.md")
+	if err := os.WriteFile(coreFile, []byte("core"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	globalOpenCode := filepath.Join(fakeHome, ".config", "opencode", "AGENTS.md")
+	if err := os.MkdirAll(filepath.Dir(globalOpenCode), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(coreFile, globalOpenCode); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, cliName := range []string{"opencode", "opencode-acp"} {
+		t.Run(cliName, func(t *testing.T) {
+			got := CheckContractConfigured(dir, cliName)
+			if got != globalOpenCode {
+				t.Fatalf("CheckContractConfigured(%s) = %q, want %q", cliName, got, globalOpenCode)
+			}
+		})
 	}
 }
 

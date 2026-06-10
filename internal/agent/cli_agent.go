@@ -324,6 +324,8 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, cliName, agentID, prompt
 		if err != nil {
 			return nil, err
 		}
+	case "opencode":
+		cmd = exec.CommandContext(ctx, "opencode", buildOpenCodeArgs(prompt, d.outputsDir)...)
 	case "gemini":
 		args := []string{"-p"}
 		if !useStdin {
@@ -369,7 +371,7 @@ func resolveCodexLaunchConfig(config models.Config, env []string) codexLaunchCon
 }
 
 func cliSupportsStdin(cliName string) bool {
-	return cliName != "vibe"
+	return cliName != "vibe" && cliName != "opencode"
 }
 
 func buildClaudeArgs(prompt string, useStdin bool, outputsDir string, disableSubagents bool) []string {
@@ -395,6 +397,14 @@ func buildCodexArgs(prompt string, useStdin bool, outputsDir string) []string {
 		args = append(args, "-")
 	} else {
 		args = append(args, prompt)
+	}
+	return args
+}
+
+func buildOpenCodeArgs(prompt string, outputsDir string) []string {
+	args := []string{"run", prompt, "--dangerously-skip-permissions"}
+	if outputsDir != "" {
+		args = append(args, "--format", "json")
 	}
 	return args
 }

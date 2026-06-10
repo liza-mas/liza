@@ -7,7 +7,8 @@ contract files, activating a project, and choosing Pairing or Multi-Agent mode.
 
 - Unix-like environment. On Windows, use WSL2; native Windows is not supported.
 - Git 2.38+ for worktree support.
-- A supported coding agent CLI: Claude Code, Codex, Kimi, Mistral, or Gemini.
+- A supported coding agent CLI: Claude Code, Codex, OpenCode, Kimi, Mistral,
+  or Gemini.
   Claude and Codex are the recommended providers.
 - `ripgrep` (`rg`), used by contracts and skills as the default code search
   tool.
@@ -61,15 +62,16 @@ Bare `liza setup` writes contracts, skills, support docs, default pipeline
 configuration, and the default `AGENT_TOOLS.md` to `~/.liza/`.
 
 Provider flags add provider-specific integrations in the user's CLI config
-directories. For Claude, Codex, and Gemini, setup creates skill symlinks under
-`~/.claude/skills/`, `~/.codex/skills/`, or `~/.gemini/skills/` pointing to
+directories. For Claude, Codex, OpenCode, and Gemini, setup creates skill
+symlinks under `~/.claude/skills/`, `~/.codex/skills/`,
+`~/.config/opencode/skills/`, or `~/.gemini/skills/` pointing to
 `~/.liza/skills/`. Mistral/Vibe also gets its prompt link under
 `~/.vibe/prompts/`. Project hooks and runtime provider settings are handled by
 `liza init`:
 
 ```bash
 liza setup --claude --codex
-liza setup --claude --codex --gemini --mistral
+liza setup --claude --codex --opencode --gemini --mistral
 ```
 
 Use `--force` after an upgrade when you want to refresh existing global files.
@@ -141,6 +143,7 @@ project-local activation. You can also pass provider flags explicitly:
 
 ```bash
 liza init --claude --codex
+liza init --opencode
 ```
 
 `liza init` creates project-local contract discovery files, hooks/settings for
@@ -150,7 +153,9 @@ For Claude, this writes project-local `.claude/settings.json` and `.claude/hooks
 For Codex, it writes project-local `.codex/` hooks and updates global
 `~/.codex/config.toml` with the project and `.git` writable roots. Brownfield
 fallbacks may also create global contract discovery symlinks such as
-`~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md`.
+`~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md`. For OpenCode, it creates the
+shared `AGENTS.md` contract symlink without Codex hooks or settings; brownfield
+fallback uses `~/.config/opencode/AGENTS.md`.
 
 For brownfield repositories that already have `CLAUDE.md`, `AGENTS.md`, or
 `GEMINI.md`, Liza does not overwrite them. It uses the provider global fallback
@@ -158,8 +163,18 @@ when possible, or warns if both the repo file and fallback are unavailable.
 
 ## Manual Provider Notes
 
-Claude and Codex are the recommended providers. `liza setup` and `liza init`
-handle their normal Liza activation paths.
+Claude and Codex are the recommended providers. OpenCode is supported through
+`opencode run` for headless agents; ACP server integrations should invoke
+OpenCode as `opencode acp`. `liza setup` and `liza init` handle the normal Liza
+activation paths. OpenCode support
+requires both `liza setup --opencode` and `liza init --opencode`; init also
+installs Liza's managed `.opencode/tools/exec.ts` compatibility tool so
+OpenCode agents have a simple shell/file-operation tool with tolerant optional
+arguments.
+
+When using Groq-backed OpenCode models, prefer a stable tool-calling model such
+as Llama 3.3 70B over GPT-OSS 120B until Harmony/tool-call behavior is proven
+reliable in this path. Verify the selected model against your real Liza flow.
 
 Gemini and Mistral have weaker instruction-following compatibility than Claude
 and Codex. They are not recommended as primary Liza providers. When using them,
@@ -242,8 +257,10 @@ roles, checkpoints, worktrees, TUI controls, and review flow.
 
 ```bash
 liza setup --claude --codex
+liza setup --opencode
 liza setup --agent-tools ~/my-agent-tools.md
 liza init --claude --codex
+liza init --opencode
 liza init "Project goal" --spec specs/vision.md
 liza tui
 liza validate

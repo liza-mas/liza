@@ -47,6 +47,9 @@ var codexConfigContent []byte
 //go:embed "codex-hooks.json"
 var codexHooksContent []byte
 
+//go:embed "opencode-tools/exec.ts"
+var opencodeExecToolContent []byte
+
 //go:embed "hooks/enforce-init.sh"
 var enforceInitHookContent []byte
 
@@ -83,6 +86,15 @@ var claudeIgnoreContent []byte
 var pipelineConfigContent []byte
 
 const supportDocEmbeddedPath = "support-docs/SUPPORT.md"
+
+// OpenCodeExecToolManagedHeader identifies the project-local OpenCode exec
+// compatibility tool as owned by Liza.
+const OpenCodeExecToolManagedHeader = "// LIZA MANAGED FILE: OpenCode exec compatibility tool. Safe for Liza to overwrite."
+
+// OpenCodeExecToolContent returns the embedded OpenCode exec compatibility tool.
+func OpenCodeExecToolContent() []byte {
+	return bytes.Clone(opencodeExecToolContent)
+}
 
 // PipelineConfigContent returns the raw embedded pipeline.yaml content.
 // Used by init to auto-freeze when --config is not provided.
@@ -1403,5 +1415,28 @@ func WriteCodexHooks(projectRoot string) error {
 		}
 	}
 
+	return nil
+}
+
+// WriteOpenCodeExecTool writes Liza's project-local OpenCode exec compatibility
+// tool to .opencode/tools/exec.ts. Existing user-owned files are preserved; only
+// Liza-managed copies are overwritten.
+func WriteOpenCodeExecTool(projectRoot string) error {
+	toolPath := filepath.Join(projectRoot, ".opencode", "tools", "exec.ts")
+	existing, err := os.ReadFile(toolPath)
+	if err == nil {
+		if !bytes.HasPrefix(existing, []byte(OpenCodeExecToolManagedHeader)) {
+			return nil
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read opencode exec tool: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(toolPath), 0755); err != nil {
+		return fmt.Errorf("failed to create .opencode/tools directory: %w", err)
+	}
+	if err := os.WriteFile(toolPath, opencodeExecToolContent, 0644); err != nil {
+		return fmt.Errorf("failed to write opencode exec tool: %w", err)
+	}
 	return nil
 }

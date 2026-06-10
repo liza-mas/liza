@@ -39,6 +39,8 @@ internal/embedded/*
 !internal/embedded/claude-settings.json
 !internal/embedded/codex-config.toml
 !internal/embedded/codex-hooks.json
+!internal/embedded/opencode-tools/
+!internal/embedded/opencode-tools/exec.ts
 !internal/embedded/git-hooks/
 !internal/embedded/hooks/
 /liza
