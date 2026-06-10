@@ -2365,6 +2365,9 @@ func TestOpenCodeExecToolSchemaAllowsOmittedAndNullOptionals(t *testing.T) {
 func TestOpenCodeExecToolInstructionsMentionExecAndAntiLoop(t *testing.T) {
 	content := string(OpenCodeExecToolContent())
 	for _, want := range []string{
+		"trusted Liza bridge work",
+		"executed through the system shell",
+		"not safe for less-trusted contexts",
 		"Prefer this exec tool",
 		"Omit optional fields",
 		"null is tolerated",
@@ -2373,6 +2376,22 @@ func TestOpenCodeExecToolInstructionsMentionExecAndAntiLoop(t *testing.T) {
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("exec tool instructions missing %q:\n%s", want, content)
+		}
+	}
+}
+
+func TestOpenCodeExecToolBoundsAccumulatedOutput(t *testing.T) {
+	content := string(OpenCodeExecToolContent())
+	for _, want := range []string{
+		"function appendLimited",
+		"OUTPUT_LIMIT - value.length",
+		"stdoutTruncated += truncated",
+		"stderrTruncated += truncated",
+		"formatOutput(\"stdout\", stdout, stdoutTruncated)",
+		"formatOutput(\"stderr\", stderr, stderrTruncated)",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("exec tool output bounding missing %q:\n%s", want, content)
 		}
 	}
 }

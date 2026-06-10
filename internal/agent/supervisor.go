@@ -244,6 +244,23 @@ func exit42TaskProgressSignature(task *models.Task) string {
 	return string(payload)
 }
 
+func successfulTurnTaskProgressSignature(task *models.Task) string {
+	snapshot := *task
+	snapshot.AssignedTo = nil
+	snapshot.LeaseExpires = nil
+	snapshot.ReviewingBy = nil
+	snapshot.ReviewLeaseExpires = nil
+	snapshot.Iteration = 0
+	snapshot.Exit42RestartCount = 0
+	snapshot.History = nil
+
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return fmt.Sprintf("%s|%t|%d", task.Status, task.HandoffPending, len(task.Output))
+	}
+	return string(payload)
+}
+
 // orchestratorProgressSignature returns a string capturing the state dimensions
 // the orchestrator is expected to change. Includes sprint metadata, task-status
 // distribution, and discovery count so that legitimate progress like resolving
@@ -541,19 +558,7 @@ func detectLizaCommandContext(output string) string {
 	return unknownLizaJSONCommand
 }
 
-const successfulTurnOutputSignatureLimit = 16000
-
-func successfulTurnProgressSignature(cliName, output, taskSnapshot string) string {
-	switch cliName {
-	case "opencode", "opencode-acp":
-		trimmed := strings.TrimSpace(output)
-		if trimmed != "" {
-			if len(trimmed) > successfulTurnOutputSignatureLimit {
-				trimmed = trimmed[:successfulTurnOutputSignatureLimit]
-			}
-			return "provider:" + cliName + "\noutput:" + trimmed
-		}
-	}
+func successfulTurnProgressSignature(_, _, taskSnapshot string) string {
 	return taskSnapshot
 }
 
@@ -741,7 +746,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		if taskID == "" {
 			return "", false
 		}
-		sig, eligible, err := readTaskStateWorktreeProgressSnapshot(config.ProjectRoot, bb, taskID)
+		sig, eligible, err := readSuccessfulTurnProgressSnapshot(config.ProjectRoot, bb, taskID, config.AgentID, resolver)
 		if err != nil {
 			GetLogger().Warn("Successful no-progress snapshot failed", "error", err, "task_id", taskID)
 			return "", false
@@ -933,6 +938,12 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			}
 		}
 
+		postSuccessSnapshot := ""
+		postSuccessEligible := false
+		if exitCode == 0 && effectiveTask != "" {
+			postSuccessSnapshot, postSuccessEligible = readSuccessProgressSnapshot(effectiveTask)
+		}
+
 		// Reset runtime status after CLI exits, but preserve explicit command-driven
 		// states such as WAITING and HANDOFF.
 		if err := resetAgentAfterExit(bb, config.AgentID, config.ProjectRoot); err != nil {
@@ -953,7 +964,6 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				GetLogger().Warn("Post-execution error", "error", err)
 			}
 			if effectiveTask != "" {
-				postSuccessSnapshot, postSuccessEligible := readSuccessProgressSnapshot(effectiveTask)
 				successSignature := successfulTurnProgressSignature(config.CLIName, currentOutput, postSuccessSnapshot)
 				if postSuccessEligible && successSignature != "" {
 					noProgressCount := successNoProgressTracker.Track(effectiveTask, successSignature)

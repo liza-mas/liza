@@ -10,9 +10,17 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
-function truncateOutput(value: string): string {
-  if (value.length <= OUTPUT_LIMIT) return value
-  return `${value.slice(0, OUTPUT_LIMIT)}\n[truncated ${value.length - OUTPUT_LIMIT} bytes]`
+function appendLimited(value: string, chunk: unknown): [string, number] {
+  const text = String(chunk)
+  const available = Math.max(OUTPUT_LIMIT - value.length, 0)
+  if (available === 0) return [value, text.length]
+  return [value + text.slice(0, available), Math.max(text.length - available, 0)]
+}
+
+function formatOutput(label: string, value: string, truncated: number): string | undefined {
+  if (value.trim().length === 0 && truncated === 0) return undefined
+  const suffix = truncated > 0 ? `\n[truncated ${truncated} bytes]` : ""
+  return `${label}:\n${value.trimEnd()}${suffix}`
 }
 
 function defaultWorkdir(context: unknown): string {
@@ -27,7 +35,7 @@ function defaultWorkdir(context: unknown): string {
 
 export default tool({
   description:
-    "Run a shell command for Liza bridge work. Prefer this exec tool for shell and file operations instead of built-in bash/read/write tools. Omit optional fields when they are not needed; null is tolerated and treated as omitted. Do not repeat the same successful command. After a successful command, inspect the result and move to the next Liza protocol step.",
+    "Run a shell command for trusted Liza bridge work. The cmd string is executed through the system shell and is not safe for less-trusted contexts. Prefer this exec tool for shell and file operations instead of built-in bash/read/write tools. Omit optional fields when they are not needed; null is tolerated and treated as omitted. Do not repeat the same successful command. After a successful command, inspect the result and move to the next Liza protocol step.",
   args: {
     cmd: tool.schema.string().describe("Shell command to run."),
     workdir: tool.schema
@@ -51,6 +59,8 @@ export default tool({
     return await new Promise<string>((resolve) => {
       let stdout = ""
       let stderr = ""
+      let stdoutTruncated = 0
+      let stderrTruncated = 0
       let timedOut = false
 
       const child = spawn(args.cmd, {
@@ -65,10 +75,14 @@ export default tool({
       }, timeoutMs)
 
       child.stdout?.on("data", (chunk) => {
-        stdout += chunk.toString()
+        const [next, truncated] = appendLimited(stdout, chunk)
+        stdout = next
+        stdoutTruncated += truncated
       })
       child.stderr?.on("data", (chunk) => {
-        stderr += chunk.toString()
+        const [next, truncated] = appendLimited(stderr, chunk)
+        stderr = next
+        stderrTruncated += truncated
       })
 
       child.on("error", (error) => {
@@ -81,8 +95,10 @@ export default tool({
         const parts = [`exit_code: ${code ?? -1}`]
         if (signal) parts.push(`signal: ${signal}`)
         if (timedOut) parts.push(`timed_out: true`)
-        if (stdout.trim().length > 0) parts.push(`stdout:\n${truncateOutput(stdout.trimEnd())}`)
-        if (stderr.trim().length > 0) parts.push(`stderr:\n${truncateOutput(stderr.trimEnd())}`)
+        const stdoutPart = formatOutput("stdout", stdout, stdoutTruncated)
+        const stderrPart = formatOutput("stderr", stderr, stderrTruncated)
+        if (stdoutPart) parts.push(stdoutPart)
+        if (stderrPart) parts.push(stderrPart)
         resolve(parts.join("\n"))
       })
     })

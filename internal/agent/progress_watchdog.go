@@ -135,11 +135,8 @@ func readExecutionProgressSnapshot(projectRoot string, bb *db.Blackboard, taskID
 	if err != nil {
 		return "", false, err
 	}
-	task := state.FindTask(taskID)
-	if task == nil {
-		return "", false, nil
-	}
-	if task.AssignedTo == nil || *task.AssignedTo != agentID || !models.IsExecutingStatus(task, pr) {
+	task, eligible := findExecutingTaskForAgent(state, taskID, agentID, pr)
+	if !eligible {
 		return "", false, nil
 	}
 
@@ -156,13 +153,13 @@ func readExecutionProgressSnapshot(projectRoot string, bb *db.Blackboard, taskID
 	return exit42TaskProgressSignature(task) + "\nworktree:" + worktreeSignature, true, nil
 }
 
-func readTaskStateWorktreeProgressSnapshot(projectRoot string, bb *db.Blackboard, taskID string) (string, bool, error) {
+func readSuccessfulTurnProgressSnapshot(projectRoot string, bb *db.Blackboard, taskID string, agentID string, pr models.PipelineResolver) (string, bool, error) {
 	state, err := bb.Read()
 	if err != nil {
 		return "", false, err
 	}
-	task := state.FindTask(taskID)
-	if task == nil {
+	task, eligible := findExecutingTaskForAgent(state, taskID, agentID, pr)
+	if !eligible {
 		return "", false, nil
 	}
 
@@ -176,7 +173,18 @@ func readTaskStateWorktreeProgressSnapshot(projectRoot string, bb *db.Blackboard
 		}
 	}
 
-	return exit42TaskProgressSignature(task) + "\nworktree:" + worktreeSignature, true, nil
+	return successfulTurnTaskProgressSignature(task) + "\nworktree:" + worktreeSignature, true, nil
+}
+
+func findExecutingTaskForAgent(state *models.State, taskID string, agentID string, pr models.PipelineResolver) (*models.Task, bool) {
+	task := state.FindTask(taskID)
+	if task == nil {
+		return nil, false
+	}
+	if task.AssignedTo == nil || *task.AssignedTo != agentID || !models.IsExecutingStatus(task, pr) {
+		return nil, false
+	}
+	return task, true
 }
 
 func progressPollInterval(timeout time.Duration) time.Duration {

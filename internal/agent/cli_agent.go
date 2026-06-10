@@ -402,6 +402,9 @@ func buildCodexArgs(prompt string, useStdin bool, outputsDir string) []string {
 }
 
 func buildOpenCodeArgs(prompt string, outputsDir string) []string {
+	// OpenCode documents `opencode run [message..]`; keep the prompt positional
+	// until a stdin/file prompt mode exists. Very large prompts remain bounded by
+	// the host OS argv limit.
 	args := []string{"run", prompt, "--dangerously-skip-permissions"}
 	if outputsDir != "" {
 		args = append(args, "--format", "json")

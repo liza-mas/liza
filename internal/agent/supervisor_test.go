@@ -1455,6 +1455,141 @@ func TestRunSupervisor_OpenCodeSuccessfulNoProgressBlocksAsSpinning(t *testing.T
 	}
 }
 
+func TestSuccessfulTurnProgressSignatureIgnoresOpenCodeOutputVariation(t *testing.T) {
+	const taskSnapshot = "task:implementing\nworktree:clean"
+
+	first := successfulTurnProgressSignature("opencode", `{"id":"one"}`, taskSnapshot)
+	second := successfulTurnProgressSignature("opencode", `{"id":"two"}`, taskSnapshot)
+	if first != second {
+		t.Fatalf("signature changed with output only: first=%q second=%q", first, second)
+	}
+}
+
+func TestSuccessfulTurnProgressSignatureTracksOpenCodeTaskProgress(t *testing.T) {
+	const output = `{"type":"tool","name":"exec","output":"ok"}`
+
+	first := successfulTurnProgressSignature("opencode", output, "task:implementing\nworktree:clean")
+	second := successfulTurnProgressSignature("opencode", output, "task:implementing\nworktree:modified")
+	if first == second {
+		t.Fatalf("signature did not change with task/worktree progress: %q", first)
+	}
+}
+
+func TestSuccessfulTurnTaskProgressSignatureIgnoresClaimChurn(t *testing.T) {
+	now := time.Now().UTC()
+	agentID := "coder-1"
+	leaseExpires := now.Add(time.Minute)
+	first := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)
+	first.AssignedTo = &agentID
+	first.LeaseExpires = &leaseExpires
+	first.Iteration = 1
+	first.History = []models.TaskHistoryEntry{{Time: now, Event: models.TaskEventClaimed, Agent: &agentID}}
+
+	second := first
+	second.Iteration = 2
+	second.History = append(second.History, models.TaskHistoryEntry{Time: now.Add(time.Second), Event: models.TaskEventClaimed, Agent: &agentID})
+
+	if successfulTurnTaskProgressSignature(&first) != successfulTurnTaskProgressSignature(&second) {
+		t.Fatal("signature changed for claim-only task churn")
+	}
+
+	second.Output = append(second.Output, models.OutputEntry{
+		Desc:       "child work",
+		DoneWhen:   "child complete",
+		Scope:      "child scope",
+		SpecRef:    "specs/child.md",
+		Validation: []string{"go test ./..."},
+	})
+	if successfulTurnTaskProgressSignature(&first) == successfulTurnTaskProgressSignature(&second) {
+		t.Fatal("signature did not change for semantic task output progress")
+	}
+}
+
+func TestReadSuccessfulTurnProgressSnapshotRequiresExecutingAgentOwnership(t *testing.T) {
+	projectRoot := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+	pr, err := ops.LoadResolverForModels(projectRoot)
+	if err != nil {
+		t.Fatalf("LoadResolverForModels: %v", err)
+	}
+
+	now := time.Now().UTC()
+	executing := testhelpers.BuildTaskByStatus("task-executing", models.TaskStatusImplementing, now)
+	reviewable := testhelpers.BuildTaskByStatus("task-reviewable", models.TaskStatusReadyForReview, now)
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{executing, reviewable}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	if _, eligible, err := readSuccessfulTurnProgressSnapshot(projectRoot, bb, "task-executing", "coder-2", pr); err != nil {
+		t.Fatalf("readSuccessfulTurnProgressSnapshot wrong agent error = %v", err)
+	} else if eligible {
+		t.Fatal("wrong agent was eligible")
+	}
+	if _, eligible, err := readSuccessfulTurnProgressSnapshot(projectRoot, bb, "task-reviewable", "coder-1", pr); err != nil {
+		t.Fatalf("readSuccessfulTurnProgressSnapshot reviewable error = %v", err)
+	} else if eligible {
+		t.Fatal("non-executing task was eligible")
+	}
+	if sig, eligible, err := readSuccessfulTurnProgressSnapshot(projectRoot, bb, "task-executing", "coder-1", pr); err != nil {
+		t.Fatalf("readSuccessfulTurnProgressSnapshot executing error = %v", err)
+	} else if !eligible || sig == "" {
+		t.Fatalf("executing task eligibility = %v, signature = %q; want eligible signature", eligible, sig)
+	}
+}
+
+func TestReadSuccessfulTurnProgressSnapshotTracksWorktreeChanges(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+	pr, err := ops.LoadResolverForModels(projectRoot)
+	if err != nil {
+		t.Fatalf("LoadResolverForModels: %v", err)
+	}
+
+	now := time.Now().UTC()
+	taskID := "task-worktree-progress"
+	agentID := "coder-1"
+	gw := lizagit.New(projectRoot)
+	baseCommit, err := gw.CreateWorktree(taskID, "main")
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+	worktree := ".worktrees/" + taskID
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+	task.Worktree = &worktree
+	task.BaseCommit = &baseCommit
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	before, eligible, err := readSuccessfulTurnProgressSnapshot(projectRoot, bb, taskID, agentID, pr)
+	if err != nil {
+		t.Fatalf("readSuccessfulTurnProgressSnapshot before change: %v", err)
+	}
+	if !eligible {
+		t.Fatal("snapshot before worktree change was not eligible")
+	}
+
+	changedPath := filepath.Join(projectRoot, worktree, "progress.txt")
+	if err := os.WriteFile(changedPath, []byte("progress\n"), 0o644); err != nil {
+		t.Fatalf("write worktree progress file: %v", err)
+	}
+
+	after, eligible, err := readSuccessfulTurnProgressSnapshot(projectRoot, bb, taskID, agentID, pr)
+	if err != nil {
+		t.Fatalf("readSuccessfulTurnProgressSnapshot after change: %v", err)
+	}
+	if !eligible {
+		t.Fatal("snapshot after worktree change was not eligible")
+	}
+	if before == after {
+		t.Fatal("snapshot did not change after actual worktree progress")
+	}
+}
+
 func TestRunAgent_ExtractedOps_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)

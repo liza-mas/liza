@@ -434,5 +434,5 @@ For sprint state transitions, see [State Machines — Sprint State Machine](../a
 
 - [Circuit Breaker](circuit-breaker.md) — systemic failure detection
 - [Task Lifecycle](task-lifecycle.md) — individual task flow
-- [Vision](../vision.md) — design philosophy
+- [Vision](../build/1%20-%20Vision.md) — design philosophy
 - [ADR Template](../architecture/ADR/TEMPLATE.md) — Architecture Decision Records format

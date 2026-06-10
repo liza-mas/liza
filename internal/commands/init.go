@@ -54,6 +54,8 @@ type InitParams struct {
 
 // InitAgentRepoSymlinks maps agent flag names to the repo-root symlink filename.
 // These symlinks point to ~/.liza/CORE.md and enable pairing mode.
+// Codex and OpenCode intentionally share AGENTS.md; provider-specific global
+// fallbacks remain separate when a brownfield repo already owns that file.
 var InitAgentRepoSymlinks = map[string]string{
 	"claude":   "CLAUDE.md",
 	"codex":    "AGENTS.md",
