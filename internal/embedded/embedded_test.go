@@ -2396,6 +2396,20 @@ func TestOpenCodeExecToolBoundsAccumulatedOutput(t *testing.T) {
 	}
 }
 
+func TestOpenCodeExecToolForceKillsTimedOutCommands(t *testing.T) {
+	content := string(OpenCodeExecToolContent())
+	for _, want := range []string{
+		"const FORCE_KILL_DELAY_MS",
+		"child.kill(\"SIGTERM\")",
+		"child.kill(\"SIGKILL\")",
+		"if (forceKill) clearTimeout(forceKill)",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("exec tool timeout enforcement missing %q:\n%s", want, content)
+		}
+	}
+}
+
 func assertHookScripts(t *testing.T, hooksDir string) {
 	t.Helper()
 	for name, wantContent := range hookScriptContents() {

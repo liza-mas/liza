@@ -1,11 +1,13 @@
 package git
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -183,7 +185,8 @@ func (g *Git) GetWorktreeRelPath(taskID string) string {
 }
 
 // WorktreeProgressSignature returns a compact signature for meaningful changes
-// inside a task worktree: HEAD movement and porcelain status changes.
+// inside a task worktree: HEAD movement, porcelain status changes, and dirty
+// content changes for tracked and untracked files.
 func (g *Git) WorktreeProgressSignature(taskID string) (string, error) {
 	if err := paths.ValidateTaskID(taskID); err != nil {
 		return "", fmt.Errorf("invalid task ID: %w", err)
@@ -197,7 +200,64 @@ func (g *Git) WorktreeProgressSignature(taskID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return head + "\n" + status, nil
+	contentSig, err := g.worktreeDirtyContentSignature(worktreePath)
+	if err != nil {
+		return "", err
+	}
+	return head + "\n" + status + "\ncontent:" + contentSig, nil
+}
+
+func (g *Git) worktreeDirtyContentSignature(worktreePath string) (string, error) {
+	h := sha256.New()
+
+	diff, err := gitenv.CombinedOutput(worktreePath, "diff", "--no-ext-diff", "--binary", "HEAD", "--")
+	if err != nil {
+		return "", fmt.Errorf("git diff failed: %w\nOutput: %s", err, diff)
+	}
+	h.Write([]byte("tracked\x00"))
+	h.Write(diff)
+
+	untracked, err := gitenv.CombinedOutput(worktreePath, "ls-files", "-z", "--others", "--exclude-standard")
+	if err != nil {
+		return "", fmt.Errorf("git ls-files failed: %w\nOutput: %s", err, untracked)
+	}
+	h.Write([]byte("\x00untracked\x00"))
+	h.Write(untracked)
+	for _, relPath := range strings.Split(strings.TrimSuffix(string(untracked), "\x00"), "\x00") {
+		if relPath == "" {
+			continue
+		}
+		fullPath := filepath.Join(worktreePath, filepath.FromSlash(relPath))
+		info, statErr := os.Lstat(fullPath)
+		if statErr != nil {
+			return "", fmt.Errorf("stat untracked file %s: %w", relPath, statErr)
+		}
+		h.Write([]byte(relPath))
+		h.Write([]byte{0})
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, readlinkErr := os.Readlink(fullPath)
+			if readlinkErr != nil {
+				return "", fmt.Errorf("readlink untracked file %s: %w", relPath, readlinkErr)
+			}
+			h.Write([]byte("symlink\x00"))
+			h.Write([]byte(target))
+			h.Write([]byte{0})
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			h.Write([]byte(info.Mode().String()))
+			h.Write([]byte{0})
+			continue
+		}
+		content, readErr := os.ReadFile(fullPath)
+		if readErr != nil {
+			return "", fmt.Errorf("read untracked file %s: %w", relPath, readErr)
+		}
+		h.Write(content)
+		h.Write([]byte{0})
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 // WorktreeStatusShort returns git status --short output for a worktree path.

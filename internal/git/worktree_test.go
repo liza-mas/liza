@@ -245,6 +245,63 @@ func TestGetWorktreeRelPath(t *testing.T) {
 	}
 }
 
+func TestWorktreeProgressSignatureTracksDirtyTrackedContent(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	g := New(repoDir)
+
+	taskID := "task-dirty-content"
+	if _, err := g.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	worktreePath := g.GetWorktreePath(taskID)
+	target := filepath.Join(worktreePath, "README.md")
+	if err := os.WriteFile(target, []byte("# Test\nfirst edit\n"), 0644); err != nil {
+		t.Fatalf("write first edit: %v", err)
+	}
+	first, err := g.WorktreeProgressSignature(taskID)
+	if err != nil {
+		t.Fatalf("WorktreeProgressSignature first error = %v", err)
+	}
+	if err := os.WriteFile(target, []byte("# Test\nsecond edit\n"), 0644); err != nil {
+		t.Fatalf("write second edit: %v", err)
+	}
+	second, err := g.WorktreeProgressSignature(taskID)
+	if err != nil {
+		t.Fatalf("WorktreeProgressSignature second error = %v", err)
+	}
+	if first == second {
+		t.Fatalf("signature did not change after dirty tracked content changed:\n%s", first)
+	}
+}
+
+func TestWorktreeProgressSignatureTracksUntrackedContent(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	g := New(repoDir)
+
+	taskID := "task-untracked-content"
+	if _, err := g.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	target := filepath.Join(g.GetWorktreePath(taskID), "notes.txt")
+	if err := os.WriteFile(target, []byte("first\n"), 0644); err != nil {
+		t.Fatalf("write first untracked edit: %v", err)
+	}
+	first, err := g.WorktreeProgressSignature(taskID)
+	if err != nil {
+		t.Fatalf("WorktreeProgressSignature first error = %v", err)
+	}
+	if err := os.WriteFile(target, []byte("second\n"), 0644); err != nil {
+		t.Fatalf("write second untracked edit: %v", err)
+	}
+	second, err := g.WorktreeProgressSignature(taskID)
+	if err != nil {
+		t.Fatalf("WorktreeProgressSignature second error = %v", err)
+	}
+	if first == second {
+		t.Fatalf("signature did not change after untracked content changed:\n%s", first)
+	}
+}
+
 func TestValidateWorktreeHealth(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	g := New(repoDir)

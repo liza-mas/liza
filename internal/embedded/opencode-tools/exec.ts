@@ -4,6 +4,7 @@ import process from "node:process"
 import { tool } from "@opencode-ai/plugin"
 
 const DEFAULT_TIMEOUT_MS = 120_000
+const FORCE_KILL_DELAY_MS = 2_000
 const OUTPUT_LIMIT = 20_000
 
 function stringValue(value: unknown): string | undefined {
@@ -62,6 +63,7 @@ export default tool({
       let stdoutTruncated = 0
       let stderrTruncated = 0
       let timedOut = false
+      let forceKill: ReturnType<typeof setTimeout> | undefined
 
       const child = spawn(args.cmd, {
         cwd,
@@ -72,6 +74,9 @@ export default tool({
       const timeout = setTimeout(() => {
         timedOut = true
         child.kill("SIGTERM")
+        forceKill = setTimeout(() => {
+          child.kill("SIGKILL")
+        }, FORCE_KILL_DELAY_MS)
       }, timeoutMs)
 
       child.stdout?.on("data", (chunk) => {
@@ -87,11 +92,13 @@ export default tool({
 
       child.on("error", (error) => {
         clearTimeout(timeout)
+        if (forceKill) clearTimeout(forceKill)
         resolve(`exit_code: 127\nerror: ${error.message}`)
       })
 
       child.on("close", (code, signal) => {
         clearTimeout(timeout)
+        if (forceKill) clearTimeout(forceKill)
         const parts = [`exit_code: ${code ?? -1}`]
         if (signal) parts.push(`signal: ${signal}`)
         if (timedOut) parts.push(`timed_out: true`)
