@@ -5,9 +5,9 @@ full Liza MAS. Use it when one agent should implement and multiple reviewers
 should challenge the work, but a full autonomous sprint would be too heavy.
 
 It runs multiple Pairing-mode sessions against a shared Markdown blackboard. Each
-agent runs in its own dedicated interactive terminal: one terminal for the doer,
-and one separate terminal for each reviewer. The typical setup is one doer and
-several reviewers on different models, so review disagreement exposes
+role typically runs in its own dedicated interactive pane: one pane for the doer
+and one pane for each reviewer. The typical setup is one doer and several
+reviewers on different models, so review disagreement exposes
 model-specific blind spots. By default, the human remains the approval authority;
 the blackboard coordinates doer/reviewer state, submitted artifacts, review
 notes, validation output, and decisions.
@@ -24,17 +24,63 @@ Use it as:
 /adversarial-pairing <role-or-reviewer-id> <blackboard-path> [yolo]
 ```
 
+In Codex interactive sessions, use `$adversarial-pairing ...` instead of a
+leading slash so the text is submitted as a normal prompt rather than handled as
+a Codex TUI command.
+
 `role-or-reviewer-id` is `doer`, `reviewer`, or `reviewer-<id>`. Use
 `reviewer-<id>` when you want the agent to receive both its reviewer role and
-the stable ID it should use when registering in the blackboard. Start the doer
-first so it can create or initialize the blackboard, then start reviewer
-sessions against the same path:
+the stable ID it should use when registering in the blackboard. If you are
+arranging panes manually, run each invocation in its own pane:
 
 ```text
 /adversarial-pairing doer .liza/adversarial/retry-client.md
-/adversarial-pairing reviewer-codex .liza/adversarial/retry-client.md
-/adversarial-pairing reviewer-claude .liza/adversarial/retry-client.md
 ```
+
+For multiple reviewer sessions, run in additional panes:
+
+```text
+/adversarial-pairing reviewer-claude .liza/adversarial/retry-client.md
+/adversarial-pairing reviewer-codex .liza/adversarial/retry-client.md
+```
+
+If you want WezTerm to do the spawning for you, use the launch command. This
+starts interactive doer plus reviewer CLI sessions in one WezTerm window with
+the `$adversarial-pairing ...` invocation as each session's initial prompt. If
+the blackboard does not exist yet, pass `--goal` so Liza can initialize it
+before reviewer panes start:
+
+```bash
+liza launch wezterm adversarial-pairing .liza/adversarial/retry-client.md \
+  --goal "Fix retry-client behavior"
+```
+
+Defaults are three Codex panes: `--doer-cli codex` plus reviewers `codex` and
+`codex-2=codex`. Customize reviewers with repeated `--reviewer` flags. Use
+`id=cli` when the stable blackboard reviewer ID should differ from the CLI name:
+
+```bash
+liza launch wezterm adversarial-pairing .liza/adversarial/retry-client.md \
+  --goal "Fix retry-client behavior" \
+  --doer-cli claude \
+  --reviewer claude \
+  --reviewer openai=codex
+```
+
+When the blackboard already exists, omit `--goal` to reuse it.
+
+**CMUX support:** Liza also supports CMUX as an alternative to WezTerm for
+adversarial-pairing launches. Use `liza launch cmux adversarial-pairing` with
+the same flags:
+
+```bash
+liza launch cmux adversarial-pairing .liza/adversarial/retry-client.md \
+  --goal "Fix retry-client behavior"
+```
+
+CMUX sends the `$adversarial-pairing ...` prompt as text to each pane and
+submits it with a real enter key event, avoiding the TUI slash command issue
+that affected the initial WezTerm implementation.
 
 Use `yolo` only on the doer session when you want the doer to proceed through
 doer-side human approval gates without pausing:

@@ -157,6 +157,47 @@ The TUI (`liza tui`) is the primary way to spawn and monitor agents. Press `s` t
 
 Alternatively, spawn agents from the CLI: `liza agent <role>`. Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `LIZA_AGENT_ID` environment variable. After resolution, `liza agent` exports that ID as `LIZA_AGENT_ID` to the spawned provider CLI, including `-i` interactive sessions, so hooks select Multi-Agent mode rather than Pairing mode.
 
+To launch a whole role set in one WezTerm window, use `liza launch wezterm mas`.
+It starts `liza tui` in the first pane and one `liza agent <role>` process per
+additional pane:
+
+```bash
+liza launch wezterm mas --preset technical-spec
+liza launch wezterm mas --preset functional-spec
+liza launch wezterm mas --preset general-objective
+```
+
+**CMUX support:** Liza also supports CMUX as an alternative to WezTerm. Use
+`liza launch cmux mas` with the same flags and presets:
+
+```bash
+liza launch cmux mas --preset technical-spec
+liza launch cmux mas --preset functional-spec
+liza launch cmux mas --preset general-objective
+```
+
+Both WezTerm and CMUX launchers support the same flags: `--preset`, `--role`,
+`--cli`, `--no-tui`, `--class`/`--workspace`, `--cwd`, and `--dry-run`. CMUX
+launchers create a CMUX workspace and use `cmux send` + `cmux send-key enter`
+for prompt injection, avoiding TUI slash command issues.
+
+| Launch command | Equivalent panes |
+|----------------|------------------|
+| `liza launch wezterm mas --preset technical-spec` | `liza tui`; `liza agent orchestrator`; `liza agent code-planner`; `liza agent code-plan-reviewer`; `liza agent coder`; `liza agent code-reviewer` |
+| `liza launch wezterm mas --preset functional-spec` | Everything in `technical-spec`, plus `liza agent architect`; `liza agent architecture-reviewer` |
+| `liza launch wezterm mas --preset general-objective` | Everything in `functional-spec`, plus `liza agent epic-planner`; `liza agent epic-plan-reviewer`; `liza agent us-writer`; `liza agent us-reviewer` |
+
+Pass `--cli <name>` to force the same backend for every launched role, or repeat
+`--role <role>` to launch a custom role set instead of a preset:
+
+```bash
+liza launch wezterm mas --role orchestrator --role coder --role code-reviewer --cli codex
+liza launch cmux mas --role orchestrator --role coder --role code-reviewer --cli codex
+```
+
+CMUX equivalents provide the same pane layouts as WezTerm but in a CMUX workspace.
+
+
 Supported CLI names for `--cli`, `--default-cli`, `--default-doer-cli`, and
 `--default-reviewer-cli` are `claude`, `codex`, `codex-acp`, `opencode`,
 `opencode-acp`, `gemini`, `mistral`, and `kimi`.
@@ -200,13 +241,13 @@ Roles:
 ```
 
 **Functional-spec setup (`functional-spec` or legacy `detailed-spec`) — 7 agents:**
-Spawn from the TUI (`s`): orchestrator, architect, architecture-reviewer, code-planner, code-plan-reviewer, coder, code-reviewer.
+Use `liza launch wezterm mas --preset functional-spec`, or spawn from the TUI (`s`): orchestrator, architect, architecture-reviewer, code-planner, code-plan-reviewer, coder, code-reviewer.
 
 **Technical-spec setup (`technical-spec`) — 5 agents:**
-Spawn from the TUI (`s`): orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer.
+Use `liza launch wezterm mas --preset technical-spec`, or spawn from the TUI (`s`): orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer.
 
 **Full pipeline (general-objective entry point) — 11 agents:**
-All of the above plus: epic-planner, epic-plan-reviewer, us-writer, us-reviewer.
+Use `liza launch wezterm mas --preset general-objective`. This launches all functional-spec roles plus: epic-planner, epic-plan-reviewer, us-writer, us-reviewer.
 
 **Integration phase** agents (integration-analyst, integration-reviewer) are spawned by the orchestrator after all coding tasks for a goal complete. They are not needed at startup — spawn them when the orchestrator triggers the integration sub-pipeline.
 
@@ -410,6 +451,7 @@ The `liza` binary provides all system operations. Key commands:
 | `liza init <goal> --spec <spec_ref> [--branch <name>]` | Initialize `.liza/` directory with blackboard (spec_ref defaults to specs/vision.md, branch defaults to integration) |
 | **Agents & Monitoring** |                                                                                                                      |
 | `liza agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted)                                         |
+| `liza launch wezterm mas --preset <name>` | Launch `liza tui` plus a MAS role preset in one WezTerm window                                                     |
 | `liza repair-agent-pool [--cli <name>] [--dry-run]` | Spawn one agent for each claimable-work role that has no live usable agent                                         |
 | `liza tui` | Live TUI: spawn agents, monitor state, manage system                                                                 |
 | `liza status` | Show system and task status at a glance                                                                              |

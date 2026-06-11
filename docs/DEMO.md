@@ -156,65 +156,64 @@ agents: {}
 
 ---
 
-## Step 6: Start the Watcher (Terminal 1)
+## Step 6: Launch the Agent Window
 
-Open a terminal for monitoring:
-
-```bash
-cd hello-cli
-liza tui
-```
-
-This monitors for anomalies, alerts, and auto-checkpoints on circuit-breaker triggers. Leave it running.
-
----
-
-## Step 7: Start the Orchestrator (Terminal 2)
+Start the functional-spec role set in one WezTerm window:
 
 ```bash
 cd hello-cli
-liza agent orchestrator
+liza launch wezterm mas --preset functional-spec
 ```
 
-Agent output is automatically persisted to `.liza/agent-outputs/` for later analysis, and prompt captures can be audited with `/context-engineering` when available (see [Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Pass `--no-log` to disable. Each agent command also accepts a `--cli` flag to select the coding agent (`claude`, `codex`, `codex-acp`, `gemini`, `mistral`, or `kimi`). When omitted, the default is resolved from role-specific config (`config.default_doer_cli` for doers and orchestrators, `config.default_reviewer_cli` for reviewers), then role-specific env (`LIZA_DEFAULT_DOER_CLI` for doers and orchestrators, `LIZA_DEFAULT_REVIEWER_CLI` for reviewers), then `config.default_cli`, then `LIZA_DEFAULT_CLI`, then `claude`.
+This opens `liza tui` plus panes for orchestrator, architect,
+architecture-reviewer, code-planner, code-plan-reviewer, coder, and
+code-reviewer. Agent output is automatically persisted to
+`.liza/agent-outputs/` for later analysis, and prompt captures can be audited
+with `/context-engineering` when available (see
+[Analyzing Agent Logs](USAGE_MULTI_AGENTS.md#analyzing-agent-logs)). Each agent
+command also accepts a `--cli` flag; pass it through the launcher when you want
+one backend for every role:
+
+```bash
+liza launch wezterm mas --preset functional-spec --cli codex
+```
+
+When `--cli` is omitted, each role resolves its backend from role-specific config
+(`config.default_doer_cli` for doers and orchestrators,
+`config.default_reviewer_cli` for reviewers), then role-specific env, then
+global defaults, then `claude`.
+
+**CMUX support:** Liza also supports CMUX as an alternative to WezTerm. Use
+`liza launch cmux mas` with the same flags to launch agents in CMUX panes
+instead of WezTerm.
 
 The Orchestrator will:
 1. Read `specs/vision.md`
-2. Create the initial code-planning task
+2. Create the initial architecture task
 3. Monitor sprint progress and create checkpoints
-
-Watch the blackboard update:
-```bash
-# In another terminal
-watch -n 2 'liza get tasks --format table'
-```
 
 ---
 
-## Step 8: Start the Code Planner and Code Plan Reviewer (Terminals 3-4)
+## Step 7: Let Planning Run
+
+The architecture and code-planning agents are already running in their panes.
+They will claim work as it becomes available:
+
+1. Architect defines the implementation structure from `specs/vision.md`.
+2. Architecture reviewer approves or rejects that plan.
+3. Code planner produces coding tasks.
+4. Code plan reviewer approves or rejects those tasks.
+
+Use the TUI pane to watch tasks and alerts. For a plain table view, run this in
+another shell or an extra WezTerm pane:
 
 ```bash
-cd hello-cli
-liza agent code-planner
+watch -n 2 'liza get tasks --format table'
 ```
 
-```bash
-cd hello-cli
-liza agent code-plan-reviewer
-```
+When a planning task reaches an approved terminal state, review the plan, then
+transition to the next phase:
 
-The Code Planner will:
-1. Claim the planning task
-2. Read the spec and produce a coding plan
-3. Populate `output[]` with task definitions
-4. Submit for review
-
-The Code Plan Reviewer will:
-1. Review the plan
-2. Approve or reject with feedback
-3. On approval: merge, triggering a sprint checkpoint (HUMAN GATE)
-
-At this point the system pauses. Review the plan, then transition to coding:
 ```bash
 liza proceed <task-id> code-plan-to-coding
 liza resume
@@ -222,19 +221,10 @@ liza resume
 
 ---
 
-## Step 9: Start the Coder and Code Reviewer (Terminals 5-6)
+## Step 8: Let Coding Run
 
-Once coding tasks appear after `proceed` + `resume`:
-
-```bash
-cd hello-cli
-liza agent coder
-```
-
-```bash
-cd hello-cli
-liza agent code-reviewer
-```
+The coder and code-reviewer panes are already running. Once coding tasks appear
+after `proceed` + `resume`, they will claim and review work.
 
 The Coder will:
 1. Claim a coding task
@@ -256,7 +246,7 @@ ls -la .worktrees/
 
 ---
 
-## Step 10: Observe the Flow
+## Step 9: Observe the Flow
 
 With all agents running, watch the system:
 

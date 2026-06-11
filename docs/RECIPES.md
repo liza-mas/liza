@@ -5,14 +5,11 @@ Step-by-step workflows for common Liza operations. See [DEMO.md](DEMO.md) for a 
 ## Autonomous Agent System
 
 ```bash
-# Start monitoring
-liza tui > watch.log 2>&1 &
+# Start monitoring plus the default coding-phase agents in one WezTerm window
+liza launch wezterm mas --preset technical-spec
 
-# Start agents (each in background or separate terminal)
-liza agent planner --agent-id planner-1 > planner.log 2>&1 &
-liza agent coder --agent-id coder-1 > coder-1.log 2>&1 &
-liza agent coder --agent-id coder-2 > coder-2.log 2>&1 &
-liza agent code-reviewer --agent-id code-reviewer-1 > reviewer.log 2>&1 &
+# Or use CMUX instead of WezTerm
+liza launch cmux mas --preset technical-spec
 
 # Monitor progress
 watch -n 5 'liza get tasks --format table'    # Task status
@@ -22,8 +19,10 @@ tail -f .liza/alerts.log                      # Alerts
 
 # Stop when done
 liza stop --reason "work session complete"
-wait  # Wait for all agents to exit cleanly
 ```
+
+Use `--dry-run` to inspect the terminal multiplexer command before launching, or repeat
+`--role <role>` for a custom set. Both WezTerm and CMUX support the same flags and presets.
 
 ## Pause and Resume
 

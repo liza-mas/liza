@@ -85,7 +85,8 @@ Continue pairing to fill gaps. A goal document is ready when:
 
 ### 7. Get reviews from other agents
 
-Open a fresh Pairing session in another terminal. Ask it to review the goal document cold — no context from the first session. A good review prompt:
+Open a fresh Pairing session in another pane or window. Ask it to review the
+goal document cold — no context from the first session. A good review prompt:
 
 ```
 Review this goal document as if you were an agent about to decompose it into tasks.
