@@ -45,14 +45,48 @@ func TestConfigureWritesProfileAndEnv(t *testing.T) {
 		t.Fatalf("read env: %v", err)
 	}
 	env := string(envData)
-	if !strings.Contains(env, `export PATH="`+installDir+`:$PATH"`) {
+	if !strings.Contains(env, `export PATH='`+installDir+`':"$PATH"`) {
 		t.Fatalf("env missing install dir PATH:\n%s", env)
 	}
-	if !strings.Contains(env, `export LIZA_ENABLE_STACKLIT="1"`) {
+	if !strings.Contains(env, `export LIZA_ENABLE_STACKLIT='1'`) {
 		t.Fatalf("env missing stacklit activation:\n%s", env)
 	}
 	if strings.Contains(env, "\nexport HF_HUB_OFFLINE=\"1\"") {
 		t.Fatalf("env should not assert Semble offline readiness before validation:\n%s", env)
+	}
+}
+
+func TestConfigureShellQuotesGeneratedEnvAndProfileSource(t *testing.T) {
+	home := t.TempDir()
+	globalDir := filepath.Join(t.TempDir(), `global $(touch bad) 'quoted'`)
+	installDir := filepath.Join(t.TempDir(), `bin $(touch bad) 'quoted'`)
+
+	got, err := Configure(ConfigureOptions{
+		Profile:           ProfileLean,
+		GlobalDir:         globalDir,
+		InstallDir:        installDir,
+		WriteShellProfile: true,
+		HomeDir:           home,
+		Shell:             "/bin/zsh",
+	})
+	if err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+
+	envData, err := os.ReadFile(got.EnvPath)
+	if err != nil {
+		t.Fatalf("read env: %v", err)
+	}
+	if want := shellQuote(installDir) + `:"$PATH"`; !strings.Contains(string(envData), want) {
+		t.Fatalf("env.sh missing shell-quoted install dir %q:\n%s", want, envData)
+	}
+
+	profileData, err := os.ReadFile(got.ShellProfilePath)
+	if err != nil {
+		t.Fatalf("read shell profile: %v", err)
+	}
+	if want := "[ -f " + shellQuote(got.EnvPath) + " ] && . " + shellQuote(got.EnvPath); !strings.Contains(string(profileData), want) {
+		t.Fatalf("shell profile missing quoted source line %q:\n%s", want, profileData)
 	}
 }
 
@@ -185,6 +219,22 @@ func TestConfigureRejectsInvalidAgentToolsModeBeforeWriting(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(globalDir, "toolchain", "profile.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("profile.json stat err = %v, want not exist", statErr)
+	}
+}
+
+func TestConfigureExpandsGlobalDirHome(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	got, err := Configure(ConfigureOptions{
+		Profile:    ProfileLean,
+		GlobalDir:  "~/custom-liza",
+		InstallDir: filepath.Join(t.TempDir(), "bin"),
+	})
+	if err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	if !strings.Contains(got.ToolchainDir, filepath.Join("custom-liza", "toolchain")) {
+		t.Fatalf("ToolchainDir = %q, want expanded custom-liza path", got.ToolchainDir)
 	}
 }
 

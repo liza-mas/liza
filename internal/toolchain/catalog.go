@@ -50,6 +50,7 @@ type Tool struct {
 	InstallKind     InstallKind `json:"install_kind"`
 	PackageName     string      `json:"package_name,omitempty"`
 	InstallURL      string      `json:"install_url,omitempty"`
+	InstallDirEnv   []string    `json:"install_dir_env,omitempty"`
 	SourceRepo      string      `json:"source_repo,omitempty"`
 	SourcePackage   string      `json:"source_package,omitempty"`
 	GoPackage       string      `json:"go_package,omitempty"`
@@ -60,7 +61,6 @@ type Tool struct {
 	BalancedDefault bool        `json:"balanced_default"`
 	LeanDefault     bool        `json:"lean_default"`
 	FullDefault     bool        `json:"full_default"`
-	DoctorOnly      bool        `json:"doctor_only"`
 	ManualNote      string      `json:"manual_note,omitempty"`
 }
 
@@ -77,7 +77,8 @@ func Catalog() []Tool {
 			ID: "rtk", Name: "RTK", Binary: "rtk", Category: CategoryCompression,
 			Purpose:     "Compresses shell command output before it reaches agent context.",
 			InstallKind: InstallScript, InstallURL: "https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh",
-			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
+			InstallDirEnv: []string{"RTK_INSTALL_DIR"},
+			VersionArgs:   []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "stacklit", Name: "Stacklit", Binary: "stacklit", Category: CategoryIndexing,
@@ -175,12 +176,6 @@ func Catalog() []Tool {
 			VersionArgs: []string{"--version"}, FullDefault: true,
 			ActivationEnv: []string{"LIZA_ENABLE_FUNCTIONAL_CLUSTERS=1"},
 		},
-		{
-			ID: "claude-usage", Name: "claude-usage", Binary: "claude-usage", Category: CategoryCost,
-			Purpose:     "Reports local Claude Code usage and token costs.",
-			InstallKind: InstallPackage, PackageName: "https://raw.githubusercontent.com/phuryn/claude-usage/main/Formula/claude-usage.rb",
-			VersionArgs: []string{"--help"}, FullDefault: true,
-		},
 		manualTool("filesystem-mcp", "filesystem MCP", "Batch local filesystem reads through provider MCP configuration."),
 		manualTool("context7", "context7 MCP", "Structured current library documentation lookup through MCP."),
 		manualTool("ref", "Ref MCP", "Broad documentation and guide lookup through MCP."),
@@ -195,8 +190,8 @@ func Catalog() []Tool {
 func manualTool(id, name, purpose string) Tool {
 	return Tool{
 		ID: id, Name: name, Category: CategoryMCP, Purpose: purpose,
-		InstallKind: InstallManualOnly, DoctorOnly: true,
-		ManualNote: "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+		InstallKind: InstallManualOnly,
+		ManualNote:  "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
 	}
 }
 

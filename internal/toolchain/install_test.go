@@ -2,7 +2,7 @@ package toolchain
 
 import (
 	"errors"
-	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -116,11 +116,14 @@ func TestInstallNativeWindowsIsUnsupported(t *testing.T) {
 		Runner:     &fakeRunner{},
 		GOOS:       "windows",
 	})
-	if err != nil {
-		t.Fatalf("Install() error = %v", err)
+	if err == nil {
+		t.Fatal("Install() error = nil, want unsupported platform error")
 	}
 	if got.Steps[0].Status != InstallUnsupported {
 		t.Fatalf("status = %s, want unsupported", got.Steps[0].Status)
+	}
+	if strings.Contains(got.Steps[0].Message, "doctor-only") {
+		t.Fatalf("message = %q, should not claim Windows is doctor-only", got.Steps[0].Message)
 	}
 }
 
@@ -134,14 +137,13 @@ func TestPackageInstallCommandRequiresKnownPackageManager(t *testing.T) {
 	}
 }
 
-func TestPackageInstallCommandUsesHomebrewFormulaForURLPackage(t *testing.T) {
-	runner := &fakeRunner{paths: map[string]string{"brew": "/opt/homebrew/bin/brew"}}
-	got, err := packageInstallCommand("https://example.test/tool.rb", runner)
-	if err != nil {
-		t.Fatalf("packageInstallCommand() error = %v", err)
+func TestPackageInstallCommandRejectsURLPackage(t *testing.T) {
+	_, err := packageInstallCommand("https://example.test/tool.rb", &fakeRunner{})
+	if err == nil {
+		t.Fatal("packageInstallCommand() error = nil, want URL package rejection")
 	}
-	if got.Name != "brew" || fmt.Sprint(got.Args) != "[install --formula https://example.test/tool.rb]" {
-		t.Fatalf("command = %+v, want brew formula install", got)
+	if !strings.Contains(err.Error(), "URL package installs are not supported") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -202,11 +204,12 @@ func allToolIDsExcept(keep ...string) []string {
 
 func TestInstallRunsCommandWhenNotDryRun(t *testing.T) {
 	runner := &fakeRunner{paths: map[string]string{}}
+	installDir := t.TempDir()
 	got, err := Install(InstallOptions{
 		Profile:    ProfileBalanced,
 		Include:    []string{"rtk"},
 		Exclude:    allToolIDsExcept("rtk"),
-		InstallDir: t.TempDir(),
+		InstallDir: installDir,
 		Runner:     runner,
 	})
 	if err != nil {
@@ -218,7 +221,61 @@ func TestInstallRunsCommandWhenNotDryRun(t *testing.T) {
 	if len(runner.runs) != 1 {
 		t.Fatalf("runs = %d, want 1", len(runner.runs))
 	}
-	if got := fmt.Sprint(runner.runs[0].Env["INSTALL_DIR"] != ""); got != "true" {
-		t.Fatalf("INSTALL_DIR env present = %s, want true", got)
+	if runner.runs[0].Env["RTK_INSTALL_DIR"] != installDir {
+		t.Fatalf("RTK_INSTALL_DIR = %q, want %q", runner.runs[0].Env["RTK_INSTALL_DIR"], installDir)
+	}
+	if runner.runs[0].Env["INSTALL_DIR"] != "" {
+		t.Fatalf("INSTALL_DIR = %q, want empty for rtk-specific installer", runner.runs[0].Env["INSTALL_DIR"])
+	}
+}
+
+func TestInstallReturnsErrorWhenAnyStepFails(t *testing.T) {
+	got, err := Install(InstallOptions{
+		Profile:    ProfileBalanced,
+		Include:    []string{"jq"},
+		Exclude:    allToolIDsExcept("jq"),
+		InstallDir: t.TempDir(),
+		Runner:     &fakeRunner{},
+	})
+	if err == nil {
+		t.Fatal("Install() error = nil, want failed step error")
+	}
+	if !strings.Contains(err.Error(), "jq:failed") {
+		t.Fatalf("error = %v, want failed tool id", err)
+	}
+	if got.Steps[0].Status != InstallFailed {
+		t.Fatalf("status = %s, want failed", got.Steps[0].Status)
+	}
+}
+
+func TestInstallNPMUsesPrefixForInstallDirBin(t *testing.T) {
+	installDir := filepath.Join(t.TempDir(), "bin")
+	got, err := installCommand(Tool{ID: "npm-tool", InstallKind: InstallNPM, NPMPackage: "example"}, installDir, &fakeRunner{})
+	if err != nil {
+		t.Fatalf("installCommand() error = %v", err)
+	}
+	if got.Env["NPM_CONFIG_PREFIX"] != filepath.Dir(installDir) {
+		t.Fatalf("NPM_CONFIG_PREFIX = %q, want %q", got.Env["NPM_CONFIG_PREFIX"], filepath.Dir(installDir))
+	}
+}
+
+func TestInstallNPMRejectsInstallDirOutsideBin(t *testing.T) {
+	_, err := installCommand(Tool{ID: "npm-tool", InstallKind: InstallNPM, NPMPackage: "example"}, t.TempDir(), &fakeRunner{})
+	if err == nil {
+		t.Fatal("installCommand() error = nil, want npm bin-dir validation")
+	}
+	if !strings.Contains(err.Error(), "ending in /bin") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestInstallUVUsesToolBinDir(t *testing.T) {
+	installDir := t.TempDir()
+	got, err := installCommand(Tool{ID: "uv-tool", InstallKind: InstallUVTool, UVPackage: "example"}, installDir, &fakeRunner{})
+	if err != nil {
+		t.Fatalf("installCommand() error = %v", err)
+	}
+	if got.Env["UV_TOOL_BIN_DIR"] != installDir {
+		t.Fatalf("UV_TOOL_BIN_DIR = %q, want %q", got.Env["UV_TOOL_BIN_DIR"], installDir)
 	}
 }

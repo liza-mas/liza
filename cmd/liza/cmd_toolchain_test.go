@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/toolchain"
 )
 
 func TestToolchainListShowsBalancedTools(t *testing.T) {
@@ -73,6 +76,25 @@ func TestToolchainInstallDryRunManualCapability(t *testing.T) {
 	}
 }
 
+func TestPrintInstallResultAndReturnPrintsFailedSteps(t *testing.T) {
+	var out bytes.Buffer
+	wantErr := errors.New("toolchain install incomplete: jq:failed")
+	err := printInstallResultAndReturn(&out, toolchain.InstallResult{Steps: []toolchain.InstallStep{
+		{ToolID: "rtk", Status: toolchain.InstallSkipped, Message: "already installed"},
+		{ToolID: "jq", Status: toolchain.InstallFailed, Message: "no supported package manager found"},
+	}}, wantErr)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want %v", err, wantErr)
+	}
+	text := out.String()
+	if !strings.Contains(text, "[SKIPPED] rtk") || !strings.Contains(text, "[FAILED] jq") {
+		t.Fatalf("install output missing failed step:\n%s", text)
+	}
+	if !strings.Contains(text, "no supported package manager found") {
+		t.Fatalf("install output missing diagnostic message:\n%s", text)
+	}
+}
+
 func toolchainArgs(args ...string) []string {
 	excluded := map[string]bool{}
 	for i := 0; i < len(args)-1; i++ {
@@ -116,5 +138,22 @@ func TestToolchainConfigureWritesFiles(t *testing.T) {
 	}
 	if !strings.Contains(string(env), installDir) {
 		t.Fatalf("env.sh missing install dir:\n%s", env)
+	}
+}
+
+func TestToolchainConfigureRequiresProjectAndAgentsTogether(t *testing.T) {
+	resetRootCmdForTest(t)
+	rootCmd.SetArgs([]string{
+		"toolchain", "configure",
+		"--global-dir", t.TempDir(),
+		"--project", ".",
+	})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("toolchain configure error = nil, want project/agents validation")
+	}
+	if !strings.Contains(err.Error(), "--project and --agents") {
+		t.Fatalf("error = %v", err)
 	}
 }

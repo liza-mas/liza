@@ -63,6 +63,9 @@ func Install(opts InstallOptions) (InstallResult, error) {
 		step := installOne(tool, installDir, goos, opts.DryRun, runner)
 		result.Steps = append(result.Steps, step)
 	}
+	if err := installResultError(result.Steps); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -71,7 +74,7 @@ func installOne(tool Tool, installDir, goos string, dryRun bool, runner Runner) 
 		return InstallStep{ToolID: tool.ID, Status: InstallSkipped, Message: tool.ManualNote}
 	}
 	if goos == "windows" {
-		return InstallStep{ToolID: tool.ID, Status: InstallUnsupported, Message: "native Windows support is doctor-only; run this installer under WSL2"}
+		return InstallStep{ToolID: tool.ID, Status: InstallUnsupported, Message: "native Windows is not a supported Liza runtime; run this installer under WSL2"}
 	}
 	if tool.Binary != "" {
 		if path, err := runner.LookPath(tool.Binary); err == nil && path != "" {
@@ -123,13 +126,16 @@ func installCommand(tool Tool, installDir string, runner Runner) (Command, error
 		if tool.InstallURL == "" {
 			return Command{}, fmt.Errorf("%s has no install URL", tool.ID)
 		}
+		env := map[string]string{
+			"LIZA_TOOL_INSTALL_URL": tool.InstallURL,
+		}
+		for _, name := range installDirEnvNames(tool) {
+			env[name] = installDir
+		}
 		return Command{
 			Name: "bash",
 			Args: []string{"-c", `curl -fsSL "$LIZA_TOOL_INSTALL_URL" | bash`},
-			Env: map[string]string{
-				"INSTALL_DIR":           installDir,
-				"LIZA_TOOL_INSTALL_URL": tool.InstallURL,
-			},
+			Env:  env,
 		}, nil
 	case InstallGo:
 		return Command{
@@ -138,9 +144,13 @@ func installCommand(tool Tool, installDir string, runner Runner) (Command, error
 			Env:  map[string]string{"GOBIN": installDir},
 		}, nil
 	case InstallNPM:
-		return Command{Name: "npm", Args: []string{"install", "-g", tool.NPMPackage}}, nil
+		prefix, err := npmPrefixForBinDir(installDir)
+		if err != nil {
+			return Command{}, err
+		}
+		return Command{Name: "npm", Args: []string{"install", "-g", tool.NPMPackage}, Env: map[string]string{"NPM_CONFIG_PREFIX": prefix}}, nil
 	case InstallUVTool:
-		return Command{Name: "uv", Args: []string{"tool", "install", tool.UVPackage}}, nil
+		return Command{Name: "uv", Args: []string{"tool", "install", tool.UVPackage}, Env: map[string]string{"UV_TOOL_BIN_DIR": installDir}}, nil
 	case InstallPackage:
 		return packageInstallCommand(tool.PackageName, runner)
 	default:
@@ -170,15 +180,39 @@ func sourceFallbackCommand(tool Tool, installDir string) (Command, error) {
 	}, nil
 }
 
+func installDirEnvNames(tool Tool) []string {
+	if len(tool.InstallDirEnv) > 0 {
+		return tool.InstallDirEnv
+	}
+	return []string{"INSTALL_DIR"}
+}
+
+func installResultError(steps []InstallStep) error {
+	var failed []string
+	for _, step := range steps {
+		if step.Status == InstallFailed || step.Status == InstallUnsupported {
+			failed = append(failed, fmt.Sprintf("%s:%s", step.ToolID, step.Status))
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("toolchain install incomplete: %s", strings.Join(failed, ", "))
+}
+
+func npmPrefixForBinDir(binDir string) (string, error) {
+	if filepath.Base(binDir) != "bin" {
+		return "", fmt.Errorf("npm global installs require install dir ending in /bin, got %s", binDir)
+	}
+	return filepath.Dir(binDir), nil
+}
+
 func packageInstallCommand(packageName string, runner Runner) (Command, error) {
 	if packageName == "" {
 		return Command{}, fmt.Errorf("missing package name")
 	}
 	if strings.HasPrefix(packageName, "http://") || strings.HasPrefix(packageName, "https://") {
-		if path, err := runner.LookPath("brew"); err == nil && path != "" {
-			return Command{Name: "brew", Args: []string{"install", "--formula", packageName}}, nil
-		}
-		return Command{}, fmt.Errorf("homebrew is required to install formula %s", packageName)
+		return Command{}, fmt.Errorf("URL package installs are not supported: %s", packageName)
 	}
 	packageManagers := []struct {
 		binary string
@@ -200,22 +234,7 @@ func packageInstallCommand(packageName string, runner Runner) (Command, error) {
 }
 
 func resolveInstallDir(raw string) (string, error) {
-	if raw == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("determine home directory: %w", err)
-		}
-		raw = filepath.Join(home, ".local", "bin")
-	}
-	expanded := raw
-	if strings.HasPrefix(expanded, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("determine home directory: %w", err)
-		}
-		expanded = filepath.Join(home, strings.TrimPrefix(expanded, "~/"))
-	}
-	abs, err := filepath.Abs(expanded)
+	abs, err := resolveHomeDir(raw, filepath.Join(".local", "bin"))
 	if err != nil {
 		return "", fmt.Errorf("resolve install dir: %w", err)
 	}

@@ -187,11 +187,14 @@ Liza optimizes cost-to-quality, not cost-to-lets-cross-fingers. These tools redu
 | [fetch MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) | Exact web page retrieval | Raw HTML, pagination, and precise page content without summarization |
 | [deepwiki](https://docs.devin.ai/work-with-devin/deepwiki-mcp) | Repository architecture and code-structure exploration | Fast high-level orientation on unfamiliar repositories |
 | [postgres](https://github.com/modelcontextprotocol/servers#using-an-mcp-client) | Read-only SQL exploration and validation | Direct schema and data inspection when a database MCP is available |
-| [claude-usage](https://github.com/phuryn/claude-usage) | Tracks Claude subscription usage with cost breakdown | Visibility into where tokens go — essential for optimizing agent configurations |
+| [claude-usage](https://github.com/phuryn/claude-usage) | Tracks Claude subscription usage with cost breakdown | Textual recommendation only; install it separately if Claude cost visibility matters for your setup |
 
 These tools are referenced in the default `~/.liza/AGENT_TOOLS.md`; see
 [Customizing AGENT_TOOLS.md](support-docs/CUSTOMIZING_AGENT_TOOLS.md).
-Liza does not install them, so install the ones you intend to use, and remove or replace the others in `AGENT_TOOLS.md` to match your environment.
+`liza toolchain` can install and verify the no-secret local CLIs it manages;
+MCP/provider capabilities and cost-reporting tools such as `claude-usage` remain
+manual setup. Remove or replace unavailable tools in `AGENT_TOOLS.md` to match
+your environment.
 
 **`.claudeignore`** — Claude Code reads all files on disk, including git-tracked ones it doesn't need. Add a `.claudeignore` at your project root (same syntax as `.gitignore`) to keep irrelevant content out of the context budget. Liza ships one by default; review and adapt it to your project. Common candidates:
 

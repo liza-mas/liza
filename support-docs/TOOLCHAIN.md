@@ -29,7 +29,6 @@ Selected by default:
 Unchecked by default:
 
 - `functional-clusters`
-- `claude-usage`
 - MCP/provider capabilities such as filesystem, context7, Ref, fetch,
   Perplexity, DeepWiki, Morph, and postgres.
 
@@ -39,7 +38,7 @@ Use `--include` and `--exclude` for repeatable explicit choices:
 
 ```bash
 liza toolchain install --profile lean --include semble --exclude scip-python --yes
-liza toolchain install --profile full --exclude claude-usage --dry-run
+liza toolchain install --profile full --dry-run
 ```
 
 In an interactive terminal, `liza toolchain install` opens a checklist unless
@@ -68,6 +67,10 @@ source ~/.liza/toolchain/env.sh
 
 The generated env file adds the selected install directory to `PATH` and exports
 selected `LIZA_ENABLE_*` gates before `liza init` or agent runtime.
+Installers that build or download binaries directly place them in that directory.
+OS package managers still use their normal system prefixes. npm-backed tools use
+the parent prefix of an install directory ending in `/bin`; `uv tool` installs use
+the selected directory as their tool binary directory.
 
 With `--write-shell-profile`, `configure` adds the env source line to the
 current shell's startup files: `.zshrc` for Zsh, `.bashrc` and `.profile` for

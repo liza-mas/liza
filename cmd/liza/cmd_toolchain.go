@@ -108,11 +108,7 @@ var toolchainInstallCmd = &cobra.Command{
 		if isJSON(cmd) {
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		if err != nil {
-			return err
-		}
-		printInstallResult(cmd.OutOrStdout(), result)
-		return nil
+		return printInstallResultAndReturn(cmd.OutOrStdout(), result, err)
 	},
 }
 
@@ -128,6 +124,15 @@ var toolchainConfigureCmd = &cobra.Command{
 		installDir, _ := cmd.Flags().GetString("install-dir")
 		agentToolsMode, _ := cmd.Flags().GetString("agent-tools")
 		writeShellProfile, _ := cmd.Flags().GetBool("write-shell-profile")
+		agentsRaw, _ := cmd.Flags().GetString("agents")
+		projectRoot, _ := cmd.Flags().GetString("project")
+		if (projectRoot == "") != (agentsRaw == "") {
+			return cliValidationError("--project and --agents must be supplied together")
+		}
+		agents := splitCSV(agentsRaw)
+		if agentsRaw != "" && len(agents) == 0 {
+			return cliValidationError("--agents must contain at least one provider")
+		}
 		result, err := toolchain.Configure(toolchain.ConfigureOptions{
 			Profile:           profile,
 			Include:           include,
@@ -144,11 +149,9 @@ var toolchainConfigureCmd = &cobra.Command{
 			return err
 		}
 
-		agentsRaw, _ := cmd.Flags().GetString("agents")
-		projectRoot, _ := cmd.Flags().GetString("project")
 		if projectRoot != "" && agentsRaw != "" {
 			applyToolchainEnv(result)
-			if err := runProjectActivation(projectRoot, splitCSV(agentsRaw)); err != nil {
+			if err := runProjectActivation(projectRoot, agents); err != nil {
 				if isJSON(cmd) {
 					return jsonout.WriteResult(os.Stdout, result, nil, err)
 				}
@@ -191,7 +194,7 @@ func init() {
 	toolchainConfigureCmd.Flags().String("global-dir", "", "global Liza config directory (default: ~/.liza)")
 	toolchainConfigureCmd.Flags().String("install-dir", "", "directory for managed binaries in generated env (default: ~/.local/bin)")
 	toolchainConfigureCmd.Flags().String("agent-tools", "auto", "AGENT_TOOLS.md handling: auto, skip, or force")
-	toolchainConfigureCmd.Flags().Bool("write-shell-profile", false, "source generated env.sh from ~/.zshrc")
+	toolchainConfigureCmd.Flags().Bool("write-shell-profile", false, "source generated env.sh from the current shell startup file")
 	toolchainConfigureCmd.Flags().String("agents", "", "comma-separated provider contracts to activate in --project")
 	toolchainConfigureCmd.Flags().String("project", "", "project root where provider contracts and optional indexing hooks should be activated")
 
@@ -263,6 +266,11 @@ func printInstallResult(w io.Writer, result toolchain.InstallResult) {
 		}
 		fmt.Fprintln(w)
 	}
+}
+
+func printInstallResultAndReturn(w io.Writer, result toolchain.InstallResult, err error) error {
+	printInstallResult(w, result)
+	return err
 }
 
 func runProjectActivation(projectRoot string, agents []string) error {

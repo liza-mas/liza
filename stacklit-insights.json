@@ -39,6 +39,7 @@
     "internal/taskkind": "Shared task-kind constants used by models and pre-commit bootstrap logic.",
     "internal/testguard": "Repository tests that enforce test-suite guardrails such as sleep and parallel usage rules.",
     "internal/testhelpers": "Shared fixtures, assertions, git setup, pipeline setup, and valid-state builders for tests.",
+    "internal/toolchain": "Optional local toolchain catalog, install, configure, doctor, and runner support for Liza development environments.",
     "internal/tui": "Terminal UI model, views, keymaps, commands, styles, and state/log/alert updates.",
     "internal/worktreeexclude": "Private ignore setup for linked worktrees so generated runtime artifacts stay out of Git status.",
     "plugin/acp": "Independent ACP session and run-metrics package for warm-session tracking, ACP-style event aggregation, and warm-vs-fresh benchmark summaries.",
@@ -61,13 +62,17 @@
       "LIZA_SPECS",
       "LIZA_ENABLE_SCIP_SEARCH",
       "LIZA_ENABLE_STACKLIT",
-      "LIZA_ENABLE_SEMBLE"
+      "LIZA_ENABLE_SEMBLE",
+      "HF_HOME",
+      "LIZA_RUN_REAL_ACP_BENCH",
+      "SEMBLE_MODEL_NAME",
+      "XDG_CACHE_HOME"
     ],
     "do_not_touch": [
       ".github/"
     ]
   },
   "architecture": {
-    "ai_summary": "Liza is a Go CLI orchestration system centered on a file-backed blackboard state. cmd/liza builds the executable and dispatches commands into internal/commands, while internal/ops owns most state mutations for tasks, agents, reviews, worktrees, merges, alerts, and optional indexing. internal/models defines the shared domain objects, internal/db serializes access to state through file locks, and internal/statevalidate enforces schema and workflow invariants.\n\nAgent execution is layered around role pipelines. internal/pipeline defines roles, role pairs, statuses, transitions, policies, context sections, and timeouts; internal/agent claims work, builds prompts through internal/prompts, runs configured providers, manages heartbeats, masks secrets, and invokes git, pre-commit, SCIP, and Stacklit support as needed. Data flows from CLI inputs or TUI actions into commands, then ops, then db-backed model updates, with logs, alerts, and validation feedback feeding operator views and subsequent agent prompts.\n\nThe codebase separates infrastructure concerns into small packages: git/gitenv for repository operations, paths for canonical artifact locations, process/procscan for agent lifecycle, render/jsonout/log for output surfaces, and secretmask for safe text handling. Tests are extensive across command, ops, pipeline, state validation, and integration workflows; feature work should follow existing package boundaries and exercise the changed orchestration path rather than only local helpers."
+    "ai_summary": "Liza is a Go CLI orchestration system centered on a file-backed blackboard state. cmd/liza builds the executable and dispatches into internal/commands, while internal/ops owns most state-changing business behavior for tasks, agents, reviews, worktrees, merges, alerts, and optional indexing. internal/models defines the shared domain objects, internal/db serializes state access through file locks, and internal/statevalidate enforces schema, artifact, role, dependency, sprint, and workflow invariants.\n\nAgent execution is organized around configurable role pipelines. internal/pipeline defines roles, role pairs, task statuses, transitions, review policies, context sections, and timeouts; internal/agent claims work, builds prompts via internal/prompts, runs configured providers, manages leases and heartbeats, masks secrets, and invokes git, pre-commit, SCIP, Semble, and Stacklit support when enabled. Data flows from CLI or TUI input into commands, then ops, then db-backed model updates, with log, alert, validation, and prompt-rendering packages feeding operator views and subsequent agent context.\n\nInfrastructure concerns are kept in small packages: git/gitenv for repository operations, paths for canonical artifact locations, process/procscan for agent lifecycle, render/jsonout/log for output surfaces, secretmask for safe text handling, and pairingindex/scipsearch/stacklit/semble for optional repository indexing. Tests are broad across commands, ops, pipeline, state validation, and integration workflows, so feature work should follow existing package boundaries and validate the full orchestration path rather than only local helpers."
   }
 }
