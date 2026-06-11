@@ -69,9 +69,15 @@ liza launch wezterm adversarial-pairing .liza/adversarial/retry-client.md \
 
 When the blackboard already exists, omit `--goal` to reuse it.
 
+WezTerm prompt injection waits 2 seconds before sending the initial
+`$adversarial-pairing ...` prompt to each pane. If a CLI starts slowly because
+it loads MCP servers or other startup hooks, increase that wait with
+`--prompt-delay`, for example `--prompt-delay 6s`.
+
 **CMUX support:** Liza also supports CMUX as an alternative to WezTerm for
 adversarial-pairing launches. Use `liza launch cmux adversarial-pairing` with
-the same flags:
+the same role, reviewer, and goal flags. The doer-only `--yolo` flag is also
+available:
 
 ```bash
 liza launch cmux adversarial-pairing .liza/adversarial/retry-client.md \

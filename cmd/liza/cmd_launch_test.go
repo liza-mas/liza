@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/spf13/cobra"
 )
 
@@ -36,12 +38,13 @@ func TestBuildWeztermPaneScriptLaunchesSplitsThenPrimary(t *testing.T) {
 
 func TestBuildWeztermInteractivePaneScriptStartsCLIsWithInitialPrompts(t *testing.T) {
 	opts := weztermLaunchOptions{
-		Class: "liza-adversarial",
-		CWD:   "/tmp/project",
+		Class:       "liza-adversarial",
+		CWD:         "/tmp/project",
+		PromptDelay: 2 * time.Second,
 	}
 	script := buildWeztermInteractivePaneScript(opts, []interactivePane{
-		{Command: pairingInteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
-		{Command: pairingInteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
+		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
+		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
 	})
 
 	for _, want := range []string{
@@ -55,6 +58,21 @@ func TestBuildWeztermInteractivePaneScriptStartsCLIsWithInitialPrompts(t *testin
 		if !strings.Contains(script, want) {
 			t.Fatalf("script missing %q\nscript:\n%s", want, script)
 		}
+	}
+}
+
+func TestBuildWeztermInteractivePaneScriptUsesPromptDelay(t *testing.T) {
+	opts := weztermLaunchOptions{
+		Class:       "liza-adversarial",
+		CWD:         "/tmp/project",
+		PromptDelay: 1500 * time.Millisecond,
+	}
+	script := buildWeztermInteractivePaneScript(opts, []interactivePane{
+		pairingInteractivePane("codex", pairingSkillPrompt("doer", "/tmp/board.md", false)),
+	})
+
+	if !strings.Contains(script, "    sleep 1.5\n") {
+		t.Fatalf("script missing custom prompt delay\nscript:\n%s", script)
 	}
 }
 
@@ -96,7 +114,7 @@ func TestAdversarialPairingDefaultsToThreeCodexPanes(t *testing.T) {
 }
 
 func TestPairingInteractiveCLICommandMapsACPToInteractiveBaseCLI(t *testing.T) {
-	cmd := pairingInteractiveCLICommand("codex-acp")
+	cmd := agent.InteractiveCLICommand("codex-acp")
 	got := strings.Join(cmd, "\x00")
 	if got != "codex" {
 		t.Fatalf("command = %q, want codex", got)
@@ -179,12 +197,13 @@ exec /bin/sh "$@"
 	primaryPrompt := pairingSkillPrompt("doer", "/tmp/board.md", false)
 	splitPrompt := pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)
 	err := runWeztermInteractiveLaunch(launchWeztermAdversarialPairingCmd, weztermLaunchOptions{
-		Class:     "liza-adversarial-test",
-		Workspace: "liza-adversarial-test",
-		CWD:       tmpDir,
+		Class:       "liza-adversarial-test",
+		Workspace:   "liza-adversarial-test",
+		CWD:         tmpDir,
+		PromptDelay: 2 * time.Second,
 	}, []interactivePane{
-		{Command: []string{"codex"}, Prompt: primaryPrompt},
-		{Command: []string{"codex"}, Prompt: splitPrompt},
+		pairingInteractivePane("codex", primaryPrompt),
+		pairingInteractivePane("codex", splitPrompt),
 	})
 	if err != nil {
 		t.Fatalf("runWeztermInteractiveLaunch returned error: %v", err)
@@ -340,8 +359,8 @@ func TestBuildCmuxInteractiveLaunchCommandsSendsPromptsWithEnter(t *testing.T) {
 		CWD:       "/tmp/project",
 	}
 	cmds, err := buildCmuxInteractiveLaunchCommands(opts, []interactivePane{
-		{Command: pairingInteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
-		{Command: pairingInteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
+		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
+		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
 	})
 	if err != nil {
 		t.Fatalf("buildCmuxInteractiveLaunchCommands returned error: %v", err)
@@ -408,6 +427,7 @@ func TestBuildCmuxInteractiveLaunchCommandsSendsPromptsWithEnter(t *testing.T) {
 
 func TestCmuxMASDefaultsToTechnicalSpecPreset(t *testing.T) {
 	tmpDir := t.TempDir()
+	initGitRepoForLaunchTest(t, tmpDir)
 	// Create a minimal Liza project structure
 	if err := os.MkdirAll(filepath.Join(tmpDir, ".liza"), 0755); err != nil {
 		t.Fatalf("create .liza dir: %v", err)
@@ -448,6 +468,27 @@ agents: {}
 		if !strings.Contains(output, want) {
 			t.Fatalf("dry-run output missing %q\noutput:\n%s", want, output)
 		}
+	}
+}
+
+func TestMASLaunchRejectsExplicitCWDOutsideLizaProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	resetRootCmdForTest(t)
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{
+		"launch", "cmux", "mas",
+		"--cwd", tmpDir,
+		"--dry-run",
+	})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatalf("expected command to reject non-project --cwd\noutput:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "resolve --cwd git root") {
+		t.Fatalf("error = %q, want --cwd git root validation", err)
 	}
 }
 
@@ -628,8 +669,8 @@ sleep 1
 		Workspace: "liza-adversarial-test",
 		CWD:       tmpDir,
 	}, []interactivePane{
-		{Command: []string{"codex"}, Prompt: primaryPrompt},
-		{Command: []string{"codex"}, Prompt: splitPrompt},
+		pairingInteractivePane("codex", primaryPrompt),
+		pairingInteractivePane("codex", splitPrompt),
 	})
 	if err != nil {
 		t.Fatalf("runCmuxInteractiveLaunch returned error: %v", err)
@@ -655,6 +696,100 @@ sleep 1
 		if !strings.Contains(log, want) {
 			t.Fatalf("fake cmux log missing %q\nlog:\n%s", want, log)
 		}
+	}
+}
+
+func TestRunCmuxInteractiveLaunchAllowsNonCodexPanes(t *testing.T) {
+	tmpDir := t.TempDir()
+	binDir := filepath.Join(tmpDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("create fake bin dir: %v", err)
+	}
+	logPath := filepath.Join(tmpDir, "cmux.log")
+	writeExecutable(t, filepath.Join(binDir, "cmux"), `#!/bin/sh
+log="$LIZA_FAKE_CMUX_LOG"
+if [ "$1" = "new-workspace" ]; then
+  echo "NEW_WORKSPACE $*" >> "$log"
+  echo "OK workspace:42"
+  exit 0
+fi
+if [ "$1" = "new-pane" ]; then
+  echo "NEW_PANE $*" >> "$log"
+  echo "OK surface:7 pane:7 workspace:42"
+  exit 0
+fi
+if [ "$1" = "list-pane-surfaces" ]; then
+  echo "LIST_PANE_SURFACES $*" >> "$log"
+  echo "* surface:5 'claude' [selected]"
+  exit 0
+fi
+if [ "$1" = "send" ]; then
+  echo "SEND $*" >> "$log"
+  exit 0
+fi
+if [ "$1" = "send-key" ]; then
+  echo "SEND_KEY $*" >> "$log"
+  exit 0
+fi
+if [ "$1" = "read-screen" ]; then
+  echo "READ_SCREEN $*" >> "$log"
+  exit 23
+fi
+`)
+	writeExecutable(t, filepath.Join(binDir, "claude"), `#!/bin/sh
+echo "CLAUDE $*" >> "$LIZA_FAKE_CMUX_LOG"
+sleep 1
+`)
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("LIZA_FAKE_CMUX_LOG", logPath)
+
+	primaryPrompt := pairingSkillPrompt("doer", "/tmp/board.md", false)
+	splitPrompt := pairingSkillPrompt("reviewer-claude", "/tmp/board.md", false)
+	err := runCmuxInteractiveLaunch(&cobra.Command{}, cmuxLaunchOptions{
+		Workspace: "liza-adversarial-test",
+		CWD:       tmpDir,
+	}, []interactivePane{
+		pairingInteractivePane("claude", primaryPrompt),
+		pairingInteractivePane("claude", splitPrompt),
+	})
+	if err != nil {
+		t.Fatalf("runCmuxInteractiveLaunch returned error: %v", err)
+	}
+
+	log := waitForFileContent(t, logPath, func(content string) bool {
+		return strings.Contains(content, primaryPrompt) && strings.Contains(content, splitPrompt)
+	})
+	if strings.Contains(log, "READ_SCREEN") {
+		t.Fatalf("non-codex panes should not use Codex read-screen readiness scraping\nlog:\n%s", log)
+	}
+}
+
+func TestCmuxSendPromptReturnsReadScreenErrorForCodex(t *testing.T) {
+	tmpDir := t.TempDir()
+	binDir := filepath.Join(tmpDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("create fake bin dir: %v", err)
+	}
+	writeExecutable(t, filepath.Join(binDir, "cmux"), `#!/bin/sh
+if [ "$1" = "send" ]; then
+  exit 0
+fi
+if [ "$1" = "send-key" ]; then
+  exit 0
+fi
+if [ "$1" = "read-screen" ]; then
+  exit 9
+fi
+`)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	err := cmuxSendPrompt("workspace:1", "surface:1", pairingInteractivePane("codex", "$adversarial-pairing doer /tmp/board.md"))
+	if err == nil {
+		t.Fatal("expected read-screen verification error")
+	}
+	if !strings.Contains(err.Error(), "verify cmux prompt submission") {
+		t.Fatalf("error = %q, want verification context", err)
 	}
 }
 
@@ -773,4 +908,12 @@ func waitForFileContent(t *testing.T, path string, predicate func(string) bool) 
 	}
 	t.Fatalf("timed out waiting for expected file content in %s\nlast content:\n%s", path, last)
 	return ""
+}
+
+func initGitRepoForLaunchTest(t *testing.T, dir string) {
+	t.Helper()
+	output, err := exec.Command("git", "-C", dir, "init").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, string(output))
+	}
 }

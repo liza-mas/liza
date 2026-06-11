@@ -35,6 +35,27 @@ func TestNewLLMAgentForCLI(t *testing.T) {
 	}
 }
 
+func TestCLIExecutableNameMapsConfiguredNamesToBinaries(t *testing.T) {
+	tests := map[string]string{
+		"claude":       "claude",
+		"codex":        "codex",
+		"codex-acp":    "codex",
+		"opencode":     "opencode",
+		"opencode-acp": "opencode",
+		"gemini":       "gemini",
+		"mistral":      "vibe",
+		"kimi":         "kimi",
+	}
+
+	for cliName, want := range tests {
+		t.Run(cliName, func(t *testing.T) {
+			if got := CLIExecutableName(cliName); got != want {
+				t.Fatalf("CLIExecutableName(%q) = %q, want %q", cliName, got, want)
+			}
+		})
+	}
+}
+
 func TestCheckCLIPrerequisitesIgnoresPlainCLIs(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 

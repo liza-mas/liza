@@ -178,10 +178,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 		},
 	})
 
-	actualCLI := cliName
-	if cliName == "mistral" {
-		actualCLI = "vibe"
-	}
+	actualCLI := CLIExecutableName(cliName)
 
 	cmdEnv := agentProcessEnv(os.Environ(), agentID)
 	var cmd *exec.Cmd
@@ -294,10 +291,7 @@ func (d *CLIAgent) ExecuteInteractive(ctx context.Context, cliName string, agent
 }
 
 func (d *CLIAgent) buildRunCommand(ctx context.Context, cliName, agentID, prompt, projectRoot string, runtimeConfig models.Config) (*exec.Cmd, error) {
-	actualCLI := cliName
-	if cliName == "mistral" {
-		actualCLI = "vibe"
-	}
+	actualCLI := CLIExecutableName(cliName)
 
 	cmdEnv := os.Environ()
 	if actualCLI == "claude" {

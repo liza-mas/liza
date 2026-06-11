@@ -110,7 +110,7 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 			reviewerSpecs = []string{"codex", "codex-2=codex"}
 		}
 		doerPrompt := pairingSkillPrompt("doer", boardPath, yolo)
-		panes := []interactivePane{{Command: pairingInteractiveCLICommand(doerCLI), Prompt: doerPrompt}}
+		panes := []interactivePane{pairingInteractivePane(doerCLI, doerPrompt)}
 		for _, spec := range reviewerSpecs {
 			id, cliName, err := parseReviewerLaunchSpec(spec)
 			if err != nil {
@@ -120,7 +120,7 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 				return cliValidationError(fmt.Sprintf("invalid reviewer CLI %q", cliName))
 			}
 			prompt := pairingSkillPrompt("reviewer-"+id, boardPath, false)
-			panes = append(panes, interactivePane{Command: pairingInteractiveCLICommand(cliName), Prompt: prompt})
+			panes = append(panes, pairingInteractivePane(cliName, prompt))
 		}
 
 		opts, err := weztermOptionsFromFlags(cmd, cwd, "liza-adversarial")
@@ -214,7 +214,7 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 			reviewerSpecs = []string{"codex", "codex-2=codex"}
 		}
 		doerPrompt := pairingSkillPrompt("doer", boardPath, yolo)
-		panes := []interactivePane{{Command: pairingInteractiveCLICommand(doerCLI), Prompt: doerPrompt}}
+		panes := []interactivePane{pairingInteractivePane(doerCLI, doerPrompt)}
 		for _, spec := range reviewerSpecs {
 			id, cliName, err := parseReviewerLaunchSpec(spec)
 			if err != nil {
@@ -224,7 +224,7 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 				return cliValidationError(fmt.Sprintf("invalid reviewer CLI %q", cliName))
 			}
 			prompt := pairingSkillPrompt("reviewer-"+id, boardPath, false)
-			panes = append(panes, interactivePane{Command: pairingInteractiveCLICommand(cliName), Prompt: prompt})
+			panes = append(panes, pairingInteractivePane(cliName, prompt))
 		}
 
 		opts, err := cmuxOptionsFromFlags(cmd, cwd, "liza-adversarial")
@@ -236,10 +236,11 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 }
 
 type weztermLaunchOptions struct {
-	Class     string
-	Workspace string
-	CWD       string
-	DryRun    bool
+	Class       string
+	Workspace   string
+	CWD         string
+	DryRun      bool
+	PromptDelay time.Duration
 }
 
 type cmuxLaunchOptions struct {
@@ -249,6 +250,7 @@ type cmuxLaunchOptions struct {
 }
 
 type interactivePane struct {
+	CLIName string
 	Command []string
 	Prompt  string
 }
@@ -294,6 +296,11 @@ func launchWorkingDir(cmd *cobra.Command, requireLizaProject bool) (string, erro
 		if err != nil {
 			return "", cliValidationWrap("resolve --cwd", err)
 		}
+		if requireLizaProject {
+			if err := validateLaunchProjectRoot(abs); err != nil {
+				return "", err
+			}
+		}
 		return abs, nil
 	}
 	if requireLizaProject {
@@ -304,6 +311,39 @@ func launchWorkingDir(cmd *cobra.Command, requireLizaProject bool) (string, erro
 		return "", cliValidationWrap("get current directory", err)
 	}
 	return wd, nil
+}
+
+func validateLaunchProjectRoot(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return cliValidationWrap("inspect --cwd", err)
+	}
+	if !info.IsDir() {
+		return cliValidationError(fmt.Sprintf("--cwd %q is not a directory", path))
+	}
+	output, err := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return cliValidationWrap("resolve --cwd git root", err)
+	}
+	gitRoot := strings.TrimSpace(string(output))
+	canonicalPath, err := canonicalDir(path)
+	if err != nil {
+		return cliValidationWrap("resolve --cwd", err)
+	}
+	canonicalRoot, err := canonicalDir(gitRoot)
+	if err != nil {
+		return cliValidationWrap("resolve --cwd git root", err)
+	}
+	if canonicalPath != canonicalRoot {
+		return cliValidationError(fmt.Sprintf("--cwd must be the Liza project root, got %s under git root %s", path, gitRoot))
+	}
+	if _, err := os.Stat(filepath.Join(path, ".liza", "state.yaml")); err != nil {
+		if os.IsNotExist(err) {
+			return cliValidationError(fmt.Sprintf("--cwd %s is not initialized as a Liza project", path))
+		}
+		return cliValidationWrap("inspect --cwd Liza state", err)
+	}
+	return nil
 }
 
 func resolveLaunchPath(cwd, path string) (string, error) {
@@ -407,7 +447,14 @@ func weztermOptionsFromFlags(cmd *cobra.Command, cwd, defaultClass string) (wezt
 		workspace = className
 	}
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	return weztermLaunchOptions{Class: className, Workspace: workspace, CWD: cwd, DryRun: dryRun}, nil
+	promptDelay := 2 * time.Second
+	if cmd.Flags().Lookup("prompt-delay") != nil {
+		promptDelay, _ = cmd.Flags().GetDuration("prompt-delay")
+		if promptDelay < 0 {
+			return weztermLaunchOptions{}, cliValidationError("--prompt-delay must not be negative")
+		}
+	}
+	return weztermLaunchOptions{Class: className, Workspace: workspace, CWD: cwd, DryRun: dryRun, PromptDelay: promptDelay}, nil
 }
 
 func cmuxOptionsFromFlags(cmd *cobra.Command, cwd, defaultWorkspace string) (cmuxLaunchOptions, error) {
@@ -523,7 +570,7 @@ func runCmuxLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, commands [][]stri
 	}
 
 	// Create panes for additional commands
-	for i, cmd := range commands[1:] {
+	for i, paneCommand := range commands[1:] {
 		direction := "right"
 		if i%2 == 1 {
 			direction = "down"
@@ -542,7 +589,7 @@ func runCmuxLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, commands [][]stri
 		if err != nil {
 			return err
 		}
-		if err := cmuxSendText(workspaceRef, surfaceRef, shellJoin(cmd)); err != nil {
+		if err := cmuxSendText(workspaceRef, surfaceRef, shellJoin(paneCommand)); err != nil {
 			return cliValidationWrap("send command to cmux pane", err)
 		}
 		if err := cmuxSendKey(workspaceRef, surfaceRef, "enter"); err != nil {
@@ -620,14 +667,14 @@ func runCmuxInteractiveLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, panes 
 		}
 	}
 
-	if err := waitForCmuxInteractiveSurfaces(workspaceRef, surfaceRefs, 60*time.Second); err != nil {
+	if err := waitForCmuxInteractiveSurfaces(workspaceRef, panes, surfaceRefs, 60*time.Second); err != nil {
 		return err
 	}
 	time.Sleep(2 * time.Second)
 
 	// Send prompts to all panes
 	for i, pane := range panes {
-		if err := cmuxSendPrompt(workspaceRef, surfaceRefs[i], pane.Prompt); err != nil {
+		if err := cmuxSendPrompt(workspaceRef, surfaceRefs[i], pane); err != nil {
 			return err
 		}
 	}
@@ -643,17 +690,23 @@ func cmuxSendKey(workspaceRef, surfaceRef, key string) error {
 	return exec.Command("cmux", "send-key", "--workspace", workspaceRef, "--surface", surfaceRef, key).Run()
 }
 
-func cmuxSendPrompt(workspaceRef, surfaceRef, prompt string) error {
-	if err := cmuxSendText(workspaceRef, surfaceRef, prompt); err != nil {
+func cmuxSendPrompt(workspaceRef, surfaceRef string, pane interactivePane) error {
+	if err := cmuxSendText(workspaceRef, surfaceRef, pane.Prompt); err != nil {
 		return cliValidationWrap("send prompt to cmux pane", err)
 	}
 	for attempt := 0; attempt < 5; attempt++ {
 		if err := cmuxSendKey(workspaceRef, surfaceRef, "enter"); err != nil {
 			return cliValidationWrap("send enter key to cmux pane", err)
 		}
+		if !cmuxPaneUsesCodex(pane) {
+			return nil
+		}
 		time.Sleep(2 * time.Second)
 		screen, err := cmuxReadScreen(workspaceRef, surfaceRef)
-		if err != nil || !cmuxPromptStillPending(screen, prompt) {
+		if err != nil {
+			return cliValidationWrap("verify cmux prompt submission", err)
+		}
+		if !cmuxPromptStillPending(screen, pane.Prompt) {
 			return nil
 		}
 	}
@@ -668,12 +721,18 @@ func cmuxWorkspaceSelectedSurfaceRef(workspaceRef string) (string, error) {
 	return parseCmuxRef(output, "surface")
 }
 
-func waitForCmuxInteractiveSurfaces(workspaceRef string, surfaceRefs []string, timeout time.Duration) error {
+func waitForCmuxInteractiveSurfaces(workspaceRef string, panes []interactivePane, surfaceRefs []string, timeout time.Duration) error {
+	if len(panes) != len(surfaceRefs) {
+		return cliValidationError("internal error: cmux pane/surface count mismatch")
+	}
 	deadline := time.Now().Add(timeout)
 	hostSelectionSent := map[string]bool{}
 	for {
 		allReady := true
-		for _, surfaceRef := range surfaceRefs {
+		for i, surfaceRef := range surfaceRefs {
+			if !cmuxPaneUsesCodex(panes[i]) {
+				continue
+			}
 			screen, err := cmuxReadScreen(workspaceRef, surfaceRef)
 			if err != nil {
 				allReady = false
@@ -700,14 +759,6 @@ func waitForCmuxInteractiveSurfaces(workspaceRef string, surfaceRefs []string, t
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-}
-
-func cmuxSurfaceLooksInteractive(workspaceRef, surfaceRef string) bool {
-	screen, err := cmuxReadScreen(workspaceRef, surfaceRef)
-	if err != nil {
-		return false
-	}
-	return cmuxScreenLooksInteractive(screen)
 }
 
 func cmuxReadScreen(workspaceRef, surfaceRef string) (string, error) {
@@ -740,6 +791,13 @@ func cmuxScreenLooksInteractive(screen string) bool {
 		}
 	}
 	return strings.Contains(screen, "›")
+}
+
+func cmuxPaneUsesCodex(pane interactivePane) bool {
+	if pane.CLIName != "" {
+		return agent.CLIExecutableName(pane.CLIName) == "codex"
+	}
+	return len(pane.Command) > 0 && pane.Command[0] == "codex"
 }
 
 func parseCmuxRef(output []byte, refType string) (string, error) {
@@ -780,7 +838,9 @@ func buildWeztermInteractivePaneScript(opts weztermLaunchOptions, panes []intera
 	b.WriteString("  pane_id=\"$1\"\n")
 	b.WriteString("  prompt=\"$2\"\n")
 	b.WriteString("  (\n")
-	b.WriteString("    sleep 2\n")
+	b.WriteString("    sleep ")
+	b.WriteString(shellSleepSeconds(opts.PromptDelay))
+	b.WriteString("\n")
 	b.WriteString("    printf '%s' \"$prompt\" | wezterm cli --class ")
 	b.WriteString(shellQuote(opts.Class))
 	b.WriteString(" send-text --no-paste --pane-id \"$pane_id\"\n")
@@ -840,7 +900,7 @@ func buildCmuxLaunchCommands(opts cmuxLaunchOptions, commands [][]string) ([][]s
 	workspaceRef := "<workspace-ref-from-new-workspace-output>"
 
 	// Create panes for additional commands
-	for i, cmd := range commands[1:] {
+	for i, paneCommand := range commands[1:] {
 		direction := "right"
 		if i%2 == 1 {
 			direction = "down"
@@ -852,7 +912,7 @@ func buildCmuxLaunchCommands(opts cmuxLaunchOptions, commands [][]string) ([][]s
 			"--workspace", workspaceRef,
 		}
 		cmds = append(cmds, paneArgs)
-		cmds = append(cmds, []string{"cmux", "send", "--workspace", workspaceRef, "--surface", fmt.Sprintf("<surface-ref-%d-from-new-pane-output>", i+1), shellJoin(cmd)})
+		cmds = append(cmds, []string{"cmux", "send", "--workspace", workspaceRef, "--surface", fmt.Sprintf("<surface-ref-%d-from-new-pane-output>", i+1), shellJoin(paneCommand)})
 		cmds = append(cmds, []string{"cmux", "send-key", "--workspace", workspaceRef, "--surface", fmt.Sprintf("<surface-ref-%d-from-new-pane-output>", i+1), "enter"})
 	}
 
@@ -932,27 +992,8 @@ func pairingSkillPrompt(roleOrReviewerID, boardPath string, yolo bool) string {
 	return prompt
 }
 
-func pairingInteractiveCLICommand(cliName string) []string {
-	switch cliName {
-	case "claude":
-		return []string{"claude"}
-	case "codex":
-		return []string{"codex"}
-	case "codex-acp":
-		return []string{"codex"}
-	case "opencode":
-		return []string{"opencode"}
-	case "opencode-acp":
-		return []string{"opencode"}
-	case "gemini":
-		return []string{"gemini"}
-	case "mistral":
-		return []string{"vibe"}
-	case "kimi":
-		return []string{"kimi"}
-	default:
-		return []string{cliName}
-	}
+func pairingInteractivePane(cliName, prompt string) interactivePane {
+	return interactivePane{CLIName: cliName, Command: agent.InteractiveCLICommand(cliName), Prompt: prompt}
 }
 
 func parseReviewerLaunchSpec(spec string) (string, string, error) {
@@ -986,6 +1027,15 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func shellSleepSeconds(duration time.Duration) string {
+	if duration%time.Second == 0 {
+		return fmt.Sprintf("%d", int(duration/time.Second))
+	}
+	value := fmt.Sprintf("%.3f", duration.Seconds())
+	value = strings.TrimRight(value, "0")
+	return strings.TrimRight(value, ".")
 }
 
 func launchShell() string {
@@ -1026,6 +1076,7 @@ func init() {
 	launchWeztermAdversarialPairingCmd.Flags().String("doer-cli", "codex", "coding CLI for the doer session")
 	launchWeztermAdversarialPairingCmd.Flags().String("goal", "", "create the blackboard with this goal when it does not exist")
 	launchWeztermAdversarialPairingCmd.Flags().StringArray("reviewer", nil, "reviewer CLI or id=cli; repeat for multiple reviewers (default: codex, codex-2=codex)")
+	launchWeztermAdversarialPairingCmd.Flags().Duration("prompt-delay", 2*time.Second, "delay before injecting adversarial-pairing prompts into WezTerm panes")
 	launchWeztermAdversarialPairingCmd.Flags().Bool("yolo", false, "pass yolo to the doer adversarial-pairing invocation")
 
 	launchCmuxMASCmd.Flags().String("preset", "technical-spec", "role preset: technical-spec, functional-spec, general-objective")

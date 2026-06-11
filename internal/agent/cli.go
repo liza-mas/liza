@@ -16,6 +16,25 @@ func ValidCLIs() []string {
 	return out
 }
 
+// CLIExecutableName returns the local executable used for a configured CLI name.
+func CLIExecutableName(cliName string) string {
+	switch cliName {
+	case "codex-acp":
+		return "codex"
+	case "opencode-acp":
+		return "opencode"
+	case "mistral":
+		return "vibe"
+	default:
+		return cliName
+	}
+}
+
+// InteractiveCLICommand returns the argv used to start an interactive CLI session.
+func InteractiveCLICommand(cliName string) []string {
+	return []string{CLIExecutableName(cliName)}
+}
+
 // NewLLMAgentForCLI creates the provider backend for a configured CLI name.
 func NewLLMAgentForCLI(cliName string, outputsDir string) LLMAgent {
 	if isACPXCLI(cliName) {
