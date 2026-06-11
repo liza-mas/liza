@@ -98,7 +98,8 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 		}
 		goal, _ := cmd.Flags().GetString("goal")
 		yolo, _ := cmd.Flags().GetBool("yolo")
-		if err := ensureAdversarialPairingBlackboard(boardPath, goal, yolo, cmd); err != nil {
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		if err := ensureAdversarialPairingBlackboard(boardPath, goal, yolo, dryRun, cmd); err != nil {
 			return err
 		}
 		doerCLI, _ := cmd.Flags().GetString("doer-cli")
@@ -202,7 +203,8 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 		}
 		goal, _ := cmd.Flags().GetString("goal")
 		yolo, _ := cmd.Flags().GetBool("yolo")
-		if err := ensureAdversarialPairingBlackboard(boardPath, goal, yolo, cmd); err != nil {
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		if err := ensureAdversarialPairingBlackboard(boardPath, goal, yolo, dryRun, cmd); err != nil {
 			return err
 		}
 		doerCLI, _ := cmd.Flags().GetString("doer-cli")
@@ -353,7 +355,7 @@ func resolveLaunchPath(cwd, path string) (string, error) {
 	return filepath.Abs(filepath.Join(cwd, path))
 }
 
-func ensureAdversarialPairingBlackboard(path, goal string, yolo bool, cmd *cobra.Command) error {
+func ensureAdversarialPairingBlackboard(path, goal string, yolo bool, dryRun bool, cmd *cobra.Command) error {
 	if _, err := os.Stat(path); err == nil {
 		return nil
 	} else if !os.IsNotExist(err) {
@@ -361,6 +363,9 @@ func ensureAdversarialPairingBlackboard(path, goal string, yolo bool, cmd *cobra
 	}
 	if strings.TrimSpace(goal) == "" {
 		return cliValidationError("blackboard does not exist; create it first or pass --goal to initialize it before launching reviewers")
+	}
+	if dryRun {
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return cliValidationWrap("create blackboard directory", err)

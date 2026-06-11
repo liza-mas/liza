@@ -111,6 +111,9 @@ func TestAdversarialPairingDefaultsToThreeCodexPanes(t *testing.T) {
 			t.Fatalf("dry-run output missing %q\noutput:\n%s", want, output)
 		}
 	}
+	if _, err := os.Stat(boardPath); !os.IsNotExist(err) {
+		t.Fatalf("dry-run created blackboard or returned unexpected stat error: %v", err)
+	}
 }
 
 func TestPairingInteractiveCLICommandMapsACPToInteractiveBaseCLI(t *testing.T) {
@@ -262,7 +265,7 @@ func TestInitialAdversarialPairingBlackboardIncludesGoalAndYolo(t *testing.T) {
 
 func TestEnsureAdversarialPairingBlackboardRequiresGoalWhenMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".liza", "adversarial", "retry-client.md")
-	err := ensureAdversarialPairingBlackboard(path, "", false, launchWeztermAdversarialPairingCmd)
+	err := ensureAdversarialPairingBlackboard(path, "", false, false, launchWeztermAdversarialPairingCmd)
 	if err == nil {
 		t.Fatal("expected missing blackboard without goal to fail")
 	}
@@ -273,7 +276,7 @@ func TestEnsureAdversarialPairingBlackboardRequiresGoalWhenMissing(t *testing.T)
 
 func TestEnsureAdversarialPairingBlackboardCreatesMissingBoard(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".liza", "adversarial", "retry-client.md")
-	if err := ensureAdversarialPairingBlackboard(path, "Fix retry client", false, launchWeztermAdversarialPairingCmd); err != nil {
+	if err := ensureAdversarialPairingBlackboard(path, "Fix retry client", false, false, launchWeztermAdversarialPairingCmd); err != nil {
 		t.Fatalf("ensureAdversarialPairingBlackboard returned error: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -282,6 +285,16 @@ func TestEnsureAdversarialPairingBlackboardCreatesMissingBoard(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "Fix retry client") {
 		t.Fatalf("created blackboard missing goal:\n%s", string(data))
+	}
+}
+
+func TestEnsureAdversarialPairingBlackboardDryRunDoesNotCreateMissingBoard(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".liza", "adversarial", "retry-client.md")
+	if err := ensureAdversarialPairingBlackboard(path, "Fix retry client", false, true, launchWeztermAdversarialPairingCmd); err != nil {
+		t.Fatalf("ensureAdversarialPairingBlackboard returned error: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("dry-run created blackboard or returned unexpected stat error: %v", err)
 	}
 }
 
@@ -521,6 +534,9 @@ func TestCmuxAdversarialPairingDefaultsToThreeCodexPanes(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("dry-run output missing %q\noutput:\n%s", want, output)
 		}
+	}
+	if _, err := os.Stat(boardPath); !os.IsNotExist(err) {
+		t.Fatalf("dry-run created blackboard or returned unexpected stat error: %v", err)
 	}
 }
 
