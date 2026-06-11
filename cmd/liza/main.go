@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,10 +10,12 @@ import (
 
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
+	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/updater"
 	"github.com/spf13/cobra"
 )
 
@@ -228,6 +231,8 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().StringP("project-root", "C", "", "Liza project root for state commands")
+	rootCmd.PersistentFlags().Bool("check-update", false, "check for a Liza update before running")
+	rootCmd.PersistentFlags().String("update-channel", "stable", "update check channel: stable or main")
 }
 
 // addAgentIDFlag registers --agent-id on a specific command.
@@ -253,6 +258,14 @@ func addChangedByFlag(cmd *cobra.Command) {
 
 func main() {
 	if err := checkSupportedPlatform(runtime.GOOS); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := updater.MaybeUpdateAndReexec(context.Background(), updater.Config{
+		CurrentVersion: Version,
+		CurrentCommit:  GitCommit,
+		IsInteractive:  interactive.IsInteractive,
+	}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

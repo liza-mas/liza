@@ -140,6 +140,8 @@ func resetRootCmdForTest(t *testing.T) {
 
 	resetHelpFlag(t, rootCmd)
 	resetFlagIfPresent(rootCmd, "project-root")
+	resetFlagIfPresent(rootCmd, "check-update")
+	resetFlagIfPresent(rootCmd, "update-channel")
 	for _, child := range rootCmd.Commands() {
 		resetCommandFlagsForTest(t, child)
 	}
@@ -159,7 +161,7 @@ func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {
 		"spec", "config", "entry-point", "branch", "post-worktree-cmd", "copy-worktree-env-files", "auto-resume", "no-follow-up", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "scip-search-plan", "cli", "claude", "codex", "opencode", "gemini", "mistral",
 		"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file",
 		"profile", "include", "exclude", "tool", "install-dir", "dry-run", "yes", "global-dir", "agent-tools", "write-shell-profile", "agents", "project",
-		"project-root",
+		"project-root", "check-update", "update-channel",
 	} {
 		resetFlagIfPresent(cmd, name)
 	}
