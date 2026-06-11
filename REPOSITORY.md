@@ -145,6 +145,8 @@ Key command groups:
 
 **System control:** `liza pause`, `liza resume`, `liza stop`, `liza start`, `liza status`, `liza get`, `liza version`
 
+**Toolchain setup:** `liza toolchain list`, `liza toolchain doctor`, `liza toolchain install`, `liza toolchain configure`
+
 **Metrics:** `liza update-sprint-metrics`
 
 Locking is internal to the binary — no external `flock` wrapper needed.
@@ -175,6 +177,7 @@ Installable operational documentation written to `~/.liza/support-docs/` by
 | `USAGE_PAIRING.md` | Pairing mode guide (human-agent collaboration) |
 | `ADVERSARIAL_PAIRING.md` | Doer/reviewer Pairing-mode blackboard workflow |
 | `CONFIGURATION.md` | Configuration documentation, including setup/init effects |
+| `TOOLCHAIN.md` | Optional local CLI toolchain install, doctor, and activation guide |
 | `TROUBLESHOOTING.md` | Common issues and fixes |
 | `CUSTOMIZING_AGENT_TOOLS.md` | How to adapt `AGENT_TOOLS.md` to the local tool surface |
 | `how-to-produce-a-goal.md` | How to write a good goal doc for `liza init --spec` |

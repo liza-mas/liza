@@ -280,6 +280,9 @@ Set the corresponding `LIZA_ENABLE_*` environment variable before running the
 `liza setup` or `liza init` command that should activate that tool.
 Liza separates their activation across setup, pairing init, and MAS runtime:
 
+- `liza toolchain` can install and doctor the local CLI prerequisites and write
+  `~/.liza/toolchain/env.sh` with selected `LIZA_ENABLE_*` gates. It does not
+  install provider credentials or MCP connectors.
 - `liza setup` owns global generic guidance in `~/.liza/AGENT_TOOLS.md`. That
   guidance explains how agents should route to optional tools only when a session
   supplies explicit paths or readiness metadata. It must stay generic and must

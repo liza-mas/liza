@@ -130,28 +130,29 @@ func resetRootCmdForTest(t *testing.T) {
 
 	resetHelpFlag(t, rootCmd)
 	for _, child := range rootCmd.Commands() {
-		resetHelpFlag(t, child)
-		resetFlagIfPresent(child, "agent-id")
-		resetFlagIfPresent(child, "changed-by")
-		resetFlagIfPresent(child, "json")
-		resetFlagIfPresent(child, "summary")
-		resetFlagIfPresent(child, "output-summary")
-		resetFlagIfPresent(child, "active")
-		for _, name := range []string{"reason", "questions", "repair-operation", "repair-target", "repair-command", "repair-evidence", "repair-validation", "recoverability-command", "assign-to", "rebase-on", "allow-dirty"} {
-			resetFlagIfPresent(child, name)
-		}
-		// Init command workspace flags — must reset Changed state between tests.
-		for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "copy-worktree-env-files", "auto-resume", "no-follow-up", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "scip-search-plan", "cli", "claude", "codex", "opencode", "gemini", "mistral"} {
-			resetFlagIfPresent(child, name)
-		}
-		for _, name := range []string{"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file"} {
-			resetFlagIfPresent(child, name)
-		}
+		resetCommandFlagsForTest(t, child)
 	}
 
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
 	rootCmd.SetArgs(nil)
+}
+
+func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+	resetHelpFlag(t, cmd)
+	for _, name := range []string{
+		"agent-id", "changed-by", "json", "summary", "output-summary", "active",
+		"reason", "questions", "repair-operation", "repair-target", "repair-command", "repair-evidence", "repair-validation", "recoverability-command", "assign-to", "rebase-on", "allow-dirty",
+		"spec", "config", "entry-point", "branch", "post-worktree-cmd", "copy-worktree-env-files", "auto-resume", "no-follow-up", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "scip-search-plan", "cli", "claude", "codex", "opencode", "gemini", "mistral",
+		"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file",
+		"profile", "include", "exclude", "tool", "install-dir", "dry-run", "yes", "global-dir", "agent-tools", "write-shell-profile", "agents", "project",
+	} {
+		resetFlagIfPresent(cmd, name)
+	}
+	for _, child := range cmd.Commands() {
+		resetCommandFlagsForTest(t, child)
+	}
 }
 
 func resetFlagIfPresent(cmd *cobra.Command, name string) {
@@ -167,7 +168,12 @@ func resetFlagIfPresent(cmd *cobra.Command, name string) {
 	}
 }
 
-func resetHelpFlag(t *testing.T, cmd *cobra.Command) {
+type testingHelper interface {
+	Helper()
+	Fatalf(string, ...any)
+}
+
+func resetHelpFlag(t testingHelper, cmd *cobra.Command) {
 	t.Helper()
 
 	helpFlag := cmd.Flags().Lookup("help")

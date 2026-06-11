@@ -93,30 +93,38 @@ Review the installed file against your actual MCP servers, CLI tools, and editor
 integrations. The detailed guide is
 [Customizing AGENT_TOOLS.md](support-docs/CUSTOMIZING_AGENT_TOOLS.md).
 
-The default `AGENT_TOOLS.md` references optional tools that Liza does not
-install. Before running agents, either install the CLI tools you intend agents
-to use or remove/adapt the corresponding guidance. Leaving instructions for
-missing tools is not harmless: agents will follow the contract, spend turns on
-unavailable commands or MCP servers, and then recover noisily.
+The default `AGENT_TOOLS.md` references optional tools. Before running agents,
+either install the CLI tools you intend agents to use or remove/adapt the
+corresponding guidance. Leaving instructions for missing tools is not harmless:
+agents will follow the contract, spend turns on unavailable commands or MCP
+servers, and then recover noisily.
+
+Use `liza toolchain` to install and configure the local no-secret CLI tools:
+
+```bash
+liza toolchain install --profile balanced --yes
+liza toolchain configure --profile balanced --write-shell-profile
+```
+
+Use `liza toolchain doctor` to verify the selected profile. MCP/provider tools
+such as postgres, filesystem, context7, Ref, fetch, Perplexity, DeepWiki, and
+Morph are reported as manual capabilities; configure those in the active
+provider or MCP host.
+
+See [Liza Toolchain](support-docs/TOOLCHAIN.md) for profiles, include/exclude
+flags, and project activation.
 
 If you keep the default SCIP guidance, install `scip-search` plus the language
 indexers for the stacks you want Liza to index. Installing `scip-search` alone
 is not enough:
 
 ```bash
-# scip-search
-curl -fsSL https://raw.githubusercontent.com/liza-mas/scip-search/main/install.sh | bash
-scip-search --version
-
-# Go
-go install github.com/scip-code/scip-go/cmd/scip-go@latest
-
-# TypeScript
-npm install -g @sourcegraph/scip-typescript
-
-# Python
-npm install -g @sourcegraph/scip-python
+liza toolchain install --profile balanced --yes
+liza toolchain doctor --tool scip-search
 ```
+
+For manual installs and source-build fallbacks, see
+[Liza Toolchain](support-docs/TOOLCHAIN.md#install-fallbacks).
 
 Enable SCIP before project init when you want Liza to generate indexes:
 
