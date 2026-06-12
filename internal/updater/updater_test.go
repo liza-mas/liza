@@ -794,8 +794,8 @@ func TestInstallFromSourceShallowFetchFallback(t *testing.T) {
 	var calls []string
 	mockRun := func(ctx context.Context, stderr io.Writer, name string, args ...string) error {
 		calls = append(calls, name+" "+strings.Join(args, " "))
-		// Simulate shallow fetch failure for exact commit
-		if name == "git" && len(args) >= 4 && args[3] == "fetch" && args[4] == "--depth" && args[5] == "1" {
+		// Simulate shallow fetch failure for exact commit.
+		if name == "git" && len(args) >= 5 && args[2] == "fetch" && args[3] == "--depth" && args[4] == "1" {
 			return fmt.Errorf("shallow fetch failed")
 		}
 		// Allow other commands to succeed
@@ -813,9 +813,8 @@ func TestInstallFromSourceShallowFetchFallback(t *testing.T) {
 	ctx := context.Background()
 	err := installFromSource(ctx, "deadbeef123456", target, io.Discard)
 
-	// Should fail because we can't actually clone in this test, but we should see the fallback attempt
-	if err == nil {
-		t.Fatal("installFromSource should fail in mock environment")
+	if err != nil {
+		t.Fatalf("installFromSource should succeed after fallback: %v", err)
 	}
 
 	// Verify we attempted both shallow and deep fetch
