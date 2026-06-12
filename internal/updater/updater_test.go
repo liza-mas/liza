@@ -1101,7 +1101,6 @@ func TestInstallTimeoutContext(t *testing.T) {
 		IsInteractive:  func() bool { return true },
 		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
 		Install: func(ctx context.Context, next candidate, target string, stdout, stderr io.Writer) error {
-			installCtx = ctx
 			_, timeoutSet = ctx.Deadline()
 			return nil
 		},
