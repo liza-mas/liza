@@ -24,6 +24,21 @@ import (
 	"time"
 )
 
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "liza-updater-home-*")
+	if err != nil {
+		panic(err)
+	}
+	oldHome := os.Getenv("HOME")
+	if err := os.Setenv("HOME", home); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	_ = os.Setenv("HOME", oldHome)
+	_ = os.RemoveAll(home)
+	os.Exit(code)
+}
+
 func tempHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
@@ -393,6 +408,15 @@ func TestMaybeUpdateAndReexecMainChannelInstallsCommitRef(t *testing.T) {
 		LookupMain: func(context.Context) (string, error) {
 			return "222222222222abcdef", nil
 		},
+		IsMainAhead: func(_ context.Context, current, latest string) (bool, error) {
+			if current != "111111111111" {
+				t.Fatalf("current = %q, want 111111111111", current)
+			}
+			if latest != "222222222222abcdef" {
+				t.Fatalf("latest = %q, want 222222222222abcdef", latest)
+			}
+			return true, nil
+		},
 		Install: func(_ context.Context, next candidate, _ string, _ io.Writer, _ io.Writer) error {
 			installedRef = next.Ref
 			return nil
@@ -412,6 +436,68 @@ func TestMaybeUpdateAndReexecMainChannelInstallsCommitRef(t *testing.T) {
 	}
 	if installedRef != "222222222222abcdef" {
 		t.Fatalf("installed ref = %q, want main commit hash", installedRef)
+	}
+}
+
+func TestMaybeUpdateAndReexecMainChannelSkipsWhenMainNotAhead(t *testing.T) {
+	var stderr bytes.Buffer
+	installCalled := false
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.2.3",
+		CurrentCommit:  "10013d9e",
+		CheckUpdate:    true,
+		Channel:        "main",
+		Args:           []string{"/tmp/branch-liza", "version"},
+		Stdin:          strings.NewReader("y\n"),
+		Stdout:         io.Discard,
+		Stderr:         &stderr,
+		IsInteractive:  func() bool { return true },
+		LookupMain: func(context.Context) (string, error) {
+			return "e02d2cde2dee", nil
+		},
+		IsMainAhead: func(_ context.Context, current, latest string) (bool, error) {
+			if current != "10013d9e" {
+				t.Fatalf("current = %q, want 10013d9e", current)
+			}
+			if latest != "e02d2cde2dee" {
+				t.Fatalf("latest = %q, want e02d2cde2dee", latest)
+			}
+			return false, nil
+		},
+		Install: func(context.Context, candidate, string, io.Writer, io.Writer) error {
+			installCalled = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaybeUpdateAndReexec returned error: %v", err)
+	}
+	if installCalled {
+		t.Fatal("expected main channel skip not to install")
+	}
+	if strings.Contains(stderr.String(), "Liza main update is available") {
+		t.Fatalf("stderr should not contain update prompt, got:\n%s", stderr.String())
+	}
+}
+
+func TestMainCommitAheadFromCompare(t *testing.T) {
+	tests := []struct {
+		name string
+		info compareInfo
+		want bool
+	}{
+		{name: "upstream main ahead", info: compareInfo{AheadBy: 1, BehindBy: 0}, want: true},
+		{name: "current branch ahead", info: compareInfo{AheadBy: 0, BehindBy: 1}, want: false},
+		{name: "diverged", info: compareInfo{AheadBy: 1, BehindBy: 1}, want: false},
+		{name: "identical", info: compareInfo{AheadBy: 0, BehindBy: 0}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mainCommitAheadFromCompare(tt.info); got != tt.want {
+				t.Fatalf("mainCommitAheadFromCompare(%+v) = %v, want %v", tt.info, got, tt.want)
+			}
+		})
 	}
 }
 

@@ -65,6 +65,7 @@ type Config struct {
 	InstallTimeout time.Duration
 	LookupLatest   func(context.Context) (string, error)
 	LookupMain     func(context.Context) (string, error)
+	IsMainAhead    func(context.Context, string, string) (bool, error)
 	Install        func(context.Context, candidate, string, io.Writer, io.Writer) error
 	InstallTarget  func() (string, error)
 	CheckDisabled  func() bool
@@ -89,6 +90,11 @@ type moduleInfo struct {
 
 type releaseInfo struct {
 	TagName string `json:"tag_name"`
+}
+
+type compareInfo struct {
+	AheadBy  int `json:"ahead_by"`
+	BehindBy int `json:"behind_by"`
 }
 
 type candidate struct {
@@ -218,6 +224,13 @@ func lookupCandidate(ctx context.Context, cfg Config) (candidate, error) {
 		if latest == "" || sameCommit(current, latest) {
 			return candidate{}, nil
 		}
+		ahead, err := cfg.IsMainAhead(ctx, current, latest)
+		if err != nil {
+			return candidate{}, err
+		}
+		if !ahead {
+			return candidate{}, nil
+		}
 		return candidate{
 			Channel: channelMain,
 			Current: shortCommit(current),
@@ -255,6 +268,44 @@ func MainCommit(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return parseMainCommit(out)
+}
+
+func MainCommitAhead(ctx context.Context, current, latest string) (bool, error) {
+	current = normalizeCommit(current)
+	latest = normalizeCommit(latest)
+	if current == "" || latest == "" || sameCommit(current, latest) {
+		return false, nil
+	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/liza-mas/liza/compare/%s...%s", current, latest)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("compare main commits: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("compare main commits: HTTP %s", resp.Status)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("read compare response: %w", err)
+	}
+	var info compareInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return false, fmt.Errorf("parse compare response: %w", err)
+	}
+	return mainCommitAheadFromCompare(info), nil
+}
+
+func mainCommitAheadFromCompare(info compareInfo) bool {
+	return info.AheadBy > 0 && info.BehindBy == 0
 }
 
 func Install(ctx context.Context, next candidate, target string, stdout, stderr io.Writer) error {
@@ -983,6 +1034,9 @@ func withDefaults(cfg Config) Config {
 	}
 	if cfg.LookupMain == nil {
 		cfg.LookupMain = MainCommit
+	}
+	if cfg.IsMainAhead == nil {
+		cfg.IsMainAhead = MainCommitAhead
 	}
 	if cfg.Install == nil {
 		// Use the configured ReleaseBaseURL for test injection, empty string uses canonical GitHub
