@@ -236,6 +236,8 @@ func init() {
 	// This allows update checks to run before the main command, while still showing these flags
 	// in --help output. The manual parsing in internal/updater implements stop-at-double-dash
 	// and last-flag-wins semantics to match pflag/Cobra behavior for these specific flags.
+	// Update channel validation (stable/main) is performed during this pre-parsing phase,
+	// and invalid values cause a fatal error before Cobra command execution.
 	rootCmd.PersistentFlags().Bool("check-update", false, "check for a Liza update before running")
 	rootCmd.PersistentFlags().String("update-channel", "stable", "update check channel: stable or main")
 }

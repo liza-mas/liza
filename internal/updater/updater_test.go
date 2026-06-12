@@ -160,6 +160,7 @@ func TestMaybeUpdateAndReexecSkipsNonInteractive(t *testing.T) {
 }
 
 func TestMaybeUpdateAndReexecDeclineRunsOriginalVersion(t *testing.T) {
+	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	installed := false
 	disabled := false
@@ -168,7 +169,7 @@ func TestMaybeUpdateAndReexecDeclineRunsOriginalVersion(t *testing.T) {
 		CheckUpdate:    true,
 		Args:           []string{"/tmp/liza", "status"},
 		Stdin:          strings.NewReader("n\ny\n"),
-		Stdout:         io.Discard,
+		Stdout:         &stdout,
 		Stderr:         &stderr,
 		IsInteractive:  func() bool { return true },
 		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
@@ -187,21 +188,26 @@ func TestMaybeUpdateAndReexecDeclineRunsOriginalVersion(t *testing.T) {
 	if installed {
 		t.Fatal("expected declined update not to install")
 	}
+	// All updater prompts should go to stderr, not stdout
+	if stdout.String() != "" {
+		t.Fatalf("stdout should be empty for updater prompts, got: %s", stdout.String())
+	}
 	if !strings.Contains(stderr.String(), "Liza stable update is available (v1.0.0 -> v1.2.3)") {
-		t.Fatalf("prompt missing latest version:\n%s", stderr.String())
+		t.Fatalf("stderr missing prompt text:\n%s", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "Disable update checks for future runs?") {
-		t.Fatalf("decline output missing disable proposal:\n%s", stderr.String())
+		t.Fatalf("stderr missing disable proposal:\n%s", stderr.String())
 	}
 	if !disabled {
 		t.Fatal("expected accepted disable proposal to persist disable preference")
 	}
 	if !strings.Contains(stderr.String(), "Update checks disabled.") {
-		t.Fatalf("decline output missing disable confirmation:\n%s", stderr.String())
+		t.Fatalf("stderr missing disable confirmation:\n%s", stderr.String())
 	}
 }
 
 func TestMaybeUpdateAndReexecInstallsAndReexecsOriginalCommand(t *testing.T) {
+	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	var installedVersion string
 	var execPath string
@@ -215,7 +221,7 @@ func TestMaybeUpdateAndReexecInstallsAndReexecsOriginalCommand(t *testing.T) {
 		Args:           []string{"/tmp/old-liza", "agent", "orchestrator", "--agent-id", "orchestrator-1"},
 		Env:            []string{"PATH=/bin"},
 		Stdin:          strings.NewReader("yes\n"),
-		Stdout:         io.Discard,
+		Stdout:         &stdout,
 		Stderr:         &stderr,
 		IsInteractive:  func() bool { return true },
 		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
@@ -246,11 +252,69 @@ func TestMaybeUpdateAndReexecInstallsAndReexecsOriginalCommand(t *testing.T) {
 	if !slices.Equal(execArgs, wantArgs) {
 		t.Fatalf("exec args = %v, want %v", execArgs, wantArgs)
 	}
+	// All updater prompts should go to stderr, not stdout
+	if stdout.String() != "" {
+		t.Fatalf("stdout should be empty for updater prompts, got: %s", stdout.String())
+	}
 	if !slices.Contains(execEnv, "LIZA_SKIP_AUTO_UPDATE=1") {
 		t.Fatalf("exec env missing skip marker: %v", execEnv)
 	}
 	if !strings.Contains(stderr.String(), "Installing release binary v1.2.3") {
 		t.Fatalf("stderr missing release install plan:\n%s", stderr.String())
+	}
+}
+
+func TestMaybeUpdateAndReexecPromptsToStderr(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	// Test accepted update
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{"/tmp/liza", "version"},
+		Stdin:          strings.NewReader("y\n"),
+		Stdout:         &stdout,
+		Stderr:         &stderr,
+		IsInteractive:  func() bool { return true },
+		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
+		Install:        func(context.Context, candidate, string, io.Writer, io.Writer) error { return nil },
+		InstallTarget:  func() (string, error) { return "/tmp/liza", nil },
+		Reexec:         func(string, []string, []string) error { return errors.New("reexec sentinel") },
+	})
+	if !errors.Is(err, errors.New("reexec sentinel")) {
+		t.Fatalf("MaybeUpdateAndReexec error = %v, want reexec sentinel", err)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("stdout should be empty for accepted update, got: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Liza stable update is available") {
+		t.Fatalf("stderr missing prompt for accepted update:\n%s", stderr.String())
+	}
+
+	// Test declined update
+	stdout.Reset()
+	stderr.Reset()
+	err = MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{"/tmp/liza", "version"},
+		Stdin:          strings.NewReader("n\nn\n"),
+		Stdout:         &stdout,
+		Stderr:         &stderr,
+		IsInteractive:  func() bool { return true },
+		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
+		Install:        func(context.Context, candidate, string, io.Writer, io.Writer) error { return nil },
+		DisableCheck:   func() error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("MaybeUpdateAndReexec returned error: %v", err)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("stdout should be empty for declined update, got: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Liza stable update is available") {
+		t.Fatalf("stderr missing prompt for declined update:\n%s", stderr.String())
 	}
 }
 
@@ -392,29 +456,28 @@ func TestDownloadChecksums(t *testing.T) {
 	}
 }
 
-func TestReleaseBaseURLControlsBothArchiveAndChecksum(t *testing.T) {
-	// Test that LIZA_RELEASE_BASE_URL controls both archive and checksum URLs
-	oldBase := os.Getenv("LIZA_RELEASE_BASE_URL")
-	defer os.Setenv("LIZA_RELEASE_BASE_URL", oldBase)
-
+func TestReleaseBaseURLControlsArchiveOnly(t *testing.T) {
+	// Test that Config.ReleaseBaseURL controls archive URL but checksum URL is always canonical
 	customBase := "https://custom.example.com/releases"
-	os.Setenv("LIZA_RELEASE_BASE_URL", customBase)
 
-	archiveURL := releaseArchiveURL("v1.0.0", "linux", "amd64")
+	archiveURL := releaseArchiveURL("v1.0.0", "linux", "amd64", customBase)
 	checksumsURL := checksumURL("v1.0.0")
 
 	if !strings.Contains(archiveURL, customBase) {
 		t.Fatalf("archive URL = %s, want to contain %s", archiveURL, customBase)
 	}
-	if !strings.Contains(checksumsURL, customBase) {
-		t.Fatalf("checksums URL = %s, want to contain %s", checksumsURL, customBase)
+	// Checksums should always come from canonical GitHub
+	if !strings.Contains(checksumsURL, "https://github.com/liza-mas/liza/releases/download") {
+		t.Fatalf("checksums URL = %s, want to contain canonical GitHub URL", checksumsURL)
+	}
+	if strings.Contains(checksumsURL, customBase) {
+		t.Fatalf("checksums URL = %s, should NOT contain custom base URL", checksumsURL)
 	}
 
-	// Test default when env var is not set
-	os.Setenv("LIZA_RELEASE_BASE_URL", "")
+	// Test default when releaseBaseURL is empty
 	defaultBase := "https://github.com/liza-mas/liza/releases/download"
 
-	archiveURL = releaseArchiveURL("v1.0.0", "linux", "amd64")
+	archiveURL = releaseArchiveURL("v1.0.0", "linux", "amd64", "")
 	checksumsURL = checksumURL("v1.0.0")
 
 	if !strings.Contains(archiveURL, defaultBase) {
@@ -467,11 +530,6 @@ func TestInstallReleaseBinaryWithChecksum(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Temporarily override the release base URL
-	oldBase := os.Getenv("LIZA_RELEASE_BASE_URL")
-	defer os.Setenv("LIZA_RELEASE_BASE_URL", oldBase)
-	os.Setenv("LIZA_RELEASE_BASE_URL", server.URL)
-
 	dir := t.TempDir()
 	target := filepath.Join(dir, "liza")
 	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
@@ -479,7 +537,7 @@ func TestInstallReleaseBinaryWithChecksum(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard); err != nil {
+	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard, server.URL); err != nil {
 		t.Fatalf("installReleaseBinary failed: %v", err)
 	}
 
@@ -529,15 +587,11 @@ func TestInstallReleaseBinaryChecksumMismatch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	oldBase := os.Getenv("LIZA_RELEASE_BASE_URL")
-	defer os.Setenv("LIZA_RELEASE_BASE_URL", oldBase)
-	os.Setenv("LIZA_RELEASE_BASE_URL", server.URL)
-
 	dir := t.TempDir()
 	target := filepath.Join(dir, "liza")
 
 	ctx := context.Background()
-	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard); err == nil {
+	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard, server.URL); err == nil {
 		t.Fatal("installReleaseBinary with wrong checksum should fail")
 	}
 }
@@ -579,16 +633,188 @@ func TestInstallReleaseBinaryMissingChecksum(t *testing.T) {
 	}))
 	defer server.Close()
 
-	oldBase := os.Getenv("LIZA_RELEASE_BASE_URL")
-	defer os.Setenv("LIZA_RELEASE_BASE_URL", oldBase)
-	os.Setenv("LIZA_RELEASE_BASE_URL", server.URL)
+	dir := t.TempDir()
+	target := filepath.Join(dir, "liza")
+
+	ctx := context.Background()
+	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard, server.URL); err == nil {
+		t.Fatal("installReleaseBinary with missing checksum should fail")
+	}
+}
+
+func TestInstallBinaryFromTarGzRejectsSymlink(t *testing.T) {
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "liza",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "/etc/passwd",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "liza")
+
+	if err := installBinaryFromTarGz(bytes.NewReader(archive.Bytes()), target); err == nil {
+		t.Fatal("installBinaryFromTarGz should reject symlink entry")
+	}
+}
+
+func TestInstallBinaryFromTarGzRejectsHardlink(t *testing.T) {
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "liza",
+		Typeflag: tar.TypeLink,
+		Linkname: "/bin/sh",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "liza")
+
+	if err := installBinaryFromTarGz(bytes.NewReader(archive.Bytes()), target); err == nil {
+		t.Fatal("installBinaryFromTarGz should reject hardlink entry")
+	}
+}
+
+func TestInstallBinaryFromTarGzRejectsPathTraversal(t *testing.T) {
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	body := []byte("#!/bin/sh\necho malicious\n")
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "../etc/liza",
+		Mode: 0o755,
+		Size: int64(len(body)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "liza")
+
+	if err := installBinaryFromTarGz(bytes.NewReader(archive.Bytes()), target); err == nil {
+		t.Fatal("installBinaryFromTarGz should reject path traversal")
+	}
+}
+
+func TestInstallBinaryFromTarGzStripsDangerousPermissions(t *testing.T) {
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	body := []byte("#!/bin/sh\necho new\n")
+	// Set setuid, setgid, and sticky bits
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "liza",
+		Mode: 0o755 | 0o7000, // 0o755 + setuid(0o4000) + setgid(0o2000) + sticky(0o1000)
+		Size: int64(len(body)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "liza")
+
+	if err := installBinaryFromTarGz(bytes.NewReader(archive.Bytes()), target); err != nil {
+		t.Fatalf("installBinaryFromTarGz failed: %v", err)
+	}
+
+	// Verify dangerous bits were stripped
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mode := info.Mode().Perm()
+	if mode&0o7000 != 0 {
+		t.Fatalf("dangerous permission bits not stripped: got %o, want no setuid/setgid/sticky", mode)
+	}
+	// Verify executable bit is still set
+	if mode&0o111 == 0 {
+		t.Fatalf("executable bit was stripped: got %o", mode)
+	}
+}
+
+func TestInstallFromSourceShallowFetchFallback(t *testing.T) {
+	// This test uses a mock command runner to simulate shallow fetch failure
+	// and verify the fallback to deeper fetch
+	var calls []string
+	mockRun := func(ctx context.Context, stderr io.Writer, name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		// Simulate shallow fetch failure for exact commit
+		if name == "git" && len(args) >= 4 && args[3] == "fetch" && args[4] == "--depth" && args[5] == "1" {
+			return fmt.Errorf("shallow fetch failed")
+		}
+		// Allow other commands to succeed
+		return nil
+	}
+
+	// Temporarily replace runStreaming for this test
+	originalRunStreaming := runStreaming
+	defer func() { runStreaming = originalRunStreaming }()
+	runStreaming = mockRun
 
 	dir := t.TempDir()
 	target := filepath.Join(dir, "liza")
 
 	ctx := context.Background()
-	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard); err == nil {
-		t.Fatal("installReleaseBinary with missing checksum should fail")
+	err := installFromSource(ctx, "deadbeef123456", target, io.Discard)
+
+	// Should fail because we can't actually clone in this test, but we should see the fallback attempt
+	if err == nil {
+		t.Fatal("installFromSource should fail in mock environment")
+	}
+
+	// Verify we attempted both shallow and deep fetch
+	shallowAttempt := false
+	deepAttempt := false
+	for _, call := range calls {
+		if strings.Contains(call, "fetch --depth 1") {
+			shallowAttempt = true
+		}
+		if strings.Contains(call, "fetch") && !strings.Contains(call, "--depth 1") {
+			deepAttempt = true
+		}
+	}
+	if !shallowAttempt {
+		t.Fatal("expected shallow fetch attempt")
+	}
+	if !deepAttempt {
+		t.Fatal("expected deep fetch fallback attempt")
 	}
 }
 
@@ -662,6 +888,79 @@ func TestUpdateChannelStopsAtDoubleDash(t *testing.T) {
 	}
 }
 
+func TestValidateChannel(t *testing.T) {
+	tests := []struct {
+		name    string
+		channel string
+		wantErr bool
+	}{
+		{name: "stable", channel: "stable", wantErr: false},
+		{name: "main", channel: "main", wantErr: false},
+		{name: "STABLE uppercase", channel: "STABLE", wantErr: false},
+		{name: "MAIN uppercase", channel: "MAIN", wantErr: false},
+		{name: "bogus", channel: "bogus", wantErr: true},
+		{name: "empty", channel: "", wantErr: true},
+		{name: "random", channel: "random", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateChannel(tt.channel)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateChannel(%q) error = %v, wantErr %v", tt.channel, err, tt.wantErr)
+			}
+			if err != nil {
+				var fatalErr *FatalError
+				if !errors.As(err, &fatalErr) {
+					t.Fatalf("validateChannel(%q) should return FatalError, got %T", tt.channel, err)
+				}
+			}
+		})
+	}
+}
+
+func TestMaybeUpdateAndReexecInvalidChannelFatal(t *testing.T) {
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{"liza", "--update-channel=bogus", "version"},
+		Stdout:         io.Discard,
+		Stderr:         io.Discard,
+		IsInteractive:  func() bool { return true },
+	})
+	if err == nil {
+		t.Fatal("MaybeUpdateAndReexec with invalid channel should return error")
+	}
+	var fatalErr *FatalError
+	if !errors.As(err, &fatalErr) {
+		t.Fatal("invalid channel should return FatalError")
+	}
+	if !strings.Contains(err.Error(), "invalid update channel") {
+		t.Fatalf("error message should mention invalid channel, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "stable, main") {
+		t.Fatalf("error message should mention valid values, got: %v", err)
+	}
+}
+
+func TestMaybeUpdateAndReexecInvalidEnvChannelFatal(t *testing.T) {
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Env:            []string{"LIZA_UPDATE_CHANNEL=bogus"},
+		Stdout:         io.Discard,
+		Stderr:         io.Discard,
+		IsInteractive:  func() bool { return true },
+	})
+	if err == nil {
+		t.Fatal("MaybeUpdateAndReexec with invalid env channel should return error")
+	}
+	var fatalErr *FatalError
+	if !errors.As(err, &fatalErr) {
+		t.Fatal("invalid env channel should return FatalError")
+	}
+}
+
 func TestUpdateChannelLastWins(t *testing.T) {
 	tests := []struct {
 		name string
@@ -703,7 +1002,7 @@ func TestLookupCandidateInvalidChannelReturnsFatalError(t *testing.T) {
 }
 
 func TestMaybeUpdateAndReexecInstallFailureContinues(t *testing.T) {
-	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	installErr := errors.New("install failed")
 
 	err := MaybeUpdateAndReexec(context.Background(), Config{
@@ -711,8 +1010,8 @@ func TestMaybeUpdateAndReexecInstallFailureContinues(t *testing.T) {
 		CheckUpdate:    true,
 		Args:           []string{"/tmp/old-liza", "version"},
 		Stdin:          strings.NewReader("y\n"),
-		Stdout:         &stdout,
-		Stderr:         &stdout,
+		Stdout:         io.Discard,
+		Stderr:         &stderr,
 		IsInteractive:  func() bool { return true },
 		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
 		Install: func(context.Context, candidate, string, io.Writer, io.Writer) error {
@@ -727,8 +1026,74 @@ func TestMaybeUpdateAndReexecInstallFailureContinues(t *testing.T) {
 		t.Fatalf("MaybeUpdateAndReexec with install failure should return nil, got: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), "update install failed") {
-		t.Fatalf("stderr missing install failure message:\n%s", stdout.String())
+	if !strings.Contains(stderr.String(), "update install failed") {
+		t.Fatalf("stderr missing install failure message:\n%s", stderr.String())
+	}
+}
+
+func TestMaybeUpdateAndReexecVerificationFailurePreventsReexec(t *testing.T) {
+	var stderr bytes.Buffer
+	reexecCalled := false
+
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{"/tmp/old-liza", "version"},
+		Stdin:          strings.NewReader("y\n"),
+		Stdout:         io.Discard,
+		Stderr:         &stderr,
+		IsInteractive:  func() bool { return true },
+		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
+		Install:        func(context.Context, candidate, string, io.Writer, io.Writer) error { return nil },
+		InstallTarget:  func() (string, error) { return "/tmp/liza", nil },
+		VerifyInstall: func(context.Context, string, io.Writer) error {
+			return fmt.Errorf("verification failed")
+		},
+		Reexec: func(string, []string, []string) error {
+			reexecCalled = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaybeUpdateAndReexec with verification failure should return nil, got: %v", err)
+	}
+	if reexecCalled {
+		t.Fatal("reexec should not be called when verification fails")
+	}
+	if !strings.Contains(stderr.String(), "post-install verification failed") {
+		t.Fatalf("stderr missing verification failure message:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "falling through to original command without reexec") {
+		t.Fatalf("stderr missing fallback message:\n%s", stderr.String())
+	}
+}
+
+func TestInstallTimeoutContext(t *testing.T) {
+	var installCtx context.Context
+	timeoutSet := false
+
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{"/tmp/old-liza", "version"},
+		Stdin:          strings.NewReader("y\n"),
+		Stdout:         io.Discard,
+		Stderr:         io.Discard,
+		IsInteractive:  func() bool { return true },
+		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
+		Install: func(ctx context.Context, next candidate, target string, stdout, stderr io.Writer) error {
+			installCtx = ctx
+			_, timeoutSet = ctx.Deadline()
+			return nil
+		},
+		InstallTarget: func() (string, error) { return "/tmp/liza", nil },
+		Reexec:        func(string, []string, []string) error { return errors.New("reexec sentinel") },
+	})
+	if !errors.Is(err, errors.New("reexec sentinel")) {
+		t.Fatalf("MaybeUpdateAndReexec error = %v, want reexec sentinel", err)
+	}
+	if !timeoutSet {
+		t.Fatal("install context should have a deadline set")
 	}
 }
 

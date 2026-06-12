@@ -31,11 +31,10 @@ const (
 	channelStable = "stable"
 	channelMain   = "main"
 
-	channelEnvName     = "LIZA_UPDATE_CHANNEL"
-	checkEnvName       = "LIZA_CHECK_UPDATE"
-	skipEnvName        = "LIZA_SKIP_AUTO_UPDATE"
-	releaseBaseEnvName = "LIZA_RELEASE_BASE_URL"
-	updatePrefs        = "update.json"
+	channelEnvName = "LIZA_UPDATE_CHANNEL"
+	checkEnvName   = "LIZA_CHECK_UPDATE"
+	skipEnvName    = "LIZA_SKIP_AUTO_UPDATE"
+	updatePrefs    = "update.json"
 )
 
 // FatalError represents a fatal CLI input/config error that should exit
@@ -71,6 +70,14 @@ type Config struct {
 	CheckDisabled  func() bool
 	DisableCheck   func() error
 	Reexec         func(string, []string, []string) error
+	// ReleaseBaseURL allows test override of the release archive base URL.
+	// In production, this is always the canonical GitHub releases URL.
+	// The checksum URL is always fetched from the canonical GitHub releases URL
+	// to maintain trust chain integrity.
+	ReleaseBaseURL string
+	// VerifyInstall runs post-install verification (e.g., binary version check).
+	// If nil, verification is skipped.
+	VerifyInstall func(context.Context, string, io.Writer) error
 }
 
 type moduleInfo struct {
@@ -91,6 +98,12 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 	cfg = withDefaults(cfg)
 	if shouldSkip(cfg) {
 		return nil
+	}
+
+	// Validate update channel if explicitly set via flag
+	channel := updateChannel(cfg)
+	if channel != channelStable && channel != channelMain {
+		return &FatalError{fmt.Errorf("invalid update channel %q (valid values: stable, main)", channel)}
 	}
 
 	lookupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -131,6 +144,17 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 	if err := cfg.Install(installCtx, next, target, cfg.Stderr, cfg.Stderr); err != nil {
 		fmt.Fprintf(cfg.Stderr, "liza: update install failed: %v\n", err)
 		return nil
+	}
+
+	// Post-install verification if configured
+	if cfg.VerifyInstall != nil {
+		verifyCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		if err := cfg.VerifyInstall(verifyCtx, target, cfg.Stderr); err != nil {
+			fmt.Fprintf(cfg.Stderr, "liza: post-install verification failed: %v\n", err)
+			fmt.Fprintf(cfg.Stderr, "liza: falling through to original command without reexec\n")
+			return nil
+		}
 	}
 
 	args := reexecArgs(cfg.Args)
@@ -199,11 +223,17 @@ func MainCommit(ctx context.Context) (string, error) {
 }
 
 func Install(ctx context.Context, next candidate, target string, stdout, stderr io.Writer) error {
+	return InstallWithBaseURL(ctx, next, target, stdout, stderr, "")
+}
+
+// InstallWithBaseURL is the actual implementation that accepts a releaseBaseURL parameter.
+// This allows test injection while maintaining a safe default in production.
+func InstallWithBaseURL(ctx context.Context, next candidate, target string, stdout, stderr io.Writer, releaseBaseURL string) error {
 	switch next.Channel {
 	case channelStable:
-		return installReleaseBinary(ctx, next.Ref, target, stderr)
+		return installReleaseBinary(ctx, next.Ref, target, stderr, releaseBaseURL)
 	case channelMain:
-		return installFromSource(ctx, next.Ref, target, stderr, stderr)
+		return installFromSource(ctx, next.Ref, target, stderr)
 	default:
 		return fmt.Errorf("invalid update channel %q", next.Channel)
 	}
@@ -231,8 +261,8 @@ func installPlan(next candidate, target string) string {
 	}
 }
 
-func installReleaseBinary(ctx context.Context, version, target string, stderr io.Writer) error {
-	url := releaseArchiveURL(version, runtime.GOOS, runtime.GOARCH)
+func installReleaseBinary(ctx context.Context, version, target string, stderr io.Writer, releaseBaseURL string) error {
+	url := releaseArchiveURL(version, runtime.GOOS, runtime.GOARCH, releaseBaseURL)
 	fmt.Fprintf(stderr, "Downloading %s\n", url)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -275,10 +305,10 @@ func installReleaseBinary(ctx context.Context, version, target string, stderr io
 	return installBinaryFromTarGz(bytes.NewReader(archiveData), target)
 }
 
-func releaseArchiveURL(version, goos, goarch string) string {
+func releaseArchiveURL(version, goos, goarch string, releaseBaseURL string) string {
 	versionBare := strings.TrimPrefix(version, "v")
 	archive := fmt.Sprintf("liza-%s-%s-%s.tar.gz", versionBare, goos, goarch)
-	baseURL := strings.TrimRight(os.Getenv(releaseBaseEnvName), "/")
+	baseURL := strings.TrimRight(releaseBaseURL, "/")
 	if baseURL == "" {
 		baseURL = "https://github.com/liza-mas/liza/releases/download"
 	}
@@ -286,10 +316,9 @@ func releaseArchiveURL(version, goos, goarch string) string {
 }
 
 func checksumURL(version string) string {
-	baseURL := strings.TrimRight(os.Getenv(releaseBaseEnvName), "/")
-	if baseURL == "" {
-		baseURL = "https://github.com/liza-mas/liza/releases/download"
-	}
+	// Always fetch checksums from the canonical GitHub releases URL
+	// to maintain trust chain integrity, regardless of any archive mirror.
+	baseURL := "https://github.com/liza-mas/liza/releases/download"
 	return fmt.Sprintf("%s/%s/checksums.txt", baseURL, version)
 }
 
@@ -354,10 +383,33 @@ func installBinaryFromTarGz(r io.Reader, target string) error {
 		if err != nil {
 			return fmt.Errorf("read release tar: %w", err)
 		}
-		if header.Typeflag != tar.TypeReg || filepath.Base(header.Name) != "liza" {
+
+		// Only accept regular files named exactly "liza" by basename
+		if filepath.Base(header.Name) != "liza" {
 			continue
 		}
-		return replaceBinary(target, tr, header.FileInfo().Mode())
+
+		// Reject dangerous entry types
+		switch header.Typeflag {
+		case tar.TypeReg:
+			// Regular file is allowed
+		case tar.TypeRegA:
+			// Regular file (extended) is allowed
+		default:
+			// Reject symlinks, hardlinks, directories, devices, etc.
+			return fmt.Errorf("reject dangerous tar entry type %d for %s", header.Typeflag, header.Name)
+		}
+
+		// Reject path traversal attempts
+		if strings.Contains(header.Name, "..") {
+			return fmt.Errorf("reject path traversal in tar entry: %s", header.Name)
+		}
+
+		// Strip dangerous permission bits (setuid, setgid, sticky)
+		mode := header.FileInfo().Mode()
+		mode &^= 0o7000 // Clear setuid (0o4000), setgid (0o2000), sticky (0o1000)
+
+		return replaceBinary(target, tr, mode)
 	}
 }
 
@@ -395,7 +447,7 @@ func replaceBinary(target string, r io.Reader, mode os.FileMode) error {
 	return nil
 }
 
-func installFromSource(ctx context.Context, commit, target string, stdout, stderr io.Writer) error {
+func installFromSource(ctx context.Context, commit, target string, stderr io.Writer) error {
 	tmpDir, err := os.MkdirTemp("", "liza-source-update-*")
 	if err != nil {
 		return fmt.Errorf("create source checkout: %w", err)
@@ -404,19 +456,24 @@ func installFromSource(ctx context.Context, commit, target string, stdout, stder
 
 	repoDir := filepath.Join(tmpDir, "liza")
 	// Clone with depth 1 for main branch
-	if err := runStreaming(ctx, stdout, stderr, "git", "clone", "--depth", "1", "--branch", "main", "https://github.com/liza-mas/liza.git", repoDir); err != nil {
+	if err := runStreaming(ctx, stderr, "git", "clone", "--depth", "1", "--branch", "main", "https://github.com/liza-mas/liza.git", repoDir); err != nil {
 		return fmt.Errorf("clone liza source: %w", err)
 	}
 	// Fetch the exact commit we need (may not be in the shallow clone)
-	if err := runStreaming(ctx, stdout, stderr, "git", "-C", repoDir, "fetch", "--depth", "1", "origin", commit); err != nil {
-		return fmt.Errorf("fetch commit %s: %w", commit, err)
+	fetchErr := runStreaming(ctx, stderr, "git", "-C", repoDir, "fetch", "--depth", "1", "origin", commit)
+	if fetchErr != nil {
+		// Fallback: try a deeper fetch if shallow exact fetch failed
+		fmt.Fprintf(stderr, "Shallow fetch failed for commit %s, attempting deeper fetch...\n", commit)
+		if err := runStreaming(ctx, stderr, "git", "-C", repoDir, "fetch", "origin", commit); err != nil {
+			return fmt.Errorf("fetch commit %s (shallow and deep fetch both failed): %w (original shallow error: %v)", commit, err, fetchErr)
+		}
 	}
 	// Checkout the fetched commit
-	if err := runStreaming(ctx, stdout, stderr, "git", "-C", repoDir, "checkout", "--detach", "FETCH_HEAD"); err != nil {
+	if err := runStreaming(ctx, stderr, "git", "-C", repoDir, "checkout", "--detach", "FETCH_HEAD"); err != nil {
 		return fmt.Errorf("checkout commit %s: %w", commit, err)
 	}
 	installDir := filepath.Dir(target)
-	if err := runStreaming(ctx, stdout, stderr, "make", "-C", repoDir, "install", "INSTALL_DIR="+installDir); err != nil {
+	if err := runStreaming(ctx, stderr, "make", "-C", repoDir, "install", "INSTALL_DIR="+installDir); err != nil {
 		return fmt.Errorf("build liza source: %w", err)
 	}
 	return nil
@@ -424,6 +481,18 @@ func installFromSource(ctx context.Context, commit, target string, stdout, stder
 
 func SyscallExec(path string, args []string, env []string) error {
 	return syscall.Exec(path, args, env)
+}
+
+// VerifyInstall runs a post-install verification by executing the installed binary
+// with a version command to ensure it's functional.
+func VerifyInstall(ctx context.Context, target string, stderr io.Writer) error {
+	cmd := exec.CommandContext(ctx, target, "version")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("version check failed: %w", err)
+	}
+	return nil
 }
 
 func parseLatestVersion(data []byte) (string, error) {
@@ -627,6 +696,14 @@ func DisableUpdateChecks() error {
 	return nil
 }
 
+func validateChannel(channel string) error {
+	channel = strings.ToLower(strings.TrimSpace(channel))
+	if channel != channelStable && channel != channelMain {
+		return &FatalError{fmt.Errorf("invalid update channel %q (valid values: stable, main)", channel)}
+	}
+	return nil
+}
+
 func updateChannel(cfg Config) string {
 	// Stop parsing at --
 	preDashArgs := cfg.Args
@@ -697,7 +774,11 @@ func withDefaults(cfg Config) Config {
 		cfg.LookupMain = MainCommit
 	}
 	if cfg.Install == nil {
-		cfg.Install = Install
+		// Use the configured ReleaseBaseURL for test injection, empty string uses canonical GitHub
+		baseURL := cfg.ReleaseBaseURL
+		cfg.Install = func(ctx context.Context, next candidate, target string, stdout, stderr io.Writer) error {
+			return InstallWithBaseURL(ctx, next, target, stdout, stderr, baseURL)
+		}
 	}
 	if cfg.InstallTarget == nil {
 		cfg.InstallTarget = InstallTarget
@@ -710,6 +791,9 @@ func withDefaults(cfg Config) Config {
 	}
 	if cfg.Reexec == nil {
 		cfg.Reexec = SyscallExec
+	}
+	if cfg.VerifyInstall == nil {
+		cfg.VerifyInstall = VerifyInstall
 	}
 	return cfg
 }
@@ -729,9 +813,9 @@ func runOutput(ctx context.Context, name string, args ...string) ([]byte, error)
 	return out, nil
 }
 
-func runStreaming(ctx context.Context, stdout, stderr io.Writer, name string, args ...string) error {
+var runStreaming = func(ctx context.Context, stderr io.Writer, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout = stdout
+	cmd.Stdout = stderr
 	cmd.Stderr = stderr
 	return cmd.Run()
 }
