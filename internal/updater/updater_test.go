@@ -553,12 +553,64 @@ func TestUpdateSettingsOnly(t *testing.T) {
 		{name: "subcommand", args: []string{"liza", "--check-update", "version"}, want: false},
 		{name: "double dash payload", args: []string{"liza", "--check-update", "--", "version"}, want: false},
 		{name: "no settings", args: []string{"liza"}, want: false},
+		{name: "invalid check value", args: []string{"liza", "--check-update=maybe"}, want: false},
+		{name: "empty check value", args: []string{"liza", "--check-update="}, want: false},
+		{name: "empty channel equals value", args: []string{"liza", "--update-channel="}, want: false},
+		{name: "missing channel value", args: []string{"liza", "--update-channel"}, want: false},
+		{name: "invalid channel value", args: []string{"liza", "--update-channel=nightly"}, want: false},
+		{name: "channel value is another flag", args: []string{"liza", "--update-channel", "--check-update"}, want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := UpdateSettingsOnly(tt.args); got != tt.want {
 				t.Fatalf("UpdateSettingsOnly(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMaybeUpdateAndReexecMalformedUpdateFlagsFatal(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "invalid check value", args: []string{"liza", "--check-update=maybe"}, want: "invalid --check-update value"},
+		{name: "empty check value", args: []string{"liza", "--check-update="}, want: "invalid --check-update value"},
+		{name: "empty channel equals value", args: []string{"liza", "--update-channel="}, want: "invalid update channel"},
+		{name: "missing channel value", args: []string{"liza", "--update-channel"}, want: "--update-channel requires a value"},
+		{name: "invalid channel value", args: []string{"liza", "--update-channel=nightly"}, want: "invalid update channel"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := MaybeUpdateAndReexec(context.Background(), Config{
+				CurrentVersion: "v1.0.0",
+				CurrentCommit:  "111111111111",
+				Args:           tt.args,
+				Env:            []string{},
+				Stdout:         io.Discard,
+				Stderr:         io.Discard,
+				IsInteractive:  func() bool { return true },
+				LookupLatest: func(context.Context) (string, error) {
+					t.Fatal("malformed update flags should fail before lookup")
+					return "", nil
+				},
+				LookupMain: func(context.Context) (string, error) {
+					t.Fatal("malformed update flags should fail before lookup")
+					return "", nil
+				},
+			})
+			if err == nil {
+				t.Fatal("MaybeUpdateAndReexec returned nil, want fatal error")
+			}
+			var fatalErr *FatalError
+			if !errors.As(err, &fatalErr) {
+				t.Fatalf("error = %T, want FatalError", err)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %q, want to contain %q", err.Error(), tt.want)
 			}
 		})
 	}

@@ -106,6 +106,9 @@ type candidate struct {
 
 func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 	cfg = withDefaults(cfg)
+	if err := validateExplicitUpdateFlags(cfg.Args); err != nil {
+		return err
+	}
 	if err := persistExplicitUpdatePreferences(cfg); err != nil {
 		return err
 	}
@@ -894,6 +897,42 @@ func persistExplicitUpdatePreferences(cfg Config) error {
 	return nil
 }
 
+func validateExplicitUpdateFlags(args []string) error {
+	preDashArgs := args
+	for i, arg := range args {
+		if arg == "--" {
+			preDashArgs = args[:i]
+			break
+		}
+	}
+
+	for i := 1; i < len(preDashArgs); i++ {
+		arg := preDashArgs[i]
+		switch {
+		case strings.HasPrefix(arg, "--check-update="):
+			value := strings.TrimPrefix(arg, "--check-update=")
+			if value != "true" && value != "false" {
+				return &FatalError{fmt.Errorf("invalid --check-update value %q (valid values: true, false)", value)}
+			}
+		case arg == "--update-channel":
+			if i+1 >= len(preDashArgs) {
+				return &FatalError{fmt.Errorf("--update-channel requires a value (valid values: stable, main)")}
+			}
+			channel := strings.ToLower(strings.TrimSpace(preDashArgs[i+1]))
+			if err := validateChannel(channel); err != nil {
+				return err
+			}
+			i++
+		case strings.HasPrefix(arg, "--update-channel="):
+			channel := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
+			if err := validateChannel(channel); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func UpdateSettingsOnly(args []string) bool {
 	changed := false
 	for i := 1; i < len(args); i++ {
@@ -901,12 +940,29 @@ func UpdateSettingsOnly(args []string) bool {
 		switch {
 		case arg == "--":
 			return changed && i == len(args)-1
-		case arg == "--check-update" || strings.HasPrefix(arg, "--check-update="):
+		case arg == "--check-update":
+			changed = true
+		case strings.HasPrefix(arg, "--check-update="):
+			value := strings.TrimPrefix(arg, "--check-update=")
+			if value != "true" && value != "false" {
+				return false
+			}
 			changed = true
 		case arg == "--update-channel":
+			if i+1 >= len(args) {
+				return false
+			}
+			channel := strings.ToLower(strings.TrimSpace(args[i+1]))
+			if channel == "" || strings.HasPrefix(channel, "-") || validateChannel(channel) != nil {
+				return false
+			}
 			changed = true
 			i++
 		case strings.HasPrefix(arg, "--update-channel="):
+			channel := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
+			if channel == "" || validateChannel(channel) != nil {
+				return false
+			}
 			changed = true
 		default:
 			return false
