@@ -537,7 +537,7 @@ func TestInstallReleaseBinaryWithChecksum(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard, server.URL); err != nil {
+	if err := installReleaseBinaryWithChecksumBase(ctx, "v1.0.0", target, io.Discard, server.URL, server.URL); err != nil {
 		t.Fatalf("installReleaseBinary failed: %v", err)
 	}
 
@@ -591,7 +591,7 @@ func TestInstallReleaseBinaryChecksumMismatch(t *testing.T) {
 	target := filepath.Join(dir, "liza")
 
 	ctx := context.Background()
-	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard, server.URL); err == nil {
+	if err := installReleaseBinaryWithChecksumBase(ctx, "v1.0.0", target, io.Discard, server.URL, server.URL); err == nil {
 		t.Fatal("installReleaseBinary with wrong checksum should fail")
 	}
 }
@@ -637,7 +637,7 @@ func TestInstallReleaseBinaryMissingChecksum(t *testing.T) {
 	target := filepath.Join(dir, "liza")
 
 	ctx := context.Background()
-	if err := installReleaseBinary(ctx, "v1.0.0", target, io.Discard, server.URL); err == nil {
+	if err := installReleaseBinaryWithChecksumBase(ctx, "v1.0.0", target, io.Discard, server.URL, server.URL); err == nil {
 		t.Fatal("installReleaseBinary with missing checksum should fail")
 	}
 }

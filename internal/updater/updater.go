@@ -262,6 +262,10 @@ func installPlan(next candidate, target string) string {
 }
 
 func installReleaseBinary(ctx context.Context, version, target string, stderr io.Writer, releaseBaseURL string) error {
+	return installReleaseBinaryWithChecksumBase(ctx, version, target, stderr, releaseBaseURL, "")
+}
+
+func installReleaseBinaryWithChecksumBase(ctx context.Context, version, target string, stderr io.Writer, releaseBaseURL, checksumBaseURL string) error {
 	url := releaseArchiveURL(version, runtime.GOOS, runtime.GOARCH, releaseBaseURL)
 	fmt.Fprintf(stderr, "Downloading %s\n", url)
 
@@ -285,7 +289,7 @@ func installReleaseBinary(ctx context.Context, version, target string, stderr io
 	}
 
 	// Download and verify checksums
-	checksumsURL := checksumURL(version)
+	checksumsURL := checksumURLWithBase(version, checksumBaseURL)
 	checksums, err := downloadChecksums(ctx, checksumsURL)
 	if err != nil {
 		return fmt.Errorf("download checksums: %w", err)
@@ -316,9 +320,16 @@ func releaseArchiveURL(version, goos, goarch string, releaseBaseURL string) stri
 }
 
 func checksumURL(version string) string {
+	return checksumURLWithBase(version, "")
+}
+
+func checksumURLWithBase(version, checksumBaseURL string) string {
 	// Always fetch checksums from the canonical GitHub releases URL
 	// to maintain trust chain integrity, regardless of any archive mirror.
-	baseURL := "https://github.com/liza-mas/liza/releases/download"
+	baseURL := strings.TrimRight(checksumBaseURL, "/")
+	if baseURL == "" {
+		baseURL = "https://github.com/liza-mas/liza/releases/download"
+	}
 	return fmt.Sprintf("%s/%s/checksums.txt", baseURL, version)
 }
 
