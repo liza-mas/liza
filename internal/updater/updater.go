@@ -493,8 +493,8 @@ func installBinaryFromTarGz(r io.Reader, target string) error {
 		switch header.Typeflag {
 		case tar.TypeReg:
 			// Regular file is allowed
-		case tar.TypeRegA:
-			// Regular file (extended) is allowed
+		case '\x00':
+			// Legacy regular file marker is allowed
 		default:
 			// Reject symlinks, hardlinks, directories, devices, etc.
 			return fmt.Errorf("reject dangerous tar entry type %d for %s", header.Typeflag, header.Name)
@@ -775,32 +775,12 @@ func shouldSkip(cfg Config) bool {
 }
 
 func checkUpdateFlag(args []string) (bool, bool) {
-	// Stop parsing at --
-	preDashArgs := args
-	for i, arg := range args {
-		if arg == "--" {
-			preDashArgs = args[:i]
-			break
-		}
+	flags, err := parseUpdateFlags(args)
+	if err != nil {
+		return false, false
 	}
-
-	var enabled *bool
-	for i := 1; i < len(preDashArgs); i++ {
-		arg := preDashArgs[i]
-		if strings.HasPrefix(arg, "--check-update=") {
-			value := strings.TrimPrefix(arg, "--check-update=")
-			if value == "true" {
-				enabled = &[]bool{true}[0]
-			} else if value == "false" {
-				enabled = &[]bool{false}[0]
-			}
-		} else if arg == "--check-update" {
-			// --check-update without = is treated as true
-			enabled = &[]bool{true}[0]
-		}
-	}
-	if enabled != nil {
-		return *enabled, true
+	if flags.checkUpdate != nil {
+		return *flags.checkUpdate, true
 	}
 	return false, false
 }
@@ -834,6 +814,12 @@ func proposeDisableCheck(stdin *bufio.Reader, stdout io.Writer, disable func() e
 type preferences struct {
 	CheckUpdate *bool  `json:"check_update,omitempty"`
 	Channel     string `json:"channel,omitempty"`
+}
+
+type parsedUpdateFlags struct {
+	checkUpdate  *bool
+	channel      string
+	settingsOnly bool
 }
 
 func updatePrefsPath() (string, error) {
@@ -898,77 +884,61 @@ func persistExplicitUpdatePreferences(cfg Config) error {
 }
 
 func validateExplicitUpdateFlags(args []string) error {
-	preDashArgs := args
-	for i, arg := range args {
-		if arg == "--" {
-			preDashArgs = args[:i]
-			break
-		}
-	}
-
-	for i := 1; i < len(preDashArgs); i++ {
-		arg := preDashArgs[i]
-		switch {
-		case strings.HasPrefix(arg, "--check-update="):
-			value := strings.TrimPrefix(arg, "--check-update=")
-			if value != "true" && value != "false" {
-				return &FatalError{fmt.Errorf("invalid --check-update value %q (valid values: true, false)", value)}
-			}
-		case arg == "--update-channel":
-			if i+1 >= len(preDashArgs) {
-				return &FatalError{fmt.Errorf("--update-channel requires a value (valid values: stable, main)")}
-			}
-			channel := strings.ToLower(strings.TrimSpace(preDashArgs[i+1]))
-			if err := validateChannel(channel); err != nil {
-				return err
-			}
-			i++
-		case strings.HasPrefix(arg, "--update-channel="):
-			channel := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
-			if err := validateChannel(channel); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	_, err := parseUpdateFlags(args)
+	return err
 }
 
 func UpdateSettingsOnly(args []string) bool {
+	flags, err := parseUpdateFlags(args)
+	return err == nil && flags.settingsOnly
+}
+
+func parseUpdateFlags(args []string) (parsedUpdateFlags, error) {
+	var flags parsedUpdateFlags
 	changed := false
+	settingsOnly := true
 	for i := 1; i < len(args); i++ {
 		arg := args[i]
 		switch {
 		case arg == "--":
-			return changed && i == len(args)-1
+			flags.settingsOnly = changed && settingsOnly && i == len(args)-1
+			return flags, nil
 		case arg == "--check-update":
-			changed = true
+			flags.checkUpdate = boolPtr(true)
 		case strings.HasPrefix(arg, "--check-update="):
 			value := strings.TrimPrefix(arg, "--check-update=")
 			if value != "true" && value != "false" {
-				return false
+				return flags, &FatalError{fmt.Errorf("invalid --check-update value %q (valid values: true, false)", value)}
 			}
-			changed = true
+			flags.checkUpdate = boolPtr(value == "true")
 		case arg == "--update-channel":
-			if i+1 >= len(args) {
-				return false
+			if i+1 >= len(args) || args[i+1] == "--" {
+				return flags, &FatalError{fmt.Errorf("--update-channel requires a value (valid values: stable, main)")}
 			}
 			channel := strings.ToLower(strings.TrimSpace(args[i+1]))
-			if channel == "" || strings.HasPrefix(channel, "-") || validateChannel(channel) != nil {
-				return false
+			flags.channel = channel
+			if err := validateChannel(channel); err != nil {
+				return flags, err
 			}
-			changed = true
 			i++
 		case strings.HasPrefix(arg, "--update-channel="):
 			channel := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
-			if channel == "" || validateChannel(channel) != nil {
-				return false
+			flags.channel = channel
+			if err := validateChannel(channel); err != nil {
+				return flags, err
 			}
-			changed = true
 		default:
-			return false
+			settingsOnly = false
+			continue
 		}
+		changed = true
 	}
-	return changed
+	flags.settingsOnly = changed && settingsOnly
+	return flags, nil
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func SavedUpdateSettingsSummary() string {
@@ -1029,26 +999,12 @@ func updateChannel(cfg Config) string {
 }
 
 func updateChannelFlag(args []string) (string, bool) {
-	// Stop parsing at --
-	preDashArgs := args
-	for i, arg := range args {
-		if arg == "--" {
-			preDashArgs = args[:i]
-			break
-		}
+	flags, err := parseUpdateFlags(args)
+	if err != nil {
+		return "", false
 	}
-
-	var channel string
-	for i := 1; i < len(preDashArgs); i++ {
-		arg := preDashArgs[i]
-		if strings.HasPrefix(arg, "--update-channel=") {
-			channel = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
-		} else if arg == "--update-channel" && i+1 < len(preDashArgs) {
-			channel = strings.ToLower(strings.TrimSpace(preDashArgs[i+1]))
-		}
-	}
-	if channel != "" {
-		return channel, true
+	if flags.channel != "" {
+		return flags.channel, true
 	}
 	return "", false
 }

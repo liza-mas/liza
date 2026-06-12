@@ -34,6 +34,22 @@ Use `--force` to refresh existing global files after an upgrade. Use
 `--agent-tools <path>` to install a custom `AGENT_TOOLS.md` instead of the
 embedded default.
 
+## Update Preferences
+
+Interactive update preferences live in `~/.liza/update.json`. Explicit
+`--check-update` and `--update-channel` flags persist there so future
+interactive `liza` runs reuse the saved choice.
+
+| Key | Values | Purpose |
+|-----|--------|---------|
+| `check_update` | `true`, `false`, or unset | Enables or disables interactive update checks |
+| `channel` | `stable`, `main`, or unset | Selects release updates or main-branch updates |
+
+Command-line flags take precedence over saved preferences and update the file.
+`LIZA_UPDATE_CHANNEL` overrides the saved channel for that process. Saved
+`check_update` controls whether update checks run when no explicit flag is
+provided.
+
 ## Project Initialization (`liza init`)
 
 Run `liza init` in each project where Liza should activate the contract. The
