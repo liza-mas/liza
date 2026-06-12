@@ -87,6 +87,10 @@ type moduleInfo struct {
 	} `json:"Origin"`
 }
 
+type releaseInfo struct {
+	TagName string `json:"tag_name"`
+}
+
 type candidate struct {
 	Channel string
 	Current string
@@ -207,11 +211,23 @@ func lookupCandidate(ctx context.Context, cfg Config) (candidate, error) {
 }
 
 func LatestModuleVersion(ctx context.Context) (string, error) {
-	out, err := runOutput(ctx, "go", "list", "-m", "-json", modulePath+"@latest")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/liza-mas/liza/releases/latest", nil)
 	if err != nil {
 		return "", err
 	}
-	return parseLatestVersion(out)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("lookup latest release: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("lookup latest release: HTTP %s", resp.Status)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read latest release response: %w", err)
+	}
+	return parseLatestReleaseVersion(data)
 }
 
 func MainCommit(ctx context.Context) (string, error) {
@@ -514,6 +530,18 @@ func parseLatestVersion(data []byte) (string, error) {
 	version := normalizeVersion(info.Version)
 	if !semver.IsValid(version) {
 		return "", fmt.Errorf("latest module version is not semantic: %q", info.Version)
+	}
+	return version, nil
+}
+
+func parseLatestReleaseVersion(data []byte) (string, error) {
+	var info releaseInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return "", fmt.Errorf("parse latest release response: %w", err)
+	}
+	version := normalizeVersion(info.TagName)
+	if !semver.IsValid(version) {
+		return "", fmt.Errorf("latest release tag is not semantic: %q", info.TagName)
 	}
 	return version, nil
 }

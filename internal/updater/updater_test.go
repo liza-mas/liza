@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,16 @@ func TestParseLatestVersion(t *testing.T) {
 	got, err := parseLatestVersion([]byte(`{"Path":"github.com/liza-mas/liza","Version":"v1.2.3"}`))
 	if err != nil {
 		t.Fatalf("parseLatestVersion returned error: %v", err)
+	}
+	if got != "v1.2.3" {
+		t.Fatalf("version = %q, want v1.2.3", got)
+	}
+}
+
+func TestParseLatestReleaseVersion(t *testing.T) {
+	got, err := parseLatestReleaseVersion([]byte(`{"tag_name":"v1.2.3"}`))
+	if err != nil {
+		t.Fatalf("parseLatestReleaseVersion returned error: %v", err)
 	}
 	if got != "v1.2.3" {
 		t.Fatalf("version = %q, want v1.2.3", got)
@@ -232,6 +243,9 @@ func TestMaybeUpdateAndReexecInstallsAndReexecsOriginalCommand(t *testing.T) {
 		InstallTarget: func() (string, error) {
 			return "/home/user/go/bin/liza", nil
 		},
+		VerifyInstall: func(context.Context, string, io.Writer) error {
+			return nil
+		},
 		Reexec: func(path string, args []string, env []string) error {
 			execPath = path
 			execArgs = append([]string(nil), args...)
@@ -267,6 +281,7 @@ func TestMaybeUpdateAndReexecInstallsAndReexecsOriginalCommand(t *testing.T) {
 func TestMaybeUpdateAndReexecPromptsToStderr(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	reexecErr := errors.New("reexec sentinel")
 
 	// Test accepted update
 	err := MaybeUpdateAndReexec(context.Background(), Config{
@@ -280,9 +295,10 @@ func TestMaybeUpdateAndReexecPromptsToStderr(t *testing.T) {
 		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
 		Install:        func(context.Context, candidate, string, io.Writer, io.Writer) error { return nil },
 		InstallTarget:  func() (string, error) { return "/tmp/liza", nil },
-		Reexec:         func(string, []string, []string) error { return errors.New("reexec sentinel") },
+		VerifyInstall:  func(context.Context, string, io.Writer) error { return nil },
+		Reexec:         func(string, []string, []string) error { return reexecErr },
 	})
-	if !errors.Is(err, errors.New("reexec sentinel")) {
+	if !errors.Is(err, reexecErr) {
 		t.Fatalf("MaybeUpdateAndReexec error = %v, want reexec sentinel", err)
 	}
 	if stdout.String() != "" {
@@ -344,6 +360,9 @@ func TestMaybeUpdateAndReexecMainChannelInstallsCommitRef(t *testing.T) {
 		},
 		InstallTarget: func() (string, error) {
 			return "/home/user/go/bin/liza", nil
+		},
+		VerifyInstall: func(context.Context, string, io.Writer) error {
+			return nil
 		},
 		Reexec: func(string, []string, []string) error {
 			return reexecErr
@@ -1069,8 +1088,8 @@ func TestMaybeUpdateAndReexecVerificationFailurePreventsReexec(t *testing.T) {
 }
 
 func TestInstallTimeoutContext(t *testing.T) {
-	var installCtx context.Context
 	timeoutSet := false
+	reexecErr := errors.New("reexec sentinel")
 
 	err := MaybeUpdateAndReexec(context.Background(), Config{
 		CurrentVersion: "v1.0.0",
@@ -1087,9 +1106,12 @@ func TestInstallTimeoutContext(t *testing.T) {
 			return nil
 		},
 		InstallTarget: func() (string, error) { return "/tmp/liza", nil },
-		Reexec:        func(string, []string, []string) error { return errors.New("reexec sentinel") },
+		VerifyInstall: func(context.Context, string, io.Writer) error {
+			return nil
+		},
+		Reexec:        func(string, []string, []string) error { return reexecErr },
 	})
-	if !errors.Is(err, errors.New("reexec sentinel")) {
+	if !errors.Is(err, reexecErr) {
 		t.Fatalf("MaybeUpdateAndReexec error = %v, want reexec sentinel", err)
 	}
 	if !timeoutSet {
@@ -1144,6 +1166,9 @@ func TestMaybeUpdateAndReexecUsesInstallTimeout(t *testing.T) {
 		InstallTarget: func() (string, error) {
 			return "/home/user/go/bin/liza", nil
 		},
+		VerifyInstall: func(context.Context, string, io.Writer) error {
+			return nil
+		},
 		Reexec: func(string, []string, []string) error {
 			return reexecErr
 		},
@@ -1163,7 +1188,6 @@ func TestMaybeUpdateAndReexecUsesInstallTimeout(t *testing.T) {
 	}
 
 	// Verify the deadline is approximately 5 minutes from now
-	now := time.Now()
 	remaining := time.Until(deadline)
 	if remaining < 4*time.Minute || remaining > 6*time.Minute {
 		t.Fatalf("Install deadline remaining = %v, want ~5 minutes", remaining)
@@ -1206,6 +1230,10 @@ func TestInstallFromSourceFetchesExactCommit(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git commit failed: %v", err)
 	}
+	cmd = exec.Command("git", "-C", repoDir, "branch", "-M", "main")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git branch main failed: %v", err)
+	}
 
 	// Create a second commit on main
 	if err := os.WriteFile(testFile, []byte("second"), 0o644); err != nil {
@@ -1242,7 +1270,8 @@ func TestInstallFromSourceFetchesExactCommit(t *testing.T) {
 	// Now test that we can checkout the old commit using the installFromSource logic
 	// We'll manually replicate the shallow clone + fetch pattern
 	cloneDir := filepath.Join(tmpDir, "clone")
-	cmd = exec.Command("git", "clone", "--depth", "1", "--branch", "main", repoDir, cloneDir)
+	repoURL := (&url.URL{Scheme: "file", Path: repoDir}).String()
+	cmd = exec.Command("git", "clone", "--depth", "1", "--branch", "main", repoURL, cloneDir)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git clone failed: %v", err)
 	}
