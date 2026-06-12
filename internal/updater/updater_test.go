@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -534,15 +535,16 @@ func TestInstallReleaseBinaryWithChecksum(t *testing.T) {
 	hash := sha256.Sum256(archiveData)
 	checksum := hex.EncodeToString(hash[:])
 
+	archiveName := fmt.Sprintf("liza-1.0.0-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1.0.0/liza-1.0.0-linux-amd64.tar.gz" {
+		if r.URL.Path == "/v1.0.0/"+archiveName {
 			w.WriteHeader(http.StatusOK)
 			w.Write(archiveData)
 			return
 		}
 		if r.URL.Path == "/v1.0.0/checksums.txt" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(checksum + "  liza-1.0.0-linux-amd64.tar.gz\n"))
+			w.Write([]byte(checksum + "  " + archiveName + "\n"))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -591,15 +593,16 @@ func TestInstallReleaseBinaryChecksumMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	archiveName := fmt.Sprintf("liza-1.0.0-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1.0.0/liza-1.0.0-linux-amd64.tar.gz" {
+		if r.URL.Path == "/v1.0.0/"+archiveName {
 			w.WriteHeader(http.StatusOK)
 			w.Write(archive.Bytes())
 			return
 		}
 		if r.URL.Path == "/v1.0.0/checksums.txt" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("wrongchecksum  liza-1.0.0-linux-amd64.tar.gz\n"))
+			w.Write([]byte("wrongchecksum  " + archiveName + "\n"))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -637,8 +640,9 @@ func TestInstallReleaseBinaryMissingChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	archiveName := fmt.Sprintf("liza-1.0.0-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1.0.0/liza-1.0.0-linux-amd64.tar.gz" {
+		if r.URL.Path == "/v1.0.0/"+archiveName {
 			w.WriteHeader(http.StatusOK)
 			w.Write(archive.Bytes())
 			return
