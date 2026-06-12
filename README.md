@@ -164,6 +164,28 @@ Mode-specific guides:
 - **Multi-Agent (Liza)**: [Multi-Agent Usage](support-docs/USAGE_MULTI_AGENTS.md), then try the [Demo](docs/DEMO.md)
 - **Reference**: [Configuration](support-docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](support-docs/TROUBLESHOOTING.md)
 
+### Update Settings
+
+Update flags persist to `~/.liza/update.json`, so you only need to set them
+once:
+
+```bash
+liza --check-update --update-channel=main
+```
+
+That writes:
+
+```json
+{
+  "check_update": true,
+  "channel": "main"
+}
+```
+
+Future interactive `liza` runs use the saved settings. `--check-update=false`
+disables saved checks, and `--update-channel=stable` switches back to release
+updates.
+
 ### Recommended Tools
 
 Liza optimizes cost-to-quality, not cost-to-lets-cross-fingers. These tools reduce token usage without sacrificing output quality:

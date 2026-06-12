@@ -283,6 +283,10 @@ func main() {
 		// If we get here with a non-fatal error, it's a reexec error or similar - log and continue
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	}
+	if updater.UpdateSettingsOnly(os.Args) {
+		fmt.Fprint(os.Stdout, updater.SavedUpdateSettingsSummary())
+		return
+	}
 	if err := rootCmd.Execute(); err != nil {
 		if !errors.Is(err, jsonout.ErrAlreadyWritten) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

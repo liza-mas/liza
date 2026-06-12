@@ -100,6 +100,12 @@ type candidate struct {
 
 func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 	cfg = withDefaults(cfg)
+	if err := persistExplicitUpdatePreferences(cfg); err != nil {
+		return err
+	}
+	if UpdateSettingsOnly(cfg.Args) {
+		return nil
+	}
 	if shouldSkip(cfg) {
 		return nil
 	}
@@ -702,6 +708,9 @@ func shouldSkip(cfg Config) bool {
 	if cfg.CheckDisabled != nil && cfg.CheckDisabled() {
 		return true
 	}
+	if prefs := readUpdatePreferences(); prefs.CheckUpdate != nil {
+		return !*prefs.CheckUpdate || !cfg.IsInteractive()
+	}
 	if !checkUpdateEnvEnabled(cfg) {
 		return true
 	}
@@ -769,7 +778,8 @@ func proposeDisableCheck(stdin *bufio.Reader, stdout io.Writer, disable func() e
 }
 
 type preferences struct {
-	CheckUpdate *bool `json:"check_update,omitempty"`
+	CheckUpdate *bool  `json:"check_update,omitempty"`
+	Channel     string `json:"channel,omitempty"`
 }
 
 func updatePrefsPath() (string, error) {
@@ -781,22 +791,93 @@ func updatePrefsPath() (string, error) {
 }
 
 func UpdateChecksDisabled() bool {
-	path, err := updatePrefsPath()
-	if err != nil {
-		return false
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	var prefs preferences
-	if err := json.Unmarshal(data, &prefs); err != nil {
-		return false
-	}
+	prefs := readUpdatePreferences()
 	return prefs.CheckUpdate != nil && !*prefs.CheckUpdate
 }
 
+func readUpdatePreferences() preferences {
+	path, err := updatePrefsPath()
+	if err != nil {
+		return preferences{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return preferences{}
+	}
+	var prefs preferences
+	if err := json.Unmarshal(data, &prefs); err != nil {
+		return preferences{}
+	}
+	prefs.Channel = strings.ToLower(strings.TrimSpace(prefs.Channel))
+	return prefs
+}
+
 func DisableUpdateChecks() error {
+	prefs := readUpdatePreferences()
+	disabled := false
+	prefs.CheckUpdate = &disabled
+	return writeUpdatePreferences(prefs)
+}
+
+func persistExplicitUpdatePreferences(cfg Config) error {
+	var changed bool
+	prefs := readUpdatePreferences()
+
+	if enabled, ok := checkUpdateFlag(cfg.Args); ok {
+		prefs.CheckUpdate = &enabled
+		changed = true
+	}
+	if channel, ok := updateChannelFlag(cfg.Args); ok {
+		if err := validateChannel(channel); err != nil {
+			return err
+		}
+		prefs.Channel = channel
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	if err := writeUpdatePreferences(prefs); err != nil {
+		return &FatalError{fmt.Errorf("write update preferences: %w", err)}
+	}
+	return nil
+}
+
+func UpdateSettingsOnly(args []string) bool {
+	changed := false
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return changed && i == len(args)-1
+		case arg == "--check-update" || strings.HasPrefix(arg, "--check-update="):
+			changed = true
+		case arg == "--update-channel":
+			changed = true
+			i++
+		case strings.HasPrefix(arg, "--update-channel="):
+			changed = true
+		default:
+			return false
+		}
+	}
+	return changed
+}
+
+func SavedUpdateSettingsSummary() string {
+	prefs := readUpdatePreferences()
+	checkUpdate := "unset"
+	if prefs.CheckUpdate != nil {
+		checkUpdate = fmt.Sprintf("%t", *prefs.CheckUpdate)
+	}
+	channel := prefs.Channel
+	if channel == "" {
+		channel = channelStable
+	}
+	return fmt.Sprintf("Update settings saved: check_update=%s, channel=%s\n", checkUpdate, channel)
+}
+
+func writeUpdatePreferences(prefs preferences) error {
 	path, err := updatePrefsPath()
 	if err != nil {
 		return err
@@ -804,8 +885,8 @@ func DisableUpdateChecks() error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create global liza config dir: %w", err)
 	}
-	disabled := false
-	data, err := json.MarshalIndent(preferences{CheckUpdate: &disabled}, "", "  ")
+	prefs.Channel = strings.ToLower(strings.TrimSpace(prefs.Channel))
+	data, err := json.MarshalIndent(prefs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode update preferences: %w", err)
 	}
@@ -825,11 +906,27 @@ func validateChannel(channel string) error {
 }
 
 func updateChannel(cfg Config) string {
+	if channel, ok := updateChannelFlag(cfg.Args); ok {
+		return channel
+	}
+	if cfg.Channel != "" {
+		return strings.ToLower(strings.TrimSpace(cfg.Channel))
+	}
+	if envChannel := envValue(cfg.Env, channelEnvName); envChannel != "" {
+		return strings.ToLower(strings.TrimSpace(envChannel))
+	}
+	if prefs := readUpdatePreferences(); prefs.Channel != "" {
+		return prefs.Channel
+	}
+	return channelStable
+}
+
+func updateChannelFlag(args []string) (string, bool) {
 	// Stop parsing at --
-	preDashArgs := cfg.Args
-	for i, arg := range cfg.Args {
+	preDashArgs := args
+	for i, arg := range args {
 		if arg == "--" {
-			preDashArgs = cfg.Args[:i]
+			preDashArgs = args[:i]
 			break
 		}
 	}
@@ -844,15 +941,9 @@ func updateChannel(cfg Config) string {
 		}
 	}
 	if channel != "" {
-		return channel
+		return channel, true
 	}
-	if cfg.Channel != "" {
-		return strings.ToLower(strings.TrimSpace(cfg.Channel))
-	}
-	if envChannel := envValue(cfg.Env, channelEnvName); envChannel != "" {
-		return strings.ToLower(strings.TrimSpace(envChannel))
-	}
-	return channelStable
+	return "", false
 }
 
 func reexecArgs(args []string) []string {

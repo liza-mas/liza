@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,42 @@ import (
 	"testing"
 	"time"
 )
+
+func tempHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	return home
+}
+
+func writePrefsForTest(t *testing.T, home string, prefs preferences) {
+	t.Helper()
+	dir := filepath.Join(home, ".liza")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create temp .liza dir: %v", err)
+	}
+	data, err := json.MarshalIndent(prefs, "", "  ")
+	if err != nil {
+		t.Fatalf("encode prefs: %v", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(dir, updatePrefs), data, 0o644); err != nil {
+		t.Fatalf("write prefs: %v", err)
+	}
+}
+
+func readPrefsForTest(t *testing.T, home string) preferences {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(home, ".liza", updatePrefs))
+	if err != nil {
+		t.Fatalf("read prefs: %v", err)
+	}
+	var prefs preferences
+	if err := json.Unmarshal(data, &prefs); err != nil {
+		t.Fatalf("decode prefs: %v", err)
+	}
+	return prefs
+}
 
 func TestParseLatestVersion(t *testing.T) {
 	got, err := parseLatestVersion([]byte(`{"Path":"github.com/liza-mas/liza","Version":"v1.2.3"}`))
@@ -86,6 +123,7 @@ func TestMaybeUpdateAndReexecSkipsDevBuild(t *testing.T) {
 }
 
 func TestMaybeUpdateAndReexecSkipsWhenCheckUpdateOff(t *testing.T) {
+	tempHome(t)
 	called := false
 	err := MaybeUpdateAndReexec(context.Background(), Config{
 		CurrentVersion: "v1.0.0",
@@ -384,6 +422,133 @@ func TestUpdateChannelFlagOverridesEnv(t *testing.T) {
 	})
 	if got != "main" {
 		t.Fatalf("channel = %q, want main", got)
+	}
+}
+
+func TestMaybeUpdateAndReexecExplicitFlagsPersistUpdatePreferences(t *testing.T) {
+	home := tempHome(t)
+
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CurrentCommit:  "111111111111",
+		Args:           []string{"liza", "--check-update", "--update-channel=main"},
+		Env:            []string{},
+		Stdout:         io.Discard,
+		Stderr:         io.Discard,
+		IsInteractive:  func() bool { return true },
+		LookupMain: func(context.Context) (string, error) {
+			t.Fatal("settings-only invocation should not run update lookup")
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaybeUpdateAndReexec returned error: %v", err)
+	}
+
+	prefs := readPrefsForTest(t, home)
+	if prefs.CheckUpdate == nil || !*prefs.CheckUpdate {
+		t.Fatalf("check_update = %v, want true", prefs.CheckUpdate)
+	}
+	if prefs.Channel != "main" {
+		t.Fatalf("channel = %q, want main", prefs.Channel)
+	}
+}
+
+func TestUpdateSettingsOnly(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "check only", args: []string{"liza", "--check-update"}, want: true},
+		{name: "channel equals only", args: []string{"liza", "--update-channel=main"}, want: true},
+		{name: "channel space only", args: []string{"liza", "--update-channel", "main"}, want: true},
+		{name: "both only", args: []string{"liza", "--check-update=false", "--update-channel=stable"}, want: true},
+		{name: "subcommand", args: []string{"liza", "--check-update", "version"}, want: false},
+		{name: "double dash payload", args: []string{"liza", "--check-update", "--", "version"}, want: false},
+		{name: "no settings", args: []string{"liza"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := UpdateSettingsOnly(tt.args); got != tt.want {
+				t.Fatalf("UpdateSettingsOnly(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSavedUpdateSettingsSummary(t *testing.T) {
+	home := tempHome(t)
+	enabled := true
+	writePrefsForTest(t, home, preferences{CheckUpdate: &enabled, Channel: "main"})
+
+	got := SavedUpdateSettingsSummary()
+	want := "Update settings saved: check_update=true, channel=main\n"
+	if got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+}
+
+func TestMaybeUpdateAndReexecSavedPreferencesEnableMainChannel(t *testing.T) {
+	home := tempHome(t)
+	enabled := true
+	writePrefsForTest(t, home, preferences{CheckUpdate: &enabled, Channel: "main"})
+
+	mainCalled := false
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CurrentCommit:  "111111111111",
+		Args:           []string{"liza", "version"},
+		Env:            []string{},
+		Stdout:         io.Discard,
+		Stderr:         io.Discard,
+		IsInteractive:  func() bool { return true },
+		LookupLatest: func(context.Context) (string, error) {
+			t.Fatal("stable lookup should not run for saved main channel")
+			return "", nil
+		},
+		LookupMain: func(context.Context) (string, error) {
+			mainCalled = true
+			return "111111111111", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaybeUpdateAndReexec returned error: %v", err)
+	}
+	if !mainCalled {
+		t.Fatal("expected saved check_update preference to run main channel lookup")
+	}
+}
+
+func TestUpdateChannelEnvOverridesSavedPreference(t *testing.T) {
+	home := tempHome(t)
+	writePrefsForTest(t, home, preferences{Channel: "main"})
+
+	got := updateChannel(Config{
+		Args: []string{"liza", "version"},
+		Env:  []string{"LIZA_UPDATE_CHANNEL=stable"},
+	})
+	if got != "stable" {
+		t.Fatalf("channel = %q, want stable", got)
+	}
+}
+
+func TestDisableUpdateChecksPreservesSavedChannel(t *testing.T) {
+	home := tempHome(t)
+	enabled := true
+	writePrefsForTest(t, home, preferences{CheckUpdate: &enabled, Channel: "main"})
+
+	if err := DisableUpdateChecks(); err != nil {
+		t.Fatalf("DisableUpdateChecks returned error: %v", err)
+	}
+
+	prefs := readPrefsForTest(t, home)
+	if prefs.CheckUpdate == nil || *prefs.CheckUpdate {
+		t.Fatalf("check_update = %v, want false", prefs.CheckUpdate)
+	}
+	if prefs.Channel != "main" {
+		t.Fatalf("channel = %q, want main", prefs.Channel)
 	}
 }
 
@@ -889,6 +1054,7 @@ func TestCheckUpdateFlagLastWins(t *testing.T) {
 }
 
 func TestUpdateChannelStopsAtDoubleDash(t *testing.T) {
+	tempHome(t)
 	tests := []struct {
 		name string
 		args []string
