@@ -145,7 +145,17 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 	installCtx, cancel := context.WithTimeout(ctx, cfg.InstallTimeout)
 	defer cancel()
 
+	rollback, err := prepareInstallRollback(target)
+	if err != nil {
+		fmt.Fprintf(cfg.Stderr, "liza: prepare update rollback failed: %v\n", err)
+		return nil
+	}
+	defer rollback.cleanup()
+
 	if err := cfg.Install(installCtx, next, target, cfg.Stderr, cfg.Stderr); err != nil {
+		if restoreErr := rollback.restore(target); restoreErr != nil {
+			fmt.Fprintf(cfg.Stderr, "liza: restore previous install failed: %v\n", restoreErr)
+		}
 		fmt.Fprintf(cfg.Stderr, "liza: update install failed: %v\n", err)
 		return nil
 	}
@@ -156,6 +166,9 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 		defer cancel()
 		if err := cfg.VerifyInstall(verifyCtx, target, cfg.Stderr); err != nil {
 			fmt.Fprintf(cfg.Stderr, "liza: post-install verification failed: %v\n", err)
+			if restoreErr := rollback.restore(target); restoreErr != nil {
+				fmt.Fprintf(cfg.Stderr, "liza: restore previous install failed: %v\n", restoreErr)
+			}
 			fmt.Fprintf(cfg.Stderr, "liza: falling through to original command without reexec\n")
 			return nil
 		}
@@ -472,6 +485,74 @@ func replaceBinary(target string, r io.Reader, mode os.FileMode) error {
 	}
 	cleanup = false
 	return nil
+}
+
+type installRollback struct {
+	backupPath string
+}
+
+func prepareInstallRollback(target string) (installRollback, error) {
+	info, err := os.Stat(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return installRollback{}, nil
+		}
+		return installRollback{}, fmt.Errorf("stat current binary: %w", err)
+	}
+	if info.IsDir() {
+		return installRollback{}, fmt.Errorf("current binary target is a directory: %s", target)
+	}
+
+	src, err := os.Open(target)
+	if err != nil {
+		return installRollback{}, fmt.Errorf("open current binary: %w", err)
+	}
+	defer src.Close()
+
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".liza-update-backup-*")
+	if err != nil {
+		return installRollback{}, fmt.Errorf("create backup binary: %w", err)
+	}
+	backupPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(backupPath)
+		}
+	}()
+
+	if _, err := io.Copy(tmp, src); err != nil {
+		_ = tmp.Close()
+		return installRollback{}, fmt.Errorf("copy current binary to backup: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return installRollback{}, fmt.Errorf("close backup binary: %w", err)
+	}
+	if err := os.Chmod(backupPath, info.Mode().Perm()); err != nil {
+		return installRollback{}, fmt.Errorf("chmod backup binary: %w", err)
+	}
+
+	cleanup = false
+	return installRollback{backupPath: backupPath}, nil
+}
+
+func (r *installRollback) restore(target string) error {
+	if r.backupPath == "" {
+		return nil
+	}
+	if err := os.Rename(r.backupPath, target); err != nil {
+		return fmt.Errorf("restore %s from backup: %w", target, err)
+	}
+	r.backupPath = ""
+	return nil
+}
+
+func (r *installRollback) cleanup() {
+	if r.backupPath == "" {
+		return
+	}
+	_ = os.Remove(r.backupPath)
+	r.backupPath = ""
 }
 
 func installFromSource(ctx context.Context, commit, target string, stderr io.Writer) error {

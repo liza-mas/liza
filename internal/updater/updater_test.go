@@ -1007,8 +1007,8 @@ func TestUpdateChannelLastWins(t *testing.T) {
 
 func TestLookupCandidateInvalidChannelReturnsFatalError(t *testing.T) {
 	cfg := Config{
-		Args:  []string{"liza", "--update-channel=bogus", "version"},
-		Env:   []string{},
+		Args:    []string{"liza", "--update-channel=bogus", "version"},
+		Env:     []string{},
 		Channel: "bogus",
 	}
 
@@ -1090,6 +1090,55 @@ func TestMaybeUpdateAndReexecVerificationFailurePreventsReexec(t *testing.T) {
 	}
 }
 
+func TestMaybeUpdateAndReexecRestoresTargetWhenVerificationFails(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "liza")
+	oldBody := []byte("#!/bin/sh\necho old\n")
+	if err := os.WriteFile(target, oldBody, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	reexecCalled := false
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{target, "version"},
+		Stdin:          strings.NewReader("y\n"),
+		Stdout:         io.Discard,
+		Stderr:         &stderr,
+		IsInteractive:  func() bool { return true },
+		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
+		Install: func(_ context.Context, _ candidate, target string, _ io.Writer, _ io.Writer) error {
+			return os.WriteFile(target, []byte("#!/bin/sh\necho broken\n"), 0o755)
+		},
+		InstallTarget: func() (string, error) { return target, nil },
+		VerifyInstall: func(context.Context, string, io.Writer) error {
+			return fmt.Errorf("verification failed")
+		},
+		Reexec: func(string, []string, []string) error {
+			reexecCalled = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaybeUpdateAndReexec with verification failure should return nil, got: %v", err)
+	}
+	if reexecCalled {
+		t.Fatal("reexec should not be called when verification fails")
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(oldBody) {
+		t.Fatalf("target body after failed verification = %q, want restored old binary", string(got))
+	}
+	if !strings.Contains(stderr.String(), "post-install verification failed") {
+		t.Fatalf("stderr missing verification failure message:\n%s", stderr.String())
+	}
+}
+
 func TestInstallTimeoutContext(t *testing.T) {
 	timeoutSet := false
 	reexecErr := errors.New("reexec sentinel")
@@ -1111,7 +1160,7 @@ func TestInstallTimeoutContext(t *testing.T) {
 		VerifyInstall: func(context.Context, string, io.Writer) error {
 			return nil
 		},
-		Reexec:        func(string, []string, []string) error { return reexecErr },
+		Reexec: func(string, []string, []string) error { return reexecErr },
 	})
 	if !errors.Is(err, reexecErr) {
 		t.Fatalf("MaybeUpdateAndReexec error = %v, want reexec sentinel", err)
