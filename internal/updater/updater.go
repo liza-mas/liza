@@ -6,7 +6,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,17 +26,31 @@ import (
 )
 
 const (
-	modulePath  = "github.com/liza-mas/liza"
-	commandPath = modulePath + "/cmd/liza"
+	modulePath = "github.com/liza-mas/liza"
 
 	channelStable = "stable"
 	channelMain   = "main"
 
-	channelEnvName = "LIZA_UPDATE_CHANNEL"
-	checkEnvName   = "LIZA_CHECK_UPDATE"
-	skipEnvName    = "LIZA_SKIP_AUTO_UPDATE"
-	updatePrefs    = "update.json"
+	channelEnvName     = "LIZA_UPDATE_CHANNEL"
+	checkEnvName       = "LIZA_CHECK_UPDATE"
+	skipEnvName        = "LIZA_SKIP_AUTO_UPDATE"
+	releaseBaseEnvName = "LIZA_RELEASE_BASE_URL"
+	updatePrefs        = "update.json"
 )
+
+// FatalError represents a fatal CLI input/config error that should exit
+// before command execution, as opposed to non-fatal update failures.
+type FatalError struct {
+	Err error
+}
+
+func (e *FatalError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *FatalError) Unwrap() error {
+	return e.Err
+}
 
 type Config struct {
 	CurrentVersion string
@@ -46,6 +63,7 @@ type Config struct {
 	IsInteractive  func() bool
 	CheckUpdate    bool
 	Channel        string
+	InstallTimeout time.Duration
 	LookupLatest   func(context.Context) (string, error)
 	LookupMain     func(context.Context) (string, error)
 	Install        func(context.Context, candidate, string, io.Writer, io.Writer) error
@@ -80,6 +98,12 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 
 	next, err := lookupCandidate(lookupCtx, cfg)
 	if err != nil {
+		// FatalError represents invalid CLI input/config that should exit
+		var fatalErr *FatalError
+		if errors.As(err, &fatalErr) {
+			return err
+		}
+		// Non-fatal lookup failures: log to stderr and continue
 		fmt.Fprintf(cfg.Stderr, "liza: update check failed: %v\n", err)
 		return nil
 	}
@@ -88,18 +112,25 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 	}
 
 	input := bufio.NewReader(cfg.Stdin)
-	if !confirmUpdate(input, cfg.Stdout, next) {
-		proposeDisableCheck(input, cfg.Stdout, cfg.DisableCheck)
+	if !confirmUpdate(input, cfg.Stderr, next) {
+		proposeDisableCheck(input, cfg.Stderr, cfg.DisableCheck)
 		return nil
 	}
 
 	target, err := cfg.InstallTarget()
 	if err != nil {
-		return fmt.Errorf("find liza install target: %w", err)
+		fmt.Fprintf(cfg.Stderr, "liza: find install target failed: %v\n", err)
+		return nil
 	}
-	fmt.Fprintln(cfg.Stdout, installPlan(next, target))
-	if err := cfg.Install(ctx, next, target, cfg.Stdout, cfg.Stderr); err != nil {
-		return fmt.Errorf("update install: %w", err)
+	fmt.Fprintln(cfg.Stderr, installPlan(next, target))
+
+	// Use a separate bounded context for install operations
+	installCtx, cancel := context.WithTimeout(ctx, cfg.InstallTimeout)
+	defer cancel()
+
+	if err := cfg.Install(installCtx, next, target, cfg.Stderr, cfg.Stderr); err != nil {
+		fmt.Fprintf(cfg.Stderr, "liza: update install failed: %v\n", err)
+		return nil
 	}
 
 	args := reexecArgs(cfg.Args)
@@ -147,7 +178,7 @@ func lookupCandidate(ctx context.Context, cfg Config) (candidate, error) {
 			Ref:     latest,
 		}, nil
 	default:
-		return candidate{}, fmt.Errorf("invalid update channel %q (want stable or main)", updateChannel(cfg))
+		return candidate{}, &FatalError{fmt.Errorf("invalid update channel %q (want stable or main)", updateChannel(cfg))}
 	}
 }
 
@@ -170,9 +201,9 @@ func MainCommit(ctx context.Context) (string, error) {
 func Install(ctx context.Context, next candidate, target string, stdout, stderr io.Writer) error {
 	switch next.Channel {
 	case channelStable:
-		return installReleaseBinary(ctx, next.Ref, target, stdout)
+		return installReleaseBinary(ctx, next.Ref, target, stderr)
 	case channelMain:
-		return installFromSource(ctx, next.Ref, target, stdout, stderr)
+		return installFromSource(ctx, next.Ref, target, stderr, stderr)
 	default:
 		return fmt.Errorf("invalid update channel %q", next.Channel)
 	}
@@ -200,9 +231,9 @@ func installPlan(next candidate, target string) string {
 	}
 }
 
-func installReleaseBinary(ctx context.Context, version, target string, stdout io.Writer) error {
+func installReleaseBinary(ctx context.Context, version, target string, stderr io.Writer) error {
 	url := releaseArchiveURL(version, runtime.GOOS, runtime.GOARCH)
-	fmt.Fprintf(stdout, "Downloading %s\n", url)
+	fmt.Fprintf(stderr, "Downloading %s\n", url)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -216,17 +247,95 @@ func installReleaseBinary(ctx context.Context, version, target string, stdout io
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download release archive: HTTP %s", resp.Status)
 	}
-	return installBinaryFromTarGz(resp.Body, target)
+
+	// Read the entire archive into memory for checksum verification
+	archiveData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read release archive: %w", err)
+	}
+
+	// Download and verify checksums
+	checksumsURL := checksumURL(version)
+	checksums, err := downloadChecksums(ctx, checksumsURL)
+	if err != nil {
+		return fmt.Errorf("download checksums: %w", err)
+	}
+
+	versionBare := strings.TrimPrefix(version, "v")
+	archiveName := fmt.Sprintf("liza-%s-%s-%s.tar.gz", versionBare, runtime.GOOS, runtime.GOARCH)
+	expectedChecksum, ok := checksums[archiveName]
+	if !ok {
+		return fmt.Errorf("checksum not found for %s", archiveName)
+	}
+
+	if err := verifyChecksum(archiveData, expectedChecksum); err != nil {
+		return fmt.Errorf("verify checksum: %w", err)
+	}
+
+	return installBinaryFromTarGz(bytes.NewReader(archiveData), target)
 }
 
 func releaseArchiveURL(version, goos, goarch string) string {
 	versionBare := strings.TrimPrefix(version, "v")
 	archive := fmt.Sprintf("liza-%s-%s-%s.tar.gz", versionBare, goos, goarch)
-	baseURL := strings.TrimRight(os.Getenv("LIZA_RELEASE_BASE_URL"), "/")
+	baseURL := strings.TrimRight(os.Getenv(releaseBaseEnvName), "/")
 	if baseURL == "" {
 		baseURL = "https://github.com/liza-mas/liza/releases/download"
 	}
 	return fmt.Sprintf("%s/%s/%s", baseURL, version, archive)
+}
+
+func checksumURL(version string) string {
+	baseURL := strings.TrimRight(os.Getenv(releaseBaseEnvName), "/")
+	if baseURL == "" {
+		baseURL = "https://github.com/liza-mas/liza/releases/download"
+	}
+	return fmt.Sprintf("%s/%s/checksums.txt", baseURL, version)
+}
+
+func downloadChecksums(ctx context.Context, url string) (map[string]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create checksum request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download checksums: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download checksums: HTTP %s", resp.Status)
+	}
+
+	checksums := make(map[string]string)
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		// GoReleaser format: "<sha256>  <filename>" or "<sha256> *<filename>"
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+		checksum := parts[0]
+		filename := strings.TrimPrefix(parts[1], "*")
+		checksums[filename] = checksum
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read checksums: %w", err)
+	}
+	return checksums, nil
+}
+
+func verifyChecksum(data []byte, expectedChecksum string) error {
+	hash := sha256.Sum256(data)
+	actual := hex.EncodeToString(hash[:])
+	if actual != expectedChecksum {
+		return fmt.Errorf("checksum mismatch: got %s, want %s", actual, expectedChecksum)
+	}
+	return nil
 }
 
 func installBinaryFromTarGz(r io.Reader, target string) error {
@@ -294,11 +403,17 @@ func installFromSource(ctx context.Context, commit, target string, stdout, stder
 	defer os.RemoveAll(tmpDir)
 
 	repoDir := filepath.Join(tmpDir, "liza")
+	// Clone with depth 1 for main branch
 	if err := runStreaming(ctx, stdout, stderr, "git", "clone", "--depth", "1", "--branch", "main", "https://github.com/liza-mas/liza.git", repoDir); err != nil {
 		return fmt.Errorf("clone liza source: %w", err)
 	}
-	if err := runStreaming(ctx, stdout, stderr, "git", "-C", repoDir, "checkout", commit); err != nil {
-		return fmt.Errorf("checkout liza source %s: %w", commit, err)
+	// Fetch the exact commit we need (may not be in the shallow clone)
+	if err := runStreaming(ctx, stdout, stderr, "git", "-C", repoDir, "fetch", "--depth", "1", "origin", commit); err != nil {
+		return fmt.Errorf("fetch commit %s: %w", commit, err)
+	}
+	// Checkout the fetched commit
+	if err := runStreaming(ctx, stdout, stderr, "git", "-C", repoDir, "checkout", "--detach", "FETCH_HEAD"); err != nil {
+		return fmt.Errorf("checkout commit %s: %w", commit, err)
 	}
 	installDir := filepath.Dir(target)
 	if err := runStreaming(ctx, stdout, stderr, "make", "-C", repoDir, "install", "INSTALL_DIR="+installDir); err != nil {
@@ -408,13 +523,32 @@ func shouldSkip(cfg Config) bool {
 }
 
 func checkUpdateFlag(args []string) (bool, bool) {
-	for _, arg := range args[1:] {
-		if arg == "--check-update" || arg == "--check-update=true" {
-			return true, true
+	// Stop parsing at --
+	preDashArgs := args
+	for i, arg := range args {
+		if arg == "--" {
+			preDashArgs = args[:i]
+			break
 		}
-		if arg == "--check-update=false" {
-			return false, true
+	}
+
+	var enabled *bool
+	for i := 1; i < len(preDashArgs); i++ {
+		arg := preDashArgs[i]
+		if strings.HasPrefix(arg, "--check-update=") {
+			value := strings.TrimPrefix(arg, "--check-update=")
+			if value == "true" {
+				enabled = &[]bool{true}[0]
+			} else if value == "false" {
+				enabled = &[]bool{false}[0]
+			}
+		} else if arg == "--check-update" {
+			// --check-update without = is treated as true
+			enabled = &[]bool{true}[0]
 		}
+	}
+	if enabled != nil {
+		return *enabled, true
 	}
 	return false, false
 }
@@ -494,15 +628,26 @@ func DisableUpdateChecks() error {
 }
 
 func updateChannel(cfg Config) string {
-	for _, arg := range cfg.Args[1:] {
-		if strings.HasPrefix(arg, "--update-channel=") {
-			return strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
+	// Stop parsing at --
+	preDashArgs := cfg.Args
+	for i, arg := range cfg.Args {
+		if arg == "--" {
+			preDashArgs = cfg.Args[:i]
+			break
 		}
 	}
-	for i, arg := range cfg.Args[1:] {
-		if arg == "--update-channel" && i+2 < len(cfg.Args) {
-			return strings.ToLower(strings.TrimSpace(cfg.Args[i+2]))
+
+	var channel string
+	for i := 1; i < len(preDashArgs); i++ {
+		arg := preDashArgs[i]
+		if strings.HasPrefix(arg, "--update-channel=") {
+			channel = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
+		} else if arg == "--update-channel" && i+1 < len(preDashArgs) {
+			channel = strings.ToLower(strings.TrimSpace(preDashArgs[i+1]))
 		}
+	}
+	if channel != "" {
+		return channel
 	}
 	if cfg.Channel != "" {
 		return strings.ToLower(strings.TrimSpace(cfg.Channel))
@@ -541,6 +686,9 @@ func withDefaults(cfg Config) Config {
 	}
 	if cfg.IsInteractive == nil {
 		cfg.IsInteractive = func() bool { return false }
+	}
+	if cfg.InstallTimeout == 0 {
+		cfg.InstallTimeout = 10 * time.Minute
 	}
 	if cfg.LookupLatest == nil {
 		cfg.LookupLatest = LatestModuleVersion

@@ -231,6 +231,11 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().StringP("project-root", "C", "", "Liza project root for state commands")
+	// Note: --check-update and --update-channel are registered here for Cobra help visibility,
+	// but the updater package manually pre-parses these flags before Cobra command execution.
+	// This allows update checks to run before the main command, while still showing these flags
+	// in --help output. The manual parsing in internal/updater implements stop-at-double-dash
+	// and last-flag-wins semantics to match pflag/Cobra behavior for these specific flags.
 	rootCmd.PersistentFlags().Bool("check-update", false, "check for a Liza update before running")
 	rootCmd.PersistentFlags().String("update-channel", "stable", "update check channel: stable or main")
 }
@@ -266,8 +271,15 @@ func main() {
 		CurrentCommit:  GitCommit,
 		IsInteractive:  interactive.IsInteractive,
 	}); err != nil {
+		// FatalError represents invalid CLI input/config that should exit before command execution
+		var fatalErr *updater.FatalError
+		if errors.As(err, &fatalErr) {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		// Non-fatal update failures: MaybeUpdateAndReexec already logged to stderr and returned nil
+		// If we get here with a non-fatal error, it's a reexec error or similar - log and continue
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
 	}
 	if err := rootCmd.Execute(); err != nil {
 		if !errors.Is(err, jsonout.ErrAlreadyWritten) {
