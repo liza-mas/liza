@@ -1,7 +1,7 @@
-# Liza Logs Report Format
+# §BRAND_NAME_TITLE§ Logs Report Format
 
-Use this format for `/liza-logs` findings. Combine analyzer output from
-`.liza/agent-outputs/*.txt`, task friction evidence from `.liza/state.yaml`, and
+Use this format for `/§BRAND_NAME_LOWER§-logs` findings. Combine analyzer output from
+`§BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt`, task friction evidence from `§BRAND_PROJECT_DIRNAME§/state.yaml`, and
 raw log excerpts only when needed to validate a specific claim.
 
 ## 1. Summary
@@ -24,7 +24,7 @@ all later tool-error counts should be interpreted.
 
 ## 2. State Friction Inventory
 
-Source: `.liza/state.yaml`
+Source: `§BRAND_PROJECT_DIRNAME§/state.yaml`
 
 | Category | Count |
 |----------|------:|
@@ -77,7 +77,7 @@ missing, count task `history` events named `rejected` or
 ## 3. Permission & Policy Friction
 
 Required when permission prompts, hook policy blocks, command-shape rejections,
-filesystem allowlist blocks, or Liza project-root mismatches appear.
+filesystem allowlist blocks, or §BRAND_NAME_TITLE§ project-root mismatches appear.
 
 | Category | Count | Example log | Example command/result | Likely fix surface |
 |----------|------:|-------------|------------------------|--------------------|
@@ -87,7 +87,7 @@ Keep these categories distinct:
 - missing allowlist entries or unsupported command forms
 - filesystem allowlist blocks
 - sleep/polling blocks
-- Liza CLI project-root mismatches
+- §BRAND_NAME_TITLE§ CLI project-root mismatches
 
 Do not mix permission/policy blocks with command exit failures such as failing
 tests, validation errors, missing files, or lint failures.
@@ -156,9 +156,9 @@ Group recommendations by root cause, not by individual task.
 ### Commands Run
 
 ```bash
-python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.txt
-python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py --summary-by-role .liza/agent-outputs/*.txt
-python3 ~/.liza/skills/liza-logs/scripts/analyze-state.py .liza/state.yaml
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-log.py §BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-log.py --summary-by-role §BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-state.py §BRAND_PROJECT_DIRNAME§/state.yaml
 ```
 
 ### Raw Evidence Pointers

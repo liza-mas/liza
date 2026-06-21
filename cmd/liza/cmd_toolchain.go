@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/jsonout"
@@ -17,13 +18,13 @@ import (
 
 var toolchainCmd = &cobra.Command{
 	Use:   "toolchain",
-	Short: "Install and configure optional Liza support tools",
-	Long:  "Install, verify, and configure optional local tools that reduce Liza context usage and improve navigation.",
+	Short: fmt.Sprintf("Install and configure optional %s support tools", brand.NameTitle),
+	Long:  fmt.Sprintf("Install, verify, and configure optional local tools that reduce %s context usage and improve navigation.", brand.NameTitle),
 }
 
 var toolchainListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List known Liza toolchain tools",
+	Short: fmt.Sprintf("List known %s toolchain tools", brand.NameTitle),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tools := toolchain.Catalog()
 		if isJSON(cmd) {
@@ -77,7 +78,7 @@ var toolchainDoctorCmd = &cobra.Command{
 
 var toolchainInstallCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install selected local Liza toolchain CLIs",
+	Short: fmt.Sprintf("Install selected local %s toolchain CLIs", brand.NameTitle),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profile, include, exclude, err := toolchainSelectionFlags(cmd)
 		if err != nil {

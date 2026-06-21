@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/embedded"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 type ConfigureOptions struct {
@@ -215,7 +216,7 @@ func renderEnvFile(installDir string, activation []string) string {
 }
 
 func resolveGlobalDir(raw string) (string, error) {
-	return resolveHomeDir(raw, ".liza")
+	return resolveHomeDir(raw, paths.GlobalDirName())
 }
 
 func resolveHomeDir(raw, defaultRel string) (string, error) {

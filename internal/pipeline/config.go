@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/paths"
 	"gopkg.in/yaml.v3"
 )
 
@@ -137,7 +138,7 @@ func (t TransitionDef) TaskSlugOrName() string {
 	return t.Name
 }
 
-// LoadFrozen loads the frozen pipeline config from .liza/pipeline.yaml.
+// LoadFrozen loads the frozen pipeline config from the project runtime directory.
 // After loading, it migrates missing allowed-operations from the embedded
 // default config to ensure older workspaces gain new operations without
 // requiring re-initialization.
@@ -145,7 +146,7 @@ func (t TransitionDef) TaskSlugOrName() string {
 // Callers can use errors.Is(err, ErrConfigNotFound) to distinguish absent
 // config from parse/validation errors.
 func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
-	path := filepath.Join(projectRoot, ".liza", "pipeline.yaml")
+	path := filepath.Join(paths.New(projectRoot).LizaDir(), "pipeline.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%w at %s (run 'liza init' to create workspace)", ErrConfigNotFound, path)
 	}

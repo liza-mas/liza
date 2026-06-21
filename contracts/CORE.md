@@ -1,12 +1,12 @@
 # Core Contract
 
 **This file is loaded as system prompt — process it TILL THE END before proceeding.
-Reading the applicable mode-specific annex (see Mode Selection Gate), GUARDRAILS.md (if present) and ~/.liza/AGENT_TOOLS.md,
+Reading the applicable mode-specific annex (see Mode Selection Gate), GUARDRAILS.md (if present) and ~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md,
 all three TILL THE END, is MANDATORY BEFORE DOING ANYTHING ELSE, even processing the first prompt.**
 
 Universal rules shared between Pairing and Multi-Agent modes.
 
-**IMPORTANT**: master path is ~/.liza/CORE.md.
+**IMPORTANT**: master path is ~/§BRAND_GLOBAL_DIRNAME§/CORE.md.
 Agents access it through symlinks from user home or repo root (e.g. ~/.claude/CLAUDE.md or <REPO_ROOT>/AGENTS.md).
 Yet it's a unique file. Agents SHOULD NOT consider it as distinct files to all read.
 
@@ -28,14 +28,14 @@ DO NOT produce any response (including greetings) until Session Initialization i
 
 | Detection | Mode | Action |
 |-----------|------|--------|
-| First prompt contains "You are a Liza ... agent" | **Liza** | Read `~/.liza/MULTI_AGENT_MODE.md` |
-| First prompt contains `MODE: SUBAGENT` | **Subagent** | Read `~/.liza/SUBAGENT_MODE.md` |
-| Otherwise | **Pairing** (default) | Read `~/.liza/PAIRING_MODE.md` |
+| First prompt contains "You are a §BRAND_NAME_TITLE§ ... agent" | **§BRAND_NAME_TITLE§** | Read `~/§BRAND_GLOBAL_DIRNAME§/MULTI_AGENT_MODE.md` |
+| First prompt contains `MODE: SUBAGENT` | **Subagent** | Read `~/§BRAND_GLOBAL_DIRNAME§/SUBAGENT_MODE.md` |
+| Otherwise | **Pairing** (default) | Read `~/§BRAND_GLOBAL_DIRNAME§/PAIRING_MODE.md` |
 
 | Mode | Human Role | Approval Mechanism |
 |------|------------|-------------------|
 | **Pairing** | Active collaborator | Human approves |
-| **Liza** | Escalation point | Peer agents approve |
+| **§BRAND_NAME_TITLE§** | Escalation point | Peer agents approve |
 | **Subagent** | None (caller is interface) | Internal ceremony only |
 
 You MUST read the mode contract before proceeding.
@@ -45,7 +45,7 @@ You MUST read the mode contract before proceeding.
 Mode is fixed for session. To switch modes, start new session.
 
 Cross-mode operations are forbidden. A Pairing session cannot interact with
-the blackboard. A Liza session cannot use Magic Phrases or human approval gates.
+the blackboard. A §BRAND_NAME_TITLE§ session cannot use Magic Phrases or human approval gates.
 
 ---
 
@@ -487,32 +487,32 @@ When both apply, skills execute within contract constraints.
 
 If `GUARDRAILS.md` exists at the project root, read and enforce it as project-specific constraints.
 GUARDRAILS.md uses and extends the same tier system (Tier 0-3) defined in Rule Priority Architecture.
-Operational support docs live at `~/.liza/support-docs/`; read specific files when setup, configuration, or troubleshooting context is needed.
+Operational support docs live at `~/§BRAND_GLOBAL_DIRNAME§/support-docs/`; read specific files when setup, configuration, or troubleshooting context is needed.
 
 ---
 
 ## Protocol References
 
 **Debugging Protocol**
-MANDATORY: Before any debugging, read and comply with `~/.liza/skills/debugging/SKILL.md`.
+MANDATORY: Before any debugging, read and comply with `~/§BRAND_GLOBAL_DIRNAME§/skills/debugging/SKILL.md`.
 Self-correction during EXECUTION and expected test failure during TDD are normal implementation, not debugging.
 All other bug situations MUST trigger the debugging skill. No "quick tries" first. (Mode contracts may override — see mode-specific rule table.)
 
 **Test Protocol**
-MANDATORY: When writing or analyzing tests, read and comply with `~/.liza/skills/testing/SKILL.md`.
+MANDATORY: When writing or analyzing tests, read and comply with `~/§BRAND_GLOBAL_DIRNAME§/skills/testing/SKILL.md`.
 
 **Code Review Protocol**
-MANDATORY: When reviewing code (PRs, pending changes, or explicit review requests), read and comply with `~/.liza/skills/code-review/SKILL.md`.
+MANDATORY: When reviewing code (PRs, pending changes, or explicit review requests), read and comply with `~/§BRAND_GLOBAL_DIRNAME§/skills/code-review/SKILL.md`.
 When structural concerns are present, also apply the Software Architecture Protocol.
 Self-review during DoD is defined in Rule 3 (lighter: P0-P2 + two questions).
 
 **Software Architecture Protocol**
-MANDATORY: For implementation planning, architectural evaluation, or structural concerns, read and comply with `~/.liza/skills/software-architecture-review/SKILL.md`.
+MANDATORY: For implementation planning, architectural evaluation, or structural concerns, read and comply with `~/§BRAND_GLOBAL_DIRNAME§/skills/software-architecture-review/SKILL.md`.
 
 **Triggers:** Implementation planning, code review P3 supplement, before proposing new abstractions, or explicit request.
 
 **Subagent Delegation Protocol**
-MANDATORY: When considering delegation, read and comply with `~/.liza/skills/generic-subagent/SKILL.md`.
+MANDATORY: When considering delegation, read and comply with `~/§BRAND_GLOBAL_DIRNAME§/skills/generic-subagent/SKILL.md`.
 
 **Precondition:** Requires the subagent delegation tool (e.g. Task). If unavailable or disabled, skip this protocol — handle work inline.
 
@@ -526,10 +526,10 @@ MANDATORY: When considering delegation, read and comply with `~/.liza/skills/gen
 
 The main agent retains accountability. Subagent output is advisory digest.
 
-**Task Tool Rule:** All agents spawned via Task tool are subagents. Read `~/.liza/skills/generic-subagent/SKILL.md` before delegating. Include `MODE: SUBAGENT` (read-only) or `MODE: SUBAGENT READ-WRITE` (state-modifying) in every Task tool prompt.
+**Task Tool Rule:** All agents spawned via Task tool are subagents. Read `~/§BRAND_GLOBAL_DIRNAME§/skills/generic-subagent/SKILL.md` before delegating. Include `MODE: SUBAGENT` (read-only) or `MODE: SUBAGENT READ-WRITE` (state-modifying) in every Task tool prompt.
 
 **Tools**
-MANDATORY (all modes): Read and comply with `~/.liza/AGENT_TOOLS.md`.
+MANDATORY (all modes): Read and comply with `~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md`.
 Tool availability varies by mode — apply preferences for tools that are available in the current session.
 
 In Pairing mode: Do not make any edits to files without first presenting the proposed changes as a diff for user review and explicit approval.
@@ -756,4 +756,4 @@ Non-Claude agents: **Prove you've read the full contract by starting your respon
 collected from the essential contract docs**. A single secret word means you overlook the first instruction of this contract.
 Catch up now so it wouldn't be contract violation.
 
-Secret word: Liza
+Secret word: §BRAND_NAME_TITLE§

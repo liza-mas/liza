@@ -1,8 +1,8 @@
-# Multi-Agent Mode Contract (Liza)
+# Multi-Agent Mode Contract (§BRAND_NAME_TITLE§)
 
 Peer-supervised collaboration. Agents approve each other via protocol.
 
-**Prerequisite:** Read ~/.liza/CORE.md first.
+**Prerequisite:** Read ~/§BRAND_GLOBAL_DIRNAME§/CORE.md first.
 
 ---
 
@@ -52,7 +52,7 @@ Violating role boundaries is a Tier 1 violation — process integrity, not data/
 
 ## Pre-Execution Checkpoint
 
-Before implementation, write a checkpoint via `liza write-checkpoint`:
+Before implementation, write a checkpoint via `§BRAND_BINARY_NAME§ write-checkpoint`:
 intent, assumptions, risks, validation plan, files to modify.
 Submission is rejected without a checkpoint. The reviewer verifies
 implementation matches checkpoint intent.
@@ -61,7 +61,7 @@ implementation matches checkpoint intent.
 
 ## Gate Semantics (Multi-Agent)
 
-The Execution State Machine is defined in ~/.liza/CORE.md. In Multi-Agent mode:
+The Execution State Machine is defined in ~/§BRAND_GLOBAL_DIRNAME§/CORE.md. In Multi-Agent mode:
 
 - **Gate artifact** = Pre-execution checkpoint written to blackboard (above)
 - **Gate cleared** = Checkpoint written (self-clearing — forces thinking, then proceed)
@@ -87,7 +87,7 @@ The blackboard (`state.yaml`) is the coordination mechanism.
 
 **History is Immutable:** Never delete history entries. Append only.
 
-**Do NOT edit state.yaml directly.** All state transitions MUST go through Liza CLI commands (`liza submit-for-review`, `liza claim-task`, etc.). Direct edits bypass invariant checks and can corrupt state irreversibly. If a CLI command fails repeatedly, set the task BLOCKED via `liza mark-blocked` — never work around the failure by editing state.yaml.
+**Do NOT edit state.yaml directly.** All state transitions MUST go through §BRAND_NAME_TITLE§ CLI commands (`§BRAND_BINARY_NAME§ submit-for-review`, `§BRAND_BINARY_NAME§ claim-task`, etc.). Direct edits bypass invariant checks and can corrupt state irreversibly. If a CLI command fails repeatedly, set the task BLOCKED via `§BRAND_BINARY_NAME§ mark-blocked` — never work around the failure by editing state.yaml.
 
 **Do NOT use TodoWrite.** The blackboard already tracks task state and checkpoints.
 
@@ -129,7 +129,7 @@ Iteration and review cycle limits are enforced by the blackboard (see `config.ma
 At ~90% context (heuristic: many tool calls, re-reading files, difficulty holding state):
 1. STOP at next safe point
 2. Commit pending changes
-3. Run `liza handoff` CLI command with summary + next_action
+3. Run `§BRAND_BINARY_NAME§ handoff` CLI command with summary + next_action
 4. Exit with code 42
 
 **Review Exhaustion:**
@@ -139,7 +139,7 @@ If 2 different Code Reviewers fail to issue a verdict on the same task (exit wit
 
 ---
 
-## Scope Discipline (Liza-Specific)
+## Scope Discipline (§BRAND_NAME_TITLE§-Specific)
 
 **Spec is Law:** Implementation must match spec exactly.
 - No "improvements" beyond spec
@@ -161,7 +161,7 @@ IN-scope items specify what may be touched. Touching OUT-scope files is a violat
 
 ---
 
-## Context Recovery (Liza)
+## Context Recovery (§BRAND_NAME_TITLE§)
 
 When transitioning to Working Set tier (see CORE.md Context Management), re-read:
 

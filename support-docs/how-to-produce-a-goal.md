@@ -1,6 +1,6 @@
-# How to Produce a Goal Document For Liza
+# How to Produce a Goal Document For §BRAND_NAME_TITLE§
 
-A goal document is the input to `liza init --spec`. It defines what you want built, why, and what "done" looks like — with enough precision that agents can decompose it into tasks without guessing.
+A goal document is the input to `§BRAND_BINARY_NAME§ init --spec`. It defines what you want built, why, and what "done" looks like — with enough precision that agents can decompose it into tasks without guessing.
 
 This guide walks you through producing one interactively in Pairing mode.
 
@@ -14,7 +14,7 @@ A goal document is not a technical spec — it defines the problem (WHY) and des
 
 ## Prerequisites
 
-- Your coding CLI (claude, codex, ...) installed and configured with the Liza contract
+- Your coding CLI (claude, codex, ...) installed and configured with the §BRAND_NAME_TITLE§ contract
 - A rough idea of what you want to build (even a single sentence is enough to start)
 
 ## Process
@@ -93,7 +93,7 @@ Review this goal document as if you were an agent about to decompose it into tas
 Flag anything ambiguous, missing, or that would force you to guess.
 ```
 
-Liza's contract makes the agents accountable. They'd raise concerns if any rather than praising a non-ready document.
+§BRAND_NAME_TITLE§'s contract makes the agents accountable. They'd raise concerns if any rather than praising a non-ready document.
 
 Address the feedback and iterate until the reviewer agent approves.
 
@@ -107,7 +107,7 @@ Do a final pass with the systemic-thinking skill:
 ### 8. Initialize the project
 
 ```bash
-liza init --spec path/to/your-goal.md
+§BRAND_BINARY_NAME§ init --spec path/to/your-goal.md
 ```
 
-Liza's orchestrator will use this document as the authoritative source for task decomposition.
+§BRAND_NAME_TITLE§'s orchestrator will use this document as the authoritative source for task decomposition.

@@ -5,12 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/scipsearch"
@@ -48,11 +48,7 @@ func writeIndexingActivationFile(t *testing.T, path, content string) {
 func runSessionStartContextHook(t *testing.T, projectDir string) string {
 	t.Helper()
 
-	_, sourceFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller(0) failed")
-	}
-	hookPath := filepath.Join(filepath.Dir(sourceFile), "..", "embedded", "hooks", "session-context.sh")
+	hookPath := renderedSessionContextHookPath(t)
 	payload, err := json.Marshal(map[string]string{"cwd": projectDir})
 	if err != nil {
 		t.Fatalf("Marshal(SessionStart payload): %v", err)
@@ -68,6 +64,16 @@ func runSessionStartContextHook(t *testing.T, projectDir string) string {
 		t.Fatalf("session-context.sh failed: %v\n%s", err, string(out))
 	}
 	return string(out)
+}
+
+func renderedSessionContextHookPath(t *testing.T) string {
+	t.Helper()
+
+	hooksRoot := t.TempDir()
+	if err := embedded.WriteHooks(hooksRoot); err != nil {
+		t.Fatalf("WriteHooks(%q): %v", hooksRoot, err)
+	}
+	return filepath.Join(hooksRoot, ".claude", "hooks", "session-context.sh")
 }
 
 func sessionStartEnv(projectDir string) []string {

@@ -111,8 +111,8 @@ Example YAML file format:
 		logPath, _ := cmd.Flags().GetString("log")
 
 		if statePath == "" && logPath == "" {
-			statePath = filepath.Join(paths.LizaDirName, paths.StateFileName)
-			logPath = filepath.Join(paths.LizaDirName, paths.LogFileName)
+			statePath = filepath.Join(paths.ProjectDirName(), paths.StateFileName)
+			logPath = filepath.Join(paths.ProjectDirName(), paths.LogFileName)
 		} else if statePath != "" && logPath == "" {
 			return cliValidationError("if --state is provided, --log must also be provided")
 		} else if statePath == "" && logPath != "" {
@@ -1046,8 +1046,8 @@ Example:
 			return err
 		}
 
-		statePath := filepath.Join(paths.LizaDirName, paths.StateFileName)
-		logPath := filepath.Join(paths.LizaDirName, paths.LogFileName)
+		statePath := filepath.Join(paths.ProjectDirName(), paths.StateFileName)
+		logPath := filepath.Join(paths.ProjectDirName(), paths.LogFileName)
 
 		resolver, err := loadResolverFromDir(filepath.Dir(statePath))
 		if err != nil {

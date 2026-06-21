@@ -3,8 +3,10 @@
 # Compensates for Bash(git:*) permission — forces manual execution for dangerous commands.
 # No external dependencies (no jq). Portable across Linux and macOS.
 
-# Only active for Liza agents (pairing sessions have human oversight).
-[[ -z "$LIZA_AGENT_ID" ]] && exit 0
+# Only active for __BRAND_NAME_TITLE__ agents (pairing sessions have human oversight).
+brand_agent_id_var="__BRAND_ENV_PREFIX__""_AGENT_ID"
+agent_id_value="${!brand_agent_id_var:-${LIZA_AGENT_ID:-}}"
+[[ -z "$agent_id_value" ]] && exit 0
 
 input=$(cat)
 

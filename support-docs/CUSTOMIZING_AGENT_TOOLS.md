@@ -1,6 +1,6 @@
 # Customizing `AGENT_TOOLS.md`
 
-`~/.liza/AGENT_TOOLS.md` is not a sample file to leave untouched. It is the tool
+`~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md` is not a sample file to leave untouched. It is the tool
 contract agents follow when deciding how to read files, search code, fetch docs,
 and fall back when a tool is unavailable.
 
@@ -12,27 +12,27 @@ or wrong for the current mode.**
 
 Before your first real run:
 
-- Review `~/.liza/AGENT_TOOLS.md` against your actual MCP servers, CLI tools, and editor integrations.
+- Review `~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md` against your actual MCP servers, CLI tools, and editor integrations.
 - If you use Claude Code, allow the CLI tools and MCP servers you intend to use in `~/.claude/settings.json`; otherwise agents may be routed to tools that Claude is not allowed to call.
 - Remove tools and servers you do not have.
 - If you have the capability under a different provider or tool name, adapt the
   row to that surface instead of deleting it.
 - Adjust precedence so the best available tools are tried first.
-- For optional navigation or compression tools, install the CLI surface Liza
+- For optional navigation or compression tools, install the CLI surface §BRAND_NAME_TITLE§
   references unless this guide explicitly says otherwise. Do not install or
   enable the tool's MCP server just because the tool offers one.
 - Do not accept installer prompts that add generic instructions to `CLAUDE.md`,
-  `AGENTS.md`, or other agent contract files. Liza already provides the
-  agent-facing guidance through `~/.liza/AGENT_TOOLS.md` and the mode contracts.
+  `AGENTS.md`, or other agent contract files. §BRAND_NAME_TITLE§ already provides the
+  agent-facing guidance through `~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md` and the mode contracts.
 - Provide your own file during setup if you already maintain one:
-  `liza setup --agent-tools ~/my-agent-tools.md`
+  `§BRAND_BINARY_NAME§ setup --agent-tools ~/my-agent-tools.md`
 
-`liza setup` owns this global generic guidance. It should describe routing rules
+`§BRAND_BINARY_NAME§ setup` owns this global generic guidance. It should describe routing rules
 that are safe for any project and any stack. It should not contain generated
 paths for one repository, worktree-specific index locations, Semble target roots,
 SCIP index paths, Stacklit index paths, or readiness claims from a past session.
 
-Pairing `liza init` owns project-local activation artifacts such as provider
+Pairing `§BRAND_BINARY_NAME§ init` owns project-local activation artifacts such as provider
 SessionStart hooks, project Git hook plumbing, generated-index cleanliness, SCIP
 hook command plans, and Semble safety files. MAS prompts own task/reviewer/root
 specific optional-tool metadata. Those mechanisms supply concrete paths or
@@ -43,7 +43,7 @@ readiness when they exist; `AGENT_TOOLS.md` should only explain how to use them.
 The stock `AGENT_TOOLS.md` references these tool surfaces or capabilities. Keep
 entries for the ones you actually have, rename equivalent providers to match
 your environment, and remove unavailable tools so agents do not waste turns.
-You need to install these tools yourself, Liza won't.
+You need to install these tools yourself, §BRAND_NAME_TITLE§ won't.
 
 - Compression: [`rtk`](https://github.com/rtk-ai/rtk)
 - Structured and Markdown navigation: `mdtoc`,
@@ -53,9 +53,9 @@ You need to install these tools yourself, Liza won't.
 - Grep: [`rg`](https://github.com/BurntSushi/ripgrep)
 - Code search and rewrite: [`ast-grep`](https://github.com/ast-grep/ast-grep),
   [Semble / `semble`](https://github.com/MinishLab/semble),
-  [`scip-search`](https://github.com/liza-mas/scip-search),
-  [Stacklit / `stacklit`](https://github.com/liza-mas/stacklit-cli),
-  [Functional Clusters / `functional-clusters`](https://github.com/liza-mas/functional-clusters),
+  `scip-search`,
+  Stacklit / `stacklit`,
+  Functional Clusters / `functional-clusters`,
   and [Morph MCP / `morph-mcp`](https://docs.morphllm.com/mcpquickstart).
 - Mandatory quality gate:
   [`pre-commit`](https://github.com/pre-commit/pre-commit).
@@ -73,12 +73,12 @@ You need to install these tools yourself, Liza won't.
 
 Activate Stacklit, SCIP Search, Functional Clusters and Semble using:
 ```bash
-export LIZA_ENABLE_STACKLIT=1
-export LIZA_ENABLE_SCIP_SEARCH=1
-export LIZA_ENABLE_SEMBLE=1
-export LIZA_ENABLE_FUNCTIONAL_CLUSTERS=1
+export §BRAND_ENV_PREFIX§_ENABLE_STACKLIT=1
+export §BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH=1
+export §BRAND_ENV_PREFIX§_ENABLE_SEMBLE=1
+export §BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS=1
 ```
-This should be done before running `liza init`.
+This should be done before running `§BRAND_BINARY_NAME§ init`.
 
 Scip and Stacklit rely on indexes on every branch (repo root and worktrees) that are updated via git hooks. This slow down the git operations but speed up agents and greatly reduce token consumption.
 
@@ -100,7 +100,7 @@ functional-clusters build \
 ```
 
 Semble doesn't rely on an index but on a local LLM model that is automatically downloaded once.
-Run `liza init --spec` with Semble installed so Liza can prewarm and
+Run `§BRAND_BINARY_NAME§ init --spec` with Semble installed so §BRAND_NAME_TITLE§ can prewarm and
 validate the model cache. After installation or prewarm, set `HF_HUB_OFFLINE=1`
 in the shell or service environment that launches unattended agents if you want
 to prevent model downloads during normal work.
@@ -123,7 +123,7 @@ Agents treat `AGENT_TOOLS.md` as an operational contract:
 
 ## Multi-Agent Specific Warnings
 
-Some support tools are a poor fit, or outright incompatible, with Liza multi-agent
+Some support tools are a poor fit, or outright incompatible, with §BRAND_NAME_TITLE§ multi-agent
 mode.
 
 ## Optional Index Routing
@@ -149,7 +149,7 @@ policy-exposed semantic fallback tools only when those tools are available.
 
 ### Worktree-Local Semble Search
 
-When Liza supplies a Semble target root in an agent prompt, use Semble for
+When §BRAND_NAME_TITLE§ supplies a Semble target root in an agent prompt, use Semble for
 natural-language semantic discovery before exact symbols or modules are known.
 Examples include "where is this behavior implemented?", "where is this behavior
 specified?", and "where is this config/default defined?". Use `--content docs`
@@ -160,7 +160,7 @@ direct read or exact source read before editing or claiming behavior.
 Do not bake `HF_HUB_OFFLINE=1` into agent-facing Semble command examples here.
 Offline mode belongs in the user/operator environment after Semble is installed
 or prewarmed; this file should describe routing syntax agents can apply in any
-session where Liza supplies a safe target root.
+session where §BRAND_NAME_TITLE§ supplies a safe target root.
 
 Semble complements the rest of the worktree-safe stack:
 
@@ -168,7 +168,7 @@ Semble complements the rest of the worktree-safe stack:
 - Use Stacklit for module ownership, dependencies, hot files, and impact maps.
 - Use SCIP / `scip-search` for exact symbols, references, callers, and
   implementations, packages, static graph hints, and review/test impact hints
-  when Liza supplies an explicit index path.
+  when §BRAND_NAME_TITLE§ supplies an explicit index path.
 - Use Morph MCP semantic/codebase search only as a fallback when Semble is
   unavailable or not offline-ready and the current tool policy exposes Morph MCP.
 - Use `rg` for literal strings, exact error messages, config keys, and path
@@ -182,14 +182,14 @@ use Semble remote Git URL indexing from unattended MAS prompts, write one
 project's Semble root into global guidance, or treat Semble MCP as part of the
 default MAS setup.
 
-When installing Semble for Liza, install the CLI and keep Liza's own
+When installing Semble for §BRAND_NAME_TITLE§, install the CLI and keep §BRAND_NAME_TITLE§'s own
 `AGENT_TOOLS.md` routing as the source of truth. Do not enable a Semble MCP
 server by default, and do not accept installer-generated additions to
 `CLAUDE.md` or `AGENTS.md`.
 
 ### Worktree-Local SCIP Indexes
 
-When Liza supplies an explicit SCIP index path in an agent prompt, prefer
+When §BRAND_NAME_TITLE§ supplies an explicit SCIP index path in an agent prompt, prefer
 `scip-search` for indexed repository navigation in that worktree:
 
 - `scip-search symbols --index <path>` for symbol lookup
@@ -211,14 +211,14 @@ struct literals that an index query cannot express.
 
 Agents should not search for default SCIP indexes, infer index locations from
 worktree paths, or rely on `scip-search` daemon, global-index, cache, watch, or
-auto-discovery behavior. Treat the explicit `--index <path>` supplied by Liza as
+auto-discovery behavior. Treat the explicit `--index <path>` supplied by §BRAND_NAME_TITLE§ as
 the authority. If no explicit index path is available, fall back to `rg`,
 `ast-grep`, exact reads, and other worktree-safe tools. Do not copy concrete
 SCIP paths from one project or worktree into global guidance examples.
 
 ### Worktree-Local Stacklit Indexes
 
-When Liza supplies an explicit Stacklit index path in an agent prompt, use
+When §BRAND_NAME_TITLE§ supplies an explicit Stacklit index path in an agent prompt, use
 `stacklit` for low-token repository orientation before opening files:
 
 - `stacklit derive --ai-summary -i <path>` for a compact module/dependency/hints map
@@ -233,12 +233,12 @@ This is the MAS-safe path for broad codebase navigation because the query is
 tied to a caller-supplied worktree or project-root index. Agents should not
 infer index locations, regenerate insights, run `stacklit view`, or mutate
 `stacklit-insights.json` / `.stacklitrc.json`. Treat the explicit `-i <path>`
-supplied by Liza as the authority. Do not copy concrete Stacklit paths from one
+supplied by §BRAND_NAME_TITLE§ as the authority. Do not copy concrete Stacklit paths from one
 project or worktree into global guidance examples.
 
 ### Functional Cluster Artifacts
 
-When Liza supplies an explicit functional-clusters artifact path, use
+When §BRAND_NAME_TITLE§ supplies an explicit functional-clusters artifact path, use
 `functional-clusters` for advisory functional capability context:
 
 - `functional-clusters list --clusters <path>` for a compact cluster overview
@@ -256,7 +256,7 @@ truth. If no explicit artifact path is supplied, fall back to Stacklit,
 
 ### Per-Worktree Servers
 
-Language servers are tied to a specific worktree. In multi-agent mode, Liza may
+Language servers are tied to a specific worktree. In multi-agent mode, §BRAND_NAME_TITLE§ may
 run many divergent worktrees at once, so duplicating them across the fleet is
 expensive and often impractical.
 
@@ -267,11 +267,11 @@ Examples:
 
 - LSP servers such as `gopls`, `pyright`, `tsserver`
 
-Prefer Semble for broad conceptual discovery when Liza supplies an offline-ready
-target root; `scip-search` when Liza supplies an explicit `--index` path for
-indexed symbols, packages, references, and implementations; Stacklit when Liza
+Prefer Semble for broad conceptual discovery when §BRAND_NAME_TITLE§ supplies an offline-ready
+target root; `scip-search` when §BRAND_NAME_TITLE§ supplies an explicit `--index` path for
+indexed symbols, packages, references, and implementations; Stacklit when §BRAND_NAME_TITLE§
 supplies an explicit `-i` path for module and dependency orientation; Functional
-Clusters when Liza supplies an explicit `--clusters` path for advisory feature
+Clusters when §BRAND_NAME_TITLE§ supplies an explicit `--clusters` path for advisory feature
 boundary context; `rg` for exact text/path search; `ast-grep` for syntax-pattern
 structural search and rewrites; Morph MCP only as the semantic fallback when
 Semble is unavailable and policy exposes it; and direct reads for evidence in
@@ -305,28 +305,28 @@ Examples:
 
 ### Session Token-Reduction Tools
 
-Interactive-session token compression tools usually add little in Liza multi-agent
-mode because Liza already reduces context structurally through blackboard-driven
+Interactive-session token compression tools usually add little in §BRAND_NAME_TITLE§ multi-agent
+mode because §BRAND_NAME_TITLE§ already reduces context structurally through blackboard-driven
 instructions and headless execution.
 
 Exception:
 
 - `RTK` remains most useful because it compresses tool output at the transport layer
 
-Install RTK as the CLI/proxy that Liza's tool contract references. If the RTK
+Install RTK as the CLI/proxy that §BRAND_NAME_TITLE§'s tool contract references. If the RTK
 installer offers to add instructions to `CLAUDE.md`, `AGENTS.md`, or another
-agent prompt file, decline or remove them. Liza owns RTK guidance in
-`AGENT_TOOLS.md`; duplicate vendor instructions can conflict with Liza's
+agent prompt file, decline or remove them. §BRAND_NAME_TITLE§ owns RTK guidance in
+`AGENT_TOOLS.md`; duplicate vendor instructions can conflict with §BRAND_NAME_TITLE§'s
 fallback and mode-specific rules.
 
 ## Safer Default Direction For Multi-Agent Use
 
 Prefer tools that remain correct across divergent worktrees:
 
-- Semble with the explicit target root supplied by Liza, for semantic discovery
-- `scip-search` with explicit `--index` paths supplied by Liza, for indexed
+- Semble with the explicit target root supplied by §BRAND_NAME_TITLE§, for semantic discovery
+- `scip-search` with explicit `--index` paths supplied by §BRAND_NAME_TITLE§, for indexed
   symbols, packages, references, and implementations
-- Stacklit with explicit `-i` paths supplied by Liza, for module and dependency
+- Stacklit with explicit `-i` paths supplied by §BRAND_NAME_TITLE§, for module and dependency
   orientation
 - `rg` and related search tools
 - `ast-grep` for syntax-pattern structural search and rewrite workflows
@@ -346,7 +346,7 @@ in your environment.
 Use a prompt like this:
 
 ```text
-Review ~/.liza/AGENT_TOOLS.md against ~/.liza/support-docs/CUSTOMIZING_AGENT_TOOLS.md and the
+Review ~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md against ~/§BRAND_GLOBAL_DIRNAME§/support-docs/CUSTOMIZING_AGENT_TOOLS.md and the
 tools actually installed and available in this environment.
 
 Goals:
@@ -364,6 +364,6 @@ Instructions:
 
 Output:
 - A short findings list ordered by impact.
-- A proposed diff for ~/.liza/AGENT_TOOLS.md.
+- A proposed diff for ~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md.
 - A short rationale for each proposed change.
 ```

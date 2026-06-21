@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/interactive"
@@ -123,7 +124,7 @@ The metrics are used to track sprint progress and detect quality issues.`,
 var tuiCmd = &cobra.Command{
 	Use:     "tui",
 	Aliases: []string{"watch"},
-	Short:   "Interactive TUI dashboard for monitoring Liza",
+	Short:   fmt.Sprintf("Interactive TUI dashboard for monitoring %s", brand.NameTitle),
 	Long: `Launch an interactive TUI dashboard that monitors the Liza blackboard.
 
 The TUI provides:
@@ -226,7 +227,7 @@ Reports the number of claims cleared and logs each cleanup action.`,
 
 var pauseCmd = &cobra.Command{
 	Use:   "pause",
-	Short: "Pause the Liza system",
+	Short: fmt.Sprintf("Pause the %s system", brand.NameTitle),
 	Long: `Pause the Liza system by setting config.mode to PAUSED in state.yaml.
 
 Agents will detect the PAUSED mode and block at their next check. They will
@@ -254,7 +255,7 @@ Use 'liza resume' to continue normal operation.`,
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the Liza system",
+	Short: fmt.Sprintf("Stop the %s system", brand.NameTitle),
 	Long: `Stop the Liza system by setting config.mode to STOPPED in state.yaml.
 
 Agents will detect the STOPPED mode and exit cleanly at their next check.
@@ -283,7 +284,7 @@ Use this for:
 
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start the Liza system from STOPPED mode",
+	Short: fmt.Sprintf("Start the %s system from STOPPED mode", brand.NameTitle),
 	Long: `Start the Liza system by setting config.mode to RUNNING in state.yaml.
 
 This command transitions from STOPPED back to RUNNING mode.
@@ -395,7 +396,7 @@ Example workflow:
 
 var resumeCmd = &cobra.Command{
 	Use:   "resume",
-	Short: "Resume the Liza system from PAUSED mode, CHECKPOINT, or COMPLETED sprint",
+	Short: fmt.Sprintf("Resume the %s system from PAUSED mode, CHECKPOINT, or COMPLETED sprint", brand.NameTitle),
 	Long: `Resume the Liza system by setting config.mode to RUNNING and sprint.status to IN_PROGRESS.
 
 This command can be used when:

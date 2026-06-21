@@ -480,7 +480,7 @@ func TestEnforceInitHook_BlocksUnsafeCodexBashDocReads(t *testing.T) {
 func writeEnforceInitHook(t *testing.T) string {
 	t.Helper()
 	hookPath := filepath.Join(t.TempDir(), "enforce-init.sh")
-	if err := os.WriteFile(hookPath, enforceInitHookContent, 0755); err != nil {
+	if err := os.WriteFile(hookPath, renderEmbeddedAsset(enforceInitHookContent), 0755); err != nil {
 		t.Fatalf("write hook: %v", err)
 	}
 	return hookPath

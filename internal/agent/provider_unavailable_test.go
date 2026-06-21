@@ -75,6 +75,31 @@ func TestProviderUnavailableSignal_WriteCheckClear(t *testing.T) {
 	}
 }
 
+func TestProviderUnavailableSignalUsesBrandedProjectDir(t *testing.T) {
+	withTestProjectDirName(t, ".acme-agent")
+	projectRoot := t.TempDir()
+	brandedDir := filepath.Join(projectRoot, ".acme-agent")
+	if err := os.MkdirAll(brandedDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ProviderUnavailableSignalPath(projectRoot, "codex"); got != filepath.Join(brandedDir, "provider-unavailable-codex") {
+		t.Fatalf("ProviderUnavailableSignalPath() = %q, want branded project dir", got)
+	}
+	if got := ProviderUnavailableSignalGlob(projectRoot); got != filepath.Join(brandedDir, "provider-unavailable-*") {
+		t.Fatalf("ProviderUnavailableSignalGlob() = %q, want branded project dir", got)
+	}
+	if err := WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
+		t.Fatalf("WriteProviderUnavailableSignal failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(brandedDir, "provider-unavailable-codex")); err != nil {
+		t.Fatalf("provider-unavailable signal not written under branded dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".liza")); !os.IsNotExist(err) {
+		t.Fatalf("legacy .liza state = %v, want not created", err)
+	}
+}
+
 func TestHandleClassifiedProviderCrash_WritesProviderUnavailableSignal(t *testing.T) {
 	projectRoot := t.TempDir()
 	lizaDir := filepath.Join(projectRoot, ".liza")

@@ -570,7 +570,7 @@ func TestSessionContextHook_SuppressesSembleForLizaAgentSessions(t *testing.T) {
 func writeSessionContextHook(t *testing.T) string {
 	t.Helper()
 	hookPath := filepath.Join(t.TempDir(), "session-context.sh")
-	if err := os.WriteFile(hookPath, sessionContextHookContent, 0755); err != nil {
+	if err := os.WriteFile(hookPath, renderEmbeddedAsset(sessionContextHookContent), 0755); err != nil {
 		t.Fatalf("write hook: %v", err)
 	}
 	return hookPath

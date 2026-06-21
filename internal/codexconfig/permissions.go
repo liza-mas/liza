@@ -3,6 +3,8 @@ package codexconfig
 import (
 	"path/filepath"
 	"runtime"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 // SupportWritableRoots returns host-level roots Codex commonly needs while
@@ -13,7 +15,7 @@ func SupportWritableRoots(homeDir, cacheDir string) []string {
 	if homeDir != "" {
 		roots = append(roots,
 			filepath.Join(homeDir, ".codex"),
-			filepath.Join(homeDir, ".liza"),
+			filepath.Join(homeDir, brand.RuntimeValues().GlobalDirName),
 			filepath.Join(homeDir, ".npm"),
 			filepath.Join(homeDir, ".pyenv", "shims"),
 		)

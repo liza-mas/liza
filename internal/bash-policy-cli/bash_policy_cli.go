@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -69,7 +68,7 @@ type InitHooksResult struct {
 }
 
 func RuntimeEnabled() bool {
-	return envgate.Truthy(os.Getenv(EnvEnableBashPolicy))
+	return envgate.TruthyEnv(EnvEnableBashPolicy)
 }
 
 func InitHooks(opts InitHooksOptions) InitHooksResult {

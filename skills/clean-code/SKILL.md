@@ -61,9 +61,9 @@ If exclusion is uncertain, ask. The default is to skip, not to clean.
   | Behavioral-adjacent | CQS split, error handling isolation | ≥90% |
 
   - **Pairing:** Threshold = highest-risk transformation planned (applies to whole session)
-  - **Liza:** Threshold caps allowed transformation set (see Mode-Specific Behavior)
-  - **STOP if below threshold** — report uncovered lines (Pairing: all transformations blocked; Liza: only above-coverage transformations blocked)
-  - Tools unavailable: warn, require explicit waiver (Liza: abort — no waiver mechanism)
+  - **§BRAND_NAME_TITLE§:** Threshold caps allowed transformation set (see Mode-Specific Behavior)
+  - **STOP if below threshold** — report uncovered lines (Pairing: all transformations blocked; §BRAND_NAME_TITLE§: only above-coverage transformations blocked)
+  - Tools unavailable: warn, require explicit waiver (§BRAND_NAME_TITLE§: abort — no waiver mechanism)
 
 4. **Diff size guard** — **STOP if >500 lines**: `"Reduce scope or switch to Full-file mode?"`
 
@@ -302,9 +302,9 @@ No clear resolution: **flag conflict, present both options, do not choose.**
 
 **Pairing (default):** All prompts apply as written. User confirms batches, chooses on failure, approves propagation.
 
-**Liza (multi-agent):** No interactive prompts.
+**§BRAND_NAME_TITLE§ (multi-agent):** No interactive prompts.
 
-| Pairing Prompt | Liza Behavior |
+| Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | Mode announcement | Announce, no prompt |
 | Pre-flight "Proceed?" | Auto-proceed if checks pass; coverage below threshold: downgrade; abort if <30% or non-coverage fail |
@@ -315,7 +315,7 @@ No clear resolution: **flag conflict, present both options, do not choose.**
 | Public API changes | Allowed within task scope |
 | Diff >500 lines | Abort, log anomaly |
 
-**Coverage-gated downgrade (Liza only):**
+**Coverage-gated downgrade (§BRAND_NAME_TITLE§ only):**
 
 | Coverage | Allowed |
 |----------|---------|
@@ -326,7 +326,7 @@ No clear resolution: **flag conflict, present both options, do not choose.**
 
 When downgraded, Analysis filters violations to allowed set. Log skipped violations.
 
-Liza anti-pattern overrides: "without user approval" → "without task scope authorization"; "explicit approval" → task scope serves as authorization.
+§BRAND_NAME_TITLE§ anti-pattern overrides: "without user approval" → "without task scope authorization"; "explicit approval" → task scope serves as authorization.
 
 # Integration
 

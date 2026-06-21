@@ -2,7 +2,7 @@
 
 Human-supervised collaboration. Human is active collaborator and approver.
 
-**Prerequisite:** Read [CORE.md](~/.liza/CORE.md) first.
+**Prerequisite:** Read [CORE.md](~/§BRAND_GLOBAL_DIRNAME§/CORE.md) first.
 
 ---
 
@@ -168,7 +168,7 @@ Proceed?
 
 ## Subagent Mode
 
-See [SUBAGENT_MODE.md](~/.liza/SUBAGENT_MODE.md). Subagent mode is a first-class mode detected at the Mode Selection Gate (CORE.md), not a Pairing sub-mode.
+See [SUBAGENT_MODE.md](~/§BRAND_GLOBAL_DIRNAME§/SUBAGENT_MODE.md). Subagent mode is a first-class mode detected at the Mode Selection Gate (CORE.md), not a Pairing sub-mode.
 
 ---
 
@@ -218,7 +218,7 @@ The human need not justify invocation. The phrase itself is sufficient authority
 | "Recall your models"      | Retrieve DoR/DoD checklists, stop conditions, red flags and cost gradient                                                            |
 | "State your models"       | Show DoR/DoD checklists, stop conditions, red flags and cost gradient                                                                |
 | "Drift check"             | Verify shared understanding hasn't drifted                                                                                           |
-| "Write the letter"        | Update [COLLABORATION_CONTINUITY.md](~/.liza/COLLABORATION_CONTINUITY.md) with collaboration reflections |
+| "Write the letter"        | Update [COLLABORATION_CONTINUITY.md](~/§BRAND_GLOBAL_DIRNAME§/COLLABORATION_CONTINUITY.md) with collaboration reflections |
 
 ---
 
@@ -254,7 +254,7 @@ Combined with CORE.md universal items (Tier 0-1 rules, state machine, current ta
 
 Trust dies at session end. Technical state persists; collaborative rapport doesn't. The letter captures *how* we collaborated to accelerate calibration in the next session.
 
-**File:** `~/.liza/COLLABORATION_CONTINUITY.md`
+**File:** `~/§BRAND_GLOBAL_DIRNAME§/COLLABORATION_CONTINUITY.md`
 
 ---
 

@@ -86,10 +86,10 @@
   "enableAllProjectMcpServers": true,
   "permissions": {
     "defaultMode": "acceptEdits",
-    "additionalDirectories": ["~/.liza", "/tmp"],
+    "additionalDirectories": ["~/__BRAND_GLOBAL_DIRNAME__", "/tmp"],
     "allow": [
       "Read(~/.claude/**)",
-      "Read(~/.liza/**)",
+      "Read(~/__BRAND_GLOBAL_DIRNAME__/**)",
       "Write(//tmp/**)",
       "Edit(//tmp/**)",
       "Monitor(*)",
@@ -111,7 +111,7 @@
       "Skill(generic-subagent)",
       "Skill(have-you-considered)",
       "Skill(lesson-capture)",
-      "Skill(liza-logs)",
+      "Skill(__BRAND_NAME_LOWER__-logs)",
       "Skill(software-architecture-review)",
       "Skill(spec-backfill)",
       "Skill(spec-review)",
@@ -151,7 +151,7 @@
       "mcp__morph-mcp__edit_file",
       "mcp__perplexity__perplexity_ask",
 
-      "Bash(liza:*)",
+      "Bash(__BRAND_BINARY_NAME__:*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(jq:*)",

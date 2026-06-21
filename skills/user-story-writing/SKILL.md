@@ -18,7 +18,7 @@ Individual user stories are its constituent parts — each story maps to one Cod
 # Trigger
 
 Use this skill when:
-- Orchestrator creates a story-writing task (Liza mode)
+- Orchestrator creates a story-writing task (§BRAND_NAME_TITLE§ mode)
 - User asks to write user stories for a feature, capability, or requirement (Pairing mode)
 - The team's workflow uses user stories rather than formal PRD requirements
 
@@ -221,9 +221,9 @@ Do not invent new prefixes. If something doesn't fit these categories, it likely
 
 **Pairing mode:** All interactive prompts apply. Present the draft stories for human review before writing the file. Human may redirect scope, resolve Open Questions inline, or confirm assumptions.
 
-**Liza mode:** Story Writer operates autonomously within task scope.
+**§BRAND_NAME_TITLE§ mode:** Story Writer operates autonomously within task scope.
 
-| Pairing Prompt | Liza Behavior |
+| Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | "Source material contains multiple capabilities — split?" | Flag to Orchestrator via BLOCKED with split recommendation |
 | "This assumption is LOW confidence — resolve?" | Surface in Assumptions section; Human resolves at the end of the sprint, before coding starts in the next sprint. |

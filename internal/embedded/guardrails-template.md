@@ -1,9 +1,9 @@
 # Project Guardrails
 
-Project-specific constraints for Liza agents.
+Project-specific constraints for __BRAND_NAME_TITLE__ agents.
 Uses the tier system from the core contract (CORE.md).
 
-**Troubleshooting reference:** See `.liza/SUPPORT.md` for task states, recovery commands, and common failure patterns.
+**Troubleshooting reference:** See `__BRAND_PROJECT_DIRNAME__/SUPPORT.md` for task states, recovery commands, and common failure patterns.
 
 ## Tier 0 (Inviolable)
 <!-- Constraints that must NEVER be violated. Triggers mandatory halt (RESET). -->

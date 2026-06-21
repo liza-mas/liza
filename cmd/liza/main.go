@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/liza-mas/liza/internal/brand"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/interactive"
@@ -26,14 +27,12 @@ var (
 	BuildDate = "unknown"
 )
 
-const windowsUnsupportedMessage = "native Windows is not supported; run liza under WSL2"
-
 var rootCmd = &cobra.Command{
-	Use:   "liza",
-	Short: "Liza - Multi-agent task execution system",
-	Long: `Liza is a multi-agent task execution system that uses a YAML-based
+	Use:   brand.BinaryName,
+	Short: fmt.Sprintf("%s - Multi-agent task execution system", brand.NameTitle),
+	Long: fmt.Sprintf(`%s is a multi-agent task execution system that uses a YAML-based
 "blackboard" pattern with file locking for state management, git worktrees
-for task isolation, and agent supervisors with restart logic.`,
+for task isolation, and agent supervisors with restart logic.`, brand.NameTitle),
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -110,18 +109,19 @@ func requireExplicitProjectRoot(root string) (string, error) {
 	}
 	if canonicalFlagRoot != canonicalProjectRoot {
 		return "", &lizaerrors.ProjectRootError{
-			Message:      fmt.Sprintf("--project-root must point at the Liza project root %s, got %s", projectRoot, absRoot),
+			Message:      fmt.Sprintf("--project-root must point at the %s project root %s, got %s", brand.NameTitle, projectRoot, absRoot),
 			Operation:    rootCmd.CommandPath(),
 			ExpectedRoot: projectRoot,
 			Err:          fmt.Errorf("explicit project root is not repository root"),
 		}
 	}
-	if info, err := os.Stat(filepath.Join(projectRoot, paths.LizaDirName)); err != nil || !info.IsDir() {
+	projectDir := paths.New(projectRoot).LizaDir()
+	if info, err := os.Stat(projectDir); err != nil || !info.IsDir() {
 		if err == nil {
 			err = fmt.Errorf("path exists but is not a directory")
 		}
 		return "", &lizaerrors.ProjectRootError{
-			Message:      fmt.Sprintf("--project-root %s is not a Liza project root: missing .liza directory", projectRoot),
+			Message:      fmt.Sprintf("--project-root %s is not a %s project root: missing %s directory", projectRoot, brand.NameTitle, paths.ProjectDirName()),
 			Operation:    rootCmd.CommandPath(),
 			ExpectedRoot: projectRoot,
 			Err:          err,
@@ -145,7 +145,7 @@ func requireAgentID(cmd *cobra.Command) (string, error) {
 		Required:  true,
 	})
 	if err != nil {
-		return "", fmt.Errorf("agent ID required (use --agent-id flag or LIZA_AGENT_ID env var): %w", err)
+		return "", fmt.Errorf("agent ID required (use --agent-id flag or %s env var; legacy LIZA_AGENT_ID is also accepted): %w", brand.EnvName("AGENT_ID"), err)
 	}
 	return agentID, nil
 }
@@ -163,7 +163,7 @@ func cliValidationWrap(message string, err error) error {
 
 func checkSupportedPlatform(goos string) error {
 	if goos == "windows" {
-		return cliValidationError(windowsUnsupportedMessage)
+		return cliValidationError(fmt.Sprintf("native Windows is not supported; run %s under WSL2", brand.BinaryName))
 	}
 	return nil
 }
@@ -230,7 +230,7 @@ func init() {
 
 	// Global flags
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
-	rootCmd.PersistentFlags().StringP("project-root", "C", "", "Liza project root for state commands")
+	rootCmd.PersistentFlags().StringP("project-root", "C", "", brand.NameTitle+" project root for state commands")
 	// Note: --check-update and --update-channel are registered here for Cobra help visibility,
 	// but the updater package manually pre-parses these flags before Cobra command execution.
 	// This allows update checks to run before the main command, while still showing these flags
@@ -238,13 +238,13 @@ func init() {
 	// and last-flag-wins semantics to match pflag/Cobra behavior for these specific flags.
 	// Update channel validation (stable/main) is performed during this pre-parsing phase,
 	// and invalid values cause a fatal error before Cobra command execution.
-	rootCmd.PersistentFlags().Bool("check-update", false, "check for a Liza update before running")
+	rootCmd.PersistentFlags().Bool("check-update", false, "check for a "+brand.NameTitle+" update before running")
 	rootCmd.PersistentFlags().String("update-channel", "stable", "update check channel: stable or main")
 }
 
 // addAgentIDFlag registers --agent-id on a specific command.
 func addAgentIDFlag(cmd *cobra.Command) {
-	cmd.Flags().String("agent-id", "", "agent identifier (overrides LIZA_AGENT_ID env var)")
+	cmd.Flags().String("agent-id", "", "agent identifier (overrides "+brand.EnvName("AGENT_ID")+" env var; legacy LIZA_AGENT_ID is also accepted)")
 }
 
 // addJSONFlag registers --json on a specific command.
@@ -260,7 +260,7 @@ func isJSON(cmd *cobra.Command) bool {
 
 // addChangedByFlag registers --changed-by on a specific command.
 func addChangedByFlag(cmd *cobra.Command) {
-	cmd.Flags().String("changed-by", "", "identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')")
+	cmd.Flags().String("changed-by", "", "identifier for audit trail (overrides "+brand.EnvName("AGENT_ID")+" env var, defaults to 'human')")
 }
 
 func main() {

@@ -12,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/envgate"
 )
 
 const EnvEnableSemble = "LIZA_ENABLE_SEMBLE"
@@ -31,8 +34,7 @@ const maxDiagnosticBytes = 1024
 // validation command execution.
 const SembleValidationTimeout = 30 * time.Second
 
-var defaultIgnorePatterns = []string{
-	".liza/",
+var defaultIgnorePatternsTail = []string{
 	".worktrees/",
 	"stacklit.json",
 	"*.scip",
@@ -222,7 +224,7 @@ func ParseEnvGate(value string) bool {
 
 // RuntimeEnabled reports whether Semble behavior is active for this process.
 func RuntimeEnabled() bool {
-	return ParseEnvGate(os.Getenv(EnvEnableSemble))
+	return ParseEnvGate(envgate.Value(EnvEnableSemble))
 }
 
 // PlanCommands returns fixed Semble prewarm and offline validation plans. When
@@ -318,8 +320,9 @@ func CheckOfflineReadiness(opts ValidationOptions) ValidationResult {
 // DefaultIgnorePatterns returns the ordered Semble ignore source of truth for
 // runtime, generated-index, and credential exclusions.
 func DefaultIgnorePatterns() []string {
-	patterns := make([]string, len(defaultIgnorePatterns))
-	copy(patterns, defaultIgnorePatterns)
+	patterns := make([]string, 0, len(defaultIgnorePatternsTail)+1)
+	patterns = append(patterns, brand.RuntimeValues().ProjectDirName+"/")
+	patterns = append(patterns, defaultIgnorePatternsTail...)
 	return patterns
 }
 

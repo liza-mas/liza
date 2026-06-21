@@ -2,7 +2,7 @@
 
 Lightweight mode for delegated work. Default: read-only (research, analyze, return digests). `READ-WRITE` variant permits state modification under stricter ceremony.
 
-**Prerequisite:** Read [CORE.md](~/.liza/CORE.md) first.
+**Prerequisite:** Read [CORE.md](~/§BRAND_GLOBAL_DIRNAME§/CORE.md) first.
 
 ---
 
@@ -47,7 +47,7 @@ When brief contains `MODE: SUBAGENT READ-WRITE`:
 
 ## Session Initialization (Subagent)
 
-1. Review `~/.liza/AGENT_TOOLS.md` — MCP servers provide efficient alternatives
+1. Review `~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md` — MCP servers provide efficient alternatives
 2. Parse brief: extract GOAL, CONTEXT, SCOPE
 3. Begin work — no greetings, no mental model ceremony
 

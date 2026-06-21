@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 func TestValidCLIsIncludesCodexACP(t *testing.T) {
@@ -158,6 +160,17 @@ func TestResolveDefaultCLI(t *testing.T) {
 	}
 }
 
+func TestResolveDefaultCLIUsesBrandedEnvBeforeLegacy(t *testing.T) {
+	restore := setAgentTestBrandEnvPrefix(t, "ACME_AGENT")
+	defer restore()
+	t.Setenv("ACME_AGENT_DEFAULT_CLI", "codex")
+	t.Setenv("LIZA_DEFAULT_CLI", "gemini")
+
+	if got := ResolveDefaultCLI(""); got != "codex" {
+		t.Fatalf("ResolveDefaultCLI() = %q, want branded env value", got)
+	}
+}
+
 func TestResolveDefaultCLIForRole(t *testing.T) {
 	t.Setenv("LIZA_DEFAULT_CLI", "")
 	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
@@ -253,6 +266,15 @@ func TestResolveDefaultCLIForRole(t *testing.T) {
 				t.Errorf("ResolveDefaultCLIForRole(%q, %+v) = %q, want %q", tt.roleType, tt.config, got, tt.want)
 			}
 		})
+	}
+}
+
+func setAgentTestBrandEnvPrefix(t *testing.T, prefix string) func() {
+	t.Helper()
+	previous := brand.EnvPrefix
+	brand.EnvPrefix = prefix
+	return func() {
+		brand.EnvPrefix = previous
 	}
 }
 

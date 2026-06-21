@@ -11,7 +11,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/gitenv"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/worktreeexclude"
 	"github.com/tailscale/hujson"
 )
@@ -228,7 +230,7 @@ func ParseEnvGate(value string) bool {
 // current process. It is true only when LIZA_ENABLE_SCIP_SEARCH is truthy and at
 // least one configured language from Config.ScipSearch remains available.
 func RuntimeEnabled(configuredLanguages []string) bool {
-	return ParseEnvGate(os.Getenv(EnvEnableScipSearch)) && len(configuredLanguages) > 0
+	return ParseEnvGate(envgate.Value(EnvEnableScipSearch)) && len(configuredLanguages) > 0
 }
 
 // PlanRuntimeCommands selects detected configured languages for a target root
@@ -581,7 +583,7 @@ func filterRuntimeLanguages(configuredLanguages, detectedLanguages []string) []s
 func buildRuntimeCommandPlans(targetRoot string, languages []string, files []string) []LanguageAggregatePlan {
 	plans := make([]LanguageAggregatePlan, 0, len(languages))
 	for _, language := range languages {
-		outputPath := filepath.Join(targetRoot, ".liza", "scip", language+".scip")
+		outputPath := filepath.Join(targetRoot, paths.ProjectDirName(), "scip", language+".scip")
 		plan, ok := languageAggregatePlan(targetRoot, language, outputPath, files)
 		if ok {
 			plans = append(plans, plan)
@@ -1521,7 +1523,7 @@ func runRuntimeCommandPlan(plan RuntimeCommandPlan) (string, error) {
 }
 
 func ensureTaskWorktreeScipExclude(targetRoot string) error {
-	if err := worktreeexclude.EnsurePrivateExclude(targetRoot, ".liza/scip/"); err != nil {
+	if err := worktreeexclude.EnsurePrivateExclude(targetRoot, paths.ProjectDirName()+"/scip/"); err != nil {
 		return fmt.Errorf("ensure task worktree scip-search exclude: %w", err)
 	}
 	return nil

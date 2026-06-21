@@ -26,7 +26,7 @@ how. It decomposes into capabilities; capabilities decompose into story document
 # Trigger
 
 Use this skill when:
-- Orchestrator creates an epic-writing task (Liza mode)
+- Orchestrator creates an epic-writing task (§BRAND_NAME_TITLE§ mode)
 - User asks to write an epic for a feature area or product milestone (Pairing mode)
 - Story-writing is blocked because scope has not been bounded at the capability level
 
@@ -34,7 +34,7 @@ Use this skill when:
 
 - **References** to one or more sections of source material (vision doc, product brief,
   strategy doc, OKRs, or prior epics)
-- **Output file path**: In Liza mode, assigned by the Orchestrator on the blackboard. In Pairing
+- **Output file path**: In §BRAND_NAME_TITLE§ mode, assigned by the Orchestrator on the blackboard. In Pairing
   mode, propose a path under the project's epic directory and confirm with the human before writing.
 
 **Scope discipline (two-tier):**
@@ -290,13 +290,13 @@ If it reads like a goal in an OKR, it's too high. Narrow it to something a Story
 **Pairing mode:** All interactive prompts apply. Present the draft epic for human review before
 writing the file. Human may redirect scope, resolve Open Questions inline, or confirm assumptions.
 
-**Liza mode:** Epic Writer operates autonomously within task scope. When a planner task
+**§BRAND_NAME_TITLE§ mode:** Epic Writer operates autonomously within task scope. When a planner task
 decomposes a vision document, the planner applies this skill once per epic boundary it identifies.
 Producing multiple epic artifacts from a single vision source is normal pipeline behavior — the
 "flag for splitting" guidance in Size applies to individual epics that are too broad, not to the
 planner's decomposition of a vision into multiple epics.
 
-| Pairing Prompt | Liza Behavior |
+| Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | "Source material spans multiple capability areas — split?" | Applies to a single epic that's too broad. When decomposing a vision into multiple epics, multiple capability areas across epics is expected — flag only if a single epic spans unrelated areas |
 | "Epic would produce >8 stories — where to split?" | Find the natural persona or subsystem seam; flag split rationale in Context |

@@ -5,7 +5,7 @@ description: Software Architecture Review Protocol
 
 **REVIEW_FILE** = `specs/architecture/architecture-review.md`
 
-**Recommended Tools:** Make sure you've read ~/.liza/AGENT_TOOLS.md
+**Recommended Tools:** Make sure you've read ~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md
 list_directory_tree and codebase_search (fast and token-efficient semantic search) may be specifically useful.
 
 Architecture is about trade-offs, not truths. Raise questions, suggest directions, avoid astronautics.
@@ -638,7 +638,7 @@ Each finding must include skill attribution:
 
 The skill uses the full repo for context, but what to *raise* depends on mode:
 
-**Liza mode (multi-agent):**
+**§BRAND_NAME_TITLE§ mode (multi-agent):**
 - Only raise issues **introduced by the changes on the worktree**
 - Pre-existing issues unrelated to the changes are out of scope
 - Use repo context to evaluate *impact* of changes, not to audit the whole codebase
@@ -662,7 +662,7 @@ Save to specs/architecture/architectural-issues.md? (y/n/select specific)
 
 Wait for user confirmation before writing.
 
-**Liza mode (multi-agent):** Save findings automatically after review completion. No confirmation required — the skill is invoked by agents operating autonomously.
+**§BRAND_NAME_TITLE§ mode (multi-agent):** Save findings automatically after review completion. No confirmation required — the skill is invoked by agents operating autonomously.
 
 ## Integration with Review Workflow
 

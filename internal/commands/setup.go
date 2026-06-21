@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 // userCustomizableFiles are files that users are expected to edit.
@@ -54,6 +56,7 @@ func SetupCommand(params SetupParams) error {
 	if err := os.MkdirAll(params.TargetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", params.TargetDir, err)
 	}
+	warnLegacyGlobalRoot(params.HomeDir, params.TargetDir)
 
 	planned := embedded.PlanGlobalFiles(params.TargetDir)
 	existing, fresh := partitionByExistence(planned)
@@ -127,6 +130,43 @@ func SetupCommand(params SetupParams) error {
 
 	printSetupSummary(params.TargetDir, written, skipFiles, autoReplaced, params.Agents)
 	return nil
+}
+
+func warnLegacyGlobalRoot(homeDir, targetDir string) {
+	if brand.RuntimeValues().GlobalDirName == paths.LizaDirName {
+		return
+	}
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return
+		}
+	}
+	legacyDir := filepath.Join(homeDir, paths.LizaDirName)
+	if sameCleanPath(legacyDir, targetDir) {
+		return
+	}
+	if _, err := os.Stat(legacyDir); err == nil {
+		fmt.Fprintf(os.Stderr, "Warning: legacy global root %s detected; using %s. Legacy state is ignored until explicitly migrated.\n", legacyDir, targetDir)
+	}
+}
+
+func warnLegacyProjectRoot(projectRoot, activeDir string) {
+	if paths.ProjectDirName() == paths.LizaDirName {
+		return
+	}
+	legacyDir := filepath.Join(projectRoot, paths.LizaDirName)
+	if sameCleanPath(legacyDir, activeDir) {
+		return
+	}
+	if _, err := os.Stat(legacyDir); err == nil {
+		fmt.Fprintf(os.Stderr, "Warning: legacy project root %s detected; using %s. Legacy state is ignored until explicitly migrated.\n", legacyDir, activeDir)
+	}
+}
+
+func sameCleanPath(left, right string) bool {
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 // partitionByExistence splits paths into those that exist on disk and those that don't.
@@ -211,7 +251,7 @@ func confirmOverwrites(existing, fresh []string, force bool, targetDir string, r
 // printSetupSummary prints the final setup results to stdout.
 // autoReplaced tracks files replaced by custom versions (not "kept existing").
 func printSetupSummary(targetDir string, written []string, skipFiles map[string]bool, autoReplaced []string, agents []string) {
-	fmt.Printf("Liza global config written to %s (%d files + pipeline.yaml):\n", targetDir, len(written))
+	fmt.Printf("%s global config written to %s (%d files + pipeline.yaml):\n", brand.NameTitle, targetDir, len(written))
 	for _, p := range written {
 		fmt.Printf("  %s\n", relDisplay(targetDir, p))
 	}
@@ -247,13 +287,13 @@ func printSetupSummary(targetDir string, written []string, skipFiles map[string]
 	}
 
 	docPath := relDisplay(targetDir, filepath.Join(targetDir, "support-docs", "CUSTOMIZING_AGENT_TOOLS.md"))
-	content := fmt.Sprintf(`Liza global setup complete
+	content := fmt.Sprintf(`%s global setup complete
 
 Next steps:
   1. Customize agent tools for your project:
        %s
-  2. Enable Liza in a project:
-       cd your-project && liza init --claude`, docPath)
+  2. Enable %s in a project:
+       cd your-project && %s init --claude`, brand.NameTitle, docPath, brand.NameTitle, brand.BinaryName)
 
 	style := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/gitenv"
 )
 
@@ -98,7 +99,7 @@ func parseEnvGate(value string) bool {
 // RuntimeEnabled reports whether runtime Stacklit behavior is active for the
 // current process.
 func RuntimeEnabled() bool {
-	return parseEnvGate(os.Getenv(EnvEnableStacklit))
+	return parseEnvGate(envgate.Value(EnvEnableStacklit))
 }
 
 // RefreshIndex generates stacklit.json for one target root. For task worktrees,

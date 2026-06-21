@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/envgate"
@@ -42,8 +43,9 @@ var (
 	initProjectSembleRunner   semble.CommandRunner
 )
 
-// InitProject initializes a Liza workspace at projectRoot. No terminal I/O.
-// Returns error if .liza already exists, spec file is missing, or setup not run.
+// InitProject initializes a workspace at projectRoot. No terminal I/O.
+// Returns error if the project runtime directory already exists, spec file is
+// missing, or setup has not run.
 func InitProject(projectRoot string, params InitProjectParams) error {
 	branch := params.Branch
 	if branch == "" {
@@ -85,9 +87,9 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 
 	lp := paths.New(projectRoot)
 
-	// Validate .liza doesn't already exist
+	// Validate project runtime directory doesn't already exist.
 	if _, err := os.Stat(lp.LizaDir()); !os.IsNotExist(err) {
-		return &PreconditionError{Reason: fmt.Sprintf(".liza already exists at %s, remove or use existing", lp.LizaDir())}
+		return &PreconditionError{Reason: fmt.Sprintf("%s already exists at %s, remove or use existing", paths.ProjectDirName(), lp.LizaDir())}
 	}
 
 	// Resolve and validate spec file
@@ -106,7 +108,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 		return &lzerr.ValidationError{Message: err.Error()}
 	}
 
-	// Validate global config exists (liza setup prerequisite)
+	// Validate global config exists (setup prerequisite).
 	globalDir, err := paths.GlobalLizaDir()
 	if err != nil {
 		return fmt.Errorf("failed to determine global config path: %w", err)
@@ -114,7 +116,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 	globalCoreFile := filepath.Join(globalDir, "CORE.md")
 	if _, err := os.Stat(globalCoreFile); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("global config not found at %s\nRun 'liza setup' first to install contracts, skills, and support docs", globalDir)
+			return fmt.Errorf("global config not found at %s\nRun '%s setup' first to install contracts, skills, and support docs", globalDir, brand.BinaryName)
 		}
 		return fmt.Errorf("cannot access global config at %s: %w", globalCoreFile, err)
 	}
@@ -123,7 +125,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 
 	// Create directory structure
 	if err := os.MkdirAll(lp.LizaDir(), 0755); err != nil {
-		return fmt.Errorf("failed to create .liza directory: %w", err)
+		return fmt.Errorf("failed to create %s directory: %w", paths.ProjectDirName(), err)
 	}
 
 	cleanup := func() {
@@ -150,7 +152,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
 
 	postWorktreeCmd := stringPtrIfNonEmpty(params.PostWorktreeCmd)
-	copyWorktreeEnvFiles := params.CopyWorktreeEnvFiles || envgate.Truthy(os.Getenv(models.EnvEnableCopyWorktreeEnvFiles))
+	copyWorktreeEnvFiles := params.CopyWorktreeEnvFiles || envgate.TruthyEnv(models.EnvEnableCopyWorktreeEnvFiles)
 
 	state := &models.State{
 		Version:         1,

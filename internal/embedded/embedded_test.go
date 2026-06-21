@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -58,6 +59,47 @@ func TestAgentToolsOptionalIndexGuidance(t *testing.T) {
 	}
 
 	assertAgentToolsOptionalIndexGuidance(t, string(content))
+}
+
+func TestRuntimeEmbeddedAssetBrandPlaceholdersAreKnownAndRendered(t *testing.T) {
+	placeholderRE := regexp.MustCompile(`__BRAND_[A-Z0-9_]+__`)
+	known := map[string]bool{
+		"__BRAND_NAME_LOWER__":      true,
+		"__BRAND_NAME_UPPER__":      true,
+		"__BRAND_NAME_TITLE__":      true,
+		"__BRAND_BINARY_NAME__":     true,
+		"__BRAND_GLOBAL_DIRNAME__":  true,
+		"__BRAND_PROJECT_DIRNAME__": true,
+		"__BRAND_ENV_PREFIX__":      true,
+	}
+	assets := map[string][]byte{
+		"claude-settings.json":             claudeSettingsContent,
+		"codex-hooks.json":                 codexHooksContent,
+		"opencode-tools/exec.ts":           opencodeExecToolContent,
+		"hooks/enforce-init.sh":            enforceInitHookContent,
+		"hooks/session-context.sh":         sessionContextHookContent,
+		"hooks/git-guard.sh":               gitGuardHookContent,
+		"hooks/rtk-guard.sh":               rtkGuardHookContent,
+		"hooks/worktree-path-guard.sh":     worktreePathGuardHookContent,
+		"git-hooks/worktree-pre-commit.sh": worktreePreCommitHookContent,
+		"guardrails-template.md":           guardrailsTemplateContent,
+		"claudeignore":                     claudeIgnoreContent,
+	}
+
+	for name, content := range assets {
+		for _, token := range placeholderRE.FindAllString(string(content), -1) {
+			if !known[token] {
+				t.Fatalf("%s contains unknown runtime brand placeholder %s", name, token)
+			}
+		}
+		rendered := string(renderEmbeddedAsset(content))
+		if token := placeholderRE.FindString(rendered); token != "" {
+			t.Fatalf("%s rendered with residual runtime brand placeholder %s", name, token)
+		}
+		if strings.Contains(rendered, "§") {
+			t.Fatalf("%s rendered with § brand macro delimiter", name)
+		}
+	}
 }
 
 func TestFrontmatter(t *testing.T) {
@@ -1173,7 +1215,7 @@ func TestWriteClaudeSettings_JSONValidity(t *testing.T) {
 
 func TestEmbeddedClaudeSettingsScipSearchPermissions(t *testing.T) {
 	var settings map[string]any
-	if err := json.Unmarshal(claudeSettingsContent, &settings); err != nil {
+	if err := json.Unmarshal(renderEmbeddedAsset(claudeSettingsContent), &settings); err != nil {
 		t.Fatalf("embedded claude-settings.json is invalid JSON: %v", err)
 	}
 
@@ -1183,7 +1225,7 @@ func TestEmbeddedClaudeSettingsScipSearchPermissions(t *testing.T) {
 
 func TestEmbeddedClaudeSettingsTmpPermissions(t *testing.T) {
 	var settings map[string]any
-	if err := json.Unmarshal(claudeSettingsContent, &settings); err != nil {
+	if err := json.Unmarshal(renderEmbeddedAsset(claudeSettingsContent), &settings); err != nil {
 		t.Fatalf("embedded claude-settings.json is invalid JSON: %v", err)
 	}
 
@@ -1891,11 +1933,11 @@ func TestWriteHooks(t *testing.T) {
 	}
 
 	for name, wantContent := range map[string][]byte{
-		"enforce-init.sh":        enforceInitHookContent,
-		"session-context.sh":     sessionContextHookContent,
-		"git-guard.sh":           gitGuardHookContent,
-		"rtk-guard.sh":           rtkGuardHookContent,
-		"worktree-path-guard.sh": worktreePathGuardHookContent,
+		"enforce-init.sh":        renderEmbeddedAsset(enforceInitHookContent),
+		"session-context.sh":     renderEmbeddedAsset(sessionContextHookContent),
+		"git-guard.sh":           renderEmbeddedAsset(gitGuardHookContent),
+		"rtk-guard.sh":           renderEmbeddedAsset(rtkGuardHookContent),
+		"worktree-path-guard.sh": renderEmbeddedAsset(worktreePathGuardHookContent),
 	} {
 		hookPath := filepath.Join(tmpDir, ".claude", "hooks", name)
 		info, err := os.Stat(hookPath)
@@ -2439,10 +2481,10 @@ func assertHookScripts(t *testing.T, hooksDir string) {
 
 func hookScriptContents() map[string][]byte {
 	return map[string][]byte{
-		"enforce-init.sh":        enforceInitHookContent,
-		"session-context.sh":     sessionContextHookContent,
-		"git-guard.sh":           gitGuardHookContent,
-		"worktree-path-guard.sh": worktreePathGuardHookContent,
+		"enforce-init.sh":        renderEmbeddedAsset(enforceInitHookContent),
+		"session-context.sh":     renderEmbeddedAsset(sessionContextHookContent),
+		"git-guard.sh":           renderEmbeddedAsset(gitGuardHookContent),
+		"worktree-path-guard.sh": renderEmbeddedAsset(worktreePathGuardHookContent),
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/codexconfig"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -93,13 +94,27 @@ const OpenCodeExecToolManagedHeader = "// LIZA MANAGED FILE: OpenCode exec compa
 
 // OpenCodeExecToolContent returns the embedded OpenCode exec compatibility tool.
 func OpenCodeExecToolContent() []byte {
-	return bytes.Clone(opencodeExecToolContent)
+	return renderEmbeddedAsset(opencodeExecToolContent)
 }
 
 // PipelineConfigContent returns the raw embedded pipeline.yaml content.
 // Used by init to auto-freeze when --config is not provided.
 func PipelineConfigContent() []byte {
 	return pipelineConfigContent
+}
+
+func renderEmbeddedAsset(content []byte) []byte {
+	values := brand.RuntimeValues()
+	replacer := strings.NewReplacer(
+		"__BRAND_NAME_LOWER__", values.NameLower,
+		"__BRAND_NAME_UPPER__", values.NameUpper,
+		"__BRAND_NAME_TITLE__", values.NameTitle,
+		"__BRAND_BINARY_NAME__", values.BinaryName,
+		"__BRAND_GLOBAL_DIRNAME__", values.GlobalDirName,
+		"__BRAND_PROJECT_DIRNAME__", values.ProjectDirName,
+		"__BRAND_ENV_PREFIX__", values.EnvPrefix,
+	)
+	return []byte(replacer.Replace(string(content)))
 }
 
 type embeddedCorpus struct {
@@ -373,7 +388,7 @@ func WriteClaudeSettings(projectRoot string, reader *bufio.Reader) error {
 	}
 
 	var lizaSettings map[string]any
-	if err := json.Unmarshal(claudeSettingsContent, &lizaSettings); err != nil {
+	if err := json.Unmarshal(renderEmbeddedAsset(claudeSettingsContent), &lizaSettings); err != nil {
 		return fmt.Errorf("failed to parse embedded claude-settings.json: %w", err)
 	}
 
@@ -581,7 +596,7 @@ func mergeCodexHooksFeature(content string) (string, bool) {
 
 func renderCodexHooksJSON(hooksPath string, reader *bufio.Reader) ([]byte, bool, error) {
 	var lizaHooks map[string]any
-	if err := json.Unmarshal(codexHooksContent, &lizaHooks); err != nil {
+	if err := json.Unmarshal(renderEmbeddedAsset(codexHooksContent), &lizaHooks); err != nil {
 		return nil, false, fmt.Errorf("failed to parse embedded codex-hooks.json: %w", err)
 	}
 
@@ -997,7 +1012,7 @@ func codexBaselineLooksComplete(content string) bool {
 	}
 	requiredSnippets := []string{
 		".codex",
-		".liza",
+		paths.GlobalDirName(),
 		".npm",
 		".pyenv",
 	}
@@ -1318,7 +1333,7 @@ func WriteGuardrails(projectRoot string) error {
 		// File already exists, don't overwrite
 		return nil
 	}
-	if err := os.WriteFile(guardrailsPath, guardrailsTemplateContent, 0644); err != nil {
+	if err := os.WriteFile(guardrailsPath, renderEmbeddedAsset(guardrailsTemplateContent), 0644); err != nil {
 		return fmt.Errorf("failed to write GUARDRAILS.md: %w", err)
 	}
 	return nil
@@ -1341,7 +1356,7 @@ func WriteClaudeIgnore(projectRoot string, reader *bufio.Reader) error {
 			return nil
 		}
 	}
-	if err := os.WriteFile(ignorePath, claudeIgnoreContent, 0644); err != nil {
+	if err := os.WriteFile(ignorePath, renderEmbeddedAsset(claudeIgnoreContent), 0644); err != nil {
 		return fmt.Errorf("failed to write .claudeignore: %w", err)
 	}
 	return nil
@@ -1368,7 +1383,7 @@ func WriteSupportDoc(lizaDir string) error {
 func RenderWorktreePreCommitHook(lizaBin, taskID string) []byte {
 	out := bytes.ReplaceAll(worktreePreCommitHookContent, []byte("__LIZA_BIN__"), []byte(lizaBin))
 	out = bytes.ReplaceAll(out, []byte("__TASK_ID__"), []byte(taskID))
-	return out
+	return renderEmbeddedAsset(out)
 }
 
 // WriteHooks writes embedded hook scripts to .claude/hooks/ in the project root.
@@ -1387,7 +1402,7 @@ func WriteHooks(projectRoot string) error {
 		"worktree-path-guard.sh": worktreePathGuardHookContent,
 	} {
 		hookPath := filepath.Join(hooksDir, name)
-		if err := os.WriteFile(hookPath, content, 0755); err != nil {
+		if err := os.WriteFile(hookPath, renderEmbeddedAsset(content), 0755); err != nil {
 			return fmt.Errorf("failed to write %s: %w", name, err)
 		}
 	}
@@ -1410,7 +1425,7 @@ func WriteCodexHooks(projectRoot string) error {
 		"worktree-path-guard.sh": worktreePathGuardHookContent,
 	} {
 		hookPath := filepath.Join(hooksDir, name)
-		if err := os.WriteFile(hookPath, content, 0755); err != nil {
+		if err := os.WriteFile(hookPath, renderEmbeddedAsset(content), 0755); err != nil {
 			return fmt.Errorf("failed to write %s: %w", name, err)
 		}
 	}
@@ -1435,7 +1450,7 @@ func WriteOpenCodeExecTool(projectRoot string) error {
 	if err := os.MkdirAll(filepath.Dir(toolPath), 0755); err != nil {
 		return fmt.Errorf("failed to create .opencode/tools directory: %w", err)
 	}
-	if err := os.WriteFile(toolPath, opencodeExecToolContent, 0644); err != nil {
+	if err := os.WriteFile(toolPath, renderEmbeddedAsset(opencodeExecToolContent), 0644); err != nil {
 		return fmt.Errorf("failed to write opencode exec tool: %w", err)
 	}
 	return nil

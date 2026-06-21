@@ -144,7 +144,7 @@ Each finding must include skill attribution:
 
 The skill uses the full system for context, but what to *raise* depends on mode:
 
-**Liza mode (multi-agent):**
+**§BRAND_NAME_TITLE§ mode (multi-agent):**
 - Only raise issues **introduced or materially affected by the changes on the worktree**
 - Pre-existing systemic issues unrelated to the changes are out of scope
 - Use system context to evaluate *impact* of changes, not to audit the whole system
@@ -168,7 +168,7 @@ Save to specs/architecture/architectural-issues.md? (y/n/select specific)
 
 Wait for user confirmation before writing.
 
-**Liza mode (multi-agent):** Write findings to the blackboard `discovered` section — not to ISSUES_FILE. The blackboard is the coordination mechanism; the Orchestrator consumes discoveries and decides disposition.
+**§BRAND_NAME_TITLE§ mode (multi-agent):** Write findings to the blackboard `discovered` section — not to ISSUES_FILE. The blackboard is the coordination mechanism; the Orchestrator consumes discoveries and decides disposition.
 
 For each finding, write a discovery entry:
 ```yaml
@@ -200,7 +200,7 @@ Override severity based on judgment when the finding's actual impact warrants it
 - `immediate` — Finding blocks current task or introduces risk that compounds with in-progress work
 - `deferred` (default) — Finding is structural; Orchestrator evaluates at next planning cycle
 
-**ISSUES_FILE in Liza mode:** Only the Orchestrator writes to ISSUES_FILE, when it evaluates a finding and decides to defer rather than create a task. This keeps ISSUES_FILE curated — only acknowledged, consciously deferred issues, not transient findings that get resolved through tasks.
+**ISSUES_FILE in §BRAND_NAME_TITLE§ mode:** Only the Orchestrator writes to ISSUES_FILE, when it evaluates a finding and decides to defer rather than create a task. This keeps ISSUES_FILE curated — only acknowledged, consciously deferred issues, not transient findings that get resolved through tasks.
 
 ## Integration with Workflow
 
@@ -211,7 +211,7 @@ Override severity based on judgment when the finding's actual impact warrants it
 4. Present list and ask for confirmation
 5. Append new findings or update existing entries in ISSUES_FILE
 
-**Liza mode:**
+**§BRAND_NAME_TITLE§ mode:**
 1. Complete systemic analysis as normal
 2. Write findings to blackboard `discovered` section (see severity/urgency mapping above)
 3. Orchestrator evaluates discoveries at next wake cycle:

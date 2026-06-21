@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/gitenv"
 )
 
 // Standard path components used throughout Liza
 const (
-	LizaDirName   = ".liza"      // Name of the Liza directory
+	LizaDirName   = ".liza"      // Legacy default name of the Liza directory
 	StateFileName = "state.yaml" // Name of the state file
 	LogFileName   = "log.yaml"   // Name of the log file
 	LockSuffix    = ".lock"      // Suffix for lock files
@@ -50,9 +51,19 @@ type LizaPaths struct {
 	projectRoot string // private: main project root (handles worktrees correctly)
 }
 
-// get is a private helper that constructs a path within the .liza directory.
+// ProjectDirName returns the branded project-local runtime directory name.
+func ProjectDirName() string {
+	return brand.RuntimeValues().ProjectDirName
+}
+
+// GlobalDirName returns the branded global runtime directory name.
+func GlobalDirName() string {
+	return brand.RuntimeValues().GlobalDirName
+}
+
+// get is a private helper that constructs a path within the project runtime directory.
 func (p LizaPaths) get(name string) string {
-	return filepath.Join(p.projectRoot, LizaDirName, name)
+	return filepath.Join(p.projectRoot, ProjectDirName(), name)
 }
 
 // ProjectRoot returns the project root directory.
@@ -61,9 +72,9 @@ func (p LizaPaths) ProjectRoot() string {
 	return p.projectRoot
 }
 
-// LizaDir returns the path to the .liza directory.
+// LizaDir returns the path to the branded project runtime directory.
 func (p LizaPaths) LizaDir() string {
-	return filepath.Join(p.projectRoot, LizaDirName)
+	return filepath.Join(p.projectRoot, ProjectDirName())
 }
 
 // Core file methods
@@ -149,13 +160,13 @@ func (p LizaPaths) ClaudeSettingsPath() string {
 	return filepath.Join(p.ClaudeDir(), ClaudeSettingsFile)
 }
 
-// GlobalLizaDir returns the path to the global ~/.liza directory.
+// GlobalLizaDir returns the path to the branded global runtime directory.
 func GlobalLizaDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(homeDir, LizaDirName), nil
+	return filepath.Join(homeDir, GlobalDirName()), nil
 }
 
 // GetProjectRoot returns the main project root directory for the current

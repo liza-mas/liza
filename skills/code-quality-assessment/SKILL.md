@@ -7,7 +7,7 @@ description: Quantitative and qualitative code quality assessment with prioritiz
 
 **Target directories:** If the target directory for REPORT_FILE does not exist, create it. The assessment is the first artifact that justifies the directory's existence.
 
-**Recommended Tools:** Make sure you've read ~/.liza/AGENT_TOOLS.md
+**Recommended Tools:** Make sure you've read ~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md
 list_directory_tree and codebase_search (fast and token-efficient semantic search) may be specifically useful.
 
 Quality is not a binary. Measure it, grade it, and direct investment where it will compound.
@@ -493,7 +493,7 @@ Significant findings (subsystem concerns rated ★★☆☆☆ or below, P1 reco
 
 This skill assesses the whole repository, not individual diffs. Scope constraints apply to **persistence** (what gets written to ISSUES_FILE), not to **analysis** (what gets examined).
 
-**Liza mode (multi-agent):**
+**§BRAND_NAME_TITLE§ mode (multi-agent):**
 - Full repo assessment is the default — the skill exists for whole-codebase evaluation
 - When invoked during a review task (not a standalone assessment), scope findings to what's relevant to the review context
 - Persist only findings not already in ISSUES_FILE
@@ -514,7 +514,7 @@ Save to specs/architecture/architectural-issues.md? (y/n/select specific)
 ```
 Wait for user confirmation.
 
-**Liza mode:** Save automatically after assessment completion.
+**§BRAND_NAME_TITLE§ mode:** Save automatically after assessment completion.
 
 ---
 

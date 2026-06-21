@@ -71,12 +71,12 @@ const providerUnavailableSignalPrefix = "provider-unavailable-"
 
 // ProviderUnavailableSignalPath returns the path to the provider-unavailable signal file.
 func ProviderUnavailableSignalPath(projectRoot, provider string) string {
-	return filepath.Join(projectRoot, paths.LizaDirName, providerUnavailableSignalPrefix+provider)
+	return filepath.Join(paths.New(projectRoot).LizaDir(), providerUnavailableSignalPrefix+provider)
 }
 
 // ProviderUnavailableSignalGlob returns a glob matching provider-unavailable signal files.
 func ProviderUnavailableSignalGlob(projectRoot string) string {
-	return filepath.Join(projectRoot, paths.LizaDirName, providerUnavailableSignalPrefix+"*")
+	return filepath.Join(paths.New(projectRoot).LizaDir(), providerUnavailableSignalPrefix+"*")
 }
 
 // ProviderFromUnavailableSignalFile extracts the provider name from a provider-unavailable signal path.

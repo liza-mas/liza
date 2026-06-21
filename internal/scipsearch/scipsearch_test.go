@@ -16,8 +16,18 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/worktreeexclude"
 )
+
+func withTestScipProjectDirName(t *testing.T, dirName string) {
+	t.Helper()
+	previous := brand.ProjectDirName
+	brand.ProjectDirName = dirName
+	t.Cleanup(func() {
+		brand.ProjectDirName = previous
+	})
+}
 
 func TestParseEnvGate(t *testing.T) {
 	tests := map[string]bool{"": false, "0": false, " false ": false, "1": true, " TRUE ": true, "yes": false}
@@ -1511,6 +1521,43 @@ func TestRefreshTaskWorktreeScipHidesGeneratedIndexes(t *testing.T) {
 	}
 }
 
+func TestRefreshTaskWorktreeScipHidesGeneratedIndexesWithBrandedProjectDir(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	withTestScipProjectDirName(t, ".acme-agent")
+	repo := newGitRepoWithWorktrees(t, "task-one")
+	worktree := repo.worktrees["task-one"]
+	brandedScipDir := filepath.Join(worktree, ".acme-agent", "scip")
+
+	result, err := RefreshIndexes(RefreshOptions{
+		TargetRoot:          worktree,
+		TargetKind:          TargetKindTaskWorktree,
+		ConfiguredLanguages: []string{"go"},
+		Runner: func(plan RuntimeCommandPlan) (string, error) {
+			if plan.Name == "scip-search" && !strings.HasPrefix(plan.OutputPath, brandedScipDir+string(os.PathSeparator)) {
+				return "", fmt.Errorf("output path %q is not prompt-local under branded task runtime dir", plan.OutputPath)
+			}
+			if err := os.WriteFile(plan.OutputPath, []byte("go"), 0o644); err != nil {
+				return "", err
+			}
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RefreshIndexes() error = %v", err)
+	}
+
+	wantPath := filepath.Join(brandedScipDir, "go.scip")
+	if !reflect.DeepEqual(result.Successes, []IndexRef{{Language: "go", Path: wantPath}}) {
+		t.Fatalf("successes = %#v, want go index at %q", result.Successes, wantPath)
+	}
+	privateExclude := gitOutput(t, worktree, "config", "--worktree", "--get", "core.excludesFile")
+	assertExcludeEntry(t, privateExclude, ".acme-agent/scip/")
+	assertNoExcludeEntry(t, privateExclude, ".liza/scip/")
+	if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
+		t.Fatalf("git status --porcelain = %q, want clean", status)
+	}
+}
+
 func TestRefreshTaskWorktreeScipRepeatedRefreshIdempotent(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	repo := newGitRepoWithWorktrees(t, "task-one")
@@ -1848,6 +1895,20 @@ func assertExcludeEntry(t *testing.T, excludePath, entry string) {
 	}
 	if count != 1 {
 		t.Fatalf("%s contains %s %d times, want exactly once; content: %q", excludePath, entry, count, content)
+	}
+}
+
+func assertNoExcludeEntry(t *testing.T, excludePath, entry string) {
+	t.Helper()
+
+	content, err := os.ReadFile(excludePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", excludePath, err)
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.TrimSpace(line) == entry {
+			t.Fatalf("%s unexpectedly contains %s; content: %q", excludePath, entry, content)
+		}
 	}
 }
 

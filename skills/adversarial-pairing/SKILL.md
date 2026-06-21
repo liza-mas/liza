@@ -1,6 +1,6 @@
 ---
 name: adversarial-pairing
-description: Coordinate Pairing-mode doer/reviewer sessions through a Markdown blackboard. Use when the user invokes /adversarial-pairing with role and blackboard-path arguments or asks multiple pairing agents to coordinate plan review, implementation, staged code review, and follow-up review rounds without Liza multi-agent mode.
+description: Coordinate Pairing-mode doer/reviewer sessions through a Markdown blackboard. Use when the user invokes /adversarial-pairing with role and blackboard-path arguments or asks multiple pairing agents to coordinate plan review, implementation, staged code review, and follow-up review rounds without §BRAND_NAME_TITLE§ multi-agent mode.
 ---
 
 # Invocation
@@ -29,7 +29,7 @@ description: Coordinate Pairing-mode doer/reviewer sessions through a Markdown b
 - One logical update equals one helper write: body note/artifact plus matching phase, counter, status, timestamp, and verdict changes.
 - Respect field ownership. Preserve peer comments and peer-owned agent entries exactly.
 - Phase gates are mandatory. Do not advance, create later artifacts, create a coding worktree, or implement unless the current gate is satisfied, `yolo: true` waives only a doer-side human prompt, or the user explicitly waives that exact gate.
-- Skill source is `skills/adversarial-pairing/SKILL.md` in the repo. Installed copies under `~/.liza/skills/` are derived; edit/sync them only after normal diff, approval, validation, and commit.
+- Skill source is `skills/adversarial-pairing/SKILL.md` in the repo. Installed copies under `~/§BRAND_GLOBAL_DIRNAME§/skills/` are derived; edit/sync them only after normal diff, approval, validation, and commit.
 
 # Polling
 

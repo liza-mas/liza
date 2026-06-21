@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 func TestLoadEnvFile(t *testing.T) {
@@ -102,4 +104,32 @@ func TestLoadEnvFile(t *testing.T) {
 			t.Fatalf("got %v, want [KEY=value=with=equals]", got)
 		}
 	})
+}
+
+func TestAgentProcessEnvExportsBrandedAndLegacyAgentID(t *testing.T) {
+	previous := brand.EnvPrefix
+	brand.EnvPrefix = "ACME_AGENT"
+	defer func() {
+		brand.EnvPrefix = previous
+	}()
+
+	got := agentProcessEnv([]string{
+		"ACME_AGENT_AGENT_ID=old-branded",
+		"LIZA_AGENT_ID=old-legacy",
+		"PATH=/bin",
+	}, "coder-7")
+
+	want := []string{
+		"PATH=/bin",
+		"ACME_AGENT_AGENT_ID=coder-7",
+		"LIZA_AGENT_ID=coder-7",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("agentProcessEnv() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("agentProcessEnv()[%d] = %q, want %q (full env %v)", i, got[i], want[i], got)
+		}
+	}
 }

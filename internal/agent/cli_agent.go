@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 )
 
@@ -434,14 +435,20 @@ func envValue(env []string, key string) string {
 }
 
 func agentProcessEnv(base []string, agentID string) []string {
-	out := make([]string, 0, len(base)+1)
+	brandedName := brand.EnvName("AGENT_ID")
+	legacyName := "LIZA_AGENT_ID"
+	out := make([]string, 0, len(base)+2)
 	for _, entry := range base {
-		if strings.HasPrefix(entry, "LIZA_AGENT_ID=") {
+		if strings.HasPrefix(entry, brandedName+"=") || strings.HasPrefix(entry, legacyName+"=") {
 			continue
 		}
 		out = append(out, entry)
 	}
-	return append(out, "LIZA_AGENT_ID="+agentID)
+	out = append(out, brandedName+"="+agentID)
+	if brandedName != legacyName {
+		out = append(out, legacyName+"="+agentID)
+	}
+	return out
 }
 
 func loadEnvFile(path string) []string {

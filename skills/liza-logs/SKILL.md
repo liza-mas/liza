@@ -1,10 +1,10 @@
 ---
-name: liza-logs
-description: Analyze Liza agents logs
+name: §BRAND_NAME_LOWER§-logs
+description: Analyze §BRAND_NAME_TITLE§ agents logs
 ---
 
 SCOPE:
-The logs in `.liza/agent-outputs/` and task state in `.liza/state.yaml`
+The logs in `§BRAND_PROJECT_DIRNAME§/agent-outputs/` and task state in `§BRAND_PROJECT_DIRNAME§/state.yaml`
 (nowhere else unless told otherwise explicitly).
 The prompt may filter more specifically, e.g. a specific role, task, status,
 or time range.
@@ -16,17 +16,17 @@ correlate state symptoms with log evidence; propose fixes.
 PROTOCOL:
 1. Start by running the analyzer:
 ```bash
-python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/coder-*.txt        # all coder agents
-python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/coder-1-*.txt # single agent
-python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py --summary-by-role .liza/agent-outputs/*.txt
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-log.py §BRAND_PROJECT_DIRNAME§/agent-outputs/coder-*.txt        # all coder agents
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-log.py §BRAND_PROJECT_DIRNAME§/agent-outputs/coder-1-*.txt # single agent
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-log.py --summary-by-role §BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt
 ```
 By default, run the analyzer **per role**.
 Use `--summary-by-role` when you need cross-role aggregate token, tool, MCP,
 error, and skill-invocation totals.
 
-2. Inspect `.liza/state.yaml` for task-level frictions before drawing conclusions:
+2. Inspect `§BRAND_PROJECT_DIRNAME§/state.yaml` for task-level frictions before drawing conclusions:
 ```bash
-python3 ~/.liza/skills/liza-logs/scripts/analyze-state.py .liza/state.yaml
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-state.py §BRAND_PROJECT_DIRNAME§/state.yaml
 ```
    - tasks with `review_cycles_total >= 4`
    - tasks whose status is `INTEGRATION_FAILED`, `BLOCKED`, `SUPERSEDED`, or `ABANDONED`
@@ -57,14 +57,14 @@ per-turn growth or cost.
 Permission/policy friction is operational setup friction, not ordinary task
 failure. Keep it near the top and separate it from command exit failures. Split
 policy blocks, missing allowlist entries, shell-shape rejections, filesystem
-allowlist blocks, sleep/polling blocks, and Liza project-root mismatches because
+allowlist blocks, sleep/polling blocks, and §BRAND_NAME_TITLE§ project-root mismatches because
 their fix surfaces differ.
 
 3. Refine the analysis with the bounded query helper, not by manually reading
    raw log files. Use `query-log.py` to extract trimmed evidence windows for
    specific questions, for example:
 ```bash
-python3 ~/.liza/skills/liza-logs/scripts/query-log.py .liza/agent-outputs/coder-3-*.txt --around-errors 3 --task architecture-4-code-planning-0-b-repair-0-coding-1
+python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/query-log.py §BRAND_PROJECT_DIRNAME§/agent-outputs/coder-3-*.txt --around-errors 3 --task architecture-4-code-planning-0-b-repair-0-coding-1
 ```
    - Manual raw-log reads are a last resort only when the query helper cannot
      answer a concrete evidence question; state the gap before doing so.
@@ -73,17 +73,17 @@ python3 ~/.liza/skills/liza-logs/scripts/query-log.py .liza/agent-outputs/coder-
      back to the exact source log quickly.
 
 4. Before proposing a fix, check whether the fix is already implemented (e.g. an instruction already exists but agents ignore it):
-   - Read one agent prompt of the relevant role in `.liza/agent-prompts/`
-   - Check the contract files in `~/.liza/` (CORE.md, AGENT_TOOLS.md, MULTI_AGENT_MODE.md)
+   - Read one agent prompt of the relevant role in `§BRAND_PROJECT_DIRNAME§/agent-prompts/`
+   - Check the contract files in `~/§BRAND_GLOBAL_DIRNAME§/` (CORE.md, AGENT_TOOLS.md, MULTI_AGENT_MODE.md)
 
-5. Write the final report using `skills/liza-logs/report-format.md`.
+5. Write the final report using `skills/§BRAND_NAME_LOWER§-logs/report-format.md`.
 
 6. Propose fixes whenever possible.
 
 FALSE POSITIVES:
 - **Repeated contract reads** (~8KB per session): Agents read AGENT_TOOLS.md, GUARDRAILS.md, etc. during initialization. These are usually cache hits — negligible cost. Do not flag as waste unless the same payload is reread for no reason later in the session.
-- **Rich JSON transcript volume**: Provider CLIs may emit full JSONL session transcripts containing runtime envelopes, tool calls, tool results, usage metadata, rate-limit events, and command output. Large `.liza/agent-outputs/*.txt` files are not automatically agent reasoning bloat. Attribute volume to avoidable behavior before raising it: broad file reads, repeated large diffs, noisy failing tests, unbounded command output, or repeated tool loops.
+- **Rich JSON transcript volume**: Provider CLIs may emit full JSONL session transcripts containing runtime envelopes, tool calls, tool results, usage metadata, rate-limit events, and command output. Large `§BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt` files are not automatically agent reasoning bloat. Attribute volume to avoidable behavior before raising it: broad file reads, repeated large diffs, noisy failing tests, unbounded command output, or repeated tool loops.
 - **Contract/prompt volume**: Contract and guardrail files are stable, load-bearing context and are often cacheable. Do not report their size as waste by itself. Parametric role/task prompts are expected to vary and may not cache well; flag only avoidable duplication, poor ordering that defeats stable-prefix reuse, prompt growth across retries, or dynamic artifacts that should have been referenced instead of embedded.
 
 NOTE:
-The skill contains a web tool for humans to inspect logs: ~/.liza/skills/liza-logs/tools/liza-session-analyzer.html
+The skill contains a web tool for humans to inspect logs: ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/tools/§BRAND_BINARY_NAME§-session-analyzer.html

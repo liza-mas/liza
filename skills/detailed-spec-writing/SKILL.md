@@ -11,7 +11,7 @@ Output: a git-tracked markdown document. One spec per task; one cohesive capabil
 
 # Trigger
 
-- Orchestrator creates a spec-writing task (Liza mode)
+- Orchestrator creates a spec-writing task (§BRAND_NAME_TITLE§ mode)
 - User asks to spec a feature or requirement (Pairing mode)
 
 # Inputs
@@ -102,9 +102,9 @@ Fix issues before submitting.
 # Mode-Specific Behavior
 
 **Pairing:** Present draft for human review before writing. Human may redirect scope, resolve OQs, or confirm assumptions.
-**Liza:** Autonomous within task scope.
+**§BRAND_NAME_TITLE§:** Autonomous within task scope.
 
-| Pairing Prompt | Liza Behavior |
+| Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | "Multiple capabilities — split?" | BLOCKED with split recommendation |
 | "LOW confidence assumption — resolve?" | Surface in Assumptions; human resolves before coding sprint |

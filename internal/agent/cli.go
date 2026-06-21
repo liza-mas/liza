@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 // validCLIs is the canonical list of supported agent backends.
@@ -71,12 +73,13 @@ type CLIResolutionConfig struct {
 }
 
 // ResolveDefaultCLI returns the effective default CLI.
-// Resolution order: configValue (from state.yaml) > LIZA_DEFAULT_CLI env var > DefaultCLI const.
+// Resolution order: configValue (from state.yaml) > branded DEFAULT_CLI env
+// var or legacy LIZA_DEFAULT_CLI alias > DefaultCLI const.
 func ResolveDefaultCLI(configValue string) string {
 	if configValue != "" {
 		return configValue
 	}
-	if v := os.Getenv("LIZA_DEFAULT_CLI"); v != "" {
+	if v := brandedEnvValue("DEFAULT_CLI"); v != "" {
 		return v
 	}
 	return DefaultCLI
@@ -84,7 +87,8 @@ func ResolveDefaultCLI(configValue string) string {
 
 // ResolveDefaultCLIForRole returns the effective default CLI for a role type.
 // Resolution order:
-// role-specific config > role-specific env > global config > LIZA_DEFAULT_CLI > DefaultCLI const.
+// role-specific config > role-specific env > global config > branded
+// DEFAULT_CLI env or legacy LIZA_DEFAULT_CLI alias > DefaultCLI const.
 // Orchestrator roles use the doer defaults because they perform work rather than review it.
 func ResolveDefaultCLIForRole(roleType string, config CLIResolutionConfig) string {
 	if v := roleSpecificConfigCLI(roleType, config); v != "" {
@@ -134,10 +138,18 @@ func roleSpecificConfigCLI(roleType string, config CLIResolutionConfig) string {
 func roleSpecificEnvCLI(roleType string) string {
 	switch roleType {
 	case "doer", "orchestrator":
-		return os.Getenv("LIZA_DEFAULT_DOER_CLI")
+		return brandedEnvValue("DEFAULT_DOER_CLI")
 	case "reviewer":
-		return os.Getenv("LIZA_DEFAULT_REVIEWER_CLI")
+		return brandedEnvValue("DEFAULT_REVIEWER_CLI")
 	default:
 		return ""
 	}
+}
+
+func brandedEnvValue(suffix string) string {
+	lookup := brand.LookupEnv(os.Getenv, suffix)
+	if lookup.Warning != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", lookup.Warning)
+	}
+	return lookup.Value
 }

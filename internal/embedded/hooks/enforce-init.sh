@@ -7,7 +7,7 @@
 #   - AGENT_TOOLS.md
 #   - GUARDRAILS.md (or verified absent)
 #   - One mode contract from the Mode Selection Gate
-#   - Pairing only: existing REPOSITORY.md/docs/USAGE.md, ~/.liza/COLLABORATION_CONTINUITY.md
+#   - Pairing only: existing REPOSITORY.md/docs/USAGE.md, ~/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md
 #
 # No external dependencies (no jq, no sed -i). Portable across Linux and macOS.
 
@@ -80,7 +80,7 @@ fi
 # Stable for the session lifetime since all hook invocations share the same parent process.
 state_root="${TMPDIR:-/tmp}"
 state_root="${state_root%/}"
-STATE_DIR="${state_root}/liza-init-gate-${session_id:-ppid-$PPID}"
+STATE_DIR="${state_root}/__BRAND_BINARY_NAME__-init-gate-${session_id:-ppid-$PPID}"
 if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   echo "enforce-init: cannot create state dir $STATE_DIR, failing open" >&2
   exit 0
@@ -165,9 +165,9 @@ clear_if_ready() {
 
 is_required_doc_path() {
   case "$1" in
-    "~/.liza/AGENT_TOOLS.md"|"$HOME"/.liza/AGENT_TOOLS.md) return 0 ;;
-    "~/.liza/PAIRING_MODE.md"|"~/.liza/MULTI_AGENT_MODE.md"|"~/.liza/SUBAGENT_MODE.md") return 0 ;;
-    "$HOME"/.liza/PAIRING_MODE.md|"$HOME"/.liza/MULTI_AGENT_MODE.md|"$HOME"/.liza/SUBAGENT_MODE.md) return 0 ;;
+    "~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"|"$HOME"/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md) return 0 ;;
+    "~/__BRAND_GLOBAL_DIRNAME__/PAIRING_MODE.md"|"~/__BRAND_GLOBAL_DIRNAME__/MULTI_AGENT_MODE.md"|"~/__BRAND_GLOBAL_DIRNAME__/SUBAGENT_MODE.md") return 0 ;;
+    "$HOME"/__BRAND_GLOBAL_DIRNAME__/PAIRING_MODE.md|"$HOME"/__BRAND_GLOBAL_DIRNAME__/MULTI_AGENT_MODE.md|"$HOME"/__BRAND_GLOBAL_DIRNAME__/SUBAGENT_MODE.md) return 0 ;;
     "$project_dir"/GUARDRAILS.md|GUARDRAILS.md|./GUARDRAILS.md) return 0 ;;
     *) return 1 ;;
   esac
@@ -177,7 +177,7 @@ is_session_init_doc_path() {
   case "$1" in
     REPOSITORY.md|./REPOSITORY.md|"$project_dir"/REPOSITORY.md) return 0 ;;
     docs/USAGE.md|./docs/USAGE.md|"$project_dir"/docs/USAGE.md) return 0 ;;
-    "~/.liza/COLLABORATION_CONTINUITY.md"|"$HOME"/.liza/COLLABORATION_CONTINUITY.md) return 0 ;;
+    "~/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md"|"$HOME"/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md) return 0 ;;
     *) is_required_doc_path "$1" ;;
   esac
 }
@@ -192,7 +192,7 @@ is_safe_read_command_for_allowed_paths() {
 
   # The first check rejects shell metacharacters that would make token-level
   # validation misleading. Quoted paths are intentionally unsupported here:
-  # Liza's init docs do not need spaces or shell expansion.
+  # __BRAND_NAME_TITLE__ init docs do not need spaces or shell expansion.
   if echo "$command_to_check" | grep -qE '[;&|<>`\\]|[$][(]'; then
     return 1
   fi
@@ -264,7 +264,7 @@ is_safe_read_command_for_allowed_paths() {
 is_safe_bash_init_read() {
   # The first check rejects shell metacharacters that would make token-level
   # validation misleading. Quoted paths are intentionally unsupported here:
-  # Liza's init docs do not need spaces or shell expansion.
+  # __BRAND_NAME_TITLE__ init docs do not need spaces or shell expansion.
   is_safe_read_command_for_allowed_paths is_session_init_doc_path "$command"
 }
 
@@ -415,7 +415,7 @@ fi
 mark_absent_project_docs_if_needed
 missing=""
 [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
-  - ~/.liza/AGENT_TOOLS.md"
+  - ~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"
 [[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing
   - The applicable mode contract from the Mode Selection Gate"
 if requires_pairing_companion_docs; then
@@ -424,7 +424,7 @@ if requires_pairing_companion_docs; then
   [[ -f "$project_dir/docs/USAGE.md" ]] && [[ ! -f "$STATE_DIR/USAGE.done" ]] && missing="$missing
   - docs/USAGE.md (from repo root)"
   [[ ! -f "$STATE_DIR/COLLABORATION_CONTINUITY.done" ]] && missing="$missing
-  - ~/.liza/COLLABORATION_CONTINUITY.md"
+  - ~/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md"
 fi
 if [[ -f "$project_dir/GUARDRAILS.md" ]] && [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]]; then
   missing="$missing

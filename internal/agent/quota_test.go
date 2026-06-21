@@ -5,7 +5,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
+
+func withTestProjectDirName(t *testing.T, dirName string) {
+	t.Helper()
+	previous := brand.ProjectDirName
+	brand.ProjectDirName = dirName
+	t.Cleanup(func() {
+		brand.ProjectDirName = previous
+	})
+}
 
 func TestDetectQuotaExhaustion_CodexMatch(t *testing.T) {
 	output := `{"type":"turn.started"}
@@ -154,6 +165,34 @@ func TestQuotaSignal_WriteCheckClear(t *testing.T) {
 
 	if CheckQuotaSignal(projectRoot, "codex") {
 		t.Fatal("signal should not exist after clear")
+	}
+}
+
+func TestQuotaSignalUsesBrandedProjectDir(t *testing.T) {
+	withTestProjectDirName(t, ".acme-agent")
+	projectRoot := t.TempDir()
+	brandedDir := filepath.Join(projectRoot, ".acme-agent")
+	if err := os.MkdirAll(brandedDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := QuotaSignalPath(projectRoot, "codex"); got != filepath.Join(brandedDir, "provider-quota-exhausted-codex") {
+		t.Fatalf("QuotaSignalPath() = %q, want branded project dir", got)
+	}
+	if got := QuotaSignalGlob(projectRoot); got != filepath.Join(brandedDir, "provider-quota-exhausted-*") {
+		t.Fatalf("QuotaSignalGlob() = %q, want branded project dir", got)
+	}
+	if err := RaiseQuotaExhaustion(projectRoot, &QuotaExhaustion{Provider: "codex", Message: "limit"}); err != nil {
+		t.Fatalf("RaiseQuotaExhaustion failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(brandedDir, "provider-quota-exhausted-codex")); err != nil {
+		t.Fatalf("quota signal not written under branded dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(brandedDir, "alerts.log")); err != nil {
+		t.Fatalf("alerts log not written under branded dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".liza")); !os.IsNotExist(err) {
+		t.Fatalf("legacy .liza state = %v, want not created", err)
 	}
 }
 

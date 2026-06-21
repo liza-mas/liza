@@ -1,6 +1,6 @@
 ---
 name: checkpoint-summary
-description: Summarize artifacts produced by liza agents for human checkpoint review
+description: Summarize artifacts produced by §BRAND_BINARY_NAME§ agents for human checkpoint review
 mode: pairing
 ---
 
@@ -26,11 +26,11 @@ Use this skill when:
 - Story writing completes across multiple agents
 - Any multi-agent phase produces artifacts the human hasn't read
 - User asks "what did the agents produce?", "what needs my attention?", or "summarize the plans"
-- Orchestrator requests a human checkpoint (Liza mode)
+- Orchestrator requests a human checkpoint (§BRAND_NAME_TITLE§ mode)
 
 ## Inputs
 
-The single entry point is **`.liza/state.yaml`** — the source of truth for all Liza state.
+The single entry point is **`§BRAND_PROJECT_DIRNAME§/state.yaml`** — the source of truth for all §BRAND_NAME_TITLE§ state.
 
 From `state.yaml`, the skill reads:
 - **`goal.spec_ref`**: the upstream source document the agents worked from
@@ -51,7 +51,7 @@ Read the upstream source (`goal.spec_ref`). Everything else is in the state file
 
 ### Phase 1: Inventory
 
-1. **Read `.liza/state.yaml`** to understand the full pipeline state: goal, tasks, agents,
+1. **Read `§BRAND_PROJECT_DIRNAME§/state.yaml`** to understand the full pipeline state: goal, tasks, agents,
    sprint status, and checkpoint trigger.
 
 2. **Read the upstream source** (`goal.spec_ref`) to understand what the agents were working
@@ -228,14 +228,14 @@ time, collecting the human's decision before moving to the next. For "Confirm" i
 present as a batch — the human can scan and override selectively. End with a count of
 decisions made and items still open.
 
-**Liza mode:** Checkpoint Summary operates autonomously within task scope. Write the
+**§BRAND_NAME_TITLE§ mode:** Checkpoint Summary operates autonomously within task scope. Write the
 report to the worktree (e.g. `docs/checkpoint-summary.md`) and submit for review.
 If any "Decide" items exist, mark BLOCKED with `blocked_reason` summarizing the
 decisions needed and `blocked_questions` listing each one — the human must resolve
 them before the next phase starts. If only "Confirm" and "Note" items exist, submit
 normally.
 
-| Pairing Prompt | Liza Behavior |
+| Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | "N decisions need your input — walk through them?" | Mark BLOCKED; report in worktree |
 | "Agents made N decisions — all look reasonable. Confirm?" | Submit for review; report in worktree |

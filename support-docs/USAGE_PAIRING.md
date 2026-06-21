@@ -1,11 +1,11 @@
 # Pairing with AI Agents Under Contract
 
-A practical guide to using the Liza behavioral contract for human-agent pairing.
+A practical guide to using the §BRAND_NAME_TITLE§ behavioral contract for human-agent pairing.
 
 **Audience**: Developers who want to pair with AI coding agents as senior engineering peers — not as autocomplete tools, not as delegated workers.
 
-**Prerequisites**: Liza has been installed, `liza setup` has been run, the
-project has been initialized with `liza init`, and a compatible agent has been
+**Prerequisites**: §BRAND_NAME_TITLE§ has been installed, `§BRAND_BINARY_NAME§ setup` has been run, the
+project has been initialized with `§BRAND_BINARY_NAME§ init`, and a compatible agent has been
 activated with the contract. For configuration details, see
 [Configuration Reference](CONFIGURATION.md).
 
@@ -32,7 +32,7 @@ For the full story behind this approach:
 ### 1. Start from an initialized project
 
 Complete the getting-started setup before using this guide. In practical terms:
-run `liza setup` once, review `~/.liza/AGENT_TOOLS.md`, run `liza init` in the
+run `§BRAND_BINARY_NAME§ setup` once, review `~/§BRAND_GLOBAL_DIRNAME§/AGENT_TOOLS.md`, run `§BRAND_BINARY_NAME§ init` in the
 project, then start your coding agent from that project directory.
 
 ### 2. Say hello

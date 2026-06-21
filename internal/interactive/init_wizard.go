@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 // InitWizardResult holds all choices made during the interactive init wizard.
@@ -153,7 +154,7 @@ func resolveContractConflicts(projectRoot string, result *InitWizardResult) erro
 	if err != nil {
 		return nil // non-fatal, let the init command handle it
 	}
-	contractTarget := filepath.Join(homeDir, ".liza", "CORE.md")
+	contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
 
 	conflicting := DetectContractConflict(projectRoot, result.Agents, contractTarget)
 	if conflicting == "" {

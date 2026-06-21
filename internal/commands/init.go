@@ -11,6 +11,7 @@ import (
 	"time"
 
 	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/envgate"
@@ -103,7 +104,7 @@ func InitPairingCommand(params InitPairingParams) error {
 	}
 	coreFile := filepath.Join(globalDir, "CORE.md")
 	if _, err := os.Stat(coreFile); os.IsNotExist(err) {
-		return fmt.Errorf("global config not found at %s\nRun 'liza setup' first", globalDir)
+		return fmt.Errorf("global config not found at %s\nRun '%s setup' first", globalDir, brand.BinaryName)
 	}
 
 	// Classify agents
@@ -143,6 +144,7 @@ func InitPairingCommand(params InitPairingParams) error {
 			return fmt.Errorf("failed to determine project root: %w", err)
 		}
 		projectRoot = lizaPaths.ProjectRoot()
+		warnLegacyProjectRoot(projectRoot, lizaPaths.LizaDir())
 	}
 
 	if projectRoot != "" && sembleEnabled {
@@ -235,7 +237,7 @@ func InitPairingCommand(params InitPairingParams) error {
 }
 
 func pairingScipEnabled() bool {
-	return scipsearch.ParseEnvGate(os.Getenv(scipsearch.EnvEnableScipSearch))
+	return scipsearch.ParseEnvGate(envgate.Value(scipsearch.EnvEnableScipSearch))
 }
 
 func writePairingScipSkipDiagnostics(skips []scipsearch.PairingPlanSkip) {
@@ -306,7 +308,7 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 			if err != nil {
 				return ""
 			}
-			contractTarget := filepath.Join(homeDir, ".liza", "CORE.md")
+			contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
 			mistralPath := filepath.Join(homeDir, ".vibe", "prompts", "liza.md")
 			if isLizaSymlink(mistralPath, contractTarget) {
 				return mistralPath
@@ -319,7 +321,7 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 	if err != nil {
 		return ""
 	}
-	contractTarget := filepath.Join(homeDir, ".liza", "CORE.md")
+	contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
 
 	// Check repo root
 	repoPath := filepath.Join(projectRoot, fileName)
@@ -369,12 +371,12 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 		globalRel, hasGlobal := InitAgentGlobalFallbacks[agent]
 		globalPath := filepath.Join(homeDir, globalRel)
 
-		// Step 1: Liza symlink already exists at either location?
+		// Step 1: product symlink already exists at either location?
 		repoIsLiza := isLizaSymlink(repoPath, contractTarget)
 		globalIsLiza := hasGlobal && isLizaSymlink(globalPath, contractTarget)
 
 		if repoIsLiza && globalIsLiza {
-			fmt.Fprintf(os.Stderr, "Warning: %s has Liza symlinks at both %s and %s — remove one to avoid confusion.\n", name, repoPath, globalPath)
+			fmt.Fprintf(os.Stderr, "Warning: %s has %s symlinks at both %s and %s; remove one to avoid confusion.\n", name, brand.NameTitle, repoPath, globalPath)
 			continue
 		}
 		if repoIsLiza {
@@ -382,7 +384,7 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 			continue
 		}
 		if globalIsLiza {
-			fmt.Printf("%s: skipping — Liza symlink already exists at %s\n", name, globalPath)
+			fmt.Printf("%s: skipping; %s symlink already exists at %s\n", name, brand.NameTitle, globalPath)
 			continue
 		}
 
@@ -402,7 +404,7 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 			continue
 		}
 
-		// Step 3: repo root occupied by non-Liza file — apply contract action
+		// Step 3: repo root occupied by non-product file; apply contract action
 		if contractAction == "skip" {
 			fmt.Printf("%s: skipped (user choice)\n", name)
 			continue
@@ -414,7 +416,7 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 				if isLizaSymlink(localPath, contractTarget) {
 					fmt.Printf("CLAUDE.local.md: already correct\n")
 				} else {
-					fmt.Fprintf(os.Stderr, "Warning: CLAUDE.local.md already exists and is not a Liza symlink.\n")
+					fmt.Fprintf(os.Stderr, "Warning: CLAUDE.local.md already exists and is not a %s symlink.\n", brand.NameTitle)
 				}
 				continue
 			}
@@ -476,8 +478,8 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 			continue
 		}
 
-		// Both locations occupied by non-Liza files
-		fmt.Fprintf(os.Stderr, "Warning: %s exists at both repo root and %s — cannot place Liza contract. Remove or rename one, then re-run.\n", name, globalPath)
+		// Both locations occupied by non-product files.
+		fmt.Fprintf(os.Stderr, "Warning: %s exists at both repo root and %s; cannot place %s contract. Remove or rename one, then re-run.\n", name, globalPath, brand.NameTitle)
 	}
 }
 
@@ -656,7 +658,7 @@ func runBashPolicyInit(projectRoot, provider string, stdin io.Reader) {
 	})
 	switch result.Status {
 	case bashpolicycli.StatusMissing:
-		fmt.Fprintf(os.Stderr, "Warning: bash-policy requested by %s but bash-policy was not found on PATH; run 'liza toolchain install --profile full --yes' and source ~/.liza/toolchain/env.sh before re-running liza init.\n", bashpolicycli.EnvEnableBashPolicy)
+		fmt.Fprintf(os.Stderr, "Warning: bash-policy requested by %s but bash-policy was not found on PATH; run '%s toolchain install --profile full --yes' and source ~/%s/toolchain/env.sh before re-running %s init.\n", bashpolicycli.EnvEnableBashPolicy, brand.BinaryName, brand.GlobalDirName, brand.BinaryName)
 	case bashpolicycli.StatusFailed:
 		fmt.Fprintf(os.Stderr, "Warning: failed to initialize bash-policy hooks: %s\n", result.Diagnostic())
 	}
@@ -728,10 +730,11 @@ func InitCommandWithConfig(params InitParams) error {
 		return fmt.Errorf("failed to setup paths: %w", err)
 	}
 
-	// Validate .liza doesn't already exist
+	// Validate project runtime directory doesn't already exist.
 	if _, err := os.Stat(lizaPaths.LizaDir()); !os.IsNotExist(err) {
-		return fmt.Errorf(".liza already exists at %s, remove or use existing", lizaPaths.LizaDir())
+		return fmt.Errorf("%s already exists at %s, remove or use existing", paths.ProjectDirName(), lizaPaths.LizaDir())
 	}
+	warnLegacyProjectRoot(lizaPaths.ProjectRoot(), lizaPaths.LizaDir())
 
 	// Resolve spec file relative to cwd (where user ran the command), not project root
 	specPath, err := filepath.Abs(specRef)
@@ -749,7 +752,7 @@ func InitCommandWithConfig(params InitParams) error {
 		return err
 	}
 
-	// Validate global config exists (liza setup must have been run)
+	// Validate global config exists (setup must have been run).
 	globalDir, err := paths.GlobalLizaDir()
 	if err != nil {
 		return fmt.Errorf("failed to determine global config path: %w", err)
@@ -757,7 +760,7 @@ func InitCommandWithConfig(params InitParams) error {
 	globalCoreFile := filepath.Join(globalDir, "CORE.md")
 	if _, err := os.Stat(globalCoreFile); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("global config not found at %s\nRun 'liza setup' first to install contracts, skills, and support docs", globalDir)
+			return fmt.Errorf("global config not found at %s\nRun '%s setup' first to install contracts, skills, and support docs", globalDir, brand.BinaryName)
 		}
 		return fmt.Errorf("cannot access global config at %s: %w\nCheck permissions on %s", globalCoreFile, err, globalDir)
 	}
@@ -769,7 +772,7 @@ func InitCommandWithConfig(params InitParams) error {
 	scipSearchConfig, err := scipsearch.ResolveInitConfig(scipsearch.InitOptions{
 		ProjectRoot:       lizaPaths.ProjectRoot(),
 		ExplicitLanguages: params.ScipSearch,
-		EnvValue:          os.Getenv(scipsearch.EnvEnableScipSearch),
+		EnvValue:          envgate.Value(scipsearch.EnvEnableScipSearch),
 	})
 	if err != nil {
 		return err
@@ -785,7 +788,7 @@ func InitCommandWithConfig(params InitParams) error {
 
 	// Create directory structure
 	if err := os.MkdirAll(lizaPaths.LizaDir(), 0755); err != nil {
-		return fmt.Errorf("failed to create .liza directory: %w", err)
+		return fmt.Errorf("failed to create %s directory: %w", paths.ProjectDirName(), err)
 	}
 
 	archiveDir := lizaPaths.ArchiveDir()
@@ -797,12 +800,12 @@ func InitCommandWithConfig(params InitParams) error {
 		os.RemoveAll(lizaPaths.LizaDir())
 	}
 
-	// Write support doc to .liza/SUPPORT.md (non-fatal)
+	// Write support doc to the project runtime directory (non-fatal).
 	if err := embedded.WriteSupportDoc(lizaPaths.LizaDir()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write SUPPORT.md: %v\n", err)
 	}
 
-	// Freeze pipeline config into .liza/pipeline.yaml
+	// Freeze pipeline config into the project runtime directory.
 	frozenPath := filepath.Join(lizaPaths.LizaDir(), "pipeline.yaml")
 	if err := os.WriteFile(frozenPath, pipelineData, 0644); err != nil {
 		cleanupInit()
@@ -907,7 +910,7 @@ func InitCommandWithConfig(params InitParams) error {
 	// Pipeline version (always v3 — pipeline is mandatory)
 	pipelineVersion := 3
 
-	copyWorktreeEnvFiles := params.CopyWorktreeEnvFiles || envgate.Truthy(os.Getenv(models.EnvEnableCopyWorktreeEnvFiles))
+	copyWorktreeEnvFiles := params.CopyWorktreeEnvFiles || envgate.TruthyEnv(models.EnvEnableCopyWorktreeEnvFiles)
 
 	// Create initial state
 	state := &models.State{
@@ -1030,7 +1033,7 @@ func InitCommandWithConfig(params InitParams) error {
 		return fmt.Errorf("failed to create integration branch %q: %w", branch, err)
 	}
 
-	fmt.Printf("Liza initialized at %s\n", lizaPaths.LizaDir())
+	fmt.Printf("%s initialized at %s\n", brand.NameTitle, lizaPaths.LizaDir())
 	fmt.Printf("Integration branch: %s\n", branch)
 
 	hasNonClaude := false

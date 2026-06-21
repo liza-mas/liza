@@ -1,27 +1,48 @@
 .PHONY: build test test-e2e clean install lint check-testhelpers check-embedded release package build-all tidy run coverage help
 
+# Brand variables
+BRAND_NAME_LOWER?=liza
+BRAND_NAME_UPPER?=LIZA
+BRAND_NAME_TITLE?=Liza
+BRAND_REPO?=liza-mas/liza
+BRAND_BINARY_NAME?=$(BRAND_NAME_LOWER)
+BRAND_GLOBAL_DIRNAME?=.$(BRAND_NAME_LOWER)
+BRAND_PROJECT_DIRNAME?=.$(BRAND_NAME_LOWER)
+BRAND_ENV_PREFIX?=$(BRAND_NAME_UPPER)
+BRAND_ARCHIVE_PREFIX?=$(BRAND_BINARY_NAME)
+BRAND_RELEASE_REPO?=$(BRAND_REPO)
+BRAND_RELEASE_BASE_URL?=https://github.com/$(BRAND_RELEASE_REPO)/releases/download
+BRAND_CHECKSUM_BASE_URL?=$(BRAND_RELEASE_BASE_URL)
+
 # Binary name
-BINARY_NAME=liza
+BINARY_NAME?=$(BRAND_BINARY_NAME)
 
 # Build variables
 VERSION?=0.2.0
 GIT_COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS=-ldflags "-X 'github.com/liza-mas/liza/internal/embedded.Version=$(VERSION)' \
-	-X 'github.com/liza-mas/liza/internal/embedded.GitCommit=$(GIT_COMMIT)' \
-	-X 'github.com/liza-mas/liza/internal/embedded.BuildDate=$(BUILD_DATE)' \
-	-X 'main.Version=$(VERSION)' -X 'main.GitCommit=$(GIT_COMMIT)' -X 'main.BuildDate=$(BUILD_DATE)'"
+		-X 'github.com/liza-mas/liza/internal/embedded.GitCommit=$(GIT_COMMIT)' \
+		-X 'github.com/liza-mas/liza/internal/embedded.BuildDate=$(BUILD_DATE)' \
+		-X 'github.com/liza-mas/liza/internal/brand.NameLower=$(BRAND_NAME_LOWER)' \
+		-X 'github.com/liza-mas/liza/internal/brand.NameUpper=$(BRAND_NAME_UPPER)' \
+		-X 'github.com/liza-mas/liza/internal/brand.NameTitle=$(BRAND_NAME_TITLE)' \
+		-X 'github.com/liza-mas/liza/internal/brand.Repo=$(BRAND_REPO)' \
+		-X 'github.com/liza-mas/liza/internal/brand.BinaryName=$(BRAND_BINARY_NAME)' \
+		-X 'github.com/liza-mas/liza/internal/brand.GlobalDirName=$(BRAND_GLOBAL_DIRNAME)' \
+		-X 'github.com/liza-mas/liza/internal/brand.ProjectDirName=$(BRAND_PROJECT_DIRNAME)' \
+		-X 'github.com/liza-mas/liza/internal/brand.EnvPrefix=$(BRAND_ENV_PREFIX)' \
+		-X 'github.com/liza-mas/liza/internal/brand.ArchivePrefix=$(BRAND_ARCHIVE_PREFIX)' \
+		-X 'github.com/liza-mas/liza/internal/brand.ReleaseRepo=$(BRAND_RELEASE_REPO)' \
+		-X 'github.com/liza-mas/liza/internal/brand.ReleaseBaseURL=$(BRAND_RELEASE_BASE_URL)' \
+		-X 'github.com/liza-mas/liza/internal/brand.ChecksumBaseURL=$(BRAND_CHECKSUM_BASE_URL)' \
+		-X 'main.Version=$(VERSION)' -X 'main.GitCommit=$(GIT_COMMIT)' -X 'main.BuildDate=$(BUILD_DATE)'"
 
 # Sync embedded files from project root
 .PHONY: sync-embedded
 sync-embedded:
 	@echo "Syncing files to internal/embedded/..."
-	@rm -rf internal/embedded/contracts internal/embedded/skills internal/embedded/support-docs internal/embedded/docs internal/embedded/specs
-	@mkdir -p internal/embedded/contracts internal/embedded/skills internal/embedded/support-docs
-	@cp contracts/*.md internal/embedded/contracts/
-	@cp -r skills/* internal/embedded/skills/
-	@cp support-docs/*.md internal/embedded/support-docs/
-	@find internal/embedded/skills/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+	@go run ./internal/brandrender/cmd/sync-embedded --repo-root .
 	@echo "Files synced successfully"
 
 # Build the binaries

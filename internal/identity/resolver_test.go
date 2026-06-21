@@ -3,6 +3,8 @@ package identity
 import (
 	"os"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 func TestResolve(t *testing.T) {
@@ -135,6 +137,30 @@ func TestResolve(t *testing.T) {
 				t.Errorf("Resolve() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolveBrandedEnvWinsOverLegacy(t *testing.T) {
+	restore := setResolverTestBrandEnvPrefix(t, "ACME_AGENT")
+	defer restore()
+	t.Setenv("ACME_AGENT_AGENT_ID", "coder-2")
+	t.Setenv("LIZA_AGENT_ID", "coder-1")
+
+	got, err := Resolve(Config{Required: true})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got != "coder-2" {
+		t.Fatalf("Resolve() = %q, want branded env value", got)
+	}
+}
+
+func setResolverTestBrandEnvPrefix(t *testing.T, prefix string) func() {
+	t.Helper()
+	previous := brand.EnvPrefix
+	brand.EnvPrefix = prefix
+	return func() {
+		brand.EnvPrefix = previous
 	}
 }
 

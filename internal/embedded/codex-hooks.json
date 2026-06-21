@@ -4,8 +4,8 @@
       {
         "hooks": [
           {
-            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/session-context.sh\"; [ -x \"$hook\" ] || { echo \"Missing Liza Codex hook: $hook. Run 'liza init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
-            "statusMessage": "Loading Liza repository indexes",
+            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/session-context.sh\"; [ -x \"$hook\" ] || { echo \"Missing __BRAND_NAME_TITLE__ Codex hook: $hook. Run '__BRAND_BINARY_NAME__ init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
+            "statusMessage": "Loading __BRAND_NAME_TITLE__ repository indexes",
             "timeout": 5,
             "type": "command"
           }
@@ -17,8 +17,8 @@
       {
         "hooks": [
           {
-            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/enforce-init.sh\"; [ -x \"$hook\" ] || { echo \"Missing Liza Codex hook: $hook. Run 'liza init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
-            "statusMessage": "Checking Liza session initialization",
+            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/enforce-init.sh\"; [ -x \"$hook\" ] || { echo \"Missing __BRAND_NAME_TITLE__ Codex hook: $hook. Run '__BRAND_BINARY_NAME__ init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
+            "statusMessage": "Checking __BRAND_NAME_TITLE__ session initialization",
             "timeout": 5,
             "type": "command"
           }
@@ -28,7 +28,7 @@
         "matcher": "^Bash$",
         "hooks": [
           {
-            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/git-guard.sh\"; [ -x \"$hook\" ] || { echo \"Missing Liza Codex hook: $hook. Run 'liza init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
+            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/git-guard.sh\"; [ -x \"$hook\" ] || { echo \"Missing __BRAND_NAME_TITLE__ Codex hook: $hook. Run '__BRAND_BINARY_NAME__ init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
             "statusMessage": "Checking git command",
             "timeout": 5,
             "type": "command"
@@ -39,7 +39,7 @@
         "matcher": "^apply_patch$|^mcp__filesystem__|^mcp__morph-mcp__edit_file$",
         "hooks": [
           {
-            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/worktree-path-guard.sh\"; [ -x \"$hook\" ] || { echo \"Missing Liza Codex hook: $hook. Run 'liza init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
+            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; hook=\"$root/.codex/hooks/worktree-path-guard.sh\"; [ -x \"$hook\" ] || { echo \"Missing __BRAND_NAME_TITLE__ Codex hook: $hook. Run '__BRAND_BINARY_NAME__ init --codex' to repair project hooks, or remove .codex/hooks.json to disable them.\" >&2; exit 1; }; bash \"$hook\"",
             "statusMessage": "Checking worktree paths",
             "timeout": 5,
             "type": "command"

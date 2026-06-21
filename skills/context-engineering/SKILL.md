@@ -1,15 +1,15 @@
 ---
 name: context-engineering
-description: "Analyze Liza `.liza/agent-prompts/` and `.liza/agent-outputs/` from a context-engineering perspective: prompt payload shape, context budget use, cacheability, duplicated or missing context, instruction hierarchy, tool-output pressure, role-specific context fit, and prompt-output feedback loops. Use when diagnosing agent context bloat, prompt drift, poor agent handoffs, repeated misunderstandings, excessive tool output, or whether Liza agents received the right information at the right time."
+description: "Analyze §BRAND_NAME_TITLE§ `§BRAND_PROJECT_DIRNAME§/agent-prompts/` and `§BRAND_PROJECT_DIRNAME§/agent-outputs/` from a context-engineering perspective: prompt payload shape, context budget use, cacheability, duplicated or missing context, instruction hierarchy, tool-output pressure, role-specific context fit, and prompt-output feedback loops. Use when diagnosing agent context bloat, prompt drift, poor agent handoffs, repeated misunderstandings, excessive tool output, or whether §BRAND_NAME_TITLE§ agents received the right information at the right time."
 ---
 
 # Context Engineering
 
 ## Scope
 
-Analyze only `.liza/agent-prompts/` and `.liza/agent-outputs/` unless the user names other artifacts.
+Analyze only `§BRAND_PROJECT_DIRNAME§/agent-prompts/` and `§BRAND_PROJECT_DIRNAME§/agent-outputs/` unless the user names other artifacts.
 
-This skill is complementary to `liza-logs`: `liza-logs` finds operational failures and token/tool patterns; this skill explains whether the prompt and context design caused or amplified those patterns.
+This skill is complementary to `§BRAND_NAME_LOWER§-logs`: `§BRAND_NAME_LOWER§-logs` finds operational failures and token/tool patterns; this skill explains whether the prompt and context design caused or amplified those patterns.
 
 ## Protocol
 
@@ -18,7 +18,7 @@ This skill is complementary to `liza-logs`: `liza-logs` finds operational failur
 Run the corpus indexer first:
 
 ```bash
-python3 skills/context-engineering/scripts/context-corpus-index.py .liza
+python3 skills/context-engineering/scripts/context-corpus-index.py §BRAND_PROJECT_DIRNAME§
 ```
 
 Use the generated index as the primary source for mechanical discovery: inventory, prompt/output pairing, size and pressure signals, outcome signals, common tools, MCP usage, and sample selection. The index is not evidence of causality by itself.
@@ -28,18 +28,18 @@ The indexer supports both Claude rich stream-json logs and Codex sparse `item.co
 Use indexer options deliberately:
 
 ```bash
-python3 skills/context-engineering/scripts/context-corpus-index.py .liza --json
-python3 skills/context-engineering/scripts/context-corpus-index.py .liza --max-pair-minutes 30
-python3 skills/context-engineering/scripts/context-corpus-index.py .liza --sample-limit 25
+python3 skills/context-engineering/scripts/context-corpus-index.py §BRAND_PROJECT_DIRNAME§ --json
+python3 skills/context-engineering/scripts/context-corpus-index.py §BRAND_PROJECT_DIRNAME§ --max-pair-minutes 30
+python3 skills/context-engineering/scripts/context-corpus-index.py §BRAND_PROJECT_DIRNAME§ --sample-limit 25
 ```
 
 - Use `--json` when exact pair metadata, token fields, or full metrics are needed.
 - Use `--max-pair-minutes` to control how strict same-role timestamp pairing should be.
 - Use `--sample-limit` to expand or shrink top lists and the sampling plan.
 
-If a `liza-logs` report or analyzer output is available, use it as the first sampling guide. Prioritize roles, runs, or timestamps with repeated tool failures, broad tool-result volume, duplicated task-local material, growing prompts, low cache reuse for expected-stable prefixes, or blocked/rejected task outcomes.
+If a `§BRAND_NAME_LOWER§-logs` report or analyzer output is available, use it as the first sampling guide. Prioritize roles, runs, or timestamps with repeated tool failures, broad tool-result volume, duplicated task-local material, growing prompts, low cache reuse for expected-stable prefixes, or blocked/rejected task outcomes.
 
-If `liza-logs` and context-engineering evidence disagree, report the disagreement explicitly and keep the narrower claim supported by direct prompt/output evidence. Example: `liza-logs` may correctly flag token pressure while prompt shape is not the cause.
+If `§BRAND_NAME_LOWER§-logs` and context-engineering evidence disagree, report the disagreement explicitly and keep the narrower claim supported by direct prompt/output evidence. Example: `§BRAND_NAME_LOWER§-logs` may correctly flag token pressure while prompt shape is not the cause.
 
 Before opening raw prompt/output files, use the index's **Sampling Plan** plus the sections relevant to the question: **Largest Prompts**, **Largest Outputs**, **High Tool-Output Pressure**, **Outcome Signal Mentions**, **Role Distribution**, **Prompt Size Trends**, **Common Tools**, **MCP Usage**, and **Pairing**.
 
@@ -149,7 +149,7 @@ For each sampled output, trace behavior back to context:
 When outputs show failures, distinguish:
 - **Prompt defect**: the needed instruction/context was absent, ambiguous, or buried.
 - **Execution defect**: the prompt was adequate, but the agent ignored it.
-- **System defect**: Liza generated or routed the wrong context.
+- **System defect**: §BRAND_NAME_TITLE§ generated or routed the wrong context.
 - **Evidence gap**: logs are insufficient to decide.
 
 Use these heuristics:
@@ -171,7 +171,7 @@ Compare prompt-output chains across roles:
 
 Flag handoff compression failures where important nuance disappears, and handoff bloat where downstream agents receive full upstream artifacts when a structured digest would suffice.
 
-**Adversarial pair overlap is not duplication.** Liza's doer/reviewer pairs require both agents to receive the same context so the reviewer can independently verify the doer's work. High content overlap between paired roles (e.g., analyst + reviewer, coder + code-reviewer, writer + us-reviewer) is by design. Do not flag it as redundancy. The relevant questions for paired prompts are whether the shared context is too large, poorly ordered, or volatile — not whether it is duplicated.
+**Adversarial pair overlap is not duplication.** §BRAND_NAME_TITLE§'s doer/reviewer pairs require both agents to receive the same context so the reviewer can independently verify the doer's work. High content overlap between paired roles (e.g., analyst + reviewer, coder + code-reviewer, writer + us-reviewer) is by design. Do not flag it as redundancy. The relevant questions for paired prompts are whether the shared context is too large, poorly ordered, or volatile — not whether it is duplicated.
 
 A good compressed handoff preserves:
 - Decisions made
@@ -196,7 +196,7 @@ For each proposed fix, identify the smallest source artifact likely to implement
 Each finding's **Fix** must name:
 - Source artifact to change
 - Expected rendered prompt or output difference
-- Validation method in a future `.liza/agent-prompts/` or `.liza/agent-outputs/` sample
+- Validation method in a future `§BRAND_PROJECT_DIRNAME§/agent-prompts/` or `§BRAND_PROJECT_DIRNAME§/agent-outputs/` sample
 
 Do not present a fix-localization finding until the relevant prompt/output pair and source template, config, contract, guardrail, skill, spec, state field, or operational process has been inspected.
 
@@ -214,8 +214,8 @@ Produce findings in this format:
 - Primary bottleneck: [one sentence]
 
 When referring to a specific session in the Executive Summary or Findings, name
-the concrete `.liza/agent-outputs/` log filename. If the claim depends on a
-paired prompt, also name the concrete `.liza/agent-prompts/` filename.
+the concrete `§BRAND_PROJECT_DIRNAME§/agent-outputs/` log filename. If the claim depends on a
+paired prompt, also name the concrete `§BRAND_PROJECT_DIRNAME§/agent-prompts/` filename.
 
 ## Findings
 
@@ -227,7 +227,7 @@ paired prompt, also name the concrete `.liza/agent-prompts/` filename.
 - **Context mechanism:** [why this context shape leads to the behavior]
 - **Impact:** [cost, failure rate, review churn, blocked tasks, context pressure]
 - **Fix:** [source artifact to change, expected rendered prompt/output difference]
-- **Validation:** [future `.liza/agent-prompts/` or `.liza/agent-outputs/` sample that would prove the fix worked]
+- **Validation:** [future `§BRAND_PROJECT_DIRNAME§/agent-prompts/` or `§BRAND_PROJECT_DIRNAME§/agent-outputs/` sample that would prove the fix worked]
 
 ## Context Budget Opportunities
 

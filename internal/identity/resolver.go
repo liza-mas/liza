@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 // Config holds agent ID resolution configuration
@@ -16,7 +18,7 @@ type Config struct {
 
 // Resolve resolves agent ID from multiple sources with priority:
 // 1. CLI flag (if provided)
-// 2. LIZA_AGENT_ID environment variable (if set)
+// 2. branded AGENT_ID environment variable, or legacy LIZA_AGENT_ID alias
 // 3. Default value (if provided)
 // 4. Empty string or error (based on Required)
 func Resolve(config Config) (string, error) {
@@ -27,9 +29,10 @@ func Resolve(config Config) (string, error) {
 	}
 
 	// Priority 2: Environment variable
-	envValue := strings.TrimSpace(os.Getenv("LIZA_AGENT_ID"))
-	if envValue != "" {
-		return envValue, nil
+	envLookup := brand.LookupEnv(os.Getenv, "AGENT_ID")
+	if envLookup.Value != "" {
+		warnEnvAlias(envLookup)
+		return envLookup.Value, nil
 	}
 
 	// Priority 3: Default value
@@ -39,10 +42,16 @@ func Resolve(config Config) (string, error) {
 
 	// Priority 4: Error if required, empty string otherwise
 	if config.Required {
-		return "", fmt.Errorf("agent ID required (use --agent-id flag or set LIZA_AGENT_ID environment variable)")
+		return "", fmt.Errorf("agent ID required (use --agent-id flag or set %s environment variable; legacy LIZA_AGENT_ID is also accepted)", brand.EnvName("AGENT_ID"))
 	}
 
 	return "", nil
+}
+
+func warnEnvAlias(lookup brand.EnvLookup) {
+	if lookup.Warning != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", lookup.Warning)
+	}
 }
 
 // parseAgentID splits an agent ID into its role and numeric suffix.

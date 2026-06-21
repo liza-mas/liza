@@ -1,4 +1,4 @@
-# .claudeignore — default template installed by liza init
+# .claudeignore — default template installed by __BRAND_BINARY_NAME__ init
 # Claude Code reads all files on disk, not just git-tracked ones.
 # This file keeps irrelevant content out of the context budget.
 # Same syntax as .gitignore. Review and adapt to your project.

@@ -13,7 +13,7 @@ Contract split complete. Original `_archive/CONTRACT_FOR_PAIRING_AGENTS_v3.md` p
 |------|---------|--------|
 | [CORE.md](CORE.md) | Entry point + universal rules | Complete |
 | [PAIRING_MODE.md](PAIRING_MODE.md) | Human-supervised collaboration | Complete |
-| [MULTI_AGENT_MODE.md](MULTI_AGENT_MODE.md) | Peer-supervised Liza system | Complete |
+| [MULTI_AGENT_MODE.md](MULTI_AGENT_MODE.md) | Peer-supervised §BRAND_NAME_TITLE§ system | Complete |
 | [CONTRACT_FOR_PAIRING_AGENTS_v3.md](_archive/CONTRACT_FOR_PAIRING_AGENTS_v3.md) | Original monolithic contract (reference) | Preserved |
 
 ## Deployment
@@ -29,15 +29,15 @@ guide for user-facing setup. The installed configuration reference is
 ~/.claude/CLAUDE.md or ~/.codex/AGENTS.md (symlinks)
     │
     ▼
-~/.liza/CORE.md (entry point + universal rules)
+~/§BRAND_GLOBAL_DIRNAME§/CORE.md (entry point + universal rules)
     │
     └── Mode Selection Gate (auto-detect from bootstrap)
         │
-        ├── Default (no Liza agent) → Read PAIRING_MODE.md
+        ├── Default (no §BRAND_NAME_TITLE§ agent) → Read PAIRING_MODE.md
         │                              → Execute Session Initialization
         │                              → (read files, build models, greet)
         │
-        └── "You are a Liza ... agent" → Read MULTI_AGENT_MODE.md
+        └── "You are a §BRAND_NAME_TITLE§ ... agent" → Read MULTI_AGENT_MODE.md
                                        → Execute Session Initialization
                                        → (read role/blackboard, silent)
 ```
@@ -74,7 +74,7 @@ guide for user-facing setup. The installed configuration reference is
 - Session Initialization
 - Collaboration Continuity
 
-### MULTI_AGENT_MODE.md — Peer-supervised Liza system
+### MULTI_AGENT_MODE.md — Peer-supervised §BRAND_NAME_TITLE§ system
 - Contract Authority (blackboard as source of truth)
 - Role Definitions
 - **Pre-Execution Checkpoint** (gate artifact for MAM)

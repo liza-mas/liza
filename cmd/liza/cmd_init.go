@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/jsonout"
@@ -32,7 +33,7 @@ var versionCmd = &cobra.Command{
 			jsonout.WriteResult(os.Stdout, result, nil, nil)
 			return
 		}
-		fmt.Printf("liza version %s\n", Version)
+		fmt.Printf("%s version %s\n", brand.BinaryName, Version)
 		fmt.Printf("  commit: %s\n", GitCommit)
 		fmt.Printf("  built:  %s\n", BuildDate)
 	},
@@ -40,19 +41,19 @@ var versionCmd = &cobra.Command{
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
-	Short: "One-time global setup of Liza contracts, skills, and support docs",
-	Long: `Write Liza contracts, skills, and support docs to ~/.liza/ for global access.
+	Short: fmt.Sprintf("One-time global setup of %s contracts, skills, and support docs", brand.NameTitle),
+	Long: fmt.Sprintf(`Write %[1]s contracts, skills, and support docs to ~/%[2]s/ for global access.
 
 This is a one-time setup step that populates the global config directory.
-Contracts are written flat (e.g., ~/.liza/CORE.md) and skills are written
-to ~/.liza/skills/. Installable support docs are written to
-~/.liza/support-docs/.
+Contracts are written flat (e.g., ~/%[2]s/CORE.md) and skills are written
+to ~/%[2]s/skills/. Installable support docs are written to
+~/%[2]s/support-docs/.
 
-After running setup, use 'liza init' in each project to create the
+After running setup, use '%[3]s init' in each project to create the
 project-local blackboard and symlinks.
 
 Use --force to overwrite an existing global config.
-Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded default.`,
+Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded default.`, brand.NameTitle, brand.GlobalDirName, brand.BinaryName),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		targetDir, err := paths.GlobalLizaDir()
 		if err != nil {
@@ -75,16 +76,16 @@ Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded def
 
 var initCmd = &cobra.Command{
 	Use:   "init [description]",
-	Short: "Initialize a new Liza workspace or enable pairing",
-	Long: `Initialize a new Liza workspace by creating .liza directory structure,
+	Short: fmt.Sprintf("Initialize a new %s workspace or enable pairing", brand.NameTitle),
+	Long: fmt.Sprintf(`Initialize a new %[1]s workspace by creating %[2]s directory structure,
 generating initial state.yaml, and setting up the integration branch.
 
 The description argument is required and describes the goal.
 The spec file (default: specs/vision.md) must exist and be fully committed
 before initialization.
 
-Use --config to provide a pipeline YAML file (defaults to ~/.liza/pipeline.yaml).
-The config is validated and frozen into .liza/pipeline.yaml. Use --entry-point to
+Use --config to provide a pipeline YAML file (defaults to ~/%[3]s/pipeline.yaml).
+The config is validated and frozen into %[2]s/pipeline.yaml. Use --entry-point to
 specify which entry-point to use (must be defined in the config).
 
 Use --branch to set the integration branch name (default: "integration").
@@ -92,17 +93,17 @@ All worktrees branch from and merge back to this branch.
 
 Use --post-worktree-cmd to specify a shell command that runs after every worktree
 creation (e.g. 'make setup', 'npm install'). This ensures worktrees are
-build/test-ready without hardcoding project-specific tooling into Liza.
+build/test-ready without hardcoding project-specific tooling into %[1]s.
 Existing workspaces can add post_worktree_cmd to state.yaml's config section.
 
 Use --copy-worktree-env-files to explicitly authorize copying ignored root env
 files into task worktrees before post-worktree setup runs.
 
 PAIRING MODE: Use agent flags without a description to create only the contract
-symlinks needed for pairing (no .liza/ workspace):
-  liza init --claude           # creates CLAUDE.md → ~/.liza/CORE.md
-  liza init --claude --codex   # creates CLAUDE.md + AGENTS.md and repo hooks
-  liza init --opencode         # creates AGENTS.md → ~/.liza/CORE.md`,
+symlinks needed for pairing (no %[2]s/ workspace):
+  %[4]s init --claude           # creates CLAUDE.md -> ~/%[3]s/CORE.md
+  %[4]s init --claude --codex   # creates CLAUDE.md + AGENTS.md and repo hooks
+  %[4]s init --opencode         # creates AGENTS.md -> ~/%[3]s/CORE.md`, brand.NameTitle, brand.ProjectDirName, brand.GlobalDirName, brand.BinaryName),
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agents := collectAgentFlags(cmd)
@@ -127,7 +128,7 @@ symlinks needed for pairing (no .liza/ workspace):
 		// Interactive wizard: no args, no agent flags, no explicit workspace flags, TTY
 		if len(args) == 0 && len(agents) == 0 && !hasExplicitInitFlags(cmd) && !cmd.Flags().Changed("scip-search") && !cmd.Flags().Changed("scip-search-plan") {
 			if !interactive.IsInteractive() {
-				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --opencode, --gemini, --mistral)\nSee: liza init --help")
+				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
 			}
 
 			// Resolve project root for conflict detection
@@ -197,7 +198,7 @@ symlinks needed for pairing (no .liza/ workspace):
 		// Pairing mode: agent flags without description
 		if len(args) == 0 {
 			if len(agents) == 0 {
-				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --opencode, --gemini, --mistral)\nSee: liza init --help")
+				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
 			}
 			if autoResume {
 				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
@@ -342,7 +343,7 @@ var migrateCmd = &cobra.Command{
 	Long: `Migrate state.yaml by normalizing underscore-form role names to
 their canonical hyphenated form (e.g. code_reviewer → code-reviewer).
 
-If no state-file argument is provided, defaults to .liza/state.yaml.
+If no state-file argument is provided, defaults to the project runtime state.yaml.
 Reports whether any changes were made.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -350,7 +351,7 @@ Reports whether any changes were made.`,
 		if len(args) > 0 {
 			statePath = args[0]
 		} else {
-			statePath = filepath.Join(paths.LizaDirName, paths.StateFileName)
+			statePath = filepath.Join(paths.ProjectDirName(), paths.StateFileName)
 		}
 
 		changed, err := commands.MigrateCommand(statePath)
@@ -431,11 +432,11 @@ func init() {
 	initCmd.Flags().String("default-reviewer-cli", "", "default CLI for reviewer agent spawning ("+strings.Join(agent.ValidCLIs(), ", ")+")")
 	initCmd.Flags().StringArray("scip-search", nil, "enable a SCIP language for indexing (repeatable)")
 	initCmd.Flags().StringArray("scip-search-plan", nil, "pairing SCIP root override: go=<module-root>, typescript=<cwd>,<project-root>, or python=<cwd>[,<target-only>] (repeatable)")
-	initCmd.Flags().Bool("claude", false, "create CLAUDE.md symlink to ~/.liza/CORE.md")
-	initCmd.Flags().Bool("codex", false, "create AGENTS.md symlink to ~/.liza/CORE.md and configure repo hooks")
-	initCmd.Flags().Bool("opencode", false, "create AGENTS.md symlink to ~/.liza/CORE.md")
-	initCmd.Flags().Bool("gemini", false, "create GEMINI.md symlink to ~/.liza/CORE.md")
-	initCmd.Flags().Bool("mistral", false, "set up ~/.vibe/ for Liza contract")
+	initCmd.Flags().Bool("claude", false, fmt.Sprintf("create CLAUDE.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
+	initCmd.Flags().Bool("codex", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md and configure repo hooks", brand.GlobalDirName))
+	initCmd.Flags().Bool("opencode", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
+	initCmd.Flags().Bool("gemini", false, fmt.Sprintf("create GEMINI.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
+	initCmd.Flags().Bool("mistral", false, fmt.Sprintf("set up ~/.vibe/ for %s contract", brand.NameTitle))
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")

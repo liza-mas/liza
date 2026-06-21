@@ -8,7 +8,21 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
+
+func withTestBrandDirs(t *testing.T, globalDir, projectDir string) {
+	t.Helper()
+	previousGlobal := brand.GlobalDirName
+	previousProject := brand.ProjectDirName
+	brand.GlobalDirName = globalDir
+	brand.ProjectDirName = projectDir
+	t.Cleanup(func() {
+		brand.GlobalDirName = previousGlobal
+		brand.ProjectDirName = previousProject
+	})
+}
 
 func TestSetupCommand_NewInstall(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -51,6 +65,62 @@ func TestSetupCommand_NewInstall(t *testing.T) {
 	if _, err := os.Stat(supportIndex); os.IsNotExist(err) {
 		t.Error("support-docs/SUPPORT.md not created")
 	}
+}
+
+func TestWarnLegacyGlobalRootForNonDefaultBrand(t *testing.T) {
+	withTestBrandDirs(t, ".acme-agent", ".acme-agent")
+	homeDir := t.TempDir()
+	legacyDir := filepath.Join(homeDir, ".liza")
+	targetDir := filepath.Join(homeDir, ".acme-agent")
+	if err := os.MkdirAll(legacyDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	stderr := captureSetupStderr(t, func() {
+		warnLegacyGlobalRoot(homeDir, targetDir)
+	})
+	for _, want := range []string{"legacy global root", legacyDir, targetDir, "ignored until explicitly migrated"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("legacy global warning = %q, want %q", stderr, want)
+		}
+	}
+}
+
+func TestWarnLegacyProjectRootForNonDefaultBrand(t *testing.T) {
+	withTestBrandDirs(t, ".acme-agent", ".acme-agent")
+	projectRoot := t.TempDir()
+	legacyDir := filepath.Join(projectRoot, ".liza")
+	activeDir := filepath.Join(projectRoot, ".acme-agent")
+	if err := os.MkdirAll(legacyDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	stderr := captureSetupStderr(t, func() {
+		warnLegacyProjectRoot(projectRoot, activeDir)
+	})
+	for _, want := range []string{"legacy project root", legacyDir, activeDir, "ignored until explicitly migrated"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("legacy project warning = %q, want %q", stderr, want)
+		}
+	}
+}
+
+func captureSetupStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	original := os.Stderr
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Pipe() error = %v", err)
+	}
+	os.Stderr = writer
+	fn()
+	_ = writer.Close()
+	os.Stderr = original
+	out, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("ReadAll(stderr) error = %v", err)
+	}
+	return string(out)
 }
 
 func TestSetupCommand_NewInstallAgentToolsOptionalIndexGuidance(t *testing.T) {

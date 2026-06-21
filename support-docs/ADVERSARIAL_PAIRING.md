@@ -1,7 +1,7 @@
 # Adversarial Pairing
 
 Adversarial Pairing is the middle step between ordinary Pairing mode and the
-full Liza MAS. Use it when one agent should implement and multiple reviewers
+full §BRAND_NAME_TITLE§ MAS. Use it when one agent should implement and multiple reviewers
 should challenge the work, but a full autonomous sprint would be too heavy.
 
 It runs multiple Pairing-mode sessions against a shared Markdown blackboard. Each
@@ -37,24 +37,24 @@ the stable ID it should use when registering in the blackboard. If you are
 arranging panes manually, run each invocation in its own pane:
 
 ```text
-/adversarial-pairing doer .liza/adversarial/retry-client.md
+/adversarial-pairing doer §BRAND_PROJECT_DIRNAME§/adversarial/retry-client.md
 ```
 
 For multiple reviewer sessions, run in additional panes:
 
 ```text
-/adversarial-pairing reviewer-claude .liza/adversarial/retry-client.md
-/adversarial-pairing reviewer-codex .liza/adversarial/retry-client.md
+/adversarial-pairing reviewer-claude §BRAND_PROJECT_DIRNAME§/adversarial/retry-client.md
+/adversarial-pairing reviewer-codex §BRAND_PROJECT_DIRNAME§/adversarial/retry-client.md
 ```
 
 If you want WezTerm to do the spawning for you, use the launch command. This
 starts interactive doer plus reviewer CLI sessions in one WezTerm window with
 the `$adversarial-pairing ...` invocation as each session's initial prompt. If
-the blackboard does not exist yet, pass `--goal` so Liza can initialize it
+the blackboard does not exist yet, pass `--goal` so §BRAND_NAME_TITLE§ can initialize it
 before reviewer panes start:
 
 ```bash
-liza launch wezterm adversarial-pairing .liza/adversarial/retry-client.md \
+§BRAND_BINARY_NAME§ launch wezterm adversarial-pairing §BRAND_PROJECT_DIRNAME§/adversarial/retry-client.md \
   --goal "Fix retry-client behavior"
 ```
 
@@ -63,7 +63,7 @@ Defaults are three Codex panes: `--doer-cli codex` plus reviewers `codex` and
 `id=cli` when the stable blackboard reviewer ID should differ from the CLI name:
 
 ```bash
-liza launch wezterm adversarial-pairing .liza/adversarial/retry-client.md \
+§BRAND_BINARY_NAME§ launch wezterm adversarial-pairing §BRAND_PROJECT_DIRNAME§/adversarial/retry-client.md \
   --goal "Fix retry-client behavior" \
   --doer-cli claude \
   --reviewer claude \
@@ -80,13 +80,13 @@ WezTerm prompt injection waits 2 seconds before sending the initial
 it loads MCP servers or other startup hooks, increase that wait with
 `--prompt-delay`, for example `--prompt-delay 6s`.
 
-**CMUX support:** Liza also supports CMUX as an alternative to WezTerm for
-adversarial-pairing launches. Use `liza launch cmux adversarial-pairing` with
+**CMUX support:** §BRAND_NAME_TITLE§ also supports CMUX as an alternative to WezTerm for
+adversarial-pairing launches. Use `§BRAND_BINARY_NAME§ launch cmux adversarial-pairing` with
 the same role, reviewer, and goal flags. The doer-only `--yolo` flag is also
 available:
 
 ```bash
-liza launch cmux adversarial-pairing .liza/adversarial/retry-client.md \
+§BRAND_BINARY_NAME§ launch cmux adversarial-pairing §BRAND_PROJECT_DIRNAME§/adversarial/retry-client.md \
   --goal "Fix retry-client behavior"
 ```
 
@@ -98,7 +98,7 @@ Use `yolo` only on the doer session when you want the doer to proceed through
 doer-side human approval gates without pausing:
 
 ```text
-/adversarial-pairing doer .liza/adversarial/retry-client.md yolo
+/adversarial-pairing doer §BRAND_PROJECT_DIRNAME§/adversarial/retry-client.md yolo
 ```
 
 `yolo` does not waive reviewer approvals, validation, stop conditions,

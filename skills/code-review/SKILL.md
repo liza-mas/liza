@@ -252,9 +252,9 @@ Next step: [e.g., "Merge after minor suggestions" | "Ready for another look"]
 
 **Pairing (default):** All prompts apply. "Adjust?" allows human to override review mode.
 
-**Liza (multi-agent):** No interactive prompts.
+**§BRAND_NAME_TITLE§ (multi-agent):** No interactive prompts.
 
-| Pairing Prompt | Liza Behavior |
+| Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | Mode announcement ("Adjust?") | Announce mode, no prompt |
 | "Ask the author" / "Clarify" | Check task spec and blackboard; if still unclear, note as `[question]` |

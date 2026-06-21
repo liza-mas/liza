@@ -20,7 +20,7 @@ implementation steps.
 
 # Trigger
 
-- Orchestrator creates an architecture task (Liza mode)
+- Orchestrator creates an architecture task (§BRAND_NAME_TITLE§ mode)
 - User asks to plan architecture for a feature or change (Pairing mode)
 - Implementation planning requires structural decisions before code-planning
 
@@ -163,9 +163,9 @@ Fix issues before submitting.
 
 **Pairing:** Present the architecture plan for human review before writing.
 
-**Liza:** Autonomous within task scope. Plan submitted for review; Architecture Reviewer validates.
+**§BRAND_NAME_TITLE§:** Autonomous within task scope. Plan submitted for review; Architecture Reviewer validates.
 
-| Pairing Prompt | Liza Behavior |
+| Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | "Parent deliverables conflict — resolve?" | Surface in Open Questions; document both options |
 | "Scope too broad — split?" | Decompose further; document split rationale |

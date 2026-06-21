@@ -9,22 +9,24 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
 
 var launchCmd = &cobra.Command{
 	Use:   "launch",
-	Short: "Launch grouped Liza workflows",
+	Short: fmt.Sprintf("Launch grouped %s workflows", brand.NameTitle),
 }
 
 var launchWeztermCmd = &cobra.Command{
 	Use:   "wezterm",
-	Short: "Launch Liza workflows in WezTerm panes",
+	Short: fmt.Sprintf("Launch %s workflows in WezTerm panes", brand.NameTitle),
 }
 
 var launchCmuxCmd = &cobra.Command{
 	Use:   "cmux",
-	Short: "Launch Liza workflows in CMUX panes",
+	Short: fmt.Sprintf("Launch %s workflows in CMUX panes", brand.NameTitle),
 }
 
 var launchWeztermMASCmd = &cobra.Command{
@@ -339,7 +341,7 @@ func validateLaunchProjectRoot(path string) error {
 	if canonicalPath != canonicalRoot {
 		return cliValidationError(fmt.Sprintf("--cwd must be the Liza project root, got %s under git root %s", path, gitRoot))
 	}
-	if _, err := os.Stat(filepath.Join(path, ".liza", "state.yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(path, paths.ProjectDirName(), "state.yaml")); err != nil {
 		if os.IsNotExist(err) {
 			return cliValidationError(fmt.Sprintf("--cwd %s is not initialized as a Liza project", path))
 		}

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Liza worktree pre-commit hook (two-stage chain).
+# __BRAND_NAME_TITLE__ worktree pre-commit hook (two-stage chain).
 #
-# Stage 1 — Liza guard (check-commit-allowed):
+# Stage 1 — __BRAND_NAME_TITLE__ guard (check-commit-allowed):
 #   Rejects commits when the task is not in a state that permits coder
 #   mutations. Fail-safe: any unexpected exit code (missing subcommand,
 #   panic, signal death) falls through to allow — the guard is a guard,
@@ -13,23 +13,23 @@
 #   `pre-commit` binary in this case is a loud error, not a silent skip
 #   (silent skip would re-introduce the gap this chain closes).
 #
-# Installed by `liza wt-create` into each task worktree via:
+# Installed by `__BRAND_BINARY_NAME__ wt-create` into each task worktree via:
 #   git config extensions.worktreeConfig true
-#   git config --worktree core.hooksPath <worktree>/.liza-hooks
+#   git config --worktree core.hooksPath <worktree>/__BRAND_PROJECT_DIRNAME__-hooks
 #
-# The absolute path to the liza binary is baked in at install time. If the
+# The absolute path to the __BRAND_BINARY_NAME__ binary is baked in at install time. If the
 # binary is missing at commit time, the guard step is skipped (belt-and-
 # braces with submit-verdict's HEAD check) but the project pre-commit
 # chain still runs.
 
-LIZA_BIN="__LIZA_BIN__"
+BRAND_BIN="__LIZA_BIN__"
 TASK_ID="__TASK_ID__"
 
-if [ ! -x "$LIZA_BIN" ]; then
-    LIZA_BIN="$(command -v liza 2>/dev/null)"
+if [ ! -x "$BRAND_BIN" ]; then
+    BRAND_BIN="$(command -v __BRAND_BINARY_NAME__ 2>/dev/null)"
 fi
-if [ -n "$LIZA_BIN" ] && [ -x "$LIZA_BIN" ]; then
-    "$LIZA_BIN" check-commit-allowed "$TASK_ID"
+if [ -n "$BRAND_BIN" ] && [ -x "$BRAND_BIN" ]; then
+    "$BRAND_BIN" check-commit-allowed "$TASK_ID"
     ec=$?
     case "$ec" in
         1) exit 1 ;;

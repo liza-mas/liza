@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/identity"
@@ -22,7 +23,7 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent <role> [initial-task-id]",
 	Short: "Run agent supervisor loop",
-	Long: `Start an agent supervisor for a specific role.
+	Long: fmt.Sprintf(`Start an agent supervisor for a specific role.
 
 The supervisor:
 - Registers the agent with collision detection
@@ -50,24 +51,24 @@ Roles:
 
 Agent ID defaults to the first <role>-N not already registered with a valid lease
 (e.g. coder-1, or coder-2 if coder-1 is active). Override with --agent-id or
-LIZA_AGENT_ID. The resolved ID is exported as LIZA_AGENT_ID to spawned provider
-CLIs so hooks select Multi-Agent mode.
+%[1]s. The resolved ID is exported as %[1]s and legacy LIZA_AGENT_ID to spawned
+provider CLIs so hooks select Multi-Agent mode.
 
 Example:
   # Auto-assigned agent ID (simplest)
-  liza agent coder
-  liza agent code-reviewer --cli codex
-  liza agent orchestrator --interactive
+  %[2]s agent coder
+  %[2]s agent code-reviewer --cli codex
+  %[2]s agent orchestrator --interactive
 
   # Explicit agent ID
-  liza agent coder --agent-id coder-1
-  liza agent code-reviewer --agent-id code-reviewer-2 --cli gemini
+  %[2]s agent coder --agent-id coder-1
+  %[2]s agent code-reviewer --agent-id code-reviewer-2 --cli gemini
 
-  # Disable saving agent output to .liza/agent-outputs/
-  liza agent coder --no-log
+  # Disable saving agent output to %[3]s/agent-outputs/
+  %[2]s agent coder --no-log
 
-  # Using LIZA_AGENT_ID environment variable
-  LIZA_AGENT_ID=coder-1 liza agent coder`,
+  # Using %[1]s environment variable
+  %[1]s=coder-1 %[2]s agent coder`, brand.EnvName("AGENT_ID"), brand.BinaryName, paths.ProjectDirName()),
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		role := args[0]
@@ -115,7 +116,8 @@ Example:
 		interactive, _ := cmd.Flags().GetBool("interactive")
 		noLog, _ := cmd.Flags().GetBool("no-log")
 
-		statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+		lizaPaths := paths.New(projectRoot)
+		statePath := lizaPaths.StatePath()
 		bb := db.For(statePath)
 		state, stateErr := bb.Read()
 		if stateErr != nil {
@@ -150,14 +152,18 @@ Example:
 
 		shouldLog := !noLog && !interactive
 
-		// Warn if no Liza contract symlink is configured for this CLI
+		// Warn if no product contract symlink is configured for this CLI.
 		if commands.CheckContractConfigured(projectRoot, cliName) == "" {
 			initFlag := contractInitFlagForCLI(cliName)
-			fmt.Fprintf(os.Stderr, "Warning: no Liza contract symlink found for %s. Agents may not find the behavioral contract.\n", cliName)
-			fmt.Fprintf(os.Stderr, "  Run 'liza init --%s' to create one.\n", initFlag)
+			fmt.Fprintf(os.Stderr, "Warning: no %s contract symlink found for %s. Agents may not find the behavioral contract.\n", brand.NameTitle, cliName)
+			fmt.Fprintf(os.Stderr, "  Run '%s init --%s' to create one.\n", brand.BinaryName, initFlag)
 		}
 
-		specsDir := os.Getenv("LIZA_SPECS")
+		specsLookup := brand.LookupEnv(os.Getenv, "SPECS")
+		if specsLookup.Warning != "" {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", specsLookup.Warning)
+		}
+		specsDir := specsLookup.Value
 		if specsDir == "" {
 			specsDir = filepath.Join(projectRoot, "specs")
 		}
@@ -165,7 +171,6 @@ Example:
 		// Set up paths for agent outputs (enabled by default, disabled by --no-log or -i)
 		var outputsDir string
 		if shouldLog {
-			lizaPaths := paths.New(projectRoot)
 			outputsDir = lizaPaths.AgentOutputsDir()
 		}
 
@@ -181,7 +186,7 @@ Example:
 					Role:        role,
 					ProjectRoot: projectRoot,
 					StatePath:   statePath,
-					LogPath:     filepath.Join(projectRoot, ".liza", "log.yaml"),
+					LogPath:     lizaPaths.LogPath(),
 					SpecsDir:    specsDir,
 					CLIName:     cliName,
 					Interactive: interactive,
@@ -198,7 +203,7 @@ Example:
 			Role:        role,
 			ProjectRoot: projectRoot,
 			StatePath:   statePath,
-			LogPath:     filepath.Join(projectRoot, ".liza", "log.yaml"),
+			LogPath:     lizaPaths.LogPath(),
 			SpecsDir:    specsDir,
 			CLIName:     cliName,
 			Interactive: interactive,
@@ -294,7 +299,7 @@ By default, refuses to recover agents whose PID is still alive.`,
 var repairAgentPoolCmd = &cobra.Command{
 	Use:   "repair-agent-pool",
 	Short: "Repair missing agent roles for claimable work",
-	Long: `Repair the runtime agent pool for claimable work.
+	Long: fmt.Sprintf(`Repair the runtime agent pool for claimable work.
 
 By default, detects roles with immediately claimable tasks but no live registered
 agent, then spawns one agent process per missing role. The --missing flag is kept
@@ -302,11 +307,11 @@ as an explicit spelling of the default behavior.
 
 Use --cli to choose the backend for newly spawned agents. When omitted, the CLI
 defaults to role-specific config, role-specific env, config.default_cli,
-LIZA_DEFAULT_CLI, then claude.
+%s, then claude.
 
 Examples:
-  liza repair-agent-pool --dry-run
-  liza repair-agent-pool --cli codex`,
+  %s repair-agent-pool --dry-run
+  %s repair-agent-pool --cli codex`, brand.EnvName("DEFAULT_CLI"), brand.BinaryName, brand.BinaryName),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		missing, _ := cmd.Flags().GetBool("missing")
@@ -406,7 +411,7 @@ func init() {
 	agentCmd.Flags().String("cli", "", "CLI to use; defaults by role-specific then global config/env; see docs ("+strings.Join(agent.ValidCLIs(), ", ")+")")
 	agentCmd.Flags().String("goal-id", "", "goal identifier marker for process diagnostics (must match state goal.id when supplied)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
-	agentCmd.Flags().Bool("no-log", false, "Disable saving agent output to .liza/agent-outputs/")
+	agentCmd.Flags().Bool("no-log", false, "Disable saving agent output to "+paths.ProjectDirName()+"/agent-outputs/")
 
 	// Recover-task command flags
 	recoverTaskCmd.Flags().Bool("force", false, "bypass live-PID checks; also clean git artifacts when task is not in state")

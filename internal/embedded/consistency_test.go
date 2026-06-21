@@ -5,90 +5,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/brandrender"
 )
 
-// TestArtifactConsistency verifies that repo master files are byte-identical
-// to their embedded copies under internal/embedded/. This catches drift when
-// a master is modified without running `make sync-embedded`.
+// TestArtifactConsistency verifies that rendered repo master files match their
+// embedded copies under internal/embedded/. This catches drift when a master is
+// modified without running `make sync-embedded`.
 func TestArtifactConsistency(t *testing.T) {
 	repoRoot := findRepoRoot(t)
 	embeddedDir := filepath.Join(repoRoot, "internal", "embedded")
 
-	t.Run("contracts", func(t *testing.T) {
-		masterDir := filepath.Join(repoRoot, "contracts")
-		embDir := filepath.Join(embeddedDir, "contracts")
-
-		// sync-embedded copies contracts/*.md (top-level .md files only)
-		entries, err := os.ReadDir(masterDir)
-		if err != nil {
-			t.Fatalf("reading contracts dir: %v", err)
-		}
-
-		var checked int
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-				continue
-			}
-			checked++
-			compareMasterToEmbedded(t, filepath.Join(masterDir, e.Name()), filepath.Join(embDir, e.Name()))
-		}
-		if checked == 0 {
-			t.Fatal("no .md files found in contracts/")
-		}
-	})
-
-	t.Run("skills", func(t *testing.T) {
-		masterDir := filepath.Join(repoRoot, "skills")
-		embDir := filepath.Join(embeddedDir, "skills")
-
-		var checked int
-		err := filepath.WalkDir(masterDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() {
-				if d.Name() == "__pycache__" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			rel, err := filepath.Rel(masterDir, path)
-			if err != nil {
-				return err
-			}
-			checked++
-			compareMasterToEmbedded(t, path, filepath.Join(embDir, rel))
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walking skills dir: %v", err)
-		}
-		if checked == 0 {
-			t.Fatal("no files found in skills/")
-		}
-	})
-
-	t.Run("support-docs", func(t *testing.T) {
-		masterDir := filepath.Join(repoRoot, "support-docs")
-		embDir := filepath.Join(embeddedDir, "support-docs")
-
-		entries, err := os.ReadDir(masterDir)
-		if err != nil {
-			t.Fatalf("reading support-docs dir: %v", err)
-		}
-
-		var checked int
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-				continue
-			}
-			checked++
-			compareMasterToEmbedded(t, filepath.Join(masterDir, e.Name()), filepath.Join(embDir, e.Name()))
-		}
-		if checked == 0 {
-			t.Fatal("no .md files found in support-docs/")
-		}
-	})
+	expected, err := brandrender.ExpectedEmbeddedFiles(repoRoot, brand.RuntimeValues())
+	if err != nil {
+		t.Fatalf("building expected embedded files: %v", err)
+	}
+	if len(expected) == 0 {
+		t.Fatal("no rendered embedded files found")
+	}
+	for _, file := range expected {
+		compareRenderedToEmbedded(t, file, filepath.Join(embeddedDir, filepath.FromSlash(file.RelPath)))
+	}
 
 	t.Run("docs support stubs resolve", func(t *testing.T) {
 		stubs := map[string]string{
@@ -117,15 +55,50 @@ func TestArtifactConsistency(t *testing.T) {
 	})
 }
 
-// compareMasterToEmbedded reads both files and reports a test error if they differ.
-func compareMasterToEmbedded(t *testing.T, masterPath, embeddedPath string) {
-	t.Helper()
+func TestArtifactConsistencyRendersNonDefaultBrand(t *testing.T) {
+	repoRoot := t.TempDir()
+	mkdirAllConsistency(t, filepath.Join(repoRoot, "contracts"))
+	mkdirAllConsistency(t, filepath.Join(repoRoot, "skills", "liza-logs"))
+	mkdirAllConsistency(t, filepath.Join(repoRoot, "support-docs"))
+	writeConsistencyFile(t, filepath.Join(repoRoot, "contracts", "CORE.md"), "You are a §BRAND_NAME_TITLE§ agent.\n")
+	writeConsistencyFile(t, filepath.Join(repoRoot, "skills", "liza-logs", "SKILL.md"), "name: §BRAND_NAME_LOWER§-logs\n")
+	writeConsistencyFile(t, filepath.Join(repoRoot, "support-docs", "USAGE.md"), "Run §BRAND_BINARY_NAME§.\n")
 
-	master, err := os.ReadFile(masterPath)
+	values := brand.ValuesFromEnv(func(key string) string {
+		switch key {
+		case "BRAND_NAME_LOWER", "BRAND_BINARY_NAME":
+			return "acme-agent"
+		case "BRAND_NAME_UPPER", "BRAND_ENV_PREFIX":
+			return "ACME_AGENT"
+		case "BRAND_NAME_TITLE":
+			return "Acme Agent"
+		case "BRAND_REPO", "BRAND_RELEASE_REPO", "BRAND_INSTALL_REPO":
+			return "acme/agent"
+		default:
+			return ""
+		}
+	})
+
+	expected, err := brandrender.ExpectedEmbeddedFiles(repoRoot, values)
 	if err != nil {
-		t.Errorf("reading master %s: %v", masterPath, err)
-		return
+		t.Fatalf("building expected embedded files: %v", err)
 	}
+	var sawRenamedSkill bool
+	for _, file := range expected {
+		if strings.Contains(file.RelPath, "acme-agent-logs") {
+			sawRenamedSkill = true
+		}
+		if strings.Contains(string(file.Content), "§") || strings.Contains(string(file.Content), "BRAND_") {
+			t.Fatalf("unrendered macro in %s: %s", file.RelPath, file.Content)
+		}
+	}
+	if !sawRenamedSkill {
+		t.Fatalf("expected rendered skill path rename, got %+v", expected)
+	}
+}
+
+func compareRenderedToEmbedded(t *testing.T, expected brandrender.RenderedFile, embeddedPath string) {
+	t.Helper()
 
 	embedded, err := os.ReadFile(embeddedPath)
 	if err != nil {
@@ -133,9 +106,23 @@ func compareMasterToEmbedded(t *testing.T, masterPath, embeddedPath string) {
 		return
 	}
 
-	if string(master) != string(embedded) {
-		t.Errorf("DRIFT: master %s differs from embedded copy %s — run `make sync-embedded`",
-			masterPath, embeddedPath)
+	if string(expected.Content) != string(embedded) {
+		t.Errorf("DRIFT: rendered source %s differs from embedded copy %s — run `make sync-embedded`",
+			expected.RelPath, embeddedPath)
+	}
+}
+
+func mkdirAllConsistency(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+}
+
+func writeConsistencyFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }
 

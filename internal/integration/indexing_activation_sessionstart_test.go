@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -194,11 +193,7 @@ func pathWithIndexingActivationPrefix(binDir string) string {
 func runPairingSessionStartContext(t *testing.T, projectDir string, env map[string]string) string {
 	t.Helper()
 
-	_, sourceFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller(0) failed")
-	}
-	hookPath := filepath.Join(filepath.Dir(sourceFile), "..", "embedded", "hooks", "session-context.sh")
+	hookPath := renderedSessionContextHookPath(t)
 	payload, err := json.Marshal(map[string]string{"cwd": projectDir})
 	if err != nil {
 		t.Fatalf("Marshal(SessionStart payload): %v", err)
