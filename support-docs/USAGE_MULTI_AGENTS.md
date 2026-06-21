@@ -431,7 +431,7 @@ IN_PROGRESS → CHECKPOINT ──→ COMPLETED ──→ (new sprint) IN_PROGRES
                   │  ↑            ↑              ↑
                   │  │            │              └── §BRAND_BINARY_NAME§ resume (2nd: archive & advance)
                   │  │            └── §BRAND_BINARY_NAME§ resume (1st: all tasks terminal → mark COMPLETED)
-                  │  └── orchestrator calls liza_sprint_checkpoint
+                  │  └── orchestrator calls §BRAND_NAME_LOWER§_sprint_checkpoint
                   │
                   ├── §BRAND_BINARY_NAME§ resume  (mid-sprint: not all terminal → back to IN_PROGRESS)
                   └── §BRAND_BINARY_NAME§ replan  (amend plan → new planning task → back to IN_PROGRESS)
@@ -633,8 +633,8 @@ jq -c 'select(.type == "assistant") | {id: .message.id, usage: .message.usage}' 
 
 Doer agents (coders, planners, writers) use a blocking workflow for review cycles:
 
-1. `liza_submit_for_review` — submit completed work
-2. `liza_await_verdict` — block until reviewer issues verdict
+1. `§BRAND_NAME_LOWER§_submit_for_review` — submit completed work
+2. `§BRAND_NAME_LOWER§_await_verdict` — block until reviewer issues verdict
 3. Handle verdict:
   - **REJECTED**: Fix issues, resubmit (session stays alive — no cold restart)
   - **APPROVED** / **NEW_ATTEMPT** / **TIMEOUT** / **ABORTED**: Exit normally
@@ -645,13 +645,13 @@ This reduces per-rejection overhead from ~47s (cold restart) to near-zero. The c
 
 Reviewer agents use a blocking workflow after non-terminal rejections:
 
-1. `liza_submit_verdict` — issue REJECTED verdict with feedback
-2. `liza_await_resubmission` — block until doer resubmits
+1. `§BRAND_NAME_LOWER§_submit_verdict` — issue REJECTED verdict with feedback
+2. `§BRAND_NAME_LOWER§_await_resubmission` — block until doer resubmits
 3. Handle result:
   - **RESUBMITTED**: Review the new changes (session stays alive — no cold restart)
   - **TERMINAL** / **TIMEOUT** / **ABORTED**: Exit normally
 
-This mirrors the doer-side `liza_await_verdict` flow, reducing per-rejection overhead from ~47s (cold restart) to near-zero for reviewers. Do not call after terminal rejections (`EscalatedToBlocked` or `NewAttemptTriggered`).
+This mirrors the doer-side `§BRAND_NAME_LOWER§_await_verdict` flow, reducing per-rejection overhead from ~47s (cold restart) to near-zero for reviewers. Do not call after terminal rejections (`EscalatedToBlocked` or `NewAttemptTriggered`).
 
 ### Differences from Pairing Mode
 

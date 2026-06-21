@@ -386,7 +386,7 @@ def test_rich_later_system_events_do_not_clear_session_model() -> None:
 def test_efficiency_insights_ignore_shared_prefix_non_duplicates() -> None:
     analyzer = load_analyzer()
     report = analyzer.SessionReport()
-    shared_prefix = '--- liza_version: "0.2.0" liza_git_commit: "abc" ---\n'
+    shared_prefix = '--- §BRAND_NAME_LOWER§_version: "0.2.0" §BRAND_NAME_LOWER§_git_commit: "abc" ---\n'
     first = shared_prefix + "first document\n" + ("a" * 1200)
     second = shared_prefix + "second document\n" + ("b" * 1200)
     report.actions = [
@@ -508,7 +508,7 @@ def test_role_summary_includes_mcp_usage() -> None:
     report.actions = [
         analyzer.TurnAction(tool_name="github/list_issues", result_chars=1200),
         analyzer.TurnAction(tool_name="github/get_issue", result_chars=300, is_error=True),
-        analyzer.TurnAction(tool_name="liza/get_state", result_chars=999),
+        analyzer.TurnAction(tool_name=f"{analyzer.BRAND_MCP_SERVER}/get_state", result_chars=999),
         analyzer.TurnAction(tool_name="rtk git", result_chars=50),
     ]
 
@@ -520,7 +520,7 @@ def test_role_summary_includes_mcp_usage() -> None:
     assert "github/list_issues" in rendered
     assert "github/get_issue" in rendered
     mcp_section = rendered.split("MCP USAGE", 1)[1]
-    assert "liza/get_state" not in mcp_section
+    assert f"{analyzer.BRAND_MCP_SERVER}/get_state" not in mcp_section
 
 
 def test_mcp_parser_ignores_slash_in_command_display_name() -> None:

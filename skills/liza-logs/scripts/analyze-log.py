@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze Liza agent log files for context usage patterns.
+"""Analyze §BRAND_NAME_TITLE§ agent log files for context usage patterns.
 
 Reads NDJSON log files produced by `claude --verbose --output-format stream-json`
 and prints a human-readable report of token usage, content breakdown, and cost.
@@ -9,8 +9,10 @@ Two log formats are supported:
   - Sparse (Format B): first event type is "thread.started". Aggregate usage only.
 
 Usage:
-    python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/orchestrator-*.txt
-    python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.txt
+    python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-log.py \
+        §BRAND_PROJECT_DIRNAME§/agent-outputs/orchestrator-*.txt
+    python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_NAME_LOWER§-logs/scripts/analyze-log.py \
+        §BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt
 """
 
 from __future__ import annotations
@@ -24,6 +26,11 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+BRAND_BINARY_NAME = "§BRAND_BINARY_NAME§"
+BRAND_MCP_SERVER = "§BRAND_NAME_LOWER§"
+BRAND_NAME_TITLE = "§BRAND_NAME_TITLE§"
+SECRET_WORD_PREFIXES = (BRAND_NAME_TITLE, "Secret")
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -117,7 +124,7 @@ class SessionReport:
     mcp_servers: list[dict[str, str]] = field(default_factory=list)
     # Skill invocations (both formats)
     skill_invocations: dict[str, int] = field(default_factory=dict)
-    # Secret words (lines starting with "Liza" or "Secret" in first assistant block)
+    # Secret words (lines starting with the brand name or "Secret" in first assistant block)
     secret_words_lines: list[str] = field(default_factory=list)
 
 
@@ -200,7 +207,7 @@ def _hash_result(text: str) -> str:
 
 
 def _extract_secret_words_lines(text: str) -> list[str]:
-    """Extract lines starting with 'Liza' or 'Secret' from the first 30 lines.
+    """Extract brand/secret-word lines from the first 30 lines.
 
     Strips leading markdown formatting (bold, italic, heading markers) before matching.
     """
@@ -209,7 +216,7 @@ def _extract_secret_words_lines(text: str) -> list[str]:
     result = []
     for line in text.strip().splitlines()[:30]:
         stripped = line.strip().strip("*_#").strip()
-        if stripped.startswith("Liza") or stripped.startswith("Secret"):
+        if stripped.startswith(SECRET_WORD_PREFIXES):
             result.append(stripped)
     return result
 
@@ -277,8 +284,8 @@ def _permission_friction_category(action: TurnAction) -> str:
         return "runtime-determined sed target"
     if "PreToolUse:Bash hook error" in text:
         return "pre-tool hook block"
-    if "must be run from project root" in text and "liza:" in text:
-        return "liza project-root mismatch"
+    if "must be run from project root" in text and f"{BRAND_BINARY_NAME}:" in text:
+        return f"{BRAND_MCP_SERVER} project-root mismatch"
     if "ls in '" in text and "was blocked" in text:
         return "filesystem allowlist block"
 
@@ -1232,7 +1239,7 @@ def _parse_secret_words(line: str) -> list[str]:
 
 
 def render_secret_words(report: SessionReport) -> str:
-    """Secret words detection — lines starting with 'Liza' or 'Secret' in first assistant block."""
+    """Secret words detection from the first assistant block."""
     lines = [
         "",
         "-" * 72,
@@ -1252,7 +1259,7 @@ def render_secret_words(report: SessionReport) -> str:
         else:
             lines.append("  Found: (none)")
     else:
-        lines.append("  (no lines starting with 'Liza' or 'Secret' in first 30 lines)")
+        lines.append(f"  (no lines starting with '{BRAND_NAME_TITLE}' or 'Secret' in first 30 lines)")
         lines.append("  Found: (none)")
 
     return "\n".join(lines) + "\n"
@@ -1284,11 +1291,11 @@ def render_mcp_usage(report: SessionReport) -> str:
     if not report.actions:
         return ""
 
-    # Exclude "liza" server — those are Liza coordination calls, not MCP tool adoption.
+    # Exclude the product coordination server; those calls are not MCP tool adoption.
     mcp_actions: list[tuple[str, str, TurnAction]] = []
     for action in report.actions:
         parsed = _parse_mcp_tool_name(action.tool_name)
-        if parsed and parsed[0] != "liza":
+        if parsed and parsed[0] != BRAND_MCP_SERVER:
             mcp_actions.append((parsed[0], parsed[1], action))
 
     if not mcp_actions:
@@ -1414,7 +1421,7 @@ def render_tool_result_breakdown(report: SessionReport) -> str:
     groups: dict[str, list[TurnAction]] = {}
     for action in report.actions:
         parsed = _parse_mcp_tool_name(action.tool_name)
-        if parsed and parsed[0] != "liza":
+        if parsed and parsed[0] != BRAND_MCP_SERVER:
             continue
         groups.setdefault(action.tool_name, []).append(action)
 
@@ -1820,7 +1827,7 @@ def render_role_summary(reports: list[SessionReport]) -> str:
             tool_chars[action.tool_name] += action.result_chars
             tool_calls[action.tool_name] += 1
             parsed = _parse_mcp_tool_name(action.tool_name)
-            if parsed and parsed[0] != "liza":
+            if parsed and parsed[0] != BRAND_MCP_SERVER:
                 server, tool = parsed
                 server_tool = f"{server}/{tool}"
                 mcp_server_calls[server] += 1
@@ -1891,7 +1898,7 @@ def render_role_summary(reports: list[SessionReport]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyze Liza agent log files.")
+    parser = argparse.ArgumentParser(description=f"Analyze {BRAND_NAME_TITLE} agent log files.")
     parser.add_argument(
         "--summary-by-role",
         action="store_true",

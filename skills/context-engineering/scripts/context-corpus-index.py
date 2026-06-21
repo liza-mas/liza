@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Index Liza prompt/output corpora for context-engineering audits.
+"""Index §BRAND_NAME_TITLE§ prompt/output corpora for context-engineering audits.
 
 The script intentionally does mechanical discovery only: corpus inventory,
 prompt/output pairing, pressure metrics, outcome signals, and a sampling plan.
@@ -22,6 +22,8 @@ SESSION_RE = re.compile(r"^(?P<role>.+)-(?P<date>\d{8})-(?P<time>\d{6})(?P<suffi
 
 VERDICT_RE = re.compile(r'"verdict"\s*:\s*"(APPROVED|REJECTED)"')
 STATUS_RE = re.compile(r'"status"\s*:\s*"(BLOCKED|CODE_APPROVED|IMPLEMENTING_CODE|MERGED|REVIEWING_CODE|SUPERSEDED)"')
+BRAND_NAME_TITLE = "§BRAND_NAME_TITLE§"
+BRAND_PROJECT_DIRNAME = "§BRAND_PROJECT_DIRNAME§"
 
 
 @dataclass
@@ -110,12 +112,13 @@ def detect_log_format(event_type: str) -> str:
     return "unknown"
 
 
-def resolve_liza_dir(path: Path) -> Path:
+def resolve_agent_data_dir(path: Path) -> Path:
     if (path / "agent-prompts").is_dir() and (path / "agent-outputs").is_dir():
         return path
-    if (path / ".liza" / "agent-prompts").is_dir() and (path / ".liza" / "agent-outputs").is_dir():
-        return path / ".liza"
-    raise SystemExit(f"not a Liza data directory: {path}")
+    project_data_dir = path / BRAND_PROJECT_DIRNAME
+    if (project_data_dir / "agent-prompts").is_dir() and (project_data_dir / "agent-outputs").is_dir():
+        return project_data_dir
+    raise SystemExit(f"not a {BRAND_NAME_TITLE} data directory: {path}")
 
 
 def add_text_signals(text: str, verdicts: Counter[str], statuses: Counter[str]) -> int:
@@ -661,14 +664,14 @@ def build_role_stats(prompts: list[FileInfo], outputs: list[OutputMetrics]) -> l
     return stats
 
 
-def summarize(liza_dir: Path, max_pair_seconds: int, sample_limit: int) -> dict[str, Any]:
-    prompts_dir = liza_dir / "agent-prompts"
-    outputs_dir = liza_dir / "agent-outputs"
-    prompts = [parse_file_info(path, liza_dir) for path in sorted(prompts_dir.glob("*")) if path.is_file()]
+def summarize(agent_data_dir: Path, max_pair_seconds: int, sample_limit: int) -> dict[str, Any]:
+    prompts_dir = agent_data_dir / "agent-prompts"
+    outputs_dir = agent_data_dir / "agent-outputs"
+    prompts = [parse_file_info(path, agent_data_dir) for path in sorted(prompts_dir.glob("*")) if path.is_file()]
     output_files = [path for path in sorted(outputs_dir.glob("*")) if path.is_file() and path.suffix == ".txt"]
-    outputs = [scan_output(path, liza_dir) for path in output_files]
+    outputs = [scan_output(path, agent_data_dir) for path in output_files]
     other_outputs = [
-        parse_file_info(path, liza_dir)
+        parse_file_info(path, agent_data_dir)
         for path in sorted(outputs_dir.glob("*"))
         if path.is_file() and path.suffix != ".txt"
     ]
@@ -713,7 +716,7 @@ def summarize(liza_dir: Path, max_pair_seconds: int, sample_limit: int) -> dict[
     role_stats = build_role_stats(prompts, outputs)
 
     return {
-        "liza_dir": str(liza_dir),
+        "agent_data_dir": str(agent_data_dir),
         "totals": totals,
         "roles": {
             "prompts": dict(prompt_roles),
@@ -788,7 +791,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Context Corpus Index",
         "",
-        f"Liza dir: `{report['liza_dir']}`",
+        f"{BRAND_NAME_TITLE} dir: `{report['agent_data_dir']}`",
         "",
         "## Inventory",
         "",
@@ -924,12 +927,15 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Index .liza/agent-prompts and .liza/agent-outputs for context-engineering audits."
+        description=(
+            f"Index {BRAND_PROJECT_DIRNAME}/agent-prompts and "
+            f"{BRAND_PROJECT_DIRNAME}/agent-outputs for context-engineering audits."
+        )
     )
     parser.add_argument(
         "path",
         type=Path,
-        help="Path to a project root containing .liza, or to a .liza directory.",
+        help=(f"Path to a project root containing {BRAND_PROJECT_DIRNAME}, or to a {BRAND_PROJECT_DIRNAME} directory."),
     )
     parser.add_argument(
         "--max-pair-minutes",
@@ -950,8 +956,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    liza_dir = resolve_liza_dir(args.path)
-    report = summarize(liza_dir, args.max_pair_minutes * 60, args.sample_limit)
+    agent_data_dir = resolve_agent_data_dir(args.path)
+    report = summarize(agent_data_dir, args.max_pair_minutes * 60, args.sample_limit)
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze Liza blackboard task state for recurring task frictions."""
+"""Analyze §BRAND_NAME_TITLE§ blackboard task state for recurring task frictions."""
 
 from __future__ import annotations
 
@@ -213,8 +213,10 @@ def render_report(analysis: dict[str, Any], source: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyze Liza .liza/state.yaml task friction.")
-    parser.add_argument("state_file", help="path to .liza/state.yaml")
+    parser = argparse.ArgumentParser(
+        description="Analyze §BRAND_NAME_TITLE§ §BRAND_PROJECT_DIRNAME§/state.yaml task friction."
+    )
+    parser.add_argument("state_file", help="path to §BRAND_PROJECT_DIRNAME§/state.yaml")
     parser.add_argument("--json", action="store_true", help="emit structured JSON instead of text")
     args = parser.parse_args()
 

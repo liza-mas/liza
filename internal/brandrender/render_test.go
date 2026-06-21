@@ -100,7 +100,7 @@ func TestExpectedEmbeddedFilesRendersMacros(t *testing.T) {
 	}
 }
 
-func TestExpectedEmbeddedMarkdownUsesNonDefaultBrand(t *testing.T) {
+func TestExpectedEmbeddedFilesUseNonDefaultBrand(t *testing.T) {
 	files, err := ExpectedEmbeddedFiles(findRepoRoot(t), brand.ValuesFromEnv(func(key string) string {
 		switch key {
 		case "BRAND_NAME_LOWER", "BRAND_BINARY_NAME", "BRAND_ARCHIVE_PREFIX", "BRAND_MISTRAL_PROMPT_ID":
@@ -119,11 +119,8 @@ func TestExpectedEmbeddedMarkdownUsesNonDefaultBrand(t *testing.T) {
 		t.Fatalf("ExpectedEmbeddedFiles: %v", err)
 	}
 
-	rawDefaultRE := regexp.MustCompile(`\b(Liza|LIZA|liza)\b|liza-mas/liza`)
+	rawDefaultRE := regexp.MustCompile(`(?i)(^|[^A-Za-z])liza($|[^A-Za-z0-9])|liza-mas/liza`)
 	for _, file := range files {
-		if !strings.HasSuffix(file.RelPath, ".md") {
-			continue
-		}
 		rendered := string(file.Content)
 		if match := rawDefaultRE.FindString(rendered); match != "" {
 			t.Fatalf("%s contains raw default brand token %q", file.RelPath, match)

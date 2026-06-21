@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Liza Session Analyzer</title>
+<title>§BRAND_NAME_TITLE§ Session Analyzer</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', -apple-system, sans-serif; }
@@ -18,6 +18,10 @@
 <script type="text/babel">
 const { useState, useMemo, useCallback } = React;
 
+const BRAND_BINARY_NAME = "§BRAND_BINARY_NAME§";
+const BRAND_NAME_LOWER = "§BRAND_NAME_LOWER§";
+const BRAND_NAME_TITLE = "§BRAND_NAME_TITLE§";
+const SECRET_WORD_PREFIXES = [BRAND_NAME_TITLE, "Secret"];
 const TOP_ITEMS_LIMIT = 10;
 
 // --- Parsers ---
@@ -397,7 +401,7 @@ function permissionFrictionCategory(action) {
   if (text.includes("Unrecognized redirect shape")) return "unrecognized redirect shape";
   if (text.includes("sed target contains command-substitution")) return "runtime-determined sed target";
   if (text.includes("PreToolUse:Bash hook error")) return "pre-tool hook block";
-  if (text.includes("must be run from project root") && text.includes("liza:")) return "liza project-root mismatch";
+  if (text.includes("must be run from project root") && text.includes(`${BRAND_BINARY_NAME}:`)) return `${BRAND_NAME_LOWER} project-root mismatch`;
   if (text.includes("ls in '") && text.includes("was blocked")) return "filesystem allowlist block";
 
   if (text.includes("Contains shell syntax")) {
@@ -445,7 +449,7 @@ function computeMcpUsage(timeline) {
   const mcpActions = [];
   for (const t of timeline) {
     const parsed = parseMcpToolName(t.toolName);
-    if (parsed && parsed.server !== "liza") {
+    if (parsed && parsed.server !== BRAND_NAME_LOWER) {
       mcpActions.push({ ...parsed, resultChars: t.resultChars, isError: t.isError });
     }
   }
@@ -551,7 +555,9 @@ function buildClaudeEmptyTurns(events, perMsgUsage) {
 function extractSecretWordsLines(text) {
   if (!text) return [];
   const lines = text.trim().split("\n").slice(0, 30);
-  return lines.map(l => l.trim().replace(/^[*_#]+\s*/, "").replace(/[*_#]+$/, "").trim()).filter(l => l.startsWith("Liza") || l.startsWith("Secret"));
+  return lines
+    .map(l => l.trim().replace(/^[*_#]+\s*/, "").replace(/[*_#]+$/, "").trim())
+    .filter(l => SECRET_WORD_PREFIXES.some(prefix => l.startsWith(prefix)));
 }
 
 function parseSecretWords(line) {
@@ -668,7 +674,7 @@ function analyzeCodex(parsed) {
   const toolResultBreakdown = {};
   for (const t of timeline) {
     const p = parseMcpToolName(t.toolName);
-    if (p && p.server !== "liza") continue;
+    if (p && p.server !== BRAND_NAME_LOWER) continue;
     if (!toolResultBreakdown[t.toolName]) toolResultBreakdown[t.toolName] = { calls: 0, totalChars: 0, maxChars: 0 };
     const b = toolResultBreakdown[t.toolName];
     b.calls++; b.totalChars += t.resultChars; b.maxChars = Math.max(b.maxChars, t.resultChars);
@@ -823,7 +829,7 @@ function analyzeClaudeCode(parsed) {
   const toolResultBreakdown = {};
   for (const t of timeline) {
     const p = parseMcpToolName(t.toolName);
-    if (p && p.server !== "liza") continue;
+    if (p && p.server !== BRAND_NAME_LOWER) continue;
     if (!toolResultBreakdown[t.toolName]) {
       toolResultBreakdown[t.toolName] = { calls: 0, totalChars: 0, maxChars: 0 };
     }
@@ -1216,7 +1222,7 @@ function CodexReport({ parsed }) {
           </div>
         </div>
       ) : (
-        <div style={{ fontSize: 12, color: C.textMuted }}>No lines starting with "Liza" or "Secret" found in first 30 lines</div>
+        <div style={{ fontSize: 12, color: C.textMuted }}>No lines starting with "{BRAND_NAME_TITLE}" or "Secret" found in first 30 lines</div>
       )}
 
       {timeline.length > 0 && (<>
@@ -1463,7 +1469,7 @@ function ClaudeCodeReport({ parsed }) {
           </div>
         </div>
       ) : (
-        <div style={{ fontSize: 12, color: C.textMuted }}>No lines starting with "Liza" or "Secret" found in first 30 lines</div>
+        <div style={{ fontSize: 12, color: C.textMuted }}>No lines starting with "{BRAND_NAME_TITLE}" or "Secret" found in first 30 lines</div>
       )}
 
       {timeline.length > 0 && (<>
@@ -1632,7 +1638,7 @@ function App() {
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>
-              <span style={{ color: C.cyan }}>liza</span><span style={{ color: C.textDim }}>::</span>session_analyzer
+              <span style={{ color: C.cyan }}>{BRAND_NAME_LOWER}</span><span style={{ color: C.textDim }}>::</span>session_analyzer
             </h1>
             <span style={{ fontSize: 11, color: C.textDim, fontFamily: "monospace" }}>v0.1</span>
           </div>

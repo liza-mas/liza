@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract bounded evidence windows from Liza agent logs.
+"""Extract bounded evidence windows from §BRAND_NAME_TITLE§ agent logs.
 
 This complements analyze-log.py. The analyzer gives full session summaries;
 this script keeps the decision-relevant event sequence and trims large payloads

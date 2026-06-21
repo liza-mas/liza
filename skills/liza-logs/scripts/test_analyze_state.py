@@ -67,7 +67,7 @@ def test_analyze_state_counts_high_rejection_and_terminal_tasks() -> None:
 def test_render_report_includes_state_sections() -> None:
     analyzer = load_state_analyzer()
     analysis = analyzer.analyze_state({"tasks": []})
-    rendered = analyzer.render_report(analysis, ".liza/state.yaml")
+    rendered = analyzer.render_report(analysis, "§BRAND_PROJECT_DIRNAME§/state.yaml")
 
     assert "STATE FRICTION INVENTORY" in rendered
     assert "STATUS COUNTS" in rendered
