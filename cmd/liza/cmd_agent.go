@@ -51,7 +51,7 @@ Roles:
 
 Agent ID defaults to the first <role>-N not already registered with a valid lease
 (e.g. coder-1, or coder-2 if coder-1 is active). Override with --agent-id or
-%[1]s. The resolved ID is exported as %[1]s and legacy LIZA_AGENT_ID to spawned
+%[1]s. The resolved ID is exported as %[1]s and the legacy env alias to spawned
 provider CLIs so hooks select Multi-Agent mode.
 
 Example:

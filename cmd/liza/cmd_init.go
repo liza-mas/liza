@@ -440,7 +440,7 @@ func init() {
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")
-	validateCmd.Flags().Bool("skip-process-checks", false, "skip live liza agent process checks for offline or archived state validation")
+	validateCmd.Flags().Bool("skip-process-checks", false, fmt.Sprintf("skip live %s agent process checks for offline or archived state validation", brand.BinaryName))
 	validateCmd.Flags().Bool("repair", false, "repair invalid active ownership before validating")
 
 	// JSON output flags

@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -53,7 +54,7 @@ var agentProcesses = agentProcessOps{
 }
 
 // SignalProcess sends SIGTERM to the deleted agent's process if it had a known PID.
-// Verifies the process is a liza agent via /proc/<pid>/cmdline before signaling,
+// Verifies the process is an agent via /proc/<pid>/cmdline before signaling,
 // preventing accidental kills from PID reuse. Safe to call unconditionally.
 func (r *DeleteAgentResult) SignalProcess() bool {
 	if r.PID <= 0 {
@@ -69,7 +70,7 @@ func (r *DeleteAgentResult) SignalProcess() bool {
 	return proc.Signal(syscall.SIGTERM) == nil
 }
 
-// TerminateAgent stops the registered liza agent process before removing it
+// TerminateAgent stops the registered agent process before removing it
 // from state. If the process exits cleanly and unregisters itself first, the
 // missing state entry is treated as success.
 func TerminateAgent(projectRoot, agentID string, force, allowRunningPID bool, reason string, grace time.Duration) (*TerminateAgentResult, error) {
@@ -142,7 +143,7 @@ func terminateProcess(pid int, grace time.Duration) (ProcessTerminationResult, e
 	// PID identity can still race between /proc verification and signal delivery,
 	// but checking argv avoids intentionally signaling unrelated processes.
 	if err := agentProcesses.signalTree(pid); err != nil {
-		return result, fmt.Errorf("signal liza agent process %d: %w", pid, err)
+		return result, fmt.Errorf("signal %s agent process %d: %w", brand.BinaryName, pid, err)
 	}
 	result.Signaled = true
 
@@ -155,7 +156,7 @@ func terminateProcess(pid int, grace time.Duration) (ProcessTerminationResult, e
 	}
 
 	if err := agentProcesses.killTree(pid); err != nil {
-		return result, fmt.Errorf("kill liza agent process %d: %w", pid, err)
+		return result, fmt.Errorf("kill %s agent process %d: %w", brand.BinaryName, pid, err)
 	}
 	result.Killed = true
 	if agentProcesses.waitForExit(pid, grace) {
@@ -163,7 +164,7 @@ func terminateProcess(pid int, grace time.Duration) (ProcessTerminationResult, e
 		return result, nil
 	}
 
-	return result, fmt.Errorf("liza agent process %d still running after termination", pid)
+	return result, fmt.Errorf("%s agent process %d still running after termination", brand.BinaryName, pid)
 }
 
 func waitForAgentProcessExit(pid int, grace time.Duration) bool {

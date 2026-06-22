@@ -4,7 +4,7 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
 1. Read task history — understand what was tried and why it failed
 2. Determine if:
    - Task is impossible as specified → supersede with revised tasks:
-     a. Re-read the task via liza get <task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY).
+     a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY).
         If status changed (e.g., task was claimed), skip supersede — the task is being actively worked.
      b. Write a tasks JSON file as a bare array — NOT a wrapper object:
         [{
@@ -18,8 +18,8 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
           "type": "coding",
           "role_pair": "coding-pair"
         }]
-     c. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
-     d. Run: liza supersede-task <old-id> <new-id-1>,<new-id-2> --reason "<reason>" --agent-id {{.AgentID}} --json
+     c. Run: {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
+     d. Run: {{binaryName}} supersede-task <old-id> <new-id-1>,<new-id-2> --reason "<reason>" --agent-id {{.AgentID}} --json
    - Missing context/docs → add to task description (update NOW)
    - Needs different approach → update scope/guidance (execute NOW)
    - Spec is wrong → fix spec first (update NOW)
@@ -27,10 +27,10 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
 4. If breaking into smaller tasks — create them all in this session
 5. After analyzing each hypothesis-exhausted task:
    - If you resolved it (superseded, updated guidance, fixed spec): no further action needed for that task
-   - If you CANNOT resolve it now: run liza assess-hypothesis-exhausted to record your assessment
-     Run: liza assess-hypothesis-exhausted <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
+   - If you CANNOT resolve it now: run {{binaryName}} assess-hypothesis-exhausted to record your assessment
+     Run: {{binaryName}} assess-hypothesis-exhausted <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
      This transitions unresolved exhausted work to BLOCKED so it cannot be reassigned unchanged, and prevents re-waking until new information arrives (new failures, human notes).
 6. All state modifications must be executed before you exit.
 
-Do NOT call liza sprint-checkpoint. You must either supersede the task, update its guidance, or assess it. Do NOT defer.
+Do NOT call {{binaryName}} sprint-checkpoint. You must either supersede the task, update its guidance, or assess it. Do NOT defer.
 {{- end -}}

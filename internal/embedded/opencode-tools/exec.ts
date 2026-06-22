@@ -1,4 +1,4 @@
-// LIZA MANAGED FILE: OpenCode exec compatibility tool. Safe for Liza to overwrite.
+// __BRAND_NAME_UPPER__ MANAGED FILE: OpenCode exec compatibility tool. Safe for __BRAND_NAME_TITLE__ to overwrite.
 import { Buffer } from "node:buffer"
 import { spawn } from "node:child_process"
 import process from "node:process"
@@ -50,7 +50,7 @@ function defaultWorkdir(context: unknown): string {
 
 export default tool({
   description:
-    "Run a shell command for trusted Liza bridge work. The cmd string is executed through the system shell and is not safe for less-trusted contexts. Prefer this exec tool for shell and file operations instead of built-in bash/read/write tools. Omit optional fields when they are not needed; null is tolerated and treated as omitted. Do not repeat the same successful command. After a successful command, inspect the result and move to the next Liza protocol step.",
+    "Run a shell command for trusted __BRAND_NAME_TITLE__ bridge work. The cmd string is executed through the system shell and is not safe for less-trusted contexts. Prefer this exec tool for shell and file operations instead of built-in bash/read/write tools. Omit optional fields when they are not needed; null is tolerated and treated as omitted. Do not repeat the same successful command. After a successful command, inspect the result and move to the next __BRAND_NAME_TITLE__ protocol step.",
   args: {
     cmd: tool.schema.string().describe("Shell command to run."),
     workdir: tool.schema
@@ -62,7 +62,7 @@ export default tool({
       .number()
       .nullable()
       .optional()
-      .describe("Timeout in milliseconds. Omit for Liza's default timeout."),
+      .describe("Timeout in milliseconds. Omit for __BRAND_NAME_TITLE__'s default timeout."),
   },
   async execute(args, context) {
     const cwd = args.workdir ?? defaultWorkdir(context)

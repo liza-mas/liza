@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/spf13/cobra"
@@ -70,8 +71,8 @@ an authoritative lock.`,
 			return nil
 		}
 
-		fmt.Fprintln(os.Stderr, "liza: "+result.Reason)
-		fmt.Fprintln(os.Stderr, "liza: if you must commit despite the task state, re-run with --no-verify.")
+		fmt.Fprintln(os.Stderr, brand.BinaryName+": "+result.Reason)
+		fmt.Fprintln(os.Stderr, brand.BinaryName+": if you must commit despite the task state, re-run with --no-verify.")
 		// Return ErrAlreadyWritten so main() exits 1 without prefixing the
 		// message with "Error: " (our two stderr lines above are the message).
 		// Keeps cobra's normal error-return flow intact — deferred log

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/taskkind"
 )
@@ -336,9 +337,16 @@ var validKinds = map[string]struct{}{
 	taskkind.PreCommitBootstrap: {},
 }
 
-// DestructiveDBAllowMarker must appear in declared validation commands for
-// tasks or output entries that may reset, drop, or otherwise destroy DB state.
+// DestructiveDBAllowMarker is the legacy break-glass marker accepted for
+// persisted state compatibility.
 const DestructiveDBAllowMarker = "LIZA_ALLOW_DESTRUCTIVE_DB=1"
+
+// CurrentDestructiveDBAllowMarker returns the active brand's destructive DB
+// break-glass marker. The legacy LIZA marker remains accepted for existing
+// state files and commands.
+func CurrentDestructiveDBAllowMarker() string {
+	return brand.EnvName("ALLOW_DESTRUCTIVE_DB") + "=1"
+}
 
 // ValidateKind rejects unknown non-empty Kind values before they can bypass
 // kind-based consumers such as task deduplication.
@@ -373,8 +381,23 @@ func ValidateValidationCommands(field string, commands []string) error {
 // HasLeadingDestructiveDBAllowMarker reports whether command begins with the
 // explicit break-glass environment assignment required for destructive DB work.
 func HasLeadingDestructiveDBAllowMarker(command string) bool {
-	return hasLeadingDestructiveDBAllowMarker(command, DestructiveDBAllowMarker) ||
-		hasLeadingDestructiveDBAllowMarker(command, "env "+DestructiveDBAllowMarker)
+	for _, marker := range acceptedDestructiveDBAllowMarkers() {
+		if hasLeadingDestructiveDBAllowMarker(command, marker) ||
+			hasLeadingDestructiveDBAllowMarker(command, "env "+marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func acceptedDestructiveDBAllowMarkers() []string {
+	current := CurrentDestructiveDBAllowMarker()
+	if current == DestructiveDBAllowMarker {
+		return []string{DestructiveDBAllowMarker}
+	}
+	// Keep accepting the legacy marker for existing state files and saved
+	// commands, but advertise only the current brand marker in prompts/errors.
+	return []string{current, DestructiveDBAllowMarker}
 }
 
 func hasLeadingDestructiveDBAllowMarker(command, prefix string) bool {
@@ -403,7 +426,8 @@ func ValidateValidationSafety(field string, commands []string, destructiveDB boo
 	}
 	for i, command := range commands {
 		if !HasLeadingDestructiveDBAllowMarker(command) {
-			return fmt.Errorf("%s[%d] destructive_db requires command to start with %s or env %s", field, i, DestructiveDBAllowMarker, DestructiveDBAllowMarker)
+			marker := CurrentDestructiveDBAllowMarker()
+			return fmt.Errorf("%s[%d] destructive_db requires command to start with %s or env %s", field, i, marker, marker)
 		}
 	}
 	return nil

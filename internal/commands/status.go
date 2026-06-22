@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -244,9 +245,9 @@ func checkpointNotice(sprint models.Sprint) string {
 		return ""
 	}
 	if models.IsTransitionCheckpointTrigger(sprint.CheckpointTrigger) {
-		return "CHECKPOINT: transition gate pending; doer/reviewer work may continue; run 'liza resume' to create downstream tasks"
+		return fmt.Sprintf("CHECKPOINT: transition gate pending; doer/reviewer work may continue; run %q to create downstream tasks", brand.Command("resume"))
 	}
-	return "CHECKPOINT: agents paused; run 'liza resume'"
+	return fmt.Sprintf("CHECKPOINT: agents paused; run %q", brand.Command("resume"))
 }
 
 // buildTaskStatus calculates task statistics
@@ -344,7 +345,7 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 	explanation := fmt.Sprintf("%d merged planning task(s) have unconsumed output and are ready for transition execution.", len(ready))
 	if len(blockers) > 0 {
 		stateName = "PARTIAL_READY"
-		explanation = fmt.Sprintf("%d merged planning task(s) have unconsumed output; %d non-terminal planned task(s) are still active. Liza can checkpoint PLANNING_COMPLETE and create implementation tasks after resume without waiting for the active tasks to finish.", len(ready), len(blockers))
+		explanation = fmt.Sprintf("%d merged planning task(s) have unconsumed output; %d non-terminal planned task(s) are still active. %s can checkpoint PLANNING_COMPLETE and create implementation tasks after resume without waiting for the active tasks to finish.", len(ready), len(blockers), brand.NameTitle)
 	}
 	if state.Sprint.Status == models.SprintStatusCheckpoint {
 		stateName = "CHECKPOINTED"
@@ -699,7 +700,7 @@ func formatStatusDashboard(data statusData) (string, error) {
 		transitionsBuf.WriteString("=== PENDING TRANSITIONS ===\n")
 		for _, pt := range data.PendingTransitions {
 			for _, tr := range pt.Transitions {
-				fmt.Fprintf(&transitionsBuf, "  %s: liza proceed %s %s\n", pt.TaskID, pt.TaskID, tr)
+				fmt.Fprintf(&transitionsBuf, "  %s: %s\n", pt.TaskID, brand.Command("proceed", pt.TaskID, tr))
 			}
 		}
 		transitionsBuf.WriteString("\n")

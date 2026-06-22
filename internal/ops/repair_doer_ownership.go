@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -58,12 +59,12 @@ func RepairInvalidDoerOwnership(statePath, projectRoot, logPath, reason string) 
 			if doerID != "" {
 				if agent, ok := state.Agents[doerID]; ok && agent.PID > 0 && IsProcessAlive(agent.PID) {
 					refusals = append(refusals, fmt.Sprintf(
-						"cannot repair invalid active doer ownership for task %s: assigned agent %s has live PID %d; inspect the worktree, then use liza recover-agent %s --force or liza release-claim %s --role doer --force",
+						"cannot repair invalid active doer ownership for task %s: assigned agent %s has live PID %d; inspect the worktree, then use %s or %s",
 						task.ID,
 						doerID,
 						agent.PID,
-						doerID,
-						task.ID,
+						brand.Command("recover-agent", doerID, "--force"),
+						brand.Command("release-claim", task.ID, "--role", "doer", "--force"),
 					))
 					continue
 				}

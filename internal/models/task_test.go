@@ -8,8 +8,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
+
 	"gopkg.in/yaml.v3"
 )
+
+func withModelBrandEnvPrefix(t *testing.T, envPrefix string) {
+	t.Helper()
+	oldEnvPrefix := brand.EnvPrefix
+	brand.EnvPrefix = envPrefix
+	t.Cleanup(func() {
+		brand.EnvPrefix = oldEnvPrefix
+	})
+}
 
 // claimTestResolver is a minimal PipelineResolver for IsClaimable tests.
 type claimTestResolver struct {
@@ -953,6 +964,36 @@ func TestValidateValidationCommands(t *testing.T) {
 				t.Fatalf("ValidateValidationCommands() error = %q, want substring %q", err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateValidationSafetyNonDefaultBrandMarker(t *testing.T) {
+	withModelBrandEnvPrefix(t, "ACME_AGENT")
+
+	currentMarker := "ACME_AGENT_ALLOW_DESTRUCTIVE_DB=1"
+	if got := CurrentDestructiveDBAllowMarker(); got != currentMarker {
+		t.Fatalf("CurrentDestructiveDBAllowMarker() = %q, want %q", got, currentMarker)
+	}
+
+	for _, command := range []string{
+		currentMarker + " make test",
+		"env " + currentMarker + " make test",
+		DestructiveDBAllowMarker + " make test",
+	} {
+		if err := ValidateValidationSafety("validation", []string{command}, true); err != nil {
+			t.Fatalf("ValidateValidationSafety(%q) error = %v, want nil", command, err)
+		}
+	}
+
+	err := ValidateValidationSafety("validation", []string{"make test"}, true)
+	if err == nil {
+		t.Fatal("ValidateValidationSafety() error = nil, want branded marker guidance")
+	}
+	if !strings.Contains(err.Error(), currentMarker) {
+		t.Fatalf("ValidateValidationSafety() error = %q, want current marker %q", err.Error(), currentMarker)
+	}
+	if strings.Contains(err.Error(), DestructiveDBAllowMarker) {
+		t.Fatalf("ValidateValidationSafety() error = %q, must not advertise legacy marker", err.Error())
 	}
 }
 

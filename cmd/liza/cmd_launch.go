@@ -32,12 +32,12 @@ var launchCmuxCmd = &cobra.Command{
 var launchWeztermMASCmd = &cobra.Command{
 	Use:   "mas",
 	Short: "Launch a multi-agent role set in WezTerm panes",
-	Long: `Launch a Liza multi-agent role set in one WezTerm window.
+	Long: fmt.Sprintf(`Launch a %s multi-agent role set in one WezTerm window.
 
 Preset role sets:
   technical-spec     orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer
   functional-spec    technical-spec plus architect, architecture-reviewer
-  general-objective  functional-spec plus epic-planner, epic-plan-reviewer, us-writer, us-reviewer`,
+  general-objective  functional-spec plus epic-planner, epic-plan-reviewer, us-writer, us-reviewer`, brand.NameTitle),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := launchWorkingDir(cmd, true)
 		if err != nil {
@@ -57,14 +57,14 @@ Preset role sets:
 		noTUI, _ := cmd.Flags().GetBool("no-tui")
 		commands := make([][]string, 0, len(roles)+1)
 		if !noTUI {
-			commands = append(commands, []string{"liza", "tui"})
+			commands = append(commands, []string{brand.BinaryName, "tui"})
 		}
 		for _, role := range roles {
 			role = strings.TrimSpace(role)
 			if role == "" {
 				return cliValidationError("--role values must not be empty")
 			}
-			agentCmd := []string{"liza", "agent", role}
+			agentCmd := []string{brand.BinaryName, "agent", role}
 			if cliName != "" {
 				if !containsString(agent.ValidCLIs(), cliName) {
 					return cliValidationError(fmt.Sprintf("invalid --cli %q", cliName))
@@ -77,7 +77,7 @@ Preset role sets:
 			return cliValidationError("nothing to launch: provide --role or omit --no-tui")
 		}
 
-		opts, err := weztermOptionsFromFlags(cmd, projectRoot, "liza-mas-"+preset)
+		opts, err := weztermOptionsFromFlags(cmd, projectRoot, brand.BinaryName+"-mas-"+preset)
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 			panes = append(panes, pairingInteractivePane(cliName, prompt))
 		}
 
-		opts, err := weztermOptionsFromFlags(cmd, cwd, "liza-adversarial")
+		opts, err := weztermOptionsFromFlags(cmd, cwd, brand.BinaryName+"-adversarial")
 		if err != nil {
 			return err
 		}
@@ -137,12 +137,12 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 var launchCmuxMASCmd = &cobra.Command{
 	Use:   "mas",
 	Short: "Launch a multi-agent role set in CMUX panes",
-	Long: `Launch a Liza multi-agent role set in one CMUX workspace.
+	Long: fmt.Sprintf(`Launch a %s multi-agent role set in one CMUX workspace.
 
 Preset role sets:
   technical-spec     orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer
   functional-spec    technical-spec plus architect, architecture-reviewer
-  general-objective  functional-spec plus epic-planner, epic-plan-reviewer, us-writer, us-reviewer`,
+  general-objective  functional-spec plus epic-planner, epic-plan-reviewer, us-writer, us-reviewer`, brand.NameTitle),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := launchWorkingDir(cmd, true)
 		if err != nil {
@@ -162,14 +162,14 @@ Preset role sets:
 		noTUI, _ := cmd.Flags().GetBool("no-tui")
 		commands := make([][]string, 0, len(roles)+1)
 		if !noTUI {
-			commands = append(commands, []string{"liza", "tui"})
+			commands = append(commands, []string{brand.BinaryName, "tui"})
 		}
 		for _, role := range roles {
 			role = strings.TrimSpace(role)
 			if role == "" {
 				return cliValidationError("--role values must not be empty")
 			}
-			agentCmd := []string{"liza", "agent", role}
+			agentCmd := []string{brand.BinaryName, "agent", role}
 			if cliName != "" {
 				if !containsString(agent.ValidCLIs(), cliName) {
 					return cliValidationError(fmt.Sprintf("invalid --cli %q", cliName))
@@ -182,7 +182,7 @@ Preset role sets:
 			return cliValidationError("nothing to launch: provide --role or omit --no-tui")
 		}
 
-		opts, err := cmuxOptionsFromFlags(cmd, projectRoot, "liza-mas-"+preset)
+		opts, err := cmuxOptionsFromFlags(cmd, projectRoot, brand.BinaryName+"-mas-"+preset)
 		if err != nil {
 			return err
 		}
@@ -231,7 +231,7 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 			panes = append(panes, pairingInteractivePane(cliName, prompt))
 		}
 
-		opts, err := cmuxOptionsFromFlags(cmd, cwd, "liza-adversarial")
+		opts, err := cmuxOptionsFromFlags(cmd, cwd, brand.BinaryName+"-adversarial")
 		if err != nil {
 			return err
 		}
@@ -339,13 +339,13 @@ func validateLaunchProjectRoot(path string) error {
 		return cliValidationWrap("resolve --cwd git root", err)
 	}
 	if canonicalPath != canonicalRoot {
-		return cliValidationError(fmt.Sprintf("--cwd must be the Liza project root, got %s under git root %s", path, gitRoot))
+		return cliValidationError(fmt.Sprintf("--cwd must be the %s project root, got %s under git root %s", brand.NameTitle, path, gitRoot))
 	}
 	if _, err := os.Stat(filepath.Join(path, paths.ProjectDirName(), "state.yaml")); err != nil {
 		if os.IsNotExist(err) {
-			return cliValidationError(fmt.Sprintf("--cwd %s is not initialized as a Liza project", path))
+			return cliValidationError(fmt.Sprintf("--cwd %s is not initialized as a %s project", path, brand.NameTitle))
 		}
-		return cliValidationWrap("inspect --cwd Liza state", err)
+		return cliValidationWrap(fmt.Sprintf("inspect --cwd %s state", brand.NameTitle), err)
 	}
 	return nil
 }
@@ -840,8 +840,10 @@ func buildWeztermPaneScript(opts weztermLaunchOptions, commands [][]string) stri
 
 func buildWeztermInteractivePaneScript(opts weztermLaunchOptions, panes []interactivePane) string {
 	var b strings.Builder
+	sendPromptFunc := shellIdentifier("wezterm_" + brand.BinaryName + "_send_prompt")
 	b.WriteString("set -e\n")
-	b.WriteString("wezterm_liza_send_prompt() {\n")
+	b.WriteString(sendPromptFunc)
+	b.WriteString("() {\n")
 	b.WriteString("  pane_id=\"$1\"\n")
 	b.WriteString("  prompt=\"$2\"\n")
 	b.WriteString("  (\n")
@@ -872,13 +874,15 @@ func buildWeztermInteractivePaneScript(opts weztermLaunchOptions, panes []intera
 		b.WriteString(" -- ")
 		b.WriteString(shellJoin(pane.Command))
 		b.WriteString(")\n")
-		b.WriteString("wezterm_liza_send_prompt \"$")
+		b.WriteString(sendPromptFunc)
+		b.WriteString(" \"$")
 		b.WriteString(paneVar)
 		b.WriteString("\" ")
 		b.WriteString(shellQuote(pane.Prompt))
 		b.WriteString("\n")
 	}
-	b.WriteString("wezterm_liza_send_prompt \"$WEZTERM_PANE\" ")
+	b.WriteString(sendPromptFunc)
+	b.WriteString(" \"$WEZTERM_PANE\" ")
 	b.WriteString(shellQuote(panes[0].Prompt))
 	b.WriteString("\n")
 	b.WriteString("exec ")
@@ -1052,6 +1056,22 @@ func launchShell() string {
 	return "/bin/sh"
 }
 
+func shellIdentifier(value string) string {
+	var b strings.Builder
+	for i, r := range value {
+		valid := r == '_' || ('A' <= r && r <= 'Z') || ('a' <= r && r <= 'z') || (i > 0 && '0' <= r && r <= '9')
+		if valid {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "launcher_fn"
+	}
+	return b.String()
+}
+
 func init() {
 	rootCmd.AddCommand(launchCmd)
 	launchCmd.AddCommand(launchWeztermCmd)
@@ -1064,21 +1084,21 @@ func init() {
 	for _, c := range []*cobra.Command{launchWeztermMASCmd, launchWeztermAdversarialPairingCmd} {
 		c.Flags().String("class", "", "WezTerm window class (default depends on launch type)")
 		c.Flags().String("workspace", "", "WezTerm workspace name (defaults to --class)")
-		c.Flags().String("cwd", "", "working directory for launched panes (default: current Liza project for MAS, current directory for pairing)")
+		c.Flags().String("cwd", "", fmt.Sprintf("working directory for launched panes (default: current %s project for MAS, current directory for pairing)", brand.NameTitle))
 		c.Flags().Bool("dry-run", false, "print the wezterm command without launching it")
 	}
 
 	for _, c := range []*cobra.Command{launchCmuxMASCmd, launchCmuxAdversarialPairingCmd} {
 		c.Flags().String("class", "", "workspace name (defaults to launch type)")
 		c.Flags().String("workspace", "", "CMUX workspace name (defaults to --class)")
-		c.Flags().String("cwd", "", "working directory for launched panes (default: current Liza project for MAS, current directory for pairing)")
+		c.Flags().String("cwd", "", fmt.Sprintf("working directory for launched panes (default: current %s project for MAS, current directory for pairing)", brand.NameTitle))
 		c.Flags().Bool("dry-run", false, "print the cmux commands without launching them")
 	}
 
 	launchWeztermMASCmd.Flags().String("preset", "technical-spec", "role preset: technical-spec, functional-spec, general-objective")
 	launchWeztermMASCmd.Flags().StringArray("role", nil, "role to launch; repeat to override --preset")
-	launchWeztermMASCmd.Flags().String("cli", "", "CLI to pass to liza agent for every launched role")
-	launchWeztermMASCmd.Flags().Bool("no-tui", false, "do not launch liza tui in the first pane")
+	launchWeztermMASCmd.Flags().String("cli", "", fmt.Sprintf("CLI to pass to %s for every launched role", brand.Command("agent")))
+	launchWeztermMASCmd.Flags().Bool("no-tui", false, fmt.Sprintf("do not launch %s in the first pane", brand.Command("tui")))
 
 	launchWeztermAdversarialPairingCmd.Flags().String("doer-cli", "codex", "coding CLI for the doer session")
 	launchWeztermAdversarialPairingCmd.Flags().String("goal", "", "create the blackboard with this goal when it does not exist")
@@ -1088,8 +1108,8 @@ func init() {
 
 	launchCmuxMASCmd.Flags().String("preset", "technical-spec", "role preset: technical-spec, functional-spec, general-objective")
 	launchCmuxMASCmd.Flags().StringArray("role", nil, "role to launch; repeat to override --preset")
-	launchCmuxMASCmd.Flags().String("cli", "", "CLI to pass to liza agent for every launched role")
-	launchCmuxMASCmd.Flags().Bool("no-tui", false, "do not launch liza tui in the first pane")
+	launchCmuxMASCmd.Flags().String("cli", "", fmt.Sprintf("CLI to pass to %s for every launched role", brand.Command("agent")))
+	launchCmuxMASCmd.Flags().Bool("no-tui", false, fmt.Sprintf("do not launch %s in the first pane", brand.Command("tui")))
 
 	launchCmuxAdversarialPairingCmd.Flags().String("doer-cli", "codex", "coding CLI for the doer session")
 	launchCmuxAdversarialPairingCmd.Flags().String("goal", "", "create the blackboard with this goal when it does not exist")

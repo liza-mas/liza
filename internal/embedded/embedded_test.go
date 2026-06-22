@@ -2338,7 +2338,7 @@ func TestWriteOpenCodeExecTool_NewFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read opencode exec tool: %v", err)
 	}
-	if !bytes.HasPrefix(content, []byte(OpenCodeExecToolManagedHeader)) {
+	if !bytes.HasPrefix(content, []byte(OpenCodeExecToolManagedHeader())) {
 		t.Fatalf("exec tool missing managed header:\n%s", string(content))
 	}
 }
@@ -2373,7 +2373,7 @@ func TestWriteOpenCodeExecTool_OverwritesManagedFile(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(toolPath), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(toolPath, []byte(OpenCodeExecToolManagedHeader+"\n// old\n"), 0644); err != nil {
+	if err := os.WriteFile(toolPath, []byte(OpenCodeExecToolManagedHeader()+"\n// old\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 

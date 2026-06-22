@@ -7,13 +7,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 // ErrProcessScanUnavailable reports that the host does not expose a procfs tree
 // usable by the scanner. Callers may treat this as a warning for live validation.
 var ErrProcessScanUnavailable = errors.New("process scan unavailable: procfs not found")
 
-// ZombieProcess describes a live process that can affect the current Liza goal
+// ZombieProcess describes a live process that can affect the current goal
 // but is not registered in state.yaml.
 type ZombieProcess struct {
 	PID     int      `json:"pid" yaml:"pid"`
@@ -33,7 +35,7 @@ type ZombieScanOptions struct {
 	ProcRoot       string
 }
 
-// FindZombieAgents enumerates /proc and returns live liza agent supervisors for
+// FindZombieAgents enumerates /proc and returns live agent supervisors for
 // the current project/goal that are missing from the registered PID set.
 func FindZombieAgents(opts ZombieScanOptions) ([]ZombieProcess, error) {
 	procRoot := opts.ProcRoot
@@ -90,17 +92,18 @@ func FindZombieAgents(opts ZombieScanOptions) ([]ZombieProcess, error) {
 	return zombies, nil
 }
 
-// IsLizaAgentArgv reports whether argv identifies a liza agent supervisor.
+// IsLizaAgentArgv reports whether argv identifies an agent supervisor.
 func IsLizaAgentArgv(argv []string) bool {
 	if len(argv) < 2 {
 		return false
 	}
-	return filepath.Base(argv[0]) == "liza" && argv[1] == "agent"
+	bin := filepath.Base(argv[0])
+	return (bin == brand.BinaryName || bin == "liza") && argv[1] == "agent"
 }
 
-// MatchesLizaAgentIdentity reports whether argv identifies the expected liza
+// MatchesLizaAgentIdentity reports whether argv identifies the expected
 // agent supervisor. Empty role or agentID inputs are treated as wildcards.
-// Omitted --agent-id is valid because liza agent auto-assigns an ID when the
+// Omitted --agent-id is valid because the agent command auto-assigns an ID when the
 // flag is not provided; explicit --agent-id values must still match.
 func MatchesLizaAgentIdentity(argv []string, role, agentID string) bool {
 	if !IsLizaAgentArgv(argv) {

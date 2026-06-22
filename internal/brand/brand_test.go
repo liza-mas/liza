@@ -10,12 +10,6 @@ func TestValuesFromEnvDerivedDefaults(t *testing.T) {
 		if key == "BRAND_NAME_LOWER" {
 			return "acme-agent"
 		}
-		if key == "BRAND_NAME_UPPER" {
-			return "ACME_AGENT"
-		}
-		if key == "BRAND_NAME_TITLE" {
-			return "Acme Agent"
-		}
 		if key == "BRAND_REPO" {
 			return "acme/agent"
 		}
@@ -30,6 +24,9 @@ func TestValuesFromEnvDerivedDefaults(t *testing.T) {
 	if values.EnvPrefix != "ACME_AGENT" {
 		t.Fatalf("EnvPrefix = %q", values.EnvPrefix)
 	}
+	if values.NameTitle != "Acme Agent" {
+		t.Fatalf("NameTitle = %q", values.NameTitle)
+	}
 	if values.ArchivePrefix != values.BinaryName {
 		t.Fatalf("ArchivePrefix = %q, want binary name", values.ArchivePrefix)
 	}
@@ -38,6 +35,13 @@ func TestValuesFromEnvDerivedDefaults(t *testing.T) {
 	}
 	if err := Validate(values); err != nil {
 		t.Fatalf("Validate derived values: %v", err)
+	}
+}
+
+func TestRuntimeValuesUseCanonicalMistralPromptID(t *testing.T) {
+	values := RuntimeValues()
+	if values.MistralPromptID != CanonicalMistralPromptID {
+		t.Fatalf("MistralPromptID = %q, want canonical %q", values.MistralPromptID, CanonicalMistralPromptID)
 	}
 }
 

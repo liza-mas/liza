@@ -2,8 +2,8 @@
 
 # Brand variables
 BRAND_NAME_LOWER?=liza
-BRAND_NAME_UPPER?=LIZA
-BRAND_NAME_TITLE?=Liza
+BRAND_NAME_UPPER?=$(shell printf '%s' '$(BRAND_NAME_LOWER)' | tr '[:lower:]-' '[:upper:]_')
+BRAND_NAME_TITLE?=$(shell printf '%s' '$(BRAND_NAME_LOWER)' | awk -F- 'BEGIN{OFS=" "} {for (i=1;i<=NF;i++) $$i=toupper(substr($$i,1,1)) substr($$i,2); print}')
 BRAND_REPO?=liza-mas/liza
 BRAND_BINARY_NAME?=$(BRAND_NAME_LOWER)
 BRAND_GLOBAL_DIRNAME?=.$(BRAND_NAME_LOWER)
@@ -81,8 +81,8 @@ SUDO := $(shell test -w $(INSTALL_DIR) && echo "" || echo "sudo")
 install: build
 	@mkdir -p $(INSTALL_DIR)
 	$(SUDO) install -m 755 $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	@if [ "$(INSTALL_DIR)" != "/usr/local/bin" ] && [ -f /usr/local/bin/liza ]; then \
-		echo "Warning: old liza binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/liza' to avoid shadowing"; \
+	@if [ "$(INSTALL_DIR)" != "/usr/local/bin" ] && [ -f /usr/local/bin/$(BINARY_NAME) ]; then \
+		echo "Warning: old $(BINARY_NAME) binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/$(BINARY_NAME)' to avoid shadowing"; \
 	fi
 
 # Check that testhelpers package is not imported in production code
@@ -130,7 +130,7 @@ build-all: sync-embedded
 release: clean lint test
 	@echo "Building release artifacts..."
 	@mkdir -p dist
-	@# Build liza for all platforms
+	@# Build $(BINARY_NAME) for all platforms
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-linux-amd64 ./cmd/liza
 	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-linux-arm64 ./cmd/liza
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-darwin-amd64 ./cmd/liza
@@ -159,17 +159,17 @@ package: release
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  build              - Build liza binary"
+	@echo "  build              - Build $(BINARY_NAME) binary"
 	@echo "  test               - Run tests (includes testhelpers check)"
 	@echo "  test-e2e           - Run e2e full sprint test (~40s, requires -tags e2e)"
 	@echo "  coverage           - Run tests with coverage report"
 	@echo "  clean              - Clean build artifacts"
-	@echo "  install            - Install liza binary"
+	@echo "  install            - Install $(BINARY_NAME) binary"
 	@echo "  lint               - Run linters (includes testhelpers check)"
 	@echo "  check-testhelpers  - Verify testhelpers not in production code"
 	@echo "  check-embedded     - Verify embedded copies match repo masters"
 	@echo "  tidy               - Tidy dependencies"
-	@echo "  run                - Build and run the liza binary"
-	@echo "  build-all          - Build liza for multiple platforms"
+	@echo "  run                - Build and run the $(BINARY_NAME) binary"
+	@echo "  build-all          - Build $(BINARY_NAME) for multiple platforms"
 	@echo "  release            - Create release artifacts (run tests, build all platforms, create checksums)"
 	@echo "  package            - Create distribution packages (tarballs)"

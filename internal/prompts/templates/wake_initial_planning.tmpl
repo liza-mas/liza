@@ -22,7 +22,7 @@ Use the mapped master planning target when available if multiple functional area
 
 Entry-point "{{.GoalEntryPoint}}" was specified. Dispatch simple goals to {{.ResolvedDisplayName}}.
 
-Run liza add-tasks once with exactly one task in a JSON file.
+Run {{binaryName}} add-tasks once with exactly one task in a JSON file.
 The file must contain a bare JSON array -- NOT a wrapper object.
 
 SIMPLE GOAL TASK EXAMPLE:
@@ -64,7 +64,7 @@ Specialized fallback remains claimable by {{.ResolvedDisplayName}}.
 For fan-out or uncertain goals, still create exactly one specialized planning task using the simple goal example above. Do not invent a master role-pair.
 {{- end }}
 
-Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
+Then run: {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 
 SUCCESS CRITERIA:
 - Exactly one task is created.
@@ -131,7 +131,7 @@ FAN-OUT GOAL TASK EXAMPLE:
   }
 ]
 
-Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
+Then run: {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 
 SUCCESS CRITERIA:
 - Exactly one task is created.
@@ -141,7 +141,7 @@ SUCCESS CRITERIA:
 - Missing master mappings fall back to one task in the chosen simple role_pair.
 {{- else }}
 
-Write a JSON file with exactly one planning task and run liza add-tasks.
+Write a JSON file with exactly one planning task and run {{binaryName}} add-tasks.
 The file must contain a bare JSON array -- NOT a wrapper object.
 [
   {
@@ -156,7 +156,7 @@ The file must contain a bare JSON array -- NOT a wrapper object.
     "role_pair": "code-planning-pair"
   }
 ]
-Then run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
+Then run: {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
 
 SUCCESS CRITERIA:
 - Exactly one task is created.
@@ -170,7 +170,7 @@ EXPECTED BEHAVIOR EXAMPLES:
 - Fan-out goal without a mapped master target: one specialized planning task, no invented master role-pair, confirm success, exit.
 
 INCORRECT:
-1. Plan but do not execute liza add-tasks
+1. Plan but do not execute {{binaryName}} add-tasks
 2. Exit without creating the task
 3. Add a second INITIAL_PLANNING task
 4. Create downstream implementation tasks -- only planning tasks belong here

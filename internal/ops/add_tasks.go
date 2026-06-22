@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -223,8 +224,8 @@ func rejectManualPipelineChildTask(state *models.State, input *AddTaskInput, res
 						perSubtaskChildID(source.ID, tDef.taskSlug, outputIdx),
 					) {
 						return &PreconditionError{Reason: fmt.Sprintf(
-							"task %q shadows pipeline transition child %q[%d]; use liza proceed/resume for transition %q instead of add-tasks",
-							input.ID, source.ID, outputIdx, td.Name,
+							"task %q shadows pipeline transition child %q[%d]; use %s/%s for transition %q instead of add-tasks",
+							input.ID, source.ID, outputIdx, brand.Command("proceed"), brand.Command("resume"), td.Name,
 						)}
 					}
 				}
@@ -234,8 +235,8 @@ func rejectManualPipelineChildTask(state *models.State, input *AddTaskInput, res
 					oneToOneChildID(source.ID, tDef.taskSlug),
 				) {
 					return &PreconditionError{Reason: fmt.Sprintf(
-						"task %q shadows pipeline transition child %q; use liza proceed/resume for transition %q instead of add-tasks",
-						input.ID, source.ID, td.Name,
+						"task %q shadows pipeline transition child %q; use %s/%s for transition %q instead of add-tasks",
+						input.ID, source.ID, brand.Command("proceed"), brand.Command("resume"), td.Name,
 					)}
 				}
 			case "many-to-one":
@@ -248,8 +249,8 @@ func rejectManualPipelineChildTask(state *models.State, input *AddTaskInput, res
 					manyToOneChildID(cohortParentID, tDef.taskSlug),
 				) {
 					return &PreconditionError{Reason: fmt.Sprintf(
-						"task %q shadows pipeline transition child cohort %q; use liza proceed/resume for transition %q instead of add-tasks",
-						input.ID, cohortParentID, td.Name,
+						"task %q shadows pipeline transition child cohort %q; use %s/%s for transition %q instead of add-tasks",
+						input.ID, cohortParentID, brand.Command("proceed"), brand.Command("resume"), td.Name,
 					)}
 				}
 			}

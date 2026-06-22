@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
@@ -107,7 +108,7 @@ work back into the main codebase.
 
 Requirements:
   - Task must be in an approved status (resolved from pipeline config or legacy statuses)
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Agent must be a reviewer role (code-reviewer, code-plan-reviewer, epic-plan-reviewer, or us-reviewer)
   - Worktree HEAD must match the task's review_commit
 

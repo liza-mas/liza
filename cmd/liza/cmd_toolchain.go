@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/jsonout"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/toolchain"
 	"github.com/spf13/cobra"
 )
@@ -192,7 +193,7 @@ func init() {
 	toolchainInstallCmd.Flags().String("install-dir", "", "directory for managed binaries (default: ~/.local/bin)")
 	toolchainInstallCmd.Flags().Bool("dry-run", false, "print planned install commands without executing them")
 	toolchainInstallCmd.Flags().Bool("yes", false, "run selected installs without interactive confirmation")
-	toolchainConfigureCmd.Flags().String("global-dir", "", "global Liza config directory (default: ~/.liza)")
+	toolchainConfigureCmd.Flags().String("global-dir", "", fmt.Sprintf("global %s config directory (default: ~/%s)", brand.NameTitle, paths.GlobalDirName()))
 	toolchainConfigureCmd.Flags().String("install-dir", "", "directory for managed binaries in generated env (default: ~/.local/bin)")
 	toolchainConfigureCmd.Flags().String("agent-tools", "auto", "AGENT_TOOLS.md handling: auto, skip, or force")
 	toolchainConfigureCmd.Flags().Bool("write-shell-profile", false, "source generated env.sh from the current shell startup file")
@@ -234,7 +235,7 @@ func runToolchainChecklist(profile toolchain.Profile, include, exclude []string)
 		options = append(options, huh.NewOption(label, tool.ID).Selected(containsString(selected, tool.ID)))
 	}
 	if err := huh.NewMultiSelect[string]().
-		Title("Select Liza toolchain tools").
+		Title(fmt.Sprintf("Select %s toolchain tools", brand.NameTitle)).
 		Options(options...).
 		Value(&selected).
 		Run(); err != nil {

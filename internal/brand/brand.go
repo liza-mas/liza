@@ -24,8 +24,10 @@ var (
 )
 
 const (
-	legacyEnvPrefix      = "LIZA"
-	defaultMistralPrompt = "liza"
+	legacyEnvPrefix = "LIZA"
+	// CanonicalMistralPromptID remains provider identity until the provider's
+	// prompt resolution supports verified branded prompt IDs.
+	CanonicalMistralPromptID = "liza"
 )
 
 var (
@@ -70,7 +72,7 @@ func RuntimeValues() Values {
 		GlobalDirName:   GlobalDirName,
 		ProjectDirName:  ProjectDirName,
 		EnvPrefix:       EnvPrefix,
-		MistralPromptID: defaultMistralPrompt,
+		MistralPromptID: CanonicalMistralPromptID,
 		ArchivePrefix:   ArchivePrefix,
 		ReleaseRepo:     ReleaseRepo,
 		ReleaseBaseURL:  ReleaseBaseURL,
@@ -84,16 +86,18 @@ func ValuesFromEnv(getenv func(string) string) Values {
 	if getenv == nil {
 		getenv = func(string) string { return "" }
 	}
+	nameLower := envOr(getenv, "BRAND_NAME_LOWER", "liza")
 	values := Values{
-		NameLower: envOr(getenv, "BRAND_NAME_LOWER", "liza"),
-		NameUpper: envOr(getenv, "BRAND_NAME_UPPER", "LIZA"),
-		NameTitle: envOr(getenv, "BRAND_NAME_TITLE", "Liza"),
+		NameLower: nameLower,
+		NameUpper: envOr(getenv, "BRAND_NAME_UPPER", upperFromLower(nameLower)),
+		NameTitle: envOr(getenv, "BRAND_NAME_TITLE", titleFromLower(nameLower)),
 		Repo:      envOr(getenv, "BRAND_REPO", "liza-mas/liza"),
 	}
 	values.BinaryName = envOr(getenv, "BRAND_BINARY_NAME", values.NameLower)
 	values.GlobalDirName = envOr(getenv, "BRAND_GLOBAL_DIRNAME", "."+values.NameLower)
 	values.ProjectDirName = envOr(getenv, "BRAND_PROJECT_DIRNAME", "."+values.NameLower)
 	values.EnvPrefix = envOr(getenv, "BRAND_ENV_PREFIX", values.NameUpper)
+	// Render-time only until provider verification proves branded prompt IDs work.
 	values.MistralPromptID = envOr(getenv, "BRAND_MISTRAL_PROMPT_ID", values.NameLower)
 	values.ArchivePrefix = envOr(getenv, "BRAND_ARCHIVE_PREFIX", values.BinaryName)
 	values.ReleaseRepo = envOr(getenv, "BRAND_RELEASE_REPO", values.Repo)
@@ -106,6 +110,12 @@ func ValuesFromEnv(getenv func(string) string) Values {
 func (v Values) withDerivedDefaults() Values {
 	if v.BinaryName == "" {
 		v.BinaryName = v.NameLower
+	}
+	if v.NameUpper == "" && v.NameLower != "" {
+		v.NameUpper = upperFromLower(v.NameLower)
+	}
+	if v.NameTitle == "" && v.NameLower != "" {
+		v.NameTitle = titleFromLower(v.NameLower)
 	}
 	if v.GlobalDirName == "" && v.NameLower != "" {
 		v.GlobalDirName = "." + v.NameLower
@@ -135,6 +145,21 @@ func (v Values) withDerivedDefaults() Values {
 		v.InstallRepo = v.Repo
 	}
 	return v
+}
+
+func upperFromLower(name string) string {
+	return strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+}
+
+func titleFromLower(name string) string {
+	parts := strings.Split(name, "-")
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 func Normalize(v Values) Values {
@@ -271,6 +296,38 @@ func (v Values) EnvName(suffix string) string {
 	return v.withDerivedDefaults().EnvPrefix + "_" + suffix
 }
 
+func LegacyEnvName(suffix string) string {
+	suffix = strings.TrimPrefix(suffix, "_")
+	return legacyEnvPrefix + "_" + suffix
+}
+
+func Command(args ...string) string {
+	return RuntimeValues().Command(args...)
+}
+
+func (v Values) Command(args ...string) string {
+	v = v.withDerivedDefaults()
+	parts := append([]string{v.BinaryName}, args...)
+	return strings.Join(parts, " ")
+}
+
+func MetadataPrefix() string {
+	return RuntimeValues().MetadataPrefix()
+}
+
+func (v Values) MetadataPrefix() string {
+	v = v.withDerivedDefaults()
+	return strings.NewReplacer("-", "_", ".", "_").Replace(v.NameLower)
+}
+
+func MetadataKey(suffix string) string {
+	return RuntimeValues().MetadataKey(suffix)
+}
+
+func (v Values) MetadataKey(suffix string) string {
+	return v.MetadataPrefix() + "_" + strings.TrimPrefix(suffix, "_")
+}
+
 func LookupEnv(getenv func(string) string, suffix string) EnvLookup {
 	return RuntimeValues().LookupEnv(getenv, suffix)
 }
@@ -281,7 +338,7 @@ func (v Values) LookupEnv(getenv func(string) string, suffix string) EnvLookup {
 	}
 	v = v.withDerivedDefaults()
 	brandedName := v.EnvName(suffix)
-	legacyName := legacyEnvPrefix + "_" + strings.TrimPrefix(suffix, "_")
+	legacyName := LegacyEnvName(suffix)
 	branded := strings.TrimSpace(getenv(brandedName))
 	legacy := strings.TrimSpace(getenv(legacyName))
 	if branded != "" {

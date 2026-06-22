@@ -3,6 +3,8 @@ package toolchain
 import (
 	"fmt"
 	"runtime"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 type DoctorOptions struct {
@@ -64,7 +66,7 @@ func doctorOne(tool Tool, goos string, runner Runner) DoctorCheck {
 		return DoctorCheck{ToolID: tool.ID, Status: DoctorManual, Message: tool.ManualNote}
 	}
 	if goos == "windows" {
-		return DoctorCheck{ToolID: tool.ID, Status: DoctorUnsupported, Message: "native Windows is not a supported Liza runtime; use WSL2 for full toolchain support"}
+		return DoctorCheck{ToolID: tool.ID, Status: DoctorUnsupported, Message: fmt.Sprintf("native Windows is not a supported %s runtime; use WSL2 for full toolchain support", brand.NameTitle)}
 	}
 	if tool.Binary == "" {
 		return DoctorCheck{ToolID: tool.ID, Status: DoctorFailed, Message: "tool has no binary probe"}

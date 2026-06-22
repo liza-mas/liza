@@ -269,23 +269,24 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	}
 	writeActiveTaskDigest(&b, state.Tasks)
 
+	binaryName := promptBinaryName()
 	b.WriteString("\nORCHESTRATOR COMMANDS:\n")
-	b.WriteString(fmt.Sprintf(`- liza add-tasks — Add one or more tasks to blackboard (atomic per task, with validation)
-  liza add-tasks --tasks-file <path.json> --agent-id "%s" --json
-- liza supersede-task — Supersede task (replacement_ids optional; no-replacement cleanup also requires --recoverability-command)
-  liza supersede-task <task-id> [replacement-task-ids] --reason "..." --agent-id "%s" --json
-  liza supersede-task <task-id> --reason "Work completed externally" --recoverability-command "liza recover-task <task-id>" --agent-id "%s" --json
-- liza assess-blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
-  liza assess-blocked <task-id> --note "..." --agent-id "%s" --json
-- liza unblock-task — Restore a repaired BLOCKED task to claimable state, or direct-resume with --assign-to
-  liza unblock-task <task-id> --reason "..." --agent-id "%s" --json
-  liza unblock-task <task-id> --rebase-on <branch> --reason "..." --agent-id "%s" --json
-- liza wt-delete — Delete worktree for abandoned/superseded/blocked tasks
-  liza wt-delete <task-id> --json
-- liza sprint-checkpoint — Create sprint checkpoint for human review (hard checkpoints pause agents; transition checkpoints gate downstream task creation)
-  liza sprint-checkpoint --json
-- liza update-sprint-metrics — Recompute sprint metrics from current state
-  liza update-sprint-metrics --json
+	b.WriteString(fmt.Sprintf(`- %[1]s add-tasks — Add one or more tasks to blackboard (atomic per task, with validation)
+  %[1]s add-tasks --tasks-file <path.json> --agent-id "%[2]s" --json
+- %[1]s supersede-task — Supersede task (replacement_ids optional; no-replacement cleanup also requires --recoverability-command)
+  %[1]s supersede-task <task-id> [replacement-task-ids] --reason "..." --agent-id "%[2]s" --json
+  %[1]s supersede-task <task-id> --reason "Work completed externally" --recoverability-command "%[1]s recover-task <task-id>" --agent-id "%[2]s" --json
+- %[1]s assess-blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
+  %[1]s assess-blocked <task-id> --note "..." --agent-id "%[2]s" --json
+- %[1]s unblock-task — Restore a repaired BLOCKED task to claimable state, or direct-resume with --assign-to
+  %[1]s unblock-task <task-id> --reason "..." --agent-id "%[2]s" --json
+  %[1]s unblock-task <task-id> --rebase-on <branch> --reason "..." --agent-id "%[2]s" --json
+- %[1]s wt-delete — Delete worktree for abandoned/superseded/blocked tasks
+  %[1]s wt-delete <task-id> --json
+- %[1]s sprint-checkpoint — Create sprint checkpoint for human review (hard checkpoints pause agents; transition checkpoints gate downstream task creation)
+  %[1]s sprint-checkpoint --json
+- %[1]s update-sprint-metrics — Recompute sprint metrics from current state
+  %[1]s update-sprint-metrics --json
 
 ANOMALY LOGGING:
 | Event | Type | Required Fields |
@@ -311,14 +312,14 @@ FIELD FORMAT GUIDELINES:
 - spec: path to spec optionally with #anchor
 
 TASK CREATION ORDER:
-When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. liza add-tasks validates that all `+"`depends`"+` IDs already exist; creating a task that references a not-yet-created dependency will fail.
+When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. %[1]s add-tasks validates that all `+"`depends`"+` IDs already exist; creating a task that references a not-yet-created dependency will fail.
 
 ERROR RECOVERY:
 On CLI command errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.
 
 MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
 Work unit = all planned state changes executed. Do NOT exit until all commands have been run.
-	`, agentID, agentID, agentID, agentID, agentID, agentID))
+	`, binaryName, agentID))
 
 	// Wake instruction is rendered separately by the wake-instructions block
 	wakeInstr := fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions)
@@ -336,7 +337,7 @@ func writeActiveTaskDigest(b *strings.Builder, tasks []models.Task) {
 		}
 		count++
 		if count > 12 {
-			b.WriteString("- ... additional active tasks omitted; use `liza get tasks --active --summary --json` if orchestration needs a fresh active-task scan.\n")
+			b.WriteString(fmt.Sprintf("- ... additional active tasks omitted; use `%s get tasks --active --summary --json` if orchestration needs a fresh active-task scan.\n", promptBinaryName()))
 			break
 		}
 		b.WriteString(fmt.Sprintf("- %s [%s]", task.ID, task.Status))

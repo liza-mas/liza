@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -76,7 +77,7 @@ var repairAgentPoolSpawn = func(projectRoot, role, cli string) (int, error) {
 	return cmd.Process.Pid, nil
 }
 
-const EnvAutoRepairAgentPool = "LIZA_AUTO_REPAIR_AGENT_POOL"
+var EnvAutoRepairAgentPool = brand.EnvName("AUTO_REPAIR_AGENT_POOL")
 
 func AutoRepairAgentPoolEnabledFromEnv() (bool, string) {
 	value, ok := os.LookupEnv(EnvAutoRepairAgentPool)
@@ -156,7 +157,7 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 		spawn := SpawnedAgent{
 			Role:    roleWork.Role,
 			CLI:     cliName,
-			Command: fmt.Sprintf("liza agent %s --cli %s", roleWork.Role, cliName),
+			Command: fmt.Sprintf("%s --cli %s", brand.Command("agent", roleWork.Role), cliName),
 		}
 		result.Commands = append(result.Commands, spawn.Command)
 

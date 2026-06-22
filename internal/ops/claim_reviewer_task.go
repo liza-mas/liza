@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
@@ -189,8 +190,9 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		if len(repairNeededTaskIDs) > 0 {
 			return nil, &PreconditionError{
 				Reason: fmt.Sprintf(
-					"review boundary needs repair for task(s): %s — run liza update-review-commit <task-id>",
+					"review boundary needs repair for task(s): %s — run %s <task-id>",
 					strings.Join(repairNeededTaskIDs, ", "),
+					brand.Command("update-review-commit"),
 				),
 			}
 		}

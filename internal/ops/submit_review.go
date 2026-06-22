@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	gitpkg "github.com/liza-mas/liza/internal/git"
@@ -45,7 +46,7 @@ func SubmitForReview(projectRoot, taskID, commitRef, agentID string) (*SubmitFor
 		return nil, &PreconditionError{Reason: "commit ref is required"}
 	}
 	if agentID == "" {
-		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
+		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
 	}
 
 	lp := paths.New(projectRoot)

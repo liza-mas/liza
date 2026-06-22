@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/huh"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -30,9 +31,9 @@ func RunInitWizard(projectRoot string) (*InitWizardResult, error) {
 
 	// Screen 1: Mode selection
 	err := huh.NewSelect[string]().
-		Title("How would you like to use Liza?").
+		Title(fmt.Sprintf("How would you like to use %s?", brand.NameTitle)).
 		Options(
-			huh.NewOption("Start with Pairing — AI agents follow Liza quality contracts (recommended for first use)", "pairing"),
+			huh.NewOption(fmt.Sprintf("Start with Pairing — AI agents follow %s quality contracts (recommended for first use)", brand.NameTitle), "pairing"),
 			huh.NewOption("Full Multi-Agent System — Orchestrated workspace with sprints, reviews, and task decomposition", "full"),
 		).
 		Value(&result.Mode).
@@ -114,7 +115,7 @@ func abortOrError(err error) error {
 }
 
 // DetectContractConflict checks whether any selected agent's contract file
-// conflicts with an existing non-Liza file at the project root.
+// conflicts with an existing non-brand file at the project root.
 // Returns the conflicting filename (e.g. "CLAUDE.md") or "" if no conflict.
 func DetectContractConflict(projectRoot string, agents []string, contractTarget string) string {
 	for _, agent := range agents {
@@ -125,13 +126,13 @@ func DetectContractConflict(projectRoot string, agents []string, contractTarget 
 
 		repoPath := filepath.Join(projectRoot, fileName)
 
-		// Check if file exists and is NOT already a Liza symlink
+		// Check if file exists and is NOT already a brand symlink.
 		fi, err := os.Lstat(repoPath)
 		if err != nil {
 			continue // doesn't exist, no conflict
 		}
 
-		// If it's already a Liza symlink, skip
+		// If it's already a brand symlink, skip.
 		if fi.Mode()&os.ModeSymlink != 0 {
 			target, readErr := os.Readlink(repoPath)
 			if readErr == nil && target == contractTarget {
@@ -165,7 +166,7 @@ func resolveContractConflicts(projectRoot string, result *InitWizardResult) erro
 	var action string
 	options := []huh.Option[string]{
 		huh.NewOption(fmt.Sprintf("Use global config instead (keeps your existing %s)", conflicting), "global"),
-		huh.NewOption(fmt.Sprintf("Rename existing to %s.bak and place Liza contract at repo root", conflicting), "rename"),
+		huh.NewOption(fmt.Sprintf("Rename existing to %s.bak and place %s contract at repo root", conflicting, brand.NameTitle), "rename"),
 	}
 	if conflicting == "CLAUDE.md" {
 		options = append(options, huh.NewOption("Use CLAUDE.local.md (local override, should be gitignored)", "local"))
@@ -173,7 +174,7 @@ func resolveContractConflicts(projectRoot string, result *InitWizardResult) erro
 	options = append(options, huh.NewOption("Skip — don't create this contract", "skip"))
 
 	err = huh.NewSelect[string]().
-		Title(fmt.Sprintf("%s already exists. Where should Liza place its contract?", conflicting)).
+		Title(fmt.Sprintf("%s already exists. Where should %s place its contract?", conflicting, brand.NameTitle)).
 		Options(options...).
 		Value(&action).
 		Run()

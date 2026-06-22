@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/models"
@@ -217,7 +218,7 @@ Example YAML file format:
 var supersedeTaskCmd = &cobra.Command{
 	Use:   "supersede-task <task-id> [replacement-task-ids] --reason <reason>",
 	Short: "Mark a task as SUPERSEDED, optionally by replacement tasks",
-	Long: `Mark a task as SUPERSEDED when it is replaced by new task(s) or completed externally.
+	Long: fmt.Sprintf(`Mark a task as SUPERSEDED when it is replaced by new task(s) or completed externally.
 
 Used by orchestrator when rescoping blocked, rejected, or problematic tasks,
 or when a task's work was already completed outside the current sprint.
@@ -230,11 +231,11 @@ Requirements:
 Replacement task IDs are optional and should be comma-separated.
 When no replacements are given, the task's branch is deleted immediately after
 recording pre-supersession branch/worktree evidence and the operator-provided
-recoverability audit command. Liza records that command but does not execute it.
+recoverability audit command. %[3]s records that command but does not execute it.
 
 Examples:
-  liza supersede-task task-3 task-4,task-5 --reason "Split into smaller tasks"
-  liza supersede-task task-3 --reason "Work already merged in prior sprint" --recoverability-command "liza recover-task task-3"`,
+  %[1]s task-3 task-4,task-5 --reason "Split into smaller tasks"
+  %[1]s task-3 --reason "Work already merged in prior sprint" --recoverability-command "%[2]s"`, brand.Command("supersede-task"), brand.Command("recover-task", "task-3"), brand.NameTitle),
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -291,7 +292,7 @@ Examples:
 var retargetDependencyCmd = &cobra.Command{
 	Use:   "retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason <reason>",
 	Short: "Retarget one non-terminal task dependency edge",
-	Long: `Retarget one non-terminal task's direct depends_on edge.
+	Long: fmt.Sprintf(`Retarget one non-terminal task's direct depends_on edge.
 
 This is an orchestrator-only metadata repair operation for cases where one task
 has the wrong scheduler dependency but neither the dependent task nor the old
@@ -301,8 +302,8 @@ list, validates the full candidate state, records audit history, and leaves task
 status unchanged.
 
 Examples:
-  liza retarget-dependency task-3 old-task replacement-task --reason "Correct dependency after planning repair"
-  liza retarget-dependency task-3 old-task repl-a,repl-b --reason "Split dependency into two prerequisites"`,
+  %[1]s task-3 old-task replacement-task --reason "Correct dependency after planning repair"
+  %[1]s task-3 old-task repl-a,repl-b --reason "Split dependency into two prerequisites"`, brand.Command("retarget-dependency")),
 	Args: cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -358,7 +359,7 @@ Per the blocking protocol (specs/architecture/roles.md), use this when:
   - Design conflict discovered that requires rescoping
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in an executing status (e.g. IMPLEMENTING_CODE, CODE_PLANNING)
   - Only the assigned agent can mark a task as blocked
   - Requires a reason and 1-3 clarifying questions
@@ -677,13 +678,13 @@ Cancellable states are determined by the pipeline transition map. Generally:
   - Rejected states: CODE_REJECTED, CODING_PLAN_REJECTED, etc.
   - BLOCKED, INTEGRATION_FAILED
 
-Not cancellable: approved or terminal states. Cancelling releases Liza's state
+Not cancellable: approved or terminal states. Cancelling releases ` + brand.NameTitle + `'s state
 claims and removes the task worktree/branch best-effort; it does not kill a
 live provider process. Stale agent commands fail once they observe the
 ABANDONED task state or missing worktree.
 
 Example:
-  liza cancel-task task-3 "Requirements no longer valid"`,
+  ` + brand.Command("cancel-task", "task-3") + ` "Requirements no longer valid"`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -729,13 +730,13 @@ Example:
 var reconcileMergedCmd = &cobra.Command{
 	Use:   "reconcile-merged <task-id>",
 	Short: "Mark an externally merged integration failure as merged",
-	Long: `Mark an INTEGRATION_FAILED task as MERGED after verifying it was completed outside Liza.
+	Long: fmt.Sprintf(`Mark an INTEGRATION_FAILED task as MERGED after verifying it was completed outside %s.
 
 This is intended for recovery from stale integration-failure state, such as when
 a GitHub PR was merged manually and the task worktree is already gone.
 
 Example:
-  liza reconcile-merged task-3 --merge-commit abc123 --pr-url https://github.com/org/repo/pull/17 --reason "PR merged externally"`,
+  %s --merge-commit abc123 --pr-url https://github.com/org/repo/pull/17 --reason "PR merged externally"`, brand.NameTitle, brand.Command("reconcile-merged", "task-3")),
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -814,7 +815,7 @@ var writeCheckpointCmd = &cobra.Command{
 	Long: `Record implementation intent, validation plan, and scope before submission.
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in an executing status (resolved from pipeline config)
   - Task must be assigned to the submitting agent
 
@@ -906,7 +907,7 @@ task_depends_on contains existing concrete task IDs to copy onto generated
 child tasks.
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in an executing status
   - Task must be assigned to the submitting agent
   - At least one output entry required
@@ -921,7 +922,7 @@ Example:
     {"desc": "Subtask 2", "done_when": "API works", "scope": "internal/api", "validation": ["make test"], "destructive_db": false, "depends_on": ["0"], "task_depends_on": ["existing-task-id"]}
   ]
   EOF
-  liza set-task-output task-1 --output outputs.json`,
+  ` + brand.Command("set-task-output", "task-1") + ` --output outputs.json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -1009,7 +1010,7 @@ Example:
     {"id": "task-2", "desc": "Implement Y", "spec": "specs/y.md", "done": "Y works", "scope": "internal/y", "validation": ["make test"], "destructive_db": false, "depends": ["task-1"]}
   ]
   EOF
-  liza add-tasks --tasks-file tasks.json`,
+  ` + brand.Command("add-tasks") + ` --tasks-file tasks.json`,
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
 			log.SetOutput(io.Discard)
@@ -1192,14 +1193,14 @@ func init() {
 	addTaskCmd.Flags().String("spec", "", "spec reference (required unless using --file)")
 	addTaskCmd.Flags().String("done", "", "done-when criteria (required unless using --file)")
 	addTaskCmd.Flags().StringArray("validation", nil, "canonical validation command; repeat for multiple commands (overrides file value)")
-	addTaskCmd.Flags().Bool("destructive-db", false, "mark task validation as destructive to DB state; commands must start with LIZA_ALLOW_DESTRUCTIVE_DB=1")
+	addTaskCmd.Flags().Bool("destructive-db", false, fmt.Sprintf("mark task validation as destructive to DB state; commands must start with %s=1", brand.EnvName("ALLOW_DESTRUCTIVE_DB")))
 	addTaskCmd.Flags().String("scope", "", "task scope (required unless using --file)")
 	addTaskCmd.Flags().Int("priority", 0, "task priority (default: 1, overrides file value)")
 	addTaskCmd.Flags().String("depends", "", "comma-separated list of task IDs this task depends on (overrides file value)")
 	addTaskCmd.Flags().String("type", "", "optional task type override (default: derived from --role-pair or file role_pair)")
 	addTaskCmd.Flags().String("role-pair", "", "task role-pair used for pipeline state and default type (required unless provided by --file)")
-	addTaskCmd.Flags().String("state", "", "path to state.yaml (default: .liza/state.yaml)")
-	addTaskCmd.Flags().String("log", "", "path to log.yaml (default: .liza/log.yaml)")
+	addTaskCmd.Flags().String("state", "", fmt.Sprintf("path to state.yaml (default: %s/state.yaml)", paths.ProjectDirName()))
+	addTaskCmd.Flags().String("log", "", fmt.Sprintf("path to log.yaml (default: %s/log.yaml)", paths.ProjectDirName()))
 
 	// Add-tasks (batch) command flags
 	addAgentIDFlag(addTasksCmd)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
@@ -23,7 +24,7 @@ var submitForReviewCmd = &cobra.Command{
 Used by doer agents to submit completed work for review.
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in an executing status (resolved from pipeline config)
   - Task must be assigned to the submitting agent
   - [commit-ref] resolves in the task worktree and must match current worktree HEAD before rebase
@@ -88,7 +89,7 @@ var handoffCmd = &cobra.Command{
 	Long: `Atomically initiate handoff when a doer agent is nearing context exhaustion.
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in an executing status (resolved from pipeline config)
   - Task must be assigned to the submitting agent
 
@@ -159,7 +160,7 @@ var submitVerdictCmd = &cobra.Command{
 Used by reviewer agents to approve or reject work.
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in a reviewing status (resolved from pipeline config)
   - For REJECTED verdicts, a rejection reason is required (via --reason flag or positional arg)
 
@@ -248,7 +249,7 @@ Safety:
   - Warns if no claims exist to release
 
 Agent ID for audit trail:
-  - Can be specified via --changed-by flag or LIZA_AGENT_ID env var
+  - Can be specified via --changed-by flag or ` + brand.EnvName("AGENT_ID") + ` env var
   - Defaults to "human" if not provided`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
@@ -296,7 +297,7 @@ var awaitVerdictCmd = &cobra.Command{
 Used by doer agents after submit-for-review to wait for the review outcome.
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in a submitted/reviewing status
 
 Possible outcomes:
@@ -358,7 +359,7 @@ var awaitResubmissionCmd = &cobra.Command{
 Used by reviewer agents after submit-verdict REJECTED to wait for the revised submission.
 
 Requirements:
-  - Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+  - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must have been rejected by the calling reviewer
 
 Possible outcomes:

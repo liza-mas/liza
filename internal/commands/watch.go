@@ -11,6 +11,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/analysis"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	lizalog "github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -616,8 +617,8 @@ func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Ti
 		Timestamp: time.Now().UTC(),
 		Level:     AlertLevelCritical,
 		Category:  "CIRCUIT BREAKER",
-		Message: fmt.Sprintf("pattern=%s severity=%s — run 'liza analyze' then 'liza sprint-checkpoint'",
-			patternResult.Pattern, patternResult.Severity),
+		Message: fmt.Sprintf("pattern=%s severity=%s — run %q then %q",
+			patternResult.Pattern, patternResult.Severity, brand.Command("analyze"), brand.Command("sprint-checkpoint")),
 	}}
 }
 
@@ -1358,7 +1359,7 @@ func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache ma
 		if suffix != "" {
 			msg += ", " + suffix
 		}
-		msg += "); the TUI auto-repairs by default; run `liza repair-agent-pool --dry-run` to preview manually"
+		msg += fmt.Sprintf("); the TUI auto-repairs by default; run `%s` to preview manually", brand.Command("repair-agent-pool", "--dry-run"))
 
 		alerts = append(alerts, Alert{
 			Timestamp: now,

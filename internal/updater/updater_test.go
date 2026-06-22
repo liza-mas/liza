@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 func TestMain(m *testing.M) {
@@ -37,6 +39,90 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("HOME", oldHome)
 	_ = os.RemoveAll(home)
 	os.Exit(code)
+}
+
+func restoreUpdaterBrand(t *testing.T, binaryName, archivePrefix, releaseBaseURL, checksumBaseURL string) {
+	t.Helper()
+	oldBinaryName := brand.BinaryName
+	oldArchivePrefix := brand.ArchivePrefix
+	oldReleaseBaseURL := brand.ReleaseBaseURL
+	oldChecksumBaseURL := brand.ChecksumBaseURL
+
+	brand.BinaryName = binaryName
+	brand.ArchivePrefix = archivePrefix
+	brand.ReleaseBaseURL = releaseBaseURL
+	brand.ChecksumBaseURL = checksumBaseURL
+
+	t.Cleanup(func() {
+		brand.BinaryName = oldBinaryName
+		brand.ArchivePrefix = oldArchivePrefix
+		brand.ReleaseBaseURL = oldReleaseBaseURL
+		brand.ChecksumBaseURL = oldChecksumBaseURL
+	})
+}
+
+func overrideUpdaterBrand(t *testing.T, values brand.Values) {
+	t.Helper()
+	oldValues := brand.Values{
+		NameLower:       brand.NameLower,
+		NameUpper:       brand.NameUpper,
+		NameTitle:       brand.NameTitle,
+		Repo:            brand.Repo,
+		BinaryName:      brand.BinaryName,
+		GlobalDirName:   brand.GlobalDirName,
+		ProjectDirName:  brand.ProjectDirName,
+		EnvPrefix:       brand.EnvPrefix,
+		ArchivePrefix:   brand.ArchivePrefix,
+		ReleaseRepo:     brand.ReleaseRepo,
+		ReleaseBaseURL:  brand.ReleaseBaseURL,
+		ChecksumBaseURL: brand.ChecksumBaseURL,
+	}
+	values = brand.Normalize(values)
+
+	brand.NameLower = values.NameLower
+	brand.NameUpper = values.NameUpper
+	brand.NameTitle = values.NameTitle
+	brand.Repo = values.Repo
+	brand.BinaryName = values.BinaryName
+	brand.GlobalDirName = values.GlobalDirName
+	brand.ProjectDirName = values.ProjectDirName
+	brand.EnvPrefix = values.EnvPrefix
+	brand.ArchivePrefix = values.ArchivePrefix
+	brand.ReleaseRepo = values.ReleaseRepo
+	brand.ReleaseBaseURL = values.ReleaseBaseURL
+	brand.ChecksumBaseURL = values.ChecksumBaseURL
+
+	t.Cleanup(func() {
+		brand.NameLower = oldValues.NameLower
+		brand.NameUpper = oldValues.NameUpper
+		brand.NameTitle = oldValues.NameTitle
+		brand.Repo = oldValues.Repo
+		brand.BinaryName = oldValues.BinaryName
+		brand.GlobalDirName = oldValues.GlobalDirName
+		brand.ProjectDirName = oldValues.ProjectDirName
+		brand.EnvPrefix = oldValues.EnvPrefix
+		brand.ArchivePrefix = oldValues.ArchivePrefix
+		brand.ReleaseRepo = oldValues.ReleaseRepo
+		brand.ReleaseBaseURL = oldValues.ReleaseBaseURL
+		brand.ChecksumBaseURL = oldValues.ChecksumBaseURL
+	})
+}
+
+func acmeUpdaterBrand() brand.Values {
+	return brand.Values{
+		NameLower:       "acme-agent",
+		NameUpper:       "ACME_AGENT",
+		NameTitle:       "Acme Agent",
+		Repo:            "acme/agent-src",
+		BinaryName:      "acme-agent",
+		GlobalDirName:   ".acme-agent",
+		ProjectDirName:  ".acme-agent",
+		EnvPrefix:       "ACME_AGENT",
+		ArchivePrefix:   "acme-release",
+		ReleaseRepo:     "acme/agent-releases",
+		ReleaseBaseURL:  "https://github.com/acme/agent-releases/releases/download",
+		ChecksumBaseURL: "https://checksums.example.com/acme",
+	}
 }
 
 func tempHome(t *testing.T) string {
@@ -329,6 +415,56 @@ func TestMaybeUpdateAndReexecInstallsAndReexecsOriginalCommand(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "Installing release binary v1.2.3") {
 		t.Fatalf("stderr missing release install plan:\n%s", stderr.String())
+	}
+}
+
+func TestMaybeUpdateAndReexecUsesBrandedEnvAndArgv(t *testing.T) {
+	overrideUpdaterBrand(t, acmeUpdaterBrand())
+
+	var stderr bytes.Buffer
+	var execArgs []string
+	var execEnv []string
+	reexecErr := errors.New("reexec sentinel")
+
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{"/tmp/old-acme-agent", "version"},
+		Env:            []string{"PATH=/bin"},
+		Stdin:          strings.NewReader("yes\n"),
+		Stdout:         io.Discard,
+		Stderr:         &stderr,
+		IsInteractive:  func() bool { return true },
+		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
+		Install: func(context.Context, candidate, string, io.Writer, io.Writer) error {
+			return nil
+		},
+		InstallTarget: func() (string, error) {
+			return "/home/user/go/bin/acme-agent", nil
+		},
+		VerifyInstall: func(context.Context, string, io.Writer) error {
+			return nil
+		},
+		Reexec: func(_ string, args []string, env []string) error {
+			execArgs = append([]string(nil), args...)
+			execEnv = append([]string(nil), env...)
+			return reexecErr
+		},
+	})
+	if !errors.Is(err, reexecErr) {
+		t.Fatalf("MaybeUpdateAndReexec error = %v, want reexec sentinel", err)
+	}
+	if !slices.Equal(execArgs, []string{"acme-agent", "version"}) {
+		t.Fatalf("exec args = %v, want branded argv[0]", execArgs)
+	}
+	if !slices.Contains(execEnv, "ACME_AGENT_SKIP_AUTO_UPDATE=1") {
+		t.Fatalf("exec env missing branded skip marker: %v", execEnv)
+	}
+	if strings.Contains(strings.Join(execEnv, "\n"), "LIZA_SKIP_AUTO_UPDATE=1") {
+		t.Fatalf("exec env should not add legacy skip marker for non-default brand: %v", execEnv)
+	}
+	if !strings.Contains(stderr.String(), "Acme Agent stable update is available") {
+		t.Fatalf("stderr missing branded update prompt:\n%s", stderr.String())
 	}
 }
 
@@ -740,6 +876,48 @@ func TestInstallBinaryFromTarGzReplacesTarget(t *testing.T) {
 	}
 }
 
+func TestInstallBinaryFromTarGzUsesBrandedBinaryName(t *testing.T) {
+	restoreUpdaterBrand(t, "acme-agent", "acme-release", "", "")
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "acme-agent")
+	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	body := []byte("#!/bin/sh\necho acme\n")
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "acme-agent",
+		Mode: 0o755,
+		Size: int64(len(body)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := installBinaryFromTarGz(bytes.NewReader(archive.Bytes()), target); err != nil {
+		t.Fatalf("installBinaryFromTarGz returned error: %v", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("target body = %q, want %q", string(got), string(body))
+	}
+}
+
 func TestVerifyChecksum(t *testing.T) {
 	data := []byte("test data")
 	hash := sha256.Sum256(data)
@@ -808,6 +986,49 @@ func TestReleaseBaseURLControlsArchiveOnly(t *testing.T) {
 	}
 	if !strings.Contains(checksumsURL, defaultBase) {
 		t.Fatalf("checksums URL = %s, want to contain %s", checksumsURL, defaultBase)
+	}
+}
+
+func TestReleaseArchiveURLUsesBrandArchivePrefix(t *testing.T) {
+	restoreUpdaterBrand(t, "acme-agent", "acme-release", "https://github.com/acme/agent/releases/download", "https://github.com/acme/agent/releases/download")
+
+	got := releaseArchiveURL("v1.2.3", "linux", "amd64", "")
+	want := "https://github.com/acme/agent/releases/download/v1.2.3/acme-release-1.2.3-linux-amd64.tar.gz"
+	if got != want {
+		t.Fatalf("releaseArchiveURL = %q, want %q", got, want)
+	}
+
+	got = releaseArchiveURL("v1.2.3", "darwin", "arm64", "https://mirror.example/releases")
+	want = "https://mirror.example/releases/v1.2.3/acme-release-1.2.3-darwin-arm64.tar.gz"
+	if got != want {
+		t.Fatalf("releaseArchiveURL with mirror = %q, want %q", got, want)
+	}
+}
+
+func TestUpdateURLsUseBrandRepos(t *testing.T) {
+	overrideUpdaterBrand(t, acmeUpdaterBrand())
+
+	if got, want := githubLatestReleaseURL(), "https://api.github.com/repos/acme/agent-releases/releases/latest"; got != want {
+		t.Fatalf("githubLatestReleaseURL = %q, want %q", got, want)
+	}
+	if got, want := githubMainCommitURL(), "https://api.github.com/repos/acme/agent-src/commits/main"; got != want {
+		t.Fatalf("githubMainCommitURL = %q, want %q", got, want)
+	}
+	if got, want := githubCompareURL("abc123", "def456"), "https://api.github.com/repos/acme/agent-src/compare/abc123...def456"; got != want {
+		t.Fatalf("githubCompareURL = %q, want %q", got, want)
+	}
+	if got, want := sourceCloneURL(), "https://github.com/acme/agent-src.git"; got != want {
+		t.Fatalf("sourceCloneURL = %q, want %q", got, want)
+	}
+}
+
+func TestChecksumURLUsesBrandChecksumBase(t *testing.T) {
+	overrideUpdaterBrand(t, acmeUpdaterBrand())
+
+	got := checksumURL("v1.2.3")
+	want := "https://checksums.example.com/acme/v1.2.3/checksums.txt"
+	if got != want {
+		t.Fatalf("checksumURL = %q, want %q", got, want)
 	}
 }
 
@@ -1140,6 +1361,54 @@ func TestInstallFromSourceShallowFetchFallback(t *testing.T) {
 	}
 	if !deepAttempt {
 		t.Fatal("expected deep fetch fallback attempt")
+	}
+}
+
+func TestSourceInstallMakeArgsPassBrandValues(t *testing.T) {
+	overrideUpdaterBrand(t, acmeUpdaterBrand())
+
+	args := sourceInstallMakeArgs("/tmp/acme-src", "/tmp/bin")
+	for _, want := range []string{
+		"-C",
+		"/tmp/acme-src",
+		"install",
+		"INSTALL_DIR=/tmp/bin",
+		"BRAND_NAME_TITLE=Acme Agent",
+		"BRAND_NAME_LOWER=acme-agent",
+		"BRAND_NAME_UPPER=ACME_AGENT",
+		"BRAND_REPO=acme/agent-src",
+		"BRAND_BINARY_NAME=acme-agent",
+		"BRAND_GLOBAL_DIRNAME=.acme-agent",
+		"BRAND_PROJECT_DIRNAME=.acme-agent",
+		"BRAND_ENV_PREFIX=ACME_AGENT",
+		"BRAND_ARCHIVE_PREFIX=acme-release",
+		"BRAND_RELEASE_REPO=acme/agent-releases",
+		"BRAND_RELEASE_BASE_URL=https://github.com/acme/agent-releases/releases/download",
+		"BRAND_CHECKSUM_BASE_URL=https://checksums.example.com/acme",
+	} {
+		if !slices.Contains(args, want) {
+			t.Fatalf("sourceInstallMakeArgs missing %q in %v", want, args)
+		}
+	}
+}
+
+func TestUpdateEnvUsesBrandedNameAndLegacyAlias(t *testing.T) {
+	overrideUpdaterBrand(t, acmeUpdaterBrand())
+
+	if !checkUpdateEnvEnabled(Config{Env: []string{"ACME_AGENT_CHECK_UPDATE=1"}}) {
+		t.Fatal("branded check-update env should enable update checks")
+	}
+	if !checkUpdateEnvEnabled(Config{Env: []string{"LIZA_CHECK_UPDATE=1"}}) {
+		t.Fatal("legacy check-update env should remain an alias")
+	}
+	if got := updateChannel(Config{Env: []string{"ACME_AGENT_UPDATE_CHANNEL=main"}}); got != channelMain {
+		t.Fatalf("branded update channel = %q, want %q", got, channelMain)
+	}
+	if !shouldSkip(Config{Env: []string{"ACME_AGENT_SKIP_AUTO_UPDATE=1"}}) {
+		t.Fatal("branded skip env should suppress update checks")
+	}
+	if !shouldSkip(Config{Env: []string{"LIZA_SKIP_AUTO_UPDATE=1"}}) {
+		t.Fatal("legacy skip env should remain an alias")
 	}
 }
 

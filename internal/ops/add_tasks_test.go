@@ -527,7 +527,7 @@ func TestAddTask_RejectsManualPipelineTransitionChild(t *testing.T) {
 				t.Fatal("expected error for manual transition child")
 			}
 			testhelpers.AssertErrorContains(t, err, "shadows pipeline transition child")
-			testhelpers.AssertErrorContains(t, err, "use liza proceed/resume")
+			testhelpers.AssertErrorContains(t, err, "use liza proceed/liza resume")
 
 			readState, err := bb.Read()
 			if err != nil {
@@ -588,7 +588,7 @@ func TestAddTask_RejectsManualOneToOnePipelineTransitionChild(t *testing.T) {
 				t.Fatal("expected error for manual one-to-one transition child")
 			}
 			testhelpers.AssertErrorContains(t, err, "shadows pipeline transition child")
-			testhelpers.AssertErrorContains(t, err, "use liza proceed/resume")
+			testhelpers.AssertErrorContains(t, err, "use liza proceed/liza resume")
 
 			readState, err := bb.Read()
 			if err != nil {
@@ -651,7 +651,7 @@ func TestAddTask_RejectsManualManyToOnePipelineTransitionChild(t *testing.T) {
 				t.Fatal("expected error for manual many-to-one transition child")
 			}
 			testhelpers.AssertErrorContains(t, err, "shadows pipeline transition child")
-			testhelpers.AssertErrorContains(t, err, "use liza proceed/resume")
+			testhelpers.AssertErrorContains(t, err, "use liza proceed/liza resume")
 
 			readState, err := bb.Read()
 			if err != nil {

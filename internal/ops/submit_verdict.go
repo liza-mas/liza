@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
@@ -97,7 +98,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 		return nil, &PreconditionError{Reason: "verdict is required"}
 	}
 	if agentID == "" {
-		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
+		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
 	}
 
 	verdict = strings.ToUpper(verdict)

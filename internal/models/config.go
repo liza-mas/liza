@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 // SystemMode represents the operational mode of the Liza system
@@ -35,7 +37,7 @@ var systemModeTransitions = map[SystemMode]systemModeTransition{
 		AllowedFrom: []SystemMode{SystemModeStopped},
 		Rejections: map[SystemMode]string{
 			SystemModeRunning: "system is already RUNNING",
-			SystemModePaused:  "system is PAUSED - use 'liza resume' instead",
+			SystemModePaused:  fmt.Sprintf("system is PAUSED - use %q instead", brand.Command("resume")),
 		},
 	},
 	SystemModeStopped: {

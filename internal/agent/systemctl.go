@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -144,7 +145,7 @@ func checkpointBlocksRole(state *models.State, roleType string) (bool, string) {
 		case "doer", "reviewer":
 			return false, ""
 		case "orchestrator":
-			return true, "[CHECKPOINT] Transition gate pending - run 'liza resume' to create downstream tasks"
+			return true, fmt.Sprintf("[CHECKPOINT] Transition gate pending - run %q to create downstream tasks", brand.Command("resume"))
 		default:
 			return true, "[CHECKPOINT] Transition gate pending - unknown role type blocked"
 		}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -233,7 +234,7 @@ func nextStepsSection() string {
 	s += "- [ ] Address any blocked tasks\n"
 	s += "- [ ] Review anomalies and circuit breaker status\n"
 	s += "- [ ] Adjust sprint scope if needed\n"
-	s += "- [ ] Resume sprint with `liza resume`\n"
+	s += fmt.Sprintf("- [ ] Resume sprint with `%s`\n", brand.Command("resume"))
 	s += "\n"
 	return s
 }

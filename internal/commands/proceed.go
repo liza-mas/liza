@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/ops"
 )
 
@@ -28,5 +29,5 @@ func printProceedResult(r *ops.ProceedResult) {
 			fmt.Printf("    - %s\n", id)
 		}
 	}
-	fmt.Println("\nRun 'liza resume' to start a new sprint with the child tasks.")
+	fmt.Printf("\nRun '%s' to start a new sprint with the child tasks.\n", brand.Command("resume"))
 }

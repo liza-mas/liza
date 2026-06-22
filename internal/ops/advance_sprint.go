@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -166,7 +167,7 @@ func planSprintAdvanceFromCompleted(s *models.State, now time.Time, projectRoot 
 		return nil, fmt.Errorf("cannot advance sprint: %w", err)
 	}
 	if blocked := collectApprovedPlanningWithUnmergedOutput(s, detCtx.planningPairs, detCtx.planningApprovedStatuses); len(blocked) > 0 {
-		return nil, fmt.Errorf("cannot advance sprint: approved planning task(s) must be merged before output can be carried forward: %s (run `liza wt-merge <task-id>` first)", strings.Join(blocked, ", "))
+		return nil, fmt.Errorf("cannot advance sprint: approved planning task(s) must be merged before output can be carried forward: %s (run `%s <task-id>` first)", strings.Join(blocked, ", "), brand.Command("wt-merge"))
 	}
 	return buildSprintAdvancePlan(s, now, detCtx)
 }

@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 type InstallOptions struct {
@@ -74,7 +76,7 @@ func installOne(tool Tool, installDir, goos string, dryRun bool, runner Runner) 
 		return InstallStep{ToolID: tool.ID, Status: InstallSkipped, Message: tool.ManualNote}
 	}
 	if goos == "windows" {
-		return InstallStep{ToolID: tool.ID, Status: InstallUnsupported, Message: "native Windows is not a supported Liza runtime; run this installer under WSL2"}
+		return InstallStep{ToolID: tool.ID, Status: InstallUnsupported, Message: fmt.Sprintf("native Windows is not a supported %s runtime; run this installer under WSL2", brand.NameTitle)}
 	}
 	if tool.Binary != "" {
 		if path, err := runner.LookPath(tool.Binary); err == nil && path != "" {

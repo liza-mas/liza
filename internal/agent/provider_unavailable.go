@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -118,6 +119,6 @@ func LogProviderUnavailableAlert(projectRoot string, pu *ProviderUnavailable) er
 
 // LogProviderUnavailableSpawnBlockedAlert appends an alert when a provider-unavailable signal blocks spawn.
 func LogProviderUnavailableSpawnBlockedAlert(projectRoot, provider, role string) error {
-	message := fmt.Sprintf("%s: refused to spawn %s while provider-unavailable signal is set; repair the provider, then delete the flag file or run liza pause then liza resume before spawning again", provider, role)
+	message := fmt.Sprintf("%s: refused to spawn %s while provider-unavailable signal is set; repair the provider, then delete the flag file or run %s then %s before spawning again", provider, role, brand.Command("pause"), brand.Command("resume"))
 	return LogAlert(projectRoot, "🚨", "PROVIDER UNAVAILABLE SPAWN BLOCKED", message)
 }

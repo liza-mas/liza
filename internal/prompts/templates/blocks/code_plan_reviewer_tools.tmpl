@@ -1,18 +1,18 @@
 {{- define "code-plan-reviewer-tools" -}}
 
 CODE PLAN REVIEWER TOOLS:
-- liza get — Query task state to inspect output[] entries
-  liza get {{.TaskID}} --json
-- liza submit-verdict — Submit review verdict
+- {{binaryName}} get — Query task state to inspect output[] entries
+  {{binaryName}} get {{.TaskID}} --json
+- {{binaryName}} submit-verdict — Submit review verdict
   ⚠️  You MUST run this CLI command in this session:
-  APPROVED: liza submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json
+  APPROVED: {{binaryName}} submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json
   REJECTED (use heredoc to avoid shell quoting issues):
     reason=$(cat <<'VERDICT'
     <detailed rejection reason>
     VERDICT
     )
-    liza submit-verdict {{.TaskID}} REJECTED --reason "$reason" --agent-id {{.AgentID}} --json
-- liza await-resubmission — Block until doer resubmits after rejection (call after submit-verdict REJECTED)
-  liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
+    {{binaryName}} submit-verdict {{.TaskID}} REJECTED --reason "$reason" --agent-id {{.AgentID}} --json
+- {{binaryName}} await-resubmission — Block until doer resubmits after rejection (call after submit-verdict REJECTED)
+  {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
   On RESUBMITTED, use the returned `base_commit` and `review_commit` for every diff command in this same session.
 {{- end -}}

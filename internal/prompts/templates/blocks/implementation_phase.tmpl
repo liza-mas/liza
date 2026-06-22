@@ -18,7 +18,7 @@ Read the epic at {{.EpicRef}} for requirement context and user stories at specs/
 2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
 3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Invoke skill: testing.
    Tests must be discoverable via standard runners (e.g. pytest, go test) — not just runnable when explicitly named.
-4. Dependency bootstrap exception: if validation/build/test commands fail because declared project dependencies are not installed in this worktree, you may run only an existing project-scoped bootstrap command to restore them. First query `liza get config.post_worktree_cmd --json`; if configured, run that command from {{.Worktree}}. If absent, use only the repo's existing lockfile-preserving install workflow. This is pre-authorized for validation only: do not edit dependency manifests or lockfiles, install global/system tooling, or add/upgrade/remove dependencies unless the task scope explicitly requires it. If bootstrap needs those changes, mark BLOCKED with the failing command and stderr.
+4. Dependency bootstrap exception: if validation/build/test commands fail because declared project dependencies are not installed in this worktree, you may run only an existing project-scoped bootstrap command to restore them. First query `{{binaryName}} get config.post_worktree_cmd --json`; if configured, run that command from {{.Worktree}}. If absent, use only the repo's existing lockfile-preserving install workflow. This is pre-authorized for validation only: do not edit dependency manifests or lockfiles, install global/system tooling, or add/upgrade/remove dependencies unless the task scope explicitly requires it. If bootstrap needs those changes, mark BLOCKED with the failing command and stderr.
 5. TDD waiver: For non-behavioral doc-only, config-only, spec-only, or cosmetic changes (no code behavior change), set tdd_not_required in the checkpoint with justification. If writing a later checkpoint before submission, repeat the waiver if it still applies.
 6. Without that waiver, coding tasks are rejected when the submission diff contains no recognized test file.
 7. Mechanical test updates: For structural refactoring (file split/move), updating test
@@ -27,7 +27,7 @@ Read the epic at {{.EpicRef}} for requirement context and user stories at specs/
    must be preserved.
 8. Invoke skill: clean-code at the end of the implementation
 9. Validate ALL done_when criteria are met
-10. If context exhaustion is near (~90%): run liza handoff --json with summary + next_action (or structured fields), then exit with code 42
+10. If context exhaustion is near (~90%): run {{binaryName}} handoff --json with summary + next_action (or structured fields), then exit with code 42
 {{- else if eq .Role "code-planner"}}
 
 IMPLEMENTATION PHASE:
@@ -58,7 +58,7 @@ file and output[] entries only.
    Save your task-output JSON to: {{.Worktree}}/specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}-output.json
    All later references to "the plan file" mean the exact path chosen here.
    (Include a "## Spec Compliance Matrix" section — see step 6c.)
-3. For EACH coding task in your plan, call liza set-task-output --json with structured entries.
+3. For EACH coding task in your plan, call {{binaryName}} set-task-output --json with structured entries.
    Each entry becomes a child task after merge. The Code Plan Reviewer will verify these.
    Fields: desc (single intent), done_when (falsifiable), scope (boundary), spec_ref (source),
    plan_ref (repo-relative path to the plan file — set to the plan file path from step 2 for all entries),
@@ -68,7 +68,7 @@ file and output[] entries only.
    Extract each field verbatim from the plan file — do not compose from memory or paraphrase.
 4. Update only planning artifacts required by DONE WHEN (plan file and task-output JSON).
 5. Validate done_when criteria with concrete checks.
-6. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
+6. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{binaryName}} submit-for-review --json until all pass):
    a. Each output[] entry passes TASK DECOMPOSITION PRINCIPLE checks above.
    b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       ("tests pass" is vague; "TestFoo in pkg/bar passes asserting X" is falsifiable.)
@@ -109,8 +109,8 @@ file and output[] entries only.
       dependency, or exclusion. If any reference points to a task that does not claim it,
       fix the plan before submitting.
    h. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
-   i. Submission proof: `liza submit-for-review` is not optional bookkeeping. It must actually run successfully after step h; do not treat plan/output artifacts alone as submission.
-7. Submit using liza submit-for-review --json only after all checks in step 6 pass, using HEAD.
+   i. Submission proof: `{{binaryName}} submit-for-review` is not optional bookkeeping. It must actually run successfully after step h; do not treat plan/output artifacts alone as submission.
+7. Submit using {{binaryName}} submit-for-review --json only after all checks in step 6 pass, using HEAD.
 {{- else if eq .Role "epic-planner"}}
 
 IMPLEMENTATION PHASE:
@@ -123,7 +123,7 @@ IMPLEMENTATION PHASE:
    Capture a timestamp by running: date -u +'%Y%m%d-%H%M%S'
    Save your epic to: {{.Worktree}}/specs/epics/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md
    All later references to "the epic doc" mean the exact path chosen here.
-6. For EACH capability in the epic, call liza set-task-output --json with structured entries.
+6. For EACH capability in the epic, call {{binaryName}} set-task-output --json with structured entries.
    Each entry becomes a US Writer child task after merge. The Epic Plan Reviewer will verify these.
    Fields: desc (single cohesive capability), done_when (falsifiable), scope (boundary),
    spec_ref (goal spec reference — preserves traceability to the original requirements),
@@ -139,7 +139,7 @@ IMPLEMENTATION PHASE:
    for the specific capability heading (e.g., specs/epics/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md#capability-cap-001---task-creation).
 7. Update worktree artifacts required by DONE WHEN.
 8. Validate done_when criteria with concrete checks.
-9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
+9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{binaryName}} submit-for-review --json until all pass):
    a. output[] completeness: one entry per capability in the epic, each with all five fields
       (desc, done_when, scope, spec_ref, epic_ref) populated.
    b. output[] parity: re-read the epic document in the worktree and verify:
@@ -151,8 +151,8 @@ IMPLEMENTATION PHASE:
    c. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       Any validation[] command is satisfiable for the capability scope and agent-executable under the validation command-shape rule.
    d. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
-   e. Submission proof: `liza submit-for-review` must actually run successfully after step 9d; do not stop at "ready for review".
-10. Submit using liza submit-for-review --json only after all checks in step 9 pass, using HEAD.
+   e. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9d; do not stop at "ready for review".
+10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using HEAD.
 {{- else if eq .Role "us-writer"}}
 
 IMPLEMENTATION PHASE:
@@ -166,11 +166,11 @@ IMPLEMENTATION PHASE:
    Run: mkdir -p {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}
    Write user stories to {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
 6. Validate done_when criteria with concrete checks.
-7. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
+7. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{binaryName}} submit-for-review --json until all pass):
    a. The required story files exist under {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/ and match the assigned capability scope.
    b. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
-   c. Submission proof: `liza submit-for-review` must actually run successfully after step 7b; do not stop at "ready for review".
-8. Submit using liza submit-for-review --json only after all checks in step 7 pass, using HEAD.
+   c. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 7b; do not stop at "ready for review".
+8. Submit using {{binaryName}} submit-for-review --json only after all checks in step 7 pass, using HEAD.
 {{- else if eq .Role "architect"}}
 
 IMPLEMENTATION PHASE:
@@ -197,7 +197,7 @@ document and output[] entries only.
    - Data flow and structural decisions
    - Cross-cutting concerns and how they are addressed
    - Decomposition into code-planning scopes (each becomes a downstream task)
-6. For EACH code-planning scope in your architecture, call liza set-task-output --json with structured entries.
+6. For EACH code-planning scope in your architecture, call {{binaryName}} set-task-output --json with structured entries.
    Each entry becomes a code-planning child task after merge. The Architecture Reviewer will verify these.
    Fields: desc (scope boundary), done_when (falsifiable), scope (what the code-planner covers),
    spec_ref (goal spec — same for all entries), arch_ref (repo-relative path to the arch doc from step 5),
@@ -225,7 +225,7 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
 - Stack-specific runners, manifest filenames, and worked done_when phrasings live in the goal spec (see Worked Example), never in this prompt (G1.1: prompt is stack-agnostic).
 7. Update only architecture artifacts required by DONE WHEN (architecture document and task-output JSON).
 8. Validate done_when criteria with concrete checks.
-9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call liza submit-for-review --json until all pass):
+9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{binaryName}} submit-for-review --json until all pass):
    a. Each output[] entry has a single, well-scoped code-planning intent.
    b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       Any validation[] command is satisfiable for the generated scope and agent-executable under the validation command-shape rule.
@@ -234,7 +234,7 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
    e. Spec compliance: the decomposition covers the full scope of the goal spec.
    f. Shared-file audit: if two output[] entries may touch the same files, add depends_on.
    g. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
-   h. Submission proof: `liza submit-for-review` must actually run successfully after step 9g; do not treat the arch doc plus `liza set-task-output` as sufficient.
-10. Submit using liza submit-for-review --json only after all checks in step 9 pass, using HEAD.
+   h. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9g; do not treat the arch doc plus `{{binaryName}} set-task-output` as sufficient.
+10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using HEAD.
 {{- end}}
 {{- end -}}

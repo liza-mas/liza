@@ -27,7 +27,7 @@ ARCHITECTURE REVIEWER STATE TRANSITIONS:
 {{- end}}
 
 After REJECTED verdict (non-terminal):
-  Run liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json to wait for the doer's resubmission.
+  Run {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json to wait for the doer's resubmission.
   If the harness backgrounds await-resubmission and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.
   - RESUBMITTED: task is reclaimed for review — discard prompt-time BASE COMMIT / REVIEW_COMMIT and use returned base_commit..review_commit
   - TERMINAL, TIMEOUT, or ABORTED: exit normally

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -122,12 +123,12 @@ func RaiseQuotaExhaustion(projectRoot string, qe *QuotaExhaustion) error {
 
 // LogQuotaSpawnBlockedAlert appends an alert when a stale quota signal blocks spawn.
 func LogQuotaSpawnBlockedAlert(projectRoot, provider, role string) error {
-	message := fmt.Sprintf("%s: refused to spawn %s while quota signal is set; delete the flag file or run liza pause then liza resume before spawning again", provider, role)
+	message := fmt.Sprintf("%s: refused to spawn %s while quota signal is set; delete the flag file or run %s then %s before spawning again", provider, role, brand.Command("pause"), brand.Command("resume"))
 	return LogAlert(projectRoot, "🚨", "PROVIDER QUOTA SPAWN BLOCKED", message)
 }
 
 // ClearQuotaSignal removes the quota signal file for a provider.
-// Intended for use by `liza resume` or manual recovery.
+// Intended for use by the resume command or manual recovery.
 func ClearQuotaSignal(projectRoot, provider string) error {
 	err := os.Remove(QuotaSignalPath(projectRoot, provider))
 	if os.IsNotExist(err) {

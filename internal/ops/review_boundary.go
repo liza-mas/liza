@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -103,21 +104,21 @@ func validateReviewBoundaryCommit(projectRoot string, task *models.Task, reviewC
 		return &ReviewBoundaryRepairNeededError{
 			TaskID:       task.ID,
 			Reason:       fmt.Sprintf("review_commit %s does not match worktree HEAD %s", reviewCommit, wtHEAD),
-			RecoveryHint: fmt.Sprintf("run liza update-review-commit %s", task.ID),
+			RecoveryHint: fmt.Sprintf("run %s", brand.Command("update-review-commit", task.ID)),
 		}
 	}
 	if task.BaseCommit == nil {
 		return &ReviewBoundaryRepairNeededError{
 			TaskID:       task.ID,
 			Reason:       fmt.Sprintf("base_commit is missing; expected effective review base %s", expectedBase),
-			RecoveryHint: fmt.Sprintf("run liza update-review-commit %s", task.ID),
+			RecoveryHint: fmt.Sprintf("run %s", brand.Command("update-review-commit", task.ID)),
 		}
 	}
 	if *task.BaseCommit != expectedBase {
 		return &ReviewBoundaryRepairNeededError{
 			TaskID:       task.ID,
 			Reason:       fmt.Sprintf("base_commit %s does not match effective review base %s", *task.BaseCommit, expectedBase),
-			RecoveryHint: fmt.Sprintf("run liza update-review-commit %s", task.ID),
+			RecoveryHint: fmt.Sprintf("run %s", brand.Command("update-review-commit", task.ID)),
 		}
 	}
 	return nil

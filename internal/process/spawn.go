@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -27,7 +28,7 @@ func buildSpawnCommand(projectRoot, role, cli string, extraArgs ...string) (*exe
 	}
 	args = append(args, extraArgs...)
 
-	cmd := exec.Command("liza", args...)
+	cmd := exec.Command(brand.BinaryName, args...)
 	cmd.Dir = projectRoot
 	SetDetachedProcessGroup(cmd)
 
@@ -62,7 +63,7 @@ func hasFlag(args []string, name string) bool {
 	return false
 }
 
-// SpawnAgent starts a detached `liza agent` subprocess with stdout/stderr
+// SpawnAgent starts a detached agent subprocess with stdout/stderr
 // redirected to /dev/null. The child process is placed in its own process
 // group and a background goroutine reaps it to prevent zombie accumulation.
 //

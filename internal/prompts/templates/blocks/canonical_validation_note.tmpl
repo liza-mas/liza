@@ -2,6 +2,6 @@
 Use declared commands as executable guidance; do not infer local tool paths. Evidence must prove the intended check ran; for hook gates, intended hooks/checks must be declared in durable task text or artifacts, not inferred from local tooling.
 If a stored validation command violates BASH CONSTRAINTS, do not execute it literally; treat it as validation intent, run an equivalent single-purpose command from the worktree/tool working directory, and record both the original command and translated command in validation evidence.
 {{ if .DestructiveDB }}
-DESTRUCTIVE DB VALIDATION: The LIZA_ALLOW_DESTRUCTIVE_DB=1 marker is part of each canonical command and must not be translated away. Run only against a disposable target.
+DESTRUCTIVE DB VALIDATION: The {{destructiveDBAllowMarker}} marker is part of each canonical command and must not be translated away. Run only against a disposable target.
 {{- end }}
 {{ end -}}

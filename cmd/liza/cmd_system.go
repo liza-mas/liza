@@ -24,7 +24,7 @@ import (
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze",
 	Short: "Run circuit breaker pattern detection analysis",
-	Long: `Analyze anomalies in the blackboard and detect systemic failure patterns.
+	Long: fmt.Sprintf(`Analyze anomalies in the blackboard and detect systemic failure patterns.
 
 Detects the following patterns:
   - retry_cluster: 3+ retry_loops with similar error patterns (ARCHITECTURE_FLAW)
@@ -37,13 +37,13 @@ Detects the following patterns:
 
 If a pattern is detected:
   - Updates circuit_breaker.status to TRIGGERED
-  - Generates .liza/circuit_breaker_report.md with evidence
-  - Sets sprint.status to CHECKPOINT (equivalent to 'liza checkpoint')
+  - Generates %[1]s/circuit_breaker_report.md with evidence
+  - Sets sprint.status to CHECKPOINT (equivalent to '%[2]s')
   - Requires human review and resolution
 
 If no patterns are detected:
   - Updates circuit_breaker.status to OK
-  - Continues normal operation`,
+  - Continues normal operation`, paths.ProjectDirName(), brand.Command("checkpoint")),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
 			log.SetOutput(io.Discard)
@@ -125,7 +125,7 @@ var tuiCmd = &cobra.Command{
 	Use:     "tui",
 	Aliases: []string{"watch"},
 	Short:   fmt.Sprintf("Interactive TUI dashboard for monitoring %s", brand.NameTitle),
-	Long: `Launch an interactive TUI dashboard that monitors the Liza blackboard.
+	Long: fmt.Sprintf(`Launch an interactive TUI dashboard that monitors the %s blackboard.
 
 The TUI provides:
   - Live dashboard with color-coded status indicators for agents and tasks
@@ -137,12 +137,13 @@ Use --headless for non-interactive monitoring (alerts to stderr + alerts.log).
 This is suitable for CI, cron, or running in a secondary terminal.
 
 Press '?' in the TUI for a full keybinding reference.`,
+		brand.NameTitle),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		headless, _ := cmd.Flags().GetBool("headless")
 
 		if !headless && !interactive.IsInteractive() {
 			headless = true
-			fmt.Fprintln(cmd.ErrOrStderr(), "liza: stdin is not a terminal, falling back to headless mode")
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s: stdin is not a terminal, falling back to headless mode\n", brand.BinaryName)
 		}
 
 		projectRoot, err := requireProjectRoot()
@@ -187,7 +188,7 @@ remain set. This command clears expired claims so other reviewers can claim the 
 Typically called by:
   - Code Reviewer supervisor on startup
   - Periodically by cron or monitoring
-  - liza-tui (though tui shouldn't mutate state by default)
+  - TUI dashboard (though tui shouldn't mutate state by default)
 
 Reports the number of claims cleared and logs each cleanup action.`,
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
@@ -228,7 +229,7 @@ Reports the number of claims cleared and logs each cleanup action.`,
 var pauseCmd = &cobra.Command{
 	Use:   "pause",
 	Short: fmt.Sprintf("Pause the %s system", brand.NameTitle),
-	Long: `Pause the Liza system by setting config.mode to PAUSED in state.yaml.
+	Long: fmt.Sprintf(`Pause the %s system by setting config.mode to PAUSED in state.yaml.
 
 Agents will detect the PAUSED mode and block at their next check. They will
 continue sending heartbeats but will not claim new tasks or make progress
@@ -239,7 +240,7 @@ This is useful for:
 - Investigating issues
 - Coordinated maintenance
 
-Use 'liza resume' to continue normal operation.`,
+Use '%s' to continue normal operation.`, brand.NameTitle, brand.Command("resume")),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reason, _ := cmd.Flags().GetString("reason")
 		changedBy := resolveChangedBy(cmd)
@@ -256,7 +257,7 @@ Use 'liza resume' to continue normal operation.`,
 var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: fmt.Sprintf("Stop the %s system", brand.NameTitle),
-	Long: `Stop the Liza system by setting config.mode to STOPPED in state.yaml.
+	Long: fmt.Sprintf(`Stop the %s system by setting config.mode to STOPPED in state.yaml.
 
 Agents will detect the STOPPED mode and exit cleanly at their next check.
 This provides a graceful shutdown of all agents.
@@ -268,7 +269,7 @@ This is different from pause:
 Use this for:
 - Ending a work session
 - System maintenance requiring agent restart
-- Shutting down before system updates`,
+- Shutting down before system updates`, brand.NameTitle),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reason, _ := cmd.Flags().GetString("reason")
 		changedBy := resolveChangedBy(cmd)
@@ -285,7 +286,7 @@ Use this for:
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: fmt.Sprintf("Start the %s system from STOPPED mode", brand.NameTitle),
-	Long: `Start the Liza system by setting config.mode to RUNNING in state.yaml.
+	Long: fmt.Sprintf(`Start the %s system by setting config.mode to RUNNING in state.yaml.
 
 This command transitions from STOPPED back to RUNNING mode.
 After starting, you must manually restart agent processes to resume work.
@@ -300,8 +301,8 @@ Use this for:
 - Recovering from a graceful shutdown
 
 After running this command, restart agents manually:
-  LIZA_AGENT_ID=coder-1 liza agent coder &
-  LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer &`,
+  %[2]s=coder-1 %[3]s &
+  %[2]s=code-reviewer-1 %[4]s &`, brand.NameTitle, brand.EnvName("AGENT_ID"), brand.Command("agent", "coder"), brand.Command("agent", "code-reviewer")),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reason, _ := cmd.Flags().GetString("reason")
 		changedBy := resolveChangedBy(cmd)
@@ -330,10 +331,10 @@ Cardinality modes:
   one-to-one   Creates a single child task. The parent task itself is the input.
                Child ID: <parent-id>-<transition-name>
 
-Available transitions are defined in the frozen pipeline config (.liza/pipeline.yaml).
-Use 'liza status' to see available transitions for tasks at terminal states.
+Available transitions are defined in the frozen pipeline config (` + paths.ProjectDirName() + `/pipeline.yaml).
+Use '` + brand.Command("status") + `' to see available transitions for tasks at terminal states.
 
-After running proceed, use 'liza resume' to start a new sprint with
+After running proceed, use '` + brand.Command("resume") + `' to start a new sprint with
 the child tasks.
 
 Idempotent: repeated calls for the same transition are rejected.
@@ -375,7 +376,7 @@ Preconditions:
 Example workflow:
   1. Planner produces output → sprint checkpoints at PLANNING_COMPLETE
   2. Human reviews and edits the plan markdown file
-  3. liza replan                    # auto-detect planning task
+  3. ` + brand.Command("replan") + `                    # auto-detect planning task
   4. Planner agent claims new task, re-reads plan, regenerates output`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -397,7 +398,7 @@ Example workflow:
 var resumeCmd = &cobra.Command{
 	Use:   "resume",
 	Short: fmt.Sprintf("Resume the %s system from PAUSED mode, CHECKPOINT, or COMPLETED sprint", brand.NameTitle),
-	Long: `Resume the Liza system by setting config.mode to RUNNING and sprint.status to IN_PROGRESS.
+	Long: fmt.Sprintf(`Resume the %s system by setting config.mode to RUNNING and sprint.status to IN_PROGRESS.
 
 This command can be used when:
 - System is in PAUSED mode (sets mode to RUNNING)
@@ -407,7 +408,7 @@ This command can be used when:
 Agents will detect the status changes and resume normal operation at their next check.
 
 If the system is STOPPED, agents must be restarted manually - resume
-cannot be used to restart stopped agents.`,
+cannot be used to restart stopped agents.`, brand.NameTitle),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		changedBy := resolveChangedBy(cmd)
 
@@ -432,10 +433,10 @@ This pauses all agents and generates a sprint summary report with:
 - Active agents
 - Anomalies and circuit breaker status
 
-The sprint summary is written to .liza/sprint_summary.md.
+The sprint summary is written to ` + paths.ProjectDirName() + `/sprint_summary.md.
 
 Agents will pause at their next check. After reviewing the summary,
-use 'liza resume' to continue the sprint.
+use '` + brand.Command("resume") + `' to continue the sprint.
 
 This is useful for:
 - Sprint review meetings
@@ -470,7 +471,7 @@ This is useful for:
 var getCmd = &cobra.Command{
 	Use:   "get <query>",
 	Short: "Query and get state data",
-	Long: `Query and retrieve Liza state data with flexible formatting.
+	Long: fmt.Sprintf(`Query and retrieve %s state data with flexible formatting.
 
 Query Types:
   Field queries:
@@ -498,20 +499,20 @@ Formats:
   --format value      - Key-value pairs (default for fields)
 
 Examples:
-  liza get config.mode
-  liza get sprint.elapsed
-  liza get tasks --format table
-  liza get tasks --active --summary --json
-  liza get tasks task-1 --output-summary --json
-  liza get tasks task-1 --format json
-  liza get task-1                  # Shorthand for tasks task-1
-  liza get fix-auth-bug            # Shorthand for tasks fix-auth-bug (any task ID)
-  liza get coder-1                 # Shorthand for agents coder-1
-  liza get code-reviewer-1         # Shorthand for agents code-reviewer-1
-  liza get agents --zombies        # Show live liza agent processes missing from state
-  liza get agents --format yaml
-  liza get metrics
-  liza get anomalies`,
+  %[2]s config.mode
+  %[2]s sprint.elapsed
+  %[2]s tasks --format table
+  %[2]s tasks --active --summary --json
+  %[2]s tasks task-1 --output-summary --json
+  %[2]s tasks task-1 --format json
+  %[2]s task-1                  # Shorthand for tasks task-1
+  %[2]s fix-auth-bug            # Shorthand for tasks fix-auth-bug (any task ID)
+  %[2]s coder-1                 # Shorthand for agents coder-1
+  %[2]s code-reviewer-1         # Shorthand for agents code-reviewer-1
+  %[2]s agents --zombies        # Show live %[3]s agent processes missing from state
+  %[2]s agents --format yaml
+  %[2]s metrics
+  %[2]s anomalies`, brand.NameTitle, brand.Command("get"), brand.BinaryName),
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -576,7 +577,7 @@ Examples:
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show system and task status at a glance",
-	Long: `Display a comprehensive overview of the Liza system state including:
+	Long: fmt.Sprintf(`Display a comprehensive overview of the %s system state including:
 - Goal and sprint progress
 - System mode (running, paused, stopped)
 - Task distribution and availability
@@ -592,10 +593,10 @@ Formats:
 Use --detailed to include anomalies and circuit breaker status.
 
 Examples:
-  liza status
-  liza status --format json
-  liza status --format yaml
-  liza status --detailed`,
+  %[2]s
+  %[2]s --format json
+  %[2]s --format yaml
+  %[2]s --detailed`, brand.NameTitle, brand.Command("status")),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -683,7 +684,7 @@ func init() {
 	getCmd.Flags().Bool("summary", false, "return compact task summaries")
 	getCmd.Flags().Bool("output-summary", false, "return compact task output summaries")
 	getCmd.Flags().Bool("active", false, "return only non-terminal tasks")
-	getCmd.Flags().Bool("zombies", false, "return live liza agent processes for this goal that are missing from state")
+	getCmd.Flags().Bool("zombies", false, fmt.Sprintf("return live %s agent processes for this goal that are missing from state", brand.BinaryName))
 
 	// Status command flags
 	statusCmd.Flags().String("format", "", "output format: json, yaml, or dashboard (default)")

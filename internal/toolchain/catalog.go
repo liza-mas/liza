@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 type Profile string
@@ -84,7 +86,7 @@ func Catalog() []Tool {
 			ID: "stacklit", Name: "Stacklit", Binary: "stacklit", Category: CategoryIndexing,
 			Purpose:     "Generates compact repository module and dependency maps.",
 			InstallKind: InstallScript, InstallURL: "https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh",
-			VersionArgs: []string{"--version"}, ActivationEnv: []string{"LIZA_ENABLE_STACKLIT=1"},
+			VersionArgs: []string{"--version"}, ActivationEnv: []string{brand.EnvName("ENABLE_STACKLIT") + "=1"},
 			BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
@@ -92,7 +94,7 @@ func Catalog() []Tool {
 			Purpose:     "Queries SCIP indexes for precise symbol, reference, and graph navigation.",
 			InstallKind: InstallScript, InstallURL: "https://raw.githubusercontent.com/liza-mas/scip-search/main/install.sh",
 			SourceRepo: "https://github.com/liza-mas/scip-search", SourcePackage: "./cmd/scip-search",
-			VersionArgs: []string{"--version"}, ActivationEnv: []string{"LIZA_ENABLE_SCIP_SEARCH=1"},
+			VersionArgs: []string{"--version"}, ActivationEnv: []string{brand.EnvName("ENABLE_SCIP_SEARCH") + "=1"},
 			BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
@@ -117,7 +119,7 @@ func Catalog() []Tool {
 			ID: "semble", Name: "Semble", Binary: "semble", Category: CategoryNavigation,
 			Purpose:     "Provides local semantic repository discovery.",
 			InstallKind: InstallUVTool, UVPackage: "semble",
-			VersionArgs: []string{"--help"}, ActivationEnv: []string{"LIZA_ENABLE_SEMBLE=1"},
+			VersionArgs: []string{"--help"}, ActivationEnv: []string{brand.EnvName("ENABLE_SEMBLE") + "=1"},
 			BalancedDefault: true, FullDefault: true,
 		},
 		{
@@ -174,7 +176,7 @@ func Catalog() []Tool {
 			Purpose:     "Builds advisory capability clusters from SCIP graph and Stacklit exports.",
 			InstallKind: InstallScript, InstallURL: "https://raw.githubusercontent.com/liza-mas/functional-clusters/main/install.sh",
 			VersionArgs: []string{"--version"}, FullDefault: true,
-			ActivationEnv: []string{"LIZA_ENABLE_FUNCTIONAL_CLUSTERS=1"},
+			ActivationEnv: []string{brand.EnvName("ENABLE_FUNCTIONAL_CLUSTERS") + "=1"},
 		},
 		{
 			ID: "bash-policy", Name: "Bash Policy", Binary: "bash-policy", Category: CategoryQuality,
@@ -182,7 +184,7 @@ func Catalog() []Tool {
 			InstallKind: InstallScript, InstallURL: "https://raw.githubusercontent.com/liza-mas/bash-policy/main/install.sh",
 			SourceRepo: "https://github.com/liza-mas/bash-policy", SourcePackage: "./cmd/bash-policy",
 			VersionArgs: []string{"--version"}, FullDefault: true,
-			ActivationEnv: []string{"LIZA_ENABLE_BASH_POLICY=1"},
+			ActivationEnv: []string{brand.EnvName("ENABLE_BASH_POLICY") + "=1"},
 		},
 		manualTool("filesystem-mcp", "filesystem MCP", "Batch local filesystem reads through provider MCP configuration."),
 		manualTool("context7", "context7 MCP", "Structured current library documentation lookup through MCP."),
@@ -199,7 +201,7 @@ func manualTool(id, name, purpose string) Tool {
 	return Tool{
 		ID: id, Name: name, Category: CategoryMCP, Purpose: purpose,
 		InstallKind: InstallManualOnly,
-		ManualNote:  "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+		ManualNote:  fmt.Sprintf("configure this capability in the active provider or MCP host; %s does not install credentials or provider-specific connectors", brand.NameTitle),
 	}
 }
 

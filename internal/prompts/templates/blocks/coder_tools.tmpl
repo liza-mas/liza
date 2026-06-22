@@ -1,19 +1,19 @@
 {{- define "coder-tools" -}}
 
 CODER TOOLS:
-- liza submit-for-review — Submit completed work for review
-  liza submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
+- {{binaryName}} submit-for-review — Submit completed work for review
+  {{binaryName}} submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
   Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then submit with HEAD. Do NOT submit the pre-change HEAD.
 {{template "await-verdict-loop" .}}
-- liza handoff — Context near exhaustion (~90%)
-  liza handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
-- liza mark-blocked — Cannot proceed (spec ambiguity, missing dependency)
-  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
+- {{binaryName}} handoff — Context near exhaustion (~90%)
+  {{binaryName}} handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
+- {{binaryName}} mark-blocked — Cannot proceed (spec ambiguity, missing dependency)
+  {{binaryName}} mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
   Add --depends-on "<task-id>" only when another concrete task blocks this task.
   If a command failure is the blocker, `--reason` MUST include the exact failing command and stderr/error text. Do NOT infer root cause without a captured failure.
   If the blocker requires an orchestrator-only repair, add --repair-operation, --repair-target, --repair-command, --repair-evidence, and --repair-validation.
-- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- {{binaryName}} write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {{binaryName}} write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
   Optional: --assumptions, --risks, --tdd-not-required, --scope-extensions
   scope_extensions: [{"file": "<path>", "justification": "<why this out-of-scope file must change>"}]
   If you need to modify a file outside the task scope, declare it as a scope_extension — not as an assumption.

@@ -6,13 +6,14 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/ops"
 )
 
-// buildRespawnArgs returns the argv for `liza agent <role> --agent-id <id> --cli <cli>`.
+// buildRespawnArgs returns the argv for the branded agent command.
 func buildRespawnArgs(role, agentID, cli string) []string {
 	return []string{
-		"liza", "agent", role,
+		brand.BinaryName, "agent", role,
 		"--agent-id", agentID,
 		"--cli", cli,
 	}
@@ -55,13 +56,13 @@ func RecoverAgentCommand(projectRoot, agentID string, force bool, cli, reason st
 
 		fmt.Printf("Respawning agent %s as %s with %s...\n", agentID, result.Role, cli)
 
-		// Build the liza agent command
+		// Build the branded agent command.
 		lizaBin, err := os.Executable()
 		if err != nil {
-			// Fall back to finding liza in PATH
-			lizaBin, err = exec.LookPath("liza")
+			// Fall back to finding the branded binary in PATH.
+			lizaBin, err = exec.LookPath(brand.BinaryName)
 			if err != nil {
-				return fmt.Errorf("cannot find liza binary: %w", err)
+				return fmt.Errorf("cannot find %s binary: %w", brand.BinaryName, err)
 			}
 		}
 

@@ -24,7 +24,7 @@ var userCustomizableFiles = map[string]bool{
 
 // SetupParams holds all parameters for the setup command.
 type SetupParams struct {
-	TargetDir      string    // target directory (typically ~/.liza/)
+	TargetDir      string    // target directory (typically the branded global directory)
 	Force          bool      // overwrite existing files
 	AgentToolsPath string    // path to custom AGENT_TOOLS.md (empty = use embedded)
 	Agents         []string  // agent names to create skill symlinks for (e.g. "claude", "codex", "opencode")
@@ -33,7 +33,7 @@ type SetupParams struct {
 }
 
 // SetupCommand performs one-time global setup by writing contracts and skills
-// to the target directory (typically ~/.liza/).
+// to the target directory.
 func SetupCommand(params SetupParams) error {
 	rawStdin := params.Stdin
 	if rawStdin == nil {
@@ -283,7 +283,7 @@ func printSetupSummary(targetDir string, written []string, skipFiles map[string]
 	}
 	if hasNonClaude {
 		fmt.Printf("\nSome agents require manual configuration.\n")
-		fmt.Printf("See: https://github.com/liza-mas/liza/blob/main/GETTING_STARTED.md\n")
+		fmt.Printf("See: https://github.com/%s/blob/main/GETTING_STARTED.md\n", brand.Repo)
 	}
 
 	docPath := relDisplay(targetDir, filepath.Join(targetDir, "support-docs", "CUSTOMIZING_AGENT_TOOLS.md"))
@@ -313,8 +313,8 @@ func backupFile(src string) error {
 
 // agentExtraLink describes an additional symlink to create beyond skills.
 type agentExtraLink struct {
-	target string // source path relative to lizaDir (e.g. "CORE.md")
-	name   string // destination path relative to configDir (e.g. "prompts/liza.md")
+	target string // source path relative to the global config dir (e.g. "CORE.md")
+	name   string // destination path relative to configDir
 }
 
 // agentConfig describes how to set up symlinks for a particular agent CLI.
@@ -326,28 +326,30 @@ type agentConfig struct {
 }
 
 // agentConfigs maps agent flag names to their configuration.
-var agentConfigs = map[string]agentConfig{
-	"claude":   {configDir: ".claude", skillsDir: "skills"},
-	"codex":    {configDir: ".codex", skillsDir: "skills"},
-	"opencode": {configDir: filepath.Join(".config", "opencode"), skillsDir: "skills"},
-	"gemini":   {configDir: ".gemini", skillsDir: "skills"},
-	"mistral": {
-		configDir: ".vibe",
-		skillsDir: "skills",
-		extraDirs: []string{"prompts"},
-		extraLinks: []agentExtraLink{
-			{target: "CORE.md", name: "prompts/liza.md"},
+func agentConfigs() map[string]agentConfig {
+	return map[string]agentConfig{
+		"claude":   {configDir: ".claude", skillsDir: "skills"},
+		"codex":    {configDir: ".codex", skillsDir: "skills"},
+		"opencode": {configDir: filepath.Join(".config", "opencode"), skillsDir: "skills"},
+		"gemini":   {configDir: ".gemini", skillsDir: "skills"},
+		"mistral": {
+			configDir: ".vibe",
+			skillsDir: "skills",
+			extraDirs: []string{"prompts"},
+			extraLinks: []agentExtraLink{
+				{target: "CORE.md", name: filepath.Join("prompts", brand.CanonicalMistralPromptID+".md")},
+			},
 		},
-	},
+	}
 }
 
 // setupAgentSymlinks creates skill symlinks in each agent's config directory.
-// For each agent, it symlinks every entry in lizaDir/skills/ into the agent's
+// For each agent, it symlinks every entry in the global skills directory into the agent's
 // skills directory, plus any extra links defined in the agent config.
 func setupAgentSymlinks(homeDir, lizaDir string, agents []string, reader *bufio.Reader) error {
 
 	for _, agent := range agents {
-		cfg, ok := agentConfigs[agent]
+		cfg, ok := agentConfigs()[agent]
 		if !ok {
 			return fmt.Errorf("unknown agent: %s", agent)
 		}
@@ -453,7 +455,7 @@ func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, prom
 	return nil
 }
 
-// relDisplay returns a display path like "~/.liza/CORE.md" using the targetDir as prefix.
+// relDisplay returns a display path using the targetDir as prefix.
 func relDisplay(targetDir, path string) string {
 	rel, err := filepath.Rel(targetDir, path)
 	if err != nil {

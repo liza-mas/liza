@@ -79,8 +79,8 @@ Include this assessment in your rejection reason if rejecting.
 {{- end}}
 
 POST-VERDICT (MANDATORY for REJECTED):
-After submitting a REJECTED verdict, MUST run liza await-resubmission immediately:
-   liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
+After submitting a REJECTED verdict, MUST run {{binaryName}} await-resubmission immediately:
+   {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
 Do NOT exit. It blocks ~100s per call, returning POLL with remaining timeout_seconds.
 If the harness backgrounds await-resubmission and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.
 - RESUBMITTED: discard prompt-time BASE COMMIT / REVIEW_COMMIT and re-review using the returned base_commit..review_commit boundary
@@ -97,9 +97,9 @@ REVIEW CHECKLIST:
 | Dependency order | Tasks have circular or missing dependencies |
 | Shared-file dependency | Two tasks modify the same file but lack depends_on between them — parallel coders will hit merge conflicts |
 | Spec compliance matrix | Plan has no "## Spec Compliance Matrix" section, or matrix has GAP rows, or matrix omits spec requirements, or matrix task mappings are inaccurate |
-| output[] populated | Task has no output[] entries (planner must call liza set-task-output --json) |
+| output[] populated | Task has no output[] entries (planner must call {{binaryName}} set-task-output --json) |
 | Plan file location | Plan artifact not in diff at specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md |
-| Task-output JSON location | Task-output JSON artifact missing from diff next to the plan artifact at specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}-output.json, or any committed task-output JSON appears under .liza/agent-outputs/ |
+| Task-output JSON location | Task-output JSON artifact missing from diff next to the plan artifact at specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}-output.json, or any committed task-output JSON appears under {{projectDirName}}/agent-outputs/ |
 | output[] matches plan | For each output[] entry, compare desc, done_when, scope, spec_ref, validation, depends_on, and task_depends_on against the plan artifact in the worktree — they must be identical, not paraphrased or extended |
 | validation satisfiable | An output[] validation command can exit 0 without exercising its intended check, or hook/check intent is not declared in durable plan/task text |
 | validation command shape | A validation[] command is not single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. |
@@ -151,10 +151,10 @@ REVIEW PHASE:
    d. Task mappings correct (listed task(s) actually address the requirement).
    Do NOT trust the matrix at face value — independently verify against the spec.
 5. Validate done_when criteria are satisfied.
-6. Verify output[] entries: run liza get {{.TaskID}} --json and confirm
+6. Verify output[] entries: run {{binaryName}} get {{.TaskID}} --json and confirm
    output[] has one entry per planned coding task with valid desc, done_when, scope, spec_ref, any declared validation with durable check/hook intent, and task_depends_on.
 7. Verify each proposed coding task passes the review checklist above.
-8. Submit verdict with liza submit-verdict.
+8. Submit verdict with {{binaryName}} submit-verdict.
 {{- else if eq .Role "epic-plan-reviewer"}}
 
 EPIC-WRITING SKILL:
@@ -203,12 +203,12 @@ REVIEW PHASE:
    git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}} -- <path>
    If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
 5. Validate done_when criteria are satisfied.
-6. Verify output[] entries: run liza get {{.TaskID}} --json and confirm
+6. Verify output[] entries: run {{binaryName}} get {{.TaskID}} --json and confirm
    output[] has one entry per capability with valid desc, done_when, scope, spec_ref, epic_ref, any declared validation with durable check/hook intent, and task_depends_on.
    Verify: spec_ref equals the task's own spec_ref (goal spec reference, same for all entries).
    Verify: each epic_ref is the epic document path with a #section-anchor matching the capability heading.
 7. Check each proposed capability against the review checklist and anti-pattern table above.
-8. Submit verdict with liza submit-verdict.
+8. Submit verdict with {{binaryName}} submit-verdict.
 {{- else if eq .Role "us-reviewer"}}
 
 SPEC-REVIEW SKILL:
@@ -283,7 +283,7 @@ CANONICAL VALIDATION:
 
 DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- end}}
-10. Submit verdict with liza submit-verdict.
+10. Submit verdict with {{binaryName}} submit-verdict.
 {{- else if eq .Role "architecture-reviewer"}}
 
 REVIEW CHECKLIST:
@@ -337,10 +337,10 @@ REVIEW PHASE:
    If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
 5. Read the architecture document in the worktree (look for the arch doc in specs/arch-plan/{{.GoalSlug}}/).
 6. Validate the decomposition: does it cover the full scope of the goal spec?
-7. Verify output[] entries: run liza get {{.TaskID}} --json and confirm
+7. Verify output[] entries: run {{binaryName}} get {{.TaskID}} --json and confirm
    output[] has one entry per code-planning scope with valid desc, done_when, scope, spec_ref, arch_ref, any declared validation with durable check/hook intent, and task_depends_on.
 8. Check each proposed scope against the review checklist above.
-9. Submit verdict with liza submit-verdict.
+9. Submit verdict with {{binaryName}} submit-verdict.
 {{- else if eq .Role "integration-reviewer"}}
 
 REVIEW SCOPE:
@@ -357,7 +357,7 @@ INSTRUCTIONS:
 3. Read the branch diff by targeted path/hunk, not by unbounded full diff:
    git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD -- <path>
    If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
-4. Review the analyst's output[]: liza get {{.TaskID}} --json
+4. Review the analyst's output[]: {{binaryName}} get {{.TaskID}} --json
    For each proposed fix-task:
    a. Verify the finding is real (confirmed by the diff, not fabricated)
    b. Verify the fix-task is well-formed: single intent, falsifiable done_when, correct scope
@@ -381,8 +381,8 @@ Include this assessment in your rejection reason if rejecting.
 {{- end}}
 
 POST-VERDICT (MANDATORY for REJECTED):
-After submitting a REJECTED verdict, MUST run liza await-resubmission immediately:
-   liza await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
+After submitting a REJECTED verdict, MUST run {{binaryName}} await-resubmission immediately:
+   {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
 Do NOT exit. It blocks ~100s per call, returning POLL with remaining timeout_seconds.
 If the harness backgrounds await-resubmission and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.
 - RESUBMITTED: discard prompt-time BASE COMMIT / REVIEW_COMMIT and re-review using the returned base_commit..review_commit boundary

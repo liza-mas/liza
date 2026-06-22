@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
@@ -49,7 +50,7 @@ func Handoff(input *HandoffInput) (*HandoffResult, error) {
 		return nil, &PreconditionError{Reason: "next action is required"}
 	}
 	if input.AgentID == "" {
-		return nil, &PreconditionError{Reason: "LIZA_AGENT_ID is required"}
+		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
 	}
 
 	lp := paths.New(input.ProjectRoot)

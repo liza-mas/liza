@@ -21,7 +21,7 @@ const (
 )
 
 // AgentProcessStatus reports both process existence and whether the process
-// identity matches the registered Liza agent row.
+// identity matches the registered agent row.
 type AgentProcessStatus struct {
 	State  AgentProcessState
 	Source string
@@ -57,7 +57,7 @@ func (s AgentProcessStatus) DisplayStatus() string {
 	}
 }
 
-// AgentProcessStatusForPID checks whether pid identifies the expected Liza agent
+// AgentProcessStatusForPID checks whether pid identifies the expected agent
 // supervisor. Procfs identity is authoritative when available; signal(0) is used
 // only to distinguish dead from unknown/unavailable process identity.
 func AgentProcessStatusForPID(pid int, role, agentID, procRoot string) AgentProcessStatus {
@@ -80,14 +80,14 @@ func AgentProcessStatusForPID(pid int, role, agentID, procRoot string) AgentProc
 			return AgentProcessStatus{
 				State:  AgentProcessLiveMatching,
 				Source: "procfs",
-				Detail: "cmdline matches expected liza agent supervisor",
+				Detail: "cmdline matches expected agent supervisor",
 				Alive:  true,
 			}
 		}
 		return AgentProcessStatus{
 			State:  AgentProcessMismatched,
 			Source: "procfs",
-			Detail: "pid exists but cmdline does not match expected liza agent supervisor",
+			Detail: "pid exists but cmdline does not match expected agent supervisor",
 			Alive:  true,
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -41,7 +42,7 @@ func ValidateCommand(statePath string, skipSpecFileCheck bool) error {
 }
 
 // ValidateCommandWithOptions validates state.yaml and, by default, verifies
-// that no live liza agent supervisor for this project/goal is missing from
+// that no live agent supervisor for this project/goal is missing from
 // state.yaml. Process validation is host-local and intentionally skippable for
 // archived/offline state validation.
 func ValidateCommandWithOptions(statePath string, opts ValidateOptions) error {
@@ -100,11 +101,11 @@ func validateNoZombieAgents(state *models.State, projectRoot string, warnings io
 		RegisteredPIDs: registeredAgentPIDs(state),
 	})
 	if stderrors.Is(err, procscan.ErrProcessScanUnavailable) {
-		fmt.Fprintln(warnings, "WARNING: Live liza agent process scan skipped (procfs unavailable on this host)")
+		fmt.Fprintf(warnings, "WARNING: Live %s agent process scan skipped (procfs unavailable on this host)\n", brand.BinaryName)
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("scan liza agent processes: %w", err)
+		return fmt.Errorf("scan %s agent processes: %w", brand.BinaryName, err)
 	}
 	if len(zombies) == 0 {
 		return nil
@@ -118,7 +119,7 @@ func validateNoZombieAgents(state *models.State, projectRoot string, warnings io
 		}
 		parts = append(parts, fmt.Sprintf("pid %d role %s", zombie.PID, role))
 	}
-	return fmt.Errorf("zombie liza agent process detected: %s not registered in state.yaml (use 'liza get agents --zombies' to inspect, or 'liza validate --skip-process-checks' for offline validation)", strings.Join(parts, ", "))
+	return fmt.Errorf("zombie %s agent process detected: %s not registered in state.yaml (use %q to inspect, or %q for offline validation)", brand.BinaryName, strings.Join(parts, ", "), brand.Command("get", "agents", "--zombies"), brand.Command("validate", "--skip-process-checks"))
 }
 
 func validateAgentInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool) error {

@@ -88,9 +88,13 @@ var pipelineConfigContent []byte
 
 const supportDocEmbeddedPath = "support-docs/SUPPORT.md"
 
+const openCodeExecToolManagedHeaderTemplate = "// __BRAND_NAME_UPPER__ MANAGED FILE: OpenCode exec compatibility tool. Safe for __BRAND_NAME_TITLE__ to overwrite."
+
 // OpenCodeExecToolManagedHeader identifies the project-local OpenCode exec
-// compatibility tool as owned by Liza.
-const OpenCodeExecToolManagedHeader = "// LIZA MANAGED FILE: OpenCode exec compatibility tool. Safe for Liza to overwrite."
+// compatibility tool as owned by the current brand.
+func OpenCodeExecToolManagedHeader() string {
+	return string(renderEmbeddedAsset([]byte(openCodeExecToolManagedHeaderTemplate)))
+}
 
 // OpenCodeExecToolContent returns the embedded OpenCode exec compatibility tool.
 func OpenCodeExecToolContent() []byte {
@@ -230,8 +234,8 @@ func writeEmbeddedFS(embeddedFS embed.FS, targetDir string, skipFiles map[string
 
 // PrependFrontmatter merges version metadata into existing YAML frontmatter,
 // or prepends a new frontmatter block if none exists.
-// Existing non-liza fields (e.g., skill name/description) are preserved;
-// old liza_* fields are replaced with current build values.
+// Existing non-brand fields (e.g., skill name/description) are preserved;
+// old brand metadata fields are replaced with current build values.
 func PrependFrontmatter(content []byte) []byte {
 	prefix := []byte("---\n")
 	if !bytes.HasPrefix(content, prefix) {
@@ -247,8 +251,9 @@ func PrependFrontmatter(content []byte) []byte {
 	existingBlock := string(existingBlockBytes)
 
 	var kept []string
+	metadataPrefix := brand.MetadataPrefix() + "_"
 	for line := range strings.SplitSeq(existingBlock, "\n") {
-		if !strings.HasPrefix(line, "liza_") {
+		if !strings.HasPrefix(line, "liza_") && !strings.HasPrefix(line, metadataPrefix) {
 			kept = append(kept, line)
 		}
 	}
@@ -288,10 +293,12 @@ func stripFrontmatter(content []byte) []byte {
 	return after
 }
 
-// versionFields returns the liza_* key-value lines without YAML delimiters.
+// versionFields returns the brand-prefixed key-value lines without YAML delimiters.
 func versionFields() string {
-	return fmt.Sprintf("liza_version: \"%s\"\nliza_git_commit: \"%s\"\nliza_build_date: \"%s\"\n",
-		Version, GitCommit, BuildDate)
+	return fmt.Sprintf("%s: \"%s\"\n%s: \"%s\"\n%s: \"%s\"\n",
+		brand.MetadataKey("version"), Version,
+		brand.MetadataKey("git_commit"), GitCommit,
+		brand.MetadataKey("build_date"), BuildDate)
 }
 
 // frontmatter generates a complete YAML frontmatter block from build-time variables.
@@ -370,7 +377,7 @@ func WriteClaudeSettings(projectRoot string, reader *bufio.Reader) error {
 
 	var existingSettings map[string]any
 	if existingData, err := os.ReadFile(settingsPath); err == nil {
-		ok, err := confirmMerge("Should the Liza claude settings be merged into the existing settings file? (y/n): ", reader)
+		ok, err := confirmMerge(fmt.Sprintf("Should the %s claude settings be merged into the existing settings file? (y/n): ", brand.NameTitle), reader)
 		if err != nil {
 			return err
 		}
@@ -459,7 +466,7 @@ func WriteCodexProjectPermissions(projectRoot string, reader *bufio.Reader) erro
 		return nil
 	}
 
-	ok, err := confirmMerge("Should Liza update ~/.codex/config.toml with this project's Codex permissions? (y/n): ", reader)
+	ok, err := confirmMerge(fmt.Sprintf("Should %s update ~/.codex/config.toml with this project's Codex permissions? (y/n): ", brand.NameTitle), reader)
 	if err != nil {
 		return err
 	}
@@ -559,7 +566,7 @@ func prepareCodexHooksFeature(configPath string, reader *bufio.Reader) (bool, st
 		return true, "", nil
 	}
 
-	ok, err := confirmMerge("Should Liza enable Codex hooks in .codex/config.toml? (y/n): ", reader)
+	ok, err := confirmMerge(fmt.Sprintf("Should %s enable Codex hooks in .codex/config.toml? (y/n): ", brand.NameTitle), reader)
 	if err != nil {
 		return false, "", err
 	}
@@ -602,7 +609,7 @@ func renderCodexHooksJSON(hooksPath string, reader *bufio.Reader) ([]byte, bool,
 
 	finalHooks := lizaHooks
 	if existingData, err := os.ReadFile(hooksPath); err == nil {
-		ok, err := confirmMerge("Should the Liza Codex hooks be merged into .codex/hooks.json? (y/n): ", reader)
+		ok, err := confirmMerge(fmt.Sprintf("Should the %s Codex hooks be merged into .codex/hooks.json? (y/n): ", brand.NameTitle), reader)
 		if err != nil {
 			return nil, false, err
 		}
@@ -986,7 +993,7 @@ func warnIncompleteCodexBaseline(content string) {
 	if codexBaselineLooksComplete(content) {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "Warning: Codex config is missing part of the recommended Liza baseline. For the full recommended Codex setup, see support-docs/CONFIGURATION.md#codex-project-permissions.")
+	fmt.Fprintf(os.Stderr, "Warning: Codex config is missing part of the recommended %s baseline. For the full recommended Codex setup, see support-docs/CONFIGURATION.md#codex-project-permissions.\n", brand.NameTitle)
 }
 
 func codexBaselineLooksComplete(content string) bool {
@@ -1348,7 +1355,7 @@ func WriteClaudeIgnore(projectRoot string, reader *bufio.Reader) error {
 		if reader == nil {
 			return nil
 		}
-		ok, err := confirmMerge(".claudeignore already exists. Overwrite with Liza template? (y/n): ", reader)
+		ok, err := confirmMerge(fmt.Sprintf(".claudeignore already exists. Overwrite with %s template? (y/n): ", brand.NameTitle), reader)
 		if err != nil {
 			return err
 		}
@@ -1440,7 +1447,7 @@ func WriteOpenCodeExecTool(projectRoot string) error {
 	toolPath := filepath.Join(projectRoot, ".opencode", "tools", "exec.ts")
 	existing, err := os.ReadFile(toolPath)
 	if err == nil {
-		if !bytes.HasPrefix(existing, []byte(OpenCodeExecToolManagedHeader)) {
+		if !bytes.HasPrefix(existing, []byte(OpenCodeExecToolManagedHeader())) {
 			return nil
 		}
 	} else if !os.IsNotExist(err) {

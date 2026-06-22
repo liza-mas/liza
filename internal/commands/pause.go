@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/ops"
 )
 
@@ -16,7 +17,7 @@ func PauseCommand(projectRoot, reason, changedBy string) error {
 
 	printModeChangeResult("System paused", result,
 		"Agents will pause at their next check.",
-		"Use 'liza resume' to continue.",
+		fmt.Sprintf("Use '%s' to continue.", brand.Command("resume")),
 	)
 	return nil
 }

@@ -58,7 +58,7 @@ type InitParams struct {
 }
 
 // InitAgentRepoSymlinks maps agent flag names to the repo-root symlink filename.
-// These symlinks point to ~/.liza/CORE.md and enable pairing mode.
+// These symlinks point to the global CORE.md and enable pairing mode.
 // Codex and OpenCode intentionally share AGENTS.md; provider-specific global
 // fallbacks remain separate when a brownfield repo already owns that file.
 var InitAgentRepoSymlinks = map[string]string{
@@ -87,10 +87,10 @@ type InitPairingParams struct {
 }
 
 // InitPairingCommand creates agent-specific contract symlinks without
-// initializing a full Liza workspace. This enables pairing mode.
+// initializing a full branded workspace. This enables pairing mode.
 //
-// For claude/codex/gemini: creates repo-root symlinks (e.g. CLAUDE.md → ~/.liza/CORE.md).
-// For mistral: creates ~/.vibe/prompts/liza.md → ~/.liza/CORE.md and sets system_prompt_id in config.toml.
+// For claude/codex/gemini: creates repo-root symlinks (e.g. CLAUDE.md → CORE.md).
+// For mistral: creates a prompt symlink and sets system_prompt_id in config.toml.
 func InitPairingCommand(params InitPairingParams) error {
 	rawStdin := params.Stdin
 	if rawStdin == nil {
@@ -302,14 +302,14 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 
 	fileName, ok := InitAgentRepoSymlinks[effectiveCLI]
 	if !ok {
-		// Mistral uses ~/.vibe/prompts/liza.md instead of a repo-root symlink
+		// Mistral uses a global prompt symlink instead of a repo-root symlink.
 		if effectiveCLI == "mistral" {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				return ""
 			}
 			contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
-			mistralPath := filepath.Join(homeDir, ".vibe", "prompts", "liza.md")
+			mistralPath := filepath.Join(homeDir, ".vibe", "prompts", brand.CanonicalMistralPromptID+".md")
 			if isLizaSymlink(mistralPath, contractTarget) {
 				return mistralPath
 			}
@@ -483,7 +483,7 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 	}
 }
 
-// setupMistralContract creates ~/.vibe/prompts/liza.md → CORE.md and sets system_prompt_id in config.toml.
+// setupMistralContract creates a Mistral prompt symlink to CORE.md and sets system_prompt_id in config.toml.
 func setupMistralContract(coreFile string, reader *bufio.Reader) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -496,32 +496,35 @@ func setupMistralContract(coreFile string, reader *bufio.Reader) error {
 		return fmt.Errorf("failed to create %s: %w", promptsDir, err)
 	}
 
-	// Create prompts/liza.md symlink (with confirmation for overwrites)
-	linkPath := filepath.Join(promptsDir, "liza.md")
+	promptID := brand.CanonicalMistralPromptID
+
+	// Create prompts/<prompt-id>.md symlink (with confirmation for overwrites)
+	linkPath := filepath.Join(promptsDir, promptID+".md")
 	if err := createSymlinkIdempotent(coreFile, linkPath, reader, true); err != nil {
-		return fmt.Errorf("failed to create liza.md symlink: %w", err)
+		return fmt.Errorf("failed to create %s.md symlink: %w", promptID, err)
 	}
 
-	// Update config.toml: system_prompt_id = "liza"
+	// Update config.toml with the canonical provider prompt ID.
 	configPath := filepath.Join(vibeDir, "config.toml")
-	if err := setMistralSystemPrompt(configPath, reader); err != nil {
+	if err := setMistralSystemPrompt(configPath, reader, promptID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// setMistralSystemPrompt ensures system_prompt_id = "liza" in ~/.vibe/config.toml.
+// setMistralSystemPrompt ensures system_prompt_id is set in ~/.vibe/config.toml.
 // Prompts user before modifying an existing file.
-func setMistralSystemPrompt(configPath string, reader *bufio.Reader) error {
+func setMistralSystemPrompt(configPath string, reader *bufio.Reader, promptID string) error {
+	promptLine := fmt.Sprintf("system_prompt_id = %q", promptID)
 	content, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Create new config with just the prompt ID — no confirmation needed
-			if err := os.WriteFile(configPath, []byte("system_prompt_id = \"liza\"\n"), 0644); err != nil {
+			if err := os.WriteFile(configPath, []byte(promptLine+"\n"), 0644); err != nil {
 				return fmt.Errorf("failed to create %s: %w", configPath, err)
 			}
-			fmt.Printf("Created %s with system_prompt_id = \"liza\"\n", configPath)
+			fmt.Printf("Created %s with %s\n", configPath, promptLine)
 			return nil
 		}
 		return fmt.Errorf("failed to read %s: %w", configPath, err)
@@ -530,14 +533,14 @@ func setMistralSystemPrompt(configPath string, reader *bufio.Reader) error {
 	text := string(content)
 
 	// Already set correctly
-	if strings.Contains(text, `system_prompt_id = "liza"`) {
-		fmt.Printf("%s: system_prompt_id already set to \"liza\"\n", configPath)
+	if strings.Contains(text, promptLine) {
+		fmt.Printf("%s: system_prompt_id already set to %q\n", configPath, promptID)
 		return nil
 	}
 
 	// Needs modification — ask user
-	fmt.Fprintf(os.Stderr, "%s exists and system_prompt_id is not set to \"liza\".\n", configPath)
-	fmt.Fprintf(os.Stderr, "Set system_prompt_id = \"liza\"? (y/n): ")
+	fmt.Fprintf(os.Stderr, "%s exists and system_prompt_id is not set to %q.\n", configPath, promptID)
+	fmt.Fprintf(os.Stderr, "Set system_prompt_id = %q? (y/n): ", promptID)
 	response, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping config.toml update\n")
@@ -555,7 +558,7 @@ func setMistralSystemPrompt(configPath string, reader *bufio.Reader) error {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "system_prompt_id") && strings.Contains(trimmed, "=") {
-			lines[i] = `system_prompt_id = "liza"`
+			lines[i] = promptLine
 			found = true
 			break
 		}
@@ -563,13 +566,13 @@ func setMistralSystemPrompt(configPath string, reader *bufio.Reader) error {
 
 	if !found {
 		// Prepend to file
-		lines = append([]string{`system_prompt_id = "liza"`}, lines...)
+		lines = append([]string{promptLine}, lines...)
 	}
 
 	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
-	fmt.Printf("%s: set system_prompt_id = \"liza\"\n", configPath)
+	fmt.Printf("%s: set system_prompt_id = %q\n", configPath, promptID)
 	return nil
 }
 
@@ -1045,7 +1048,7 @@ func InitCommandWithConfig(params InitParams) error {
 	}
 	if hasNonClaude {
 		fmt.Println("Some agents require manual configuration.")
-		fmt.Println("See: https://github.com/liza-mas/liza/blob/main/GETTING_STARTED.md")
+		fmt.Printf("See: https://github.com/%s/blob/main/GETTING_STARTED.md\n", brand.Repo)
 	}
 
 	return nil

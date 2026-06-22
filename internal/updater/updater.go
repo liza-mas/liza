@@ -21,20 +21,21 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 	"golang.org/x/mod/semver"
 )
 
 const (
-	modulePath = "github.com/liza-mas/liza"
+	canonicalRepo = "liza-mas/liza"
 
 	channelStable = "stable"
 	channelMain   = "main"
 
-	channelEnvName = "LIZA_UPDATE_CHANNEL"
-	checkEnvName   = "LIZA_CHECK_UPDATE"
-	skipEnvName    = "LIZA_SKIP_AUTO_UPDATE"
-	updatePrefs    = "update.json"
+	channelEnvSuffix = "UPDATE_CHANNEL"
+	checkEnvSuffix   = "CHECK_UPDATE"
+	skipEnvSuffix    = "SKIP_AUTO_UPDATE"
+	updatePrefs      = "update.json"
 )
 
 // FatalError represents a fatal CLI input/config error that should exit
@@ -71,10 +72,8 @@ type Config struct {
 	CheckDisabled  func() bool
 	DisableCheck   func() error
 	Reexec         func(string, []string, []string) error
-	// ReleaseBaseURL allows test override of the release archive base URL.
-	// In production, this is always the canonical GitHub releases URL.
-	// The checksum URL is always fetched from the canonical GitHub releases URL
-	// to maintain trust chain integrity.
+	// ReleaseBaseURL overrides the archive download base for this run.
+	// When empty, archive and checksum URLs use the compiled brand defaults.
 	ReleaseBaseURL string
 	// VerifyInstall runs post-install verification (e.g., binary version check).
 	// If nil, verification is skipped.
@@ -90,6 +89,10 @@ type moduleInfo struct {
 
 type releaseInfo struct {
 	TagName string `json:"tag_name"`
+}
+
+type commitInfo struct {
+	SHA string `json:"sha"`
 }
 
 type compareInfo struct {
@@ -136,7 +139,7 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 			return err
 		}
 		// Non-fatal lookup failures: log to stderr and continue
-		fmt.Fprintf(cfg.Stderr, "liza: update check failed: %v\n", err)
+		fmt.Fprintf(cfg.Stderr, "%s: update check failed: %v\n", cliPrefix(), err)
 		return nil
 	}
 	if next.Ref == "" {
@@ -151,7 +154,7 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 
 	target, err := cfg.InstallTarget()
 	if err != nil {
-		fmt.Fprintf(cfg.Stderr, "liza: find install target failed: %v\n", err)
+		fmt.Fprintf(cfg.Stderr, "%s: find install target failed: %v\n", cliPrefix(), err)
 		return nil
 	}
 	fmt.Fprintln(cfg.Stderr, installPlan(next, target))
@@ -162,16 +165,16 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 
 	rollback, err := prepareInstallRollback(target)
 	if err != nil {
-		fmt.Fprintf(cfg.Stderr, "liza: prepare update rollback failed: %v\n", err)
+		fmt.Fprintf(cfg.Stderr, "%s: prepare update rollback failed: %v\n", cliPrefix(), err)
 		return nil
 	}
 	defer rollback.cleanup()
 
 	if err := cfg.Install(installCtx, next, target, cfg.Stderr, cfg.Stderr); err != nil {
 		if restoreErr := rollback.restore(target); restoreErr != nil {
-			fmt.Fprintf(cfg.Stderr, "liza: restore previous install failed: %v\n", restoreErr)
+			fmt.Fprintf(cfg.Stderr, "%s: restore previous install failed: %v\n", cliPrefix(), restoreErr)
 		}
-		fmt.Fprintf(cfg.Stderr, "liza: update install failed: %v\n", err)
+		fmt.Fprintf(cfg.Stderr, "%s: update install failed: %v\n", cliPrefix(), err)
 		return nil
 	}
 
@@ -180,17 +183,17 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 		verifyCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		if err := cfg.VerifyInstall(verifyCtx, target, cfg.Stderr); err != nil {
-			fmt.Fprintf(cfg.Stderr, "liza: post-install verification failed: %v\n", err)
+			fmt.Fprintf(cfg.Stderr, "%s: post-install verification failed: %v\n", cliPrefix(), err)
 			if restoreErr := rollback.restore(target); restoreErr != nil {
-				fmt.Fprintf(cfg.Stderr, "liza: restore previous install failed: %v\n", restoreErr)
+				fmt.Fprintf(cfg.Stderr, "%s: restore previous install failed: %v\n", cliPrefix(), restoreErr)
 			}
-			fmt.Fprintf(cfg.Stderr, "liza: falling through to original command without reexec\n")
+			fmt.Fprintf(cfg.Stderr, "%s: falling through to original command without reexec\n", cliPrefix())
 			return nil
 		}
 	}
 
 	args := reexecArgs(cfg.Args)
-	env := setEnv(cfg.Env, skipEnvName, "1")
+	env := setEnv(cfg.Env, brand.EnvName(skipEnvSuffix), "1")
 	return cfg.Reexec(target, args, env)
 }
 
@@ -246,7 +249,7 @@ func lookupCandidate(ctx context.Context, cfg Config) (candidate, error) {
 }
 
 func LatestModuleVersion(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/liza-mas/liza/releases/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubLatestReleaseURL(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -266,11 +269,23 @@ func LatestModuleVersion(ctx context.Context) (string, error) {
 }
 
 func MainCommit(ctx context.Context) (string, error) {
-	out, err := runOutput(ctx, "go", "list", "-m", "-json", modulePath+"@main")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubMainCommitURL(), nil)
 	if err != nil {
 		return "", err
 	}
-	return parseMainCommit(out)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("lookup main commit: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("lookup main commit: HTTP %s", resp.Status)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read main commit response: %w", err)
+	}
+	return parseMainCommit(data)
 }
 
 func MainCommitAhead(ctx context.Context, current, latest string) (bool, error) {
@@ -280,7 +295,7 @@ func MainCommitAhead(ctx context.Context, current, latest string) (bool, error) 
 		return false, nil
 	}
 
-	url := fmt.Sprintf("https://api.github.com/repos/liza-mas/liza/compare/%s...%s", current, latest)
+	url := githubCompareURL(current, latest)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return false, err
@@ -331,7 +346,7 @@ func InstallWithBaseURL(ctx context.Context, next candidate, target string, stdo
 func InstallTarget() (string, error) {
 	path, err := os.Executable()
 	if err != nil {
-		if found, lookErr := exec.LookPath("liza"); lookErr == nil {
+		if found, lookErr := exec.LookPath(binaryName()); lookErr == nil {
 			return found, nil
 		}
 		return "", err
@@ -385,7 +400,7 @@ func installReleaseBinaryWithChecksumBase(ctx context.Context, version, target s
 	}
 
 	versionBare := strings.TrimPrefix(version, "v")
-	archiveName := fmt.Sprintf("liza-%s-%s-%s.tar.gz", versionBare, runtime.GOOS, runtime.GOARCH)
+	archiveName := releaseArchiveName(versionBare, runtime.GOOS, runtime.GOARCH)
 	expectedChecksum, ok := checksums[archiveName]
 	if !ok {
 		return fmt.Errorf("checksum not found for %s", archiveName)
@@ -400,12 +415,26 @@ func installReleaseBinaryWithChecksumBase(ctx context.Context, version, target s
 
 func releaseArchiveURL(version, goos, goarch string, releaseBaseURL string) string {
 	versionBare := strings.TrimPrefix(version, "v")
-	archive := fmt.Sprintf("liza-%s-%s-%s.tar.gz", versionBare, goos, goarch)
+	archive := releaseArchiveName(versionBare, goos, goarch)
 	baseURL := strings.TrimRight(releaseBaseURL, "/")
 	if baseURL == "" {
-		baseURL = "https://github.com/liza-mas/liza/releases/download"
+		baseURL = brand.ReleaseBaseURL
+		if baseURL == "" {
+			baseURL = "https://github.com/liza-mas/liza/releases/download"
+		}
 	}
 	return fmt.Sprintf("%s/%s/%s", baseURL, version, archive)
+}
+
+func releaseArchiveName(versionBare, goos, goarch string) string {
+	prefix := brand.ArchivePrefix
+	if prefix == "" {
+		prefix = brand.BinaryName
+	}
+	if prefix == "" {
+		prefix = "liza"
+	}
+	return fmt.Sprintf("%s-%s-%s-%s.tar.gz", prefix, versionBare, goos, goarch)
 }
 
 func checksumURL(version string) string {
@@ -413,11 +442,14 @@ func checksumURL(version string) string {
 }
 
 func checksumURLWithBase(version, checksumBaseURL string) string {
-	// Always fetch checksums from the canonical GitHub releases URL
-	// to maintain trust chain integrity, regardless of any archive mirror.
+	// Fetch checksums from the configured checksum base, independent from any
+	// archive mirror override.
 	baseURL := strings.TrimRight(checksumBaseURL, "/")
 	if baseURL == "" {
-		baseURL = "https://github.com/liza-mas/liza/releases/download"
+		baseURL = brand.ChecksumBaseURL
+		if baseURL == "" {
+			baseURL = "https://github.com/liza-mas/liza/releases/download"
+		}
 	}
 	return fmt.Sprintf("%s/%s/checksums.txt", baseURL, version)
 }
@@ -478,14 +510,14 @@ func installBinaryFromTarGz(r io.Reader, target string) error {
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
-			return fmt.Errorf("release archive does not contain liza binary")
+			return fmt.Errorf("release archive does not contain %s binary", expectedArchiveBinaryName())
 		}
 		if err != nil {
 			return fmt.Errorf("read release tar: %w", err)
 		}
 
-		// Only accept regular files named exactly "liza" by basename
-		if filepath.Base(header.Name) != "liza" {
+		// Only accept regular files named exactly like the branded binary.
+		if filepath.Base(header.Name) != expectedArchiveBinaryName() {
 			continue
 		}
 
@@ -511,6 +543,13 @@ func installBinaryFromTarGz(r io.Reader, target string) error {
 
 		return replaceBinary(target, tr, mode)
 	}
+}
+
+func expectedArchiveBinaryName() string {
+	if brand.BinaryName != "" {
+		return brand.BinaryName
+	}
+	return "liza"
 }
 
 func replaceBinary(target string, r io.Reader, mode os.FileMode) error {
@@ -616,16 +655,16 @@ func (r *installRollback) cleanup() {
 }
 
 func installFromSource(ctx context.Context, commit, target string, stderr io.Writer) error {
-	tmpDir, err := os.MkdirTemp("", "liza-source-update-*")
+	tmpDir, err := os.MkdirTemp("", binaryName()+"-source-update-*")
 	if err != nil {
 		return fmt.Errorf("create source checkout: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	repoDir := filepath.Join(tmpDir, "liza")
+	repoDir := filepath.Join(tmpDir, sourceCheckoutDirName())
 	// Clone with depth 1 for main branch
-	if err := runStreaming(ctx, stderr, "git", "clone", "--depth", "1", "--branch", "main", "https://github.com/liza-mas/liza.git", repoDir); err != nil {
-		return fmt.Errorf("clone liza source: %w", err)
+	if err := runStreaming(ctx, stderr, "git", "clone", "--depth", "1", "--branch", "main", sourceCloneURL(), repoDir); err != nil {
+		return fmt.Errorf("clone %s source: %w", nameLower(), err)
 	}
 	// Fetch the exact commit we need (may not be in the shallow clone)
 	fetchErr := runStreaming(ctx, stderr, "git", "-C", repoDir, "fetch", "--depth", "1", "origin", commit)
@@ -641,8 +680,9 @@ func installFromSource(ctx context.Context, commit, target string, stderr io.Wri
 		return fmt.Errorf("checkout commit %s: %w", commit, err)
 	}
 	installDir := filepath.Dir(target)
-	if err := runStreaming(ctx, stderr, "make", "-C", repoDir, "install", "INSTALL_DIR="+installDir); err != nil {
-		return fmt.Errorf("build liza source: %w", err)
+	makeArgs := sourceInstallMakeArgs(repoDir, installDir)
+	if err := runStreaming(ctx, stderr, "make", makeArgs...); err != nil {
+		return fmt.Errorf("build %s source: %w", nameLower(), err)
 	}
 	return nil
 }
@@ -688,15 +728,24 @@ func parseLatestReleaseVersion(data []byte) (string, error) {
 }
 
 func parseMainCommit(data []byte) (string, error) {
+	var commit commitInfo
+	if err := json.Unmarshal(data, &commit); err == nil && commit.SHA != "" {
+		sha := normalizeCommit(commit.SHA)
+		if sha == "" {
+			return "", fmt.Errorf("main commit response did not include sha")
+		}
+		return sha, nil
+	}
+
 	var info moduleInfo
 	if err := json.Unmarshal(data, &info); err != nil {
-		return "", fmt.Errorf("parse go list output: %w", err)
+		return "", fmt.Errorf("parse main commit response: %w", err)
 	}
-	commit := normalizeCommit(info.Origin.Hash)
-	if commit == "" {
+	sha := normalizeCommit(info.Origin.Hash)
+	if sha == "" {
 		return "", fmt.Errorf("main module response did not include origin hash")
 	}
-	return commit, nil
+	return sha, nil
 }
 
 func isNewerVersion(current, latest string) bool {
@@ -739,7 +788,7 @@ func shortCommit(commit string) string {
 }
 
 func confirmUpdate(stdin *bufio.Reader, stdout io.Writer, next candidate) bool {
-	fmt.Fprintf(stdout, "Liza %s update is available (%s -> %s). Update now and rerun this command? [y/N] ", next.Channel, next.Current, next.Latest)
+	fmt.Fprintf(stdout, "%s %s update is available (%s -> %s). Update now and rerun this command? [y/N] ", nameTitle(), next.Channel, next.Current, next.Latest)
 	line, err := stdin.ReadString('\n')
 	if err != nil && len(line) == 0 {
 		fmt.Fprintln(stdout)
@@ -750,7 +799,7 @@ func confirmUpdate(stdin *bufio.Reader, stdout io.Writer, next candidate) bool {
 }
 
 func shouldSkip(cfg Config) bool {
-	if envValue(cfg.Env, skipEnvName) != "" {
+	if envValueForSuffix(cfg.Env, skipEnvSuffix) != "" {
 		return true
 	}
 	if enabled, ok := checkUpdateFlag(cfg.Args); ok {
@@ -786,7 +835,7 @@ func checkUpdateFlag(args []string) (bool, bool) {
 }
 
 func checkUpdateEnvEnabled(cfg Config) bool {
-	switch strings.ToLower(strings.TrimSpace(envValue(cfg.Env, checkEnvName))) {
+	switch strings.ToLower(strings.TrimSpace(envValueForSuffix(cfg.Env, checkEnvSuffix))) {
 	case "1", "true", "yes", "on":
 		return true
 	default:
@@ -989,7 +1038,7 @@ func updateChannel(cfg Config) string {
 	if cfg.Channel != "" {
 		return strings.ToLower(strings.TrimSpace(cfg.Channel))
 	}
-	if envChannel := envValue(cfg.Env, channelEnvName); envChannel != "" {
+	if envChannel := envValueForSuffix(cfg.Env, channelEnvSuffix); envChannel != "" {
 		return strings.ToLower(strings.TrimSpace(envChannel))
 	}
 	if prefs := readUpdatePreferences(); prefs.Channel != "" {
@@ -1011,10 +1060,10 @@ func updateChannelFlag(args []string) (string, bool) {
 
 func reexecArgs(args []string) []string {
 	if len(args) == 0 {
-		return []string{"liza"}
+		return []string{binaryName()}
 	}
 	out := make([]string, 0, len(args))
-	out = append(out, "liza")
+	out = append(out, binaryName())
 	out = append(out, args[1:]...)
 	return out
 }
@@ -1051,7 +1100,7 @@ func withDefaults(cfg Config) Config {
 		cfg.IsMainAhead = MainCommitAhead
 	}
 	if cfg.Install == nil {
-		// Use the configured ReleaseBaseURL for test injection, empty string uses canonical GitHub
+		// Use the configured ReleaseBaseURL for test injection; empty string uses the brand default.
 		baseURL := cfg.ReleaseBaseURL
 		cfg.Install = func(ctx context.Context, next candidate, target string, stdout, stderr io.Writer) error {
 			return InstallWithBaseURL(ctx, next, target, stdout, stderr, baseURL)
@@ -1073,21 +1122,6 @@ func withDefaults(cfg Config) Config {
 		cfg.VerifyInstall = VerifyInstall
 	}
 	return cfg
-}
-
-func runOutput(ctx context.Context, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg != "" {
-			return nil, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, msg)
-		}
-		return nil, fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return out, nil
 }
 
 var runStreaming = func(ctx context.Context, stderr io.Writer, name string, args ...string) error {
@@ -1115,6 +1149,13 @@ func setEnv(env []string, key, value string) []string {
 	return out
 }
 
+func envValueForSuffix(env []string, suffix string) string {
+	lookup := brand.RuntimeValues().LookupEnv(func(key string) string {
+		return envValue(env, key)
+	}, suffix)
+	return lookup.Value
+}
+
 func envValue(env []string, key string) string {
 	prefix := key + "="
 	for _, item := range env {
@@ -1123,4 +1164,88 @@ func envValue(env []string, key string) string {
 		}
 	}
 	return ""
+}
+
+func cliPrefix() string {
+	return nameLower()
+}
+
+func binaryName() string {
+	if brand.BinaryName != "" {
+		return brand.BinaryName
+	}
+	return "liza"
+}
+
+func nameLower() string {
+	if brand.NameLower != "" {
+		return brand.NameLower
+	}
+	return "liza"
+}
+
+func nameTitle() string {
+	if brand.NameTitle != "" {
+		return brand.NameTitle
+	}
+	return "Liza"
+}
+
+func releaseRepo() string {
+	if brand.ReleaseRepo != "" {
+		return brand.ReleaseRepo
+	}
+	return canonicalRepo
+}
+
+func sourceRepo() string {
+	if brand.Repo != "" {
+		return brand.Repo
+	}
+	return canonicalRepo
+}
+
+func githubLatestReleaseURL() string {
+	return fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", releaseRepo())
+}
+
+func githubMainCommitURL() string {
+	return fmt.Sprintf("https://api.github.com/repos/%s/commits/main", sourceRepo())
+}
+
+func githubCompareURL(current, latest string) string {
+	return fmt.Sprintf("https://api.github.com/repos/%s/compare/%s...%s", sourceRepo(), current, latest)
+}
+
+func sourceCloneURL() string {
+	return fmt.Sprintf("https://github.com/%s.git", sourceRepo())
+}
+
+func sourceCheckoutDirName() string {
+	name := nameLower()
+	if name == "" {
+		return "liza"
+	}
+	return name
+}
+
+func sourceInstallMakeArgs(repoDir, installDir string) []string {
+	values := brand.RuntimeValues()
+	return []string{
+		"-C", repoDir,
+		"install",
+		"INSTALL_DIR=" + installDir,
+		"BRAND_NAME_TITLE=" + values.NameTitle,
+		"BRAND_NAME_LOWER=" + values.NameLower,
+		"BRAND_NAME_UPPER=" + values.NameUpper,
+		"BRAND_REPO=" + values.Repo,
+		"BRAND_BINARY_NAME=" + values.BinaryName,
+		"BRAND_GLOBAL_DIRNAME=" + values.GlobalDirName,
+		"BRAND_PROJECT_DIRNAME=" + values.ProjectDirName,
+		"BRAND_ENV_PREFIX=" + values.EnvPrefix,
+		"BRAND_ARCHIVE_PREFIX=" + values.ArchivePrefix,
+		"BRAND_RELEASE_REPO=" + values.ReleaseRepo,
+		"BRAND_RELEASE_BASE_URL=" + values.ReleaseBaseURL,
+		"BRAND_CHECKSUM_BASE_URL=" + values.ChecksumBaseURL,
+	}
 }

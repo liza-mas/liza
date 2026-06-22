@@ -22,12 +22,12 @@ WORKFLOW:
 
 3. IF UNRESOLVABLE
    git -C {{.Worktree}} rebase --abort
-   liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "Merge conflicts require redesign: <explain>" --questions "..." --json
+   {{binaryName}} mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "Merge conflicts require redesign: <explain>" --questions "..." --json
 
 4. VALIDATE
    Run tests in the worktree. Verify done_when criteria still met.
 
 5. SUBMIT
-   liza submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
+   {{binaryName}} submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
 {{- end}}
 {{- end -}}

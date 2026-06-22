@@ -145,7 +145,7 @@ func requireAgentID(cmd *cobra.Command) (string, error) {
 		Required:  true,
 	})
 	if err != nil {
-		return "", fmt.Errorf("agent ID required (use --agent-id flag or %s env var; legacy LIZA_AGENT_ID is also accepted): %w", brand.EnvName("AGENT_ID"), err)
+		return "", fmt.Errorf("agent ID required (use --agent-id flag or %s env var; legacy env alias is also accepted): %w", brand.EnvName("AGENT_ID"), err)
 	}
 	return agentID, nil
 }
@@ -211,7 +211,7 @@ func resolveChangedBy(cmd *cobra.Command) string {
 	return changedBy
 }
 
-// defaultPipelineConfigPath returns ~/.liza/pipeline.yaml if it exists,
+// defaultPipelineConfigPath returns the global pipeline.yaml if it exists,
 // or empty string otherwise (no global setup, or home dir unresolvable).
 func defaultPipelineConfigPath() string {
 	globalDir, err := paths.GlobalLizaDir()
@@ -244,7 +244,7 @@ func init() {
 
 // addAgentIDFlag registers --agent-id on a specific command.
 func addAgentIDFlag(cmd *cobra.Command) {
-	cmd.Flags().String("agent-id", "", "agent identifier (overrides "+brand.EnvName("AGENT_ID")+" env var; legacy LIZA_AGENT_ID is also accepted)")
+	cmd.Flags().String("agent-id", "", "agent identifier (overrides "+brand.EnvName("AGENT_ID")+" env var; legacy env alias is also accepted)")
 }
 
 // addJSONFlag registers --json on a specific command.

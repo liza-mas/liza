@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -46,7 +47,7 @@ type AwaitVerdictResult struct {
 	Guidance        string            `json:"guidance"`                   // Inline guidance for the agent on rejection
 	ReviewCommit    string            `json:"review_commit,omitempty"`    // Commit associated with the submitted review, when known
 	CurrentAssignee string            `json:"current_assignee,omitempty"` // Current task assignee when task already moved onward
-	SafeAction      string            `json:"safe_action,omitempty"`      // revise or stop, when Liza can determine it
+	SafeAction      string            `json:"safe_action,omitempty"`      // revise or stop, when the system can determine it
 }
 
 type awaitVerdictWatcher interface {
@@ -647,8 +648,8 @@ func stopVerdictGuidance(status models.TaskStatus) string {
 		return "Stop this session; do not run more worktree commands for this submission."
 	}
 	return fmt.Sprintf(
-		"Stop this session; do not run more worktree commands for this submission. Task status is %s, and Liza may clean up the task worktree after terminal merge.",
-		status,
+		"Stop this session; do not run more worktree commands for this submission. Task status is %s, and %s may clean up the task worktree after terminal merge.",
+		status, brand.NameTitle,
 	)
 }
 

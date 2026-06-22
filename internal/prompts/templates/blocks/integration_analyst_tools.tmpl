@@ -1,14 +1,14 @@
 {{- define "integration-analyst-tools" -}}
 
 INTEGRATION ANALYST TOOLS:
-- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
-- liza submit-for-review — Submit integration analysis for review
-  liza submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
+- {{binaryName}} write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {{binaryName}} write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- {{binaryName}} submit-for-review — Submit integration analysis for review
+  {{binaryName}} submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
   Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then submit with HEAD. Do NOT submit the pre-change HEAD.
 {{template "await-verdict-loop" .}}
-- liza set-task-output — Persist fix-task definitions for downstream creation
-  liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
+- {{binaryName}} set-task-output — Persist fix-task definitions for downstream creation
+  {{binaryName}} set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
   Create <path.json> with a file-writing tool, not a Bash heredoc (heredoc with JSON triggers a shell safety block).
   An empty array [] is valid (e.g. clean scan with no findings).
   JSON file contains: [
@@ -18,10 +18,10 @@ INTEGRATION ANALYST TOOLS:
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.
   task_depends_on: optional array of existing concrete task IDs. Use this for dependencies on tasks outside this output[].
-- liza handoff — Context near exhaustion (~90%)
-  liza handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
-- liza mark-blocked — Cannot proceed (spec ambiguity, missing dependency)
-  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
+- {{binaryName}} handoff — Context near exhaustion (~90%)
+  {{binaryName}} handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
+- {{binaryName}} mark-blocked — Cannot proceed (spec ambiguity, missing dependency)
+  {{binaryName}} mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
   Add --depends-on "<task-id>" only when another concrete task blocks this task.
   If a command failure is the blocker, `--reason` MUST include the exact failing command and stderr/error text. Do NOT infer root cause without a captured failure.
   If the blocker requires an orchestrator-only repair, add --repair-operation, --repair-target, --repair-command, --repair-evidence, and --repair-validation.

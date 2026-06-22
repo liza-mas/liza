@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -21,7 +22,7 @@ type InspectOptions struct {
 	Summary       bool   // If true, return compact entity summaries
 	OutputSummary bool   // If true, return compact task output entries
 	Active        bool   // If true, return only non-terminal tasks
-	Zombies       bool   // If true, return live liza agent processes missing from state
+	Zombies       bool   // If true, return live agent processes missing from state
 }
 
 // Validate checks if the inspect options are valid
@@ -36,7 +37,7 @@ func (opts *InspectOptions) Validate() error {
 	return nil
 }
 
-// InspectCommand is the main entry point for liza inspect
+// InspectCommand is the main entry point for the inspect command.
 // Routes to appropriate handlers based on the query
 func InspectCommand(args []string, opts InspectOptions) (string, error) {
 	if err := opts.Validate(); err != nil {
@@ -195,7 +196,7 @@ func formatOutput(data any, format string) (string, error) {
 		return render.FormatValue(data)
 	case "table":
 		// Table format requires specific structure
-		return "", fmt.Errorf("table format requires entity query (e.g., 'liza inspect tasks')")
+		return "", fmt.Errorf("table format requires entity query (e.g., %q)", brand.Command("inspect", "tasks"))
 	default:
 		return render.FormatValue(data)
 	}

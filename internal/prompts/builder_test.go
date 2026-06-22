@@ -10,6 +10,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -20,6 +21,21 @@ const awaitResubmissionPassiveGuidance = "If the harness backgrounds await-resub
 const awaitResubmissionBoundaryGuidance = "On RESUBMITTED, use the returned `base_commit` and `review_commit` for every diff command in this same session."
 const validationCommandShapeRule = "Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree."
 const validationFallback = "If a stored validation command violates BASH CONSTRAINTS, do not execute it literally; treat it as validation intent, run an equivalent single-purpose command from the worktree/tool working directory, and record both the original command and translated command in validation evidence."
+
+func withPromptBrandValues(t *testing.T, mutate func()) {
+	t.Helper()
+	oldNameTitle := brand.NameTitle
+	oldBinaryName := brand.BinaryName
+	oldGlobalDirName := brand.GlobalDirName
+	oldProjectDirName := brand.ProjectDirName
+	mutate()
+	t.Cleanup(func() {
+		brand.NameTitle = oldNameTitle
+		brand.BinaryName = oldBinaryName
+		brand.GlobalDirName = oldGlobalDirName
+		brand.ProjectDirName = oldProjectDirName
+	})
+}
 
 func assertAwaitResubmissionPassiveGuidance(t *testing.T, output string, wantGuidanceLines int) {
 	t.Helper()
@@ -87,12 +103,12 @@ func TestBuildBasePrompt(t *testing.T) {
 				"BLACKBOARD: /project/.liza/state.yaml",
 				"GOAL: Build a web API",
 				"APPROVED: use CLI commands with escalated permissions",
-				"TWO .liza/ directories exist",
+				"TWO brand data directories exist",
 				"~/.liza/ = installed contracts & skills",
 				"/project/.liza/ = runtime state & blackboard",
 				"Do NOT create, edit, stage, or commit files under /project/.liza/agent-outputs/",
 				"runtime log state owned by Liza",
-				"You have FULL read access to both .liza/ directories",
+				"You have FULL read access to both brand data directories",
 				"For READING state: use liza get --json",
 				"For MODIFYING state: use role-specific CLI commands ONLY",
 				"NEVER edit state.yaml directly",
@@ -198,6 +214,54 @@ func TestBuildBasePrompt(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildBasePromptUsesDistinctBrandDirectories(t *testing.T) {
+	withPromptBrandValues(t, func() {
+		brand.NameTitle = "Acme"
+		brand.BinaryName = "acme"
+		brand.GlobalDirName = ".acme-home"
+		brand.ProjectDirName = ".acme-state"
+	})
+
+	config := BasePromptConfig{
+		Role:        "code-coder",
+		AgentID:     "coder-1",
+		TaskID:      "task-1",
+		SpecsDir:    "/project/specs",
+		ProjectRoot: "/project",
+		StatePath:   "/project/.acme-state/state.yaml",
+		GoalDesc:    "Build a web API",
+		GoalSpecRef: "specs/vision.md",
+	}
+
+	prompt, err := BuildBasePrompt(config)
+	if err != nil {
+		t.Fatalf("BuildBasePrompt() error: %v", err)
+	}
+
+	for _, want := range []string{
+		"You are a Acme code-coder agent",
+		"TWO brand data directories exist",
+		"~/.acme-home/ = installed contracts & skills",
+		"/project/.acme-state/ = runtime state & blackboard",
+		"Do NOT create, edit, stage, or commit files under /project/.acme-state/agent-outputs/",
+		"You have FULL read access to both brand data directories",
+		"For READING state: use acme get --json",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("BuildBasePrompt() missing expected branded content %q:\n%s", want, prompt)
+		}
+	}
+	for _, notWant := range []string{
+		"TWO .acme-state/ directories exist",
+		"~/.acme-state/ = installed contracts & skills",
+		"You have FULL read access to both .acme-state/ directories",
+	} {
+		if strings.Contains(prompt, notWant) {
+			t.Fatalf("BuildBasePrompt() rendered misleading directory guidance %q:\n%s", notWant, prompt)
+		}
 	}
 }
 
@@ -1013,12 +1077,12 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 
 	// --- OPERATIONAL RULES: .liza/ directory disambiguation ---
 	assertSection("liza-dirs", []string{
-		"TWO .liza/ directories exist",
+		"TWO brand data directories exist",
 		"~/.liza/ = installed contracts & skills",
 		"/project/.liza/ = runtime state & blackboard",
 		"Do NOT create, edit, stage, or commit files under /project/.liza/agent-outputs/",
 		"runtime log state owned by Liza",
-		"FULL read access to both .liza/ directories",
+		"FULL read access to both brand data directories",
 	})
 
 	// --- STATE ACCESS: liza get over state.yaml ---
@@ -1269,7 +1333,7 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 }
 
 func TestBlockMandatoryDocs_Populated(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/mandatory_docs.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/mandatory_docs.tmpl"))
 
 	data := RoleContextData{
 		MandatoryDocs: []string{
@@ -1298,7 +1362,7 @@ func TestBlockMandatoryDocs_Populated(t *testing.T) {
 }
 
 func TestBlockMandatoryDocs_Empty(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/mandatory_docs.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/mandatory_docs.tmpl"))
 
 	data := RoleContextData{
 		MandatoryDocs: nil,
@@ -1316,7 +1380,7 @@ func TestBlockMandatoryDocs_Empty(t *testing.T) {
 }
 
 func TestBlockMandatoryDocs_EmptySlice(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/mandatory_docs.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/mandatory_docs.tmpl"))
 
 	data := RoleContextData{
 		MandatoryDocs: []string{},
@@ -1334,7 +1398,7 @@ func TestBlockMandatoryDocs_EmptySlice(t *testing.T) {
 }
 
 func TestBlockSkillsAffinity_Populated(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/skills_affinity.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/skills_affinity.tmpl"))
 
 	data := RoleContextData{
 		Skills: []string{
@@ -1363,7 +1427,7 @@ func TestBlockSkillsAffinity_Populated(t *testing.T) {
 }
 
 func TestBlockSkillsAffinity_Empty(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/skills_affinity.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/skills_affinity.tmpl"))
 
 	data := RoleContextData{
 		Skills: nil,
@@ -1381,7 +1445,7 @@ func TestBlockSkillsAffinity_Empty(t *testing.T) {
 }
 
 func TestBlockSkillsAffinity_EmptySlice(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/skills_affinity.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/skills_affinity.tmpl"))
 
 	data := RoleContextData{
 		Skills: []string{},
@@ -1399,7 +1463,7 @@ func TestBlockSkillsAffinity_EmptySlice(t *testing.T) {
 }
 
 func TestBlockParentTasksContext_WithEntries(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles(
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
 		"templates/blocks/artifact_ref_fallback.tmpl",
 		"templates/blocks/parent_tasks_context.tmpl",
 	))
@@ -1454,7 +1518,7 @@ func TestBlockParentTasksContext_WithEntries(t *testing.T) {
 }
 
 func TestBlockParentTasksContext_Empty(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles(
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
 		"templates/blocks/artifact_ref_fallback.tmpl",
 		"templates/blocks/parent_tasks_context.tmpl",
 	))
@@ -1475,7 +1539,7 @@ func TestBlockParentTasksContext_Empty(t *testing.T) {
 }
 
 func TestBlockParentTasksContext_EmptySlice(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles(
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
 		"templates/blocks/artifact_ref_fallback.tmpl",
 		"templates/blocks/parent_tasks_context.tmpl",
 	))
@@ -2489,7 +2553,7 @@ func TestBuildRoleContext_ValidationCommandShapeGuidance(t *testing.T) {
 		})
 	}
 
-	tmpl := template.Must(template.ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
 	for _, role := range []string{"code-plan-reviewer", "epic-plan-reviewer", "architecture-reviewer", "integration-reviewer"} {
 		t.Run("reviewer/"+role, func(t *testing.T) {
 			data := RoleContextData{
@@ -2518,7 +2582,7 @@ func TestBuildRoleContext_ValidationCommandShapeGuidance(t *testing.T) {
 }
 
 func TestReviewInstructions_PostVerdictResubmissionBoundaryGuidance(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
 
 	for _, role := range []string{"code-reviewer", "integration-reviewer"} {
 		t.Run(role, func(t *testing.T) {
@@ -2828,7 +2892,7 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 }
 
 func TestBlockBranchIntegrationContext_Populated(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/branch_integration_context.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/branch_integration_context.tmpl"))
 
 	data := RoleContextData{
 		GoalBaseCommit: "abc123def456",
@@ -2909,7 +2973,7 @@ func TestBlockBranchIntegrationContext_Populated(t *testing.T) {
 }
 
 func TestBlockBranchIntegrationContext_Empty(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/branch_integration_context.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/branch_integration_context.tmpl"))
 
 	data := RoleContextData{
 		GoalBaseCommit: "",
@@ -2927,7 +2991,7 @@ func TestBlockBranchIntegrationContext_Empty(t *testing.T) {
 }
 
 func TestBlockBranchIntegrationContext_NoCompletedTasks(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/branch_integration_context.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/branch_integration_context.tmpl"))
 
 	data := RoleContextData{
 		GoalBaseCommit: "abc123def456",
@@ -2958,7 +3022,7 @@ func TestBlockBranchIntegrationContext_NoCompletedTasks(t *testing.T) {
 }
 
 func TestBlockReviewInstructions_IntegrationReviewer(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
 
 	data := RoleContextData{
 		Role:           "integration-reviewer",
@@ -2994,7 +3058,7 @@ func TestBlockReviewInstructions_IntegrationReviewer(t *testing.T) {
 }
 
 func TestReviewInstructions_CodeReviewerSkipsIntegrationDriftWhenBranchMissing(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
 
 	data := RoleContextData{
 		Role:         "code-reviewer",
@@ -3036,7 +3100,7 @@ func TestReviewInstructions_CodeReviewerSkipsIntegrationDriftWhenBranchMissing(t
 }
 
 func TestReviewInstructions_CodeReviewerBoundsIntegrationDriftWhenBranchPresent(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
 
 	data := RoleContextData{
 		Role:              "code-reviewer",
@@ -3074,7 +3138,7 @@ func TestReviewInstructions_CodeReviewerBoundsIntegrationDriftWhenBranchPresent(
 }
 
 func TestReviewTask_RendersIntegrationBranchOnlyForCodeReviewer(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles(
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
 		"templates/blocks/review_task.tmpl",
 		"templates/blocks/task_decomposition_metadata.tmpl",
 	))
@@ -3115,7 +3179,7 @@ func TestReviewTask_RendersIntegrationBranchOnlyForCodeReviewer(t *testing.T) {
 }
 
 func TestReviewInstructions_OutputReviewersUseFullTaskJSON(t *testing.T) {
-	tmpl := template.Must(template.ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
 
 	for _, role := range []string{"code-plan-reviewer", "epic-plan-reviewer", "architecture-reviewer", "integration-reviewer"} {
 		t.Run(role, func(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
@@ -25,10 +26,10 @@ func SprintCheckpointCommand(projectRoot string) error {
 	fmt.Println()
 	if models.IsTransitionCheckpointTrigger(result.Trigger) {
 		fmt.Println("Transition gate is pending; doer/reviewer agents may continue existing work.")
-		fmt.Println("Orchestrator transition execution waits for 'liza resume'.")
+		fmt.Printf("Orchestrator transition execution waits for '%s'.\n", brand.Command("resume"))
 	} else {
 		fmt.Println("Agents will pause at their next check.")
 	}
-	fmt.Println("Review the sprint summary, then use 'liza resume' to continue.")
+	fmt.Printf("Review the sprint summary, then use '%s' to continue.\n", brand.Command("resume"))
 	return nil
 }

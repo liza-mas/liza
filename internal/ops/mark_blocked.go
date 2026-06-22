@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/alerts"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -249,7 +250,7 @@ func normalizeRepairRequest(request *models.RepairRequest) (*models.RepairReques
 		return nil, &PreconditionError{Reason: "repair request validation is required"}
 	}
 	if !normalized.HasStructuredFailureEvidence() {
-		return nil, &PreconditionError{Reason: `repair requests require structured failure evidence; valid examples: "command=liza add-task --json exit_code=1 stderr=command requires role type [orchestrator]", "command=provider-call exit_code=1 error=provider unavailable", or "error=provider session thread not found"`}
+		return nil, &PreconditionError{Reason: fmt.Sprintf(`repair requests require structured failure evidence; valid examples: "command=%s exit_code=1 stderr=command requires role type [orchestrator]", "command=provider-call exit_code=1 error=provider unavailable", or "error=provider session thread not found"`, brand.Command("add-task", "--json"))}
 	}
 	return normalized, nil
 }

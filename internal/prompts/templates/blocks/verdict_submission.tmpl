@@ -1,14 +1,14 @@
 {{- define "verdict-submission" -}}
 
 --- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---
-⚠️  You MUST execute the liza submit-verdict CLI command IN THIS SAME SESSION:
-  APPROVED: liza submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json
+⚠️  You MUST execute the {{binaryName}} submit-verdict CLI command IN THIS SAME SESSION:
+  APPROVED: {{binaryName}} submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json
   REJECTED (use heredoc to avoid shell quoting issues with markdown):
     reason=$(cat <<'VERDICT'
     <detailed rejection — markdown, backticks, apostrophes all safe here>
     VERDICT
     )
-    liza submit-verdict {{.TaskID}} REJECTED --reason "$reason" --agent-id {{.AgentID}} --json
+    {{binaryName}} submit-verdict {{.TaskID}} REJECTED --reason "$reason" --agent-id {{.AgentID}} --json
 After submitting verdict, EXIT immediately. Your work is complete.
 
 ❌ FAILURE MODE: Completing review, saying "I recommend APPROVED", then exiting WITHOUT running the command.

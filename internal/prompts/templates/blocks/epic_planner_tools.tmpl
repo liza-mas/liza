@@ -1,14 +1,14 @@
 {{- define "epic-planner-tools" -}}
 
 EPIC PLANNER TOOLS:
-- liza submit-for-review — Submit epic plan for review
-  liza submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
+- {{binaryName}} submit-for-review — Submit epic plan for review
+  {{binaryName}} submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
   Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then submit with HEAD. Do NOT submit the pre-change HEAD.
 {{template "await-verdict-loop" .}}
-- liza write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
-  liza write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
-- liza set-task-output — Persist one entry per capability for downstream US Writer tasks
-  liza set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
+- {{binaryName}} write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
+  {{binaryName}} write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
+- {{binaryName}} set-task-output — Persist one entry per capability for downstream US Writer tasks
+  {{binaryName}} set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
   Create <path.json> with a file-writing tool, not a Bash heredoc (heredoc with JSON triggers a shell safety block).
   JSON file contains: [
     {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "plan_ref": "...", "validation": ["<canonical command>"], "depends_on": ["0"], "task_depends_on": ["existing-task-id"]}
@@ -16,10 +16,10 @@ EPIC PLANNER TOOLS:
   validation: optional ordered array of canonical commands the child task should run; each must be satisfiable for the child scope. Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
   depends_on: optional array of sibling index strings for ordering capabilities.
   task_depends_on: optional array of existing concrete task IDs. Use this for dependencies on tasks outside this output[].
-- liza handoff — Context near exhaustion (~90%)
-  liza handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
-- liza mark-blocked — Cannot proceed
-  liza mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
+- {{binaryName}} handoff — Context near exhaustion (~90%)
+  {{binaryName}} handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
+- {{binaryName}} mark-blocked — Cannot proceed
+  {{binaryName}} mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "<what is blocking>" --questions "<q1>" --questions "<q2>" --json
   If a command failure is the blocker, `--reason` MUST include the exact failing command and stderr/error text. Do NOT infer root cause without a captured failure.
   If the blocker requires an orchestrator-only repair, add --repair-operation, --repair-target, --repair-command, --repair-evidence, and --repair-validation.
 {{- end -}}

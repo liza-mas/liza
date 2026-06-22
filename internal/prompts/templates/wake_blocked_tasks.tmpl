@@ -4,26 +4,26 @@ Tasks are BLOCKED. Analyze and resolve immediately:
 1. Read blocked tasks from blackboard — understand blocked_reason, blocked_questions, and repair_request if present
 2. Determine if blocker is:
    - Structured repair_request present → verify the target state still needs repair, then apply the requested orchestrator-only operation if valid
-   - Missing dependency → create prerequisite task (run liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW)
+   - Missing dependency → create prerequisite task (run {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW)
    - Spec ambiguity → clarify spec, then supersede with corrected task
    - External dependency → document, possibly supersede task
    - Wrong approach → supersede task, create alternative (run commands NOW)
 3. For each blocked task, decide action:
    - To repair a wrong direct task dependency without replacing either task:
-     a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED and still has the old depends_on edge.
+     a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still BLOCKED and still has the old depends_on edge.
      b. Verify the new dependency task(s) already exist and represent the intended blocker.
-     c. Run: liza retarget-dependency <task-id> <old-dep-id> <new-dep-id[,new-dep-id]> --reason "Correct dependency edge because <why>" --agent-id {{.AgentID}} --json
-     d. The task remains BLOCKED. After validation/repair is complete, use liza unblock-task or liza assess-blocked.
+     c. Run: {{binaryName}} retarget-dependency <task-id> <old-dep-id> <new-dep-id[,new-dep-id]> --reason "Correct dependency edge because <why>" --agent-id {{.AgentID}} --json
+     d. The task remains BLOCKED. After validation/repair is complete, use {{binaryName}} unblock-task or {{binaryName}} assess-blocked.
 	   - To resume after verified repair:
-	     a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED.
+	     a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still BLOCKED.
 	     b. Verify the blocker is no longer true using the repair_request validation, current worktree state, or another concrete check.
-	     c. If the task has a preserved worktree and integration moved while blocked, prefer: liza unblock-task <task-id> --rebase-on <integration-branch> --reason "Verified blocker is resolved" --agent-id {{.AgentID}} --json
-	     d. Otherwise run: liza unblock-task <task-id> --reason "Verified blocker is resolved" --agent-id {{.AgentID}} --json
+	     c. If the task has a preserved worktree and integration moved while blocked, prefer: {{binaryName}} unblock-task <task-id> --rebase-on <integration-branch> --reason "Verified blocker is resolved" --agent-id {{.AgentID}} --json
+	     d. Otherwise run: {{binaryName}} unblock-task <task-id> --reason "Verified blocker is resolved" --agent-id {{.AgentID}} --json
 	     e. Add --assign-to <doer-agent-id> only when direct resume is required; no live process check is required for unblock assignment.
 	     f. A --rebase-on conflict remains BLOCKED with a fresh repair_request; do not treat it as submit/merge INTEGRATION_FAILED.
    - To supersede (create clean replacement):
    Example supersede workflow:
-   a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED.
+   a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still BLOCKED.
       If status changed (e.g., task was claimed), skip — the task is being actively worked.
    b. Write a tasks JSON file as a bare array — NOT a wrapper object:
       [{
@@ -37,15 +37,15 @@ Tasks are BLOCKED. Analyze and resolve immediately:
         "type": "coding",
         "role_pair": "coding-pair"
       }]
-   c. Run: liza add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
-   d. Run: liza supersede-task <task-id> <new-id-1>,<new-id-2> --reason "Split due to complexity" --agent-id {{.AgentID}} --json
-   e. Run: liza wt-delete <task-id> --json (if worktree exists)
+   c. Run: {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
+   d. Run: {{binaryName}} supersede-task <task-id> <new-id-1>,<new-id-2> --reason "Split due to complexity" --agent-id {{.AgentID}} --json
+   e. Run: {{binaryName}} wt-delete <task-id> --json (if worktree exists)
 4. After analyzing each blocked task:
    - If you resolved it (unblocked or superseded): no further action needed for that task
-   - If you CANNOT resolve it (genuine spec ambiguity, external dependency): run liza assess-blocked to record your assessment
-     Run: liza assess-blocked <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
+   - If you CANNOT resolve it (genuine spec ambiguity, external dependency): run {{binaryName}} assess-blocked to record your assessment
+     Run: {{binaryName}} assess-blocked <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
      This prevents re-waking for the same unresolvable block. The task will trigger again only when new information arrives (dependency changes, human notes).
 5. Execute all state-modifying commands in this session. Do NOT defer.
 
-Do NOT call liza sprint-checkpoint. If you cannot resolve a blocker, assess it and exit. Other tasks must continue uninterrupted.
+Do NOT call {{binaryName}} sprint-checkpoint. If you cannot resolve a blocker, assess it and exit. Other tasks must continue uninterrupted.
 {{- end -}}

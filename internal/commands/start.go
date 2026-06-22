@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/ops"
 )
 
@@ -16,8 +17,8 @@ func StartCommand(projectRoot, reason, changedBy string) error {
 
 	printModeChangeResult("System started", result,
 		"The system mode is now RUNNING. Restart agents to resume work:",
-		"  LIZA_AGENT_ID=coder-1 liza agent coder &",
-		"  LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer &",
+		fmt.Sprintf("  %s=coder-1 %s &", brand.EnvName("AGENT_ID"), brand.Command("agent", "coder")),
+		fmt.Sprintf("  %s=code-reviewer-1 %s &", brand.EnvName("AGENT_ID"), brand.Command("agent", "code-reviewer")),
 	)
 	return nil
 }

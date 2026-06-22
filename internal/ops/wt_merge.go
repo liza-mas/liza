@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
@@ -653,7 +654,7 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 		if runErr := cmd.Run(); runErr != nil {
 			testOutput = combinedOutput.String()
 			if ctx.Err() == context.DeadlineExceeded {
-				testOutput += fmt.Sprintf("\n[liza] integration test killed after %s timeout", DefaultIntegrationTestTimeout)
+				testOutput += fmt.Sprintf("\n[%s] integration test killed after %s timeout", brand.BinaryName, DefaultIntegrationTestTimeout)
 			}
 
 			// CAS rollback: only rewind if ref still points to our merge commit.
