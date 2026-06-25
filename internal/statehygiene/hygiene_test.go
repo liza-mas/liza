@@ -5,8 +5,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 )
+
+func withStateHygieneProjectDir(t *testing.T, projectDir string) {
+	t.Helper()
+	oldProjectDir := brand.ProjectDirName
+	brand.ProjectDirName = projectDir
+	t.Cleanup(func() {
+		brand.ProjectDirName = oldProjectDir
+	})
+}
 
 func TestValidateStateRejectsRawProviderTranscriptPayload(t *testing.T) {
 	state := createState()
@@ -156,8 +166,8 @@ func TestScrubStateForMigrationPreservesAnomalyAndScrubsMessage(t *testing.T) {
 		t.Fatalf("len(Anomalies) = %d, want 2", len(state.Anomalies))
 	}
 	details := state.Anomalies[0].Details
-	if details["message"] != ScrubbedProviderAuditMessage {
-		t.Fatalf("scrubbed message = %q, want %q", details["message"], ScrubbedProviderAuditMessage)
+	if details["message"] != scrubbedProviderAuditMessage() {
+		t.Fatalf("scrubbed message = %q, want %q", details["message"], scrubbedProviderAuditMessage())
 	}
 	if details["message_scrubbed"] != true {
 		t.Fatalf("message_scrubbed = %v, want true", details["message_scrubbed"])
@@ -200,10 +210,10 @@ func TestScrubStateForMigrationUsesGenericMessageForNonProviderAnomaly(t *testin
 		t.Fatal("ScrubStateForMigration() changed = false, want true")
 	}
 	details := state.Anomalies[0].Details
-	if details["message"] != ScrubbedStateMessage {
-		t.Fatalf("scrubbed message = %q, want %q", details["message"], ScrubbedStateMessage)
+	if details["message"] != scrubbedStateMessage() {
+		t.Fatalf("scrubbed message = %q, want %q", details["message"], scrubbedStateMessage())
 	}
-	if details["message"] == ScrubbedProviderAuditMessage {
+	if details["message"] == scrubbedProviderAuditMessage() {
 		t.Fatal("non-provider anomaly got provider-audit scrub message")
 	}
 	if details["message_scrubbed"] != true {
@@ -233,8 +243,35 @@ func TestScrubStateForMigrationScrubsTranscriptOutsideAnomalies(t *testing.T) {
 	if !ScrubStateForMigration(state) {
 		t.Fatal("ScrubStateForMigration() changed = false, want true")
 	}
-	if state.HumanNotes[0].Message != ScrubbedStateMessage {
+	if state.HumanNotes[0].Message != scrubbedStateMessage() {
 		t.Fatalf("human note message = %q, want generic scrub message", state.HumanNotes[0].Message)
+	}
+}
+
+func TestScrubStateForMigrationUsesBrandedAgentOutputsPath(t *testing.T) {
+	withStateHygieneProjectDir(t, ".acme")
+	state := createState()
+	state.Anomalies = []models.Anomaly{
+		{
+			Timestamp: time.Now().UTC(),
+			Task:      "task-1",
+			Reporter:  "coder-1",
+			Type:      "retry_loop",
+			Details: map[string]any{
+				"message": rawProviderTranscript(),
+			},
+		},
+	}
+
+	if !ScrubStateForMigration(state) {
+		t.Fatal("ScrubStateForMigration() changed = false, want true")
+	}
+	message := state.Anomalies[0].Details["message"].(string)
+	if !strings.Contains(message, ".acme/agent-outputs") {
+		t.Fatalf("scrubbed message = %q, want branded agent outputs path", message)
+	}
+	if strings.Contains(message, ".liza/agent-outputs") {
+		t.Fatalf("scrubbed message = %q, want no default project dir", message)
 	}
 }
 

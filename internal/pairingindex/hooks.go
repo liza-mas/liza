@@ -123,14 +123,14 @@ type HookCollisionError struct {
 
 func (e *HookCollisionError) Error() string {
 	if e == nil || len(e.Collisions) == 0 {
-		return "Liza-managed pairing index hook collision"
+		return fmt.Sprintf("%s-managed pairing index hook collision", brand.NameTitle)
 	}
 
 	parts := make([]string, 0, len(e.Collisions))
 	for _, collision := range e.Collisions {
-		parts = append(parts, fmt.Sprintf("%s at %s already exists and is not Liza-managed", collision.Hook, collision.Path))
+		parts = append(parts, fmt.Sprintf("%s at %s already exists and is not %s-managed", collision.Hook, collision.Path, brand.NameTitle))
 	}
-	return "Liza-managed pairing index hook collision: " + strings.Join(parts, "; ")
+	return fmt.Sprintf("%s-managed pairing index hook collision: %s", brand.NameTitle, strings.Join(parts, "; "))
 }
 
 // InstallActivation installs or verifies the managed pairing index entrypoint
@@ -709,7 +709,7 @@ func installManagedIndexScript(scriptPath, want string) (HookAction, error) {
 	}
 	if !strings.Contains(string(current), ManagedIndexScriptMarker) {
 		if looksLikeLegacyIndexScript(string(current)) {
-			return "", fmt.Errorf("%s at %s already exists and appears to be a legacy Liza index hook; move it aside and rerun init: mv %s %s.backup", name, scriptPath, scriptPath, scriptPath)
+			return "", fmt.Errorf("%s at %s already exists and appears to be a legacy managed index hook; move it aside and rerun %s: mv %s %s.backup", name, scriptPath, brand.Command("init"), scriptPath, scriptPath)
 		}
 		return "", fmt.Errorf("%s at %s already exists and is not managed by %s", name, scriptPath, brand.NameTitle)
 	}

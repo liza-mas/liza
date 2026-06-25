@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/scipsearch"
 )
 
@@ -664,7 +665,7 @@ func TestInstallLifecycleHooksReportsExistingHookCollision(t *testing.T) {
 	if collision.Collisions[0].Hook != "post-commit" || collision.Collisions[0].Path != collidingHook {
 		t.Fatalf("collision = %#v, want post-commit at %s", collision.Collisions[0], collidingHook)
 	}
-	if !strings.Contains(err.Error(), "post-commit") || !strings.Contains(err.Error(), "not Liza-managed") {
+	if !strings.Contains(err.Error(), "post-commit") || !strings.Contains(err.Error(), "not "+brand.NameTitle+"-managed") {
 		t.Fatalf("error = %v, want explicit hook collision diagnostic", err)
 	}
 	if _, err := os.Stat(filepath.Join(hooksDir, "post-checkout")); err == nil {

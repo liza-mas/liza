@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/render"
 	"github.com/mattn/go-runewidth"
@@ -113,13 +114,14 @@ func (m Model) View() string {
 
 // renderHeader renders the header bar:
 //
-//	⚡  LIZA  |  {goal.description}  |  sprint: {sprint.id} {sprint.status}  |  system: {STATUS}
+//	⚡  {BRAND}  |  {goal.description}  |  sprint: {sprint.id} {sprint.status}  |  system: {STATUS}
 //
 // Full-width, background-colored. STATUS colored per system mode.
-// If m.state is nil, renders "⚡  LIZA  |  Loading..."
+// If m.state is nil, renders "⚡  {BRAND}  |  Loading..."
 func (m Model) renderHeader() string {
+	nameUpper := brand.RuntimeValues().NameUpper
 	if m.state == nil {
-		return m.styles.HeaderBar.Render("⚡  LIZA  |  Loading...")
+		return m.styles.HeaderBar.Render(fmt.Sprintf("⚡  %s  |  Loading...", nameUpper))
 	}
 
 	sprintStatusText := strings.ToUpper(string(m.state.Sprint.Status))
@@ -135,7 +137,8 @@ func (m Model) renderHeader() string {
 	sprintLabel := m.styles.HeaderLabel.Render("sprint:")
 	systemLabel := m.styles.HeaderLabel.Render("system:")
 
-	content := fmt.Sprintf("⚡  LIZA  |  %s  |  %s %s %s  |  %s %s",
+	content := fmt.Sprintf("⚡  %s  |  %s  |  %s %s %s  |  %s %s",
+		nameUpper,
 		m.state.Goal.Description,
 		sprintLabel,
 		m.state.Sprint.ID,

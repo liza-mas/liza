@@ -7,9 +7,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+func withAgentBrandValues(t *testing.T, mutate func()) {
+	t.Helper()
+	oldBinaryName := brand.BinaryName
+	oldProjectDirName := brand.ProjectDirName
+	mutate()
+	t.Cleanup(func() {
+		brand.BinaryName = oldBinaryName
+		brand.ProjectDirName = oldProjectDirName
+	})
+}
 
 // withFakeCheckpointSummaryRunner swaps in a deterministic runner for the
 // duration of a sub-test and restores the previous one on cleanup.
@@ -51,8 +63,31 @@ func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
 	if !strings.Contains(gotPrompt, "task-1") {
 		t.Errorf("prompt = %q, want to mention task ID", gotPrompt)
 	}
-	if !strings.Contains(gotPrompt, CheckpointSummaryRelPath) {
-		t.Errorf("prompt = %q, want to mention report path %q", gotPrompt, CheckpointSummaryRelPath)
+	if !strings.Contains(gotPrompt, checkpointSummaryRelPath()) {
+		t.Errorf("prompt = %q, want to mention report path %q", gotPrompt, checkpointSummaryRelPath())
+	}
+}
+
+func TestEmitCheckpointSummary_UsesBrandedProjectPathsInPrompt(t *testing.T) {
+	withAgentBrandValues(t, func() {
+		brand.ProjectDirName = ".acme"
+	})
+	tmp := t.TempDir()
+	var gotPrompt string
+	withFakeCheckpointSummaryRunner(t, func(_, _, prompt string, _ models.Config) error {
+		gotPrompt = prompt
+		return nil
+	})
+
+	emitCheckpointSummary(tmp, "task-branded", models.Config{})
+
+	for _, want := range []string{".acme/state.yaml", ".acme/checkpoint-summary.md"} {
+		if !strings.Contains(gotPrompt, want) {
+			t.Fatalf("prompt = %q, want %q", gotPrompt, want)
+		}
+	}
+	if strings.Contains(gotPrompt, ".liza/") {
+		t.Fatalf("prompt = %q, want no default project dir", gotPrompt)
 	}
 }
 
@@ -183,8 +218,31 @@ func TestRunCheckpointSummaryCLI_WritesLizaOwnedReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runCheckpointSummaryCLI() error = %v", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(tmp, CheckpointSummaryRelPath)); statErr != nil {
-		t.Errorf("expected report at %s: %v", CheckpointSummaryRelPath, statErr)
+	if _, statErr := os.Stat(filepath.Join(tmp, filepath.FromSlash(checkpointSummaryRelPath()))); statErr != nil {
+		t.Errorf("expected report at %s: %v", checkpointSummaryRelPath(), statErr)
+	}
+}
+
+func TestRunCheckpointSummaryCLI_WritesBrandedReport(t *testing.T) {
+	withAgentBrandValues(t, func() {
+		brand.ProjectDirName = ".acme"
+	})
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"mkdir -p .acme",
+		"printf '# checkpoint summary\\n' > .acme/checkpoint-summary.md",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err != nil {
+		t.Fatalf("runCheckpointSummaryCLI() error = %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(tmp, ".acme", "checkpoint-summary.md")); statErr != nil {
+		t.Errorf("expected branded report: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(tmp, ".liza", "checkpoint-summary.md")); !os.IsNotExist(statErr) {
+		t.Errorf("default report path exists or stat failed unexpectedly: %v", statErr)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/gitenv"
 )
 
@@ -49,19 +50,19 @@ func ensureCommittedCleanFile(projectRoot, filePath, targetRef, label string, re
 	gitPath := filepath.ToSlash(repoRel)
 	if _, err := gitenv.CombinedOutput(projectRoot, "cat-file", "-e", targetRef+":"+gitPath); err != nil {
 		if targetRef == "HEAD" {
-			return "", fmt.Errorf("%s must be fully committed before liza init: %s", label, gitPath)
+			return "", fmt.Errorf("%s must be fully committed before %s: %s", label, brand.Command("init"), gitPath)
 		}
-		return "", fmt.Errorf("%s must exist on %s before liza init: %s", label, targetRef, gitPath)
+		return "", fmt.Errorf("%s must exist on %s before %s: %s", label, targetRef, brand.Command("init"), gitPath)
 	}
 	if changed, err := gitDiffHasChanges(projectRoot, "--cached", "--", gitPath); err != nil {
 		return "", fmt.Errorf("failed to check %s git status: %w", label, err)
 	} else if changed {
-		return "", fmt.Errorf("%s has staged changes; commit them before liza init: %s", label, gitPath)
+		return "", fmt.Errorf("%s has staged changes; commit them before %s: %s", label, brand.Command("init"), gitPath)
 	}
 	if changed, err := gitDiffHasChanges(projectRoot, "--", gitPath); err != nil {
 		return "", fmt.Errorf("failed to check %s git status: %w", label, err)
 	} else if changed {
-		return "", fmt.Errorf("%s has unstaged changes; commit them before liza init: %s", label, gitPath)
+		return "", fmt.Errorf("%s has unstaged changes; commit them before %s: %s", label, brand.Command("init"), gitPath)
 	}
 
 	return gitPath, nil

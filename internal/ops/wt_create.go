@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/errors"
@@ -18,10 +19,12 @@ import (
 	"github.com/liza-mas/liza/internal/worktreeexclude"
 )
 
-// worktreeHooksDirName is the directory, relative to each worktree root, where
+// worktreeHooksDirName returns the directory, relative to each worktree root, where
 // the per-worktree git hooks live. Git resolves core.hooksPath (set via
 // --worktree) to this directory. See InstallWorktreePreCommitHook.
-const worktreeHooksDirName = ".liza-hooks"
+func worktreeHooksDirName() string {
+	return paths.ProjectDirName() + "-hooks"
+}
 
 // CreateWorktreeResult contains the outcome of creating a worktree.
 type CreateWorktreeResult struct {
@@ -274,8 +277,8 @@ func checkIgnored(dir, rel string) error {
 //
 // Mechanism:
 //  1. Enable extensions.worktreeConfig on the main repo (idempotent).
-//  2. Write the rendered hook to <worktreeDir>/.liza-hooks/pre-commit (chmod 0755).
-//  3. git config --worktree core.hooksPath <abs-path-to-.liza-hooks> in the
+//  2. Write the rendered hook to <worktreeDir>/<brand-hooks>/pre-commit (chmod 0755).
+//  3. git config --worktree core.hooksPath <abs-path-to-brand-hooks> in the
 //     worktree.
 //
 // The hook dir lives inside the worktree rather than under .git/worktrees/...
@@ -288,7 +291,7 @@ func InstallWorktreePreCommitHook(gitWrapper *git.Git, worktreeDir, taskID strin
 	lizaBin, err := os.Executable()
 	if err != nil {
 		// Fall back to PATH lookup at hook exec time.
-		lizaBin = "liza"
+		lizaBin = brand.RuntimeValues().BinaryName
 	}
 
 	if err := gitWrapper.EnableWorktreeConfigExtension(); err != nil {
@@ -296,7 +299,7 @@ func InstallWorktreePreCommitHook(gitWrapper *git.Git, worktreeDir, taskID strin
 		return warnings
 	}
 
-	hooksDir := filepath.Join(worktreeDir, worktreeHooksDirName)
+	hooksDir := filepath.Join(worktreeDir, worktreeHooksDirName())
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		warnings = append(warnings, fmt.Sprintf("install-pre-commit-hook: mkdir: %v", err))
 		return warnings

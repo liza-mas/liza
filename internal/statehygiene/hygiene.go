@@ -3,19 +3,28 @@ package statehygiene
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"unicode"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
-const (
-	MaxStateTextBytes = 4096
+const MaxStateTextBytes = 4096
 
-	ScrubbedProviderAuditMessage = "provider audit degraded; raw provider event omitted from state; inspect .liza/agent-outputs and alerts for transcript evidence"
-	ScrubbedStateMessage         = "raw state payload omitted; inspect .liza/agent-outputs and alerts for evidence"
-)
+func agentOutputsRelPath() string {
+	return filepath.ToSlash(filepath.Join(paths.ProjectDirName(), paths.AgentOutputsDirName))
+}
+
+func scrubbedProviderAuditMessage() string {
+	return fmt.Sprintf("provider audit degraded; raw provider event omitted from state; inspect %s and alerts for transcript evidence", agentOutputsRelPath())
+}
+
+func scrubbedStateMessage() string {
+	return fmt.Sprintf("raw state payload omitted; inspect %s and alerts for evidence", agentOutputsRelPath())
+}
 
 var cappedTextFields = map[string]bool{
 	"message":    true,
@@ -52,9 +61,9 @@ func ScrubStateForMigration(state *models.State) bool {
 			continue
 		}
 		if anomaly.Type == "provider_audit_degraded" {
-			anomaly.Details["message"] = ScrubbedProviderAuditMessage
+			anomaly.Details["message"] = scrubbedProviderAuditMessage()
 		} else {
-			anomaly.Details["message"] = ScrubbedStateMessage
+			anomaly.Details["message"] = scrubbedStateMessage()
 		}
 		anomaly.Details["message_scrubbed"] = true
 		anomaly.Details["scrub_reason"] = scrubReason(message)
@@ -68,7 +77,7 @@ func ScrubStateForMigration(state *models.State) bool {
 }
 
 // IsTranscriptPayload detects raw provider transcript/event records that should
-// stay in .liza/agent-outputs rather than state.yaml.
+// stay in agent output logs rather than state.yaml.
 func IsTranscriptPayload(s string) bool {
 	lower := strings.ToLower(s)
 	if strings.Contains(lower, "item.completed") ||
@@ -112,10 +121,10 @@ func validateValue(v reflect.Value, path, fieldName string) error {
 	case reflect.String:
 		value := v.String()
 		if IsTranscriptPayload(value) {
-			return fmt.Errorf("%s contains raw provider transcript payload; store raw evidence under .liza/agent-outputs and keep only a bounded summary/log_ref in state.yaml", path)
+			return fmt.Errorf("%s contains raw provider transcript payload; store raw evidence under %s and keep only a bounded summary/log_ref in state.yaml", path, agentOutputsRelPath())
 		}
 		if isCappedTextField(fieldName) && len([]byte(value)) > MaxStateTextBytes {
-			return fmt.Errorf("%s is %d bytes, exceeds %d-byte state text limit; store raw evidence under .liza/agent-outputs and keep a bounded summary/log_ref in state.yaml", path, len([]byte(value)), MaxStateTextBytes)
+			return fmt.Errorf("%s is %d bytes, exceeds %d-byte state text limit; store raw evidence under %s and keep a bounded summary/log_ref in state.yaml", path, len([]byte(value)), MaxStateTextBytes, agentOutputsRelPath())
 		}
 	case reflect.Struct:
 		t := v.Type()
@@ -164,7 +173,7 @@ func scrubValue(v reflect.Value, fieldName string) bool {
 		if v.Elem().Kind() == reflect.String {
 			value := v.Elem().String()
 			if shouldScrubString(value, fieldName) {
-				v.Set(reflect.ValueOf(ScrubbedStateMessage))
+				v.Set(reflect.ValueOf(scrubbedStateMessage()))
 				return true
 			}
 			return false
@@ -178,7 +187,7 @@ func scrubValue(v reflect.Value, fieldName string) bool {
 			return false
 		}
 		if shouldScrubString(v.String(), fieldName) {
-			v.SetString(ScrubbedStateMessage)
+			v.SetString(scrubbedStateMessage())
 			return true
 		}
 	case reflect.Struct:
@@ -221,7 +230,7 @@ func scrubAny(value any, fieldName string) (any, bool) {
 	switch typed := value.(type) {
 	case string:
 		if shouldScrubString(typed, fieldName) {
-			return ScrubbedStateMessage, true
+			return scrubbedStateMessage(), true
 		}
 		return typed, false
 	case map[string]any:

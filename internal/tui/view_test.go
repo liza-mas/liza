@@ -7,8 +7,18 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 )
+
+func withTUIBrandNameUpper(t *testing.T, nameUpper string) {
+	t.Helper()
+	oldNameUpper := brand.NameUpper
+	brand.NameUpper = nameUpper
+	t.Cleanup(func() {
+		brand.NameUpper = oldNameUpper
+	})
+}
 
 func TestView_NotReady_ReturnsLoading(t *testing.T) {
 	m := newTestModel()
@@ -34,9 +44,9 @@ func TestView_Ready_ContainsHeaderAndFooter(t *testing.T) {
 	}
 
 	got := m.View()
-	// Header should be present (contains LIZA)
-	if !strings.Contains(got, "LIZA") {
-		t.Errorf("View() should contain header with 'LIZA', got: %q", got)
+	// Header should be present.
+	if !strings.Contains(got, brand.RuntimeValues().NameUpper) {
+		t.Errorf("View() should contain branded header, got: %q", got)
 	}
 }
 
@@ -158,8 +168,29 @@ func TestRenderHeader_NilState_ReturnsLoadingFallback(t *testing.T) {
 	if !strings.Contains(got, "Loading") {
 		t.Errorf("renderHeader() with nil state should contain 'Loading', got: %q", got)
 	}
-	if !strings.Contains(got, "LIZA") {
-		t.Errorf("renderHeader() with nil state should still contain 'LIZA', got: %q", got)
+	if !strings.Contains(got, brand.RuntimeValues().NameUpper) {
+		t.Errorf("renderHeader() with nil state should still contain brand name, got: %q", got)
+	}
+}
+
+func TestRenderHeader_UsesBrandedNameUpper(t *testing.T) {
+	withTUIBrandNameUpper(t, "ACME")
+
+	m := newTestModel()
+	m.width = 120
+	m.styles = NewStyles(120)
+	m.state = &models.State{
+		Goal:   models.Goal{Description: "goal"},
+		Sprint: models.Sprint{ID: "s1"},
+		Config: models.Config{Mode: models.SystemModeRunning},
+	}
+
+	got := m.renderHeader()
+	if !strings.Contains(got, "ACME") {
+		t.Errorf("renderHeader() should contain branded upper name, got: %q", got)
+	}
+	if strings.Contains(got, "LIZA") {
+		t.Errorf("renderHeader() should not contain default brand under non-default brand, got: %q", got)
 	}
 }
 

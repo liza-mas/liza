@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 // ACPXAgent implements LLMAgent through the headless acpx ACP client.
@@ -399,8 +401,9 @@ func acpxAgentName(cliName string) string {
 }
 
 func acpxSessionName(agentID string) string {
+	binaryName := brand.RuntimeValues().BinaryName
 	if agentID == "" {
-		return "liza-agent"
+		return binaryName + "-agent"
 	}
-	return "liza-" + agentID
+	return binaryName + "-" + agentID
 }

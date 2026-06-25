@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
@@ -173,6 +174,11 @@ func TestSubmitForReview_NoCheckpoint(t *testing.T) {
 
 	_, err := SubmitForReview(tmpDir, "task-1", "abc123", "coder-1")
 	testhelpers.RequireErrorContains(t, err, "pre-execution checkpoint required")
+	testhelpers.RequireErrorContains(t, err, brand.Command("write-checkpoint", "task-1"))
+	staleToolName := strings.Join([]string{"li" + "za", "write_checkpoint"}, "_")
+	if strings.Contains(err.Error(), staleToolName) {
+		t.Fatalf("error = %v, want no stale MCP tool name", err)
+	}
 }
 
 // setupRebaseConflictScenario creates a git repo with a worktree whose branch

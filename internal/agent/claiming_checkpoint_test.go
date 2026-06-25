@@ -31,7 +31,7 @@ func TestHandleApprovedMerges_AutoEmitsCheckpointSummary(t *testing.T) {
 		gotPrompt = prompt
 		// Simulate the CLI's job: write the report file so any downstream
 		// post-run sanity check would be satisfied.
-		reportPath := filepath.Join(projectRoot, CheckpointSummaryRelPath)
+		reportPath := filepath.Join(projectRoot, filepath.FromSlash(checkpointSummaryRelPath()))
 		if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
 			return err
 		}
@@ -59,7 +59,7 @@ func TestHandleApprovedMerges_AutoEmitsCheckpointSummary(t *testing.T) {
 	}
 
 	// Verify the report file actually landed where the prompt asked for it.
-	reportPath := filepath.Join(tmpDir, CheckpointSummaryRelPath)
+	reportPath := filepath.Join(tmpDir, filepath.FromSlash(checkpointSummaryRelPath()))
 	if _, err := os.Stat(reportPath); err != nil {
 		t.Errorf("expected report at %s, got: %v", reportPath, err)
 	}

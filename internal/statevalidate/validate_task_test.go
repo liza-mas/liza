@@ -6,10 +6,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+func withStateValidateProjectDir(t *testing.T, projectDir string) {
+	t.Helper()
+	oldProjectDir := brand.ProjectDirName
+	brand.ProjectDirName = projectDir
+	t.Cleanup(func() {
+		brand.ProjectDirName = oldProjectDir
+	})
+}
 
 func TestValidateTaskInvariants_EnforcesStatusSpecificRequiredFields(t *testing.T) {
 	cfg := loadTestConfig(t)
@@ -232,6 +242,18 @@ func TestValidateTaskInvariants_EnforcesStatusSpecificRequiredFields(t *testing.
 			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
 			assertErrorContains(t, err, tc.wantErr)
 		})
+	}
+}
+
+func TestValidateTaskInvariants_DuplicateFailedByUsesBrandedStatePath(t *testing.T) {
+	withStateValidateProjectDir(t, ".acme")
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+	task.FailedBy = []string{"coder-1", "coder-1"}
+
+	err := validateTaskInvariants(stateWithTasks(task), "", true, nil, nil)
+	assertErrorContains(t, err, ".acme/state.yaml")
+	if strings.Contains(err.Error(), ".liza/state.yaml") {
+		t.Fatalf("error = %v, want no default project dir", err)
 	}
 }
 

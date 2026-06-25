@@ -1009,7 +1009,7 @@ func writeUpdatePreferences(prefs preferences) error {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create global liza config dir: %w", err)
+		return fmt.Errorf("create global %s config dir: %w", brand.NameTitle, err)
 	}
 	prefs.Channel = strings.ToLower(strings.TrimSpace(prefs.Channel))
 	data, err := json.MarshalIndent(prefs, "", "  ")

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 func TestACPXAgentRunUsesPersistentCodexSession(t *testing.T) {
@@ -121,6 +123,19 @@ func TestACPXAgentRunUsesOpenCodeTarget(t *testing.T) {
 		if !strings.Contains(log, want) {
 			t.Fatalf("fake acpx log missing %q:\n%s", want, log)
 		}
+	}
+}
+
+func TestACPXSessionNameUsesBrandedBinaryName(t *testing.T) {
+	withAgentBrandValues(t, func() {
+		brand.BinaryName = "acme"
+	})
+
+	if got := acpxSessionName("coder-1"); got != "acme-coder-1" {
+		t.Fatalf("acpxSessionName() = %q, want acme-coder-1", got)
+	}
+	if got := acpxSessionName(""); got != "acme-agent" {
+		t.Fatalf("acpxSessionName(empty) = %q, want acme-agent", got)
 	}
 }
 

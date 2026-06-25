@@ -13,12 +13,21 @@ import (
 
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
-// CheckpointSummaryRelPath is the location, relative to the project root,
-// where the auto-generated checkpoint summary is written. Keep it under
-// .liza/ so Liza does not overwrite user-owned project documentation.
-const CheckpointSummaryRelPath = ".liza/checkpoint-summary.md"
+const checkpointSummaryFileName = "checkpoint-summary.md"
+
+// checkpointSummaryRelPath is the location, relative to the project root, where
+// the auto-generated checkpoint summary is written. Keep it under the branded
+// project runtime directory so it does not overwrite user-owned documentation.
+func checkpointSummaryRelPath() string {
+	return filepath.ToSlash(filepath.Join(paths.ProjectDirName(), checkpointSummaryFileName))
+}
+
+func checkpointSummaryStateRelPath() string {
+	return filepath.ToSlash(filepath.Join(paths.ProjectDirName(), paths.StateFileName))
+}
 
 // checkpointSummaryDefaultTimeout bounds how long the spawned CLI is allowed
 // to run before being terminated. Checkpoint summaries are short reads + a
@@ -30,11 +39,12 @@ const checkpointSummaryDefaultTimeout = 5 * time.Minute
 // a deterministic fake without spawning a real LLM subprocess.
 //
 // Contract:
-//   - projectRoot: working directory for the spawn (state.yaml lives in .liza/)
+//   - projectRoot: working directory for the spawn (state.yaml lives in the
+//     branded project runtime directory)
 //   - cliName: resolved default CLI (claude, codex, gemini, ...)
 //   - prompt: the message handed to the CLI; instructs it to use the
-//     checkpoint-summary skill against .liza/state.yaml and write the report
-//     to .liza/checkpoint-summary.md.
+//     checkpoint-summary skill against state.yaml and write the report under
+//     the branded project runtime directory.
 //   - cfg: runtime config used to preserve per-CLI launch settings.
 //
 // Returns nil on a successful spawn that wrote the report. Any error is
@@ -47,7 +57,7 @@ var checkpointSummaryRunner = runCheckpointSummaryCLI
 //
 // Behavior:
 //   - opt-out via Config.AutoCheckpointSummary == false
-//   - report is written to <projectRoot>/.liza/checkpoint-summary.md
+//   - report is written under the branded project runtime directory
 //   - CLI is resolved through ResolveDefaultCLI (state.yaml > env > const)
 func emitCheckpointSummary(projectRoot string, taskID string, cfg models.Config) {
 	logger := GetLogger()
@@ -71,21 +81,21 @@ func emitCheckpointSummary(projectRoot string, taskID string, cfg models.Config)
 	logger.Info("Auto checkpoint-summary emitted",
 		"task_id", taskID,
 		"cli", cliName,
-		"path", CheckpointSummaryRelPath)
+		"path", checkpointSummaryRelPath())
 }
 
 // buildCheckpointSummaryPrompt builds the prompt sent to the configured CLI.
-// It is self-contained: the CLI must read .liza/state.yaml, apply the
+// It is self-contained: the CLI must read state.yaml, apply the
 // checkpoint-summary skill, and write the result. Kept short on purpose —
 // the skill instructions live in skills/checkpoint-summary/SKILL.md.
 func buildCheckpointSummaryPrompt(taskID string) string {
 	return fmt.Sprintf(`Use the checkpoint-summary skill.
 
-Context: task %s just merged into the integration branch. Read .liza/state.yaml,
+Context: task %s just merged into the integration branch. Read %s,
 apply the checkpoint-summary skill protocol, and write the report to
 %s (overwrite if it already exists). Do not create, edit, or delete any other
 file. Do not ask follow-up questions.
-`, taskID, CheckpointSummaryRelPath)
+`, taskID, checkpointSummaryStateRelPath(), checkpointSummaryRelPath())
 }
 
 // runCheckpointSummaryCLI is the production implementation of
@@ -102,7 +112,8 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 		return fmt.Errorf("failed to snapshot git status before checkpoint-summary: %w", err)
 	}
 
-	reportPath := filepath.Join(projectRoot, CheckpointSummaryRelPath)
+	reportRelPath := checkpointSummaryRelPath()
+	reportPath := filepath.Join(projectRoot, filepath.FromSlash(reportRelPath))
 	if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
 		return fmt.Errorf("failed to prepare checkpoint-summary directory: %w", err)
 	}
@@ -283,7 +294,7 @@ func validateCheckpointSummaryStatus(projectRoot string, before map[string]check
 func unexpectedCheckpointSummaryStatusChanges(before, after map[string]checkpointStatusEntry) []string {
 	var unexpected []string
 	for path, afterEntry := range after {
-		if path == filepath.ToSlash(CheckpointSummaryRelPath) {
+		if path == checkpointSummaryRelPath() {
 			continue
 		}
 		beforeEntry, existed := before[path]
@@ -294,7 +305,7 @@ func unexpectedCheckpointSummaryStatusChanges(before, after map[string]checkpoin
 	}
 
 	for path, beforeEntry := range before {
-		if path == filepath.ToSlash(CheckpointSummaryRelPath) {
+		if path == checkpointSummaryRelPath() {
 			continue
 		}
 		if _, stillPresent := after[path]; !stillPresent {

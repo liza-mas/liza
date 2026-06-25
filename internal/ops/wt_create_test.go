@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
@@ -19,6 +20,15 @@ import (
 	"github.com/liza-mas/liza/internal/stacklit"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+func withOpsBrandProjectDir(t *testing.T, projectDir string) {
+	t.Helper()
+	oldProjectDir := brand.ProjectDirName
+	brand.ProjectDirName = projectDir
+	t.Cleanup(func() {
+		brand.ProjectDirName = oldProjectDir
+	})
+}
 
 func TestCreateWorktree_Validation(t *testing.T) {
 	_, err := CreateWorktree("/nonexistent", "", false)
@@ -405,7 +415,7 @@ func TestCreateWorktree_ScipIndexesEnabledNewWorktreeAfterSetup(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(plan.Dir, ".claude", "settings.json")); err != nil {
 			return "", fmt.Errorf("claude config not provisioned before indexing: %w", err)
 		}
-		if _, err := os.Stat(filepath.Join(plan.Dir, ".liza-hooks", "pre-commit")); err != nil {
+		if _, err := os.Stat(filepath.Join(plan.Dir, worktreeHooksDirName(), "pre-commit")); err != nil {
 			return "", fmt.Errorf("pre-commit hook not installed before indexing: %w", err)
 		}
 		if _, err := os.Stat(markerPath); err != nil {
@@ -750,7 +760,7 @@ func TestCreateWorktree_InstallsPreCommitHook(t *testing.T) {
 	}
 
 	// 1. Hook file exists at the expected path and is executable.
-	hookPath := filepath.Join(result.WorktreeDir, ".liza-hooks", "pre-commit")
+	hookPath := filepath.Join(result.WorktreeDir, worktreeHooksDirName(), "pre-commit")
 	info, err := os.Stat(hookPath)
 	if err != nil {
 		t.Fatalf("pre-commit hook not installed at %s: %v", hookPath, err)
@@ -766,7 +776,7 @@ func TestCreateWorktree_InstallsPreCommitHook(t *testing.T) {
 	}
 
 	// 3. Worktree has core.hooksPath pointing at the installed dir.
-	hooksAbs, err := filepath.Abs(filepath.Join(result.WorktreeDir, ".liza-hooks"))
+	hooksAbs, err := filepath.Abs(filepath.Join(result.WorktreeDir, worktreeHooksDirName()))
 	if err != nil {
 		t.Fatalf("filepath.Abs: %v", err)
 	}
@@ -782,6 +792,35 @@ func TestCreateWorktree_InstallsPreCommitHook(t *testing.T) {
 	}
 	if gotResolved != wantHooksAbs {
 		t.Errorf("core.hooksPath = %q, want %q", got, hooksAbs)
+	}
+}
+
+func TestCreateWorktree_InstallsBrandedHookDirectory(t *testing.T) {
+	withOpsBrandProjectDir(t, ".acme")
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	testhelpers.SetupLizaDir(t, tmpDir)
+	if err := os.Rename(filepath.Join(tmpDir, ".liza"), filepath.Join(tmpDir, ".acme")); err != nil {
+		t.Fatalf("rename test runtime dir: %v", err)
+	}
+	stateFile := filepath.Join(tmpDir, ".acme", "state.yaml")
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now)}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := CreateWorktree(tmpDir, "task-1", false)
+	if err != nil {
+		t.Fatalf("CreateWorktree() error: %v", err)
+	}
+
+	hookPath := filepath.Join(result.WorktreeDir, ".acme-hooks", "pre-commit")
+	if _, err := os.Stat(hookPath); err != nil {
+		t.Fatalf("pre-commit hook not installed at branded path %s: %v", hookPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(result.WorktreeDir, ".liza-hooks", "pre-commit")); !os.IsNotExist(err) {
+		t.Fatalf("default hook path exists or stat failed unexpectedly: %v", err)
 	}
 }
 
@@ -805,8 +844,8 @@ func TestCreateWorktree_InstallsHookOnExisting(t *testing.T) {
 	}
 
 	// Simulate a pre-hook-era worktree by deleting the hook file.
-	hookPath := filepath.Join(result.WorktreeDir, ".liza-hooks", "pre-commit")
-	if err := os.RemoveAll(filepath.Join(result.WorktreeDir, ".liza-hooks")); err != nil {
+	hookPath := filepath.Join(result.WorktreeDir, worktreeHooksDirName(), "pre-commit")
+	if err := os.RemoveAll(filepath.Join(result.WorktreeDir, worktreeHooksDirName())); err != nil {
 		t.Fatalf("setup: remove hooks dir: %v", err)
 	}
 
@@ -853,7 +892,7 @@ func TestCreateWorktree_HookFiresAndRejects(t *testing.T) {
 	// Overwrite the installed hook with a deterministic rejector so we're
 	// testing the hook-invocation plumbing, not CheckCommitAllowed's logic
 	// (which has its own unit tests).
-	hookPath := filepath.Join(result.WorktreeDir, ".liza-hooks", "pre-commit")
+	hookPath := filepath.Join(result.WorktreeDir, worktreeHooksDirName(), "pre-commit")
 	rejector := "#!/bin/sh\necho 'liza-test-reject' 1>&2\nexit 1\n"
 	if err := os.WriteFile(hookPath, []byte(rejector), 0755); err != nil {
 		t.Fatalf("write rejector: %v", err)
@@ -917,7 +956,7 @@ func TestHookShellFailSafeOnUnknownExitCode(t *testing.T) {
 	// Using the real embedded template means this test protects the
 	// in-repo script: if someone deletes the case statement, this test
 	// fails.
-	hookPath := filepath.Join(result.WorktreeDir, ".liza-hooks", "pre-commit")
+	hookPath := filepath.Join(result.WorktreeDir, worktreeHooksDirName(), "pre-commit")
 	stubBin := filepath.Join(tmpDir, "stub-liza")
 	if err := os.WriteFile(stubBin, []byte("#!/bin/sh\nexit 127\n"), 0755); err != nil {
 		t.Fatalf("write stub liza: %v", err)
@@ -974,7 +1013,7 @@ func setupChainTestWorktree(t *testing.T, lizaExitCode int) string {
 	if err := os.WriteFile(stubBin, []byte(stubScript), 0755); err != nil {
 		t.Fatalf("write stub liza: %v", err)
 	}
-	hookPath := filepath.Join(result.WorktreeDir, ".liza-hooks", "pre-commit")
+	hookPath := filepath.Join(result.WorktreeDir, worktreeHooksDirName(), "pre-commit")
 	if err := os.WriteFile(hookPath, embedded.RenderWorktreePreCommitHook(stubBin, "task-1"), 0755); err != nil {
 		t.Fatalf("write hook: %v", err)
 	}
@@ -1173,7 +1212,7 @@ func withCreateWorktreeStacklitRuntimeRunner(t *testing.T, runner stacklit.Runti
 
 func addTrackedGoSourceForCreateWorktreeScipTest(t *testing.T, projectRoot string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(".claude/\n.liza-hooks/\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(".claude/\n"+worktreeHooksDirName()+"/\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(.gitignore) error: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(projectRoot, "go.mod"), []byte("module example.com/scipcreate\n\ngo 1.22\n"), 0o644); err != nil {
@@ -1256,7 +1295,7 @@ func assertCreateWorktreeScipExcludeCount(t *testing.T, worktreeDir string, want
 
 func commitEnvIgnoreForWorktreeTest(t *testing.T, projectRoot string) {
 	t.Helper()
-	ignore := ".env\n.env.*\n*.env\n.envrc\n.liza-hooks/\n"
+	ignore := ".env\n.env.*\n*.env\n.envrc\n" + worktreeHooksDirName() + "/\n"
 	if err := os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(ignore), 0o644); err != nil {
 		t.Fatalf("WriteFile(.gitignore) error: %v", err)
 	}

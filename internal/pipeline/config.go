@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 	"gopkg.in/yaml.v3"
 )
@@ -148,7 +149,7 @@ func (t TransitionDef) TaskSlugOrName() string {
 func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
 	path := filepath.Join(paths.New(projectRoot).LizaDir(), "pipeline.yaml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, fmt.Errorf("%w at %s (run 'liza init' to create workspace)", ErrConfigNotFound, path)
+		return nil, fmt.Errorf("%w at %s (run %q to create workspace)", ErrConfigNotFound, path, brand.Command("init"))
 	}
 	cfg, err := Load(path)
 	if err != nil {

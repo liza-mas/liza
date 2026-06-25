@@ -99,7 +99,7 @@ func SubmitForReview(projectRoot, taskID, commitRef, agentID string) (*SubmitFor
 
 	// Pre-execution checkpoint required before submission
 	if !HasCheckpoint(task.History, agentID) {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s: pre-execution checkpoint required before submission (use liza_write_checkpoint)", taskID)}
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s: pre-execution checkpoint required before submission (use %q)", taskID, brand.Command("write-checkpoint", taskID))}
 	}
 	if err := validateOutputArtifactRefScalars(taskID, task.Output); err != nil {
 		return nil, err
@@ -238,7 +238,7 @@ func SubmitForReview(projectRoot, taskID, commitRef, agentID string) (*SubmitFor
 			return nil, &OperationalError{
 				Code:    "state_write",
 				Phase:   "mark-integration-failed",
-				Message: fmt.Sprintf("rebase conflict on %s: transition to INTEGRATION_FAILED also failed — worktree is intact (rebase aborted), check task state with liza_get tasks/%s before retrying", taskID, taskID),
+				Message: fmt.Sprintf("rebase conflict on %s: transition to INTEGRATION_FAILED also failed — worktree is intact (rebase aborted), check task state with %q before retrying", taskID, brand.Command("get", "tasks/"+taskID)),
 				Details: map[string]any{
 					"operation":     integrationOperationSubmitForReview,
 					"task_id":       taskID,

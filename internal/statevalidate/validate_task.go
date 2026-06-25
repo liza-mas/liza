@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
@@ -263,7 +264,8 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			seen := make(map[string]bool)
 			for _, agent := range task.FailedBy {
 				if seen[agent] {
-					return fmt.Errorf("task %s has duplicate agent IDs in failed_by (manually edit .liza/state.yaml to remove duplicates)", task.ID)
+					stateRelPath := filepath.ToSlash(filepath.Join(paths.ProjectDirName(), paths.StateFileName))
+					return fmt.Errorf("task %s has duplicate agent IDs in failed_by (manually edit %s to remove duplicates)", task.ID, stateRelPath)
 				}
 				seen[agent] = true
 			}

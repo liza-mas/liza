@@ -4,8 +4,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 )
+
+func withStateValidateBrandBinary(t *testing.T, binaryName string) {
+	t.Helper()
+	oldBinaryName := brand.BinaryName
+	brand.BinaryName = binaryName
+	t.Cleanup(func() {
+		brand.BinaryName = oldBinaryName
+	})
+}
 
 func TestValidateRoleNames_UnderscoreDetected(t *testing.T) {
 	tests := []struct {
@@ -18,19 +28,19 @@ func TestValidateRoleNames_UnderscoreDetected(t *testing.T) {
 			name:    "underscore code_reviewer triggers error",
 			role:    "code_reviewer",
 			wantErr: true,
-			wantMsg: "liza migrate",
+			wantMsg: brand.Command("migrate"),
 		},
 		{
 			name:    "underscore code_planner triggers error",
 			role:    "code_planner",
 			wantErr: true,
-			wantMsg: "liza migrate",
+			wantMsg: brand.Command("migrate"),
 		},
 		{
 			name:    "underscore epic_plan_reviewer triggers error",
 			role:    "epic_plan_reviewer",
 			wantErr: true,
-			wantMsg: "liza migrate",
+			wantMsg: brand.Command("migrate"),
 		},
 		{
 			name:    "hyphenated code-reviewer passes",
@@ -92,8 +102,28 @@ func TestValidateRoleNames_MultipleAgents(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when any agent has underscore role")
 	}
-	if !strings.Contains(err.Error(), "liza migrate") {
-		t.Errorf("error should mention liza migrate, got: %v", err)
+	if !strings.Contains(err.Error(), brand.Command("migrate")) {
+		t.Errorf("error should mention migrate command, got: %v", err)
+	}
+}
+
+func TestValidateRoleNames_UsesBrandedMigrateCommand(t *testing.T) {
+	withStateValidateBrandBinary(t, "acme")
+	state := &models.State{
+		Agents: map[string]models.Agent{
+			"reviewer-1": {Role: "code_reviewer"},
+		},
+	}
+
+	err := validateRoleNames(state, "/tmp", false)
+	if err == nil {
+		t.Fatal("expected error for underscore role")
+	}
+	if !strings.Contains(err.Error(), "acme migrate") {
+		t.Errorf("error should mention branded migrate command, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "liza migrate") {
+		t.Errorf("error should not mention default migrate command under non-default brand, got: %v", err)
 	}
 }
 
