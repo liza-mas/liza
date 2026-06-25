@@ -799,7 +799,7 @@ func confirmUpdate(stdin *bufio.Reader, stdout io.Writer, next candidate) bool {
 }
 
 func shouldSkip(cfg Config) bool {
-	if envValueForSuffix(cfg.Env, skipEnvSuffix) != "" {
+	if envValueForSuffix(cfg, skipEnvSuffix) != "" {
 		return true
 	}
 	if enabled, ok := checkUpdateFlag(cfg.Args); ok {
@@ -835,7 +835,7 @@ func checkUpdateFlag(args []string) (bool, bool) {
 }
 
 func checkUpdateEnvEnabled(cfg Config) bool {
-	switch strings.ToLower(strings.TrimSpace(envValueForSuffix(cfg.Env, checkEnvSuffix))) {
+	switch strings.ToLower(strings.TrimSpace(envValueForSuffix(cfg, checkEnvSuffix))) {
 	case "1", "true", "yes", "on":
 		return true
 	default:
@@ -1038,7 +1038,7 @@ func updateChannel(cfg Config) string {
 	if cfg.Channel != "" {
 		return strings.ToLower(strings.TrimSpace(cfg.Channel))
 	}
-	if envChannel := envValueForSuffix(cfg.Env, channelEnvSuffix); envChannel != "" {
+	if envChannel := envValueForSuffix(cfg, channelEnvSuffix); envChannel != "" {
 		return strings.ToLower(strings.TrimSpace(envChannel))
 	}
 	if prefs := readUpdatePreferences(); prefs.Channel != "" {
@@ -1149,10 +1149,13 @@ func setEnv(env []string, key, value string) []string {
 	return out
 }
 
-func envValueForSuffix(env []string, suffix string) string {
+func envValueForSuffix(cfg Config, suffix string) string {
 	lookup := brand.RuntimeValues().LookupEnv(func(key string) string {
-		return envValue(env, key)
+		return envValue(cfg.Env, key)
 	}, suffix)
+	if lookup.Warning != "" && cfg.Stderr != nil {
+		fmt.Fprintf(cfg.Stderr, "Warning: %s\n", lookup.Warning)
+	}
 	return lookup.Value
 }
 

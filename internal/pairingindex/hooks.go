@@ -21,6 +21,8 @@ const ManagedHookMarker = "# PAIRING-INDEX-HOOK: managed"
 // ManagedIndexScriptMarker identifies pairing index scripts owned by this tool.
 const ManagedIndexScriptMarker = "# PAIRING-INDEX-SCRIPT: managed"
 
+const legacyManagedIndexScriptMarker = "# LIZA-PAIRING-INDEX-SCRIPT: managed"
+
 const stacklitArtifactName = "stacklit.json"
 const stacklitInsightsArtifactName = "stacklit-insights.json"
 const defaultScriptName = "liza-index.sh"
@@ -707,7 +709,7 @@ func installManagedIndexScript(scriptPath, want string) (HookAction, error) {
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", name, err)
 	}
-	if !strings.Contains(string(current), ManagedIndexScriptMarker) {
+	if !managedIndexScriptOwned(string(current)) {
 		if looksLikeLegacyIndexScript(string(current)) {
 			return "", fmt.Errorf("%s at %s already exists and appears to be a legacy managed index hook; move it aside and rerun %s: mv %s %s.backup", name, scriptPath, brand.Command("init"), scriptPath, scriptPath)
 		}
@@ -726,6 +728,11 @@ func installManagedIndexScript(scriptPath, want string) (HookAction, error) {
 		return "", fmt.Errorf("chmod %s: %w", name, err)
 	}
 	return HookActionUpdated, nil
+}
+
+func managedIndexScriptOwned(content string) bool {
+	return strings.Contains(content, ManagedIndexScriptMarker) ||
+		strings.Contains(content, legacyManagedIndexScriptMarker)
 }
 
 func rejectHookCollisions(hooksDir string, hooks []string) error {

@@ -38,6 +38,7 @@ func SyncEmbedded(opts SyncOptions) error {
 		return err
 	}
 	embeddedRoot := filepath.Join(repoRoot, "internal", "embedded")
+	// Also clear stale docs/specs dirs from older embedded layouts.
 	for _, rel := range []string{"contracts", "skills", "support-docs", "docs", "specs"} {
 		if err := os.RemoveAll(filepath.Join(embeddedRoot, rel)); err != nil {
 			return fmt.Errorf("remove embedded %s: %w", rel, err)

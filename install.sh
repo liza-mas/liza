@@ -18,6 +18,49 @@ derive_brand_upper() {
 derive_brand_title() {
     printf '%s' "$1" | awk -F- 'BEGIN{OFS=" "} {for (i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}'
 }
+brand_config_error() {
+    local name="$1"
+    local why="$2"
+    echo -e "${RED}Error: ${name} invalid: ${why}${NC}" >&2
+    exit 1
+}
+require_match() {
+    local name="$1"
+    local value="$2"
+    local pattern="$3"
+    local why="$4"
+    if [[ ! "$value" =~ $pattern ]]; then
+        brand_config_error "$name" "$why"
+    fi
+}
+validate_brand_title() {
+    local value="$1"
+    local pattern='^[A-Za-z0-9][A-Za-z0-9 ._/-]*$'
+    if [ -z "$value" ] || [[ "$value" == *$'\n'* ]] || [[ "$value" == *$'\r'* ]] || [[ ! "$value" =~ $pattern ]]; then
+        brand_config_error "BRAND_NAME_TITLE" "must be non-empty printable text with only shell-safe characters"
+    fi
+}
+validate_dir_name() {
+    local name="$1"
+    local value="$2"
+    if [ -z "$value" ] || [ "$value" = "." ] || [ "$value" = ".." ]; then
+        brand_config_error "$name" "must be a single directory name"
+    fi
+    if [[ "$value" == */* ]] || [[ "$value" == *\\* ]]; then
+        brand_config_error "$name" "must not contain path separators"
+    fi
+    require_match "$name" "$value" '^[A-Za-z0-9._-]+$' "contains characters unsafe for generated shell/config snippets"
+}
+validate_https_url() {
+    local name="$1"
+    local value="$2"
+    if [ -z "$value" ] || [[ "$value" =~ [[:space:]] ]] || [[ ! "$value" =~ ^https://[^/[:space:]]+($|/) ]]; then
+        brand_config_error "$name" "must be an absolute https:// URL with no whitespace"
+    fi
+    if [[ "$value" == *\"* || "$value" == *"'"* || "$value" == *\`* || "$value" == *\$* || "$value" == *\\* ]]; then
+        brand_config_error "$name" "contains characters unsafe for generated shell/config snippets"
+    fi
+}
 BRAND_NAME_UPPER="${BRAND_NAME_UPPER:-$(derive_brand_upper "$BRAND_NAME_LOWER")}"
 BRAND_NAME_TITLE="${BRAND_NAME_TITLE:-$(derive_brand_title "$BRAND_NAME_LOWER")}"
 BRAND_REPO="${BRAND_REPO:-liza-mas/liza}"
@@ -32,6 +75,23 @@ BRAND_ARCHIVE_PREFIX="${BRAND_ARCHIVE_PREFIX:-$BINARY_NAME}"
 BRAND_RELEASE_REPO="${BRAND_RELEASE_REPO:-$BRAND_REPO}"
 BRAND_RELEASE_BASE_URL="${BRAND_RELEASE_BASE_URL:-https://github.com/${BRAND_RELEASE_REPO}/releases/download}"
 BRAND_CHECKSUM_BASE_URL="${BRAND_CHECKSUM_BASE_URL:-$BRAND_RELEASE_BASE_URL}"
+validate_brand_config() {
+    require_match "BRAND_NAME_LOWER" "$BRAND_NAME_LOWER" '^[a-z][a-z0-9-]*$' "must match ^[a-z][a-z0-9-]*$"
+    require_match "BRAND_NAME_UPPER" "$BRAND_NAME_UPPER" '^[A-Z][A-Z0-9_]*$' "must match ^[A-Z][A-Z0-9_]*$"
+    require_match "BRAND_ENV_PREFIX" "$BRAND_ENV_PREFIX" '^[A-Z][A-Z0-9_]*$' "must match ^[A-Z][A-Z0-9_]*$"
+    require_match "BRAND_BINARY_NAME" "$BINARY_NAME" '^[A-Za-z0-9][A-Za-z0-9._-]*$' "must match ^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    require_match "BRAND_ARCHIVE_PREFIX" "$BRAND_ARCHIVE_PREFIX" '^[A-Za-z0-9][A-Za-z0-9._-]*$' "must match ^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    require_match "BRAND_REPO" "$BRAND_REPO" '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' "must use owner/repo form with no URL scheme"
+    require_match "BRAND_RELEASE_REPO" "$BRAND_RELEASE_REPO" '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' "must use owner/repo form with no URL scheme"
+    require_match "BRAND_INSTALL_REPO" "$BRAND_INSTALL_REPO" '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' "must use owner/repo form with no URL scheme"
+    validate_brand_title "$BRAND_NAME_TITLE"
+    validate_dir_name "BRAND_GLOBAL_DIRNAME" "$BRAND_GLOBAL_DIRNAME"
+    validate_dir_name "BRAND_PROJECT_DIRNAME" "$BRAND_PROJECT_DIRNAME"
+    validate_dir_name "BRAND_SOURCE_DIR_NAME" "$SOURCE_DIR_NAME"
+    validate_https_url "BRAND_RELEASE_BASE_URL" "$BRAND_RELEASE_BASE_URL"
+    validate_https_url "BRAND_CHECKSUM_BASE_URL" "$BRAND_CHECKSUM_BASE_URL"
+}
+validate_brand_config
 if [ -z "${INSTALL_DIR:-}" ]; then
     INSTALL_DIR="$HOME/.local/bin"
     if ! echo "$PATH" | tr ':' '\n' | grep -qxF "$INSTALL_DIR"; then

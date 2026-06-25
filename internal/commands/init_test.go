@@ -3169,7 +3169,7 @@ func TestInitPairingCommand_IndexHookFailuresReportDiagnostics(t *testing.T) {
 			setup: func(t *testing.T, repo string) {
 				writeFileForTest(t, filepath.Join(repo, ".git", "hooks", "liza-index.sh"), "#!/bin/sh\n# Refresh scip and stacklit indexes for current branch in liza pairing mode.\n", 0755)
 			},
-			wantError: "appears to be a legacy Liza index hook",
+			wantError: "appears to be a legacy managed index hook",
 		},
 		{
 			name: "unsafe hooksPath file",

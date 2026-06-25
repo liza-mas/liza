@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,15 @@ func TestNonDefaultBrandBuildSmoke(t *testing.T) {
 
 	agentHelp := runBrandSmokeCommand(t, bin, "agent", "--help")
 	assertContains(t, agentHelp, "ACME_AGENT_AGENT_ID")
+
+	for label, output := range map[string]string{
+		"version":    version,
+		"root help":  rootHelp,
+		"init help":  initHelp,
+		"agent help": agentHelp,
+	} {
+		assertNoDefaultBrandLeaks(t, label, output)
+	}
 }
 
 func runBrandSmokeCommand(t *testing.T, bin string, args ...string) string {
@@ -62,5 +72,14 @@ func assertContains(t *testing.T, got, want string) {
 	t.Helper()
 	if !strings.Contains(got, want) {
 		t.Fatalf("output missing %q:\n%s", want, got)
+	}
+}
+
+var defaultBrandLeakRE = regexp.MustCompile(`(?i)(^|[^A-Za-z])liza($|[^A-Za-z0-9])|liza-mas/liza`)
+
+func assertNoDefaultBrandLeaks(t *testing.T, label, got string) {
+	t.Helper()
+	if match := defaultBrandLeakRE.FindString(got); match != "" {
+		t.Fatalf("%s output leaked default brand token %q:\n%s", label, match, got)
 	}
 }

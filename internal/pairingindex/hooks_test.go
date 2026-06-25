@@ -320,6 +320,37 @@ func TestInstallIndexScriptWritesExecutableManagedScript(t *testing.T) {
 	}
 }
 
+func TestInstallIndexScriptUpdatesLegacyManagedScript(t *testing.T) {
+	repo := initGitRepo(t)
+	scriptPath := filepath.Join(repo, ".git", "hooks", "liza-index.sh")
+	legacyScript := "#!/bin/sh\n" + legacyManagedIndexScriptMarker + "\necho stale\n"
+	if err := os.WriteFile(scriptPath, []byte(legacyScript), 0644); err != nil {
+		t.Fatalf("write legacy managed script: %v", err)
+	}
+
+	result, err := InstallIndexScript(InstallIndexScriptOptions{RepoRoot: repo})
+	if err != nil {
+		t.Fatalf("InstallIndexScript() error = %v", err)
+	}
+	if result.Action != HookActionUpdated {
+		t.Fatalf("script action = %q, want %q", result.Action, HookActionUpdated)
+	}
+	updated := readFile(t, scriptPath)
+	if !strings.Contains(updated, ManagedIndexScriptMarker) {
+		t.Fatalf("updated script missing new managed marker:\n%s", updated)
+	}
+	if strings.Contains(updated, legacyManagedIndexScriptMarker) {
+		t.Fatalf("updated script retained legacy marker:\n%s", updated)
+	}
+	info, err := os.Stat(scriptPath)
+	if err != nil {
+		t.Fatalf("updated script missing: %v", err)
+	}
+	if info.Mode()&0111 == 0 {
+		t.Fatalf("updated script is not executable: mode=%v", info.Mode())
+	}
+}
+
 func TestInstalledIndexScriptRefreshesStacklitJSONWithoutAIByDefault(t *testing.T) {
 	repo := initGitRepo(t)
 	result, err := InstallIndexScript(InstallIndexScriptOptions{RepoRoot: repo})

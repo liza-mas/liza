@@ -1412,6 +1412,26 @@ func TestUpdateEnvUsesBrandedNameAndLegacyAlias(t *testing.T) {
 	}
 }
 
+func TestUpdateEnvWarnsOnMixedBrandedAndLegacyValues(t *testing.T) {
+	overrideUpdaterBrand(t, acmeUpdaterBrand())
+
+	var stderr bytes.Buffer
+	got := updateChannel(Config{
+		Env: []string{
+			"ACME_AGENT_UPDATE_CHANNEL=main",
+			"LIZA_UPDATE_CHANNEL=stable",
+		},
+		Stderr: &stderr,
+	})
+	if got != channelMain {
+		t.Fatalf("update channel = %q, want %q", got, channelMain)
+	}
+	want := "Warning: ACME_AGENT_UPDATE_CHANNEL and LIZA_UPDATE_CHANNEL are both set; using ACME_AGENT_UPDATE_CHANNEL"
+	if !strings.Contains(stderr.String(), want) {
+		t.Fatalf("stderr missing %q:\n%s", want, stderr.String())
+	}
+}
+
 func TestCheckUpdateFlagStopsAtDoubleDash(t *testing.T) {
 	tests := []struct {
 		name     string
