@@ -665,6 +665,19 @@ func init() {
 	rootCmd.AddCommand(getCmd)
 	rootCmd.AddCommand(statusCmd)
 
+	proceedCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		switch len(args) {
+		case 0:
+			return completeTaskIDs(cmd, args, toComplete)
+		case 1:
+			return completePipelineTransitions(cmd, args, toComplete)
+		default:
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+	}
+	replanCmd.ValidArgsFunction = completeTaskIDs
+	getCmd.ValidArgsFunction = completeGetQueries
+
 	addChangedByFlag(pauseCmd)
 	addChangedByFlag(stopCmd)
 	addChangedByFlag(startCmd)
@@ -685,10 +698,12 @@ func init() {
 	getCmd.Flags().Bool("output-summary", false, "return compact task output summaries")
 	getCmd.Flags().Bool("active", false, "return only non-terminal tasks")
 	getCmd.Flags().Bool("zombies", false, fmt.Sprintf("return live %s agent processes for this goal that are missing from state", brand.BinaryName))
+	registerCompletion(getCmd, "format", completeValues("json", "yaml", "table", "value"))
 
 	// Status command flags
 	statusCmd.Flags().String("format", "", "output format: json, yaml, or dashboard (default)")
 	statusCmd.Flags().Bool("detailed", false, "include anomalies and circuit breaker status")
+	registerCompletion(statusCmd, "format", completeValues("json", "yaml", "dashboard"))
 
 	// TUI command flags
 	tuiCmd.Flags().Bool("headless", false, "run in headless mode (no TUI, alerts to stderr + alerts.log)")

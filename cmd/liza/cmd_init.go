@@ -437,6 +437,11 @@ func init() {
 	initCmd.Flags().Bool("opencode", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("gemini", false, fmt.Sprintf("create GEMINI.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("mistral", false, fmt.Sprintf("set up ~/.vibe/ for %s contract", brand.NameTitle))
+	registerCompletion(initCmd, "entry-point", completeValues("general-objective", "functional-spec", "technical-spec", "detailed-spec"))
+	registerCompletion(initCmd, "default-cli", completeCLINames)
+	registerCompletion(initCmd, "default-doer-cli", completeCLINames)
+	registerCompletion(initCmd, "default-reviewer-cli", completeCLINames)
+	registerCompletion(initCmd, "scip-search", completeValues("go", "typescript", "python"))
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")

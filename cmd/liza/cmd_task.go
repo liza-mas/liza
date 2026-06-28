@@ -1126,6 +1126,27 @@ func init() {
 	rootCmd.AddCommand(setDiscoveryDispositionCmd)
 	deleteCmd.AddCommand(deleteTaskCmd)
 
+	claimTaskCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return completeTaskIDs(cmd, args, toComplete)
+		}
+		if len(args) == 1 {
+			return completeAgentIDs(cmd, args, toComplete)
+		}
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	supersedeTaskCmd.ValidArgsFunction = completeTaskIDs
+	retargetDependencyCmd.ValidArgsFunction = completeTaskIDs
+	cancelTaskCmd.ValidArgsFunction = completeTaskIDs
+	reconcileMergedCmd.ValidArgsFunction = completeTaskIDs
+	markBlockedCmd.ValidArgsFunction = completeTaskIDs
+	unblockTaskCmd.ValidArgsFunction = completeTaskIDs
+	assessBlockedCmd.ValidArgsFunction = completeTaskIDs
+	assessHypothesisExhaustedCmd.ValidArgsFunction = completeTaskIDs
+	writeCheckpointCmd.ValidArgsFunction = completeTaskIDs
+	setTaskOutputCmd.ValidArgsFunction = completeTaskIDs
+	deleteTaskCmd.ValidArgsFunction = completeTaskIDs
+
 	addJSONFlag(claimTaskCmd)
 	addJSONFlag(addTaskCmd)
 	addJSONFlag(addTasksCmd)
@@ -1169,6 +1190,8 @@ func init() {
 	markBlockedCmd.Flags().String("agent-id", "", "agent ID marking the task as blocked")
 	markBlockedCmd.MarkFlagRequired("reason")
 	markBlockedCmd.MarkFlagRequired("questions")
+	registerCompletion(markBlockedCmd, "depends-on", completeTaskIDs)
+	registerCompletion(markBlockedCmd, "agent-id", completeAgentIDs)
 
 	// Unblock-task command flags
 	unblockTaskCmd.Flags().String("agent-id", "", "orchestrator agent ID (auto-resolved if not provided)")
@@ -1177,14 +1200,18 @@ func init() {
 	unblockTaskCmd.Flags().String("rebase-on", "", "branch or commit to rebase the task worktree onto before unblocking")
 	unblockTaskCmd.Flags().Bool("allow-dirty", false, "allow tracked worktree changes during --rebase-on by using git rebase --autostash")
 	unblockTaskCmd.MarkFlagRequired("reason")
+	registerCompletion(unblockTaskCmd, "agent-id", completeAgentIDs)
+	registerCompletion(unblockTaskCmd, "assign-to", completeAgentIDs)
 
 	// Assess-blocked command flags
 	assessBlockedCmd.Flags().String("agent-id", "", "orchestrator agent ID (auto-resolved if not provided)")
 	assessBlockedCmd.Flags().String("note", "", "optional note about the assessment outcome")
+	registerCompletion(assessBlockedCmd, "agent-id", completeAgentIDs)
 
 	// Assess-hypothesis-exhausted command flags
 	assessHypothesisExhaustedCmd.Flags().String("agent-id", "", "orchestrator agent ID (auto-resolved if not provided)")
 	assessHypothesisExhaustedCmd.Flags().String("note", "", "optional note about the assessment outcome")
+	registerCompletion(assessHypothesisExhaustedCmd, "agent-id", completeAgentIDs)
 
 	// Add-task command flags
 	addTaskCmd.Flags().String("file", "", "path to YAML file containing task details")
@@ -1201,6 +1228,7 @@ func init() {
 	addTaskCmd.Flags().String("role-pair", "", "task role-pair used for pipeline state and default type (required unless provided by --file)")
 	addTaskCmd.Flags().String("state", "", fmt.Sprintf("path to state.yaml (default: %s/state.yaml)", paths.ProjectDirName()))
 	addTaskCmd.Flags().String("log", "", fmt.Sprintf("path to log.yaml (default: %s/log.yaml)", paths.ProjectDirName()))
+	registerCompletion(addTaskCmd, "depends", completeTaskIDs)
 
 	// Add-tasks (batch) command flags
 	addAgentIDFlag(addTasksCmd)

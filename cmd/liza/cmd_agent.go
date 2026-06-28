@@ -406,6 +406,13 @@ func init() {
 	rootCmd.AddCommand(clearAgentDegradedCmd)
 	deleteCmd.AddCommand(deleteAgentCmd)
 
+	agentCmd.ValidArgsFunction = completeAgentArgs
+	recoverTaskCmd.ValidArgsFunction = completeTaskIDs
+	recoverAgentCmd.ValidArgsFunction = completeAgentIDs
+	markAgentDegradedCmd.ValidArgsFunction = completeAgentIDs
+	clearAgentDegradedCmd.ValidArgsFunction = completeAgentIDs
+	deleteAgentCmd.ValidArgsFunction = completeAgentIDs
+
 	// Agent command flags
 	addAgentIDFlag(agentCmd)
 	agentCmd.Flags().String("cli", "", "CLI to use; defaults by role-specific then global config/env; see docs ("+strings.Join(agent.ValidCLIs(), ", ")+")")
@@ -427,6 +434,9 @@ func init() {
 	repairAgentPoolCmd.Flags().Bool("missing", false, "spawn roles with claimable work and no registered agent")
 	repairAgentPoolCmd.Flags().String("cli", "", "CLI to use for spawned agents; defaults by role-specific then global config/env; see docs")
 	repairAgentPoolCmd.Flags().Bool("dry-run", false, "print missing roles and spawn commands without launching agents")
+	registerCompletion(agentCmd, "cli", completeCLINames)
+	registerCompletion(recoverAgentCmd, "cli", completeCLINames)
+	registerCompletion(repairAgentPoolCmd, "cli", completeCLINames)
 
 	// Agent health command flags
 	markAgentDegradedCmd.Flags().String("role", "", "runtime role whose capacity is degraded")
@@ -438,6 +448,9 @@ func init() {
 	markAgentDegradedCmd.MarkFlagRequired("role")
 	markAgentDegradedCmd.MarkFlagRequired("reason")
 	markAgentDegradedCmd.MarkFlagRequired("error")
+	registerCompletion(markAgentDegradedCmd, "role", completeAgentRoles)
+	registerCompletion(markAgentDegradedCmd, "task", completeTaskIDs)
+	registerCompletion(markAgentDegradedCmd, "candidate-task", completeTaskIDs)
 
 	// Delete agent command flags
 	deleteAgentCmd.Flags().Bool("force", false, "force deletion even if agent has active lease or current task")

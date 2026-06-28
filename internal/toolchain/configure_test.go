@@ -57,6 +57,16 @@ func TestConfigureWritesProfileAndEnv(t *testing.T) {
 	if strings.Contains(env, "LIZA_ENABLE_BASH_POLICY") {
 		t.Fatalf("balanced env should not enable bash-policy:\n%s", env)
 	}
+	for _, want := range []string{
+		`case "$-" in`,
+		`command -v liza >/dev/null 2>&1`,
+		`eval "$(liza completion bash 2>/dev/null)"`,
+		`eval "$(liza completion zsh 2>/dev/null)"`,
+	} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("env missing completion activation %q:\n%s", want, env)
+		}
+	}
 }
 
 func TestConfigureFullProfileEnablesBashPolicy(t *testing.T) {
