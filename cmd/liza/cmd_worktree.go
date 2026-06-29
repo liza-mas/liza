@@ -167,9 +167,9 @@ func init() {
 	rootCmd.AddCommand(wtDeleteCmd)
 	rootCmd.AddCommand(wtMergeCmd)
 
-	wtCreateCmd.ValidArgsFunction = completeTaskIDs
-	wtDeleteCmd.ValidArgsFunction = completeTaskIDs
-	wtMergeCmd.ValidArgsFunction = completeTaskIDs
+	wtCreateCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	wtDeleteCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	wtMergeCmd.ValidArgsFunction = completeTaskIDArgs(1)
 
 	addAgentIDFlag(wtMergeCmd)
 	registerCompletion(wtMergeCmd, "agent-id", completeAgentIDs)

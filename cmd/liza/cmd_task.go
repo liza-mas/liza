@@ -1135,17 +1135,17 @@ func init() {
 		}
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	supersedeTaskCmd.ValidArgsFunction = completeTaskIDs
-	retargetDependencyCmd.ValidArgsFunction = completeTaskIDs
-	cancelTaskCmd.ValidArgsFunction = completeTaskIDs
-	reconcileMergedCmd.ValidArgsFunction = completeTaskIDs
-	markBlockedCmd.ValidArgsFunction = completeTaskIDs
-	unblockTaskCmd.ValidArgsFunction = completeTaskIDs
-	assessBlockedCmd.ValidArgsFunction = completeTaskIDs
-	assessHypothesisExhaustedCmd.ValidArgsFunction = completeTaskIDs
-	writeCheckpointCmd.ValidArgsFunction = completeTaskIDs
-	setTaskOutputCmd.ValidArgsFunction = completeTaskIDs
-	deleteTaskCmd.ValidArgsFunction = completeTaskIDs
+	supersedeTaskCmd.ValidArgsFunction = completeTaskIDArgs(2)
+	retargetDependencyCmd.ValidArgsFunction = completeTaskIDArgs(3)
+	cancelTaskCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	reconcileMergedCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	markBlockedCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	unblockTaskCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	assessBlockedCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	assessHypothesisExhaustedCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	writeCheckpointCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	setTaskOutputCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	deleteTaskCmd.ValidArgsFunction = completeTaskIDArgs(1)
 
 	addJSONFlag(claimTaskCmd)
 	addJSONFlag(addTaskCmd)

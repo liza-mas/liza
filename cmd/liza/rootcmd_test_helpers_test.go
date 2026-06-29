@@ -142,6 +142,7 @@ func resetRootCmdForTest(t *testing.T) {
 	resetFlagIfPresent(rootCmd, "project-root")
 	resetFlagIfPresent(rootCmd, "check-update")
 	resetFlagIfPresent(rootCmd, "update-channel")
+	removeGeneratedCompletionCmdForTest(rootCmd)
 	for _, child := range rootCmd.Commands() {
 		resetCommandFlagsForTest(t, child)
 	}
@@ -149,6 +150,15 @@ func resetRootCmdForTest(t *testing.T) {
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
 	rootCmd.SetArgs(nil)
+}
+
+func removeGeneratedCompletionCmdForTest(cmd *cobra.Command) {
+	for _, child := range cmd.Commands() {
+		if child.Name() == "completion" {
+			cmd.RemoveCommand(child)
+			return
+		}
+	}
 }
 
 func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {

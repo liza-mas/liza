@@ -66,8 +66,9 @@ or provider-specific secrets.
 source ~/§BRAND_GLOBAL_DIRNAME§/toolchain/env.sh
 ```
 
-The generated env file adds the selected install directory to `PATH` and exports
-selected `§BRAND_ENV_PREFIX§_ENABLE_*` gates before `§BRAND_BINARY_NAME§ init` or agent runtime.
+The generated env file adds the selected install directory to `PATH`, exports
+selected `§BRAND_ENV_PREFIX§_ENABLE_*` gates, and registers `§BRAND_BINARY_NAME§ completion`
+for interactive Bash and Zsh shells before `§BRAND_BINARY_NAME§ init` or agent runtime.
 Installers that build or download binaries directly place them in that directory.
 OS package managers still use their normal system prefixes. npm-backed tools use
 the parent prefix of an install directory ending in `/bin`; `uv tool` installs use

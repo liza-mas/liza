@@ -675,7 +675,7 @@ func init() {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 	}
-	replanCmd.ValidArgsFunction = completeTaskIDs
+	replanCmd.ValidArgsFunction = completeTaskIDArgs(1)
 	getCmd.ValidArgsFunction = completeGetQueries
 
 	addChangedByFlag(pauseCmd)

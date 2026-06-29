@@ -466,8 +466,8 @@ func init() {
 	rootCmd.AddCommand(awaitVerdictCmd)
 	rootCmd.AddCommand(awaitResubmissionCmd)
 	rootCmd.AddCommand(updateReviewCommitCmd)
-	submitForReviewCmd.ValidArgsFunction = completeTaskIDs
-	handoffCmd.ValidArgsFunction = completeTaskIDs
+	submitForReviewCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	handoffCmd.ValidArgsFunction = completeTaskIDArgs(1)
 	submitVerdictCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return completeTaskIDs(cmd, args, toComplete)
@@ -477,10 +477,10 @@ func init() {
 		}
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	releaseClaimCmd.ValidArgsFunction = completeTaskIDs
-	awaitVerdictCmd.ValidArgsFunction = completeTaskIDs
-	awaitResubmissionCmd.ValidArgsFunction = completeTaskIDs
-	updateReviewCommitCmd.ValidArgsFunction = completeTaskIDs
+	releaseClaimCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	awaitVerdictCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	awaitResubmissionCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	updateReviewCommitCmd.ValidArgsFunction = completeTaskIDArgs(1)
 
 	addAgentIDFlag(submitForReviewCmd)
 	addAgentIDFlag(handoffCmd)

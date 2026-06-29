@@ -407,11 +407,11 @@ func init() {
 	deleteCmd.AddCommand(deleteAgentCmd)
 
 	agentCmd.ValidArgsFunction = completeAgentArgs
-	recoverTaskCmd.ValidArgsFunction = completeTaskIDs
-	recoverAgentCmd.ValidArgsFunction = completeAgentIDs
-	markAgentDegradedCmd.ValidArgsFunction = completeAgentIDs
-	clearAgentDegradedCmd.ValidArgsFunction = completeAgentIDs
-	deleteAgentCmd.ValidArgsFunction = completeAgentIDs
+	recoverTaskCmd.ValidArgsFunction = completeTaskIDArgs(1)
+	recoverAgentCmd.ValidArgsFunction = completeAgentIDArgs(1)
+	markAgentDegradedCmd.ValidArgsFunction = completeAgentIDArgs(1)
+	clearAgentDegradedCmd.ValidArgsFunction = completeAgentIDArgs(1)
+	deleteAgentCmd.ValidArgsFunction = completeAgentIDArgs(1)
 
 	// Agent command flags
 	addAgentIDFlag(agentCmd)

@@ -208,7 +208,7 @@ func init() {
 	registerCompletion(toolchainDoctorCmd, "exclude", completeToolIDs)
 	registerCompletion(toolchainInstallCmd, "exclude", completeToolIDs)
 	registerCompletion(toolchainConfigureCmd, "exclude", completeToolIDs)
-	registerCompletion(toolchainDoctorCmd, "tool", completeToolIDs)
+	registerCompletion(toolchainDoctorCmd, "tool", completeToolIDsOrAll)
 	registerCompletion(toolchainConfigureCmd, "agent-tools", completeValues("auto", "skip", "force"))
 
 	addJSONFlag(toolchainListCmd)

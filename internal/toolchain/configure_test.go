@@ -60,7 +60,9 @@ func TestConfigureWritesProfileAndEnv(t *testing.T) {
 	for _, want := range []string{
 		`case "$-" in`,
 		`command -v liza >/dev/null 2>&1`,
+		`${BASH_VERSION:-}`,
 		`eval "$(liza completion bash 2>/dev/null)"`,
+		`${ZSH_VERSION:-}`,
 		`eval "$(liza completion zsh 2>/dev/null)"`,
 	} {
 		if !strings.Contains(env, want) {

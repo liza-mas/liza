@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/toolchain"
 	"github.com/spf13/cobra"
 )
@@ -23,12 +24,20 @@ func completeCLINames(_ *cobra.Command, _ []string, toComplete string) ([]string
 	return filterCompletionValues(agent.ValidCLIs(), toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
-func completeToolIDs(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func toolIDs() []string {
 	var ids []string
 	for _, tool := range toolchain.Catalog() {
 		ids = append(ids, tool.ID)
 	}
-	ids = append(ids, "all")
+	return ids
+}
+
+func completeToolIDs(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return filterCompletionValues(toolIDs(), toComplete), cobra.ShellCompDirectiveNoFileComp
+}
+
+func completeToolIDsOrAll(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ids := append(toolIDs(), "all")
 	return filterCompletionValues(ids, toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -50,21 +59,11 @@ func completePipelineTransitions(cmd *cobra.Command, _ []string, toComplete stri
 }
 
 func completeAgentRoles(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	roles := completionProjectRoles(cmd)
-	if len(roles) == 0 {
-		roles = []string{
-			"orchestrator",
-			"epic-planner",
-			"epic-plan-reviewer",
-			"us-writer",
-			"us-reviewer",
-			"code-planner",
-			"code-plan-reviewer",
-			"coder",
-			"code-reviewer",
-		}
+	roleNames := completionProjectRoles(cmd)
+	if len(roleNames) == 0 {
+		roleNames = roles.All()
 	}
-	return filterCompletionValues(roles, toComplete), cobra.ShellCompDirectiveNoFileComp
+	return filterCompletionValues(roleNames, toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
 func completeAgentArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -92,6 +91,24 @@ func completeAgentIDs(cmd *cobra.Command, _ []string, toComplete string) ([]stri
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return filterCompletionValues(agentIDsFromState(state), toComplete), cobra.ShellCompDirectiveNoFileComp
+}
+
+func completeTaskIDArgs(maxArgs int) cobra.CompletionFunc {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) >= maxArgs {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return completeTaskIDs(cmd, args, toComplete)
+	}
+}
+
+func completeAgentIDArgs(maxArgs int) cobra.CompletionFunc {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) >= maxArgs {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return completeAgentIDs(cmd, args, toComplete)
+	}
 }
 
 func completeGetQueries(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {

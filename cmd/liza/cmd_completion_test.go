@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
+	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestCompletionCommandGeneratesBashScript(t *testing.T) {
@@ -19,24 +23,19 @@ func TestCompletionCommandGeneratesBashScript(t *testing.T) {
 	}
 
 	text := out.String()
-	for _, want := range []string{"__start_liza", "completion", "toolchain"} {
+	for _, want := range []string{"__start_liza", "__complete"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("completion output missing %q:\n%s", want, text)
 		}
 	}
 }
 
-func TestCompletionCommandRejectsUnknownShell(t *testing.T) {
-	resetRootCmdForTest(t)
-
-	rootCmd.SetArgs([]string{"completion", "elvish"})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("completion elvish error = nil, want error")
-	}
-	if !strings.Contains(err.Error(), `invalid argument "elvish"`) {
-		t.Fatalf("error = %q, want cobra valid-args error", err)
+func TestShellCompleteCompletionCommandShellNames(t *testing.T) {
+	output := executeShellComplete(t, "completion", "")
+	for _, want := range []string{"bash", "zsh", "fish", "powershell"} {
+		if !completionOutputContains(output, want) {
+			t.Fatalf("completion command shell completion missing %q:\n%s", want, output)
+		}
 	}
 }
 
@@ -75,6 +74,36 @@ func TestShellCompleteSubmitVerdictSecondArgument(t *testing.T) {
 	}
 }
 
+func TestShellCompleteRoleFallbackUsesCanonicalRoles(t *testing.T) {
+	output := executeShellComplete(t, "--project-root", t.TempDir(), "agent", "integ")
+	if !completionOutputContains(output, "integration-analyst") {
+		t.Fatalf("agent role fallback completion missing integration-analyst:\n%s", output)
+	}
+}
+
+func TestShellCompleteToolIDsOnlyIncludesAllForToolFlag(t *testing.T) {
+	includeOutput := executeShellComplete(t, "toolchain", "install", "--include", "")
+	if completionOutputContains(includeOutput, "all") {
+		t.Fatalf("toolchain --include completion unexpectedly included all:\n%s", includeOutput)
+	}
+
+	toolOutput := executeShellComplete(t, "toolchain", "doctor", "--tool", "")
+	if !completionOutputContains(toolOutput, "all") {
+		t.Fatalf("toolchain --tool completion missing all:\n%s", toolOutput)
+	}
+}
+
+func TestShellCompleteDoesNotSuggestTaskIDsForFreeTextArgs(t *testing.T) {
+	projectRoot := setupCompletionProject(t)
+
+	output := executeShellComplete(t, "--project-root", projectRoot, "cancel-task", "task-1", "")
+	for _, unwanted := range []string{"task-1", "task-2"} {
+		if completionOutputContains(output, unwanted) {
+			t.Fatalf("cancel-task reason completion unexpectedly included %q:\n%s", unwanted, output)
+		}
+	}
+}
+
 func executeShellComplete(t *testing.T, args ...string) string {
 	t.Helper()
 	resetRootCmdForTest(t)
@@ -97,4 +126,26 @@ func completionOutputContains(output, want string) bool {
 		}
 	}
 	return false
+}
+
+func setupCompletionProject(t *testing.T) string {
+	t.Helper()
+
+	projectRoot := t.TempDir()
+	cmd := exec.Command("git", "-C", projectRoot, "init")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
+
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		{ID: "task-1"},
+		{ID: "task-2"},
+	}
+	state.Agents = map[string]models.Agent{
+		"coder-1": {Role: "coder"},
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+	return projectRoot
 }
