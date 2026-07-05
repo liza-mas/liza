@@ -8,11 +8,21 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/liza-mas/liza/internal/gitenv"
 )
 
 var privateExcludeMu sync.Mutex
+
+const (
+	// gitConfigLockRetries bounds how many times a shared-config write is
+	// retried while a concurrent git process holds the config lock.
+	gitConfigLockRetries = 12
+	// gitConfigLockBackoff is the base backoff between config-lock retries; the
+	// effective delay grows linearly per attempt.
+	gitConfigLockBackoff = 25 * time.Millisecond
+)
 
 // EnsurePrivateExclude makes the linked worktree's private info/exclude file
 // the worktree-specific core.excludesFile and appends missing relative entries
@@ -89,7 +99,7 @@ func ensureWorktreeExcludeConfig(worktreeRoot, excludePath string) error {
 		return err
 	}
 
-	output, err := gitenv.CombinedOutput(worktreeRoot, "config", "extensions.worktreeConfig", "true")
+	output, err := gitConfigWrite(worktreeRoot, "config", "extensions.worktreeConfig", "true")
 	if err != nil {
 		return fmt.Errorf("enable worktree config for private exclude: %w%s", err, outputSuffix(string(output)))
 	}
@@ -160,11 +170,33 @@ func appendMissingEntries(excludePath string, entries []string) error {
 }
 
 func setWorktreeExcludeConfig(worktreeRoot, excludePath string) error {
-	output, err := gitenv.CombinedOutput(worktreeRoot, "config", "--worktree", "core.excludesFile", excludePath)
+	output, err := gitConfigWrite(worktreeRoot, "config", "--worktree", "core.excludesFile", excludePath)
 	if err != nil {
 		return fmt.Errorf("configure worktree private exclude: %w%s", err, outputSuffix(string(output)))
 	}
 	return nil
+}
+
+// gitConfigWrite runs a git config write that mutates a lock-guarded config file
+// and retries when git cannot acquire the lock because a concurrent git process
+// (e.g. `git worktree add` on the shared repository) holds it. Git writes config
+// through a `<file>.lock` sentinel and fails fast with "could not lock config
+// file" instead of waiting, so concurrent worktree setup must retry itself.
+func gitConfigWrite(worktreeRoot string, args ...string) ([]byte, error) {
+	var output []byte
+	var err error
+	for attempt := 0; attempt < gitConfigLockRetries; attempt++ {
+		output, err = gitenv.CombinedOutput(worktreeRoot, args...)
+		if err == nil || !isConfigLockContention(output) {
+			return output, err
+		}
+		time.Sleep(gitConfigLockBackoff * time.Duration(attempt+1))
+	}
+	return output, err
+}
+
+func isConfigLockContention(output []byte) bool {
+	return strings.Contains(string(output), "could not lock config file")
 }
 
 func gitConfigUnset(err error) bool {
