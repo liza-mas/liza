@@ -66,12 +66,15 @@ directories. For Claude, Codex, OpenCode, and Gemini, setup creates skill
 symlinks under `~/.claude/skills/`, `~/.codex/skills/`,
 `~/.config/opencode/skills/`, or `~/.gemini/skills/` pointing to
 `~/.liza/skills/`. Mistral/Vibe also gets its prompt link under
-`~/.vibe/prompts/`. Project hooks and runtime provider settings are handled by
-`liza init`:
+`~/.vibe/prompts/`. Catalog-backed providers use repeatable `--provider <id>`
+without requiring a new Liza binary. Project hooks and runtime provider settings
+are handled by `liza init`:
 
 ```bash
 liza setup --claude --codex
 liza setup --claude --codex --opencode --gemini --mistral
+liza setup --provider qwen
+liza setup --provider devin
 ```
 
 Use `--force` after an upgrade when you want to refresh existing global files.

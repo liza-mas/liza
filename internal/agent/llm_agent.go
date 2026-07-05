@@ -55,7 +55,10 @@ type LLMAgentRunRequest struct {
 	SessionID      string
 	ResumeSession  string
 	WarmSession    bool
+	ProfileName    string
+	ProfileVars    map[string]string
 	Prompt         string
+	PromptFile     string
 	ProjectRoot    string
 	AdditionalDirs []string
 	RuntimeConfig  models.Config
@@ -86,8 +89,11 @@ type LLMAgentInteractiveRequest struct {
 	BackendName    string
 	AgentID        string
 	SessionID      string
+	ProfileName    string
+	ProfileVars    map[string]string
 	ProjectRoot    string
 	AdditionalDirs []string
+	RuntimeConfig  models.Config
 	EventSink      LLMAgentEventSink
 }
 

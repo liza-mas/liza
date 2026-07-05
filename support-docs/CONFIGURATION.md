@@ -20,7 +20,8 @@ skill symlinks under `~/.claude/skills/`, `~/.codex/skills/`,
 `~/.config/opencode/skills/`, or `~/.gemini/skills/` pointing to
 `~/§BRAND_GLOBAL_DIRNAME§/skills/`. Mistral/Vibe also gets its prompt link under
 `~/.vibe/prompts/`. Project hooks and runtime provider settings are handled by
-`§BRAND_BINARY_NAME§ init`:
+`§BRAND_BINARY_NAME§ init`. Built-in shortcut flags remain supported; catalog
+providers use repeatable `--provider <id>`:
 
 ```bash
 §BRAND_BINARY_NAME§ setup --claude
@@ -28,6 +29,7 @@ skill symlinks under `~/.claude/skills/`, `~/.codex/skills/`,
 §BRAND_BINARY_NAME§ setup --opencode
 §BRAND_BINARY_NAME§ setup --gemini
 §BRAND_BINARY_NAME§ setup --mistral
+§BRAND_BINARY_NAME§ setup --provider qwen
 ```
 
 Use `--force` to refresh existing global files after an upgrade. Use
@@ -262,8 +264,10 @@ task before relying on it for unattended work.
 ## Configuration Matrix
 
 All configuration lives in `§BRAND_PROJECT_DIRNAME§/state.yaml` under the `config` section.
-Supported CLI names are `claude`, `codex`, `codex-acp`, `cursor-acp`,
-`opencode`, `opencode-acp`, `gemini`, `mistral`, and `kimi`.
+The embedded fallback CLI names are `claude`, `codex`, `codex-acp`,
+`cursor-acp`, `opencode`, `opencode-acp`, `gemini`, `mistral`, and `kimi`.
+Additional catalog entries such as `qwen`, `qwen-acp`, `devin`, and `devin-acp`
+are loaded at runtime from the provider catalog.
 
 | Parameter | Default | Min | Max | Unit | Purpose |
 |-----------|---------|-----|-----|------|---------|
@@ -281,6 +285,11 @@ Supported CLI names are `claude`, `codex`, `codex-acp`, `cursor-acp`,
 | `default_cli` | (none) | — | — | CLI name | Global default coding agent CLI |
 | `default_doer_cli` | (none) | — | — | CLI name | Default coding agent CLI for doers and orchestrators |
 | `default_reviewer_cli` | (none) | — | — | CLI name | Default coding agent CLI for reviewers |
+| `default_profile` | (none) | — | — | profile name | Global default structured launch profile |
+| `default_doer_profile` | (none) | — | — | profile name | Default launch profile for doers and orchestrators |
+| `default_reviewer_profile` | (none) | — | — | profile name | Default launch profile for reviewers |
+| `agent_tools` | built-ins | — | — | map | Custom or overridden CLI launch definitions |
+| `agent_profiles` | (none) | — | — | map | Named launch profiles that select a CLI and template variables |
 | `codex_package_version` | (none) | — | — | npm package version | Pins headless Codex agents to `@openai/codex@<version>` |
 | `post_worktree_cmd` | (none) | — | — | shell cmd | Command run after worktree creation (e.g. `npm install`) |
 | `copy_worktree_env_files` | false | — | — | boolean | Explicitly authorize copying ignored root env files into task worktrees |
@@ -860,7 +869,31 @@ as an auto-summary failure and do not block the completed merge.
 
 ## Supported CLIs
 
-The `--cli` flag on `§BRAND_BINARY_NAME§ agent` and `§BRAND_BINARY_NAME§ repair-agent-pool` selects which coding agent to invoke. When omitted, the default is resolved from role-specific config (`config.default_doer_cli` for doers and orchestrators, `config.default_reviewer_cli` for reviewers), then role-specific env (`§BRAND_ENV_PREFIX§_DEFAULT_DOER_CLI` for doers and orchestrators, `§BRAND_ENV_PREFIX§_DEFAULT_REVIEWER_CLI` for reviewers), then `config.default_cli`, then `§BRAND_ENV_PREFIX§_DEFAULT_CLI`, then `claude`. Set defaults at init time with `§BRAND_BINARY_NAME§ init --default-cli <cli>`, `§BRAND_BINARY_NAME§ init --default-doer-cli <cli>`, or `§BRAND_BINARY_NAME§ init --default-reviewer-cli <cli>`.
+The `--cli` flag on `§BRAND_BINARY_NAME§ agent` and `§BRAND_BINARY_NAME§ repair-agent-pool` selects which coding agent to invoke. When omitted, §BRAND_NAME_TITLE§ first applies the selected structured profile, then falls back to role-specific config (`config.default_doer_cli` for doers and orchestrators, `config.default_reviewer_cli` for reviewers), role-specific env (`§BRAND_ENV_PREFIX§_DEFAULT_DOER_CLI` for doers and orchestrators, `§BRAND_ENV_PREFIX§_DEFAULT_REVIEWER_CLI` for reviewers), `config.default_cli`, `§BRAND_ENV_PREFIX§_DEFAULT_CLI`, then `claude`. Set built-in defaults at init time with `§BRAND_BINARY_NAME§ init --default-cli <cli>`, `§BRAND_BINARY_NAME§ init --default-doer-cli <cli>`, or `§BRAND_BINARY_NAME§ init --default-reviewer-cli <cli>`.
+
+Use `agent_tools` for project-local custom launch definitions. §BRAND_NAME_TITLE§ executes these as structured argv through `exec.Command`; values are not shell-split. `prompt_transport` is `stdin`, `arg`, or `file`. `contract_key` may reuse a known setup provider such as `codex`, or use `none` when §BRAND_NAME_TITLE§ should not suggest a setup command for the custom tool.
+
+```yaml
+config:
+  default_doer_profile: careful
+  agent_profiles:
+    careful:
+      cli: cursor
+      vars:
+        model: gpt-5
+  agent_tools:
+    cursor:
+      executable: cursor-agent
+      prompt_transport: file
+      run_args: ["--cwd", "{{projectRoot}}", "--prompt-file", "{{promptFile}}", "--model", "{{profile.model}}"]
+      contract_key: none
+```
+
+Preview the resolved command without launching a provider:
+
+```bash
+§BRAND_BINARY_NAME§ agent coder --explain-launch
+```
 
 Headless watch automatically runs the repair-agent-pool behavior when a task is immediately claimable but no live agent is registered for the required role. This is enabled by default. Set `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0`, `false`, or `no` to disable it. Unset or empty values enable it; other invalid non-empty values also leave it enabled and emit a warning.
 
@@ -875,6 +908,36 @@ Headless watch automatically runs the repair-agent-pool behavior when a task is 
 | `gemini` | Google Gemini CLI |
 | `mistral` | Mistral Le Chat CLI |
 | `kimi` | Kimi (alias to claude with Kimi-specific env vars) |
+| `qwen` | Qwen CLI from the remote provider catalog. Use `§BRAND_BINARY_NAME§ setup --provider qwen` and `§BRAND_BINARY_NAME§ init --provider qwen` for contract and skill activation. |
+| `qwen-acp` | Qwen through ACPX from the remote provider catalog. Requires `acpx` on `PATH`, reuses Qwen's `QWEN.md` contract setup, and uses catalog-defined ACPX session and prompt argv. |
+| `devin` | Devin CLI from the remote provider catalog. Use `§BRAND_BINARY_NAME§ setup --provider devin` for global skills and `§BRAND_BINARY_NAME§ init --provider devin` to link §BRAND_NAME_TITLE§'s contract at the catalog-defined repo path. |
+| `devin-acp` | Devin through ACPX from the remote provider catalog. Requires both `acpx` and `devin` on `PATH`; ACPX is invoked with `--agent "devin acp"` because Devin's ACP server is the `devin acp` command, not a standalone executable. Reuses Devin's catalog-defined contract setup. |
+
+## Provider Catalog
+
+§BRAND_NAME_TITLE§ loads provider definitions through a cache at
+`~/§BRAND_GLOBAL_DIRNAME§/cache/provider-catalog.yaml` with metadata in
+`~/§BRAND_GLOBAL_DIRNAME§/cache/provider-catalog.meta.json`. The default source
+is the project raw provider catalog. Override it with
+`§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_URL`. Cache freshness defaults to one hour
+and can be changed with `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_TTL`; network
+timeout can be changed with `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_TIMEOUT`.
+
+Use `§BRAND_BINARY_NAME§ providers list`, `§BRAND_BINARY_NAME§ providers detect`,
+and `§BRAND_BINARY_NAME§ providers refresh` to inspect and refresh the catalog.
+Remote YAML is accepted only after HTTPS fetch (localhost is allowed for tests)
+and strict schema validation. Catalog entries describe structured argv, env-file
+paths, contract links, and setup assets, not arbitrary shell scripts. Path fields
+must stay relative to their intended project or home roots, and executable names
+must be bare command names.
+
+The provider catalog is a launch trust boundary. Catalog-defined argv can include
+provider permission flags such as ACPX `--approve-all` or OpenCode
+`--dangerously-skip-permissions`; operators who override
+`§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_URL` should treat that source as trusted code
+configuration. Explicit `§BRAND_BINARY_NAME§ providers refresh` fails if the
+remote catalog cannot be fetched or validated, except for a verified `304 Not
+Modified` response that reuses the existing cache and refreshes its metadata.
 
 ## Output Logging
 
@@ -918,6 +981,9 @@ project configuration belongs in `§BRAND_PROJECT_DIRNAME§/state.yaml`.
 | `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` | No | unset | Strict opt-in activation gate for Stacklit. In pairing init, truthy values enable project-local hook setup for repo-root `stacklit.json` refresh. In MAS, truthy values enable target-local `stacklit.json` refresh and prompt guidance when an index is available. Unset, empty, `0`, and `false` disable it. Values are trimmed and parsed case-insensitively. |
 | `§BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS` | No | unset | Strict opt-in activation gate for Functional Clusters. Truthy values enable target-local `functional-clusters.json` refresh and prompt guidance when Stacklit and SCIP prerequisites are also active and an artifact is available. Unset, empty, `0`, and `false` disable it. Values are trimmed and parsed case-insensitively. |
 | `§BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB` | Per marked validation command | unset | Break-glass marker for task or `output[]` validation declared with `destructive_db: true`. It is not a global configuration switch: every destructive DB validation command must start with `§BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 ` or `env §BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 `. |
+| `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_URL` | No | GitHub raw catalog | Provider catalog source URL. Must be HTTPS except localhost test URLs. |
+| `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_TTL` | No | `1h` | Cache freshness duration for `~/§BRAND_GLOBAL_DIRNAME§/cache/provider-catalog.yaml`. |
+| `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_TIMEOUT` | No | `1500ms` | Network timeout for provider catalog refresh attempts. |
 | `§BRAND_ENV_PREFIX§_CODEX_VERSION` | No | unset | Process-local fallback for `config.codex_package_version` when launching headless Codex agents |
 | `§BRAND_ENV_PREFIX§_SPECS` | No | `specs/` | Path to specs directory (relative to project root) |
 | `§BRAND_ENV_PREFIX§_LOG_LEVEL` | No | `INFO` | Logging verbosity: DEBUG, INFO, WARN, ERROR |

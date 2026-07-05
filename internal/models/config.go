@@ -126,33 +126,64 @@ type Config struct {
 	// OrchestratorMaxWait is the maximum time an orchestrator agent will wait for work
 	// before exiting. When 0, defaults to DefaultOrchestratorMaxWait (5 hours).
 	// The orchestrator will exit earlier if STOPPED mode is detected or context is cancelled.
-	OrchestratorMaxWait      int        `yaml:"orchestrator_max_wait"`
-	ReviewerPollInterval     int        `yaml:"reviewer_poll_interval"`
-	ReviewerMaxWait          int        `yaml:"reviewer_max_wait"`
-	Exit42RestartThreshold   int        `yaml:"exit42_restart_threshold,omitempty"`
-	Exit42MaxBackoffSeconds  int        `yaml:"exit42_max_backoff_seconds,omitempty"`
-	CrashRestartThreshold    int        `yaml:"crash_restart_threshold,omitempty"`
-	SpinningRestartThreshold int        `yaml:"spinning_restart_threshold,omitempty"`
-	AgentProgressTimeout     int        `yaml:"agent_progress_timeout,omitempty"`
-	DefaultCLI               string     `yaml:"default_cli,omitempty"`
-	DefaultDoerCLI           string     `yaml:"default_doer_cli,omitempty"`
-	DefaultReviewerCLI       string     `yaml:"default_reviewer_cli,omitempty"`
-	ScipSearch               []string   `yaml:"scip_search,omitempty"`
-	CodexPackageVersion      string     `yaml:"codex_package_version,omitempty"`
-	IntegrationBranch        string     `yaml:"integration_branch"`
-	EscalationWebhook        *string    `yaml:"escalation_webhook,omitempty"`
-	Mode                     SystemMode `yaml:"mode,omitempty"`
-	ModeChangedAt            *time.Time `yaml:"mode_changed_at,omitempty"`
-	ModeChangedBy            *string    `yaml:"mode_changed_by,omitempty"`
-	DiagnosticLogging        bool       `yaml:"diagnostic_logging,omitempty"`
-	AutoResume               bool       `yaml:"auto_resume,omitempty"`
-	NoFollowUp               bool       `yaml:"no_follow_up,omitempty"`
-	PostWorktreeCmd          *string    `yaml:"post_worktree_cmd,omitempty"`
-	CopyWorktreeEnvFiles     bool       `yaml:"copy_worktree_env_files,omitempty"`
+	OrchestratorMaxWait      int                           `yaml:"orchestrator_max_wait"`
+	ReviewerPollInterval     int                           `yaml:"reviewer_poll_interval"`
+	ReviewerMaxWait          int                           `yaml:"reviewer_max_wait"`
+	Exit42RestartThreshold   int                           `yaml:"exit42_restart_threshold,omitempty"`
+	Exit42MaxBackoffSeconds  int                           `yaml:"exit42_max_backoff_seconds,omitempty"`
+	CrashRestartThreshold    int                           `yaml:"crash_restart_threshold,omitempty"`
+	SpinningRestartThreshold int                           `yaml:"spinning_restart_threshold,omitempty"`
+	AgentProgressTimeout     int                           `yaml:"agent_progress_timeout,omitempty"`
+	DefaultCLI               string                        `yaml:"default_cli,omitempty"`
+	DefaultDoerCLI           string                        `yaml:"default_doer_cli,omitempty"`
+	DefaultReviewerCLI       string                        `yaml:"default_reviewer_cli,omitempty"`
+	DefaultProfile           string                        `yaml:"default_profile,omitempty"`
+	DefaultDoerProfile       string                        `yaml:"default_doer_profile,omitempty"`
+	DefaultReviewerProfile   string                        `yaml:"default_reviewer_profile,omitempty"`
+	AgentTools               map[string]AgentToolConfig    `yaml:"agent_tools,omitempty"`
+	AgentProfiles            map[string]AgentProfileConfig `yaml:"agent_profiles,omitempty"`
+	ScipSearch               []string                      `yaml:"scip_search,omitempty"`
+	CodexPackageVersion      string                        `yaml:"codex_package_version,omitempty"`
+	IntegrationBranch        string                        `yaml:"integration_branch"`
+	EscalationWebhook        *string                       `yaml:"escalation_webhook,omitempty"`
+	Mode                     SystemMode                    `yaml:"mode,omitempty"`
+	ModeChangedAt            *time.Time                    `yaml:"mode_changed_at,omitempty"`
+	ModeChangedBy            *string                       `yaml:"mode_changed_by,omitempty"`
+	DiagnosticLogging        bool                          `yaml:"diagnostic_logging,omitempty"`
+	AutoResume               bool                          `yaml:"auto_resume,omitempty"`
+	NoFollowUp               bool                          `yaml:"no_follow_up,omitempty"`
+	PostWorktreeCmd          *string                       `yaml:"post_worktree_cmd,omitempty"`
+	CopyWorktreeEnvFiles     bool                          `yaml:"copy_worktree_env_files,omitempty"`
 	// AutoCheckpointSummary controls whether Liza auto-invokes the
 	// checkpoint-summary skill against a task that just reached MERGED and
 	// writes the result to .liza/checkpoint-summary.md. Default (nil) is ON.
 	// Set explicitly to false to opt out.
 	AutoCheckpointSummary *bool          `yaml:"auto_checkpoint_summary,omitempty"`
 	Extra                 map[string]any `yaml:",inline"`
+}
+
+// AgentToolConfig describes how Liza launches a CLI-backed agent tool.
+type AgentToolConfig struct {
+	Backend             string   `yaml:"backend,omitempty"`
+	ProviderKey         string   `yaml:"provider_key,omitempty"`
+	Executable          string   `yaml:"executable,omitempty"`
+	PromptTransport     string   `yaml:"prompt_transport,omitempty"`
+	RunArgs             []string `yaml:"run_args,omitempty"`
+	LoggedRunArgs       []string `yaml:"logged_run_args,omitempty"`
+	InteractiveArgs     []string `yaml:"interactive_args,omitempty"`
+	EnvFiles            []string `yaml:"env_files,omitempty"`
+	RequiredExecutables []string `yaml:"required_executables,omitempty"`
+	ContractKey         string   `yaml:"contract_key,omitempty"`
+	ACPXAgent           string   `yaml:"acpx_agent,omitempty"`
+	ACPXSessionName     string   `yaml:"acpx_session_name,omitempty"`
+	ACPXShowArgs        []string `yaml:"acpx_show_args,omitempty"`
+	ACPXEnsureArgs      []string `yaml:"acpx_ensure_args,omitempty"`
+	ACPXPromptArgs      []string `yaml:"acpx_prompt_args,omitempty"`
+	ACPXEventMode       string   `yaml:"acpx_event_mode,omitempty"`
+}
+
+// AgentProfileConfig selects a tool and supplies profile-scoped template values.
+type AgentProfileConfig struct {
+	CLI  string            `yaml:"cli,omitempty"`
+	Vars map[string]string `yaml:"vars,omitempty"`
 }

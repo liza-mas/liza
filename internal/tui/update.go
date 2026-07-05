@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -382,7 +381,7 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 			}
 			cli = resolvedCLI
 		}
-		if !slices.Contains(agent.ValidCLIs(), cli) {
+		if !slices.Contains(m.availableCLIs(), cli) {
 			m.spawnRole = ""
 			return m, func() tea.Msg {
 				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown CLI %q", cli)}
@@ -437,7 +436,7 @@ func (m Model) cycleCompletion() Model {
 	case InlineActionSpawn, InlineActionSpawnWith:
 		candidates = m.roleCompletions
 	case InlineActionSpawnCLI:
-		candidates = agent.ValidCLIs()
+		candidates = m.availableCLIs()
 	case InlineActionTerminate:
 		candidates = m.agentCompletions
 	}

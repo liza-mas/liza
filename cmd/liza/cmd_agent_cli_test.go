@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
@@ -132,6 +134,63 @@ func TestAgentCmd_EnvVarOverridesConst(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "invalid CLI: envtestcli") {
 		t.Fatalf("expected 'invalid CLI: envtestcli' (from env), got: %v", err)
+	}
+}
+
+func TestAgentCmd_ExplainLaunchUsesConfiguredToolProfile(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_CLI", "")
+	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
+	t.Setenv("LIZA_DEFAULT_REVIEWER_CLI", "")
+	projectRoot := setupAgentTestProject(t, "")
+
+	statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+	bb := db.For(statePath)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	state.Config.AgentTools = map[string]models.AgentToolConfig{
+		"cursor": {
+			Executable:      "cursor-agent",
+			PromptTransport: agent.PromptTransportFile,
+			RunArgs:         []string{"--cwd", "{{projectRoot}}", "--prompt-file", "{{promptFile}}", "--model", "{{profile.model}}"},
+			ContractKey:     "none",
+		},
+	}
+	state.Config.AgentProfiles = map[string]models.AgentProfileConfig{
+		"careful": {CLI: "cursor", Vars: map[string]string{"model": "gpt-5"}},
+	}
+	state.Config.DefaultDoerProfile = "careful"
+	if err := bb.Write(state); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	oldDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldDir) }()
+	_ = os.Chdir(projectRoot)
+
+	resetRootCmdForTest(t)
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs([]string{"agent", "coder", "--explain-launch", "--no-log"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("agent --explain-launch error: %v", err)
+	}
+
+	output := out.String()
+	for _, want := range []string{
+		"tool: cursor",
+		"profile: careful",
+		"executable: cursor-agent",
+		"--cwd ",
+		"--prompt-file <prompt-file>",
+		"--model gpt-5",
+		"prompt_transport: file",
+		"contract_key: none",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("explain output missing %q:\n%s", want, output)
+		}
 	}
 }
 

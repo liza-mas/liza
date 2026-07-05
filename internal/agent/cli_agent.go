@@ -66,7 +66,20 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 		},
 	})
 
-	cmd, err := d.buildRunCommand(ctx, cliName, agentID, prompt, projectRoot, runtimeConfig)
+	cmd, cleanup, err := d.buildRunCommand(ctx, LLMAgentRunRequest{
+		BackendName:    cliName,
+		AgentID:        agentID,
+		TaskID:         req.TaskID,
+		SessionID:      req.SessionID,
+		ProfileName:    req.ProfileName,
+		ProfileVars:    req.ProfileVars,
+		Prompt:         prompt,
+		PromptFile:     req.PromptFile,
+		ProjectRoot:    projectRoot,
+		AdditionalDirs: req.AdditionalDirs,
+		RuntimeConfig:  runtimeConfig,
+		EventSink:      req.EventSink,
+	})
 	if err != nil {
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 			Kind:        LLMAgentEventCompleted,
@@ -81,6 +94,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 		})
 		return LLMAgentRunResult{Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
 	}
+	defer cleanup()
 
 	var stdoutBuf, stderrBuf strings.Builder
 	var stdoutLog, stderrLog *streamingOutputFile
@@ -179,20 +193,24 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 		},
 	})
 
-	actualCLI := CLIExecutableName(cliName)
-
 	cmdEnv := agentProcessEnv(os.Environ(), agentID)
-	var cmd *exec.Cmd
-	switch actualCLI {
-	case "codex":
-		var err error
-		cmd, err = codexCommandContext(ctx, "", codexInteractiveArgs())
-		if err != nil {
-			return 0, err
-		}
-	default:
-		cmd = exec.CommandContext(ctx, actualCLI)
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      cliName,
+		ProfileName:   req.ProfileName,
+		ProfileVars:   req.ProfileVars,
+		ProjectRoot:   projectRoot,
+		AgentID:       agentID,
+		SessionID:     req.SessionID,
+		RuntimeConfig: req.RuntimeConfig,
+		Interactive:   true,
+	})
+	if err != nil {
+		return 0, err
 	}
+	if plan.Backend != ToolBackendCLI {
+		return 1, fmt.Errorf("interactive mode is not supported by %s", cliName)
+	}
+	cmd := exec.CommandContext(ctx, plan.Executable, plan.Args...)
 
 	cmd.Dir = projectRoot
 	cmd.Stdout = os.Stdout
@@ -200,7 +218,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	cmd.Stdin = os.Stdin
 	cmd.Env = cmdEnv
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode := exitErr.ExitCode()
@@ -291,12 +309,78 @@ func (d *CLIAgent) ExecuteInteractive(ctx context.Context, cliName string, agent
 	})
 }
 
-func (d *CLIAgent) buildRunCommand(ctx context.Context, cliName, agentID, prompt, projectRoot string, runtimeConfig models.Config) (*exec.Cmd, error) {
-	actualCLI := CLIExecutableName(cliName)
-
+func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) (*exec.Cmd, func(), error) {
 	cmdEnv := os.Environ()
-	if actualCLI == "claude" {
-		envFile := filepath.Join(projectRoot, "claude.env")
+	disableSubagents := envValue(cmdEnv, "LIZA_DISABLE_CLAUDE_SUBAGENTS") == "1"
+	promptFile := req.PromptFile
+	cleanup := func() {}
+	if promptFile == "" {
+		plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+			ToolName:         req.BackendName,
+			ProfileName:      req.ProfileName,
+			ProfileVars:      req.ProfileVars,
+			Prompt:           req.Prompt,
+			ProjectRoot:      req.ProjectRoot,
+			AgentID:          req.AgentID,
+			TaskID:           req.TaskID,
+			SessionID:        req.SessionID,
+			OutputsDir:       d.outputsDir,
+			RuntimeConfig:    req.RuntimeConfig,
+			DisableSubagents: disableSubagents,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		if plan.UsesPromptFile {
+			file, err := os.CreateTemp("", "liza-agent-prompt-*.md")
+			if err != nil {
+				return nil, nil, fmt.Errorf("create prompt file: %w", err)
+			}
+			promptFile = file.Name()
+			if _, err := file.WriteString(req.Prompt); err != nil {
+				_ = file.Close()
+				_ = os.Remove(promptFile)
+				return nil, nil, fmt.Errorf("write prompt file: %w", err)
+			}
+			if err := file.Close(); err != nil {
+				_ = os.Remove(promptFile)
+				return nil, nil, fmt.Errorf("close prompt file: %w", err)
+			}
+			cleanup = func() {
+				_ = os.Remove(promptFile)
+			}
+		}
+	}
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:         req.BackendName,
+		ProfileName:      req.ProfileName,
+		ProfileVars:      req.ProfileVars,
+		Prompt:           req.Prompt,
+		PromptFile:       promptFile,
+		ProjectRoot:      req.ProjectRoot,
+		AgentID:          req.AgentID,
+		TaskID:           req.TaskID,
+		SessionID:        req.SessionID,
+		OutputsDir:       d.outputsDir,
+		RuntimeConfig:    req.RuntimeConfig,
+		DisableSubagents: disableSubagents,
+	})
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if plan.Backend != ToolBackendCLI {
+		cleanup()
+		return nil, nil, fmt.Errorf("%s is not a CLI backend", req.BackendName)
+	}
+
+	for _, envFile := range plan.EnvFiles {
+		if envFile == "" {
+			continue
+		}
+		if !filepath.IsAbs(envFile) {
+			envFile = filepath.Join(req.ProjectRoot, envFile)
+		}
 		if extra := loadEnvFile(envFile); len(extra) > 0 {
 			cmdEnv = append(cmdEnv, extra...)
 			if d.masker != nil {
@@ -304,57 +388,27 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, cliName, agentID, prompt
 			}
 		}
 	}
-	cmdEnv = agentProcessEnv(cmdEnv, agentID)
+	cmdEnv = agentProcessEnv(cmdEnv, req.AgentID)
 
-	useStdin := cliSupportsStdin(actualCLI)
 	var cmd *exec.Cmd
-	switch actualCLI {
-	case "claude":
-		disableSubagents := envValue(cmdEnv, "LIZA_DISABLE_CLAUDE_SUBAGENTS") == "1"
-		cmd = exec.CommandContext(ctx, "claude", buildClaudeArgs(prompt, useStdin, d.outputsDir, disableSubagents)...)
-	case "codex":
-		codexConfig := resolveCodexLaunchConfig(runtimeConfig, cmdEnv)
+	if plan.RequiresCodexWrapper {
+		codexConfig := resolveCodexLaunchConfig(req.RuntimeConfig, cmdEnv)
 		var err error
-		cmd, err = codexCommandContext(ctx, codexConfig.PackageVersion, buildCodexArgs(prompt, useStdin, d.outputsDir))
+		cmd, err = codexCommandContext(ctx, codexConfig.PackageVersion, plan.Args)
 		if err != nil {
-			return nil, err
+			cleanup()
+			return nil, nil, err
 		}
-	case "opencode":
-		cmd = exec.CommandContext(ctx, "opencode", buildOpenCodeArgs(prompt, d.outputsDir)...)
-	case "gemini":
-		args := []string{"-p"}
-		if !useStdin {
-			args = append(args, prompt)
-		}
-		if d.outputsDir != "" {
-			args = append(args, "--output-format", "stream-json")
-		}
-		cmd = exec.CommandContext(ctx, "gemini", args...)
-	case "vibe":
-		args := []string{"-p", prompt}
-		if d.outputsDir != "" {
-			args = append(args, "--output", "streaming")
-		}
-		cmd = exec.CommandContext(ctx, "vibe", args...)
-	case "kimi":
-		args := []string{"-p"}
-		if !useStdin {
-			args = append(args, prompt)
-		}
-		if d.outputsDir != "" {
-			args = append(args, "--verbose", "--output-format", "stream-json")
-		}
-		cmd = exec.CommandContext(ctx, "kimi", args...)
-	default:
-		return nil, fmt.Errorf("unknown CLI: %s", cliName)
+	} else {
+		cmd = exec.CommandContext(ctx, plan.Executable, plan.Args...)
 	}
 
-	cmd.Dir = projectRoot
-	if useStdin {
-		cmd.Stdin = strings.NewReader(prompt)
+	cmd.Dir = req.ProjectRoot
+	if plan.UsesStdin {
+		cmd.Stdin = strings.NewReader(req.Prompt)
 	}
 	cmd.Env = cmdEnv
-	return cmd, nil
+	return cmd, cleanup, nil
 }
 
 func resolveCodexLaunchConfig(config models.Config, env []string) codexLaunchConfig {

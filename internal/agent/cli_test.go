@@ -101,6 +101,10 @@ func TestCheckCLIPrerequisitesAcceptsACPXOnPath(t *testing.T) {
 	if err := os.WriteFile(acpxPath, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
+	cursorPath := filepath.Join(binDir, "cursor-agent")
+	if err := os.WriteFile(cursorPath, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("PATH", binDir)
 
 	if err := CheckCLIPrerequisites("codex-acp"); err != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -98,7 +99,8 @@ func SpawnAgent(projectRoot, role, cli string, extraArgs ...string) (*exec.Cmd, 
 		}
 		return nil, err
 	}
-	if err := agent.CheckCLIPrerequisites(cli); err != nil {
+	runtimeConfig := readRuntimeConfig(projectRoot)
+	if err := agent.CheckCLIPrerequisitesWithConfig(cli, runtimeConfig); err != nil {
 		return nil, fmt.Errorf("spawn %s with %s: %w", role, cli, err)
 	}
 
@@ -117,4 +119,15 @@ func SpawnAgent(projectRoot, role, cli string, extraArgs ...string) (*exec.Cmd, 
 	}()
 
 	return cmd, nil
+}
+
+func readRuntimeConfig(projectRoot string) models.Config {
+	if projectRoot == "" {
+		return models.Config{}
+	}
+	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+	if err != nil {
+		return models.Config{}
+	}
+	return state.Config
 }

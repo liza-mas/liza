@@ -508,7 +508,7 @@ func TestDeleteAgent_ReturnsPID(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := DeleteAgent(tmpDir, "coder-1", false, false, "test")
+	result, err := DeleteAgent(tmpDir, "coder-1", false, true, "test")
 	if err != nil {
 		t.Fatalf("DeleteAgent() error: %v", err)
 	}

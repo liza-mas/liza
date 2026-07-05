@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/models"
 )
 
 func TestACPXAgentRunUsesPersistentCodexSession(t *testing.T) {
@@ -172,6 +173,196 @@ func TestACPXAgentRunUsesCursorTarget(t *testing.T) {
 	}
 }
 
+func TestACPXAgentRunUsesConfiguredQwenTarget(t *testing.T) {
+	binDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "acpx.log")
+	writeFakeACPX(t, filepath.Join(binDir, "acpx"), logPath)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	req := LLMAgentRunRequest{
+		BackendName: "qwen-acp",
+		AgentID:     "coder-1",
+		Prompt:      "implement the requested change",
+		ProjectRoot: t.TempDir(),
+		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
+			"qwen-acp": {
+				Backend:             ToolBackendACPX,
+				Executable:          "acpx",
+				PromptTransport:     PromptTransportStdin,
+				RequiredExecutables: []string{"acpx"},
+				ContractKey:         "qwen",
+				ACPXAgent:           "qwen",
+				ACPXSessionName:     "liza-qwen-{{agentID}}",
+				ACPXShowArgs:        []string{"--cwd", "{{projectRoot}}", "{{acpxAgent}}", "sessions", "show", "--name", "{{sessionName}}"},
+				ACPXEnsureArgs:      []string{"--cwd", "{{projectRoot}}", "{{acpxAgent}}", "sessions", "ensure", "--name", "{{sessionName}}"},
+				ACPXPromptArgs:      []string{"--cwd", "{{projectRoot}}", "--format", "json", "--approve-all", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
+				ACPXEventMode:       "json",
+			},
+		}},
+	}
+
+	result, err := NewACPXAgent("").Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+	if result.SessionID != "liza-qwen-coder-1" {
+		t.Fatalf("SessionID = %q, want liza-qwen-coder-1", result.SessionID)
+	}
+
+	log := readTextForTest(t, logPath)
+	for _, want := range []string{
+		"ARGS:--cwd " + req.ProjectRoot + " qwen sessions ensure --name liza-qwen-coder-1",
+		"ARGS:--cwd " + req.ProjectRoot + " --format json --approve-all qwen prompt -s liza-qwen-coder-1 --file -",
+		"STDIN:implement the requested change",
+	} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("fake acpx log missing %q:\n%s", want, log)
+		}
+	}
+}
+
+func TestACPXAgentEnsureSessionFallbackUsesProjectRoot(t *testing.T) {
+	binDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "acpx.log")
+	writeFakeACPX(t, filepath.Join(binDir, "acpx"), logPath)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	req := LLMAgentRunRequest{
+		BackendName: "custom-acp",
+		AgentID:     "coder-1",
+		Prompt:      "implement the requested change",
+		ProjectRoot: t.TempDir(),
+		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
+			"custom-acp": {
+				Backend:         ToolBackendACPX,
+				Executable:      "acpx",
+				PromptTransport: PromptTransportStdin,
+				ACPXAgent:       "custom",
+				ACPXSessionName: "liza-custom-{{agentID}}",
+				ACPXPromptArgs:  []string{"--cwd", "{{projectRoot}}", "--format", "json", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
+				ACPXEventMode:   "json",
+			},
+		}},
+	}
+
+	result, err := NewACPXAgent("").Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+
+	log := readTextForTest(t, logPath)
+	want := "ARGS:--cwd " + req.ProjectRoot + " custom sessions ensure --name liza-custom-coder-1"
+	if !strings.Contains(log, want) {
+		t.Fatalf("fake acpx log missing fallback ensure args %q:\n%s", want, log)
+	}
+	if strings.Contains(log, "ARGS:--cwd  custom sessions ensure") {
+		t.Fatalf("fake acpx log used empty cwd fallback:\n%s", log)
+	}
+}
+
+func TestACPXAgentEnsureSessionFailsFastWithoutProjectRootOrEnsureArgs(t *testing.T) {
+	binDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "acpx.log")
+	writeFakeACPX(t, filepath.Join(binDir, "acpx"), logPath)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	req := LLMAgentRunRequest{
+		BackendName: "custom-acp",
+		AgentID:     "coder-1",
+		Prompt:      "implement the requested change",
+		ProjectRoot: "",
+		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
+			"custom-acp": {
+				Backend:         ToolBackendACPX,
+				Executable:      "acpx",
+				PromptTransport: PromptTransportStdin,
+				ACPXAgent:       "custom",
+				ACPXSessionName: "liza-custom-{{agentID}}",
+				ACPXPromptArgs:  []string{"--cwd", "{{projectRoot}}", "--format", "json", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
+				ACPXEventMode:   "json",
+			},
+		}},
+	}
+
+	result, err := NewACPXAgent("").Run(context.Background(), req)
+	if err == nil {
+		t.Fatal("Run() error = nil, want error for missing project root and ensure args")
+	}
+	if !strings.Contains(err.Error(), "acpx ensure args are required when project root is empty") {
+		t.Fatalf("err = %v, want message about missing project root/ensure args", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+
+	if _, statErr := os.Stat(logPath); statErr == nil {
+		log := readTextForTest(t, logPath)
+		if strings.Contains(log, "sessions ensure") {
+			t.Fatalf("fake acpx log unexpectedly invoked sessions ensure with no project root:\n%s", log)
+		}
+	}
+}
+
+func TestACPXAgentRunUsesConfiguredDevinACPServerCommand(t *testing.T) {
+	binDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "acpx.log")
+	writeFakeACPX(t, filepath.Join(binDir, "acpx"), logPath)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	req := LLMAgentRunRequest{
+		BackendName: "devin-acp",
+		AgentID:     "coder-1",
+		Prompt:      "implement the requested change",
+		ProjectRoot: t.TempDir(),
+		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
+			"devin-acp": {
+				Backend:             ToolBackendACPX,
+				Executable:          "acpx",
+				PromptTransport:     PromptTransportStdin,
+				RequiredExecutables: []string{"acpx", "devin"},
+				ContractKey:         "devin",
+				ACPXAgent:           "devin acp",
+				ACPXSessionName:     "liza-devin-{{agentID}}",
+				ACPXShowArgs:        []string{"--cwd", "{{projectRoot}}", "--agent", "{{acpxAgent}}", "sessions", "show", "--name", "{{sessionName}}"},
+				ACPXEnsureArgs:      []string{"--cwd", "{{projectRoot}}", "--agent", "{{acpxAgent}}", "sessions", "ensure", "--name", "{{sessionName}}"},
+				ACPXPromptArgs:      []string{"--cwd", "{{projectRoot}}", "--format", "json", "--approve-all", "--agent", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
+				ACPXEventMode:       "json",
+			},
+		}},
+	}
+
+	result, err := NewACPXAgent("").Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+	if result.SessionID != "liza-devin-coder-1" {
+		t.Fatalf("SessionID = %q, want liza-devin-coder-1", result.SessionID)
+	}
+
+	log := readTextForTest(t, logPath)
+	for _, want := range []string{
+		"ARGS:--cwd " + req.ProjectRoot + " --agent devin acp sessions ensure --name liza-devin-coder-1",
+		"ARGS:--cwd " + req.ProjectRoot + " --format json --approve-all --agent devin acp prompt -s liza-devin-coder-1 --file -",
+		"STDIN:implement the requested change",
+	} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("fake acpx log missing %q:\n%s", want, log)
+		}
+	}
+	if strings.Contains(log, " devin sessions ") || strings.Contains(log, " devin prompt ") {
+		t.Fatalf("fake acpx log used positional devin instead of raw devin acp command:\n%s", log)
+	}
+}
+
 func TestACPXAgentMasksReturnedOutputAndEvents(t *testing.T) {
 	binDir := t.TempDir()
 	logPath := filepath.Join(t.TempDir(), "acpx.log")
@@ -311,6 +502,15 @@ func TestACPXAgentRunInteractiveDelegatesToUnderlyingCLI(t *testing.T) {
 		if !strings.Contains(log, want) {
 			t.Fatalf("fake cursor-agent log missing %q:\n%s", want, log)
 		}
+	}
+}
+
+func TestInteractiveExecutableForACPXEmptyAgentIsUnsupported(t *testing.T) {
+	if got := interactiveExecutableForACPX(LaunchPlan{}); got != "" {
+		t.Fatalf("interactiveExecutableForACPX(empty) = %q, want empty", got)
+	}
+	if got := interactiveExecutableForACPX(LaunchPlan{ACPXAgent: "   "}); got != "" {
+		t.Fatalf("interactiveExecutableForACPX(whitespace) = %q, want empty", got)
 	}
 }
 

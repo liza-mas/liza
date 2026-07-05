@@ -4,18 +4,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/models"
 )
-
-// validCLIs is the canonical list of supported agent backends.
-var validCLIs = []string{"claude", "codex", "codex-acp", "cursor-acp", "opencode", "opencode-acp", "gemini", "mistral", "kimi"}
 
 // ValidCLIs returns the supported CLI backends. Returns a fresh copy to prevent mutation.
 func ValidCLIs() []string {
-	out := make([]string, len(validCLIs))
-	copy(out, validCLIs)
-	return out
+	return AvailableCLIs(models.Config{})
 }
 
 // CLIExecutableName returns the local executable used for a configured CLI name.
@@ -41,7 +38,13 @@ func InteractiveCLICommand(cliName string) []string {
 
 // NewLLMAgentForCLI creates the provider backend for a configured CLI name.
 func NewLLMAgentForCLI(cliName string, outputsDir string) LLMAgent {
-	if isACPXCLI(cliName) {
+	return NewLLMAgentForCLIWithConfig(cliName, outputsDir, models.Config{})
+}
+
+// NewLLMAgentForCLIWithConfig creates the provider backend for a configured CLI name.
+func NewLLMAgentForCLIWithConfig(cliName string, outputsDir string, config models.Config) LLMAgent {
+	tool, ok := AgentToolRegistry(config)[cliName]
+	if ok && tool.Backend == ToolBackendACPX {
 		return NewACPXAgent(outputsDir)
 	}
 	return NewCLIAgent(outputsDir)
@@ -49,17 +52,45 @@ func NewLLMAgentForCLI(cliName string, outputsDir string) LLMAgent {
 
 // CheckCLIPrerequisites validates external binaries required by selected backends.
 func CheckCLIPrerequisites(cliName string) error {
-	if !isACPXCLI(cliName) {
-		return nil
+	return CheckCLIPrerequisitesWithConfig(cliName, models.Config{})
+}
+
+// CheckCLIPrerequisitesWithConfig validates external binaries required by configured backends.
+func CheckCLIPrerequisitesWithConfig(cliName string, config models.Config) error {
+	tool, ok := AgentToolRegistry(config)[cliName]
+	if !ok {
+		return fmt.Errorf("unknown CLI: %s", cliName)
 	}
-	if _, err := exec.LookPath("acpx"); err != nil {
-		return fmt.Errorf("%s requires acpx on PATH; install with: npm install -g acpx: %w", cliName, err)
+	required := tool.RequiredExecutables
+	if len(required) == 0 && tool.Backend == ToolBackendACPX {
+		required = []string{"acpx"}
+	}
+	for _, executable := range required {
+		if _, err := exec.LookPath(executable); err != nil {
+			if executable == "acpx" && isACPXCLI(cliName) {
+				return fmt.Errorf("%s requires acpx on PATH; install with: npm install -g acpx: %w", cliName, err)
+			}
+			return fmt.Errorf("%s requires %s on PATH: %w", cliName, executable, err)
+		}
 	}
 	return nil
 }
 
 func isACPXCLI(cliName string) bool {
-	return cliName == "codex-acp" || cliName == "cursor-acp" || cliName == "opencode-acp"
+	tool, ok := AgentToolRegistry(models.Config{})[cliName]
+	return ok && tool.Backend == ToolBackendACPX
+}
+
+func IsValidCLI(cliName string, config models.Config) bool {
+	return slices.Contains(AvailableCLIs(config), cliName)
+}
+
+func ContractKeyForCLI(cliName string, config models.Config) string {
+	tool, ok := AgentToolRegistry(config)[cliName]
+	if !ok {
+		return cliName
+	}
+	return tool.ContractKey
 }
 
 // DefaultCLI is the CLI used when none is specified.

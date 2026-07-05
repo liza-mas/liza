@@ -23,6 +23,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/projectdetect"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
@@ -107,30 +108,34 @@ func InitPairingCommand(params InitPairingParams) error {
 	if _, err := os.Stat(coreFile); os.IsNotExist(err) {
 		return fmt.Errorf("global config not found at %s\nRun '%s setup' first", globalDir, brand.BinaryName)
 	}
+	catalog := loadProviderCatalog()
+	selectedProviders, err := resolveCatalogProviders(catalog, params.Agents)
+	if err != nil {
+		return err
+	}
 
 	// Classify agents
-	var repoRootAgents []string
+	var repoRootAgents []providers.Provider
 	hasClaude := false
 	hasCodex := false
 	hasOpenCode := false
 	hasMistral := false
-	for _, agent := range params.Agents {
-		if _, ok := InitAgentRepoSymlinks[agent]; ok {
-			repoRootAgents = append(repoRootAgents, agent)
+	for _, provider := range selectedProviders {
+		if provider.Setup.Contract.RepoFile != "" {
+			repoRootAgents = append(repoRootAgents, provider)
 		}
-		switch agent {
-		case "claude":
+		assets := provider.Setup.ActivationAssets
+		if assets.ClaudeSettings {
 			hasClaude = true
-		case "codex":
+		}
+		if assets.CodexConfig || assets.CodexHooks {
 			hasCodex = true
-		case "opencode":
+		}
+		if assets.OpenCodeExecTool {
 			hasOpenCode = true
-		case "mistral":
+		}
+		if assets.MistralPromptConfig {
 			hasMistral = true
-		case "gemini":
-			// handled by repoRootAgents above
-		default:
-			return fmt.Errorf("unknown agent: %s", agent)
 		}
 	}
 
@@ -189,7 +194,7 @@ func InitPairingCommand(params InitPairingParams) error {
 	}
 
 	if len(repoRootAgents) > 0 {
-		createContractSymlinksForAgents(projectRoot, coreFile, repoRootAgents, params.ContractAction)
+		createContractSymlinksForProviders(projectRoot, coreFile, repoRootAgents, params.ContractAction)
 	}
 
 	// Write/merge .claude/settings.json and deploy hooks
@@ -300,30 +305,16 @@ func isLizaSymlink(path, contractTarget string) bool {
 // given CLI name, at either the repo root or the CLI's global config directory.
 // Returns the path where it was found, or "" if not found.
 func CheckContractConfigured(projectRoot, cliName string) string {
-	// Map CLI name to expected filename (kimi uses claude's config)
-	effectiveCLI := cliName
-	if cliName == "kimi" {
-		effectiveCLI = "claude"
-	} else if cliName == "codex-acp" || cliName == "cursor-acp" {
-		effectiveCLI = "codex"
-	} else if cliName == "opencode-acp" {
-		effectiveCLI = "opencode"
-	}
-
-	fileName, ok := InitAgentRepoSymlinks[effectiveCLI]
+	catalog := loadProviderCatalog()
+	provider, ok := catalog.Resolve(cliName)
 	if !ok {
-		// Mistral uses a global prompt symlink instead of a repo-root symlink.
-		if effectiveCLI == "mistral" {
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				return ""
-			}
-			contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
-			mistralPath := filepath.Join(homeDir, ".vibe", "prompts", brand.CanonicalMistralPromptID+".md")
-			if isLizaSymlink(mistralPath, contractTarget) {
-				return mistralPath
-			}
-		}
+		return ""
+	}
+	contract := provider.Setup.Contract
+	if contract.RepoFile == "" && provider.Setup.ActivationAssets.MistralPromptConfig {
+		contract.GlobalFallback = filepath.Join(".vibe", "prompts", brand.CanonicalMistralPromptID+".md")
+	}
+	if contract.RepoFile == "" && contract.GlobalFallback == "" {
 		return ""
 	}
 
@@ -334,22 +325,23 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 	contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
 
 	// Check repo root
-	repoPath := filepath.Join(projectRoot, fileName)
-	if isLizaSymlink(repoPath, contractTarget) {
-		return repoPath
+	if contract.RepoFile != "" {
+		repoPath := filepath.Join(projectRoot, contract.RepoFile)
+		if isLizaSymlink(repoPath, contractTarget) {
+			return repoPath
+		}
 	}
 
-	// Check CLAUDE.local.md (Claude-specific local override)
-	if effectiveCLI == "claude" {
-		localPath := filepath.Join(projectRoot, "CLAUDE.local.md")
+	if contract.LocalFallback != "" {
+		localPath := filepath.Join(projectRoot, contract.LocalFallback)
 		if isLizaSymlink(localPath, contractTarget) {
 			return localPath
 		}
 	}
 
 	// Check global fallback
-	if globalRel, ok := InitAgentGlobalFallbacks[effectiveCLI]; ok {
-		globalPath := filepath.Join(homeDir, globalRel)
+	if contract.GlobalFallback != "" {
+		globalPath := filepath.Join(homeDir, contract.GlobalFallback)
 		if isLizaSymlink(globalPath, contractTarget) {
 			return globalPath
 		}
@@ -358,14 +350,14 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 	return ""
 }
 
-// createContractSymlinksForAgents creates repo-root symlinks to the contract.
+// createContractSymlinksForProviders creates repo-root symlinks to the contract.
 // When a non-Liza file already exists at the repo root, it falls back to the
 // CLI's global config directory (e.g. ~/.claude/CLAUDE.md).
 //
 // The contractAction parameter controls conflict resolution when set by the
 // interactive wizard: "rename" backs up the existing file, "global" uses the
 // global fallback, "skip" skips creation. Empty string uses default behavior.
-func createContractSymlinksForAgents(projectRoot, contractTarget string, agents []string, contractAction string) {
+func createContractSymlinksForProviders(projectRoot, contractTarget string, agents []providers.Provider, contractAction string) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cannot determine home directory: %v\n", err)
@@ -373,12 +365,13 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 	}
 
 	for _, agent := range agents {
-		name, ok := InitAgentRepoSymlinks[agent]
-		if !ok {
+		name := agent.Setup.Contract.RepoFile
+		if name == "" {
 			continue
 		}
 		repoPath := filepath.Join(projectRoot, name)
-		globalRel, hasGlobal := InitAgentGlobalFallbacks[agent]
+		globalRel := agent.Setup.Contract.GlobalFallback
+		hasGlobal := globalRel != ""
 		globalPath := filepath.Join(homeDir, globalRel)
 
 		// Step 1: product symlink already exists at either location?
@@ -405,6 +398,10 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 			continue
 		}
 		if os.IsNotExist(repoErr) {
+			if err := os.MkdirAll(filepath.Dir(repoPath), 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create parent directory for %s: %v\n", name, err)
+				continue
+			}
 			if err := os.Symlink(contractTarget, repoPath); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", name, err)
 				fmt.Fprintf(os.Stderr, "  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry.\n")
@@ -420,20 +417,24 @@ func createContractSymlinksForAgents(projectRoot, contractTarget string, agents 
 			continue
 		}
 
-		if contractAction == "local" && name == "CLAUDE.md" {
-			localPath := filepath.Join(projectRoot, "CLAUDE.local.md")
+		if contractAction == "local" && agent.Setup.Contract.LocalFallback != "" {
+			localPath := filepath.Join(projectRoot, agent.Setup.Contract.LocalFallback)
 			if _, err := os.Lstat(localPath); err == nil {
 				if isLizaSymlink(localPath, contractTarget) {
-					fmt.Printf("CLAUDE.local.md: already correct\n")
+					fmt.Printf("%s: already correct\n", agent.Setup.Contract.LocalFallback)
 				} else {
-					fmt.Fprintf(os.Stderr, "Warning: CLAUDE.local.md already exists and is not a %s symlink.\n", brand.NameTitle)
+					fmt.Fprintf(os.Stderr, "Warning: %s already exists and is not a %s symlink.\n", agent.Setup.Contract.LocalFallback, brand.NameTitle)
 				}
 				continue
 			}
+			if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create parent directory for %s: %v\n", agent.Setup.Contract.LocalFallback, err)
+				continue
+			}
 			if err := os.Symlink(contractTarget, localPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to create CLAUDE.local.md symlink: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", agent.Setup.Contract.LocalFallback, err)
 			} else {
-				fmt.Printf("CLAUDE.local.md → %s\n", contractTarget)
+				fmt.Printf("%s → %s\n", agent.Setup.Contract.LocalFallback, contractTarget)
 			}
 			continue
 		}
@@ -647,6 +648,15 @@ func bashPolicyProvider(hasClaude, hasCodex bool) string {
 	}
 }
 
+func providerHasAsset(items []providers.Provider, match func(providers.ActivationAssets) bool) bool {
+	for _, item := range items {
+		if match(item.Setup.ActivationAssets) {
+			return true
+		}
+	}
+	return false
+}
+
 func bashPolicySubprocessStdin(rawStdin io.Reader, bufferedStdin *bufio.Reader) io.Reader {
 	file, ok := rawStdin.(*os.File)
 	if !ok {
@@ -702,6 +712,11 @@ func InitCommandWithConfig(params InitParams) error {
 	// Single shared buffered reader — avoids multiple bufio.NewReader instances
 	// consuming from the same underlying reader (which causes EOF for later readers).
 	stdin := bufio.NewReader(rawStdin)
+	catalog := loadProviderCatalog()
+	selectedProviders, err := resolveCatalogProviders(catalog, params.Agents)
+	if err != nil {
+		return err
+	}
 
 	// Validate and load pipeline config early (before creating .liza dir)
 	var pipelineCfg *pipeline.PipelineConfig
@@ -832,7 +847,10 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
 	}
 
-	if slices.Contains(params.Agents, "codex") {
+	hasCodex := providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool {
+		return a.CodexConfig || a.CodexHooks
+	})
+	if hasCodex {
 		if err := embedded.WriteCodexProjectPermissions(lizaPaths.ProjectRoot(), stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write codex config: %v\n", err)
 		}
@@ -841,16 +859,16 @@ func InitCommandWithConfig(params InitParams) error {
 		}
 	}
 
-	fullBashPolicyProviderName := bashPolicyProvider(true, slices.Contains(params.Agents, "codex"))
-	if lizaPaths.ProjectRoot() != "" && fullBashPolicyProviderName != "" && bashpolicycli.RuntimeEnabled() {
+	bashPolicyProviderName := bashPolicyProvider(true, hasCodex)
+	if lizaPaths.ProjectRoot() != "" && bashPolicyProviderName != "" && bashpolicycli.RuntimeEnabled() {
 		if err := embedded.WriteBashPolicyConfig(lizaPaths.ProjectRoot(), stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write .bash-policy.yaml: %v\n", err)
 		}
 	}
 
-	runBashPolicyInit(lizaPaths.ProjectRoot(), fullBashPolicyProviderName, bashPolicySubprocessStdin(rawStdin, stdin))
+	runBashPolicyInit(lizaPaths.ProjectRoot(), bashPolicyProviderName, bashPolicySubprocessStdin(rawStdin, stdin))
 
-	if slices.Contains(params.Agents, "opencode") {
+	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.OpenCodeExecTool }) {
 		if err := embedded.WriteOpenCodeExecTool(lizaPaths.ProjectRoot()); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
 		}
@@ -862,15 +880,15 @@ func InitCommandWithConfig(params InitParams) error {
 	}
 
 	// Create contract symlinks only for explicitly requested providers
-	if len(params.Agents) > 0 {
-		var agents []string
-		for _, agent := range params.Agents {
-			if _, ok := InitAgentRepoSymlinks[agent]; ok {
-				agents = append(agents, agent)
+	if len(selectedProviders) > 0 {
+		var agents []providers.Provider
+		for _, provider := range selectedProviders {
+			if provider.Setup.Contract.RepoFile != "" {
+				agents = append(agents, provider)
 			}
 		}
 		if len(agents) > 0 {
-			createContractSymlinksForAgents(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), agents, params.ContractAction)
+			createContractSymlinksForProviders(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), agents, params.ContractAction)
 		}
 	}
 

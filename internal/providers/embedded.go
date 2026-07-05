@@ -1,0 +1,210 @@
+package providers
+
+const embeddedFallbackCatalogYAML = `version: 1
+providers:
+  - id: claude
+    display_name: Claude
+    aliases: [anthropic]
+    backend: cli
+    detection:
+      binaries: [claude]
+      version_args: [--version]
+    setup:
+      config_dir: .claude
+      skills_dir: skills
+      contract:
+        repo_file: CLAUDE.md
+        global_fallback: .claude/CLAUDE.md
+        local_fallback: CLAUDE.local.md
+      activation_assets:
+        claude_settings: true
+        claude_ignore: true
+        bash_policy_claude: true
+    runtime:
+      provider_key: claude
+      executable: claude
+      prompt_transport: stdin
+      run_args: [-p]
+      logged_run_args: [-p, --verbose, --output-format, stream-json]
+      env_files: [claude.env]
+      contract_key: claude
+
+  - id: codex
+    display_name: Codex
+    aliases: [openai]
+    backend: cli
+    detection:
+      binaries: [codex]
+      version_args: [--version]
+    setup:
+      config_dir: .codex
+      skills_dir: skills
+      contract:
+        repo_file: AGENTS.md
+        global_fallback: .codex/AGENTS.md
+      activation_assets:
+        codex_config: true
+        codex_hooks: true
+        bash_policy_codex: true
+    runtime:
+      provider_key: codex
+      executable: codex
+      prompt_transport: stdin
+      run_args: [exec, "-"]
+      logged_run_args: [exec, --json, "-"]
+      contract_key: codex
+
+  - id: codex-acp
+    display_name: Codex ACP
+    backend: acpx
+    detection:
+      binaries: [acpx]
+      version_args: [--version]
+    setup:
+      contract:
+        repo_file: AGENTS.md
+        global_fallback: .codex/AGENTS.md
+    runtime:
+      provider_key: codex
+      executable: acpx
+      prompt_transport: stdin
+      required_executables: [acpx]
+      contract_key: codex
+      acpx_agent: codex
+      acpx_session_name: liza-{{agentID}}
+      acpx_show_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, show, --name, "{{sessionName}}"]
+      acpx_ensure_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, ensure, --name, "{{sessionName}}"]
+      acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
+      acpx_event_mode: json
+
+  - id: cursor-acp
+    display_name: Cursor ACP
+    backend: acpx
+    detection:
+      binaries: [cursor-agent]
+      version_args: [--version]
+    setup:
+      contract:
+        repo_file: AGENTS.md
+        global_fallback: .codex/AGENTS.md
+    runtime:
+      provider_key: cursor
+      executable: acpx
+      prompt_transport: stdin
+      required_executables: [acpx, cursor-agent]
+      contract_key: codex
+      acpx_agent: cursor
+      acpx_session_name: liza-{{agentID}}
+      acpx_show_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, show, --name, "{{sessionName}}"]
+      acpx_ensure_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, ensure, --name, "{{sessionName}}"]
+      acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
+      acpx_event_mode: json
+
+  - id: opencode
+    display_name: OpenCode
+    backend: cli
+    detection:
+      binaries: [opencode]
+      version_args: [--version]
+    setup:
+      config_dir: .config/opencode
+      skills_dir: skills
+      contract:
+        repo_file: AGENTS.md
+        global_fallback: .config/opencode/AGENTS.md
+      activation_assets:
+        opencode_exec_tool: true
+    runtime:
+      provider_key: opencode
+      executable: opencode
+      prompt_transport: arg
+      run_args: [run, "{{prompt}}", --dangerously-skip-permissions]
+      logged_run_args: [run, "{{prompt}}", --dangerously-skip-permissions, --format, json]
+      contract_key: opencode
+
+  - id: opencode-acp
+    display_name: OpenCode ACP
+    backend: acpx
+    detection:
+      binaries: [acpx]
+      version_args: [--version]
+    setup:
+      contract:
+        repo_file: AGENTS.md
+        global_fallback: .config/opencode/AGENTS.md
+    runtime:
+      provider_key: opencode
+      executable: acpx
+      prompt_transport: stdin
+      required_executables: [acpx]
+      contract_key: opencode
+      acpx_agent: opencode
+      acpx_session_name: liza-{{agentID}}
+      acpx_show_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, show, --name, "{{sessionName}}"]
+      acpx_ensure_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, ensure, --name, "{{sessionName}}"]
+      acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
+      acpx_event_mode: json
+
+  - id: gemini
+    display_name: Gemini
+    backend: cli
+    detection:
+      binaries: [gemini]
+      version_args: [--version]
+    setup:
+      config_dir: .gemini
+      skills_dir: skills
+      contract:
+        repo_file: GEMINI.md
+        global_fallback: .gemini/GEMINI.md
+    runtime:
+      provider_key: gemini
+      executable: gemini
+      prompt_transport: stdin
+      run_args: [-p]
+      logged_run_args: [-p, --output-format, stream-json]
+      contract_key: gemini
+
+  - id: mistral
+    display_name: Mistral
+    aliases: [vibe]
+    backend: cli
+    detection:
+      binaries: [vibe]
+      version_args: [--version]
+    setup:
+      config_dir: .vibe
+      skills_dir: skills
+      extra_dirs: [prompts]
+      symlinks:
+        - source: CORE.md
+          target: prompts/liza.md
+      activation_assets:
+        mistral_prompt_config: true
+    runtime:
+      provider_key: mistral
+      executable: vibe
+      prompt_transport: arg
+      run_args: [-p, "{{prompt}}"]
+      logged_run_args: [-p, "{{prompt}}", --output, streaming]
+      contract_key: mistral
+
+  - id: kimi
+    display_name: Kimi
+    backend: cli
+    detection:
+      binaries: [kimi]
+      version_args: [--version]
+    setup:
+      contract:
+        repo_file: CLAUDE.md
+        global_fallback: .claude/CLAUDE.md
+        local_fallback: CLAUDE.local.md
+    runtime:
+      provider_key: kimi
+      executable: kimi
+      prompt_transport: stdin
+      run_args: [-p]
+      logged_run_args: [-p, --verbose, --output-format, stream-json]
+      contract_key: claude
+`

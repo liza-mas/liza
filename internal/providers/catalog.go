@@ -1,0 +1,570 @@
+package providers
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	neturl "net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/liza-mas/liza/internal/models"
+	"gopkg.in/yaml.v3"
+)
+
+var errCatalogNotModified = errors.New("provider catalog not modified")
+
+const (
+	DefaultCatalogURL     = "https://raw.githubusercontent.com/liza-mas/liza/main/provider-catalog.yaml"
+	EnvCatalogURL         = "LIZA_PROVIDER_CATALOG_URL"
+	EnvCatalogTTL         = "LIZA_PROVIDER_CATALOG_TTL"
+	EnvCatalogTimeout     = "LIZA_PROVIDER_CATALOG_TIMEOUT"
+	defaultCatalogTTL     = time.Hour
+	defaultCatalogTimeout = 1500 * time.Millisecond
+)
+
+type Catalog struct {
+	Version   int        `yaml:"version"`
+	Providers []Provider `yaml:"providers"`
+
+	byID    map[string]Provider
+	aliases map[string]string
+}
+
+type Provider struct {
+	ID          string    `yaml:"id"`
+	DisplayName string    `yaml:"display_name"`
+	Aliases     []string  `yaml:"aliases,omitempty"`
+	Backend     string    `yaml:"backend"`
+	Detection   Detection `yaml:"detection,omitempty"`
+	Setup       Setup     `yaml:"setup,omitempty"`
+	Runtime     Runtime   `yaml:"runtime"`
+}
+
+type Detection struct {
+	Binaries    []string `yaml:"binaries,omitempty"`
+	VersionArgs []string `yaml:"version_args,omitempty"`
+}
+
+type Setup struct {
+	ConfigDir        string           `yaml:"config_dir,omitempty"`
+	SkillsDir        string           `yaml:"skills_dir,omitempty"`
+	ExtraDirs        []string         `yaml:"extra_dirs,omitempty"`
+	Symlinks         []Symlink        `yaml:"symlinks,omitempty"`
+	Contract         ContractLinks    `yaml:"contract,omitempty"`
+	ActivationAssets ActivationAssets `yaml:"activation_assets,omitempty"`
+}
+
+type Symlink struct {
+	Source string `yaml:"source"`
+	Target string `yaml:"target"`
+}
+
+type ContractLinks struct {
+	RepoFile       string `yaml:"repo_file,omitempty"`
+	GlobalFallback string `yaml:"global_fallback,omitempty"`
+	LocalFallback  string `yaml:"local_fallback,omitempty"`
+}
+
+type ActivationAssets struct {
+	ClaudeSettings      bool `yaml:"claude_settings,omitempty"`
+	CodexConfig         bool `yaml:"codex_config,omitempty"`
+	CodexHooks          bool `yaml:"codex_hooks,omitempty"`
+	OpenCodeExecTool    bool `yaml:"opencode_exec_tool,omitempty"`
+	ClaudeIgnore        bool `yaml:"claude_ignore,omitempty"`
+	MistralPromptConfig bool `yaml:"mistral_prompt_config,omitempty"`
+	BashPolicyClaude    bool `yaml:"bash_policy_claude,omitempty"`
+	BashPolicyCodex     bool `yaml:"bash_policy_codex,omitempty"`
+}
+
+type Runtime struct {
+	ProviderKey         string   `yaml:"provider_key,omitempty"`
+	Executable          string   `yaml:"executable,omitempty"`
+	PromptTransport     string   `yaml:"prompt_transport,omitempty"`
+	RunArgs             []string `yaml:"run_args,omitempty"`
+	LoggedRunArgs       []string `yaml:"logged_run_args,omitempty"`
+	InteractiveArgs     []string `yaml:"interactive_args,omitempty"`
+	EnvFiles            []string `yaml:"env_files,omitempty"`
+	RequiredExecutables []string `yaml:"required_executables,omitempty"`
+	ContractKey         string   `yaml:"contract_key,omitempty"`
+	ACPXAgent           string   `yaml:"acpx_agent,omitempty"`
+	ACPXSessionName     string   `yaml:"acpx_session_name,omitempty"`
+	ACPXShowArgs        []string `yaml:"acpx_show_args,omitempty"`
+	ACPXEnsureArgs      []string `yaml:"acpx_ensure_args,omitempty"`
+	ACPXPromptArgs      []string `yaml:"acpx_prompt_args,omitempty"`
+	ACPXEventMode       string   `yaml:"acpx_event_mode,omitempty"`
+}
+
+type LoadOptions struct {
+	URL      string
+	HomeDir  string
+	TTL      time.Duration
+	Timeout  time.Duration
+	Force    bool
+	Client   *http.Client
+	LookPath func(string) (string, error)
+	Now      func() time.Time
+}
+
+type CacheMeta struct {
+	URL          string    `json:"url"`
+	ETag         string    `json:"etag,omitempty"`
+	LastModified string    `json:"last_modified,omitempty"`
+	FetchedAt    time.Time `json:"fetched_at"`
+}
+
+type DetectionResult struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Installed   bool   `json:"installed"`
+	Executable  string `json:"executable,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+func EmbeddedCatalog() Catalog {
+	cat, err := ParseCatalog([]byte(embeddedFallbackCatalogYAML))
+	if err != nil {
+		panic(err)
+	}
+	return cat
+}
+
+func ParseCatalog(data []byte) (Catalog, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	var cat Catalog
+	if err := dec.Decode(&cat); err != nil {
+		return Catalog{}, err
+	}
+	if err := cat.Validate(); err != nil {
+		return Catalog{}, err
+	}
+	return cat, nil
+}
+
+func (c *Catalog) Validate() error {
+	if c.Version <= 0 {
+		return fmt.Errorf("catalog version must be positive")
+	}
+	if len(c.Providers) == 0 {
+		return fmt.Errorf("catalog must define at least one provider")
+	}
+	byID := make(map[string]Provider, len(c.Providers))
+	for _, p := range c.Providers {
+		if err := validateProvider(p); err != nil {
+			return err
+		}
+		if _, exists := byID[p.ID]; exists {
+			return fmt.Errorf("duplicate provider id: %s", p.ID)
+		}
+		byID[p.ID] = p
+	}
+	// Aliases are validated against the complete id set so an alias colliding
+	// with a provider id declared later in the list is still rejected.
+	aliases := make(map[string]string)
+	for _, p := range c.Providers {
+		for _, alias := range p.Aliases {
+			alias = strings.TrimSpace(alias)
+			if alias == "" {
+				continue
+			}
+			if _, providerExists := byID[alias]; providerExists {
+				return fmt.Errorf("alias %s conflicts with provider id", alias)
+			}
+			if existing, exists := aliases[alias]; exists && existing != p.ID {
+				return fmt.Errorf("alias %s maps to both %s and %s", alias, existing, p.ID)
+			}
+			aliases[alias] = p.ID
+		}
+	}
+	c.byID = byID
+	c.aliases = aliases
+	return nil
+}
+
+func validateProvider(p Provider) error {
+	if !validID(p.ID) {
+		return fmt.Errorf("invalid provider id: %q", p.ID)
+	}
+	if strings.TrimSpace(p.DisplayName) == "" {
+		return fmt.Errorf("provider %s missing display_name", p.ID)
+	}
+	if p.Backend != "cli" && p.Backend != "acpx" {
+		return fmt.Errorf("provider %s has unsupported backend %q", p.ID, p.Backend)
+	}
+	if p.Runtime.Executable == "" {
+		return fmt.Errorf("provider %s missing runtime.executable", p.ID)
+	}
+	if !validExecutable(p.Runtime.Executable) {
+		return fmt.Errorf("provider %s has invalid runtime.executable %q", p.ID, p.Runtime.Executable)
+	}
+	if p.Runtime.PromptTransport != "" && p.Runtime.PromptTransport != "stdin" && p.Runtime.PromptTransport != "arg" && p.Runtime.PromptTransport != "file" {
+		return fmt.Errorf("provider %s has unsupported prompt transport %q", p.ID, p.Runtime.PromptTransport)
+	}
+	for _, value := range append(append([]string{}, p.Detection.Binaries...), p.Runtime.RequiredExecutables...) {
+		if !validExecutable(value) {
+			return fmt.Errorf("provider %s has invalid executable %q", p.ID, value)
+		}
+	}
+	for _, arg := range p.Detection.VersionArgs {
+		if strings.ContainsAny(arg, "\x00\r\n") {
+			return fmt.Errorf("provider %s has invalid version arg", p.ID)
+		}
+	}
+	for _, path := range []string{
+		p.Setup.ConfigDir,
+		p.Setup.SkillsDir,
+		p.Setup.Contract.RepoFile,
+		p.Setup.Contract.GlobalFallback,
+		p.Setup.Contract.LocalFallback,
+	} {
+		if path != "" && !validRelativePath(path) {
+			return fmt.Errorf("provider %s has invalid setup path %q", p.ID, path)
+		}
+	}
+	for _, path := range p.Setup.ExtraDirs {
+		if !validRelativePath(path) {
+			return fmt.Errorf("provider %s has invalid setup path %q", p.ID, path)
+		}
+	}
+	for _, link := range p.Setup.Symlinks {
+		if !validRelativePath(link.Source) || !validRelativePath(link.Target) {
+			return fmt.Errorf("provider %s has invalid setup symlink", p.ID)
+		}
+	}
+	for _, path := range p.Runtime.EnvFiles {
+		if !validRelativePath(path) {
+			return fmt.Errorf("provider %s has invalid runtime env file %q", p.ID, path)
+		}
+	}
+	return nil
+}
+
+func validID(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validExecutable(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && !strings.ContainsAny(value, "/\\\x00\r\n\t ;|&$")
+}
+
+func validRelativePath(value string) bool {
+	value = filepath.Clean(strings.TrimSpace(value))
+	return value != "." && !filepath.IsAbs(value) && !strings.HasPrefix(value, "..") && !strings.ContainsAny(value, "\x00\r\n")
+}
+
+func (c Catalog) ProvidersSorted() []Provider {
+	providers := append([]Provider(nil), c.Providers...)
+	sort.Slice(providers, func(i, j int) bool { return providers[i].ID < providers[j].ID })
+	return providers
+}
+
+func (c Catalog) Resolve(id string) (Provider, bool) {
+	if c.byID == nil {
+		_ = c.Validate()
+	}
+	id = strings.TrimSpace(id)
+	if p, ok := c.byID[id]; ok {
+		return p, true
+	}
+	if resolved, ok := c.aliases[id]; ok {
+		p, ok := c.byID[resolved]
+		return p, ok
+	}
+	return Provider{}, false
+}
+
+func (c Catalog) RuntimeTools() map[string]models.AgentToolConfig {
+	out := make(map[string]models.AgentToolConfig, len(c.Providers))
+	for _, p := range c.Providers {
+		out[p.ID] = p.RuntimeToolConfig()
+	}
+	return out
+}
+
+func (p Provider) RuntimeToolConfig() models.AgentToolConfig {
+	required := append([]string(nil), p.Runtime.RequiredExecutables...)
+	if len(required) == 0 && p.Backend == "acpx" {
+		required = []string{"acpx"}
+	}
+	transport := p.Runtime.PromptTransport
+	if transport == "" {
+		transport = "stdin"
+	}
+	providerKey := p.Runtime.ProviderKey
+	if providerKey == "" {
+		providerKey = p.ID
+	}
+	return models.AgentToolConfig{
+		Backend:             p.Backend,
+		ProviderKey:         providerKey,
+		Executable:          p.Runtime.Executable,
+		PromptTransport:     transport,
+		RunArgs:             append([]string(nil), p.Runtime.RunArgs...),
+		LoggedRunArgs:       append([]string(nil), p.Runtime.LoggedRunArgs...),
+		InteractiveArgs:     append([]string(nil), p.Runtime.InteractiveArgs...),
+		EnvFiles:            append([]string(nil), p.Runtime.EnvFiles...),
+		RequiredExecutables: required,
+		ContractKey:         p.Runtime.ContractKey,
+		ACPXAgent:           p.Runtime.ACPXAgent,
+		ACPXSessionName:     p.Runtime.ACPXSessionName,
+		ACPXShowArgs:        append([]string(nil), p.Runtime.ACPXShowArgs...),
+		ACPXEnsureArgs:      append([]string(nil), p.Runtime.ACPXEnsureArgs...),
+		ACPXPromptArgs:      append([]string(nil), p.Runtime.ACPXPromptArgs...),
+		ACPXEventMode:       p.Runtime.ACPXEventMode,
+	}
+}
+
+func Detect(cat Catalog, lookPath func(string) (string, error)) []DetectionResult {
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+	results := make([]DetectionResult, 0, len(cat.Providers))
+	for _, p := range cat.ProvidersSorted() {
+		binaries := p.Detection.Binaries
+		if len(binaries) == 0 {
+			binaries = []string{p.Runtime.Executable}
+		}
+		result := DetectionResult{ID: p.ID, DisplayName: p.DisplayName}
+		for _, bin := range binaries {
+			path, err := lookPath(bin)
+			if err == nil {
+				result.Installed = true
+				result.Executable = path
+				break
+			}
+			result.Error = err.Error()
+		}
+		results = append(results, result)
+	}
+	return results
+}
+
+func Load(ctx context.Context, opts LoadOptions) (Catalog, error) {
+	url := firstNonEmpty(opts.URL, os.Getenv(EnvCatalogURL), DefaultCatalogURL)
+	homeDir := opts.HomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			if opts.Force {
+				return Catalog{}, err
+			}
+			return EmbeddedCatalog(), nil
+		}
+	}
+	ttl := opts.TTL
+	if ttl <= 0 {
+		ttl = durationFromEnv(EnvCatalogTTL, defaultCatalogTTL)
+	}
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = durationFromEnv(EnvCatalogTimeout, defaultCatalogTimeout)
+	}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	cachePath, metaPath := CachePaths(homeDir)
+	meta, _ := readMeta(metaPath)
+	if !opts.Force && meta.URL == url && !meta.FetchedAt.IsZero() && now().Sub(meta.FetchedAt) < ttl {
+		if cat, err := readCatalogFile(cachePath); err == nil {
+			return cat, nil
+		}
+	}
+	requestMeta := meta
+	if requestMeta.URL != url {
+		requestMeta = CacheMeta{}
+	}
+	cat, metaOut, err := fetchCatalog(ctx, opts.Client, url, timeout, requestMeta, now().UTC())
+	if err == nil {
+		if cacheErr := writeCatalogCache(cachePath, metaPath, cat.raw, metaOut); cacheErr != nil && opts.Force {
+			// The fetch itself succeeded and cat.catalog is valid; only the
+			// disk persist failed. Return it alongside the error instead of
+			// discarding it, so a caller that wants the freshly-fetched data
+			// despite a non-durable refresh isn't forced to refetch.
+			return cat.catalog, cacheErr
+		}
+		return cat.catalog, nil
+	}
+	if errors.Is(err, errCatalogNotModified) {
+		if meta.URL != url {
+			if opts.Force {
+				return Catalog{}, fmt.Errorf("provider catalog not modified but cache belongs to %q", meta.URL)
+			}
+			return EmbeddedCatalog(), nil
+		}
+		cached, cacheErr := readCatalogFile(cachePath)
+		if cacheErr != nil {
+			if opts.Force {
+				return Catalog{}, fmt.Errorf("provider catalog not modified but cache is unavailable: %w", cacheErr)
+			}
+		} else {
+			if writeErr := writeMeta(metaPath, metaOut); writeErr != nil && opts.Force {
+				return Catalog{}, writeErr
+			}
+			return cached, nil
+		}
+	}
+	if opts.Force {
+		return Catalog{}, err
+	}
+	if meta.URL == url {
+		if cat, cacheErr := readCatalogFile(cachePath); cacheErr == nil {
+			return cat, nil
+		}
+	}
+	if cat, cacheErr := readCatalogFile(cachePath); cacheErr == nil && meta.URL == "" {
+		return cat, nil
+	}
+	return EmbeddedCatalog(), nil
+}
+
+func CachePaths(homeDir string) (catalogPath, metaPath string) {
+	cacheDir := filepath.Join(homeDir, ".liza", "cache")
+	return filepath.Join(cacheDir, "provider-catalog.yaml"), filepath.Join(cacheDir, "provider-catalog.meta.json")
+}
+
+type fetchedCatalog struct {
+	catalog Catalog
+	raw     []byte
+}
+
+func fetchCatalog(ctx context.Context, client *http.Client, url string, timeout time.Duration, meta CacheMeta, fetchedAt time.Time) (fetchedCatalog, CacheMeta, error) {
+	parsed, err := neturl.Parse(url)
+	if err != nil {
+		return fetchedCatalog{}, CacheMeta{}, fmt.Errorf("invalid provider catalog URL: %w", err)
+	}
+	host := parsed.Hostname()
+	isLoopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
+	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && isLoopback) {
+		return fetchedCatalog{}, CacheMeta{}, fmt.Errorf("provider catalog URL must use HTTPS")
+	}
+	if client == nil {
+		client = &http.Client{Timeout: timeout}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fetchedCatalog{}, CacheMeta{}, err
+	}
+	if meta.ETag != "" {
+		req.Header.Set("If-None-Match", meta.ETag)
+	}
+	if meta.LastModified != "" {
+		req.Header.Set("If-Modified-Since", meta.LastModified)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fetchedCatalog{}, CacheMeta{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotModified {
+		metaOut := meta
+		metaOut.URL = url
+		if etag := resp.Header.Get("ETag"); etag != "" {
+			metaOut.ETag = etag
+		}
+		if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
+			metaOut.LastModified = lastModified
+		}
+		metaOut.FetchedAt = fetchedAt
+		return fetchedCatalog{}, metaOut, errCatalogNotModified
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fetchedCatalog{}, CacheMeta{}, fmt.Errorf("provider catalog fetch returned HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fetchedCatalog{}, CacheMeta{}, err
+	}
+	cat, err := ParseCatalog(data)
+	if err != nil {
+		return fetchedCatalog{}, CacheMeta{}, err
+	}
+	return fetchedCatalog{catalog: cat, raw: data}, CacheMeta{
+		URL:          url,
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+		FetchedAt:    fetchedAt,
+	}, nil
+}
+
+func writeCatalogCache(cachePath, metaPath string, data []byte, meta CacheMeta) error {
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(cachePath, data, 0644); err != nil {
+		return err
+	}
+	return writeMeta(metaPath, meta)
+}
+
+func readCatalogFile(path string) (Catalog, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Catalog{}, err
+	}
+	return ParseCatalog(data)
+}
+
+func readMeta(path string) (CacheMeta, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return CacheMeta{}, err
+	}
+	var meta CacheMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return CacheMeta{}, err
+	}
+	return meta, nil
+}
+
+func writeMeta(path string, meta CacheMeta) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0644)
+}
+
+func durationFromEnv(name string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}

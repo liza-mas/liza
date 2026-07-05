@@ -172,8 +172,11 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 			BackendName:    config.CLIName,
 			AgentID:        config.AgentID,
 			SessionID:      taskID,
+			ProfileName:    config.ProfileName,
+			ProfileVars:    config.ProfileVars,
 			ProjectRoot:    config.ProjectRoot,
 			AdditionalDirs: additionalDirs,
+			RuntimeConfig:  runtimeConfig,
 		})
 		return exitCode, "", err
 	}
@@ -202,6 +205,8 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 		SessionID:      taskID,
 		ResumeSession:  "",
 		WarmSession:    false,
+		ProfileName:    config.ProfileName,
+		ProfileVars:    config.ProfileVars,
 		Prompt:         prompt,
 		ProjectRoot:    config.ProjectRoot,
 		AdditionalDirs: additionalDirs,

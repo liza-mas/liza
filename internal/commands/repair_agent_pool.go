@@ -122,8 +122,9 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 		return nil, fmt.Errorf("failed to load pipeline resolver: %w", err)
 	}
 
-	if opts.CLI != "" && !slices.Contains(agent.ValidCLIs(), opts.CLI) {
-		return nil, fmt.Errorf("invalid CLI: %s (must be %s)", opts.CLI, strings.Join(agent.ValidCLIs(), ", "))
+	availableCLIs := agent.AvailableCLIs(state.Config)
+	if opts.CLI != "" && !slices.Contains(availableCLIs, opts.CLI) {
+		return nil, fmt.Errorf("invalid CLI: %s (must be %s)", opts.CLI, strings.Join(availableCLIs, ", "))
 	}
 
 	missing := filterMissingRoleWork(FindMissingRolesWithClaimableWork(state, pr), opts.Roles)
@@ -220,8 +221,9 @@ func resolveRepairCLI(explicitCLI, role string, state *models.State, pr models.P
 		DefaultDoerCLI:     state.Config.DefaultDoerCLI,
 		DefaultReviewerCLI: state.Config.DefaultReviewerCLI,
 	})
-	if !slices.Contains(agent.ValidCLIs(), cliName) {
-		return "", fmt.Errorf("invalid CLI for role %s: %s (must be %s)", role, cliName, strings.Join(agent.ValidCLIs(), ", "))
+	availableCLIs := agent.AvailableCLIs(state.Config)
+	if !slices.Contains(availableCLIs, cliName) {
+		return "", fmt.Errorf("invalid CLI for role %s: %s (must be %s)", role, cliName, strings.Join(availableCLIs, ", "))
 	}
 	return cliName, nil
 }

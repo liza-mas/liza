@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/identity"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/spf13/cobra"
@@ -112,8 +113,10 @@ Example:
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")
+		profileName, _ := cmd.Flags().GetString("profile")
 		goalID, _ := cmd.Flags().GetString("goal-id")
 		interactive, _ := cmd.Flags().GetBool("interactive")
+		explainLaunch, _ := cmd.Flags().GetBool("explain-launch")
 		noLog, _ := cmd.Flags().GetBool("no-log")
 
 		lizaPaths := paths.New(projectRoot)
@@ -129,34 +132,38 @@ Example:
 			}
 		}
 
+		var runtimeConfig models.Config
+		if state != nil {
+			runtimeConfig = state.Config
+		}
+
+		resolvedProfile, err := agent.ResolveProfileForRole(profileName, roleType, runtimeConfig)
+		if err != nil {
+			return err
+		}
+
 		// Resolve default CLI from state config when --cli is not explicitly set
 		flagChanged := cmd.Flags().Changed("cli")
-		var cliConfig agent.CLIResolutionConfig
-		if !flagChanged {
-			if state != nil {
-				cliConfig = agent.CLIResolutionConfig{
-					DefaultCLI:         state.Config.DefaultCLI,
-					DefaultDoerCLI:     state.Config.DefaultDoerCLI,
-					DefaultReviewerCLI: state.Config.DefaultReviewerCLI,
-				}
-			}
+		cliName, err = agent.ResolveCLIWithProfile(flagChanged, cliName, resolvedProfile, roleType, runtimeConfig)
+		if err != nil {
+			return err
 		}
-		cliName = agent.ResolveCLIFromStateForRole(flagChanged, cliName, roleType, cliConfig)
 
-		if !slices.Contains(agent.ValidCLIs(), cliName) {
-			return fmt.Errorf("invalid CLI: %s (must be %s)", cliName, strings.Join(agent.ValidCLIs(), ", "))
+		availableCLIs := agent.AvailableCLIs(runtimeConfig)
+		if !slices.Contains(availableCLIs, cliName) {
+			return fmt.Errorf("invalid CLI: %s (must be %s)", cliName, strings.Join(availableCLIs, ", "))
 		}
-		if err := agent.CheckCLIPrerequisites(cliName); err != nil {
+		if err := agent.CheckCLIPrerequisitesWithConfig(cliName, runtimeConfig); err != nil {
 			return err
 		}
 
 		shouldLog := !noLog && !interactive
 
+		contractKey := agent.ContractKeyForCLI(cliName, runtimeConfig)
 		// Warn if no product contract symlink is configured for this CLI.
-		if commands.CheckContractConfigured(projectRoot, cliName) == "" {
-			initFlag := contractInitFlagForCLI(cliName)
+		if contractKey != "" && contractKey != "none" && commands.CheckContractConfigured(projectRoot, contractKey) == "" {
 			fmt.Fprintf(os.Stderr, "Warning: no %s contract symlink found for %s. Agents may not find the behavioral contract.\n", brand.NameTitle, cliName)
-			fmt.Fprintf(os.Stderr, "  Run '%s init --%s' to create one.\n", brand.BinaryName, initFlag)
+			fmt.Fprintf(os.Stderr, "  Run '%s' to create one.\n", contractInitCommandForProvider(contractKey))
 		}
 
 		specsLookup := brand.LookupEnv(os.Getenv, "SPECS")
@@ -174,6 +181,10 @@ Example:
 			outputsDir = lizaPaths.AgentOutputsDir()
 		}
 
+		if explainLaunch {
+			return explainAgentLaunch(cmd, cliName, resolvedProfile, projectRoot, outputsDir, runtimeConfig)
+		}
+
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
@@ -189,9 +200,11 @@ Example:
 					LogPath:     lizaPaths.LogPath(),
 					SpecsDir:    specsDir,
 					CLIName:     cliName,
+					ProfileName: resolvedProfile.Name,
+					ProfileVars: resolvedProfile.Vars,
 					Interactive: interactive,
 					InitialTask: initialTask,
-					LLMAgent:    agent.NewLLMAgentForCLI(cliName, outputsDir),
+					LLMAgent:    agent.NewLLMAgentForCLIWithConfig(cliName, outputsDir, runtimeConfig),
 				}
 				return agent.RunSupervisor(ctx, config)
 			})
@@ -206,27 +219,70 @@ Example:
 			LogPath:     lizaPaths.LogPath(),
 			SpecsDir:    specsDir,
 			CLIName:     cliName,
+			ProfileName: resolvedProfile.Name,
+			ProfileVars: resolvedProfile.Vars,
 			Interactive: interactive,
 			InitialTask: initialTask,
-			LLMAgent:    agent.NewLLMAgentForCLI(cliName, outputsDir),
+			LLMAgent:    agent.NewLLMAgentForCLIWithConfig(cliName, outputsDir, runtimeConfig),
 		}
 
 		return agent.RunSupervisor(ctx, config)
 	},
 }
 
-func contractInitFlagForCLI(cliName string) string {
+func explainAgentLaunch(cmd *cobra.Command, cliName string, profile agent.ResolvedProfile, projectRoot, outputsDir string, runtimeConfig models.Config) error {
+	promptFile := ""
+	if tool, ok := agent.AgentToolRegistry(runtimeConfig)[cliName]; ok && tool.PromptTransport == agent.PromptTransportFile {
+		promptFile = "<prompt-file>"
+	}
+	plan, err := agent.ResolveLaunchPlan(agent.LaunchPlanRequest{
+		ToolName:      cliName,
+		ProfileName:   profile.Name,
+		ProfileVars:   profile.Vars,
+		Prompt:        "<prompt>",
+		PromptFile:    promptFile,
+		ProjectRoot:   projectRoot,
+		OutputsDir:    outputsDir,
+		RuntimeConfig: runtimeConfig,
+	})
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "tool: %s\n", plan.ToolName)
+	if plan.ProfileName != "" {
+		fmt.Fprintf(out, "profile: %s\n", plan.ProfileName)
+	}
+	fmt.Fprintf(out, "backend: %s\n", plan.Backend)
+	fmt.Fprintf(out, "executable: %s\n", plan.Executable)
+	fmt.Fprintf(out, "args: %s\n", strings.Join(plan.Args, " "))
+	fmt.Fprintf(out, "prompt_transport: %s\n", plan.PromptTransport)
+	if plan.PromptFile != "" {
+		fmt.Fprintf(out, "prompt_file: %s\n", plan.PromptFile)
+	}
+	if len(plan.EnvFiles) > 0 {
+		fmt.Fprintf(out, "env_files: %s\n", strings.Join(plan.EnvFiles, ", "))
+	}
+	if plan.ContractKey != "" {
+		fmt.Fprintf(out, "contract_key: %s\n", plan.ContractKey)
+	}
+	return nil
+}
+
+func contractInitCommandForProvider(cliName string) string {
 	switch cliName {
 	case "kimi":
-		return "claude" // kimi uses Claude's config
+		return "liza init --claude" // kimi uses Claude's config
 	case "codex-acp":
-		return "codex" // codex-acp uses Codex's config
+		return "liza init --codex" // codex-acp uses Codex's config
 	case "cursor-acp":
-		return "codex" // cursor-acp uses the shared AGENTS.md contract setup
+		return "liza init --codex" // cursor-acp uses the shared AGENTS.md contract setup
 	case "opencode-acp":
-		return "opencode" // opencode-acp uses OpenCode's config
+		return "liza init --opencode" // opencode-acp uses OpenCode's config
+	case "claude", "codex", "opencode", "gemini", "mistral":
+		return "liza init --" + cliName
 	default:
-		return cliName
+		return "liza init --provider " + cliName
 	}
 }
 
@@ -415,7 +471,9 @@ func init() {
 
 	// Agent command flags
 	addAgentIDFlag(agentCmd)
-	agentCmd.Flags().String("cli", "", "CLI to use; defaults by role-specific then global config/env; see docs ("+strings.Join(agent.ValidCLIs(), ", ")+")")
+	agentCmd.Flags().String("cli", "", "CLI to use; defaults by role-specific then global config/env ("+providerCLIHelpHint+")")
+	agentCmd.Flags().String("profile", "", "structured launch profile from config.agent_profiles")
+	agentCmd.Flags().Bool("explain-launch", false, "resolve and print provider launch configuration without running an agent")
 	agentCmd.Flags().String("goal-id", "", "goal identifier marker for process diagnostics (must match state goal.id when supplied)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")
 	agentCmd.Flags().Bool("no-log", false, "Disable saving agent output to "+paths.ProjectDirName()+"/agent-outputs/")

@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providers"
 )
 
 // userCustomizableFiles are files that users are expected to edit.
@@ -69,6 +70,11 @@ func SetupCommand(params SetupParams) error {
 			filepath.Join(params.TargetDir, "AGENT_TOOLS.md"): true,
 		}
 	}
+	catalog := loadProviderCatalog()
+	selectedProviders, err := resolveCatalogProviders(catalog, params.Agents)
+	if err != nil {
+		return err
+	}
 
 	skipFiles, err := confirmOverwrites(existing, fresh, params.Force, params.TargetDir, stdin, autoSkip)
 	if err != nil {
@@ -114,7 +120,7 @@ func SetupCommand(params SetupParams) error {
 	}
 
 	// Create agent skill symlinks (after main setup so sources exist).
-	if len(params.Agents) > 0 {
+	if len(selectedProviders) > 0 {
 		homeDir := params.HomeDir
 		if homeDir == "" {
 			var err error
@@ -123,7 +129,7 @@ func SetupCommand(params SetupParams) error {
 				return fmt.Errorf("failed to determine home directory: %w", err)
 			}
 		}
-		if err := setupAgentSymlinks(homeDir, params.TargetDir, params.Agents, stdin); err != nil {
+		if err := setupAgentSymlinks(homeDir, params.TargetDir, selectedProviders, stdin); err != nil {
 			return fmt.Errorf("agent symlink setup failed: %w", err)
 		}
 	}
@@ -311,57 +317,25 @@ func backupFile(src string) error {
 	return embedded.BackupFile(src)
 }
 
-// agentExtraLink describes an additional symlink to create beyond skills.
-type agentExtraLink struct {
-	target string // source path relative to the global config dir (e.g. "CORE.md")
-	name   string // destination path relative to configDir
-}
-
-// agentConfig describes how to set up symlinks for a particular agent CLI.
-type agentConfig struct {
-	configDir  string           // e.g. ".claude" (relative to home)
-	skillsDir  string           // e.g. "skills" (relative to configDir)
-	extraDirs  []string         // extra dirs to create relative to configDir
-	extraLinks []agentExtraLink // extra symlinks beyond skills
-}
-
-// agentConfigs maps agent flag names to their configuration.
-func agentConfigs() map[string]agentConfig {
-	return map[string]agentConfig{
-		"claude":   {configDir: ".claude", skillsDir: "skills"},
-		"codex":    {configDir: ".codex", skillsDir: "skills"},
-		"opencode": {configDir: filepath.Join(".config", "opencode"), skillsDir: "skills"},
-		"gemini":   {configDir: ".gemini", skillsDir: "skills"},
-		"mistral": {
-			configDir: ".vibe",
-			skillsDir: "skills",
-			extraDirs: []string{"prompts"},
-			extraLinks: []agentExtraLink{
-				{target: "CORE.md", name: filepath.Join("prompts", brand.CanonicalMistralPromptID+".md")},
-			},
-		},
-	}
-}
-
 // setupAgentSymlinks creates skill symlinks in each agent's config directory.
 // For each agent, it symlinks every entry in the global skills directory into the agent's
 // skills directory, plus any extra links defined in the agent config.
-func setupAgentSymlinks(homeDir, lizaDir string, agents []string, reader *bufio.Reader) error {
+func setupAgentSymlinks(homeDir, lizaDir string, agents []providers.Provider, reader *bufio.Reader) error {
 
-	for _, agent := range agents {
-		cfg, ok := agentConfigs()[agent]
-		if !ok {
-			return fmt.Errorf("unknown agent: %s", agent)
+	for _, provider := range agents {
+		cfg := provider.Setup
+		if cfg.ConfigDir == "" || cfg.SkillsDir == "" {
+			return fmt.Errorf("provider %s does not define setup skill symlinks", provider.ID)
 		}
 
-		configDir := filepath.Join(homeDir, cfg.configDir)
-		skillsDir := filepath.Join(configDir, cfg.skillsDir)
+		configDir := filepath.Join(homeDir, cfg.ConfigDir)
+		skillsDir := filepath.Join(configDir, cfg.SkillsDir)
 
 		if err := os.MkdirAll(skillsDir, 0755); err != nil {
 			return fmt.Errorf("failed to create %s: %w", skillsDir, err)
 		}
 
-		for _, dir := range cfg.extraDirs {
+		for _, dir := range cfg.ExtraDirs {
 			dirPath := filepath.Join(configDir, dir)
 			if err := os.MkdirAll(dirPath, 0755); err != nil {
 				return fmt.Errorf("failed to create %s: %w", dirPath, err)
@@ -385,9 +359,9 @@ func setupAgentSymlinks(homeDir, lizaDir string, agents []string, reader *bufio.
 		}
 
 		// Create extra links
-		for _, extra := range cfg.extraLinks {
-			target := filepath.Join(lizaDir, extra.target)
-			linkPath := filepath.Join(configDir, extra.name)
+		for _, extra := range cfg.Symlinks {
+			target := filepath.Join(lizaDir, extra.Source)
+			linkPath := filepath.Join(configDir, extra.Target)
 
 			if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
 				return fmt.Errorf("failed to create parent dir for %s: %w", linkPath, err)
@@ -398,7 +372,7 @@ func setupAgentSymlinks(homeDir, lizaDir string, agents []string, reader *bufio.
 			}
 		}
 
-		fmt.Printf("Agent %s: skill symlinks created in %s\n", agent, configDir)
+		fmt.Printf("Agent %s: skill symlinks created in %s\n", provider.ID, configDir)
 	}
 
 	return nil

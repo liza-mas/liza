@@ -10,6 +10,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -54,6 +55,7 @@ Preset role sets:
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")
+		availableCLIs := launchAvailableCLIs(projectRoot)
 		noTUI, _ := cmd.Flags().GetBool("no-tui")
 		commands := make([][]string, 0, len(roles)+1)
 		if !noTUI {
@@ -66,7 +68,7 @@ Preset role sets:
 			}
 			agentCmd := []string{brand.BinaryName, "agent", role}
 			if cliName != "" {
-				if !containsString(agent.ValidCLIs(), cliName) {
+				if !containsString(availableCLIs, cliName) {
 					return cliValidationError(fmt.Sprintf("invalid --cli %q", cliName))
 				}
 				agentCmd = append(agentCmd, "--cli", cliName)
@@ -159,6 +161,7 @@ Preset role sets:
 		}
 
 		cliName, _ := cmd.Flags().GetString("cli")
+		availableCLIs := launchAvailableCLIs(projectRoot)
 		noTUI, _ := cmd.Flags().GetBool("no-tui")
 		commands := make([][]string, 0, len(roles)+1)
 		if !noTUI {
@@ -171,7 +174,7 @@ Preset role sets:
 			}
 			agentCmd := []string{brand.BinaryName, "agent", role}
 			if cliName != "" {
-				if !containsString(agent.ValidCLIs(), cliName) {
+				if !containsString(availableCLIs, cliName) {
 					return cliValidationError(fmt.Sprintf("invalid --cli %q", cliName))
 				}
 				agentCmd = append(agentCmd, "--cli", cliName)
@@ -476,6 +479,17 @@ func cmuxOptionsFromFlags(cmd *cobra.Command, cwd, defaultWorkspace string) (cmu
 	}
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	return cmuxLaunchOptions{Workspace: workspace, CWD: cwd, DryRun: dryRun}, nil
+}
+
+func launchAvailableCLIs(projectRoot string) []string {
+	if projectRoot == "" {
+		return agent.ValidCLIs()
+	}
+	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+	if err != nil {
+		return agent.ValidCLIs()
+	}
+	return agent.AvailableCLIs(state.Config)
 }
 
 func runWeztermLaunch(cmd *cobra.Command, opts weztermLaunchOptions, commands [][]string) error {

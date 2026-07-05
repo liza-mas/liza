@@ -24,8 +24,10 @@ type SupervisorConfig struct {
 	ProjectRoot      string
 	StatePath        string
 	LogPath          string
-	SpecsDir         string        // For prompt building
-	CLIName          string        // "claude", "codex", "gemini", "mistral", "kimi"
+	SpecsDir         string // For prompt building
+	CLIName          string // "claude", "codex", "gemini", "mistral", "kimi"
+	ProfileName      string // Optional structured launch profile name
+	ProfileVars      map[string]string
 	Interactive      bool          // Print prompt location, don't execute
 	InitialTask      string        // Optional task ID to resume
 	LLMAgent         LLMAgent      // Agent execution backend (CLI-based or future ACP-based)

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,14 +11,17 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/paths"
+	providercatalog "github.com/liza-mas/liza/internal/providers"
 	"github.com/spf13/cobra"
 )
 
@@ -62,7 +67,10 @@ Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded def
 		force, _ := cmd.Flags().GetBool("force")
 		agentToolsPath, _ := cmd.Flags().GetString("agent-tools")
 
-		agents := collectAgentFlags(cmd)
+		agents, err := collectSetupProviderFlags(cmd)
+		if err != nil {
+			return err
+		}
 
 		return commands.SetupCommand(commands.SetupParams{
 			TargetDir:      targetDir,
@@ -128,7 +136,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		// Interactive wizard: no args, no agent flags, no explicit workspace flags, TTY
 		if len(args) == 0 && len(agents) == 0 && !hasExplicitInitFlags(cmd) && !cmd.Flags().Changed("scip-search") && !cmd.Flags().Changed("scip-search-plan") {
 			if !interactive.IsInteractive() {
-				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
+				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
 			}
 
 			// Resolve project root for conflict detection
@@ -198,7 +206,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		// Pairing mode: agent flags without description
 		if len(args) == 0 {
 			if len(agents) == 0 {
-				return fmt.Errorf("requires a description argument or at least one agent flag (--claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
+				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
 			}
 			if autoResume {
 				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
@@ -252,6 +260,64 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		return nil
 	},
 }
+
+var providersCmd = &cobra.Command{
+	Use:   "providers",
+	Short: "Inspect the provider catalog",
+}
+
+var providersListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List catalog providers",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cat, err := providercatalog.Load(cmd.Context(), providercatalog.LoadOptions{})
+		if err != nil {
+			return err
+		}
+		for _, p := range cat.ProvidersSorted() {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", p.ID, p.DisplayName, p.Backend)
+		}
+		return nil
+	},
+}
+
+var providersDetectCmd = &cobra.Command{
+	Use:   "detect",
+	Short: "Detect installed catalog providers",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cat, err := providercatalog.Load(cmd.Context(), providercatalog.LoadOptions{})
+		if err != nil {
+			return err
+		}
+		for _, result := range providercatalog.Detect(cat, nil) {
+			status := "missing"
+			if result.Installed {
+				status = "installed"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s", result.ID, result.DisplayName, status)
+			if result.Executable != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "\t%s", result.Executable)
+			}
+			fmt.Fprintln(cmd.OutOrStdout())
+		}
+		return nil
+	},
+}
+
+var providersRefreshCmd = &cobra.Command{
+	Use:   "refresh",
+	Short: "Refresh the provider catalog cache",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cat, err := providercatalog.Load(cmd.Context(), providercatalog.LoadOptions{Force: true})
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "provider catalog refreshed (%d providers)\n", len(cat.Providers))
+		return nil
+	},
+}
+
+var providerCLIHelpHint = fmt.Sprintf("built-in and catalog-backed providers; see '%s providers list'", brand.BinaryName)
 
 var validateCmd = &cobra.Command{
 	Use:   "validate [state-file]",
@@ -394,6 +460,8 @@ func validateDefaultCLIFlag(name, value string) error {
 // collectAgentFlags returns the agent names whose boolean flags are set on cmd.
 func collectAgentFlags(cmd *cobra.Command) []string {
 	var agents []string
+	providers, _ := cmd.Flags().GetStringArray("provider")
+	agents = append(agents, providers...)
 	for _, name := range agentFlagNames {
 		if v, _ := cmd.Flags().GetBool(name); v {
 			agents = append(agents, name)
@@ -402,16 +470,120 @@ func collectAgentFlags(cmd *cobra.Command) []string {
 	return agents
 }
 
+func collectSetupProviderFlags(cmd *cobra.Command) ([]string, error) {
+	agents := collectAgentFlags(cmd)
+	if len(agents) > 0 || !interactive.IsInteractive() {
+		return agents, nil
+	}
+	return promptDetectedProviders(os.Stdin, cmd.OutOrStdout())
+}
+
+func promptDetectedProviders(in io.Reader, out io.Writer) ([]string, error) {
+	cat, _ := providercatalog.Load(cmdContext(), providercatalog.LoadOptions{})
+	results := providercatalog.Detect(cat, nil)
+	installed := setupDetectableProviders(cat, results)
+	if len(installed) == 0 {
+		return nil, nil
+	}
+	if in == os.Stdin {
+		return promptDetectedProvidersInteractive(installed, in, out)
+	}
+	return promptDetectedProvidersText(installed, in, out)
+}
+
+func promptDetectedProvidersInteractive(installed []providercatalog.DetectionResult, in io.Reader, out io.Writer) ([]string, error) {
+	selected, options := detectedProviderPickerOptions(installed)
+	field := huh.NewMultiSelect[string]().
+		Title("Detected providers").
+		Description("Use Space to toggle providers, Enter to confirm.").
+		Options(options...).
+		Value(&selected)
+	if err := huh.NewForm(huh.NewGroup(field)).WithInput(in).WithOutput(out).Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return selected, nil
+}
+
+func setupDetectableProviders(cat providercatalog.Catalog, results []providercatalog.DetectionResult) []providercatalog.DetectionResult {
+	var installed []providercatalog.DetectionResult
+	for _, result := range results {
+		if !result.Installed {
+			continue
+		}
+		provider, ok := cat.Resolve(result.ID)
+		if !ok || provider.Setup.ConfigDir == "" || provider.Setup.SkillsDir == "" {
+			continue
+		}
+		installed = append(installed, result)
+	}
+	return installed
+}
+
+func detectedProviderPickerOptions(installed []providercatalog.DetectionResult) ([]string, []huh.Option[string]) {
+	selected := make([]string, 0, len(installed))
+	options := make([]huh.Option[string], 0, len(installed))
+	for _, result := range installed {
+		selected = append(selected, result.ID)
+		label := fmt.Sprintf("%s (%s)", result.DisplayName, result.ID)
+		options = append(options, huh.NewOption(label, result.ID).Selected(true))
+	}
+	return selected, options
+}
+
+func promptDetectedProvidersText(installed []providercatalog.DetectionResult, in io.Reader, out io.Writer) ([]string, error) {
+	fmt.Fprintln(out, "Detected providers:")
+	for i, result := range installed {
+		fmt.Fprintf(out, "  %d. %s (%s)\n", i+1, result.DisplayName, result.ID)
+	}
+	fmt.Fprint(out, "Select providers by number or id, comma-separated (blank to skip): ")
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil, nil
+	}
+	var selected []string
+	for _, part := range strings.Split(line, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if n, err := strconv.Atoi(part); err == nil {
+			if n < 1 || n > len(installed) {
+				return nil, fmt.Errorf("provider selection %d out of range", n)
+			}
+			selected = append(selected, installed[n-1].ID)
+			continue
+		}
+		selected = append(selected, part)
+	}
+	return selected, nil
+}
+
+func cmdContext() context.Context {
+	return context.Background()
+}
+
 func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(providersCmd)
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(migrateCmd)
+	providersCmd.AddCommand(providersListCmd)
+	providersCmd.AddCommand(providersDetectCmd)
+	providersCmd.AddCommand(providersRefreshCmd)
 
 	// Setup command flags
 	setupCmd.Flags().Bool("force", false, "overwrite existing global config")
 	setupCmd.Flags().String("agent-tools", "", "path to custom AGENT_TOOLS.md (replaces embedded default)")
+	setupCmd.Flags().StringArray("provider", nil, "create setup links for provider catalog id (repeatable)")
 	setupCmd.Flags().Bool("claude", false, "create skill symlinks in ~/.claude/")
 	setupCmd.Flags().Bool("codex", false, "create skill symlinks in ~/.codex/")
 	setupCmd.Flags().Bool("opencode", false, "create skill symlinks in ~/.config/opencode/")
@@ -427,11 +599,12 @@ func init() {
 	initCmd.Flags().Bool("copy-worktree-env-files", false, "copy ignored root env files into worktrees before setup commands")
 	initCmd.Flags().Bool("auto-resume", false, "automatically resume at checkpoint and sprint completion")
 	initCmd.Flags().Bool("no-follow-up", false, "run only the entry-point subpipeline by suppressing top-level pipeline transitions")
-	initCmd.Flags().String("default-cli", "", "default CLI for agent spawning ("+strings.Join(agent.ValidCLIs(), ", ")+")")
-	initCmd.Flags().String("default-doer-cli", "", "default CLI for doer and orchestrator agent spawning ("+strings.Join(agent.ValidCLIs(), ", ")+")")
-	initCmd.Flags().String("default-reviewer-cli", "", "default CLI for reviewer agent spawning ("+strings.Join(agent.ValidCLIs(), ", ")+")")
+	initCmd.Flags().String("default-cli", "", "default CLI for agent spawning ("+providerCLIHelpHint+")")
+	initCmd.Flags().String("default-doer-cli", "", "default CLI for doer and orchestrator agent spawning ("+providerCLIHelpHint+")")
+	initCmd.Flags().String("default-reviewer-cli", "", "default CLI for reviewer agent spawning ("+providerCLIHelpHint+")")
 	initCmd.Flags().StringArray("scip-search", nil, "enable a SCIP language for indexing (repeatable)")
 	initCmd.Flags().StringArray("scip-search-plan", nil, "pairing SCIP root override: go=<module-root>, typescript=<cwd>,<project-root>, or python=<cwd>[,<target-only>] (repeatable)")
+	initCmd.Flags().StringArray("provider", nil, "activate provider catalog id (repeatable)")
 	initCmd.Flags().Bool("claude", false, fmt.Sprintf("create CLAUDE.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("codex", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md and configure repo hooks", brand.GlobalDirName))
 	initCmd.Flags().Bool("opencode", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md", brand.GlobalDirName))

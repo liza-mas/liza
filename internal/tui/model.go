@@ -247,6 +247,13 @@ func (m Model) cliResolutionConfig() agent.CLIResolutionConfig {
 	}
 }
 
+func (m Model) availableCLIs() []string {
+	if m.state == nil {
+		return agent.ValidCLIs()
+	}
+	return agent.AvailableCLIs(m.state.Config)
+}
+
 // New creates a new Model. Creates the fsnotify watcher and blackboard.
 // Returns error if watcher creation fails (e.g., non-existent project root).
 func New(projectRoot string) (Model, error) {

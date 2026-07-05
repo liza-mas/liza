@@ -50,13 +50,15 @@ The PR keeps ACP out of the default runtime path and does not change Liza's
 coordination model. ACP-backed execution is explicit opt-in provider plumbing,
 not a replacement for the supervisor or blackboard.
 
-The `codex-acp` implementation uses `acpx --approve-all` intentionally because
-Liza agents already run non-interactively inside supervised task worktrees. This
-matches the automation posture of existing CLI-backed agents, but it is a trust
-boundary: ACPX and the wrapped provider remain responsible for their own
-sandboxing and permission semantics. `codex-acp` is therefore opt-in and should
-not become the default runtime dependency without a separate review of the ACPX
-permission model.
+The ACPX implementations use catalog-defined launch arguments such as
+`acpx --approve-all` intentionally because Liza agents already run
+non-interactively inside supervised task worktrees. This matches the automation
+posture of existing CLI-backed agents, but it is a trust boundary: the provider
+catalog now carries structured launch argv, and ACPX plus the wrapped provider
+remain responsible for their own sandboxing and permission semantics.
+Catalog-backed ACP providers are therefore opt-in and should not become the
+default runtime dependency without a separate review of the ACPX permission
+model and catalog distribution path.
 
 ACPX commands execute with `--cwd` set to the project root, while session names
 are scoped to the Liza agent identity so later turns by the same agent can reuse

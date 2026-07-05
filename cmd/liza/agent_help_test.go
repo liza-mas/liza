@@ -23,20 +23,21 @@ func TestAgentHelpListsAllRuntimeRoles(t *testing.T) {
 	}
 }
 
-func TestContractInitFlagForCLI(t *testing.T) {
+func TestContractInitCommandForProvider(t *testing.T) {
 	tests := map[string]string{
-		"claude":       "claude",
-		"codex":        "codex",
-		"codex-acp":    "codex",
-		"cursor-acp":   "codex",
-		"opencode":     "opencode",
-		"opencode-acp": "opencode",
-		"kimi":         "claude",
+		"claude":       "liza init --claude",
+		"codex":        "liza init --codex",
+		"codex-acp":    "liza init --codex",
+		"cursor-acp":   "liza init --codex",
+		"opencode":     "liza init --opencode",
+		"opencode-acp": "liza init --opencode",
+		"kimi":         "liza init --claude",
+		"qwen":         "liza init --provider qwen",
 	}
 
 	for cliName, want := range tests {
-		if got := contractInitFlagForCLI(cliName); got != want {
-			t.Fatalf("contractInitFlagForCLI(%q) = %q, want %q", cliName, got, want)
+		if got := contractInitCommandForProvider(cliName); got != want {
+			t.Fatalf("contractInitCommandForProvider(%q) = %q, want %q", cliName, got, want)
 		}
 	}
 }

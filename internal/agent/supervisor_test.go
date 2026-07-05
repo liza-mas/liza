@@ -824,6 +824,54 @@ printf '%%s\n' "$LIZA_AGENT_ID" > %q
 	}
 }
 
+func TestCLIAgentRunsConfiguredToolWithPromptFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake CLI shell script test requires /bin/sh")
+	}
+
+	binDir := t.TempDir()
+	fakeAgent := filepath.Join(binDir, "fake-agent")
+	script := `#!/bin/sh
+printf 'args:%s\n' "$*"
+if [ "$1" = "--prompt-file" ]; then
+  printf 'prompt:'
+  cat "$2"
+fi
+`
+	if err := os.WriteFile(fakeAgent, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake agent: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	result, err := NewCLIAgent("").Run(context.Background(), LLMAgentRunRequest{
+		BackendName: "cursor",
+		AgentID:     "coder-1",
+		Prompt:      "implement the task",
+		ProjectRoot: t.TempDir(),
+		RuntimeConfig: models.Config{
+			AgentTools: map[string]models.AgentToolConfig{
+				"cursor": {
+					Executable:      "fake-agent",
+					PromptTransport: PromptTransportFile,
+					RunArgs:         []string{"--prompt-file", "{{promptFile}}", "--cwd", "{{projectRoot}}"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; output:\n%s", result.ExitCode, result.Output)
+	}
+	if !strings.Contains(result.Output, "args:--prompt-file ") || !strings.Contains(result.Output, "--cwd ") {
+		t.Fatalf("output missing resolved argv:\n%s", result.Output)
+	}
+	if !strings.Contains(result.Output, "prompt:implement the task") {
+		t.Fatalf("output missing prompt file contents:\n%s", result.Output)
+	}
+}
+
 func TestSupervisor_Exit0ProviderAuditDegradedContinuesPostExecution(t *testing.T) {
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)

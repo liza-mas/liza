@@ -138,7 +138,7 @@ func ClearQuotaSignal(projectRoot, provider string) error {
 }
 
 func canonicalQuotaProvider(cliName string) string {
-	return acpxAgentName(cliName)
+	return acpxAgentNameFromTool(cliName)
 }
 
 // tailReadSize is the maximum bytes to read from the end of an output file.

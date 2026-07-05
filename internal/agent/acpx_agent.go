@@ -30,9 +30,27 @@ func NewACPXAgent(outputsDir string) *ACPXAgent {
 }
 
 func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRunResult, error) {
-	acpxAgent := acpxAgentName(req.BackendName)
-	sessionName := acpxSessionName(req.AgentID)
-	warm := a.hasSeenSession(sessionName) || a.sessionExists(ctx, req.ProjectRoot, req.AgentID, acpxAgent, sessionName)
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      req.BackendName,
+		ProfileName:   req.ProfileName,
+		ProfileVars:   req.ProfileVars,
+		Prompt:        req.Prompt,
+		ProjectRoot:   req.ProjectRoot,
+		AgentID:       req.AgentID,
+		TaskID:        req.TaskID,
+		SessionID:     req.SessionID,
+		OutputsDir:    a.outputsDir,
+		RuntimeConfig: req.RuntimeConfig,
+	})
+	if err != nil {
+		return LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
+	}
+	acpxAgent := plan.ACPXAgent
+	sessionName := plan.ACPXSessionName
+	if sessionName == "" {
+		sessionName = acpxSessionName(req.AgentID)
+	}
+	warm := a.hasSeenSession(sessionName) || a.sessionExists(ctx, req.ProjectRoot, req.AgentID, plan)
 
 	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 		Kind:        LLMAgentEventStarted,
@@ -46,7 +64,7 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 		},
 	})
 
-	if err := a.ensureSession(ctx, req.ProjectRoot, req.AgentID, acpxAgent, sessionName); err != nil {
+	if err := a.ensureSession(ctx, req.AgentID, req.ProjectRoot, plan); err != nil {
 		errText := a.maskText(err.Error())
 		maskedErr := maskedError{message: errText, err: err}
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
@@ -64,7 +82,7 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 	}
 	a.markSessionSeen(sessionName)
 
-	output, usage, err := a.prompt(ctx, req, acpxAgent, sessionName)
+	output, usage, err := a.prompt(ctx, req, plan)
 	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 		Kind:        LLMAgentEventUsage,
 		BackendName: req.BackendName,
@@ -123,46 +141,123 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 }
 
 func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRequest) (int, error) {
-	return NewCLIAgent(a.outputsDir).RunInteractive(ctx, req)
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      req.BackendName,
+		ProfileName:   req.ProfileName,
+		ProfileVars:   req.ProfileVars,
+		ProjectRoot:   req.ProjectRoot,
+		AgentID:       req.AgentID,
+		SessionID:     req.SessionID,
+		RuntimeConfig: req.RuntimeConfig,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if plan.Backend != ToolBackendACPX {
+		return NewCLIAgent(a.outputsDir).RunInteractive(ctx, req)
+	}
+
+	executable := interactiveExecutableForACPX(plan)
+	if executable == "" {
+		return 1, fmt.Errorf("interactive mode is not supported by %s", req.BackendName)
+	}
+
+	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
+		Kind:        LLMAgentEventStarted,
+		BackendName: req.BackendName,
+		AgentID:     req.AgentID,
+		SessionID:   req.SessionID,
+		Payload: map[string]any{
+			"mode": "interactive",
+		},
+	})
+
+	cmd := exec.CommandContext(ctx, executable)
+	cmd.Dir = req.ProjectRoot
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Env = agentProcessEnv(os.Environ(), req.AgentID)
+
+	err = cmd.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode := exitErr.ExitCode()
+			emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
+				Kind:        LLMAgentEventCompleted,
+				BackendName: req.BackendName,
+				AgentID:     req.AgentID,
+				SessionID:   req.SessionID,
+				Payload: map[string]any{
+					"exit_code": exitCode,
+				},
+			})
+			return exitCode, nil
+		}
+		return 0, err
+	}
+	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
+		Kind:        LLMAgentEventCompleted,
+		BackendName: req.BackendName,
+		AgentID:     req.AgentID,
+		SessionID:   req.SessionID,
+		Payload: map[string]any{
+			"exit_code": 0,
+		},
+	})
+	return 0, nil
 }
 
-func (a *ACPXAgent) ensureSession(ctx context.Context, cwd, agentID, acpxAgent, sessionName string) error {
-	args := []string{"--cwd", cwd, acpxAgent, "sessions", "ensure", "--name", sessionName}
-	out, err := a.runACPX(ctx, agentID, args, "")
+func interactiveExecutableForACPX(plan LaunchPlan) string {
+	switch plan.ACPXAgent {
+	case "cursor":
+		return "cursor-agent"
+	case "codex":
+		return "codex"
+	case "opencode":
+		return "opencode"
+	default:
+		fields := strings.Fields(plan.ACPXAgent)
+		if len(fields) == 0 {
+			return ""
+		}
+		return fields[0]
+	}
+}
+
+func (a *ACPXAgent) ensureSession(ctx context.Context, agentID string, projectRoot string, plan LaunchPlan) error {
+	args := plan.ACPXEnsureArgs
+	if len(args) == 0 {
+		if strings.TrimSpace(projectRoot) == "" {
+			return fmt.Errorf("acpx ensure args are required when project root is empty")
+		}
+		args = []string{"--cwd", projectRoot, plan.ACPXAgent, "sessions", "ensure", "--name", plan.ACPXSessionName}
+	}
+	out, err := a.runACPX(ctx, plan.Executable, agentID, args, "")
 	if err != nil {
 		return fmt.Errorf("acpx sessions ensure: %w\n%s", err, out)
 	}
 	return nil
 }
 
-func (a *ACPXAgent) prompt(ctx context.Context, req LLMAgentRunRequest, acpxAgent, sessionName string) (acpxOutput, LLMAgentUsage, error) {
-	args := []string{
-		"--cwd", req.ProjectRoot,
-		"--format", "json",
-		// Liza runs ACPX in non-interactive MAS worktrees. Auto-approval keeps
-		// behavior aligned with supervised CLI agents; ADR-0085 documents the
-		// trust boundary and sandbox expectation for this opt-in backend.
-		"--approve-all",
-		acpxAgent,
-		"prompt",
-		"-s", sessionName,
-		"--file", "-",
-	}
-	output, usage, raw, err := a.runACPXPrompt(ctx, req, args)
+func (a *ACPXAgent) prompt(ctx context.Context, req LLMAgentRunRequest, plan LaunchPlan) (acpxOutput, LLMAgentUsage, error) {
+	output, usage, raw, err := a.runACPXPrompt(ctx, req, plan)
 	if err != nil {
 		return output, usage, fmt.Errorf("acpx prompt: %w\n%s", err, raw)
 	}
 	return output, usage, nil
 }
 
-func (a *ACPXAgent) sessionExists(ctx context.Context, cwd, agentID, acpxAgent, sessionName string) bool {
-	args := []string{"--cwd", cwd, acpxAgent, "sessions", "show", "--name", sessionName}
-	_, err := a.runACPX(ctx, agentID, args, "")
+func (a *ACPXAgent) sessionExists(ctx context.Context, _ string, agentID string, plan LaunchPlan) bool {
+	if len(plan.ACPXShowArgs) == 0 {
+		return false
+	}
+	_, err := a.runACPX(ctx, plan.Executable, agentID, plan.ACPXShowArgs, "")
 	return err == nil
 }
 
-func (a *ACPXAgent) runACPX(ctx context.Context, agentID string, args []string, stdin string) (string, error) {
-	cmd := exec.CommandContext(ctx, "acpx", args...)
+func (a *ACPXAgent) runACPX(ctx context.Context, executable, agentID string, args []string, stdin string) (string, error) {
+	cmd := exec.CommandContext(ctx, executable, args...)
 	cmd.Env = agentProcessEnv(os.Environ(), agentID)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
@@ -174,8 +269,8 @@ func (a *ACPXAgent) runACPX(ctx context.Context, agentID string, args []string, 
 	return stdout.String() + stderr.String(), err
 }
 
-func (a *ACPXAgent) runACPXPrompt(ctx context.Context, req LLMAgentRunRequest, args []string) (acpxOutput, LLMAgentUsage, string, error) {
-	cmd := exec.CommandContext(ctx, "acpx", args...)
+func (a *ACPXAgent) runACPXPrompt(ctx context.Context, req LLMAgentRunRequest, plan LaunchPlan) (acpxOutput, LLMAgentUsage, string, error) {
+	cmd := exec.CommandContext(ctx, plan.Executable, plan.ACPXPromptArgs...)
 	cmd.Env = agentProcessEnv(os.Environ(), req.AgentID)
 	cmd.Stdin = strings.NewReader(req.Prompt)
 
@@ -203,7 +298,7 @@ func (a *ACPXAgent) runACPXPrompt(ctx context.Context, req LLMAgentRunRequest, a
 		BackendName: req.BackendName,
 		AgentID:     req.AgentID,
 		TaskID:      req.TaskID,
-		SessionID:   acpxSessionName(req.AgentID),
+		SessionID:   plan.ACPXSessionName,
 	}
 	progress := executionProgressCallback(ctx)
 
@@ -382,21 +477,6 @@ func acpxInt(raw any) int {
 		return v
 	default:
 		return 0
-	}
-}
-
-func acpxAgentName(cliName string) string {
-	switch cliName {
-	case "codex-acp", "acpx-codex":
-		return "codex"
-	default:
-		if strings.HasPrefix(cliName, "acpx-") {
-			return strings.TrimPrefix(cliName, "acpx-")
-		}
-		if strings.HasSuffix(cliName, "-acp") {
-			return strings.TrimSuffix(cliName, "-acp")
-		}
-		return cliName
 	}
 }
 
