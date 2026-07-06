@@ -225,7 +225,9 @@ func TestLizaPathsFromGit(t *testing.T) {
 }
 
 func TestISOTimestamp(t *testing.T) {
+	before := time.Now().UTC()
 	ts := ISOTimestamp()
+	after := time.Now().UTC()
 
 	// Verify format: YYYY-MM-DDTHH:MM:SSZ
 	if len(ts) != 20 {
@@ -237,17 +239,17 @@ func TestISOTimestamp(t *testing.T) {
 	}
 
 	// Parse to verify it's valid ISO8601
-	_, err := time.Parse(time.RFC3339, ts)
+	parsed, err := time.Parse(time.RFC3339, ts)
 	if err != nil {
 		t.Errorf("ISOTimestamp() = %v, not valid RFC3339: %v", ts, err)
 	}
 
-	// Verify it's recent (within 1 second)
-	parsed, _ := time.Parse(time.RFC3339, ts)
-	now := time.Now().UTC()
-	diff := now.Sub(parsed)
-	if diff < 0 || diff > time.Second {
-		t.Errorf("ISOTimestamp() = %v, time difference from now = %v, want < 1s", ts, diff)
+	// Verify it is within the call window at the second precision returned by
+	// time.RFC3339 formatting.
+	start := before.Truncate(time.Second)
+	end := after.Truncate(time.Second)
+	if parsed.Before(start) || parsed.After(end) {
+		t.Errorf("ISOTimestamp() = %v, want between %v and %v", ts, start, end)
 	}
 }
 
