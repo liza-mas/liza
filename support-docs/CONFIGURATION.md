@@ -727,7 +727,10 @@ This writes `.cursor/hooks.json` with:
   "version": 1,
   "hooks": {
     "beforeShellExecution": [
-      { "command": "bash .cursor/hooks/cursor-bash-policy.sh" }
+      {
+        "command": "bash .cursor/hooks/cursor-bash-policy.sh",
+        "failClosed": true
+      }
     ]
   }
 }
@@ -735,9 +738,10 @@ This writes `.cursor/hooks.json` with:
 
 The managed script invokes `bash-policy evaluate --provider codex --mode on
 --policy-artifact-root <project_root> --safe-root <project_root> --json` and
-exits nonzero unless the decision is `allow` or `no-op`. If `bash-policy` is not
-available when Cursor runs the hook, shell execution is blocked until
-`bash-policy` is installed or `.cursor/hooks.json` is removed.
+returns Cursor `allow` only when the decision is `allow` or `no-op`; all other
+results return Cursor `deny`. If `bash-policy` is not available when Cursor
+runs the hook, shell execution is blocked until `bash-policy` is installed or
+`.cursor/hooks.json` is removed.
 
 ### Agent Execution Timeouts
 

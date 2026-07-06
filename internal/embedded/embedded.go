@@ -704,7 +704,8 @@ func managedCursorHooks() map[string]any {
 		"hooks": map[string]any{
 			"beforeShellExecution": []any{
 				map[string]any{
-					"command": cursorBashPolicyHookCommand,
+					"command":    cursorBashPolicyHookCommand,
+					"failClosed": true,
 				},
 			},
 		},

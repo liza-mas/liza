@@ -2,23 +2,29 @@
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+input="$(cat)"
+
+deny() {
+  cat <<'JSON'
+{"continue":true,"permission":"deny","user_message":"Cursor shell execution blocked by Liza bash-policy.","agent_message":"The Liza Cursor shell policy hook denied this shell command. Install or repair bash-policy, or adjust .bash-policy.yaml if this command should be allowed."}
+JSON
+}
 
 if ! command -v bash-policy >/dev/null 2>&1; then
-  echo "bash-policy not found; install it or remove .cursor/hooks.json to disable the Cursor shell policy hook." >&2
-  exit 1
+  deny
+  exit 0
 fi
 
-if ! output="$(bash-policy evaluate --provider codex --mode on --policy-artifact-root "$root" --safe-root "$root" --json)"; then
-  echo "bash-policy evaluate failed; shell execution blocked." >&2
-  exit 1
+if ! output="$(printf '%s' "$input" | bash-policy evaluate --provider codex --mode on --policy-artifact-root "$root" --safe-root "$root" --json)"; then
+  deny
+  exit 0
 fi
 
 case "$output" in
   *'"decision":"allow"'* | *'"decision":"no-op"'*)
-    exit 0
+    printf '{"continue":true,"permission":"allow"}\n'
     ;;
   *)
-    echo "bash-policy blocked shell command." >&2
-    exit 1
+    deny
     ;;
 esac

@@ -4479,7 +4479,7 @@ func verifyCursorHooks(t *testing.T, projectRoot string) {
 	if err := json.Unmarshal(hooksContent, &hooks); err != nil {
 		t.Fatalf("Cursor hooks.json is invalid JSON: %v", err)
 	}
-	for _, want := range []string{"beforeShellExecution", "bash .cursor/hooks/cursor-bash-policy.sh"} {
+	for _, want := range []string{"beforeShellExecution", "bash .cursor/hooks/cursor-bash-policy.sh", `"failClosed": true`} {
 		if !strings.Contains(string(hooksContent), want) {
 			t.Errorf("Cursor hooks.json missing %q:\n%s", want, string(hooksContent))
 		}
@@ -4497,7 +4497,7 @@ func verifyCursorHooks(t *testing.T, projectRoot string) {
 	if err != nil {
 		t.Fatalf("read Cursor hook script: %v", err)
 	}
-	for _, want := range []string{"bash-policy evaluate", "--provider codex", "--json"} {
+	for _, want := range []string{"bash-policy evaluate", "--provider codex", "--json", `"permission":"deny"`, `printf '%s' "$input"`} {
 		if !strings.Contains(string(hookContent), want) {
 			t.Errorf("Cursor hook script missing %q:\n%s", want, string(hookContent))
 		}

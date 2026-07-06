@@ -2475,7 +2475,7 @@ func TestWriteCursorProjectHooks_NewFile(t *testing.T) {
 	if err := json.Unmarshal(hooksContent, &hooks); err != nil {
 		t.Fatalf("Cursor hooks.json is invalid JSON: %v", err)
 	}
-	for _, want := range []string{"beforeShellExecution", cursorBashPolicyHookCommand} {
+	for _, want := range []string{"beforeShellExecution", cursorBashPolicyHookCommand, `"failClosed": true`} {
 		if !strings.Contains(string(hooksContent), want) {
 			t.Fatalf("Cursor hooks.json missing %q:\n%s", want, string(hooksContent))
 		}
@@ -2699,6 +2699,11 @@ func assertCursorHookScript(t *testing.T, hookPath string) {
 	}
 	if !bytes.Equal(content, renderEmbeddedAsset(cursorBashPolicyHookContent)) {
 		t.Errorf("Cursor hook content does not match embedded source")
+	}
+	for _, want := range []string{`"permission":"deny"`, `printf '%s' "$input"`} {
+		if !bytes.Contains(content, []byte(want)) {
+			t.Errorf("Cursor hook content missing %q:\n%s", want, string(content))
+		}
 	}
 }
 

@@ -23,6 +23,15 @@ func TestAgentHelpListsAllRuntimeRoles(t *testing.T) {
 	}
 }
 
+func TestContractWarningInitCommandUsesCLIName(t *testing.T) {
+	cliName := "cursor-acp"
+	contractKey := "codex"
+
+	if got := contractInitCommandForMissingContract(cliName, contractKey); got != "liza init --cursor" {
+		t.Fatalf("contractInitCommandForMissingContract(%q, %q) = %q, want liza init --cursor", cliName, contractKey, got)
+	}
+}
+
 func TestContractInitCommandForProvider(t *testing.T) {
 	tests := map[string]string{
 		"claude":       "liza init --claude",
