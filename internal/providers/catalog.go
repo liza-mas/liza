@@ -79,6 +79,7 @@ type ActivationAssets struct {
 	CodexConfig         bool `yaml:"codex_config,omitempty"`
 	CodexHooks          bool `yaml:"codex_hooks,omitempty"`
 	OpenCodeExecTool    bool `yaml:"opencode_exec_tool,omitempty"`
+	CursorHooks         bool `yaml:"cursor_hooks,omitempty"`
 	ClaudeIgnore        bool `yaml:"claude_ignore,omitempty"`
 	MistralPromptConfig bool `yaml:"mistral_prompt_config,omitempty"`
 	BashPolicyClaude    bool `yaml:"bash_policy_claude,omitempty"`

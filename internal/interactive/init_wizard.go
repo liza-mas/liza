@@ -15,7 +15,7 @@ import (
 // InitWizardResult holds all choices made during the interactive init wizard.
 type InitWizardResult struct {
 	Mode           string   // "pairing" or "full"
-	Agents         []string // selected agents (e.g. "claude", "codex")
+	Agents         []string // selected agents (e.g. "claude", "codex", "cursor")
 	Description    string   // project goal (full mode only)
 	SpecRef        string   // spec file path (full mode only)
 	EntryPoint     string   // entry point (full mode only)
@@ -48,6 +48,7 @@ func RunInitWizard(projectRoot string) (*InitWizardResult, error) {
 		Options(
 			huh.NewOption("Claude  (creates CLAUDE.md)", "claude").Selected(true),
 			huh.NewOption("Codex   (creates AGENTS.md)", "codex"),
+			huh.NewOption("Cursor  (creates AGENTS.md + Cursor hooks)", "cursor"),
 			huh.NewOption("OpenCode (creates AGENTS.md)", "opencode"),
 			huh.NewOption("Gemini  (creates GEMINI.md)", "gemini"),
 			huh.NewOption("Mistral (sets up ~/.vibe/)", "mistral"),

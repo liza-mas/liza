@@ -17,10 +17,17 @@ import (
 func TestEmbeddedCatalogResolvesBuiltInsAndAliases(t *testing.T) {
 	cat := EmbeddedCatalog()
 
-	for _, id := range []string{"claude", "codex", "codex-acp", "opencode", "opencode-acp", "gemini", "mistral", "kimi"} {
+	for _, id := range []string{"claude", "codex", "codex-acp", "cursor-acp", "opencode", "opencode-acp", "gemini", "mistral", "kimi"} {
 		if _, ok := cat.Resolve(id); !ok {
 			t.Fatalf("EmbeddedCatalog().Resolve(%q) = false", id)
 		}
+	}
+	cursor, ok := cat.Resolve("cursor")
+	if !ok || cursor.ID != "cursor-acp" {
+		t.Fatalf("Resolve(cursor) = %+v, %v; want cursor-acp", cursor, ok)
+	}
+	if !cursor.Setup.ActivationAssets.CursorHooks {
+		t.Fatal("cursor-acp missing Cursor hook activation asset")
 	}
 	p, ok := cat.Resolve("vibe")
 	if !ok || p.ID != "mistral" {
@@ -48,6 +55,13 @@ func TestRepositoryCatalogAddsRemoteProviders(t *testing.T) {
 	}
 	if _, ok := cat.Resolve("qwen"); !ok {
 		t.Fatal("provider-catalog.yaml missing qwen")
+	}
+	cursor, ok := cat.Resolve("cursor")
+	if !ok || cursor.ID != "cursor-acp" {
+		t.Fatalf("provider-catalog.yaml Resolve(cursor) = %+v, %v; want cursor-acp", cursor, ok)
+	}
+	if !cursor.Setup.ActivationAssets.CursorHooks {
+		t.Fatal("provider-catalog.yaml cursor-acp missing Cursor hook activation asset")
 	}
 	qwenACP, ok := cat.Resolve("qwen-acp")
 	if !ok {

@@ -79,6 +79,7 @@ providers:
 
   - id: cursor-acp
     display_name: Cursor ACP
+    aliases: [cursor]
     backend: acpx
     detection:
       binaries: [cursor-agent]
@@ -87,6 +88,8 @@ providers:
       contract:
         repo_file: AGENTS.md
         global_fallback: .codex/AGENTS.md
+      activation_assets:
+        cursor_hooks: true
     runtime:
       provider_key: cursor
       executable: acpx

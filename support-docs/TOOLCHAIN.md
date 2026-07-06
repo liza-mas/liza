@@ -108,6 +108,12 @@ source ~/§BRAND_GLOBAL_DIRNAME§/toolchain/env.sh
 §BRAND_BINARY_NAME§ init --claude --codex
 ```
 
+Add `--cursor` when the project should activate Cursor's project-local hook
+system; this writes `.cursor/hooks.json` with a `beforeShellExecution` hook that
+runs `bash-policy evaluate`. If `bash-policy` is not on `PATH`, init warns and
+the Cursor hook will block shell execution until the CLI is installed or the hook
+configuration is removed.
+
 Or use `configure --project` to invoke pairing activation for provider contract
 files and optional indexing hooks:
 
@@ -116,8 +122,8 @@ files and optional indexing hooks:
 ```
 
 Project-local activation still belongs to `§BRAND_BINARY_NAME§ init`: Stacklit hooks, SCIP hook
-plans, `.sembleignore`, provider symlinks, bash-policy policy files and
-provider hooks, and OpenCode exec tools are written there. If
+plans, `.sembleignore`, provider symlinks, bash-policy policy files, Cursor
+hooks, Claude/Codex provider hooks, and OpenCode exec tools are written there. If
 `§BRAND_ENV_PREFIX§_ENABLE_BASH_POLICY` is truthy but the standalone
 `bash-policy` CLI is unavailable or fails, `§BRAND_BINARY_NAME§ init` warns and
 continues; `.bash-policy.yaml` is written before that CLI call. Global

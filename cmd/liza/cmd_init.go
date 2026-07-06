@@ -111,6 +111,7 @@ PAIRING MODE: Use agent flags without a description to create only the contract
 symlinks needed for pairing (no %[2]s/ workspace):
   %[4]s init --claude           # creates CLAUDE.md -> ~/%[3]s/CORE.md
   %[4]s init --claude --codex   # creates CLAUDE.md + AGENTS.md and repo hooks
+  %[4]s init --cursor           # creates AGENTS.md and Cursor shell hooks
   %[4]s init --opencode         # creates AGENTS.md -> ~/%[3]s/CORE.md`, brand.NameTitle, brand.ProjectDirName, brand.GlobalDirName, brand.BinaryName),
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -136,7 +137,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		// Interactive wizard: no args, no agent flags, no explicit workspace flags, TTY
 		if len(args) == 0 && len(agents) == 0 && !hasExplicitInitFlags(cmd) && !cmd.Flags().Changed("scip-search") && !cmd.Flags().Changed("scip-search-plan") {
 			if !interactive.IsInteractive() {
-				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
+				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
 			}
 
 			// Resolve project root for conflict detection
@@ -206,7 +207,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		// Pairing mode: agent flags without description
 		if len(args) == 0 {
 			if len(agents) == 0 {
-				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
+				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
 			}
 			if autoResume {
 				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
@@ -434,7 +435,7 @@ Reports whether any changes were made.`,
 }
 
 // agentFlagNames is the canonical list of supported agent flag names.
-var agentFlagNames = []string{"claude", "codex", "opencode", "gemini", "mistral"}
+var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini", "mistral"}
 
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
@@ -607,6 +608,7 @@ func init() {
 	initCmd.Flags().StringArray("provider", nil, "activate provider catalog id (repeatable)")
 	initCmd.Flags().Bool("claude", false, fmt.Sprintf("create CLAUDE.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("codex", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md and configure repo hooks", brand.GlobalDirName))
+	initCmd.Flags().Bool("cursor", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md and configure Cursor shell hooks", brand.GlobalDirName))
 	initCmd.Flags().Bool("opencode", false, fmt.Sprintf("create AGENTS.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("gemini", false, fmt.Sprintf("create GEMINI.md symlink to ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("mistral", false, fmt.Sprintf("set up ~/.vibe/ for %s contract", brand.NameTitle))

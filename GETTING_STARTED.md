@@ -121,9 +121,12 @@ flags, and project activation.
 standalone command-policy layer for agent shell use. When
 `LIZA_ENABLE_BASH_POLICY=1` is set before `liza init`, Liza writes
 `.bash-policy.yaml`, then delegates to the installed `bash-policy` CLI to
-install provider-aware bash hooks for Claude and Codex in the project. It
-continues initialization if the executable is missing or fails. For the full
-setup, activation, tuning, and update lifecycle, see the
+install provider-aware bash hooks for Claude and Codex in the project. `liza
+init --cursor` writes project-local Cursor hooks that run `bash-policy evaluate`
+before shell execution; init warns if `bash-policy` is missing, and the Cursor
+hook blocks shell execution until the CLI is installed or the hook config is
+removed. It continues initialization if the executable is missing or fails. For
+the full setup, activation, tuning, and update lifecycle, see the
 [bash-policy configuration guide](https://github.com/liza-mas/bash-policy/blob/main/docs/CONFIGURATION.md).
 
 If you keep the default SCIP guidance, install `scip-search` plus the language
@@ -163,6 +166,7 @@ project-local activation. You can also pass provider flags explicitly:
 
 ```bash
 liza init --claude --codex
+liza init --cursor
 liza init --opencode
 ```
 
@@ -280,6 +284,7 @@ liza setup --claude --codex
 liza setup --opencode
 liza setup --agent-tools ~/my-agent-tools.md
 liza init --claude --codex
+liza init --cursor
 liza init --opencode
 liza init "Project goal" --spec specs/vision.md
 liza tui

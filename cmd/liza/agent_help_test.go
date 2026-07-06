@@ -28,7 +28,7 @@ func TestContractInitCommandForProvider(t *testing.T) {
 		"claude":       "liza init --claude",
 		"codex":        "liza init --codex",
 		"codex-acp":    "liza init --codex",
-		"cursor-acp":   "liza init --codex",
+		"cursor-acp":   "liza init --cursor",
 		"opencode":     "liza init --opencode",
 		"opencode-acp": "liza init --opencode",
 		"kimi":         "liza init --claude",

@@ -2455,6 +2455,82 @@ func TestWriteCodexHooks_Overwrites(t *testing.T) {
 	assertHookScripts(t, hooksDir)
 }
 
+func TestWriteCursorProjectHooks_NewFile(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	installed, err := WriteCursorProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("")))
+	if err != nil {
+		t.Fatalf("WriteCursorProjectHooks failed: %v", err)
+	}
+	if !installed {
+		t.Fatal("WriteCursorProjectHooks installed = false, want true")
+	}
+
+	hooksPath := filepath.Join(projectRoot, ".cursor", "hooks.json")
+	hooksContent, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("Cursor hooks.json not created: %v", err)
+	}
+	var hooks map[string]any
+	if err := json.Unmarshal(hooksContent, &hooks); err != nil {
+		t.Fatalf("Cursor hooks.json is invalid JSON: %v", err)
+	}
+	for _, want := range []string{"beforeShellExecution", cursorBashPolicyHookCommand} {
+		if !strings.Contains(string(hooksContent), want) {
+			t.Fatalf("Cursor hooks.json missing %q:\n%s", want, string(hooksContent))
+		}
+	}
+	assertCursorHookScript(t, filepath.Join(projectRoot, ".cursor", "hooks", "cursor-bash-policy.sh"))
+}
+
+func TestWriteCursorProjectHooks_MergesExistingHooks(t *testing.T) {
+	projectRoot := t.TempDir()
+	cursorDir := filepath.Join(projectRoot, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	existingHooks := `{"version":1,"hooks":{"beforeShellExecution":[{"command":"./hooks/allow.sh"}],"stop":[{"command":"./hooks/cleanup.sh"}]}}`
+	if err := os.WriteFile(filepath.Join(cursorDir, "hooks.json"), []byte(existingHooks), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	installed, err := WriteCursorProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("y\n")))
+	if err != nil {
+		t.Fatalf("WriteCursorProjectHooks failed: %v", err)
+	}
+	if !installed {
+		t.Fatal("WriteCursorProjectHooks installed = false, want true")
+	}
+
+	hooksContent, err := os.ReadFile(filepath.Join(cursorDir, "hooks.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{cursorBashPolicyHookCommand, "./hooks/allow.sh", "./hooks/cleanup.sh"} {
+		if !strings.Contains(string(hooksContent), want) {
+			t.Fatalf("merged Cursor hooks.json missing %q:\n%s", want, string(hooksContent))
+		}
+	}
+	assertCursorHookScript(t, filepath.Join(projectRoot, ".cursor", "hooks", "cursor-bash-policy.sh"))
+}
+
+func TestWriteCursorHooks_Overwrites(t *testing.T) {
+	projectRoot := t.TempDir()
+	hookPath := filepath.Join(projectRoot, ".cursor", "hooks", "cursor-bash-policy.sh")
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hookPath, []byte("old"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteCursorHooks(projectRoot); err != nil {
+		t.Fatalf("WriteCursorHooks failed: %v", err)
+	}
+
+	assertCursorHookScript(t, hookPath)
+}
+
 func TestWriteOpenCodeExecTool_NewFile(t *testing.T) {
 	projectRoot := t.TempDir()
 
@@ -2605,6 +2681,24 @@ func assertHookScripts(t *testing.T, hooksDir string) {
 		if !bytes.Equal(content, wantContent) {
 			t.Errorf("hook %s content does not match embedded source", name)
 		}
+	}
+}
+
+func assertCursorHookScript(t *testing.T, hookPath string) {
+	t.Helper()
+	info, err := os.Stat(hookPath)
+	if err != nil {
+		t.Fatalf("Cursor hook file not found: %v", err)
+	}
+	if info.Mode()&0111 == 0 {
+		t.Errorf("Cursor hook should be executable, got %o", info.Mode())
+	}
+	content, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatalf("failed to read Cursor hook: %v", err)
+	}
+	if !bytes.Equal(content, renderEmbeddedAsset(cursorBashPolicyHookContent)) {
+		t.Errorf("Cursor hook content does not match embedded source")
 	}
 }
 

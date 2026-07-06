@@ -51,6 +51,9 @@ var codexHooksContent []byte
 //go:embed "bash-policy.yaml"
 var bashPolicyContent []byte
 
+//go:embed "hooks/cursor-bash-policy.sh"
+var cursorBashPolicyHookContent []byte
+
 //go:embed "opencode-tools/exec.ts"
 var opencodeExecToolContent []byte
 
@@ -90,6 +93,8 @@ var claudeIgnoreContent []byte
 var pipelineConfigContent []byte
 
 const supportDocEmbeddedPath = "support-docs/SUPPORT.md"
+
+const cursorBashPolicyHookCommand = "bash .cursor/hooks/cursor-bash-policy.sh"
 
 const openCodeExecToolManagedHeaderTemplate = "// __BRAND_NAME_UPPER__ MANAGED FILE: OpenCode exec compatibility tool. Safe for __BRAND_NAME_TITLE__ to overwrite."
 
@@ -525,34 +530,66 @@ func WriteCodexProjectHooks(projectRoot string, reader *bufio.Reader) error {
 	return nil
 }
 
+// WriteCursorProjectHooks writes project-local Cursor hook configuration and a
+// bash-policy wrapper script to .cursor/. Existing hooks.json is merged only
+// after confirmation. It reports whether hook configuration was installed.
+func WriteCursorProjectHooks(projectRoot string, reader *bufio.Reader) (bool, error) {
+	if reader == nil {
+		reader = bufio.NewReader(os.Stdin)
+	}
+	cursorDir := filepath.Join(projectRoot, ".cursor")
+	if err := ensureProviderDir(cursorDir); err != nil {
+		return false, fmt.Errorf("failed to create .cursor directory: %w", err)
+	}
+
+	hooksOutput, installed, err := renderCursorHooksJSON(filepath.Join(cursorDir, "hooks.json"), reader)
+	if err != nil {
+		return false, err
+	}
+	if !installed {
+		return false, nil
+	}
+	if err := WriteCursorHooks(projectRoot); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(filepath.Join(cursorDir, "hooks.json"), hooksOutput, 0644); err != nil {
+		return false, fmt.Errorf("failed to write cursor hooks.json: %w", err)
+	}
+	return true, nil
+}
+
 func ensureCodexDir(codexDir string) error {
-	info, err := os.Lstat(codexDir)
+	return ensureProviderDir(codexDir)
+}
+
+func ensureProviderDir(dir string) error {
+	info, err := os.Lstat(dir)
 	if err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			targetInfo, targetErr := os.Stat(codexDir)
+			targetInfo, targetErr := os.Stat(dir)
 			if targetErr == nil && targetInfo.IsDir() {
 				return nil
 			}
 			if targetErr != nil {
-				return fmt.Errorf("%s exists as symlink: %w", codexDir, targetErr)
+				return fmt.Errorf("%s exists as symlink: %w", dir, targetErr)
 			}
-			return fmt.Errorf("%s exists as symlink and is not a directory", codexDir)
+			return fmt.Errorf("%s exists as symlink and is not a directory", dir)
 		}
 		if info.IsDir() {
 			return nil
 		}
 		if info.Mode().IsRegular() && info.Size() == 0 {
-			if err := os.Remove(codexDir); err != nil {
+			if err := os.Remove(dir); err != nil {
 				return err
 			}
-			return os.MkdirAll(codexDir, 0755)
+			return os.MkdirAll(dir, 0755)
 		}
-		return fmt.Errorf("%s exists and is not a directory", codexDir)
+		return fmt.Errorf("%s exists and is not a directory", dir)
 	}
 	if !os.IsNotExist(err) {
 		return err
 	}
-	return os.MkdirAll(codexDir, 0755)
+	return os.MkdirAll(dir, 0755)
 }
 
 func prepareCodexHooksFeature(configPath string, reader *bufio.Reader) (bool, string, error) {
@@ -633,6 +670,45 @@ func renderCodexHooksJSON(hooksPath string, reader *bufio.Reader) ([]byte, bool,
 		return nil, false, fmt.Errorf("failed to marshal codex hooks.json: %w", err)
 	}
 	return append(output, '\n'), true, nil
+}
+
+func renderCursorHooksJSON(hooksPath string, reader *bufio.Reader) ([]byte, bool, error) {
+	finalHooks := managedCursorHooks()
+	if existingData, err := os.ReadFile(hooksPath); err == nil {
+		ok, err := confirmMerge(fmt.Sprintf("Should the %s Cursor hooks be merged into .cursor/hooks.json? (y/n): ", brand.NameTitle), reader)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			return nil, false, nil
+		}
+
+		var existingHooks map[string]any
+		if err := json.Unmarshal(existingData, &existingHooks); err != nil {
+			return nil, false, fmt.Errorf("failed to parse existing cursor hooks.json: %w", err)
+		}
+		finalHooks = mergeSettings(finalHooks, existingHooks)
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, false, fmt.Errorf("failed to read cursor hooks.json: %w", err)
+	}
+	output, err := json.MarshalIndent(finalHooks, "", "  ")
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to marshal cursor hooks.json: %w", err)
+	}
+	return append(output, '\n'), true, nil
+}
+
+func managedCursorHooks() map[string]any {
+	return map[string]any{
+		"version": float64(1),
+		"hooks": map[string]any{
+			"beforeShellExecution": []any{
+				map[string]any{
+					"command": cursorBashPolicyHookCommand,
+				},
+			},
+		},
+	}
 }
 
 func codexConfigPath() (string, error) {
@@ -1219,13 +1295,16 @@ func mergeHooks(liza, existing map[string]any) map[string]any {
 }
 
 // unionHookEntries deduplicates hook entries by the command string inside
-// each entry's hooks array. Existing entries (b) take precedence on command
-// collision — preserving user customizations (e.g. different timeout).
+// each entry's hooks array or direct command field. Existing entries (b) take
+// precedence on command collision — preserving user customizations.
 func unionHookEntries(a, b []any) []any {
 	commandsOf := func(entry any) []string {
 		entryMap, ok := entry.(map[string]any)
 		if !ok {
 			return nil
+		}
+		if cmd, ok := entryMap["command"].(string); ok {
+			return []string{cmd}
 		}
 		hooks, ok := entryMap["hooks"].([]any)
 		if !ok {
@@ -1464,6 +1543,21 @@ func WriteCodexHooks(projectRoot string) error {
 		}
 	}
 
+	return nil
+}
+
+// WriteCursorHooks writes embedded hook scripts to .cursor/hooks/ in the
+// project root. Always overwrites Liza-managed hook script names.
+func WriteCursorHooks(projectRoot string) error {
+	hooksDir := filepath.Join(projectRoot, ".cursor", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .cursor/hooks directory: %w", err)
+	}
+
+	hookPath := filepath.Join(hooksDir, "cursor-bash-policy.sh")
+	if err := os.WriteFile(hookPath, renderEmbeddedAsset(cursorBashPolicyHookContent), 0755); err != nil {
+		return fmt.Errorf("failed to write cursor-bash-policy.sh: %w", err)
+	}
 	return nil
 }
 

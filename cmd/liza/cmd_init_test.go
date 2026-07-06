@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -150,6 +151,23 @@ func TestHasExplicitInitFlags_NoFollowUpDoesNotBypassWizard(t *testing.T) {
 	}
 	if hasExplicitInitFlags(initCmd) {
 		t.Fatal("hasExplicitInitFlags() = true for --no-follow-up, want false so the wizard path can pass it through")
+	}
+}
+
+func TestCollectAgentFlagsIncludesCursor(t *testing.T) {
+	cmd := &cobra.Command{Use: "init"}
+	cmd.Flags().StringArray("provider", nil, "")
+	for _, name := range agentFlagNames {
+		cmd.Flags().Bool(name, false, "")
+	}
+
+	if err := cmd.Flags().Set("cursor", "true"); err != nil {
+		t.Fatalf("set cursor flag: %v", err)
+	}
+
+	got := collectAgentFlags(cmd)
+	if !slices.Contains(got, "cursor") {
+		t.Fatalf("collectAgentFlags() = %v, want cursor", got)
 	}
 }
 

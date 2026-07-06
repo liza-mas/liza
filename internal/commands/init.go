@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -53,7 +54,7 @@ type InitParams struct {
 	DefaultReviewerCLI   string   // --default-reviewer-cli: default CLI for reviewer agent spawning
 	ScipSearch           []string // --scip-search: enabled SCIP languages
 	ScipSearchPlans      []string // --scip-search-plan: pairing SCIP root overrides
-	Agents               []string // --claude, --codex, --opencode, --gemini, --mistral
+	Agents               []string // --claude, --codex, --cursor, --opencode, --gemini, --mistral
 	Stdin                io.Reader
 	ForceInteractive     bool   // bypass TTY check (for testing)
 	ContractAction       string // "global", "rename", "skip", or "" (default behavior)
@@ -66,6 +67,7 @@ type InitParams struct {
 var InitAgentRepoSymlinks = map[string]string{
 	"claude":   "CLAUDE.md",
 	"codex":    "AGENTS.md",
+	"cursor":   "AGENTS.md",
 	"opencode": "AGENTS.md",
 	"gemini":   "GEMINI.md",
 }
@@ -75,13 +77,14 @@ var InitAgentRepoSymlinks = map[string]string{
 var InitAgentGlobalFallbacks = map[string]string{
 	"claude":   filepath.Join(".claude", "CLAUDE.md"),
 	"codex":    filepath.Join(".codex", "AGENTS.md"),
+	"cursor":   filepath.Join(".codex", "AGENTS.md"),
 	"opencode": filepath.Join(".config", "opencode", "AGENTS.md"),
 	"gemini":   filepath.Join(".gemini", "GEMINI.md"),
 }
 
 // InitPairingParams holds the parameters for InitPairingCommand.
 type InitPairingParams struct {
-	Agents          []string  // agent names (e.g. "claude", "codex", "opencode", "gemini", "mistral")
+	Agents          []string  // agent names (e.g. "claude", "codex", "cursor", "opencode", "gemini", "mistral")
 	ScipSearch      []string  // --scip-search: enabled pairing SCIP languages
 	ScipSearchPlans []string  // --scip-search-plan: pairing SCIP root overrides
 	Stdin           io.Reader // input for interactive prompts (nil = os.Stdin)
@@ -109,7 +112,7 @@ func InitPairingCommand(params InitPairingParams) error {
 		return fmt.Errorf("global config not found at %s\nRun '%s setup' first", globalDir, brand.BinaryName)
 	}
 	catalog := loadProviderCatalog()
-	selectedProviders, err := resolveCatalogProviders(catalog, params.Agents)
+	selectedProviders, err := resolveCatalogProviders(catalog, canonicalInitProviderIDs(params.Agents))
 	if err != nil {
 		return err
 	}
@@ -118,8 +121,11 @@ func InitPairingCommand(params InitPairingParams) error {
 	var repoRootAgents []providers.Provider
 	hasClaude := false
 	hasCodex := false
+	hasCursor := false
 	hasOpenCode := false
 	hasMistral := false
+	hasBashPolicyClaude := false
+	hasBashPolicyCodex := false
 	for _, provider := range selectedProviders {
 		if provider.Setup.Contract.RepoFile != "" {
 			repoRootAgents = append(repoRootAgents, provider)
@@ -131,11 +137,20 @@ func InitPairingCommand(params InitPairingParams) error {
 		if assets.CodexConfig || assets.CodexHooks {
 			hasCodex = true
 		}
+		if providerNeedsCursorHooks(provider) {
+			hasCursor = true
+		}
 		if assets.OpenCodeExecTool {
 			hasOpenCode = true
 		}
 		if assets.MistralPromptConfig {
 			hasMistral = true
+		}
+		if assets.BashPolicyClaude {
+			hasBashPolicyClaude = true
+		}
+		if assets.BashPolicyCodex {
+			hasBashPolicyCodex = true
 		}
 	}
 
@@ -213,14 +228,23 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 	}
 
-	bashPolicyProviderName := bashPolicyProvider(hasClaude, hasCodex)
-	if projectRoot != "" && bashPolicyProviderName != "" && bashpolicycli.RuntimeEnabled() {
+	bashPolicyProviderName := bashPolicyProvider(hasBashPolicyClaude, hasBashPolicyCodex)
+	if projectRoot != "" && ((bashPolicyProviderName != "" && bashpolicycli.RuntimeEnabled()) || hasCursor) {
 		if err := embedded.WriteBashPolicyConfig(projectRoot, stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write .bash-policy.yaml: %v\n", err)
 		}
 	}
 
 	runBashPolicyInit(projectRoot, bashPolicyProviderName, bashPolicySubprocessStdin(rawStdin, stdin))
+
+	if hasCursor {
+		installed, err := embedded.WriteCursorProjectHooks(projectRoot, stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write cursor hooks: %v\n", err)
+		} else if installed {
+			warnCursorBashPolicyMissing()
+		}
+	}
 
 	if hasOpenCode {
 		if err := embedded.WriteOpenCodeExecTool(projectRoot); err != nil {
@@ -657,6 +681,43 @@ func providerHasAsset(items []providers.Provider, match func(providers.Activatio
 	return false
 }
 
+func providerHas(items []providers.Provider, match func(providers.Provider) bool) bool {
+	for _, item := range items {
+		if match(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func providerNeedsCursorHooks(provider providers.Provider) bool {
+	return provider.ID == "cursor-acp" || provider.Setup.ActivationAssets.CursorHooks
+}
+
+func canonicalInitProviderIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "cursor" {
+			out = append(out, "cursor-acp")
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+func warnCursorBashPolicyMissing() {
+	lookPath := initBashPolicyLookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+	executable, err := lookPath("bash-policy")
+	if err == nil && executable != "" {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "Warning: Cursor shell policy hook installed but bash-policy was not found on PATH; Cursor shell execution will be blocked until bash-policy is installed or .cursor/hooks.json is removed.")
+}
+
 func bashPolicySubprocessStdin(rawStdin io.Reader, bufferedStdin *bufio.Reader) io.Reader {
 	file, ok := rawStdin.(*os.File)
 	if !ok {
@@ -713,7 +774,7 @@ func InitCommandWithConfig(params InitParams) error {
 	// consuming from the same underlying reader (which causes EOF for later readers).
 	stdin := bufio.NewReader(rawStdin)
 	catalog := loadProviderCatalog()
-	selectedProviders, err := resolveCatalogProviders(catalog, params.Agents)
+	selectedProviders, err := resolveCatalogProviders(catalog, canonicalInitProviderIDs(params.Agents))
 	if err != nil {
 		return err
 	}
@@ -847,6 +908,7 @@ func InitCommandWithConfig(params InitParams) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
 	}
 
+	hasCursor := providerHas(selectedProviders, providerNeedsCursorHooks)
 	hasCodex := providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool {
 		return a.CodexConfig || a.CodexHooks
 	})
@@ -860,13 +922,22 @@ func InitCommandWithConfig(params InitParams) error {
 	}
 
 	bashPolicyProviderName := bashPolicyProvider(true, hasCodex)
-	if lizaPaths.ProjectRoot() != "" && bashPolicyProviderName != "" && bashpolicycli.RuntimeEnabled() {
+	if lizaPaths.ProjectRoot() != "" && ((bashPolicyProviderName != "" && bashpolicycli.RuntimeEnabled()) || hasCursor) {
 		if err := embedded.WriteBashPolicyConfig(lizaPaths.ProjectRoot(), stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write .bash-policy.yaml: %v\n", err)
 		}
 	}
 
 	runBashPolicyInit(lizaPaths.ProjectRoot(), bashPolicyProviderName, bashPolicySubprocessStdin(rawStdin, stdin))
+
+	if hasCursor {
+		installed, err := embedded.WriteCursorProjectHooks(lizaPaths.ProjectRoot(), stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write cursor hooks: %v\n", err)
+		} else if installed {
+			warnCursorBashPolicyMissing()
+		}
+	}
 
 	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.OpenCodeExecTool }) {
 		if err := embedded.WriteOpenCodeExecTool(lizaPaths.ProjectRoot()); err != nil {
