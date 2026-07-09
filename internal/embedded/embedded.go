@@ -480,6 +480,7 @@ func WriteCodexProjectPermissionsWithOptions(projectRoot string, reader *bufio.R
 			return fmt.Errorf("failed to write codex config: %w", err)
 		}
 		warnIncompleteCodexBaseline(content)
+		warnCodexAppArmorSandboxIfNeeded()
 		return nil
 	}
 	if err != nil {
@@ -492,6 +493,7 @@ func WriteCodexProjectPermissionsWithOptions(projectRoot string, reader *bufio.R
 	}
 	if !changed {
 		warnIncompleteCodexBaseline(string(existingData))
+		warnCodexAppArmorSandboxIfNeeded()
 		return nil
 	}
 
@@ -500,6 +502,7 @@ func WriteCodexProjectPermissionsWithOptions(projectRoot string, reader *bufio.R
 		return err
 	}
 	if !ok {
+		warnCodexAppArmorSandboxIfNeeded()
 		return nil
 	}
 
@@ -507,6 +510,7 @@ func WriteCodexProjectPermissionsWithOptions(projectRoot string, reader *bufio.R
 		return fmt.Errorf("failed to write codex config: %w", err)
 	}
 	warnIncompleteCodexBaseline(merged)
+	warnCodexAppArmorSandboxIfNeeded()
 	return nil
 }
 
@@ -676,6 +680,79 @@ func codexConfigPath() (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 	return filepath.Join(homeDir, ".codex", "config.toml"), nil
+}
+
+const (
+	appArmorRestrictUnprivilegedUsernsPath = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns"
+	appArmorLoadedProfilesPath             = "/sys/kernel/security/apparmor/profiles"
+	bwrapUsernsRestrictProfilePath         = "/etc/apparmor.d/bwrap-userns-restrict"
+	systemBwrapPath                        = "/usr/bin/bwrap"
+)
+
+var warnCodexAppArmorSandboxIfNeeded = defaultWarnCodexAppArmorSandboxIfNeeded
+
+func defaultWarnCodexAppArmorSandboxIfNeeded() {
+	for _, warning := range codexAppArmorSandboxWarnings(runtime.GOOS, os.ReadFile, os.Stat) {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+}
+
+func codexAppArmorSandboxWarnings(
+	goos string,
+	readFile func(string) ([]byte, error),
+	stat func(string) (os.FileInfo, error),
+) []string {
+	if goos != "linux" {
+		return nil
+	}
+
+	data, err := readFile(appArmorRestrictUnprivilegedUsernsPath)
+	if err != nil || strings.TrimSpace(string(data)) != "1" {
+		return nil
+	}
+
+	var details []string
+	if _, err := stat(systemBwrapPath); err != nil {
+		details = append(details, "Install the bubblewrap package so Codex can use /usr/bin/bwrap.")
+	}
+
+	profileInstalled := false
+	if _, err := stat(bwrapUsernsRestrictProfilePath); err != nil {
+		details = append(details, "Install and load the bwrap-userns-restrict AppArmor profile.")
+	} else {
+		profileInstalled = true
+	}
+
+	if profileInstalled {
+		loadedProfiles, err := readFile(appArmorLoadedProfilesPath)
+		switch {
+		case err != nil:
+			details = append(details, "Could not verify that bwrap-userns-restrict is loaded in enforce mode.")
+		case !appArmorProfileEnforced(loadedProfiles, "bwrap-userns-restrict"):
+			details = append(details, "The bwrap-userns-restrict profile exists but does not appear to be loaded in enforce mode.")
+		}
+	}
+
+	if len(details) == 0 {
+		return nil
+	}
+
+	warnings := []string{
+		"Warning: Codex sandbox may fail on Ubuntu 24.04+ systems because AppArmor restricts unprivileged user namespaces.",
+	}
+	warnings = append(warnings, details...)
+	warnings = append(warnings, "See support-docs/CONFIGURATION.md for manual setup.")
+	return warnings
+}
+
+func appArmorProfileEnforced(loadedProfiles []byte, profile string) bool {
+	for _, line := range strings.Split(string(loadedProfiles), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 1 && (fields[0] == profile || filepath.Base(fields[0]) == profile) && fields[1] == "(enforce)" {
+			return true
+		}
+	}
+	return false
 }
 
 func codexSupportWritableRoots() []string {

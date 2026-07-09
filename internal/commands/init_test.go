@@ -4096,7 +4096,8 @@ func TestInitPairingCommand_AmbientScipSearchAggregatesMultiRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitPairingCommand() error = %v", err)
 	}
-	if stderr != "" {
+	normalizedStderr := strings.ToLower(stderr)
+	if strings.Contains(normalizedStderr, "multi-root") || strings.Contains(normalizedStderr, "ambiguous") {
 		t.Fatalf("stderr = %q, want no multi-root warning", stderr)
 	}
 	script := readFileForTest(t, filepath.Join(gitDir, ".git", "hooks", brand.BinaryName+"-index.sh"))

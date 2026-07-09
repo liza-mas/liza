@@ -271,6 +271,58 @@ Codex agents through
 The state config version takes precedence over the environment fallback.
 Interactive `§BRAND_BINARY_NAME§ agent -i` keeps using the installed Codex binary.
 
+## Ubuntu 24.04+ AppArmor Sandbox Fix
+
+Ubuntu 24.04+ systems have `kernel.apparmor_restrict_unprivileged_userns=1` enabled by default, which blocks Codex's sandbox from creating user namespaces. This causes errors like:
+
+```
+bwrap: setting up uid map: Permission denied
+```
+
+The fix is to install and load the `bwrap-userns-restrict` AppArmor profile, which allows `/usr/bin/bwrap` to create user namespaces while keeping the restriction enabled for all other binaries. Codex prefers `/usr/bin/bwrap` when available (since Codex 0.117.0).
+
+### Automatic Detection
+
+The execution engine does not install packages or modify AppArmor automatically. When Codex config is written, it checks for this AppArmor restriction and prints a warning if `/usr/bin/bwrap` or the loaded `bwrap-userns-restrict` profile appears to be missing.
+
+### Manual Setup
+
+```bash
+sudo apt update
+sudo apt install -y apparmor-profiles bubblewrap
+sudo install -m 0644 \
+  /usr/share/apparmor/extra-profiles/bwrap-userns-restrict \
+  /etc/apparmor.d/bwrap-userns-restrict
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+sudo systemctl reload apparmor
+```
+
+### Verify
+
+```bash
+# Check the profile is loaded and in enforce mode
+sudo aa-status | grep bwrap
+
+# Test bwrap directly
+/usr/bin/bwrap --unshare-user --uid 0 --gid 0 \
+  --ro-bind /usr /usr --ro-bind /bin /bin \
+  --ro-bind /lib /lib --ro-bind /lib64 /lib64 \
+  --proc /proc --dev /dev /bin/true
+
+# Test Codex sandbox
+codex sandbox linux echo test
+```
+
+### Important: Remove Stale Profiles
+
+If you previously created custom AppArmor profiles for Codex or bwrap (e.g., `codex-bwrap`, `codex-native`, `home.livio.npx.codex`), remove them before loading `bwrap-userns-restrict`. Stale profiles with conflicting path attachments can prevent the `bwrap` profile from being applied:
+
+```bash
+sudo rm /etc/apparmor.d/codex-bwrap /etc/apparmor.d/codex-native /etc/apparmor.d/home.livio.npx.codex 2>/dev/null
+sudo aa-remove-unknown
+sudo systemctl reload apparmor
+```
+
 The recommended complete setup shape is:
 
 ```toml

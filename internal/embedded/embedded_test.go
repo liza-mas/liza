@@ -1818,6 +1818,15 @@ func TestWriteCodexProjectPermissions_MergeDeclined(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	appArmorWarningChecks := 0
+	previousAppArmorWarning := warnCodexAppArmorSandboxIfNeeded
+	warnCodexAppArmorSandboxIfNeeded = func() {
+		appArmorWarningChecks++
+	}
+	t.Cleanup(func() {
+		warnCodexAppArmorSandboxIfNeeded = previousAppArmorWarning
+	})
+
 	err := WriteCodexProjectPermissions(t.TempDir(), bufio.NewReader(strings.NewReader("n\n")))
 	if err != nil {
 		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
@@ -1829,6 +1838,9 @@ func TestWriteCodexProjectPermissions_MergeDeclined(t *testing.T) {
 	}
 	if string(content) != original {
 		t.Errorf("config changed despite declined merge:\n%s", string(content))
+	}
+	if appArmorWarningChecks != 1 {
+		t.Fatalf("AppArmor sandbox warning checks = %d, want 1", appArmorWarningChecks)
 	}
 }
 
@@ -2059,6 +2071,15 @@ func TestWriteCodexProjectPermissions_NoDuplicateRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	appArmorWarningChecks := 0
+	previousAppArmorWarning := warnCodexAppArmorSandboxIfNeeded
+	warnCodexAppArmorSandboxIfNeeded = func() {
+		appArmorWarningChecks++
+	}
+	t.Cleanup(func() {
+		warnCodexAppArmorSandboxIfNeeded = previousAppArmorWarning
+	})
+
 	err := WriteCodexProjectPermissions(projectRoot, bufio.NewReader(strings.NewReader("")))
 	if err != nil {
 		t.Fatalf("WriteCodexProjectPermissions failed: %v", err)
@@ -2070,6 +2091,172 @@ func TestWriteCodexProjectPermissions_NoDuplicateRoots(t *testing.T) {
 	}
 	if string(content) != original {
 		t.Errorf("already-configured roots should not be rewritten:\n%s", string(content))
+	}
+	if appArmorWarningChecks != 1 {
+		t.Fatalf("AppArmor sandbox warning checks = %d, want 1", appArmorWarningChecks)
+	}
+}
+
+func TestCodexAppArmorSandboxWarnings_Guards(t *testing.T) {
+	restrictedReadFile := fakeReadFileForCodexAppArmorTest(map[string]string{
+		appArmorRestrictUnprivilegedUsernsPath: "1\n",
+	})
+	missingStat := fakeStatForCodexAppArmorTest(nil)
+
+	for _, tt := range []struct {
+		name     string
+		goos     string
+		readFile func(string) ([]byte, error)
+	}{
+		{
+			name:     "non linux",
+			goos:     "darwin",
+			readFile: restrictedReadFile,
+		},
+		{
+			name:     "missing restriction probe",
+			goos:     "linux",
+			readFile: fakeReadFileForCodexAppArmorTest(nil),
+		},
+		{
+			name: "restriction disabled",
+			goos: "linux",
+			readFile: fakeReadFileForCodexAppArmorTest(map[string]string{
+				appArmorRestrictUnprivilegedUsernsPath: "0\n",
+			}),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := codexAppArmorSandboxWarnings(tt.goos, tt.readFile, missingStat)
+			if len(warnings) != 0 {
+				t.Fatalf("warnings = %v, want none", warnings)
+			}
+		})
+	}
+}
+
+func TestCodexAppArmorSandboxWarnings_CompleteSetup(t *testing.T) {
+	warnings := codexAppArmorSandboxWarnings(
+		"linux",
+		fakeReadFileForCodexAppArmorTest(map[string]string{
+			appArmorRestrictUnprivilegedUsernsPath: "1\n",
+			appArmorLoadedProfilesPath:             "/etc/apparmor.d/bwrap-userns-restrict (enforce)\n",
+		}),
+		fakeStatForCodexAppArmorTest(map[string]bool{
+			systemBwrapPath:                true,
+			bwrapUsernsRestrictProfilePath: true,
+		}),
+	)
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", warnings)
+	}
+}
+
+func TestCodexAppArmorSandboxWarnings_MissingBwrapAndProfile(t *testing.T) {
+	warnings := codexAppArmorSandboxWarnings(
+		"linux",
+		fakeReadFileForCodexAppArmorTest(map[string]string{
+			appArmorRestrictUnprivilegedUsernsPath: "1\n",
+		}),
+		fakeStatForCodexAppArmorTest(nil),
+	)
+
+	assertWarningsContain(t, warnings,
+		"AppArmor restricts unprivileged user namespaces",
+		"Install the bubblewrap package",
+		"Install and load the bwrap-userns-restrict AppArmor profile",
+		"support-docs/CONFIGURATION.md",
+	)
+}
+
+func TestCodexAppArmorSandboxWarnings_ProfileNotLoaded(t *testing.T) {
+	warnings := codexAppArmorSandboxWarnings(
+		"linux",
+		fakeReadFileForCodexAppArmorTest(map[string]string{
+			appArmorRestrictUnprivilegedUsernsPath: "1\n",
+			appArmorLoadedProfilesPath:             "not-bwrap-userns-restrict (enforce)\n",
+		}),
+		fakeStatForCodexAppArmorTest(map[string]bool{
+			systemBwrapPath:                true,
+			bwrapUsernsRestrictProfilePath: true,
+		}),
+	)
+
+	assertWarningsContain(t, warnings, "exists but does not appear to be loaded in enforce mode")
+}
+
+func TestCodexAppArmorSandboxWarnings_ProfileLoadedInComplainMode(t *testing.T) {
+	warnings := codexAppArmorSandboxWarnings(
+		"linux",
+		fakeReadFileForCodexAppArmorTest(map[string]string{
+			appArmorRestrictUnprivilegedUsernsPath: "1\n",
+			appArmorLoadedProfilesPath:             "bwrap-userns-restrict (complain)\n",
+		}),
+		fakeStatForCodexAppArmorTest(map[string]bool{
+			systemBwrapPath:                true,
+			bwrapUsernsRestrictProfilePath: true,
+		}),
+	)
+
+	assertWarningsContain(t, warnings, "exists but does not appear to be loaded in enforce mode")
+}
+
+func TestAppArmorProfileEnforced_MatchesProfileNameFieldAndMode(t *testing.T) {
+	if !appArmorProfileEnforced([]byte("bwrap-userns-restrict (enforce)\n"), "bwrap-userns-restrict") {
+		t.Fatal("expected exact enforced profile name to match")
+	}
+	if !appArmorProfileEnforced([]byte("/etc/apparmor.d/bwrap-userns-restrict (enforce)\n"), "bwrap-userns-restrict") {
+		t.Fatal("expected enforced profile path basename to match")
+	}
+	if appArmorProfileEnforced([]byte("bwrap-userns-restrict (complain)\n"), "bwrap-userns-restrict") {
+		t.Fatal("profile should not match when it is not in enforce mode")
+	}
+	if appArmorProfileEnforced([]byte("not-bwrap-userns-restrict (enforce)\n"), "bwrap-userns-restrict") {
+		t.Fatal("profile name should not match as a substring of another profile")
+	}
+}
+
+func TestCodexAppArmorSandboxWarnings_ProfileLoadStateUnknown(t *testing.T) {
+	warnings := codexAppArmorSandboxWarnings(
+		"linux",
+		fakeReadFileForCodexAppArmorTest(map[string]string{
+			appArmorRestrictUnprivilegedUsernsPath: "1\n",
+		}),
+		fakeStatForCodexAppArmorTest(map[string]bool{
+			systemBwrapPath:                true,
+			bwrapUsernsRestrictProfilePath: true,
+		}),
+	)
+
+	assertWarningsContain(t, warnings, "Could not verify")
+}
+
+func fakeReadFileForCodexAppArmorTest(files map[string]string) func(string) ([]byte, error) {
+	return func(path string) ([]byte, error) {
+		content, ok := files[path]
+		if !ok {
+			return nil, os.ErrNotExist
+		}
+		return []byte(content), nil
+	}
+}
+
+func fakeStatForCodexAppArmorTest(files map[string]bool) func(string) (os.FileInfo, error) {
+	return func(path string) (os.FileInfo, error) {
+		if files[path] {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+}
+
+func assertWarningsContain(t *testing.T, warnings []string, wants ...string) {
+	t.Helper()
+	joined := strings.Join(warnings, "\n")
+	for _, want := range wants {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("warnings missing %q:\n%s", want, joined)
+		}
 	}
 }
 
