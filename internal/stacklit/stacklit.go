@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/gitenv"
+	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 var EnvEnableStacklit = brand.EnvName("ENABLE_STACKLIT")
@@ -195,10 +196,7 @@ func getDefaultRunner() RuntimeRunner {
 }
 
 func runRuntimeCommandPlan(plan RuntimeCommandPlan) (string, error) {
-	cmd := exec.Command(plan.Name, plan.Args...)
-	cmd.Dir = plan.Dir
-	output, err := cmd.CombinedOutput()
-	return string(output), err
+	return subprocess.CombinedOutput(plan.Name, plan.Args, plan.Dir)
 }
 
 func prepareTaskWorktreeStacklitFile(targetRoot string) error {

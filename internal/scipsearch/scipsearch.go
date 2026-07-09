@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/subprocess"
 	"github.com/liza-mas/liza/internal/worktreeexclude"
 	"github.com/tailscale/hujson"
 )
@@ -1518,10 +1519,7 @@ func runCommand(name string, args ...string) (string, error) {
 }
 
 func runRuntimeCommandPlan(plan RuntimeCommandPlan) (string, error) {
-	cmd := exec.Command(plan.Name, plan.Args...)
-	cmd.Dir = plan.Dir
-	output, err := cmd.CombinedOutput()
-	return string(output), err
+	return subprocess.CombinedOutput(plan.Name, plan.Args, plan.Dir)
 }
 
 func ensureTaskWorktreeScipExclude(targetRoot string) error {

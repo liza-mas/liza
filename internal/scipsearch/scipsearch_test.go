@@ -15,9 +15,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/subprocess"
+	"github.com/liza-mas/liza/internal/testhelpers"
 	"github.com/liza-mas/liza/internal/worktreeexclude"
 )
 
@@ -1333,6 +1336,34 @@ func TestRuntimeRefreshCreatesParentAndRunsExactCommandPlans(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, paths.ProjectDirName(), "scip")); err != nil {
 		t.Fatalf("Stat(%s/scip) error = %v", paths.ProjectDirName(), err)
+	}
+}
+
+func TestRuntimeCommandPlanTimesOutHungIndexer(t *testing.T) {
+	testhelpers.WithShortSubprocessTimeout(t, 50*time.Millisecond)
+	testhelpers.AddSlowCommandToPath(t, "scip-typescript")
+
+	start := time.Now()
+	output, err := runRuntimeCommandPlan(RuntimeCommandPlan{
+		Language: "typescript",
+		Name:     "scip-typescript",
+		Args:     []string{"index"},
+		Dir:      t.TempDir(),
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("runRuntimeCommandPlan() error = nil, want timeout")
+	}
+	var timeoutErr *subprocess.TimeoutError
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("runRuntimeCommandPlan() error = %T %v, want *subprocess.TimeoutError", err, err)
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("runRuntimeCommandPlan() elapsed = %s, want under 1s", elapsed)
+	}
+	if !strings.Contains(output, "started") || strings.Contains(output, "late") {
+		t.Fatalf("output = %q, want pre-timeout output only", output)
 	}
 }
 

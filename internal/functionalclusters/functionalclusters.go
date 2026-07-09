@@ -22,6 +22,7 @@ import (
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/stacklit"
+	"github.com/liza-mas/liza/internal/subprocess"
 	"github.com/liza-mas/liza/internal/worktreeexclude"
 )
 
@@ -290,10 +291,7 @@ func getDefaultRunner() RuntimeRunner {
 }
 
 func runRuntimeCommandPlan(plan RuntimeCommandPlan) (string, error) {
-	cmd := exec.Command(plan.Name, plan.Args...)
-	cmd.Dir = plan.Dir
-	output, err := cmd.CombinedOutput()
-	return string(output), err
+	return subprocess.CombinedOutput(plan.Name, plan.Args, plan.Dir)
 }
 
 func prepareTaskWorktreeFunctionalClustersFile(targetRoot string) error {

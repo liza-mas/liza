@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/liza-mas/liza/internal/subprocess"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -155,6 +157,33 @@ func TestRefreshIndexTaskWorktreeFailureRemovesPromptLocalIndex(t *testing.T) {
 		t.Fatalf("AvailableIndexes() error = %v", err)
 	} else if len(available) != 0 {
 		t.Fatalf("AvailableIndexes() = %#v, want none after failed refresh", available)
+	}
+}
+
+func TestRunRuntimeCommandPlanTimesOutHungStacklit(t *testing.T) {
+	testhelpers.WithShortSubprocessTimeout(t, 50*time.Millisecond)
+	testhelpers.AddSlowCommandToPath(t, "stacklit")
+
+	start := time.Now()
+	output, err := runRuntimeCommandPlan(RuntimeCommandPlan{
+		Name: "stacklit",
+		Args: []string{"generate-json", "-o", "stacklit.json"},
+		Dir:  t.TempDir(),
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("runRuntimeCommandPlan() error = nil, want timeout")
+	}
+	var timeoutErr *subprocess.TimeoutError
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("runRuntimeCommandPlan() error = %T %v, want *subprocess.TimeoutError", err, err)
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("runRuntimeCommandPlan() elapsed = %s, want under 1s", elapsed)
+	}
+	if !strings.Contains(output, "started") || strings.Contains(output, "late") {
+		t.Fatalf("output = %q, want pre-timeout output only", output)
 	}
 }
 

@@ -566,7 +566,9 @@ the agent and omits Stacklit prompt guidance when no task-local or project-root
 `stacklit.json` is available. If a previously generated project-root index is
 available after a failed root refresh, prompts may still include it as an
 available repository snapshot; agents are instructed to verify behavior against
-source files before editing.
+source files before editing. Runtime Stacklit refresh subprocesses are bounded
+by an implementation-owned 90-second timeout; timeout failures are reported as
+warnings and do not block the lifecycle transition that requested the refresh.
 
 Pairing SessionStart and MAS prompts advertise Stacklit only when they have an
 explicit current-session index path. Agents must not infer index locations from
@@ -780,7 +782,9 @@ to the agent.
 Indexing failures degrade gracefully at runtime. If one enabled language fails
 to index, §BRAND_NAME_TITLE§ still spawns the agent and omits that failed language from the
 `scip-search` prompt guidance. If no index is available, §BRAND_NAME_TITLE§ omits the
-`scip-search` prompt section entirely.
+`scip-search` prompt section entirely. Runtime SCIP indexer and aggregate
+subprocesses are bounded by an implementation-owned 90-second timeout; timeout
+failures are isolated to the affected language and reported as warnings.
 
 Pairing SessionStart and MAS prompts advertise SCIP only when they have explicit
 current-session index paths. Agents must not search for default SCIP indexes or
@@ -826,6 +830,11 @@ stacklit export-architecture -i stacklit.json -o <tmp>/stacklit-architecture.jso
 scip-search graph-export --index <language>.scip -o <tmp>/<language>-scip-graph.json
 functional-clusters build --scip-graph <tmp>/<language>-scip-graph.json --stacklit-architecture <tmp>/stacklit-architecture.json -o functional-clusters.json
 ```
+
+Each Functional Clusters refresh subprocess is bounded by an implementation-owned
+90-second timeout. Timeout failures degrade like other Functional Clusters
+refresh failures: §BRAND_NAME_TITLE§ reports a warning, omits the artifact when unavailable,
+and does not block the lifecycle transition that requested the refresh.
 
 Pairing SessionStart and MAS prompts advertise Functional Clusters only when
 `§BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS` is truthy and the target-local

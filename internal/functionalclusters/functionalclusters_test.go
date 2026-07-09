@@ -8,10 +8,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/stacklit"
+	"github.com/liza-mas/liza/internal/subprocess"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -169,6 +171,33 @@ func TestRefreshIndexTaskWorktreeGeneratedArtifactIsPromptLocalAndClean(t *testi
 	}
 	if ignored := gitOutput(t, worktreeRoot, "check-ignore", "functional-clusters.json"); ignored != "functional-clusters.json" {
 		t.Fatalf("git check-ignore functional-clusters.json = %q, want worktree-private exclude", ignored)
+	}
+}
+
+func TestRunRuntimeCommandPlanTimesOutHungFunctionalClusters(t *testing.T) {
+	testhelpers.WithShortSubprocessTimeout(t, 50*time.Millisecond)
+	testhelpers.AddSlowCommandToPath(t, "functional-clusters")
+
+	start := time.Now()
+	output, err := runRuntimeCommandPlan(RuntimeCommandPlan{
+		Name: "functional-clusters",
+		Args: []string{"build"},
+		Dir:  t.TempDir(),
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("runRuntimeCommandPlan() error = nil, want timeout")
+	}
+	var timeoutErr *subprocess.TimeoutError
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("runRuntimeCommandPlan() error = %T %v, want *subprocess.TimeoutError", err, err)
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("runRuntimeCommandPlan() elapsed = %s, want under 1s", elapsed)
+	}
+	if !strings.Contains(output, "started") || strings.Contains(output, "late") {
+		t.Fatalf("output = %q, want pre-timeout output only", output)
 	}
 }
 
