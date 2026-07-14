@@ -862,6 +862,38 @@ func TestHandleInlineKey_EnterStopConfirmNReturnsNilCmd(t *testing.T) {
 	}
 }
 
+func TestHandleInlineKey_YKeyStopConfirmReturnsCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionStopConfirm
+	m.textInput.Focus()
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}
+	_, cmd := m.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("Y key with stop confirm should return a non-nil tea.Cmd")
+	}
+}
+
+func TestHandleInlineKey_NKeyStopConfirmReturnsNilCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionStopConfirm
+	m.textInput.Focus()
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if cmd != nil {
+		t.Error("N key with stop confirm should return nil cmd (cancelled)")
+	}
+	if m2.inputMode != InputModeNormal {
+		t.Error("N key should return to normal mode")
+	}
+}
+
 func TestHandleInlineKey_EnterPauseReturnsCmd(t *testing.T) {
 	m := testModel()
 	m.inputMode = InputModeInline
@@ -1307,6 +1339,47 @@ func TestHandleInlineKey_TerminateConfirmYReturnsCmd(t *testing.T) {
 	}
 	if m2.terminateTarget != "" {
 		t.Errorf("terminateTarget should be cleared after confirmation, got %q", m2.terminateTarget)
+	}
+}
+
+func TestHandleInlineKey_YKeyTerminateConfirmReturnsCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminateConfirm
+	m.terminateTarget = "coder-1"
+	m.textInput.Focus()
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if cmd == nil {
+		t.Fatal("Y key with terminate confirm should return a non-nil tea.Cmd")
+	}
+	if m2.terminateTarget != "" {
+		t.Errorf("terminateTarget should be cleared after confirmation, got %q", m2.terminateTarget)
+	}
+}
+
+func TestHandleInlineKey_NKeyTerminateConfirmReturnsNilCmd(t *testing.T) {
+	m := testModel()
+	m.inputMode = InputModeInline
+	m.inlineAction = InlineActionTerminateConfirm
+	m.terminateTarget = "coder-1"
+	m.textInput.Focus()
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	result, cmd := m.Update(msg)
+	m2 := result.(Model)
+
+	if cmd != nil {
+		t.Error("N key with terminate confirm should return nil cmd (cancelled)")
+	}
+	if m2.terminateTarget != "" {
+		t.Errorf("terminateTarget should be cleared after rejection, got %q", m2.terminateTarget)
+	}
+	if m2.inputMode != InputModeNormal {
+		t.Error("N key should return to normal mode")
 	}
 }
 

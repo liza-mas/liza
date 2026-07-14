@@ -799,6 +799,10 @@ func (m Model) renderNormalHints() string {
 
 // renderInlineHints renders hints for inline input mode.
 func (m Model) renderInlineHints() string {
+	// Show different hints for confirmation mode
+	if m.inlineAction == InlineActionStopConfirm || m.inlineAction == InlineActionTerminateConfirm {
+		return m.renderHints([][2]string{{"y/n", "confirm"}, {"Esc", "cancel"}})
+	}
 	return m.renderHints([][2]string{{"Tab", "complete"}, {"Enter", "confirm"}, {"Esc", "cancel"}})
 }
 

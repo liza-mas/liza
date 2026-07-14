@@ -290,6 +290,7 @@ func (m Model) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleInlineKey handles key events in inline input mode.
 // Delegates to textinput for character input. Handles Tab (completion),
 // Enter (confirm action), and Esc (cancel) specially.
+// For confirmation prompts (y/n), accepts single keypress without Enter.
 func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
@@ -298,6 +299,35 @@ func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.spawnRole = ""
 		m.terminateTarget = ""
 		m.textInput.Blur()
+		return m, nil
+
+	// Single-key confirmation for y/n prompts
+	case m.inlineAction == InlineActionStopConfirm || m.inlineAction == InlineActionTerminateConfirm:
+		// Handle y/n keys directly without Enter
+		if key.Matches(msg, key.NewBinding(key.WithKeys("y", "Y"))) {
+			action := m.inlineAction
+			m.inputMode = InputModeNormal
+			m.inlineAction = InlineActionNone
+			m.textInput.Blur()
+			return m.executeInlineAction(action, "y")
+		}
+		if key.Matches(msg, key.NewBinding(key.WithKeys("n", "N"))) {
+			m.inputMode = InputModeNormal
+			m.inlineAction = InlineActionNone
+			m.terminateTarget = ""
+			m.textInput.Blur()
+			return m, nil
+		}
+		// For confirmation mode, also allow Enter for backward compatibility
+		if key.Matches(msg, key.NewBinding(key.WithKeys("enter"))) {
+			value := m.textInput.Value()
+			action := m.inlineAction
+			m.inputMode = InputModeNormal
+			m.inlineAction = InlineActionNone
+			m.textInput.Blur()
+			return m.executeInlineAction(action, value)
+		}
+		// Ignore other keys in confirmation mode
 		return m, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):

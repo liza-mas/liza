@@ -27,6 +27,7 @@ import (
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
+	"github.com/liza-mas/liza/internal/termutil"
 )
 
 var (
@@ -573,13 +574,13 @@ func setMistralSystemPrompt(configPath string, reader *bufio.Reader, promptID st
 	if autoConfirm {
 		fmt.Fprintln(os.Stderr, "yes")
 	} else {
-		response, err := reader.ReadString('\n')
+		response, err := termutil.ReadSingleKey(reader)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping config.toml update\n")
 			return nil
 		}
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
+		if response != "y" {
+			fmt.Fprintln(os.Stderr) // Print newline for clean terminal output
 			fmt.Fprintf(os.Stderr, "  Skipped %s\n", configPath)
 			return nil
 		}
@@ -986,12 +987,9 @@ func InitCommandWithConfig(params InitParams) error {
 				fmt.Fprintln(os.Stderr, "yes")
 				postWorktreeCmd = suggested
 			} else {
-				response, err := stdin.ReadString('\n')
-				if err == nil {
-					response = strings.TrimSpace(strings.ToLower(response))
-					if response == "y" || response == "yes" {
-						postWorktreeCmd = suggested
-					}
+				response, err := termutil.ReadSingleKey(stdin)
+				if err == nil && response == "y" {
+					postWorktreeCmd = suggested
 				}
 			}
 		} else if subdirs := detectNodeSubdirs(root); len(subdirs) > 1 {

@@ -23,6 +23,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/termutil"
 	"golang.org/x/mod/semver"
 )
 
@@ -789,13 +790,16 @@ func shortCommit(commit string) string {
 
 func confirmUpdate(stdin *bufio.Reader, stdout io.Writer, next candidate) bool {
 	fmt.Fprintf(stdout, "%s %s update is available (%s -> %s). Update now and rerun this command? [y/N] ", nameTitle(), next.Channel, next.Current, next.Latest)
-	line, err := stdin.ReadString('\n')
-	if err != nil && len(line) == 0 {
+	answer, err := termutil.ReadSingleKey(stdin)
+	if err != nil {
 		fmt.Fprintln(stdout)
 		return false
 	}
-	answer := strings.ToLower(strings.TrimSpace(line))
-	return answer == "y" || answer == "yes"
+	if answer != "y" {
+		fmt.Fprintln(stdout) // Print newline for clean terminal output
+		return false
+	}
+	return true
 }
 
 func shouldSkip(cfg Config) bool {
@@ -845,18 +849,19 @@ func checkUpdateEnvEnabled(cfg Config) bool {
 
 func proposeDisableCheck(stdin *bufio.Reader, stdout io.Writer, disable func() error) {
 	fmt.Fprint(stdout, "Update skipped. Disable update checks for future runs? [y/N] ")
-	line, err := stdin.ReadString('\n')
-	if err != nil && len(line) == 0 {
+	answer, err := termutil.ReadSingleKey(stdin)
+	if err != nil {
 		fmt.Fprintln(stdout)
 		return
 	}
-	answer := strings.ToLower(strings.TrimSpace(line))
-	if answer == "y" || answer == "yes" {
+	if answer == "y" {
 		if err := disable(); err != nil {
 			fmt.Fprintf(stdout, "Could not disable update checks: %v\n", err)
 			return
 		}
 		fmt.Fprintln(stdout, "Update checks disabled.")
+	} else {
+		fmt.Fprintln(stdout) // Print newline for clean terminal output
 	}
 }
 

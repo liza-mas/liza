@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/termutil"
 )
 
 // userCustomizableFiles are files that users are expected to edit.
@@ -247,12 +248,12 @@ func confirmOverwrites(existing, fresh []string, force bool, autoConfirm bool, t
 	if autoConfirm {
 		fmt.Println("yes")
 	} else {
-		response, err := reader.ReadString('\n')
+		response, err := termutil.ReadSingleKey(reader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read input: %w", err)
 		}
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
+		if response != "y" {
+			fmt.Println() // Print newline for clean terminal output
 			return nil, fmt.Errorf("aborted by user")
 		}
 	}
@@ -273,14 +274,14 @@ func confirmOverwrites(existing, fresh []string, force bool, autoConfirm bool, t
 			fmt.Fprintln(os.Stderr, "yes")
 			continue
 		}
-		response, err := reader.ReadString('\n')
+		response, err := termutil.ReadSingleKey(reader)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to read input for %s: %v\n", base, err)
 			skipFiles[p] = true
 			continue
 		}
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
+		if response != "y" {
+			fmt.Fprintln(os.Stderr) // Print newline for clean terminal output
 			skipFiles[p] = true
 			fmt.Fprintf(os.Stderr, "  Skipped %s (kept existing)\n", base)
 		}
@@ -447,13 +448,12 @@ func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, prom
 		if autoConfirm {
 			fmt.Fprintln(os.Stderr, "yes")
 		} else {
-			response, err := reader.ReadString('\n')
+			response, err := termutil.ReadSingleKey(reader)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", linkPath)
 				return nil
 			}
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "y" && response != "yes" {
+			if response != "y" {
 				return nil
 			}
 		}

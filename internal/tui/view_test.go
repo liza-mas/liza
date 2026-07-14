@@ -1544,6 +1544,23 @@ func TestRenderFooter_InlineMode_ContainsInlineHints(t *testing.T) {
 	assertContains(t, got, "cancel", "inline mode should show 'cancel'")
 }
 
+func TestRenderFooter_ConfirmationMode_ContainsConfirmHints(t *testing.T) {
+	m := Model{
+		width:       120,
+		height:      40,
+		inputMode:   InputModeInline,
+		inlineAction: InlineActionStopConfirm,
+		keys:        NewKeyMap(),
+		styles:      NewStyles(120),
+	}
+	got := m.renderFooter()
+
+	// Should contain the confirmation-specific hints
+	assertContains(t, got, "y/n", "confirmation mode should show 'y/n'")
+	assertContains(t, got, "confirm", "confirmation mode should show 'confirm'")
+	assertContains(t, got, "cancel", "confirmation mode should show 'cancel'")
+}
+
 func TestRenderFooter_FormMode_ContainsFormHints(t *testing.T) {
 	m := Model{
 		width:     120,

@@ -21,6 +21,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/codexconfig"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/termutil"
 )
 
 // Build-time variables (set via -ldflags during build)
@@ -368,12 +369,11 @@ func confirmMergeWithOptions(prompt string, reader *bufio.Reader, opts ConfirmOp
 		fmt.Println("yes")
 		return true, nil
 	}
-	response, err := reader.ReadString('\n')
+	response, err := termutil.ReadSingleKey(reader)
 	if err != nil {
 		return false, fmt.Errorf("failed to read user input: %w", err)
 	}
-	response = strings.TrimSpace(strings.ToLower(response))
-	return response == "y" || response == "yes", nil
+	return response == "y", nil
 }
 
 // WriteClaudeSettings writes the embedded claude-settings.json to .claude/settings.json
