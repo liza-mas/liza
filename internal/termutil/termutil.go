@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"os"
 	"strings"
-
-	"golang.org/x/term"
 )
 
 // IsInteractive returns true if stdin is connected to a terminal.
@@ -17,32 +15,11 @@ func IsInteractive() bool {
 	return info.Mode()&os.ModeCharDevice != 0
 }
 
-// ReadSingleKey reads a single keypress from stdin without requiring Enter.
-// Returns the lowercase key character. Falls back to ReadString('\n') if terminal is not available.
-// Note: In raw mode, only the first character is read. If user types "yes<Enter>" instead of "y",
-// the trailing "es\n" will be consumed by the next stdin read in the same command execution.
-// This is acceptable for confirmation prompts since the user's intent was already clear from
-// the first character, and subsequent prompts will ignore the extra input.
+// ReadSingleKey reads a CLI confirmation response and returns its lowercase first character.
+// CLI confirmations remain line-based so familiar inputs such as "y<Enter>" and "yes<Enter>"
+// are consumed completely and cannot leak into a subsequent prompt. TUI confirmations handle
+// single-key input in their own event loop.
 func ReadSingleKey(reader *bufio.Reader) (string, error) {
-	if IsInteractive() {
-		// Terminal is available - use raw mode for single-key input
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-		if err != nil {
-			// Fall back to line-based input if raw mode fails
-			return ReadLineKey(reader)
-		}
-		defer term.Restore(int(os.Stdin.Fd()), oldState)
-
-		// Read single byte
-		b := make([]byte, 1)
-		n, err := os.Stdin.Read(b)
-		if err != nil || n != 1 {
-			return "", err
-		}
-		return strings.ToLower(string(b[0])), nil
-	}
-
-	// Non-interactive or terminal not available - fall back to line-based input
 	return ReadLineKey(reader)
 }
 

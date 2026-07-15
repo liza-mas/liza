@@ -36,6 +36,26 @@ func TestReadLineKey(t *testing.T) {
 	}
 }
 
+func TestReadSingleKeyConsumesConsecutiveConfirmationLines(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader("y\nyes\n"))
+
+	first, err := ReadSingleKey(reader)
+	if err != nil {
+		t.Fatalf("first ReadSingleKey() error = %v", err)
+	}
+	if first != "y" {
+		t.Fatalf("first ReadSingleKey() = %q, want %q", first, "y")
+	}
+
+	second, err := ReadSingleKey(reader)
+	if err != nil {
+		t.Fatalf("second ReadSingleKey() error = %v", err)
+	}
+	if second != "y" {
+		t.Fatalf("second ReadSingleKey() = %q, want %q", second, "y")
+	}
+}
+
 func TestIsInteractive(t *testing.T) {
 	// This test just verifies the function doesn't panic
 	// In a test environment, this will typically return false

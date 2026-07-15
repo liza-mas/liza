@@ -306,8 +306,9 @@ func TestSetupCommand_CustomizableFileOverwritten(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Provide "y\n" for bulk overwrite, then "y\n" to also overwrite AGENT_TOOLS.md
-	stdin := strings.NewReader("y\ny\n")
+	// Preserve line-oriented CLI muscle memory across consecutive prompts.
+	// Provide "y<Enter>" for bulk overwrite, then "yes<Enter>" for AGENT_TOOLS.md.
+	stdin := strings.NewReader("y\nyes\n")
 
 	err := SetupCommand(SetupParams{TargetDir: tmpDir, Force: true, Stdin: stdin})
 	if err != nil {
