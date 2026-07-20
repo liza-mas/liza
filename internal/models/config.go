@@ -178,6 +178,7 @@ type AgentToolConfig struct {
 	ACPXSessionName     string   `yaml:"acpx_session_name,omitempty"`
 	ACPXShowArgs        []string `yaml:"acpx_show_args,omitempty"`
 	ACPXEnsureArgs      []string `yaml:"acpx_ensure_args,omitempty"`
+	ACPXSetModeArgs     []string `yaml:"acpx_set_mode_args,omitempty"`
 	ACPXPromptArgs      []string `yaml:"acpx_prompt_args,omitempty"`
 	ACPXEventMode       string   `yaml:"acpx_event_mode,omitempty"`
 }

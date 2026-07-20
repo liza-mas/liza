@@ -80,6 +80,22 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 		})
 		return LLMAgentRunResult{ExitCode: 1, Output: errText, WarmUsage: warm, SessionID: sessionName}, maskedErr
 	}
+	if err := a.configureSession(ctx, req.AgentID, plan); err != nil {
+		errText := a.maskText(err.Error())
+		maskedErr := maskedError{message: errText, err: err}
+		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
+			Kind:        LLMAgentEventCompleted,
+			BackendName: req.BackendName,
+			AgentID:     req.AgentID,
+			TaskID:      req.TaskID,
+			SessionID:   sessionName,
+			Message:     errText,
+			Payload: map[string]any{
+				"error": errText,
+			},
+		})
+		return LLMAgentRunResult{ExitCode: 1, Output: errText, WarmUsage: warm, SessionID: sessionName}, maskedErr
+	}
 	a.markSessionSeen(sessionName)
 
 	output, usage, err := a.prompt(ctx, req, plan)
@@ -236,6 +252,17 @@ func (a *ACPXAgent) ensureSession(ctx context.Context, agentID string, projectRo
 	out, err := a.runACPX(ctx, plan.Executable, agentID, args, "")
 	if err != nil {
 		return fmt.Errorf("acpx sessions ensure: %w\n%s", err, out)
+	}
+	return nil
+}
+
+func (a *ACPXAgent) configureSession(ctx context.Context, agentID string, plan LaunchPlan) error {
+	if len(plan.ACPXSetModeArgs) == 0 {
+		return nil
+	}
+	out, err := a.runACPX(ctx, plan.Executable, agentID, plan.ACPXSetModeArgs, "")
+	if err != nil {
+		return fmt.Errorf("acpx set-mode: %w\n%s", err, out)
 	}
 	return nil
 }

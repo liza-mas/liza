@@ -164,6 +164,7 @@ func TestACPXAgentRunUsesCursorTarget(t *testing.T) {
 	log := readTextForTest(t, logPath)
 	for _, want := range []string{
 		"ARGS:--cwd " + req.ProjectRoot + " cursor sessions ensure --name liza-coder-1",
+		"ARGS:--cwd " + req.ProjectRoot + " cursor set-mode agent -s liza-coder-1",
 		"ARGS:--cwd " + req.ProjectRoot + " --format json --approve-all cursor prompt -s liza-coder-1 --file -",
 		"STDIN:implement the requested change",
 	} {
@@ -171,6 +172,11 @@ func TestACPXAgentRunUsesCursorTarget(t *testing.T) {
 			t.Fatalf("fake acpx log missing %q:\n%s", want, log)
 		}
 	}
+	assertLogOrder(t, log,
+		"cursor sessions ensure --name liza-coder-1",
+		"cursor set-mode agent -s liza-coder-1",
+		"cursor prompt -s liza-coder-1",
+	)
 }
 
 func TestACPXAgentRunUsesConfiguredQwenTarget(t *testing.T) {
@@ -635,6 +641,9 @@ case "$*" in
   *" sessions ensure "*)
     exit 0
     ;;
+  *" set-mode "*)
+    exit 0
+    ;;
   *" prompt "*)
     prompt="$(cat)"
     printf 'STDIN:%s\n' "$prompt" >> "` + logPath + `"
@@ -703,6 +712,18 @@ func readSingleGlobForTest(t *testing.T, pattern string) string {
 		t.Fatalf("glob %s matched %d files: %v", pattern, len(matches), matches)
 	}
 	return readTextForTest(t, matches[0])
+}
+
+func assertLogOrder(t *testing.T, log string, ordered ...string) {
+	t.Helper()
+	offset := 0
+	for _, want := range ordered {
+		idx := strings.Index(log[offset:], want)
+		if idx < 0 {
+			t.Fatalf("log missing %q after offset %d:\n%s", want, offset, log)
+		}
+		offset += idx + len(want)
+	}
 }
 
 func hasLLMAgentEvent(events []LLMAgentEvent, kind LLMAgentEventKind) bool {

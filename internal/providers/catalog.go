@@ -159,6 +159,7 @@ type Runtime struct {
 	ACPXSessionName     string   `yaml:"acpx_session_name,omitempty"`
 	ACPXShowArgs        []string `yaml:"acpx_show_args,omitempty"`
 	ACPXEnsureArgs      []string `yaml:"acpx_ensure_args,omitempty"`
+	ACPXSetModeArgs     []string `yaml:"acpx_set_mode_args,omitempty"`
 	ACPXPromptArgs      []string `yaml:"acpx_prompt_args,omitempty"`
 	ACPXEventMode       string   `yaml:"acpx_event_mode,omitempty"`
 }
@@ -503,6 +504,7 @@ func runtimeToolConfig(id, backend string, rt Runtime) models.AgentToolConfig {
 		ACPXSessionName:     rt.ACPXSessionName,
 		ACPXShowArgs:        append([]string(nil), rt.ACPXShowArgs...),
 		ACPXEnsureArgs:      append([]string(nil), rt.ACPXEnsureArgs...),
+		ACPXSetModeArgs:     append([]string(nil), rt.ACPXSetModeArgs...),
 		ACPXPromptArgs:      append([]string(nil), rt.ACPXPromptArgs...),
 		ACPXEventMode:       rt.ACPXEventMode,
 	}

@@ -77,6 +77,10 @@ func TestEmbeddedCatalogResolvesBuiltInsAndAliases(t *testing.T) {
 	if q.Backend != "acpx" || q.ACPXAgent != "codex" || !slices.Equal(q.RequiredExecutables, []string{"acpx"}) {
 		t.Fatalf("codex-acp runtime = %+v, want configured ACPX target", q)
 	}
+	cursorTool := tools["cursor-acp"]
+	if !slices.Equal(cursorTool.ACPXSetModeArgs, []string{"--cwd", "{{projectRoot}}", "{{acpxAgent}}", "set-mode", "agent", "-s", "{{sessionName}}"}) {
+		t.Fatalf("cursor-acp ACPXSetModeArgs = %v, want Cursor agent mode before prompt", cursorTool.ACPXSetModeArgs)
+	}
 	if tools["kimi"].ContractKey != "claude" {
 		t.Fatalf("kimi contract key = %q, want claude", tools["kimi"].ContractKey)
 	}
@@ -169,6 +173,16 @@ func TestRepositoryCatalogAddsRemoteProviders(t *testing.T) {
 	}
 	if !slices.Equal(cursor.Detection.Binaries, []string{"cursor-agent"}) {
 		t.Fatalf("provider-catalog.yaml cursor detection binaries = %v, want [cursor-agent]", cursor.Detection.Binaries)
+	}
+	// ACPXSetModeArgs is an ACP-specific field; check it on the synthesized
+	// cursor-acp provider's tool config, not the base cursor CLI runtime.
+	cursorACP, ok := cat.Resolve("cursor-acp")
+	if !ok {
+		t.Fatal("provider-catalog.yaml missing synthesized cursor-acp")
+	}
+	cursorACPTool := cursorACP.RuntimeToolConfig()
+	if !slices.Equal(cursorACPTool.ACPXSetModeArgs, []string{"--cwd", "{{projectRoot}}", "{{acpxAgent}}", "set-mode", "agent", "-s", "{{sessionName}}"}) {
+		t.Fatalf("provider-catalog.yaml cursor-acp ACPXSetModeArgs = %v, want Cursor agent mode before prompt", cursorACPTool.ACPXSetModeArgs)
 	}
 	qwenACP, ok := cat.Resolve("qwen-acp")
 	if !ok {

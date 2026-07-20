@@ -103,6 +103,7 @@ providers:
       acpx_session_name: liza-{{agentID}}
       acpx_show_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, show, --name, "{{sessionName}}"]
       acpx_ensure_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, ensure, --name, "{{sessionName}}"]
+      acpx_set_mode_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", set-mode, agent, -s, "{{sessionName}}"]
       acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
       acpx_event_mode: json
 
