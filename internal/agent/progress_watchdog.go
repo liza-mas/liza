@@ -124,6 +124,15 @@ func runExecutionProgressWatchdog(
 				continue
 			}
 
+			// A progress signal and the timeout ticker may become ready
+			// simultaneously. Consume pending progress before timing out.
+			select {
+			case <-progress:
+				lastProgress = time.Now()
+				continue
+			default:
+			}
+
 			if time.Since(lastProgress) < timeout {
 				continue
 			}
