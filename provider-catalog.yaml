@@ -136,6 +136,7 @@ providers:
   - id: gemini
     display_name: Gemini
     backend: cli
+    disabled: true
     detection:
       binaries: [gemini]
       version_args: [--version]
@@ -157,6 +158,7 @@ providers:
     display_name: Mistral
     aliases: [vibe]
     backend: cli
+    disabled: true
     detection:
       binaries: [vibe]
       version_args: [--version]

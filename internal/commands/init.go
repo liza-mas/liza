@@ -706,7 +706,8 @@ func canonicalInitProviderIDs(ids []string) []string {
 	}
 	for _, id := range ids {
 		// The --cursor convenience flag prepares Cursor's harness dependencies;
-		// explicit provider IDs such as cursor-acp remain exact catalog requests.
+		// cursor-acp is a synthesized ACP provider resolved from the base
+		// cursor provider's acp_runtime block.
 		if id == "cursor" {
 			appendID("claude")
 			appendID("codex")

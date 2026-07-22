@@ -660,6 +660,11 @@ func TestSetupCommand_AgentCursor(t *testing.T) {
 }
 
 func TestSetupCommand_ProviderCursorStaysCatalogRequest(t *testing.T) {
+	// Force the embedded catalog (which has the new acp_runtime structure)
+	// by pointing the catalog URL to an unreachable address. The loaded
+	// cache may still have the old separate -acp entries.
+	t.Setenv("LIZA_PROVIDER_CATALOG_URL", "https://invalid.test/catalog.yaml")
+
 	lizaDir := t.TempDir()
 	homeDir := t.TempDir()
 
@@ -668,13 +673,16 @@ func TestSetupCommand_ProviderCursorStaysCatalogRequest(t *testing.T) {
 		HomeDir:     homeDir,
 		ProviderIDs: []string{"cursor"},
 	})
-	if err == nil {
-		t.Fatal("SetupCommand() error = nil, want cursor-acp setup error")
-	}
-	if !strings.Contains(err.Error(), "provider cursor-acp does not define setup skill symlinks") {
-		t.Fatalf("SetupCommand() error = %q, want cursor-acp setup error", err)
+	if err != nil {
+		t.Fatalf("SetupCommand() error = %v, want nil for cursor provider with setup skills", err)
 	}
 
+	// cursor setup should create .cursor but NOT expand to .claude or .codex
+	// shortcut setup.
+	skillsDir := filepath.Join(homeDir, ".cursor", "skills")
+	if _, statErr := os.Stat(skillsDir); os.IsNotExist(statErr) {
+		t.Fatalf(".cursor/skills state = %v, want present because --provider cursor should set up cursor skills", statErr)
+	}
 	for _, configDir := range []string{".claude", ".codex"} {
 		if _, statErr := os.Stat(filepath.Join(homeDir, configDir)); !os.IsNotExist(statErr) {
 			t.Fatalf("%s state = %v, want absent because --provider cursor must not expand to shortcut setup", configDir, statErr)

@@ -44,6 +44,7 @@ type Provider struct {
 	DisplayName string    `yaml:"display_name"`
 	Aliases     []string  `yaml:"aliases,omitempty"`
 	Backend     string    `yaml:"backend"`
+	Disabled    bool      `yaml:"disabled,omitempty"`
 	Detection   Detection `yaml:"detection,omitempty"`
 	Setup       Setup     `yaml:"setup,omitempty"`
 	Runtime     Runtime   `yaml:"runtime"`
@@ -169,6 +170,20 @@ func (c *Catalog) Validate() error {
 		}
 		byID[p.ID] = p
 	}
+	// Synthesize <id>-acp entries from each provider's acp_runtime so that
+	// consumers can resolve ACP variants (e.g. "codex-acp") without separate
+	// catalog entries. The synthesized provider inherits setup/detection from
+	// the base provider and uses the acp_runtime as its Runtime.
+	for _, p := range c.Providers {
+		if p.ACPRuntime == nil {
+			continue
+		}
+		acpID := p.ID + "-acp"
+		if _, exists := byID[acpID]; exists {
+			return fmt.Errorf("duplicate provider id: %s (synthesized from acp_runtime of %s)", acpID, p.ID)
+		}
+		byID[acpID] = synthesizeACPProvider(p)
+	}
 	// Aliases are validated against the complete id set so an alias colliding
 	// with a provider id declared later in the list is still rejected.
 	aliases := make(map[string]string)
@@ -190,6 +205,21 @@ func (c *Catalog) Validate() error {
 	c.byID = byID
 	c.aliases = aliases
 	return nil
+}
+
+// synthesizeACPProvider builds a virtual <id>-acp Provider from a base
+// provider's acp_runtime block. The synthesized provider has backend "acpx",
+// its Runtime populated from the acp_runtime config, and inherits setup and
+// detection from the base provider.
+func synthesizeACPProvider(base Provider) Provider {
+	return Provider{
+		ID:          base.ID + "-acp",
+		DisplayName: base.DisplayName + " ACP",
+		Backend:     "acpx",
+		Detection:   base.Detection,
+		Setup:       base.Setup,
+		Runtime:     *base.ACPRuntime,
+	}
 }
 
 func validateProvider(p Provider) error {
@@ -247,6 +277,34 @@ func validateProvider(p Provider) error {
 			return fmt.Errorf("provider %s has invalid runtime env file %q", p.ID, path)
 		}
 	}
+	if p.ACPRuntime != nil {
+		if err := validateRuntime(p.ID, "acp_runtime", *p.ACPRuntime); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateRuntime(providerID, label string, rt Runtime) error {
+	if rt.Executable == "" {
+		return fmt.Errorf("provider %s missing %s.executable", providerID, label)
+	}
+	if !validExecutable(rt.Executable) {
+		return fmt.Errorf("provider %s has invalid %s.executable %q", providerID, label, rt.Executable)
+	}
+	if rt.PromptTransport != "" && rt.PromptTransport != "stdin" && rt.PromptTransport != "arg" && rt.PromptTransport != "file" {
+		return fmt.Errorf("provider %s has unsupported %s prompt transport %q", providerID, label, rt.PromptTransport)
+	}
+	for _, value := range rt.RequiredExecutables {
+		if !validExecutable(value) {
+			return fmt.Errorf("provider %s has invalid %s executable %q", providerID, label, value)
+		}
+	}
+	for _, path := range rt.EnvFiles {
+		if !validRelativePath(path) {
+			return fmt.Errorf("provider %s has invalid %s env file %q", providerID, label, path)
+		}
+	}
 	return nil
 }
 
@@ -295,43 +353,60 @@ func (c Catalog) Resolve(id string) (Provider, bool) {
 }
 
 func (c Catalog) RuntimeTools() map[string]models.AgentToolConfig {
-	out := make(map[string]models.AgentToolConfig, len(c.Providers))
+	out := make(map[string]models.AgentToolConfig, len(c.Providers)*2)
 	for _, p := range c.Providers {
 		out[p.ID] = p.RuntimeToolConfig()
+		if p.ACPRuntime != nil {
+			out[p.ID+"-acp"] = p.ACPToolConfig()
+		}
 	}
 	return out
 }
 
 func (p Provider) RuntimeToolConfig() models.AgentToolConfig {
-	required := append([]string(nil), p.Runtime.RequiredExecutables...)
-	if len(required) == 0 && p.Backend == "acpx" {
+	return runtimeToolConfig(p.ID, p.Backend, p.Runtime)
+}
+
+// ACPToolConfig returns the AgentToolConfig derived from the provider's
+// acp_runtime block. Returns an empty config if the provider has no ACP
+// runtime.
+func (p Provider) ACPToolConfig() models.AgentToolConfig {
+	if p.ACPRuntime == nil {
+		return models.AgentToolConfig{}
+	}
+	return runtimeToolConfig(p.ID+"-acp", "acpx", *p.ACPRuntime)
+}
+
+func runtimeToolConfig(id, backend string, rt Runtime) models.AgentToolConfig {
+	required := append([]string(nil), rt.RequiredExecutables...)
+	if len(required) == 0 && backend == "acpx" {
 		required = []string{"acpx"}
 	}
-	transport := p.Runtime.PromptTransport
+	transport := rt.PromptTransport
 	if transport == "" {
 		transport = "stdin"
 	}
-	providerKey := p.Runtime.ProviderKey
+	providerKey := rt.ProviderKey
 	if providerKey == "" {
-		providerKey = p.ID
+		providerKey = id
 	}
 	return models.AgentToolConfig{
-		Backend:             p.Backend,
+		Backend:             backend,
 		ProviderKey:         providerKey,
-		Executable:          p.Runtime.Executable,
+		Executable:          rt.Executable,
 		PromptTransport:     transport,
-		RunArgs:             append([]string(nil), p.Runtime.RunArgs...),
-		LoggedRunArgs:       append([]string(nil), p.Runtime.LoggedRunArgs...),
-		InteractiveArgs:     append([]string(nil), p.Runtime.InteractiveArgs...),
-		EnvFiles:            append([]string(nil), p.Runtime.EnvFiles...),
+		RunArgs:             append([]string(nil), rt.RunArgs...),
+		LoggedRunArgs:       append([]string(nil), rt.LoggedRunArgs...),
+		InteractiveArgs:     append([]string(nil), rt.InteractiveArgs...),
+		EnvFiles:            append([]string(nil), rt.EnvFiles...),
 		RequiredExecutables: required,
-		ContractKey:         p.Runtime.ContractKey,
-		ACPXAgent:           p.Runtime.ACPXAgent,
-		ACPXSessionName:     p.Runtime.ACPXSessionName,
-		ACPXShowArgs:        append([]string(nil), p.Runtime.ACPXShowArgs...),
-		ACPXEnsureArgs:      append([]string(nil), p.Runtime.ACPXEnsureArgs...),
-		ACPXPromptArgs:      append([]string(nil), p.Runtime.ACPXPromptArgs...),
-		ACPXEventMode:       p.Runtime.ACPXEventMode,
+		ContractKey:         rt.ContractKey,
+		ACPXAgent:           rt.ACPXAgent,
+		ACPXSessionName:     rt.ACPXSessionName,
+		ACPXShowArgs:        append([]string(nil), rt.ACPXShowArgs...),
+		ACPXEnsureArgs:      append([]string(nil), rt.ACPXEnsureArgs...),
+		ACPXPromptArgs:      append([]string(nil), rt.ACPXPromptArgs...),
+		ACPXEventMode:       rt.ACPXEventMode,
 	}
 }
 

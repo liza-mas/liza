@@ -22,7 +22,7 @@ func TestProvidersListCommandUsesCatalog(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("providers list error: %v", err)
 	}
-	if !strings.Contains(out.String(), "qwen\tQwen\tcli") {
+	if !strings.Contains(out.String(), "qwen\tQwen\tcli\tfalse") {
 		t.Fatalf("providers list output missing qwen:\n%s", out.String())
 	}
 }
@@ -78,12 +78,7 @@ func TestSetupDetectableProvidersSkipsRuntimeOnlyACPProviders(t *testing.T) {
 				SkillsDir: "skills",
 			},
 			Runtime: providers.Runtime{Executable: "codex", PromptTransport: "stdin"},
-		},
-		{
-			ID:          "codex-acp",
-			DisplayName: "Codex ACP",
-			Backend:     "acpx",
-			Runtime: providers.Runtime{
+			ACPRuntime: &providers.Runtime{
 				Executable:          "acpx",
 				PromptTransport:     "stdin",
 				RequiredExecutables: []string{"acpx"},
@@ -92,7 +87,6 @@ func TestSetupDetectableProvidersSkipsRuntimeOnlyACPProviders(t *testing.T) {
 	}}
 	results := []providers.DetectionResult{
 		{ID: "codex", DisplayName: "Codex", Installed: true},
-		{ID: "codex-acp", DisplayName: "Codex ACP", Installed: true},
 	}
 	installed := setupDetectableProviders(cat, results)
 	if len(installed) != 1 || installed[0].ID != "codex" {

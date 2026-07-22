@@ -53,18 +53,7 @@ providers:
       run_args: [exec, "-"]
       logged_run_args: [exec, --json, "-"]
       contract_key: codex
-
-  - id: codex-acp
-    display_name: Codex ACP
-    backend: acpx
-    detection:
-      binaries: [acpx]
-      version_args: [--version]
-    setup:
-      contract:
-        repo_file: AGENTS.md
-        global_fallback: .codex/AGENTS.md
-    runtime:
+    acp_runtime:
       provider_key: codex
       executable: acpx
       prompt_transport: stdin
@@ -77,20 +66,29 @@ providers:
       acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
       acpx_event_mode: json
 
-  - id: cursor-acp
-    display_name: Cursor ACP
-    aliases: [cursor]
-    backend: acpx
+  - id: cursor
+    display_name: Cursor
+    backend: cli
     detection:
-      binaries: [cursor-agent]
+      binaries: [cursor]
       version_args: [--version]
     setup:
+      config_dir: .cursor
+      skills_dir: skills
       contract:
         repo_file: AGENTS.md
-        global_fallback: .codex/AGENTS.md
+        global_fallback: .cursor/AGENTS.md
       activation_assets:
         cursor_hooks: true
     runtime:
+      provider_key: cursor
+      executable: cursor
+      prompt_transport: stdin
+      run_args: [-p]
+      logged_run_args: [-p, --verbose, --output-format, stream-json]
+      env_files: [cursor.env]
+      contract_key: cursor
+    acp_runtime:
       provider_key: cursor
       executable: acpx
       prompt_transport: stdin
@@ -124,18 +122,7 @@ providers:
       run_args: [run, "{{prompt}}", --dangerously-skip-permissions]
       logged_run_args: [run, "{{prompt}}", --dangerously-skip-permissions, --format, json]
       contract_key: opencode
-
-  - id: opencode-acp
-    display_name: OpenCode ACP
-    backend: acpx
-    detection:
-      binaries: [acpx]
-      version_args: [--version]
-    setup:
-      contract:
-        repo_file: AGENTS.md
-        global_fallback: .config/opencode/AGENTS.md
-    runtime:
+    acp_runtime:
       provider_key: opencode
       executable: acpx
       prompt_transport: stdin
@@ -151,6 +138,7 @@ providers:
   - id: gemini
     display_name: Gemini
     backend: cli
+    disabled: true
     detection:
       binaries: [gemini]
       version_args: [--version]
@@ -172,6 +160,7 @@ providers:
     display_name: Mistral
     aliases: [vibe]
     backend: cli
+    disabled: true
     detection:
       binaries: [vibe]
       version_args: [--version]
@@ -210,4 +199,69 @@ providers:
       run_args: [-p]
       logged_run_args: [-p, --verbose, --output-format, stream-json]
       contract_key: claude
+
+  - id: qwen
+    display_name: Qwen
+    aliases: [qwen-code]
+    backend: cli
+    detection:
+      binaries: [qwen]
+      version_args: [--version]
+    setup:
+      config_dir: .qwen
+      skills_dir: skills
+      contract:
+        repo_file: QWEN.md
+        global_fallback: .qwen/QWEN.md
+    runtime:
+      provider_key: qwen
+      executable: qwen
+      prompt_transport: stdin
+      run_args: [-p]
+      logged_run_args: [-p, --output-format, stream-json]
+      contract_key: qwen
+    acp_runtime:
+      provider_key: qwen
+      executable: acpx
+      prompt_transport: stdin
+      required_executables: [acpx]
+      contract_key: qwen
+      acpx_agent: qwen
+      acpx_session_name: liza-qwen-{{agentID}}
+      acpx_show_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, show, --name, "{{sessionName}}"]
+      acpx_ensure_args: [--cwd, "{{projectRoot}}", "{{acpxAgent}}", sessions, ensure, --name, "{{sessionName}}"]
+      acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
+      acpx_event_mode: json
+
+  - id: devin
+    display_name: Devin
+    backend: cli
+    detection:
+      binaries: [devin]
+      version_args: [--version]
+    setup:
+      config_dir: .config/devin
+      skills_dir: skills
+      contract:
+        repo_file: .windsurf/rules/liza.md
+        global_fallback: .config/devin/liza.md
+    runtime:
+      provider_key: devin
+      executable: devin
+      prompt_transport: arg
+      run_args: [--permission-mode, dangerous, -p, "{{prompt}}"]
+      logged_run_args: [--permission-mode, dangerous, -p, "{{prompt}}"]
+      contract_key: devin
+    acp_runtime:
+      provider_key: devin
+      executable: acpx
+      prompt_transport: stdin
+      required_executables: [acpx, devin]
+      contract_key: devin
+      acpx_agent: devin acp
+      acpx_session_name: liza-devin-{{agentID}}
+      acpx_show_args: [--cwd, "{{projectRoot}}", --agent, "{{acpxAgent}}", sessions, show, --name, "{{sessionName}}"]
+      acpx_ensure_args: [--cwd, "{{projectRoot}}", --agent, "{{acpxAgent}}", sessions, ensure, --name, "{{sessionName}}"]
+      acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, --agent, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
+      acpx_event_mode: json
 `

@@ -284,7 +284,7 @@ var providersListCmd = &cobra.Command{
 			return err
 		}
 		for _, p := range cat.ProvidersSorted() {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", p.ID, p.DisplayName, p.Backend)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%t\n", p.ID, p.DisplayName, p.Backend, p.Disabled)
 		}
 		return nil
 	},
