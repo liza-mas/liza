@@ -911,11 +911,12 @@ Headless watch automatically runs the repair-agent-pool behavior when a task is 
 | `claude` | Claude Code (fallback default when no config is set) |
 | `codex` | OpenAI Codex CLI |
 | `codex-acp` | OpenAI Codex through ACPX. Requires the `acpx` executable on the spawned agent's `PATH`; install it with `npm install -g acpx`. §BRAND_NAME_TITLE§ preflights this prerequisite before direct `§BRAND_BINARY_NAME§ agent` execution and before TUI/API agent spawning. `codex-acp` reuses Codex `AGENTS.md` contract setup and runs ACPX with non-interactive auto-approval inside §BRAND_NAME_TITLE§ task worktrees. During `acpx prompt`, streams stdout JSON-RPC and stderr diagnostics to `§BRAND_PROJECT_DIRNAME§/agent-outputs/`, returns parsed message chunks to the supervisor, and logs lifecycle/usage metadata. Short ACPX session control calls are not transcript-logged. |
+| `cursor` | Cursor CLI (`cursor-agent`). Use `§BRAND_BINARY_NAME§ setup --provider cursor` for global skills and `§BRAND_BINARY_NAME§ init --provider cursor` for contract setup. Set `§BRAND_ENV_PREFIX§_ENABLE_BASH_POLICY=1` before init when selected providers should receive standalone bash-policy hooks. |
 | `cursor-acp` | Cursor through ACPX. Requires `acpx` on `PATH` and an authenticated Cursor CLI (`cursor-agent`). Reuses the shared `AGENTS.md` contract setup and selects the ACPX Cursor target; it is not a Cursor executable name. Use `§BRAND_BINARY_NAME§ init --cursor` for contract setup; it includes the Claude and Codex project setup Cursor relies on. Set `§BRAND_ENV_PREFIX§_ENABLE_BASH_POLICY=1` before init when selected providers should receive standalone bash-policy hooks. |
 | `opencode` | OpenCode CLI through `opencode run`. Requires `§BRAND_BINARY_NAME§ setup --opencode` and `§BRAND_BINARY_NAME§ init --opencode` for contract and skill activation. Logged runs add JSON output. |
 | `opencode-acp` | OpenCode through ACPX. Requires `acpx` on `PATH`, reuses OpenCode `AGENTS.md` contract setup, and selects the ACPX OpenCode target; it is not an OpenCode executable name. |
-| `gemini` | Google Gemini CLI |
-| `mistral` | Mistral Le Chat CLI |
+| `gemini` | Google Gemini CLI. Marked `disabled: true` in the catalog — informational only, the provider remains detectable and resolvable. |
+| `mistral` | Mistral Le Chat CLI. Marked `disabled: true` in the catalog — informational only, the provider remains detectable and resolvable. |
 | `kimi` | Kimi (alias to claude with Kimi-specific env vars) |
 | `qwen` | Qwen CLI from the remote provider catalog. Use `§BRAND_BINARY_NAME§ setup --provider qwen` and `§BRAND_BINARY_NAME§ init --provider qwen` for contract and skill activation. |
 | `qwen-acp` | Qwen through ACPX from the remote provider catalog. Requires `acpx` on `PATH`, reuses Qwen's `QWEN.md` contract setup, and uses catalog-defined ACPX session and prompt argv. |
@@ -934,11 +935,22 @@ timeout can be changed with `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_TIMEOUT`.
 
 Use `§BRAND_BINARY_NAME§ providers list`, `§BRAND_BINARY_NAME§ providers detect`,
 and `§BRAND_BINARY_NAME§ providers refresh` to inspect and refresh the catalog.
-Remote YAML is accepted only after HTTPS fetch (localhost is allowed for tests)
-and strict schema validation. Catalog entries describe structured argv, env-file
-paths, contract links, and setup assets, not arbitrary shell scripts. Path fields
-must stay relative to their intended project or home roots, and executable names
-must be bare command names.
+`providers list` outputs four tab-separated columns: provider ID, display name,
+backend (`cli` or `acpx`), and disabled (boolean). Synthesized ACP variants
+(e.g. `codex-acp`, `cursor-acp`) appear in the list alongside their base
+providers. Remote YAML is accepted only after HTTPS fetch (localhost is allowed
+for tests) and strict schema validation. Catalog entries describe structured
+argv, env-file paths, contract links, and setup assets, not arbitrary shell
+scripts. Path fields must stay relative to their intended project or home roots,
+and executable names must be bare command names.
+
+**ACP synthesis:** Providers with an `acp_runtime` block automatically
+synthesize a virtual `<id>-acp` provider at catalog validation time. The
+synthesized provider inherits setup and detection from the base provider and
+uses the `acp_runtime` as its runtime. This means `Resolve("codex-acp")` works
+without a separate catalog entry. The `disabled` field is informational: it
+marks providers that are not yet fully supported, but disabled providers remain
+detectable, resolvable, and available for setup.
 
 The provider catalog is a launch trust boundary. Catalog-defined argv can include
 provider permission flags such as ACPX `--approve-all` or OpenCode

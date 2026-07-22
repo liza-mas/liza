@@ -70,7 +70,7 @@ providers:
     display_name: Cursor
     backend: cli
     detection:
-      binaries: [cursor]
+      binaries: [cursor-agent]
       version_args: [--version]
     setup:
       config_dir: .cursor
@@ -82,10 +82,10 @@ providers:
         cursor_hooks: true
     runtime:
       provider_key: cursor
-      executable: cursor
+      executable: cursor-agent
       prompt_transport: stdin
       run_args: [-p]
-      logged_run_args: [-p, --verbose, --output-format, stream-json]
+      logged_run_args: [-p, --output-format, stream-json]
       env_files: [cursor.env]
       contract_key: cursor
     acp_runtime:

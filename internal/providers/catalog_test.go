@@ -32,6 +32,23 @@ func TestEmbeddedCatalogResolvesBuiltInsAndAliases(t *testing.T) {
 	if cursor.ACPRuntime == nil {
 		t.Fatal("cursor missing acp_runtime")
 	}
+	// Cursor provider must use cursor-agent (documented Agent CLI entrypoint),
+	// not the `cursor` IDE binary. See https://docs.cursor.com/en/cli/overview
+	if cursor.Runtime.Executable != "cursor-agent" {
+		t.Fatalf("cursor runtime executable = %q, want cursor-agent", cursor.Runtime.Executable)
+	}
+	if !slices.Equal(cursor.Detection.Binaries, []string{"cursor-agent"}) {
+		t.Fatalf("cursor detection binaries = %v, want [cursor-agent]", cursor.Detection.Binaries)
+	}
+	if !slices.Equal(cursor.Runtime.RunArgs, []string{"-p"}) {
+		t.Fatalf("cursor run_args = %v, want [-p]", cursor.Runtime.RunArgs)
+	}
+	// logged_run_args must not include --verbose (undocumented Cursor CLI flag)
+	for _, arg := range cursor.Runtime.LoggedRunArgs {
+		if arg == "--verbose" {
+			t.Fatalf("cursor logged_run_args must not include --verbose (undocumented): %v", cursor.Runtime.LoggedRunArgs)
+		}
+	}
 	p, ok := cat.Resolve("vibe")
 	if !ok || p.ID != "mistral" {
 		t.Fatalf("Resolve(vibe) = %+v, %v; want mistral", p, ok)
@@ -68,6 +85,12 @@ func TestRepositoryCatalogAddsRemoteProviders(t *testing.T) {
 	}
 	if cursor.ACPRuntime == nil {
 		t.Fatal("provider-catalog.yaml cursor missing acp_runtime")
+	}
+	if cursor.Runtime.Executable != "cursor-agent" {
+		t.Fatalf("provider-catalog.yaml cursor runtime executable = %q, want cursor-agent", cursor.Runtime.Executable)
+	}
+	if !slices.Equal(cursor.Detection.Binaries, []string{"cursor-agent"}) {
+		t.Fatalf("provider-catalog.yaml cursor detection binaries = %v, want [cursor-agent]", cursor.Detection.Binaries)
 	}
 	qwenACP, ok := cat.Resolve("qwen-acp")
 	if !ok {
