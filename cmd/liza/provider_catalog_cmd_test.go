@@ -25,6 +25,10 @@ func TestProvidersListCommandUsesCatalog(t *testing.T) {
 	if !strings.Contains(out.String(), "qwen\tQwen\tcli\tfalse") {
 		t.Fatalf("providers list output missing qwen:\n%s", out.String())
 	}
+	// Synthesized ACP variants should appear in the list output.
+	if !strings.Contains(out.String(), "qwen-acp\tQwen ACP\tacpx\tfalse") {
+		t.Fatalf("providers list output missing synthesized qwen-acp:\n%s", out.String())
+	}
 }
 
 func TestProvidersRefreshCommandWritesCache(t *testing.T) {
@@ -135,6 +139,13 @@ providers:
       prompt_transport: stdin
       run_args: [-p]
       contract_key: qwen
+    acp_runtime:
+      provider_key: qwen
+      executable: acpx
+      prompt_transport: stdin
+      required_executables: [acpx]
+      contract_key: qwen
+      acpx_agent: qwen
 `))
 	}))
 	t.Cleanup(server.Close)

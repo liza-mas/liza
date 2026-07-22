@@ -326,6 +326,22 @@ func (c Catalog) ProvidersSorted() []Provider {
 	return providers
 }
 
+// AllProvidersSorted returns every resolvable provider — declared entries plus
+// synthesized ACP variants — sorted by ID. Use this when listing the full
+// catalog surface (e.g. `providers list`); use ProvidersSorted for detection,
+// which should only iterate declared entries.
+func (c Catalog) AllProvidersSorted() []Provider {
+	if c.byID == nil {
+		_ = c.Validate()
+	}
+	all := make([]Provider, 0, len(c.byID))
+	for _, p := range c.byID {
+		all = append(all, p)
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].ID < all[j].ID })
+	return all
+}
+
 func (c Catalog) Resolve(id string) (Provider, bool) {
 	if c.byID == nil {
 		_ = c.Validate()

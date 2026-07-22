@@ -7,8 +7,8 @@ import (
 	"github.com/liza-mas/liza/internal/providers"
 )
 
-func loadProviderCatalog() providers.Catalog {
-	cat, _ := providers.Load(context.Background(), providers.LoadOptions{})
+func loadProviderCatalog(homeDir string) providers.Catalog {
+	cat, _ := providers.Load(context.Background(), providers.LoadOptions{HomeDir: homeDir})
 	return cat
 }
 

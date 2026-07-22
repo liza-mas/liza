@@ -79,7 +79,7 @@ func SetupCommand(params SetupParams) error {
 			filepath.Join(params.TargetDir, "AGENT_TOOLS.md"): true,
 		}
 	}
-	catalog := loadProviderCatalog()
+	catalog := loadProviderCatalog(params.HomeDir)
 	setupProviderIDs := append([]string{}, params.ProviderIDs...)
 	setupProviderIDs = append(setupProviderIDs, canonicalSetupProviderIDs(params.Agents)...)
 	selectedProviders, err := resolveCatalogProviders(catalog, setupProviderIDs)

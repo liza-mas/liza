@@ -660,9 +660,9 @@ func TestSetupCommand_AgentCursor(t *testing.T) {
 }
 
 func TestSetupCommand_ProviderCursorStaysCatalogRequest(t *testing.T) {
-	// Force the embedded catalog (which has the new acp_runtime structure)
-	// by pointing the catalog URL to an unreachable address. The loaded
-	// cache may still have the old separate -acp entries.
+	// Use an unreachable catalog URL so Load() falls back to the embedded
+	// catalog instead of hitting the network. HomeDir is set to a temp dir
+	// so the cache is isolated from any stale real-home cache entries.
 	t.Setenv("LIZA_PROVIDER_CATALOG_URL", "https://invalid.test/catalog.yaml")
 
 	lizaDir := t.TempDir()
