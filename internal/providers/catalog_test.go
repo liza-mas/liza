@@ -256,7 +256,7 @@ providers:
       executable: qwen
       prompt_transport: telepathy
 `))
-		if err == nil || !strings.Contains(err.Error(), "unsupported prompt transport") {
+		if err == nil || !strings.Contains(err.Error(), "unsupported") || !strings.Contains(err.Error(), "prompt transport") {
 			t.Fatalf("ParseCatalog error = %v, want prompt transport error", err)
 		}
 	})

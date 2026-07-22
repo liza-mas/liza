@@ -232,19 +232,13 @@ func validateProvider(p Provider) error {
 	if p.Backend != "cli" && p.Backend != "acpx" {
 		return fmt.Errorf("provider %s has unsupported backend %q", p.ID, p.Backend)
 	}
-	if p.Runtime.Executable == "" {
-		return fmt.Errorf("provider %s missing runtime.executable", p.ID)
-	}
-	if !validExecutable(p.Runtime.Executable) {
-		return fmt.Errorf("provider %s has invalid runtime.executable %q", p.ID, p.Runtime.Executable)
-	}
-	if p.Runtime.PromptTransport != "" && p.Runtime.PromptTransport != "stdin" && p.Runtime.PromptTransport != "arg" && p.Runtime.PromptTransport != "file" {
-		return fmt.Errorf("provider %s has unsupported prompt transport %q", p.ID, p.Runtime.PromptTransport)
-	}
-	for _, value := range append(append([]string{}, p.Detection.Binaries...), p.Runtime.RequiredExecutables...) {
+	for _, value := range p.Detection.Binaries {
 		if !validExecutable(value) {
 			return fmt.Errorf("provider %s has invalid executable %q", p.ID, value)
 		}
+	}
+	if err := validateRuntime(p.ID, "runtime", p.Runtime); err != nil {
+		return err
 	}
 	for _, arg := range p.Detection.VersionArgs {
 		if strings.ContainsAny(arg, "\x00\r\n") {
@@ -270,11 +264,6 @@ func validateProvider(p Provider) error {
 	for _, link := range p.Setup.Symlinks {
 		if !validRelativePath(link.Source) || !validRelativePath(link.Target) {
 			return fmt.Errorf("provider %s has invalid setup symlink", p.ID)
-		}
-	}
-	for _, path := range p.Runtime.EnvFiles {
-		if !validRelativePath(path) {
-			return fmt.Errorf("provider %s has invalid runtime env file %q", p.ID, path)
 		}
 	}
 	if p.ACPRuntime != nil {
