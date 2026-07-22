@@ -47,6 +47,7 @@ type Provider struct {
 	Detection   Detection `yaml:"detection,omitempty"`
 	Setup       Setup     `yaml:"setup,omitempty"`
 	Runtime     Runtime   `yaml:"runtime"`
+	ACPRuntime  *Runtime  `yaml:"acp_runtime,omitempty"`
 }
 
 type Detection struct {
