@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -80,7 +81,11 @@ func buildNonDefaultBrandBinary(t *testing.T) string {
 		if nonDefaultBrandBuild.err != nil {
 			return
 		}
-		nonDefaultBrandBuild.binary = filepath.Join(nonDefaultBrandBuild.tempDir, "acme-agent")
+		binName := "acme-agent"
+		if runtime.GOOS == "windows" {
+			binName = "acme-agent.exe"
+		}
+		nonDefaultBrandBuild.binary = filepath.Join(nonDefaultBrandBuild.tempDir, binName)
 		ldflags := strings.Join([]string{
 			"-X github.com/liza-mas/liza/internal/brand.NameLower=acme-agent",
 			"-X github.com/liza-mas/liza/internal/brand.NameUpper=ACME_AGENT",
