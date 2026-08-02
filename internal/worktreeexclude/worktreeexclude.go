@@ -108,7 +108,7 @@ func ensureWorktreeExcludeConfig(worktreeRoot, excludePath string) error {
 	if err == nil {
 		current := strings.TrimSpace(string(output))
 		if current != "" && filepath.Clean(current) != filepath.Clean(excludePath) {
-			return fmt.Errorf("worktree core.excludesFile already configured as %q, want %q", current, excludePath)
+			return fmt.Errorf("worktree core.excludesFile already configured as %s, want %s", quotePath(current), quotePath(excludePath))
 		}
 		return nil
 	}
@@ -123,7 +123,7 @@ func ensureNoEffectiveExcludeConflict(worktreeRoot, excludePath string) error {
 	if err == nil {
 		current := strings.TrimSpace(string(output))
 		if current != "" && filepath.Clean(current) != filepath.Clean(excludePath) {
-			return fmt.Errorf("effective core.excludesFile already configured as %q, want %q", current, excludePath)
+			return fmt.Errorf("effective core.excludesFile already configured as %s, want %s", quotePath(current), quotePath(excludePath))
 		}
 		return nil
 	}
@@ -131,6 +131,14 @@ func ensureNoEffectiveExcludeConflict(worktreeRoot, excludePath string) error {
 		return fmt.Errorf("inspect effective core.excludesFile: %w", err)
 	}
 	return nil
+}
+
+// quotePath wraps a path in double quotes for human-facing error messages
+// without escaping inner characters. fmt's %q verb backslash-escapes Windows
+// paths (C:\Users -> C:\\Users), which makes error messages confusing and
+// breaks substring assertions; this helper quotes literally.
+func quotePath(path string) string {
+	return `"` + path + `"`
 }
 
 func appendMissingEntries(excludePath string, entries []string) error {
