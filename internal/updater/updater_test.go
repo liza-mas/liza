@@ -1274,6 +1274,13 @@ func TestInstallBinaryFromTarGzRejectsPathTraversal(t *testing.T) {
 }
 
 func TestInstallBinaryFromTarGzStripsDangerousPermissions(t *testing.T) {
+	// This test asserts POSIX permission bits (setuid/setgid/sticky stripping
+	// and executable-bit preservation) round-trip through os.Chmod. Windows
+	// has no executable bit and os.Chmod is effectively a no-op there, so the
+	// assertions cannot hold. The permission-stripping path is covered on Unix.
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping POSIX permission-bit test on Windows")
+	}
 	var archive bytes.Buffer
 	gz := gzip.NewWriter(&archive)
 	tw := tar.NewWriter(gz)
