@@ -111,9 +111,7 @@ detect_platform() {
         Linux*)     os="linux";;
         Darwin*)    os="darwin";;
         MINGW*|MSYS*|CYGWIN*)
-            echo -e "${RED}Error: Native Windows is not supported.${NC}"
-            echo "Run ${BINARY_NAME} under WSL2 and run this installer from the WSL2 shell."
-            exit 1
+            os="windows"
             ;;
         *)
             echo -e "${RED}Error: Unsupported operating system: $(uname -s)${NC}"
@@ -181,8 +179,14 @@ install_release() {
     tmp_dir=$(mktemp -d)
     trap "rm -rf ${tmp_dir}" EXIT
 
-    # Download archive (goreleaser produces tar.gz for linux/darwin)
-    local archive_name="${BRAND_ARCHIVE_PREFIX}-${version_bare}-${platform}.tar.gz"
+    # Download archive. goreleaser produces tar.gz for linux/darwin and zip for
+    # windows. The platform string is "<os>-<arch>", so read its os prefix.
+    local os_prefix="${platform%%-*}"
+    local archive_ext="tar.gz"
+    if [ "$os_prefix" = "windows" ]; then
+        archive_ext="zip"
+    fi
+    local archive_name="${BRAND_ARCHIVE_PREFIX}-${version_bare}-${platform}.${archive_ext}"
     local download_url="${BRAND_RELEASE_BASE_URL%/}/${version}/${archive_name}"
     echo "Downloading from ${download_url}..."
 
@@ -194,9 +198,13 @@ install_release() {
 
     # Extract
     echo "Extracting..."
-    tar -xzf "${tmp_dir}/${archive_name}" -C "${tmp_dir}"
+    if [ "$archive_ext" = "zip" ]; then
+        unzip -o "${tmp_dir}/${archive_name}" -d "${tmp_dir}"
+    else
+        tar -xzf "${tmp_dir}/${archive_name}" -C "${tmp_dir}"
+    fi
 
-    # Make executable
+    # Make executable (no-op on Windows; harmless under Git Bash)
     chmod +x "${tmp_dir}/${BINARY_NAME}"
 
     # Verify the binary works

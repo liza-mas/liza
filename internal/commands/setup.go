@@ -108,7 +108,7 @@ func SetupCommand(params SetupParams) error {
 	}
 	homeDir := params.HomeDir
 	if len(selectedProviders) > 0 && homeDir == "" {
-		homeDir, err = os.UserHomeDir()
+		homeDir, err = paths.UserHomeDir()
 		if err != nil {
 			return fmt.Errorf("failed to determine home directory: %w", err)
 		}
@@ -181,7 +181,7 @@ func warnLegacyGlobalRoot(homeDir, targetDir string) {
 	}
 	if homeDir == "" {
 		var err error
-		homeDir, err = os.UserHomeDir()
+		homeDir, err = paths.UserHomeDir()
 		if err != nil {
 			return
 		}

@@ -1,7 +1,6 @@
 package ops
 
 import (
-	stderrors "errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -203,18 +202,17 @@ func isLizaAgentProcess(pid int) bool {
 }
 
 // IsProcessAlive checks if a process with the given PID is running.
+//
+// Delegates to procscan.ProcessAlive, which uses signal(0) on Unix and
+// OpenProcess on Windows. This is the single cross-platform source of truth
+// for process-existence checks; os.Process.Signal(0) does not work on Windows
+// ("not supported"), so callers must not bypass this helper.
 func IsProcessAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-
-	err = process.Signal(syscall.Signal(0))
-	return err == nil || stderrors.Is(err, syscall.EPERM)
+	alive, _, _ := procscan.ProcessAlive(pid)
+	return alive
 }
 
 // validateAgentDeletion checks whether an agent can be safely deleted based on

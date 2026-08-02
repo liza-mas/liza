@@ -300,6 +300,9 @@ func TestISOTimestampOffset(t *testing.T) {
 }
 
 func TestValidatePath(t *testing.T) {
+	// Use a platform-appropriate absolute path so the "valid" case holds on
+	// Windows (where /tmp/test is not absolute) as well as Unix.
+	absPath := filepath.Join(t.TempDir(), "test")
 	tests := []struct {
 		name    string
 		path    string
@@ -307,7 +310,7 @@ func TestValidatePath(t *testing.T) {
 	}{
 		{
 			name:    "valid absolute path",
-			path:    "/tmp/test",
+			path:    absPath,
 			wantErr: false,
 		},
 		{
@@ -386,7 +389,10 @@ func TestLizaPathsMethods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.method()
-			if got != tt.expected {
+			// Expected paths are written with forward slashes; normalize the
+			// result the same way so the assertions hold on Windows where
+			// filepath.Join uses backslashes.
+			if filepath.ToSlash(got) != tt.expected {
 				t.Errorf("%s = %v, want %v", tt.name, got, tt.expected)
 			}
 		})
@@ -423,7 +429,10 @@ func TestLizaPathsGenericGet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.method()
-			if got != tt.expected {
+			// Expected paths are written with forward slashes; normalize the
+			// result the same way so the assertions hold on Windows where
+			// filepath.Join uses backslashes.
+			if filepath.ToSlash(got) != tt.expected {
 				t.Errorf("%s = %v, want %v", tt.name, got, tt.expected)
 			}
 		})

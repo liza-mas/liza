@@ -671,7 +671,7 @@ func renderCodexHooksJSON(hooksPath string, reader *bufio.Reader, opts ConfirmOp
 }
 
 func codexConfigPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := paths.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
@@ -679,7 +679,7 @@ func codexConfigPath() (string, error) {
 }
 
 func codexSupportWritableRoots() []string {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := paths.UserHomeDir()
 	cacheDir, _ := os.UserCacheDir()
 	return codexconfig.SupportWritableRoots(homeDir, cacheDir)
 }

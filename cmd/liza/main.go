@@ -233,9 +233,10 @@ func registeredFlagToken(cmd *cobra.Command, value string) string {
 }
 
 func checkSupportedPlatform(goos string) error {
-	if goos == "windows" {
-		return cliValidationError(fmt.Sprintf("native Windows is not supported; run %s under WSL2", brand.BinaryName))
-	}
+	// Native Windows is supported (requires Git for Windows so that the bash
+	// hooks resolve). No platform is rejected here; the guard is retained as a
+	// single point to add future platform checks if needed.
+	_ = goos
 	return nil
 }
 

@@ -551,6 +551,12 @@ func TestDeleteTask_WorktreePreserved(t *testing.T) {
 func TestDeleteTask_CommitFailureDoesNotDeleteWorktreeOrBranch(t *testing.T) {
 	t.Parallel()
 
+	// This test relies on os.Chmod(dir, 0555) to make the state directory
+	// non-writable and force a commit failure. On Windows, chmod does not map
+	// POSIX owner-write bits to NTFS ACLs in a way that blocks Go file writes,
+	// so the failure cannot be reliably reproduced. The graceful-write-failure
+	// path is covered on Unix.
+	skipOnWindowsChmodUnsupported(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

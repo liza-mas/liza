@@ -19,6 +19,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/brandrender"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"gopkg.in/yaml.v3"
 )
 
@@ -540,7 +541,7 @@ func Load(ctx context.Context, opts LoadOptions) (Catalog, error) {
 	homeDir := opts.HomeDir
 	if homeDir == "" {
 		var err error
-		homeDir, err = os.UserHomeDir()
+		homeDir, err = paths.UserHomeDir()
 		if err != nil {
 			if opts.Force {
 				return Catalog{}, err

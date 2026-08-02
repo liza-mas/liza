@@ -7,8 +7,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-
-	"github.com/liza-mas/liza/internal/brand"
 )
 
 type InstallOptions struct {
@@ -59,10 +57,11 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
+	_ = goos // reserved for future per-OS install behavior
 
 	result := InstallResult{Profile: selection.Profile, InstallDir: installDir}
 	for _, tool := range selection.Tools {
-		step := installOne(tool, installDir, goos, opts.DryRun, runner)
+		step := installOne(tool, installDir, opts.DryRun, runner)
 		result.Steps = append(result.Steps, step)
 	}
 	if err := installResultError(result.Steps); err != nil {
@@ -71,12 +70,9 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	return result, nil
 }
 
-func installOne(tool Tool, installDir, goos string, dryRun bool, runner Runner) InstallStep {
+func installOne(tool Tool, installDir string, dryRun bool, runner Runner) InstallStep {
 	if tool.InstallKind == InstallManualOnly {
 		return InstallStep{ToolID: tool.ID, Status: InstallSkipped, Message: tool.ManualNote}
-	}
-	if goos == "windows" {
-		return InstallStep{ToolID: tool.ID, Status: InstallUnsupported, Message: fmt.Sprintf("native Windows is not a supported %s runtime; run this installer under WSL2", brand.NameTitle)}
 	}
 	if tool.Binary != "" {
 		if path, err := runner.LookPath(tool.Binary); err == nil && path != "" {

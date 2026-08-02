@@ -1,0 +1,38 @@
+# Enforce LF line endings on text files.
+#
+# Without this, Windows checkouts with core.autocrlf=true get CRLF in shell
+# scripts and hooks, which breaks `bash -n` validation and execution
+# (`$'do\r': command not found`). LF is required for all POSIX shell.
+#
+# Default: auto-detect text, normalize to LF in the repo and on checkout.
+* text=auto eol=lf
+
+# Shell scripts, hooks, and config that bash/sh must execute: always LF.
+*.sh       text eol=lf
+*.bash     text eol=lf
+install.sh text eol=lf
+install.ps1 text eol=lf
+
+# Go and YAML/JSON/TOML: LF.
+*.go   text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+
+# Embedded hook sources are mastered directly here and must stay LF.
+internal/embedded/hooks/**      text eol=lf
+internal/embedded/git-hooks/**  text eol=lf
+.claude/hooks/**                text eol=lf
+
+# Windows-native scripts keep CRLF (PowerShell tolerates both, but .bat/.cmd
+# historically expect CRLF).
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binary files: never normalize.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.zip  binary
+*.gz   binary

@@ -462,20 +462,12 @@ func validateBashSyntax(content []byte) error {
 	if err != nil {
 		return nil
 	}
-	tmp, err := os.CreateTemp("", "brandrender-*.sh")
-	if err != nil {
-		return fmt.Errorf("create shell syntax temp file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(content); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("write shell syntax temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close shell syntax temp file: %w", err)
-	}
-	cmd := exec.Command(bashPath, "-n", tmpPath)
+	// Pass the script via stdin rather than a temp file path. On Windows the
+	// temp path contains backslashes (C:\Users\...) which bash interprets as
+	// escape characters, mangling it into an unusable path. Reading from stdin
+	// sidesteps the path entirely and is portable across platforms.
+	cmd := exec.Command(bashPath, "-n")
+	cmd.Stdin = bytes.NewReader(content)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("invalid shell syntax: %w: %s", err, strings.TrimSpace(string(output)))
 	}
