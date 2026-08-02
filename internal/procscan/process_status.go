@@ -1,13 +1,11 @@
 package procscan
 
 import (
-	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"syscall"
 )
 
 // AgentProcessState classifies a registered agent PID using the strongest
@@ -145,50 +143,44 @@ func FindExplicitAgentIdentityPIDs(role, agentID, procRoot string) []int {
 }
 
 func signalProcessStatus(pid int, identityErr error, procfsUnavailable bool) AgentProcessStatus {
-	process, err := os.FindProcess(pid)
+	alive, permDenied, err := ProcessAlive(pid)
 	if err != nil {
+		// Could not even attempt the probe (e.g. os.FindProcess failed). Treat
+		// as dead so we don't hold onto a phantom agent row.
 		return AgentProcessStatus{
 			State:  AgentProcessDead,
-			Source: "os.FindProcess",
+			Source: "process-probe",
 			Detail: err.Error(),
 		}
 	}
 
-	err = process.Signal(syscall.Signal(0))
-	if err == nil {
-		detail := fmt.Sprintf("process accepted signal 0; identity unavailable: %v", identityErr)
+	if alive && !permDenied {
+		detail := fmt.Sprintf("process is alive; identity unavailable: %v", identityErr)
 		if procfsUnavailable {
-			detail = "process accepted signal 0; procfs unavailable"
+			detail = "process is alive; procfs unavailable"
 		}
 		return AgentProcessStatus{
 			State:  AgentProcessUnknown,
-			Source: "signal(0)",
+			Source: processProbeSource(),
 			Detail: detail,
 			Alive:  true,
 		}
 	}
-	if stderrors.Is(err, syscall.EPERM) {
-		detail := fmt.Sprintf("process exists but signal permission was denied; identity unavailable: %v", identityErr)
+	if alive && permDenied {
+		detail := fmt.Sprintf("process exists but probe permission was denied; identity unavailable: %v", identityErr)
 		if procfsUnavailable {
-			detail = "process exists but signal permission was denied; procfs unavailable"
+			detail = "process exists but probe permission was denied; procfs unavailable"
 		}
 		return AgentProcessStatus{
 			State:  AgentProcessUnknown,
-			Source: "signal(0)",
+			Source: processProbeSource(),
 			Detail: detail,
 			Alive:  true,
-		}
-	}
-	if stderrors.Is(err, syscall.ESRCH) {
-		return AgentProcessStatus{
-			State:  AgentProcessDead,
-			Source: "signal(0)",
-			Detail: "process does not exist",
 		}
 	}
 	return AgentProcessStatus{
 		State:  AgentProcessDead,
-		Source: "signal(0)",
-		Detail: err.Error(),
+		Source: processProbeSource(),
+		Detail: "process does not exist",
 	}
 }

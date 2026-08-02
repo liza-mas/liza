@@ -160,11 +160,32 @@ func (p LizaPaths) ClaudeSettingsPath() string {
 	return filepath.Join(p.ClaudeDir(), ClaudeSettingsFile)
 }
 
-// GlobalLizaDir returns the path to the branded global runtime directory.
-func GlobalLizaDir() (string, error) {
+// UserHomeDir returns the current user's home directory.
+//
+// It honors the HOME environment variable first (consistent with the ~/.liza/
+// convention documented across Liza, and with Git for Windows / WSL, where HOME
+// is set by the bash layer). On platforms where HOME is unset it falls back to
+// os.UserHomeDir() (USERPROFILE on Windows, the getpwuid home on Unix).
+//
+// Honoring HOME is what lets tests isolate the home via t.Setenv("HOME", ...)
+// portably across operating systems, and lets a user override the global Liza
+// directory by exporting HOME.
+func UserHomeDir() (string, error) {
+	if home := os.Getenv("HOME"); home != "" {
+		return home, nil
+	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return homeDir, nil
+}
+
+// GlobalLizaDir returns the path to the branded global runtime directory.
+func GlobalLizaDir() (string, error) {
+	homeDir, err := UserHomeDir()
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(homeDir, GlobalDirName()), nil
 }

@@ -547,7 +547,7 @@ func Load(ctx context.Context, opts LoadOptions) (Catalog, error) {
 	homeDir := opts.HomeDir
 	if homeDir == "" {
 		var err error
-		homeDir, err = os.UserHomeDir()
+		homeDir, err = paths.UserHomeDir()
 		if err != nil {
 			if opts.Force {
 				return Catalog{}, err

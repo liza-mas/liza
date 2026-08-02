@@ -1340,6 +1340,7 @@ func TestHandleReadyClaimWorktree_CleanupAbortedWhenTaskClaimedConcurrently(t *t
 }
 
 func TestClaimTask_PostWorktreeCmdRunsOnFreshClaim(t *testing.T) {
+	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1409,6 +1410,7 @@ func TestClaimTask_CopyWorktreeEnvFilesOnFreshClaim(t *testing.T) {
 // fail closed rather than hand it to a coder session (ADR-0031 amendment
 // 2026-08-23; superseded the earlier warn-and-continue contract).
 func TestClaimTask_PostWorktreeCmdFailureFailsClaimClosed(t *testing.T) {
+	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1486,6 +1488,7 @@ func TestClaimTask_PostWorktreeCmdFailurePreservesWorktree(t *testing.T) {
 }
 
 func TestClaimTask_PostWorktreeCmdRunsOnSameCoderReclaim(t *testing.T) {
+	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1726,6 +1729,7 @@ func TestClaimTaskPreparesSembleIgnoreForRejectedReclaim(t *testing.T) {
 }
 
 func TestClaimTask_ScipIndexesEnabledWorktreeAfterPostWorktreeCmd(t *testing.T) {
+	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForClaimScipTest(t, tmpDir)
@@ -1778,6 +1782,7 @@ func TestClaimTask_ScipIndexesEnabledWorktreeAfterPostWorktreeCmd(t *testing.T) 
 }
 
 func TestClaimTaskSembleIgnorePreparationRunsAfterPostWorktreeBeforeIndexRefresh(t *testing.T) {
+	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForClaimScipTest(t, tmpDir)
@@ -1951,6 +1956,7 @@ func TestClaimTask_FunctionalClustersFailedBuildWarningReturned(t *testing.T) {
 }
 
 func TestClaimTaskSembleIgnorePreparationWarningsAreBounded(t *testing.T) {
+	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	if err := os.WriteFile(filepath.Join(tmpDir, ".sembleignore"), []byte("operator-owned marker\n"+paths.ProjectDirName()+"/\n"), 0o644); err != nil {

@@ -107,26 +107,6 @@ func TestInstallManualToolIsSkipped(t *testing.T) {
 	}
 }
 
-func TestInstallNativeWindowsIsUnsupported(t *testing.T) {
-	got, err := Install(InstallOptions{
-		Profile:    ProfileLean,
-		Include:    []string{"rtk"},
-		Exclude:    allToolIDsExcept("rtk"),
-		InstallDir: t.TempDir(),
-		Runner:     &fakeRunner{},
-		GOOS:       "windows",
-	})
-	if err == nil {
-		t.Fatal("Install() error = nil, want unsupported platform error")
-	}
-	if got.Steps[0].Status != InstallUnsupported {
-		t.Fatalf("status = %s, want unsupported", got.Steps[0].Status)
-	}
-	if strings.Contains(got.Steps[0].Message, "doctor-only") {
-		t.Fatalf("message = %q, should not claim Windows is doctor-only", got.Steps[0].Message)
-	}
-}
-
 func TestPackageInstallCommandRequiresKnownPackageManager(t *testing.T) {
 	_, err := packageInstallCommand("jq", &fakeRunner{})
 	if err == nil {

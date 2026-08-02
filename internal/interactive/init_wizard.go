@@ -232,7 +232,7 @@ func resolveContractConflicts(projectRoot string, result *InitWizardResult) erro
 		return nil
 	}
 
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := paths.UserHomeDir()
 	if err != nil {
 		return nil // non-fatal, let the init command handle it
 	}

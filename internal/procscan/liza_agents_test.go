@@ -338,7 +338,11 @@ func writeProc(t *testing.T, procRoot string, pid int, cwd string, argv []string
 	t.Helper()
 	procDir := writeProcCmdline(t, procRoot, pid, argv)
 	if err := os.Symlink(cwd, filepath.Join(procDir, "cwd")); err != nil {
-		t.Fatal(err)
+		// Creating a symlink requires Developer Mode or Administrator on Windows
+		// (ERROR_PRIVILEGE_NOT_HELD). These tests simulate the Linux /proc
+		// filesystem, which is a no-op target on Windows anyway, so skip rather
+		// than fail when the host cannot create the required symlink.
+		t.Skipf("cannot create cwd symlink (procfs simulation unavailable without symlink support): %v", err)
 	}
 }
 

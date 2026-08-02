@@ -324,7 +324,7 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 		return ""
 	}
 
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := paths.UserHomeDir()
 	if err != nil {
 		return ""
 	}
@@ -391,7 +391,10 @@ func createContractSymlinksForProviders(projectRoot, contractTarget string, agen
 			repoActivations[providerID] = cleaned
 		}
 	}
-	homeDir, err := os.UserHomeDir()
+	// paths.UserHomeDir rather than os.UserHomeDir: it honours an injected HOME,
+	// which os.UserHomeDir ignores on Windows. Without it the tests write into
+	// the developer's real profile.
+	homeDir, err := paths.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: cannot determine home directory: %v\n", err)
 		return repoActivations
@@ -606,7 +609,7 @@ func ensurePreferredGlobalContract(name, repoPath, globalPath, contractTarget st
 
 // setupMistralContract creates a Mistral prompt symlink to CORE.md and sets system_prompt_id in config.toml.
 func setupMistralContract(coreFile string, reader *bufio.Reader, autoConfirm bool) error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := paths.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to determine home directory: %w", err)
 	}

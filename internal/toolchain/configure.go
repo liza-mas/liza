@@ -235,7 +235,7 @@ func resolveGlobalDir(raw string) (string, error) {
 func resolveHomeDir(raw, defaultRel string) (string, error) {
 	needsHome := raw == "" || strings.HasPrefix(raw, "~/")
 	if needsHome {
-		home, err := os.UserHomeDir()
+		home, err := paths.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("determine home directory: %w", err)
 		}
@@ -251,7 +251,7 @@ func resolveHomeDir(raw, defaultRel string) (string, error) {
 func appendShellProfileSources(homeDir, shell, envPath string) ([]string, error) {
 	if homeDir == "" {
 		var err error
-		homeDir, err = os.UserHomeDir()
+		homeDir, err = paths.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("determine home directory: %w", err)
 		}
