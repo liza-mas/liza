@@ -210,6 +210,14 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		if err != nil {
 			return LaunchPlan{}, fmt.Errorf("%s acpx session name: %w", toolName, err)
 		}
+		// Scope the session to the task so context cannot accumulate across
+		// tasks: a session that spans tasks grows until the provider rejects
+		// every prompt, and auto-repair then respawns into the same poisoned
+		// session (DEV-667). Templates that already place {{taskID}} keep
+		// full control.
+		if scope := acpxSessionTaskScope(req.TaskID); scope != "" && !strings.Contains(sessionTemplate, "{{taskID}}") {
+			renderedSessionName = renderedSessionName + "-" + scope
+		}
 		vars["sessionName"] = renderedSessionName
 	}
 
@@ -345,6 +353,26 @@ func validatePromptTransport(value string) error {
 	default:
 		return fmt.Errorf("unsupported prompt transport: %s", value)
 	}
+}
+
+// acpxSessionTaskScope converts a task ID into a session-name suffix. Task IDs
+// are engine-generated kebab-case, but sanitize defensively so the name stays
+// safe as an acpx session key.
+func acpxSessionTaskScope(taskID string) string {
+	taskID = strings.ToLower(strings.TrimSpace(taskID))
+	if taskID == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range taskID {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 func launchTemplateVars(req LaunchPlanRequest, toolName string) map[string]string {

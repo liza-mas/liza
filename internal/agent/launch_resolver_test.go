@@ -326,3 +326,90 @@ func TestAppendDisallowedTaskArgInsertsBeforeFirstLoggingFlag(t *testing.T) {
 		})
 	}
 }
+
+func acpxTaskScopeTestTool() models.AgentToolConfig {
+	return models.AgentToolConfig{
+		Backend:         ToolBackendACPX,
+		Executable:      "acpx",
+		PromptTransport: PromptTransportStdin,
+		ACPXAgent:       "qwen",
+		ACPXSessionName: "liza-qwen-{{agentID}}",
+		ACPXEnsureArgs:  []string{"--cwd", "{{projectRoot}}", "{{acpxAgent}}", "sessions", "ensure", "--name", "{{sessionName}}"},
+		ACPXPromptArgs:  []string{"--cwd", "{{projectRoot}}", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
+	}
+}
+
+func TestResolveLaunchPlanScopesACPXSessionToTask(t *testing.T) {
+	config := models.Config{AgentTools: map[string]models.AgentToolConfig{"qwen-acp": acpxTaskScopeTestTool()}}
+
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "qwen-acp",
+		AgentID:       "coder-1",
+		TaskID:        "code-plan-mobile-coding-0",
+		ProjectRoot:   "/repo",
+		RuntimeConfig: config,
+	})
+	if err != nil {
+		t.Fatalf("ResolveLaunchPlan() error = %v", err)
+	}
+	want := "liza-qwen-coder-1-code-plan-mobile-coding-0"
+	if plan.ACPXSessionName != want {
+		t.Fatalf("ACPXSessionName = %q, want %q", plan.ACPXSessionName, want)
+	}
+	if !slices.Contains(plan.ACPXEnsureArgs, want) {
+		t.Fatalf("ACPXEnsureArgs = %v, want session name %q", plan.ACPXEnsureArgs, want)
+	}
+	if !slices.Contains(plan.ACPXPromptArgs, want) {
+		t.Fatalf("ACPXPromptArgs = %v, want session name %q", plan.ACPXPromptArgs, want)
+	}
+}
+
+func TestResolveLaunchPlanWithoutTaskKeepsAgentScopedSession(t *testing.T) {
+	config := models.Config{AgentTools: map[string]models.AgentToolConfig{"qwen-acp": acpxTaskScopeTestTool()}}
+
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "qwen-acp",
+		AgentID:       "orchestrator-1",
+		ProjectRoot:   "/repo",
+		RuntimeConfig: config,
+	})
+	if err != nil {
+		t.Fatalf("ResolveLaunchPlan() error = %v", err)
+	}
+	if plan.ACPXSessionName != "liza-qwen-orchestrator-1" {
+		t.Fatalf("ACPXSessionName = %q, want liza-qwen-orchestrator-1", plan.ACPXSessionName)
+	}
+}
+
+func TestResolveLaunchPlanRespectsExplicitTaskIDTemplate(t *testing.T) {
+	tool := acpxTaskScopeTestTool()
+	tool.ACPXSessionName = "custom-{{taskID}}-{{agentID}}"
+	config := models.Config{AgentTools: map[string]models.AgentToolConfig{"qwen-acp": tool}}
+
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "qwen-acp",
+		AgentID:       "coder-2",
+		TaskID:        "fleet-coding-1",
+		ProjectRoot:   "/repo",
+		RuntimeConfig: config,
+	})
+	if err != nil {
+		t.Fatalf("ResolveLaunchPlan() error = %v", err)
+	}
+	if plan.ACPXSessionName != "custom-fleet-coding-1-coder-2" {
+		t.Fatalf("ACPXSessionName = %q, want custom-fleet-coding-1-coder-2 (no double task suffix)", plan.ACPXSessionName)
+	}
+}
+
+func TestACPXSessionTaskScopeSanitizes(t *testing.T) {
+	for _, tt := range []struct{ in, want string }{
+		{"code-plan-mobile-coding-0", "code-plan-mobile-coding-0"},
+		{"  Task With Spaces!  ", "task-with-spaces"},
+		{"", ""},
+		{"---", ""},
+	} {
+		if got := acpxSessionTaskScope(tt.in); got != tt.want {
+			t.Fatalf("acpxSessionTaskScope(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

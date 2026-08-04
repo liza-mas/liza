@@ -1443,7 +1443,7 @@ func TestRunSupervisor_CodexCommandRuntimeFailureBlocksWithoutGenericSpin(t *tes
 	}
 }
 
-func TestRunSupervisor_OpenCodeSuccessfulNoProgressBlocksAsSpinning(t *testing.T) {
+func TestRunSupervisor_OpenCodeNoProgressBlocksBeforeSecondExecution(t *testing.T) {
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
@@ -1480,8 +1480,11 @@ func TestRunSupervisor_OpenCodeSuccessfulNoProgressBlocksAsSpinning(t *testing.T
 		t.Fatalf("RunSupervisor() error = %v", err)
 	}
 
-	if calls := mock.GetCalls(); len(calls) != 2 {
-		t.Fatalf("Execute calls = %d, want 2 before no-progress guard blocks retry", len(calls))
+	// With claim-churn excluded from the progress signature (DEV-667), the
+	// pre-execution spin guard blocks on the second claim, before wasting a
+	// second execution.
+	if calls := mock.GetCalls(); len(calls) != 1 {
+		t.Fatalf("Execute calls = %d, want 1 before spin guard blocks re-claim", len(calls))
 	}
 
 	updated, err := bb.Read()
@@ -1498,8 +1501,8 @@ func TestRunSupervisor_OpenCodeSuccessfulNoProgressBlocksAsSpinning(t *testing.T
 	if task.BlockedReason == nil {
 		t.Fatal("BlockedReason = nil, want no-progress reason")
 	}
-	if !strings.Contains(*task.BlockedReason, "successful no-progress loop detected") {
-		t.Fatalf("BlockedReason = %q, want successful no-progress loop", *task.BlockedReason)
+	if !strings.Contains(*task.BlockedReason, "spinning detected") {
+		t.Fatalf("BlockedReason = %q, want spinning detected", *task.BlockedReason)
 	}
 }
 
@@ -2373,5 +2376,21 @@ func TestNewDefaultCLIExecutorDelegatesToCLIAgent(t *testing.T) {
 	e := NewDefaultCLIExecutor(dir)
 	if e.outputsDir != dir {
 		t.Errorf("outputsDir = %q, want %q", e.outputsDir, dir)
+	}
+}
+
+func TestExit42TaskProgressSignatureIgnoresClaimIteration(t *testing.T) {
+	task := models.Task{ID: "task-1", Status: models.TaskStatusImplementing, Iteration: 3}
+	reClaimed := task
+	reClaimed.Iteration = 4
+
+	if exit42TaskProgressSignature(&task) != exit42TaskProgressSignature(&reClaimed) {
+		t.Fatal("signature changed on claim-only Iteration bump; spin/crash counters would reset every re-claim")
+	}
+
+	progressed := task
+	progressed.Status = models.TaskStatusReadyForReview
+	if exit42TaskProgressSignature(&task) == exit42TaskProgressSignature(&progressed) {
+		t.Fatal("signature must change on real status progress")
 	}
 }

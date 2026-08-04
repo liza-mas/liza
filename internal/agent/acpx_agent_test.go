@@ -46,8 +46,8 @@ func TestACPXAgentRunUsesPersistentCodexSession(t *testing.T) {
 	if first.Output != "done from acpx" {
 		t.Fatalf("first Output = %q, want fake acpx message", first.Output)
 	}
-	if first.SessionID != "liza-coder-1" {
-		t.Fatalf("first SessionID = %q, want liza-coder-1", first.SessionID)
+	if first.SessionID != "liza-coder-1-task-acp" {
+		t.Fatalf("first SessionID = %q, want liza-coder-1-task-acp", first.SessionID)
 	}
 	if first.WarmUsage {
 		t.Fatal("first WarmUsage = true, want false")
@@ -68,8 +68,8 @@ func TestACPXAgentRunUsesPersistentCodexSession(t *testing.T) {
 	log := readTextForTest(t, logPath)
 	for _, want := range []string{
 		"ENV_LIZA_AGENT_ID:coder-1",
-		"ARGS:--cwd " + req.ProjectRoot + " codex sessions ensure --name liza-coder-1",
-		"ARGS:--cwd " + req.ProjectRoot + " --format json --approve-all codex prompt -s liza-coder-1 --file -",
+		"ARGS:--cwd " + req.ProjectRoot + " codex sessions ensure --name liza-coder-1-task-acp",
+		"ARGS:--cwd " + req.ProjectRoot + " --format json --approve-all codex prompt -s liza-coder-1-task-acp --file -",
 		"STDIN:implement the requested change",
 	} {
 		if !strings.Contains(log, want) {

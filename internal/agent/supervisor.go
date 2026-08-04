@@ -236,12 +236,16 @@ func exit42TaskProgressSignature(task *models.Task) string {
 	snapshot.LeaseExpires = nil
 	snapshot.ReviewingBy = nil
 	snapshot.ReviewLeaseExpires = nil
+	// Iteration is bumped by every ClaimTask, including the no-progress
+	// re-claims this signature exists to detect; keeping it would reset the
+	// spin/crash counters on each cycle (DEV-667).
+	snapshot.Iteration = 0
 	snapshot.Exit42RestartCount = 0
 	snapshot.History = nil
 
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
-		return fmt.Sprintf("%s|%d|%t", task.Status, task.Iteration, task.HandoffPending)
+		return fmt.Sprintf("%s|%t", task.Status, task.HandoffPending)
 	}
 	return string(payload)
 }
@@ -853,9 +857,14 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			effectiveTask = taskID
 		}
 		if effectiveTask != "" {
-			var sig string
-			if task := stateBefore.FindTask(effectiveTask); task != nil {
-				sig = exit42TaskProgressSignature(task)
+			// Prefer the worktree-aware snapshot: genuine iteration on a task
+			// often progresses only in the worktree, and task-field signatures
+			// alone would count it as spinning (DEV-667).
+			sig, snapshotEligible := readSuccessProgressSnapshot(effectiveTask)
+			if !snapshotEligible || sig == "" {
+				if task := stateBefore.FindTask(effectiveTask); task != nil {
+					sig = exit42TaskProgressSignature(task)
+				}
 			}
 			spinCount := spinTracker.Track(effectiveTask, sig)
 			spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
