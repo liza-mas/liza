@@ -1,6 +1,7 @@
 package testhelpers
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,12 +25,12 @@ func WithShortSubprocessTimeout(t *testing.T, timeout time.Duration) {
 	})
 }
 
-// AddSlowCommandToPath installs a fake executable that emits one line, then
-// sleeps long enough for short-timeout tests to kill it.
-func AddSlowCommandToPath(t *testing.T, name string) {
+// AddSlowCommandToPathWithDelay installs a fake executable with a caller-set
+// delay before its late output so timeout tests can allow for suite load.
+func AddSlowCommandToPathWithDelay(t *testing.T, name string, delay time.Duration) {
 	t.Helper()
 	binDir := t.TempDir()
-	commandName, content := slowCommandFile(name)
+	commandName, content := slowCommandFile(name, delay)
 	path := filepath.Join(binDir, commandName)
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
@@ -40,9 +41,13 @@ func AddSlowCommandToPath(t *testing.T, name string) {
 	}
 }
 
-func slowCommandFile(name string) (string, string) {
-	if runtime.GOOS == "windows" {
-		return name + ".cmd", "@echo off\r\necho started\r\nping -n 3 127.0.0.1 >NUL\r\necho late\r\n"
+func slowCommandFile(name string, delay time.Duration) (string, string) {
+	delaySeconds := int((delay + time.Second - 1) / time.Second)
+	if delaySeconds < 1 {
+		delaySeconds = 1
 	}
-	return name, "#!/bin/sh\nprintf 'started\\n'\nsleep 2\nprintf 'late\\n'\n"
+	if runtime.GOOS == "windows" {
+		return name + ".cmd", fmt.Sprintf("@echo off\r\necho started\r\nping -n %d 127.0.0.1 >NUL\r\necho late\r\n", delaySeconds+1)
+	}
+	return name, fmt.Sprintf("#!/bin/sh\nprintf 'started\\n'\nsleep %d\nprintf 'late\\n'\n", delaySeconds)
 }

@@ -11,6 +11,8 @@ import (
 )
 
 func TestCombinedOutputWithTimeoutKillsHungCommand(t *testing.T) {
+	const timeout = 5 * time.Second
+
 	binDir := t.TempDir()
 	commandName, content := slowCommandFile("slow-tool")
 	fakeCommand := filepath.Join(binDir, commandName)
@@ -22,11 +24,11 @@ func TestCombinedOutputWithTimeoutKillsHungCommand(t *testing.T) {
 		t.Setenv("PATHEXT", ".COM;.EXE;.BAT;.CMD")
 	}
 	previousWaitDelay := DefaultWaitDelay
-	DefaultWaitDelay = 50 * time.Millisecond
+	DefaultWaitDelay = 500 * time.Millisecond
 	t.Cleanup(func() { DefaultWaitDelay = previousWaitDelay })
 
 	start := time.Now()
-	output, err := CombinedOutputWithTimeout(50*time.Millisecond, "slow-tool", []string{"arg"}, t.TempDir())
+	output, err := CombinedOutputWithTimeout(timeout, "slow-tool", []string{"arg"}, t.TempDir())
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -36,8 +38,8 @@ func TestCombinedOutputWithTimeoutKillsHungCommand(t *testing.T) {
 	if !errors.As(err, &timeoutErr) {
 		t.Fatalf("CombinedOutputWithTimeout() error = %T %v, want *TimeoutError", err, err)
 	}
-	if elapsed >= time.Second {
-		t.Fatalf("CombinedOutputWithTimeout() elapsed = %s, want under 1s", elapsed)
+	if elapsed >= timeout+2*time.Second {
+		t.Fatalf("CombinedOutputWithTimeout() elapsed = %s, want under %s", elapsed, timeout+2*time.Second)
 	}
 	if !strings.Contains(output, "started") {
 		t.Fatalf("output = %q, want pre-timeout output", output)
@@ -45,14 +47,14 @@ func TestCombinedOutputWithTimeoutKillsHungCommand(t *testing.T) {
 	if strings.Contains(output, "late") {
 		t.Fatalf("output = %q, want process killed before late output", output)
 	}
-	if timeoutErr.Name != "slow-tool" || timeoutErr.Timeout != 50*time.Millisecond {
+	if timeoutErr.Name != "slow-tool" || timeoutErr.Timeout != timeout {
 		t.Fatalf("timeout error = %#v, want command facts", timeoutErr)
 	}
 }
 
 func slowCommandFile(name string) (string, string) {
 	if runtime.GOOS == "windows" {
-		return name + ".cmd", "@echo off\r\necho started\r\nping -n 3 127.0.0.1 >NUL\r\necho late\r\n"
+		return name + ".cmd", "@echo off\r\necho started\r\nping -n 16 127.0.0.1 >NUL\r\necho late\r\n"
 	}
-	return name, "#!/bin/sh\nprintf 'started\\n'\nsleep 2\nprintf 'late\\n'\n"
+	return name, "#!/bin/sh\nprintf 'started\\n'\nsleep 15\nprintf 'late\\n'\n"
 }

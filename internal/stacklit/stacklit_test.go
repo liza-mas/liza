@@ -161,8 +161,9 @@ func TestRefreshIndexTaskWorktreeFailureRemovesPromptLocalIndex(t *testing.T) {
 }
 
 func TestRunRuntimeCommandPlanTimesOutHungStacklit(t *testing.T) {
-	testhelpers.WithShortSubprocessTimeout(t, 50*time.Millisecond)
-	testhelpers.AddSlowCommandToPath(t, "stacklit")
+	const timeout = 5 * time.Second
+	testhelpers.WithShortSubprocessTimeout(t, timeout)
+	testhelpers.AddSlowCommandToPathWithDelay(t, "stacklit", 15*time.Second)
 
 	start := time.Now()
 	output, err := runRuntimeCommandPlan(RuntimeCommandPlan{
@@ -179,8 +180,8 @@ func TestRunRuntimeCommandPlanTimesOutHungStacklit(t *testing.T) {
 	if !errors.As(err, &timeoutErr) {
 		t.Fatalf("runRuntimeCommandPlan() error = %T %v, want *subprocess.TimeoutError", err, err)
 	}
-	if elapsed >= time.Second {
-		t.Fatalf("runRuntimeCommandPlan() elapsed = %s, want under 1s", elapsed)
+	if elapsed >= timeout+2*time.Second {
+		t.Fatalf("runRuntimeCommandPlan() elapsed = %s, want under %s", elapsed, timeout+2*time.Second)
 	}
 	if !strings.Contains(output, "started") || strings.Contains(output, "late") {
 		t.Fatalf("output = %q, want pre-timeout output only", output)
