@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,33 @@ func TestReadContext_CancelsBlockedLockAcquisition(t *testing.T) {
 	close(releaseHolder)
 	if err := <-holderDone; err != nil {
 		t.Fatalf("holder error: %v", err)
+	}
+}
+
+// assertRegularFileMode mirrors testhelpers.AssertRegularFileMode. It is
+// duplicated here because internal/testhelpers imports internal/db
+// (testhelpers/fixtures.go), and these tests are in package db, so importing
+// testhelpers back would create an import cycle.
+//
+// Windows has no POSIX mode bits: os.Stat reports 0666 for a writable file and
+// 0444 for one carrying the read-only attribute, so an exact comparison against
+// unixPerm can never hold there; "not read-only" is the observable equivalent.
+func assertRegularFileMode(t *testing.T, path string, unixPerm os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Errorf("stat %s: %v", path, err)
+		return
+	}
+	if runtime.GOOS == "windows" {
+		if info.Mode().Perm()&0o200 == 0 {
+			t.Errorf("%s is read-only: mode=%v", path, info.Mode().Perm())
+		}
+		return
+	}
+	if info.Mode().Perm() != unixPerm {
+		t.Errorf("%s has wrong permissions: got %o, want %o", path, info.Mode().Perm(), unixPerm)
 	}
 }
 
@@ -1174,13 +1202,10 @@ func TestBlackboardWriteWithFsync(t *testing.T) {
 	}
 
 	// Verify state file exists and has correct permissions
-	info, err := os.Stat(statePath)
-	if err != nil {
+	if _, err := os.Stat(statePath); err != nil {
 		t.Fatalf("State file not found: %v", err)
 	}
-	if info.Mode().Perm() != 0644 {
-		t.Errorf("State file has wrong permissions: got %o, want 0644", info.Mode().Perm())
-	}
+	assertRegularFileMode(t, statePath, 0644)
 
 	// Verify temp file was cleaned up
 	tmpPath := statePath + ".tmp"

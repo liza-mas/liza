@@ -12,6 +12,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/scipsearch"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestResolveEffectiveHooksDirDefault(t *testing.T) {
@@ -44,13 +45,10 @@ func TestInstallLifecycleHooksDefaultHooks(t *testing.T) {
 
 	for _, hook := range DefaultLifecycleHooks() {
 		hookPath := filepath.Join(wantHooksDir, hook)
-		info, err := os.Stat(hookPath)
-		if err != nil {
+		if _, err := os.Stat(hookPath); err != nil {
 			t.Fatalf("%s missing: %v", hookPath, err)
 		}
-		if info.Mode()&0111 == 0 {
-			t.Fatalf("%s is not executable: mode=%v", hookPath, info.Mode())
-		}
+		testhelpers.AssertExecutableScript(t, hookPath)
 		target, err := os.Readlink(hookPath)
 		if err != nil {
 			t.Fatalf("%s is not a dispatcher symlink: %v", hookPath, err)
@@ -164,13 +162,10 @@ func TestInstallLifecycleHooksRefreshesStaleManagedHook(t *testing.T) {
 	if got, err := os.Readlink(hookPath); err != nil || got != hookDispatcherName() {
 		t.Fatalf("post-merge symlink = %q, err=%v; want %q", got, err, hookDispatcherName())
 	}
-	info, err := os.Stat(hookPath)
-	if err != nil {
+	if _, err := os.Stat(hookPath); err != nil {
 		t.Fatalf("stat refreshed hook: %v", err)
 	}
-	if info.Mode()&0111 == 0 {
-		t.Fatalf("refreshed hook is not executable: mode=%v", info.Mode())
-	}
+	testhelpers.AssertExecutableScript(t, hookPath)
 }
 
 func TestInstallLifecycleHooksRefreshPreservesUnrelatedStagingFile(t *testing.T) {
@@ -414,13 +409,10 @@ func TestInstallIndexScriptWritesExecutableManagedScript(t *testing.T) {
 	if result.Action != HookActionInstalled {
 		t.Fatalf("script action = %q, want %q", result.Action, HookActionInstalled)
 	}
-	info, err := os.Stat(wantPath)
-	if err != nil {
+	if _, err := os.Stat(wantPath); err != nil {
 		t.Fatalf("installed script missing: %v", err)
 	}
-	if info.Mode()&0111 == 0 {
-		t.Fatalf("installed script is not executable: mode=%v", info.Mode())
-	}
+	testhelpers.AssertExecutableScript(t, wantPath)
 	if got := readFile(t, wantPath); !strings.Contains(got, ManagedIndexScriptMarker) {
 		t.Fatalf("installed script missing managed marker:\n%s", got)
 	}
@@ -448,13 +440,10 @@ func TestInstallIndexScriptUpdatesLegacyManagedScript(t *testing.T) {
 	if strings.Contains(updated, legacyManagedIndexScriptMarker) {
 		t.Fatalf("updated script retained legacy marker:\n%s", updated)
 	}
-	info, err := os.Stat(scriptPath)
-	if err != nil {
+	if _, err := os.Stat(scriptPath); err != nil {
 		t.Fatalf("updated script missing: %v", err)
 	}
-	if info.Mode()&0111 == 0 {
-		t.Fatalf("updated script is not executable: mode=%v", info.Mode())
-	}
+	testhelpers.AssertExecutableScript(t, scriptPath)
 }
 
 func TestInstalledIndexScriptRefreshesStacklitJSONWithoutAIByDefault(t *testing.T) {

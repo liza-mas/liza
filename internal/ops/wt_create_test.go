@@ -762,13 +762,10 @@ func TestCreateWorktree_InstallsPreCommitHook(t *testing.T) {
 
 	// 1. Hook file exists at the expected path and is executable.
 	hookPath := filepath.Join(result.WorktreeDir, worktreeHooksDirName(), "pre-commit")
-	info, err := os.Stat(hookPath)
-	if err != nil {
+	if _, err := os.Stat(hookPath); err != nil {
 		t.Fatalf("pre-commit hook not installed at %s: %v", hookPath, err)
 	}
-	if info.Mode()&0111 == 0 {
-		t.Errorf("pre-commit hook is not executable: mode=%v", info.Mode())
-	}
+	testhelpers.AssertExecutableScript(t, hookPath)
 
 	// 2. Main repo has extensions.worktreeConfig=true.
 	ext := runGitInDir(t, tmpDir, "config", "--get", "extensions.worktreeConfig")

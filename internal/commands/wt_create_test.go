@@ -525,13 +525,11 @@ func TestWtCreateCommand_ProvisionClaudeConfig(t *testing.T) {
 		if string(got) != string(tc.content) {
 			t.Errorf("%s: content mismatch: got %q, want %q", tc.rel, got, tc.content)
 		}
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Errorf("%s: stat failed: %v", tc.rel, err)
-			continue
-		}
-		if info.Mode().Perm() != tc.mode {
-			t.Errorf("%s: mode %v, want %v", tc.rel, info.Mode().Perm(), tc.mode)
+		testhelpers.AssertRegularFileMode(t, path, tc.mode)
+		if tc.mode&0o111 != 0 {
+			// Windows cannot express the exec bit, so assert what it stands
+			// for: the copied hook is still a runnable script.
+			testhelpers.AssertExecutableScript(t, path)
 		}
 	}
 }
