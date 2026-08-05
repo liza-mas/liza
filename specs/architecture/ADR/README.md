@@ -105,3 +105,4 @@
 | [0115 — Declarative Atomic Dependency Repairs](0115-declarative-atomic-dependency-repairs.md) | Persist command-free dependency repair requests through `--repair-request-file` and consume them atomically with `apply-dependency-repair`. |
 | [0116 — Orchestrator Classifies Defect Objectives](0116-orchestrator-classifies-defect-objectives.md) | Define task-level RCA defaults plus explicit per-output overrides so each specialized code-planning scope gets the right reviewed diagnosis requirement. |
 | [0117 — Fail-Closed Worktree Readiness](0117-fail-closed-worktree-readiness.md) | A configured `post_worktree_cmd` must succeed before a provider session starts; failure degrades the agent instead of warning. Supersedes ADR-0031's failure handling. |
+| [0118 — Native Windows Support](0118-native-windows-support.md) | Support Windows natively, requiring Git for Windows for POSIX hooks and falling back where symlinks are unavailable. |
