@@ -51,6 +51,13 @@ json_val() {
   done
 }
 
+is_windows_shell() {
+  case "${OSTYPE:-}" in
+    msys*|cygwin*|win32*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 quote_for_shell() {
   local value="$1"
   printf "'%s'" "$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
@@ -162,6 +169,20 @@ root_sembleignore_safe() {
 }
 
 cwd=$(json_val cwd)
+
+# Canonicalise Windows path separators, as enforce-init.sh does.
+#
+# git rev-parse --show-toplevel reports a forward-slashed path even on Windows,
+# while the cwd the agent sends is backslashed. Without this, whichever of the
+# two answers wins decides the separator, and the fallback branch below emits
+# paths like C:\Users\proj/stacklit.json — half native, half POSIX. On Windows
+# the backslash is a reserved character that can never appear in a filename, so
+# the rewrite is lossless; on Unix it is a legal filename character, so it must
+# not be touched there.
+if is_windows_shell; then
+  cwd="${cwd//\\//}"
+fi
+
 project_dir="${CLAUDE_PROJECT_DIR:-}"
 if [[ -z "$project_dir" ]]; then
   if [[ -n "$cwd" ]]; then
