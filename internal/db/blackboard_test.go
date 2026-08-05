@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/perm"
 )
 
 func TestReadContext_CancelsBlockedLockAcquisition(t *testing.T) {
@@ -920,17 +921,21 @@ func TestBlackboardWriteReadOnlyDir(t *testing.T) {
 	}
 
 	// Make directory read-only
-	if err := os.Chmod(dir, 0555); err != nil {
+	restore, err := perm.DenyWrites(dir)
+	if err != nil {
 		t.Fatalf("Failed to make directory read-only: %v", err)
 	}
-	defer os.Chmod(dir, 0755) // Restore permissions for cleanup
+	defer func() {
+		if err := restore(); err != nil { // Restore permissions for cleanup
+			t.Errorf("restore write access: %v", err)
+		}
+	}()
 
 	// Use shorter timeout for error case since we expect immediate failure
 	bbShortTimeout := bb.WithLockTimeout(500 * time.Millisecond)
 
 	// Try to write again - should fail
-	err := bbShortTimeout.Write(state)
-	if err == nil {
+	if err := bbShortTimeout.Write(state); err == nil {
 		t.Error("Expected error writing to read-only directory, got nil")
 	}
 }

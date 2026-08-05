@@ -1274,13 +1274,6 @@ func TestInstallBinaryFromTarGzRejectsPathTraversal(t *testing.T) {
 }
 
 func TestInstallBinaryFromTarGzStripsDangerousPermissions(t *testing.T) {
-	// This test asserts POSIX permission bits (setuid/setgid/sticky stripping
-	// and executable-bit preservation) round-trip through os.Chmod. Windows
-	// has no executable bit and os.Chmod is effectively a no-op there, so the
-	// assertions cannot hold. The permission-stripping path is covered on Unix.
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping POSIX permission-bit test on Windows")
-	}
 	var archive bytes.Buffer
 	gz := gzip.NewWriter(&archive)
 	tw := tar.NewWriter(gz)
@@ -1310,11 +1303,31 @@ func TestInstallBinaryFromTarGzStripsDangerousPermissions(t *testing.T) {
 		t.Fatalf("installBinaryFromTarGz failed: %v", err)
 	}
 
-	// Verify dangerous bits were stripped
 	info, err := os.Stat(target)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if runtime.GOOS == "windows" {
+		// Windows implements none of these bits: os.Stat derives the mode from
+		// the read-only attribute, so setuid/setgid/sticky cannot be present and
+		// the exec bit cannot be set. Assert instead that the archive entry was
+		// installed and left usable, which is the part of the contract that
+		// carries over.
+		installed, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatalf("read installed binary: %v", err)
+		}
+		if !bytes.Equal(installed, body) {
+			t.Fatalf("installed binary content = %q, want %q", installed, body)
+		}
+		if info.Mode().Perm()&0o200 == 0 {
+			t.Fatalf("installed binary is read-only: got %o", info.Mode().Perm())
+		}
+		return
+	}
+
+	// Verify dangerous bits were stripped
 	mode := info.Mode().Perm()
 	if mode&0o7000 != 0 {
 		t.Fatalf("dangerous permission bits not stripped: got %o, want no setuid/setgid/sticky", mode)

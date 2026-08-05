@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/perm"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -552,12 +553,9 @@ func TestDeleteTask_WorktreePreserved(t *testing.T) {
 func TestDeleteTask_CommitFailureDoesNotDeleteWorktreeOrBranch(t *testing.T) {
 	t.Parallel()
 
-	// This test relies on os.Chmod(dir, 0555) to make the state directory
-	// non-writable and force a commit failure. On Windows, chmod does not map
-	// POSIX owner-write bits to NTFS ACLs in a way that blocks Go file writes,
-	// so the failure cannot be reliably reproduced. The graceful-write-failure
-	// path is covered on Unix.
-	skipOnWindowsChmodUnsupported(t)
+	// This test forces a commit failure by making the state directory
+	// non-writable, which perm.DenyWrites does with a chmod on POSIX and an
+	// explicit deny entry in the DACL on Windows.
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -582,14 +580,17 @@ func TestDeleteTask_CommitFailureDoesNotDeleteWorktreeOrBranch(t *testing.T) {
 	if err := os.WriteFile(pidPath, []byte("0"), 0644); err != nil {
 		t.Fatalf("Failed to pre-create pid file: %v", err)
 	}
-	if err := os.Chmod(lizaDir, 0555); err != nil {
+	restore, err := perm.DenyWrites(lizaDir)
+	if err != nil {
 		t.Fatalf("failed to make project runtime directory read-only: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = os.Chmod(lizaDir, 0755)
+		if err := restore(); err != nil {
+			t.Errorf("restore write access: %v", err)
+		}
 	})
 
-	_, err := DeleteTask(tmpDir, "task-1", false, true, "test")
+	_, err = DeleteTask(tmpDir, "task-1", false, true, "test")
 	if err == nil {
 		t.Fatal("Expected DeleteTask to fail when state commit cannot write")
 	}
