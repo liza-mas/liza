@@ -3106,6 +3106,8 @@ func TestInitCommandWithConfig_PostWorktreeCmdOmittedWhenEmpty(t *testing.T) {
 // --- InitPairingCommand tests ---
 
 func TestInitPairingCommand_Claude(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
+
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)
@@ -3227,6 +3229,8 @@ func TestInitPairingCommand_BashPolicyDisabledSkipsLookup(t *testing.T) {
 }
 
 func TestInitPairingCommand_CursorSkipsBashPolicyWhenGateDisabled(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
+
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)
@@ -4165,6 +4169,8 @@ func TestInitPairingCommand_IndexHookFailuresReportDiagnostics(t *testing.T) {
 }
 
 func TestInitPairingCommand_Idempotent(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
+
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)

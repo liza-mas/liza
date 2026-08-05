@@ -46,6 +46,31 @@ func ResolveBashForScripts(t *testing.T) string {
 	return ""
 }
 
+// RequireSymlinkCapability skips the test unless this process can actually
+// create a symlink, verified by creating one rather than inferred from GOOS.
+//
+// Creating symlinks on Windows requires either Developer Mode or an elevated
+// shell; whether the current session has that privilege is a property of the
+// session, not of the platform. Probing it means the test runs for real
+// wherever the privilege is held — notably on Windows CI — and is skipped with
+// an actionable message only where it genuinely cannot run.
+func RequireSymlinkCapability(t *testing.T) {
+	t.Helper()
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "probe-target")
+	if err := os.WriteFile(target, []byte("probe"), 0o644); err != nil {
+		t.Fatalf("symlink capability probe: write target: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "probe-link")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("cannot create symlinks in this session: %v\n"+
+				"  Enable Developer Mode (Settings > System > For developers) or run the shell as Administrator.", err)
+		}
+		t.Skipf("cannot create symlinks in this session: %v", err)
+	}
+}
+
 // WaitForAsyncSetup pauses briefly to let goroutines initialize (e.g.
 // establish an fsnotify watcher) before the test mutates shared state.
 // Centralised here so the sleep-budget ratchet in testguard counts it once.

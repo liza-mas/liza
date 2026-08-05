@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestDetectContractConflicts_PreferredGlobalPathAvailable(t *testing.T) {
@@ -69,6 +70,8 @@ func TestDetectContractConflicts_RepoOnlyProvider(t *testing.T) {
 }
 
 func TestDetectContractConflicts_ManagedRepoSymlink(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
+
 	projectRoot := t.TempDir()
 	homeDir := t.TempDir()
 	contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
