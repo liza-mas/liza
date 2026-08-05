@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/testhelpers"
 	"github.com/spf13/cobra"
 )
 
@@ -185,8 +186,7 @@ fi
 echo "CODEX $*" >> "$LIZA_FAKE_WEZTERM_LOG"
 sleep 4
 `)
-	shellPath := filepath.Join(binDir, "test-shell")
-	writeExecutable(t, shellPath, `#!/bin/sh
+	shellPath := writeExecutable(t, filepath.Join(binDir, "test-shell"), `#!/bin/sh
 if [ "$1" = "-lc" ]; then
   shift
   exec /bin/sh -c "$1"
@@ -914,11 +914,11 @@ func TestCmuxPromptStillPending(t *testing.T) {
 	}
 }
 
-func writeExecutable(t *testing.T, path, content string) {
+// writeExecutable installs a stub command and returns the path that can be
+// executed, which carries a .cmd extension on Windows.
+func writeExecutable(t *testing.T, path, content string) string {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
-		t.Fatalf("write executable %s: %v", path, err)
-	}
+	return testhelpers.WriteShellStub(t, path, content)
 }
 
 func waitForFileContent(t *testing.T, path string, predicate func(string) bool) string {

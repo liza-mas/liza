@@ -13,6 +13,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestACPXAgentRunUsesPersistentCodexSession(t *testing.T) {
@@ -844,9 +845,7 @@ case "$*" in
     ;;
 esac
 `
-	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake acpx: %v", err)
-	}
+	testhelpers.WriteShellStub(t, path, script)
 }
 
 func writeFakeExecutable(t *testing.T, path, logPath string) {
@@ -856,9 +855,7 @@ printf 'ARGS:%s\n' "$*" >> "` + logPath + `"
 printf 'ENV_LIZA_AGENT_ID:%s\n' "$LIZA_AGENT_ID" >> "` + logPath + `"
 exit 0
 `
-	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake executable: %v", err)
-	}
+	testhelpers.WriteShellStub(t, path, script)
 }
 
 func readTextForTest(t *testing.T, path string) string {

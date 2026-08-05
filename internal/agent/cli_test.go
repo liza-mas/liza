@@ -1,13 +1,13 @@
 package agent
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestValidCLIsIncludesCodexACP(t *testing.T) {
@@ -97,14 +97,8 @@ func TestCheckCLIPrerequisitesRequiresACPXForCodexACP(t *testing.T) {
 
 func TestCheckCLIPrerequisitesAcceptsACPXOnPath(t *testing.T) {
 	binDir := t.TempDir()
-	acpxPath := filepath.Join(binDir, "acpx")
-	if err := os.WriteFile(acpxPath, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	cursorPath := filepath.Join(binDir, "cursor-agent")
-	if err := os.WriteFile(cursorPath, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "acpx"), "#!/bin/sh\nexit 0\n")
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "cursor-agent"), "#!/bin/sh\nexit 0\n")
 	t.Setenv("PATH", binDir)
 
 	if err := CheckCLIPrerequisites("codex-acp"); err != nil {
