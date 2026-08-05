@@ -1635,9 +1635,12 @@ func expectedCodexRequiredSnippets() []string {
 }
 
 func expectedCodexWritableRootSnippets(projectRoot string) []string {
+	// The renderer emits TOML strings, so quote the way it does rather than
+	// wrapping the raw path: on Windows every separator in a real path is a
+	// backslash and comes out escaped.
 	snippets := []string{
-		`"` + projectRoot + `"`,
-		`"` + filepath.Join(projectRoot, ".git") + `"`,
+		tomlStringValue(projectRoot),
+		tomlStringValue(filepath.Join(projectRoot, ".git")),
 	}
 	if runtime.GOOS != "windows" {
 		snippets = append(snippets, `"/tmp"`)
@@ -1653,8 +1656,12 @@ func expectedCodexConfigSnippets(projectRoot string, extra ...string) []string {
 
 func TestRenderCodexProjectConfig_RendersWritableRootsExactly(t *testing.T) {
 	fakeHome := setCodexHomeForTest(t)
+	// Synthetic roots that never touch the filesystem: this test pins the exact
+	// rendered layout, so the fixture paths are written out rather than joined,
+	// which would turn them into backslash paths on Windows and defeat the
+	// literal comparison below. The home-derived roots still exercise escaping.
 	projectRoot := "/tmp/project"
-	gitDir := filepath.Join(projectRoot, ".git")
+	gitDir := projectRoot + "/.git"
 	writeRoots := codexSupportWritableRoots()
 
 	got := renderCodexProjectConfig(append([]string{projectRoot, gitDir}, append(writeRoots, "/tmp")...))
@@ -1689,8 +1696,9 @@ writable_roots = [
 
 func TestRenderCodexProjectConfig_RemovesTmpPlaceholderWhenAbsent(t *testing.T) {
 	setCodexHomeForTest(t)
+	// Synthetic roots, written out rather than joined — see the sibling test.
 	projectRoot := "/tmp/project"
-	gitDir := filepath.Join(projectRoot, ".git")
+	gitDir := projectRoot + "/.git"
 	writeRoots := codexSupportWritableRoots()
 
 	got := renderCodexProjectConfig(append([]string{projectRoot, gitDir}, writeRoots...))
