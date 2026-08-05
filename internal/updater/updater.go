@@ -2,6 +2,7 @@ package updater
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"compress/gzip"
@@ -411,6 +412,9 @@ func installReleaseBinaryWithChecksumBase(ctx context.Context, version, target s
 		return fmt.Errorf("verify checksum: %w", err)
 	}
 
+	if runtime.GOOS == "windows" {
+		return installBinaryFromZip(archiveData, target)
+	}
 	return installBinaryFromTarGz(bytes.NewReader(archiveData), target)
 }
 
@@ -435,7 +439,12 @@ func releaseArchiveName(versionBare, goos, goarch string) string {
 	if prefix == "" {
 		prefix = brand.RuntimeValues().ArchivePrefix
 	}
-	return fmt.Sprintf("%s-%s-%s-%s.tar.gz", prefix, versionBare, goos, goarch)
+	// Windows releases ship as zip, per the format override in .goreleaser.yaml.
+	extension := "tar.gz"
+	if goos == "windows" {
+		extension = "zip"
+	}
+	return fmt.Sprintf("%s-%s-%s-%s.%s", prefix, versionBare, goos, goarch, extension)
 }
 
 func checksumURL(version string) string {
@@ -546,8 +555,48 @@ func installBinaryFromTarGz(r io.Reader, target string) error {
 	}
 }
 
+// installBinaryFromZip extracts the branded binary from a Windows release zip.
+//
+// The whole archive is held in memory rather than streamed: the zip central
+// directory lives at the end of the file, so archive/zip needs an io.ReaderAt,
+// and the caller has already buffered the download to verify its checksum.
+func installBinaryFromZip(data []byte, target string) error {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return fmt.Errorf("read release zip: %w", err)
+	}
+
+	for _, entry := range zr.File {
+		if filepath.Base(entry.Name) != expectedArchiveBinaryName() {
+			continue
+		}
+		if strings.Contains(entry.Name, "..") {
+			return fmt.Errorf("reject path traversal in zip entry: %s", entry.Name)
+		}
+		if !entry.Mode().IsRegular() {
+			return fmt.Errorf("reject non-regular zip entry %s", entry.Name)
+		}
+
+		rc, err := entry.Open()
+		if err != nil {
+			return fmt.Errorf("open zip entry %s: %w", entry.Name, err)
+		}
+		defer rc.Close()
+
+		// Windows carries no permission bits worth preserving; replaceBinary
+		// defaults the mode.
+		return replaceBinary(target, rc, 0)
+	}
+
+	return fmt.Errorf("release archive does not contain %s binary", expectedArchiveBinaryName())
+}
+
 func expectedArchiveBinaryName() string {
-	return brand.RuntimeValues().BinaryName
+	name := brand.RuntimeValues().BinaryName
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
 func replaceBinary(target string, r io.Reader, mode os.FileMode) error {
@@ -577,10 +626,41 @@ func replaceBinary(target string, r io.Reader, mode os.FileMode) error {
 	if err := os.Chmod(tmpPath, mode|0o111); err != nil {
 		return fmt.Errorf("chmod temporary binary: %w", err)
 	}
-	if err := os.Rename(tmpPath, target); err != nil {
-		return fmt.Errorf("replace %s: %w", target, err)
+	if err := renameOverBinary(tmpPath, target); err != nil {
+		return err
 	}
 	cleanup = false
+	return nil
+}
+
+// renameOverBinary moves the staged binary onto target.
+//
+// On Windows an executable that is currently running cannot be overwritten or
+// deleted, and `liza update` is itself running from target. It can, however, be
+// renamed: the directory entry moves while the open image keeps pointing at the
+// same file. So displace the running binary first, then move the new one into
+// place, and try to sweep the leftover — which fails while the old process
+// lives, hence the best-effort removal at the next update.
+func renameOverBinary(stagedPath, target string) error {
+	if err := os.Rename(stagedPath, target); err == nil {
+		return nil
+	} else if runtime.GOOS != "windows" {
+		return fmt.Errorf("replace %s: %w", target, err)
+	}
+
+	displaced := target + ".old"
+	_ = os.Remove(displaced)
+	if err := os.Rename(target, displaced); err != nil {
+		return fmt.Errorf("displace running binary %s: %w", target, err)
+	}
+	if err := os.Rename(stagedPath, target); err != nil {
+		// Put the previous binary back rather than leaving nothing installed.
+		if restoreErr := os.Rename(displaced, target); restoreErr != nil {
+			return fmt.Errorf("replace %s: %w (and restoring %s failed: %v)", target, err, displaced, restoreErr)
+		}
+		return fmt.Errorf("replace %s: %w", target, err)
+	}
+	_ = os.Remove(displaced)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package updater
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -850,7 +851,7 @@ func TestInstallBinaryFromTarGzReplacesTarget(t *testing.T) {
 	tw := tar.NewWriter(gz)
 	body := []byte("#!/bin/sh\necho new\n")
 	if err := tw.WriteHeader(&tar.Header{
-		Name: brand.BinaryName,
+		Name: expectedArchiveBinaryName(),
 		Mode: 0o755,
 		Size: int64(len(body)),
 	}); err != nil {
@@ -892,7 +893,7 @@ func TestInstallBinaryFromTarGzUsesBrandedBinaryName(t *testing.T) {
 	tw := tar.NewWriter(gz)
 	body := []byte("#!/bin/sh\necho acme\n")
 	if err := tw.WriteHeader(&tar.Header{
-		Name: "acme-agent",
+		Name: expectedArchiveBinaryName(),
 		Mode: 0o755,
 		Size: int64(len(body)),
 	}); err != nil {
@@ -1041,7 +1042,7 @@ func TestInstallReleaseBinaryWithChecksum(t *testing.T) {
 	tw := tar.NewWriter(gz)
 	body := []byte("#!/bin/sh\necho new\n")
 	if err := tw.WriteHeader(&tar.Header{
-		Name: brand.BinaryName,
+		Name: expectedArchiveBinaryName(),
 		Mode: 0o755,
 		Size: int64(len(body)),
 	}); err != nil {
@@ -1058,10 +1059,15 @@ func TestInstallReleaseBinaryWithChecksum(t *testing.T) {
 	}
 
 	archiveData := archive.Bytes()
+	if runtime.GOOS == "windows" {
+		// Windows releases ship as zip, and installReleaseBinary picks the
+		// reader from the platform — so serve what the platform will ask for.
+		archiveData = buildZipArchive(t, map[string][]byte{expectedArchiveBinaryName(): body})
+	}
 	hash := sha256.Sum256(archiveData)
 	checksum := hex.EncodeToString(hash[:])
 
-	archiveName := fmt.Sprintf("liza-1.0.0-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	archiveName := releaseArchiveName("1.0.0", runtime.GOOS, runtime.GOARCH)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1.0.0/"+archiveName {
 			w.WriteHeader(http.StatusOK)
@@ -1078,7 +1084,7 @@ func TestInstallReleaseBinaryWithChecksum(t *testing.T) {
 	defer server.Close()
 
 	dir := t.TempDir()
-	target := filepath.Join(dir, brand.BinaryName)
+	target := filepath.Join(dir, expectedArchiveBinaryName())
 	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1103,7 +1109,7 @@ func TestInstallReleaseBinaryChecksumMismatch(t *testing.T) {
 	tw := tar.NewWriter(gz)
 	body := []byte("#!/bin/sh\necho new\n")
 	if err := tw.WriteHeader(&tar.Header{
-		Name: brand.BinaryName,
+		Name: expectedArchiveBinaryName(),
 		Mode: 0o755,
 		Size: int64(len(body)),
 	}); err != nil {
@@ -1119,7 +1125,7 @@ func TestInstallReleaseBinaryChecksumMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	archiveName := fmt.Sprintf("liza-1.0.0-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	archiveName := releaseArchiveName("1.0.0", runtime.GOOS, runtime.GOARCH)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1.0.0/"+archiveName {
 			w.WriteHeader(http.StatusOK)
@@ -1150,7 +1156,7 @@ func TestInstallReleaseBinaryMissingChecksum(t *testing.T) {
 	tw := tar.NewWriter(gz)
 	body := []byte("#!/bin/sh\necho new\n")
 	if err := tw.WriteHeader(&tar.Header{
-		Name: brand.BinaryName,
+		Name: expectedArchiveBinaryName(),
 		Mode: 0o755,
 		Size: int64(len(body)),
 	}); err != nil {
@@ -1166,7 +1172,7 @@ func TestInstallReleaseBinaryMissingChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	archiveName := fmt.Sprintf("liza-1.0.0-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	archiveName := releaseArchiveName("1.0.0", runtime.GOOS, runtime.GOARCH)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1.0.0/"+archiveName {
 			w.WriteHeader(http.StatusOK)
@@ -1196,7 +1202,7 @@ func TestInstallBinaryFromTarGzRejectsSymlink(t *testing.T) {
 	gz := gzip.NewWriter(&archive)
 	tw := tar.NewWriter(gz)
 	if err := tw.WriteHeader(&tar.Header{
-		Name:     brand.BinaryName,
+		Name:     expectedArchiveBinaryName(),
 		Typeflag: tar.TypeSymlink,
 		Linkname: "/etc/passwd",
 	}); err != nil {
@@ -1222,7 +1228,7 @@ func TestInstallBinaryFromTarGzRejectsHardlink(t *testing.T) {
 	gz := gzip.NewWriter(&archive)
 	tw := tar.NewWriter(gz)
 	if err := tw.WriteHeader(&tar.Header{
-		Name:     brand.BinaryName,
+		Name:     expectedArchiveBinaryName(),
 		Typeflag: tar.TypeLink,
 		Linkname: "/bin/sh",
 	}); err != nil {
@@ -1280,7 +1286,7 @@ func TestInstallBinaryFromTarGzStripsDangerousPermissions(t *testing.T) {
 	body := []byte("#!/bin/sh\necho new\n")
 	// Set setuid, setgid, and sticky bits
 	if err := tw.WriteHeader(&tar.Header{
-		Name: brand.BinaryName,
+		Name: expectedArchiveBinaryName(),
 		Mode: 0o755 | 0o7000, // 0o755 + setuid(0o4000) + setgid(0o2000) + sticky(0o1000)
 		Size: int64(len(body)),
 	}); err != nil {
@@ -1983,4 +1989,72 @@ func TestDisableUpdateChecksPersistsGlobalPreference(t *testing.T) {
 	if !UpdateChecksDisabled() {
 		t.Fatal("expected persisted preference to disable update checks")
 	}
+}
+
+func TestReleaseArchiveNameUsesZipOnWindows(t *testing.T) {
+	if got := releaseArchiveName("1.2.3", "windows", "amd64"); !strings.HasSuffix(got, "-windows-amd64.zip") {
+		t.Fatalf("releaseArchiveName(windows) = %q, want a .zip name", got)
+	}
+	if got := releaseArchiveName("1.2.3", "linux", "amd64"); !strings.HasSuffix(got, "-linux-amd64.tar.gz") {
+		t.Fatalf("releaseArchiveName(linux) = %q, want a .tar.gz name", got)
+	}
+}
+
+func TestInstallBinaryFromZipReplacesTarget(t *testing.T) {
+	body := []byte("new binary payload")
+	archive := buildZipArchive(t, map[string][]byte{
+		"README.md":                 []byte("not the binary"),
+		expectedArchiveBinaryName(): body,
+	})
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, expectedArchiveBinaryName())
+	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := installBinaryFromZip(archive, target); err != nil {
+		t.Fatalf("installBinaryFromZip returned error: %v", err)
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, body) {
+		t.Fatalf("installed binary = %q, want %q", got, body)
+	}
+}
+
+func TestInstallBinaryFromZipRejectsArchiveWithoutBinary(t *testing.T) {
+	archive := buildZipArchive(t, map[string][]byte{"README.md": []byte("no binary here")})
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, expectedArchiveBinaryName())
+
+	if err := installBinaryFromZip(archive, target); err == nil {
+		t.Fatal("installBinaryFromZip should reject an archive without the branded binary")
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("no binary should have been installed, stat err = %v", err)
+	}
+}
+
+func buildZipArchive(t *testing.T, entries map[string][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range entries {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("create zip entry %s: %v", name, err)
+		}
+		if _, err := w.Write(content); err != nil {
+			t.Fatalf("write zip entry %s: %v", name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	return buf.Bytes()
 }
