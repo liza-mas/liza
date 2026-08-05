@@ -23,6 +23,15 @@ const ManagedIndexScriptMarker = "# PAIRING-INDEX-SCRIPT: managed"
 
 const legacyManagedIndexScriptMarker = "# LIZA-PAIRING-INDEX-SCRIPT: managed"
 
+// hookNameEnvVar carries the git hook name from the wrapper to the dispatcher.
+//
+// When the hook is a symlink to the dispatcher, the dispatcher reads the name
+// from $0. The wrapper installed where symlinks are unavailable execs the
+// dispatcher by its own name, so $0 says "liza-index-hook.sh" and the
+// post-checkout file-checkout short-circuit would never fire. The wrapper
+// therefore states the name explicitly.
+const hookNameEnvVar = "PAIRING_INDEX_HOOK_NAME"
+
 const stacklitArtifactName = "stacklit.json"
 const stacklitInsightsArtifactName = "stacklit-insights.json"
 const stacklitArchitectureArtifactName = "stacklit-architecture.json"
@@ -938,11 +947,26 @@ func installManagedHook(hookPath, hook string) (HookAction, error) {
 	if !managed {
 		return "", fmt.Errorf("%s at %s already exists and is not managed by %s", hook, hookPath, brand.NameTitle)
 	}
-	if err := os.Remove(hookPath); err != nil {
-		return "", fmt.Errorf("replace %s hook wrapper: %w", hook, err)
+
+	// Build the symlink beside the hook and move it into place, rather than
+	// removing the hook first. os.Symlink cannot overwrite an existing file, but
+	// removing before knowing whether the link can be created destroys a working
+	// wrapper wherever symlinks are unavailable — Windows without Developer Mode
+	// or an elevated shell, and filesystems that do not support them. The
+	// wrapper fallback then sees no file, reinstalls from scratch and reports
+	// "installed" on every run instead of "verified" or "updated".
+	staged := hookPath + ".tmp"
+	if err := os.Remove(staged); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("clear staged %s hook: %w", hook, err)
 	}
-	if err := os.Symlink(hookDispatcherName(), hookPath); err != nil {
+	if err := os.Symlink(hookDispatcherName(), staged); err != nil {
 		return installManagedHookWrapper(hookPath, hook)
+	}
+	if err := os.Rename(staged, hookPath); err != nil {
+		if removeErr := os.Remove(staged); removeErr != nil && !os.IsNotExist(removeErr) {
+			return "", fmt.Errorf("replace %s hook: %w (and clearing %s failed: %v)", hook, err, staged, removeErr)
+		}
+		return "", fmt.Errorf("replace %s hook: %w", hook, err)
 	}
 	return HookActionUpdated, nil
 }
@@ -981,10 +1005,10 @@ func managedHookContent(hook string) string {
 hook_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 0
 dispatcher="$hook_dir/%s"
 if [ -x "$dispatcher" ]; then
-	"$dispatcher" "$@"
+	%s=%s "$dispatcher" "$@"
 fi
 exit 0
-		`, ManagedHookMarker, hook, hookDispatcherName())
+		`, ManagedHookMarker, hook, hookDispatcherName(), hookNameEnvVar, shellQuote(hook))
 }
 
 func managedHookDispatcherContent() string {
@@ -997,7 +1021,7 @@ if [ -z "$repo_root" ]; then
 	exit 0
 fi
 
-hook_name="$(basename "$0")"
+hook_name="${%s:-$(basename "$0")}"
 if [ "$hook_name" = "post-checkout" ] && [ "${3:-}" = "0" ]; then
 	exit 0
 fi
@@ -1016,7 +1040,7 @@ fi
 
 cd "$repo_root"
 "$script"
-`, ManagedHookMarker, scriptName())
+`, ManagedHookMarker, hookNameEnvVar, scriptName())
 }
 
 func looksLikeLegacyHookDispatcher(content string) bool {
