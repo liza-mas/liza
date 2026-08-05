@@ -2150,15 +2150,12 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 
 	// Verify settings.json was created
 	settingsPath := filepath.Join(claudeDir, "settings.json")
-	info, err := os.Stat(settingsPath)
-	if os.IsNotExist(err) {
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
 		t.Fatalf("settings.json not created")
 	}
 
 	// Verify file permissions
-	if info.Mode().Perm() != 0644 {
-		t.Errorf("settings.json has wrong permissions: got %o, want 0644", info.Mode().Perm())
-	}
+	testhelpers.AssertRegularFileMode(t, settingsPath, 0644)
 
 	// Read and parse JSON
 	content, err := os.ReadFile(settingsPath)
@@ -2196,11 +2193,10 @@ func TestInitCommand_WritesClaudeSettings(t *testing.T) {
 
 	// Verify .claude/hooks/enforce-init.sh was deployed
 	hookPath := filepath.Join(claudeDir, "hooks", "enforce-init.sh")
-	hookInfo, hookErr := os.Stat(hookPath)
-	if os.IsNotExist(hookErr) {
+	if _, hookErr := os.Stat(hookPath); os.IsNotExist(hookErr) {
 		t.Error(".claude/hooks/enforce-init.sh not created during workspace init")
-	} else if hookErr == nil && hookInfo.Mode()&0111 == 0 {
-		t.Errorf("enforce-init.sh should be executable, got %o", hookInfo.Mode())
+	} else if hookErr == nil {
+		testhelpers.AssertExecutableScript(t, hookPath)
 	}
 }
 
@@ -3144,11 +3140,10 @@ func TestInitPairingCommand_Claude(t *testing.T) {
 
 	// .claude/hooks/enforce-init.sh should be deployed
 	hookPath := filepath.Join(gitDir, ".claude", "hooks", "enforce-init.sh")
-	hookInfo, err := os.Stat(hookPath)
-	if os.IsNotExist(err) {
+	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
 		t.Error(".claude/hooks/enforce-init.sh should be created for --claude pairing")
-	} else if err == nil && hookInfo.Mode()&0111 == 0 {
-		t.Errorf("enforce-init.sh should be executable, got %o", hookInfo.Mode())
+	} else if err == nil {
+		testhelpers.AssertExecutableScript(t, hookPath)
 	}
 
 	// AGENTS.md and GEMINI.md should NOT exist (only --claude)
@@ -5435,13 +5430,10 @@ func verifyClaudeArtifacts(t *testing.T, projectRoot string) {
 	}
 
 	hookPath := filepath.Join(projectRoot, ".claude", "hooks", "enforce-init.sh")
-	hookInfo, err := os.Stat(hookPath)
-	if err != nil {
+	if _, err := os.Stat(hookPath); err != nil {
 		t.Fatalf("Claude enforce-init.sh not created: %v", err)
 	}
-	if hookInfo.Mode()&0111 == 0 {
-		t.Errorf("Claude enforce-init.sh should be executable, got %o", hookInfo.Mode())
-	}
+	testhelpers.AssertExecutableScript(t, hookPath)
 }
 
 func verifyCodexHooks(t *testing.T, projectRoot string) {
@@ -5472,12 +5464,10 @@ func verifyCodexHooks(t *testing.T, projectRoot string) {
 	}
 
 	for _, name := range []string{"enforce-init.sh", "git-guard.sh", "worktree-path-guard.sh"} {
-		info, err := os.Stat(filepath.Join(projectRoot, ".codex", "hooks", name))
-		if err != nil {
+		hookPath := filepath.Join(projectRoot, ".codex", "hooks", name)
+		if _, err := os.Stat(hookPath); err != nil {
 			t.Fatalf("Codex hook %s not created: %v", name, err)
 		}
-		if info.Mode()&0111 == 0 {
-			t.Errorf("Codex hook %s should be executable, got %o", name, info.Mode())
-		}
+		testhelpers.AssertExecutableScript(t, hookPath)
 	}
 }

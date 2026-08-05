@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -455,9 +456,7 @@ func TestWriteGlobalFiles(t *testing.T) {
 		}
 
 		// Verify file permissions
-		if info.Mode().Perm() != 0644 {
-			t.Errorf("File %s has wrong permissions: got %o, want 0644", file, info.Mode().Perm())
-		}
+		assertRegularFileMode(t, file, 0644)
 	}
 
 	// Verify contracts are flat in targetDir (not in a contracts/ subdir)
@@ -1008,15 +1007,12 @@ func TestWriteClaudeSettings_NewFile(t *testing.T) {
 
 	// Verify settings.json was created
 	settingsPath := filepath.Join(claudeDir, "settings.json")
-	info, err := os.Stat(settingsPath)
-	if os.IsNotExist(err) {
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
 		t.Fatalf("settings.json was not created")
 	}
 
 	// Verify file permissions
-	if info.Mode().Perm() != 0644 {
-		t.Errorf("File has wrong permissions: got %o, want 0644", info.Mode().Perm())
-	}
+	assertRegularFileMode(t, settingsPath, 0644)
 
 	// Read and parse JSON
 	content, err := os.ReadFile(settingsPath)
@@ -2108,15 +2104,12 @@ func TestWriteHooks(t *testing.T) {
 		"worktree-path-guard.sh": renderEmbeddedAsset(worktreePathGuardHookContent),
 	} {
 		hookPath := filepath.Join(tmpDir, ".claude", "hooks", name)
-		info, err := os.Stat(hookPath)
-		if err != nil {
+		if _, err := os.Stat(hookPath); err != nil {
 			t.Fatalf("hook file %s not found: %v", name, err)
 		}
 
 		// Verify executable permission
-		if info.Mode()&0111 == 0 {
-			t.Errorf("hook file %s is not executable: %v", name, info.Mode())
-		}
+		assertExecutableScript(t, hookPath)
 
 		// Verify content matches embedded source
 		content, err := os.ReadFile(hookPath)
@@ -2725,17 +2718,60 @@ func TestOpenCodeExecToolForceKillsTimedOutCommands(t *testing.T) {
 	}
 }
 
+// assertExecutableScript and assertRegularFileMode mirror the testhelpers
+// helpers of the same names. They are duplicated here because
+// internal/testhelpers imports internal/embedded (testhelpers/pipeline.go), and
+// these tests are in package embedded, so importing testhelpers back would
+// create an import cycle — the same reason resolveBashForScripts is duplicated
+// in enforce_init_hook_test.go.
+func assertExecutableScript(t *testing.T, path string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command(resolveBashForScripts(t), "-n", filepath.ToSlash(path)).CombinedOutput()
+		if err != nil {
+			t.Errorf("%s is not a runnable script: %v\n%s", path, err, out)
+		}
+		return
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Errorf("stat %s: %v", path, err)
+		return
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Errorf("%s is not executable: mode=%v", path, info.Mode())
+	}
+}
+
+func assertRegularFileMode(t *testing.T, path string, unixPerm os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Errorf("stat %s: %v", path, err)
+		return
+	}
+	if runtime.GOOS == "windows" {
+		if info.Mode().Perm()&0o200 == 0 {
+			t.Errorf("%s is read-only: mode=%v", path, info.Mode().Perm())
+		}
+		return
+	}
+	if info.Mode().Perm() != unixPerm {
+		t.Errorf("%s has wrong permissions: got %o, want %o", path, info.Mode().Perm(), unixPerm)
+	}
+}
+
 func assertHookScripts(t *testing.T, hooksDir string) {
 	t.Helper()
 	for name, wantContent := range hookScriptContents() {
 		hookPath := filepath.Join(hooksDir, name)
-		info, err := os.Stat(hookPath)
-		if err != nil {
+		if _, err := os.Stat(hookPath); err != nil {
 			t.Fatalf("hook file %s not found: %v", name, err)
 		}
-		if info.Mode()&0111 == 0 {
-			t.Errorf("hook file %s is not executable: %v", name, info.Mode())
-		}
+		assertExecutableScript(t, hookPath)
 		content, err := os.ReadFile(hookPath)
 		if err != nil {
 			t.Fatalf("failed to read hook %s: %v", name, err)
