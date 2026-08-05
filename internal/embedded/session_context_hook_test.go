@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -46,9 +45,9 @@ func TestSessionContextHook_EmitsSessionStartContextForIndexedRepo(t *testing.T)
 		"docs/USAGE.md",
 		"~/" + paths.GlobalDirName() + "/COLLABORATION_CONTINUITY.md",
 		brand.NameTitle + " repository indexes detected",
-		"stacklit derive --ai-summary -i '" + filepath.Join(projectRoot, "stacklit.json") + "'",
-		"Go index: " + filepath.Join(projectRoot, "go.scip"),
-		"Python index: " + filepath.Join(projectRoot, "python.scip"),
+		"stacklit derive --ai-summary -i '" + emitted(filepath.Join(projectRoot, "stacklit.json")) + "'",
+		"Go index: " + emitted(filepath.Join(projectRoot, "go.scip")),
+		"Python index: " + emitted(filepath.Join(projectRoot, "python.scip")),
 		"scip-search symbols --index <index-path> --name Foo --name Bar",
 		"scip-search packages --index <index-path> --prefix com.example",
 		"scip-search references --index <index-path> --name Handler --one-line",
@@ -76,8 +75,8 @@ func TestSessionContextHook_EmitsSessionStartContextForIndexedRepo(t *testing.T)
 		}
 	}
 	for _, unwanted := range []string{
-		"scip-search symbols --index '" + filepath.Join(projectRoot, "go.scip") + "'",
-		"scip-search symbols --index '" + filepath.Join(projectRoot, "python.scip") + "'",
+		"scip-search symbols --index '" + emitted(filepath.Join(projectRoot, "go.scip")) + "'",
+		"scip-search symbols --index '" + emitted(filepath.Join(projectRoot, "python.scip")) + "'",
 	} {
 		if strings.Contains(context, unwanted) {
 			t.Fatalf("session context should not repeat path-specific SCIP commands, found %q in:\n%s", unwanted, context)
@@ -97,9 +96,6 @@ func TestSessionContextHook_InstructsAgentsToRunStacklitSummaryWhenAvailable(t *
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
-	}
 
 	hookPath := writeSessionContextHook(t)
 	projectRoot := t.TempDir()
@@ -108,7 +104,7 @@ func TestSessionContextHook_InstructsAgentsToRunStacklitSummaryWhenAvailable(t *
 
 	output := runSessionContextHook(t, hookPath, sessionStartPayload(t, projectRoot), nil, 0)
 	context := sessionStartAdditionalContext(t, output)
-	want := "Run `stacklit derive --ai-summary -i '" + filepath.Join(projectRoot, "stacklit.json") + "'` at the end of the session initialization."
+	want := "Run `stacklit derive --ai-summary -i '" + emitted(filepath.Join(projectRoot, "stacklit.json")) + "'` at the end of the session initialization."
 	if !strings.Contains(context, want) {
 		t.Fatalf("startup context should instruct agent to run stacklit summary, missing %q in:\n%s", want, context)
 	}
@@ -120,9 +116,6 @@ func TestSessionContextHook_InstructsAgentsToRunStacklitSummaryWhenAvailable(t *
 func TestSessionContextHook_StillEmitsContextWhenStacklitFails(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
 	}
 
 	hookPath := writeSessionContextHook(t)
@@ -269,8 +262,8 @@ func TestSessionContextHook_EmitsStacklitBlockOnlyWhenStacklitArtifactExists(t *
 	context := sessionStartAdditionalContext(t, output)
 	for _, want := range []string{
 		brand.NameTitle + " repository indexes detected",
-		"Stacklit index: " + filepath.Join(projectRoot, "stacklit.json"),
-		"stacklit derive --ai-summary -i '" + filepath.Join(projectRoot, "stacklit.json") + "'",
+		"Stacklit index: " + emitted(filepath.Join(projectRoot, "stacklit.json")),
+		"stacklit derive --ai-summary -i '" + emitted(filepath.Join(projectRoot, "stacklit.json")) + "'",
 	} {
 		if !strings.Contains(context, want) {
 			t.Fatalf("startup context missing %q, got:\n%s", want, context)
@@ -304,7 +297,7 @@ func TestSessionContextHook_EmitsScipBlockOnlyWhenScipArtifactExists(t *testing.
 	for _, want := range []string{
 		brand.NameTitle + " repository indexes detected",
 		"SCIP indexes:",
-		"Go index: " + filepath.Join(projectRoot, "go.scip"),
+		"Go index: " + emitted(filepath.Join(projectRoot, "go.scip")),
 		"scip-search symbols --index <index-path> --name Foo --name Bar",
 		"scip-search graph --index <index-path> --symbol '<exact-symbol>' --markdown",
 	} {
@@ -340,9 +333,9 @@ func TestSessionContextHook_EmitsFunctionalClustersWhenEnabledAndArtifactExists(
 	}, 0)
 	context := sessionStartAdditionalContext(t, output)
 	for _, want := range []string{
-		"Functional clusters artifact: " + clustersPath,
-		"functional-clusters list --clusters '" + clustersPath + "'",
-		"functional-clusters explain --clusters '" + clustersPath + "' '<exact-member-symbol>'",
+		"Functional clusters artifact: " + emitted(clustersPath),
+		"functional-clusters list --clusters '" + emitted(clustersPath) + "'",
+		"functional-clusters explain --clusters '" + emitted(clustersPath) + "' '<exact-member-symbol>'",
 		"Functional clusters are advisory and may be stale",
 	} {
 		if !strings.Contains(context, want) {
@@ -501,9 +494,6 @@ func TestSessionContextHook_EmitsSembleWhenEnabledSafeAndOfflineReady(t *testing
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
-	}
 
 	hookPath := writeSessionContextHook(t)
 	projectRoot := t.TempDir()
@@ -516,9 +506,9 @@ func TestSessionContextHook_EmitsSembleWhenEnabledSafeAndOfflineReady(t *testing
 	}, 0)
 	context := sessionStartAdditionalContext(t, output)
 	for _, want := range []string{
-		"Semble semantic search is available for this repo root: " + projectRoot,
-		"semble search \"where is review submission validated?\" '" + projectRoot + "'",
-		"semble search \"where is task superseding specified?\" '" + projectRoot + "' --content docs",
+		"Semble semantic search is available for this repo root: " + emitted(projectRoot),
+		"semble search \"where is review submission validated?\" '" + emitted(projectRoot) + "'",
+		"semble search \"where is task superseding specified?\" '" + emitted(projectRoot) + "' --content docs",
 		"Use --content with one of: code, docs, config, all; code is the default.",
 		"Semble returns candidate chunks, not proof",
 		"Do not use rg for broad-scope or common-word conceptual queries.",
@@ -535,9 +525,6 @@ func TestSessionContextHook_EmitsSembleWhenEnabledSafeAndOfflineReady(t *testing
 func TestSessionContextHook_EmptyBrandedSembleGateSuppressesLegacyAlias(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
 	}
 	restore := setSessionContextHookBrandEnvPrefix(t, "ACME_AGENT")
 	defer restore()
@@ -562,9 +549,6 @@ func TestSessionContextHook_OmitsSembleWithoutRootIgnore(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
-	}
 
 	hookPath := writeSessionContextHook(t)
 	projectRoot := t.TempDir()
@@ -583,9 +567,6 @@ func TestSessionContextHook_OmitsSembleWithoutRootIgnore(t *testing.T) {
 func TestSessionContextHook_OmitsSembleWithIncompleteRootIgnore(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
 	}
 
 	hookPath := writeSessionContextHook(t)
@@ -609,9 +590,6 @@ func TestSessionContextHook_OmitsSembleWhenOfflineValidationFails(t *testing.T) 
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
-	}
 
 	hookPath := writeSessionContextHook(t)
 	projectRoot := t.TempDir()
@@ -631,9 +609,6 @@ func TestSessionContextHook_OmitsSembleWhenOfflineValidationFails(t *testing.T) 
 func TestSessionContextHook_SuppressesSembleForLizaAgentSessions(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script test")
 	}
 
 	hookPath := writeSessionContextHook(t)
@@ -697,6 +672,15 @@ func writeLizaIndexHook(t *testing.T, projectRoot string) {
 	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte("#!/bin/sh\n"+brand.BinaryName+"-index\n"), 0755); err != nil {
 		t.Fatalf("write post-commit hook: %v", err)
 	}
+}
+
+// emitted renders a path the way the hook prints it.
+//
+// git reports forward-slashed paths even on Windows, and the hook canonicalises
+// the cwd it is handed so both sources agree. Expectations built from native
+// paths therefore have to be canonicalised too. On Unix this is the identity.
+func emitted(path string) string {
+	return filepath.ToSlash(path)
 }
 
 func sessionStartPayload(t *testing.T, cwd string) string {
