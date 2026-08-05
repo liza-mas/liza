@@ -49,3 +49,45 @@ jobs:
           fail_ci_if_error: false
           # Requires CODECOV_TOKEN secret — configure in repo settings
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test-windows:
+    name: Test (windows)
+    runs-on: windows-latest
+    # The ops package has a pending stdio-handle issue that can stall the suite;
+    # bound the job so a stall fails in minutes instead of hours.
+    timeout-minutes: 45
+    defaults:
+      run:
+        # Git Bash. The hooks liza deploys are POSIX shell, and the tests that
+        # exercise them resolve this same bash.
+        shell: bash
+    steps:
+      - name: Check out with LF endings
+        # Windows runners default to core.autocrlf=true. .gitattributes pins
+        # eol=lf, so a fresh checkout is already LF, but a stale global setting
+        # is exactly how CRLF gets into shell scripts, where it breaks the
+        # shebang. Pin it before anything is written to disk.
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The Makefile targets are not reused here. `make test` runs with -race,
+      # which needs cgo and a C toolchain on Windows, and `make lint` drives the
+      # Python pre-commit hooks — both are already covered by the Linux and
+      # macOS jobs. What Windows has to answer is narrower: does it build, does
+      # it vet, do the tests pass.
+      - name: Sync embedded artifacts
+        run: go run ./internal/brandrender/cmd/sync-embedded --repo-root .
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -timeout 15m ./...
+
+      - name: Build
+        run: go build -o liza.exe ./cmd/liza
