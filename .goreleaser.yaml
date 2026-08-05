@@ -17,6 +17,7 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
@@ -45,6 +46,12 @@ archives:
   - id: liza-archive
     formats:
       - tar.gz
+    # Windows ships as a zip: tar is not a given on a Windows host, and
+    # install.ps1 uses Expand-Archive, which reads zip only.
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
     name_template: >-
       {{- if .Env.BRAND_ARCHIVE_PREFIX }}{{ .Env.BRAND_ARCHIVE_PREFIX }}{{ else if .Env.BRAND_BINARY_NAME }}{{ .Env.BRAND_BINARY_NAME }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER }}{{ else }}liza{{ end }}-
       {{- .Version }}-
