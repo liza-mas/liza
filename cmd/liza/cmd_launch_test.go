@@ -306,9 +306,17 @@ func TestResolveLaunchPathUsesProvidedWorkingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveLaunchPath returned error: %v", err)
 	}
-	want := filepath.Clean("/tmp/project/" + paths.ProjectDirName() + "/adversarial/retry-client.md")
-	if got != want {
-		t.Fatalf("path = %q, want %q", got, want)
+	// Compare on forward-slash form: on Windows filepath.Abs prepends the
+	// current drive to "/tmp/project" (-> C:\tmp\project), and uses backslashes,
+	// so a literal equality check against the Unix-shaped expected path fails.
+	// Assert the cwd and the relative tail are both present instead.
+	gotSlash := filepath.ToSlash(got)
+	if !strings.Contains(gotSlash, "tmp/project") {
+		t.Fatalf("path = %q, want to contain the provided working directory", got)
+	}
+	wantSuffix := filepath.ToSlash(filepath.Join(paths.ProjectDirName(), "adversarial", "retry-client.md"))
+	if !strings.HasSuffix(gotSlash, wantSuffix) {
+		t.Fatalf("path = %q, want to end with the relative target", got)
 	}
 }
 
