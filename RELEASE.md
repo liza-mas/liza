@@ -43,6 +43,7 @@ make package
 This creates the following in the `dist/` directory:
 - Binaries for Linux (amd64, arm64)
 - Binaries for macOS (amd64, arm64)
+- Binaries for Windows (amd64, arm64), with a `.exe` suffix
 - SHA256 checksums file
 - Compressed archives (if using `make package`)
 
@@ -57,6 +58,11 @@ This creates the following in the `dist/` directory:
 tar -xzf dist/liza-v1.0.0-linux-amd64.tar.gz
 ./liza version
 ```
+
+Windows archives are zip rather than tar.gz, since tar is not a given on a
+Windows host and `install.ps1` extracts with `Expand-Archive`, which reads zip
+only. The updater picks the format from the platform, so no release step has to
+choose between them.
 
 ### 3. Create GitHub Release
 
@@ -195,7 +201,8 @@ Cross-compilation issues are rare with Go, but if you encounter one:
 | Linux | arm64 | Yes |
 | macOS | amd64 (Intel) | Yes |
 | macOS | arm64 (Apple Silicon) | Yes |
-| Windows | amd64 | No - use WSL2 |
+| Windows | amd64 | Yes |
+| Windows | arm64 | Yes |
 
 ### Go Versions
 
