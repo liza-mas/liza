@@ -9,7 +9,8 @@
 #   - One mode contract from the Mode Selection Gate
 #   - Pairing only: existing REPOSITORY.md/docs/USAGE.md, ~/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md
 #
-# No external dependencies (no jq, no sed -i). Portable across Linux and macOS.
+# No external dependencies (no jq, no sed -i). Portable across Linux, macOS,
+# and Windows under Git Bash.
 
 input=$(cat)
 
@@ -75,10 +76,34 @@ json_array_vals() {
 /g;s/^\"//;s/\"$//;p;}"
 }
 
+is_windows_shell() {
+  case "${OSTYPE:-}" in
+    msys*|cygwin*|win32*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 tool_name=$(json_val tool_name)
 session_id=$(json_val session_id)
 cwd=$(json_val cwd)
 command=$(json_val command)
+
+# Canonicalise Windows path separators before any validation.
+#
+# On Windows the backslash is the path separator, but it is also a reserved
+# character that can never appear in a filename — so rewriting it to "/" is
+# lossless there. It is also what makes a native path comparable with
+# $project_dir, which git reports forward-slashed even on Windows.
+#
+# Never do this on Unix: a backslash IS a legal filename character there, so
+# normalising would make the guard validate a different path than the one the
+# command actually reads, and would blunt the metacharacter rejection in
+# is_safe_read_command_for_allowed_paths. The other metacharacters are
+# untouched here, so ";", "&", "|", "<", ">", "`" and "$(" remain rejected.
+if is_windows_shell; then
+  command="${command//\\//}"
+  cwd="${cwd//\\//}"
+fi
 
 project_dir="${CLAUDE_PROJECT_DIR:-}"
 if [[ -z "$project_dir" ]]; then
