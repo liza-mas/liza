@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func withTestBrandDirs(t *testing.T, globalDir, projectDir string) {
@@ -874,6 +875,8 @@ func TestSetupCommand_AgentIdempotent(t *testing.T) {
 }
 
 func TestSetupCommand_RemovesRetiredSkillAfterRename(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
+
 	lizaDir, homeDir := setupWithAgents(t, []string{"claude"})
 
 	retiredSkillDir := filepath.Join(lizaDir, "skills", "code-cleaning")

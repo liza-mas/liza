@@ -309,6 +309,8 @@ func TestHasExplicitInitFlags_YesDoesNotForceWorkspaceInit(t *testing.T) {
 }
 
 func TestHasExplicitInitFlags_SembleEnvDoesNotForceWorkspaceInit(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
+
 	resetRootCmdForTest(t)
 	defer resetRootCmdForTest(t)
 	t.Setenv(semble.EnvEnableSemble, "true")
