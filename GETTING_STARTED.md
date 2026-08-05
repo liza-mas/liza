@@ -5,7 +5,12 @@ contract files, activating a project, and choosing Pairing or Multi-Agent mode.
 
 ## Requirements
 
-- Unix-like environment. On Windows, use WSL2; native Windows is not supported.
+- Linux, macOS, or Windows.
+- On Windows: Git for Windows, with its `bash.exe` on PATH ahead of the WSL
+  launcher in `system32`. The hooks Liza deploys are POSIX shell and run through
+  bash; the WSL launcher cannot reach `C:/...` paths, so it is not a substitute.
+  Symlink creation also needs either Developer Mode or an elevated shell, see
+  [Troubleshooting](support-docs/TROUBLESHOOTING.md#symlink-creation-fails-on-windows).
 - Git 2.38+ for worktree support.
 - A supported coding agent CLI: Claude Code, Codex, OpenCode, Kimi, Mistral,
   or Gemini.
@@ -21,6 +26,12 @@ Quick install for the latest release on macOS/Linux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liza-mas/liza/main/install.sh | bash
+```
+
+On Windows, from PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/liza-mas/liza/main/install.ps1 | iex
 ```
 
 Install options:

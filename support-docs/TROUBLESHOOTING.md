@@ -393,6 +393,61 @@ Warning: failed to create CLAUDE.md symlink: symlink ... A required privilege is
 
 2. **Run elevated**: Open your terminal as Administrator, then re-run the command.
 
+### Hooks do nothing, or bash reports "No such file or directory" on Windows
+
+**Error:**
+```
+/c/Users/you/project/.claude/hooks/enforce-init.sh: No such file or directory
+```
+or a hook that silently never fires.
+
+**Cause:** `bash` on PATH is the WSL launcher at `C:\Windows\System32\bash.exe`,
+not Git for Windows. The WSL launcher cannot see `C:/...` paths — it expects
+`/mnt/c/...` — so every hook invoked by its native path fails.
+
+**Check:**
+```powershell
+(Get-Command bash).Source
+```
+
+**Fix:** Put Git for Windows ahead of `system32` on PATH. A user-level PATH entry
+cannot win, because the machine PATH is evaluated first, so the Git `bin`
+directory has to be prepended to the **machine** PATH (an elevated change):
+
+```powershell
+# Run as Administrator. Adjust the path to your Git installation.
+$git = "$env:LOCALAPPDATA\Programs\Git\bin"
+$machine = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
+[System.Environment]::SetEnvironmentVariable('PATH', "$git;$machine", 'Machine')
+```
+
+Open a new terminal afterwards, and confirm `bash --version` reports a Git
+version rather than a Linux distribution.
+
+### Hooks fail with `$'\r': command not found` on Windows
+
+**Cause:** the shell scripts were checked out with CRLF line endings. `bash` reads
+the carriage return as part of the command.
+
+The repository pins `eol=lf` in `.gitattributes`, so a fresh clone is unaffected.
+A clone made **before** that file existed keeps its CRLF working tree
+indefinitely: `git status` looks clean, because Git compares normalized content
+and hides the difference.
+
+**Check:** `git ls-files --eol | grep w/crlf` — anything listed is CRLF on disk.
+
+**Fix:** renormalize the working tree from the index.
+
+```bash
+git config core.autocrlf false
+git ls-files --eol | grep 'w/crlf' | cut -f2 > /tmp/crlf-files
+xargs -a /tmp/crlf-files -d '\n' rm -f
+git checkout -- .
+```
+
+The index is never modified, so the tree can be restored with `git checkout -- .`
+at any point. Commit any pending work first: this rewrites tracked files.
+
 ### Error: specs/vision.md required
 
 Create the vision spec first:
