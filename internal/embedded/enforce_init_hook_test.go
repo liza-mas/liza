@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -810,9 +811,40 @@ func bashPayload(t *testing.T, sessionID, cwd, command string) string {
 	return strings.TrimSpace(buf.String())
 }
 
+// resolveBashForScripts mirrors testhelpers.ResolveBashForScripts. It is
+// duplicated here because internal/testhelpers imports internal/embedded
+// (testhelpers/pipeline.go), and these tests are in package embedded, so
+// importing testhelpers back would create an import cycle.
+func resolveBashForScripts(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		if p, err := exec.LookPath("bash"); err == nil {
+			return p
+		}
+		t.Skip("bash not available")
+		return ""
+	}
+	for _, candidate := range []string{
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "Git", "bin", "bash.exe"),
+		filepath.Join(os.Getenv("ProgramFiles"), "Git", "bin", "bash.exe"),
+		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Git", "bin", "bash.exe"),
+	} {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	if p, err := exec.LookPath("bash"); err == nil {
+		return p
+	}
+	t.Skip("bash not available")
+	return ""
+}
+
 func runHook(t *testing.T, hookPath, payload string, wantCode int) string {
 	t.Helper()
-	cmd := exec.Command("bash", hookPath)
+	// Git Bash treats backslashes as escapes, so pass the hook path in
+	// forward-slash form for it to be found on Windows as well as Unix.
+	cmd := exec.Command(resolveBashForScripts(t), filepath.ToSlash(hookPath))
 	cmd.Stdin = strings.NewReader(payload)
 	var output bytes.Buffer
 	cmd.Stdout = &output
