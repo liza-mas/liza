@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -49,14 +50,7 @@ func TestInstallLifecycleHooksDefaultHooks(t *testing.T) {
 			t.Fatalf("%s missing: %v", hookPath, err)
 		}
 		testhelpers.AssertExecutableScript(t, hookPath)
-		target, err := os.Readlink(hookPath)
-		if err != nil {
-			t.Fatalf("%s is not a dispatcher symlink: %v", hookPath, err)
-		}
-		if target != defaultHookDispatcherName {
-			t.Fatalf("%s symlink target = %q, want %q", hookPath, target, defaultHookDispatcherName)
-		}
-		content := readFile(t, hookPath)
+		content := assertManagedHookWiring(t, wantHooksDir, hook)
 		if !strings.Contains(content, ManagedHookMarker) {
 			t.Fatalf("%s missing managed marker in:\n%s", hook, content)
 		}
@@ -129,10 +123,7 @@ func TestInstallLifecycleHooksIsIdempotentForManagedHooks(t *testing.T) {
 	assertHookActions(t, first, HookActionInstalled)
 	assertHookActions(t, second, HookActionVerified)
 	for _, hook := range DefaultLifecycleHooks() {
-		hookPath := filepath.Join(first.HooksDir, hook)
-		if got, err := os.Readlink(hookPath); err != nil || got != defaultHookDispatcherName {
-			t.Fatalf("%s symlink = %q, err=%v; want %q", hook, got, err, defaultHookDispatcherName)
-		}
+		assertManagedHookWiring(t, first.HooksDir, hook)
 	}
 }
 
@@ -159,9 +150,7 @@ func TestInstallLifecycleHooksRefreshesStaleManagedHook(t *testing.T) {
 	if result.Hooks[index].Action != HookActionUpdated {
 		t.Fatalf("post-merge action = %q, want %q", result.Hooks[index].Action, HookActionUpdated)
 	}
-	if got, err := os.Readlink(hookPath); err != nil || got != defaultHookDispatcherName {
-		t.Fatalf("post-merge symlink = %q, err=%v; want %q", got, err, defaultHookDispatcherName)
-	}
+	assertManagedHookWiring(t, hooksDir, "post-merge")
 	if _, err := os.Stat(hookPath); err != nil {
 		t.Fatalf("stat refreshed hook: %v", err)
 	}
@@ -184,7 +173,7 @@ func TestManagedHookDispatcherInvokesLocalIndexScriptWithoutLifecycleArguments(t
 		t.Fatalf("write liza-index.sh fixture: %v", err)
 	}
 
-	cmd := exec.Command(filepath.Join(result.HooksDir, "post-rewrite"), "rebase", "amend")
+	cmd := scriptCommand(t, filepath.Join(result.HooksDir, "post-rewrite"), "rebase", "amend")
 	cmd.Dir = repo
 	cmd.Env = append(os.Environ(), "LIZA_TEST_HOOK_LOG="+logPath)
 	output, err := cmd.CombinedOutput()
@@ -217,7 +206,7 @@ func TestManagedHookDispatcherSkipsPostCheckoutFileCheckout(t *testing.T) {
 		t.Fatalf("write liza-index.sh fixture: %v", err)
 	}
 
-	cmd := exec.Command(filepath.Join(result.HooksDir, "post-checkout"), "old", "new", "0")
+	cmd := scriptCommand(t, filepath.Join(result.HooksDir, "post-checkout"), "old", "new", "0")
 	cmd.Dir = repo
 	cmd.Env = append(os.Environ(), "LIZA_TEST_HOOK_LOG="+logPath)
 	output, err := cmd.CombinedOutput()
@@ -279,7 +268,7 @@ func TestInstallActivationWritesScipCommandsWithoutStacklit(t *testing.T) {
 			t.Fatalf("script missing %q:\n%s", want, script)
 		}
 	}
-	hook := readFile(t, filepath.Join(result.HooksDir, "post-commit"))
+	hook := assertManagedHookWiring(t, result.HooksDir, "post-commit")
 	if !strings.Contains(hook, ManagedHookMarker) || !strings.Contains(hook, "liza-index.sh") {
 		t.Fatalf("post-commit hook missing managed wrapper:\n%s", hook)
 	}
@@ -371,7 +360,7 @@ func TestInstalledIndexScriptRefreshesStacklitJSONWithoutAIByDefault(t *testing.
 	logPath := filepath.Join(t.TempDir(), "stacklit.log")
 	pathDir := writeFakeStacklit(t)
 
-	cmd := exec.Command(result.Path)
+	cmd := scriptCommand(t, result.Path)
 	cmd.Env = append(os.Environ(),
 		"PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"LIZA_TEST_STACKLIT_LOG="+logPath,
@@ -474,7 +463,7 @@ func TestInstalledIndexScriptManualAIArgumentRunsAISummary(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "stacklit.log")
 	pathDir := writeFakeStacklit(t)
 
-	cmd := exec.Command(result.Path, "ai")
+	cmd := scriptCommand(t, result.Path, "ai")
 	cmd.Env = append(os.Environ(),
 		"PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"LIZA_TEST_STACKLIT_LOG="+logPath,
@@ -501,7 +490,7 @@ func TestInstalledIndexScriptSkipsStacklitRefreshWhenDiffReportsNoChanges(t *tes
 	logPath := filepath.Join(t.TempDir(), "stacklit.log")
 	pathDir := writeFakeStacklit(t)
 
-	cmd := exec.Command(result.Path)
+	cmd := scriptCommand(t, result.Path)
 	cmd.Env = append(os.Environ(),
 		"PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"LIZA_TEST_STACKLIT_LOG="+logPath,
@@ -689,7 +678,7 @@ func TestInstalledIndexScriptRefreshesFunctionalClustersJSON(t *testing.T) {
 	scipDir := writeFakeScipGo(t)
 	functionalClustersDir := writeFakeFunctionalClusters(t)
 
-	cmd := exec.Command(result.Path)
+	cmd := scriptCommand(t, result.Path)
 	cmd.Dir = t.TempDir()
 	cmd.Env = append(os.Environ(),
 		"PATH="+stacklitDir+string(os.PathListSeparator)+scipDir+string(os.PathListSeparator)+functionalClustersDir+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -752,7 +741,7 @@ func TestManagedLifecycleHookInvokesInstalledIndexScriptWithoutAI(t *testing.T) 
 	logPath := filepath.Join(t.TempDir(), "stacklit.log")
 	pathDir := writeFakeStacklit(t)
 
-	cmd := exec.Command(filepath.Join(hookResult.HooksDir, "post-commit"))
+	cmd := scriptCommand(t, filepath.Join(hookResult.HooksDir, "post-commit"))
 	cmd.Dir = repo
 	cmd.Env = append(os.Environ(),
 		"PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -897,6 +886,46 @@ func commitPath(t *testing.T, repo, path, message string) {
 	runGit(t, repo, "commit", "-m", message)
 }
 
+// assertManagedHookWiring checks that hook is wired to the managed dispatcher
+// and returns the dispatcher's own content.
+//
+// installManagedHook symlinks the hook to the dispatcher and falls back to a
+// wrapper script that execs it when os.Symlink fails — which is what happens on
+// Windows outside Developer Mode or an elevated shell. Both are correct
+// installations, so assert the property they share ("this hook runs the managed
+// dispatcher") rather than the symlink, which is only one of the two shapes.
+//
+// Reading the dispatcher explicitly also keeps the content assertions honest:
+// through a symlink they used to read the dispatcher by accident, and through a
+// wrapper they would have read the wrapper instead.
+func assertManagedHookWiring(t *testing.T, hooksDir, hook string) string {
+	t.Helper()
+
+	hookPath := filepath.Join(hooksDir, hook)
+	info, err := os.Lstat(hookPath)
+	if err != nil {
+		t.Fatalf("%s missing: %v", hookPath, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(hookPath)
+		if err != nil {
+			t.Fatalf("read %s symlink: %v", hookPath, err)
+		}
+		if filepath.Base(target) != defaultHookDispatcherName {
+			t.Fatalf("%s symlink target = %q, want %q", hookPath, target, defaultHookDispatcherName)
+		}
+	} else {
+		content := readFile(t, hookPath)
+		if !strings.Contains(content, ManagedHookMarker) {
+			t.Fatalf("%s is neither a dispatcher symlink nor a managed wrapper:\n%s", hookPath, content)
+		}
+		if !strings.Contains(content, defaultHookDispatcherName) {
+			t.Fatalf("%s wrapper does not invoke %s:\n%s", hookPath, defaultHookDispatcherName, content)
+		}
+	}
+	return readFile(t, filepath.Join(hooksDir, defaultHookDispatcherName))
+}
+
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 
@@ -916,6 +945,24 @@ func containsAll(content string, needles ...string) bool {
 	return true
 }
 
+// scriptCommand builds a command that runs a managed shell script.
+//
+// Windows cannot exec an extensionless script, and Git for Windows runs hooks
+// through its bundled sh rather than by exec'ing them, so mirror that here. On
+// other platforms the script is exec'd directly as before, honouring its
+// shebang.
+func scriptCommand(t *testing.T, scriptPath string, args ...string) *exec.Cmd {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		// Git Bash reads backslashes as escapes, so pass the script
+		// forward-slashed.
+		bashArgs := append([]string{filepath.ToSlash(scriptPath)}, args...)
+		return exec.Command(testhelpers.ResolveBashForScripts(t), bashArgs...)
+	}
+	return exec.Command(scriptPath, args...)
+}
+
 func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 	t.Helper()
 
@@ -927,7 +974,7 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 func runIndexScriptWithPath(t *testing.T, scriptPath, pathDir string, extraEnv ...string) {
 	t.Helper()
 
-	cmd := exec.Command(scriptPath)
+	cmd := scriptCommand(t, scriptPath)
 	cmd.Env = append(os.Environ(), "PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	cmd.Env = append(cmd.Env, extraEnv...)
 	output, err := cmd.CombinedOutput()
@@ -941,7 +988,7 @@ func runInstalledIndexScript(t *testing.T, scriptPath string) {
 
 	logPath := filepath.Join(t.TempDir(), "stacklit.log")
 	pathDir := writeFakeStacklit(t)
-	cmd := exec.Command(scriptPath)
+	cmd := scriptCommand(t, scriptPath)
 	cmd.Env = append(os.Environ(),
 		"PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"LIZA_TEST_STACKLIT_LOG="+logPath,
