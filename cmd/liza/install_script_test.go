@@ -6,39 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-// resolveBashForScripts returns the path to a bash that can execute Windows
-// filesystem paths, preferring Git Bash over WSL's system32\bash.exe.
-//
-// WSL bash cannot access Windows paths (C:/Users/... -> "No such file or
-// directory"; it needs /mnt/c/...). Git for Windows installs bash.exe under
-// %LOCALAPPDATA%\Programs\Git\bin or %ProgramFiles%\Git\bin, but it is often
-// not on PATH ahead of system32. Tests that exec a script by its Windows path
-// need the Git Bash binary specifically.
-func resolveBashForScripts(t *testing.T) string {
-	t.Helper()
-	// Prefer an explicit Git Bash location if present.
-	for _, candidate := range []string{
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "Git", "bin", "bash.exe"),
-		filepath.Join(os.Getenv("ProgramFiles"), "Git", "bin", "bash.exe"),
-		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Git", "bin", "bash.exe"),
-	} {
-		if candidate != "" {
-			if _, err := os.Stat(candidate); err == nil {
-				return candidate
-			}
-		}
-	}
-	// Fall back to whatever bash is on PATH (may be WSL bash on Windows, which
-	// cannot run Windows-path scripts — callers that need path access should
-	// skip if this is the only option and it is WSL).
-	if p, err := exec.LookPath("bash"); err == nil {
-		return p
-	}
-	t.Skip("bash not available")
-	return ""
-}
+	"github.com/liza-mas/liza/internal/testhelpers"
+)
 
 func TestInstallScriptAcceptsDerivedBrandInputsInHelp(t *testing.T) {
 	out, err := runInstallScriptHelp(t,
@@ -86,7 +56,7 @@ func TestInstallScriptRejectsInvalidBrandInputs(t *testing.T) {
 
 func runInstallScriptHelp(t *testing.T, env ...string) (string, error) {
 	t.Helper()
-	bashPath := resolveBashForScripts(t)
+	bashPath := testhelpers.ResolveBashForScripts(t)
 	repoRoot := findRepoRootForInstallScript(t)
 	// Bash (Git for Windows) treats backslashes as escape characters, so a
 	// Windows path like C:\Users\...\install.sh gets mangled. Pass the script
