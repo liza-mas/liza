@@ -14,10 +14,14 @@ import (
 // Tests stand in for wezterm, codex, acpx, stacklit and friends with a small
 // POSIX shell script. That works directly on Unix, but on Windows a file has to
 // carry a PATHEXT extension for exec.LookPath to consider it, and the OS cannot
-// execute a shebang script in any case. So on Windows the script is written
-// beside the command as "<name>.sh" and a "<name>.cmd" wrapper hands it to Git
-// Bash, forwarding arguments, stdin and the exit code. Callers keep writing one
-// portable shell script and pass the extensionless path.
+// execute a shebang script in any case. So on Windows the script is written at
+// the exact path given — a POSIX shell looking up the bare name still finds it —
+// and a "<name>.cmd" wrapper hands it to Git Bash so exec.LookPath finds it too.
+// Callers keep writing one portable shell script and pass the extensionless path.
+//
+// The wrapper forwards arguments with %*, which cannot carry a newline inside a
+// single argument. A stub invoked with a multi-line payload needs a real
+// executable rather than this wrapper.
 //
 // Pass the command path without an extension, e.g.
 // filepath.Join(binDir, "wezterm"). The returned path is the one that can
