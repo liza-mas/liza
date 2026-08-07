@@ -3,6 +3,7 @@ package integration
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -110,11 +111,11 @@ func TestIndexingActivationScipLanguageFiltersExcludeOtherDetectedLanguages(t *t
 
 	script := readScipIndexingActivationHookScript(t, projectDir)
 	assertIndexingActivationContainsAll(t, script,
-		"scip-go index --module-root "+projectDir,
+		"scip-go index --module-root "+testhelpers.ShellArg(projectDir),
 		`--output "$tmp_go_scip/go-0.scip"`,
-		"set -- scip-search aggregate-index --project-root "+projectDir,
+		"set -- scip-search aggregate-index --project-root "+testhelpers.ShellArg(projectDir),
 		`--root . --index "$tmp_go_scip/go-0.scip"`,
-		"--out "+filepath.Join(projectDir, "go.scip"),
+		"--out "+testhelpers.ShellArg(filepath.Join(projectDir, "go.scip")),
 	)
 	assertIndexingActivationContainsNone(t, script, "scip-typescript", "scip-python")
 }
@@ -142,12 +143,12 @@ func TestIndexingActivationScipLanguageFilterAggregatesFilteredRoots(t *testing.
 	}
 	script := readScipIndexingActivationHookScript(t, projectDir)
 	assertIndexingActivationContainsAll(t, script,
-		"scip-go index --module-root "+filepath.Join(projectDir, "services", "api"),
-		"scip-go index --module-root "+filepath.Join(projectDir, "services", "worker"),
-		"set -- scip-search aggregate-index --project-root "+projectDir,
+		"scip-go index --module-root "+testhelpers.ShellArg(filepath.Join(projectDir, "services", "api")),
+		"scip-go index --module-root "+testhelpers.ShellArg(filepath.Join(projectDir, "services", "worker")),
+		"set -- scip-search aggregate-index --project-root "+testhelpers.ShellArg(projectDir),
 		"--root services/api --index",
 		"--root services/worker --index",
-		"--out "+filepath.Join(projectDir, "go.scip"),
+		"--out "+testhelpers.ShellArg(filepath.Join(projectDir, "go.scip")),
 	)
 	assertIndexingActivationContainsNone(t, script, "scip-typescript")
 }
@@ -251,6 +252,16 @@ func readScipIndexingActivationHookScript(t *testing.T, projectDir string) strin
 	return string(content)
 }
 
+var scipProjectPlaceholderPattern = regexp.MustCompile(`\$\{PROJECT\}(/[^\s"']*)?`)
+
+// expandScipProjectPlaceholder renders ${PROJECT} and ${PROJECT}/sub/path the
+// way the hook script writer emits them: joined with the platform separator and
+// quoted when the result carries a shell metacharacter, which a Windows path
+// always does. Writing the placeholder with forward slashes keeps the table
+// readable; the expansion is what has to match the script.
 func expandScipProjectPlaceholder(value, projectDir string) string {
-	return strings.ReplaceAll(value, "${PROJECT}", projectDir)
+	return scipProjectPlaceholderPattern.ReplaceAllStringFunc(value, func(match string) string {
+		rel := strings.TrimPrefix(match, "${PROJECT}")
+		return testhelpers.ShellArg(filepath.Join(projectDir, filepath.FromSlash(rel)))
+	})
 }

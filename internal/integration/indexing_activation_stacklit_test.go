@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestIndexingActivationStacklitPairingInitInstallsLifecycleRefreshWithoutGlobalToolsMutation(t *testing.T) {
@@ -71,7 +72,10 @@ func TestIndexingActivationStacklitPairingInitInstallsLifecycleRefreshWithoutGlo
 
 	writeIndexingActivationFile(t, filepath.Join(projectDir, "stacklit.json"), "stale index\n")
 	manualLogPath := filepath.Join(t.TempDir(), "stacklit-manual-ai.log")
-	runIndexingActivationCommand(t, projectDir, manualLogPath, scriptPath, "ai")
+	// Windows cannot fork/exec a .sh: the hook has to be handed to a shell, the
+	// way git hands it to one when it runs the hook itself.
+	runIndexingActivationCommand(t, projectDir, manualLogPath,
+		testhelpers.ResolveBashForScripts(t), filepath.ToSlash(scriptPath), "ai")
 
 	wantManualCalls := "diff -i stacklit.json\ngenerate-json -o stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o stacklit-insights.json\nai-summary\ngenerate-json -o stacklit.json --parse-workers 3\n"
 	if got := readIndexingActivationFile(t, manualLogPath); got != wantManualCalls {
