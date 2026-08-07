@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -129,7 +130,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	// Worktree path is deterministic from taskID — always "worktrees/<taskID>".
 	// This is the canonical path regardless of task status or prior claim history.
 	lp := paths.New(projectRoot)
-	worktreeRel := filepath.Join(paths.WorktreesDirName, taskID)
+	worktreeRel := path.Join(paths.WorktreesDirName, taskID)
 	worktreeDir := filepath.Join(lp.ProjectRoot(), worktreeRel)
 
 	bb := db.For(lp.StatePath())

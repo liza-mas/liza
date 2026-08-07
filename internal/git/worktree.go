@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -200,7 +201,13 @@ func (g *Git) GetWorktreePath(taskID string) string {
 
 // GetWorktreeRelPath returns the relative path for a task's worktree
 func (g *Git) GetWorktreeRelPath(taskID string) string {
-	return filepath.Join(paths.WorktreesDirName, taskID)
+	// Slash-separated on every platform. This value is stored in state.yaml and
+	// compared against paths built elsewhere — recover_task builds it with a
+	// literal "/", and paths.NormalizeSpecRef looks for the ".worktrees/" marker
+	// — so a native separator would make Windows disagree with the rest of the
+	// codebase and would make a state file written there unreadable to a Unix
+	// peer. Consumers join it with filepath.Join, which accepts either form.
+	return path.Join(paths.WorktreesDirName, taskID)
 }
 
 // WorktreeProgressSignature returns a compact signature for meaningful changes
