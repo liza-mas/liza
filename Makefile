@@ -17,6 +17,15 @@ BRAND_CHECKSUM_BASE_URL?=$(BRAND_RELEASE_BASE_URL)
 # Binary name
 BINARY_NAME?=$(BRAND_BINARY_NAME)
 
+# Windows will not resolve an extensionless file through PATHEXT, so a binary
+# built as "liza" installs fine and is then found by nothing: not the shell, not
+# exec.LookPath, not `liza toolchain doctor`. $(OS) is the reliable discriminant
+# here — it is set by Windows itself and survives Git Bash, unlike uname.
+ifeq ($(OS),Windows_NT)
+BINARY_EXT := .exe
+endif
+BINARY_FILE := $(BINARY_NAME)$(BINARY_EXT)
+
 # Build variables
 # Derived from git rather than pinned, because a pinned default goes stale and
 # then lies: the binary claimed 0.2.0 long after 0.8.0 shipped. Only an exact,
@@ -57,7 +66,7 @@ sync-embedded:
 # Build the binaries
 build: sync-embedded
 	@echo "Building $(BINARY_NAME) (version=$(VERSION), commit=$(GIT_COMMIT), date=$(BUILD_DATE))"
-	@go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/liza
+	@go build $(LDFLAGS) -o $(BINARY_FILE) ./cmd/liza
 
 # Run tests
 # IMPORTANT: Always use `make test`, not bare `go test ./...`.
@@ -88,7 +97,7 @@ coverage: sync-embedded check-testhelpers
 
 # Clean build artifacts
 clean:
-	rm -f $(BINARY_NAME)
+	rm -f $(BINARY_FILE)
 	rm -f $(BINARY_NAME)-*
 	rm -f coverage.out
 	rm -rf dist
@@ -97,13 +106,24 @@ clean:
 
 # Install the binaries
 # Prefer INSTALL_DIR env var, then ~/.local/bin (same as install.sh)
+# $(HOME) is a native path on Windows, and the recipes below run under Git
+# Bash, which reads its backslashes as escapes: C:\Users\me reaches test(1)
+# as C:Usersme. Give the shell a path it can actually resolve.
+ifeq ($(OS),Windows_NT)
+INSTALL_DIR ?= $(subst \,/,$(HOME))/.local/bin
+# The install directory belongs to the user, and Windows sudo is absent or
+# disabled on managed machines; escalating here only turns a working install
+# into an error.
+SUDO :=
+else
 INSTALL_DIR ?= $(HOME)/.local/bin
 SUDO := $(shell test -w $(INSTALL_DIR) && echo "" || echo "sudo")
+endif
 install: build
 	@mkdir -p $(INSTALL_DIR)
-	$(SUDO) install -m 755 $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	@if [ "$(INSTALL_DIR)" != "/usr/local/bin" ] && [ -f /usr/local/bin/$(BINARY_NAME) ]; then \
-		echo "Warning: old $(BINARY_NAME) binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/$(BINARY_NAME)' to avoid shadowing"; \
+	$(SUDO) install -m 755 $(BINARY_FILE) $(INSTALL_DIR)/$(BINARY_FILE)
+	@if [ "$(INSTALL_DIR)" != "/usr/local/bin" ] && [ -f /usr/local/bin/$(BINARY_FILE) ]; then \
+		echo "Warning: old $(BINARY_NAME) binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/$(BINARY_FILE)' to avoid shadowing"; \
 	fi
 
 # Check that testhelpers package is not imported in production code

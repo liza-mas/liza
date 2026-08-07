@@ -46,6 +46,7 @@ internal/embedded/*
 !internal/embedded/git-hooks/
 !internal/embedded/hooks/
 /liza
+/liza.exe
 dist/
 
 # Symlinks to the contract
