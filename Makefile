@@ -130,9 +130,11 @@ install: build
 # This prevents test utilities from leaking into production binaries and
 # ensures clear separation between test and production code. Test helpers
 # should only be used in *_test.go files.
+# The check matches text rather than imports, so the package's own directory is
+# excluded: a helper naming its own sub-package is not a leak into production.
 check-testhelpers:
 	@echo "Checking for testhelpers in production code..."
-	@matches="$$(grep -rl --include='*.go' --exclude='*_test.go' 'internal/testhelpers' cmd internal plugin || true)"; \
+	@matches="$$(grep -rl --include='*.go' --exclude='*_test.go' --exclude-dir=testhelpers 'internal/testhelpers' cmd internal plugin || true)"; \
 	if [ -n "$$matches" ]; then \
 		echo "ERROR: testhelpers package imported in production code:"; \
 		printf '%s\n' "$$matches"; \
