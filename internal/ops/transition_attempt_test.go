@@ -228,21 +228,15 @@ func TestTransitionToNewAttempt_WorktreeDeletionFailure(t *testing.T) {
 		t.Fatalf("failed to update worktree: %v", err)
 	}
 
-	// Make the worktree non-removable: create a permission-locked subdirectory.
-	// Both "git worktree remove --force" and os.RemoveAll will fail.
+	// Make the worktree non-removable: lock a subdirectory so both
+	// "git worktree remove --force" and os.RemoveAll fail. PreventRemoval
+	// restores removability on cleanup so t.TempDir() can remove everything.
 	worktreeDir := filepath.Join(tmpDir, ".worktrees", "task-1")
 	lockedDir := filepath.Join(worktreeDir, "locked")
 	if err := os.MkdirAll(lockedDir, 0755); err != nil {
 		t.Fatalf("failed to create locked dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(lockedDir, "file"), []byte("x"), 0644); err != nil {
-		t.Fatalf("failed to create locked file: %v", err)
-	}
-	if err := os.Chmod(lockedDir, 0555); err != nil {
-		t.Fatalf("failed to chmod locked dir: %v", err)
-	}
-	// Restore permissions in cleanup so t.TempDir() can remove everything.
-	t.Cleanup(func() { os.Chmod(lockedDir, 0755) })
+	testhelpers.PreventRemoval(t, lockedDir)
 
 	result, err := TransitionToNewAttempt(tmpDir, "task-1", "review cycle limit reached")
 	if err != nil {
