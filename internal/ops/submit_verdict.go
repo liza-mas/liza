@@ -23,6 +23,13 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
+// statWorktreePath is a seam for the "stat failed for a reason other than
+// absence" branch below. A fixture can produce that on POSIX by putting a
+// regular file where the worktree parent belongs (ENOTDIR), but Windows maps
+// the same situation to "path not found", which os.IsNotExist reports as true,
+// and an unprivileged process cannot deny itself access to a path it owns.
+var statWorktreePath = os.Stat
+
 // VerdictResult contains the outcome of a successful verdict submission.
 type VerdictResult struct {
 	TaskID              string `json:"task_id"`
@@ -218,7 +225,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 
 	g := git.New(projectRoot)
 	wtPath := g.GetWorktreePath(taskID)
-	if _, statErr := os.Stat(wtPath); os.IsNotExist(statErr) {
+	if _, statErr := statWorktreePath(wtPath); os.IsNotExist(statErr) {
 		// Worktree absent on disk (e.g. tests without real worktrees) — skip check.
 	} else if statErr != nil {
 		return nil, fmt.Errorf("failed to stat worktree %s: %w", wtPath, statErr)

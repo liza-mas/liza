@@ -875,12 +875,13 @@ func TestSubmitVerdict_StatErrorNotSilenced(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// Create a regular file at .worktrees so os.Stat(.worktrees/task-1)
-	// returns ENOTDIR instead of ENOENT.
-	wtParent := filepath.Join(tmpDir, ".worktrees")
-	if err := os.WriteFile(wtParent, []byte("not-a-directory"), 0644); err != nil {
-		t.Fatalf("Failed to create fixture: %v", err)
-	}
+	// The stat has to fail for a reason other than absence. A regular file at
+	// .worktrees gives ENOTDIR on POSIX, but Windows reports that same layout as
+	// "path not found" — os.IsNotExist is true — and an unprivileged process
+	// cannot deny itself access to a path it owns. So the error is injected.
+	originalStat := statWorktreePath
+	statWorktreePath = func(string) (os.FileInfo, error) { return nil, os.ErrPermission }
+	t.Cleanup(func() { statWorktreePath = originalStat })
 
 	_, err := SubmitVerdict(tmpDir, "task-1", "APPROVED", "", "code-reviewer-1", "")
 	if err == nil {
