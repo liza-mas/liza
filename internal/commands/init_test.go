@@ -991,6 +991,7 @@ func verifyInitialization(t *testing.T, tmpDir, description, specRef string) {
 }
 
 func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	// Create temporary git repo
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
@@ -1240,6 +1241,7 @@ func TestInitCommandWithConfig_MultiProviderBashPolicyUsesSharedBufferedInput(t 
 }
 
 func TestInitCommand_OpenCodeCreatesGlobalContractWithoutCodexHooks(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1342,6 +1344,7 @@ func TestInitCommand_OpenCodePreservesUserExecTool(t *testing.T) {
 }
 
 func TestInitCommand_PreservesManagedRepoSymlinkRecordedForRepoOnlyProvider(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1398,6 +1401,7 @@ func TestInitCommand_PreservesManagedRepoSymlinkRecordedForRepoOnlyProvider(t *t
 }
 
 func TestInitCommand_NoProvidersLeavesManagedRepoSymlinkUntouched(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1433,6 +1437,7 @@ func TestInitCommand_NoProvidersLeavesManagedRepoSymlinkUntouched(t *testing.T) 
 }
 
 func TestInitCommand_BrownfieldFallsBackToGlobal(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1502,6 +1507,7 @@ func TestInitCommand_BrownfieldFallsBackToGlobal(t *testing.T) {
 }
 
 func TestInitCommand_OpenCodeBrownfieldFallsBackToOpenCodeGlobal(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1553,6 +1559,7 @@ func TestInitCommand_OpenCodeBrownfieldFallsBackToOpenCodeGlobal(t *testing.T) {
 }
 
 func TestInitCommand_CodexAndOpenCodeBrownfieldCreateBothFallbacks(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1599,6 +1606,7 @@ func TestInitCommand_CodexAndOpenCodeBrownfieldCreateBothFallbacks(t *testing.T)
 }
 
 func TestInitCommand_BrownfieldExistingLizaAtGlobalSkipsCreation(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1700,6 +1708,7 @@ func TestInitCommand_BrownfieldBothOccupiedWarns(t *testing.T) {
 }
 
 func TestInitCommand_DuplicateClaudeSymlinkRemovesUnownedRepoCopy(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1738,6 +1747,7 @@ func TestInitCommand_DuplicateClaudeSymlinkRemovesUnownedRepoCopy(t *testing.T) 
 }
 
 func TestInitCommand_DuplicateCodexSymlinkPreservesRepoCopyForCursor(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1788,6 +1798,7 @@ func TestInitCommand_DuplicateCodexSymlinkPreservesRepoCopyForCursor(t *testing.
 }
 
 func TestInitPairingCommand_PrefersActiveProviderGlobalRoot(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	tests := []struct {
 		name         string
 		agent        string
@@ -1838,6 +1849,7 @@ func TestInitPairingCommand_PrefersActiveProviderGlobalRoot(t *testing.T) {
 }
 
 func TestInitPairingCommand_QwenRelativeHomeRetainsRepoContractAcrossWorkingDirectories(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)
@@ -1883,6 +1895,7 @@ func TestInitPairingCommand_QwenRelativeHomeRetainsRepoContractAcrossWorkingDire
 }
 
 func TestPreferredGlobalOccupiedRetainsManagedRepoContract(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("CODEX_HOME", "")
@@ -1923,6 +1936,7 @@ func TestPreferredGlobalOccupiedRetainsManagedRepoContract(t *testing.T) {
 }
 
 func TestInitCommand_GlobalClaudeSymlinkPreservesRepoRegularFile(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1967,6 +1981,7 @@ func TestInitCommand_GlobalClaudeSymlinkPreservesRepoRegularFile(t *testing.T) {
 }
 
 func TestInitCommand_ContractActionLocalCreatesCLAUDELocalMd(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -2010,6 +2025,7 @@ func TestInitCommand_ContractActionLocalCreatesCLAUDELocalMd(t *testing.T) {
 }
 
 func TestCheckContractConfigured_FindsLocalMd(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	dir := t.TempDir()
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
@@ -2033,6 +2049,7 @@ func TestCheckContractConfigured_FindsLocalMd(t *testing.T) {
 }
 
 func TestCheckContractConfigured_CodexACPUsesCodexContract(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	dir := t.TempDir()
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
@@ -2059,6 +2076,7 @@ func TestCheckContractConfigured_CodexACPUsesCodexContract(t *testing.T) {
 }
 
 func TestCheckContractConfigured_CursorACPUsesAgentsContract(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	dir := t.TempDir()
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
@@ -2085,6 +2103,7 @@ func TestCheckContractConfigured_CursorACPUsesAgentsContract(t *testing.T) {
 }
 
 func TestCheckContractConfigured_OpenCodeUsesAgentsContract(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	dir := t.TempDir()
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
@@ -3155,6 +3174,7 @@ func TestInitPairingCommand_Claude(t *testing.T) {
 }
 
 func TestInitPairingCommand_MultipleAgents(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)
@@ -3269,6 +3289,7 @@ func TestInitPairingCommand_CursorSkipsBashPolicyWhenGateDisabled(t *testing.T) 
 }
 
 func TestInitPairingCommand_CursorAndOpenCodeRetainSharedRepoContract(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)
@@ -3388,6 +3409,7 @@ func TestInitPairingCommand_ProviderScopedConflictActionPreservesGlobalFirst(t *
 }
 
 func TestInitPairingCommand_SharedRepoContractSurvivesGlobalActivationFailure(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)
@@ -3426,6 +3448,7 @@ func TestInitPairingCommand_SharedRepoContractSurvivesGlobalActivationFailure(t 
 }
 
 func TestCreateContractSymlinksForProviders_NormalizesSharedRepoPaths(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	projectRoot := t.TempDir()
@@ -3925,6 +3948,7 @@ func TestInitPairingCommand_ScipSearchGoFilterPlansConcreteHookCommand(t *testin
 }
 
 func TestInitPairingCommand_ScipSearchPlanOverridesAmbiguousRoots(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	setupGlobalLiza(t)
@@ -4016,6 +4040,7 @@ func TestInitPairingCommand_ScipSearchSkipsStrayTypeScriptWithoutTSConfig(t *tes
 }
 
 func TestInitPairingCommand_ScipSearchMultiRootInstallsAggregateHooks(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	setupGlobalLiza(t)
@@ -4045,6 +4070,7 @@ func TestInitPairingCommand_ScipSearchMultiRootInstallsAggregateHooks(t *testing
 }
 
 func TestInitPairingCommand_AmbientScipSearchAggregatesMultiRoot(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	setupGlobalLiza(t)
@@ -4193,6 +4219,7 @@ func TestInitPairingCommand_Idempotent(t *testing.T) {
 }
 
 func TestInitPairingCommand_Mistral(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	fakeHome := setupGlobalLiza(t)
 
 	err := InitPairingCommand(InitPairingParams{
@@ -4225,6 +4252,7 @@ func TestInitPairingCommand_Mistral(t *testing.T) {
 }
 
 func TestInitPairingCommand_MistralReplacesExistingPromptID(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	fakeHome := setupGlobalLiza(t)
 
 	// Pre-create config.toml with system_prompt_id = "cli"
@@ -4259,6 +4287,7 @@ func TestInitPairingCommand_MistralReplacesExistingPromptID(t *testing.T) {
 }
 
 func TestInitPairingCommand_MistralAutoConfirmReplacesExistingPromptID(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	fakeHome := setupGlobalLiza(t)
 
 	vibeDir := filepath.Join(fakeHome, ".vibe")
@@ -4296,6 +4325,7 @@ func TestInitPairingCommand_MistralAutoConfirmReplacesExistingPromptID(t *testin
 }
 
 func TestInitPairingCommand_MistralDeclinesOverwrite(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	fakeHome := setupGlobalLiza(t)
 
 	// Pre-create config.toml with system_prompt_id = "cli"
@@ -4326,6 +4356,7 @@ func TestInitPairingCommand_MistralDeclinesOverwrite(t *testing.T) {
 // TestInitPairingCommand_ClaudeBrownfieldUsesGlobalFallback verifies that when
 // CLAUDE.md already exists at repo root, the Liza symlink goes to ~/.claude/CLAUDE.md.
 func TestInitPairingCommand_ClaudeBrownfieldUsesGlobalFallback(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 	fakeHome := setupGlobalLiza(t)

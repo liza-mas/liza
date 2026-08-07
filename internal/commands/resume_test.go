@@ -11,6 +11,7 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/perm"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -289,10 +290,15 @@ func TestResumeCommand_ArchiveWriteFailure(t *testing.T) {
 	if err := os.MkdirAll(archiveDir, 0755); err != nil {
 		t.Fatalf("Failed to create archive dir: %v", err)
 	}
-	if err := os.Chmod(archiveDir, 0444); err != nil {
-		t.Fatalf("Failed to chmod archive dir: %v", err)
+	restore, err := perm.DenyWrites(archiveDir)
+	if err != nil {
+		t.Fatalf("deny writes on archive dir: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(archiveDir, 0755) })
+	t.Cleanup(func() {
+		if err := restore(); err != nil {
+			t.Errorf("restore write access: %v", err)
+		}
+	})
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -307,7 +313,7 @@ func TestResumeCommand_ArchiveWriteFailure(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// Resume should fail because archive write fails before state mutation.
-	err := ResumeCommand(tmpDir, "human")
+	err = ResumeCommand(tmpDir, "human")
 	if err == nil {
 		t.Fatal("ResumeCommand() should fail when archive write fails")
 	}

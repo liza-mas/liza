@@ -505,9 +505,7 @@ func installFailingSubmitReviewIndexer(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\necho fake scip-go failed >&2\nexit 3\n"
-	if err := os.WriteFile(filepath.Join(binDir, "scip-go"), []byte(script), 0755); err != nil {
-		t.Fatal(err)
-	}
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "scip-go"), script)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 

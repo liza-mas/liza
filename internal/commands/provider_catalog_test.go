@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestSetupCommand_ProviderFromCatalog(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	useTestProviderCatalog(t)
 	lizaDir := t.TempDir()
 	homeDir := t.TempDir()
@@ -39,6 +41,7 @@ func TestSetupCommand_ProviderFromCatalog(t *testing.T) {
 }
 
 func TestInitPairingCommand_ProviderFromCatalog(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	useTestProviderCatalog(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
@@ -67,6 +70,7 @@ func TestInitPairingCommand_ProviderFromCatalog(t *testing.T) {
 }
 
 func TestInitPairingCommand_ProviderFromCatalogCreatesNestedContractParent(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	useTestProviderCatalog(t)
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
@@ -93,6 +97,7 @@ func TestInitPairingCommand_ProviderFromCatalogCreatesNestedContractParent(t *te
 }
 
 func TestCachedLegacyCatalogMigratesBuiltInContractPolicy(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
@@ -328,6 +333,7 @@ providers:
 }
 
 func TestDuplicateNonPreferGlobalSymlinksWarnsAndRetainsBoth(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	projectRoot := t.TempDir()

@@ -567,6 +567,7 @@ func setupWithAgents(t *testing.T, agents []string) (lizaDir, homeDir string) {
 }
 
 func TestSetupCommand_QwenRelativeHomeSkipsGlobalContractRepair(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	previousNameLower, previousGlobalDirName := brand.NameLower, brand.GlobalDirName
 	brand.NameLower = "omni"
 	brand.GlobalDirName = ".omni-ee"
@@ -672,6 +673,7 @@ func TestRepairExistingProviderContractSymlinkWarnsOnUnexpectedGlobalPathErrors(
 }
 
 func TestSetupCommand_AgentClaude(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	lizaDir, homeDir := setupWithAgents(t, []string{"claude"})
 
 	// Verify skills dir exists
@@ -706,6 +708,7 @@ func TestSetupCommand_AgentClaude(t *testing.T) {
 }
 
 func TestSetupCommand_AgentOpenCode(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	lizaDir, homeDir := setupWithAgents(t, []string{"opencode"})
 
 	skillsDir := filepath.Join(homeDir, ".config", "opencode", "skills")
@@ -732,6 +735,7 @@ func TestSetupCommand_AgentOpenCode(t *testing.T) {
 }
 
 func TestSetupCommand_AgentCursor(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	lizaDir, homeDir := setupWithAgents(t, []string{"cursor"})
 	sourceEntries, _ := os.ReadDir(filepath.Join(lizaDir, "skills"))
 
@@ -770,6 +774,7 @@ func TestSetupCommand_AgentCursor(t *testing.T) {
 }
 
 func TestSetupCommand_ProviderCursorStaysCatalogRequest(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	// Use an unreachable catalog URL so Load() falls back to the embedded
 	// catalog instead of hitting the network. HomeDir is set to a temp dir
 	// so the cache is isolated from any stale real-home cache entries.
@@ -801,6 +806,7 @@ func TestSetupCommand_ProviderCursorStaysCatalogRequest(t *testing.T) {
 }
 
 func TestSetupCommand_AgentMistral(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	lizaDir, homeDir := setupWithAgents(t, []string{"mistral"})
 
 	// Verify skills symlinks in .vibe/skills/
@@ -832,6 +838,7 @@ func TestSetupCommand_AgentMistral(t *testing.T) {
 }
 
 func TestSetupCommand_AgentIdempotent(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	lizaDir := t.TempDir()
 	homeDir := t.TempDir()
 
@@ -926,6 +933,7 @@ func TestSetupCommand_RemovesRetiredSkillAfterRename(t *testing.T) {
 }
 
 func TestSetupCommand_AgentExistingWrongSymlink(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	lizaDir, homeDir := setupWithAgents(t, []string{"claude"})
 
 	// Get a skill name to tamper with
@@ -965,6 +973,7 @@ func TestSetupCommand_AgentExistingWrongSymlink(t *testing.T) {
 }
 
 func TestSetupCommand_RepairsNameDerivedProviderContractSymlink(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	previousNameLower, previousGlobalDirName := brand.NameLower, brand.GlobalDirName
 	brand.NameLower = "omni"
 	brand.GlobalDirName = ".omni-ee"
@@ -1049,6 +1058,7 @@ func TestSetupCommand_RepairsDefaultProviderContractPathWithEnvironmentOverride(
 }
 
 func TestRepairExistingProviderContractSymlinkPreservesUnmanagedPaths(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	previousNameLower, previousGlobalDirName := brand.NameLower, brand.GlobalDirName
 	brand.NameLower = "omni"
 	brand.GlobalDirName = ".omni-ee"
@@ -1125,6 +1135,7 @@ func TestRepairExistingProviderContractSymlinkPreservesUnmanagedPaths(t *testing
 }
 
 func TestSetupCommand_MultipleAgents(t *testing.T) {
+	testhelpers.RequireSymlinkCapability(t)
 	lizaDir, homeDir := setupWithAgents(t, []string{"claude", "codex"})
 
 	sourceEntries, _ := os.ReadDir(filepath.Join(lizaDir, "skills"))
