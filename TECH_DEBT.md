@@ -129,6 +129,16 @@ one authoritative path table is not a local mechanical change.
 writer changes, centralize the affected path metadata and consume it from both
 the writer and legacy activation-evidence detection.
 
+## TestIndexingActivationGeneratedArtifactsStayOutOfGitStatusWhenUntracked fails on Windows
+
+**What:** The test commits, lets the post-commit hook refresh the indexes, and then reads `go.scip`. On Windows the file is never written. The hook does run — its output shows `Stacklit Indexing... / Wrote stacklit.json` — but that text comes from the real `stacklit.exe` on PATH, not from the fake the test installs, and two bare `usage` lines suggest the real `scip-go` and `scip-search` ran too and rejected the arguments the fakes expect.
+
+**What has been ruled out, with measurements:** the fake tools are executable under MSYS and a bare script does win over a same-named `.exe` further along PATH (probed directly); a git hook does inherit an injected PATH and does resolve a fake through it (probed with a real repository and hook). So the mechanism works in isolation and something specific to this fixture defeats it. The remaining suspects are the extra directory the test prepends, the length of the resulting PATH, and whether `liza init` — which resolves tools through Go, where an extensionless fake is invisible — bakes a decision into the generated script.
+
+**Why deferred:** three instrumented attempts did not isolate it, and every other test in the package now passes. Continuing would have blocked delivery of eleven verified fixes for one test whose failure mode is understood well enough to describe.
+
+**Payback trigger:** before proposing the indexing hooks upstream, or as soon as another test that fronts a real tool with a fake starts failing on Windows — the two would share a cause.
+
 ## Retired task artifact refs are non-blocking during merge validation
 
 **What:** `ValidateArtifactRefs` and task invariant artifact-ref checks ignore refs on `SUPERSEDED` and `ABANDONED` tasks. This prevents stale superseded/WIP artifacts from blocking unrelated merges, but it also means retired task artifact loss is not enforced by global validation.
