@@ -1048,6 +1048,10 @@ func TestInitCommand_CreatesContractSymlinks(t *testing.T) {
 		t.Fatalf("Codex config not created for --codex: %v", err)
 	}
 	for _, want := range []string{gitDir, filepath.Join(gitDir, ".git")} {
+		// TOML basic strings escape the backslash, so a native Windows path is
+		// written C:\\Users\\... and the raw path never appears verbatim. The
+		// replacement is the identity on Unix.
+		want = strings.ReplaceAll(want, `\`, `\\`)
 		if !strings.Contains(string(configContent), want) {
 			t.Errorf("Codex config missing writable root %q:\n%s", want, string(configContent))
 		}

@@ -1294,28 +1294,30 @@ func TestBlackboardAtomicWriteOnError(t *testing.T) {
 		t.Fatalf("Initial write failed: %v", err)
 	}
 
-	// Make directory read-only to force write error
-	if os.Getuid() != 0 {
-		if err := os.Chmod(dir, 0555); err != nil {
-			t.Fatalf("Failed to make directory read-only: %v", err)
-		}
-		defer os.Chmod(dir, 0755)
+	// Make directory read-only to force write error. os.Chmod cannot express
+	// that on Windows, where the POSIX bits reach only the read-only attribute
+	// and leave directory entry creation untouched — the modify would then
+	// succeed and the assertions below would read a state that did change.
+	restore, err := perm.DenyWrites(dir)
+	if err != nil {
+		t.Fatalf("Failed to make directory read-only: %v", err)
+	}
 
-		// Use shorter timeout for error case since we expect immediate failure
-		bbShortTimeout := bb.WithLockTimeout(500 * time.Millisecond)
+	// Use shorter timeout for error case since we expect immediate failure
+	bbShortTimeout := bb.WithLockTimeout(500 * time.Millisecond)
 
-		// Try to modify - should fail
-		err := bbShortTimeout.Modify(func(s *models.State) error {
-			s.Version = 2
-			return nil
-		})
-		if err == nil {
-			t.Error("Expected error when writing to read-only directory")
-		}
+	// Try to modify - should fail
+	if err := bbShortTimeout.Modify(func(s *models.State) error {
+		s.Version = 2
+		return nil
+	}); err == nil {
+		t.Error("Expected error when writing to read-only directory")
 	}
 
 	// Restore permissions and verify original state is intact
-	os.Chmod(dir, 0755)
+	if err := restore(); err != nil {
+		t.Fatalf("restore write access: %v", err)
+	}
 	readState, err := bb.Read()
 	if err != nil {
 		t.Fatalf("Read after failed modify failed: %v", err)
