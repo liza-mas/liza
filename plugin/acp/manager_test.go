@@ -6,6 +6,10 @@ import (
 )
 
 func TestRunManagerLifecycle(t *testing.T) {
+	// Own the clock rather than race it: the work below takes microseconds, and
+	// Windows measures that as zero.
+	clock := stubClock(t, 250*time.Millisecond)
+
 	m := NewRunManager()
 	run1 := m.Start("task-1")
 	if run1.Warm {
@@ -40,8 +44,8 @@ func TestRunManagerLifecycle(t *testing.T) {
 	if metric1.Usage.InputTokens != 40 {
 		t.Fatalf("unexpected tokens: %#v", metric1.Usage)
 	}
-	if metric1.Duration <= 0 {
-		t.Fatalf("expected duration, got %s", metric1.Duration)
+	if metric1.Duration != clock.step {
+		t.Fatalf("duration = %s, want the one clock step between start and finish (%s)", metric1.Duration, clock.step)
 	}
 	if metric1.Output != "first output chunk" {
 		t.Fatalf("unexpected output: %q", metric1.Output)

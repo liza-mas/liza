@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+// nowFunc is a seam for measuring elapsed time. Windows advances its clock in
+// steps of up to ~15ms, wall and monotonic alike, so a run that completes in
+// microseconds genuinely measures as zero there and a test cannot observe the
+// measurement without owning the clock.
+var nowFunc = time.Now
+
 type ActiveRun struct {
 	TaskID    string
 	SessionID string
@@ -48,13 +54,13 @@ func (m *RunManager) Start(taskID string) ActiveRun {
 func (m *RunManager) StartWithSessionKey(taskID string, sessionKey string) ActiveRun {
 	sessionID, warm := m.sessions.Start(sessionKey)
 
-	now := time.Now().UTC()
+	now := nowFunc()
 	state := &runState{
 		ActiveRun: ActiveRun{
 			TaskID:    taskID,
 			SessionID: sessionID,
 			Warm:      warm,
-			StartedAt: now,
+			StartedAt: now.UTC(),
 		},
 		startedAt: now,
 	}
@@ -115,7 +121,7 @@ func (m *RunManager) Finish(taskID string, exitCode int) (RunMetric, error) {
 		SessionID: state.SessionID,
 		Warm:      state.Warm,
 		ExitCode:  exitCode,
-		Duration:  time.Since(state.startedAt),
+		Duration:  nowFunc().Sub(state.startedAt),
 		Output:    state.Output,
 		Usage:     state.Usage,
 	}
