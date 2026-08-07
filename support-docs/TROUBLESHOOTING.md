@@ -401,9 +401,9 @@ Warning: failed to create CLAUDE.md symlink: symlink ... A required privilege is
 
 ```
 # after an elevated `setup`
-Liza global config written to C:\Users\you\.liza
+§BRAND_NAME_TITLE§ global config written to C:\Users\you\§BRAND_GLOBAL_DIRNAME§
 # but from your normal session
-Test-Path C:\Users\you\.liza    ->  Access denied
+Test-Path C:\Users\you\§BRAND_GLOBAL_DIRNAME§    ->  Access denied
 Get-ChildItem ~/§BRAND_GLOBAL_DIRNAME§  ->  empty
 
 # and an elevated `init`
@@ -466,7 +466,7 @@ when that name is free. If something already occupies it, init falls back to the
 global location and says so:
 
 ```
-C:\Users\you\.claude\CLAUDE.md → C:\Users\you\.liza\CORE.md (repo root has existing CLAUDE.md)
+C:\Users\you\.claude\CLAUDE.md → C:\Users\you\§BRAND_GLOBAL_DIRNAME§\CORE.md (repo root has existing CLAUDE.md)
 ```
 
 That fallback works, but it is not the same thing: the contract then applies to
@@ -477,7 +477,7 @@ session, which points at a POSIX home that does not exist natively:
 
 ```bash
 ls -la CLAUDE.md
-lrwxrwxrwx ... CLAUDE.md -> /home/you/.liza/CORE.md
+lrwxrwxrwx ... CLAUDE.md -> /home/you/§BRAND_GLOBAL_DIRNAME§/CORE.md
 ```
 
 The entry exists, so init sees the name as taken, while nothing can read it —
