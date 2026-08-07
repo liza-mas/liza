@@ -416,16 +416,16 @@ func TestInitDispatch_PairingScipSearchPlanFlagWritesOverrideCommands(t *testing
 		t.Fatalf("%s-index.sh missing after pairing SCIP init: %v", brand.BinaryName, err)
 	}
 	for _, want := range []string{
-		"scip-go index --module-root " + projectRoot + "/services/design-diagnosis/cli --output ",
-		"scip-typescript index --cwd " + projectRoot + "/apps/web/src --output ",
-		"scip-python index --cwd " + projectRoot + "/apps/api --output ",
-		"scip-search aggregate-index --project-root " + projectRoot,
+		"scip-go index --module-root " + shellArgForTest(filepath.Join(projectRoot, "services", "design-diagnosis", "cli")) + " --output ",
+		"scip-typescript index --cwd " + shellArgForTest(filepath.Join(projectRoot, "apps", "web", "src")) + " --output ",
+		"scip-python index --cwd " + shellArgForTest(filepath.Join(projectRoot, "apps", "api")) + " --output ",
+		"scip-search aggregate-index --project-root " + shellArgForTest(projectRoot),
 		"--root services/design-diagnosis/cli --index ",
 		"--root apps/web/src --index ",
 		"--root apps/api --index ",
-		"--out " + projectRoot + "/go.scip",
-		"--out " + projectRoot + "/typescript.scip",
-		"--out " + projectRoot + "/python.scip",
+		"--out " + shellArgForTest(filepath.Join(projectRoot, "go.scip")),
+		"--out " + shellArgForTest(filepath.Join(projectRoot, "typescript.scip")),
+		"--out " + shellArgForTest(filepath.Join(projectRoot, "python.scip")),
 	} {
 		if !strings.Contains(string(script), want) {
 			t.Fatalf("%s-index.sh missing override command %q:\n%s", brand.BinaryName, want, string(script))
@@ -687,6 +687,16 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+// shellArgForTest mirrors how the index script writer emits a word: bare unless
+// it carries a shell metacharacter. A native Windows path carries one — the
+// backslash — so the same value appears quoted there and bare on Unix.
+func shellArgForTest(value string) string {
+	if value != "" && !strings.ContainsAny(value, " \t\n'\"\\$`;&|<>*?!()[]{}") {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
 func writeFakeSembleForTest(t *testing.T, path string) {
 	t.Helper()
 
@@ -697,9 +707,7 @@ func writeFakeSembleForTest(t *testing.T, path string) {
 } >> "$SEMBLE_TEST_LOG"
 exit 0
 `
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake semble: %v", err)
-	}
+	testhelpers.WriteShellStub(t, path, script)
 }
 
 func marshalConfigForTest(t *testing.T, config any) []byte {
