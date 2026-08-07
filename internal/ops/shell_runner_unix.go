@@ -3,6 +3,7 @@
 package ops
 
 import (
+	"context"
 	"os/exec"
 )
 
@@ -12,6 +13,14 @@ import (
 // post_worktree_cmd and other shell-invoked configuration strings.
 func shellCommand(cmdStr, dir string) *exec.Cmd {
 	cmd := exec.Command("sh", "-c", cmdStr)
+	cmd.Dir = dir
+	return cmd
+}
+
+// shellCommandContext is shellCommand bound to a context, for callers that
+// enforce a timeout.
+func shellCommandContext(ctx context.Context, cmdStr, dir string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 	cmd.Dir = dir
 	return cmd
 }

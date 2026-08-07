@@ -2906,12 +2906,14 @@ func TestMergeWorktree_NonNotExistStatErrorNotMisclassified(t *testing.T) {
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
 
-	// Create a regular file at <projectRoot>/scripts so os.Stat on
-	// <projectRoot>/scripts/integration-test.sh returns ENOTDIR.
-	scriptsPath := filepath.Join(tmpDir, "scripts")
-	if err := os.WriteFile(scriptsPath, []byte("not-a-directory"), 0644); err != nil {
-		t.Fatalf("Failed to create scripts path fixture: %v", err)
-	}
+	// The stat has to fail for a reason other than absence. A regular file at
+	// <projectRoot>/scripts gives ENOTDIR on POSIX, but Windows reports that
+	// same layout as "path not found" — os.IsNotExist is true — and an
+	// unprivileged process cannot deny itself access to a path it owns. So the
+	// error is injected.
+	originalStat := statIntegrationScript
+	statIntegrationScript = func(string) (os.FileInfo, error) { return nil, os.ErrPermission }
+	t.Cleanup(func() { statIntegrationScript = originalStat })
 
 	var result *MergeResult
 	var err error

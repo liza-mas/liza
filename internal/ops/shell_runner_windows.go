@@ -3,6 +3,7 @@
 package ops
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -24,6 +25,19 @@ func shellCommand(cmdStr, dir string) *exec.Cmd {
 		return cmd
 	}
 	cmd := exec.Command("cmd", "/c", cmdStr)
+	cmd.Dir = dir
+	return cmd
+}
+
+// shellCommandContext is shellCommand bound to a context, for callers that
+// enforce a timeout.
+func shellCommandContext(ctx context.Context, cmdStr, dir string) *exec.Cmd {
+	if path, err := exec.LookPath("sh"); err == nil {
+		cmd := exec.CommandContext(ctx, path, "-c", cmdStr)
+		cmd.Dir = dir
+		return cmd
+	}
+	cmd := exec.CommandContext(ctx, "cmd", "/c", cmdStr)
 	cmd.Dir = dir
 	return cmd
 }
