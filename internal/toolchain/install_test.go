@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -395,5 +396,96 @@ func TestPackageInstallUsesWingetIdentifier(t *testing.T) {
 	}
 	if !slices.Contains(runner.runs[0].Args, "BurntSushi.ripgrep.MSVC") {
 		t.Fatalf("args = %v, want the winget package identifier rather than the plain name", runner.runs[0].Args)
+	}
+}
+
+func TestNPMInstallTargetsTheManagedDirectoryOnWindows(t *testing.T) {
+	// npm writes global executables to <prefix>/bin on Unix but to <prefix>
+	// itself on Windows. Passing the parent there scatters the shims one level
+	// above the managed directory, where nothing on PATH finds them.
+	installDir := filepath.Join(t.TempDir(), "bin")
+	tool := Tool{ID: "npm-tool", Binary: "npm-tool", InstallKind: InstallNPM, NPMPackage: "example"}
+
+	windows, err := installCommand(tool, installDir, &fakeRunner{}, "windows")
+	if err != nil {
+		t.Fatalf("installCommand(windows) error = %v", err)
+	}
+	if got := windows.Env["NPM_CONFIG_PREFIX"]; got != installDir {
+		t.Fatalf("NPM_CONFIG_PREFIX = %q, want the install dir itself %q", got, installDir)
+	}
+
+	unix, err := installCommand(tool, installDir, &fakeRunner{}, "linux")
+	if err != nil {
+		t.Fatalf("installCommand(linux) error = %v", err)
+	}
+	if got := unix.Env["NPM_CONFIG_PREFIX"]; got != filepath.Dir(installDir) {
+		t.Fatalf("NPM_CONFIG_PREFIX = %q, want the parent %q", got, filepath.Dir(installDir))
+	}
+}
+
+func TestPackageManagerInstallIsNotFailedForBeingOffThisProcessPath(t *testing.T) {
+	// winget and friends install into their own prefix and extend PATH for
+	// processes started afterwards. Demanding proof from this process's PATH
+	// would report a successful install as a failure.
+	runner := &fakeRunner{paths: map[string]string{"winget": "C:\\winget.exe"}}
+
+	got, err := Install(InstallOptions{
+		Profile:    ProfileBalanced,
+		Include:    []string{"jq"},
+		Exclude:    allToolIDsExcept("jq"),
+		InstallDir: t.TempDir(),
+		Runner:     runner,
+		GOOS:       "windows",
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if got.Steps[0].Status != InstallInstalled {
+		t.Fatalf("status = %s (%s), want installed", got.Steps[0].Status, got.Steps[0].Message)
+	}
+	if !strings.Contains(got.Steps[0].Message, "new shell") {
+		t.Fatalf("message = %q, want the PATH caveat", got.Steps[0].Message)
+	}
+}
+
+func TestWindowsRenameLeavesNpmShimsAlone(t *testing.T) {
+	// npm writes <name>, <name>.cmd and <name>.ps1. The extensionless one is a
+	// POSIX shell wrapper; renaming it to .exe would shadow the .cmd that
+	// actually runs, because PATHEXT tries .EXE first.
+	installDir := t.TempDir()
+	for _, name := range []string{"npm-tool", "npm-tool.cmd", "npm-tool.ps1"} {
+		if err := os.WriteFile(filepath.Join(installDir, name), []byte("stub"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tool := Tool{ID: "npm-tool", Binary: "npm-tool", InstallKind: InstallNPM}
+
+	step := verifyInstalled(InstallStep{ToolID: tool.ID, Status: InstallInstalled}, tool, installDir, &fakeRunner{}, "windows")
+
+	if step.Status != InstallInstalled {
+		t.Fatalf("status = %s (%s), want installed", step.Status, step.Message)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, "npm-tool.exe")); err == nil {
+		t.Fatal("the shell wrapper was renamed to .exe, shadowing the .cmd shim")
+	}
+	if _, err := os.Stat(filepath.Join(installDir, "npm-tool")); err != nil {
+		t.Fatalf("the shell wrapper should be left in place: %v", err)
+	}
+}
+
+func TestWindowsRenamesWhenNothingRunnableExists(t *testing.T) {
+	installDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(installDir, "built"), []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool := Tool{ID: "built", Binary: "built", InstallKind: InstallScript}
+
+	step := verifyInstalled(InstallStep{ToolID: tool.ID, Status: InstallInstalled}, tool, installDir, &fakeRunner{}, "windows")
+
+	if step.Status != InstallInstalled {
+		t.Fatalf("status = %s (%s), want installed", step.Status, step.Message)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, "built.exe")); err != nil {
+		t.Fatalf("expected the binary to be renamed so PATH can resolve it: %v", err)
 	}
 }
