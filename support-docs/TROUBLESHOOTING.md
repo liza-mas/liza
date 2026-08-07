@@ -392,6 +392,104 @@ Warning: failed to create CLAUDE.md symlink: symlink ... A required privilege is
 1. **Enable Developer Mode** (recommended): Settings → System → For developers → toggle Developer Mode on. Then re-run `§BRAND_BINARY_NAME§ setup` and `§BRAND_BINARY_NAME§ init`.
 
 2. **Run elevated**: Open your terminal as Administrator, then re-run the command.
+   Check first that elevation keeps you as the same account — see the next
+   section, where it does not.
+
+### Elevation runs as a different account
+
+**Symptoms** — several, and none of them names the cause:
+
+```
+# after an elevated `setup`
+Liza global config written to C:\Users\you\.liza
+# but from your normal session
+Test-Path C:\Users\you\.liza    ->  Access denied
+Get-ChildItem ~/§BRAND_GLOBAL_DIRNAME§  ->  empty
+
+# and an elevated `init`
+Error: failed to determine project root: ... exit status 128
+fatal: detected dubious ownership in repository at '...'
+```
+
+**Cause:** on a domain-joined machine, the administrator you elevate to may be a
+**local** account that merely shares your short name. Windows gives it its own
+profile — `C:\Users\you` next to `C:\Users\you.DOMAIN` — so `~` means something
+different on each side, and Git sees a repository owned by someone else.
+
+Compare both sides; different prefixes mean different accounts:
+
+```powershell
+whoami   # normal session,  e.g. PROGINOV\you
+whoami   # elevated session, e.g. PORT_MACHINE\you
+```
+
+**Preferred fix — stop needing elevation.** Grant the working account the
+privilege the symlinks require, and everything runs in the right profile with no
+juggling: `secpol.msc` → Local Policies → User Rights Assignment → **Create
+symbolic links** → add your account → sign out and back in. Verify with
+`whoami /priv | Select-String Symbolic`. Group policy may revert this on refresh.
+
+**Otherwise — elevate, but redirect.** §BRAND_NAME_TITLE§ resolves `~` from
+`HOME` before falling back to the account's profile, so `HOME` is the lever. Git
+needs telling separately that the repository is trustworthy for this account.
+
+```powershell
+$env:HOME = "C:\Users\you.DOMAIN"
+git config --global --add safe.directory C:/path/to/your/repo
+§BRAND_BINARY_NAME§ setup --claude
+cd C:\path\to\your\repo
+§BRAND_BINARY_NAME§ init --claude
+```
+
+- Keep it all in one shell session: `HOME` does not persist.
+- Give Git the **resolved** path it prints in the error, not a junction pointing
+  at it.
+- With `HOME` redirected, `git config --global` writes into *your* `.gitconfig`,
+  not the administrator's. That is usually what you want — later elevated
+  sessions will read it back — and the entry is inert for you, since you own the
+  repository. To keep your config untouched, point `GIT_CONFIG_GLOBAL` at a
+  scratch file first; your `user.name` and `user.email` will then be unread,
+  which is harmless for `init`.
+- Files land in your profile but are created by the other account. ACL
+  inheritance normally still grants you full control; if a later `--force` write
+  fails, check with `icacls`.
+
+**Do not elevate without redirecting `HOME`.** `init` would create `CLAUDE.md`
+pointing at the *other* account's `~/§BRAND_GLOBAL_DIRNAME§/CORE.md` — a symlink
+that looks correct, resolves to a directory your session cannot read, and fails
+later at a point far from its cause.
+
+### init reports "repo root has existing CLAUDE.md" and links globally
+
+`§BRAND_BINARY_NAME§ init` only creates the contract link at the repository root
+when that name is free. If something already occupies it, init falls back to the
+global location and says so:
+
+```
+C:\Users\you\.claude\CLAUDE.md → C:\Users\you\.liza\CORE.md (repo root has existing CLAUDE.md)
+```
+
+That fallback works, but it is not the same thing: the contract then applies to
+every project you open, not this one.
+
+A common cause on Windows is a contract link left behind by a WSL or MSYS
+session, which points at a POSIX home that does not exist natively:
+
+```bash
+ls -la CLAUDE.md
+lrwxrwxrwx ... CLAUDE.md -> /home/you/.liza/CORE.md
+```
+
+The entry exists, so init sees the name as taken, while nothing can read it —
+`cat CLAUDE.md` reports "No such file or directory" and PowerShell shows a
+zero-length file with no target. Remove the dangling link and re-run init:
+
+```powershell
+Remove-Item -LiteralPath CLAUDE.md -Force
+```
+
+These files are listed in `.gitignore`, so removing one costs nothing in the
+repository.
 
 ### Hooks do nothing, or bash reports "No such file or directory" on Windows
 
