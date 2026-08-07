@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -761,11 +762,13 @@ func collectCompletedTasks(state *models.State) []prompts.CompletedTaskSummary {
 }
 
 // resolveWorktreePath returns the absolute worktree path, or "" if worktree is nil.
+// The stored worktree value is always slash-separated; joining it with filepath.Join
+// yields the platform-native path the agent's tools and the init gate expect.
 func resolveWorktreePath(projectRoot string, worktree *string) string {
 	if worktree == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s/%s", projectRoot, *worktree)
+	return filepath.Join(projectRoot, *worktree)
 }
 
 // derefString returns the value pointed to by s, or "" if s is nil.
