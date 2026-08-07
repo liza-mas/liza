@@ -144,18 +144,31 @@ func verifyInstalled(step InstallStep, tool Tool, installDir string, runner Runn
 		return step
 	}
 
-	if goos == "windows" {
+	// A package manager installs into its own prefix and extends PATH for
+	// processes started afterwards, so neither the managed directory nor this
+	// process's PATH can show the result: the environment was captured before
+	// the install ran. Its exit code is the only evidence available here, and a
+	// package manager is a trustworthy reporter.
+	if tool.InstallKind == InstallPackage {
+		step.Message = strings.TrimSpace(step.Message + " (installed by a package manager; start a new shell for PATH to include it)")
+		return step
+	}
+
+	if goos == "windows" && !hasExecutableForm(tool, installDir) {
+		// Only when nothing runnable exists. npm, for one, writes three files per
+		// package — a POSIX shell wrapper with no extension plus .cmd and .ps1
+		// shims — and the extensionless one is a script, not a binary. Renaming
+		// it would put a shell script where PATHEXT looks for an executable
+		// first, shadowing the .cmd that actually works.
 		plain := filepath.Join(installDir, tool.Binary)
-		suffixed := plain + ".exe"
-		if _, err := os.Stat(suffixed); err != nil {
-			if info, statErr := os.Stat(plain); statErr == nil && !info.IsDir() {
-				if renameErr := os.Rename(plain, suffixed); renameErr != nil {
-					step.Status = InstallFailed
-					step.Message = fmt.Sprintf("%s was installed as %s, which Windows cannot resolve through PATH, and renaming it failed: %v", tool.ID, plain, renameErr)
-					return step
-				}
-				step.Message = strings.TrimSpace(step.Message + " (renamed to " + filepath.Base(suffixed) + " so PATH can resolve it)")
+		if info, statErr := os.Stat(plain); statErr == nil && !info.IsDir() {
+			suffixed := plain + ".exe"
+			if renameErr := os.Rename(plain, suffixed); renameErr != nil {
+				step.Status = InstallFailed
+				step.Message = fmt.Sprintf("%s was installed as %s, which Windows cannot resolve through PATH, and renaming it failed: %v", tool.ID, plain, renameErr)
+				return step
 			}
+			step.Message = strings.TrimSpace(step.Message + " (renamed to " + filepath.Base(suffixed) + " so PATH can resolve it)")
 		}
 	}
 
@@ -177,16 +190,26 @@ func verifyInstalled(step InstallStep, tool Tool, installDir string, runner Runn
 }
 
 func binaryInInstallDir(tool Tool, installDir, goos string) bool {
-	candidates := []string{filepath.Join(installDir, tool.Binary)}
 	if goos == "windows" {
-		candidates = append(candidates, filepath.Join(installDir, tool.Binary+".exe"))
+		return hasExecutableForm(tool, installDir) || regularFileExists(filepath.Join(installDir, tool.Binary))
 	}
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+	return regularFileExists(filepath.Join(installDir, tool.Binary))
+}
+
+// hasExecutableForm reports whether the install directory already holds a form
+// of the tool that Windows will resolve through PATHEXT.
+func hasExecutableForm(tool Tool, installDir string) bool {
+	for _, ext := range []string{".exe", ".cmd", ".bat", ".com"} {
+		if regularFileExists(filepath.Join(installDir, tool.Binary+ext)) {
 			return true
 		}
 	}
 	return false
+}
+
+func regularFileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func installCommand(tool Tool, installDir string, runner Runner, goos string) (Command, error) {
@@ -218,13 +241,17 @@ func installCommand(tool Tool, installDir string, runner Runner, goos string) (C
 			Env:  map[string]string{"GOBIN": installDir},
 		}, nil
 	case InstallNPM:
-		prefix, err := npmPrefixForBinDir(installDir)
+		prefix, err := npmPrefixForBinDir(installDir, goos)
 		if err != nil {
 			return Command{}, err
 		}
 		return Command{Name: "npm", Args: []string{"install", "-g", tool.NPMPackage}, Env: map[string]string{"NPM_CONFIG_PREFIX": prefix}}, nil
 	case InstallUVTool:
-		return Command{Name: "uv", Args: []string{"tool", "install", tool.UVPackage}, Env: map[string]string{"UV_TOOL_BIN_DIR": installDir}}, nil
+		// --force because this step is only reached when the binary is missing:
+		// uv considers a tool installed from its own registry and would report
+		// success without recreating the executable a previous install placed
+		// somewhere else.
+		return Command{Name: "uv", Args: []string{"tool", "install", "--force", tool.UVPackage}, Env: map[string]string{"UV_TOOL_BIN_DIR": installDir}}, nil
 	case InstallPackage:
 		return packageInstallCommand(tool, runner)
 	default:
@@ -303,7 +330,17 @@ func installResultError(steps []InstallStep) error {
 	return fmt.Errorf("toolchain install incomplete: %s", strings.Join(failed, ", "))
 }
 
-func npmPrefixForBinDir(binDir string) (string, error) {
+// npmPrefixForBinDir maps the directory binaries should land in to the prefix
+// npm needs to be given.
+//
+// npm writes global executables to <prefix>/bin on Unix but to <prefix> itself
+// on Windows, with no bin subdirectory. Passing the parent on Windows therefore
+// scatters the shims one level above the managed directory, where nothing on
+// PATH finds them.
+func npmPrefixForBinDir(binDir, goos string) (string, error) {
+	if goos == "windows" {
+		return binDir, nil
+	}
 	if filepath.Base(binDir) != "bin" {
 		return "", fmt.Errorf("npm global installs require install dir ending in /bin, got %s", binDir)
 	}
