@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,11 +58,9 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
-	_ = goos // reserved for future per-OS install behavior
-
 	result := InstallResult{Profile: selection.Profile, InstallDir: installDir}
 	for _, tool := range selection.Tools {
-		step := installOne(tool, installDir, opts.DryRun, runner)
+		step := installOne(tool, installDir, opts.DryRun, runner, goos)
 		result.Steps = append(result.Steps, step)
 	}
 	if err := installResultError(result.Steps); err != nil {
@@ -70,7 +69,7 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	return result, nil
 }
 
-func installOne(tool Tool, installDir string, dryRun bool, runner Runner) InstallStep {
+func installOne(tool Tool, installDir string, dryRun bool, runner Runner, goos string) InstallStep {
 	if tool.InstallKind == InstallManualOnly {
 		return InstallStep{ToolID: tool.ID, Status: InstallSkipped, Message: tool.ManualNote}
 	}
@@ -80,7 +79,16 @@ func installOne(tool Tool, installDir string, dryRun bool, runner Runner) Instal
 		}
 	}
 
-	command, err := installCommand(tool, installDir, runner)
+	command, err := installCommand(tool, installDir, runner, goos)
+	if errors.Is(err, errNoPackagePath) {
+		// Nothing automated can install it here. Say what would, and let doctor
+		// keep reporting it missing until someone does.
+		message := "no package manager on this host carries " + tool.ID
+		if tool.ManualInstallNote != "" {
+			message += "; " + tool.ManualInstallNote
+		}
+		return InstallStep{ToolID: tool.ID, Status: InstallSkipped, Message: message}
+	}
 	if err != nil {
 		return InstallStep{ToolID: tool.ID, Status: InstallFailed, Message: err.Error()}
 	}
@@ -107,20 +115,88 @@ func installOne(tool Tool, installDir string, dryRun bool, runner Runner) Instal
 				Output:  fallbackOutput,
 			}
 		}
-		return InstallStep{
+		return verifyInstalled(InstallStep{
 			ToolID:  tool.ID,
 			Status:  InstallInstalled,
 			Message: "installed from source after primary installer failed",
 			Command: fallback,
 			Output:  fallbackOutput,
-		}
+		}, tool, installDir, runner, goos)
 	}
-	return InstallStep{ToolID: tool.ID, Status: InstallInstalled, Command: command, Output: output}
+	return verifyInstalled(InstallStep{ToolID: tool.ID, Status: InstallInstalled, Command: command, Output: output}, tool, installDir, runner, goos)
 }
 
-func installCommand(tool Tool, installDir string, runner Runner) (Command, error) {
+// verifyInstalled confirms the tool is reachable now that its installer claims
+// success, and repairs the one case where it reliably is not.
+//
+// An installer that builds from source with `go build -o <dir>/<name>` writes
+// exactly that name, and Go honours it — so on Windows the result carries no
+// extension and nothing resolves it through PATHEXT: not exec.LookPath, not
+// cmd, not PowerShell. The install reports success and every later invocation
+// fails, including toolchain doctor, which reports the tool missing seconds
+// after it was installed. Renaming it is safe: the file sits in the directory
+// this command was told to manage.
+//
+// Anything still unresolved afterwards is reported as a failure rather than
+// left to be discovered later.
+func verifyInstalled(step InstallStep, tool Tool, installDir string, runner Runner, goos string) InstallStep {
+	if tool.Binary == "" {
+		return step
+	}
+
+	if goos == "windows" {
+		plain := filepath.Join(installDir, tool.Binary)
+		suffixed := plain + ".exe"
+		if _, err := os.Stat(suffixed); err != nil {
+			if info, statErr := os.Stat(plain); statErr == nil && !info.IsDir() {
+				if renameErr := os.Rename(plain, suffixed); renameErr != nil {
+					step.Status = InstallFailed
+					step.Message = fmt.Sprintf("%s was installed as %s, which Windows cannot resolve through PATH, and renaming it failed: %v", tool.ID, plain, renameErr)
+					return step
+				}
+				step.Message = strings.TrimSpace(step.Message + " (renamed to " + filepath.Base(suffixed) + " so PATH can resolve it)")
+			}
+		}
+	}
+
+	// The binary is accounted for if it landed in the directory this command
+	// manages, or if it is resolvable anywhere on PATH — a package manager puts
+	// it under its own prefix, not here. Being absent from PATH is not a
+	// failure: the install directory is wired in by `toolchain configure`, which
+	// may not have run yet.
+	if binaryInInstallDir(tool, installDir, goos) {
+		return step
+	}
+	if path, err := runner.LookPath(tool.Binary); err == nil && path != "" {
+		return step
+	}
+	step.Status = InstallFailed
+	step.Message = strings.TrimSpace(fmt.Sprintf("%s installer reported success but produced no %s in %s and none is on PATH. %s",
+		tool.ID, tool.Binary, installDir, step.Message))
+	return step
+}
+
+func binaryInInstallDir(tool Tool, installDir, goos string) bool {
+	candidates := []string{filepath.Join(installDir, tool.Binary)}
+	if goos == "windows" {
+		candidates = append(candidates, filepath.Join(installDir, tool.Binary+".exe"))
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func installCommand(tool Tool, installDir string, runner Runner, goos string) (Command, error) {
 	switch tool.InstallKind {
 	case InstallScript:
+		// A tool whose install script rejects Windows may still publish a
+		// native build. Prefer that over a script that cannot run.
+		if goos == "windows" && tool.WindowsArchiveURL != "" {
+			return windowsArchiveCommand(tool, installDir), nil
+		}
 		if tool.InstallURL == "" {
 			return Command{}, fmt.Errorf("%s has no install URL", tool.ID)
 		}
@@ -150,9 +226,38 @@ func installCommand(tool Tool, installDir string, runner Runner) (Command, error
 	case InstallUVTool:
 		return Command{Name: "uv", Args: []string{"tool", "install", tool.UVPackage}, Env: map[string]string{"UV_TOOL_BIN_DIR": installDir}}, nil
 	case InstallPackage:
-		return packageInstallCommand(tool.PackageName, runner)
+		return packageInstallCommand(tool, runner)
 	default:
 		return Command{}, fmt.Errorf("%s has unsupported install kind %q", tool.ID, tool.InstallKind)
+	}
+}
+
+// windowsArchiveCommand downloads a release archive and unpacks the binary into
+// the install directory, through PowerShell rather than curl and tar so it works
+// on a host with no Unix tooling at all.
+func windowsArchiveCommand(tool Tool, installDir string) Command {
+	script := strings.Join([]string{
+		`$ErrorActionPreference = 'Stop'`,
+		`$work = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString('N'))`,
+		`New-Item -ItemType Directory -Path $work | Out-Null`,
+		`try {`,
+		`  $archive = Join-Path $work 'archive.zip'`,
+		`  Invoke-WebRequest -Uri $env:LIZA_TOOL_ARCHIVE_URL -OutFile $archive -UseBasicParsing`,
+		`  Expand-Archive -Path $archive -DestinationPath $work -Force`,
+		`  $binary = Get-ChildItem -Path $work -Recurse -Filter ($env:LIZA_TOOL_BINARY + '.exe') | Select-Object -First 1`,
+		`  if (-not $binary) { throw ('archive does not contain ' + $env:LIZA_TOOL_BINARY + '.exe') }`,
+		`  New-Item -ItemType Directory -Path $env:LIZA_TOOL_INSTALL_DIR -Force | Out-Null`,
+		`  Move-Item -Path $binary.FullName -Destination (Join-Path $env:LIZA_TOOL_INSTALL_DIR ($env:LIZA_TOOL_BINARY + '.exe')) -Force`,
+		`} finally { Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue }`,
+	}, "; ")
+	return Command{
+		Name: "powershell",
+		Args: []string{"-NoProfile", "-NonInteractive", "-Command", script},
+		Env: map[string]string{
+			"LIZA_TOOL_ARCHIVE_URL": tool.WindowsArchiveURL,
+			"LIZA_TOOL_BINARY":      tool.Binary,
+			"LIZA_TOOL_INSTALL_DIR": installDir,
+		},
 	}
 }
 
@@ -205,30 +310,83 @@ func npmPrefixForBinDir(binDir string) (string, error) {
 	return filepath.Dir(binDir), nil
 }
 
-func packageInstallCommand(packageName string, runner Runner) (Command, error) {
-	if packageName == "" {
+// errNoPackagePath reports that no package manager on this host can install the
+// tool. It is distinct from a failure: the tool may still be installable by
+// hand, and the caller turns it into an actionable message rather than an error.
+var errNoPackagePath = errors.New("no package manager path")
+
+func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
+	if tool.PackageName == "" {
 		return Command{}, fmt.Errorf("missing package name")
 	}
-	if strings.HasPrefix(packageName, "http://") || strings.HasPrefix(packageName, "https://") {
-		return Command{}, fmt.Errorf("URL package installs are not supported: %s", packageName)
+	if strings.HasPrefix(tool.PackageName, "http://") || strings.HasPrefix(tool.PackageName, "https://") {
+		return Command{}, fmt.Errorf("URL package installs are not supported: %s", tool.PackageName)
 	}
+
+	// Windows managers come first so they win on a host that has both, which is
+	// the case under Git Bash with scoop or a WSL-adjacent brew on PATH.
 	packageManagers := []struct {
 		binary string
-		cmd    Command
+		build  func(name string) Command
 	}{
-		{"brew", Command{Name: "brew", Args: []string{"install", packageName}}},
-		{"apt-get", Command{Name: "sh", Args: []string{"-c", `sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"`}, Env: map[string]string{"LIZA_TOOL_PACKAGE": packageName}}},
-		{"dnf", Command{Name: "sudo", Args: []string{"dnf", "install", "-y", packageName}}},
-		{"yum", Command{Name: "sudo", Args: []string{"yum", "install", "-y", packageName}}},
-		{"pacman", Command{Name: "sudo", Args: []string{"pacman", "-Sy", "--needed", packageName}}},
-		{"zypper", Command{Name: "sudo", Args: []string{"zypper", "install", "-y", packageName}}},
+		{"winget", func(name string) Command {
+			return Command{Name: "winget", Args: []string{
+				"install", "--exact", "--id", name,
+				"--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity",
+			}}
+		}},
+		{"scoop", func(name string) Command { return Command{Name: "scoop", Args: []string{"install", name}} }},
+		{"choco", func(name string) Command {
+			return Command{Name: "choco", Args: []string{"install", name, "-y", "--no-progress"}}
+		}},
+		{"brew", func(name string) Command { return Command{Name: "brew", Args: []string{"install", name}} }},
+		{"apt-get", func(name string) Command {
+			return Command{Name: "sh", Args: []string{"-c", `sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"`}, Env: map[string]string{"LIZA_TOOL_PACKAGE": name}}
+		}},
+		{"dnf", func(name string) Command { return Command{Name: "sudo", Args: []string{"dnf", "install", "-y", name}} }},
+		{"yum", func(name string) Command { return Command{Name: "sudo", Args: []string{"yum", "install", "-y", name}} }},
+		{"pacman", func(name string) Command {
+			return Command{Name: "sudo", Args: []string{"pacman", "-Sy", "--needed", name}}
+		}},
+		{"zypper", func(name string) Command {
+			return Command{Name: "sudo", Args: []string{"zypper", "install", "-y", name}}
+		}},
 	}
+
+	var names []string
 	for _, candidate := range packageManagers {
-		if path, err := runner.LookPath(candidate.binary); err == nil && path != "" {
-			return candidate.cmd, nil
+		names = append(names, candidate.binary)
+		path, err := runner.LookPath(candidate.binary)
+		if err != nil || path == "" {
+			continue
 		}
+		packageName, ok := packageNameFor(tool, candidate.binary)
+		if !ok {
+			// The manager is present but carries this tool under no name we
+			// know. Installing PackageName blindly would install whatever else
+			// answers to it, so stop here rather than guess.
+			return Command{}, errNoPackagePath
+		}
+		return candidate.build(packageName), nil
 	}
-	return Command{}, fmt.Errorf("no supported package manager found for %s (checked brew, apt-get, dnf, yum, pacman, zypper)", packageName)
+	return Command{}, fmt.Errorf("no supported package manager found for %s (checked %s)", tool.PackageName, strings.Join(names, ", "))
+}
+
+// packageNameFor resolves the package identifier for one manager.
+//
+// Unix managers share the plain name. The Windows managers identify packages by
+// publisher-qualified IDs, so they are only used when the catalog states the
+// identifier explicitly.
+func packageNameFor(tool Tool, manager string) (string, bool) {
+	if name, ok := tool.PackageNamesByManager[manager]; ok && name != "" {
+		return name, true
+	}
+	switch manager {
+	case "winget", "scoop", "choco":
+		return "", false
+	default:
+		return tool.PackageName, true
+	}
 }
 
 func resolveInstallDir(raw string) (string, error) {

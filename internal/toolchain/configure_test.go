@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -181,6 +182,7 @@ func TestConfigureShellProfileUsesBashStartupFiles(t *testing.T) {
 		WriteShellProfile: true,
 		HomeDir:           home,
 		Shell:             "/bin/bash",
+		GOOS:              "linux",
 	})
 	if err != nil {
 		t.Fatalf("Configure() error = %v", err)
@@ -291,4 +293,70 @@ func contains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestConfigureWritesPowerShellActivationOnWindows(t *testing.T) {
+	home := t.TempDir()
+	globalDir := t.TempDir()
+	installDir := filepath.Join(t.TempDir(), "bin")
+
+	got, err := Configure(ConfigureOptions{
+		Profile:           ProfileLean,
+		GlobalDir:         globalDir,
+		InstallDir:        installDir,
+		WriteShellProfile: true,
+		HomeDir:           home,
+		Shell:             "/bin/bash",
+		GOOS:              "windows",
+	})
+	if err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+
+	if got.PowerShellEnvPath == "" {
+		t.Fatal("PowerShellEnvPath = empty, want an env.ps1 beside env.sh")
+	}
+	env, err := os.ReadFile(got.PowerShellEnvPath)
+	if err != nil {
+		t.Fatalf("read PowerShell env: %v", err)
+	}
+	if !strings.Contains(string(env), "$env:PATH = ") {
+		t.Fatalf("PowerShell env does not extend PATH:\n%s", env)
+	}
+	for _, entry := range got.ActivationEnv {
+		name, _, _ := strings.Cut(entry, "=")
+		if !strings.Contains(string(env), "$env:"+name+" = ") {
+			t.Fatalf("PowerShell env missing %s:\n%s", name, env)
+		}
+	}
+
+	profilePath := filepath.Join(home, "Documents", "WindowsPowerShell", "profile.ps1")
+	if !slices.Contains(got.ShellProfilePaths, profilePath) {
+		t.Fatalf("ShellProfilePaths = %v, want it to include %s", got.ShellProfilePaths, profilePath)
+	}
+	profile, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read PowerShell profile: %v", err)
+	}
+	if !strings.Contains(string(profile), got.PowerShellEnvPath) {
+		t.Fatalf("PowerShell profile does not source env.ps1:\n%s", profile)
+	}
+}
+
+func TestConfigureLeavesPowerShellAloneOnUnix(t *testing.T) {
+	got, err := Configure(ConfigureOptions{
+		Profile:           ProfileLean,
+		GlobalDir:         t.TempDir(),
+		InstallDir:        filepath.Join(t.TempDir(), "bin"),
+		WriteShellProfile: true,
+		HomeDir:           t.TempDir(),
+		Shell:             "/bin/bash",
+		GOOS:              "linux",
+	})
+	if err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	if got.PowerShellEnvPath != "" {
+		t.Fatalf("PowerShellEnvPath = %q, want empty off Windows", got.PowerShellEnvPath)
+	}
 }

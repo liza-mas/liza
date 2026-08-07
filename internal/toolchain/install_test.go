@@ -12,6 +12,10 @@ type fakeRunner struct {
 	paths             map[string]string
 	runs              []Command
 	failInstallScript bool
+	// resolvesAfterRun names the binaries a successful Run makes available, so
+	// the fake reflects what an installer actually does: the tool is absent
+	// before the command and on PATH after it.
+	resolvesAfterRun []string
 }
 
 func (f *fakeRunner) LookPath(name string) (string, error) {
@@ -28,6 +32,12 @@ func (f *fakeRunner) Run(command Command) (CommandOutput, error) {
 	f.runs = append(f.runs, command)
 	if f.failInstallScript && command.Env["LIZA_TOOL_INSTALL_URL"] != "" {
 		return CommandOutput{Stderr: "release metadata unavailable"}, errors.New("exit status 1")
+	}
+	for _, name := range f.resolvesAfterRun {
+		if f.paths == nil {
+			f.paths = map[string]string{}
+		}
+		f.paths[name] = "/fake/bin/" + name
 	}
 	return CommandOutput{Stdout: "ok"}, nil
 }
@@ -108,7 +118,7 @@ func TestInstallManualToolIsSkipped(t *testing.T) {
 }
 
 func TestPackageInstallCommandRequiresKnownPackageManager(t *testing.T) {
-	_, err := packageInstallCommand("jq", &fakeRunner{})
+	_, err := packageInstallCommand(Tool{ID: "jq", PackageName: "jq"}, &fakeRunner{})
 	if err == nil {
 		t.Fatal("packageInstallCommand() error = nil, want missing package manager error")
 	}
@@ -118,7 +128,7 @@ func TestPackageInstallCommandRequiresKnownPackageManager(t *testing.T) {
 }
 
 func TestPackageInstallCommandRejectsURLPackage(t *testing.T) {
-	_, err := packageInstallCommand("https://example.test/tool.rb", &fakeRunner{})
+	_, err := packageInstallCommand(Tool{ID: "tool", PackageName: "https://example.test/tool.rb"}, &fakeRunner{})
 	if err == nil {
 		t.Fatal("packageInstallCommand() error = nil, want URL package rejection")
 	}
@@ -128,7 +138,7 @@ func TestPackageInstallCommandRejectsURLPackage(t *testing.T) {
 }
 
 func TestInstallFallsBackToGoSourceBuildWhenScriptFails(t *testing.T) {
-	runner := &fakeRunner{paths: map[string]string{}, failInstallScript: true}
+	runner := &fakeRunner{paths: map[string]string{}, failInstallScript: true, resolvesAfterRun: []string{"mdtoc"}}
 	got, err := Install(InstallOptions{
 		Profile:    ProfileBalanced,
 		Include:    []string{"mdtoc"},
@@ -202,7 +212,7 @@ func TestBashPolicyCatalogPlansStandaloneInstaller(t *testing.T) {
 	}
 
 	installDir := filepath.Join(t.TempDir(), "bin")
-	command, err := installCommand(tool, installDir, &fakeRunner{})
+	command, err := installCommand(tool, installDir, &fakeRunner{}, "linux")
 	if err != nil {
 		t.Fatalf("installCommand() error = %v", err)
 	}
@@ -229,7 +239,7 @@ func allToolIDsExcept(keep ...string) []string {
 }
 
 func TestInstallRunsCommandWhenNotDryRun(t *testing.T) {
-	runner := &fakeRunner{paths: map[string]string{}}
+	runner := &fakeRunner{paths: map[string]string{}, resolvesAfterRun: []string{"rtk"}}
 	installDir := t.TempDir()
 	got, err := Install(InstallOptions{
 		Profile:    ProfileBalanced,
@@ -237,6 +247,7 @@ func TestInstallRunsCommandWhenNotDryRun(t *testing.T) {
 		Exclude:    allToolIDsExcept("rtk"),
 		InstallDir: installDir,
 		Runner:     runner,
+		GOOS:       "linux",
 	})
 	if err != nil {
 		t.Fatalf("Install() error = %v", err)
@@ -276,7 +287,7 @@ func TestInstallReturnsErrorWhenAnyStepFails(t *testing.T) {
 
 func TestInstallNPMUsesPrefixForInstallDirBin(t *testing.T) {
 	installDir := filepath.Join(t.TempDir(), "bin")
-	got, err := installCommand(Tool{ID: "npm-tool", InstallKind: InstallNPM, NPMPackage: "example"}, installDir, &fakeRunner{})
+	got, err := installCommand(Tool{ID: "npm-tool", InstallKind: InstallNPM, NPMPackage: "example"}, installDir, &fakeRunner{}, "linux")
 	if err != nil {
 		t.Fatalf("installCommand() error = %v", err)
 	}
@@ -286,7 +297,7 @@ func TestInstallNPMUsesPrefixForInstallDirBin(t *testing.T) {
 }
 
 func TestInstallNPMRejectsInstallDirOutsideBin(t *testing.T) {
-	_, err := installCommand(Tool{ID: "npm-tool", InstallKind: InstallNPM, NPMPackage: "example"}, t.TempDir(), &fakeRunner{})
+	_, err := installCommand(Tool{ID: "npm-tool", InstallKind: InstallNPM, NPMPackage: "example"}, t.TempDir(), &fakeRunner{}, "linux")
 	if err == nil {
 		t.Fatal("installCommand() error = nil, want npm bin-dir validation")
 	}
@@ -297,11 +308,92 @@ func TestInstallNPMRejectsInstallDirOutsideBin(t *testing.T) {
 
 func TestInstallUVUsesToolBinDir(t *testing.T) {
 	installDir := t.TempDir()
-	got, err := installCommand(Tool{ID: "uv-tool", InstallKind: InstallUVTool, UVPackage: "example"}, installDir, &fakeRunner{})
+	got, err := installCommand(Tool{ID: "uv-tool", InstallKind: InstallUVTool, UVPackage: "example"}, installDir, &fakeRunner{}, "linux")
 	if err != nil {
 		t.Fatalf("installCommand() error = %v", err)
 	}
 	if got.Env["UV_TOOL_BIN_DIR"] != installDir {
 		t.Fatalf("UV_TOOL_BIN_DIR = %q, want %q", got.Env["UV_TOOL_BIN_DIR"], installDir)
+	}
+}
+
+func TestInstallUsesWindowsArchiveWhenScriptCannotRun(t *testing.T) {
+	runner := &fakeRunner{paths: map[string]string{}, resolvesAfterRun: []string{"rtk"}}
+	installDir := t.TempDir()
+
+	got, err := Install(InstallOptions{
+		Profile:    ProfileBalanced,
+		Include:    []string{"rtk"},
+		Exclude:    allToolIDsExcept("rtk"),
+		InstallDir: installDir,
+		Runner:     runner,
+		GOOS:       "windows",
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if got.Steps[0].Status != InstallInstalled {
+		t.Fatalf("status = %s, want installed", got.Steps[0].Status)
+	}
+	if len(runner.runs) != 1 {
+		t.Fatalf("runs = %d, want 1", len(runner.runs))
+	}
+	command := runner.runs[0]
+	if command.Name != "powershell" {
+		t.Fatalf("command = %q, want powershell rather than the Linux-only install script", command.Name)
+	}
+	if command.Env["LIZA_TOOL_ARCHIVE_URL"] == "" {
+		t.Fatal("archive URL not passed to the install command")
+	}
+	if command.Env["LIZA_TOOL_INSTALL_DIR"] != installDir {
+		t.Fatalf("install dir = %q, want %q", command.Env["LIZA_TOOL_INSTALL_DIR"], installDir)
+	}
+}
+
+func TestPackageInstallSkipsWhenNoWindowsPackageIdentifierIsKnown(t *testing.T) {
+	// pre-commit is a Python tool that no Windows package manager carries. The
+	// step has to say so, not install whatever answers to the name "pre-commit".
+	runner := &fakeRunner{paths: map[string]string{"winget": "C:\\winget.exe"}}
+
+	got, err := Install(InstallOptions{
+		Profile:    ProfileBalanced,
+		Include:    []string{"pre-commit"},
+		Exclude:    allToolIDsExcept("pre-commit"),
+		InstallDir: t.TempDir(),
+		Runner:     runner,
+		GOOS:       "windows",
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if got.Steps[0].Status != InstallSkipped {
+		t.Fatalf("status = %s, want skipped", got.Steps[0].Status)
+	}
+	if !strings.Contains(got.Steps[0].Message, "uv tool install pre-commit") {
+		t.Fatalf("message = %q, want the manual install instruction", got.Steps[0].Message)
+	}
+	if len(runner.runs) != 0 {
+		t.Fatalf("runs = %v, want no install attempt", runner.runs)
+	}
+}
+
+func TestPackageInstallUsesWingetIdentifier(t *testing.T) {
+	runner := &fakeRunner{paths: map[string]string{"winget": "C:\\winget.exe"}, resolvesAfterRun: []string{"rg"}}
+
+	if _, err := Install(InstallOptions{
+		Profile:    ProfileBalanced,
+		Include:    []string{"rg"},
+		Exclude:    allToolIDsExcept("rg"),
+		InstallDir: t.TempDir(),
+		Runner:     runner,
+		GOOS:       "windows",
+	}); err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if len(runner.runs) != 1 {
+		t.Fatalf("runs = %d, want 1", len(runner.runs))
+	}
+	if !slices.Contains(runner.runs[0].Args, "BurntSushi.ripgrep.MSVC") {
+		t.Fatalf("args = %v, want the winget package identifier rather than the plain name", runner.runs[0].Args)
 	}
 }

@@ -44,26 +44,38 @@ const (
 )
 
 type Tool struct {
-	ID              string      `json:"id"`
-	Name            string      `json:"name"`
-	Binary          string      `json:"binary,omitempty"`
-	Category        Category    `json:"category"`
-	Purpose         string      `json:"purpose"`
-	InstallKind     InstallKind `json:"install_kind"`
-	PackageName     string      `json:"package_name,omitempty"`
-	InstallURL      string      `json:"install_url,omitempty"`
-	InstallDirEnv   []string    `json:"install_dir_env,omitempty"`
-	SourceRepo      string      `json:"source_repo,omitempty"`
-	SourcePackage   string      `json:"source_package,omitempty"`
-	GoPackage       string      `json:"go_package,omitempty"`
-	NPMPackage      string      `json:"npm_package,omitempty"`
-	UVPackage       string      `json:"uv_package,omitempty"`
-	VersionArgs     []string    `json:"version_args,omitempty"`
-	ActivationEnv   []string    `json:"activation_env,omitempty"`
-	BalancedDefault bool        `json:"balanced_default"`
-	LeanDefault     bool        `json:"lean_default"`
-	FullDefault     bool        `json:"full_default"`
-	ManualNote      string      `json:"manual_note,omitempty"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Binary      string      `json:"binary,omitempty"`
+	Category    Category    `json:"category"`
+	Purpose     string      `json:"purpose"`
+	InstallKind InstallKind `json:"install_kind"`
+	PackageName string      `json:"package_name,omitempty"`
+	// PackageNamesByManager overrides PackageName for a specific package
+	// manager, keyed by its binary name. Windows managers identify packages by
+	// publisher-qualified IDs ("BurntSushi.ripgrep.MSVC"), which never match the
+	// plain name the Unix managers use, so a manager with no entry here is
+	// treated as unable to install the tool rather than guessing.
+	PackageNamesByManager map[string]string `json:"package_names_by_manager,omitempty"`
+	// WindowsArchiveURL is a release archive to unpack into the install
+	// directory on Windows, for tools whose install script does not run there.
+	WindowsArchiveURL string `json:"windows_archive_url,omitempty"`
+	// ManualInstallNote is surfaced when no automated path exists on the current
+	// platform, so the step reports what to run instead of a bare failure.
+	ManualInstallNote string   `json:"manual_install_note,omitempty"`
+	InstallURL        string   `json:"install_url,omitempty"`
+	InstallDirEnv     []string `json:"install_dir_env,omitempty"`
+	SourceRepo        string   `json:"source_repo,omitempty"`
+	SourcePackage     string   `json:"source_package,omitempty"`
+	GoPackage         string   `json:"go_package,omitempty"`
+	NPMPackage        string   `json:"npm_package,omitempty"`
+	UVPackage         string   `json:"uv_package,omitempty"`
+	VersionArgs       []string `json:"version_args,omitempty"`
+	ActivationEnv     []string `json:"activation_env,omitempty"`
+	BalancedDefault   bool     `json:"balanced_default"`
+	LeanDefault       bool     `json:"lean_default"`
+	FullDefault       bool     `json:"full_default"`
+	ManualNote        string   `json:"manual_note,omitempty"`
 }
 
 type Selection struct {
@@ -80,7 +92,11 @@ func Catalog() []Tool {
 			Purpose:     "Compresses shell command output before it reaches agent context.",
 			InstallKind: InstallScript, InstallURL: "https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh",
 			InstallDirEnv: []string{"RTK_INSTALL_DIR"},
-			VersionArgs:   []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
+			// The install script accepts Linux and Darwin only, and RTK has no Go
+			// source to fall back to. Upstream publishes a native Windows build
+			// and, since v0.37.2, a native hook that needs no Unix shell.
+			WindowsArchiveURL: "https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-pc-windows-msvc.zip",
+			VersionArgs:       []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "stacklit", Name: "Stacklit", Binary: "stacklit", Category: CategoryIndexing,
@@ -126,12 +142,18 @@ func Catalog() []Tool {
 			ID: "rg", Name: "ripgrep", Binary: "rg", Category: CategoryNavigation,
 			Purpose:     "Fast exact text search and file discovery.",
 			InstallKind: InstallPackage, PackageName: "ripgrep",
+			PackageNamesByManager: map[string]string{
+				"winget": "BurntSushi.ripgrep.MSVC", "scoop": "ripgrep", "choco": "ripgrep",
+			},
 			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "ast-grep", Name: "ast-grep", Binary: "ast-grep", Category: CategoryNavigation,
 			Purpose:     "AST-aware structural search and rewrite.",
 			InstallKind: InstallPackage, PackageName: "ast-grep",
+			PackageNamesByManager: map[string]string{
+				"winget": "ast-grep.ast-grep", "scoop": "ast-grep", "choco": "ast-grep",
+			},
 			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
@@ -145,31 +167,45 @@ func Catalog() []Tool {
 			ID: "mdq", Name: "mdq", Binary: "mdq", Category: CategoryNavigation,
 			Purpose:     "Queries Markdown documents by structure.",
 			InstallKind: InstallPackage, PackageName: "mdq",
-			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
+			// No Windows manager carries this mdq. The winget entry of that name
+			// is a different tool.
+			ManualInstallNote: "install with: cargo install mdq",
+			VersionArgs:       []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "jq", Name: "jq", Binary: "jq", Category: CategoryStructured,
 			Purpose:     "Queries JSON without reading entire files into context.",
 			InstallKind: InstallPackage, PackageName: "jq",
+			PackageNamesByManager: map[string]string{
+				"winget": "jqlang.jq", "scoop": "jq", "choco": "jq",
+			},
 			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "yq", Name: "yq", Binary: "yq", Category: CategoryStructured,
 			Purpose:     "Queries YAML, TOML, XML, CSV, and related structured files.",
 			InstallKind: InstallPackage, PackageName: "yq",
+			PackageNamesByManager: map[string]string{
+				"winget": "MikeFarah.yq", "scoop": "yq", "choco": "yq",
+			},
 			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "gh", Name: "GitHub CLI", Binary: "gh", Category: CategoryRepository,
 			Purpose:     "Uses authenticated GitHub workflows from shell commands.",
 			InstallKind: InstallPackage, PackageName: "gh",
+			PackageNamesByManager: map[string]string{
+				"winget": "GitHub.cli", "scoop": "gh", "choco": "gh",
+			},
 			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "pre-commit", Name: "pre-commit", Binary: "pre-commit", Category: CategoryQuality,
 			Purpose:     "Runs repository quality gates before delivery.",
 			InstallKind: InstallPackage, PackageName: "pre-commit",
-			VersionArgs: []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
+			// A Python tool: the Windows package managers do not carry it.
+			ManualInstallNote: "install with: uv tool install pre-commit",
+			VersionArgs:       []string{"--version"}, BalancedDefault: true, LeanDefault: true, FullDefault: true,
 		},
 		{
 			ID: "functional-clusters", Name: "Functional Clusters", Binary: "functional-clusters", Category: CategoryIndexing,

@@ -144,3 +144,36 @@ source repository and running `go install ./cmd/<tool>` into the selected
 install directory.
 
 The source fallback requires `git` and `go` on `PATH`.
+
+## Windows
+
+The toolchain installs and activates natively; the differences are in how each
+tool arrives.
+
+**Package managers.** `winget`, `scoop` and `choco` are tried before the Unix
+managers. They identify packages by publisher-qualified IDs, so a tool is only
+installed through them when the catalog states the identifier — otherwise the
+step is skipped with the command to run by hand, rather than installing whatever
+else answers to the same name. Today that affects `mdq` (`cargo install mdq`)
+and `pre-commit` (`uv tool install pre-commit`).
+
+**Install scripts.** Several upstream scripts accept Linux and macOS only. Where
+a source fallback exists it takes over automatically, so `mdtoc`, `scip-search`,
+`functional-clusters` and `bash-policy` still install — given `git` and `go` on
+`PATH`. `rtk` has no source fallback, so it is installed from the native Windows
+archive its publisher ships.
+
+**Binary names.** An install script that builds with `go build -o <dir>/<name>`
+produces a file with no extension, which Windows cannot resolve through
+`PATHEXT`: the install would report success and every later invocation, including
+`§BRAND_BINARY_NAME§ toolchain doctor`, would report the tool missing. Installs
+into the managed directory are renamed to `<name>.exe`, and any tool that is
+neither in that directory nor on `PATH` afterwards is reported as failed.
+
+**Activation.** PowerShell reads none of the POSIX profiles, so
+`§BRAND_BINARY_NAME§ toolchain configure` writes `env.ps1` beside `env.sh` and
+sources it from `$PROFILE.CurrentUserAllHosts`. Git Bash sessions keep using
+`env.sh`; both are wired in the same run.
+
+**Known gap.** `bash-policy` does not build on Windows: its file locking calls
+`syscall.Flock` with no build tags. Nothing here works around that.
