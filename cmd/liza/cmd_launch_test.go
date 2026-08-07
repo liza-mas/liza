@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -122,6 +123,28 @@ func TestPairingInteractiveCLICommandMapsACPToInteractiveBaseCLI(t *testing.T) {
 	got := strings.Join(cmd, "\x00")
 	if got != "codex" {
 		t.Fatalf("command = %q, want codex", got)
+	}
+}
+
+func TestLaunchShellIsExecutableWhenShellIsUnset(t *testing.T) {
+	// Git for Windows leaves SHELL unset, and the pane script is POSIX, so the
+	// fallback has to name something the OS can actually start.
+	testhelpers.ResolveBashForScripts(t)
+	t.Setenv("SHELL", "")
+
+	got := launchShell()
+
+	if runtime.GOOS != "windows" {
+		if got != "/bin/sh" {
+			t.Fatalf("launchShell() = %q, want /bin/sh", got)
+		}
+		return
+	}
+	if got == "/bin/sh" {
+		t.Fatal("launchShell() = /bin/sh, which Windows cannot execute")
+	}
+	if _, err := exec.LookPath(got); err != nil {
+		t.Fatalf("launchShell() = %q, which is not executable: %v", got, err)
 	}
 }
 

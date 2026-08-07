@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -1063,9 +1064,17 @@ func shellSleepSeconds(duration time.Duration) string {
 	return strings.TrimRight(value, ".")
 }
 
+// launchShell returns the shell the terminal is asked to run the pane script
+// with. The script is POSIX, so Windows needs the shell Git for Windows ships:
+// SHELL is normally unset there, and /bin/sh names nothing the OS can execute.
 func launchShell() string {
 	if shell := os.Getenv("SHELL"); shell != "" {
 		return shell
+	}
+	if runtime.GOOS == "windows" {
+		if bash, err := exec.LookPath("bash"); err == nil {
+			return bash
+		}
 	}
 	return "/bin/sh"
 }
