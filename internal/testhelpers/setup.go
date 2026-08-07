@@ -135,6 +135,13 @@ func initializeTestGitRepo(dir string, includeIntegrationBranch bool) error {
 	if err := runGitForSetup(dir, "config", "user.name", "Test User"); err != nil {
 		return err
 	}
+	// Fixtures are compared byte for byte. Git for Windows defaults to
+	// core.autocrlf=true, which rewrites LF to CRLF on checkout — including
+	// when a worktree is added — and makes those comparisons fail. Set once on
+	// the template: every copy inherits .git/config as materialized.
+	if err := runGitForSetup(dir, "config", "core.autocrlf", "false"); err != nil {
+		return err
+	}
 	if err := configureTestGitRepoHooks(dir); err != nil {
 		return err
 	}
