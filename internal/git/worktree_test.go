@@ -241,7 +241,10 @@ func TestGetWorktreeRelPath(t *testing.T) {
 	git := New("/test/repo")
 
 	taskID := "task-123"
-	expected := filepath.Join(".worktrees", taskID)
+	// The relative path is recorded in state.yaml and shared across machines,
+	// so it is slash-separated on every platform. Consumers join it with
+	// filepath.Join, which accepts either separator.
+	expected := ".worktrees/" + taskID
 
 	got := git.GetWorktreeRelPath(taskID)
 	if got != expected {
