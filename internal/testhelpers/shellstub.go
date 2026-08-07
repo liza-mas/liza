@@ -3,8 +3,10 @@ package testhelpers
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 )
 
@@ -16,12 +18,12 @@ import (
 // carry a PATHEXT extension for exec.LookPath to consider it, and the OS cannot
 // execute a shebang script in any case. So on Windows the script is written at
 // the exact path given — a POSIX shell looking up the bare name still finds it —
-// and a "<name>.cmd" wrapper hands it to Git Bash so exec.LookPath finds it too.
+// and a "<name>.exe" relay hands it to Git Bash so exec.LookPath finds it too.
 // Callers keep writing one portable shell script and pass the extensionless path.
 //
-// The wrapper forwards arguments with %*, which cannot carry a newline inside a
-// single argument. A stub invoked with a multi-line payload needs a real
-// executable rather than this wrapper.
+// The relay is a real executable rather than a .cmd wrapper because cmd.exe
+// cannot carry a newline inside a single argument: a stub handed a multi-line
+// payload would receive only its first line.
 //
 // Pass the command path without an extension, e.g.
 // filepath.Join(binDir, "wezterm"). The returned path is the one that can
@@ -48,13 +50,58 @@ func WriteShellStub(t *testing.T, path, script string) string {
 		t.Fatalf("write shell stub %s: %v", path, err)
 	}
 
-	// %* forwards the arguments verbatim; cmd.exe propagates the exit code of
-	// the last command, so a failing stub still reports failure.
-	wrapper := fmt.Sprintf("@echo off\r\n\"%s\" \"%s\" %%*\r\n",
-		ResolveBashForScripts(t), filepath.ToSlash(path))
-	wrapperPath := path + ".cmd"
-	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o644); err != nil {
-		t.Fatalf("write shell stub wrapper %s: %v", wrapperPath, err)
+	// The relay reads the shell to use from a file beside the script, so the
+	// resolution done here — Git Bash, not the WSL launcher — is the one that
+	// applies at run time, whatever PATH the test installs.
+	if err := os.WriteFile(path+".bash", []byte(ResolveBashForScripts(t)), 0o644); err != nil {
+		t.Fatalf("write shell stub shell path %s: %v", path+".bash", err)
 	}
-	return wrapperPath
+
+	relayPath := path + ".exe"
+	if err := copyFile(stubRelayBinary(t), relayPath); err != nil {
+		t.Fatalf("install shell stub relay %s: %v", relayPath, err)
+	}
+	return relayPath
+}
+
+var stubRelay struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+// stubRelayBinary builds the relay once per test binary and returns its path.
+func stubRelayBinary(t *testing.T) string {
+	t.Helper()
+
+	repoRoot := FindRepoRoot(t)
+
+	stubRelay.once.Do(func() {
+		var dir string
+		dir, stubRelay.err = os.MkdirTemp("", "liza-stub-relay-*")
+		if stubRelay.err != nil {
+			return
+		}
+		binary := filepath.Join(dir, "stubrelay.exe")
+		build := exec.Command("go", "build", "-o", binary, "./internal/testhelpers/stubrelay")
+		build.Dir = repoRoot
+		if out, err := build.CombinedOutput(); err != nil {
+			stubRelay.err = fmt.Errorf("build stub relay: %w\n%s", err, out)
+			return
+		}
+		stubRelay.path = binary
+	})
+
+	if stubRelay.err != nil {
+		t.Fatalf("shell stub relay unavailable: %v", stubRelay.err)
+	}
+	return stubRelay.path
+}
+
+func copyFile(src, dst string) error {
+	content, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, content, 0o755)
 }
