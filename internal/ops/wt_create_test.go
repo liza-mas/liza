@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -778,7 +779,7 @@ func TestCreateWorktree_InstallsPreCommitHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filepath.Abs: %v", err)
 	}
-	// EvalSymlinks because tmp dirs on macOS go through /var → /private/var.
+	// EvalSymlinks because tmp dirs on macOS go through /var â†’ /private/var.
 	wantHooksAbs, err := filepath.EvalSymlinks(hooksAbs)
 	if err != nil {
 		wantHooksAbs = hooksAbs
@@ -900,14 +901,14 @@ func TestCreateWorktree_HookFiresAndRejects(t *testing.T) {
 	runGitInDir(t, result.WorktreeDir, "config", "user.email", "test@example.com")
 	runGitInDir(t, result.WorktreeDir, "config", "user.name", "Test User")
 
-	// Attempt an empty commit — hook must fire and reject.
+	// Attempt an empty commit â€” hook must fire and reject.
 	cmd := exec.Command("git", "-C", result.WorktreeDir, "commit", "--allow-empty", "-m", "should-fail")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("git commit succeeded but hook should have rejected. Output:\n%s", out)
 	}
 	if !strings.Contains(string(out), "liza-test-reject") {
-		t.Errorf("hook output missing — git didn't invoke our hook. Output:\n%s", out)
+		t.Errorf("hook output missing â€” git didn't invoke our hook. Output:\n%s", out)
 	}
 
 	// --no-verify must bypass, proving the hook is the thing that blocked.
@@ -932,7 +933,7 @@ func TestCreateWorktree_HookFiresAndRejects(t *testing.T) {
 // fail-safe-allow contract at the shell boundary, not just inside the Go CLI.
 // A stub "liza" that exits with a non-policy code (e.g. 127 "command not
 // found", 139 "segfault", 2 "panic") must be interpreted as allow by the
-// hook wrapper — otherwise a crashing or upgraded-out-of-sync binary would
+// hook wrapper â€” otherwise a crashing or upgraded-out-of-sync binary would
 // deadlock every commit in a worktree.
 func TestHookShellFailSafeOnUnknownExitCode(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -967,7 +968,7 @@ func TestHookShellFailSafeOnUnknownExitCode(t *testing.T) {
 	runGitInDir(t, result.WorktreeDir, "config", "user.email", "test@example.com")
 	runGitInDir(t, result.WorktreeDir, "config", "user.name", "Test User")
 
-	// Stub exits 127 → hook translates to exit 0 → git allows the commit.
+	// Stub exits 127 â†’ hook translates to exit 0 â†’ git allows the commit.
 	cmd := exec.Command("git", "-C", result.WorktreeDir, "commit", "--allow-empty", "-m", "stub-127-should-allow")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1033,7 +1034,16 @@ func makeIsolatedPath(t *testing.T, withPreCommit bool, preCommitExit int, marke
 	if err != nil {
 		t.Skip("git not on PATH")
 	}
-	if err := os.Symlink(gitBin, filepath.Join(dir, "git")); err != nil {
+	// Windows gets a forwarding shim rather than a symlink. Creating a symlink
+	// needs a privilege the session may not hold, and a link named "git" with no
+	// extension is invisible to CreateProcess even where it can be created â€” the
+	// isolated PATH would hold a git that nothing can run.
+	if runtime.GOOS == "windows" {
+		shim := fmt.Sprintf("@echo off\r\n%q %%*\r\n", gitBin)
+		if err := os.WriteFile(filepath.Join(dir, "git.cmd"), []byte(shim), 0644); err != nil {
+			t.Fatalf("write git shim: %v", err)
+		}
+	} else if err := os.Symlink(gitBin, filepath.Join(dir, "git")); err != nil {
 		t.Fatalf("symlink git: %v", err)
 	}
 	if withPreCommit {
@@ -1041,9 +1051,7 @@ func makeIsolatedPath(t *testing.T, withPreCommit bool, preCommitExit int, marke
 		// Avoids external `touch` which wouldn't be on the restricted PATH.
 		// Echo to stderr surfaces invocation in CombinedOutput when debugging.
 		script := fmt.Sprintf("#!/bin/sh\necho 'pre-commit-stub-invoked' >&2\n: > %q\nexit %d\n", markerFile, preCommitExit)
-		if err := os.WriteFile(filepath.Join(dir, "pre-commit"), []byte(script), 0755); err != nil {
-			t.Fatalf("write pre-commit stub: %v", err)
-		}
+		testhelpers.WriteShellStub(t, filepath.Join(dir, "pre-commit"), script)
 	}
 	return dir
 }
@@ -1058,7 +1066,7 @@ func commitInIsolatedPath(t *testing.T, worktreeDir, isolatedPath, message strin
 }
 
 // writePreCommitConfig drops a minimal .pre-commit-config.yaml into the
-// worktree. Content is irrelevant to the chain — only file presence matters.
+// worktree. Content is irrelevant to the chain â€” only file presence matters.
 func writePreCommitConfig(t *testing.T, worktreeDir string) {
 	t.Helper()
 	path := filepath.Join(worktreeDir, ".pre-commit-config.yaml")
@@ -1123,7 +1131,7 @@ func TestHook_FailLoudOnMissingPreCommitBinary(t *testing.T) {
 }
 
 // TestHook_GuardRejectShortCircuitsChain proves the Liza guard's reject
-// short-circuits before project pre-commit runs — the guard is authoritative
+// short-circuits before project pre-commit runs â€” the guard is authoritative
 // for task-state policy regardless of config presence.
 func TestHook_GuardRejectShortCircuitsChain(t *testing.T) {
 	worktreeDir := setupChainTestWorktree(t, 1) // guard rejects
@@ -1161,7 +1169,7 @@ func TestHook_ProjectPreCommitFailureBlocksCommit(t *testing.T) {
 
 // TestHook_FailSafeOnUnknownGuardExitFallsThroughToChain covers acceptance
 // criterion 5: an unknown guard exit code (e.g. 127, stale binary) is treated
-// as allow, but the project pre-commit chain still runs — preserving the
+// as allow, but the project pre-commit chain still runs â€” preserving the
 // fail-safe asymmetry. This complements TestHookShellFailSafeOnUnknownExitCode
 // which covers the no-config flavor of the same property.
 func TestHook_FailSafeOnUnknownGuardExitFallsThroughToChain(t *testing.T) {

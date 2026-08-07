@@ -35,15 +35,19 @@ func WriteShellStub(t *testing.T, path, script string) string {
 		return path
 	}
 
-	scriptPath := path + ".sh"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
-		t.Fatalf("write shell stub %s: %v", scriptPath, err)
+	// The script keeps the bare name so a POSIX shell can still resolve it:
+	// production code reached through Go needs the PATHEXT wrapper below, but a
+	// stub invoked from inside a shell script — a git hook calling pre-commit,
+	// say — is looked up by the exact name, and sh appends .exe at most, never
+	// .cmd. Writing both forms serves either caller.
+	if err := os.WriteFile(path, []byte(script), 0o644); err != nil {
+		t.Fatalf("write shell stub %s: %v", path, err)
 	}
 
 	// %* forwards the arguments verbatim; cmd.exe propagates the exit code of
 	// the last command, so a failing stub still reports failure.
 	wrapper := fmt.Sprintf("@echo off\r\n\"%s\" \"%s\" %%*\r\n",
-		ResolveBashForScripts(t), filepath.ToSlash(scriptPath))
+		ResolveBashForScripts(t), filepath.ToSlash(path))
 	wrapperPath := path + ".cmd"
 	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o644); err != nil {
 		t.Fatalf("write shell stub wrapper %s: %v", wrapperPath, err)

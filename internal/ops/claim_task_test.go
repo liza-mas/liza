@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1239,7 +1240,7 @@ func TestClaimTask_ReadyWithPrunableWorktreeRegistration_RecreatesCleanWorktree(
 	if task.Status != models.TaskStatusImplementing {
 		t.Errorf("Status = %v, want IMPLEMENTING", task.Status)
 	}
-	if task.Worktree == nil || *task.Worktree != filepath.Join(paths.WorktreesDirName, "task-1") {
+	if task.Worktree == nil || *task.Worktree != path.Join(paths.WorktreesDirName, "task-1") {
 		t.Errorf("Worktree = %v, want .worktrees/task-1", task.Worktree)
 	}
 }
@@ -1259,7 +1260,7 @@ func TestHandleReadyClaimWorktree_ConcurrentWinnerDoesNotDeleteWorktree(t *testi
 		t.Fatalf("Failed to create winning worktree: %v", err)
 	}
 
-	worktreeRel := filepath.Join(paths.WorktreesDirName, "task-1")
+	worktreeRel := path.Join(paths.WorktreesDirName, "task-1")
 	worktreeDir := filepath.Join(tmpDir, worktreeRel)
 
 	err := handleReadyClaimWorktree(
@@ -1312,7 +1313,7 @@ func TestHandleReadyClaimWorktree_CleanupAbortedWhenTaskClaimedConcurrently(t *t
 		t.Fatalf("Failed to create worktree: %v", err)
 	}
 
-	worktreeRel := filepath.Join(paths.WorktreesDirName, "task-1")
+	worktreeRel := path.Join(paths.WorktreesDirName, "task-1")
 	worktreeDir := filepath.Join(tmpDir, worktreeRel)
 
 	// cleanupAllowed=true but task is IMPLEMENTING → guard must abort cleanup.
@@ -1692,7 +1693,7 @@ func TestClaimTaskPreparesSembleIgnoreForFreshClaim(t *testing.T) {
 	}
 
 	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
-	if result.WorktreeRel != filepath.Join(paths.WorktreesDirName, "task-1") {
+	if result.WorktreeRel != path.Join(paths.WorktreesDirName, "task-1") {
 		t.Fatalf("WorktreeRel = %q, want task worktree", result.WorktreeRel)
 	}
 	assertPrepareSembleIgnorePayload(t, worktreeDir)
