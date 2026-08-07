@@ -3983,16 +3983,16 @@ func TestInitPairingCommand_ScipSearchPlanOverridesAmbiguousRoots(t *testing.T) 
 
 	script := readFileForTest(t, filepath.Join(gitDir, ".git", "hooks", "liza-index.sh"))
 	for _, want := range []string{
-		"scip-go index --module-root " + gitDir + "/services/design-diagnosis/cli --output ",
-		"scip-typescript index --cwd " + gitDir + "/apps/web/src --output ",
-		"scip-python index --cwd " + gitDir + "/apps/api --output ",
-		"scip-search aggregate-index --project-root " + gitDir,
+		"scip-go index --module-root " + testhelpers.ShellArg(filepath.Join(gitDir, "services", "design-diagnosis", "cli")) + " --output ",
+		"scip-typescript index --cwd " + testhelpers.ShellArg(filepath.Join(gitDir, "apps", "web", "src")) + " --output ",
+		"scip-python index --cwd " + testhelpers.ShellArg(filepath.Join(gitDir, "apps", "api")) + " --output ",
+		"scip-search aggregate-index --project-root " + testhelpers.ShellArg(gitDir),
 		"--root services/design-diagnosis/cli --index ",
 		"--root apps/web/src --index ",
 		"--root apps/api --index ",
-		"--out " + gitDir + "/go.scip",
-		"--out " + gitDir + "/typescript.scip",
-		"--out " + gitDir + "/python.scip",
+		"--out " + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip")),
+		"--out " + testhelpers.ShellArg(filepath.Join(gitDir, "typescript.scip")),
+		"--out " + testhelpers.ShellArg(filepath.Join(gitDir, "python.scip")),
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("liza-index.sh missing override command %q:\n%s", want, script)
@@ -4062,7 +4062,7 @@ func TestInitPairingCommand_ScipSearchMultiRootInstallsAggregateHooks(t *testing
 		t.Fatalf("InitPairingCommand() error = %v", err)
 	}
 	script := readFileForTest(t, filepath.Join(gitDir, ".git", "hooks", "liza-index.sh"))
-	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", "--out " + gitDir + "/go.scip"} {
+	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", "--out " + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip"))} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("liza-index.sh = %q, want %q", script, want)
 		}
@@ -4094,7 +4094,7 @@ func TestInitPairingCommand_AmbientScipSearchAggregatesMultiRoot(t *testing.T) {
 		t.Fatalf("stderr = %q, want no multi-root warning", stderr)
 	}
 	script := readFileForTest(t, filepath.Join(gitDir, ".git", "hooks", "liza-index.sh"))
-	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", "--out " + gitDir + "/go.scip"} {
+	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", "--out " + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip"))} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("liza-index.sh = %q, want %q", script, want)
 		}

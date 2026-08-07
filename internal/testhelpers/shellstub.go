@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -62,6 +63,19 @@ func WriteShellStub(t *testing.T, path, script string) string {
 		t.Fatalf("install shell stub relay %s: %v", relayPath, err)
 	}
 	return relayPath
+}
+
+// ShellArg renders a value the way the generated shell scripts do: bare unless
+// it carries a metacharacter, quoted otherwise.
+//
+// Tests that assert on a generated script cannot hardcode either form. A native
+// Windows path carries a backslash, so the same value appears quoted there and
+// bare on Unix, and an expectation built by concatenation matches neither.
+func ShellArg(value string) string {
+	if value != "" && !strings.ContainsAny(value, " \t\n'\"\\$`;&|<>*?!()[]{}") {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 var stubRelay struct {
