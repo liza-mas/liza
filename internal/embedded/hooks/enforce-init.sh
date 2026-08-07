@@ -103,6 +103,15 @@ command=$(json_val command)
 if is_windows_shell; then
   command="${command//\\//}"
   cwd="${cwd//\\//}"
+  # $HOME needs more than separator rewriting. Git Bash translates it into MSYS
+  # form at startup — /c/Users/... , or /tmp/... for a home under the temp
+  # directory — while the agent sends native Windows paths, so the two never
+  # compare equal however the slashes lean. cygpath brings it back into the
+  # namespace the caller uses. It ships with Git for Windows, which these hooks
+  # already require; where it is absent the comparisons stay as they were.
+  if command -v cygpath >/dev/null 2>&1; then
+    HOME=$(cygpath -m "$HOME" 2>/dev/null || printf '%s' "$HOME")
+  fi
 fi
 
 project_dir="${CLAUDE_PROJECT_DIR:-}"
@@ -413,6 +422,13 @@ if [[ "$tool_name" == "Read" || "$tool_name" =~ ^mcp__filesystem__read ]]; then
   recognized_init_read=0
   while IFS= read -r file_path; do
     [[ -z "$file_path" ]] && continue
+    # Same canonicalisation as $command and $cwd above, for the same reason:
+    # these arrive as native paths and are compared against $project_dir, which
+    # git reports forward-slashed even on Windows. Without it no native Read
+    # clears the gate.
+    if is_windows_shell; then
+      file_path="${file_path//\\//}"
+    fi
     if mark_session_init_doc_path "$file_path"; then
       recognized_init_read=1
     fi
