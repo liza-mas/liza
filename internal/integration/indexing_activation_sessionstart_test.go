@@ -41,7 +41,7 @@ func TestIndexingActivationSemblePairingInitCreatesProjectRootIgnoreBeforeSessio
 	context := runPairingSessionStartContext(t, projectDir, sembleSessionStartOverrides(binDir))
 
 	assertIndexingActivationContainsAll(t, context,
-		"Semble semantic search is available for this repo root: "+projectDir,
+		"Semble semantic search is available for this repo root: "+emittedPath(projectDir),
 		"semble search",
 		"Semble returns candidate chunks, not proof",
 	)
@@ -81,7 +81,7 @@ func TestIndexingActivationSemblePairingInitVerifiesExistingSafeProjectRootIgnor
 
 	context := runPairingSessionStartContext(t, projectDir, sembleSessionStartOverrides(binDir))
 	assertIndexingActivationContainsAll(t, context,
-		"Semble semantic search is available for this repo root: "+projectDir,
+		"Semble semantic search is available for this repo root: "+emittedPath(projectDir),
 		"semble find-related",
 	)
 	assertIndexingActivationContainsNone(t, context,
@@ -131,7 +131,7 @@ func TestIndexingActivationSessionStartAdvertisesOnlyReadyRepoRootOptionalTools(
 	writeIndexingActivationFile(t, filepath.Join(projectDir, "stacklit.json"), "{}\n")
 	context = runPairingSessionStartContext(t, projectDir, nil)
 	assertIndexingActivationContainsAll(t, context,
-		"Stacklit index: "+filepath.Join(projectDir, "stacklit.json"),
+		"Stacklit index: "+emittedPath(filepath.Join(projectDir, "stacklit.json")),
 		"stacklit derive --ai-summary -i",
 	)
 	assertIndexingActivationContainsNone(t, context,
@@ -143,7 +143,7 @@ func TestIndexingActivationSessionStartAdvertisesOnlyReadyRepoRootOptionalTools(
 	context = runPairingSessionStartContext(t, projectDir, nil)
 	assertIndexingActivationContainsAll(t, context,
 		"SCIP indexes:",
-		"Go index: "+filepath.Join(projectDir, "go.scip"),
+		"Go index: "+emittedPath(filepath.Join(projectDir, "go.scip")),
 		"scip-search symbols --index <index-path>",
 		"scip-search impact --index <index-path>",
 	)
@@ -153,16 +153,16 @@ func TestIndexingActivationSessionStartAdvertisesOnlyReadyRepoRootOptionalTools(
 	readyBinDir := writeIndexingActivationFakeSembleTools(t, true)
 	context = runPairingSessionStartContext(t, projectDir, sembleSessionStartOverrides(readyBinDir))
 	assertIndexingActivationContainsAll(t, context,
-		"Stacklit index: "+filepath.Join(projectDir, "stacklit.json"),
-		"Go index: "+filepath.Join(projectDir, "go.scip"),
-		"Semble semantic search is available for this repo root: "+projectDir,
+		"Stacklit index: "+emittedPath(filepath.Join(projectDir, "stacklit.json")),
+		"Go index: "+emittedPath(filepath.Join(projectDir, "go.scip")),
+		"Semble semantic search is available for this repo root: "+emittedPath(projectDir),
 	)
 
 	notReadyBinDir := writeIndexingActivationFakeSembleTools(t, false)
 	context = runPairingSessionStartContext(t, projectDir, sembleSessionStartOverrides(notReadyBinDir))
 	assertIndexingActivationContainsAll(t, context,
-		"Stacklit index: "+filepath.Join(projectDir, "stacklit.json"),
-		"Go index: "+filepath.Join(projectDir, "go.scip"),
+		"Stacklit index: "+emittedPath(filepath.Join(projectDir, "stacklit.json")),
+		"Go index: "+emittedPath(filepath.Join(projectDir, "go.scip")),
 	)
 	assertIndexingActivationContainsNone(t, context, "Semble semantic search is available")
 }
@@ -258,6 +258,16 @@ func pairingSessionStartEnv(projectDir string, overrides map[string]string) []st
 		env = append(env, name+"="+values[name])
 	}
 	return env
+}
+
+// emittedPath renders a path the way the session context hook prints it. The
+// hook canonicalises the project directory so that git, which reports
+// forward-slashed paths even on Windows, and the runtime, which supplies a
+// native one, cannot each impose a different separator on the same output. On
+// Unix this is the identity. internal/embedded has the same helper for the same
+// reason.
+func emittedPath(path string) string {
+	return filepath.ToSlash(path)
 }
 
 func writeIndexingActivationLizaIndexHook(t *testing.T, projectDir string) {
