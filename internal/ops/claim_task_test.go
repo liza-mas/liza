@@ -1743,7 +1743,9 @@ func TestClaimTask_ScipIndexesEnabledWorktreeAfterPostWorktreeCmd(t *testing.T) 
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
 	state.Config.ScipSearch = []string{"go"}
-	postCmd := fmt.Sprintf("touch %s", markerPath)
+	// The command runs in a POSIX shell, which reads a native Windows path as a
+	// string of escapes: "touch C:\dir\marker" creates a file named "Cdirmarker".
+	postCmd := fmt.Sprintf("touch %q", filepath.ToSlash(markerPath))
 	state.Config.PostWorktreeCmd = &postCmd
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),

@@ -257,6 +257,10 @@ func TestProvisionWorktreeEnvFilesCandidateFilteringAndWarnings(t *testing.T) {
 }
 
 func TestProvisionWorktreeEnvFilesRejectsUnsafeSources(t *testing.T) {
+	// The unsafe source under test is a symlink, which Windows only lets an
+	// elevated or Developer Mode session create.
+	testhelpers.RequireSymlinkCapability(t)
+
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	commitEnvIgnoreForWorktreeTest(t, tmpDir)
@@ -405,7 +409,9 @@ func TestCreateWorktree_ScipIndexesEnabledNewWorktreeAfterSetup(t *testing.T) {
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 	state.Config.ScipSearch = []string{"go"}
-	postCmd := fmt.Sprintf("touch %s", markerPath)
+	// The command runs in a POSIX shell, which reads a native Windows path as a
+	// string of escapes: "touch C:\dir\marker" creates a file named "Cdirmarker".
+	postCmd := fmt.Sprintf("touch %q", filepath.ToSlash(markerPath))
 	state.Config.PostWorktreeCmd = &postCmd
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
