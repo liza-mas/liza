@@ -39,6 +39,7 @@ func TestIndexingActivationGeneratedArtifactsStayOutOfGitStatusWhenUntracked(t *
 	statusAfterInit := runIndexingActivationGitOutput(t, projectDir, "status", "--short")
 
 	logPath := filepath.Join(t.TempDir(), "index-refresh.log")
+
 	runIndexingActivationGit(t, projectDir, logPath, "commit", "--allow-empty", "-m", "Trigger index hooks")
 
 	statusAfterRefresh := runIndexingActivationGitOutput(t, projectDir, "status", "--short")
@@ -182,7 +183,15 @@ func assertIndexingActivationDefaultHooksUnmanaged(t *testing.T, projectDir stri
 func writeIndexingActivationFakeScipGo(t *testing.T) string {
 	t.Helper()
 
-	dir := t.TempDir()
+	// Write over the placeholder indexers SetupGlobalLiza installs in $HOME/bin
+	// rather than into a directory of our own. Those placeholders answer "usage"
+	// to everything and produce no index, and they win the PATH lookup here, so
+	// a second copy elsewhere is never reached — the hook then reports failure
+	// to index and the test looks for an artifact nothing wrote.
+	dir := filepath.Join(os.Getenv("HOME"), "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", dir, err)
+	}
 	scipGoPath := filepath.Join(dir, "scip-go")
 	scipGoScript := `#!/bin/sh
 args="$*"
