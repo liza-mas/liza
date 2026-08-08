@@ -12,14 +12,33 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+// withAgentBrandValues applies mutate to the brand variables and restores them
+// when the test ends.
+//
+// Those variables are process-wide: the change is visible to every goroutine,
+// not just this test. That is safe here because no test in this package runs in
+// parallel and none outlives itself — a goroutine still reading brand values
+// after its test returned would race with the restore below, and the detector
+// would report it against whichever test happened to be running at the time.
+//
+// Only BinaryName and ProjectDirName are captured, since those are what the
+// callers change. Rather than track that list by hand — a mutation of any other
+// field would leak into every later test in the package, silently — the restore
+// checks the whole struct and fails if anything is left behind.
 func withAgentBrandValues(t *testing.T, mutate func()) {
 	t.Helper()
+	before := brand.RuntimeValues()
 	oldBinaryName := brand.BinaryName
 	oldProjectDirName := brand.ProjectDirName
 	mutate()
 	t.Cleanup(func() {
 		brand.BinaryName = oldBinaryName
 		brand.ProjectDirName = oldProjectDirName
+		if after := brand.RuntimeValues(); after != before {
+			t.Errorf("brand values not restored after the test:\n got  %+v\n want %+v\n"+
+				"mutate() changed a field this helper does not capture — add it, or the change leaks into the tests that follow",
+				after, before)
+		}
 	})
 }
 
