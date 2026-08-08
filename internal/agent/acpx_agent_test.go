@@ -544,12 +544,12 @@ func TestACPXAgentRunStreamsOutputToLogsEventsAndProgress(t *testing.T) {
 
 	outputsDir := t.TempDir()
 	progressCh := make(chan struct{}, 4)
-	ctx := withExecutionProgressCallback(context.Background(), func() {
+	ctx, cancelRun := context.WithCancel(withExecutionProgressCallback(context.Background(), func() {
 		select {
 		case progressCh <- struct{}{}:
 		default:
 		}
-	})
+	}))
 
 	var mu sync.Mutex
 	var events []LLMAgentEvent
@@ -564,7 +564,10 @@ func TestACPXAgentRunStreamsOutputToLogsEventsAndProgress(t *testing.T) {
 		err    error
 	}
 	done := make(chan runResult, 1)
+	var runDone sync.WaitGroup
+	runDone.Add(1)
 	go func() {
+		defer runDone.Done()
 		result, err := NewACPXAgent(outputsDir).Run(ctx, LLMAgentRunRequest{
 			BackendName: "codex-acp",
 			AgentID:     "coder-1",
@@ -576,11 +579,23 @@ func TestACPXAgentRunStreamsOutputToLogsEventsAndProgress(t *testing.T) {
 		done <- runResult{result: result, err: err}
 	}()
 
+	// Every assertion below ends the test on the spot when it fails. Without
+	// this the agent goroutine outlives the test, and it reads process-wide
+	// brand values that a later test in this package mutates and restores —
+	// a data race reported against that unrelated test, far from its cause.
+	t.Cleanup(func() {
+		cancelRun()
+		runDone.Wait()
+	})
+
 	select {
 	case <-progressCh:
 	case result := <-done:
 		t.Fatalf("Run() completed before streaming progress; result=%+v err=%v", result.result, result.err)
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
+		// Generous because this waits on a real process to start and stream:
+		// the previous two seconds were enough when the machine was idle and
+		// not when the rest of the suite was running beside it.
 		t.Fatal("timed out waiting for streamed ACPX progress")
 	}
 
