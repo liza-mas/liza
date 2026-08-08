@@ -80,8 +80,13 @@ test-fast: sync-embedded check-testhelpers
 	go test -short ./...
 
 # Run the full suite with race instrumentation
+#
+# The timeout is raised from the 10m default because internal/commands and
+# internal/ops each exceed it under -race on a slower filesystem — measured at
+# 10m12s and 17m55s on Windows. Go kills the whole package when that fires, so
+# the tests after the one running at the time are silently never reported.
 test-race: sync-embedded check-testhelpers
-	go test -race ./...
+	go test -race -timeout 30m ./...
 
 # Run e2e tests (full sprint sequence with mock CLI — ~40s)
 test-e2e: sync-embedded check-testhelpers
