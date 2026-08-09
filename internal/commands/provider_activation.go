@@ -10,6 +10,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	gitpkg "github.com/liza-mas/liza/internal/gitenv"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
 )
 
@@ -241,7 +242,12 @@ func reconcilePreviousProviderActivations(
 	preservedByOthers map[string]bool,
 	activations map[string]string,
 ) {
-	homeDir, homeErr := os.UserHomeDir()
+	// paths.UserHomeDir rather than os.UserHomeDir: the rest of this flow
+	// resolves the home that way, and on Windows os.UserHomeDir reads
+	// USERPROFILE and ignores an injected HOME. The two disagreeing means this
+	// function reconciles against a different home than the one the activation
+	// was placed in — and in a test, against the developer's real profile.
+	homeDir, homeErr := paths.UserHomeDir()
 	// Values are display-only: repo-relative for repo placements and absolute
 	// for global placements.
 	verifiedReplacementDisplayPaths := make(map[string]string)
