@@ -99,7 +99,11 @@ func TestEmbeddedCatalogBrandsDevinRepoFile(t *testing.T) {
 	if !ok {
 		t.Fatal("EmbeddedCatalog() missing devin")
 	}
-	want := filepath.Join(".windsurf", "rules", "acme-agent.md")
+	// RepoFile is declared in the catalog YAML and stays in the form written
+	// there: repo-relative and slash-separated on every platform, like every
+	// other path a shared config file carries. Consumers join it with
+	// filepath.Join, which accepts either separator.
+	want := ".windsurf/rules/acme-agent.md"
 	if got := devin.Setup.Contract.RepoFile; got != want {
 		t.Fatalf("devin contract repo file = %q, want %q", got, want)
 	}
@@ -121,7 +125,7 @@ func TestParseCatalogPreservesCustomDevinRepoFile(t *testing.T) {
 	if !ok {
 		t.Fatal("ParseCatalog() missing devin")
 	}
-	want := filepath.Join(".windsurf", "rules", "liza.md")
+	want := ".windsurf/rules/liza.md"
 	if got := devin.Setup.Contract.RepoFile; got != want {
 		t.Fatalf("custom Devin repo file = %q, want preserved %q", got, want)
 	}
