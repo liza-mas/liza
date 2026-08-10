@@ -215,7 +215,15 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		// every prompt, and auto-repair then respawns into the same poisoned
 		// session (DEV-667). Templates that already place {{taskID}} keep
 		// full control.
-		if scope := acpxSessionTaskScope(req.TaskID); scope != "" && !strings.Contains(sessionTemplate, "{{taskID}}") {
+		templateIncludesTaskID := false
+		for _, match := range templateExprRE.FindAllString(sessionTemplate, -1) {
+			name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
+			if name == "taskID" {
+				templateIncludesTaskID = true
+				break
+			}
+		}
+		if scope := acpxSessionTaskScope(req.TaskID); scope != "" && !templateIncludesTaskID {
 			renderedSessionName = renderedSessionName + "-" + scope
 		}
 		vars["sessionName"] = renderedSessionName

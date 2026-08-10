@@ -401,6 +401,26 @@ func TestResolveLaunchPlanRespectsExplicitTaskIDTemplate(t *testing.T) {
 	}
 }
 
+func TestResolveLaunchPlanRespectsWhitespaceInExplicitTaskIDTemplate(t *testing.T) {
+	tool := acpxTaskScopeTestTool()
+	tool.ACPXSessionName = "custom-{{ taskID }}-{{agentID}}"
+	config := models.Config{AgentTools: map[string]models.AgentToolConfig{"qwen-acp": tool}}
+
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "qwen-acp",
+		AgentID:       "coder-2",
+		TaskID:        "fleet-coding-1",
+		ProjectRoot:   "/repo",
+		RuntimeConfig: config,
+	})
+	if err != nil {
+		t.Fatalf("ResolveLaunchPlan() error = %v", err)
+	}
+	if plan.ACPXSessionName != "custom-fleet-coding-1-coder-2" {
+		t.Fatalf("ACPXSessionName = %q, want custom-fleet-coding-1-coder-2 (no double task suffix)", plan.ACPXSessionName)
+	}
+}
+
 func TestACPXSessionTaskScopeSanitizes(t *testing.T) {
 	for _, tt := range []struct{ in, want string }{
 		{"code-plan-mobile-coding-0", "code-plan-mobile-coding-0"},
