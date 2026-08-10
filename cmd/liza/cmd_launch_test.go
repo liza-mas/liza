@@ -153,10 +153,16 @@ func TestLaunchShellIsExecutableWhenShellIsUnset(t *testing.T) {
 
 func TestRunWeztermInteractiveLaunchInjectsPromptsWithNoPasteSubmit(t *testing.T) {
 	tmpDir := t.TempDir()
-	binDir := filepath.Join(tmpDir, "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
+	// The fake wezterm starts its panes in the background on purpose, so those
+	// processes outlive the test. On Windows a running executable cannot be
+	// deleted, and t.TempDir fails the test when its cleanup cannot remove one —
+	// the assertions pass and the test still goes red. Keep the stubs out of the
+	// managed directory and clean up on a best-effort basis instead.
+	binDir, err := os.MkdirTemp("", "wezterm-stubs-*")
+	if err != nil {
 		t.Fatalf("create fake bin dir: %v", err)
 	}
+	t.Cleanup(func() { _ = os.RemoveAll(binDir) })
 	logPath := filepath.Join(tmpDir, "wezterm.log")
 	counterPath := filepath.Join(tmpDir, "pane-counter")
 	if err := os.WriteFile(counterPath, []byte("100"), 0644); err != nil {
@@ -225,7 +231,7 @@ exec /bin/sh "$@"
 
 	primaryPrompt := pairingSkillPrompt("doer", "/tmp/board.md", false)
 	splitPrompt := pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)
-	err := runWeztermInteractiveLaunch(launchWeztermAdversarialPairingCmd, weztermLaunchOptions{
+	err = runWeztermInteractiveLaunch(launchWeztermAdversarialPairingCmd, weztermLaunchOptions{
 		Class:       "liza-adversarial-test",
 		Workspace:   "liza-adversarial-test",
 		CWD:         tmpDir,
