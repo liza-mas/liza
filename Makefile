@@ -114,8 +114,22 @@ clean:
 # $(HOME) is a native path on Windows, and the recipes below run under Git
 # Bash, which reads its backslashes as escapes: C:\Users\me reaches test(1)
 # as C:Usersme. Give the shell a path it can actually resolve.
+#
+# HOME is not a Windows variable: it exists only when the caller is a POSIX-ish
+# shell such as Git Bash. From PowerShell or cmd it is empty, and the install
+# directory silently becomes /.local/bin — mkdir then fails at the filesystem
+# root. USERPROFILE is what Windows itself sets, so fall back to it.
 ifeq ($(OS),Windows_NT)
-INSTALL_DIR ?= $(subst \,/,$(HOME))/.local/bin
+WINDOWS_HOME := $(if $(HOME),$(HOME),$(USERPROFILE))
+INSTALL_DIR ?= $(subst \,/,$(WINDOWS_HOME))/.local/bin
+# Make runs a recipe line straight through CreateProcess when it holds no shell
+# metacharacter, so "mkdir -p <dir>" looks for mkdir.exe and fails: the POSIX
+# utilities ship in Git\usr\bin, which is not on PATH and must not be added
+# there — it would shadow find, grep and sort with MSYS builds. Naming the shell
+# covers the lines that do reach a shell; the install recipe quotes its paths,
+# which both defeats that shortcut and survives a profile containing a space.
+SHELL := bash
+.SHELLFLAGS := -c
 # The install directory belongs to the user, and Windows sudo is absent or
 # disabled on managed machines; escalating here only turns a working install
 # into an error.
@@ -125,8 +139,8 @@ INSTALL_DIR ?= $(HOME)/.local/bin
 SUDO := $(shell test -w $(INSTALL_DIR) && echo "" || echo "sudo")
 endif
 install: build
-	@mkdir -p $(INSTALL_DIR)
-	$(SUDO) install -m 755 $(BINARY_FILE) $(INSTALL_DIR)/$(BINARY_FILE)
+	@mkdir -p "$(INSTALL_DIR)"
+	$(SUDO) install -m 755 "$(BINARY_FILE)" "$(INSTALL_DIR)/$(BINARY_FILE)"
 	@if [ "$(INSTALL_DIR)" != "/usr/local/bin" ] && [ -f /usr/local/bin/$(BINARY_FILE) ]; then \
 		echo "Warning: old $(BINARY_NAME) binary found in /usr/local/bin — run 'sudo rm /usr/local/bin/$(BINARY_FILE)' to avoid shadowing"; \
 	fi
