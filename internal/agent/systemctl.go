@@ -240,6 +240,13 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 			"hint", "CLI may be hung, will retry")
 		return 1, result.Output, nil // Return failure code to trigger retry
 	}
+	if err != nil && result.ExitCode != 0 {
+		// A provider/CLI failure must reach RunSupervisor's non-zero exit path.
+		// Returning it as a Go error exits the supervisor, resets its in-memory
+		// loop tracker, and lets auto-repair respawn into the same task session.
+		logger.Warn("Agent process failed", "agent_id", config.AgentID, "exit_code", result.ExitCode, "error", err)
+		return result.ExitCode, result.Output, nil
+	}
 
 	return result.ExitCode, result.Output, err
 }
