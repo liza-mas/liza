@@ -30,8 +30,8 @@ func ProcessAlive(pid int) (alive bool, permDenied bool, err error) {
 	// ERROR_INVALID_PARAMETER (87) are not all exported by name in the syscall
 	// package, so compare numerically.
 	const (
-		errAccessDenied       = syscall.Errno(5)
-		errInvalidParameter   = syscall.Errno(87)
+		errAccessDenied     = syscall.Errno(5)
+		errInvalidParameter = syscall.Errno(87)
 	)
 	switch e {
 	case errAccessDenied:
