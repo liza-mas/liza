@@ -123,6 +123,17 @@ if [[ -z "$project_dir" ]]; then
   fi
 fi
 
+# CLAUDE_PROJECT_DIR is set by the runtime and holds a native path, so it skips
+# the canonicalisation applied to cwd above. The required-document patterns are
+# built from project_dir and matched against reads that have been canonicalised,
+# so leaving it native means an absolute read of GUARDRAILS.md never matches and
+# the gate stays armed after every document has been read. The derived branches
+# above are already forward-slashed — git reports them that way, and cwd was
+# rewritten — which is why only the environment path was exposed.
+if is_windows_shell; then
+  project_dir="${project_dir//\\//}"
+fi
+
 # Fallback: $PPID is the Claude Code process PID (POSIX — the parent that forked this shell).
 # Stable for the session lifetime since all hook invocations share the same parent process.
 state_root="${TMPDIR:-/tmp}"
