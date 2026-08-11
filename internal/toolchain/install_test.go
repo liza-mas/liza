@@ -128,6 +128,46 @@ func TestPackageInstallCommandRequiresKnownPackageManager(t *testing.T) {
 	}
 }
 
+// TestPackageInstallCommandSkipsManagerWithoutAKnownPackage covers a catalog
+// shape the shipped one does not have yet: a tool scoop knows and winget does
+// not. Since winget is present on any modern Windows and is checked first, a
+// stop at the first present manager would never reach scoop.
+func TestPackageInstallCommandSkipsManagerWithoutAKnownPackage(t *testing.T) {
+	tool := Tool{
+		ID:                    "example",
+		PackageName:           "example",
+		PackageNamesByManager: map[string]string{"scoop": "example-scoop-id"},
+	}
+	runner := &fakeRunner{paths: map[string]string{
+		"winget": `C:\Windows\winget.exe`,
+		"scoop":  `C:\Users\dev\scoop\shims\scoop.exe`,
+	}}
+
+	got, err := packageInstallCommand(tool, runner)
+	if err != nil {
+		t.Fatalf("packageInstallCommand() error = %v, want the scoop command", err)
+	}
+	if got.Name != "scoop" {
+		t.Fatalf("packageInstallCommand() ran %q, want scoop", got.Name)
+	}
+	if !slices.Contains(got.Args, "example-scoop-id") {
+		t.Fatalf("packageInstallCommand() args = %v, want the scoop package id", got.Args)
+	}
+}
+
+// TestPackageInstallCommandReportsNoPackagePathWhenNoManagerKnowsTheTool keeps
+// the other outcome pinned: skipping a manager must not turn "nobody carries
+// this" into "no manager installed", which reads very differently to a user.
+func TestPackageInstallCommandReportsNoPackagePathWhenNoManagerKnowsTheTool(t *testing.T) {
+	tool := Tool{ID: "example", PackageName: "example"}
+	runner := &fakeRunner{paths: map[string]string{"winget": `C:\Windows\winget.exe`}}
+
+	_, err := packageInstallCommand(tool, runner)
+	if !errors.Is(err, errNoPackagePath) {
+		t.Fatalf("packageInstallCommand() error = %v, want errNoPackagePath", err)
+	}
+}
+
 func TestPackageInstallCommandRejectsURLPackage(t *testing.T) {
 	_, err := packageInstallCommand(Tool{ID: "tool", PackageName: "https://example.test/tool.rb"}, &fakeRunner{})
 	if err == nil {
