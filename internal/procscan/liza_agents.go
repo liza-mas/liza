@@ -114,11 +114,17 @@ func FindZombieAgents(opts ZombieScanOptions) (ZombieScanResult, error) {
 }
 
 // IsLizaAgentArgv reports whether argv identifies an agent supervisor.
+//
+// The executable suffix is dropped before comparing: Go appends .exe for
+// GOOS=windows, so the image an agent runs under is liza.exe there while the
+// configured binary name has no suffix. Trimming it unconditionally keeps one
+// comparison for both platforms, and a bare "liza" is what a Unix argv[0]
+// already is.
 func IsLizaAgentArgv(argv []string) bool {
 	if len(argv) < 2 {
 		return false
 	}
-	bin := filepath.Base(argv[0])
+	bin := strings.TrimSuffix(filepath.Base(argv[0]), ".exe")
 	return (bin == brand.BinaryName || bin == "liza") && argv[1] == "agent"
 }
 
