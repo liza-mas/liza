@@ -44,49 +44,67 @@ func TestEnforceInitHook_NativeReadsClearPairingGate(t *testing.T) {
 		t.Skip("bash not available")
 	}
 
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	hookPath := writeEnforceInitHook(t)
-	projectRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(projectRoot, "docs"), 0755); err != nil {
-		t.Fatalf("create project docs directory: %v", err)
-	}
-	for _, path := range []string{
-		filepath.Join(projectRoot, "GUARDRAILS.md"),
-		filepath.Join(projectRoot, "REPOSITORY.md"),
-		filepath.Join(projectRoot, "docs", "USAGE.md"),
+	// project_dir reaches the hook from two places, and the required-document
+	// patterns are built from it. When the runtime supplies CLAUDE_PROJECT_DIR
+	// it is a native path; when it does not, the hook derives one from cwd,
+	// which it has already canonicalised. Both have to land in the same
+	// namespace as the Read paths they are compared against, so both run here.
+	for _, tc := range []struct {
+		name             string
+		setProjectDirEnv bool
+	}{
+		{name: "project dir derived from cwd"},
+		{name: "project dir from environment", setProjectDirEnv: true},
 	} {
-		if err := os.WriteFile(path, []byte("required\n"), 0644); err != nil {
-			t.Fatalf("write required project document %s: %v", path, err)
-		}
-	}
-	sessionID := "test-native-pairing-init-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
-	stateDir := filepath.Join(os.TempDir(), "liza-init-gate-"+sessionID)
-	defer os.RemoveAll(stateDir)
-	for _, path := range []string{
-		filepath.Join(homeDir, ".liza", "AGENT_TOOLS.md"),
-		filepath.Join(homeDir, ".liza", "PAIRING_MODE.md"),
-		filepath.Join(projectRoot, "GUARDRAILS.md"),
-		filepath.Join(projectRoot, "REPOSITORY.md"),
-		filepath.Join(projectRoot, "docs", "USAGE.md"),
-		filepath.Join(homeDir, ".liza", "COLLABORATION_CONTINUITY.md"),
-	} {
-		payload, err := json.Marshal(map[string]any{
-			"session_id": sessionID,
-			"cwd":        projectRoot,
-			"tool_name":  "Read",
-			"tool_input": map[string]any{"file_path": path},
-		})
-		if err != nil {
-			t.Fatalf("marshal native read payload: %v", err)
-		}
-		runHook(t, hookPath, string(payload), 0)
-	}
+		t.Run(tc.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			t.Setenv("HOME", homeDir)
+			hookPath := writeEnforceInitHook(t)
+			projectRoot := t.TempDir()
+			if tc.setProjectDirEnv {
+				t.Setenv("CLAUDE_PROJECT_DIR", projectRoot)
+			}
+			if err := os.MkdirAll(filepath.Join(projectRoot, "docs"), 0755); err != nil {
+				t.Fatalf("create project docs directory: %v", err)
+			}
+			for _, path := range []string{
+				filepath.Join(projectRoot, "GUARDRAILS.md"),
+				filepath.Join(projectRoot, "REPOSITORY.md"),
+				filepath.Join(projectRoot, "docs", "USAGE.md"),
+			} {
+				if err := os.WriteFile(path, []byte("required\n"), 0644); err != nil {
+					t.Fatalf("write required project document %s: %v", path, err)
+				}
+			}
+			sessionID := "test-native-pairing-init-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
+			stateDir := filepath.Join(os.TempDir(), "liza-init-gate-"+sessionID)
+			defer os.RemoveAll(stateDir)
+			for _, path := range []string{
+				filepath.Join(homeDir, ".liza", "AGENT_TOOLS.md"),
+				filepath.Join(homeDir, ".liza", "PAIRING_MODE.md"),
+				filepath.Join(projectRoot, "GUARDRAILS.md"),
+				filepath.Join(projectRoot, "REPOSITORY.md"),
+				filepath.Join(projectRoot, "docs", "USAGE.md"),
+				filepath.Join(homeDir, ".liza", "COLLABORATION_CONTINUITY.md"),
+			} {
+				payload, err := json.Marshal(map[string]any{
+					"session_id": sessionID,
+					"cwd":        projectRoot,
+					"tool_name":  "Read",
+					"tool_input": map[string]any{"file_path": path},
+				})
+				if err != nil {
+					t.Fatalf("marshal native read payload: %v", err)
+				}
+				runHook(t, hookPath, string(payload), 0)
+			}
 
-	if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); err != nil {
-		t.Fatalf("expected native Read calls to clear the Pairing init gate: %v", err)
+			if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); err != nil {
+				t.Fatalf("expected native Read calls to clear the Pairing init gate: %v", err)
+			}
+			runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "git status --short"), 0)
+		})
 	}
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "git status --short"), 0)
 }
 
 func TestEnforceInitHook_WrongPathDocumentBasenamesDoNotClearGate(t *testing.T) {
