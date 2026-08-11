@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -54,7 +55,38 @@ func TestInstallScriptRejectsInvalidBrandInputs(t *testing.T) {
 	}
 }
 
+// TestInstallScriptRefusesWindowsRelease covers the refusal itself and the fact
+// that it is visible. detect_platform's stdout is consumed by the caller's
+// command substitution, so a message printed there never reaches the process
+// output this test reads.
+func TestInstallScriptRefusesWindowsRelease(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("uname reports MINGW/MSYS/CYGWIN only when bash runs on Windows")
+	}
+
+	out, err := runInstallScript(t, nil)
+	if err == nil {
+		t.Fatalf("install.sh succeeded, want a refusal:\n%s", out)
+	}
+	for _, want := range []string{
+		"does not install Windows releases",
+		"install.ps1",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("install.sh output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Downloading from") {
+		t.Fatalf("install.sh reached the download before refusing:\n%s", out)
+	}
+}
+
 func runInstallScriptHelp(t *testing.T, env ...string) (string, error) {
+	t.Helper()
+	return runInstallScript(t, []string{"--help"}, env...)
+}
+
+func runInstallScript(t *testing.T, args []string, env ...string) (string, error) {
 	t.Helper()
 	bashPath := testhelpers.ResolveBashForScripts(t)
 	repoRoot := findRepoRootForInstallScript(t)
@@ -62,7 +94,7 @@ func runInstallScriptHelp(t *testing.T, env ...string) (string, error) {
 	// Windows path like C:\Users\...\install.sh gets mangled. Pass the script
 	// path with forward slashes, which bash accepts on every platform.
 	scriptPath := filepath.ToSlash(filepath.Join(repoRoot, "install.sh"))
-	cmd := exec.Command(bashPath, scriptPath, "--help")
+	cmd := exec.Command(bashPath, append([]string{scriptPath}, args...)...)
 	cmd.Env = append(os.Environ(), "INSTALL_DIR="+t.TempDir())
 	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()

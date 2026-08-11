@@ -111,7 +111,17 @@ detect_platform() {
         Linux*)     os="linux";;
         Darwin*)    os="darwin";;
         MINGW*|MSYS*|CYGWIN*)
-            os="windows"
+            # Refusals go to stderr: this function's stdout is the caller's
+            # command substitution, which would swallow them.
+            echo -e "${RED}Error: this installer does not install Windows releases.${NC}" >&2
+            echo "The Windows archive ships ${BINARY_NAME}.exe, and a file installed" >&2
+            echo "without that extension does not resolve through PATHEXT." >&2
+            echo "" >&2
+            echo "From PowerShell:" >&2
+            echo "  irm https://raw.githubusercontent.com/${REPO}/main/install.ps1 | iex" >&2
+            echo "" >&2
+            echo "Or build from source here by setting BRANCH (requires Go and make)." >&2
+            exit 1
             ;;
         *)
             echo -e "${RED}Error: Unsupported operating system: $(uname -s)${NC}"
@@ -179,14 +189,8 @@ install_release() {
     tmp_dir=$(mktemp -d)
     trap "rm -rf ${tmp_dir}" EXIT
 
-    # Download archive. goreleaser produces tar.gz for linux/darwin and zip for
-    # windows. The platform string is "<os>-<arch>", so read its os prefix.
-    local os_prefix="${platform%%-*}"
-    local archive_ext="tar.gz"
-    if [ "$os_prefix" = "windows" ]; then
-        archive_ext="zip"
-    fi
-    local archive_name="${BRAND_ARCHIVE_PREFIX}-${version_bare}-${platform}.${archive_ext}"
+    # Download archive (goreleaser produces tar.gz for linux/darwin)
+    local archive_name="${BRAND_ARCHIVE_PREFIX}-${version_bare}-${platform}.tar.gz"
     local download_url="${BRAND_RELEASE_BASE_URL%/}/${version}/${archive_name}"
     echo "Downloading from ${download_url}..."
 
@@ -198,13 +202,9 @@ install_release() {
 
     # Extract
     echo "Extracting..."
-    if [ "$archive_ext" = "zip" ]; then
-        unzip -o "${tmp_dir}/${archive_name}" -d "${tmp_dir}"
-    else
-        tar -xzf "${tmp_dir}/${archive_name}" -C "${tmp_dir}"
-    fi
+    tar -xzf "${tmp_dir}/${archive_name}" -C "${tmp_dir}"
 
-    # Make executable (no-op on Windows; harmless under Git Bash)
+    # Make executable
     chmod +x "${tmp_dir}/${BINARY_NAME}"
 
     # Verify the binary works
