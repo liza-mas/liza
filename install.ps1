@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Installs liza on Windows from a published release.
+    Installs the CLI on Windows from a published release.
 
 .DESCRIPTION
     The PowerShell counterpart to install.sh, covering the release-download path
@@ -10,18 +10,22 @@
     Windows releases ship as a zip rather than a tar.gz, because tar is not a
     given on a Windows host and Expand-Archive reads zip only.
 
+    Which product this installs is decided by the BRAND_* environment
+    variables read below, so this help stays neutral: naming one here would
+    describe the wrong thing under any other brand.
+
 .PARAMETER Version
     Release tag to install, e.g. v1.2.3. Defaults to the latest release.
 
 .PARAMETER InstallDir
-    Where to place liza.exe. Defaults to %LOCALAPPDATA%\Programs\liza, which
-    needs no elevation.
+    Where to place the executable. Defaults to a directory named after the
+    binary under %LOCALAPPDATA%\Programs, which needs no elevation.
 
 .EXAMPLE
     irm https://raw.githubusercontent.com/liza-mas/liza/main/install.ps1 | iex
 
 .EXAMPLE
-    .\install.ps1 -Version v1.2.3 -InstallDir C:\tools\liza
+    .\install.ps1 -Version v1.2.3 -InstallDir C:\tools\cli
 #>
 
 [CmdletBinding()]
@@ -109,7 +113,7 @@ try {
     $target = Join-Path $InstallDir "$BinaryName.exe"
 
     # A running executable cannot be overwritten on Windows, but it can be
-    # renamed out of the way, the same move `liza update` performs.
+    # renamed out of the way, the same move the self-updater performs.
     if (Test-Path $target) {
         $displaced = "$target.old"
         Remove-Item -Path $displaced -Force -ErrorAction SilentlyContinue
