@@ -68,6 +68,80 @@ func TestAgentToolRegistryMergesCustomTools(t *testing.T) {
 	}
 }
 
+func TestAgentToolsFromCatalogsMergesLoadedOverEmbedded(t *testing.T) {
+	embedded := providers.Catalog{
+		Providers: []providers.Provider{
+			{
+				ID:      "cursor",
+				Backend: "cli",
+				Runtime: providers.Runtime{
+					Executable:      "cursor",
+					RunArgs:         []string{"--embedded"},
+					ACPXSetModeArgs: []string{"embedded-set-mode"},
+					ACPXPromptArgs:  []string{"embedded-prompt"},
+				},
+			},
+			{
+				ID:      "claude",
+				Backend: "cli",
+				Runtime: providers.Runtime{
+					Executable: "claude",
+					RunArgs:    []string{"-p"},
+				},
+			},
+		},
+	}
+	loaded := providers.Catalog{
+		Providers: []providers.Provider{
+			{
+				ID:      "cursor",
+				Backend: "cli",
+				Runtime: providers.Runtime{
+					Executable:      "cursor-agent",
+					RunArgs:         []string{"--loaded"},
+					ACPXSetModeArgs: []string{"loaded-set-mode"},
+				},
+			},
+			{
+				ID:      "newtool",
+				Backend: "cli",
+				Runtime: providers.Runtime{
+					Executable: "newtool",
+					RunArgs:    []string{"--new"},
+				},
+			},
+		},
+	}
+
+	registry := agentToolsFromCatalogs(embedded, loaded)
+
+	cursor, ok := registry["cursor"]
+	if !ok {
+		t.Fatal("cursor tool missing from merged registry")
+	}
+	if cursor.Executable != "cursor-agent" {
+		t.Fatalf("cursor executable = %q, want loaded catalog value", cursor.Executable)
+	}
+	if !slices.Equal(cursor.RunArgs, []string{"--loaded"}) {
+		t.Fatalf("cursor run args = %v, want loaded catalog value", cursor.RunArgs)
+	}
+	if !slices.Equal(cursor.ACPXSetModeArgs, []string{"loaded-set-mode"}) {
+		t.Fatalf("cursor set-mode args = %v, want loaded catalog value", cursor.ACPXSetModeArgs)
+	}
+	if !slices.Equal(cursor.ACPXPromptArgs, []string{"embedded-prompt"}) {
+		t.Fatalf("cursor prompt args = %v, want embedded fallback value", cursor.ACPXPromptArgs)
+	}
+
+	if _, ok := registry["claude"]; !ok {
+		t.Fatal("embedded-only tool missing from merged registry")
+	}
+	if newTool, ok := registry["newtool"]; !ok {
+		t.Fatal("loaded-only tool missing from merged registry")
+	} else if newTool.Executable != "newtool" {
+		t.Fatalf("newtool executable = %q, want loaded catalog value", newTool.Executable)
+	}
+}
+
 func TestResolveProfileAndCLIWithStructuredProfiles(t *testing.T) {
 	config := models.Config{
 		DefaultDoerProfile: "careful",

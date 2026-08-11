@@ -24,8 +24,10 @@ const (
 var templateExprRE = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
 
 var (
-	runtimeCatalogOnce sync.Once
-	runtimeCatalog     providers.Catalog
+	runtimeCatalogOnce  sync.Once
+	runtimeCatalog      providers.Catalog
+	embeddedCatalogOnce sync.Once
+	embeddedCatalog     providers.Catalog
 )
 
 type ResolvedProfile struct {
@@ -74,20 +76,20 @@ type LaunchPlanRequest struct {
 }
 
 func BuiltInAgentTools() map[string]models.AgentToolConfig {
+	embeddedCatalogOnce.Do(func() {
+		embeddedCatalog = providers.EmbeddedCatalog()
+	})
 	runtimeCatalogOnce.Do(func() {
 		cat, _ := providers.Load(context.Background(), providers.LoadOptions{})
 		runtimeCatalog = cat
 	})
-	return agentToolsFromCatalogs(providers.EmbeddedCatalog(), runtimeCatalog)
+	return agentToolsFromCatalogs(embeddedCatalog, runtimeCatalog)
 }
 
 func agentToolsFromCatalogs(embedded, loaded providers.Catalog) map[string]models.AgentToolConfig {
 	registry := embedded.RuntimeTools()
 	for name, tool := range loaded.RuntimeTools() {
-		if _, exists := registry[name]; exists {
-			continue
-		}
-		registry[name] = tool
+		registry[name] = mergeAgentToolConfig(name, registry[name], tool)
 	}
 	return registry
 }
@@ -201,14 +203,14 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 
 	vars := launchTemplateVars(req, toolName)
 	vars["acpxAgent"] = acpxAgent
-	acpxSessionName := ""
+	renderedSessionName := ""
 	if sessionTemplate != "" {
 		var err error
-		acpxSessionName, err = renderArg(sessionTemplate, vars)
+		renderedSessionName, err = renderArg(sessionTemplate, vars)
 		if err != nil {
 			return LaunchPlan{}, fmt.Errorf("%s acpx session name: %w", toolName, err)
 		}
-		vars["sessionName"] = acpxSessionName
+		vars["sessionName"] = renderedSessionName
 	}
 
 	renderedArgs, err := renderArgs(args, vars)
@@ -248,7 +250,7 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		RequiresCodexWrapper: toolName == "codex",
 		ProviderKey:          strings.TrimSpace(tool.ProviderKey),
 		ACPXAgent:            acpxAgent,
-		ACPXSessionName:      acpxSessionName,
+		ACPXSessionName:      renderedSessionName,
 		ACPXShowArgs:         acpxShowArgs,
 		ACPXEnsureArgs:       acpxEnsureArgs,
 		ACPXSetModeArgs:      acpxSetModeArgs,
