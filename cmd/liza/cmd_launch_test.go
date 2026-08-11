@@ -129,6 +129,57 @@ func TestPairingInteractiveCLICommandMapsACPToInteractiveBaseCLI(t *testing.T) {
 	}
 }
 
+// TestLaunchShellPrefersGitForWindowsOverAPathMatch stands in for the trap the
+// probe exists for: System32\bash.exe is the WSL launcher, it is on the machine
+// PATH, and the machine PATH is searched before the user's — so whatever is
+// found by name may well be a shell that cannot see C:/... paths at all. The
+// decoy here occupies the same position without needing WSL installed.
+func TestLaunchShellPrefersGitForWindowsOverAPathMatch(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("a bash.exe on PATH that cannot run the pane script is a Windows-only situation")
+	}
+
+	gitBash := ""
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		gitBash = statFirstExisting(filepath.Join(local, "Programs", "Git", "bin", "bash.exe"))
+	}
+	if gitBash == "" {
+		gitBash = statFirstExisting(
+			filepath.Join(os.Getenv("ProgramFiles"), "Git", "bin", "bash.exe"),
+			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Git", "bin", "bash.exe"),
+		)
+	}
+	if gitBash == "" {
+		t.Skip("Git for Windows is not installed in a standard location")
+	}
+
+	decoyDir := t.TempDir()
+	decoy := filepath.Join(decoyDir, "bash.exe")
+	if err := os.WriteFile(decoy, []byte("not a usable shell"), 0755); err != nil {
+		t.Fatalf("write decoy bash: %v", err)
+	}
+	t.Setenv("SHELL", "")
+	t.Setenv("PATH", decoyDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	got := launchShell()
+
+	if strings.EqualFold(got, decoy) {
+		t.Fatalf("launchShell() = %q, the first bash.exe on PATH, want the Git for Windows shell %q", got, gitBash)
+	}
+	if !strings.EqualFold(got, gitBash) {
+		t.Fatalf("launchShell() = %q, want %q", got, gitBash)
+	}
+}
+
+func statFirstExisting(candidates ...string) string {
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
 func TestLaunchShellIsExecutableWhenShellIsUnset(t *testing.T) {
 	// Git for Windows leaves SHELL unset, and the pane script is POSIX, so the
 	// fallback has to name something the OS can actually start.
