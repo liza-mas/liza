@@ -364,6 +364,42 @@ func TestResolveLaunchPlanScopesACPXSessionToTask(t *testing.T) {
 	}
 }
 
+func TestResolveLaunchPlanScopesDistinctValidTaskIDsToDistinctSessions(t *testing.T) {
+	config := models.Config{AgentTools: map[string]models.AgentToolConfig{"qwen-acp": acpxTaskScopeTestTool()}}
+
+	upperPlan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "qwen-acp",
+		AgentID:       "coder-1",
+		TaskID:        "Task-1",
+		ProjectRoot:   "/repo",
+		RuntimeConfig: config,
+	})
+	if err != nil {
+		t.Fatalf("ResolveLaunchPlan(upper) error = %v", err)
+	}
+
+	lowerPlan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "qwen-acp",
+		AgentID:       "coder-1",
+		TaskID:        "task-1",
+		ProjectRoot:   "/repo",
+		RuntimeConfig: config,
+	})
+	if err != nil {
+		t.Fatalf("ResolveLaunchPlan(lower) error = %v", err)
+	}
+
+	if upperPlan.ACPXSessionName != "liza-qwen-coder-1-Task-1" {
+		t.Fatalf("upper session = %q, want liza-qwen-coder-1-Task-1", upperPlan.ACPXSessionName)
+	}
+	if lowerPlan.ACPXSessionName != "liza-qwen-coder-1-task-1" {
+		t.Fatalf("lower session = %q, want liza-qwen-coder-1-task-1", lowerPlan.ACPXSessionName)
+	}
+	if upperPlan.ACPXSessionName == lowerPlan.ACPXSessionName {
+		t.Fatal("distinct valid task IDs collapsed to the same ACPX session name")
+	}
+}
+
 func TestResolveLaunchPlanWithoutTaskKeepsAgentScopedSession(t *testing.T) {
 	config := models.Config{AgentTools: map[string]models.AgentToolConfig{"qwen-acp": acpxTaskScopeTestTool()}}
 
@@ -421,12 +457,13 @@ func TestResolveLaunchPlanRespectsWhitespaceInExplicitTaskIDTemplate(t *testing.
 	}
 }
 
-func TestACPXSessionTaskScopeSanitizes(t *testing.T) {
+func TestACPXSessionTaskScopePreservesIdentity(t *testing.T) {
 	for _, tt := range []struct{ in, want string }{
 		{"code-plan-mobile-coding-0", "code-plan-mobile-coding-0"},
-		{"  Task With Spaces!  ", "task-with-spaces"},
+		{"Task-1", "Task-1"},
+		{"task-1", "task-1"},
+		{"task-", "task-"},
 		{"", ""},
-		{"---", ""},
 	} {
 		if got := acpxSessionTaskScope(tt.in); got != tt.want {
 			t.Fatalf("acpxSessionTaskScope(%q) = %q, want %q", tt.in, got, tt.want)

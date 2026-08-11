@@ -61,11 +61,12 @@ default runtime dependency without a separate review of the ACPX permission
 model and catalog distribution path.
 
 ACPX commands execute with `--cwd` set to the project root, while session names
-are scoped to the Liza agent identity so later turns by the same agent can reuse
-provider session state. `WarmUsage` is best-effort operational metadata: the
-adapter checks both process-local seen state and persisted ACPX session
-existence, but a provider may still reload, recreate, or globally resolve a
-session internally. It must not drive correctness-sensitive task transitions.
+are scoped to the Liza task identity so later turns within the same task can
+reuse provider session state without colliding across tasks. `WarmUsage` is
+best-effort operational metadata: the adapter checks both process-local seen
+state and persisted ACPX session existence, but a provider may still reload,
+recreate, or globally resolve a session internally. It must not drive
+correctness-sensitive task transitions.
 
 ACP also opens a future prompt-caching and bootstrap-efficiency path, but this is
 not built in by this ADR. What is built in today is a stable session boundary:

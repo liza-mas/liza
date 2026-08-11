@@ -363,24 +363,14 @@ func validatePromptTransport(value string) error {
 	}
 }
 
-// acpxSessionTaskScope converts a task ID into a session-name suffix. Task IDs
-// are engine-generated kebab-case, but sanitize defensively so the name stays
-// safe as an acpx session key.
+// acpxSessionTaskScope preserves the validated task ID so session names stay
+// collision-free across distinct valid task IDs.
 func acpxSessionTaskScope(taskID string) string {
-	taskID = strings.ToLower(strings.TrimSpace(taskID))
+	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return ""
 	}
-	var b strings.Builder
-	for _, r := range taskID {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('-')
-		}
-	}
-	return strings.Trim(b.String(), "-")
+	return taskID
 }
 
 func launchTemplateVars(req LaunchPlanRequest, toolName string) map[string]string {
