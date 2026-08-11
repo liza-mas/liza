@@ -1072,9 +1072,41 @@ func launchShell() string {
 		return shell
 	}
 	if runtime.GOOS == "windows" {
-		if bash, err := exec.LookPath("bash"); err == nil {
-			return bash
+		return windowsLaunchShell()
+	}
+	return "/bin/sh"
+}
+
+// windowsLaunchShell finds a bash able to run the POSIX pane script.
+//
+// Looking the name up on PATH is not enough. Windows ships
+// C:\Windows\System32\bash.exe — the WSL launcher — and the machine PATH is
+// searched before the user's, so a Git for Windows entry added at user level
+// can never win. Handing a pane script full of C:/... paths to that launcher
+// fails: it addresses the same files as /mnt/c/... . Reordering the machine
+// PATH needs the elevation the locked-down machines this supports do not grant,
+// so the install is located directly instead, and PATH is only consulted after.
+func windowsLaunchShell() string {
+	var candidates []string
+	// A per-user install lands under LOCALAPPDATA\Programs; a machine-wide one
+	// under Program Files. An empty root would make filepath.Join produce a
+	// relative path and match against the working directory.
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		candidates = append(candidates, filepath.Join(local, "Programs", "Git", "bin", "bash.exe"))
+	}
+	for _, programFiles := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")} {
+		if programFiles != "" {
+			candidates = append(candidates, filepath.Join(programFiles, "Git", "bin", "bash.exe"))
 		}
+	}
+
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	if bash, err := exec.LookPath("bash"); err == nil {
+		return bash
 	}
 	return "/bin/sh"
 }
