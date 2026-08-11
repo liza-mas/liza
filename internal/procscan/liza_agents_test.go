@@ -211,8 +211,13 @@ func TestIsLizaAgentArgv(t *testing.T) {
 		want bool
 	}{
 		{name: "liza agent", argv: []string{"/usr/bin/liza", "agent", "coder"}, want: true},
+		// filepath.Base only splits on backslashes when it runs on Windows, so
+		// the path here stays separator-neutral and the suffix is what is
+		// under test.
+		{name: "windows executable suffix", argv: []string{"liza.exe", "agent", "coder"}, want: true},
 		{name: "too short", argv: []string{"liza"}, want: false},
 		{name: "other liza command", argv: []string{"liza", "status"}, want: false},
+		{name: "other liza command on windows", argv: []string{"liza.exe", "status"}, want: false},
 		{name: "provider cli", argv: []string{"codex", "exec"}, want: false},
 	}
 	for _, tt := range tests {

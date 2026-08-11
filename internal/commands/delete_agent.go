@@ -35,6 +35,11 @@ func DeleteAgentCommand(projectRoot, agentID string, force bool, reason string, 
 		return fmt.Errorf("delete agent: %w", err)
 	}
 
+	if result.Process.IdentityUnverified {
+		fmt.Fprintf(os.Stderr,
+			"Warning: PID %d is still running but could not be confirmed to be agent %s, so it was left alone. Check it before reusing the slot.\n",
+			result.Process.PID, result.AgentID)
+	}
 	fmt.Printf("Deleted agent %s\n", result.AgentID)
 	return nil
 }

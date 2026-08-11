@@ -34,6 +34,13 @@ type ProcessTerminationResult struct {
 	Signaled bool
 	Exited   bool
 	Killed   bool
+
+	// IdentityUnverified reports that the recorded PID belonged to a live
+	// process which could not be confirmed to be this agent — a recycled PID,
+	// or one whose command line could not be read. Such a process is
+	// deliberately left alone, but the state row is still removed, so the
+	// caller has to be able to say that something is still running under it.
+	IdentityUnverified bool
 }
 
 type agentProcessOps struct {
@@ -135,7 +142,16 @@ func readAgentForDeletion(projectRoot, agentID string) (models.Agent, error) {
 
 func terminateProcess(pid int, grace time.Duration) (ProcessTerminationResult, error) {
 	result := ProcessTerminationResult{PID: pid}
-	if pid <= 0 || !agentProcesses.isLizaAgent(pid) {
+	if pid <= 0 {
+		return result, nil
+	}
+	if !agentProcesses.isLizaAgent(pid) {
+		// Not signalled: the PID may since have been handed to something
+		// unrelated, and killing that would be worse than leaving an agent
+		// behind. Whether anything is still running under it decides between
+		// "the agent is already gone" and "the row is about to be removed
+		// while its process is not".
+		result.IdentityUnverified = agentProcesses.isAlive(pid)
 		return result, nil
 	}
 
@@ -189,22 +205,10 @@ func waitForAgentProcessExit(pid int, grace time.Duration) bool {
 	return !IsProcessAlive(pid)
 }
 
-// isLizaAgentProcess checks if the process with the given PID is a liza agent
-// by reading /proc/<pid>/cmdline. Returns false if the process doesn't exist,
-// is unreadable, or isn't a liza agent.
-// Linux-only: returns false on platforms without procfs (documented no-op).
-func isLizaAgentProcess(pid int) bool {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
-	if err != nil {
-		return false
-	}
-	return procscan.IsLizaAgentArgv(procscan.ParseCmdlineBytes(data))
-}
-
 // IsProcessAlive checks if a process with the given PID is running.
 //
-// Delegates to procscan.ProcessAlive, which uses signal(0) on Unix and
-// OpenProcess on Windows. This is the single cross-platform source of truth
+// Delegates to procscan.ProcessAlive, which uses signal(0) on Unix and an
+// exit-code probe on Windows. This is the single cross-platform source of truth
 // for process-existence checks; os.Process.Signal(0) does not work on Windows
 // ("not supported"), so callers must not bypass this helper.
 func IsProcessAlive(pid int) bool {
