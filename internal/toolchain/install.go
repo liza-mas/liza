@@ -391,6 +391,10 @@ func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
 	}
 
 	var names []string
+	// Set when a manager was present but named no package we know: that is a
+	// different failure from finding no manager at all, and the caller reports
+	// it differently.
+	unknownPackageName := false
 	for _, candidate := range packageManagers {
 		names = append(names, candidate.binary)
 		path, err := runner.LookPath(candidate.binary)
@@ -401,10 +405,16 @@ func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
 		if !ok {
 			// The manager is present but carries this tool under no name we
 			// know. Installing PackageName blindly would install whatever else
-			// answers to it, so stop here rather than guess.
-			return Command{}, errNoPackagePath
+			// answers to it, so this manager is skipped rather than guessed at
+			// — and the next one still gets its turn, since a catalog entry
+			// naming a scoop package but no winget one is ordinary.
+			unknownPackageName = true
+			continue
 		}
 		return candidate.build(packageName), nil
+	}
+	if unknownPackageName {
+		return Command{}, errNoPackagePath
 	}
 	return Command{}, fmt.Errorf("no supported package manager found for %s (checked %s)", tool.PackageName, strings.Join(names, ", "))
 }
