@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e clean install lint check-testhelpers check-embedded release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync test test-nosync test-e2e test-e2e-nosync clean install lint lint-nosync check-testhelpers check-embedded release package build-all tidy run coverage help
 
 # Brand variables
 BRAND_NAME_LOWER?=liza
@@ -47,6 +47,9 @@ sync-embedded:
 
 # Build the binaries
 build: sync-embedded
+	@$(MAKE) build-nosync
+
+build-nosync:
 	@echo "Building $(BINARY_NAME) (version=$(VERSION), commit=$(GIT_COMMIT), date=$(BUILD_DATE))"
 	@go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/liza
 
@@ -54,11 +57,24 @@ build: sync-embedded
 # IMPORTANT: Always use `make test`, not bare `go test ./...`.
 # The sync-embedded step copies contracts/ and skills/ into internal/embedded/ for go:embed.
 # claude-settings.json and hooks/ are mastered directly in internal/embedded/.
-test: sync-embedded check-testhelpers
+ci-prepare: sync-embedded check-testhelpers
+
+ci-test-nosync: ci-test-go-nosync
+
+ci-test-go-nosync:
+	@$(MAKE) -j2 test-nosync test-e2e-nosync
+
+test: ci-prepare
+	@$(MAKE) test-nosync
+
+test-nosync:
 	go test -race -coverprofile=coverage.out ./...
 
 # Run e2e tests (full sprint sequence with mock CLI — ~40s)
-test-e2e: sync-embedded check-testhelpers
+test-e2e: ci-prepare
+	@$(MAKE) test-e2e-nosync
+
+test-e2e-nosync:
 	go test -race -tags e2e -run TestFullSprintSequence ./internal/integration/ -count=1
 
 # Run tests with coverage report
@@ -108,8 +124,16 @@ check-embedded:
 	@echo "✓ Embedded artifacts are consistent with masters"
 
 # Run linters
-lint: sync-embedded check-testhelpers check-embedded
-	go fmt ./...
+lint: ci-prepare check-embedded
+	@$(MAKE) lint-nosync
+
+lint-nosync:
+	@unformatted="$$(gofmt -l $$(find . -name '*.go' -type f -not -path './vendor/*'))"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "Go files need formatting:"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
 	go vet ./...
 
 # Tidy dependencies
@@ -160,12 +184,19 @@ package: release
 help:
 	@echo "Available targets:"
 	@echo "  build              - Build $(BINARY_NAME) binary"
+	@echo "  build-nosync       - Build against an already-synced checkout"
+	@echo "  ci-prepare         - Sync generated files and run shared CI checks"
+	@echo "  ci-test-nosync     - Run all available tests concurrently without syncing"
+	@echo "  ci-test-go-nosync  - Run Go and e2e tests concurrently without syncing"
 	@echo "  test               - Run tests (includes testhelpers check)"
+	@echo "  test-nosync        - Run tests against an already-synced checkout"
 	@echo "  test-e2e           - Run e2e full sprint test (~40s, requires -tags e2e)"
+	@echo "  test-e2e-nosync    - Run e2e tests against an already-synced checkout"
 	@echo "  coverage           - Run tests with coverage report"
 	@echo "  clean              - Clean build artifacts"
 	@echo "  install            - Install $(BINARY_NAME) binary"
 	@echo "  lint               - Run linters (includes testhelpers check)"
+	@echo "  lint-nosync        - Run nonmutating format and vet checks without syncing"
 	@echo "  check-testhelpers  - Verify testhelpers not in production code"
 	@echo "  check-embedded     - Verify embedded copies match repo masters"
 	@echo "  tidy               - Tidy dependencies"

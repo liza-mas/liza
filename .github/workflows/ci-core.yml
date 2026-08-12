@@ -1,0 +1,124 @@
+name: CI core
+
+on:
+  workflow_call:
+    inputs:
+      setup_python:
+        description: Install Python and run the repository's Python test target
+        required: false
+        default: false
+        type: boolean
+      macos_on_pr:
+        description: Run the macOS compatibility job for pull requests
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      verified_sha:
+        description: Commit checked out and verified by the Linux CI job
+        value: ${{ jobs.linux.outputs.verified_sha }}
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      verified_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Record verified source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: inputs.setup_python
+        with:
+          python-version: "3.12"
+
+      - name: Install Python test dependencies
+        if: inputs.setup_python
+        run: |
+          cat > "$RUNNER_TEMP/requirements-ci.txt" <<'EOF'
+          iniconfig==2.3.0 \
+              --hash=sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730 \
+              --hash=sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12
+          packaging==26.2 \
+              --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e \
+              --hash=sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661
+          pluggy==1.6.0 \
+              --hash=sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3 \
+              --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
+          pygments==2.20.0 \
+              --hash=sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f \
+              --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
+          pytest==9.0.2 \
+              --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b \
+              --hash=sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11
+          pytest-asyncio==1.3.0 \
+              --hash=sha256:611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5 \
+              --hash=sha256:d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5
+          typing-extensions==4.16.0 \
+              --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
+              --hash=sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5
+          EOF
+          python -m pip install --require-hashes -r "$RUNNER_TEMP/requirements-ci.txt"
+
+      - name: Prepare and verify generated artifacts
+        run: |
+          make ci-prepare
+          if ! git diff --quiet -- . || \
+             [ -n "$(git status --porcelain --untracked-files=all -- .)" ]; then
+            echo "ci-prepare changed tracked files; regenerate and commit them:" >&2
+            git diff --exit-code -- .
+            git status --short --untracked-files=all -- . >&2
+            exit 1
+          fi
+
+      - name: Run linters
+        run: make lint-nosync
+
+      - name: Run Go and e2e tests in parallel
+        if: ${{ ! inputs.setup_python }}
+        run: make ci-test-go-nosync
+
+      - name: Run Go, Python, and e2e tests in parallel
+        if: inputs.setup_python
+        run: make ci-test-nosync
+
+      - name: Build
+        run: make build-nosync
+
+  macos:
+    name: macOS compatibility
+    if: github.event_name != 'pull_request' || inputs.macos_on_pr
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Prepare generated artifacts
+        run: make ci-prepare
+
+      - name: Run Go and e2e tests in parallel
+        run: make ci-test-go-nosync
+
+      - name: Build
+        run: make build-nosync
