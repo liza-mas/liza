@@ -1055,6 +1055,19 @@ func makeIsolatedPath(t *testing.T, withPreCommit bool, preCommitExit int, marke
 		script := fmt.Sprintf("#!/bin/sh\necho 'pre-commit-stub-invoked' >&2\n: > %q\nexit %d\n", markerFile, preCommitExit)
 		testhelpers.WriteShellStub(t, filepath.Join(dir, "pre-commit"), script)
 	}
+	if runtime.GOOS == "windows" {
+		// git runs the worktree hook through a shell of its own, so a PATH
+		// holding only stubs leaves it unable to start one. The commit then
+		// fails before the hook runs at all, reporting
+		// "cannot spawn <hook>: No such file or directory" — an ENOENT that
+		// names the hook but is really about the missing interpreter.
+		//
+		// Git for Windows keeps bash, sh and git in a single directory and
+		// nothing else, so adding it grants the shell without putting any
+		// binary on the PATH that these tests could mistake for a project
+		// tool: pre-commit still comes only from the stub above.
+		return dir + string(os.PathListSeparator) + filepath.Dir(testhelpers.ResolveBashForScripts(t))
+	}
 	return dir
 }
 
