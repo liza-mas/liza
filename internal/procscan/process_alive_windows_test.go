@@ -5,7 +5,8 @@ package procscan
 import (
 	"os/exec"
 	"testing"
-	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // TestProcessAliveReportsExitedProcessWithSurvivingHandle covers the Windows
@@ -21,27 +22,33 @@ func TestProcessAliveReportsExitedProcessWithSurvivingHandle(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start short-lived process: %v", err)
 	}
-	// No Wait: the handle stays open, which is what keeps the PID resolvable
-	// after the process has gone.
-	t.Cleanup(func() { _ = cmd.Wait() })
-
 	pid := cmd.Process.Pid
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		alive, permDenied, err := ProcessAlive(pid)
-		if err != nil {
-			t.Fatalf("ProcessAlive(%d) error: %v", pid, err)
-		}
-		if permDenied {
-			t.Fatalf("ProcessAlive(%d) reported permission denied for a child process", pid)
-		}
-		if !alive {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ProcessAlive(%d) still reports alive after the process exited", pid)
-		}
-		time.Sleep(20 * time.Millisecond)
+
+	// Hold a handle of our own before reaping. os/exec releases its handle in
+	// Wait, so this one takes over the job of keeping the PID resolvable —
+	// which is the state the production code meets between Start and Wait,
+	// reproduced here without waiting on the clock for it.
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		t.Fatalf("open handle on child %d: %v", pid, err)
+	}
+	defer windows.CloseHandle(handle)
+
+	// Wait returns only once the process has actually exited, so what follows
+	// needs no polling.
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("wait for child: %v", err)
+	}
+
+	alive, permDenied, err := ProcessAlive(pid)
+	if err != nil {
+		t.Fatalf("ProcessAlive(%d) error: %v", pid, err)
+	}
+	if permDenied {
+		t.Fatalf("ProcessAlive(%d) reported permission denied for a child process", pid)
+	}
+	if alive {
+		t.Fatalf("ProcessAlive(%d) = alive, want dead: the process has exited and only a handle survives", pid)
 	}
 }
 

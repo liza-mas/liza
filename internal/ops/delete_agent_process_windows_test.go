@@ -3,6 +3,7 @@
 package ops
 
 import (
+	"bufio"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -146,27 +147,37 @@ func startFakeAgentWithChild(t *testing.T) *os.Process {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(binDir) })
 
+	// The stub announces itself only after its child is running, so the test
+	// can wait on that line instead of polling for the tree to fill in.
 	stub := testhelpers.WriteShellStub(t, filepath.Join(binDir, "liza"), `#!/bin/sh
 ping -n 60 127.0.0.1 >/dev/null 2>&1 &
+echo ready
 wait
 `)
 
 	cmd := exec.Command(stub, "agent", "coder")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("pipe fake agent stdout: %v", err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start fake agent: %v", err)
 	}
 	t.Cleanup(func() { _ = cmd.Wait() })
 
-	// The tree is only complete once the shell has spawned its child.
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		tree, err := processTreeDeepestFirst(uint32(cmd.Process.Pid))
-		if err == nil && len(tree) >= 3 {
-			return cmd.Process
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("fake agent never spawned its child (tree: %v, err: %v)", tree, err)
-		}
-		time.Sleep(50 * time.Millisecond)
+	// Blocking read: it returns once the child exists, and the child is what
+	// makes the tree worth terminating.
+	line, err := bufio.NewReader(stdout).ReadString('\n')
+	if err != nil {
+		t.Fatalf("fake agent never reported ready (read %q): %v", line, err)
 	}
+
+	tree, err := processTreeDeepestFirst(uint32(cmd.Process.Pid))
+	if err != nil {
+		t.Fatalf("read process tree: %v", err)
+	}
+	if len(tree) < 3 {
+		t.Fatalf("fake agent tree = %v (%d processes), want the agent, its shell and the child it spawned", tree, len(tree))
+	}
+	return cmd.Process
 }
