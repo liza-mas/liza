@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -117,15 +118,31 @@ func FindZombieAgents(opts ZombieScanOptions) (ZombieScanResult, error) {
 //
 // The executable suffix is dropped before comparing: Go appends .exe for
 // GOOS=windows, so the image an agent runs under is liza.exe there while the
-// configured binary name has no suffix. Trimming it unconditionally keeps one
-// comparison for both platforms, and a bare "liza" is what a Unix argv[0]
-// already is.
+// configured binary name has no suffix. Trimming it keeps one comparison for
+// both platforms, and a bare "liza" is what a Unix argv[0] already is.
 func IsLizaAgentArgv(argv []string) bool {
 	if len(argv) < 2 {
 		return false
 	}
-	bin := strings.TrimSuffix(filepath.Base(argv[0]), ".exe")
+	bin := trimExecutableSuffix(filepath.Base(argv[0]))
 	return (bin == brand.BinaryName || bin == "liza") && argv[1] == "agent"
+}
+
+// trimExecutableSuffix drops a trailing .exe from an image name.
+//
+// The suffix case is only insignificant on Windows, where PATHEXT resolution
+// decides it: a shell launching a bare "liza" can produce liza.EXE, which a
+// case-sensitive trim would leave intact and no comparison would then match.
+// On POSIX, liza.EXE and liza.exe are two different files, so the case stands.
+func trimExecutableSuffix(base string) string {
+	const suffix = ".exe"
+	if runtime.GOOS != "windows" {
+		return strings.TrimSuffix(base, suffix)
+	}
+	if len(base) > len(suffix) && strings.EqualFold(base[len(base)-len(suffix):], suffix) {
+		return base[:len(base)-len(suffix)]
+	}
+	return base
 }
 
 // MatchesLizaAgentIdentity reports whether argv identifies the expected
