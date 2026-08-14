@@ -63,3 +63,13 @@ func ProcessCommandLine(pid int) ([]string, error) {
 	}
 	return argv, nil
 }
+
+// platformCommandLineSource names the mechanism behind platformCommandLine, so
+// a status carries how its identity was established.
+const platformCommandLineSource = "NtQueryInformationProcess"
+
+// platformCommandLine gives the identity check a source on a host that has no
+// procfs to read.
+func platformCommandLine(pid int) ([]string, error) {
+	return ProcessCommandLine(pid)
+}
