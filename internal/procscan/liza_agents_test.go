@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"testing"
 )
@@ -215,6 +216,11 @@ func TestIsLizaAgentArgv(t *testing.T) {
 		// the path here stays separator-neutral and the suffix is what is
 		// under test.
 		{name: "windows executable suffix", argv: []string{"liza.exe", "agent", "coder"}, want: true},
+		// PATHEXT resolution decides the suffix case: launching a bare "liza"
+		// through MSYS or wezterm yields liza.EXE. Windows names it the same
+		// file; POSIX does not, so the expectation follows the platform.
+		{name: "uppercase suffix", argv: []string{"liza.EXE", "agent", "coder"}, want: runtime.GOOS == "windows"},
+		{name: "mixed case suffix", argv: []string{"liza.Exe", "agent", "coder"}, want: runtime.GOOS == "windows"},
 		{name: "too short", argv: []string{"liza"}, want: false},
 		{name: "other liza command", argv: []string{"liza", "status"}, want: false},
 		{name: "other liza command on windows", argv: []string{"liza.exe", "status"}, want: false},
