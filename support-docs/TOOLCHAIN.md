@@ -175,5 +175,10 @@ neither in that directory nor on `PATH` afterwards is reported as failed.
 sources it from `$PROFILE.CurrentUserAllHosts`. Git Bash sessions keep using
 `env.sh`; both are wired in the same run.
 
-**Known gap.** `bash-policy` does not build on Windows: its file locking calls
-`syscall.Flock` with no build tags. Nothing here works around that.
+**Known gaps.** Two tools install on Windows without being usable there, and
+nothing here works around either. `bash-policy` does not build: its file locking
+calls `syscall.Flock` with no build tags. `scip-python` builds a regular
+expression from the platform path separator while its module loads, so a
+backslash leaves the pattern unterminated and every invocation — `--version`
+included — dies before it starts; `doctor` reports it as failed, and Python
+projects have no SCIP index on this platform.
