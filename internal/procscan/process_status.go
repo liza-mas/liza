@@ -8,6 +8,15 @@ import (
 	"strconv"
 )
 
+// defaultProcRoot is the procfs mount every caller means when it does not name
+// one. Tests name a directory of their own instead, which is what tells the
+// two apart; a test that needs this host to look procfs-less repoints it.
+var defaultProcRoot = "/proc"
+
+// nativeCommandLine reads a live process's argv without going through procfs.
+// It is a variable so a test can stand in for the host.
+var nativeCommandLine = platformCommandLine
+
 // AgentProcessState classifies a registered agent PID using the strongest
 // available host evidence.
 type AgentProcessState string
@@ -68,7 +77,7 @@ func AgentProcessStatusForPID(pid int, role, agentID, procRoot string) AgentProc
 		}
 	}
 	if procRoot == "" {
-		procRoot = "/proc"
+		procRoot = defaultProcRoot
 	}
 
 	cmdlinePath := filepath.Join(procRoot, strconv.Itoa(pid), "cmdline")
@@ -88,6 +97,30 @@ func AgentProcessStatusForPID(pid int, role, agentID, procRoot string) AgentProc
 			Source: "procfs",
 			Detail: "pid exists but cmdline does not match expected agent supervisor",
 			Alive:  true,
+		}
+	}
+
+	// Procfs did not answer. A host without one can still name its processes,
+	// and without asking, every live agent reads as unknown — indistinguishable
+	// from a PID that has been handed to something unrelated. Only the real
+	// proc root is consulted this way: an injected one means the caller is
+	// describing the host, and the machine underneath is not it.
+	if procRoot == defaultProcRoot {
+		if argv, nativeErr := nativeCommandLine(pid); nativeErr == nil {
+			if MatchesLizaAgentIdentity(argv, role, agentID) {
+				return AgentProcessStatus{
+					State:  AgentProcessLiveMatching,
+					Source: platformCommandLineSource,
+					Detail: "command line matches expected agent supervisor",
+					Alive:  true,
+				}
+			}
+			return AgentProcessStatus{
+				State:  AgentProcessMismatched,
+				Source: platformCommandLineSource,
+				Detail: "pid exists but command line does not match expected agent supervisor",
+				Alive:  true,
+			}
 		}
 	}
 
