@@ -40,6 +40,11 @@ type ZombieScanResult struct {
 	UnknownScope []AgentProcess
 }
 
+// enumerateCandidatePIDs lists the processes worth asking for a command line
+// on a host with no procfs. It is a variable so a test can stand in for the
+// host's process table.
+var enumerateCandidatePIDs = enumerateAgentImagePIDs
+
 // ZombieScanOptions controls live-process zombie detection.
 type ZombieScanOptions struct {
 	ProjectRoot    string
@@ -48,19 +53,27 @@ type ZombieScanOptions struct {
 	ProcRoot       string
 }
 
-// FindZombieAgents enumerates /proc and returns live agent supervisors for
-// the current project/goal that are missing from the registered PID set.
-// With no project root, the scan is an exact goal filter rather than a
+// FindZombieAgents enumerates the host's processes and returns live agent
+// supervisors for the current project/goal that are missing from the registered
+// PID set. With no project root, the scan is an exact goal filter rather than a
 // scan-all mode; candidates without matching goal metadata are omitted.
+//
+// Procfs is the source wherever there is one. A host without it falls back to
+// naming its own processes, and only the real proc root does so: an injected
+// one means the caller is describing a host, and the machine underneath is
+// not it.
 func FindZombieAgents(opts ZombieScanOptions) (ZombieScanResult, error) {
 	procRoot := opts.ProcRoot
 	if procRoot == "" {
-		procRoot = "/proc"
+		procRoot = defaultProcRoot
 	}
 
 	entries, err := os.ReadDir(procRoot)
 	if os.IsNotExist(err) {
-		return ZombieScanResult{}, ErrProcessScanUnavailable
+		if procRoot != defaultProcRoot {
+			return ZombieScanResult{}, ErrProcessScanUnavailable
+		}
+		return findZombieAgentsNatively(opts)
 	}
 	if err != nil {
 		return ZombieScanResult{}, fmt.Errorf("scan procfs: %w", err)
@@ -86,14 +99,7 @@ func FindZombieAgents(opts ZombieScanOptions) (ZombieScanResult, error) {
 			continue
 		}
 
-		zombie := ZombieProcess{
-			PID:     pid,
-			Role:    roleFromArgv(argv),
-			CLI:     flagValue(argv, "--cli"),
-			GoalID:  flagValue(argv, "--goal-id"),
-			Cmdline: argv,
-			Reason:  "not_registered_in_state",
-		}
+		zombie := newZombieProcess(pid, argv)
 		cwd, err := os.Readlink(filepath.Join(procDir, "cwd"))
 		if projectRoot != "" && os.IsNotExist(err) {
 			continue
@@ -114,6 +120,63 @@ func FindZombieAgents(opts ZombieScanOptions) (ZombieScanResult, error) {
 	return result, nil
 }
 
+// findZombieAgentsNatively scans the process table of a host that exposes no
+// procfs.
+//
+// The cwd that decides scope elsewhere is not merely unreadable here, it is
+// absent by construction: Windows does not report another process's working
+// directory without the access rights the command-line probe deliberately
+// avoids needing. Classifying every candidate as unknown scope on that basis
+// would report the whole agent pool as unresolved on every scan, which is the
+// noise this path exists to remove.
+//
+// The goal ID each candidate carries in its own argv stands in, and keeps the
+// three outcomes meaningful: a match is the current run, a different goal
+// belongs to another one, and a candidate with no goal recorded is what nothing
+// can be said about. The procfs path is untouched — its cwd evidence is
+// stronger, and weakening it to match would trade accuracy everywhere else for
+// reach here.
+func findZombieAgentsNatively(opts ZombieScanOptions) (ZombieScanResult, error) {
+	if opts.GoalID == "" {
+		return ZombieScanResult{}, nil
+	}
+	pids, err := enumerateCandidatePIDs()
+	if err != nil {
+		return ZombieScanResult{}, err
+	}
+
+	var result ZombieScanResult
+	for _, pid := range pids {
+		if opts.RegisteredPIDs[pid] {
+			continue
+		}
+		argv, err := nativeCommandLine(pid)
+		if err != nil || !IsLizaAgentArgv(argv) {
+			continue
+		}
+		candidate := newZombieProcess(pid, argv)
+		switch {
+		case candidate.GoalID == opts.GoalID:
+			result.Zombies = append(result.Zombies, candidate)
+		case candidate.GoalID == "":
+			candidate.Reason = ScopeReasonCWDUnreadable
+			result.UnknownScope = append(result.UnknownScope, candidate)
+		}
+	}
+	return result, nil
+}
+
+func newZombieProcess(pid int, argv []string) ZombieProcess {
+	return ZombieProcess{
+		PID:     pid,
+		Role:    roleFromArgv(argv),
+		CLI:     flagValue(argv, "--cli"),
+		GoalID:  flagValue(argv, "--goal-id"),
+		Cmdline: argv,
+		Reason:  "not_registered_in_state",
+	}
+}
+
 // IsLizaAgentArgv reports whether argv identifies an agent supervisor.
 //
 // The executable suffix is dropped before comparing: Go appends .exe for
@@ -124,8 +187,17 @@ func IsLizaAgentArgv(argv []string) bool {
 	if len(argv) < 2 {
 		return false
 	}
-	bin := trimExecutableSuffix(filepath.Base(argv[0]))
-	return (bin == brand.BinaryName || bin == "liza") && argv[1] == "agent"
+	return isAgentImageName(filepath.Base(argv[0])) && argv[1] == "agent"
+}
+
+// isAgentImageName reports whether an image name is the one agents run under.
+//
+// It says nothing on its own about a process being an agent — argv decides
+// that. It exists so the process-table pre-filter and the identity check agree
+// on what the image is called.
+func isAgentImageName(base string) bool {
+	bin := trimExecutableSuffix(base)
+	return bin == brand.BinaryName || bin == "liza"
 }
 
 // trimExecutableSuffix drops a trailing .exe from an image name.
