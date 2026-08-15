@@ -546,6 +546,34 @@ git checkout -- .
 The index is never modified, so the tree can be restored with `git checkout -- .`
 at any point. Commit any pending work first: this rewrites tracked files.
 
+### A flag value arrives empty, shifted, or missing its quotes on Windows
+
+**Cause:** Windows PowerShell 5.1 rewrites a native command's arguments before
+the process sees them. Two rewrites lose content with no error, so the command
+runs on something other than what was written:
+
+- An **empty** value disappears entirely, taking the next flag's place.
+  `--reason $r --agent-id a1` with `$r` empty reaches the process as
+  `--reason --agent-id a1`, so the parser reads the reason as `--agent-id` and
+  `a1` becomes a stray positional argument.
+- **Double quotes inside a value are stripped.** `He said "no"` arrives as
+  `He said no`, so a rejection reason quoting code or an error message is
+  altered silently.
+
+Spaces, accents, line breaks and a leading `--` all survive intact; only these
+two cases lose content. PowerShell 7 (`pwsh`) has neither behaviour.
+
+**Check:** run the command with `--reason` last. If the value was dropped, the
+following flag shows up as the reason.
+
+**Fix:** attach the value to the flag so an empty string still produces a token,
+and escape embedded quotes with a backslash:
+
+```powershell
+§BRAND_BINARY_NAME§ submit-verdict task-1 REJECTED "--reason=$reason"
+$reason = 'the guard rejects \"draft\" states'
+```
+
 ### Error: specs/vision.md required
 
 Create the vision spec first:
