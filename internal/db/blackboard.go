@@ -259,7 +259,7 @@ func (bb *Blackboard) writeStateData(data []byte) error {
 		return fmt.Errorf("failed to close state file: %w", closeErr)
 	}
 
-	if err := os.Rename(tmpPath, bb.statePath); err != nil {
+	if err := publishState(tmpPath, bb.statePath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename state file: %w", err)
 	}
