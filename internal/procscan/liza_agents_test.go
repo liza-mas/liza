@@ -205,6 +205,127 @@ func TestFindZombieAgents_ProcfsUnavailable(t *testing.T) {
 	}
 }
 
+// stubCandidatePIDs stands in for the host process table and reports how many
+// times the scan asked for it.
+func stubCandidatePIDs(t *testing.T, pids []int, err error) *int {
+	t.Helper()
+	calls := 0
+	old := enumerateCandidatePIDs
+	enumerateCandidatePIDs = func() ([]int, error) {
+		calls++
+		return pids, err
+	}
+	t.Cleanup(func() { enumerateCandidatePIDs = old })
+	return &calls
+}
+
+// TestFindZombieAgents_NativeScanMatchesOnGoalID covers the host that has no
+// procfs. There is no working directory to scope by there, so the goal ID the
+// candidate carries in its own argv has to do it — note that ProjectRoot is set
+// and deliberately not what decides the match.
+func TestFindZombieAgents_NativeScanMatchesOnGoalID(t *testing.T) {
+	hideProcfs(t)
+	stubCandidatePIDs(t, []int{1234}, nil)
+	stubNativeCommandLine(t, []string{`C:\bin\liza.EXE`, "agent", "coder", "--cli", "codex", "--goal-id", "goal-1"}, nil)
+
+	result, err := FindZombieAgents(ZombieScanOptions{
+		ProjectRoot: t.TempDir(),
+		GoalID:      "goal-1",
+	})
+	if err != nil {
+		t.Fatalf("FindZombieAgents() error = %v", err)
+	}
+	if len(result.Zombies) != 1 {
+		t.Fatalf("zombie count = %d, want 1: %+v", len(result.Zombies), result)
+	}
+	if len(result.UnknownScope) != 0 {
+		t.Errorf("unknown scope = %+v, want none for a goal that matches", result.UnknownScope)
+	}
+	if result.Zombies[0].PID != 1234 || result.Zombies[0].Role != "coder" || result.Zombies[0].CLI != "codex" {
+		t.Errorf("zombie = %+v, want pid 1234 role coder cli codex", result.Zombies[0])
+	}
+}
+
+// TestFindZombieAgents_NativeScanReportsCandidateWithoutGoal keeps the third
+// outcome reachable on this path: a candidate carrying no goal is the one
+// nothing can be said about, so it is surfaced rather than claimed or dropped.
+func TestFindZombieAgents_NativeScanReportsCandidateWithoutGoal(t *testing.T) {
+	hideProcfs(t)
+	stubCandidatePIDs(t, []int{1234}, nil)
+	stubNativeCommandLine(t, []string{"liza", "agent", "coder"}, nil)
+
+	result, err := FindZombieAgents(ZombieScanOptions{
+		ProjectRoot: t.TempDir(),
+		GoalID:      "goal-1",
+	})
+	if err != nil {
+		t.Fatalf("FindZombieAgents() error = %v", err)
+	}
+	if len(result.Zombies) != 0 {
+		t.Errorf("zombies = %+v, want none claimed without a goal to prove it", result.Zombies)
+	}
+	if len(result.UnknownScope) != 1 {
+		t.Fatalf("unknown scope count = %d, want 1: %+v", len(result.UnknownScope), result)
+	}
+	if result.UnknownScope[0].Reason != ScopeReasonCWDUnreadable {
+		t.Errorf("reason = %q, want %q", result.UnknownScope[0].Reason, ScopeReasonCWDUnreadable)
+	}
+}
+
+func TestFindZombieAgents_NativeScanIgnoresAnotherGoal(t *testing.T) {
+	hideProcfs(t)
+	stubCandidatePIDs(t, []int{1234}, nil)
+	stubNativeCommandLine(t, []string{"liza", "agent", "coder", "--goal-id", "goal-2"}, nil)
+
+	result, err := FindZombieAgents(ZombieScanOptions{GoalID: "goal-1"})
+	if err != nil {
+		t.Fatalf("FindZombieAgents() error = %v", err)
+	}
+	if len(result.Zombies) != 0 || len(result.UnknownScope) != 0 {
+		t.Fatalf("result = %+v, want nothing for another run's goal", result)
+	}
+}
+
+func TestFindZombieAgents_NativeScanSkipsRegisteredPID(t *testing.T) {
+	hideProcfs(t)
+	stubCandidatePIDs(t, []int{1234}, nil)
+	calls := stubNativeCommandLine(t, []string{"liza", "agent", "coder", "--goal-id", "goal-1"}, nil)
+
+	result, err := FindZombieAgents(ZombieScanOptions{
+		GoalID:         "goal-1",
+		RegisteredPIDs: map[int]bool{1234: true},
+	})
+	if err != nil {
+		t.Fatalf("FindZombieAgents() error = %v", err)
+	}
+	if len(result.Zombies) != 0 || len(result.UnknownScope) != 0 {
+		t.Fatalf("result = %+v, want nothing for a registered pid", result)
+	}
+	if *calls != 0 {
+		t.Errorf("native command line consulted %d times, want 0 for a registered pid", *calls)
+	}
+}
+
+// TestFindZombieAgents_InjectedProcRootStaysOffTheHost mirrors the guard the
+// per-PID status check already carries: naming a proc root describes a host, so
+// the machine underneath must not be scanned instead. Without it, the fake-procfs
+// fixtures in ops, agent and commands would start seeing this machine.
+func TestFindZombieAgents_InjectedProcRootStaysOffTheHost(t *testing.T) {
+	calls := stubCandidatePIDs(t, []int{1234}, nil)
+
+	_, err := FindZombieAgents(ZombieScanOptions{
+		GoalID:   "goal-1",
+		ProcRoot: filepath.Join(t.TempDir(), "missing"),
+	})
+
+	if !errors.Is(err, ErrProcessScanUnavailable) {
+		t.Fatalf("FindZombieAgents() error = %v, want ErrProcessScanUnavailable", err)
+	}
+	if *calls != 0 {
+		t.Errorf("process table enumerated %d times, want 0 for an injected proc root", *calls)
+	}
+}
+
 func TestIsLizaAgentArgv(t *testing.T) {
 	tests := []struct {
 		name string
