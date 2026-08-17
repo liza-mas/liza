@@ -570,8 +570,8 @@ following flag shows up as the reason.
 and escape embedded quotes with a backslash:
 
 ```powershell
-§BRAND_BINARY_NAME§ submit-verdict task-1 REJECTED "--reason=$reason"
 $reason = 'the guard rejects \"draft\" states'
+§BRAND_BINARY_NAME§ submit-verdict task-1 REJECTED --reason="$reason"
 ```
 
 ### Error: specs/vision.md required

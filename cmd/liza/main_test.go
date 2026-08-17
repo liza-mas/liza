@@ -102,7 +102,7 @@ func TestValidateReasonFlag(t *testing.T) {
 				t.Fatalf("validateReasonFlag() matched = %q, want %q", matched, tt.wantMatched)
 			}
 			if err != nil {
-				for _, want := range []string{"matches registered flag", "empty shell expansion", "Only registered flag tokens are detected"} {
+				for _, want := range []string{"matches registered flag", "empty shell expansion", `--reason="$reason"`, "Only registered flag tokens are detected"} {
 					if !strings.Contains(err.Error(), want) {
 						t.Fatalf("error = %q, want substring %q", err, want)
 					}
