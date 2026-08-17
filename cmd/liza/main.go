@@ -205,7 +205,7 @@ func validateReasonFlag(cmd *cobra.Command) (string, error) {
 	}
 
 	return matchedFlag, cliValidationError(fmt.Sprintf(
-		"--reason value %q matches registered flag %s and may have been consumed after an empty shell expansion; quote variables (for example, --reason \"$reason\"). Only registered flag tokens are detected",
+		"--reason value %q matches registered flag %s and may have been consumed after an empty shell expansion; quote variables (for example, --reason \"$reason\"), or attach the value as --reason=\"$reason\", which also holds in PowerShell, where quoting does not prevent an empty argument from being dropped. Only registered flag tokens are detected",
 		reason,
 		matchedFlag,
 	))
