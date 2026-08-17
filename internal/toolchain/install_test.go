@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 type fakeRunner struct {
@@ -31,7 +33,7 @@ func (f *fakeRunner) LookPath(name string) (string, error) {
 
 func (f *fakeRunner) Run(command Command) (CommandOutput, error) {
 	f.runs = append(f.runs, command)
-	if f.failInstallScript && command.Env["LIZA_TOOL_INSTALL_URL"] != "" {
+	if f.failInstallScript && command.Env[toolEnvName("INSTALL_URL")] != "" {
 		return CommandOutput{Stderr: "release metadata unavailable"}, errors.New("exit status 1")
 	}
 	for _, name := range f.resolvesAfterRun {
@@ -200,11 +202,11 @@ func TestInstallFallsBackToGoSourceBuildWhenScriptFails(t *testing.T) {
 		t.Fatalf("runs = %d, want primary script plus fallback", len(runner.runs))
 	}
 	fallback := runner.runs[1]
-	if fallback.Env["LIZA_TOOL_SOURCE_REPO"] != "https://github.com/liza-mas/mdtoc" {
-		t.Fatalf("fallback source repo = %q", fallback.Env["LIZA_TOOL_SOURCE_REPO"])
+	if fallback.Env[toolEnvName("SOURCE_REPO")] != "https://github.com/liza-mas/mdtoc" {
+		t.Fatalf("fallback source repo = %q", fallback.Env[toolEnvName("SOURCE_REPO")])
 	}
-	if fallback.Env["LIZA_TOOL_SOURCE_PACKAGE"] != "./cmd/mdtoc" {
-		t.Fatalf("fallback package = %q", fallback.Env["LIZA_TOOL_SOURCE_PACKAGE"])
+	if fallback.Env[toolEnvName("SOURCE_PACKAGE")] != "./cmd/mdtoc" {
+		t.Fatalf("fallback package = %q", fallback.Env[toolEnvName("SOURCE_PACKAGE")])
 	}
 	if !strings.Contains(strings.Join(fallback.Args, " "), "git clone") || !strings.Contains(strings.Join(fallback.Args, " "), "go install") {
 		t.Fatalf("fallback command does not build from source: %+v", fallback)
@@ -260,8 +262,8 @@ func TestBashPolicyCatalogPlansStandaloneInstaller(t *testing.T) {
 	if command.Name != "bash" {
 		t.Fatalf("command name = %q, want bash", command.Name)
 	}
-	if command.Env["LIZA_TOOL_INSTALL_URL"] != tool.InstallURL {
-		t.Fatalf("LIZA_TOOL_INSTALL_URL = %q", command.Env["LIZA_TOOL_INSTALL_URL"])
+	if command.Env[toolEnvName("INSTALL_URL")] != tool.InstallURL {
+		t.Fatalf("%s = %q", toolEnvName("INSTALL_URL"), command.Env[toolEnvName("INSTALL_URL")])
 	}
 	if command.Env["INSTALL_DIR"] != installDir {
 		t.Fatalf("INSTALL_DIR = %q, want %q", command.Env["INSTALL_DIR"], installDir)
@@ -383,11 +385,79 @@ func TestInstallUsesWindowsArchiveWhenScriptCannotRun(t *testing.T) {
 	if command.Name != "powershell" {
 		t.Fatalf("command = %q, want powershell rather than the Linux-only install script", command.Name)
 	}
-	if command.Env["LIZA_TOOL_ARCHIVE_URL"] == "" {
+	if command.Env[toolEnvName("ARCHIVE_URL")] == "" {
 		t.Fatal("archive URL not passed to the install command")
 	}
-	if command.Env["LIZA_TOOL_INSTALL_DIR"] != installDir {
-		t.Fatalf("install dir = %q, want %q", command.Env["LIZA_TOOL_INSTALL_DIR"], installDir)
+	if command.Env[toolEnvName("INSTALL_DIR")] != installDir {
+		t.Fatalf("install dir = %q, want %q", command.Env[toolEnvName("INSTALL_DIR")], installDir)
+	}
+}
+
+// TestInstallCommandsCarryTheConfiguredBrand pins the whole TOOL_* family to the
+// configured brand rather than to the default one. The expected names are
+// spelled out rather than derived, so a toolEnvName that stopped consulting the
+// brand would fail here instead of agreeing with itself.
+func TestInstallCommandsCarryTheConfiguredBrand(t *testing.T) {
+	previous := brand.EnvPrefix
+	brand.EnvPrefix = "ACME_AGENT"
+	t.Cleanup(func() { brand.EnvPrefix = previous })
+
+	installDir := t.TempDir()
+	commands := []Command{
+		windowsArchiveCommand(Tool{Binary: "rtk", WindowsArchiveURL: "https://example.test/rtk.zip"}, installDir),
+	}
+	for _, build := range []func() (Command, error){
+		func() (Command, error) {
+			return installCommand(Tool{ID: "rtk", InstallKind: InstallScript, InstallURL: "https://example.test/install.sh"}, installDir, &fakeRunner{}, "linux")
+		},
+		func() (Command, error) {
+			return sourceFallbackCommand(Tool{SourceRepo: "https://example.test/rtk", SourcePackage: "./cmd/rtk"}, installDir)
+		},
+		func() (Command, error) {
+			return packageInstallCommand(Tool{PackageName: "rtk"}, &fakeRunner{paths: map[string]string{"apt-get": "/usr/bin/apt-get"}})
+		},
+	} {
+		command, err := build()
+		if err != nil {
+			t.Fatalf("building install command: %v", err)
+		}
+		commands = append(commands, command)
+	}
+
+	wanted := map[string]bool{
+		"ACME_AGENT_TOOL_ARCHIVE_URL":    false,
+		"ACME_AGENT_TOOL_BINARY":         false,
+		"ACME_AGENT_TOOL_INSTALL_DIR":    false,
+		"ACME_AGENT_TOOL_INSTALL_URL":    false,
+		"ACME_AGENT_TOOL_SOURCE_REPO":    false,
+		"ACME_AGENT_TOOL_SOURCE_PACKAGE": false,
+		"ACME_AGENT_TOOL_PACKAGE":        false,
+	}
+	for _, command := range commands {
+		rendered := command.Name + " " + strings.Join(command.Args, " ")
+		for name := range command.Env {
+			if _, ok := wanted[name]; ok {
+				wanted[name] = true
+			}
+			if strings.HasPrefix(name, "LIZA") {
+				t.Errorf("env %q keeps the default brand under a white-label build", name)
+			}
+			// Every TOOL_* variable exists to be read by the script it travels
+			// with. Renaming one side only would leave both sides looking right
+			// and the install broken, so the two are checked against each other
+			// rather than each against the brand.
+			if strings.HasPrefix(name, "ACME_AGENT_TOOL_") && !strings.Contains(rendered, name) {
+				t.Errorf("env %q is set but the script never reads it: %s", name, rendered)
+			}
+		}
+		if strings.Contains(rendered, "LIZA_TOOL_") {
+			t.Errorf("command script still reads a default-brand variable: %s", rendered)
+		}
+	}
+	for name, seen := range wanted {
+		if !seen {
+			t.Errorf("%s was never set by any install command", name)
+		}
 	}
 }
 
