@@ -8,7 +8,18 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
+
+// toolEnvName names an environment variable the generated install commands set
+// and their scripts read. The pair is closed - nothing outside this package
+// writes or reads these, so no legacy alias is needed - but the names appear in
+// every command the CLI prints, so they carry the configured brand rather than
+// a hardcoded one.
+func toolEnvName(suffix string) string {
+	return brand.EnvName("TOOL_" + suffix)
+}
 
 type InstallOptions struct {
 	Profile    Profile
@@ -223,15 +234,16 @@ func installCommand(tool Tool, installDir string, runner Runner, goos string) (C
 		if tool.InstallURL == "" {
 			return Command{}, fmt.Errorf("%s has no install URL", tool.ID)
 		}
+		installURLEnv := toolEnvName("INSTALL_URL")
 		env := map[string]string{
-			"LIZA_TOOL_INSTALL_URL": tool.InstallURL,
+			installURLEnv: tool.InstallURL,
 		}
 		for _, name := range installDirEnvNames(tool) {
 			env[name] = installDir
 		}
 		return Command{
 			Name: "bash",
-			Args: []string{"-c", `curl -fsSL "$LIZA_TOOL_INSTALL_URL" | bash`},
+			Args: []string{"-c", `curl -fsSL "$` + installURLEnv + `" | bash`},
 			Env:  env,
 		}, nil
 	case InstallGo:
@@ -263,27 +275,30 @@ func installCommand(tool Tool, installDir string, runner Runner, goos string) (C
 // the install directory, through PowerShell rather than curl and tar so it works
 // on a host with no Unix tooling at all.
 func windowsArchiveCommand(tool Tool, installDir string) Command {
+	archiveURLEnv := toolEnvName("ARCHIVE_URL")
+	binaryEnv := toolEnvName("BINARY")
+	installDirEnv := toolEnvName("INSTALL_DIR")
 	script := strings.Join([]string{
 		`$ErrorActionPreference = 'Stop'`,
 		`$work = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString('N'))`,
 		`New-Item -ItemType Directory -Path $work | Out-Null`,
 		`try {`,
 		`  $archive = Join-Path $work 'archive.zip'`,
-		`  Invoke-WebRequest -Uri $env:LIZA_TOOL_ARCHIVE_URL -OutFile $archive -UseBasicParsing`,
+		`  Invoke-WebRequest -Uri $env:` + archiveURLEnv + ` -OutFile $archive -UseBasicParsing`,
 		`  Expand-Archive -Path $archive -DestinationPath $work -Force`,
-		`  $binary = Get-ChildItem -Path $work -Recurse -Filter ($env:LIZA_TOOL_BINARY + '.exe') | Select-Object -First 1`,
-		`  if (-not $binary) { throw ('archive does not contain ' + $env:LIZA_TOOL_BINARY + '.exe') }`,
-		`  New-Item -ItemType Directory -Path $env:LIZA_TOOL_INSTALL_DIR -Force | Out-Null`,
-		`  Move-Item -Path $binary.FullName -Destination (Join-Path $env:LIZA_TOOL_INSTALL_DIR ($env:LIZA_TOOL_BINARY + '.exe')) -Force`,
+		`  $binary = Get-ChildItem -Path $work -Recurse -Filter ($env:` + binaryEnv + ` + '.exe') | Select-Object -First 1`,
+		`  if (-not $binary) { throw ('archive does not contain ' + $env:` + binaryEnv + ` + '.exe') }`,
+		`  New-Item -ItemType Directory -Path $env:` + installDirEnv + ` -Force | Out-Null`,
+		`  Move-Item -Path $binary.FullName -Destination (Join-Path $env:` + installDirEnv + ` ($env:` + binaryEnv + ` + '.exe')) -Force`,
 		`} finally { Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue }`,
 	}, "; ")
 	return Command{
 		Name: "powershell",
 		Args: []string{"-NoProfile", "-NonInteractive", "-Command", script},
 		Env: map[string]string{
-			"LIZA_TOOL_ARCHIVE_URL": tool.WindowsArchiveURL,
-			"LIZA_TOOL_BINARY":      tool.Binary,
-			"LIZA_TOOL_INSTALL_DIR": installDir,
+			archiveURLEnv: tool.WindowsArchiveURL,
+			binaryEnv:     tool.Binary,
+			installDirEnv: installDir,
 		},
 	}
 }
@@ -292,20 +307,22 @@ func sourceFallbackCommand(tool Tool, installDir string) (Command, error) {
 	if tool.SourceRepo == "" || tool.SourcePackage == "" {
 		return Command{}, fmt.Errorf("%s has no source fallback", tool.ID)
 	}
+	sourceRepoEnv := toolEnvName("SOURCE_REPO")
+	sourcePackageEnv := toolEnvName("SOURCE_PACKAGE")
 	return Command{
 		Name: "bash",
 		Args: []string{"-c", strings.Join([]string{
 			`set -euo pipefail`,
 			`tmp="$(mktemp -d)"`,
 			`trap 'rm -rf "$tmp"' EXIT`,
-			`git clone --depth 1 "$LIZA_TOOL_SOURCE_REPO" "$tmp/src"`,
+			`git clone --depth 1 "$` + sourceRepoEnv + `" "$tmp/src"`,
 			`cd "$tmp/src"`,
-			`GOBIN="$INSTALL_DIR" go install "$LIZA_TOOL_SOURCE_PACKAGE"`,
+			`GOBIN="$INSTALL_DIR" go install "$` + sourcePackageEnv + `"`,
 		}, "; ")},
 		Env: map[string]string{
-			"INSTALL_DIR":              installDir,
-			"LIZA_TOOL_SOURCE_REPO":    tool.SourceRepo,
-			"LIZA_TOOL_SOURCE_PACKAGE": tool.SourcePackage,
+			"INSTALL_DIR":    installDir,
+			sourceRepoEnv:    tool.SourceRepo,
+			sourcePackageEnv: tool.SourcePackage,
 		},
 	}, nil
 }
@@ -378,7 +395,8 @@ func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
 		}},
 		{"brew", func(name string) Command { return Command{Name: "brew", Args: []string{"install", name}} }},
 		{"apt-get", func(name string) Command {
-			return Command{Name: "sh", Args: []string{"-c", `sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"`}, Env: map[string]string{"LIZA_TOOL_PACKAGE": name}}
+			packageEnv := toolEnvName("PACKAGE")
+			return Command{Name: "sh", Args: []string{"-c", `sudo apt-get update && sudo apt-get install -y "$` + packageEnv + `"`}, Env: map[string]string{packageEnv: name}}
 		}},
 		{"dnf", func(name string) Command { return Command{Name: "sudo", Args: []string{"dnf", "install", "-y", name}} }},
 		{"yum", func(name string) Command { return Command{Name: "sudo", Args: []string{"yum", "install", "-y", name}} }},
