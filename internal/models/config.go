@@ -76,20 +76,21 @@ func (sm SystemMode) ValidateTransition(to SystemMode) error {
 
 // Default configuration values (seconds) used as fallbacks when config fields are unset.
 const (
-	DefaultMaxCoderIterations       = 10
-	DefaultMaxReviewCycles          = 5
-	DefaultLeaseDurationSeconds     = 1800 // 30 minutes
-	DefaultCoderPollInterval        = 30
-	DefaultDoerMaxWait              = 18000 // 5 hours
-	DefaultOrchestratorPollInterval = 60
-	DefaultOrchestratorMaxWait      = 18000 // 5 hours
-	DefaultReviewerPollInterval     = 30
-	DefaultReviewerMaxWait          = 18000 // 5 hours
-	DefaultExit42MaxBackoffSec      = 60
-	DefaultExit42RestartLimit       = 5
-	DefaultCrashRestartThreshold    = 5
-	DefaultSpinningRestartThreshold = 10
-	DefaultAgentProgressTimeoutSec  = 1800 // 30 minutes
+	DefaultMaxCoderIterations              = 10
+	DefaultMaxReviewCycles                 = 5
+	defaultMaxGlobalIntegrationGenerations = 3
+	DefaultLeaseDurationSeconds            = 1800 // 30 minutes
+	DefaultCoderPollInterval               = 30
+	DefaultDoerMaxWait                     = 18000 // 5 hours
+	DefaultOrchestratorPollInterval        = 60
+	DefaultOrchestratorMaxWait             = 18000 // 5 hours
+	DefaultReviewerPollInterval            = 30
+	DefaultReviewerMaxWait                 = 18000 // 5 hours
+	DefaultExit42MaxBackoffSec             = 60
+	DefaultExit42RestartLimit              = 5
+	DefaultCrashRestartThreshold           = 5
+	DefaultSpinningRestartThreshold        = 10
+	DefaultAgentProgressTimeoutSec         = 1800 // 30 minutes
 )
 
 var EnvEnableCopyWorktreeEnvFiles = brand.EnvName("ENABLE_COPY_ENV_FILES")
@@ -111,14 +112,24 @@ func NormalizeHeartbeatInterval(interval int) time.Duration {
 	return time.Duration(interval) * time.Second
 }
 
+// NormalizeGlobalIntegrationGenerationLimit returns the configured positive
+// limit or the deterministic default for absent and non-positive values.
+func NormalizeGlobalIntegrationGenerationLimit(limit int) int {
+	if limit <= 0 {
+		return defaultMaxGlobalIntegrationGenerations
+	}
+	return limit
+}
+
 // Config holds system configuration parameters
 type Config struct {
-	MaxCoderIterations int `yaml:"max_coder_iterations"`
-	MaxReviewCycles    int `yaml:"max_review_cycles"`
-	HeartbeatInterval  int `yaml:"heartbeat_interval"`
-	LeaseDuration      int `yaml:"lease_duration"`
-	CoderPollInterval  int `yaml:"coder_poll_interval"`
-	DoerMaxWait        int `yaml:"doer_max_wait"`
+	MaxCoderIterations              int `yaml:"max_coder_iterations"`
+	MaxReviewCycles                 int `yaml:"max_review_cycles"`
+	MaxGlobalIntegrationGenerations int `yaml:"max_global_integration_generations"`
+	HeartbeatInterval               int `yaml:"heartbeat_interval"`
+	LeaseDuration                   int `yaml:"lease_duration"`
+	CoderPollInterval               int `yaml:"coder_poll_interval"`
+	DoerMaxWait                     int `yaml:"doer_max_wait"`
 	// DeprecatedCoderMaxWait preserves read compatibility for state files that
 	// still use coder_max_wait. New state files should write doer_max_wait.
 	DeprecatedCoderMaxWait   int `yaml:"coder_max_wait,omitempty" inspect:"-"`
