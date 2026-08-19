@@ -254,7 +254,7 @@ Validation:
 - `rg -q 'generation.*exhaust|exhaust.*generation' specs/protocols/task-lifecycle.md`
 - `rg -q 'lineariz|clean.*commit.*integration HEAD|integration HEAD.*clean.*commit' INVARIANTS.md`
 - `rg -q 'max_global_integration_generations.*3' support-docs/CONFIGURATION.md`
-- `rg -q 'fresh workspace|manual.*pipeline' support-docs/USAGE_MULTI_AGENTS.md`
+- `python3 -c 'import pathlib,re; text=pathlib.Path("support-docs/USAGE_MULTI_AGENTS.md").read_text(); match=re.search(r"(?ms)^#### Sliced Integration[ \t]*$\n(?P<body>.*?)(?=^#{1,4}[ \t]|\Z)", text); assert match is not None and re.search(r"legacy frozen (?:pipeline|topology)", match.group("body"), re.I) and re.search(r"fresh workspace", match.group("body"), re.I) and re.search(r"manual topology update", match.group("body"), re.I)'`
 - `rg -U -q 'Integration Closure Is Not Revalidated(?s).*TestSlicedIntegration(Lifecycle|FinalizationRace)(?s).*commit [0-9a-f]{7,40}' specs/architecture/architectural-issues.md`
 - `pre-commit run --files specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md specs/architecture/ADR/README.md specs/architecture/state-machines.md specs/protocols/task-lifecycle.md INVARIANTS.md support-docs/CONFIGURATION.md support-docs/USAGE_MULTI_AGENTS.md specs/architecture/architectural-issues.md`
 
@@ -284,7 +284,7 @@ Implication: Task 1 persists source identity, Tasks 5-6 verify/project it, and T
 
 A successful `go test -run` process is not evidence that its named acceptance test exists. With eleven downstream tasks, that false-green shape would replicate across the full fan-out.
 
-Implication: Tasks 1-10 require exact passing JSON test events and reject any failing event; Task 11 uses obligation-specific content assertions instead of treating generic Markdown hygiene as behavioral proof.
+Implication: Tasks 1-10 require exact passing JSON test events and reject any failing event; Task 11 bounds the frozen-pipeline assertion to a `#### Sliced Integration` section and requires both fresh-workspace and manual-topology-update alternatives.
 
 No additional systemic issue remains after checking completion-consumer closure, frozen-pipeline divergence, Git identity separation, interface single ownership, and fail-closed validation.
 
