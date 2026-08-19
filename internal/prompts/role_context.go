@@ -234,3 +234,18 @@ type RoleContextData struct {
 	MandatoryDocs []string
 	Skills        []string
 }
+
+// ShellIntegrationWorktree returns the worktree as one POSIX shell operand.
+func (d *RoleContextData) ShellIntegrationWorktree() string {
+	return shellQuote(d.Worktree)
+}
+
+// ShellIntegrationSnapshot returns one immutable git object operand.
+func (d *RoleContextData) ShellIntegrationSnapshot(path string) string {
+	return shellQuote(d.IntegrationSourceCommit + ":" + path)
+}
+
+// ShellIntegrationDiffRange returns the immutable aggregate range as one operand.
+func (d *RoleContextData) ShellIntegrationDiffRange() string {
+	return shellQuote(d.GoalBaseCommit + ".." + d.IntegrationSourceCommit)
+}

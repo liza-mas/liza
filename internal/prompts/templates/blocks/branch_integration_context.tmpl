@@ -57,7 +57,7 @@ ATTRIBUTED PATHS:
 
 IMMUTABLE SNAPSHOT READS:
 {{- range .IntegrationSnapshotPaths}}
-git -C {{$.Worktree}} show {{$.IntegrationSourceCommit}}:{{.}}
+git -C {{$.ShellIntegrationWorktree}} show {{$.ShellIntegrationSnapshot .}}
 {{- end}}
 {{- if not .IntegrationSnapshotPaths}}
 (no affected path exists at the source commit)
@@ -91,10 +91,10 @@ COVERAGE MAP (navigation evidence, not proof of aggregate correctness):
 
 INDEPENDENT AGGREGATE REVIEW:
 Perform an independent aggregate review: use the coverage map for navigation, then inspect the goal-wide source snapshot.
-git -C {{.Worktree}} diff --name-only {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
-git -C {{.Worktree}} diff --stat {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
+git -C {{.ShellIntegrationWorktree}} diff --name-only {{.ShellIntegrationDiffRange}}
+git -C {{.ShellIntegrationWorktree}} diff --stat {{.ShellIntegrationDiffRange}}
 Inspect only targeted paths from the map:
-git -C {{.Worktree}} diff {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}} -- <path>
+git -C {{.ShellIntegrationWorktree}} diff {{.ShellIntegrationDiffRange}} -- <path>
 Run the smallest tests covering the aggregate changed paths, declared validation, or plausible cross-scope risks from {{.Worktree}}.
 {{- else if ne .GoalBaseCommit ""}}
 

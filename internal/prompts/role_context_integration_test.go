@@ -10,7 +10,7 @@ import (
 func TestSliceIntegrationContext(t *testing.T) {
 	data := &RoleContextData{
 		Role:                    "integration-reviewer",
-		Worktree:                "/tmp/slice-worktree",
+		Worktree:                "/tmp/slice worktree; echo marker",
 		IntegrationPhase:        models.IntegrationAnalysisPhaseSlice,
 		IntegrationSourceCommit: "slice-source-123",
 		IntegrationOriginatingPlan: &IntegrationPlanSummary{
@@ -34,7 +34,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 			},
 		}},
 		IntegrationAffectedPaths: []string{"internal/alpha/a.go", "internal/alpha/deleted.go"},
-		IntegrationSnapshotPaths: []string{"internal/alpha/a.go"},
+		IntegrationSnapshotPaths: []string{"internal/alpha/a file; echo marker.go"},
 	}
 
 	output := renderIntegrationContextForTest(t, data)
@@ -47,7 +47,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 		"shared-read-only",
 		"Read-only output dependencies: 2",
 		"internal/alpha/deleted.go",
-		"git -C /tmp/slice-worktree show slice-source-123:internal/alpha/a.go",
+		"git -C '/tmp/slice worktree; echo marker' show 'slice-source-123:internal/alpha/a file; echo marker.go'",
 		"intra-plan composition",
 	} {
 		if !strings.Contains(output, want) {
@@ -64,7 +64,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 func TestGlobalIntegrationContext(t *testing.T) {
 	data := &RoleContextData{
 		Role:                    "integration-reviewer",
-		Worktree:                "/tmp/global-worktree",
+		Worktree:                "/tmp/global worktree; echo marker",
 		GoalBaseCommit:          "goal-base-222",
 		IntegrationPhase:        models.IntegrationAnalysisPhaseGlobal,
 		IntegrationGeneration:   3,
@@ -100,8 +100,8 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		"plan-sliced",
 		"slice_report",
 		"navigation evidence, not proof of aggregate correctness",
-		"git -C /tmp/global-worktree diff --name-only goal-base-222..global-source-456",
-		"git -C /tmp/global-worktree diff goal-base-222..global-source-456 -- <path>",
+		"git -C '/tmp/global worktree; echo marker' diff --name-only 'goal-base-222..global-source-456'",
+		"git -C '/tmp/global worktree; echo marker' diff 'goal-base-222..global-source-456' -- <path>",
 		"independent aggregate review",
 		"cross-scope interactions",
 		"goal-level merge readiness",

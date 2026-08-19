@@ -13,7 +13,7 @@ import (
 func TestSliceIntegrationContext(t *testing.T) {
 	now := time.Now().UTC()
 	baseCommit := "goal-base-111"
-	worktree := ".worktrees/slice-analysis"
+	worktree := ".worktrees/slice analysis; echo marker"
 	mergeA := "slice-commit-aaa"
 	mergeB := "slice-commit-bbb"
 	state := &models.State{
@@ -44,8 +44,8 @@ func TestSliceIntegrationContext(t *testing.T) {
 						{TaskID: "coding-a", Commit: mergeA},
 					},
 					SourceCommit:        "slice-source-123",
-					AffectedPaths:       []string{"internal/alpha/b.go", "internal/alpha/a.go"},
-					SourceSnapshotPaths: []string{"internal/alpha/a.go"},
+					AffectedPaths:       []string{"internal/alpha/b.go", "internal/alpha/a file; echo marker.go"},
+					SourceSnapshotPaths: []string{"internal/alpha/a file; echo marker.go"},
 				},
 			},
 			{
@@ -127,7 +127,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 		"shared.Contract",
 		"shared-read-only",
 		"Read-only output dependencies: 2",
-		"git -C /project/.worktrees/slice-analysis show slice-source-123:internal/alpha/a.go",
+		"git -C '/project/.worktrees/slice analysis; echo marker' show 'slice-source-123:internal/alpha/a file; echo marker.go'",
 	)
 	assertContainsAll(t, reviewer,
 		"intra-plan composition",
@@ -171,7 +171,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 func TestGlobalIntegrationContext(t *testing.T) {
 	now := time.Now().UTC()
 	baseCommit := "goal-base-222"
-	worktree := ".worktrees/global-analysis"
+	worktree := ".worktrees/global analysis; echo marker"
 	reviewedCommit := "reviewed-single-aaa"
 	mergeCommit := "merged-single-bbb"
 	state := &models.State{
@@ -270,9 +270,9 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		"plan-sliced",
 		"slice_report",
 		"slice-report-task",
-		"git -C /project/.worktrees/global-analysis diff --name-only goal-base-222..global-source-456",
-		"git -C /project/.worktrees/global-analysis diff --stat goal-base-222..global-source-456",
-		"git -C /project/.worktrees/global-analysis diff goal-base-222..global-source-456 -- <path>",
+		"git -C '/project/.worktrees/global analysis; echo marker' diff --name-only 'goal-base-222..global-source-456'",
+		"git -C '/project/.worktrees/global analysis; echo marker' diff --stat 'goal-base-222..global-source-456'",
+		"git -C '/project/.worktrees/global analysis; echo marker' diff 'goal-base-222..global-source-456' -- <path>",
 		"independent aggregate review",
 	)
 	assertContainsAll(t, reviewer,
