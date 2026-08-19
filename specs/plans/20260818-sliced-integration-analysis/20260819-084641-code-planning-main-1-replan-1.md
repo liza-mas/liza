@@ -51,8 +51,8 @@ No replacement task redefines progress evaluation, configuration, pipeline capab
 | `integration mutation linearization protocol` | Task 2 | Retained Tasks 8, 10, and 11 |
 | `clean-source verification under the integration mutation lock` | Task 2 | Task 3 |
 | `ReconcileIntegrationAnalyses` | Task 3 | Retained Tasks 7-11 |
-| `analysis verdict projection` | Task 3 | Retained Tasks 7-11 |
-| `idempotent analysis task materialization` | Task 3 | Retained Tasks 7-11 |
+| `analysis verdict projection` | Task 3 | — |
+| `idempotent analysis task materialization` | Task 3 | — |
 
 ## Dependency order
 
