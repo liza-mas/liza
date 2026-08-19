@@ -110,7 +110,14 @@ func TestGlobalIntegrationContext(t *testing.T) {
 			t.Fatalf("global context missing %q:\n%s", want, output)
 		}
 	}
-	for _, unwanted := range []string{"..HEAD", "intra-plan composition", "SLICE INTEGRATION CONTEXT"} {
+	for _, unwanted := range []string{
+		"..HEAD",
+		"intra-plan composition",
+		"SLICE INTEGRATION CONTEXT",
+		"git -C /tmp/global worktree; echo marker diff --name-only goal-base-222..global-source-456",
+		"git -C /tmp/global worktree; echo marker diff --stat goal-base-222..global-source-456",
+		"git -C /tmp/global worktree; echo marker diff goal-base-222..global-source-456 -- <path>",
+	} {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("global context contains %q:\n%s", unwanted, output)
 		}

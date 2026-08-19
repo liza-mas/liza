@@ -286,7 +286,15 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		"global-source-456",
 	)
 	for _, output := range []string{analyst, reviewer} {
-		for _, unwanted := range []string{"unrelated-merged", "Distracting merged task", "..HEAD", "intra-plan composition"} {
+		for _, unwanted := range []string{
+			"unrelated-merged",
+			"Distracting merged task",
+			"..HEAD",
+			"intra-plan composition",
+			"git -C /project/.worktrees/global analysis; echo marker diff --name-only goal-base-222..global-source-456",
+			"git -C /project/.worktrees/global analysis; echo marker diff --stat goal-base-222..global-source-456",
+			"git -C /project/.worktrees/global analysis; echo marker diff goal-base-222..global-source-456 -- <path>",
+		} {
 			assertNotContains(t, output, unwanted)
 		}
 	}

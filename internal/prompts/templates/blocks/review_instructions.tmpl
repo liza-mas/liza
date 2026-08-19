@@ -339,12 +339,12 @@ INSTRUCTIONS:
 3. Check that the descendants compose and satisfy their shared plan intent; later sibling changes belong to global analysis.
 {{- else if eq .IntegrationPhase "global"}}
 1. Changed-file map and stat first:
-	git -C {{.Worktree}} diff --name-only {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
-	git -C {{.Worktree}} diff --stat {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
+	git -C {{.ShellIntegrationWorktree}} diff --name-only {{.ShellIntegrationDiffRange}}
+	git -C {{.ShellIntegrationWorktree}} diff --stat {{.ShellIntegrationDiffRange}}
 	Read touched files/artifacts from this list before any broad repository search; use supporting rg/glob only after the changed-file map gives you a specific question.
 2. Invoke skill: systemic-thinking for systemic analysis framing.
 3. Read the branch diff by targeted path/hunk, not by unbounded full diff:
-	git -C {{.Worktree}} diff {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}} -- <path>
+	git -C {{.ShellIntegrationWorktree}} diff {{.ShellIntegrationDiffRange}} -- <path>
 	If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
 {{- else}}
 1. Changed-file map and stat first:
