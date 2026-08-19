@@ -19,13 +19,23 @@ func TestIntegrationLifecycleYAMLRoundTrip(t *testing.T) {
 					{
 						PlanTaskID: "plan-single",
 						Kind:       IntegrationCoverageApprovalAttestation,
-						ApprovalAttestation: &IntegrationApprovalAttestation{
-							ReviewedTaskID:     "coding-single",
-							AcceptanceCriteria: "single scope composes",
-							ReviewedCommit:     "reviewed-single",
-							Approver:           "code-reviewer-1",
-							Validation:         []string{"go test ./internal/single"},
-							MergeCommit:        "merged-single",
+						ApprovalAttestations: []IntegrationApprovalAttestation{
+							{
+								ReviewedTaskID:     "coding-single-replacement-a",
+								AcceptanceCriteria: "first replacement branch composes",
+								ReviewedCommit:     "reviewed-single-a",
+								Approver:           "code-reviewer-1",
+								Validation:         []string{"go test ./internal/single/a"},
+								MergeCommit:        "merged-single-a",
+							},
+							{
+								ReviewedTaskID:     "coding-single-replacement-b",
+								AcceptanceCriteria: "second replacement branch composes",
+								ReviewedCommit:     "reviewed-single-b",
+								Approver:           "code-reviewer-2",
+								Validation:         []string{"go test ./internal/single/b"},
+								MergeCommit:        "merged-single-b",
+							},
 						},
 					},
 					{
@@ -128,6 +138,30 @@ func TestIntegrationLifecycleYAMLRoundTrip(t *testing.T) {
 	}
 	if decoded.Goal.Integration.GlobalGenerations[1].SourceCommit == decoded.Goal.Integration.GlobalGenerations[1].ReportCommit {
 		t.Fatal("source commit and analyst report commit were conflated")
+	}
+	if got := len(decoded.Goal.Integration.Coverage[0].ApprovalAttestations); got != 2 {
+		t.Fatalf("decoded approval attestation count = %d, want 2", got)
+	}
+
+	zeroScopeState := State{Goal: Goal{Integration: &IntegrationLifecycle{
+		ContributingSet: &IntegrationContributingSet{Scopes: []IntegrationScopeSnapshot{}},
+	}}}
+	zeroScopeEncoded, err := yaml.Marshal(&zeroScopeState)
+	if err != nil {
+		t.Fatalf("zero-scope yaml.Marshal() error = %v", err)
+	}
+	var zeroScopeDecoded State
+	if err := yaml.Unmarshal(zeroScopeEncoded, &zeroScopeDecoded); err != nil {
+		t.Fatalf("zero-scope yaml.Unmarshal() error = %v", err)
+	}
+	if zeroScopeDecoded.Goal.Integration == nil || zeroScopeDecoded.Goal.Integration.ContributingSet == nil {
+		t.Fatal("zero-scope contributing set became nil after round trip")
+	}
+	if zeroScopeDecoded.Goal.Integration.ContributingSet.Scopes == nil {
+		t.Fatal("zero-scope contributing set scopes became nil after round trip")
+	}
+	if got := len(zeroScopeDecoded.Goal.Integration.ContributingSet.Scopes); got != 0 {
+		t.Fatalf("zero-scope contributing set scope count = %d, want 0", got)
 	}
 
 	var legacy State

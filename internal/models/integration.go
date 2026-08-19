@@ -85,10 +85,10 @@ type IntegrationScopeSnapshot struct {
 // IntegrationCoverageRecord is the tagged local-coverage union for one
 // contributing plan.
 type IntegrationCoverageRecord struct {
-	PlanTaskID          string                          `yaml:"plan_task_id" json:"plan_task_id"`
-	Kind                IntegrationCoverageKind         `yaml:"kind" json:"kind"`
-	ApprovalAttestation *IntegrationApprovalAttestation `yaml:"approval_attestation,omitempty" json:"approval_attestation,omitempty"`
-	SliceReport         *IntegrationSliceReport         `yaml:"slice_report,omitempty" json:"slice_report,omitempty"`
+	PlanTaskID           string                           `yaml:"plan_task_id" json:"plan_task_id"`
+	Kind                 IntegrationCoverageKind          `yaml:"kind" json:"kind"`
+	ApprovalAttestations []IntegrationApprovalAttestation `yaml:"approval_attestations,omitempty" json:"approval_attestations,omitempty"`
+	SliceReport          *IntegrationSliceReport          `yaml:"slice_report,omitempty" json:"slice_report,omitempty"`
 }
 
 // IntegrationApprovalAttestation reuses the immutable approval evidence for a

@@ -106,9 +106,6 @@ func validateContributingSet(set *models.IntegrationContributingSet) (map[string
 	if set == nil {
 		return nil, nil
 	}
-	if len(set.Scopes) == 0 {
-		return nil, fmt.Errorf("integration contributing set has no scopes")
-	}
 	frozenRoots := make(map[string][]string, len(set.Scopes))
 	rootOwners := make(map[string]string)
 	for _, scope := range set.Scopes {
@@ -155,7 +152,7 @@ func validateIntegrationCoverage(
 			return fmt.Errorf("invalid integration coverage kind %q for plan %s", record.Kind, record.PlanTaskID)
 		}
 		payloadCount := 0
-		if record.ApprovalAttestation != nil {
+		if len(record.ApprovalAttestations) > 0 {
 			payloadCount++
 		}
 		if record.SliceReport != nil {
@@ -167,14 +164,14 @@ func validateIntegrationCoverage(
 
 		switch record.Kind {
 		case models.IntegrationCoverageApprovalAttestation:
-			if record.ApprovalAttestation == nil || record.SliceReport != nil {
+			if len(record.ApprovalAttestations) == 0 || record.SliceReport != nil {
 				return fmt.Errorf("approval-attestation coverage for plan %s must have exactly one matching payload", record.PlanTaskID)
 			}
-			if err := validateApprovalAttestation(record.ApprovalAttestation); err != nil {
+			if err := validateApprovalAttestations(record.ApprovalAttestations); err != nil {
 				return fmt.Errorf("plan %s: %w", record.PlanTaskID, err)
 			}
 		case models.IntegrationCoverageSliceReport:
-			if record.SliceReport == nil || record.ApprovalAttestation != nil {
+			if record.SliceReport == nil || len(record.ApprovalAttestations) != 0 {
 				return fmt.Errorf("slice-report coverage for plan %s must have exactly one matching payload", record.PlanTaskID)
 			}
 			reference := record.SliceReport.AnalysisTaskID + "\x00" + record.SliceReport.AnalysisKey
@@ -186,6 +183,24 @@ func validateIntegrationCoverage(
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func validateApprovalAttestations(attestations []models.IntegrationApprovalAttestation) error {
+	if len(attestations) == 0 {
+		return fmt.Errorf("approval attestation set is empty")
+	}
+	reviewedTasks := make(map[string]struct{}, len(attestations))
+	for i := range attestations {
+		attestation := &attestations[i]
+		if err := validateApprovalAttestation(attestation); err != nil {
+			return err
+		}
+		if _, exists := reviewedTasks[attestation.ReviewedTaskID]; exists {
+			return fmt.Errorf("duplicate approval attestation reviewed task ID %q", attestation.ReviewedTaskID)
+		}
+		reviewedTasks[attestation.ReviewedTaskID] = struct{}{}
 	}
 	return nil
 }

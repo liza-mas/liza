@@ -21,6 +21,16 @@ func TestIntegrationLifecycleValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("settled zero-scope cohort composes through ValidateState", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Goal.Integration = &models.IntegrationLifecycle{
+			ContributingSet: &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}},
+		}
+		if err := ValidateState(state, projectRoot, true, nil); err != nil {
+			t.Fatalf("ValidateState() error = %v", err)
+		}
+	})
+
 	structuralCases := []struct {
 		name    string
 		mutate  func(*models.State)
@@ -135,18 +145,38 @@ func TestIntegrationLifecycleValidation(t *testing.T) {
 			wantErr: "exactly one payload",
 		},
 		{
-			name: "coverage has neither payload",
+			name: "approval attestation set is empty",
 			mutate: func(state *models.State) {
-				state.Goal.Integration.Coverage[0].ApprovalAttestation = nil
+				state.Goal.Integration.Coverage[0].ApprovalAttestations = []models.IntegrationApprovalAttestation{}
 			},
 			wantErr: "exactly one payload",
 		},
 		{
 			name: "approval attestation missing fact",
 			mutate: func(state *models.State) {
-				state.Goal.Integration.Coverage[0].ApprovalAttestation.Approver = ""
+				state.Goal.Integration.Coverage[0].ApprovalAttestations[0].Approver = ""
 			},
 			wantErr: "approval attestation approver is empty",
+		},
+		{
+			name: "approval attestation reviewed task duplicated",
+			mutate: func(state *models.State) {
+				duplicate := state.Goal.Integration.Coverage[0].ApprovalAttestations[0]
+				duplicate.MergeCommit = "merged-duplicate"
+				state.Goal.Integration.Coverage[0].ApprovalAttestations = append(
+					state.Goal.Integration.Coverage[0].ApprovalAttestations,
+					duplicate,
+				)
+			},
+			wantErr: "duplicate approval attestation reviewed task ID",
+		},
+		{
+			name: "coverage for settled zero-scope cohort",
+			mutate: func(state *models.State) {
+				state.Goal.Integration.ContributingSet.Scopes = []models.IntegrationScopeSnapshot{}
+				state.Goal.Integration.Coverage = state.Goal.Integration.Coverage[:1]
+			},
+			wantErr: "coverage references unknown contributing plan",
 		},
 		{
 			name: "slice references missing task",
@@ -412,6 +442,36 @@ func TestIntegrationLifecycleValidation(t *testing.T) {
 			t.Fatalf("ValidateIntegrationLifecycleTransition() error = %v", err)
 		}
 	})
+
+	t.Run("settled zero-scope cohort is immutable", func(t *testing.T) {
+		previous := testhelpers.CreateValidState()
+		previous.Goal.Integration = &models.IntegrationLifecycle{
+			ContributingSet: &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}},
+		}
+
+		unchanged := cloneIntegrationState(t, previous)
+		if err := ValidateIntegrationLifecycleTransition(previous, unchanged); err != nil {
+			t.Fatalf("unchanged zero-scope transition error = %v", err)
+		}
+
+		cleared := cloneIntegrationState(t, previous)
+		cleared.Goal.Integration.ContributingSet = nil
+		assertIntegrationErrorContains(
+			t,
+			ValidateIntegrationLifecycleTransition(previous, cleared),
+			"contributing set cannot be cleared",
+		)
+
+		replaced := cloneIntegrationState(t, previous)
+		replaced.Goal.Integration.ContributingSet.Scopes = []models.IntegrationScopeSnapshot{
+			{PlanTaskID: "plan-added", RootTaskIDs: []string{"coding-added"}},
+		}
+		assertIntegrationErrorContains(
+			t,
+			ValidateIntegrationLifecycleTransition(previous, replaced),
+			"contributing set cannot change",
+		)
+	})
 }
 
 func validIntegrationState(t *testing.T) *models.State {
@@ -469,13 +529,23 @@ func validIntegrationState(t *testing.T) *models.State {
 			{
 				PlanTaskID: "plan-single",
 				Kind:       models.IntegrationCoverageApprovalAttestation,
-				ApprovalAttestation: &models.IntegrationApprovalAttestation{
-					ReviewedTaskID:     "coding-single",
-					AcceptanceCriteria: "single lineage accepted",
-					ReviewedCommit:     "reviewed-single",
-					Approver:           "code-reviewer-1",
-					Validation:         []string{"go test ./internal/single"},
-					MergeCommit:        "merged-single",
+				ApprovalAttestations: []models.IntegrationApprovalAttestation{
+					{
+						ReviewedTaskID:     "coding-single-replacement-a",
+						AcceptanceCriteria: "first replacement accepted",
+						ReviewedCommit:     "reviewed-single-a",
+						Approver:           "code-reviewer-1",
+						Validation:         []string{"go test ./internal/single/a"},
+						MergeCommit:        "merged-single-a",
+					},
+					{
+						ReviewedTaskID:     "coding-single-replacement-b",
+						AcceptanceCriteria: "second replacement accepted",
+						ReviewedCommit:     "reviewed-single-b",
+						Approver:           "code-reviewer-2",
+						Validation:         []string{"go test ./internal/single/b"},
+						MergeCommit:        "merged-single-b",
+					},
 				},
 			},
 			{
