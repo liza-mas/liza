@@ -327,6 +327,45 @@ func setupIntegrationMutationScenario(t *testing.T) integrationMutationScenario 
 	}
 }
 
+func prepareUnfinalizedIntegrationScenario(t *testing.T, scenario integrationMutationScenario) {
+	t.Helper()
+	bb := db.For(scenario.stateFile)
+	if err := bb.Modify(func(state *models.State) error {
+		state.Goal.Integration.GlobalGenerations = nil
+		state.Goal.Integration.Closure = nil
+		return nil
+	}); err != nil {
+		t.Fatalf("prepare unfinalized integration scenario: %v", err)
+	}
+}
+
+func persistVerifiedCleanProjection(t *testing.T, scenario integrationMutationScenario, verification cleanIntegrationSourceVerification) {
+	t.Helper()
+	if !verification.Effective {
+		return
+	}
+	bb := db.For(scenario.stateFile)
+	if err := bb.Modify(func(state *models.State) error {
+		state.Goal.Integration.GlobalGenerations = append(state.Goal.Integration.GlobalGenerations, models.IntegrationGlobalGeneration{
+			Generation:     1,
+			AnalysisTaskID: scenario.taskID,
+			AnalysisKey:    "global:1",
+			Verdict:        models.IntegrationAnalysisVerdictClean,
+			SourceCommit:   verification.SourceCommit,
+			ReportCommit:   scenario.after,
+		})
+		state.Goal.Integration.Closure = &models.IntegrationClosure{
+			Status:       models.IntegrationClosureStatusClean,
+			Generation:   1,
+			AnalysisKey:  "global:1",
+			SourceCommit: verification.SourceCommit,
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("persist verified clean projection: %v", err)
+	}
+}
+
 func testIntegrationMutationReceiptPersistence(t *testing.T) {
 	scenario := setupIntegrationMutationScenario(t)
 	beforeState := readStateForTest(t, scenario.stateFile)
@@ -445,6 +484,7 @@ func testIntegrationMutationNoOpReceipt(t *testing.T) {
 
 func testIntegrationMutationBeforeVerification(t *testing.T) {
 	scenario := setupIntegrationMutationScenario(t)
+	prepareUnfinalizedIntegrationScenario(t, scenario)
 	linearized := make(chan struct{})
 	releasePersistence := make(chan struct{})
 	released := false
@@ -473,12 +513,17 @@ func testIntegrationMutationBeforeVerification(t *testing.T) {
 		t.Fatal("timed out waiting for integration ref mutation")
 	}
 
-	verification, err := verifyCleanIntegrationSource(scenario.projectRoot)
+	verification, err := verifyCleanIntegrationSource(scenario.projectRoot, scenario.before)
 	if err != nil {
 		t.Fatalf("verifyCleanIntegrationSource() error = %v", err)
 	}
 	if verification.Effective || verification.SourceCommit != scenario.before || verification.IntegrationHEAD != scenario.after {
 		t.Fatalf("verification after mutation = %#v, want stale source ineffective against new HEAD", verification)
+	}
+	persistVerifiedCleanProjection(t, scenario, verification)
+	state := readStateForTest(t, scenario.stateFile)
+	if len(state.Goal.Integration.GlobalGenerations) != 0 || state.Goal.Integration.Closure != nil {
+		t.Fatalf("mutation-before-finalization persisted stale clean projection: %#v", state.Goal.Integration)
 	}
 	release()
 	select {
@@ -492,21 +537,86 @@ func testIntegrationMutationBeforeVerification(t *testing.T) {
 }
 
 func testIntegrationMutationAfterVerification(t *testing.T) {
-	scenario := setupIntegrationMutationScenario(t)
-	verification, err := verifyCleanIntegrationSource(scenario.projectRoot)
-	if err != nil {
-		t.Fatalf("verifyCleanIntegrationSource() error = %v", err)
-	}
-	if !verification.Effective || verification.SourceCommit != scenario.before || verification.IntegrationHEAD != scenario.before {
-		t.Fatalf("verification before mutation = %#v, want current clean source effective", verification)
-	}
+	t.Run("projection before mutation", func(t *testing.T) {
+		scenario := setupIntegrationMutationScenario(t)
+		prepareUnfinalizedIntegrationScenario(t, scenario)
+		verification, err := verifyCleanIntegrationSource(scenario.projectRoot, scenario.before)
+		if err != nil {
+			t.Fatalf("verifyCleanIntegrationSource() error = %v", err)
+		}
+		if !verification.Effective || verification.SourceCommit != scenario.before || verification.IntegrationHEAD != scenario.before {
+			t.Fatalf("verification before mutation = %#v, want prospective clean source effective", verification)
+		}
+		persistVerifiedCleanProjection(t, scenario, verification)
 
-	if _, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.agentID); err != nil {
-		t.Fatalf("MergeWorktree() error = %v", err)
-	}
+		if _, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.agentID); err != nil {
+			t.Fatalf("MergeWorktree() error = %v", err)
+		}
+		assertStaleProjectionIneffective(t, scenario)
+	})
+
+	t.Run("mutation between verification and projection", func(t *testing.T) {
+		scenario := setupIntegrationMutationScenario(t)
+		prepareUnfinalizedIntegrationScenario(t, scenario)
+		verification, err := verifyCleanIntegrationSource(scenario.projectRoot, scenario.before)
+		if err != nil {
+			t.Fatalf("verifyCleanIntegrationSource() error = %v", err)
+		}
+		if !verification.Effective || verification.SourceCommit != scenario.before || verification.IntegrationHEAD != scenario.before {
+			t.Fatalf("verification before mutation = %#v, want prospective clean source effective", verification)
+		}
+
+		linearized := make(chan struct{})
+		releasePersistence := make(chan struct{})
+		released := false
+		release := func() {
+			if !released {
+				close(releasePersistence)
+				released = true
+			}
+		}
+		t.Cleanup(release)
+		previousHook := integrationMutationReceiptPersistTestHook
+		integrationMutationReceiptPersistTestHook = func(receipt models.IntegrationMutationReceipt) {
+			close(linearized)
+			<-releasePersistence
+		}
+		t.Cleanup(func() { integrationMutationReceiptPersistTestHook = previousHook })
+		mergeDone := make(chan error, 1)
+		go func() {
+			_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.agentID)
+			mergeDone <- err
+		}()
+		select {
+		case <-linearized:
+		case <-time.After(2 * time.Second):
+			release()
+			t.Fatal("timed out waiting for integration ref mutation")
+		}
+
+		persistVerifiedCleanProjection(t, scenario, verification)
+		release()
+		select {
+		case err := <-mergeDone:
+			if err != nil {
+				t.Fatalf("MergeWorktree() error = %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for merge after clean projection")
+		}
+		assertStaleProjectionIneffective(t, scenario)
+	})
+}
+
+func assertStaleProjectionIneffective(t *testing.T, scenario integrationMutationScenario) {
+	t.Helper()
 	state := readStateForTest(t, scenario.stateFile)
+	generations := state.Goal.Integration.GlobalGenerations
+	if len(generations) != 1 || generations[0].Verdict != models.IntegrationAnalysisVerdictClean || generations[0].SourceCommit != scenario.before {
+		t.Fatalf("clean global projection = %#v, want one clean generation for source %s", generations, scenario.before)
+	}
 	if state.Goal.Integration.Closure == nil || state.Goal.Integration.Closure.SourceCommit != scenario.before {
-		t.Fatalf("mutation rewrote prior clean closure: %#v", state.Goal.Integration.Closure)
+		t.Fatalf("mutation rewrote clean closure: %#v", state.Goal.Integration.Closure)
 	}
 	decision := evaluateProgress(t, state, pipeline.SlicedIntegrationCapability{Available: true}, scenario.after)
 	if decision.IntegrationComplete {

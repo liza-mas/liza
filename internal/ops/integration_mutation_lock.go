@@ -7,7 +7,6 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/git"
-	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -41,19 +40,14 @@ type cleanIntegrationSourceVerification struct {
 	Effective       bool
 }
 
-// verifyCleanIntegrationSource evaluates completion against fresh state and
-// the live integration ref under the same lock order used by ref mutations.
+// verifyCleanIntegrationSource compares a prospective clean analysis source
+// with the live integration ref under the same lock order used by ref mutations.
 // Callers persist any resulting projection only after this function returns.
-func verifyCleanIntegrationSource(projectRoot string) (cleanIntegrationSourceVerification, error) {
-	resolver, _, err := loadResolver(projectRoot)
-	if err != nil {
-		return cleanIntegrationSourceVerification{}, err
-	}
-
+func verifyCleanIntegrationSource(projectRoot, sourceCommit string) (cleanIntegrationSourceVerification, error) {
 	bb := db.For(paths.New(projectRoot).StatePath())
 	gitWrapper := git.New(projectRoot)
-	var verification cleanIntegrationSourceVerification
-	err = withIntegrationMutationLock(projectRoot, "verify clean integration source", func() error {
+	verification := cleanIntegrationSourceVerification{SourceCommit: sourceCommit}
+	err := withIntegrationMutationLock(projectRoot, "verify clean integration source", func() error {
 		state, readErr := bb.Read()
 		if readErr != nil {
 			return fmt.Errorf("failed to read state for clean integration verification: %w", readErr)
@@ -66,17 +60,8 @@ func verifyCleanIntegrationSource(projectRoot string) (cleanIntegrationSourceVer
 		if headErr != nil {
 			return fmt.Errorf("failed to read live integration HEAD: %w", headErr)
 		}
-		decision, evaluateErr := EvaluateIntegrationProgress(state, resolver.SlicedIntegrationCapability(), integrationHEAD)
-		if evaluateErr != nil {
-			return evaluateErr
-		}
-
 		verification.IntegrationHEAD = integrationHEAD
-		verification.Effective = decision.IntegrationComplete
-		if state.Goal.Integration != nil && state.Goal.Integration.Closure != nil &&
-			state.Goal.Integration.Closure.Status == models.IntegrationClosureStatusClean {
-			verification.SourceCommit = state.Goal.Integration.Closure.SourceCommit
-		}
+		verification.Effective = sourceCommit != "" && sourceCommit == integrationHEAD
 		return nil
 	})
 	return verification, err
