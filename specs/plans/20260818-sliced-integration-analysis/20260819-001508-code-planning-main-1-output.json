@@ -1,0 +1,497 @@
+[
+  {
+    "desc": "Persist typed integration lifecycle evidence for coverage snapshots, analysis identities, verdicts, and closure state.",
+    "done_when": "`TestIntegrationLifecycleYAMLRoundTrip` preserves the contributing-set snapshot, coverage union, generation records, mutation receipts, and per-task analysis metadata; `TestIntegrationLifecycleValidation` rejects duplicate analysis keys, mutable cohort replacement, malformed evidence, non-monotonic generations, and clean evidence without an immutable source commit.",
+    "scope": "Own `internal/models/integration.go`, `internal/models/integration_test.go`, `internal/models/history.go`, `internal/models/task.go`, `internal/statevalidate/integration.go`, `internal/statevalidate/integration_test.go`, and validation wiring in `internal/statevalidate/validate.go`. Define persistence and validation only; do not derive progress, create tasks, mutate Git, or render prompts.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#proposed-model",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/models ./internal/statevalidate -run TestIntegrationLifecycle"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/models/integration.go",
+        "internal/models/integration_test.go",
+        "internal/models/history.go",
+        "internal/models/task.go",
+        "internal/statevalidate/integration.go",
+        "internal/statevalidate/integration_test.go",
+        "internal/statevalidate/validate.go"
+      ],
+      "owned_modules": [
+        "internal/models",
+        "internal/statevalidate"
+      ],
+      "read_only_depends_on": [],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "IntegrationLifecycle persistence schema",
+        "IntegrationAnalysisMetadata persistence schema",
+        "integration lifecycle invariant validation"
+      ],
+      "interfaces_consumed": [],
+      "coverage_notes": "Durable facts distinguish slice evidence, global generations, immutable source commits, mutation receipts, and blocked or exhausted closure."
+    }
+  },
+  {
+    "desc": "Add a configurable global integration generation ceiling with deterministic default `3`.",
+    "done_when": "`TestGlobalIntegrationGenerationLimitDefaults` proves new workspaces persist `max_global_integration_generations: 3`, legacy zero or negative values normalize to `3`, and positive configured values survive initialization and YAML round-trip without stack-specific assumptions.",
+    "scope": "Own `internal/models/config.go`, `internal/models/config_test.go`, `internal/ops/init_project.go`, `internal/ops/init_project_test.go`, `internal/commands/init.go`, `internal/commands/init_test.go`, and `internal/testhelpers/fixtures.go`. Define the configuration field, normalization, and initialization defaults only; do not implement generation decisions or documentation.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#final-closure",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/models ./internal/ops ./internal/commands -run TestGlobalIntegrationGenerationLimit"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/models/config.go",
+        "internal/models/config_test.go",
+        "internal/ops/init_project.go",
+        "internal/ops/init_project_test.go",
+        "internal/commands/init.go",
+        "internal/commands/init_test.go",
+        "internal/testhelpers/fixtures.go"
+      ],
+      "owned_modules": [
+        "internal/models",
+        "internal/ops",
+        "internal/commands"
+      ],
+      "read_only_depends_on": [],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "Config.MaxGlobalIntegrationGenerations",
+        "NormalizeGlobalIntegrationGenerationLimit"
+      ],
+      "interfaces_consumed": [],
+      "coverage_notes": "The deterministic default is three total global generations; project initialization stays stack-agnostic."
+    }
+  },
+  {
+    "desc": "Add the slice integration role-pair specialization and a fail-closed frozen-pipeline capability policy.",
+    "done_when": "`TestSlicedIntegrationPipelineTopology` proves new embedded pipelines expose distinct slice/global role-pairs and finding-to-fix transitions; `TestSlicedIntegrationPipelineLegacyFrozenUpgrade` proves an existing frozen pipeline is not topology-backfilled and reports an actionable `pipeline_upgrade_required` capability result instead of skipping slice coverage.",
+    "scope": "Own `internal/embedded/pipeline.yaml`, `internal/pipeline/config.go`, `internal/pipeline/config_test.go`, `internal/pipeline/migrate.go`, `internal/pipeline/migrate_test.go`, `internal/pipeline/resolver.go`, `internal/pipeline/resolver_test.go`, and `internal/testhelpers/pipeline.go`. Reuse existing analyst/reviewer roles, keep distinct lifecycle state names, retain allowed-operation migration, and do not create tasks or edit operator documentation.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#slice-integration",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/pipeline -run TestSlicedIntegrationPipeline"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/embedded/pipeline.yaml",
+        "internal/pipeline/config.go",
+        "internal/pipeline/config_test.go",
+        "internal/pipeline/migrate.go",
+        "internal/pipeline/migrate_test.go",
+        "internal/pipeline/resolver.go",
+        "internal/pipeline/resolver_test.go",
+        "internal/testhelpers/pipeline.go"
+      ],
+      "owned_modules": [
+        "internal/embedded",
+        "internal/pipeline"
+      ],
+      "read_only_depends_on": [],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "slice-integration-pair lifecycle",
+        "slice-integration-to-fix transition",
+        "SlicedIntegrationCapability"
+      ],
+      "interfaces_consumed": [],
+      "coverage_notes": "New workspaces receive the topology; legacy frozen workspaces fail closed with explicit fresh-or-manual-update guidance per ADR-0067."
+    }
+  },
+  {
+    "desc": "Compute a single deterministic integration progress decision from state, pipeline capability, generation budget, and integration HEAD.",
+    "done_when": "`TestEvaluateIntegrationProgress` proves partial handoff cannot settle coverage, the cohort freezes exactly once, fewer than two scopes create no slices, one-lineage scopes produce attestations, multi-lineage scopes produce one slice key, escalation plans stay repair lineage, replacements resolve recursively, blocked or abandoned findings block, global readiness waits for all barriers, stale clean evidence is ineffective, and exhausted generations block.",
+    "scope": "Own `internal/ops/integration_progress.go` and `internal/ops/integration_progress_test.go`. Implement a pure decision API over Task 1-3 interfaces; do not write state, create tasks, read prompts, or mutate Git.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#required-properties",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/ops -run TestEvaluateIntegrationProgress"
+    ],
+    "depends_on": [
+      "0",
+      "1",
+      "2"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/integration_progress.go",
+        "internal/ops/integration_progress_test.go"
+      ],
+      "owned_modules": [
+        "internal/ops"
+      ],
+      "read_only_depends_on": [
+        0,
+        1,
+        2
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "EvaluateIntegrationProgress",
+        "IntegrationProgressDecision",
+        "deterministic slice and global analysis keys"
+      ],
+      "interfaces_consumed": [
+        "IntegrationLifecycle persistence schema",
+        "NormalizeGlobalIntegrationGenerationLimit",
+        "SlicedIntegrationCapability"
+      ],
+      "coverage_notes": "One pure decision closes classification drift across coverage, global readiness, exhaustion, and effective completion."
+    }
+  },
+  {
+    "desc": "Make every integration ref mutation invalidate superseded clean evidence at the mutation linearization point.",
+    "done_when": "`TestIntegrationMutationLinearization` proves a mutation receipt names the before/after commits, the ref update immediately makes old clean evidence ineffective, receipt persistence occurs only after releasing the integration mutation lock, and clean finalization ordered before or after a racing mutation can never yield effective success for a stale commit.",
+    "scope": "Own `internal/ops/integration_mutation_lock.go`, `internal/ops/integration_mutation_lock_test.go`, `internal/ops/wt_merge.go`, and `internal/ops/wt_merge_test.go`. Preserve ADR-0112 lock order, CAS merge behavior, rollback behavior, and the prohibition on blackboard writes under the integration mutation lock; do not own sprint progression or generation reconciliation.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#final-closure",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/ops -run TestIntegrationMutationLinearization"
+    ],
+    "depends_on": [
+      "0",
+      "3"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/integration_mutation_lock.go",
+        "internal/ops/integration_mutation_lock_test.go",
+        "internal/ops/wt_merge.go",
+        "internal/ops/wt_merge_test.go"
+      ],
+      "owned_modules": [
+        "internal/ops"
+      ],
+      "read_only_depends_on": [
+        0,
+        3
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "IntegrationMutationReceipt",
+        "integration mutation linearization protocol",
+        "clean-source verification under the integration mutation lock"
+      ],
+      "interfaces_consumed": [
+        "IntegrationLifecycle persistence schema",
+        "EvaluateIntegrationProgress"
+      ],
+      "coverage_notes": "Live HEAD mismatch is the immediate invalidator; durable receipts provide audit and next-generation input after the lock is released."
+    }
+  },
+  {
+    "desc": "Reconcile deterministic slice and global analysis tasks from the authoritative progress decision.",
+    "done_when": "`TestReconcileIntegrationAnalyses` proves cohort snapshotting and missing-task creation are atomic and idempotent across repeated wake or restart calls; slice verdicts project immutable coverage evidence; global findings wait for resolved repair or replacement lineage; clean verdicts bind to the verified source commit; and slice or generation exhaustion records an explicit blocked state.",
+    "scope": "Own `internal/ops/integration_reconcile.go`, `internal/ops/integration_reconcile_test.go`, `internal/ops/submit_verdict.go`, and `internal/ops/submit_verdict_test.go`. Create and project analysis lifecycle state through existing authorization boundaries; do not render prompts, mutate the integration ref, or decide sprint completion independently.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#global-integration",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/ops -run TestReconcileIntegrationAnalyses"
+    ],
+    "depends_on": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/integration_reconcile.go",
+        "internal/ops/integration_reconcile_test.go",
+        "internal/ops/submit_verdict.go",
+        "internal/ops/submit_verdict_test.go"
+      ],
+      "owned_modules": [
+        "internal/ops"
+      ],
+      "read_only_depends_on": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "ReconcileIntegrationAnalyses",
+        "analysis verdict projection",
+        "idempotent analysis task materialization"
+      ],
+      "interfaces_consumed": [
+        "IntegrationLifecycle persistence schema",
+        "Config.MaxGlobalIntegrationGenerations",
+        "SlicedIntegrationCapability",
+        "EvaluateIntegrationProgress",
+        "clean-source verification under the integration mutation lock"
+      ],
+      "coverage_notes": "Deterministic keys and atomic reconciliation prevent duplicate slice or global generations after wake and restart recovery."
+    }
+  },
+  {
+    "desc": "Render phase-aware immutable review context for slice and global integration analyses.",
+    "done_when": "`TestSliceIntegrationContext` proves slice prompts contain only the originating plan boundary, descendant acceptance criteria, attributable commits and paths, decomposition metadata, and snapshot reads at the source commit; `TestGlobalIntegrationContext` proves global prompts contain the compact coverage map plus an independent aggregate diff and phase-specific reviewer instructions.",
+    "scope": "Own `internal/agent/prompt.go`, `internal/agent/prompt_integration_test.go`, `internal/prompts/role_context.go`, `internal/prompts/role_context_integration_test.go`, `internal/prompts/templates/blocks/branch_integration_context.tmpl`, and `internal/prompts/templates/blocks/review_instructions.tmpl`. Consume persisted analysis metadata; do not classify lineages, create tasks, or alter wake decisions.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#slice-integration",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/agent ./internal/prompts -run 'Test(SliceIntegrationContext|GlobalIntegrationContext)'"
+    ],
+    "depends_on": [
+      "0",
+      "2",
+      "5"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/agent/prompt.go",
+        "internal/agent/prompt_integration_test.go",
+        "internal/prompts/role_context.go",
+        "internal/prompts/role_context_integration_test.go",
+        "internal/prompts/templates/blocks/branch_integration_context.tmpl",
+        "internal/prompts/templates/blocks/review_instructions.tmpl"
+      ],
+      "owned_modules": [
+        "internal/agent",
+        "internal/prompts"
+      ],
+      "read_only_depends_on": [
+        0,
+        2,
+        5
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "slice analysis prompt projection",
+        "global analysis prompt projection",
+        "phase-aware integration reviewer instructions"
+      ],
+      "interfaces_consumed": [
+        "IntegrationAnalysisMetadata persistence schema",
+        "SlicedIntegrationCapability",
+        "ReconcileIntegrationAnalyses"
+      ],
+      "coverage_notes": "Slice context is attributable and immutable; global context remains independently goal-wide."
+    }
+  },
+  {
+    "desc": "Reject every state-changing sprint progression path while effective integration completion is false.",
+    "done_when": "`TestEffectiveIntegrationCompletionGate` proves checkpoint-to-completed resume, completed-sprint resume/archive, direct advance, and manual proceed all reject stale clean evidence or a pending replacement generation; the same paths succeed only when the authoritative decision is effectively complete; and invalidation followed immediately by resume or advance cannot archive or complete the sprint.",
+    "scope": "Own `internal/ops/pipeline_ops.go`, `internal/ops/pipeline_ops_test.go`, `internal/ops/advance_sprint.go`, `internal/ops/advance_sprint_test.go`, `internal/ops/mode_change.go`, `internal/ops/mode_change_test.go`, `internal/ops/proceed.go`, `internal/ops/proceed_test.go`, `internal/ops/sprint_checkpoint.go`, and `internal/ops/sprint_checkpoint_test.go`. Replace terminal-only completion checks with Task 4's decision; do not implement wake presentation, analysis reconciliation, or Git mutation.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#final-closure",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/ops -run TestEffectiveIntegrationCompletionGate"
+    ],
+    "depends_on": [
+      "3",
+      "4",
+      "5"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/pipeline_ops.go",
+        "internal/ops/pipeline_ops_test.go",
+        "internal/ops/advance_sprint.go",
+        "internal/ops/advance_sprint_test.go",
+        "internal/ops/mode_change.go",
+        "internal/ops/mode_change_test.go",
+        "internal/ops/proceed.go",
+        "internal/ops/proceed_test.go",
+        "internal/ops/sprint_checkpoint.go",
+        "internal/ops/sprint_checkpoint_test.go"
+      ],
+      "owned_modules": [
+        "internal/ops"
+      ],
+      "read_only_depends_on": [
+        3,
+        4,
+        5
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "state-changing effective-completion gate for checkpoint, resume, archive, advance, and proceed"
+      ],
+      "interfaces_consumed": [
+        "EvaluateIntegrationProgress",
+        "integration mutation linearization protocol",
+        "ReconcileIntegrationAnalyses"
+      ],
+      "coverage_notes": "This is the sole owner of every state-changing sprint completion and advance consumer, including the previously unguarded COMPLETED-sprint archive path."
+    }
+  },
+  {
+    "desc": "Route every non-mutating completion consumer and supervisor terminal action through the authoritative progress decision.",
+    "done_when": "`TestEffectiveIntegrationCompletionConsumers` proves wake detection, orchestrator dashboard instructions, post-run assertions, auto-resume goal stopping, and status diagnostics request reconciliation or report blocked/exhausted while effective completion is false; repeated wake evaluation creates no duplicate generation; and `SPRINT_COMPLETE` or goal-complete stop appears only for clean evidence bound to current HEAD.",
+    "scope": "Own `internal/agent/workdetection.go`, `internal/agent/workdetection_test.go`, `internal/agent/systemctl.go`, `internal/agent/systemctl_test.go`, `internal/prompts/builder.go`, `internal/prompts/builder_test.go`, `internal/prompts/wake.go`, `internal/prompts/templates/wake_coding_complete.tmpl`, `internal/commands/status.go`, and `internal/commands/status_test.go`. Consume Task 8's gate and Task 6's reconciliation; do not recreate progress predicates or mutate the integration ref.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#required-properties",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/agent ./internal/prompts ./internal/commands -run TestEffectiveIntegrationCompletionConsumers"
+    ],
+    "depends_on": [
+      "3",
+      "5",
+      "7"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/agent/workdetection.go",
+        "internal/agent/workdetection_test.go",
+        "internal/agent/systemctl.go",
+        "internal/agent/systemctl_test.go",
+        "internal/prompts/builder.go",
+        "internal/prompts/builder_test.go",
+        "internal/prompts/wake.go",
+        "internal/prompts/templates/wake_coding_complete.tmpl",
+        "internal/commands/status.go",
+        "internal/commands/status_test.go"
+      ],
+      "owned_modules": [
+        "internal/agent",
+        "internal/prompts",
+        "internal/commands"
+      ],
+      "read_only_depends_on": [
+        3,
+        5,
+        7
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "effective-completion wake projection",
+        "supervisor terminal decision",
+        "integration lifecycle status projection"
+      ],
+      "interfaces_consumed": [
+        "EvaluateIntegrationProgress",
+        "ReconcileIntegrationAnalyses",
+        "state-changing effective-completion gate for checkpoint, resume, archive, advance, and proceed"
+      ],
+      "coverage_notes": "All remaining success consumers share the same decision; raw terminal task or sprint status cannot independently signal integration success."
+    }
+  },
+  {
+    "desc": "Prove the complete sliced integration lifecycle and finalization race through the integration test layer.",
+    "done_when": "`TestSlicedIntegrationLifecycle` proves the settled boundary, zero-slice bypass, mixed attestation and slice coverage, concurrent slice creation without duplicates, blocked slice fan-in, global fix rescans, generation exhaustion, restart recovery, frozen-pipeline fail-closed behavior, and invalidation followed immediately by resume or advance; `TestSlicedIntegrationFinalizationRace` proves both mutation-before-finalization and mutation-after-finalization orderings never leave effective success tied to stale HEAD.",
+    "scope": "Own `internal/integration/sliced_integration_test.go`. Exercise public operations and real Git refs with controlled synchronization; do not change production behavior, weaken existing assertions, or encode stack-specific validation commands.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#success-criteria",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "go test ./internal/integration -run TestSlicedIntegration"
+    ],
+    "depends_on": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/integration/sliced_integration_test.go"
+      ],
+      "owned_modules": [
+        "internal/integration"
+      ],
+      "read_only_depends_on": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "end-to-end sliced integration acceptance evidence",
+        "controlled finalization race evidence"
+      ],
+      "interfaces_consumed": [
+        "IntegrationLifecycle persistence schema",
+        "Config.MaxGlobalIntegrationGenerations",
+        "SlicedIntegrationCapability",
+        "EvaluateIntegrationProgress",
+        "integration mutation linearization protocol",
+        "ReconcileIntegrationAnalyses",
+        "slice analysis prompt projection",
+        "state-changing effective-completion gate for checkpoint, resume, archive, advance, and proceed",
+        "supervisor terminal decision"
+      ],
+      "coverage_notes": "Cross-component tests exercise every success criterion, especially immediate resume or advance after invalidation."
+    }
+  },
+  {
+    "desc": "Document the sliced integration contract and update the architectural issue lifecycle after implementation evidence exists.",
+    "done_when": "ADR-0113 extends ADR-0055 and supersedes its no-rescan limitation; state-machine, task-lifecycle, invariant, configuration, and multi-agent usage docs describe barriers, evidence, generations, exhaustion, linearization, and the frozen-pipeline upgrade policy; the ADR index is updated; and `integration-closure-is-not-revalidated` is resolved or revised with Task 10 validation evidence and traceability.",
+    "scope": "Own `specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md`, `specs/architecture/ADR/README.md`, `specs/architecture/state-machines.md`, `specs/protocols/task-lifecycle.md`, `INVARIANTS.md`, `support-docs/CONFIGURATION.md`, `support-docs/USAGE_MULTI_AGENTS.md`, and `specs/architecture/architectural-issues.md`. Document implemented behavior only; preserve issue traceability and explicitly state that legacy frozen pipelines require a fresh workspace or manual topology update.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#documentation-impact",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-001508-code-planning-main-1.md",
+    "validation": [
+      "pre-commit run --files specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md specs/architecture/ADR/README.md specs/architecture/state-machines.md specs/protocols/task-lifecycle.md INVARIANTS.md support-docs/CONFIGURATION.md support-docs/USAGE_MULTI_AGENTS.md specs/architecture/architectural-issues.md"
+    ],
+    "depends_on": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md",
+        "specs/architecture/ADR/README.md",
+        "specs/architecture/state-machines.md",
+        "specs/protocols/task-lifecycle.md",
+        "INVARIANTS.md",
+        "support-docs/CONFIGURATION.md",
+        "support-docs/USAGE_MULTI_AGENTS.md",
+        "specs/architecture/architectural-issues.md"
+      ],
+      "owned_modules": [
+        "specs/architecture",
+        "specs/protocols",
+        "support-docs"
+      ],
+      "read_only_depends_on": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "read_only_task_depends_on": [],
+      "interfaces_owned": [
+        "ADR-0113",
+        "sliced integration operator contract",
+        "architectural issue disposition"
+      ],
+      "interfaces_consumed": [
+        "all implementation interfaces and Task 10 acceptance evidence"
+      ],
+      "coverage_notes": "Documentation includes the deliberate fail-closed legacy frozen-pipeline policy and updates issue lifecycle only after validation exists."
+    }
+  }
+]
