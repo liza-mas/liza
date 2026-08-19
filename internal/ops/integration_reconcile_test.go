@@ -88,8 +88,13 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 	})
 
 	t.Run("task-order permutation and concurrent callers converge", func(t *testing.T) {
-		ordered := newReconcileFixture(t, false)
-		permuted := newReconcileFixture(t, true)
+		ordered := newReconcileFixtureAt(t, false, "2001-02-03T04:05:06Z")
+		permuted := newReconcileFixtureAt(t, true, "2001-02-03T04:05:07Z")
+		orderedTimestamp := testhelpers.MustGit(t, ordered.projectRoot, "show", "-s", "--format=%at", ordered.head)
+		permutedTimestamp := testhelpers.MustGit(t, permuted.projectRoot, "show", "-s", "--format=%at", permuted.head)
+		if orderedTimestamp == permutedTimestamp {
+			t.Fatalf("fixture commit timestamps = %s, want different seconds", orderedTimestamp)
+		}
 		for _, fixture := range []*reconcileFixture{ordered, permuted} {
 			if _, err := ReconcileIntegrationAnalyses(fixture.projectRoot); err != nil {
 				t.Fatalf("ReconcileIntegrationAnalyses(%s) error = %v", filepath.Base(fixture.projectRoot), err)
@@ -97,8 +102,10 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 		}
 		orderedTask := ordered.readState(t).FindTask("integration-slice-plan-multi")
 		permutedTask := permuted.readState(t).FindTask("integration-slice-plan-multi")
-		if !reflect.DeepEqual(orderedTask.IntegrationAnalysis, permutedTask.IntegrationAnalysis) || !reflect.DeepEqual(orderedTask.ParentTasks, permutedTask.ParentTasks) {
-			t.Fatalf("task order changed projection:\nordered: %#v\npermuted: %#v", orderedTask, permutedTask)
+		orderedProjection := semanticReconcileProjection(t, ordered, orderedTask)
+		permutedProjection := semanticReconcileProjection(t, permuted, permutedTask)
+		if !reflect.DeepEqual(orderedProjection, permutedProjection) {
+			t.Fatalf("task order changed projection:\nordered: %#v\npermuted: %#v", orderedProjection, permutedProjection)
 		}
 
 		concurrent := newReconcileFixture(t, false)
@@ -361,7 +368,42 @@ type reconcileFixture struct {
 	commits     map[string]string
 }
 
+type reconcileTaskProjection struct {
+	metadata    models.IntegrationAnalysisMetadata
+	parentTasks []string
+}
+
+func semanticReconcileProjection(t *testing.T, fixture *reconcileFixture, task *models.Task) reconcileTaskProjection {
+	t.Helper()
+	if task == nil || task.IntegrationAnalysis == nil {
+		t.Fatalf("reconciled task = %#v, want integration analysis metadata", task)
+	}
+	wantChanges := []models.IntegrationDescendantChange{
+		{TaskID: "coding-a", Commit: fixture.commits["coding-a"]},
+		{TaskID: "coding-b", Commit: fixture.commits["coding-b"]},
+	}
+	if task.IntegrationAnalysis.SourceCommit != fixture.head || !reflect.DeepEqual(task.IntegrationAnalysis.DescendantChanges, wantChanges) {
+		t.Fatalf("commit attribution = source %q changes %#v, want source %q changes %#v", task.IntegrationAnalysis.SourceCommit, task.IntegrationAnalysis.DescendantChanges, fixture.head, wantChanges)
+	}
+
+	metadata := *task.IntegrationAnalysis
+	metadata.RootTaskIDs = slices.Clone(metadata.RootTaskIDs)
+	metadata.DescendantChanges = slices.Clone(metadata.DescendantChanges)
+	metadata.AffectedPaths = slices.Clone(metadata.AffectedPaths)
+	metadata.SourceSnapshotPaths = slices.Clone(metadata.SourceSnapshotPaths)
+	metadata.SourceCommit = "fixture-head"
+	for i := range metadata.DescendantChanges {
+		metadata.DescendantChanges[i].Commit = metadata.DescendantChanges[i].TaskID
+	}
+	return reconcileTaskProjection{metadata: metadata, parentTasks: slices.Clone(task.ParentTasks)}
+}
+
 func newReconcileFixture(t *testing.T, reverseTasks bool) *reconcileFixture {
+	t.Helper()
+	return newReconcileFixtureAt(t, reverseTasks, "")
+}
+
+func newReconcileFixtureAt(t *testing.T, reverseTasks bool, commitTimestamp string) *reconcileFixture {
 	t.Helper()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
@@ -376,7 +418,7 @@ func newReconcileFixture(t *testing.T, reverseTasks bool) *reconcileFixture {
 	writeFixtureFile(t, projectRoot, "a.go", "package fixture\n")
 	writeFixtureFile(t, projectRoot, "deleted.txt", "temporary\n")
 	testhelpers.MustGit(t, projectRoot, "add", "a.go", "deleted.txt")
-	testhelpers.MustGit(t, projectRoot, "commit", "-m", "add slice a")
+	commitFixture(t, projectRoot, "add slice a", commitTimestamp)
 	commitA := mustCommit(t, gitWrapper, "HEAD")
 
 	if err := os.Remove(filepath.Join(projectRoot, "deleted.txt")); err != nil {
@@ -384,12 +426,12 @@ func newReconcileFixture(t *testing.T, reverseTasks bool) *reconcileFixture {
 	}
 	writeFixtureFile(t, projectRoot, "b.go", "package fixture\n")
 	testhelpers.MustGit(t, projectRoot, "add", "b.go", "deleted.txt")
-	testhelpers.MustGit(t, projectRoot, "commit", "-m", "add slice b")
+	commitFixture(t, projectRoot, "add slice b", commitTimestamp)
 	commitB := mustCommit(t, gitWrapper, "HEAD")
 
 	writeFixtureFile(t, projectRoot, "single.go", "package fixture\n")
 	testhelpers.MustGit(t, projectRoot, "add", "single.go")
-	testhelpers.MustGit(t, projectRoot, "commit", "-m", "add single scope")
+	commitFixture(t, projectRoot, "add single scope", commitTimestamp)
 	commitSingle := mustCommit(t, gitWrapper, "HEAD")
 	testhelpers.MustGit(t, projectRoot, "update-ref", "refs/heads/integration", commitSingle)
 
@@ -420,6 +462,15 @@ func newReconcileFixture(t *testing.T, reverseTasks bool) *reconcileFixture {
 	state.Sprint.Scope.Planned = taskIDs(tasks)
 	testhelpers.WriteInitialState(t, statePath, state)
 	return fixture
+}
+
+func commitFixture(t *testing.T, projectRoot, message, timestamp string) {
+	t.Helper()
+	args := []string{"commit", "-m", message}
+	if timestamp != "" {
+		args = append(args, "--date", timestamp)
+	}
+	testhelpers.MustGit(t, projectRoot, args...)
 }
 
 func reconcileMergedPlan(now time.Time, id string) models.Task {
