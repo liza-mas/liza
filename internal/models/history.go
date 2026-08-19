@@ -21,11 +21,14 @@ func (gs GoalStatus) IsValid() bool {
 
 // Goal represents the high-level goal spanning one or more sprints
 type Goal struct {
-	ID               string             `yaml:"id"`
-	Description      string             `yaml:"description"`
-	SpecRef          string             `yaml:"spec_ref"`
-	EntryPoint       string             `yaml:"entry_point,omitempty"`
-	BaseCommit       *string            `yaml:"base_commit,omitempty"`
+	ID          string  `yaml:"id"`
+	Description string  `yaml:"description"`
+	SpecRef     string  `yaml:"spec_ref"`
+	EntryPoint  string  `yaml:"entry_point,omitempty"`
+	BaseCommit  *string `yaml:"base_commit,omitempty"`
+
+	Integration *IntegrationLifecycle `yaml:"integration,omitempty"`
+
 	Created          time.Time          `yaml:"created"`
 	Status           GoalStatus         `yaml:"status"`
 	AlignmentHistory []AlignmentHistory `yaml:"alignment_history"`

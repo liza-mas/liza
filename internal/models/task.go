@@ -265,15 +265,18 @@ type Task struct {
 	RescopeReason       *string                `yaml:"rescope_reason,omitempty"`
 	FailedBy            []string               `yaml:"failed_by,omitempty"`
 	IntegrationFailure  map[string]any         `yaml:"integration_failure,omitempty" json:"integration_failure,omitempty"`
-	Attempt             int                    `yaml:"attempt,omitempty"`
-	DependsOn           []string               `yaml:"depends_on,omitempty"`
-	IntegrationFix      bool                   `yaml:"integration_fix,omitempty"`
-	HandoffPending      bool                   `yaml:"handoff_pending,omitempty"`
-	HandoffEvents       []HandoffEvent         `yaml:"handoff_events,omitempty"`
-	MaxIterations       int                    `yaml:"max_iterations,omitempty"`
-	Created             time.Time              `yaml:"created"`
-	History             []TaskHistoryEntry     `yaml:"history"`
-	Extra               map[string]any         `yaml:",inline"`
+
+	IntegrationAnalysis *IntegrationAnalysisMetadata `yaml:"integration_analysis,omitempty" json:"integration_analysis,omitempty"`
+
+	Attempt        int                `yaml:"attempt,omitempty"`
+	DependsOn      []string           `yaml:"depends_on,omitempty"`
+	IntegrationFix bool               `yaml:"integration_fix,omitempty"`
+	HandoffPending bool               `yaml:"handoff_pending,omitempty"`
+	HandoffEvents  []HandoffEvent     `yaml:"handoff_events,omitempty"`
+	MaxIterations  int                `yaml:"max_iterations,omitempty"`
+	Created        time.Time          `yaml:"created"`
+	History        []TaskHistoryEntry `yaml:"history"`
+	Extra          map[string]any     `yaml:",inline"`
 }
 
 // EffectiveParentTasks returns the list of parent task IDs.

@@ -192,6 +192,7 @@ func ValidateState(state *models.State, projectRoot string, skipSpecFileCheck bo
 		validateRoleNames,
 		validateRequiredFields,
 		validateUniqueTaskIDs,
+		validateIntegrationLifecycle,
 		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
 			return validateTaskStates(state, projectRoot, skipSpecFileCheck, resolver)
 		},
