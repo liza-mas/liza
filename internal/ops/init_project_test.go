@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"gopkg.in/yaml.v3"
 )
 
 // setupInitTestDir creates a temp dir with a git repo and a spec file,
@@ -149,6 +150,57 @@ func TestInitProject_Success(t *testing.T) {
 	pipelinePath := filepath.Join(lizaDir, "pipeline.yaml")
 	if _, err := os.Stat(pipelinePath); os.IsNotExist(err) {
 		t.Fatal("pipeline.yaml was not created")
+	}
+}
+
+func TestGlobalIntegrationGenerationLimitDefaults(t *testing.T) {
+	tests := []struct {
+		name  string
+		input int
+		want  int
+	}{
+		{name: "zero defaults", input: 0, want: 3},
+		{name: "negative defaults", input: -1, want: 3},
+		{name: "positive preserved", input: 7, want: 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot, specFile := setupInitTestDir(t)
+			if err := InitProject(projectRoot, InitProjectParams{
+				Description:                     "Test project",
+				SpecRef:                         specFile,
+				MaxGlobalIntegrationGenerations: tt.input,
+			}); err != nil {
+				t.Fatalf("InitProject() error: %v", err)
+			}
+
+			statePath := filepath.Join(projectRoot, ".liza", "state.yaml")
+			state, err := db.For(statePath).Read()
+			if err != nil {
+				t.Fatalf("read typed state: %v", err)
+			}
+			if got := state.Config.MaxGlobalIntegrationGenerations; got != tt.want {
+				t.Fatalf("typed max global integration generations = %d, want %d", got, tt.want)
+			}
+
+			data, err := os.ReadFile(statePath)
+			if err != nil {
+				t.Fatalf("read state.yaml: %v", err)
+			}
+			var persisted struct {
+				Config struct {
+					MaxGlobalIntegrationGenerations int `yaml:"max_global_integration_generations"`
+				} `yaml:"config"`
+			}
+			if err := yaml.Unmarshal(data, &persisted); err != nil {
+				t.Fatalf("unmarshal state.yaml: %v", err)
+			}
+			persistedLimit := persisted.Config.MaxGlobalIntegrationGenerations
+			if persistedLimit != state.Config.MaxGlobalIntegrationGenerations {
+				t.Fatalf("persisted max global integration generations = %d, typed state = %d", persistedLimit, state.Config.MaxGlobalIntegrationGenerations)
+			}
+		})
 	}
 }
 

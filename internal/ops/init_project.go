@@ -23,19 +23,20 @@ import (
 
 // InitProjectParams holds parameters for non-interactive project initialization.
 type InitProjectParams struct {
-	Description          string
-	SpecRef              string
-	Branch               string // default "integration" if empty
-	EntryPoint           string // optional
-	PostWorktreeCmd      string // optional
-	CopyWorktreeEnvFiles bool   // optional explicit authorization to copy ignored root env files into task worktrees
-	DefaultCLI           string // optional; default CLI for agent spawning
-	DefaultDoerCLI       string // optional; default CLI for doer and orchestrator agent spawning
-	DefaultReviewerCLI   string // optional; default CLI for reviewer agent spawning
-	AutoResume           bool
-	NoFollowUp           bool
-	PipelineConfig       []byte       // optional raw YAML; nil = use embedded default
-	SembleDiagnosticSink func(string) // optional transient sink for bounded Semble diagnostics
+	Description                     string
+	SpecRef                         string
+	Branch                          string // default "integration" if empty
+	EntryPoint                      string // optional
+	PostWorktreeCmd                 string // optional
+	CopyWorktreeEnvFiles            bool   // optional explicit authorization to copy ignored root env files into task worktrees
+	DefaultCLI                      string // optional; default CLI for agent spawning
+	DefaultDoerCLI                  string // optional; default CLI for doer and orchestrator agent spawning
+	DefaultReviewerCLI              string // optional; default CLI for reviewer agent spawning
+	MaxGlobalIntegrationGenerations int
+	AutoResume                      bool
+	NoFollowUp                      bool
+	PipelineConfig                  []byte       // optional raw YAML; nil = use embedded default
+	SembleDiagnosticSink            func(string) // optional transient sink for bounded Semble diagnostics
 }
 
 var (
@@ -213,27 +214,28 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 			History:        []models.CircuitBreakerHistory{},
 		},
 		Config: models.Config{
-			MaxCoderIterations:       10,
-			MaxReviewCycles:          5,
-			HeartbeatInterval:        60,
-			LeaseDuration:            1800,
-			CoderPollInterval:        30,
-			DoerMaxWait:              18000,
-			OrchestratorPollInterval: 60,
-			OrchestratorMaxWait:      18000,
-			ReviewerPollInterval:     30,
-			ReviewerMaxWait:          18000,
-			AgentProgressTimeout:     models.DefaultAgentProgressTimeoutSec,
-			DefaultCLI:               params.DefaultCLI,
-			DefaultDoerCLI:           params.DefaultDoerCLI,
-			DefaultReviewerCLI:       params.DefaultReviewerCLI,
-			IntegrationBranch:        branch,
-			EscalationWebhook:        nil,
-			Mode:                     models.SystemModeRunning,
-			AutoResume:               params.AutoResume,
-			NoFollowUp:               params.NoFollowUp,
-			PostWorktreeCmd:          postWorktreeCmd,
-			CopyWorktreeEnvFiles:     copyWorktreeEnvFiles,
+			MaxCoderIterations:              10,
+			MaxReviewCycles:                 5,
+			MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(params.MaxGlobalIntegrationGenerations),
+			HeartbeatInterval:               60,
+			LeaseDuration:                   1800,
+			CoderPollInterval:               30,
+			DoerMaxWait:                     18000,
+			OrchestratorPollInterval:        60,
+			OrchestratorMaxWait:             18000,
+			ReviewerPollInterval:            30,
+			ReviewerMaxWait:                 18000,
+			AgentProgressTimeout:            models.DefaultAgentProgressTimeoutSec,
+			DefaultCLI:                      params.DefaultCLI,
+			DefaultDoerCLI:                  params.DefaultDoerCLI,
+			DefaultReviewerCLI:              params.DefaultReviewerCLI,
+			IntegrationBranch:               branch,
+			EscalationWebhook:               nil,
+			Mode:                            models.SystemModeRunning,
+			AutoResume:                      params.AutoResume,
+			NoFollowUp:                      params.NoFollowUp,
+			PostWorktreeCmd:                 postWorktreeCmd,
+			CopyWorktreeEnvFiles:            copyWorktreeEnvFiles,
 		},
 	}
 
