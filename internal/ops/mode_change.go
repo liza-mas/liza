@@ -204,6 +204,7 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 		if err != nil {
 			return nil, err
 		}
+		runBeforeEffectiveIntegrationProgressionMutationTestHook()
 	}
 
 	timestamp := time.Now()

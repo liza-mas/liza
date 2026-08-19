@@ -58,6 +58,7 @@ func AdvanceSprint(projectRoot string) (*AdvanceSprintResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	runBeforeEffectiveIntegrationProgressionMutationTestHook()
 
 	var result AdvanceSprintResult
 

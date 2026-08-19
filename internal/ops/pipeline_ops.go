@@ -14,22 +14,25 @@ import (
 )
 
 type effectiveIntegrationCompletionAuthorization struct {
-	cohortFrozen        bool
-	integrationComplete bool
-	generation          int
-	analysisKey         string
-	sourceCommit        string
+	cohortFrozen         bool
+	integrationComplete  bool
+	generation           int
+	analysisKey          string
+	sourceCommit         string
+	mutationReceiptCount int
 }
 
 type effectiveIntegrationCompletionSnapshot struct {
-	decision     IntegrationProgressDecision
-	cohortFrozen bool
-	closure      *models.IntegrationClosure
+	decision             IntegrationProgressDecision
+	cohortFrozen         bool
+	closure              *models.IntegrationClosure
+	mutationReceiptCount int
 }
 
 var (
-	reconcileIntegrationAnalysesForProgression = ReconcileIntegrationAnalyses
-	readEffectiveIntegrationCompletion         = readEffectiveIntegrationCompletionSnapshot
+	reconcileIntegrationAnalysesForProgression            = ReconcileIntegrationAnalyses
+	readEffectiveIntegrationCompletion                    = readEffectiveIntegrationCompletionSnapshot
+	beforeEffectiveIntegrationProgressionMutationTestHook func()
 )
 
 // authorizeEffectiveIntegrationCompletion projects pending integration work,
@@ -68,11 +71,12 @@ func authorizeEffectiveIntegrationCompletion(projectRoot string, requireSettled 
 		return nil, integrationCompletionPreconditionError(progressReason(integrationProgressWaitingClosure))
 	}
 	return &effectiveIntegrationCompletionAuthorization{
-		cohortFrozen:        true,
-		integrationComplete: true,
-		generation:          snapshot.closure.Generation,
-		analysisKey:         snapshot.closure.AnalysisKey,
-		sourceCommit:        snapshot.closure.SourceCommit,
+		cohortFrozen:         true,
+		integrationComplete:  true,
+		generation:           snapshot.closure.Generation,
+		analysisKey:          snapshot.closure.AnalysisKey,
+		sourceCommit:         snapshot.closure.SourceCommit,
+		mutationReceiptCount: snapshot.mutationReceiptCount,
 	}, nil
 }
 
@@ -104,6 +108,9 @@ func readEffectiveIntegrationCompletionSnapshot(projectRoot string) (effectiveIn
 		}
 		snapshot.decision = decision
 		snapshot.cohortFrozen = state.Goal.Integration != nil && state.Goal.Integration.ContributingSet != nil
+		if state.Goal.Integration != nil {
+			snapshot.mutationReceiptCount = len(state.Goal.Integration.MutationReceipts)
+		}
 		if state.Goal.Integration != nil && state.Goal.Integration.Closure != nil {
 			closure := *state.Goal.Integration.Closure
 			snapshot.closure = &closure
@@ -139,12 +146,22 @@ func (authorization *effectiveIntegrationCompletionAuthorization) validateState(
 		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
 	}
 	closure := state.Goal.Integration.Closure
+	// MergeWorktree persists a mutation receipt before returning. Rechecking the
+	// receipt count inside the progression transaction closes the authorization
+	// race without acquiring the integration lock under the blackboard lock.
 	if closure == nil || closure.Status != models.IntegrationClosureStatusClean ||
 		closure.Generation != authorization.generation || closure.AnalysisKey != authorization.analysisKey ||
-		closure.SourceCommit != authorization.sourceCommit {
+		closure.SourceCommit != authorization.sourceCommit ||
+		len(state.Goal.Integration.MutationReceipts) != authorization.mutationReceiptCount {
 		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
 	}
 	return nil
+}
+
+func runBeforeEffectiveIntegrationProgressionMutationTestHook() {
+	if beforeEffectiveIntegrationProgressionMutationTestHook != nil {
+		beforeEffectiveIntegrationProgressionMutationTestHook()
+	}
 }
 
 // loadResolver loads the frozen pipeline config for the given project root.

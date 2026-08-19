@@ -168,6 +168,56 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("public integration mutation between authorization and progression rejects resume and advance", func(t *testing.T) {
+		for _, path := range []effectiveCompletionPath{effectiveCompletionPaths()[1], effectiveCompletionPaths()[3]} {
+			t.Run(path.name, func(t *testing.T) {
+				fixture := newEffectiveCompletionFixture(t, true)
+				path.prepare(t, fixture)
+				previousHook := beforeEffectiveIntegrationProgressionMutationTestHook
+				beforeEffectiveIntegrationProgressionMutationTestHook = func() {
+					beforeEffectiveIntegrationProgressionMutationTestHook = nil
+					taskID, agentID := fixture.installPublicIntegrationMutation(t)
+					if _, err := MergeWorktree(fixture.projectRoot, taskID, agentID); err != nil {
+						t.Fatalf("MergeWorktree() error = %v", err)
+					}
+				}
+				defer func() { beforeEffectiveIntegrationProgressionMutationTestHook = previousHook }()
+
+				err := path.invoke(fixture.projectRoot)
+				requireEffectiveCompletionPrecondition(t, err)
+				path.assertRejected(t, fixture)
+			})
+		}
+	})
+
+	t.Run("sprint complete state race leaves existing summary unchanged", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		path := effectiveCompletionPaths()[0]
+		path.prepare(t, fixture)
+		reportPath := filepath.Join(fixture.projectRoot, ".liza", "sprint_summary.md")
+		const originalSummary = "existing summary\n"
+		if err := os.WriteFile(reportPath, []byte(originalSummary), 0o644); err != nil {
+			t.Fatalf("write existing summary: %v", err)
+		}
+		previousHook := beforeEffectiveIntegrationProgressionMutationTestHook
+		beforeEffectiveIntegrationProgressionMutationTestHook = func() {
+			fixture.mutateState(t, func(state *models.State) {
+				state.Goal.Integration.Closure = nil
+			})
+		}
+		defer func() { beforeEffectiveIntegrationProgressionMutationTestHook = previousHook }()
+
+		err := path.invoke(fixture.projectRoot)
+		requireEffectiveCompletionPrecondition(t, err)
+		got, readErr := os.ReadFile(reportPath)
+		if readErr != nil {
+			t.Fatalf("read existing summary: %v", readErr)
+		}
+		if string(got) != originalSummary {
+			t.Fatalf("summary = %q, want unchanged %q", got, originalSummary)
+		}
+	})
 }
 
 type effectiveCompletionFixture struct {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -83,16 +84,33 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 
 	timestamp := time.Now()
 	report := generateSprintSummary(state, timestamp)
-
-	if err := os.WriteFile(reportPath, []byte(report), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write sprint summary: %w", err)
+	stagedReport, err := os.CreateTemp(filepath.Dir(reportPath), ".sprint-summary-*.tmp")
+	if err != nil {
+		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
 	}
+	stagedReportPath := stagedReport.Name()
+	defer os.Remove(stagedReportPath)
+	if _, err := stagedReport.WriteString(report); err != nil {
+		_ = stagedReport.Close()
+		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
+	}
+	if err := stagedReport.Chmod(0644); err != nil {
+		_ = stagedReport.Close()
+		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
+	}
+	if err := stagedReport.Close(); err != nil {
+		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
+	}
+	runBeforeEffectiveIntegrationProgressionMutationTestHook()
 
 	err = blackboard.Modify(func(s *models.State) error {
 		if completionAuthorization != nil {
 			if err := completionAuthorization.validateState(s, true); err != nil {
 				return err
 			}
+		}
+		if err := os.Rename(stagedReportPath, reportPath); err != nil {
+			return fmt.Errorf("failed to write sprint summary: %w", err)
 		}
 		s.Sprint.Status = models.SprintStatusCheckpoint
 		s.Sprint.Timeline.CheckpointAt = &timestamp
