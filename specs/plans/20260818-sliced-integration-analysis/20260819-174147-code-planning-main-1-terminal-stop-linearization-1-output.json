@@ -1,0 +1,16 @@
+[
+  {
+    "desc": "Make the authoritative goal-complete stop linearizable with integration HEAD mutation.",
+    "done_when": "`TestLinearizableGoalCompleteStop` proves `StopForGoalCompletion` leaves the system `STOPPED` only for clean evidence bound to current integration HEAD; a public HEAD mutation deterministically ordered between stop authorization and mode change cannot leave stale success `STOPPED`; mutation after a completed automatic stop reactivates `RUNNING` without a later wake; generic operator stops remain `STOPPED`; and every blackboard write occurs after release of the ADR-0112 integration mutation lock.",
+    "scope": "Own the terminal-stop composition and mutation-side mode invalidation in `internal/ops/pipeline_ops.go`, `internal/ops/pipeline_ops_test.go`, `internal/ops/mode_change.go`, `internal/ops/mode_change_test.go`, `internal/ops/wt_merge.go`, and `internal/ops/wt_merge_test.go`. Reuse the dependency-owned effective-completion precondition, clean-source verifier, mutation receipt, and lifecycle transition validator; preserve generic `Stop`, CAS merge, rollback, sync/restore, and manual or safety shutdown behavior. Do not change consumer wake/status presentation, integration generation policy, pipeline topology, durable model schemas, documentation, or code outside `internal/ops`.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#final-closure",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-174147-code-planning-main-1-terminal-stop-linearization-1.md",
+    "validation": [
+      "go test -json ./internal/ops -run '^TestLinearizableGoalCompleteStop$' -count=1 | jq -e -s 'any(.[]; .Action == \"pass\" and .Test == \"TestLinearizableGoalCompleteStop\") and all(.[]; .Action != \"fail\")'"
+    ],
+    "task_depends_on": [
+      "code-planning-main-1-replan-1-code-planning-1-coding-0",
+      "code-planning-main-1-code-planning-7-coding-0"
+    ]
+  }
+]
