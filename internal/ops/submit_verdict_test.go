@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -2150,4 +2151,492 @@ func TestSubmitVerdict_RejectionAtReviewCap_Attempt2_TriggersBlocked(t *testing.
 
 	assertReleasedAgent(t, readState, coderID)
 	assertReleasedAgent(t, readState, "code-reviewer-1")
+}
+
+func TestSubmitVerdictIntegrationLifecycleProjection(t *testing.T) {
+	t.Run("final quorum slice approvals append immutable clean and findings reports", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			output      []models.OutputEntry
+			wantVerdict models.IntegrationAnalysisVerdict
+			wantStatus  models.TaskStatus
+		}{
+			{name: "clean", wantVerdict: models.IntegrationAnalysisVerdictClean, wantStatus: models.TaskStatus("SLICE_INTEGRATION_ANALYSIS_CLEAN")},
+			{
+				name:        "findings",
+				output:      []models.OutputEntry{{Desc: "repair slice", DoneWhen: "slice repaired", Scope: "internal/ops", SpecRef: "README.md"}},
+				wantVerdict: models.IntegrationAnalysisVerdictFindings,
+				wantStatus:  models.TaskStatus("SLICE_INTEGRATION_ANALYSIS_APPROVED"),
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseSlice, tc.output)
+				before := fixture.readState(t)
+				priorCoverage := append([]models.IntegrationCoverageRecord(nil), before.Goal.Integration.Coverage...)
+				priorReceipts := append([]models.IntegrationMutationReceipt(nil), before.Goal.Integration.MutationReceipts...)
+
+				if _, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, ""); err != nil {
+					t.Fatalf("SubmitVerdict() error = %v", err)
+				}
+
+				after := fixture.readState(t)
+				task := after.FindTask(fixture.taskID)
+				if task == nil || task.Status != tc.wantStatus {
+					t.Fatalf("task status = %v, want %s", taskStatus(task), tc.wantStatus)
+				}
+				if !reflect.DeepEqual(after.Goal.Integration.Coverage[:len(priorCoverage)], priorCoverage) {
+					t.Fatalf("prior coverage changed:\n got: %#v\nwant: %#v", after.Goal.Integration.Coverage[:len(priorCoverage)], priorCoverage)
+				}
+				if !reflect.DeepEqual(after.Goal.Integration.MutationReceipts, priorReceipts) {
+					t.Fatalf("mutation receipts changed:\n got: %#v\nwant: %#v", after.Goal.Integration.MutationReceipts, priorReceipts)
+				}
+				if len(after.Goal.Integration.Coverage) != len(priorCoverage)+1 {
+					t.Fatalf("coverage count = %d, want %d", len(after.Goal.Integration.Coverage), len(priorCoverage)+1)
+				}
+				record := after.Goal.Integration.Coverage[len(priorCoverage)]
+				if record.Kind != models.IntegrationCoverageSliceReport || record.PlanTaskID != fixture.planTaskID || record.SliceReport == nil {
+					t.Fatalf("slice coverage = %#v, want report for %s", record, fixture.planTaskID)
+				}
+				report := record.SliceReport
+				if report.AnalysisTaskID != fixture.taskID || report.AnalysisKey != fixture.analysisKey || report.Verdict != tc.wantVerdict {
+					t.Fatalf("slice report identity = %#v", report)
+				}
+				if report.SourceCommit != fixture.sourceCommit || report.ReportCommit != fixture.reportCommit || report.SourceCommit == report.ReportCommit {
+					t.Fatalf("slice commits = source %q report %q, want distinct %q and %q", report.SourceCommit, report.ReportCommit, fixture.sourceCommit, fixture.reportCommit)
+				}
+			})
+		}
+	})
+
+	t.Run("partial slice approval preserves lifecycle", func(t *testing.T) {
+		fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseSlice, nil)
+		enableSubmitVerdictIntegrationQuorum(t, fixture.projectRoot, "slice-integration-pair")
+		before := fixture.readState(t)
+
+		if _, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, ""); err != nil {
+			t.Fatalf("SubmitVerdict() error = %v", err)
+		}
+
+		after := fixture.readState(t)
+		if !reflect.DeepEqual(after.Goal.Integration, before.Goal.Integration) {
+			t.Fatalf("partial approval lifecycle changed:\n got: %#v\nwant: %#v", after.Goal.Integration, before.Goal.Integration)
+		}
+		if got := after.FindTask(fixture.taskID).Status; got != models.TaskStatus("SLICE_INTEGRATION_ANALYSIS_PARTIALLY_APPROVED") {
+			t.Fatalf("partial approval status = %s", got)
+		}
+		if analyst := after.Agents[fixture.analystID]; analyst.Status != models.AgentStatusWaiting || analyst.CurrentTask == nil || *analyst.CurrentTask != fixture.taskID {
+			t.Fatalf("partial approval analyst ownership = %#v, want waiting on %s", analyst, fixture.taskID)
+		}
+	})
+
+	t.Run("global findings append contiguous generation without clean closure", func(t *testing.T) {
+		fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseGlobal, []models.OutputEntry{{Desc: "repair global", DoneWhen: "global repaired", Scope: "internal/ops", SpecRef: "README.md"}})
+		fixture.installPriorGlobalGeneration(t)
+		before := fixture.readState(t)
+		prior := append([]models.IntegrationGlobalGeneration(nil), before.Goal.Integration.GlobalGenerations...)
+
+		if _, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, ""); err != nil {
+			t.Fatalf("SubmitVerdict() error = %v", err)
+		}
+
+		after := fixture.readState(t)
+		if !reflect.DeepEqual(after.Goal.Integration.GlobalGenerations[:len(prior)], prior) {
+			t.Fatalf("prior global generations changed")
+		}
+		if len(after.Goal.Integration.GlobalGenerations) != 2 {
+			t.Fatalf("global generation count = %d, want 2", len(after.Goal.Integration.GlobalGenerations))
+		}
+		generation := after.Goal.Integration.GlobalGenerations[1]
+		if generation.Generation != 2 || generation.AnalysisKey != fixture.analysisKey || generation.Verdict != models.IntegrationAnalysisVerdictFindings || generation.SourceCommit != fixture.sourceCommit || generation.ReportCommit != fixture.reportCommit {
+			t.Fatalf("global findings generation = %#v", generation)
+		}
+		if after.Goal.Integration.Closure != nil {
+			t.Fatalf("global findings closure = %#v, want nil", after.Goal.Integration.Closure)
+		}
+	})
+
+	t.Run("global clean verifies source before atomic projection", func(t *testing.T) {
+		fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseGlobal, nil)
+		called := make(chan string, 1)
+		release := make(chan struct{})
+		previousVerifier := verifyCleanIntegrationSourceForVerdict
+		verifyCleanIntegrationSourceForVerdict = func(_ string, sourceCommit string) (cleanIntegrationSourceVerification, error) {
+			called <- sourceCommit
+			select {
+			case <-release:
+				return cleanIntegrationSourceVerification{SourceCommit: sourceCommit, IntegrationHEAD: sourceCommit, Effective: true}, nil
+			case <-time.After(5 * time.Second):
+				return cleanIntegrationSourceVerification{}, fmt.Errorf("timed out waiting to release clean-source verification")
+			}
+		}
+		t.Cleanup(func() { verifyCleanIntegrationSourceForVerdict = previousVerifier })
+
+		type verdictCall struct {
+			result *VerdictResult
+			err    error
+		}
+		completed := make(chan verdictCall, 1)
+		go func() {
+			result, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, "")
+			completed <- verdictCall{result: result, err: err}
+		}()
+
+		select {
+		case sourceCommit := <-called:
+			if sourceCommit != fixture.sourceCommit {
+				t.Fatalf("verified source = %q, want %q", sourceCommit, fixture.sourceCommit)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("clean-source verification was not called")
+		}
+		blockedState := fixture.readState(t)
+		if got := blockedState.FindTask(fixture.taskID).Status; got != models.TaskStatus("REVIEWING_INTEGRATION_ANALYSIS") {
+			t.Fatalf("status changed before verification returned: %s", got)
+		}
+		if len(blockedState.Goal.Integration.GlobalGenerations) != 0 {
+			t.Fatalf("global evidence persisted before verification returned: %#v", blockedState.Goal.Integration.GlobalGenerations)
+		}
+
+		close(release)
+		select {
+		case call := <-completed:
+			if call.err != nil {
+				t.Fatalf("SubmitVerdict() error = %v", call.err)
+			}
+			if call.result == nil {
+				t.Fatal("SubmitVerdict() result is nil")
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("SubmitVerdict did not complete after verification")
+		}
+
+		after := fixture.readState(t)
+		if len(after.Goal.Integration.GlobalGenerations) != 1 {
+			t.Fatalf("global generation count = %d, want 1", len(after.Goal.Integration.GlobalGenerations))
+		}
+		generation := after.Goal.Integration.GlobalGenerations[0]
+		if generation.Verdict != models.IntegrationAnalysisVerdictClean || generation.SourceCommit != fixture.sourceCommit || generation.ReportCommit != fixture.reportCommit {
+			t.Fatalf("global clean generation = %#v", generation)
+		}
+		closure := after.Goal.Integration.Closure
+		if closure == nil || closure.Status != models.IntegrationClosureStatusClean || closure.Generation != 1 || closure.AnalysisKey != fixture.analysisKey || closure.SourceCommit != fixture.sourceCommit {
+			t.Fatalf("global clean closure = %#v", closure)
+		}
+	})
+
+	t.Run("stale global clean source records evidence without clean closure", func(t *testing.T) {
+		fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseGlobal, nil)
+		previousVerifier := verifyCleanIntegrationSourceForVerdict
+		verifyCleanIntegrationSourceForVerdict = func(_ string, sourceCommit string) (cleanIntegrationSourceVerification, error) {
+			return cleanIntegrationSourceVerification{SourceCommit: sourceCommit, IntegrationHEAD: "new-head", Effective: false}, nil
+		}
+		t.Cleanup(func() { verifyCleanIntegrationSourceForVerdict = previousVerifier })
+
+		if _, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, ""); err != nil {
+			t.Fatalf("SubmitVerdict() error = %v", err)
+		}
+		after := fixture.readState(t)
+		if len(after.Goal.Integration.GlobalGenerations) != 1 || after.Goal.Integration.GlobalGenerations[0].Verdict != models.IntegrationAnalysisVerdictClean {
+			t.Fatalf("stale clean generation = %#v", after.Goal.Integration.GlobalGenerations)
+		}
+		if after.Goal.Integration.Closure != nil {
+			t.Fatalf("stale clean closure = %#v, want nil", after.Goal.Integration.Closure)
+		}
+		if analyst := after.Agents[fixture.analystID]; analyst.Status != models.AgentStatusWaiting || analyst.CurrentTask != nil {
+			t.Fatalf("completed verdict analyst ownership = %#v, want waiting without current task", analyst)
+		}
+	})
+
+	t.Run("role phase mismatch and duplicate projection fail closed", func(t *testing.T) {
+		t.Run("role phase mismatch", func(t *testing.T) {
+			fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseSlice, nil)
+			fixture.mutateState(t, func(state *models.State) {
+				task := state.FindTask(fixture.taskID)
+				task.RolePair = "integration-pair"
+				task.Status = models.TaskStatus("REVIEWING_INTEGRATION_ANALYSIS")
+			})
+			before := fixture.readState(t)
+
+			_, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, "")
+			testhelpers.RequireErrorContains(t, err, "phase")
+			assertSubmitVerdictTransactionUnchanged(t, before, fixture.readState(t), fixture.taskID, fixture.reviewerID)
+		})
+
+		t.Run("duplicate slice projection", func(t *testing.T) {
+			fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseSlice, nil)
+			fixture.mutateState(t, func(state *models.State) {
+				state.Goal.Integration.Coverage = append(state.Goal.Integration.Coverage, models.IntegrationCoverageRecord{
+					PlanTaskID: fixture.planTaskID,
+					Kind:       models.IntegrationCoverageSliceReport,
+					SliceReport: &models.IntegrationSliceReport{
+						AnalysisTaskID: fixture.taskID,
+						AnalysisKey:    fixture.analysisKey,
+						Verdict:        models.IntegrationAnalysisVerdictClean,
+						SourceCommit:   fixture.sourceCommit,
+						ReportCommit:   fixture.reportCommit,
+					},
+				})
+			})
+			before := fixture.readState(t)
+
+			_, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, "")
+			testhelpers.RequireErrorContains(t, err, "duplicate")
+			assertSubmitVerdictTransactionUnchanged(t, before, fixture.readState(t), fixture.taskID, fixture.reviewerID)
+		})
+	})
+
+	t.Run("candidate and transition validation abort the complete verdict transaction", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			corrupt func(*models.State)
+			wantErr string
+		}{
+			{
+				name: "malformed newly appended evidence",
+				corrupt: func(state *models.State) {
+					state.Goal.Integration.Coverage[len(state.Goal.Integration.Coverage)-1].SliceReport.ReportCommit = ""
+				},
+				wantErr: "report commit is empty",
+			},
+			{
+				name: "prior nested evidence rewrite",
+				corrupt: func(state *models.State) {
+					state.Goal.Integration.ContributingSet.Scopes[0].RootTaskIDs[0] = "rewritten-root"
+				},
+				wantErr: "contributing set cannot change",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseSlice, nil)
+				previousHooks := testSubmitVerdictHooks
+				testSubmitVerdictHooks = &submitVerdictTestHooks{beforeValidation: tc.corrupt}
+				t.Cleanup(func() { testSubmitVerdictHooks = previousHooks })
+				before := fixture.readState(t)
+
+				_, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, "")
+				testhelpers.RequireErrorContains(t, err, tc.wantErr)
+				assertSubmitVerdictTransactionUnchanged(t, before, fixture.readState(t), fixture.taskID, fixture.reviewerID)
+			})
+		}
+	})
+
+	t.Run("ordinary non integration approval preserves existing behavior", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-ordinary", models.TaskStatusReviewing, now)}
+		state.Agents["code-reviewer-1"] = models.Agent{Role: "code-reviewer", Status: models.AgentStatusWorking}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		if _, err := SubmitVerdict(tmpDir, "task-ordinary", "APPROVED", "", "code-reviewer-1", ""); err != nil {
+			t.Fatalf("SubmitVerdict() error = %v", err)
+		}
+		after, err := db.New(stateFile).Read()
+		if err != nil {
+			t.Fatalf("Read() error = %v", err)
+		}
+		if got := after.FindTask("task-ordinary").Status; got != models.TaskStatusApproved {
+			t.Fatalf("ordinary approval status = %s, want %s", got, models.TaskStatusApproved)
+		}
+		if after.Goal.Integration != nil {
+			t.Fatalf("ordinary approval lifecycle = %#v, want nil", after.Goal.Integration)
+		}
+	})
+}
+
+type submitVerdictIntegrationFixture struct {
+	projectRoot  string
+	statePath    string
+	taskID       string
+	reviewerID   string
+	analystID    string
+	planTaskID   string
+	analysisKey  string
+	sourceCommit string
+	reportCommit string
+}
+
+func newSubmitVerdictIntegrationFixture(t *testing.T, phase models.IntegrationAnalysisPhase, output []models.OutputEntry) submitVerdictIntegrationFixture {
+	t.Helper()
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.CreateSpecFile(t, projectRoot, "vision.md", "# Test vision\n")
+
+	rolePair := "slice-integration-pair"
+	reviewingStatus := models.TaskStatus("REVIEWING_SLICE_INTEGRATION_ANALYSIS")
+	planTaskID := "plan-slice"
+	analysisKey := "slice:plan-slice"
+	generation := 0
+	if phase == models.IntegrationAnalysisPhaseGlobal {
+		rolePair = "integration-pair"
+		reviewingStatus = models.TaskStatus("REVIEWING_INTEGRATION_ANALYSIS")
+		planTaskID = ""
+		analysisKey = "global:1"
+		generation = 1
+	}
+
+	taskID := "analysis-task"
+	reviewerID := "integration-reviewer-1"
+	analystID := "integration-analyst-1"
+	sourceCommit := "analyzed-source-commit"
+	reportCommit := "analyst-report-commit"
+	now := time.Now().UTC()
+	lease := now.Add(30 * time.Minute)
+	taskRef := taskID
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{{
+		ID:                 taskID,
+		Type:               models.TaskTypeIntegration,
+		Description:        "Integration analysis",
+		Status:             reviewingStatus,
+		RolePair:           rolePair,
+		Priority:           1,
+		Created:            now,
+		SpecRef:            "README.md",
+		DoneWhen:           "Analysis reviewed",
+		Scope:              "Integration scope",
+		Output:             output,
+		AssignedTo:         &analystID,
+		ReviewCommit:       &reportCommit,
+		ReviewingBy:        &reviewerID,
+		ReviewLeaseExpires: &lease,
+		HandoffEvents:      []models.HandoffEvent{{Timestamp: now, Agent: analystID, Trigger: models.HandoffTriggerSubmission}},
+		IntegrationAnalysis: &models.IntegrationAnalysisMetadata{
+			Key:                   analysisKey,
+			Phase:                 phase,
+			Generation:            generation,
+			OriginatingPlanTaskID: planTaskID,
+			RootTaskIDs:           sliceRoots(phase),
+			SourceCommit:          sourceCommit,
+		},
+	}}
+	state.Agents[analystID] = models.Agent{
+		Role:         "integration-analyst",
+		Status:       models.AgentStatusWaiting,
+		CurrentTask:  &taskRef,
+		LeaseExpires: &lease,
+		Heartbeat:    now,
+		RegisteredAt: now,
+		Provider:     "codex",
+		PID:          os.Getpid(),
+	}
+	state.Agents[reviewerID] = models.Agent{
+		Role:         "integration-reviewer",
+		Status:       models.AgentStatusReviewing,
+		CurrentTask:  &taskRef,
+		LeaseExpires: &lease,
+		Heartbeat:    now,
+		RegisteredAt: now,
+		Provider:     "codex",
+		PID:          os.Getpid(),
+	}
+	state.Goal.Integration = &models.IntegrationLifecycle{}
+	if phase == models.IntegrationAnalysisPhaseSlice {
+		state.Goal.Integration.ContributingSet = &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{
+			{PlanTaskID: "plan-prior", RootTaskIDs: []string{"root-prior"}},
+			{PlanTaskID: planTaskID, RootTaskIDs: sliceRoots(phase)},
+		}}
+		state.Goal.Integration.Coverage = []models.IntegrationCoverageRecord{{
+			PlanTaskID: "plan-prior",
+			Kind:       models.IntegrationCoverageApprovalAttestation,
+			ApprovalAttestations: []models.IntegrationApprovalAttestation{{
+				ReviewedTaskID: "prior-coding", AcceptanceCriteria: "prior done", ReviewedCommit: "prior-review",
+				Approver: "prior-reviewer", Validation: []string{"go test ./..."}, MergeCommit: "prior-merge",
+			}},
+		}}
+		state.Goal.Integration.MutationReceipts = []models.IntegrationMutationReceipt{{TaskID: "prior-merge-task", BeforeCommit: "before", AfterCommit: "after"}}
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+	return submitVerdictIntegrationFixture{
+		projectRoot: projectRoot, statePath: statePath, taskID: taskID, reviewerID: reviewerID, analystID: analystID,
+		planTaskID: planTaskID, analysisKey: analysisKey, sourceCommit: sourceCommit, reportCommit: reportCommit,
+	}
+}
+
+func sliceRoots(phase models.IntegrationAnalysisPhase) []string {
+	if phase != models.IntegrationAnalysisPhaseSlice {
+		return nil
+	}
+	return []string{"root-a", "root-b"}
+}
+
+func (fixture submitVerdictIntegrationFixture) readState(t *testing.T) *models.State {
+	t.Helper()
+	state, err := db.New(fixture.statePath).Read()
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	return state
+}
+
+func (fixture submitVerdictIntegrationFixture) mutateState(t *testing.T, mutate func(*models.State)) {
+	t.Helper()
+	state := fixture.readState(t)
+	mutate(state)
+	testhelpers.WriteInitialState(t, fixture.statePath, state)
+}
+
+func (fixture *submitVerdictIntegrationFixture) installPriorGlobalGeneration(t *testing.T) {
+	t.Helper()
+	fixture.mutateState(t, func(state *models.State) {
+		current := state.FindTask(fixture.taskID)
+		current.IntegrationAnalysis.Key = "global:2"
+		current.IntegrationAnalysis.Generation = 2
+		fixture.analysisKey = "global:2"
+		priorReport := "prior-global-report"
+		state.Tasks = append([]models.Task{{
+			ID: "global-analysis-1", Type: models.TaskTypeIntegration, Description: "Prior global analysis",
+			Status: models.TaskStatus("INTEGRATION_ANALYSIS_APPROVED"), RolePair: "integration-pair", Priority: 1,
+			Created: time.Now().UTC(), SpecRef: "README.md", DoneWhen: "Prior analysis reviewed", Scope: "Integration scope",
+			ReviewCommit:        &priorReport,
+			HandoffEvents:       []models.HandoffEvent{{Timestamp: time.Now().UTC(), Agent: "integration-analyst-1", Trigger: models.HandoffTriggerSubmission}},
+			IntegrationAnalysis: &models.IntegrationAnalysisMetadata{Key: "global:1", Phase: models.IntegrationAnalysisPhaseGlobal, Generation: 1, SourceCommit: "prior-global-source"},
+		}}, state.Tasks...)
+		state.Goal.Integration.GlobalGenerations = []models.IntegrationGlobalGeneration{{
+			Generation: 1, AnalysisTaskID: "global-analysis-1", AnalysisKey: "global:1",
+			Verdict: models.IntegrationAnalysisVerdictFindings, SourceCommit: "prior-global-source", ReportCommit: priorReport,
+		}}
+	})
+}
+
+func enableSubmitVerdictIntegrationQuorum(t *testing.T, projectRoot, rolePair string) {
+	t.Helper()
+	pipelinePath := filepath.Join(projectRoot, ".liza", "pipeline.yaml")
+	content, err := os.ReadFile(pipelinePath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", pipelinePath, err)
+	}
+	pairHeader := "    " + rolePair + ":\n      doer: integration-analyst\n      reviewer: integration-reviewer\n"
+	pairWithQuorum := pairHeader + "      review-policy:\n        quorum: 2\n        provider-diversity: preferred\n"
+	updated := strings.Replace(string(content), pairHeader, pairWithQuorum, 1)
+	cleanState := "        clean: SLICE_INTEGRATION_ANALYSIS_CLEAN\n"
+	updated = strings.Replace(updated, cleanState, "        partially-approved: SLICE_INTEGRATION_ANALYSIS_PARTIALLY_APPROVED\n        reviewing-2: REVIEWING_SLICE_INTEGRATION_ANALYSIS_2\n", 1)
+	if updated == string(content) {
+		t.Fatalf("pipeline role pair %s was not updated", rolePair)
+	}
+	if err := os.WriteFile(pipelinePath, []byte(updated), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", pipelinePath, err)
+	}
+}
+
+func assertSubmitVerdictTransactionUnchanged(t *testing.T, before, after *models.State, taskID, reviewerID string) {
+	t.Helper()
+	if !reflect.DeepEqual(after.FindTask(taskID), before.FindTask(taskID)) {
+		t.Fatalf("task changed after rejected verdict transaction:\n got: %#v\nwant: %#v", after.FindTask(taskID), before.FindTask(taskID))
+	}
+	if !reflect.DeepEqual(after.Goal.Integration, before.Goal.Integration) {
+		t.Fatalf("lifecycle changed after rejected verdict transaction:\n got: %#v\nwant: %#v", after.Goal.Integration, before.Goal.Integration)
+	}
+	if !reflect.DeepEqual(after.Agents[reviewerID], before.Agents[reviewerID]) {
+		t.Fatalf("reviewer changed after rejected verdict transaction:\n got: %#v\nwant: %#v", after.Agents[reviewerID], before.Agents[reviewerID])
+	}
+}
+
+func taskStatus(task *models.Task) models.TaskStatus {
+	if task == nil {
+		return ""
+	}
+	return task.Status
 }

@@ -3,8 +3,10 @@ package ops
 import (
 	stderrors "errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/secretmask"
 	"github.com/liza-mas/liza/internal/statehygiene"
+	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
 // VerdictResult contains the outcome of a successful verdict submission.
@@ -40,10 +43,12 @@ var impactOrder = map[string]int{
 }
 
 type submitVerdictTestHooks struct {
-	beforeModify func()
+	beforeModify     func()
+	beforeValidation func(*models.State)
 }
 
 var testSubmitVerdictHooks *submitVerdictTestHooks
+var verifyCleanIntegrationSourceForVerdict = verifyCleanIntegrationSource
 
 // IsValidImpact returns whether v is a recognized impact classification.
 // Empty string is valid (means "not specified").
@@ -222,6 +227,21 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 	newAttemptNeeded := false
 	newAttemptReason := ""
 	var staleVerdictErr *PreconditionError
+	var cleanSourceVerification *cleanIntegrationSourceVerification
+	if verdict == "APPROVED" && task.IntegrationAnalysis != nil &&
+		task.IntegrationAnalysis.Phase == models.IntegrationAnalysisPhaseGlobal && len(task.Output) == 0 {
+		effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, effectiveImpact)
+		if qErr != nil {
+			return nil, fmt.Errorf("failed to resolve quorum: %w", qErr)
+		}
+		if task.ApprovalCount()+1 >= effectiveQuorum {
+			verification, verificationErr := verifyCleanIntegrationSourceForVerdict(projectRoot, task.IntegrationAnalysis.SourceCommit)
+			if verificationErr != nil {
+				return nil, fmt.Errorf("failed to verify clean integration source: %w", verificationErr)
+			}
+			cleanSourceVerification = &verification
+		}
+	}
 
 	if testSubmitVerdictHooks != nil && testSubmitVerdictHooks.beforeModify != nil {
 		testSubmitVerdictHooks.beforeModify()
@@ -237,6 +257,11 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 			appendStaleVerdictAnomaly(state, task, taskID, agentID, verdict, reason, impact, now)
 			staleVerdictErr = &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}
 			return nil
+		}
+		var previousLifecycleState *models.State
+		projectedIntegrationEvidence := false
+		if task.IntegrationAnalysis != nil {
+			previousLifecycleState = snapshotIntegrationLifecycleState(state)
 		}
 
 		transitionTask := func(to models.TaskStatus) error {
@@ -295,6 +320,15 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 				}
 				if err := transitionTask(targetStatus); err != nil {
 					return err
+				}
+				if task.IntegrationAnalysis != nil {
+					if err := validateIntegrationAnalysisRolePair(task); err != nil {
+						return err
+					}
+					if err := appendIntegrationVerdictEvidence(state, task, cleanSourceVerification); err != nil {
+						return err
+					}
+					projectedIntegrationEvidence = true
 				}
 			}
 
@@ -378,6 +412,25 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 		task.ReviewLeaseExpires = nil
 		state.ReleaseAgent(agentID)
 
+		if projectedIntegrationEvidence {
+			if task.AssignedTo != nil {
+				assignedAgentID := *task.AssignedTo
+				assignedAgent, ok := state.Agents[assignedAgentID]
+				if ok && assignedAgent.Status == models.AgentStatusWaiting && assignedAgent.CurrentTask != nil && *assignedAgent.CurrentTask == task.ID {
+					// The await command keeps the agent WAITING until process exit, but
+					// a completed task is no longer a valid current-task reference.
+					assignedAgent.CurrentTask = nil
+					state.Agents[assignedAgentID] = assignedAgent
+				}
+			}
+			if testSubmitVerdictHooks != nil && testSubmitVerdictHooks.beforeValidation != nil {
+				testSubmitVerdictHooks.beforeValidation(state)
+			}
+			if err := validateIntegrationLifecycleCandidate(projectRoot, previousLifecycleState, state); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 
@@ -404,6 +457,157 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 		BlockedReason:       blockedReasonOut,
 		NewAttemptTriggered: !escalatedToBlocked && newAttemptNeeded,
 	}, nil
+}
+
+func validateIntegrationAnalysisRolePair(task *models.Task) error {
+	if task == nil || task.IntegrationAnalysis == nil {
+		return nil
+	}
+	wantRolePair := ""
+	switch task.IntegrationAnalysis.Phase {
+	case models.IntegrationAnalysisPhaseSlice:
+		wantRolePair = "slice-integration-pair"
+	case models.IntegrationAnalysisPhaseGlobal:
+		wantRolePair = "integration-pair"
+	default:
+		return fmt.Errorf("task %s has invalid integration analysis phase %q", task.ID, task.IntegrationAnalysis.Phase)
+	}
+	if task.RolePair != wantRolePair {
+		return fmt.Errorf("task %s integration analysis phase %q requires role_pair %q, got %q", task.ID, task.IntegrationAnalysis.Phase, wantRolePair, task.RolePair)
+	}
+	return nil
+}
+
+func appendIntegrationVerdictEvidence(state *models.State, task *models.Task, verification *cleanIntegrationSourceVerification) error {
+	metadata := task.IntegrationAnalysis
+	if metadata == nil || task.ReviewCommit == nil {
+		return fmt.Errorf("task %s integration analysis verdict requires metadata and review commit", task.ID)
+	}
+	if state.Goal.Integration == nil {
+		state.Goal.Integration = &models.IntegrationLifecycle{}
+	}
+	verdict := models.IntegrationAnalysisVerdictFindings
+	if len(task.Output) == 0 {
+		verdict = models.IntegrationAnalysisVerdictClean
+	}
+
+	switch metadata.Phase {
+	case models.IntegrationAnalysisPhaseSlice:
+		state.Goal.Integration.Coverage = append(state.Goal.Integration.Coverage, models.IntegrationCoverageRecord{
+			PlanTaskID: metadata.OriginatingPlanTaskID,
+			Kind:       models.IntegrationCoverageSliceReport,
+			SliceReport: &models.IntegrationSliceReport{
+				AnalysisTaskID: task.ID,
+				AnalysisKey:    metadata.Key,
+				Verdict:        verdict,
+				SourceCommit:   metadata.SourceCommit,
+				ReportCommit:   *task.ReviewCommit,
+			},
+		})
+	case models.IntegrationAnalysisPhaseGlobal:
+		if verdict == models.IntegrationAnalysisVerdictClean && (verification == nil || verification.SourceCommit != metadata.SourceCommit) {
+			return fmt.Errorf("task %s clean integration source was not verified", task.ID)
+		}
+		state.Goal.Integration.GlobalGenerations = append(state.Goal.Integration.GlobalGenerations, models.IntegrationGlobalGeneration{
+			Generation:     metadata.Generation,
+			AnalysisTaskID: task.ID,
+			AnalysisKey:    metadata.Key,
+			Verdict:        verdict,
+			SourceCommit:   metadata.SourceCommit,
+			ReportCommit:   *task.ReviewCommit,
+		})
+		if verdict == models.IntegrationAnalysisVerdictClean && verification.Effective {
+			state.Goal.Integration.Closure = &models.IntegrationClosure{
+				Status:       models.IntegrationClosureStatusClean,
+				Generation:   metadata.Generation,
+				AnalysisKey:  metadata.Key,
+				SourceCommit: metadata.SourceCommit,
+			}
+		}
+	default:
+		return fmt.Errorf("task %s has invalid integration analysis phase %q", task.ID, metadata.Phase)
+	}
+	return nil
+}
+
+func validateIntegrationLifecycleCandidate(projectRoot string, previous, candidate *models.State) error {
+	if err := statevalidate.ValidateState(candidate, projectRoot, false, io.Discard); err != nil {
+		return fmt.Errorf("invalid integration lifecycle candidate: %w", err)
+	}
+	normalizeEmptyIntegrationPrefixes(previous, candidate)
+	if err := statevalidate.ValidateIntegrationLifecycleTransition(previous, candidate); err != nil {
+		return fmt.Errorf("invalid integration lifecycle transition: %w", err)
+	}
+	return nil
+}
+
+func normalizeEmptyIntegrationPrefixes(previous, candidate *models.State) {
+	if previous.Goal.Integration == nil || candidate.Goal.Integration == nil {
+		return
+	}
+	// reflect.DeepEqual distinguishes nil and empty slices. Normalize only an
+	// append's zero-length before image so the transition validator compares
+	// evidence values rather than their in-memory slice representation.
+	if previous.Goal.Integration.Coverage == nil && len(candidate.Goal.Integration.Coverage) > 0 {
+		previous.Goal.Integration.Coverage = []models.IntegrationCoverageRecord{}
+	}
+	if previous.Goal.Integration.GlobalGenerations == nil && len(candidate.Goal.Integration.GlobalGenerations) > 0 {
+		previous.Goal.Integration.GlobalGenerations = []models.IntegrationGlobalGeneration{}
+	}
+	if previous.Goal.Integration.MutationReceipts == nil && len(candidate.Goal.Integration.MutationReceipts) > 0 {
+		previous.Goal.Integration.MutationReceipts = []models.IntegrationMutationReceipt{}
+	}
+}
+
+func snapshotIntegrationLifecycleState(state *models.State) *models.State {
+	previous := *state
+	previous.Goal = state.Goal
+	previous.Tasks = slices.Clone(state.Tasks)
+	for i := range previous.Tasks {
+		metadata := state.Tasks[i].IntegrationAnalysis
+		if metadata == nil {
+			continue
+		}
+		metadataCopy := *metadata
+		metadataCopy.RootTaskIDs = slices.Clone(metadata.RootTaskIDs)
+		metadataCopy.DescendantChanges = slices.Clone(metadata.DescendantChanges)
+		metadataCopy.AffectedPaths = slices.Clone(metadata.AffectedPaths)
+		metadataCopy.SourceSnapshotPaths = slices.Clone(metadata.SourceSnapshotPaths)
+		previous.Tasks[i].IntegrationAnalysis = &metadataCopy
+	}
+
+	lifecycle := state.Goal.Integration
+	if lifecycle == nil {
+		return &previous
+	}
+	lifecycleCopy := *lifecycle
+	if lifecycle.ContributingSet != nil {
+		setCopy := *lifecycle.ContributingSet
+		setCopy.Scopes = slices.Clone(lifecycle.ContributingSet.Scopes)
+		for i := range setCopy.Scopes {
+			setCopy.Scopes[i].RootTaskIDs = slices.Clone(lifecycle.ContributingSet.Scopes[i].RootTaskIDs)
+		}
+		lifecycleCopy.ContributingSet = &setCopy
+	}
+	lifecycleCopy.Coverage = slices.Clone(lifecycle.Coverage)
+	for i := range lifecycleCopy.Coverage {
+		lifecycleCopy.Coverage[i].ApprovalAttestations = slices.Clone(lifecycle.Coverage[i].ApprovalAttestations)
+		for j := range lifecycleCopy.Coverage[i].ApprovalAttestations {
+			lifecycleCopy.Coverage[i].ApprovalAttestations[j].Validation = slices.Clone(lifecycle.Coverage[i].ApprovalAttestations[j].Validation)
+		}
+		if lifecycle.Coverage[i].SliceReport != nil {
+			reportCopy := *lifecycle.Coverage[i].SliceReport
+			lifecycleCopy.Coverage[i].SliceReport = &reportCopy
+		}
+	}
+	lifecycleCopy.GlobalGenerations = slices.Clone(lifecycle.GlobalGenerations)
+	lifecycleCopy.MutationReceipts = slices.Clone(lifecycle.MutationReceipts)
+	if lifecycle.Closure != nil {
+		closureCopy := *lifecycle.Closure
+		lifecycleCopy.Closure = &closureCopy
+	}
+	previous.Goal.Integration = &lifecycleCopy
+	return &previous
 }
 
 func recordSubmitVerdictFailure(bb *db.Blackboard, logPath, taskID, agentID, verdict string, err error) {
