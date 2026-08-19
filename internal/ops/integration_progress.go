@@ -341,10 +341,23 @@ func (e *integrationProgressEvaluator) hasAnalysisAncestor(taskID string) (bool,
 }
 
 func (e *integrationProgressEvaluator) directCodingRoots(planID string) []string {
+	replacementIDs := make(map[string]bool)
+	for i := range e.state.Tasks {
+		task := &e.state.Tasks[i]
+		if task.Supersedes != nil && *task.Supersedes != "" {
+			replacementIDs[task.ID] = true
+		}
+		for _, replacementID := range task.SupersededBy {
+			replacementIDs[replacementID] = true
+		}
+	}
+
 	roots := make([]string, 0)
 	for i := range e.state.Tasks {
 		task := &e.state.Tasks[i]
-		if task.RolePair == "coding-pair" && slices.Contains(task.EffectiveParentTasks(), planID) {
+		if task.RolePair == "coding-pair" &&
+			slices.Contains(task.EffectiveParentTasks(), planID) &&
+			!replacementIDs[task.ID] {
 			roots = append(roots, task.ID)
 		}
 	}

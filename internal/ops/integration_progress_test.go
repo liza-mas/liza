@@ -127,8 +127,8 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 		root.Status = models.TaskStatusSuperseded
 		root.SupersededBy = []string{"coding-leaf-z", "coding-leaf-a"}
 		state.Tasks = append(state.Tasks,
-			progressReplacement("coding-leaf-z", "coding-root", models.TaskStatusMerged),
-			progressReplacement("coding-leaf-a", "coding-root", models.TaskStatusMerged),
+			progressCoding("coding-leaf-z", "plan-branched"),
+			progressCoding("coding-leaf-a", "plan-branched"),
 		)
 
 		decision := evaluateProgress(t, state, available, "head-1")
