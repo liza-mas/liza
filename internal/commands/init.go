@@ -41,25 +41,26 @@ var (
 
 // InitParams holds the parameters for InitCommand.
 type InitParams struct {
-	Description          string
-	SpecRef              string
-	ConfigPath           string   // --config: path to pipeline YAML
-	EntryPoint           string   // --entry-point: name of entry-point in config
-	Branch               string   // --branch: integration branch name (default: "integration")
-	PostWorktreeCmd      string   // --post-worktree-cmd: shell command to run after worktree creation
-	CopyWorktreeEnvFiles bool     // --copy-worktree-env-files: copy ignored root env files into task worktrees
-	AutoResume           bool     // --auto-resume: automatically resume at checkpoint and sprint completion
-	NoFollowUp           bool     // --no-follow-up: suppress top-level pipeline-transitions after the entry subpipeline
-	DefaultCLI           string   // --default-cli: default CLI for agent spawning
-	DefaultDoerCLI       string   // --default-doer-cli: default CLI for doer and orchestrator agent spawning
-	DefaultReviewerCLI   string   // --default-reviewer-cli: default CLI for reviewer agent spawning
-	ScipSearch           []string // --scip-search: enabled SCIP languages
-	ScipSearchPlans      []string // --scip-search-plan: pairing SCIP root overrides
-	Agents               []string // --claude, --codex, --cursor, --opencode, --gemini, --mistral
-	Stdin                io.Reader
-	ForceInteractive     bool              // bypass TTY check (for testing)
-	ContractActions      map[string]string // provider-scoped wizard actions keyed by canonical provider ID
-	AutoConfirm          bool              // auto-confirm interactive approval prompts
+	Description                     string
+	SpecRef                         string
+	ConfigPath                      string // --config: path to pipeline YAML
+	EntryPoint                      string // --entry-point: name of entry-point in config
+	Branch                          string // --branch: integration branch name (default: "integration")
+	PostWorktreeCmd                 string // --post-worktree-cmd: shell command to run after worktree creation
+	CopyWorktreeEnvFiles            bool   // --copy-worktree-env-files: copy ignored root env files into task worktrees
+	AutoResume                      bool   // --auto-resume: automatically resume at checkpoint and sprint completion
+	NoFollowUp                      bool   // --no-follow-up: suppress top-level pipeline-transitions after the entry subpipeline
+	MaxGlobalIntegrationGenerations int
+	DefaultCLI                      string   // --default-cli: default CLI for agent spawning
+	DefaultDoerCLI                  string   // --default-doer-cli: default CLI for doer and orchestrator agent spawning
+	DefaultReviewerCLI              string   // --default-reviewer-cli: default CLI for reviewer agent spawning
+	ScipSearch                      []string // --scip-search: enabled SCIP languages
+	ScipSearchPlans                 []string // --scip-search-plan: pairing SCIP root overrides
+	Agents                          []string // --claude, --codex, --cursor, --opencode, --gemini, --mistral
+	Stdin                           io.Reader
+	ForceInteractive                bool              // bypass TTY check (for testing)
+	ContractActions                 map[string]string // provider-scoped wizard actions keyed by canonical provider ID
+	AutoConfirm                     bool              // auto-confirm interactive approval prompts
 }
 
 // InitPairingParams holds the parameters for InitPairingCommand.
@@ -1184,28 +1185,29 @@ func InitCommandWithConfig(params InitParams) error {
 			History:        []models.CircuitBreakerHistory{},
 		},
 		Config: models.Config{
-			MaxCoderIterations:       10,
-			MaxReviewCycles:          5,
-			HeartbeatInterval:        60,
-			LeaseDuration:            1800,
-			CoderPollInterval:        30,
-			DoerMaxWait:              18000,
-			OrchestratorPollInterval: 60,
-			OrchestratorMaxWait:      18000,
-			ReviewerPollInterval:     30,
-			ReviewerMaxWait:          18000,
-			AgentProgressTimeout:     models.DefaultAgentProgressTimeoutSec,
-			DefaultCLI:               params.DefaultCLI,
-			DefaultDoerCLI:           params.DefaultDoerCLI,
-			DefaultReviewerCLI:       params.DefaultReviewerCLI,
-			ScipSearch:               scipSearchConfig.Languages,
-			IntegrationBranch:        branch,
-			EscalationWebhook:        nil,
-			Mode:                     models.SystemModeRunning,
-			AutoResume:               params.AutoResume,
-			NoFollowUp:               params.NoFollowUp,
-			PostWorktreeCmd:          stringPtrOrNil(postWorktreeCmd),
-			CopyWorktreeEnvFiles:     copyWorktreeEnvFiles,
+			MaxCoderIterations:              10,
+			MaxReviewCycles:                 5,
+			MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(params.MaxGlobalIntegrationGenerations),
+			HeartbeatInterval:               60,
+			LeaseDuration:                   1800,
+			CoderPollInterval:               30,
+			DoerMaxWait:                     18000,
+			OrchestratorPollInterval:        60,
+			OrchestratorMaxWait:             18000,
+			ReviewerPollInterval:            30,
+			ReviewerMaxWait:                 18000,
+			AgentProgressTimeout:            models.DefaultAgentProgressTimeoutSec,
+			DefaultCLI:                      params.DefaultCLI,
+			DefaultDoerCLI:                  params.DefaultDoerCLI,
+			DefaultReviewerCLI:              params.DefaultReviewerCLI,
+			ScipSearch:                      scipSearchConfig.Languages,
+			IntegrationBranch:               branch,
+			EscalationWebhook:               nil,
+			Mode:                            models.SystemModeRunning,
+			AutoResume:                      params.AutoResume,
+			NoFollowUp:                      params.NoFollowUp,
+			PostWorktreeCmd:                 stringPtrOrNil(postWorktreeCmd),
+			CopyWorktreeEnvFiles:            copyWorktreeEnvFiles,
 		},
 	}
 

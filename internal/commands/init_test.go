@@ -24,6 +24,7 @@ import (
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"gopkg.in/yaml.v3"
 )
 
 // setupGlobalLiza delegates to testhelpers.SetupGlobalLiza.
@@ -222,6 +223,70 @@ func TestInitCommand(t *testing.T) {
 			// If no error expected, verify the initialization
 			if !tt.wantErr {
 				verifyInitialization(t, tmpDir, tt.description, tt.specRef)
+			}
+		})
+	}
+}
+
+func TestGlobalIntegrationGenerationLimitDefaults(t *testing.T) {
+	tests := []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{name: "zero defaults", limit: 0, want: 3},
+		{name: "negative defaults", limit: -1, want: 3},
+		{name: "positive is preserved", limit: 7, want: 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := setupGitRepo(t)
+			defer os.RemoveAll(tmpDir)
+
+			setupGlobalLiza(t)
+
+			originalDir, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Chdir(originalDir)
+			if err := os.Chdir(tmpDir); err != nil {
+				t.Fatal(err)
+			}
+
+			testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+			if err := InitCommandWithConfig(InitParams{
+				Description:                     "Test goal",
+				SpecRef:                         "specs/vision.md",
+				MaxGlobalIntegrationGenerations: tt.limit,
+			}); err != nil {
+				t.Fatalf("InitCommandWithConfig() error = %v", err)
+			}
+
+			statePath := filepath.Join(paths.New(tmpDir).LizaDir(), "state.yaml")
+			state, err := db.For(statePath).Read()
+			if err != nil {
+				t.Fatalf("read initialized state: %v", err)
+			}
+			if got := state.Config.MaxGlobalIntegrationGenerations; got != tt.want {
+				t.Fatalf("state.Config.MaxGlobalIntegrationGenerations = %d, want %d", got, tt.want)
+			}
+
+			data, err := os.ReadFile(statePath)
+			if err != nil {
+				t.Fatalf("read persisted state: %v", err)
+			}
+			var persisted struct {
+				Config struct {
+					MaxGlobalIntegrationGenerations int `yaml:"max_global_integration_generations"`
+				} `yaml:"config"`
+			}
+			if err := yaml.Unmarshal(data, &persisted); err != nil {
+				t.Fatalf("unmarshal persisted state: %v", err)
+			}
+			if got := persisted.Config.MaxGlobalIntegrationGenerations; got != state.Config.MaxGlobalIntegrationGenerations {
+				t.Fatalf("persisted max_global_integration_generations = %d, typed state = %d", got, state.Config.MaxGlobalIntegrationGenerations)
 			}
 		})
 	}
