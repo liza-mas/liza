@@ -59,6 +59,16 @@ func TestIntegrationMutationLockCrossProcess(t *testing.T) {
 	}
 }
 
+func TestIntegrationMutationLinearization(t *testing.T) {
+	t.Run("public merge appends validated receipt without rewriting evidence", testIntegrationMutationReceiptPersistence)
+	t.Run("validator rejection prevents receipt and task persistence", testIntegrationMutationValidatorRejection)
+	t.Run("receipt persistence starts after mutation lock release", testIntegrationMutationReceiptAfterLockRelease)
+	t.Run("rollback appends the reverse mutation", testIntegrationMutationRollbackReceipt)
+	t.Run("already merged no-op appends no receipt", testIntegrationMutationNoOpReceipt)
+	t.Run("mutation ordered before verification invalidates old clean evidence", testIntegrationMutationBeforeVerification)
+	t.Run("mutation ordered after verification invalidates persisted clean evidence", testIntegrationMutationAfterVerification)
+}
+
 func runIntegrationMutationLockHelper(t *testing.T) {
 	projectRoot := os.Getenv(integrationMutationLockRootEnv)
 	if projectRoot == "" {
