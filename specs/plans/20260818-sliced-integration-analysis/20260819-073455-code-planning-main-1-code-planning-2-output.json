@@ -1,0 +1,12 @@
+[
+  {
+    "desc": "Make sliced integration capability explicit for both new embedded pipelines and legacy frozen pipelines.",
+    "done_when": "`TestSlicedIntegrationPipelineTopology` proves new embedded pipelines expose distinct slice/global role-pairs and finding-to-fix transitions; `TestSlicedIntegrationPipelineLegacyFrozenUpgrade` proves an existing frozen pipeline is not topology-backfilled and reports an actionable `pipeline_upgrade_required` capability result instead of skipping slice coverage.",
+    "scope": "Own `internal/embedded/pipeline.yaml`, `internal/pipeline/config.go`, `internal/pipeline/config_test.go`, `internal/pipeline/migrate.go`, `internal/pipeline/migrate_test.go`, `internal/pipeline/resolver.go`, `internal/pipeline/resolver_test.go`, and `internal/testhelpers/pipeline.go`. Reuse existing analyst/reviewer roles, keep distinct lifecycle state names, retain allowed-operation migration, and do not create tasks or edit operator documentation.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#slice-integration",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-073455-code-planning-main-1-code-planning-2.md",
+    "validation": [
+      "go test -json ./internal/pipeline -run '^(TestSlicedIntegrationPipelineLegacyFrozenUpgrade|TestSlicedIntegrationPipelineTopology)$' -count=1 | jq -e -s '([.[] | select(.Action == \"pass\" and (.Test == \"TestSlicedIntegrationPipelineLegacyFrozenUpgrade\" or .Test == \"TestSlicedIntegrationPipelineTopology\")) | .Test] | unique | sort) == [\"TestSlicedIntegrationPipelineLegacyFrozenUpgrade\",\"TestSlicedIntegrationPipelineTopology\"] and all(.[]; .Action != \"fail\")'"
+    ]
+  }
+]
