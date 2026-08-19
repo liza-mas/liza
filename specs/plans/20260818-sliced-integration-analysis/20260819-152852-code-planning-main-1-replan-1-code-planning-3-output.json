@@ -1,0 +1,25 @@
+[
+  {
+    "desc": "Make settled integration cohorts and bounded one-lineage approval evidence durably representable.",
+    "done_when": "`TestIntegrationLifecycleYAMLRoundTrip` preserves a non-nil settled contributing set with zero scopes and a one-root coverage record containing attestations for multiple reviewed replacement leaves; `TestIntegrationLifecycleValidation` accepts the zero-scope marker, rejects empty, duplicate, mixed, or malformed approval-attestation sets, and preserves either frozen form immutably through transition validation.",
+    "scope": "Own `internal/models/integration.go`, `internal/models/integration_test.go`, `internal/statevalidate/integration.go`, and `internal/statevalidate/integration_test.go`. Update only the lifecycle representation, candidate validation, transition-validation tests, and YAML round-trip tests needed for settled zero scopes and plural one-lineage attestations; do not derive progress, create tasks, project verdicts, mutate Git, render prompts, or change unrelated lifecycle fields.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#required-properties",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-152852-code-planning-main-1-replan-1-code-planning-3.md",
+    "validation": [
+      "go test -json ./internal/models ./internal/statevalidate -run '^(TestIntegrationLifecycleYAMLRoundTrip|TestIntegrationLifecycleValidation)$' -count=1"
+    ]
+  },
+  {
+    "desc": "Compute authoritative integration progress with complete bounded evidence for every merged leaf of one root lineage.",
+    "done_when": "`TestEvaluateIntegrationProgress` proves a settled zero-contributing-scope boundary emits one persistable non-nil empty cohort, a single root with branched merged replacement leaves remains one lineage and emits one deterministic approval-attestation set containing every leaf, persisted sets are accepted only when their reviewed-task membership is exact, and all existing planning, slice, repair, global-generation, exhaustion, purity, and determinism cases remain covered.",
+    "scope": "Own `internal/ops/integration_progress.go` and `internal/ops/integration_progress_test.go`. Re-emit the pure decision API against Task 1's lifecycle schema, including deterministic replacement-leaf attestation sets; do not write state, create tasks, project verdicts, mutate Git, render prompts, gate sprint completion, or modify reconciliation consumers.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#required-properties",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-152852-code-planning-main-1-replan-1-code-planning-3.md",
+    "validation": [
+      "go test -json ./internal/ops -run '^TestEvaluateIntegrationProgress$' -count=1"
+    ],
+    "depends_on": [
+      "0"
+    ]
+  }
+]
