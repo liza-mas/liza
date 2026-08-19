@@ -1,0 +1,25 @@
+[
+  {
+    "desc": "Project approved slice and global analysis verdicts into immutable lifecycle evidence at `SubmitVerdict`'s atomic persistence boundary.",
+    "done_when": "`TestSubmitVerdictIntegrationLifecycleProjection` proves final-quorum slice and global approvals append immutable evidence with distinct analyzed-source and analyst-report commits; partial approval and ordinary non-integration verdicts preserve existing behavior; global clean projection consumes lock-ordered clean-source verification; and public `SubmitVerdict` invokes the shared lifecycle transition validator so duplicate projection or attempted rewrite fails before any verdict state persists.",
+    "scope": "Own `internal/ops/submit_verdict.go` and `internal/ops/submit_verdict_test.go`. Add the alias-safe lifecycle transition-validation call and verdict projection inside the existing atomic review boundary; preserve quorum, history, impact, rejection escalation, reviewer release, pipeline-resolved statuses, and authorization. Do not create analysis tasks, derive progress, render context, mutate the integration ref, or decide sprint completion.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#final-closure",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-130654-code-planning-main-1-replan-1-code-planning-2.md",
+    "validation": [
+      "go test -json ./internal/ops -run '^TestSubmitVerdictIntegrationLifecycleProjection$' -count=1 | jq -e -s 'any(.[]; .Action == \"pass\" and .Test == \"TestSubmitVerdictIntegrationLifecycleProjection\") and all(.[]; .Action != \"fail\")'"
+    ]
+  },
+  {
+    "desc": "Materialize exactly the missing slice and global analysis work and closure projection requested by `EvaluateIntegrationProgress`.",
+    "done_when": "`TestReconcileIntegrationAnalyses` proves cohort freezing, one-lineage attestations, immutable slice source snapshots, and missing-task creation are one atomic idempotent transaction across repeated wake, restart, task-order permutation, and concurrent calls; public reconciliation rejects replacement of a frozen cohort through the shared lifecycle transition validator; global creation waits for resolved repair or replacement lineage; later current-HEAD generations are unique and bounded; slice/capability/review or generation exhaustion records an explicit blocked/exhausted closure; and the aggregate flow proves public `SubmitVerdict` cannot rewrite projected coverage.",
+    "scope": "Own `internal/ops/integration_reconcile.go` and `internal/ops/integration_reconcile_test.go`. Consume frozen-pipeline capability, authoritative progress decisions, persisted lifecycle types, shared transition validation, and existing Git read helpers to create initial slice/global analysis tasks and closure projection only. Do not modify verdict implementation, pipeline topology, progress policy, prompts, completion consumers, the integration ref, or sprint completion.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#global-integration",
+    "plan_ref": "specs/plans/20260818-sliced-integration-analysis/20260819-130654-code-planning-main-1-replan-1-code-planning-2.md",
+    "validation": [
+      "go test -json ./internal/ops -run '^TestReconcileIntegrationAnalyses$' -count=1 | jq -e -s 'any(.[]; .Action == \"pass\" and .Test == \"TestReconcileIntegrationAnalyses\") and all(.[]; .Action != \"fail\")'"
+    ],
+    "depends_on": [
+      "0"
+    ]
+  }
+]
