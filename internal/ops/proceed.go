@@ -168,6 +168,10 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 	if err != nil {
 		return nil, err
 	}
+	completionAuthorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, false)
+	if err != nil {
+		return nil, err
+	}
 
 	statePath := paths.New(projectRoot).StatePath()
 	blackboard := db.For(statePath)
@@ -179,6 +183,9 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 	}
 
 	err = blackboard.Modify(func(s *models.State) error {
+		if err := completionAuthorization.validateState(s, false); err != nil {
+			return err
+		}
 		// Validate sprint is COMPLETED
 		if s.Sprint.Status != models.SprintStatusCompleted {
 			return fmt.Errorf("sprint must be COMPLETED before proceeding (current: %s)", s.Sprint.Status)

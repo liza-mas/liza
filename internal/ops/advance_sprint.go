@@ -47,10 +47,24 @@ func AdvanceSprint(projectRoot string) (*AdvanceSprintResult, error) {
 	lizaPaths := paths.New(projectRoot)
 	statePath := lizaPaths.StatePath()
 	blackboard := db.For(statePath)
+	preflightState, err := blackboard.Read()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read state before sprint advance: %w", err)
+	}
+	if _, err := planSprintAdvance(preflightState, time.Now().UTC(), projectRoot); err != nil {
+		return nil, fmt.Errorf("failed to advance sprint: %w", err)
+	}
+	completionAuthorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, false)
+	if err != nil {
+		return nil, err
+	}
 
 	var result AdvanceSprintResult
 
-	err := blackboard.Modify(func(s *models.State) error {
+	err = blackboard.Modify(func(s *models.State) error {
+		if err := completionAuthorization.validateState(s, false); err != nil {
+			return err
+		}
 		plan, err := planSprintAdvance(s, time.Now().UTC(), projectRoot)
 		if err != nil {
 			return err

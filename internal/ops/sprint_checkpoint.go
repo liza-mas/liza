@@ -66,6 +66,21 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 		// This is fine for legacy projects without pipelines.
 	}
 
+	var completionAuthorization *effectiveIntegrationCompletionAuthorization
+	if trigger == models.CheckpointTriggerSprintComplete {
+		completionAuthorization, err = authorizeEffectiveIntegrationCompletion(projectRoot, true)
+		if err != nil {
+			return nil, err
+		}
+		state, err = blackboard.Read()
+		if err != nil {
+			return nil, fmt.Errorf("failed to re-read state after integration completion check: %w", err)
+		}
+		if err := completionAuthorization.validateState(state, true); err != nil {
+			return nil, err
+		}
+	}
+
 	timestamp := time.Now()
 	report := generateSprintSummary(state, timestamp)
 
@@ -74,6 +89,11 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 	}
 
 	err = blackboard.Modify(func(s *models.State) error {
+		if completionAuthorization != nil {
+			if err := completionAuthorization.validateState(s, true); err != nil {
+				return err
+			}
+		}
 		s.Sprint.Status = models.SprintStatusCheckpoint
 		s.Sprint.Timeline.CheckpointAt = &timestamp
 		s.Sprint.CheckpointTrigger = trigger

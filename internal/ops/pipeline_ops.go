@@ -7,10 +7,145 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
+	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 )
+
+type effectiveIntegrationCompletionAuthorization struct {
+	cohortFrozen        bool
+	integrationComplete bool
+	generation          int
+	analysisKey         string
+	sourceCommit        string
+}
+
+type effectiveIntegrationCompletionSnapshot struct {
+	decision     IntegrationProgressDecision
+	cohortFrozen bool
+	closure      *models.IntegrationClosure
+}
+
+var (
+	reconcileIntegrationAnalysesForProgression = ReconcileIntegrationAnalyses
+	readEffectiveIntegrationCompletion         = readEffectiveIntegrationCompletionSnapshot
+)
+
+// authorizeEffectiveIntegrationCompletion projects pending integration work,
+// then evaluates completion against live integration HEAD under the integration
+// mutation lock. A nil contributing set remains available to pre-integration
+// phase handoffs, but never authorizes an explicit sprint-complete claim.
+func authorizeEffectiveIntegrationCompletion(projectRoot string, requireSettled bool) (*effectiveIntegrationCompletionAuthorization, error) {
+	if _, err := reconcileIntegrationAnalysesForProgression(projectRoot); err != nil {
+		return nil, fmt.Errorf("reconcile integration completion precondition: %w", err)
+	}
+
+	snapshot, err := readEffectiveIntegrationCompletion(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate integration completion precondition: %w", err)
+	}
+	if !snapshot.cohortFrozen {
+		if requireSettled {
+			return nil, integrationCompletionPreconditionError(progressReason(integrationProgressWaitingPlanning))
+		}
+		return &effectiveIntegrationCompletionAuthorization{}, nil
+	}
+	if !snapshot.decision.IntegrationComplete {
+		reason := snapshot.decision.Blocked
+		if reason == nil {
+			reason = snapshot.decision.Waiting
+		}
+		if reason == nil && snapshot.decision.GlobalRequest != nil {
+			reason = progressReason(integrationProgressWaitingGlobalAnalysis)
+		}
+		if reason == nil {
+			reason = &IntegrationProgressReason{Code: "integration_incomplete"}
+		}
+		return nil, integrationCompletionPreconditionError(reason)
+	}
+	if snapshot.closure == nil {
+		return nil, integrationCompletionPreconditionError(progressReason(integrationProgressWaitingClosure))
+	}
+	return &effectiveIntegrationCompletionAuthorization{
+		cohortFrozen:        true,
+		integrationComplete: true,
+		generation:          snapshot.closure.Generation,
+		analysisKey:         snapshot.closure.AnalysisKey,
+		sourceCommit:        snapshot.closure.SourceCommit,
+	}, nil
+}
+
+func readEffectiveIntegrationCompletionSnapshot(projectRoot string) (effectiveIntegrationCompletionSnapshot, error) {
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		return effectiveIntegrationCompletionSnapshot{}, err
+	}
+	capability := resolver.SlicedIntegrationCapability()
+	blackboard := db.For(paths.New(projectRoot).StatePath())
+	gitWrapper := gitpkg.New(projectRoot)
+	var snapshot effectiveIntegrationCompletionSnapshot
+	err = withIntegrationMutationLock(projectRoot, "verify effective integration completion", func() error {
+		state, readErr := blackboard.Read()
+		if readErr != nil {
+			return fmt.Errorf("read integration state: %w", readErr)
+		}
+		branch := state.Config.IntegrationBranch
+		if branch == "" {
+			branch = "main"
+		}
+		head, headErr := gitWrapper.GetCommitSHA("refs/heads/" + branch)
+		if headErr != nil {
+			return fmt.Errorf("read live integration HEAD: %w", headErr)
+		}
+		decision, decisionErr := EvaluateIntegrationProgress(state, capability, head)
+		if decisionErr != nil {
+			return decisionErr
+		}
+		snapshot.decision = decision
+		snapshot.cohortFrozen = state.Goal.Integration != nil && state.Goal.Integration.ContributingSet != nil
+		if state.Goal.Integration != nil && state.Goal.Integration.Closure != nil {
+			closure := *state.Goal.Integration.Closure
+			snapshot.closure = &closure
+		}
+		return nil
+	})
+	return snapshot, err
+}
+
+func integrationCompletionPreconditionError(reason *IntegrationProgressReason) error {
+	details := map[string]any{"code": reason.Code}
+	if len(reason.TaskIDs) > 0 {
+		details["task_ids"] = append([]string(nil), reason.TaskIDs...)
+	}
+	if reason.Guidance != "" {
+		details["guidance"] = reason.Guidance
+	}
+	return &PreconditionError{
+		Reason:  "integration is not effectively complete: " + reason.Code,
+		Details: details,
+	}
+}
+
+func (authorization *effectiveIntegrationCompletionAuthorization) validateState(state *models.State, requireSettled bool) error {
+	frozen := state.Goal.Integration != nil && state.Goal.Integration.ContributingSet != nil
+	if !frozen {
+		if requireSettled || authorization.cohortFrozen {
+			return integrationCompletionPreconditionError(progressReason(integrationProgressWaitingPlanning))
+		}
+		return nil
+	}
+	if !authorization.cohortFrozen || !authorization.integrationComplete {
+		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+	}
+	closure := state.Goal.Integration.Closure
+	if closure == nil || closure.Status != models.IntegrationClosureStatusClean ||
+		closure.Generation != authorization.generation || closure.AnalysisKey != authorization.analysisKey ||
+		closure.SourceCommit != authorization.sourceCommit {
+		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+	}
+	return nil
+}
 
 // loadResolver loads the frozen pipeline config for the given project root.
 func loadResolver(projectRoot string) (*pipeline.Resolver, *pipeline.PipelineConfig, error) {

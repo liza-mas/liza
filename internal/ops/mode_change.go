@@ -162,6 +162,20 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 	}
 }
 
+func resumeRequiresEffectiveIntegrationCompletion(state *models.State, projectRoot string) (bool, error) {
+	switch state.Sprint.Status {
+	case models.SprintStatusCompleted:
+		return true, nil
+	case models.SprintStatusCheckpoint:
+		if models.IsTransitionCheckpointTrigger(state.Sprint.CheckpointTrigger) {
+			return false, nil
+		}
+		return allPlannedTasksTerminalForProject(state, projectRoot)
+	default:
+		return false, nil
+	}
+}
+
 // Resume transitions from PAUSED or CIRCUIT_BREAKER_TRIPPED to RUNNING,
 // and/or resumes sprint from CHECKPOINT or COMPLETED. No terminal I/O.
 //
@@ -176,13 +190,28 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 	lizaPaths := paths.New(projectRoot)
 	statePath := lizaPaths.StatePath()
 	blackboard := db.For(statePath)
+	preflightState, err := blackboard.Read()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read state before resume: %w", err)
+	}
+	requiresCompletion, err := resumeRequiresEffectiveIntegrationCompletion(preflightState, projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate resume completion branch: %w", err)
+	}
+	var completionAuthorization *effectiveIntegrationCompletionAuthorization
+	if requiresCompletion {
+		completionAuthorization, err = authorizeEffectiveIntegrationCompletion(projectRoot, false)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	timestamp := time.Now()
 	var resumedFrom string
 	var advanceResult *AdvanceSprintResult
 	runTransitionsAfterResume := false
 
-	err := blackboard.Modify(func(s *models.State) error {
+	err = blackboard.Modify(func(s *models.State) error {
 		currentMode := s.Config.Mode
 		if currentMode == "" {
 			currentMode = models.SystemModeRunning
@@ -198,6 +227,18 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 
 		if !canResumeMode && !canResumeSprint {
 			return &PreconditionError{Reason: fmt.Sprintf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)}
+		}
+		currentRequiresCompletion, completionErr := resumeRequiresEffectiveIntegrationCompletion(s, projectRoot)
+		if completionErr != nil {
+			return completionErr
+		}
+		if currentRequiresCompletion {
+			if completionAuthorization == nil {
+				return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+			}
+			if err := completionAuthorization.validateState(s, false); err != nil {
+				return err
+			}
 		}
 
 		wasTransitionCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint &&
