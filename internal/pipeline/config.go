@@ -27,6 +27,18 @@ type PipelineConfig struct {
 	Pipeline Pipeline `yaml:"pipeline"`
 }
 
+// SlicedIntegrationCapability reports whether a frozen pipeline can run the
+// sliced integration lifecycle.
+type SlicedIntegrationCapability struct {
+	Available bool
+	Code      string
+	Guidance  string
+}
+
+// SlicedIntegrationUpgradeRequired is returned when a frozen pipeline lacks
+// the complete sliced integration topology.
+const SlicedIntegrationUpgradeRequired = "pipeline_upgrade_required"
+
 // Pipeline defines roles, role-pairs, sub-pipelines, and entry-points.
 type Pipeline struct {
 	Roles               map[string]RoleDef     `yaml:"roles,omitempty"`

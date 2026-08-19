@@ -51,6 +51,40 @@ func NewResolver(config *PipelineConfig, opts ...ResolverOption) *Resolver {
 	return r
 }
 
+// SlicedIntegrationCapability reports whether the configured pipeline has the
+// complete slice and global integration topology required for sliced coverage.
+func (r *Resolver) SlicedIntegrationCapability() SlicedIntegrationCapability {
+	slicePair, sliceOK := r.config.Pipeline.RolePairs["slice-integration-pair"]
+	globalPair, globalOK := r.config.Pipeline.RolePairs["integration-pair"]
+	integration, integrationOK := r.config.Pipeline.SubPipelines["integration-subpipeline"]
+	if sliceOK && globalOK && integrationOK &&
+		slicePair.Doer == "integration-analyst" && slicePair.Reviewer == "integration-reviewer" &&
+		globalPair.Doer == "integration-analyst" && globalPair.Reviewer == "integration-reviewer" &&
+		slicePair.States.Clean != "" && globalPair.States.Clean != "" &&
+		slices.Contains(integration.Steps, "slice-integration-pair") &&
+		slices.Contains(integration.Steps, "integration-pair") &&
+		slices.Contains(integration.Steps, "coding-pair") &&
+		hasIntegrationFindingTransition(integration.Transitions, "slice-integration-to-fix", "slice-integration-pair.approved") &&
+		hasIntegrationFindingTransition(integration.Transitions, "integration-to-fix", "integration-pair.approved") {
+		return SlicedIntegrationCapability{Available: true}
+	}
+
+	return SlicedIntegrationCapability{
+		Code:     SlicedIntegrationUpgradeRequired,
+		Guidance: "Sliced integration requires a fresh workspace or a manual frozen pipeline topology update.",
+	}
+}
+
+func hasIntegrationFindingTransition(transitions []TransitionDef, name, from string) bool {
+	return slices.ContainsFunc(transitions, func(transition TransitionDef) bool {
+		return transition.Name == name &&
+			transition.From == from &&
+			transition.To == "coding-pair.initial" &&
+			transition.Trigger == "auto" &&
+			transition.Cardinality == "per-subtask"
+	})
+}
+
 func (r *Resolver) lookupStates(rolePair string) (*RolePairStates, error) {
 	rp, ok := r.config.Pipeline.RolePairs[rolePair]
 	if !ok {

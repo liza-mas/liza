@@ -3,11 +3,13 @@ package pipeline
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestLoad_ValidConfig(t *testing.T) {
@@ -740,6 +742,65 @@ func TestLoadFrozen_BackfillsLegacyMasterDecompositionOutputRefs(t *testing.T) {
 	})
 }
 
+func TestSlicedIntegrationPipelineLegacyFrozenUpgrade(t *testing.T) {
+	legacyData, err := os.ReadFile("testdata/valid-with-clean.yaml")
+	if err != nil {
+		t.Fatalf("read legacy pipeline fixture: %v", err)
+	}
+	legacyData = []byte(strings.Replace(string(legacyData), "        - await-verdict\n", "", 1))
+
+	legacy, err := LoadFromBytes(legacyData)
+	if err != nil {
+		t.Fatalf("LoadFromBytes(legacy): %v", err)
+	}
+	dir := t.TempDir()
+	testhelpers.SetupPipelineConfigBytes(t, dir, legacyData)
+
+	frozen, err := LoadFrozen(dir)
+	if err != nil {
+		t.Fatalf("LoadFrozen: %v", err)
+	}
+
+	if !reflect.DeepEqual(frozen.Pipeline.RolePairs, legacy.Pipeline.RolePairs) {
+		t.Errorf("LoadFrozen changed legacy role-pair topology")
+	}
+	if !reflect.DeepEqual(frozen.Pipeline.SubPipelines, legacy.Pipeline.SubPipelines) {
+		t.Errorf("LoadFrozen changed legacy sub-pipeline topology")
+	}
+	if !reflect.DeepEqual(frozen.Pipeline.PipelineTransitions, legacy.Pipeline.PipelineTransitions) {
+		t.Errorf("LoadFrozen changed legacy pipeline transitions")
+	}
+	if _, ok := frozen.Pipeline.RolePairs["integration-pair"]; !ok {
+		t.Error("LoadFrozen removed the legacy global integration pair")
+	}
+	if _, ok := frozen.Pipeline.RolePairs["slice-integration-pair"]; ok {
+		t.Error("LoadFrozen backfilled slice-integration-pair")
+	}
+	if _, err := NewResolver(frozen).Transition("slice-integration-to-fix"); err == nil {
+		t.Error("LoadFrozen backfilled slice-integration-to-fix")
+	}
+	if slices.Contains(frozen.Pipeline.SubPipelines["integration-subpipeline"].Steps, "slice-integration-pair") {
+		t.Error("LoadFrozen backfilled the slice integration step")
+	}
+	if !slices.Contains(frozen.Pipeline.Roles["coder"].AllowedOperations, "await-verdict") {
+		t.Error("LoadFrozen did not retain allowed-operation migration")
+	}
+
+	capability := NewResolver(frozen).SlicedIntegrationCapability()
+	if capability.Available {
+		t.Error("SlicedIntegrationCapability.Available = true for legacy topology")
+	}
+	if capability.Code != "pipeline_upgrade_required" {
+		t.Errorf("SlicedIntegrationCapability.Code = %q, want pipeline_upgrade_required", capability.Code)
+	}
+	if !strings.Contains(capability.Guidance, "fresh workspace") {
+		t.Errorf("SlicedIntegrationCapability.Guidance = %q, want fresh-workspace guidance", capability.Guidance)
+	}
+	if !strings.Contains(capability.Guidance, "manual") {
+		t.Errorf("SlicedIntegrationCapability.Guidance = %q, want manual-update guidance", capability.Guidance)
+	}
+}
+
 // --- Resolver tests ---
 
 func loadTestConfig(t *testing.T) *PipelineConfig {
@@ -1434,6 +1495,7 @@ func assertEmbeddedTaskSlugs(t *testing.T, cfg *PipelineConfig) {
 		"code-planning-main-pair": "cpm",
 		"code-planning-pair":      "cp",
 		"coding-pair":             "code",
+		"slice-integration-pair":  "sia",
 		"integration-pair":        "ia",
 	}
 	for name, want := range wantRolePairSlugs {
@@ -1448,6 +1510,7 @@ func assertEmbeddedTaskSlugs(t *testing.T, cfg *PipelineConfig) {
 		"arch-decompose":            "ar",
 		"code-plan-decompose":       "cp",
 		"code-plan-to-coding":       "code",
+		"slice-integration-to-fix":  "fix",
 		"integration-to-fix":        "fix",
 		"us-to-coding":              "arm",
 		"architecture-to-code-plan": "cp",
@@ -2147,6 +2210,119 @@ func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
 	orch := cfg.Pipeline.Roles["orchestrator"]
 	if orch.MaxInstances != 1 {
 		t.Errorf("orchestrator max-instances = %d, want 1", orch.MaxInstances)
+	}
+}
+
+func TestSlicedIntegrationPipelineTopology(t *testing.T) {
+	data, err := os.ReadFile("../embedded/pipeline.yaml")
+	if err != nil {
+		t.Fatalf("read embedded pipeline: %v", err)
+	}
+	cfg, err := LoadFromBytes(data)
+	if err != nil {
+		t.Fatalf("LoadFromBytes(embedded): %v", err)
+	}
+	resolver := NewResolver(cfg)
+
+	slicePair, ok := cfg.Pipeline.RolePairs["slice-integration-pair"]
+	if !ok {
+		t.Fatal("embedded pipeline missing slice-integration-pair")
+	}
+	globalPair, ok := cfg.Pipeline.RolePairs["integration-pair"]
+	if !ok {
+		t.Fatal("embedded pipeline missing integration-pair")
+	}
+	if slicePair.Doer != "integration-analyst" || slicePair.Reviewer != "integration-reviewer" {
+		t.Errorf("slice role reuse = (%q, %q), want (integration-analyst, integration-reviewer)", slicePair.Doer, slicePair.Reviewer)
+	}
+	if globalPair.Doer != "integration-analyst" || globalPair.Reviewer != "integration-reviewer" {
+		t.Errorf("global role reuse = (%q, %q), want (integration-analyst, integration-reviewer)", globalPair.Doer, globalPair.Reviewer)
+	}
+	if slicePair.TaskSlug != "sia" {
+		t.Errorf("slice task slug = %q, want sia", slicePair.TaskSlug)
+	}
+	wantSliceStates := RolePairStates{
+		Initial: "DRAFT_SLICE_INTEGRATION_ANALYSIS", Executing: "ANALYZING_SLICE_INTEGRATION",
+		Submitted: "SLICE_INTEGRATION_ANALYSIS_TO_REVIEW", Reviewing: "REVIEWING_SLICE_INTEGRATION_ANALYSIS",
+		Approved: "SLICE_INTEGRATION_ANALYSIS_APPROVED", Rejected: "SLICE_INTEGRATION_ANALYSIS_REJECTED",
+		Clean: "SLICE_INTEGRATION_ANALYSIS_CLEAN",
+	}
+	if slicePair.States != wantSliceStates {
+		t.Errorf("slice states = %+v, want %+v", slicePair.States, wantSliceStates)
+	}
+	if steps := cfg.Pipeline.SubPipelines["integration-subpipeline"].Steps; !slices.Equal(steps, []string{"slice-integration-pair", "integration-pair", "coding-pair"}) {
+		t.Errorf("integration steps = %v, want slice, global, coding", steps)
+	}
+
+	sliceStates := []string{
+		slicePair.States.Initial, slicePair.States.Executing, slicePair.States.Submitted,
+		slicePair.States.Reviewing, slicePair.States.Approved, slicePair.States.Rejected,
+		slicePair.States.Clean,
+	}
+	globalStates := []string{
+		globalPair.States.Initial, globalPair.States.Executing, globalPair.States.Submitted,
+		globalPair.States.Reviewing, globalPair.States.Approved, globalPair.States.Rejected,
+		globalPair.States.Clean,
+	}
+	for _, state := range sliceStates {
+		if state == "" {
+			t.Error("slice lifecycle contains an empty state")
+		}
+		if slices.Contains(globalStates, state) {
+			t.Errorf("slice lifecycle state %q is reused by the global lifecycle", state)
+		}
+	}
+
+	for _, want := range []TransitionDef{
+		{
+			Name: "slice-integration-to-fix", TaskSlug: "fix",
+			From: "slice-integration-pair.approved", To: "coding-pair.initial",
+			Trigger: "auto", Cardinality: "per-subtask",
+		},
+		{
+			Name: "integration-to-fix", TaskSlug: "fix",
+			From: "integration-pair.approved", To: "coding-pair.initial",
+			Trigger: "auto", Cardinality: "per-subtask",
+		},
+	} {
+		got, err := resolver.Transition(want.Name)
+		if err != nil {
+			t.Errorf("Transition(%q): %v", want.Name, err)
+			continue
+		}
+		if *got != want {
+			t.Errorf("Transition(%q) = %+v, want %+v", want.Name, *got, want)
+		}
+	}
+	if got := resolver.AvailableAutoTransitions(models.TaskStatus(slicePair.States.Approved), nil); !slices.Equal(got, []string{"slice-integration-to-fix"}) {
+		t.Errorf("slice approved auto transitions = %v, want [slice-integration-to-fix]", got)
+	}
+	if got := resolver.AvailableAutoTransitions(models.TaskStatus(globalPair.States.Approved), nil); !slices.Equal(got, []string{"integration-to-fix"}) {
+		t.Errorf("global approved auto transitions = %v, want [integration-to-fix]", got)
+	}
+	for _, clean := range []string{slicePair.States.Clean, globalPair.States.Clean} {
+		if successors := resolver.TransitionMap()[models.TaskStatus(clean)]; len(successors) != 0 {
+			t.Errorf("clean state %q successors = %v, want terminal", clean, successors)
+		}
+	}
+
+	capability := resolver.SlicedIntegrationCapability()
+	if !capability.Available || capability.Code != "" || capability.Guidance != "" {
+		t.Errorf("SlicedIntegrationCapability() = %+v, want available capability", capability)
+	}
+
+	partial, err := LoadFromBytes(data)
+	if err != nil {
+		t.Fatalf("LoadFromBytes(partial): %v", err)
+	}
+	integration := partial.Pipeline.SubPipelines["integration-subpipeline"]
+	integration.Transitions = slices.DeleteFunc(integration.Transitions, func(transition TransitionDef) bool {
+		return transition.Name == "slice-integration-to-fix"
+	})
+	partial.Pipeline.SubPipelines["integration-subpipeline"] = integration
+	partialCapability := NewResolver(partial).SlicedIntegrationCapability()
+	if partialCapability.Available || partialCapability.Code != "pipeline_upgrade_required" {
+		t.Errorf("partial SlicedIntegrationCapability() = %+v, want pipeline upgrade required", partialCapability)
 	}
 }
 

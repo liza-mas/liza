@@ -523,6 +523,19 @@ pipeline:
         approved: ARCHITECTURE_APPROVED
         rejected: ARCHITECTURE_REJECTED
 
+    slice-integration-pair:
+      doer: integration-analyst
+      reviewer: integration-reviewer
+      task-slug: sia
+      states:
+        initial: DRAFT_SLICE_INTEGRATION_ANALYSIS
+        executing: ANALYZING_SLICE_INTEGRATION
+        submitted: SLICE_INTEGRATION_ANALYSIS_TO_REVIEW
+        reviewing: REVIEWING_SLICE_INTEGRATION_ANALYSIS
+        approved: SLICE_INTEGRATION_ANALYSIS_APPROVED
+        rejected: SLICE_INTEGRATION_ANALYSIS_REJECTED
+        clean: SLICE_INTEGRATION_ANALYSIS_CLEAN
+
     integration-pair:
       doer: integration-analyst
       reviewer: integration-reviewer
@@ -589,9 +602,16 @@ pipeline:
 
     integration-subpipeline:
       steps:
+        - slice-integration-pair
         - integration-pair
         - coding-pair
       transitions:
+        - name: slice-integration-to-fix
+          task-slug: fix
+          from: slice-integration-pair.approved
+          to: coding-pair.initial
+          trigger: auto
+          cardinality: per-subtask
         - name: integration-to-fix
           task-slug: fix
           from: integration-pair.approved
