@@ -47,9 +47,9 @@ No replacement task redefines progress evaluation, configuration, pipeline capab
 | `IntegrationAnalysisMetadata persistence schema` | Task 1 | Task 3 |
 | `IntegrationMutationReceipt persistence schema` | Task 1 | Task 2 |
 | `integration lifecycle invariant validation` | Task 1 | Tasks 2 and 3 |
-| `integration mutation receipt production and persistence` | Task 2 | Task 3 and retained downstream readers |
-| `integration mutation linearization protocol` | Task 2 | Task 3 and retained completion/race scopes |
-| `clean-source verification under the integration mutation lock` | Task 2 | Task 3 and retained completion/race scopes |
+| `integration mutation receipt production and persistence` | Task 2 | — |
+| `integration mutation linearization protocol` | Task 2 | Retained Tasks 8, 10, and 11 |
+| `clean-source verification under the integration mutation lock` | Task 2 | Task 3 |
 | `ReconcileIntegrationAnalyses` | Task 3 | Retained Tasks 7-11 |
 | `analysis verdict projection` | Task 3 | Retained Tasks 7-11 |
 | `idempotent analysis task materialization` | Task 3 | Retained Tasks 7-11 |
@@ -124,7 +124,7 @@ Decomposition: `owned_files=[internal/ops/integration_reconcile.go, internal/ops
 
 ## Systemic Decomposition Review
 
-The systemic lens was applied to schema ownership, transition enforcement, public mutation boundaries, external dependency remapping, retained-scope references, and downstream fan-out.
+The systemic lens was applied to schema ownership, transition enforcement, public mutation boundaries, external dependency remapping, retained-scope references, and exact interface-by-interface downstream fan-out.
 
 No systemic issues identified.
 
