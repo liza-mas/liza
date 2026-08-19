@@ -54,41 +54,37 @@ func AdvanceSprint(projectRoot string) (*AdvanceSprintResult, error) {
 	if _, err := planSprintAdvance(preflightState, time.Now().UTC(), projectRoot); err != nil {
 		return nil, fmt.Errorf("failed to advance sprint: %w", err)
 	}
-	completionAuthorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, false)
-	if err != nil {
-		return nil, err
-	}
-	runBeforeEffectiveIntegrationProgressionMutationTestHook()
-
 	var result AdvanceSprintResult
 
-	err = blackboard.Modify(func(s *models.State) error {
-		if err := completionAuthorization.validateState(s, false); err != nil {
-			return err
-		}
-		plan, err := planSprintAdvance(s, time.Now().UTC(), projectRoot)
-		if err != nil {
-			return err
-		}
+	err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "advance sprint", false, func(completionAuthorization *effectiveIntegrationCompletionAuthorization) error {
+		return blackboard.Modify(func(s *models.State) error {
+			if err := completionAuthorization.validateState(s, false); err != nil {
+				return err
+			}
+			plan, err := planSprintAdvance(s, time.Now().UTC(), projectRoot)
+			if err != nil {
+				return err
+			}
 
-		archivePath := lizaPaths.SprintArchivePath(plan.archivedSprint.Number)
+			archivePath := lizaPaths.SprintArchivePath(plan.archivedSprint.Number)
 
-		// Write archive BEFORE mutating state. If this fails, Modify aborts
-		// and state is unchanged — no data loss.
-		if err := writeSprintArchive(archivePath, &plan.archivedSprint); err != nil {
-			return fmt.Errorf("archive write failed (state unchanged): %w", err)
-		}
+			// Write archive BEFORE mutating state. If this fails, Modify aborts
+			// and state is unchanged — no data loss.
+			if err := writeSprintArchive(archivePath, &plan.archivedSprint); err != nil {
+				return fmt.Errorf("archive write failed (state unchanged): %w", err)
+			}
 
-		applySprintAdvance(s, plan)
+			applySprintAdvance(s, plan)
 
-		result = AdvanceSprintResult{
-			ArchivedSprintID: plan.archivedSprint.ID,
-			NewSprintID:      plan.newSprintID,
-			NewSprintNumber:  plan.newNumber,
-			CarriedTasks:     plan.carriedTasks,
-			ArchivePath:      archivePath,
-		}
-		return nil
+			result = AdvanceSprintResult{
+				ArchivedSprintID: plan.archivedSprint.ID,
+				NewSprintID:      plan.newSprintID,
+				NewSprintNumber:  plan.newNumber,
+				CarriedTasks:     plan.carriedTasks,
+				ArchivePath:      archivePath,
+			}
+			return nil
+		})
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to advance sprint: %w", err)

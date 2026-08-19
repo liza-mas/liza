@@ -198,72 +198,70 @@ func Resume(projectRoot, changedBy string) (*ResumeResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate resume completion branch: %w", err)
 	}
-	var completionAuthorization *effectiveIntegrationCompletionAuthorization
-	if requiresCompletion {
-		completionAuthorization, err = authorizeEffectiveIntegrationCompletion(projectRoot, false)
-		if err != nil {
-			return nil, err
-		}
-		runBeforeEffectiveIntegrationProgressionMutationTestHook()
-	}
-
 	timestamp := time.Now()
 	var resumedFrom string
 	var advanceResult *AdvanceSprintResult
 	runTransitionsAfterResume := false
 
-	err = blackboard.Modify(func(s *models.State) error {
-		currentMode := s.Config.Mode
-		if currentMode == "" {
-			currentMode = models.SystemModeRunning
-		}
-
-		// Fail fast on STOPPED — no sprint mutations allowed while system is stopped.
-		if currentMode == models.SystemModeStopped {
-			return &PreconditionError{Reason: "cannot resume from STOPPED state (system must be restarted)"}
-		}
-
-		canResumeMode := currentMode == models.SystemModePaused || currentMode == models.SystemModeCircuitBreakerTripped
-		canResumeSprint := s.Sprint.Status == models.SprintStatusCheckpoint || s.Sprint.Status == models.SprintStatusCompleted
-
-		if !canResumeMode && !canResumeSprint {
-			return &PreconditionError{Reason: fmt.Sprintf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)}
-		}
-		currentRequiresCompletion, completionErr := resumeRequiresEffectiveIntegrationCompletion(s, projectRoot)
-		if completionErr != nil {
-			return completionErr
-		}
-		if currentRequiresCompletion {
-			if completionAuthorization == nil {
-				return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+	resumeMutation := func(completionAuthorization *effectiveIntegrationCompletionAuthorization) error {
+		return blackboard.Modify(func(s *models.State) error {
+			currentMode := s.Config.Mode
+			if currentMode == "" {
+				currentMode = models.SystemModeRunning
 			}
-			if err := completionAuthorization.validateState(s, false); err != nil {
+
+			// Fail fast on STOPPED — no sprint mutations allowed while system is stopped.
+			if currentMode == models.SystemModeStopped {
+				return &PreconditionError{Reason: "cannot resume from STOPPED state (system must be restarted)"}
+			}
+
+			canResumeMode := currentMode == models.SystemModePaused || currentMode == models.SystemModeCircuitBreakerTripped
+			canResumeSprint := s.Sprint.Status == models.SprintStatusCheckpoint || s.Sprint.Status == models.SprintStatusCompleted
+
+			if !canResumeMode && !canResumeSprint {
+				return &PreconditionError{Reason: fmt.Sprintf("system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: %s, sprint status: %s)", currentMode, s.Sprint.Status)}
+			}
+			currentRequiresCompletion, completionErr := resumeRequiresEffectiveIntegrationCompletion(s, projectRoot)
+			if completionErr != nil {
+				return completionErr
+			}
+			if currentRequiresCompletion {
+				if completionAuthorization == nil {
+					return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+				}
+				if err := completionAuthorization.validateState(s, false); err != nil {
+					return err
+				}
+			}
+
+			wasTransitionCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint &&
+				models.IsTransitionCheckpointTrigger(s.Sprint.CheckpointTrigger)
+
+			resumedFrom = resumeSystemMode(s, timestamp, changedBy)
+
+			sprintDesc, advResult, err := resumeSprint(s, lizaPaths, projectRoot, timestamp)
+			if err != nil {
 				return err
 			}
-		}
-
-		wasTransitionCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint &&
-			models.IsTransitionCheckpointTrigger(s.Sprint.CheckpointTrigger)
-
-		resumedFrom = resumeSystemMode(s, timestamp, changedBy)
-
-		sprintDesc, advResult, err := resumeSprint(s, lizaPaths, projectRoot, timestamp)
-		if err != nil {
-			return err
-		}
-		advanceResult = advResult
-		runTransitionsAfterResume = advResult != nil ||
-			(wasTransitionCheckpoint && s.Sprint.Status == models.SprintStatusInProgress)
-		if sprintDesc != "" {
-			if resumedFrom != "" {
-				resumedFrom += " and " + sprintDesc
-			} else {
-				resumedFrom = sprintDesc
+			advanceResult = advResult
+			runTransitionsAfterResume = advResult != nil ||
+				(wasTransitionCheckpoint && s.Sprint.Status == models.SprintStatusInProgress)
+			if sprintDesc != "" {
+				if resumedFrom != "" {
+					resumedFrom += " and " + sprintDesc
+				} else {
+					resumedFrom = sprintDesc
+				}
 			}
-		}
 
-		return nil
-	})
+			return nil
+		})
+	}
+	if requiresCompletion {
+		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "resume", false, resumeMutation)
+	} else {
+		err = resumeMutation(nil)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to resume system: %w", err)

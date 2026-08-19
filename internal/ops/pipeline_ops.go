@@ -30,16 +30,66 @@ type effectiveIntegrationCompletionSnapshot struct {
 }
 
 var (
-	reconcileIntegrationAnalysesForProgression            = ReconcileIntegrationAnalyses
-	readEffectiveIntegrationCompletion                    = readEffectiveIntegrationCompletionSnapshot
-	beforeEffectiveIntegrationProgressionMutationTestHook func()
+	reconcileIntegrationAnalysesForProgression                = ReconcileIntegrationAnalyses
+	readEffectiveIntegrationCompletion                        = readEffectiveIntegrationCompletionSnapshot
+	beforeEffectiveIntegrationProgressionMutationTestHook     func()
+	beforeEffectiveIntegrationCompletionLinearizationTestHook func(string)
 )
+
+// withEffectiveIntegrationCompletionLinearization orders sprint finalization
+// with integration ref mutation without extending the integration mutation lock
+// across a blackboard write. The lock order is completion -> mutation -> read;
+// both receipt and progression writes happen after the mutation lock is released.
+func withEffectiveIntegrationCompletionLinearization(projectRoot, operation string, fn func() error) error {
+	if beforeEffectiveIntegrationCompletionLinearizationTestHook != nil {
+		beforeEffectiveIntegrationCompletionLinearizationTestHook(operation)
+	}
+	lock, err := projectFileLock(projectRoot, "integration-completion")
+	if err != nil {
+		return err
+	}
+	return lock.WithTimeout(integrationMutationLockTimeout).WithLockOperation(operation, fn)
+}
+
+func withEffectiveIntegrationCompletionAuthorization(
+	projectRoot, operation string,
+	requireSettled bool,
+	fn func(*effectiveIntegrationCompletionAuthorization) error,
+) error {
+	if !requireSettled {
+		state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+		if err != nil {
+			return fmt.Errorf("read integration completion precondition: %w", err)
+		}
+		cohortFrozen := state.Goal.Integration != nil && state.Goal.Integration.ContributingSet != nil
+		if !cohortFrozen {
+			runBeforeEffectiveIntegrationProgressionMutationTestHook()
+			return fn(&effectiveIntegrationCompletionAuthorization{})
+		}
+	}
+	return withEffectiveIntegrationCompletionLinearization(projectRoot, "progression "+operation, func() error {
+		authorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, requireSettled)
+		if err != nil {
+			return err
+		}
+		runBeforeEffectiveIntegrationProgressionMutationTestHook()
+		return fn(authorization)
+	})
+}
 
 // authorizeEffectiveIntegrationCompletion projects pending integration work,
 // then evaluates completion against live integration HEAD under the integration
 // mutation lock. A nil contributing set remains available to pre-integration
 // phase handoffs, but never authorizes an explicit sprint-complete claim.
 func authorizeEffectiveIntegrationCompletion(projectRoot string, requireSettled bool) (*effectiveIntegrationCompletionAuthorization, error) {
+	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+	if err != nil {
+		return nil, fmt.Errorf("read integration completion precondition: %w", err)
+	}
+	cohortFrozen := state.Goal.Integration != nil && state.Goal.Integration.ContributingSet != nil
+	if !cohortFrozen && !requireSettled {
+		return &effectiveIntegrationCompletionAuthorization{}, nil
+	}
 	if _, err := reconcileIntegrationAnalysesForProgression(projectRoot); err != nil {
 		return nil, fmt.Errorf("reconcile integration completion precondition: %w", err)
 	}
@@ -146,9 +196,9 @@ func (authorization *effectiveIntegrationCompletionAuthorization) validateState(
 		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
 	}
 	closure := state.Goal.Integration.Closure
-	// MergeWorktree persists a mutation receipt before returning. Rechecking the
-	// receipt count inside the progression transaction closes the authorization
-	// race without acquiring the integration lock under the blackboard lock.
+	// The outer completion lock excludes cooperating ref mutations here. Recheck
+	// closure identity and receipt count to reject any durable state drift before
+	// the progression transaction commits.
 	if closure == nil || closure.Status != models.IntegrationClosureStatusClean ||
 		closure.Generation != authorization.generation || closure.AnalysisKey != authorization.analysisKey ||
 		closure.SourceCommit != authorization.sourceCommit ||

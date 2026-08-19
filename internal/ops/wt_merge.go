@@ -340,15 +340,17 @@ func rollbackMergedCommit(projectRoot string, gitWrapper *git.Git, integrationRe
 }
 
 func rollbackMergedCommitAndPersist(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID string) error {
-	mutation, rollbackErr := rollbackMergedCommit(projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID)
-	if receiptErr := persistIntegrationMutationReceipt(bb, mutation); receiptErr != nil {
-		receiptErr = fmt.Errorf("failed to persist rollback integration mutation receipt: %w", receiptErr)
-		if rollbackErr != nil {
-			return errors.Join(rollbackErr, receiptErr)
+	return withEffectiveIntegrationCompletionLinearization(projectRoot, "rollback "+taskID, func() error {
+		mutation, rollbackErr := rollbackMergedCommit(projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID)
+		if receiptErr := persistIntegrationMutationReceipt(bb, mutation); receiptErr != nil {
+			receiptErr = fmt.Errorf("failed to persist rollback integration mutation receipt: %w", receiptErr)
+			if rollbackErr != nil {
+				return errors.Join(rollbackErr, receiptErr)
+			}
+			return receiptErr
 		}
-		return receiptErr
-	}
-	return rollbackErr
+		return rollbackErr
+	})
 }
 
 func buildArtifactGuardHook(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, taskID string) func(candidateTreeish string) error {
@@ -625,31 +627,34 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 	artifactGuardHook := buildArtifactGuardHook(bb, projectRoot, gitWrapper, taskID)
 	var outcome *casMergeOutcome
 	var forwardMutation *integrationRefMutation
-	err = withIntegrationMutationLock(projectRoot, "forward "+taskID, func() error {
-		var mergeErr error
-		outcome, mergeErr = performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, artifactGuardHook)
-		if mergeErr != nil || outcome.conflict {
-			return mergeErr
-		}
-		if outcome.preMergeHEAD != outcome.mergeCommit {
-			forwardMutation = &integrationRefMutation{
-				taskID:       taskID,
-				beforeCommit: outcome.preMergeHEAD,
-				afterCommit:  outcome.mergeCommit,
+	err = withEffectiveIntegrationCompletionLinearization(projectRoot, "forward "+taskID, func() error {
+		mutationErr := withIntegrationMutationLock(projectRoot, "forward "+taskID, func() error {
+			var mergeErr error
+			outcome, mergeErr = performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, artifactGuardHook)
+			if mergeErr != nil || outcome.conflict {
+				return mergeErr
 			}
+			if outcome.preMergeHEAD != outcome.mergeCommit {
+				forwardMutation = &integrationRefMutation{
+					taskID:       taskID,
+					beforeCommit: outcome.preMergeHEAD,
+					afterCommit:  outcome.mergeCommit,
+				}
+			}
+			if syncErr := gitWrapper.SyncMergedFiles(outcome.preMergeHEAD, outcome.mergeCommit); syncErr != nil {
+				return fmt.Errorf("failed to sync working tree after merge: %w", syncErr)
+			}
+			return nil
+		})
+		if receiptErr := persistIntegrationMutationReceipt(bb, forwardMutation); receiptErr != nil {
+			receiptErr = fmt.Errorf("failed to persist integration mutation receipt: %w", receiptErr)
+			if mutationErr != nil {
+				return errors.Join(mutationErr, receiptErr)
+			}
+			return receiptErr
 		}
-		if syncErr := gitWrapper.SyncMergedFiles(outcome.preMergeHEAD, outcome.mergeCommit); syncErr != nil {
-			return fmt.Errorf("failed to sync working tree after merge: %w", syncErr)
-		}
-		return nil
+		return mutationErr
 	})
-	if receiptErr := persistIntegrationMutationReceipt(bb, forwardMutation); receiptErr != nil {
-		receiptErr = fmt.Errorf("failed to persist integration mutation receipt: %w", receiptErr)
-		if err != nil {
-			return nil, errors.Join(err, receiptErr)
-		}
-		return nil, receiptErr
-	}
 	if err != nil {
 		var artifactErr *candidateArtifactGuardError
 		if errors.As(err, &artifactErr) {

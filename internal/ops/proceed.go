@@ -214,18 +214,15 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 		return nil, fmt.Errorf("proceed failed: %w", err)
 	}
 
-	completionAuthorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, false)
-	if err != nil {
-		return nil, err
-	}
-	runBeforeEffectiveIntegrationProgressionMutationTestHook()
 	result := newResult()
 
-	err = blackboard.Modify(func(s *models.State) error {
-		if err := completionAuthorization.validateState(s, false); err != nil {
-			return err
-		}
-		return execute(s, result)
+	err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "proceed", false, func(completionAuthorization *effectiveIntegrationCompletionAuthorization) error {
+		return blackboard.Modify(func(s *models.State) error {
+			if err := completionAuthorization.validateState(s, false); err != nil {
+				return err
+			}
+			return execute(s, result)
+		})
 	})
 
 	if err != nil {

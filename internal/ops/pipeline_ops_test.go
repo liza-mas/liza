@@ -169,24 +169,168 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 		}
 	})
 
-	t.Run("public integration mutation between authorization and progression rejects resume and advance", func(t *testing.T) {
+	t.Run("paused integration mutation receipt blocks stale resume and advance", func(t *testing.T) {
 		for _, path := range []effectiveCompletionPath{effectiveCompletionPaths()[1], effectiveCompletionPaths()[3]} {
 			t.Run(path.name, func(t *testing.T) {
 				fixture := newEffectiveCompletionFixture(t, true)
 				path.prepare(t, fixture)
-				previousHook := beforeEffectiveIntegrationProgressionMutationTestHook
-				beforeEffectiveIntegrationProgressionMutationTestHook = func() {
-					beforeEffectiveIntegrationProgressionMutationTestHook = nil
-					taskID, agentID := fixture.installPublicIntegrationMutation(t)
-					if _, err := MergeWorktree(fixture.projectRoot, taskID, agentID); err != nil {
+				taskID, agentID := fixture.installPublicIntegrationMutation(t)
+				receiptPersisting := make(chan struct{})
+				releaseReceipt := make(chan struct{})
+				previousReceiptHook := integrationMutationReceiptPersistTestHook
+				integrationMutationReceiptPersistTestHook = func(models.IntegrationMutationReceipt) {
+					close(receiptPersisting)
+					<-releaseReceipt
+				}
+				defer func() { integrationMutationReceiptPersistTestHook = previousReceiptHook }()
+
+				mergeDone := make(chan error, 1)
+				go func() {
+					_, err := MergeWorktree(fixture.projectRoot, taskID, agentID)
+					mergeDone <- err
+				}()
+				select {
+				case <-receiptPersisting:
+				case <-time.After(2 * time.Second):
+					close(releaseReceipt)
+					t.Fatal("timed out waiting for integration ref mutation")
+				}
+
+				progressionAttempted := make(chan struct{})
+				previousLinearizationHook := beforeEffectiveIntegrationCompletionLinearizationTestHook
+				beforeEffectiveIntegrationCompletionLinearizationTestHook = func(operation string) {
+					if strings.HasPrefix(operation, "progression ") {
+						close(progressionAttempted)
+					}
+				}
+				defer func() { beforeEffectiveIntegrationCompletionLinearizationTestHook = previousLinearizationHook }()
+				progressionDone := make(chan error, 1)
+				go func() { progressionDone <- path.invoke(fixture.projectRoot) }()
+				select {
+				case <-progressionAttempted:
+				case <-time.After(2 * time.Second):
+					close(releaseReceipt)
+					t.Fatal("timed out waiting for stale progression attempt")
+				}
+				select {
+				case err := <-progressionDone:
+					close(releaseReceipt)
+					t.Fatalf("progression returned before mutation receipt persisted: %v", err)
+				default:
+				}
+				path.assertRejected(t, fixture)
+
+				close(releaseReceipt)
+				select {
+				case err := <-mergeDone:
+					if err != nil {
 						t.Fatalf("MergeWorktree() error = %v", err)
 					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("timed out waiting for integration mutation")
+				}
+				select {
+				case err := <-progressionDone:
+					requireEffectiveCompletionPrecondition(t, err)
+				case <-time.After(5 * time.Second):
+					t.Fatal("timed out waiting for stale progression rejection")
+				}
+				path.assertRejected(t, fixture)
+			})
+		}
+	})
+
+	t.Run("authorized progression serializes a later public integration mutation", func(t *testing.T) {
+		for _, path := range []effectiveCompletionPath{effectiveCompletionPaths()[1], effectiveCompletionPaths()[3]} {
+			t.Run(path.name, func(t *testing.T) {
+				fixture := newEffectiveCompletionFixture(t, true)
+				path.prepare(t, fixture)
+				var taskID, agentID string
+
+				progressionAuthorized := make(chan struct{})
+				releaseProgression := make(chan struct{})
+				previousHook := beforeEffectiveIntegrationProgressionMutationTestHook
+				beforeEffectiveIntegrationProgressionMutationTestHook = func() {
+					taskID, agentID = fixture.installPublicIntegrationMutation(t)
+					close(progressionAuthorized)
+					<-releaseProgression
 				}
 				defer func() { beforeEffectiveIntegrationProgressionMutationTestHook = previousHook }()
 
-				err := path.invoke(fixture.projectRoot)
-				requireEffectiveCompletionPrecondition(t, err)
-				path.assertRejected(t, fixture)
+				progressionDone := make(chan error, 1)
+				go func() { progressionDone <- path.invoke(fixture.projectRoot) }()
+				select {
+				case <-progressionAuthorized:
+				case <-time.After(2 * time.Second):
+					t.Fatal("timed out waiting for progression authorization")
+				}
+
+				mutationAttempted := make(chan struct{})
+				previousLinearizationHook := beforeEffectiveIntegrationCompletionLinearizationTestHook
+				beforeEffectiveIntegrationCompletionLinearizationTestHook = func(operation string) {
+					if strings.HasPrefix(operation, "forward ") {
+						close(mutationAttempted)
+					}
+				}
+				defer func() { beforeEffectiveIntegrationCompletionLinearizationTestHook = previousLinearizationHook }()
+				receiptPersisting := make(chan struct{})
+				releaseReceipt := make(chan struct{})
+				previousReceiptHook := integrationMutationReceiptPersistTestHook
+				integrationMutationReceiptPersistTestHook = func(models.IntegrationMutationReceipt) {
+					close(receiptPersisting)
+					<-releaseReceipt
+				}
+				defer func() { integrationMutationReceiptPersistTestHook = previousReceiptHook }()
+				mergeDone := make(chan error, 1)
+				go func() {
+					_, err := MergeWorktree(fixture.projectRoot, taskID, agentID)
+					mergeDone <- err
+				}()
+				select {
+				case <-mutationAttempted:
+				case <-time.After(2 * time.Second):
+					close(releaseProgression)
+					t.Fatal("timed out waiting for integration mutation linearization attempt")
+				}
+				select {
+				case <-receiptPersisting:
+					close(releaseProgression)
+					close(releaseReceipt)
+					t.Fatal("integration ref advanced while authorized progression was pending")
+				default:
+				}
+
+				close(releaseProgression)
+				select {
+				case err := <-progressionDone:
+					if err != nil {
+						t.Fatalf("progression error = %v", err)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("timed out waiting for authorized progression")
+				}
+				path.assertAllowed(t, fixture)
+				select {
+				case <-receiptPersisting:
+				case <-time.After(2 * time.Second):
+					t.Fatal("timed out waiting for integration ref mutation")
+				}
+				close(releaseReceipt)
+				select {
+				case err := <-mergeDone:
+					if err != nil {
+						t.Fatalf("MergeWorktree() error = %v", err)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("timed out waiting for integration mutation")
+				}
+				snapshot, err := readEffectiveIntegrationCompletionSnapshot(fixture.projectRoot)
+				if err != nil {
+					t.Fatalf("readEffectiveIntegrationCompletionSnapshot() error = %v", err)
+				}
+				if snapshot.decision.IntegrationComplete {
+					t.Fatal("later integration mutation left prior completion effective")
+				}
 			})
 		}
 	})

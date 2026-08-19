@@ -67,56 +67,57 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 		// This is fine for legacy projects without pipelines.
 	}
 
-	var completionAuthorization *effectiveIntegrationCompletionAuthorization
-	if trigger == models.CheckpointTriggerSprintComplete {
-		completionAuthorization, err = authorizeEffectiveIntegrationCompletion(projectRoot, true)
-		if err != nil {
-			return nil, err
-		}
-		state, err = blackboard.Read()
-		if err != nil {
-			return nil, fmt.Errorf("failed to re-read state after integration completion check: %w", err)
-		}
-		if err := completionAuthorization.validateState(state, true); err != nil {
-			return nil, err
-		}
-	}
-
 	timestamp := time.Now()
-	report := generateSprintSummary(state, timestamp)
-	stagedReport, err := os.CreateTemp(filepath.Dir(reportPath), ".sprint-summary-*.tmp")
-	if err != nil {
-		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
-	}
-	stagedReportPath := stagedReport.Name()
-	defer os.Remove(stagedReportPath)
-	if _, err := stagedReport.WriteString(report); err != nil {
-		_ = stagedReport.Close()
-		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
-	}
-	if err := stagedReport.Chmod(0644); err != nil {
-		_ = stagedReport.Close()
-		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
-	}
-	if err := stagedReport.Close(); err != nil {
-		return nil, fmt.Errorf("failed to stage sprint summary: %w", err)
-	}
-	runBeforeEffectiveIntegrationProgressionMutationTestHook()
-
-	err = blackboard.Modify(func(s *models.State) error {
+	checkpoint := func(completionAuthorization *effectiveIntegrationCompletionAuthorization) error {
 		if completionAuthorization != nil {
-			if err := completionAuthorization.validateState(s, true); err != nil {
+			state, err = blackboard.Read()
+			if err != nil {
+				return fmt.Errorf("failed to re-read state after integration completion check: %w", err)
+			}
+			if err := completionAuthorization.validateState(state, true); err != nil {
 				return err
 			}
 		}
-		if err := os.Rename(stagedReportPath, reportPath); err != nil {
-			return fmt.Errorf("failed to write sprint summary: %w", err)
+
+		report := generateSprintSummary(state, timestamp)
+		stagedReport, err := os.CreateTemp(filepath.Dir(reportPath), ".sprint-summary-*.tmp")
+		if err != nil {
+			return fmt.Errorf("failed to stage sprint summary: %w", err)
 		}
-		s.Sprint.Status = models.SprintStatusCheckpoint
-		s.Sprint.Timeline.CheckpointAt = &timestamp
-		s.Sprint.CheckpointTrigger = trigger
-		return nil
-	})
+		stagedReportPath := stagedReport.Name()
+		defer os.Remove(stagedReportPath)
+		if _, err := stagedReport.WriteString(report); err != nil {
+			_ = stagedReport.Close()
+			return fmt.Errorf("failed to stage sprint summary: %w", err)
+		}
+		if err := stagedReport.Chmod(0644); err != nil {
+			_ = stagedReport.Close()
+			return fmt.Errorf("failed to stage sprint summary: %w", err)
+		}
+		if err := stagedReport.Close(); err != nil {
+			return fmt.Errorf("failed to stage sprint summary: %w", err)
+		}
+
+		return blackboard.Modify(func(s *models.State) error {
+			if completionAuthorization != nil {
+				if err := completionAuthorization.validateState(s, true); err != nil {
+					return err
+				}
+			}
+			if err := os.Rename(stagedReportPath, reportPath); err != nil {
+				return fmt.Errorf("failed to write sprint summary: %w", err)
+			}
+			s.Sprint.Status = models.SprintStatusCheckpoint
+			s.Sprint.Timeline.CheckpointAt = &timestamp
+			s.Sprint.CheckpointTrigger = trigger
+			return nil
+		})
+	}
+	if trigger == models.CheckpointTriggerSprintComplete {
+		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "sprint checkpoint", true, checkpoint)
+	} else {
+		err = checkpoint(nil)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to update sprint status: %w", err)
