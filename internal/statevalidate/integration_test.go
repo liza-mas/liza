@@ -329,6 +329,13 @@ func TestIntegrationLifecycleValidation(t *testing.T) {
 			wantErr: "contributing set cannot change",
 		},
 		{
+			name: "contributing set root replaced by duplicate",
+			mutate: func(state *models.State) {
+				state.Goal.Integration.ContributingSet.Scopes[1].RootTaskIDs = []string{"coding-a", "coding-a"}
+			},
+			wantErr: "contributing set cannot change",
+		},
+		{
 			name: "coverage removed",
 			mutate: func(state *models.State) {
 				state.Goal.Integration.Coverage = state.Goal.Integration.Coverage[:1]
@@ -367,6 +374,13 @@ func TestIntegrationLifecycleValidation(t *testing.T) {
 			name: "analysis metadata changed",
 			mutate: func(state *models.State) {
 				state.Tasks[0].IntegrationAnalysis.SourceCommit = "rewritten"
+			},
+			wantErr: "integration analysis metadata cannot change",
+		},
+		{
+			name: "analysis metadata root replaced by duplicate",
+			mutate: func(state *models.State) {
+				state.Tasks[0].IntegrationAnalysis.RootTaskIDs = []string{"coding-a", "coding-a"}
 			},
 			wantErr: "integration analysis metadata cannot change",
 		},

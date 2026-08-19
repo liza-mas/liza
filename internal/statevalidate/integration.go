@@ -437,8 +437,9 @@ func sameStringSet(left, right []string) bool {
 		if _, exists := values[value]; !exists {
 			return false
 		}
+		delete(values, value)
 	}
-	return true
+	return len(values) == 0
 }
 
 func sameContributingSet(left, right *models.IntegrationContributingSet) bool {
