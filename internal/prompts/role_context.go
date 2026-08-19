@@ -12,6 +12,56 @@ type CompletedTaskSummary struct {
 	SpecRef     string
 }
 
+// IntegrationPlanSummary is the bounded originating-plan view for a slice.
+type IntegrationPlanSummary struct {
+	ID          string
+	Description string
+	DoneWhen    string
+	SpecRef     string
+	PlanRef     string
+	ArchRef     string
+}
+
+// IntegrationDescendantSummary binds persisted change attribution to the
+// acceptance and decomposition context of one metadata-named task.
+type IntegrationDescendantSummary struct {
+	ID            string
+	Description   string
+	DoneWhen      string
+	SpecRef       string
+	Commit        string
+	DependsOn     []string
+	Decomposition *models.DecompositionManifest
+}
+
+// IntegrationApprovalSummary is the compact prompt view of reused coding
+// review evidence for one contributing scope.
+type IntegrationApprovalSummary struct {
+	ReviewedTaskID     string
+	AcceptanceCriteria string
+	ReviewedCommit     string
+	Approver           string
+	Validation         []string
+	MergeCommit        string
+}
+
+// IntegrationSliceReportSummary is the compact prompt view of slice evidence.
+type IntegrationSliceReportSummary struct {
+	AnalysisTaskID string
+	AnalysisKey    string
+	Verdict        string
+	SourceCommit   string
+	ReportCommit   string
+}
+
+// IntegrationCoverageSummary is one tagged row in the global coverage map.
+type IntegrationCoverageSummary struct {
+	PlanTaskID           string
+	Kind                 string
+	ApprovalAttestations []IntegrationApprovalSummary
+	SliceReport          *IntegrationSliceReportSummary
+}
+
 // TaskGraphDigest provides bounded task graph context so agents can load exact
 // related tasks instead of pulling the full task list.
 type TaskGraphDigest struct {
@@ -142,8 +192,17 @@ type RoleContextData struct {
 	PreCommitKind              string // canonical marker string, mirrors precommit.Kind
 
 	// Integration-specific (populated for integration-analyst and integration-reviewer)
-	GoalBaseCommit string
-	CompletedTasks []CompletedTaskSummary
+	GoalBaseCommit             string
+	CompletedTasks             []CompletedTaskSummary
+	IntegrationPhase           models.IntegrationAnalysisPhase
+	IntegrationGeneration      int
+	IntegrationSourceCommit    string
+	IntegrationOriginatingPlan *IntegrationPlanSummary
+	IntegrationRootTaskIDs     []string
+	IntegrationDescendants     []IntegrationDescendantSummary
+	IntegrationAffectedPaths   []string
+	IntegrationSnapshotPaths   []string
+	IntegrationCoverage        []IntegrationCoverageSummary
 
 	// Task artifact / integration context
 	IntegrationBranch string

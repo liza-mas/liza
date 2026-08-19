@@ -318,31 +318,60 @@ REVIEW PHASE:
 {{- else if eq .Role "integration-reviewer"}}
 
 REVIEW SCOPE:
+{{- if .IntegrationPhase}}
+Evaluate the analyst's findings and proposed fix-task definitions (output[]) against the immutable source commit {{.IntegrationSourceCommit}}.
+{{- else}}
 Evaluate the analyst's proposed fix-task definitions (output[]) against the branch diff.
+{{- end}}
 Each fix-task must be well-formed (single intent, falsifiable done_when, correct scope) and correctly scoped.
+{{- if eq .IntegrationPhase "slice"}}
+Review intra-plan composition and shared intent for originating plan {{.IntegrationOriginatingPlan.ID}}. Do not reopen sibling or goal-wide concerns.
+{{- else if eq .IntegrationPhase "global"}}
+Independently review cross-scope interactions, shared interfaces, aggregate tests and specifications, architectural drift, emergent risks, omissions, and goal-level merge readiness. Coverage is navigation evidence, not a correctness verdict.
+{{- else}}
 Enrich with systemic analysis: interaction effects across fixes, architectural drift, emergent risks.
+{{- end}}
 
 INSTRUCTIONS:
+{{- if eq .IntegrationPhase "slice"}}
+1. Re-read only the metadata-named descendants, attributed paths, and snapshot reads in the slice context above at {{.IntegrationSourceCommit}}.
+2. Invoke skill: systemic-thinking for intra-plan composition analysis.
+3. Check that the descendants compose and satisfy their shared plan intent; later sibling changes belong to global analysis.
+{{- else if eq .IntegrationPhase "global"}}
 1. Changed-file map and stat first:
-   git -C {{.Worktree}} diff --name-only {{.GoalBaseCommit}}..HEAD
-   git -C {{.Worktree}} diff --stat {{.GoalBaseCommit}}..HEAD
-   Read touched files/artifacts from this list before any broad repository search; use supporting rg/glob only after the changed-file map gives you a specific question.
+	git -C {{.Worktree}} diff --name-only {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
+	git -C {{.Worktree}} diff --stat {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
+	Read touched files/artifacts from this list before any broad repository search; use supporting rg/glob only after the changed-file map gives you a specific question.
 2. Invoke skill: systemic-thinking for systemic analysis framing.
 3. Read the branch diff by targeted path/hunk, not by unbounded full diff:
-   git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD -- <path>
-   If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
+	git -C {{.Worktree}} diff {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}} -- <path>
+	If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
+{{- else}}
+1. Changed-file map and stat first:
+	git -C {{.Worktree}} diff --name-only {{.GoalBaseCommit}}..HEAD
+	git -C {{.Worktree}} diff --stat {{.GoalBaseCommit}}..HEAD
+	Read touched files/artifacts from this list before any broad repository search; use supporting rg/glob only after the changed-file map gives you a specific question.
+2. Invoke skill: systemic-thinking for systemic analysis framing.
+3. Read the branch diff by targeted path/hunk, not by unbounded full diff:
+	git -C {{.Worktree}} diff {{.GoalBaseCommit}}..HEAD -- <path>
+	If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
+{{- end}}
 4. Review the analyst's output[]: {{binaryName}} get {{.TaskID}} --json
-   For each proposed fix-task:
-   a. Verify the finding is real (confirmed by the diff, not fabricated)
-   b. Verify the fix-task is well-formed: single intent, falsifiable done_when, correct scope
-   c. Verify the scope is minimal — fix only what's needed, no scope creep
-   d. Verify any validation command is satisfiable and its intended check/hook intent is declared in durable fix-task text
-   e. Verify any validation[] command is single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
+	For each proposed fix-task:
+	a. Verify the finding is real (confirmed by the diff, not fabricated)
+	b. Verify the fix-task is well-formed: single intent, falsifiable done_when, correct scope
+	c. Verify the scope is minimal — fix only what's needed, no scope creep
+	d. Verify any validation command is satisfiable and its intended check/hook intent is declared in durable fix-task text
+	e. Verify any validation[] command is single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
+{{- if eq .IntegrationPhase "slice"}}
+5. Enrich only within the originating plan: check dependency and interface fit, acceptance-criteria composition, and missing intra-plan findings.
+{{- else}}
 5. Systemic enrichment: after reviewing individual fix-tasks, analyze:
-   a. Interaction effects: could fixing A break the fix for B?
-   b. Architectural drift: do the fixes collectively move the codebase away from its design intent?
-   c. Emergent risks: are there cross-cutting concerns invisible at the individual finding level?
-   d. Missing findings: are there integration issues the analyst missed?
+	a. Interaction effects: could fixing A break the fix for B?
+	b. Architectural drift: do the fixes collectively move the codebase away from its design intent?
+	c. Emergent risks: are there cross-cutting concerns invisible at the individual finding level?
+	d. Missing findings: are there integration issues the analyst missed?
+{{- end}}
 6. If enrichment produces additional fix-tasks, include them in the rejection with specific task definitions.
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}

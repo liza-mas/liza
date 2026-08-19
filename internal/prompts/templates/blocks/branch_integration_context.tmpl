@@ -1,5 +1,102 @@
 {{- define "branch-integration-context" -}}
-{{- if ne .GoalBaseCommit ""}}
+{{- if eq .IntegrationPhase "slice"}}
+
+=== SLICE INTEGRATION CONTEXT ===
+SOURCE COMMIT: {{.IntegrationSourceCommit}}
+ORIGINATING PLAN: {{.IntegrationOriginatingPlan.ID}} — {{.IntegrationOriginatingPlan.Description}}
+Shared intent: {{.IntegrationOriginatingPlan.DoneWhen}}
+Spec: {{.IntegrationOriginatingPlan.SpecRef}}
+Plan: {{.IntegrationOriginatingPlan.PlanRef}}
+Architecture: {{.IntegrationOriginatingPlan.ArchRef}}
+
+ROOT LINEAGES:
+{{- range .IntegrationRootTaskIDs}}
+- {{.}}
+{{- end}}
+
+ATTRIBUTED DESCENDANTS:
+{{- range .IntegrationDescendants}}
+- {{.ID}} @ {{.Commit}}: {{.Description}}
+  Acceptance criteria: {{.DoneWhen}}
+  Spec: {{.SpecRef}}
+{{- if .DependsOn}}
+  Dependencies: {{range $index, $dependency := .DependsOn}}{{if $index}}, {{end}}{{$dependency}}{{end}}
+{{- end}}
+{{- with .Decomposition}}
+{{- if .OwnedFiles}}
+  Owned files: {{range $index, $value := .OwnedFiles}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- if .OwnedModules}}
+  Owned modules: {{range $index, $value := .OwnedModules}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- if .ReadOnlyDependsOn}}
+  Read-only output dependencies: {{range $index, $value := .ReadOnlyDependsOn}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- if .ReadOnlyTaskDependsOn}}
+  Read-only task dependencies: {{range $index, $value := .ReadOnlyTaskDependsOn}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- if .InterfacesOwned}}
+  Interfaces owned: {{range $index, $value := .InterfacesOwned}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- if .InterfacesConsumed}}
+  Interfaces consumed: {{range $index, $value := .InterfacesConsumed}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- if .CoverageNotes}}
+  Coverage notes: {{.CoverageNotes}}
+{{- end}}
+{{- end}}
+{{- end}}
+
+ATTRIBUTED PATHS:
+{{- range .IntegrationAffectedPaths}}
+- {{.}}
+{{- end}}
+{{- if not .IntegrationAffectedPaths}}
+(none)
+{{- end}}
+
+IMMUTABLE SNAPSHOT READS:
+{{- range .IntegrationSnapshotPaths}}
+git -C {{$.Worktree}} show {{$.IntegrationSourceCommit}}:{{.}}
+{{- end}}
+{{- if not .IntegrationSnapshotPaths}}
+(no affected path exists at the source commit)
+{{- end}}
+
+Review only intra-plan composition and the shared intent above. Later sibling changes and goal-wide concerns are outside this slice boundary.
+Run the smallest tests covering the attributed descendants, paths, declared validation, or plausible composition risks from {{.Worktree}}.
+{{- else if eq .IntegrationPhase "global"}}
+
+=== GLOBAL INTEGRATION CONTEXT ===
+GENERATION: {{.IntegrationGeneration}}
+SOURCE COMMIT: {{.IntegrationSourceCommit}}
+
+COVERAGE MAP (navigation evidence, not proof of aggregate correctness):
+{{- range .IntegrationCoverage}}
+- {{.PlanTaskID}} [{{.Kind}}]
+{{- range .ApprovalAttestations}}
+  - reviewed task {{.ReviewedTaskID}} @ {{.ReviewedCommit}}; merge {{.MergeCommit}}; approver {{.Approver}}
+    Acceptance criteria: {{.AcceptanceCriteria}}
+{{- if .Validation}}
+    Validation: {{range $index, $command := .Validation}}{{if $index}}; {{end}}{{$command}}{{end}}
+{{- end}}
+{{- end}}
+{{- with .SliceReport}}
+  - slice analysis {{.AnalysisTaskID}} ({{.AnalysisKey}}): {{.Verdict}}; source {{.SourceCommit}}; report {{.ReportCommit}}
+{{- end}}
+{{- end}}
+{{- if not .IntegrationCoverage}}
+(no contributing scopes)
+{{- end}}
+
+INDEPENDENT AGGREGATE REVIEW:
+Perform an independent aggregate review: use the coverage map for navigation, then inspect the goal-wide source snapshot.
+git -C {{.Worktree}} diff --name-only {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
+git -C {{.Worktree}} diff --stat {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}}
+Inspect only targeted paths from the map:
+git -C {{.Worktree}} diff {{.GoalBaseCommit}}..{{.IntegrationSourceCommit}} -- <path>
+Run the smallest tests covering the aggregate changed paths, declared validation, or plausible cross-scope risks from {{.Worktree}}.
+{{- else if ne .GoalBaseCommit ""}}
 
 === BRANCH INTEGRATION CONTEXT ===
 SCAN BOUNDARY: goal base commit {{.GoalBaseCommit}}
