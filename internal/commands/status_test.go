@@ -10,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/render"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -89,6 +91,198 @@ func TestCheckpointNotice(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
+	terminalState := testhelpers.CreateValidState()
+	baseCommit := "base"
+	terminalState.Goal.BaseCommit = &baseCommit
+	terminalState.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("coding-1", models.TaskStatusMerged, time.Now().UTC()),
+	}
+	terminalState.Sprint.Scope.Planned = []string{"coding-1"}
+	originalState := mustMarshalStatusState(t, terminalState)
+
+	tests := []struct {
+		name       string
+		projection prompts.EffectiveIntegrationCompletion
+		wantStatus string
+		wantCode   string
+		wantDetail string
+	}{
+		{
+			name: "reconciliation needed",
+			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
+				GlobalRequest: &ops.IntegrationAnalysisRequest{Key: "global:2"},
+			}, nil, nil),
+			wantStatus: "reconciliation_needed",
+			wantDetail: "global:2",
+		},
+		{
+			name: "waiting",
+			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
+				Waiting: &ops.IntegrationProgressReason{
+					Code: "integration_repairs_pending", TaskIDs: []string{"repair-z", "repair-a"}, Guidance: "wait for merged repairs",
+				},
+			}, nil, nil),
+			wantStatus: "waiting",
+			wantCode:   "integration_repairs_pending",
+			wantDetail: "repair-a, repair-z",
+		},
+		{
+			name: "blocked",
+			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
+				Blocked: &ops.IntegrationProgressReason{
+					Code: "integration_analysis_blocked", TaskIDs: []string{"slice-z", "slice-a"}, Guidance: "resolve the blocked analysis",
+				},
+			}, nil, nil),
+			wantStatus: "blocked",
+			wantCode:   "integration_analysis_blocked",
+			wantDetail: "slice-a, slice-z",
+		},
+		{
+			name: "exhausted",
+			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
+				Exhausted: true,
+				Blocked: &ops.IntegrationProgressReason{
+					Code: "global_generations_exhausted", Guidance: "generation limit reached",
+				},
+			}, nil, nil),
+			wantStatus: "exhausted",
+			wantCode:   "global_generations_exhausted",
+			wantDetail: "generation limit reached",
+		},
+		{
+			name:       "unavailable",
+			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, os.ErrNotExist),
+			wantStatus: "unavailable",
+			wantCode:   "integration_progress_unavailable",
+			wantDetail: os.ErrNotExist.Error(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wake := agent.DetectOrchestratorWakeTriggersWithIntegrationProjection(terminalState, nil, nil, nil, tt.projection)
+			got := buildOrchestratorStatusFromWakeResult(terminalState, wake)
+			repeated := buildOrchestratorStatusFromWakeResult(terminalState, wake)
+			if !reflect.DeepEqual(got, repeated) {
+				t.Fatalf("repeated status projection changed: first=%#v second=%#v", got, repeated)
+			}
+			if got.Integration == nil {
+				t.Fatal("integration diagnostics are absent")
+			}
+			if got.Integration.Status != tt.wantStatus || got.Integration.ReasonCode != tt.wantCode {
+				t.Fatalf("integration diagnostics = %#v, want status=%q reason=%q", got.Integration, tt.wantStatus, tt.wantCode)
+			}
+
+			data := statusData{OrchestratorState: got}
+			dashboard, err := formatStatusDashboard(data)
+			if err != nil {
+				t.Fatalf("format dashboard: %v", err)
+			}
+			jsonOutput, err := render.FormatJSON(data)
+			if err != nil {
+				t.Fatalf("format JSON: %v", err)
+			}
+			yamlOutput, err := render.FormatYAML(data)
+			if err != nil {
+				t.Fatalf("format YAML: %v", err)
+			}
+			for format, output := range map[string]string{"dashboard": dashboard, "json": jsonOutput, "yaml": yamlOutput} {
+				for _, want := range []string{tt.wantStatus, tt.wantDetail} {
+					if !strings.Contains(output, want) {
+						t.Errorf("%s output missing %q:\n%s", format, want, output)
+					}
+				}
+				if strings.Contains(output, "SPRINT_COMPLETE") {
+					t.Errorf("ineffective %s output reported SPRINT_COMPLETE:\n%s", format, output)
+				}
+			}
+		})
+	}
+
+	if after := mustMarshalStatusState(t, terminalState); after != originalState {
+		t.Fatalf("status projection mutated lifecycle state:\nbefore=%s\nafter=%s", originalState, after)
+	}
+
+	t.Run("production evaluation fails closed and accepts only current HEAD clean evidence", func(t *testing.T) {
+		projectRoot, state, reviewedHEAD := setupStatusCleanIntegrationProject(t)
+		before := mustMarshalStatusState(t, state)
+
+		clean := buildOrchestratorStatus(state, projectRoot)
+		if clean.Trigger != "SPRINT_COMPLETE" || clean.Integration == nil || clean.Integration.Status != "complete" {
+			t.Fatalf("current-HEAD clean status = %#v, want SPRINT_COMPLETE", clean)
+		}
+		if currentHEAD := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration"); currentHEAD != reviewedHEAD {
+			t.Fatalf("status read changed integration HEAD: got %q want %q", currentHEAD, reviewedHEAD)
+		}
+
+		if err := os.WriteFile(filepath.Join(projectRoot, "advance.txt"), []byte("advance\n"), 0o644); err != nil {
+			t.Fatalf("write integration advance: %v", err)
+		}
+		testhelpers.MustGit(t, projectRoot, "add", "advance.txt")
+		testhelpers.MustGit(t, projectRoot, "commit", "-m", "advance integration")
+		advancedHEAD := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+		testhelpers.MustGit(t, projectRoot, "update-ref", "refs/heads/integration", advancedHEAD)
+
+		stale := buildOrchestratorStatus(state, projectRoot)
+		if stale.Trigger == "SPRINT_COMPLETE" || stale.Integration == nil || stale.Integration.Status != "reconciliation_needed" {
+			t.Fatalf("stale clean status = %#v, want reconciliation-needed non-terminal status", stale)
+		}
+		if after := mustMarshalStatusState(t, state); after != before {
+			t.Fatalf("production status read mutated lifecycle state:\nbefore=%s\nafter=%s", before, after)
+		}
+		if currentHEAD := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration"); currentHEAD != advancedHEAD {
+			t.Fatalf("stale status read changed integration HEAD: got %q want %q", currentHEAD, advancedHEAD)
+		}
+
+		unavailableRoot := t.TempDir()
+		testhelpers.SetupPipelineConfig(t, unavailableRoot)
+		unavailable := buildOrchestratorStatus(state, unavailableRoot)
+		if unavailable.Trigger == "SPRINT_COMPLETE" || unavailable.Integration == nil || unavailable.Integration.Status != "unavailable" {
+			t.Fatalf("unavailable status = %#v, want fail-closed diagnostics", unavailable)
+		}
+	})
+}
+
+func mustMarshalStatusState(t *testing.T, state *models.State) string {
+	t.Helper()
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal status state: %v", err)
+	}
+	return string(encoded)
+}
+
+func setupStatusCleanIntegrationProject(t *testing.T) (string, *models.State, string) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+	head := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
+
+	analysis := testhelpers.BuildTaskByStatus("integration-global-1", models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN"), time.Now().UTC())
+	analysis.RolePair = "integration-pair"
+	analysis.IntegrationAnalysis = &models.IntegrationAnalysisMetadata{
+		Key: "global:1", Phase: models.IntegrationAnalysisPhaseGlobal, Generation: 1, SourceCommit: head,
+	}
+	analysis.ReviewCommit = testhelpers.StringPtr("global-report")
+	state := testhelpers.CreateValidState()
+	state.Goal.BaseCommit = &head
+	state.Goal.Integration = &models.IntegrationLifecycle{
+		ContributingSet: &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}},
+		GlobalGenerations: []models.IntegrationGlobalGeneration{{
+			Generation: 1, AnalysisTaskID: analysis.ID, AnalysisKey: "global:1",
+			Verdict: models.IntegrationAnalysisVerdictClean, SourceCommit: head, ReportCommit: "global-report",
+		}},
+		Closure: &models.IntegrationClosure{
+			Status: models.IntegrationClosureStatusClean, Generation: 1, AnalysisKey: "global:1", SourceCommit: head,
+		},
+	}
+	state.Tasks = []models.Task{analysis}
+	state.Sprint.Scope.Planned = []string{analysis.ID}
+	return projectRoot, state, head
 }
 
 func TestBuildStatusData(t *testing.T) {

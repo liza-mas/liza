@@ -140,9 +140,19 @@ type agentStatus struct {
 }
 
 type orchestratorStatus struct {
-	Trigger      string `json:"trigger"`
-	TriggerCount int    `json:"trigger_count"`
-	Reason       string `json:"reason"`
+	Trigger      string                      `json:"trigger"`
+	TriggerCount int                         `json:"trigger_count"`
+	Reason       string                      `json:"reason"`
+	Integration  *integrationLifecycleStatus `json:"integration,omitempty" yaml:"integration,omitempty"`
+}
+
+type integrationLifecycleStatus struct {
+	Status         string   `json:"status" yaml:"status"`
+	ReasonCode     string   `json:"reason_code,omitempty" yaml:"reason_code,omitempty"`
+	TaskIDs        []string `json:"task_ids,omitempty" yaml:"task_ids,omitempty"`
+	RequestKeys    []string `json:"request_keys,omitempty" yaml:"request_keys,omitempty"`
+	CreatedTaskIDs []string `json:"created_task_ids,omitempty" yaml:"created_task_ids,omitempty"`
+	Guidance       string   `json:"guidance,omitempty" yaml:"guidance,omitempty"`
 }
 
 type workQueuesStatus struct {
@@ -475,13 +485,27 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 		planningPairs = detCtx.PlanningPairs
 		m2oTransitions = detCtx.ManyToOneTransitions
 	}
-	result := agent.DetectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions)
+	result := agent.DetectOrchestratorWakeTriggersForProject(projectRoot, state, pipelineTerminals, planningPairs, m2oTransitions)
+	return buildOrchestratorStatusFromWakeResult(state, result)
+}
+
+func buildOrchestratorStatusFromWakeResult(state *models.State, result agent.OrchestratorWakeResult) orchestratorStatus {
 	trigger := string(result.Trigger)
 	count := result.Count
 
 	ps := orchestratorStatus{
 		Trigger:      trigger,
 		TriggerCount: count,
+	}
+	if result.Integration.Status != "" {
+		ps.Integration = &integrationLifecycleStatus{
+			Status:         result.Integration.Status,
+			ReasonCode:     result.Integration.ReasonCode,
+			TaskIDs:        append([]string(nil), result.Integration.TaskIDs...),
+			RequestKeys:    append([]string(nil), result.Integration.RequestKeys...),
+			CreatedTaskIDs: append([]string(nil), result.Integration.CreatedTaskIDs...),
+			Guidance:       result.Integration.Guidance,
+		}
 	}
 
 	switch trigger {
@@ -502,8 +526,14 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 		ps.Reason = fmt.Sprintf("%d planning task(s) merged with output[]; ready for coding task expansion", count)
 	case "MANY_TO_ONE_READY":
 		ps.Reason = fmt.Sprintf("%d many-to-one cohort(s) ready for consolidation transition", count)
+	case "CODING_COMPLETE", "INTEGRATION_WAITING", "INTEGRATION_BLOCKED", "INTEGRATION_EXHAUSTED", "INTEGRATION_UNAVAILABLE":
+		ps.Reason = formatIntegrationLifecycleReason(ps.Integration)
 	case "SPRINT_COMPLETE":
-		ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)
+		if ps.Integration != nil && ps.Integration.Status == "complete" {
+			ps.Reason = "Authoritative integration completion is clean for current integration HEAD"
+		} else {
+			ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)
+		}
 	case "NONE":
 		ps.Reason = "No triggers; orchestrator is idle"
 	default:
@@ -511,6 +541,29 @@ func buildOrchestratorStatus(state *models.State, projectRoot string) orchestrat
 	}
 
 	return ps
+}
+
+func formatIntegrationLifecycleReason(status *integrationLifecycleStatus) string {
+	if status == nil {
+		return "Authoritative integration progress is unavailable"
+	}
+	parts := []string{"Integration status: " + status.Status}
+	if status.ReasonCode != "" {
+		parts = append(parts, "reason: "+status.ReasonCode)
+	}
+	if len(status.TaskIDs) > 0 {
+		parts = append(parts, "related tasks: "+strings.Join(status.TaskIDs, ", "))
+	}
+	if len(status.RequestKeys) > 0 {
+		parts = append(parts, "requested analyses: "+strings.Join(status.RequestKeys, ", "))
+	}
+	if len(status.CreatedTaskIDs) > 0 {
+		parts = append(parts, "reconciled tasks: "+strings.Join(status.CreatedTaskIDs, ", "))
+	}
+	if status.Guidance != "" {
+		parts = append(parts, "guidance: "+status.Guidance)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // buildWorkQueuesStatus calculates work queue availability
