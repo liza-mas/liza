@@ -150,6 +150,8 @@ Agent registration/unregistration, heartbeat, post-exit IDLE reset, orchestrator
 | Three-phase claim: validate ownership/eligibility under lock → worktree outside lock → re-validate ownership/eligibility and commit under lock | TOCTOU races on claim | code (`claim_task.go`) |
 | CAS merge: `update-ref` uses compare-and-swap; retries up to 3× if ref moved | Concurrent merge corruption | spec (`worktree-management.md`), code (`wt_merge.go`) |
 | Integration ref advancement and every main-index sync/restore run under one project-scoped file lock; blackboard state writes happen after releasing it | Cross-process `index.lock` collisions, lock-order inversion | spec (`worktree-management.md`), code (`wt_merge.go`, `integration_mutation_lock.go`) |
+| Sliced-integration analysis materialization is idempotent: a deterministic slice/global analysis key has exactly one matching task and one planned membership across concurrent reconciliation, wake, and restart | Duplicate analysis tasks or generations | code (`integration_reconcile.go`, `workdetection.go`) |
+| Completion and integration-ref mutation are linearizable under the completion → mutation → blackboard-read lock order; ADR-0112's mutation → blackboard-read order remains intact, and there is no blackboard state write while the mutation lock is held | Durable completion tied to a stale integration HEAD, deadlock | code (`pipeline_ops.go`, `integration_mutation_lock.go`, `wt_merge.go`, `mode_change.go`) |
 | Singleton Blackboard instances per state path | Cache coherence, fragmented locks | code (`blackboard.go` via `sync.Map`) |
 | Concurrent transition detection: re-validate status under lock before committing | Status changed between read and write | code (`wt_merge.go`, `submit_review.go`) |
 
@@ -169,6 +171,7 @@ Agent registration/unregistration, heartbeat, post-exit IDLE reset, orchestrator
 | Max iteration limits (default 10 coder, 5 review cycles) → BLOCKED | Infinite coder-reviewer loops | spec (`task-lifecycle.md`), code (`claim_task.go`) |
 | Rejection must include structured format: file:line, specific defect, actionable fix; iteration 2+: prior feedback status | Ambiguous feedback, unaddressed rejections | spec (`roles.md`) |
 | Code tasks must include tests (TDD: tests first, then implementation); waiver requires explicit `tdd_not_required` | Untested behavior, post-hoc test addition | spec (`roles.md`), code (`submit_review.go`) |
+| Local coverage is a bounded navigation record; global integration review independently assesses the aggregate branch and cannot inherit a slice or coding-review verdict as goal-wide approval | Local approval mistaken for aggregate correctness | spec (`task-lifecycle.md`), code (`integration_progress.go`, `integration_reconcile.go`) |
 
 Submitted, reviewing, partially-approved, and approved tasks must not carry `integration_failure`; that diagnostic belongs to active integration recovery, not live review/approval state. Approval and rejection clear stale integration-attempt metadata (`merge_commit`, integration-failure diagnostics) while preserving the review boundary needed by the next step. Rejected tasks also clear stale live review metadata (`review_commit`, approvals) while preserving `output[]` as rework context. Doer claim release clears `output[]` and live review metadata while preserving `failed_by` for hypothesis exhaustion. Fresh-attempt reset paths (task recovery reset, new attempt) clear `output[]`, live review metadata, and `failed_by` so the next claim starts from the initial projection. Retired tasks (`SUPERSEDED`, `ABANDONED`) clear live review/failure metadata while preserving terminal audit context such as `output[]` and `failed_by`.
 
@@ -192,6 +195,19 @@ Integration-fix claims clear active `output[]`, `review_commit`, approvals, `mer
 | Rejected-task reclaim preserves the task worktree/branch for same-owner reclaim and post-expiry reassignment; missing or corrupt worktree state is recreated from integration | Lost rejected work, inconsistent reassignment semantics | spec, code (`claim_task.go`) |
 | Initial-status task with `worktree` set means claimable continuation from preserved branch; claim validates path, task branch, HEAD, and `base_commit`, and fails rather than deleting invalid preserved work | Lost blocked-task work, stale worktree misclassification | spec, code (`claim_task.go`) |
 | Rebase onto integration branch before submission; conflict → abort and restore clean state | Merge conflicts discovered late | code (`submit_review.go`) |
+| Integration progression fails closed until planning is settled, required coverage is complete, every slice is resolved, and coding plus repair work is terminal; blocked/abandoned repairs, slice exhaustion, unavailable topology, and global generation exhaustion cannot satisfy completion | Premature global analysis or successful completion with missing evidence | code (`integration_progress.go`, `pipeline_ops.go`) |
+| Clean integration completion names an immutable reviewed source commit and is effective only while it equals live integration HEAD; a later ref mutation appends a receipt and mutation-side invalidation makes any goal-complete stop tied to the superseded commit non-successful | Stale clean evidence surviving a branch mutation | code (`submit_verdict.go`, `wt_merge.go`, `mode_change.go`) |
+
+The finalization linearization point establishes one relationship among the
+clean reviewed commit, live integration HEAD, and completion: all three agree or
+completion fails. A mutation ordered before finalization prevents clean closure
+for the stale source. A mutation ordered after finalization preserves the
+immutable prior evidence but appends its before/after receipt, invalidates the
+goal-complete stop on the mutation side, and requires another bounded global
+generation. This ordering extends ADR-0112 without reversing it: the completion
+lock encloses the mutation lock and any blackboard read, the mutation lock is
+released before receipt or completion state is written, and no blackboard state
+write occurs under the mutation lock.
 
 The candidate-tree artifact guard protects goal `spec_ref`; task `spec_ref`,
 `epic_ref`, `plan_ref`, and `arch_ref`; and merge-durable output refs. Output
@@ -339,6 +355,8 @@ What these invariants collectively protect against:
 | Scope creep | Hard scope boundary, discovery protocol (§8) |
 | Infinite loops | Iteration limits, hypothesis exhaustion, circuit breaker (§6, §8, §12) |
 | Race conditions | CAS merge, 3-phase claim, atomic modifications (§5) |
+| Duplicate or stale integration analysis | Deterministic analysis identities, idempotent reconciliation, immutable coverage and generation evidence (§5, §7) |
+| Premature or stale integration completion | Fail-closed coverage/repair barriers, independent aggregate review, clean-current-HEAD linearization, mutation-side invalidation (§6, §7) |
 | Silent failures | Anomaly logging, blocking protocol (§14) |
 | Hallucination & fabrication | Tier 0.2, source validation, phantom fix prevention (§1, §15) |
 | Secret exposure | Credential file prohibition, redaction protocol (§9) |
