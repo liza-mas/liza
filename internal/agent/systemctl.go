@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -11,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/prompts"
 )
 
 // errGoalComplete is a sentinel error returned by waitWhilePaused when
@@ -48,6 +50,18 @@ func isGoalComplete(result *ops.ResumeResult) bool {
 		len(result.SprintAdvanced.CarriedTasks) == 0 &&
 		result.TransitionsExecuted == 0 &&
 		result.TransitionError == ""
+}
+
+type goalCompletionStopFunc func(projectRoot, reason string) (*ops.ModeChangeResult, error)
+
+func stopAfterCompletedResume(projectRoot string, result *ops.ResumeResult, stop goalCompletionStopFunc) error {
+	if !isGoalComplete(result) {
+		return nil
+	}
+	if _, err := stop(projectRoot, "goal complete"); err != nil {
+		return fmt.Errorf("goal complete but failed to stop system: %w", err)
+	}
+	return errGoalComplete
 }
 
 // autoResumeAction returns the sprint status to auto-resume, or "" if none.
@@ -107,12 +121,11 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 					if resumeErr != nil {
 						logger.Warn("Auto-resume from COMPLETED failed, waiting", "error", resumeErr)
 					} else {
-						if isGoalComplete(result) {
-							logger.Info("Goal complete — all tasks terminal, no pending transitions. Stopping system.")
-							if _, stopErr := ops.Stop(projectRoot, "goal complete", "system"); stopErr != nil {
-								return fmt.Errorf("goal complete but failed to stop system: %w", stopErr)
+						if completionErr := stopAfterCompletedResume(projectRoot, result, ops.StopForGoalCompletion); completionErr != nil {
+							if errors.Is(completionErr, errGoalComplete) {
+								logger.Info("Goal complete — clean integration evidence stopped the system.")
 							}
-							return errGoalComplete
+							return completionErr
 						}
 						continue // state changed, re-read immediately
 					}
@@ -283,6 +296,7 @@ func (supervisorLLMAgentEventSink) RecordLLMAgentEvent(_ context.Context, event 
 // verifyOrchestratorStateChanges checks if orchestrator made expected state changes after completion
 func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) error {
 	logger := GetLogger()
+	projectRoot := filepath.Dir(filepath.Dir(bb.GetStatePath()))
 	// Read state after agent execution
 	stateAfter, err := bb.ReadCached()
 	if err != nil {
@@ -290,7 +304,7 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 	}
 
 	// Detect the wake trigger that caused this orchestrator run
-	result := DetectOrchestratorWakeTriggers(stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
+	result := DetectOrchestratorWakeTriggersForProject(projectRoot, stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
 
 	// Verify expected changes based on trigger
 	switch result.Trigger {
@@ -378,18 +392,16 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 		logger.Info("Orchestrator checkpointed many-to-one cohort readiness")
 
 	case WakeTriggerCodingComplete:
-		// CODING_COMPLETE: expect integration task to exist after orchestrator runs
-		hasIntegration := false
-		for _, task := range stateAfter.Tasks {
-			if task.RolePair == "integration-pair" {
-				hasIntegration = true
-				break
-			}
+		if result.Integration.Status != "reconciliation_needed" {
+			return fmt.Errorf("orchestrator completed with CODING_COMPLETE trigger but integration status is %q", result.Integration.Status)
 		}
-		if !hasIntegration {
-			return fmt.Errorf("orchestrator completed with CODING_COMPLETE trigger but no integration-pair task was created")
-		}
-		logger.Info("Orchestrator spawned integration task")
+		return reconcileEffectiveIntegrationOutcome(projectRoot, bb, result.Integration, ops.ReconcileIntegrationAnalyses)
+
+	case WakeTriggerIntegrationBlocked, WakeTriggerIntegrationExhausted:
+		return verifyEffectiveIntegrationOutcome(stateAfter, result.Integration, nil)
+
+	case WakeTriggerIntegrationWaiting, WakeTriggerIntegrationUnavailable:
+		return verifyEffectiveIntegrationOutcome(stateAfter, result.Integration, nil)
 
 	case WakeTriggerSprintComplete:
 		// SPRINT_COMPLETE: expect sprint status to be CHECKPOINT (or COMPLETED)
@@ -403,6 +415,60 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 	}
 
 	return nil
+}
+
+type integrationReconcileFunc func(projectRoot string) (*ops.ReconcileIntegrationAnalysesResult, error)
+
+func reconcileEffectiveIntegrationOutcome(projectRoot string, bb *db.Blackboard, projection prompts.EffectiveIntegrationCompletion, reconcile integrationReconcileFunc) error {
+	reconciliation, err := reconcile(projectRoot)
+	if err != nil {
+		return fmt.Errorf("reconcile requested integration analyses: %w", err)
+	}
+	state, err := bb.Read()
+	if err != nil {
+		return fmt.Errorf("read reconciled integration state: %w", err)
+	}
+	return verifyEffectiveIntegrationOutcome(state, projection, reconciliation)
+}
+
+func verifyEffectiveIntegrationOutcome(state *models.State, projection prompts.EffectiveIntegrationCompletion, reconciliation *ops.ReconcileIntegrationAnalysesResult) error {
+	switch projection.Status {
+	case "blocked", "exhausted":
+		return nil
+	case "reconciliation_needed":
+		if reconciliation != nil && reconciliation.Reason != nil {
+			lifecycle := state.Goal.Integration
+			if lifecycle == nil || lifecycle.Closure == nil ||
+				(lifecycle.Closure.Status != models.IntegrationClosureStatusBlocked && lifecycle.Closure.Status != models.IntegrationClosureStatusExhausted) ||
+				lifecycle.Closure.Reason != reconciliation.Reason.Code {
+				return fmt.Errorf("integration reconciliation returned %q without matching blocked or exhausted closure", reconciliation.Reason.Code)
+			}
+			return nil
+		}
+		if len(projection.RequestKeys) == 0 {
+			return fmt.Errorf("integration reconciliation projected no requested analysis keys")
+		}
+		for _, key := range projection.RequestKeys {
+			taskCount := 0
+			plannedCount := 0
+			for i := range state.Tasks {
+				if state.Tasks[i].IntegrationAnalysis != nil && state.Tasks[i].IntegrationAnalysis.Key == key {
+					taskCount++
+					for _, plannedID := range state.Sprint.Scope.Planned {
+						if plannedID == state.Tasks[i].ID {
+							plannedCount++
+						}
+					}
+				}
+			}
+			if taskCount != 1 || plannedCount != 1 {
+				return fmt.Errorf("requested integration analysis %q has duplicate or missing membership: tasks=%d planned=%d", key, taskCount, plannedCount)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("integration outcome %q (%s) is not an accepted post-run result", projection.Status, projection.ReasonCode)
+	}
 }
 
 func countUnresolvedHypothesisExhausted(state *models.State) int {

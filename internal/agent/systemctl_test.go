@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -208,6 +212,254 @@ func TestIsGoalComplete(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
+	t.Run("all-terminal wake consumes authoritative projection and preserves priority", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		baseCommit := "base"
+		state.Goal.BaseCommit = &baseCommit
+		state.Tasks = []models.Task{
+			testhelpers.BuildTaskByStatus("coding-1", models.TaskStatusMerged, time.Now().UTC()),
+		}
+		state.Sprint.Scope.Planned = []string{"coding-1"}
+
+		requested := prompts.EffectiveIntegrationCompletion{
+			WakeTrigger: "CODING_COMPLETE",
+			Status:      "reconciliation_needed",
+			RequestKeys: []string{"global:2", "slice:plan-a"},
+		}
+		result := DetectOrchestratorWakeTriggersWithIntegrationProjection(state, nil, nil, nil, requested)
+		if result.Trigger != WakeTriggerCodingComplete || result.Count != 2 || !result.ShouldWake() {
+			t.Fatalf("requested result = %#v, want actionable two-analysis reconciliation", result)
+		}
+		if result.Integration.Status != requested.Status || len(result.Integration.RequestKeys) != 2 {
+			t.Fatalf("integration projection = %#v, want %#v", result.Integration, requested)
+		}
+
+		for _, tt := range []struct {
+			name       string
+			projection prompts.EffectiveIntegrationCompletion
+			trigger    OrchestratorWakeTrigger
+		}{
+			{
+				name:       "blocked",
+				projection: prompts.EffectiveIntegrationCompletion{WakeTrigger: "INTEGRATION_BLOCKED", Status: "blocked", ReasonCode: "slice_blocked"},
+				trigger:    WakeTriggerIntegrationBlocked,
+			},
+			{
+				name:       "exhausted",
+				projection: prompts.EffectiveIntegrationCompletion{WakeTrigger: "INTEGRATION_EXHAUSTED", Status: "exhausted", ReasonCode: "global_generations_exhausted"},
+				trigger:    WakeTriggerIntegrationExhausted,
+			},
+			{
+				name:       "malformed",
+				projection: prompts.EffectiveIntegrationCompletion{WakeTrigger: "NOT_A_TRIGGER", Status: "unknown"},
+				trigger:    WakeTriggerIntegrationUnavailable,
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				got := DetectOrchestratorWakeTriggersWithIntegrationProjection(state, nil, nil, nil, tt.projection)
+				if got.Trigger != tt.trigger || got.ShouldWake() {
+					t.Fatalf("stable terminal result = %#v, want non-actionable %s", got, tt.trigger)
+				}
+			})
+		}
+
+		clean := prompts.EffectiveIntegrationCompletion{WakeTrigger: "SPRINT_COMPLETE", Status: "complete"}
+		cleanResult := DetectOrchestratorWakeTriggersWithIntegrationProjection(state, nil, nil, nil, clean)
+		if cleanResult.Trigger != WakeTriggerSprintComplete || !cleanResult.ShouldWake() {
+			t.Fatalf("clean result = %#v, want actionable sprint completion", cleanResult)
+		}
+
+		blockedTask := testhelpers.BuildTaskByStatus("blocked-1", models.TaskStatusBlocked, time.Now().UTC())
+		state.Tasks = append(state.Tasks, blockedTask)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, blockedTask.ID)
+		priority := DetectOrchestratorWakeTriggersWithIntegrationProjection(state, nil, nil, nil, requested)
+		if priority.Trigger != WakeTriggerBlocked {
+			t.Fatalf("non-integration priority trigger = %s, want %s", priority.Trigger, WakeTriggerBlocked)
+		}
+	})
+
+	t.Run("public reconciliation is idempotent across restart", func(t *testing.T) {
+		projectRoot, statePath := newAgentReconciliationProject(t)
+		projection := prompts.EffectiveIntegrationCompletion{
+			WakeTrigger: "CODING_COMPLETE", Status: "reconciliation_needed", RequestKeys: []string{"global:1"},
+		}
+		bb := db.For(statePath)
+		for attempt := 1; attempt <= 2; attempt++ {
+			if err := reconcileEffectiveIntegrationOutcome(projectRoot, bb, projection, ops.ReconcileIntegrationAnalyses); err != nil {
+				t.Fatalf("reconciliation attempt %d: %s", attempt, deepestTestError(err))
+			}
+		}
+		state, err := bb.Read()
+		if err != nil {
+			t.Fatalf("read reconciled state: %v", err)
+		}
+		if err := verifyEffectiveIntegrationOutcome(state, projection, &ops.ReconcileIntegrationAnalysesResult{}); err != nil {
+			t.Fatalf("restart membership verification: %v", err)
+		}
+	})
+
+	t.Run("restart reconciliation accepts exact membership and rejects duplicates", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		analysis := testhelpers.BuildTaskByStatus("integration-global-2", models.TaskStatusReady, time.Now().UTC())
+		analysis.IntegrationAnalysis = &models.IntegrationAnalysisMetadata{
+			Key: "global:2", Phase: models.IntegrationAnalysisPhaseGlobal, Generation: 2, SourceCommit: "head-2",
+		}
+		state.Tasks = []models.Task{analysis}
+		state.Sprint.Scope.Planned = []string{analysis.ID}
+		projection := prompts.EffectiveIntegrationCompletion{
+			WakeTrigger: "CODING_COMPLETE", Status: "reconciliation_needed", RequestKeys: []string{"global:2"},
+		}
+
+		if err := verifyEffectiveIntegrationOutcome(state, projection, &ops.ReconcileIntegrationAnalysesResult{}); err != nil {
+			t.Fatalf("existing deterministic membership rejected after restart: %v", err)
+		}
+		state.Tasks = append(state.Tasks, analysis)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, analysis.ID)
+		if err := verifyEffectiveIntegrationOutcome(state, projection, &ops.ReconcileIntegrationAnalysesResult{}); err == nil || !strings.Contains(err.Error(), "duplicate") {
+			t.Fatalf("duplicate membership error = %v, want duplicate rejection", err)
+		}
+
+		blocked := prompts.EffectiveIntegrationCompletion{WakeTrigger: "INTEGRATION_BLOCKED", Status: "blocked", ReasonCode: "slice_blocked"}
+		if err := verifyEffectiveIntegrationOutcome(state, blocked, nil); err != nil {
+			t.Fatalf("explicit blocked outcome rejected: %v", err)
+		}
+		exhausted := prompts.EffectiveIntegrationCompletion{WakeTrigger: "INTEGRATION_EXHAUSTED", Status: "exhausted", ReasonCode: "global_generations_exhausted"}
+		if err := verifyEffectiveIntegrationOutcome(state, exhausted, nil); err != nil {
+			t.Fatalf("explicit exhausted outcome rejected: %v", err)
+		}
+		waiting := prompts.EffectiveIntegrationCompletion{WakeTrigger: "INTEGRATION_WAITING", Status: "waiting", ReasonCode: "repair_pending"}
+		if err := verifyEffectiveIntegrationOutcome(state, waiting, nil); err == nil {
+			t.Fatal("waiting outcome accepted as completed orchestrator reconciliation")
+		}
+	})
+
+	t.Run("automatic completion delegates to race-safe terminal stop", func(t *testing.T) {
+		completeResume := &ops.ResumeResult{
+			SprintAdvanced: &ops.AdvanceSprintResult{},
+		}
+		calls := 0
+		if err := stopAfterCompletedResume("/project", &ops.ResumeResult{}, func(string, string) (*ops.ModeChangeResult, error) {
+			calls++
+			return nil, nil
+		}); err != nil || calls != 0 {
+			t.Fatalf("non-complete resume error=%v calls=%d, want nil and zero", err, calls)
+		}
+
+		cleanRoot := newAgentCleanCompletionProject(t, false)
+		if err := stopAfterCompletedResume(cleanRoot, completeResume, ops.StopForGoalCompletion); !errors.Is(err, errGoalComplete) {
+			t.Fatalf("current-HEAD clean completion error: %s", deepestTestError(err))
+		}
+		cleanState, err := db.For(filepath.Join(cleanRoot, ".liza", "state.yaml")).Read()
+		if err != nil || cleanState.Config.Mode != models.SystemModeStopped {
+			t.Fatalf("clean completion state mode=%s error=%v", cleanState.Config.Mode, err)
+		}
+
+		staleRoot := newAgentCleanCompletionProject(t, true)
+		if err := stopAfterCompletedResume(staleRoot, completeResume, ops.StopForGoalCompletion); err == nil || errors.Is(err, errGoalComplete) {
+			t.Fatalf("stale clean evidence error = %v, want non-terminal precondition failure", err)
+		}
+		staleState, err := db.For(filepath.Join(staleRoot, ".liza", "state.yaml")).Read()
+		if err != nil || staleState.Config.Mode != models.SystemModeRunning {
+			t.Fatalf("stale completion state mode=%s error=%v", staleState.Config.Mode, err)
+		}
+	})
+}
+
+func deepestTestError(err error) string {
+	for {
+		unwrapped := errors.Unwrap(err)
+		if unwrapped == nil {
+			return err.Error()
+		}
+		err = unwrapped
+	}
+}
+
+func newAgentReconciliationProject(t *testing.T) (string, string) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+
+	baseCommit := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(projectRoot, "change.go"), []byte("package fixture\n"), 0o644); err != nil {
+		t.Fatalf("write coding change: %v", err)
+	}
+	testhelpers.MustGit(t, projectRoot, "add", "change.go")
+	testhelpers.MustGit(t, projectRoot, "commit", "-m", "add coding change")
+	mergeCommit := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, projectRoot, "update-ref", "refs/heads/integration", mergeCommit)
+
+	now := time.Now().UTC()
+	plan := testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusMerged, now)
+	plan.Type = models.TaskTypePlanning
+	plan.RolePair = "code-planning-pair"
+	plan.Output = []models.OutputEntry{{Desc: "coding", DoneWhen: "coded", Scope: "change.go", SpecRef: "README.md"}}
+	plan.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+	plan.ReviewCommit = testhelpers.StringPtr("plan-review")
+
+	coding := testhelpers.BuildTaskByStatus("coding-1", models.TaskStatusMerged, now)
+	coding.RolePair = "coding-pair"
+	coding.ParentTask = testhelpers.StringPtr(plan.ID)
+	coding.BaseCommit = &baseCommit
+	coding.ReviewCommit = &mergeCommit
+	coding.MergeCommit = &mergeCommit
+	coding.Validation = []string{"go test ./..."}
+
+	state := testhelpers.CreateValidState()
+	state.Goal.SpecRef = "README.md"
+	state.Goal.BaseCommit = &baseCommit
+	state.Tasks = []models.Task{plan, coding}
+	state.Sprint.Scope.Planned = []string{plan.ID, coding.ID}
+	testhelpers.WriteInitialState(t, statePath, state)
+	return projectRoot, statePath
+}
+
+func newAgentCleanCompletionProject(t *testing.T, stale bool) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+	head := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
+
+	analysis := testhelpers.BuildTaskByStatus("integration-global-1", models.TaskStatus("INTEGRATION_ANALYSIS_CLEAN"), time.Now().UTC())
+	analysis.RolePair = "integration-pair"
+	analysis.IntegrationAnalysis = &models.IntegrationAnalysisMetadata{
+		Key: "global:1", Phase: models.IntegrationAnalysisPhaseGlobal, Generation: 1, SourceCommit: head,
+	}
+	analysis.ReviewCommit = testhelpers.StringPtr("global-report")
+	state := testhelpers.CreateValidState()
+	state.Goal.SpecRef = "README.md"
+	state.Goal.BaseCommit = &head
+	state.Goal.Integration = &models.IntegrationLifecycle{
+		ContributingSet: &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}},
+		GlobalGenerations: []models.IntegrationGlobalGeneration{{
+			Generation: 1, AnalysisTaskID: analysis.ID, AnalysisKey: "global:1",
+			Verdict: models.IntegrationAnalysisVerdictClean, SourceCommit: head, ReportCommit: "global-report",
+		}},
+		Closure: &models.IntegrationClosure{
+			Status: models.IntegrationClosureStatusClean, Generation: 1, AnalysisKey: "global:1", SourceCommit: head,
+		},
+	}
+	state.Tasks = []models.Task{analysis}
+	state.Sprint.Scope.Planned = []string{analysis.ID}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	if stale {
+		if err := os.WriteFile(filepath.Join(projectRoot, "stale.txt"), []byte("stale\n"), 0o644); err != nil {
+			t.Fatalf("write stale marker: %v", err)
+		}
+		testhelpers.MustGit(t, projectRoot, "add", "stale.txt")
+		testhelpers.MustGit(t, projectRoot, "commit", "-m", "advance integration")
+		newHead := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+		testhelpers.MustGit(t, projectRoot, "update-ref", "refs/heads/integration", newHead)
+	}
+	return projectRoot
 }
 
 // TestIsSystemStopped tests the isSystemStopped helper function
@@ -417,9 +669,9 @@ func TestVerifyOrchestratorStateChanges_HypothesisExhaustedBlocked(t *testing.T)
 	}
 }
 
-// TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration verifies that
-// CODING_COMPLETE wake rejects when no integration-pair task was created.
-func TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration(t *testing.T) {
+// TestVerifyOrchestratorStateChanges_IntegrationUnavailable verifies that
+// post-run validation fails closed when authoritative progress cannot be read.
+func TestVerifyOrchestratorStateChanges_IntegrationUnavailable(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
@@ -451,7 +703,7 @@ func TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration(t *testing.T
 		Config: models.Config{IntegrationBranch: "main"},
 	}
 
-	// State after: still no integration-pair task (orchestrator failed to create one)
+	// State after: unchanged, with no Git repository from which to read integration HEAD.
 	stateAfter := &models.State{
 		Version: 1,
 		Goal: models.Goal{
@@ -481,10 +733,10 @@ func TestVerifyOrchestratorStateChanges_CodingCompleteNoIntegration(t *testing.T
 
 	err := verifyOrchestratorStateChanges(bb, stateBefore, nil, nil, nil)
 	if err == nil {
-		t.Error("Expected error when CODING_COMPLETE trigger but no integration-pair task created")
+		t.Error("Expected error when authoritative integration progress is unavailable")
 	}
-	if err != nil && !strings.Contains(err.Error(), "integration-pair") {
-		t.Errorf("Expected error mentioning integration-pair, got: %v", err)
+	if err != nil && !strings.Contains(err.Error(), "integration_progress_unavailable") {
+		t.Errorf("Expected fail-closed integration progress error, got: %v", err)
 	}
 }
 

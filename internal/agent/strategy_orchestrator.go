@@ -100,9 +100,12 @@ func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboar
 
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
-			result := DetectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions)
-			if result.Trigger != WakeTriggerNone {
+			result := DetectOrchestratorWakeTriggersForProject(config.ProjectRoot, state, pipelineTerminals, planningPairs, m2oTransitions)
+			if result.ShouldWake() {
 				return true, fmt.Sprintf("Orchestrator wake trigger: %s (count: %d)", result.Trigger, result.Count)
+			}
+			if result.Trigger != WakeTriggerNone {
+				return false, fmt.Sprintf("Orchestrator stable integration outcome: %s (%s)", result.Trigger, result.Integration.ReasonCode)
 			}
 			return false, ""
 		})
@@ -148,7 +151,7 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 		// expected state change directly instead of relying on the LLM.
 		// This breaks the re-wake loop where the orchestrator keeps
 		// executing without calling sprint_checkpoint.
-		trigger := DetectOrchestratorWakeTriggers(stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
+		trigger := DetectOrchestratorWakeTriggersForProject(config.ProjectRoot, stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
 		if healed := selfHealCheckpoint(config.ProjectRoot, trigger.Trigger); healed {
 			GetLogger().Info("Self-healed: checkpoint created after agent failed to do so",
 				"trigger", trigger.Trigger)
