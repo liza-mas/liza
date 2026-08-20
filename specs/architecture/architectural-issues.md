@@ -2,7 +2,7 @@
 
 Persistent record of issues identified by architectural analysis skills.
 
-**Last verified:** 2026-07-25 against the pending worktree.
+**Last verified:** 2026-08-20 against the pending worktree.
 
 **Skills that contribute here:**
 - `systemic-thinking` — Systemic coherence and risk analysis
@@ -35,7 +35,6 @@ Persistent record of issues identified by architectural analysis skills.
 - [Feedback Loops](#feedback-loops)
   - [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure)
   - [Systemic Discovery Channel Has Two Loss Modes](#systemic-discovery-channel-has-two-loss-modes)
-  - [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated)
   - [Coverage Basis Is Not Reproducible by Repository Tooling](#coverage-basis-is-not-reproducible-by-repository-tooling)
   - [Issue Registry Resolution Drift](#issue-registry-resolution-drift)
   - [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote)
@@ -117,7 +116,6 @@ Persistent record of issues identified by architectural analysis skills.
 | **high** | TENSION | [Code Reviewer Structural Accountability Gap](#code-reviewer-structural-accountability-gap) |
 | **high** | FEEDBACK | [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure) |
 | **high** | FEEDBACK | [Systemic Discovery Channel Has Two Loss Modes](#systemic-discovery-channel-has-two-loss-modes) |
-| **high** | FEEDBACK | [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated) |
 | **high** | FEEDBACK | [Coverage Basis Is Not Reproducible by Repository Tooling](#coverage-basis-is-not-reproducible-by-repository-tooling) |
 | **high** | FRAGILITY | [Dual Contract Delivery Paths](#dual-contract-delivery-paths) |
 | **high** | FEEDBACK | [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote) |
@@ -180,7 +178,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
 
-**Counts:** 18 high, 36 medium, 15 low — 69 open issues total. *(2026-07-25: review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 36 medium, 15 low — 68 open issues total. *(2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -364,23 +362,6 @@ Self-reinforcing patterns that can amplify failures.
 - Add an unresolved-systemic-discovery wake condition distinct from immediate implementation discoveries
 - Make deferred disposition and registry persistence one recoverable operation
 - Represent evaluation and persistence as separate states so incomplete disposition is observable
-
-### Integration Closure Is Not Revalidated
-
-**Skill:** systemic-thinking
-**Category:** FEEDBACK
-**Related:** [Code Reviewer Structural Accountability Gap](#code-reviewer-structural-accountability-gap), [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers)
-
-**Issue:** The integration phase exists because task-scoped reviewers cannot detect cross-task effects. It scans the branch once, creates fix tasks, and returns those fixes to task-scoped review. `CodingComplete` fires once per goal, and the accepted lifecycle contains no branch-wide re-scan after the fixes mutate the branch. The validator therefore does not re-establish the property it was introduced to verify.
-
-**Implication:** The MAS can declare integration complete after changes that no branch-wide reviewer has observed.
-
-**Current mitigation:** Every integration fix receives normal coder/reviewer validation, and a fixer can block work that expands beyond its scope. That review sees the individual repair rather than the final interaction of the repair cohort.
-
-**Future options:**
-- Require a clean branch-wide pass after the integration-fix cohort merges
-- Use a bounded scan/fix cycle with an explicit exhaustion state
-- Tie integration completion to a scan of the final integration HEAD
 
 ### Coverage Basis Is Not Reproducible by Repository Tooling
 
@@ -1285,6 +1266,7 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 - **2026-03-11:** [MCP Admin Handler Authorization Gap](#mcp-admin-handler-authorization-gap) and [Unbounded Integration Test Execution](#unbounded-integration-test-execution).
 - **2026-04-13:** [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency).
 - **2026-07-25:** [Role Pair Field as Single Point of Configuration Truth](#role-pair-field-as-single-point-of-configuration-truth), [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows), [Task Type Registry is Partial Abstraction](#task-type-registry-is-partial-abstraction), [Orchestrator Role Dissolution Without Replacement](#orchestrator-role-dissolution-without-replacement), [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop), [Implicit Orchestrator Provenance Default](#implicit-orchestrator-provenance-default), [Orchestrator State Change Verification is Non-Binding](#orchestrator-state-change-verification-is-non-binding), [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified), [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments), [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift), [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation), [Self-Reported Validation](#self-reported-validation), [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause), and [Supervisor Contention](#supervisor-contention).
+- **2026-08-20:** [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated).
 
 ---
 
@@ -1309,6 +1291,7 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 | [Self-Reported Validation](#self-reported-validation) | ACCEPTED v1 | 2026-07-25 — reviewers must execute task-declared canonical validation (`1e88541f`, `03e2d19f`) |
 | [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause) | FEEDBACK | 2026-07-25 — rescoping requires root cause in role contract and audit log (`99216a33`) |
 | [Supervisor Contention](#supervisor-contention) | STRESS POINT | 2026-07-25 — supervisors are per-agent; blackboard writes lock and integration updates use CAS |
+| [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated) | FEEDBACK | 2026-08-20 — ADR-0113; `TestSlicedIntegrationLifecycle` and `TestSlicedIntegrationFinalizationRace`; merge commit `84159a1eb0593e2e4eb5288e9ed6c65ae4776a4d` |
 
 ---
 
@@ -1415,3 +1398,9 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 **Resolution:** The original issue assumed one central supervisor process. The deployed model runs a supervisor per agent. Shared blackboard mutations are serialized with file locking, while concurrent integration updates use working-tree-less compare-and-swap merges with bounded retries.
 
 **Evidence:** `internal/agent/supervisor.go`, `internal/db/blackboard.go`, and `internal/ops/wt_merge.go`.
+
+### Integration Closure Is Not Revalidated
+
+**Resolution:** ADR-0113 supersedes the accepted no-rescan limitation with independent, bounded global rescans after integration repairs and ties successful completion to clean evidence for the current integration HEAD. Its linearizable finalization and mutation-side invalidation prevent a concurrent HEAD change from leaving stale success.
+
+**Evidence:** `TestSlicedIntegrationLifecycle` and `TestSlicedIntegrationFinalizationRace` both passed for the merged acceptance task at merge commit `84159a1eb0593e2e4eb5288e9ed6c65ae4776a4d`, proving repair rescans, generation exhaustion, current-HEAD closure, and both finalization race orderings.
