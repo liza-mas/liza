@@ -373,6 +373,7 @@ are loaded at runtime from the provider catalog.
 |-----------|---------|-----|-----|------|---------|
 | `max_coder_iterations` | 10 | 1 | 100 | count | Max iterations per coder per task |
 | `max_review_cycles` | 5 | 1 | 20 | count | Max review rejection cycles |
+| `max_global_integration_generations` | 3 | 1 | — | count | Max aggregate integration scans before exhaustion |
 | `heartbeat_interval` | 60 | 1 | 300 | seconds | Heartbeat frequency |
 | `lease_duration` | 1800 | 300 | 7200 | seconds | Task lease duration |
 | `coder_poll_interval` | 30 | 5 | 120 | seconds | Check interval (legacy, now event-driven) |
@@ -395,6 +396,13 @@ are loaded at runtime from the provider catalog.
 | `copy_worktree_env_files` | false | — | — | boolean | Explicitly authorize copying ignored root env files into task worktrees |
 | `auto_checkpoint_summary` | true | — | — | boolean | Auto-runs checkpoint-summary after successful merges and writes `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` |
 | `scip_search` | (none) | — | — | language list | Durable allowlist of SCIP languages §BRAND_NAME_TITLE§ may index when `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH` is truthy |
+
+`max_global_integration_generations` has a deterministic default of `3`.
+Absent or non-positive values normalize to the default `3`; positive values are
+preserved. Each value bounds the number of independent aggregate scans. If the
+current integration HEAD still lacks clean evidence after that many global
+generations, integration is blocked with a generation-exhausted result rather
+than reported as complete.
 
 ## Optional Tool Activation
 

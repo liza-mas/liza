@@ -359,7 +359,7 @@ detailed-spec entry point:
   legacy alias for functional-spec
 
 integration sub-pipeline (post-coding, orchestrator-triggered):
-  integration-pair → coding-pair (fix tasks)
+  slice-integration-pair (when required) → integration-pair → coding-pair (fix tasks)
 ```
 
 The configured entry points still name the specialized planning pairs. During `INITIAL_PLANNING`, §BRAND_NAME_TITLE§ resolves the mapped `decomposition-root` role-pair and creates exactly one first task: the specialized task for simple work, or the master task when the work would otherwise fan out. The master task's quorum-approved `output[]` entries create the specialized children.
@@ -371,6 +371,41 @@ The intra-subpipeline master-to-specialized transitions (`epic-decompose`, `arch
 Use `§BRAND_BINARY_NAME§ init --no-follow-up` to suppress top-level `pipeline-transitions`. The selected entry-point sub-pipeline still runs normally, but §BRAND_NAME_TITLE§ will not show, auto-execute, or allow manual `§BRAND_BINARY_NAME§ proceed` for cross-sub-pipeline follow-up transitions.
 
 The `integration-to-fix` transition is an exception — it uses `trigger: auto`, meaning fix tasks are created automatically when the integration reviewer approves findings, without a human gate.
+
+#### Sliced Integration
+
+Integration coverage opens only after planning reaches the settled barrier:
+every pre-integration planning source is terminal, every eligible coding output
+and transition has been consumed, and the resulting coding work is terminal.
+The contributing scope set is then frozen once. If fewer than two contributing
+scopes exist, the workflow creates zero slice analyses and proceeds directly to
+global integration.
+
+With multiple contributing scopes, every contributing scope supplies bounded
+coverage. A one-lineage scope reuses its coding-review approval attestation;
+the attestation records the reviewed task and acceptance criteria, reviewed and
+merge commits, approver, and validation, without persisted reviewer reasoning.
+A qualifying multi-lineage scope—one with at least two distinct coding lineages
+that produced merged work—receives exactly one slice analysis. This coverage
+map is navigation evidence, not proof of aggregate correctness.
+
+Global analysis begins only after all required coverage and slice repairs are
+resolved, then performs an independent global review of the current aggregate
+branch. Global fixes or later integration-HEAD mutations cause the next global
+generation to rescan the branch independently while budget remains. A blocked
+slice blocks global integration; exhausting the configured global generation
+limit returns `global_generations_exhausted` instead of successful completion.
+
+Validation remains stack-agnostic: analysts use the affected paths and declared
+project validation rather than an assumed language, framework, or build tool.
+Review approval boundaries are unchanged: the integration reviewer still
+approves analysis findings or clean results, and the supervisor retains merge
+authority.
+
+Frozen pipeline capability also fails closed. A legacy frozen pipeline or
+topology that lacks the complete slice and global integration topology returns
+`pipeline_upgrade_required`. The operator must create a fresh workspace or
+perform a manual topology update instead of silently skipping required slices.
 
 #### Sprint Phases
 
