@@ -7,7 +7,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
-	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -137,18 +136,13 @@ func readEffectiveIntegrationCompletionSnapshot(projectRoot string) (effectiveIn
 	}
 	capability := resolver.SlicedIntegrationCapability()
 	blackboard := db.For(paths.New(projectRoot).StatePath())
-	gitWrapper := gitpkg.New(projectRoot)
 	var snapshot effectiveIntegrationCompletionSnapshot
 	err = withIntegrationMutationLock(projectRoot, "verify effective integration completion", func() error {
 		state, readErr := blackboard.Read()
 		if readErr != nil {
 			return fmt.Errorf("read integration state: %w", readErr)
 		}
-		branch := state.Config.IntegrationBranch
-		if branch == "" {
-			branch = "main"
-		}
-		head, headErr := gitWrapper.GetCommitSHA("refs/heads/" + branch)
+		head, headErr := ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
 		if headErr != nil {
 			return fmt.Errorf("read live integration HEAD: %w", headErr)
 		}

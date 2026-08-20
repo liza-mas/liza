@@ -53,7 +53,7 @@ func ReconcileIntegrationAnalyses(projectRoot string) (*ReconcileIntegrationAnal
 	bb := db.For(paths.New(projectRoot).StatePath())
 	err = bb.Modify(func(state *models.State) error {
 		previous := snapshotIntegrationLifecycleState(state)
-		integrationHEAD, headErr := gitWrapper.GetCommitSHA(state.Config.IntegrationBranch)
+		integrationHEAD, headErr := ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
 		if headErr != nil {
 			return fmt.Errorf("read integration HEAD: %w", headErr)
 		}

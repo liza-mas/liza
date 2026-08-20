@@ -6,7 +6,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
-	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -45,18 +44,13 @@ type cleanIntegrationSourceVerification struct {
 // Callers persist any resulting projection only after this function returns.
 func verifyCleanIntegrationSource(projectRoot, sourceCommit string) (cleanIntegrationSourceVerification, error) {
 	bb := db.For(paths.New(projectRoot).StatePath())
-	gitWrapper := git.New(projectRoot)
 	verification := cleanIntegrationSourceVerification{SourceCommit: sourceCommit}
 	err := withIntegrationMutationLock(projectRoot, "verify clean integration source", func() error {
 		state, readErr := bb.Read()
 		if readErr != nil {
 			return fmt.Errorf("failed to read state for clean integration verification: %w", readErr)
 		}
-		integrationBranch := state.Config.IntegrationBranch
-		if integrationBranch == "" {
-			integrationBranch = "main"
-		}
-		integrationHEAD, headErr := gitWrapper.GetCommitSHA("refs/heads/" + integrationBranch)
+		integrationHEAD, headErr := ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
 		if headErr != nil {
 			return fmt.Errorf("failed to read live integration HEAD: %w", headErr)
 		}

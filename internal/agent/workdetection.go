@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -191,7 +190,7 @@ func evaluateEffectiveIntegrationWakeProjection(projectRoot string, state *model
 	if err != nil {
 		return prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("load frozen pipeline: %w", err))
 	}
-	integrationHEAD, err := gitpkg.New(projectRoot).GetCommitSHA(state.Config.IntegrationBranch)
+	integrationHEAD, err := ops.ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
 	if err != nil {
 		return prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("read integration HEAD: %w", err))
 	}
