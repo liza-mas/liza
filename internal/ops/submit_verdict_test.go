@@ -2153,6 +2153,74 @@ func TestSubmitVerdict_RejectionAtReviewCap_Attempt2_TriggersBlocked(t *testing.
 	assertReleasedAgent(t, readState, "code-reviewer-1")
 }
 
+func TestValidateIntegrationAnalysisRolePair(t *testing.T) {
+	tests := []struct {
+		name     string
+		taskID   string
+		phase    models.IntegrationAnalysisPhase
+		rolePair string
+		wantErr  string
+	}{
+		{
+			name:     "slice phase accepts slice role pair",
+			taskID:   "task-slice",
+			phase:    models.IntegrationAnalysisPhaseSlice,
+			rolePair: "slice-integration-pair",
+		},
+		{
+			name:     "global phase accepts global role pair",
+			taskID:   "task-global",
+			phase:    models.IntegrationAnalysisPhaseGlobal,
+			rolePair: "integration-pair",
+		},
+		{
+			name:     "slice phase rejects global role pair",
+			taskID:   "task-slice-mismatch",
+			phase:    models.IntegrationAnalysisPhaseSlice,
+			rolePair: "integration-pair",
+			wantErr:  `task task-slice-mismatch integration analysis phase "slice" requires role_pair "slice-integration-pair", got "integration-pair"`,
+		},
+		{
+			name:     "global phase rejects slice role pair",
+			taskID:   "task-global-mismatch",
+			phase:    models.IntegrationAnalysisPhaseGlobal,
+			rolePair: "slice-integration-pair",
+			wantErr:  `task task-global-mismatch integration analysis phase "global" requires role_pair "integration-pair", got "slice-integration-pair"`,
+		},
+		{
+			name:     "invalid phase is rejected",
+			taskID:   "task-invalid",
+			phase:    models.IntegrationAnalysisPhase("future"),
+			rolePair: "integration-pair",
+			wantErr:  `task task-invalid has invalid integration analysis phase "future"`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			task := &models.Task{
+				ID:                  tc.taskID,
+				RolePair:            tc.rolePair,
+				IntegrationAnalysis: &models.IntegrationAnalysisMetadata{Phase: tc.phase},
+			}
+
+			err := validateIntegrationAnalysisRolePair(task)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateIntegrationAnalysisRolePair() error = %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("validateIntegrationAnalysisRolePair() error = nil, want error")
+			}
+			if got := err.Error(); got != tc.wantErr {
+				t.Fatalf("validateIntegrationAnalysisRolePair() error = %q, want %q", got, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestSubmitVerdictIntegrationLifecycleProjection(t *testing.T) {
 	t.Run("final quorum slice approvals append immutable clean and findings reports", func(t *testing.T) {
 		for _, tc := range []struct {

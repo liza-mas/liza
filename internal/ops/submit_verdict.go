@@ -463,13 +463,8 @@ func validateIntegrationAnalysisRolePair(task *models.Task) error {
 	if task == nil || task.IntegrationAnalysis == nil {
 		return nil
 	}
-	wantRolePair := ""
-	switch task.IntegrationAnalysis.Phase {
-	case models.IntegrationAnalysisPhaseSlice:
-		wantRolePair = "slice-integration-pair"
-	case models.IntegrationAnalysisPhaseGlobal:
-		wantRolePair = "integration-pair"
-	default:
+	wantRolePair, err := analysisRolePair(task.IntegrationAnalysis.Phase)
+	if err != nil {
 		return fmt.Errorf("task %s has invalid integration analysis phase %q", task.ID, task.IntegrationAnalysis.Phase)
 	}
 	if task.RolePair != wantRolePair {
