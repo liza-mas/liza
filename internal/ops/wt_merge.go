@@ -307,6 +307,9 @@ func persistIntegrationMutationReceipt(bb *db.Blackboard, mutation *integrationR
 		}
 
 		state.Goal.Integration.MutationReceipts = append(state.Goal.Integration.MutationReceipts, receipt)
+		if err := invalidateGoalCompleteStopForMutation(state, receipt); err != nil {
+			return err
+		}
 		return validateIntegrationLifecycleTransition(&previous, state)
 	})
 }

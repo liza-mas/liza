@@ -1,12 +1,41 @@
 package ops
 
 import (
+	"bytes"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+)
+
+const (
+	goalCompleteStopReservedNamespace = "system:goal-complete:"
+	goalCompleteStopTokenPrefix       = goalCompleteStopReservedNamespace + "v1:"
+	goalCompleteStopOperationIDBytes  = 16
+	goalCompleteStopWriteStop         = "stop"
+	goalCompleteStopWriteRestore      = "restore"
+)
+
+type goalCompleteStopToken struct {
+	AnalysisKey  string `json:"analysis_key"`
+	Generation   int    `json:"generation"`
+	SourceCommit string `json:"source_commit"`
+	OperationID  string `json:"operation_id"`
+}
+
+var (
+	goalCompleteStopNow                        = time.Now
+	generateGoalCompleteStopOperationID        = newGoalCompleteStopOperationID
+	afterGoalCompleteStopAuthorizationTestHook func()
+	beforeGoalCompleteStopStateWriteTestHook   func(string)
+	afterGoalCompleteStopModeWriteTestHook     func(string)
 )
 
 // ModeChangeResult contains the outcome of a system mode change.
@@ -25,7 +54,180 @@ func Start(projectRoot, reason, changedBy string) (*ModeChangeResult, error) {
 // Stop transitions system mode to STOPPED. Agents detect this and exit
 // cleanly. No terminal I/O.
 func Stop(projectRoot, reason, changedBy string) (*ModeChangeResult, error) {
+	if strings.HasPrefix(changedBy, goalCompleteStopReservedNamespace) {
+		return nil, &PreconditionError{Reason: "changed-by identity is reserved for automatic goal completion"}
+	}
 	return changeMode(projectRoot, reason, changedBy, models.SystemModeStopped)
+}
+
+// StopForGoalCompletion stops only for clean integration evidence at current
+// HEAD and records exact ownership in the reserved ModeChangedBy token.
+func StopForGoalCompletion(projectRoot, reason string) (*ModeChangeResult, error) {
+	authorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, true)
+	if err != nil {
+		return nil, err
+	}
+	operationID, err := generateGoalCompleteStopOperationID()
+	if err != nil {
+		return nil, fmt.Errorf("generate goal-complete stop operation ID: %w", err)
+	}
+	rawToken, err := encodeGoalCompleteStopToken(goalCompleteStopToken{
+		AnalysisKey:  authorization.analysisKey,
+		Generation:   authorization.generation,
+		SourceCommit: authorization.sourceCommit,
+		OperationID:  operationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encode goal-complete stop token: %w", err)
+	}
+	if afterGoalCompleteStopAuthorizationTestHook != nil {
+		afterGoalCompleteStopAuthorizationTestHook()
+	}
+
+	blackboard := db.For(paths.New(projectRoot).StatePath())
+	timestamp := goalCompleteStopNow()
+	var previousMode models.SystemMode
+	err = withEffectiveIntegrationCompletionLinearization(projectRoot, "goal-complete stop", func() error {
+		if beforeGoalCompleteStopStateWriteTestHook != nil {
+			beforeGoalCompleteStopStateWriteTestHook(goalCompleteStopWriteStop)
+		}
+		return blackboard.Modify(func(state *models.State) error {
+			if err := authorization.validateState(state, true); err != nil {
+				return err
+			}
+			previousMode = state.Config.Mode
+			if previousMode == "" {
+				previousMode = models.SystemModeRunning
+			}
+			if err := previousMode.ValidateTransition(models.SystemModeStopped); err != nil {
+				return &PreconditionError{Reason: err.Error()}
+			}
+			state.Config.Mode = models.SystemModeStopped
+			state.Config.ModeChangedAt = &timestamp
+			state.Config.ModeChangedBy = &rawToken
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	if afterGoalCompleteStopModeWriteTestHook != nil {
+		afterGoalCompleteStopModeWriteTestHook(rawToken)
+	}
+
+	snapshot, verificationErr := readEffectiveIntegrationCompletion(projectRoot)
+	if verificationErr == nil && goalCompleteStopAuthorizationMatches(authorization, snapshot) {
+		return &ModeChangeResult{
+			Previous: previousMode, New: models.SystemModeStopped, ChangedBy: rawToken, Reason: reason,
+		}, nil
+	}
+	restoreErr := restoreRunningForExactGoalCompleteStop(projectRoot, rawToken)
+	if verificationErr != nil {
+		return nil, errors.Join(fmt.Errorf("verify goal-complete stop: %w", verificationErr), restoreErr)
+	}
+	return nil, errors.Join(integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"}), restoreErr)
+}
+
+func goalCompleteStopAuthorizationMatches(
+	authorization *effectiveIntegrationCompletionAuthorization,
+	snapshot effectiveIntegrationCompletionSnapshot,
+) bool {
+	closure := snapshot.closure
+	return snapshot.decision.IntegrationComplete && snapshot.cohortFrozen && closure != nil &&
+		closure.Status == models.IntegrationClosureStatusClean &&
+		closure.Generation == authorization.generation &&
+		closure.AnalysisKey == authorization.analysisKey &&
+		closure.SourceCommit == authorization.sourceCommit &&
+		snapshot.mutationReceiptCount == authorization.mutationReceiptCount
+}
+
+func restoreRunningForExactGoalCompleteStop(projectRoot, rawToken string) error {
+	return withEffectiveIntegrationCompletionLinearization(projectRoot, "restore stale goal-complete stop", func() error {
+		if beforeGoalCompleteStopStateWriteTestHook != nil {
+			beforeGoalCompleteStopStateWriteTestHook(goalCompleteStopWriteRestore)
+		}
+		blackboard := db.For(paths.New(projectRoot).StatePath())
+		return blackboard.Modify(func(state *models.State) error {
+			if state.Config.Mode != models.SystemModeStopped || state.Config.ModeChangedBy == nil ||
+				*state.Config.ModeChangedBy != rawToken {
+				return nil
+			}
+			if err := state.Config.Mode.ValidateTransition(models.SystemModeRunning); err != nil {
+				return &PreconditionError{Reason: err.Error()}
+			}
+			timestamp := goalCompleteStopNow()
+			changedBy := "system:integration-head-verification"
+			state.Config.Mode = models.SystemModeRunning
+			state.Config.ModeChangedAt = &timestamp
+			state.Config.ModeChangedBy = &changedBy
+			return nil
+		})
+	})
+}
+
+func invalidateGoalCompleteStopForMutation(state *models.State, receipt models.IntegrationMutationReceipt) error {
+	if state.Config.Mode != models.SystemModeStopped || state.Config.ModeChangedBy == nil {
+		return nil
+	}
+	rawToken := *state.Config.ModeChangedBy
+	token, ok := decodeGoalCompleteStopToken(rawToken)
+	if !ok || token.SourceCommit != receipt.BeforeCommit || state.Config.ModeChangedBy == nil ||
+		*state.Config.ModeChangedBy != rawToken {
+		return nil
+	}
+	if err := state.Config.Mode.ValidateTransition(models.SystemModeRunning); err != nil {
+		return &PreconditionError{Reason: err.Error()}
+	}
+	timestamp := time.Now()
+	changedBy := receipt.TaskID
+	state.Config.Mode = models.SystemModeRunning
+	state.Config.ModeChangedAt = &timestamp
+	state.Config.ModeChangedBy = &changedBy
+	return nil
+}
+
+func newGoalCompleteStopOperationID() (string, error) {
+	raw := make([]byte, goalCompleteStopOperationIDBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func encodeGoalCompleteStopToken(token goalCompleteStopToken) (string, error) {
+	if !validGoalCompleteStopToken(token) {
+		return "", fmt.Errorf("goal-complete stop token is incomplete")
+	}
+	payload, err := json.Marshal(token)
+	if err != nil {
+		return "", err
+	}
+	return goalCompleteStopTokenPrefix + base64.RawURLEncoding.EncodeToString(payload), nil
+}
+
+func decodeGoalCompleteStopToken(rawToken string) (goalCompleteStopToken, bool) {
+	if !strings.HasPrefix(rawToken, goalCompleteStopTokenPrefix) {
+		return goalCompleteStopToken{}, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(rawToken, goalCompleteStopTokenPrefix))
+	if err != nil {
+		return goalCompleteStopToken{}, false
+	}
+	var token goalCompleteStopToken
+	if err := json.Unmarshal(payload, &token); err != nil || !validGoalCompleteStopToken(token) {
+		return goalCompleteStopToken{}, false
+	}
+	canonical, err := json.Marshal(token)
+	if err != nil || !bytes.Equal(payload, canonical) {
+		return goalCompleteStopToken{}, false
+	}
+	return token, true
+}
+
+func validGoalCompleteStopToken(token goalCompleteStopToken) bool {
+	operationID, err := base64.RawURLEncoding.DecodeString(token.OperationID)
+	return token.AnalysisKey != "" && token.Generation > 0 && token.SourceCommit != "" &&
+		err == nil && len(operationID) == goalCompleteStopOperationIDBytes
 }
 
 // Pause transitions system mode to PAUSED. Agents block until resumed.

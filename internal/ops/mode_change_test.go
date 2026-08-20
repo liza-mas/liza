@@ -138,6 +138,314 @@ func TestStop_AlreadyStopped(t *testing.T) {
 	}
 }
 
+func TestLinearizableGoalCompleteStop(t *testing.T) {
+	const (
+		operationID1 = "AAAAAAAAAAAAAAAAAAAAAA"
+		operationID2 = "AAAAAAAAAAAAAAAAAAAAAQ"
+	)
+
+	t.Run("current clean evidence writes a reserved source-bound token", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		installGoalCompleteStopTestSeams(t, time.Unix(1_700_000_000, 0).UTC(), operationID1)
+
+		result, err := StopForGoalCompletion(fixture.projectRoot, "goal complete")
+		if err != nil {
+			t.Fatalf("StopForGoalCompletion() error = %v", err)
+		}
+		state := fixture.readState(t)
+		if result.New != models.SystemModeStopped || state.Config.Mode != models.SystemModeStopped || state.Config.ModeChangedBy == nil {
+			t.Fatalf("goal completion stop result=%#v mode=%s changed_by=%v", result, state.Config.Mode, state.Config.ModeChangedBy)
+		}
+		token, ok := decodeGoalCompleteStopToken(*state.Config.ModeChangedBy)
+		if !ok || token.AnalysisKey != state.Goal.Integration.Closure.AnalysisKey ||
+			token.Generation != state.Goal.Integration.Closure.Generation ||
+			token.SourceCommit != state.Goal.Integration.Closure.SourceCommit || token.OperationID != operationID1 {
+			t.Fatalf("automatic stop token = %#v valid=%v", token, ok)
+		}
+		snapshot, err := readEffectiveIntegrationCompletionSnapshot(fixture.projectRoot)
+		if err != nil || !snapshot.decision.IntegrationComplete || snapshot.closure.SourceCommit != token.SourceCommit {
+			t.Fatalf("post-stop completion snapshot=%#v error=%v", snapshot, err)
+		}
+	})
+
+	t.Run("generic stop rejects the reserved namespace", func(t *testing.T) {
+		validToken, err := encodeGoalCompleteStopToken(goalCompleteStopToken{
+			AnalysisKey: "global:1", Generation: 1, SourceCommit: "source-a", OperationID: operationID1,
+		})
+		if err != nil {
+			t.Fatalf("encodeGoalCompleteStopToken() error = %v", err)
+		}
+		for _, changedBy := range []string{goalCompleteStopReservedNamespace, validToken} {
+			t.Run(changedBy, func(t *testing.T) {
+				fixture := newEffectiveCompletionFixture(t, true)
+				_, stopErr := Stop(fixture.projectRoot, "forged automatic stop", changedBy)
+				var precondition *PreconditionError
+				if !errors.As(stopErr, &precondition) {
+					t.Fatalf("Stop() error = %T %v, want PreconditionError", stopErr, stopErr)
+				}
+				if state := fixture.readState(t); state.Config.Mode != models.SystemModeRunning {
+					t.Fatalf("reserved generic stop changed mode to %s", state.Config.Mode)
+				}
+			})
+		}
+	})
+
+	t.Run("public mutation after authorization wins before the mode write", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		installGoalCompleteStopTestSeams(t, time.Unix(1_700_000_001, 0).UTC(), operationID1)
+		previousHook := afterGoalCompleteStopAuthorizationTestHook
+		afterGoalCompleteStopAuthorizationTestHook = func() {
+			taskID, agentID := fixture.installPublicIntegrationMutation(t)
+			if _, err := MergeWorktree(fixture.projectRoot, taskID, agentID); err != nil {
+				t.Fatalf("MergeWorktree() error = %v", err)
+			}
+		}
+		t.Cleanup(func() { afterGoalCompleteStopAuthorizationTestHook = previousHook })
+
+		_, err := StopForGoalCompletion(fixture.projectRoot, "goal complete")
+		requireEffectiveCompletionPrecondition(t, err)
+		if state := fixture.readState(t); state.Config.Mode != models.SystemModeRunning {
+			t.Fatalf("mutation-before-write left mode %s", state.Config.Mode)
+		}
+	})
+
+	t.Run("public mutation after the mode write invalidates the exact automatic stop", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		installGoalCompleteStopTestSeams(t, time.Unix(1_700_000_002, 0).UTC(), operationID1)
+		writeStages := observeGoalCompleteStopWritesOutsideMutationLock(t, fixture.projectRoot)
+		receiptWrite := observeMutationReceiptWriteOutsideMutationLock(t, fixture.projectRoot)
+		receiptObserved := make(chan string, 1)
+		mergeDone := make(chan error, 1)
+		var taskID string
+		previousHook := afterGoalCompleteStopModeWriteTestHook
+		afterGoalCompleteStopModeWriteTestHook = func(string) {
+			var agentID string
+			taskID, agentID = fixture.installPublicIntegrationMutation(t)
+			go func() {
+				_, err := MergeWorktree(fixture.projectRoot, taskID, agentID)
+				mergeDone <- err
+			}()
+			select {
+			case observedTaskID := <-receiptWrite:
+				receiptObserved <- observedTaskID
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out waiting for post-stop ref mutation")
+			}
+		}
+		t.Cleanup(func() { afterGoalCompleteStopModeWriteTestHook = previousHook })
+
+		_, err := StopForGoalCompletion(fixture.projectRoot, "goal complete")
+		requireEffectiveCompletionPrecondition(t, err)
+		select {
+		case mergeErr := <-mergeDone:
+			if mergeErr != nil {
+				t.Fatalf("MergeWorktree() error = %v", mergeErr)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for post-stop public mutation")
+		}
+		if state := fixture.readState(t); state.Config.Mode != models.SystemModeRunning {
+			t.Fatalf("mutation-after-write left mode %s", state.Config.Mode)
+		}
+		if got := <-writeStages; got != goalCompleteStopWriteStop {
+			t.Fatalf("first state write stage = %q", got)
+		}
+		if got := <-receiptObserved; got != taskID {
+			t.Fatalf("receipt write task = %q, want %q", got, taskID)
+		}
+	})
+
+	t.Run("mutation after a completed automatic stop reactivates running", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		installGoalCompleteStopTestSeams(t, time.Unix(1_700_000_004, 0).UTC(), operationID1)
+		if _, err := StopForGoalCompletion(fixture.projectRoot, "goal complete"); err != nil {
+			t.Fatalf("StopForGoalCompletion() error = %v", err)
+		}
+		taskID, agentID := fixture.installPublicIntegrationMutation(t)
+		if _, err := MergeWorktree(fixture.projectRoot, taskID, agentID); err != nil {
+			t.Fatalf("MergeWorktree() error = %v", err)
+		}
+		if state := fixture.readState(t); state.Config.Mode != models.SystemModeRunning {
+			t.Fatalf("post-completion mutation left mode %s", state.Config.Mode)
+		}
+	})
+
+	t.Run("later mutation preserves an ordinary operator stop", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		taskID, agentID := fixture.installPublicIntegrationMutation(t)
+		if _, err := Stop(fixture.projectRoot, "operator shutdown", "operator-1"); err != nil {
+			t.Fatalf("Stop() error = %v", err)
+		}
+		if _, err := MergeWorktree(fixture.projectRoot, taskID, agentID); err != nil {
+			t.Fatalf("MergeWorktree() error = %v", err)
+		}
+		state := fixture.readState(t)
+		if state.Config.Mode != models.SystemModeStopped || state.Config.ModeChangedBy == nil || *state.Config.ModeChangedBy != "operator-1" {
+			t.Fatalf("mutation overwrote operator stop: mode=%s changed_by=%v", state.Config.Mode, state.Config.ModeChangedBy)
+		}
+	})
+
+	t.Run("operation ID failure writes no stop", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		previousGenerator := generateGoalCompleteStopOperationID
+		generateGoalCompleteStopOperationID = func() (string, error) { return "", errors.New("entropy unavailable") }
+		t.Cleanup(func() { generateGoalCompleteStopOperationID = previousGenerator })
+
+		_, err := StopForGoalCompletion(fixture.projectRoot, "goal complete")
+		if err == nil || !strings.Contains(err.Error(), "entropy unavailable") {
+			t.Fatalf("StopForGoalCompletion() error = %v, want entropy failure", err)
+		}
+		state := fixture.readState(t)
+		if state.Config.Mode != models.SystemModeRunning || state.Config.ModeChangedBy != nil {
+			t.Fatalf("entropy failure wrote mode=%s changed_by=%v", state.Config.Mode, state.Config.ModeChangedBy)
+		}
+	})
+
+	t.Run("stale post-check cannot overwrite a newer repeated-timestamp automatic stop", func(t *testing.T) {
+		fixture := newEffectiveCompletionFixture(t, true)
+		fixedTime := time.Unix(1_700_000_003, 0).UTC()
+		installGoalCompleteStopTestSeams(t, fixedTime, operationID1, operationID2)
+		var taskID, agentID string
+		firstWritten := make(chan string, 1)
+		releaseFirst := make(chan struct{})
+		previousHook := afterGoalCompleteStopModeWriteTestHook
+		afterGoalCompleteStopModeWriteTestHook = func(rawToken string) {
+			token, ok := decodeGoalCompleteStopToken(rawToken)
+			if ok && token.OperationID == operationID1 {
+				taskID, agentID = fixture.installPublicIntegrationMutation(t)
+				firstWritten <- rawToken
+				<-releaseFirst
+			}
+		}
+		t.Cleanup(func() { afterGoalCompleteStopModeWriteTestHook = previousHook })
+
+		firstDone := make(chan error, 1)
+		go func() {
+			_, err := StopForGoalCompletion(fixture.projectRoot, "first goal completion")
+			firstDone <- err
+		}()
+		var firstToken string
+		select {
+		case firstToken = <-firstWritten:
+		case err := <-firstDone:
+			close(releaseFirst)
+			t.Fatalf("first StopForGoalCompletion() returned before mode-write hook: %v", err)
+		case <-time.After(2 * time.Second):
+			close(releaseFirst)
+			t.Fatal("timed out waiting for first automatic stop")
+		}
+		firstState := fixture.readState(t)
+		if firstState.Config.ModeChangedAt == nil || !firstState.Config.ModeChangedAt.Equal(fixedTime) {
+			close(releaseFirst)
+			t.Fatalf("first stop timestamp = %v, want %v", firstState.Config.ModeChangedAt, fixedTime)
+		}
+		if _, err := MergeWorktree(fixture.projectRoot, taskID, agentID); err != nil {
+			close(releaseFirst)
+			t.Fatalf("MergeWorktree() error = %v", err)
+		}
+		newHead := testhelpers.MustGit(t, fixture.projectRoot, "rev-parse", "refs/heads/integration")
+		installNextCleanGoalClosure(t, fixture, newHead)
+		if _, err := StopForGoalCompletion(fixture.projectRoot, "second goal completion"); err != nil {
+			close(releaseFirst)
+			t.Fatalf("second StopForGoalCompletion() error = %v", err)
+		}
+		secondState := fixture.readState(t)
+		if secondState.Config.ModeChangedBy == nil || *secondState.Config.ModeChangedBy == firstToken ||
+			secondState.Config.ModeChangedAt == nil || !secondState.Config.ModeChangedAt.Equal(fixedTime) {
+			close(releaseFirst)
+			t.Fatalf("second stop token/timestamp = %v %v", secondState.Config.ModeChangedBy, secondState.Config.ModeChangedAt)
+		}
+		secondToken := *secondState.Config.ModeChangedBy
+
+		close(releaseFirst)
+		select {
+		case err := <-firstDone:
+			requireEffectiveCompletionPrecondition(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for stale first post-check")
+		}
+		finalState := fixture.readState(t)
+		if finalState.Config.Mode != models.SystemModeStopped || finalState.Config.ModeChangedBy == nil || *finalState.Config.ModeChangedBy != secondToken {
+			t.Fatalf("stale post-check overwrote newer stop: mode=%s changed_by=%v want=%q", finalState.Config.Mode, finalState.Config.ModeChangedBy, secondToken)
+		}
+	})
+}
+
+func installGoalCompleteStopTestSeams(t *testing.T, timestamp time.Time, operationIDs ...string) {
+	t.Helper()
+	previousNow := goalCompleteStopNow
+	previousGenerator := generateGoalCompleteStopOperationID
+	goalCompleteStopNow = func() time.Time { return timestamp }
+	ids := make(chan string, len(operationIDs))
+	for _, operationID := range operationIDs {
+		ids <- operationID
+	}
+	generateGoalCompleteStopOperationID = func() (string, error) {
+		select {
+		case operationID := <-ids:
+			return operationID, nil
+		default:
+			return "", errors.New("no deterministic operation ID available")
+		}
+	}
+	t.Cleanup(func() {
+		goalCompleteStopNow = previousNow
+		generateGoalCompleteStopOperationID = previousGenerator
+	})
+}
+
+func observeGoalCompleteStopWritesOutsideMutationLock(t *testing.T, projectRoot string) <-chan string {
+	t.Helper()
+	stages := make(chan string, 4)
+	previousHook := beforeGoalCompleteStopStateWriteTestHook
+	beforeGoalCompleteStopStateWriteTestHook = func(stage string) {
+		if err := withIntegrationMutationLockTimeout(projectRoot, "goal-stop-write-test", 250*time.Millisecond, func() error { return nil }); err != nil {
+			t.Errorf("goal-complete state write %q held integration mutation lock: %v", stage, err)
+		}
+		stages <- stage
+	}
+	t.Cleanup(func() { beforeGoalCompleteStopStateWriteTestHook = previousHook })
+	return stages
+}
+
+func observeMutationReceiptWriteOutsideMutationLock(t *testing.T, projectRoot string) <-chan string {
+	t.Helper()
+	taskIDs := make(chan string, 2)
+	previousHook := integrationMutationReceiptPersistTestHook
+	integrationMutationReceiptPersistTestHook = func(receipt models.IntegrationMutationReceipt) {
+		if err := withIntegrationMutationLockTimeout(projectRoot, "goal-stop-receipt-test", 250*time.Millisecond, func() error { return nil }); err != nil {
+			t.Errorf("mutation receipt state write held integration mutation lock: %v", err)
+		}
+		taskIDs <- receipt.TaskID
+	}
+	t.Cleanup(func() { integrationMutationReceiptPersistTestHook = previousHook })
+	return taskIDs
+}
+
+func installNextCleanGoalClosure(t *testing.T, fixture *effectiveCompletionFixture, sourceCommit string) {
+	t.Helper()
+	fixture.mutateState(t, func(state *models.State) {
+		previous := state.FindTask("integration-global-1")
+		if previous == nil {
+			t.Fatal("global generation 1 task missing")
+		}
+		analysis := *previous
+		analysis.ID = "integration-global-2"
+		analysis.IntegrationAnalysis = &models.IntegrationAnalysisMetadata{
+			Key: "global:2", Phase: models.IntegrationAnalysisPhaseGlobal, Generation: 2, SourceCommit: sourceCommit,
+		}
+		analysis.ReviewCommit = progressString("global-report-2")
+		state.Tasks = append(state.Tasks, analysis)
+		state.Goal.Integration.GlobalGenerations = append(state.Goal.Integration.GlobalGenerations, models.IntegrationGlobalGeneration{
+			Generation: 2, AnalysisTaskID: analysis.ID, AnalysisKey: "global:2",
+			Verdict: models.IntegrationAnalysisVerdictClean, SourceCommit: sourceCommit, ReportCommit: "global-report-2",
+		})
+		state.Goal.Integration.Closure = &models.IntegrationClosure{
+			Status: models.IntegrationClosureStatusClean, Generation: 2, AnalysisKey: "global:2", SourceCommit: sourceCommit,
+		}
+	})
+}
+
 // --- Pause ---
 
 func TestPause_FromRunning(t *testing.T) {

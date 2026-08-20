@@ -71,6 +71,7 @@ Operational lessons from project experience. Read when a trigger matches.
 | Constructing paths inside a worktree | [worktree-path-construction.md](lessons/agents/worktree-path-construction.md) |
 | Running `go build` or `go test` in a Liza worktree | [worktree-build-prerequisites.md](lessons/agents/worktree-build-prerequisites.md) |
 | When reading Go test files (`*_test.go`) | [large-test-file-reads.md](lessons/agents/large-test-file-reads.md) |
+| Piping or redirecting stdin through an RTK-wrapped tool | [rtk-proxy-for-stdin-tools.md](lessons/agents/rtk-proxy-for-stdin-tools.md) |
 
 ### G2.2: Contract and prompt conciseness
 
