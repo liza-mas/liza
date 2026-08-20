@@ -16,6 +16,7 @@ import (
 	activitylog "github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -2323,51 +2324,130 @@ func TestSubmitVerdictIntegrationLifecycleProjection(t *testing.T) {
 		}
 	})
 
-	t.Run("global clean verifies source before atomic projection", func(t *testing.T) {
-		fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseGlobal, nil)
-		called := make(chan string, 1)
-		release := make(chan struct{})
-		previousVerifier := verifyCleanIntegrationSourceForVerdict
-		verifyCleanIntegrationSourceForVerdict = func(_ string, sourceCommit string) (cleanIntegrationSourceVerification, error) {
-			called <- sourceCommit
+	t.Run("global clean verdict serializes closure persistence before competing merge", func(t *testing.T) {
+		scenario := setupIntegrationMutationScenario(t)
+		verdictTaskID := "global-verdict"
+		analystID := "integration-analyst-2"
+		reviewerID := "integration-reviewer-1"
+		now := time.Now().UTC()
+		lease := now.Add(30 * time.Minute)
+		verdictTaskRef := verdictTaskID
+		state := readStateForTest(t, scenario.stateFile)
+		mutationTask := state.FindTask(scenario.taskID)
+		if mutationTask == nil {
+			t.Fatalf("merge task %s missing", scenario.taskID)
+		}
+		mutationTask.Type = models.TaskTypeArchitecture
+		mutationTask.RolePair = "architecture-pair"
+		mutationTask.Status = models.TaskStatus("ARCHITECTURE_APPROVED")
+		mutationTask.IntegrationAnalysis = nil
+		priorReceipts := append([]models.IntegrationMutationReceipt(nil), state.Goal.Integration.MutationReceipts...)
+		state.Tasks = []models.Task{*mutationTask}
+		state.Goal.Integration = &models.IntegrationLifecycle{
+			ContributingSet:  &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}},
+			MutationReceipts: priorReceipts,
+		}
+		state.Tasks = append(state.Tasks, models.Task{
+			ID: verdictTaskID, Type: models.TaskTypeIntegration, Description: "Global integration analysis",
+			Status: models.TaskStatus("REVIEWING_INTEGRATION_ANALYSIS"), RolePair: "integration-pair", Priority: 1,
+			Created: now, SpecRef: "README.md", DoneWhen: "Analysis reviewed", Scope: "Integration scope",
+			AssignedTo: &analystID, ReviewCommit: &scenario.after, ReviewingBy: &reviewerID, ReviewLeaseExpires: &lease,
+			HandoffEvents: []models.HandoffEvent{{Timestamp: now, Agent: analystID, Trigger: models.HandoffTriggerSubmission}},
+			IntegrationAnalysis: &models.IntegrationAnalysisMetadata{
+				Key: "global:1", Phase: models.IntegrationAnalysisPhaseGlobal, Generation: 1, SourceCommit: scenario.before,
+			},
+		})
+		state.Agents[analystID] = models.Agent{
+			Role: "integration-analyst", Status: models.AgentStatusWaiting, CurrentTask: &verdictTaskRef,
+			LeaseExpires: &lease, Heartbeat: now, RegisteredAt: now, Provider: "codex", PID: os.Getpid(),
+		}
+		state.Agents[reviewerID] = models.Agent{
+			Role: "integration-reviewer", Status: models.AgentStatusReviewing, CurrentTask: &verdictTaskRef,
+			LeaseExpires: &lease, Heartbeat: now, RegisteredAt: now, Provider: "codex", PID: os.Getpid(),
+		}
+		testhelpers.WriteInitialState(t, scenario.stateFile, state)
+
+		beforeModify := make(chan struct{})
+		releaseVerdict := make(chan struct{})
+		release := func() {
 			select {
-			case <-release:
-				return cleanIntegrationSourceVerification{SourceCommit: sourceCommit, IntegrationHEAD: sourceCommit, Effective: true}, nil
-			case <-time.After(5 * time.Second):
-				return cleanIntegrationSourceVerification{}, fmt.Errorf("timed out waiting to release clean-source verification")
+			case <-releaseVerdict:
+			default:
+				close(releaseVerdict)
 			}
 		}
-		t.Cleanup(func() { verifyCleanIntegrationSourceForVerdict = previousVerifier })
+		t.Cleanup(release)
+		previousVerdictHooks := testSubmitVerdictHooks
+		testSubmitVerdictHooks = &submitVerdictTestHooks{beforeModify: func() {
+			close(beforeModify)
+			<-releaseVerdict
+		}}
+		t.Cleanup(func() { testSubmitVerdictHooks = previousVerdictHooks })
 
 		type verdictCall struct {
 			result *VerdictResult
 			err    error
 		}
-		completed := make(chan verdictCall, 1)
+		verdictDone := make(chan verdictCall, 1)
 		go func() {
-			result, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, "")
-			completed <- verdictCall{result: result, err: err}
+			result, err := SubmitVerdict(scenario.projectRoot, verdictTaskID, "APPROVED", "", reviewerID, "")
+			verdictDone <- verdictCall{result: result, err: err}
 		}()
-
 		select {
-		case sourceCommit := <-called:
-			if sourceCommit != fixture.sourceCommit {
-				t.Fatalf("verified source = %q, want %q", sourceCommit, fixture.sourceCommit)
-			}
+		case <-beforeModify:
 		case <-time.After(5 * time.Second):
-			t.Fatal("clean-source verification was not called")
-		}
-		blockedState := fixture.readState(t)
-		if got := blockedState.FindTask(fixture.taskID).Status; got != models.TaskStatus("REVIEWING_INTEGRATION_ANALYSIS") {
-			t.Fatalf("status changed before verification returned: %s", got)
-		}
-		if len(blockedState.Goal.Integration.GlobalGenerations) != 0 {
-			t.Fatalf("global evidence persisted before verification returned: %#v", blockedState.Goal.Integration.GlobalGenerations)
+			t.Fatal("clean verdict did not reach the post-verification persistence gap")
 		}
 
-		close(release)
+		mergeAttempted := make(chan struct{}, 1)
+		previousLinearizationHook := beforeEffectiveIntegrationCompletionLinearizationTestHook
+		beforeEffectiveIntegrationCompletionLinearizationTestHook = func(operation string) {
+			if operation == "forward "+scenario.taskID {
+				mergeAttempted <- struct{}{}
+			}
+		}
+		t.Cleanup(func() { beforeEffectiveIntegrationCompletionLinearizationTestHook = previousLinearizationHook })
+		type receiptObservation struct {
+			receipt models.IntegrationMutationReceipt
+			state   *models.State
+			err     error
+		}
+		receiptReached := make(chan receiptObservation, 1)
+		previousReceiptHook := integrationMutationReceiptPersistTestHook
+		integrationMutationReceiptPersistTestHook = func(receipt models.IntegrationMutationReceipt) {
+			state, err := db.For(scenario.stateFile).Read()
+			receiptReached <- receiptObservation{receipt: receipt, state: state, err: err}
+		}
+		t.Cleanup(func() { integrationMutationReceiptPersistTestHook = previousReceiptHook })
+		mergeDone := make(chan error, 1)
+		go func() {
+			_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.agentID)
+			mergeDone <- err
+		}()
 		select {
-		case call := <-completed:
+		case <-mergeAttempted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("competing merge did not attempt completion serialization")
+		}
+		select {
+		case observation := <-receiptReached:
+			t.Fatalf("competing merge reached receipt persistence before verdict release: %#v", observation.receipt)
+		case err := <-mergeDone:
+			t.Fatalf("competing merge completed before verdict release: %v", err)
+		case <-time.After(250 * time.Millisecond):
+		}
+		assertIntegrationHead(t, scenario.projectRoot, scenario.before)
+		paused := readStateForTest(t, scenario.stateFile)
+		if len(paused.Goal.Integration.GlobalGenerations) != 0 || paused.Goal.Integration.Closure != nil {
+			t.Fatalf("verdict evidence persisted while verdict was paused: %#v", paused.Goal.Integration)
+		}
+		if len(paused.Goal.Integration.MutationReceipts) != 1 {
+			t.Fatalf("mutation receipt count while verdict paused = %d, want 1", len(paused.Goal.Integration.MutationReceipts))
+		}
+
+		release()
+		select {
+		case call := <-verdictDone:
 			if call.err != nil {
 				t.Fatalf("SubmitVerdict() error = %v", call.err)
 			}
@@ -2375,20 +2455,53 @@ func TestSubmitVerdictIntegrationLifecycleProjection(t *testing.T) {
 				t.Fatal("SubmitVerdict() result is nil")
 			}
 		case <-time.After(5 * time.Second):
-			t.Fatal("SubmitVerdict did not complete after verification")
+			t.Fatal("SubmitVerdict did not complete after release")
+		}
+		var observation receiptObservation
+		select {
+		case observation = <-receiptReached:
+		case <-time.After(5 * time.Second):
+			t.Fatal("MergeWorktree did not reach receipt persistence after verdict completion")
+		}
+		if observation.err != nil {
+			t.Fatalf("read state at receipt persistence: %v", observation.err)
+		}
+		assertMutationReceipt(t, observation.receipt, scenario.taskID, scenario.before, scenario.after)
+		if observation.state == nil || len(observation.state.Goal.Integration.GlobalGenerations) != 1 {
+			t.Fatalf("global evidence at receipt persistence = %#v, want one durable generation", observation.state)
+		}
+		closureAtReceipt := observation.state.Goal.Integration.Closure
+		if closureAtReceipt == nil || closureAtReceipt.SourceCommit != scenario.before {
+			t.Fatalf("clean closure at receipt persistence = %#v, want source %s", closureAtReceipt, scenario.before)
+		}
+		if len(observation.state.Goal.Integration.MutationReceipts) != 1 {
+			t.Fatalf("mutation receipts before competing persistence = %#v, want prior receipt only", observation.state.Goal.Integration.MutationReceipts)
+		}
+		select {
+		case err := <-mergeDone:
+			if err != nil {
+				t.Fatalf("MergeWorktree() error = %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("MergeWorktree did not complete after verdict persistence")
 		}
 
-		after := fixture.readState(t)
+		assertIntegrationHead(t, scenario.projectRoot, scenario.after)
+		after := readStateForTest(t, scenario.stateFile)
 		if len(after.Goal.Integration.GlobalGenerations) != 1 {
 			t.Fatalf("global generation count = %d, want 1", len(after.Goal.Integration.GlobalGenerations))
 		}
 		generation := after.Goal.Integration.GlobalGenerations[0]
-		if generation.Verdict != models.IntegrationAnalysisVerdictClean || generation.SourceCommit != fixture.sourceCommit || generation.ReportCommit != fixture.reportCommit {
+		if generation.Verdict != models.IntegrationAnalysisVerdictClean || generation.SourceCommit != scenario.before || generation.ReportCommit != scenario.after {
 			t.Fatalf("global clean generation = %#v", generation)
 		}
-		closure := after.Goal.Integration.Closure
-		if closure == nil || closure.Status != models.IntegrationClosureStatusClean || closure.Generation != 1 || closure.AnalysisKey != fixture.analysisKey || closure.SourceCommit != fixture.sourceCommit {
-			t.Fatalf("global clean closure = %#v", closure)
+		if len(after.Goal.Integration.MutationReceipts) != 2 {
+			t.Fatalf("mutation receipt count = %d, want 2", len(after.Goal.Integration.MutationReceipts))
+		}
+		assertMutationReceipt(t, after.Goal.Integration.MutationReceipts[1], scenario.taskID, scenario.before, scenario.after)
+		decision := evaluateProgress(t, after, pipeline.SlicedIntegrationCapability{Available: true}, scenario.after)
+		if decision.IntegrationComplete {
+			t.Fatalf("old-source clean closure remained effective after merge: %#v", decision)
 		}
 	})
 
@@ -2511,6 +2624,40 @@ func TestSubmitVerdictIntegrationLifecycleProjection(t *testing.T) {
 			t.Fatalf("ordinary approval lifecycle = %#v, want nil", after.Goal.Integration)
 		}
 	})
+}
+
+func TestSubmitVerdict_CleanGlobalClassificationReadFailureFailsClosed(t *testing.T) {
+	fixture := newSubmitVerdictIntegrationFixture(t, models.IntegrationAnalysisPhaseGlobal, nil)
+	before := fixture.readState(t)
+	forcedErr := fmt.Errorf("forced classification read failure")
+	readCalls := 0
+	previousReader := readTaskStateForSubmitVerdict
+	readTaskStateForSubmitVerdict = func(bb *db.Blackboard, taskID string) (*models.State, *models.Task, error) {
+		readCalls++
+		if readCalls == 1 {
+			return nil, nil, forcedErr
+		}
+		return readTaskState(bb, taskID)
+	}
+	t.Cleanup(func() { readTaskStateForSubmitVerdict = previousReader })
+
+	result, err := SubmitVerdict(fixture.projectRoot, fixture.taskID, "APPROVED", "", fixture.reviewerID, "")
+	if result != nil {
+		t.Fatalf("SubmitVerdict() result = %#v, want nil", result)
+	}
+	if err == nil || !strings.Contains(err.Error(), forcedErr.Error()) {
+		t.Fatalf("SubmitVerdict() error = %v, want %q", err, forcedErr)
+	}
+	if readCalls != 1 {
+		t.Fatalf("task-state reads = %d, want 1", readCalls)
+	}
+	assertSubmitVerdictTransactionUnchanged(t, before, fixture.readState(t), fixture.taskID, fixture.reviewerID)
+	if _, _, err := readTaskStateForSubmitVerdict(db.For(fixture.statePath), fixture.taskID); err != nil {
+		t.Fatalf("subsequent task-state read error = %v, want success", err)
+	}
+	if readCalls != 2 {
+		t.Fatalf("task-state reads after subsequent lookup = %d, want 2", readCalls)
+	}
 }
 
 type submitVerdictIntegrationFixture struct {

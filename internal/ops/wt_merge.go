@@ -651,10 +651,19 @@ func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string
 		})
 		if receiptErr := persistIntegrationMutationReceipt(bb, forwardMutation); receiptErr != nil {
 			receiptErr = fmt.Errorf("failed to persist integration mutation receipt: %w", receiptErr)
-			if mutationErr != nil {
-				return errors.Join(mutationErr, receiptErr)
+			rollbackMutation, rollbackErr := rollbackMergedCommit(
+				projectRoot,
+				gitWrapper,
+				integrationRef,
+				outcome.preMergeHEAD,
+				outcome.mergeCommit,
+				"HEAD",
+				taskID,
+			)
+			if rollbackErr == nil && rollbackMutation == nil {
+				rollbackErr = fmt.Errorf("failed to roll back integration ref after receipt persistence failure: ref changed from %s", shortSHA(outcome.mergeCommit))
 			}
-			return receiptErr
+			return errors.Join(mutationErr, receiptErr, rollbackErr)
 		}
 		return mutationErr
 	})

@@ -72,6 +72,7 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 				fixture := newSlicedLifecycleFixture(t, false)
 				if scopes == 0 {
 					fixture.modify(t, func(state *models.State) {
+						state.Goal.BaseCommit = nil
 						state.Tasks = nil
 						state.Sprint.Scope.Planned = nil
 					})
@@ -88,6 +89,44 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 				global := state.FindTask("integration-global-1")
 				if global == nil || global.IntegrationAnalysis == nil || global.IntegrationAnalysis.SourceCommit != fixture.head {
 					t.Fatalf("%d-scope global analysis = %#v", scopes, global)
+				}
+				if scopes == 0 {
+					if state.Goal.BaseCommit == nil || *state.Goal.BaseCommit != fixture.head {
+						t.Fatalf("zero-scope goal base commit = %v, want %s", state.Goal.BaseCommit, fixture.head)
+					}
+					const analystID = "integration-analyst-1"
+					ensureTestAgent(t, fixture, analystID, roles.IntegrationAnalyst)
+					if _, err := ops.ClaimTask(fixture.root, global.ID, analystID); err != nil {
+						t.Fatalf("ClaimTask(%s): %v", global.ID, err)
+					}
+					prompt := buildIntegrationPrompt(t, fixture, global.ID, analystID)
+					claimed := fixture.read(t).FindTask(global.ID)
+					if claimed == nil || claimed.Worktree == nil {
+						t.Fatalf("claimed zero-scope global task = %#v", claimed)
+					}
+					worktree := filepath.Join(fixture.root, *claimed.Worktree)
+					diffRange := fixture.head + ".." + fixture.head
+					for _, want := range []string{
+						"git -C '" + worktree + "' diff --name-only '" + diffRange + "'",
+						"git -C '" + worktree + "' diff --stat '" + diffRange + "'",
+						"git -C '" + worktree + "' diff '" + diffRange + "' -- <path>",
+					} {
+						if !strings.Contains(prompt, want) {
+							t.Fatalf("zero-scope global prompt missing aggregate boundary %q", want)
+						}
+					}
+					completeIntegrationAnalysis(t, fixture, global.ID, nil)
+					if _, err := ops.StopForGoalCompletion(fixture.root, "zero-scope goal complete"); err != nil {
+						t.Fatalf("StopForGoalCompletion(): %v", err)
+					}
+					completed := fixture.read(t)
+					closure := completed.Goal.Integration.Closure
+					if closure == nil || closure.Status != models.IntegrationClosureStatusClean || closure.SourceCommit != fixture.head {
+						t.Fatalf("zero-scope clean closure = %#v", closure)
+					}
+					if completed.Config.Mode != models.SystemModeStopped {
+						t.Fatalf("zero-scope completed mode = %s, want STOPPED", completed.Config.Mode)
+					}
 				}
 			})
 		}

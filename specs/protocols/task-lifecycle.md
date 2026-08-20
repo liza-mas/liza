@@ -499,7 +499,10 @@ from terminal-count heuristics.
 `goal.base_commit` is snapshotted when the first coding-pair children are
 created (from any pipeline transition). It records the integration branch HEAD
 at that point, giving global analysis the stable lower bound for the goal-wide
-diff. Per-slice immutable source snapshots are recorded separately.
+diff. If a settled goal has no contributing coding scopes and therefore never
+created coding children, reconciliation snapshots the first global analysis's
+immutable source commit as `goal.base_commit` before materializing that task.
+Per-slice immutable source snapshots are recorded separately.
 
 ---
 

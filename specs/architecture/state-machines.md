@@ -271,7 +271,9 @@ validate the existing task and planned membership as an unchanged no-op.
 
 **Goal.BaseCommit:** Snapshotted when the first coding-pair children are created
 (from any transition). Global analysis still receives the goal-wide integration
-surface, while slice metadata records its narrower immutable source surface.
+surface. For a zero-scope cohort with no coding children, reconciliation instead
+snapshots the first global analysis source commit before creating that task.
+Slice metadata records its narrower immutable source surface.
 
 ### Blocked Repair Exception
 

@@ -49,6 +49,7 @@ type submitVerdictTestHooks struct {
 
 var testSubmitVerdictHooks *submitVerdictTestHooks
 var verifyCleanIntegrationSourceForVerdict = verifyCleanIntegrationSource
+var readTaskStateForSubmitVerdict = readTaskState
 
 // IsValidImpact returns whether v is a recognized impact classification.
 // Empty string is valid (means "not specified").
@@ -97,6 +98,10 @@ func ResolveEffectiveImpact(history []models.TaskHistoryEntry) string {
 // the reviewer's impact classification; it cannot downgrade the effective impact.
 // No terminal I/O.
 func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string) (result *VerdictResult, retErr error) {
+	return submitVerdict(projectRoot, taskID, verdict, reason, agentID, impact, false)
+}
+
+func submitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string, completionLinearized bool) (result *VerdictResult, retErr error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -134,8 +139,9 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
+	recordFailure := true
 	defer func() {
-		if retErr != nil {
+		if retErr != nil && recordFailure {
 			recordSubmitVerdictFailure(bb, lp.LogPath(), taskID, agentID, verdict, retErr)
 		}
 	}()
@@ -145,7 +151,7 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 	}
 
 	// Phase 1: Read state and validate preconditions
-	_, task, err := readTaskState(bb, taskID)
+	_, task, err := readTaskStateForSubmitVerdict(bb, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -218,6 +224,20 @@ func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string)
 		if *task.ReviewCommit != wtHEAD {
 			return nil, &PreconditionError{Reason: fmt.Sprintf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)}
 		}
+	}
+
+	if !completionLinearized && verdict == "APPROVED" && task.IntegrationAnalysis != nil &&
+		task.IntegrationAnalysis.Phase == models.IntegrationAnalysisPhaseGlobal && len(task.Output) == 0 {
+		callbackEntered := false
+		linearizationErr := withEffectiveIntegrationCompletionLinearization(projectRoot, "clean integration verdict "+taskID, func() error {
+			callbackEntered = true
+			result, retErr = submitVerdict(projectRoot, taskID, verdict, reason, agentID, impact, true)
+			return retErr
+		})
+		if callbackEntered {
+			recordFailure = false
+		}
+		return result, linearizationErr
 	}
 
 	// Phase 3: Atomic state update

@@ -397,6 +397,30 @@ func testIntegrationMutationReceiptPersistence(t *testing.T) {
 
 func testIntegrationMutationValidatorRejection(t *testing.T) {
 	scenario := setupIntegrationMutationScenario(t)
+	state := readStateForTest(t, scenario.stateFile)
+	closure := state.Goal.Integration.Closure
+	if closure == nil {
+		t.Fatal("clean integration closure missing")
+	}
+	stopToken, err := encodeGoalCompleteStopToken(goalCompleteStopToken{
+		AnalysisKey:  closure.AnalysisKey,
+		Generation:   closure.Generation,
+		SourceCommit: closure.SourceCommit,
+		OperationID:  "AAAAAAAAAAAAAAAAAAAAAA",
+	})
+	if err != nil {
+		t.Fatalf("encode goal-complete stop token: %v", err)
+	}
+	stoppedAt := time.Unix(1_700_000_000, 0).UTC()
+	if err := db.For(scenario.stateFile).Modify(func(state *models.State) error {
+		state.Config.Mode = models.SystemModeStopped
+		state.Config.ModeChangedAt = &stoppedAt
+		state.Config.ModeChangedBy = &stopToken
+		return nil
+	}); err != nil {
+		t.Fatalf("install goal-complete stop: %v", err)
+	}
+	before := readStateForTest(t, scenario.stateFile)
 	previousValidator := validateIntegrationLifecycleTransition
 	validatorCalled := false
 	validateIntegrationLifecycleTransition = func(previous, candidate *models.State) error {
@@ -405,16 +429,24 @@ func testIntegrationMutationValidatorRejection(t *testing.T) {
 	}
 	t.Cleanup(func() { validateIntegrationLifecycleTransition = previousValidator })
 
-	_, err := MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.agentID)
+	_, err = MergeWorktree(scenario.projectRoot, scenario.taskID, scenario.agentID)
 	if err == nil || !strings.Contains(err.Error(), "forced lifecycle transition rejection") {
 		t.Fatalf("MergeWorktree() error = %v, want validator rejection", err)
 	}
 	if !validatorCalled {
 		t.Fatal("public MergeWorktree did not call the lifecycle transition validator")
 	}
-	state := readStateForTest(t, scenario.stateFile)
+	assertIntegrationHead(t, scenario.projectRoot, scenario.before)
+	state = readStateForTest(t, scenario.stateFile)
+	if !reflect.DeepEqual(state.Goal.Integration, before.Goal.Integration) {
+		t.Fatalf("integration lifecycle changed after validator rejection:\n got: %#v\nwant: %#v", state.Goal.Integration, before.Goal.Integration)
+	}
 	if got := len(state.Goal.Integration.MutationReceipts); got != 1 {
 		t.Fatalf("mutation receipt count = %d, want prior receipt only", got)
+	}
+	if state.Config.Mode != models.SystemModeStopped || state.Config.ModeChangedAt == nil || !state.Config.ModeChangedAt.Equal(stoppedAt) ||
+		state.Config.ModeChangedBy == nil || *state.Config.ModeChangedBy != stopToken {
+		t.Fatalf("goal-complete stop changed after validator rejection: mode=%s changed_at=%v changed_by=%v", state.Config.Mode, state.Config.ModeChangedAt, state.Config.ModeChangedBy)
 	}
 	if task := state.FindTask(scenario.taskID); task == nil || task.Status != models.TaskStatus("INTEGRATION_ANALYSIS_APPROVED") {
 		t.Fatalf("task persisted after validator rejection: %#v", task)

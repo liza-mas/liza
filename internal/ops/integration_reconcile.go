@@ -99,6 +99,12 @@ func projectIntegrationProgressDecision(
 	result *ReconcileIntegrationAnalysesResult,
 ) (bool, error) {
 	changed := false
+	if decision.GlobalRequest != nil && state.Goal.BaseCommit == nil &&
+		decision.ContributingSet != nil && len(decision.ContributingSet.Scopes) == 0 {
+		baseCommit := decision.GlobalRequest.SourceCommit
+		state.Goal.BaseCommit = &baseCommit
+		changed = true
+	}
 	needsLifecycle := decision.FreezeContributingSet || len(decision.Coverage) > 0 ||
 		len(decision.SliceRequests) > 0 || decision.GlobalRequest != nil || decision.Blocked != nil
 	if state.Goal.Integration == nil && needsLifecycle {
