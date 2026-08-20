@@ -2,8 +2,10 @@ package prompts
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -873,7 +876,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 			},
 		},
 		{
-			name: "sprint complete trigger",
+			name: "terminal tasks without authoritative integration evidence fail closed",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				state.Sprint.Scope.Planned = []string{"task-1", "task-2"}
@@ -884,12 +887,15 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				return state
 			}(),
 			wantContains: []string{
-				"WAKE TRIGGER: SPRINT_COMPLETE",
+				"WAKE TRIGGER: INTEGRATION_UNAVAILABLE",
 				"- Total tasks: 2",
 				"- Merged: 2",
-				"All planned sprint tasks have reached terminal state",
-				`liza update-sprint-metrics --json`,
-				`liza sprint-checkpoint --json`,
+				"- Status: unavailable",
+				"- Reason: integration_progress_unavailable",
+				"Authoritative integration completion is not effective.",
+			},
+			wantNotContain: []string{
+				"SPRINT_COMPLETE",
 			},
 		},
 	}
@@ -2833,7 +2839,7 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 		}
 	})
 
-	t.Run("all cycle-blocked → SPRINT_COMPLETE not PLANNING_COMPLETE", func(t *testing.T) {
+	t.Run("all cycle-blocked fails closed without integration evidence", func(t *testing.T) {
 		state := testhelpers.CreateValidState()
 		state.Sprint.Scope.Planned = []string{"plan-cycled", "code-done"}
 
@@ -2858,11 +2864,11 @@ func TestRenderOrchestratorDashboard_CycleBlocked(t *testing.T) {
 		}
 		result := dashboard + "\n" + wakeInstr
 
-		if !strings.Contains(result, "WAKE TRIGGER: SPRINT_COMPLETE") {
-			t.Errorf("expected SPRINT_COMPLETE (all planning is cycle-blocked), got:\n%s", result)
+		if !strings.Contains(result, "WAKE TRIGGER: INTEGRATION_UNAVAILABLE") {
+			t.Errorf("expected INTEGRATION_UNAVAILABLE without authoritative evidence, got:\n%s", result)
 		}
-		if strings.Contains(result, "PLANNING_COMPLETE") {
-			t.Error("should NOT trigger PLANNING_COMPLETE when all planning is cycle-blocked")
+		if strings.Contains(result, "SPRINT_COMPLETE") || strings.Contains(result, "PLANNING_COMPLETE") {
+			t.Error("should not project terminal or planning completion when all planning is cycle-blocked")
 		}
 		if !strings.Contains(result, "Cycle-blocked planning: 1") {
 			t.Error("expected cycle-blocked count in dashboard for operator visibility")
@@ -3426,17 +3432,191 @@ func TestReviewInstructions_OutputReviewersUseFullTaskJSON(t *testing.T) {
 }
 
 func TestWakeTemplate_CodingComplete(t *testing.T) {
-	data := wakeTemplateData{AgentID: "orchestrator-1"}
+	data := wakeTemplateData{
+		AgentID: "orchestrator-1",
+		Integration: EffectiveIntegrationCompletion{
+			RequestKeys: []string{"global:2", "slice:plan-a"},
+		},
+	}
 	result, err := executeTemplate("wake_coding_complete", data)
 	if err != nil {
 		t.Fatalf("executeTemplate(wake_coding_complete) error: %v", err)
 	}
 
-	for _, want := range []string{"integration-pair", "integration", "goal.base_commit", "BLOCKED ESCALATION"} {
+	for _, want := range []string{"ReconcileIntegrationAnalyses", "global:2", "slice:plan-a", "restart idempotency"} {
 		if !strings.Contains(result, want) {
 			t.Errorf("wake_coding_complete output missing %q", want)
 		}
 	}
+	for _, forbidden := range []string{"add-tasks", `"role_pair": "integration-pair"`} {
+		if strings.Contains(result, forbidden) {
+			t.Errorf("wake_coding_complete output contains manual task creation %q", forbidden)
+		}
+	}
+}
+
+func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
+	t.Run("requested work renders deterministic reconciliation context without mutation", func(t *testing.T) {
+		decision := ops.IntegrationProgressDecision{
+			FreezeContributingSet: true,
+			SliceRequests: []ops.IntegrationAnalysisRequest{
+				{Key: "slice:plan-z"},
+				{Key: "slice:plan-a"},
+			},
+			GlobalRequest: &ops.IntegrationAnalysisRequest{Key: "global:2"},
+		}
+		before := ops.IntegrationProgressDecision{
+			FreezeContributingSet: decision.FreezeContributingSet,
+			SliceRequests:         append([]ops.IntegrationAnalysisRequest(nil), decision.SliceRequests...),
+			GlobalRequest:         &ops.IntegrationAnalysisRequest{Key: decision.GlobalRequest.Key},
+		}
+		reconciliation := &ops.ReconcileIntegrationAnalysesResult{
+			CreatedTaskIDs: []string{"integration-slice-plan-z", "integration-slice-plan-a"},
+		}
+		beforeReconciliation := append([]string(nil), reconciliation.CreatedTaskIDs...)
+
+		projection := ProjectEffectiveIntegrationCompletion(decision, reconciliation, nil)
+		wakeData := wakeTemplateData{Integration: projection}
+		first, err := buildInstructionsForWakeTrigger(projection.WakeTrigger, "orchestrator-1", wakeData, nil)
+		if err != nil {
+			t.Fatalf("buildInstructionsForWakeTrigger() first render error = %v", err)
+		}
+		second, err := buildInstructionsForWakeTrigger(projection.WakeTrigger, "orchestrator-1", wakeData, nil)
+		if err != nil {
+			t.Fatalf("buildInstructionsForWakeTrigger() second render error = %v", err)
+		}
+
+		if first != second {
+			t.Fatalf("repeated reconciliation rendering changed:\nfirst:  %q\nsecond: %q", first, second)
+		}
+		for _, want := range []string{"ReconcileIntegrationAnalyses", "global:2", "slice:plan-a", "slice:plan-z"} {
+			if !strings.Contains(first, want) {
+				t.Errorf("reconciliation instructions missing %q:\n%s", want, first)
+			}
+		}
+		for _, forbidden := range []string{"add-tasks", `"role_pair": "integration-pair"`, "SPRINT_COMPLETE"} {
+			if strings.Contains(first, forbidden) {
+				t.Errorf("reconciliation instructions contain forbidden %q:\n%s", forbidden, first)
+			}
+		}
+		if !reflect.DeepEqual(decision, before) {
+			t.Fatalf("projection mutated decision:\ngot:  %#v\nwant: %#v", decision, before)
+		}
+		if !reflect.DeepEqual(reconciliation.CreatedTaskIDs, beforeReconciliation) {
+			t.Fatalf("projection mutated reconciliation result: got %v, want %v", reconciliation.CreatedTaskIDs, beforeReconciliation)
+		}
+	})
+
+	t.Run("waiting blocked exhausted and unavailable outcomes fail closed", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			decision ops.IntegrationProgressDecision
+			err      error
+			trigger  string
+			code     string
+		}{
+			{
+				name: "waiting",
+				decision: ops.IntegrationProgressDecision{
+					Coverage: []ops.IntegrationScopeCoverage{{PlanTaskID: "plan-a"}},
+					Waiting:  &ops.IntegrationProgressReason{Code: "integration_repairs_pending", TaskIDs: []string{"repair-z", "repair-a"}},
+				},
+				trigger: "INTEGRATION_WAITING",
+				code:    "integration_repairs_pending",
+			},
+			{
+				name:     "blocked",
+				decision: ops.IntegrationProgressDecision{Blocked: &ops.IntegrationProgressReason{Code: "integration_analysis_blocked", TaskIDs: []string{"analysis-1"}}},
+				trigger:  "INTEGRATION_BLOCKED",
+				code:     "integration_analysis_blocked",
+			},
+			{
+				name:     "exhausted",
+				decision: ops.IntegrationProgressDecision{Exhausted: true, Blocked: &ops.IntegrationProgressReason{Code: "global_generations_exhausted", Guidance: "generation limit reached"}},
+				trigger:  "INTEGRATION_EXHAUSTED",
+				code:     "global_generations_exhausted",
+			},
+			{
+				name:    "unavailable",
+				err:     fmt.Errorf("read integration HEAD: missing ref"),
+				trigger: "INTEGRATION_UNAVAILABLE",
+				code:    "integration_progress_unavailable",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				projection := ProjectEffectiveIntegrationCompletion(tt.decision, nil, tt.err)
+				if projection.WakeTrigger != tt.trigger || projection.ReasonCode != tt.code {
+					t.Fatalf("projection = %#v, want trigger %q reason %q", projection, tt.trigger, tt.code)
+				}
+				var diagnostic strings.Builder
+				writeIntegrationProgressDiagnostic(&diagnostic, projection)
+				instructions, err := buildInstructionsForWakeTrigger(
+					projection.WakeTrigger,
+					"orchestrator-1",
+					wakeTemplateData{Integration: projection},
+					nil,
+				)
+				if err != nil {
+					t.Fatalf("buildInstructionsForWakeTrigger() error = %v", err)
+				}
+				rendered := diagnostic.String() + instructions
+				if !strings.Contains(rendered, tt.code) {
+					t.Errorf("rendered outcome missing reason %q:\n%s", tt.code, rendered)
+				}
+				if strings.Contains(rendered, "SPRINT_COMPLETE") {
+					t.Errorf("ineffective completion rendered SPRINT_COMPLETE:\n%s", rendered)
+				}
+			})
+		}
+	})
+
+	t.Run("only current HEAD clean evidence renders sprint complete", func(t *testing.T) {
+		state := &models.State{
+			Goal: models.Goal{Integration: &models.IntegrationLifecycle{
+				ContributingSet: &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}},
+				GlobalGenerations: []models.IntegrationGlobalGeneration{{
+					Generation: 1, AnalysisTaskID: "global-1", AnalysisKey: "global:1",
+					Verdict: models.IntegrationAnalysisVerdictClean, SourceCommit: "head-1", ReportCommit: "report-1",
+				}},
+				Closure: &models.IntegrationClosure{
+					Status: models.IntegrationClosureStatusClean, Generation: 1,
+					AnalysisKey: "global:1", SourceCommit: "head-1",
+				},
+			}},
+			Tasks: []models.Task{{
+				ID: "global-1",
+				IntegrationAnalysis: &models.IntegrationAnalysisMetadata{
+					Key: "global:1", Phase: models.IntegrationAnalysisPhaseGlobal,
+					Generation: 1, SourceCommit: "head-1",
+				},
+			}},
+			Config: models.Config{MaxGlobalIntegrationGenerations: 3},
+		}
+		capability := pipeline.SlicedIntegrationCapability{Available: true}
+
+		current, err := ops.EvaluateIntegrationProgress(state, capability, "head-1")
+		if err != nil {
+			t.Fatalf("EvaluateIntegrationProgress(current HEAD) error = %v", err)
+		}
+		currentProjection := ProjectEffectiveIntegrationCompletion(current, nil, nil)
+		if currentProjection.WakeTrigger != "SPRINT_COMPLETE" {
+			t.Fatalf("current clean projection = %#v, want SPRINT_COMPLETE", currentProjection)
+		}
+
+		stale, err := ops.EvaluateIntegrationProgress(state, capability, "head-2")
+		if err != nil {
+			t.Fatalf("EvaluateIntegrationProgress(stale HEAD) error = %v", err)
+		}
+		staleProjection := ProjectEffectiveIntegrationCompletion(stale, nil, nil)
+		if staleProjection.WakeTrigger == "SPRINT_COMPLETE" {
+			t.Fatalf("stale clean projection = %#v, must not render SPRINT_COMPLETE", staleProjection)
+		}
+		if staleProjection.WakeTrigger != "CODING_COMPLETE" || !reflect.DeepEqual(staleProjection.RequestKeys, []string{"global:2"}) {
+			t.Fatalf("stale clean projection = %#v, want deterministic global:2 reconciliation", staleProjection)
+		}
+	})
 }
 
 func TestDetermineWakeTrigger_CodingComplete(t *testing.T) {

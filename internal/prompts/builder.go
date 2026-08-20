@@ -255,6 +255,11 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	}
 
 	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
+	var integrationProjection EffectiveIntegrationCompletion
+	if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
+		integrationProjection = evaluateEffectiveIntegrationCompletion(state, projectRoot)
+		wakeTrigger = integrationProjection.WakeTrigger
+	}
 	if !wakeOpen && wakeTrigger == "UNKNOWN" {
 		wakeTrigger = "NONE"
 	}
@@ -263,6 +268,7 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	if wakeErr != nil {
 		return "", "", fmt.Errorf("building wake template data: %w", wakeErr)
 	}
+	wakeData.Integration = integrationProjection
 
 	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeData, planningTasks)
 	if instrErr != nil {
@@ -295,6 +301,7 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 		b.WriteString(fmt.Sprintf("- Cycle-blocked planning: %d\n", cycleBlocked))
 	}
 	writeActiveTaskDigest(&b, state.Tasks)
+	writeIntegrationProgressDiagnostic(&b, integrationProjection)
 
 	binaryName := promptBinaryName()
 	b.WriteString("\nORCHESTRATOR COMMANDS:\n")

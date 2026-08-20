@@ -1,28 +1,13 @@
 {{- define "wake_coding_complete" -}}
 All coding tasks for this goal have been merged. Integration analysis is needed.
 
-Spawn a single integration-analyst task scoped to the full branch diff since goal.base_commit.
+Delegate lifecycle materialization exclusively to `ReconcileIntegrationAnalyses`; do not create analysis tasks manually.
+{{- if .Integration.RequestKeys }}
+Authoritative request keys: {{ range $index, $key := .Integration.RequestKeys }}{{ if $index }}, {{ end }}{{ $key }}{{ end }}
+{{- end }}
+{{- if .Integration.CreatedTaskIDs }}
+Reconciled task IDs: {{ range $index, $id := .Integration.CreatedTaskIDs }}{{ if $index }}, {{ end }}{{ $id }}{{ end }}
+{{- end }}
 
-1. Read the goal context:
-   {{binaryName}} get goal.spec_ref --json
-   {{binaryName}} get goal.base_commit --json
-2. Create integration task — write a JSON file and run:
-   {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json
-   ⚠️  The file must contain a bare JSON array — NOT a wrapper object.
-   [{
-     "id": "<unique-id>",  {{/* e.g., "integration-auth-refactor-1" — must be unique across sprints, avoid static IDs */}}
-     "type": "integration",
-     "role_pair": "integration-pair",
-     "desc": "Integration analysis: scan full branch diff for cross-task consistency issues (type alignment, serialization completeness, error mapping, API surface coherence, test/code agreement, code organization)",
-     "spec": "<goal spec_ref>",
-     "done": "Branch diff from goal.base_commit analyzed. Either: (a) fix-task definitions produced as output[] entries, each with single intent, falsifiable done_when, and correct scope; or (b) clean scan confirmed with empty output[] and INTEGRATION_ANALYSIS_CLEAN terminal state.",
-     "scope": "Full branch diff analysis from goal.base_commit to integration HEAD. Read-only analysis producing fix-task definitions, not code changes.",
-     "priority": 1
-   }]
-3. Update sprint metrics: {{binaryName}} update-sprint-metrics --json
-
-BLOCKED ESCALATION:
-If a fix task is BLOCKED by a coder because the fix requires non-trivial work (e.g., type alignment across many files, new error type + propagation), you will wake on BLOCKED_TASKS. At that point, supersede the fix task and create a full code-planning task in the coding sub-pipeline.
-
-Do NOT create a sprint checkpoint — integration proceeds without human gate.
+The runtime owns reconciliation and restart idempotency. Do not create a checkpoint or advance terminal state manually.
 {{- end -}}

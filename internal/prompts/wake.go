@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -46,6 +47,165 @@ type wakeTemplateData struct {
 	ResolvedFanOutTaskIDPrefix string
 	ResolvedFanOutTaskType     string
 	EntryPoints                []wakeEntryPointData // available entry-points for LLM classification
+	Integration                EffectiveIntegrationCompletion
+}
+
+// EffectiveIntegrationCompletion is the read-only wake projection of the
+// authoritative integration progress and reconciliation outcomes.
+type EffectiveIntegrationCompletion struct {
+	WakeTrigger    string
+	Status         string
+	ReasonCode     string
+	TaskIDs        []string
+	RequestKeys    []string
+	CreatedTaskIDs []string
+	Guidance       string
+}
+
+// ProjectEffectiveIntegrationCompletion maps authoritative integration
+// progress and reconciliation outcomes into deterministic wake vocabulary.
+func ProjectEffectiveIntegrationCompletion(
+	decision ops.IntegrationProgressDecision,
+	reconciliation *ops.ReconcileIntegrationAnalysesResult,
+	evaluationErr error,
+) EffectiveIntegrationCompletion {
+	if evaluationErr != nil {
+		return EffectiveIntegrationCompletion{
+			WakeTrigger: "INTEGRATION_UNAVAILABLE",
+			Status:      "unavailable",
+			ReasonCode:  "integration_progress_unavailable",
+			Guidance:    evaluationErr.Error(),
+		}
+	}
+	if decision.IntegrationComplete {
+		return EffectiveIntegrationCompletion{
+			WakeTrigger: "SPRINT_COMPLETE",
+			Status:      "complete",
+		}
+	}
+
+	reason := decision.Blocked
+	if reconciliation != nil && reconciliation.Reason != nil {
+		reason = reconciliation.Reason
+	}
+	if reason != nil {
+		trigger := "INTEGRATION_BLOCKED"
+		status := "blocked"
+		if decision.Exhausted {
+			trigger = "INTEGRATION_EXHAUSTED"
+			status = "exhausted"
+		}
+		return EffectiveIntegrationCompletion{
+			WakeTrigger: trigger,
+			Status:      status,
+			ReasonCode:  reason.Code,
+			TaskIDs:     sortedStringsCopy(reason.TaskIDs),
+			Guidance:    reason.Guidance,
+		}
+	}
+
+	requestKeys := integrationRequestKeys(decision)
+	var createdTaskIDs []string
+	if reconciliation != nil {
+		createdTaskIDs = sortedStringsCopy(reconciliation.CreatedTaskIDs)
+	}
+	if decision.FreezeContributingSet || len(requestKeys) > 0 {
+		return EffectiveIntegrationCompletion{
+			WakeTrigger:    "CODING_COMPLETE",
+			Status:         "reconciliation_needed",
+			RequestKeys:    requestKeys,
+			CreatedTaskIDs: createdTaskIDs,
+		}
+	}
+	if decision.Waiting != nil {
+		return EffectiveIntegrationCompletion{
+			WakeTrigger:    "INTEGRATION_WAITING",
+			Status:         "waiting",
+			ReasonCode:     decision.Waiting.Code,
+			TaskIDs:        sortedStringsCopy(decision.Waiting.TaskIDs),
+			CreatedTaskIDs: createdTaskIDs,
+			Guidance:       decision.Waiting.Guidance,
+		}
+	}
+	return EffectiveIntegrationCompletion{
+		WakeTrigger: "INTEGRATION_UNAVAILABLE",
+		Status:      "unavailable",
+		ReasonCode:  "integration_progress_incomplete",
+	}
+}
+
+func integrationRequestKeys(decision ops.IntegrationProgressDecision) []string {
+	keys := make([]string, 0, len(decision.SliceRequests)+1)
+	for _, request := range decision.SliceRequests {
+		keys = append(keys, request.Key)
+	}
+	if decision.GlobalRequest != nil {
+		keys = append(keys, decision.GlobalRequest.Key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedStringsCopy(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := append([]string(nil), values...)
+	sort.Strings(result)
+	return result
+}
+
+func evaluateEffectiveIntegrationCompletion(state *models.State, projectRoot string) EffectiveIntegrationCompletion {
+	cfg, err := pipeline.LoadFrozen(projectRoot)
+	if err != nil {
+		return ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("load frozen pipeline: %w", err))
+	}
+	resolver := pipeline.NewResolver(cfg)
+	integrationHEAD, err := gitpkg.New(projectRoot).GetCommitSHA(state.Config.IntegrationBranch)
+	if err != nil {
+		return ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("read integration HEAD: %w", err))
+	}
+	decision, err := ops.EvaluateIntegrationProgress(state, resolver.SlicedIntegrationCapability(), integrationHEAD)
+	return ProjectEffectiveIntegrationCompletion(decision, nil, err)
+}
+
+func writeIntegrationProgressDiagnostic(b *strings.Builder, projection EffectiveIntegrationCompletion) {
+	if projection.Status == "" {
+		return
+	}
+	b.WriteString("\nINTEGRATION PROGRESS:\n")
+	b.WriteString(fmt.Sprintf("- Status: %s\n", projection.Status))
+	if projection.ReasonCode != "" {
+		b.WriteString(fmt.Sprintf("- Reason: %s\n", projection.ReasonCode))
+	}
+	if len(projection.TaskIDs) > 0 {
+		b.WriteString(fmt.Sprintf("- Related tasks: %s\n", strings.Join(projection.TaskIDs, ", ")))
+	}
+	if len(projection.RequestKeys) > 0 {
+		b.WriteString(fmt.Sprintf("- Requested analyses: %s\n", strings.Join(projection.RequestKeys, ", ")))
+	}
+	if len(projection.CreatedTaskIDs) > 0 {
+		b.WriteString(fmt.Sprintf("- Reconciled tasks: %s\n", strings.Join(projection.CreatedTaskIDs, ", ")))
+	}
+	if projection.Guidance != "" {
+		b.WriteString(fmt.Sprintf("- Guidance: %s\n", projection.Guidance))
+	}
+}
+
+func integrationOutcomeInstructions(projection EffectiveIntegrationCompletion) string {
+	var b strings.Builder
+	b.WriteString("Authoritative integration completion is not effective.\n")
+	if projection.ReasonCode != "" {
+		b.WriteString(fmt.Sprintf("Reason: %s\n", projection.ReasonCode))
+	}
+	if len(projection.TaskIDs) > 0 {
+		b.WriteString(fmt.Sprintf("Related tasks: %s\n", strings.Join(projection.TaskIDs, ", ")))
+	}
+	if projection.Guidance != "" {
+		b.WriteString(fmt.Sprintf("Guidance: %s\n", projection.Guidance))
+	}
+	b.WriteString("Preserve this outcome; do not create analysis tasks or advance terminal state manually.")
+	return b.String()
 }
 
 // wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template
@@ -260,7 +420,10 @@ func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeT
 	case "MANY_TO_ONE_READY":
 		return executeTemplate("wake_many_to_one_ready", agentData)
 	case "CODING_COMPLETE":
-		return executeTemplate("wake_coding_complete", agentData)
+		wakeData.AgentID = agentID
+		return executeTemplate("wake_coding_complete", wakeData)
+	case "INTEGRATION_WAITING", "INTEGRATION_BLOCKED", "INTEGRATION_EXHAUSTED", "INTEGRATION_UNAVAILABLE":
+		return integrationOutcomeInstructions(wakeData.Integration), nil
 	case "SPRINT_COMPLETE":
 		return executeTemplate("wake_sprint_complete", agentData)
 	default:
