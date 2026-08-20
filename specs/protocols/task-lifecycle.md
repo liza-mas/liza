@@ -390,24 +390,112 @@ Before agents can run, human must initialize the project:
 
 ## Integration Phase
 
-After all coding tasks for a goal complete, the orchestrator spawns an integration-analyst task scoped to the full branch diff (`goal.base_commit..HEAD`).
+Integration reverses planning's fan-out: it first establishes bounded local
+coverage, then independently reviews the aggregate branch in one or more global
+generations. `goal.base_commit` remains the stable goal-wide diff base, while
+each analysis also carries immutable `integration_analysis` metadata.
 
 ### Lifecycle
 
-1. **Orchestrator** creates integration-pair task (status: DRAFT_INTEGRATION_ANALYSIS)
-2. **Integration Analyst** claims, scans branch diff, produces fix-task definitions as `output[]` with optional canonical `validation` commands
-3. **Integration Reviewer** validates findings via submit/verdict
-4. **Two outcomes after approval:**
-   - **Findings exist** (`output[]` non-empty): auto-transition `integration-to-fix` creates one coding-pair child per finding. Fix tasks follow the standard coding lifecycle (coder + code-reviewer).
-   - **Clean scan** (`output[]` empty): task routes to INTEGRATION_ANALYSIS_CLEAN — a terminal state. Supervisor cleans up worktree.
+1. **Settle and freeze planning exactly once.** Planning is settled only after
+   every pre-integration planning source is terminal, each eligible
+   coding-producing output and transition is consumed, and the resulting coding
+   work is terminal. Partial planning handoff does not open this boundary. The
+   first settled evaluation persists `integration.contributing_set`; subsequent
+   evaluations validate and reuse that frozen cohort rather than recomputing it.
+   A contributing scope is a pre-integration `code-planning-pair` with at least
+   one distinct root coding lineage that produced merged work.
+2. **Apply the zero-slice rule.** Fewer than two contributing scopes means zero
+   slice analyses and direct global analysis. With multiple scopes, every
+   contributing scope requires one coverage record. A one-lineage scope reuses
+   approval attestation evidence for every merged leaf: reviewed task and
+   acceptance criteria, reviewed commit, approver, validation, and merge commit.
+   It does not persist reviewer reasoning and creates no slice. A scope with at
+   least two distinct root lineages is a multi-lineage scope and receives
+   exactly one slice analysis, identified by the deterministic key
+   `slice:<plan-task-id>`.
+3. **Review the bounded slice surface.** Slice metadata records the originating
+   plan, root task IDs, merged descendant changes, affected paths, immutable
+   source commit, and source snapshot paths that exist at that commit. This is a
+   bounded review surface for intra-plan composition, not the entire goal.
+   Coding, fix, and replacement lineage determines which merged leaves and
+   repairs belong to the slice. Later sibling mutations do not reopen completed
+   slices; their cross-scope effects belong to global review.
+4. **Resolve findings fail closed.** Empty `output[]` records verdict `clean`.
+   Findings record verdict `findings`, and the automatic phase transition creates
+   standard reviewed coding fixes. A repair is resolved only by a merged fix or
+   merged replacement lineage; superseded work waits for its replacement leaves.
+   Unresolved blocked or abandoned findings fail closed and block fan-in. Slice
+   task or review exhaustion likewise becomes explicit blocked closure rather
+   than silently satisfying coverage.
+5. **Run independent global analysis.** Global analysis waits for planning to be
+   settled, all coding work terminal, all integration repair work terminal,
+   complete coverage for every contributing scope, and every created slice
+   resolved. Local records are navigation evidence, not proof of aggregate
+   correctness. The `integration-pair` independently checks the current
+   goal-wide integration HEAD for cross-scope interaction, shared-interface,
+   test/specification, architectural, and merge-readiness failures.
+6. **Repeat bounded global generations.** Global metadata uses deterministic
+   keys `global:<generation>` and binds each verdict and report commit to an
+   immutable source commit. Promoted integration-escalation repairs remain
+   repair work outside the frozen cohort: they create no new slice and, after
+   merging, trigger another global generation. Any later integration HEAD
+   mutation also triggers another global generation while budget remains.
+   Slice exhaustion is explicitly blocked; global generation exhaustion is
+   explicitly `exhausted`. Neither is successful completion.
+7. **Complete only on current clean evidence.** An empty global output records a
+   clean generation, but clean closure is projected only when the reviewed
+   source commit equals live integration HEAD. Sprint progression and automatic
+   goal stop re-evaluate that authoritative completion decision rather than
+   deriving success from terminal task counts.
+
+### Persisted Evidence
+
+`goal.integration` is an append-only lifecycle ledger plus a current closure
+projection:
+
+- `contributing_set.scopes[]` freezes each `plan_task_id` and its root task IDs;
+- `coverage[]` is a tagged union of `approval_attestations[]` or one
+  `slice_report` for every contributing scope when the coverage barrier applies;
+- slice reports and `global_generations[]` record analysis task ID, analysis
+  key, verdict (`clean` or `findings`), immutable `source_commit`, and reviewed
+  `report_commit`;
+- `mutation_receipts[]` records task ID plus before/after integration commits;
+- `closure` projects `clean`, `blocked`, or `exhausted`, with clean closure also
+  naming its generation, analysis key, and source commit.
+
+Approval attestations intentionally contain approval facts, not persisted
+reviewer reasoning. Slice analysis task metadata holds the more detailed bounded
+surface (`descendant_changes`, `affected_paths`, and `source_snapshot_paths`).
 
 ### Auto-Transitions
 
-The `integration-to-fix` transition has `trigger: auto` — it executes in the reviewer's PreWork phase without a human gate. This is the only auto-trigger transition in the current pipeline. Integration tasks fan out from APPROVED state directly (not MERGED, since the analyst doesn't commit code).
+`slice-integration-to-fix` and `integration-to-fix` have `trigger: auto` and
+create one `coding-pair` child per approved output entry. They fan out from the
+analysis `APPROVED` state, not `MERGED`, because analysts do not merge code.
+Large findings may be promoted through `code-planning-pair`, but that plan and
+its coding descendants retain the originating analysis as an ancestor and are
+therefore integration repairs outside the frozen contributing cohort.
+
+### Reconciliation and Recovery
+
+The pure progress evaluator returns waiting, blocked, exhausted, slice-request,
+global-request, or complete outcomes without mutating state. Reconciliation
+projects those outcomes atomically. Analysis keys map to deterministic task IDs;
+an existing task must match its phase, metadata, parents, initial status, and
+planned membership. Consequently wake and restart reconciliation creates no
+duplicate analyses: exactly one writer creates each requested slice or global
+analysis and every later invocation is a no-op or fails on an evidence
+collision. Authoritative wake projection reports reconciliation work,
+waiting, blocked, exhausted, unavailable, or complete without inventing tasks
+from terminal-count heuristics.
 
 ### Goal BaseCommit
 
-`goal.base_commit` is snapshotted when the first coding-pair children are created (from any pipeline transition). It records the integration branch HEAD at that point, giving the analyst a stable diff base that captures exactly the work done for this goal.
+`goal.base_commit` is snapshotted when the first coding-pair children are
+created (from any pipeline transition). It records the integration branch HEAD
+at that point, giving global analysis the stable lower bound for the goal-wide
+diff. Per-slice immutable source snapshots are recorded separately.
 
 ---
 

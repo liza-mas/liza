@@ -226,25 +226,52 @@ The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is executed by the o
 
 ### Integration-Pair State Machine
 
-The integration pair introduces a state cycle for branch-wide integration analysis after coding completes.
+Integration has two analysis phases. Slice analyses provide bounded local
+composition evidence; global generations independently judge the aggregate
+integration branch. Both use the integration analyst/reviewer protocol, but
+their role pairs and persisted `integration_analysis.phase` values are distinct.
 
-| State | Description | Valid Transitions |
-|-------|-------------|-------------------|
-| DRAFT_INTEGRATION_ANALYSIS | Task created by orchestrator | → ANALYZING_INTEGRATION |
-| ANALYZING_INTEGRATION | Integration Analyst scanning branch diff | → INTEGRATION_ANALYSIS_TO_REVIEW, BLOCKED |
-| INTEGRATION_ANALYSIS_TO_REVIEW | Analyst done, awaiting Integration Reviewer | → REVIEWING_INTEGRATION_ANALYSIS |
-| REVIEWING_INTEGRATION_ANALYSIS | Integration Reviewer active | → INTEGRATION_ANALYSIS_APPROVED, INTEGRATION_ANALYSIS_REJECTED, INTEGRATION_ANALYSIS_CLEAN |
-| INTEGRATION_ANALYSIS_APPROVED | Findings approved, fix tasks pending | Auto-transition creates coding-pair children |
-| INTEGRATION_ANALYSIS_REJECTED | Reviewer rejected, feedback provided | → DRAFT_INTEGRATION_ANALYSIS |
-| INTEGRATION_ANALYSIS_CLEAN | No findings — terminal | Terminal (worktree cleaned up by supervisor) |
+| Phase | Role pair | State cycle |
+|-------|-----------|-------------|
+| Slice | `slice-integration-pair` | `DRAFT_SLICE_INTEGRATION_ANALYSIS` → `ANALYZING_SLICE_INTEGRATION` → `SLICE_INTEGRATION_ANALYSIS_TO_REVIEW` → `REVIEWING_SLICE_INTEGRATION_ANALYSIS` → `SLICE_INTEGRATION_ANALYSIS_APPROVED`, `SLICE_INTEGRATION_ANALYSIS_REJECTED`, or `SLICE_INTEGRATION_ANALYSIS_CLEAN` |
+| Global | `integration-pair` | `DRAFT_INTEGRATION_ANALYSIS` → `ANALYZING_INTEGRATION` → `INTEGRATION_ANALYSIS_TO_REVIEW` → `REVIEWING_INTEGRATION_ANALYSIS` → `INTEGRATION_ANALYSIS_APPROVED`, `INTEGRATION_ANALYSIS_REJECTED`, or `INTEGRATION_ANALYSIS_CLEAN` |
 
-**Two terminal outcomes:**
-- **Findings exist** (`output[]` non-empty): APPROVED → auto-transition `integration-to-fix` creates one coding-pair child per output entry. Fix tasks follow the standard coding lifecycle.
-- **Clean scan** (`output[]` empty): CLEAN — bypasses per-subtask transition entirely. The supervisor cleans up the worktree and releases the assigned agent.
+A findings verdict (`output[]` non-empty) reaches the phase's `*_APPROVED`
+state. The automatic `slice-integration-to-fix` or `integration-to-fix`
+transition then creates ordinary `coding-pair` repairs. An empty output reaches
+the phase's `*_CLEAN` terminal state and creates no repair children. Rejection
+returns the same immutable analysis task through its configured retry cycle.
 
-**Auto-transitions:** The `integration-to-fix` transition has `trigger: auto` — it executes in the reviewer's PreWork without a human gate. Integration tasks fan out from APPROVED (not MERGED, since the analyst doesn't commit code).
+The coverage barrier opens only after pre-integration planning is settled and
+the contributing set is frozen. With fewer than two contributing scopes it
+bypasses slices and requests the first global generation. Otherwise every
+contributing scope must have persisted bounded coverage evidence: an
+`approval_attestation` for a single root coding lineage or one `slice_report`
+for multiple root lineages. Missing slice evidence waits; a blocked or abandoned
+slice analysis or unresolved repair blocks fan-in, so no global task is
+materialized.
 
-**Goal.BaseCommit:** Snapshotted when the first coding-pair children are created (from any transition). The analyst diffs `goal.base_commit..HEAD` to scope the integration analysis.
+Slice evidence is immutable and remains scoped to its originating plan,
+descendant commits, affected paths, and source snapshot. Clean or fully repaired
+slices resolve the barrier. Slice task or review exhaustion is an explicit
+blocked outcome; it never degrades into absent coverage. Later sibling changes
+do not reopen the slice phase.
+
+Once coverage is complete and all coding and integration-repair lineages are
+terminal, the global phase creates ordered keys `global:1`, `global:2`, and so
+on. A clean global verdict is effective only when its `source_commit` equals
+live integration HEAD. Findings, promoted repairs, or any later HEAD mutation
+require the next bounded global generation. Global generation exhaustion
+projects closure status `exhausted`; slice exhaustion projects `blocked`.
+Neither outcome permits successful sprint or goal completion.
+
+Reconciliation is idempotent: deterministic analysis keys and task IDs make
+concurrent wake or restart attempts either create exactly one requested task or
+validate the existing task and planned membership as an unchanged no-op.
+
+**Goal.BaseCommit:** Snapshotted when the first coding-pair children are created
+(from any transition). Global analysis still receives the goal-wide integration
+surface, while slice metadata records its narrower immutable source surface.
 
 ### Blocked Repair Exception
 
