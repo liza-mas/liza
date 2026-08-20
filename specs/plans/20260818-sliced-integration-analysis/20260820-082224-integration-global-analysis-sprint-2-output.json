@@ -24,15 +24,34 @@
     ]
   },
   {
-    "desc": "Consolidate the duplicated integration wake projection and the duplicated analysis phase-to-role-pair mapping onto single owners.",
-    "done_when": "`internal/agent/workdetection.go` no longer contains its own copy of the frozen-pipeline load, integration-HEAD read, and `ProjectEffectiveIntegrationCompletion` call: it calls one exported helper owned by `internal/prompts` that `internal/prompts/builder.go` also uses, and `evaluateEffectiveIntegrationWakeProjection` is gone. `ops.validateIntegrationAnalysisRolePair` in `internal/ops/submit_verdict.go` derives the expected role pair from `ops.analysisRolePair` (or the `sliceIntegrationRolePair` / `globalIntegrationRolePair` constants) instead of repeating the literals, so `rg -n '\"slice-integration-pair\"' internal/ops --glob '!*_test.go'` reports only `internal/ops/integration_reconcile.go`. Behaviour is unchanged: the wake trigger, status projection, and verdict role-pair rejection for every existing test input stay identical and all existing tests in `internal/agent`, `internal/prompts`, and `internal/ops` pass without modification of their assertions.",
-    "scope": "Own `internal/agent/workdetection.go`, `internal/prompts/wake.go`, `internal/ops/submit_verdict.go`, and only the test edits required by the moved symbols. No behaviour change, no new wake vocabulary, no change to the progress decision or evidence model.",
+    "desc": "Give live integration progress evaluation one shared owner across prompt rendering and agent work detection.",
+    "done_when": "Exactly one shared live evaluator loads the frozen pipeline capability, resolves integration HEAD through the helper introduced by output[1], calls `EvaluateIntegrationProgress`, and returns the decision or evaluation error. Both `internal/prompts/builder.go` and `internal/agent/workdetection.go` obtain those inputs from it and pass them to the existing pure `ProjectEffectiveIntegrationCompletion` mapping; `evaluateEffectiveIntegrationWakeProjection` and the second frozen-pipeline/HEAD/evaluation copy are gone. The live evaluator is owned at the narrowest existing dependency-safe boundary rather than being required to live in `internal/prompts`. Focused behavior cases in `internal/prompts/builder_test.go` and `internal/agent/workdetection_test.go` prove both consumers retain the same complete, waiting, blocked, exhausted, unavailable, and reconciliation-needed wake outcomes.",
+    "scope": "Own `internal/agent/workdetection.go`, `internal/agent/workdetection_test.go`, `internal/prompts/wake.go`, `internal/prompts/builder.go`, `internal/prompts/builder_test.go`, and, only if it is the dependency-safe live-evaluation owner, `internal/ops/integration_progress.go` plus `internal/ops/integration_progress_test.go`. Do not add a package, move wake presentation vocabulary into `internal/ops`, strengthen the documented `prompts -> ops` coupling, change progress decisions, or change lifecycle evidence.",
     "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#required-properties",
     "validation": [
       "make sync-embedded",
       "go test ./internal/agent ./internal/prompts ./internal/ops -count=1",
-      "pre-commit run --files internal/agent/workdetection.go internal/prompts/wake.go internal/ops/submit_verdict.go"
+      "pre-commit run --files internal/agent/workdetection.go internal/agent/workdetection_test.go internal/prompts/wake.go internal/prompts/builder.go internal/prompts/builder_test.go internal/ops/integration_progress.go internal/ops/integration_progress_test.go"
     ],
     "depends_on": ["1"]
+  },
+  {
+    "desc": "Make integration-analysis phase-to-role-pair validation consume the package's existing canonical mapping.",
+    "done_when": "`validateIntegrationAnalysisRolePair` in `internal/ops/submit_verdict.go` obtains the expected role pair from `analysisRolePair` or the existing `sliceIntegrationRolePair` and `globalIntegrationRolePair` constants instead of repeating both string literals. Slice and global tasks still accept their matching pair, reject the opposite pair with the same actionable task/phase/wanted/got information, and reject an invalid phase. `rg -n '\"slice-integration-pair\"|\"integration-pair\"' internal/ops --glob '!*_test.go'` reports the canonical definitions in `internal/ops/integration_reconcile.go` and no duplicate mapping in `submit_verdict.go`.",
+    "scope": "Own `internal/ops/submit_verdict.go`, `internal/ops/submit_verdict_test.go`, `internal/ops/integration_reconcile.go`, and `internal/ops/integration_reconcile_test.go`. Do not change role-pair names, analysis phases, verdict authorization, reconciliation, or pipeline topology.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#required-properties",
+    "validation": [
+      "go test ./internal/ops -count=1",
+      "pre-commit run --files internal/ops/submit_verdict.go internal/ops/submit_verdict_test.go internal/ops/integration_reconcile.go internal/ops/integration_reconcile_test.go"
+    ]
+  },
+  {
+    "desc": "Reconcile zero-slice and frozen-pipeline documentation with the implemented capability boundary.",
+    "done_when": "ADR-0113's global-readiness and frozen-compatibility sections, `specs/protocols/task-lifecycle.md`'s lifecycle and persisted-evidence wording, and `support-docs/USAGE_MULTI_AGENTS.md`'s operator guidance all state the same boundary: coverage records and sliced-integration capability are required only when the frozen contributing cohort has at least two scopes; a zero- or one-scope cohort persists no coverage records and may proceed through an existing valid global integration pair; `pipeline_upgrade_required` applies when a qualifying cohort requires slice topology that the frozen pipeline lacks. The documents no longer imply that every incomplete legacy sliced topology blocks the direct-global bypass, and code/tests remain unchanged.",
+    "scope": "Own only `specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md`, `specs/protocols/task-lifecycle.md`, and `support-docs/USAGE_MULTI_AGENTS.md`. Preserve the implemented progress decision, frozen-pipeline behavior, direct-global bypass, and all code and tests.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#slice-integration",
+    "validation": [
+      "pre-commit run --files specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md specs/protocols/task-lifecycle.md support-docs/USAGE_MULTI_AGENTS.md"
+    ]
   }
 ]
