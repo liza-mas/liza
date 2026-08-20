@@ -482,7 +482,7 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 		func() []Alert { return checkReassigned(state, config.StateCache) },
 		func() []Alert { return checkApproachingLimits(state) },
 		func() []Alert { return checkStaleSentinels(state, config.StateCache) },
-		func() []Alert { return checkStalled(state, config.StateCache) },
+		func() []Alert { return checkStalled(state, config.StateCache, pr) },
 		func() []Alert { return checkStaleDrafts(state) },
 		func() []Alert { return checkImmediateDiscoveries(state) },
 		func() []Alert { return checkMissingRoles(state, pr, config.StateCache) },
@@ -1229,7 +1229,7 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Aler
 // timestamp across all tasks. Heartbeat writes do not create history entries,
 // so this signal is immune to lease-renewal traffic. Falls back to the earliest
 // task Created time when no history exists. Throttles alerts to once every 5 minutes.
-func checkStalled(state *models.State, cache map[string]time.Time) []Alert {
+func checkStalled(state *models.State, cache map[string]time.Time, pr models.PipelineResolver) []Alert {
 	var alerts []Alert
 	now := time.Now().UTC()
 
@@ -1238,7 +1238,7 @@ func checkStalled(state *models.State, cache map[string]time.Time) []Alert {
 	hasActive := false
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if !task.Status.IsTerminal() {
+		if !models.IsOperationallyTerminal(task, pr) {
 			hasActive = true
 		}
 		for j := range task.History {

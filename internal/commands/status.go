@@ -300,7 +300,7 @@ func buildTaskStatus(state *models.State, pr models.PipelineResolver) taskStatus
 			ts.Blocked++
 		}
 
-		if task.Status.IsTerminal() {
+		if models.IsOperationallyTerminal(&task, pr) {
 			ts.Terminal++
 		} else {
 			ts.Active++

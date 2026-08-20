@@ -316,6 +316,27 @@ func TestInspectTasksSummaryActive(t *testing.T) {
 	}
 }
 
+func TestInspectTasksActiveUsesOperationalTerminalStates(t *testing.T) {
+	state := &models.State{Tasks: []models.Task{
+		{ID: "clean", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_CLEAN"},
+		{ID: "approved", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_APPROVED"},
+	}}
+
+	result, err := inspectTasks(state, inspectTasksOptions{
+		Internal:         true,
+		Summary:          true,
+		Active:           true,
+		PipelineResolver: operationalTerminalResolver(),
+	})
+	if err != nil {
+		t.Fatalf("inspectTasks() error = %v", err)
+	}
+	summaries := result.([]taskSummaryInfo)
+	if len(summaries) != 1 || summaries[0].ID != "approved" {
+		t.Fatalf("active summaries = %#v, want approved transition source only", summaries)
+	}
+}
+
 func TestInspectTasksFullTaskDecomposition(t *testing.T) {
 	state := &models.State{
 		Tasks: []models.Task{{

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 func withTUIBrandNameUpper(t *testing.T, nameUpper string) {
@@ -769,6 +770,36 @@ func TestRenderTaskPanel_SprintMetricsUsePipelineTerminals(t *testing.T) {
 
 	out := m.renderTaskPanel(10)
 	assertContains(t, out, "1/1 done", "pipeline clean terminal status should count as done")
+}
+
+func TestRenderTaskPanelUsesOperationalTerminalStates(t *testing.T) {
+	now := time.Now()
+	clean := makeTask("clean-old", "INTEGRATION_ANALYSIS_CLEAN", 1)
+	clean.RolePair = "integration-pair"
+	clean.Created = now.Add(-time.Hour)
+	approved := makeTask("approved-new", "INTEGRATION_ANALYSIS_APPROVED", 1)
+	approved.RolePair = "integration-pair"
+	approved.Created = now
+
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		stateCategories: map[models.TaskStatus]pipeline.StateCategory{
+			"INTEGRATION_ANALYSIS_CLEAN":    pipeline.StateCategoryClean,
+			"INTEGRATION_ANALYSIS_APPROVED": pipeline.StateCategoryApproved,
+		},
+		state: &models.State{Tasks: []models.Task{clean, approved}},
+	}
+
+	if !m.isOperationallyTerminal(clean) || m.isOperationallyTerminal(approved) {
+		t.Fatalf("operational terminal classification clean=%t approved=%t", m.isOperationallyTerminal(clean), m.isOperationallyTerminal(approved))
+	}
+	out := m.renderTaskPanel(15)
+	if approvedIndex, cleanIndex := strings.Index(out, approved.ID), strings.Index(out, clean.ID); approvedIndex == -1 || cleanIndex == -1 || approvedIndex > cleanIndex {
+		t.Fatalf("active approved task should render before clean terminal task:\n%s", out)
+	}
 }
 
 func TestRenderTaskPanel_ColumnTierMinimal(t *testing.T) {

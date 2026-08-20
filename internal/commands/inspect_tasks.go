@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/render"
 )
 
@@ -21,6 +22,7 @@ type inspectTasksOptions struct {
 	OutputSummary    bool   // Return compact output entry summaries
 	Active           bool   // Show only non-terminal tasks
 	ProjectRoot      string // Project root, used for filesystem-aware diagnostics
+	PipelineResolver models.PipelineResolver
 }
 
 // taskInfo represents task information with computed fields
@@ -101,6 +103,13 @@ type outputEntrySummaryInfo struct {
 
 // inspectTasks lists all tasks or filters by criteria
 func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
+	if opts.Active && opts.PipelineResolver == nil && opts.ProjectRoot != "" {
+		cfg, err := pipeline.LoadFrozen(opts.ProjectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("load pipeline for active task filtering: %w", err)
+		}
+		opts.PipelineResolver = pipeline.NewResolver(cfg)
+	}
 	filtered := filterTasks(state.Tasks, opts)
 
 	if opts.OutputSummary {
@@ -297,7 +306,7 @@ func filterTasks(tasks []models.Task, opts inspectTasksOptions) []models.Task {
 	var filtered []models.Task
 
 	for _, task := range tasks {
-		if opts.Active && task.Status.IsTerminal() {
+		if opts.Active && models.IsOperationallyTerminal(&task, opts.PipelineResolver) {
 			continue
 		}
 		if opts.StatusFilter != "" && string(task.Status) != opts.StatusFilter {

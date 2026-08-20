@@ -9,9 +9,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/render"
 	"github.com/mattn/go-runewidth"
 )
+
+func (m Model) isOperationallyTerminal(task models.Task) bool {
+	return task.Status.IsTerminal() || m.stateCategories[task.Status] == pipeline.StateCategoryClean
+}
 
 // View renders the complete TUI dashboard.
 // Vertical stack: Header → Alert banner → Agent panel → Task panel → Activity → Footer.
@@ -45,7 +50,7 @@ func (m Model) View() string {
 	if m.state != nil {
 		agentCount = len(m.state.Agents)
 		for _, t := range m.state.Tasks {
-			if t.Status.IsTerminal() {
+			if m.isOperationallyTerminal(t) {
 				terminalTaskCount++
 			} else {
 				activeTaskCount++
@@ -443,7 +448,7 @@ func (m Model) renderTaskPanel(budget int) string {
 	// Both partitions preserve Created-ascending order.
 	var active, terminal []models.Task
 	for _, t := range tasks {
-		if t.Status.IsTerminal() {
+		if m.isOperationallyTerminal(t) {
 			terminal = append(terminal, t)
 		} else {
 			active = append(active, t)
@@ -576,7 +581,7 @@ func (m Model) renderTaskPanel(budget int) string {
 		if i >= maxRows {
 			break
 		}
-		isTerminal := t.Status.IsTerminal()
+		isTerminal := m.isOperationallyTerminal(t)
 		var parts []string
 		for _, c := range cols {
 			val := c.value(t)

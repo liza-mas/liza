@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -16,9 +17,12 @@ import (
 )
 
 const (
-	sliceIntegrationRolePair  = "slice-integration-pair"
-	globalIntegrationRolePair = "integration-pair"
+	sliceIntegrationRolePair        = "slice-integration-pair"
+	globalIntegrationRolePair       = "integration-pair"
+	maxIntegrationReconcileAttempts = 3
 )
+
+var errIntegrationReconcileChanged = errors.New("integration reconciliation input changed")
 
 // ReconcileIntegrationAnalysesResult reports the durable projection made by
 // ReconcileIntegrationAnalyses.
@@ -29,8 +33,9 @@ type ReconcileIntegrationAnalysesResult struct {
 }
 
 type reconcileIntegrationAnalysesTestHooks struct {
-	capability       *pipeline.SlicedIntegrationCapability
-	beforeValidation func(*models.State)
+	capability        *pipeline.SlicedIntegrationCapability
+	beforeGitEvidence func()
+	beforeValidation  func(*models.State)
 }
 
 var testReconcileIntegrationAnalysesHooks *reconcileIntegrationAnalysesTestHooks
@@ -39,6 +44,16 @@ var testReconcileIntegrationAnalysesHooks *reconcileIntegrationAnalysesTestHooks
 // coverage, analysis work, and non-clean closure requested by the authoritative
 // integration progress decision.
 func ReconcileIntegrationAnalyses(projectRoot string) (*ReconcileIntegrationAnalysesResult, error) {
+	return reconcileIntegrationAnalyses(projectRoot, false)
+}
+
+// reconcileIntegrationAnalysesWithCompletionLockHeld is used by progression,
+// whose caller already holds the non-reentrant integration completion lock.
+func reconcileIntegrationAnalysesWithCompletionLockHeld(projectRoot string) (*ReconcileIntegrationAnalysesResult, error) {
+	return reconcileIntegrationAnalyses(projectRoot, true)
+}
+
+func reconcileIntegrationAnalyses(projectRoot string, completionLockHeld bool) (*ReconcileIntegrationAnalysesResult, error) {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("load integration reconciliation pipeline: %w", err)
@@ -48,54 +63,103 @@ func ReconcileIntegrationAnalyses(projectRoot string) (*ReconcileIntegrationAnal
 		capability = *hooks.capability
 	}
 
-	result := &ReconcileIntegrationAnalysesResult{}
 	gitWrapper := gitpkg.New(projectRoot)
 	bb := db.For(paths.New(projectRoot).StatePath())
-	err = bb.Modify(func(state *models.State) error {
-		previous := snapshotIntegrationLifecycleState(state)
-		integrationHEAD, headErr := ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
-		if headErr != nil {
-			return fmt.Errorf("read integration HEAD: %w", headErr)
+	for attempt := 1; attempt <= maxIntegrationReconcileAttempts; attempt++ {
+		snapshot, readErr := bb.Read()
+		if readErr != nil {
+			return nil, fmt.Errorf("read integration reconciliation state: %w", readErr)
 		}
-		decision, decisionErr := EvaluateIntegrationProgress(state, capability, integrationHEAD)
+		integrationHEAD, headErr := ResolveIntegrationHEAD(projectRoot, snapshot.Config.IntegrationBranch)
+		if headErr != nil {
+			return nil, fmt.Errorf("read integration HEAD: %w", headErr)
+		}
+		decision, decisionErr := EvaluateIntegrationProgress(snapshot, capability, integrationHEAD)
 		if decisionErr != nil {
-			return decisionErr
+			return nil, decisionErr
 		}
 
-		changed, projectionErr := projectIntegrationProgressDecision(
-			state,
+		prepared, prepareErr := prepareIntegrationAnalysisProjections(
+			snapshot,
 			decision,
 			integrationHEAD,
 			projectRoot,
-			resolver,
 			gitWrapper,
-			result,
 		)
-		if projectionErr != nil {
-			return projectionErr
+		if prepareErr != nil {
+			return nil, prepareErr
 		}
-		result.Changed = changed
-		if hooks := testReconcileIntegrationAnalysesHooks; hooks != nil && hooks.beforeValidation != nil {
-			hooks.beforeValidation(state)
+
+		result := &ReconcileIntegrationAnalysesResult{}
+		apply := func() error {
+			currentHEAD, currentHeadErr := ResolveIntegrationHEAD(projectRoot, snapshot.Config.IntegrationBranch)
+			if currentHeadErr != nil {
+				return fmt.Errorf("re-read integration HEAD: %w", currentHeadErr)
+			}
+			if currentHEAD != integrationHEAD {
+				return errIntegrationReconcileChanged
+			}
+
+			previous := snapshotIntegrationLifecycleState(snapshot)
+			candidate := snapshotIntegrationLifecycleState(snapshot)
+			candidate.Sprint.Scope.Planned = slices.Clone(snapshot.Sprint.Scope.Planned)
+			changed, projectionErr := projectIntegrationProgressDecision(
+				candidate,
+				decision,
+				resolver,
+				prepared,
+				result,
+			)
+			if projectionErr != nil {
+				return projectionErr
+			}
+			result.Changed = changed
+			if hooks := testReconcileIntegrationAnalysesHooks; hooks != nil && hooks.beforeValidation != nil {
+				hooks.beforeValidation(candidate)
+			}
+			if validationErr := validateIntegrationLifecycleCandidate(projectRoot, previous, candidate); validationErr != nil {
+				return validationErr
+			}
+
+			return bb.Modify(func(current *models.State) error {
+				if !sameIntegrationReconciliationInput(snapshot, current) {
+					return errIntegrationReconcileChanged
+				}
+				current.Goal = candidate.Goal
+				current.Tasks = candidate.Tasks
+				current.Sprint.Scope.Planned = slices.Clone(candidate.Sprint.Scope.Planned)
+				return nil
+			})
 		}
-		if validationErr := validateIntegrationLifecycleCandidate(projectRoot, previous, state); validationErr != nil {
-			return validationErr
+
+		if completionLockHeld {
+			err = apply()
+		} else {
+			err = withEffectiveIntegrationCompletionLinearization(projectRoot, "reconcile integration analyses", apply)
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("reconcile integration analyses: %w", err)
+		if errors.Is(err, errIntegrationReconcileChanged) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reconcile integration analyses: %w", err)
+		}
+		return result, nil
 	}
-	return result, nil
+	return nil, fmt.Errorf("reconcile integration analyses: inputs changed during %d attempts", maxIntegrationReconcileAttempts)
+}
+
+func sameIntegrationReconciliationInput(snapshot, current *models.State) bool {
+	return reflect.DeepEqual(snapshot.Goal, current.Goal) &&
+		reflect.DeepEqual(snapshot.Tasks, current.Tasks) &&
+		reflect.DeepEqual(snapshot.Sprint, current.Sprint) &&
+		reflect.DeepEqual(snapshot.Config, current.Config)
 }
 
 func projectIntegrationProgressDecision(
 	state *models.State,
 	decision IntegrationProgressDecision,
-	integrationHEAD string,
-	projectRoot string,
 	resolver *pipeline.Resolver,
-	gitWrapper *gitpkg.Git,
+	prepared map[string]preparedIntegrationAnalysisProjection,
 	result *ReconcileIntegrationAnalysesResult,
 ) (bool, error) {
 	changed := false
@@ -129,24 +193,14 @@ func projectIntegrationProgressDecision(
 		changed = changed || coverageChanged
 	}
 
-	requests := slices.Clone(decision.SliceRequests)
-	if decision.GlobalRequest != nil {
-		requests = append(requests, *decision.GlobalRequest)
-	}
-	if decision.Blocked != nil {
-		requests = nil
-	}
-	sort.Slice(requests, func(i, j int) bool { return requests[i].Key < requests[j].Key })
+	requests := requestedIntegrationAnalyses(decision)
 	now := time.Now().UTC()
 	for _, request := range requests {
 		createdID, created, err := materializeIntegrationAnalysis(
 			state,
-			decision,
 			request,
-			integrationHEAD,
-			projectRoot,
 			resolver,
-			gitWrapper,
+			prepared,
 			now,
 		)
 		if err != nil {
@@ -163,6 +217,18 @@ func projectIntegrationProgressDecision(
 		changed = changed || closureChanged
 	}
 	return changed, nil
+}
+
+func requestedIntegrationAnalyses(decision IntegrationProgressDecision) []IntegrationAnalysisRequest {
+	if decision.Blocked != nil {
+		return nil
+	}
+	requests := slices.Clone(decision.SliceRequests)
+	if decision.GlobalRequest != nil {
+		requests = append(requests, *decision.GlobalRequest)
+	}
+	sort.Slice(requests, func(i, j int) bool { return requests[i].Key < requests[j].Key })
+	return requests
 }
 
 func appendApprovalCoverage(
@@ -201,12 +267,9 @@ func appendApprovalCoverage(
 
 func materializeIntegrationAnalysis(
 	state *models.State,
-	decision IntegrationProgressDecision,
 	request IntegrationAnalysisRequest,
-	integrationHEAD string,
-	projectRoot string,
 	resolver *pipeline.Resolver,
-	gitWrapper *gitpkg.Git,
+	prepared map[string]preparedIntegrationAnalysisProjection,
 	now time.Time,
 ) (string, bool, error) {
 	taskID := integrationAnalysisTaskID(request.Key)
@@ -219,17 +282,11 @@ func materializeIntegrationAnalysis(
 		return "", false, fmt.Errorf("resolve initial status for %s: %w", rolePair, err)
 	}
 
-	metadata, refs, parents, err := buildIntegrationAnalysisProjection(
-		state,
-		decision,
-		request,
-		integrationHEAD,
-		projectRoot,
-		gitWrapper,
-	)
-	if err != nil {
-		return "", false, err
+	projection, ok := prepared[request.Key]
+	if !ok {
+		return "", false, fmt.Errorf("missing prepared integration analysis projection %q", request.Key)
 	}
+	metadata, refs, parents := projection.metadata, projection.refs, projection.parents
 	if existing := state.FindTask(taskID); existing != nil {
 		if existing.Type != models.TaskTypeIntegration || existing.RolePair != rolePair ||
 			existing.Status != initialStatus || !reflect.DeepEqual(existing.IntegrationAnalysis, metadata) ||
@@ -271,6 +328,54 @@ type analysisRefs struct {
 	spec string
 	plan string
 	arch string
+}
+
+type preparedIntegrationAnalysisProjection struct {
+	metadata *models.IntegrationAnalysisMetadata
+	refs     analysisRefs
+	parents  []string
+}
+
+func prepareIntegrationAnalysisProjections(
+	state *models.State,
+	decision IntegrationProgressDecision,
+	integrationHEAD string,
+	projectRoot string,
+	gitWrapper *gitpkg.Git,
+) (map[string]preparedIntegrationAnalysisProjection, error) {
+	requests := requestedIntegrationAnalyses(decision)
+	for _, request := range requests {
+		if request.Phase == models.IntegrationAnalysisPhaseSlice {
+			if hooks := testReconcileIntegrationAnalysesHooks; hooks != nil && hooks.beforeGitEvidence != nil {
+				hooks.beforeGitEvidence()
+			}
+			break
+		}
+	}
+
+	prepared := make(map[string]preparedIntegrationAnalysisProjection, len(requests))
+	for _, request := range requests {
+		metadata, refs, parents, err := buildIntegrationAnalysisProjection(
+			state,
+			decision,
+			request,
+			integrationHEAD,
+			projectRoot,
+			gitWrapper,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := prepared[request.Key]; exists {
+			return nil, fmt.Errorf("duplicate integration analysis request key %q", request.Key)
+		}
+		prepared[request.Key] = preparedIntegrationAnalysisProjection{
+			metadata: metadata,
+			refs:     refs,
+			parents:  parents,
+		}
+	}
+	return prepared, nil
 }
 
 func buildIntegrationAnalysisProjection(

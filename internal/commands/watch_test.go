@@ -985,7 +985,7 @@ func TestCheckStalled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache := make(map[string]time.Time)
-			alerts := checkStalled(tt.state, cache)
+			alerts := checkStalled(tt.state, cache, nil)
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
@@ -1016,13 +1016,13 @@ func TestCheckStalledThrottling(t *testing.T) {
 	cache := make(map[string]time.Time)
 
 	// First call - should generate alert
-	alerts := checkStalled(state, cache)
+	alerts := checkStalled(state, cache, nil)
 	if len(alerts) != 1 {
 		t.Errorf("First call: len(alerts) = %d, want 1", len(alerts))
 	}
 
 	// Second call immediately after - should be throttled
-	alerts = checkStalled(state, cache)
+	alerts = checkStalled(state, cache, nil)
 	if len(alerts) != 0 {
 		t.Errorf("Second call (throttled): len(alerts) = %d, want 0", len(alerts))
 	}
@@ -1031,9 +1031,30 @@ func TestCheckStalledThrottling(t *testing.T) {
 	cache["stalled:alert"] = now.Add(-6 * time.Minute)
 
 	// Third call after 5 minutes - should generate alert again
-	alerts = checkStalled(state, cache)
+	alerts = checkStalled(state, cache, nil)
 	if len(alerts) != 1 {
 		t.Errorf("Third call (after 5 min): len(alerts) = %d, want 1", len(alerts))
+	}
+}
+
+func TestCheckStalledUsesOperationalTerminalStates(t *testing.T) {
+	old := time.Now().UTC().Add(-time.Hour)
+	resolver := operationalTerminalResolver()
+
+	clean := &models.State{Tasks: []models.Task{{
+		ID: "clean", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_CLEAN",
+		History: []models.TaskHistoryEntry{{Time: old, Event: "approved"}},
+	}}}
+	if alerts := checkStalled(clean, make(map[string]time.Time), resolver); len(alerts) != 0 {
+		t.Fatalf("clean integration analysis produced stalled alerts: %#v", alerts)
+	}
+
+	approved := &models.State{Tasks: []models.Task{{
+		ID: "approved", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_APPROVED",
+		History: []models.TaskHistoryEntry{{Time: old, Event: "approved"}},
+	}}}
+	if alerts := checkStalled(approved, make(map[string]time.Time), resolver); len(alerts) != 1 {
+		t.Fatalf("approved transition source produced %d stalled alerts, want 1", len(alerts))
 	}
 }
 

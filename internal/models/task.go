@@ -149,6 +149,28 @@ func (ts TaskStatus) IsTerminal() bool {
 	return ts == TaskStatusMerged || ts == TaskStatusAbandoned || ts == TaskStatusSuperseded
 }
 
+type pipelineCleanStatusResolver interface {
+	CleanStatus(rolePair string) (TaskStatus, error)
+}
+
+// IsOperationallyTerminal reports whether a task has no remaining operational
+// work. Pipeline-declared clean states are terminal, while approved states that
+// merely feed another pipeline stage remain active.
+func IsOperationallyTerminal(task *Task, pr PipelineResolver) bool {
+	if task == nil {
+		return false
+	}
+	if task.Status.IsTerminal() {
+		return true
+	}
+	cleanResolver, ok := pr.(pipelineCleanStatusResolver)
+	if !ok || task.RolePair == "" {
+		return false
+	}
+	cleanStatus, err := cleanResolver.CleanStatus(task.RolePair)
+	return err == nil && task.Status == cleanStatus
+}
+
 // IsSprintTerminal checks if the task status is terminal for sprint completion purposes.
 // MERGED is the universal sprint-terminal state for all role-pairs.
 func (ts TaskStatus) IsSprintTerminal() bool {

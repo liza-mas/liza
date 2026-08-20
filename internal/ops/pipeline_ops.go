@@ -29,7 +29,7 @@ type effectiveIntegrationCompletionSnapshot struct {
 }
 
 var (
-	reconcileIntegrationAnalysesForProgression                = ReconcileIntegrationAnalyses
+	reconcileIntegrationAnalysesForProgression                = reconcileIntegrationAnalysesWithCompletionLockHeld
 	readEffectiveIntegrationCompletion                        = readEffectiveIntegrationCompletionSnapshot
 	beforeEffectiveIntegrationProgressionMutationTestHook     func()
 	beforeEffectiveIntegrationCompletionLinearizationTestHook func(string)

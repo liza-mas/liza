@@ -142,6 +142,117 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 		}
 	})
 
+	t.Run("git evidence preparation releases state lock and retries relevant drift", func(t *testing.T) {
+		fixture := newReconcileFixture(t, false)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		calls := 0
+		previousHooks := testReconcileIntegrationAnalysesHooks
+		testReconcileIntegrationAnalysesHooks = &reconcileIntegrationAnalysesTestHooks{
+			beforeGitEvidence: func() {
+				calls++
+				if calls == 1 {
+					close(entered)
+					<-release
+				}
+			},
+		}
+		t.Cleanup(func() { testReconcileIntegrationAnalysesHooks = previousHooks })
+
+		type outcome struct {
+			result *ReconcileIntegrationAnalysesResult
+			err    error
+		}
+		done := make(chan outcome, 1)
+		go func() {
+			result, err := ReconcileIntegrationAnalyses(fixture.projectRoot)
+			done <- outcome{result: result, err: err}
+		}()
+		<-entered
+
+		modifyDone := make(chan error, 1)
+		go func() {
+			modifyDone <- db.For(fixture.statePath).Modify(func(state *models.State) error {
+				state.Tasks[0], state.Tasks[1] = state.Tasks[1], state.Tasks[0]
+				state.HumanNotes = append(state.HumanNotes, models.HumanNote{
+					Timestamp: time.Now().UTC(),
+					Message:   "preserve concurrent reconciliation note",
+					For:       "orchestrator",
+				})
+				return nil
+			})
+		}()
+		select {
+		case err := <-modifyDone:
+			if err != nil {
+				close(release)
+				t.Fatalf("concurrent state modification error = %v", err)
+			}
+		case <-time.After(time.Second):
+			close(release)
+			t.Fatal("state modification blocked while Git evidence preparation was paused")
+		}
+		close(release)
+
+		got := <-done
+		if got.err != nil {
+			t.Fatalf("ReconcileIntegrationAnalyses() error = %v", got.err)
+		}
+		if calls != 2 {
+			t.Fatalf("Git evidence preparations = %d, want 2 after state drift", calls)
+		}
+		state := fixture.readState(t)
+		if len(state.HumanNotes) != 1 || state.HumanNotes[0].Message != "preserve concurrent reconciliation note" {
+			t.Fatalf("concurrent human notes = %#v", state.HumanNotes)
+		}
+		if got.result == nil || !got.result.Changed || countTasks(state, "integration-slice-plan-multi") != 1 {
+			t.Fatalf("reconciliation result=%#v tasks=%d", got.result, countTasks(state, "integration-slice-plan-multi"))
+		}
+	})
+
+	t.Run("integration HEAD movement during evidence preparation retries", func(t *testing.T) {
+		fixture := newReconcileFixture(t, false)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		calls := 0
+		previousHooks := testReconcileIntegrationAnalysesHooks
+		testReconcileIntegrationAnalysesHooks = &reconcileIntegrationAnalysesTestHooks{
+			beforeGitEvidence: func() {
+				calls++
+				if calls == 1 {
+					close(entered)
+					<-release
+				}
+			},
+		}
+		t.Cleanup(func() { testReconcileIntegrationAnalysesHooks = previousHooks })
+
+		type outcome struct {
+			result *ReconcileIntegrationAnalysesResult
+			err    error
+		}
+		done := make(chan outcome, 1)
+		go func() {
+			result, err := ReconcileIntegrationAnalyses(fixture.projectRoot)
+			done <- outcome{result: result, err: err}
+		}()
+		<-entered
+
+		testhelpers.MustGit(t, fixture.projectRoot, "update-ref", "refs/heads/integration", fixture.base, fixture.head)
+		close(release)
+		got := <-done
+		if got.err != nil {
+			t.Fatalf("ReconcileIntegrationAnalyses() error = %v", got.err)
+		}
+		if calls != 2 {
+			t.Fatalf("Git evidence preparations = %d, want 2 after HEAD movement", calls)
+		}
+		task := fixture.readState(t).FindTask("integration-slice-plan-multi")
+		if task == nil || task.IntegrationAnalysis == nil || task.IntegrationAnalysis.SourceCommit != fixture.base {
+			t.Fatalf("slice task after HEAD movement = %#v, want source %s", task, fixture.base)
+		}
+	})
+
 	t.Run("candidate and transition validation roll back the whole transaction", func(t *testing.T) {
 		for _, tc := range []struct {
 			name      string

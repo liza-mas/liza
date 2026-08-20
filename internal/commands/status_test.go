@@ -1039,6 +1039,38 @@ func statusReadinessResolver() models.PipelineResolver {
 	return pipeline.NewResolver(&pipeline.PipelineConfig{Pipeline: pipeline.Pipeline{Roles: roles, RolePairs: pairs}})
 }
 
+func operationalTerminalResolver() models.PipelineResolver {
+	return pipeline.NewResolver(&pipeline.PipelineConfig{Pipeline: pipeline.Pipeline{
+		Roles: map[string]pipeline.RoleDef{
+			"integration-analyst":  {Type: "doer"},
+			"integration-reviewer": {Type: "reviewer"},
+		},
+		RolePairs: map[string]pipeline.RolePairDef{
+			"integration-pair": {
+				Doer: "integration-analyst", Reviewer: "integration-reviewer",
+				States: pipeline.RolePairStates{
+					Initial: "DRAFT_INTEGRATION_ANALYSIS", Executing: "ANALYZING_INTEGRATION",
+					Submitted: "INTEGRATION_ANALYSIS_TO_REVIEW", Reviewing: "REVIEWING_INTEGRATION_ANALYSIS",
+					Approved: "INTEGRATION_ANALYSIS_APPROVED", Rejected: "INTEGRATION_ANALYSIS_REJECTED",
+					Clean: "INTEGRATION_ANALYSIS_CLEAN",
+				},
+			},
+		},
+	}})
+}
+
+func TestBuildTaskStatusUsesOperationalTerminalStates(t *testing.T) {
+	state := &models.State{Tasks: []models.Task{
+		{ID: "clean", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_CLEAN"},
+		{ID: "approved", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_APPROVED"},
+	}}
+
+	got := buildTaskStatus(state, operationalTerminalResolver())
+	if got.Total != 2 || got.Terminal != 1 || got.Active != 1 {
+		t.Fatalf("task status = total:%d terminal:%d active:%d, want 2/1/1", got.Total, got.Terminal, got.Active)
+	}
+}
+
 func statusRolePair(doer, reviewer, initial, executing, submitted, reviewing, approved, rejected string) pipeline.RolePairDef {
 	return pipeline.RolePairDef{
 		Doer: doer, Reviewer: reviewer,
