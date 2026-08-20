@@ -177,13 +177,48 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("completed slices stay frozen after sibling mutation", func(t *testing.T) {
+	t.Run("promoted repair and sibling mutation preserve frozen slices", func(t *testing.T) {
 		fixture := newSlicedLifecycleFixture(t, true)
 		seedRealMutationReceipt(t, fixture)
 		reconcileSlicedLifecycle(t, fixture.root)
 		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-a", nil)
-		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-b", nil)
-		before := cloneSliceEvidence(fixture.read(t))
+		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-b", []models.OutputEntry{{
+			Desc: "repair composition through planning", DoneWhen: "planned repair composes", Scope: "promoted-repair.txt", SpecRef: "README.md",
+		}})
+		markPlanningTransitionsConsumed(t, fixture)
+		transitionResults, err := ops.ExecuteAvailableTransitions(fixture.root, "auto")
+		if err != nil || len(transitionResults) != 1 || len(transitionResults[0].ChildTaskIDs) != 1 {
+			t.Fatalf("create promoted integration fix: results=%#v err=%v", transitionResults, err)
+		}
+		fixID := transitionResults[0].ChildTaskIDs[0]
+		beforeEscalation := cloneSliceEvidence(fixture.read(t))
+		frozenCohort := *fixture.read(t).Goal.Integration.ContributingSet
+		const escalatedPlanID = "integration-repair-code-plan"
+		addIntegrationRepairPlan(t, fixture, escalatedPlanID, fixID)
+		mergeCodingTask(t, fixture, fixID, "promoted-repair.txt")
+		codingChildren := completeIntegrationRepairPlan(t, fixture, escalatedPlanID)
+		state := fixture.read(t)
+		if !reflect.DeepEqual(*state.Goal.Integration.ContributingSet, frozenCohort) {
+			t.Fatalf("promoted repair changed frozen cohort: got=%#v want=%#v", state.Goal.Integration.ContributingSet, frozenCohort)
+		}
+		if !reflect.DeepEqual(cloneSliceEvidence(state), beforeEscalation) {
+			t.Fatal("promoted repair changed coverage, slice keys, evidence, or slice planned memberships")
+		}
+		if state.FindTask("integration-slice-"+escalatedPlanID) != nil || countSlicedTasks(state, models.IntegrationAnalysisPhaseSlice) != 2 {
+			t.Fatal("promoted integration repair created a new slice")
+		}
+		plan := state.FindTask(escalatedPlanID)
+		if plan == nil || plan.ParentTask == nil || *plan.ParentTask != fixID || plan.Status != models.TaskStatusMerged || countString(state.Sprint.Scope.Planned, escalatedPlanID) != 1 {
+			t.Fatalf("promoted repair plan lineage = %#v", plan)
+		}
+		for _, childID := range codingChildren {
+			child := state.FindTask(childID)
+			if child == nil || !slices.Contains(child.EffectiveParentTasks(), escalatedPlanID) || child.Status != models.TaskStatusMerged || child.MergeCommit == nil || countString(state.Sprint.Scope.Planned, childID) != 1 {
+				t.Fatalf("promoted coding descendant %s = %#v", childID, child)
+			}
+		}
+
+		before := cloneSliceEvidence(state)
 		taskID, reviewerID := prepareApprovedMutation(t, fixture, "later-sibling-mutation")
 		beforeHead := fixture.integrationHead(t)
 		if _, err := ops.MergeWorktree(fixture.root, taskID, reviewerID); err != nil {
@@ -195,9 +230,10 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 			t.Fatal("later sibling mutation rewrote completed slice evidence")
 		}
 		reconcileSlicedLifecycle(t, fixture.root)
-		global := fixture.read(t).FindTask("integration-global-1")
-		if global == nil || global.IntegrationAnalysis.SourceCommit != afterHead {
-			t.Fatalf("global analysis source = %#v, want changed HEAD %s", global, afterHead)
+		state = fixture.read(t)
+		globalOne := state.FindTask("integration-global-1")
+		if globalOne == nil || globalOne.IntegrationAnalysis.SourceCommit != afterHead {
+			t.Fatalf("global analysis source after sibling mutation = %#v, want %s", globalOne, afterHead)
 		}
 	})
 
@@ -249,6 +285,7 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 		if globalOne == nil || globalOne.IntegrationAnalysis.SourceCommit != fixture.integrationHead(t) {
 			t.Fatalf("generation one = %#v", globalOne)
 		}
+		assertGlobalIntegrationPrompt(t, fixture, "integration-global-1")
 
 		completeIntegrationAnalysis(t, fixture, "integration-global-1", []models.OutputEntry{{
 			Desc: "repair aggregate", DoneWhen: "aggregate repaired", Scope: "global-fix.txt", SpecRef: "README.md",
@@ -507,10 +544,14 @@ func TestSlicedIntegrationBarrierHelper(t *testing.T) {
 }
 
 type slicedLifecycleFixture struct {
-	root      string
-	statePath string
-	head      string
-	commits   map[string]string
+	root                  string
+	statePath             string
+	goalBase              string
+	head                  string
+	commits               map[string]string
+	sourceSentinels       map[string]string
+	aggregateSentinelPath string
+	aggregateSentinel     string
 }
 
 type lifecycleProjection struct {
@@ -544,11 +585,19 @@ func newSlicedLifecycleFixture(t *testing.T, multipleScopes bool) *slicedLifecyc
 	}
 	commits := make(map[string]string, len(ids))
 	bases := make(map[string]string, len(ids))
+	sourceSentinels := map[string]string{
+		"coding-a-1":           "ALPHA-LEFT-IMMUTABLE-SOURCE-731",
+		"coding-a-2":           "ALPHA-RIGHT-IMMUTABLE-SOURCE-947",
+		"coding-b-1":           "BETA-LEFT-IMMUTABLE-SOURCE-263",
+		"coding-b-2":           "BETA-RIGHT-IMMUTABLE-SOURCE-589",
+		"coding-single-leaf-a": "ATTESTATION-ONLY-SOURCE-181",
+		"coding-single-leaf-z": "ATTESTATION-ONLY-SOURCE-827",
+	}
 	previous := base
 	for _, id := range ids {
 		bases[id] = previous
 		path := id + ".txt"
-		if err := os.WriteFile(filepath.Join(root, path), []byte(id+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, path), []byte(sourceSentinels[id]+"\n"), 0o644); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
 		testhelpers.MustGit(t, root, "add", path)
@@ -556,6 +605,14 @@ func newSlicedLifecycleFixture(t *testing.T, multipleScopes bool) *slicedLifecyc
 		previous = testhelpers.MustGit(t, root, "rev-parse", "HEAD")
 		commits[id] = previous
 	}
+	const aggregateSentinelPath = "aggregate-independent-source.txt"
+	const aggregateSentinel = "GOAL-WIDE-AGGREGATE-SOURCE-ONLY-419"
+	if err := os.WriteFile(filepath.Join(root, aggregateSentinelPath), []byte(aggregateSentinel+"\n"), 0o644); err != nil {
+		t.Fatalf("write aggregate source sentinel: %v", err)
+	}
+	testhelpers.MustGit(t, root, "add", aggregateSentinelPath)
+	testhelpers.MustGit(t, root, "commit", "-m", "add independent aggregate source")
+	previous = testhelpers.MustGit(t, root, "rev-parse", "HEAD")
 	testhelpers.MustGit(t, root, "update-ref", "refs/heads/integration", previous)
 
 	now := time.Now().UTC()
@@ -586,12 +643,16 @@ func newSlicedLifecycleFixture(t *testing.T, multipleScopes bool) *slicedLifecyc
 
 	state := testhelpers.CreateValidState()
 	state.Goal.SpecRef = "README.md"
+	state.Goal.BaseCommit = testhelpers.StringPtr(base)
 	state.Goal.Integration = nil
 	state.Tasks = tasks
 	state.Sprint.Scope.Planned = taskIDsForSlicedFixture(tasks)
 	testhelpers.WriteInitialState(t, statePath, state)
 	db.ResetInstances()
-	return &slicedLifecycleFixture{root: root, statePath: statePath, head: previous, commits: commits}
+	return &slicedLifecycleFixture{
+		root: root, statePath: statePath, goalBase: base, head: previous, commits: commits,
+		sourceSentinels: sourceSentinels, aggregateSentinelPath: aggregateSentinelPath, aggregateSentinel: aggregateSentinel,
+	}
 }
 
 func mergedPlanTask(now time.Time, id string) models.Task {
@@ -763,13 +824,14 @@ func assertMixedCoverage(t *testing.T, state *models.State, sourceCommit string)
 func assertBoundedSlicePrompts(t *testing.T, fixture *slicedLifecycleFixture) {
 	t.Helper()
 	for _, tc := range []struct {
-		planID   string
-		rootIDs  []string
-		otherIDs []string
-		agentID  string
+		planID      string
+		rootIDs     []string
+		otherPlanID string
+		otherIDs    []string
+		agentID     string
 	}{
-		{planID: "plan-a", rootIDs: []string{"coding-a-1", "coding-a-2"}, otherIDs: []string{"coding-b-1", "coding-b-2"}, agentID: "integration-analyst-11"},
-		{planID: "plan-b", rootIDs: []string{"coding-b-1", "coding-b-2"}, otherIDs: []string{"coding-a-1", "coding-a-2"}, agentID: "integration-analyst-12"},
+		{planID: "plan-a", rootIDs: []string{"coding-a-1", "coding-a-2"}, otherPlanID: "plan-b", otherIDs: []string{"coding-b-1", "coding-b-2"}, agentID: "integration-analyst-11"},
+		{planID: "plan-b", rootIDs: []string{"coding-b-1", "coding-b-2"}, otherPlanID: "plan-a", otherIDs: []string{"coding-a-1", "coding-a-2"}, agentID: "integration-analyst-12"},
 	} {
 		taskID := "integration-slice-" + tc.planID
 		ensureTestAgent(t, fixture, tc.agentID, roles.IntegrationAnalyst)
@@ -791,8 +853,16 @@ func assertBoundedSlicePrompts(t *testing.T, fixture *slicedLifecycleFixture) {
 					t.Fatalf("slice %s prompt missing bounded evidence %q", tc.planID, want)
 				}
 			}
+			assertImmutableSnapshotRead(t, fixture, prompt, taskID, rootID+".txt", fixture.sourceSentinels[rootID])
 		}
-		for _, unwanted := range append(tc.otherIDs, "coding-single-leaf-a", "coding-single-leaf-z", "..HEAD", "show HEAD:") {
+		unwanted := append([]string{}, tc.otherIDs...)
+		unwanted = append(unwanted,
+			tc.otherPlanID,
+			"plan-single", "coding-single", "coding-single-leaf-a", "coding-single-leaf-z",
+			fixture.sourceSentinels["coding-single-leaf-a"], fixture.sourceSentinels["coding-single-leaf-z"],
+			fixture.aggregateSentinelPath, fixture.aggregateSentinel, "..HEAD", "show HEAD:",
+		)
+		for _, unwanted := range unwanted {
 			if strings.Contains(prompt, unwanted) {
 				t.Fatalf("slice %s prompt leaked %q", tc.planID, unwanted)
 			}
@@ -818,6 +888,103 @@ func buildIntegrationPrompt(t *testing.T, fixture *slicedLifecycleFixture, taskI
 		t.Fatalf("BuildPrompt(%s): %v", taskID, err)
 	}
 	return prompt
+}
+
+func assertImmutableSnapshotRead(t *testing.T, fixture *slicedLifecycleFixture, prompt, taskID, path, sentinel string) {
+	t.Helper()
+	task := fixture.read(t).FindTask(taskID)
+	if task == nil || task.Worktree == nil {
+		t.Fatalf("snapshot task %s has no worktree", taskID)
+	}
+	worktree := filepath.Join(fixture.root, *task.Worktree)
+	wantRead := "git -C '" + worktree + "' show '" + fixture.head + ":" + path + "'"
+	if !strings.Contains(prompt, wantRead) {
+		t.Fatalf("snapshot prompt missing immutable read %q", wantRead)
+	}
+	contents := testhelpers.MustGit(t, fixture.root, "show", fixture.head+":"+path)
+	if contents != sentinel {
+		t.Fatalf("immutable read %s:%s = %q, want source sentinel %q", fixture.head, path, contents, sentinel)
+	}
+}
+
+func assertGlobalIntegrationPrompt(t *testing.T, fixture *slicedLifecycleFixture, taskID string) {
+	t.Helper()
+	const analystID = "integration-analyst-1"
+	ensureTestAgent(t, fixture, analystID, roles.IntegrationAnalyst)
+	if _, err := ops.ClaimTask(fixture.root, taskID, analystID); err != nil {
+		t.Fatalf("ClaimTask(%s): %v", taskID, err)
+	}
+	prompt := buildIntegrationPrompt(t, fixture, taskID, analystID)
+	state := fixture.read(t)
+	task := state.FindTask(taskID)
+	if task == nil || task.Worktree == nil || task.IntegrationAnalysis == nil {
+		t.Fatalf("global prompt task = %#v", task)
+	}
+	source := task.IntegrationAnalysis.SourceCommit
+	if source != fixture.integrationHead(t) {
+		t.Fatalf("global prompt source = %s, want live integration HEAD", source)
+	}
+	for _, want := range []string{
+		"GLOBAL INTEGRATION CONTEXT", "GENERATION: 1", "SOURCE COMMIT: " + source,
+		"COVERAGE MAP", "navigation evidence, not proof of aggregate correctness", "independent aggregate review",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("global prompt missing %q", want)
+		}
+	}
+	for _, record := range state.Goal.Integration.Coverage {
+		for _, want := range []string{record.PlanTaskID, string(record.Kind)} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("global prompt missing coverage witness %q", want)
+			}
+		}
+		for _, attestation := range record.ApprovalAttestations {
+			for _, want := range []string{
+				attestation.ReviewedTaskID, attestation.AcceptanceCriteria, attestation.ReviewedCommit,
+				attestation.Approver, attestation.MergeCommit,
+			} {
+				if !strings.Contains(prompt, want) {
+					t.Fatalf("global prompt missing approval witness %q", want)
+				}
+			}
+			for _, validation := range attestation.Validation {
+				if !strings.Contains(prompt, validation) {
+					t.Fatalf("global prompt missing approval validation %q", validation)
+				}
+			}
+		}
+		if report := record.SliceReport; report != nil {
+			for _, want := range []string{report.AnalysisTaskID, report.AnalysisKey, string(report.Verdict), report.SourceCommit, report.ReportCommit} {
+				if !strings.Contains(prompt, want) {
+					t.Fatalf("global prompt missing slice witness %q", want)
+				}
+			}
+		}
+	}
+	worktree := filepath.Join(fixture.root, *task.Worktree)
+	diffRange := fixture.goalBase + ".." + source
+	for _, want := range []string{
+		"git -C '" + worktree + "' diff --name-only '" + diffRange + "'",
+		"git -C '" + worktree + "' diff --stat '" + diffRange + "'",
+		"git -C '" + worktree + "' diff '" + diffRange + "' -- <path>",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("global prompt missing aggregate boundary %q", want)
+		}
+	}
+	changedPaths := strings.Fields(testhelpers.MustGit(t, fixture.root, "diff", "--name-only", diffRange))
+	if !slices.Contains(changedPaths, fixture.aggregateSentinelPath) {
+		t.Fatalf("aggregate boundary paths = %v, missing %s", changedPaths, fixture.aggregateSentinelPath)
+	}
+	contents := testhelpers.MustGit(t, fixture.root, "show", source+":"+fixture.aggregateSentinelPath)
+	if contents != fixture.aggregateSentinel {
+		t.Fatalf("aggregate source sentinel = %q, want %q", contents, fixture.aggregateSentinel)
+	}
+	for _, localSentinel := range fixture.sourceSentinels {
+		if strings.Contains(prompt, localSentinel) {
+			t.Fatalf("global coverage map treated local source body %q as aggregate proof", localSentinel)
+		}
+	}
 }
 
 func assertExactlyOneCreatedTask(t *testing.T, results []*ops.ReconcileIntegrationAnalysesResult, taskID string) {
@@ -862,6 +1029,78 @@ func addReplacementTask(t *testing.T, fixture *slicedLifecycleFixture, taskID st
 	if err != nil {
 		t.Fatalf("AddTask(%s): %v", taskID, err)
 	}
+}
+
+func addIntegrationRepairPlan(t *testing.T, fixture *slicedLifecycleFixture, taskID, parentFixID string) {
+	t.Helper()
+	lp := paths.New(fixture.root)
+	if _, err := ops.AddTask(lp.StatePath(), lp.LogPath(), &ops.AddTaskInput{
+		ID: taskID, Type: string(models.TaskTypePlanning), RolePair: "code-planning-pair",
+		Description: "plan a non-trivial integration repair", SpecRef: "README.md", PlanRef: "README.md",
+		DoneWhen: "repair plan produces reviewed coding descendants", Scope: taskID + ".md", Priority: 1,
+	}, "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask(%s): %v", taskID, err)
+	}
+	fixture.modify(t, func(state *models.State) {
+		plan := state.FindTask(taskID)
+		plan.ParentTask = testhelpers.StringPtr(parentFixID)
+	})
+}
+
+func completeIntegrationRepairPlan(t *testing.T, fixture *slicedLifecycleFixture, taskID string) []string {
+	t.Helper()
+	plannerID := ensureTestAgent(t, fixture, "code-planner-1", "code-planner")
+	reviewerID := ensureTestAgent(t, fixture, "code-plan-reviewer-1", "code-plan-reviewer")
+	if _, err := ops.ClaimTask(fixture.root, taskID, plannerID); err != nil {
+		t.Fatalf("ClaimTask(%s): %v", taskID, err)
+	}
+	task := fixture.read(t).FindTask(taskID)
+	if task == nil || task.Worktree == nil {
+		t.Fatalf("claimed repair plan %s has no worktree", taskID)
+	}
+	worktree := filepath.Join(fixture.root, *task.Worktree)
+	planFile := taskID + ".md"
+	if err := os.WriteFile(filepath.Join(worktree, planFile), []byte("reviewed integration repair plan\n"), 0o644); err != nil {
+		t.Fatalf("write repair plan: %v", err)
+	}
+	testhelpers.MustGit(t, worktree, "add", planFile)
+	testhelpers.MustGit(t, worktree, "commit", "-m", "plan integration repair")
+	output := []models.OutputEntry{
+		{Desc: "implement first planned repair", DoneWhen: "first repair merged", Scope: "planned-repair-a.txt", SpecRef: "README.md", PlanRef: "README.md"},
+		{Desc: "implement second planned repair", DoneWhen: "second repair merged", Scope: "planned-repair-b.txt", SpecRef: "README.md", PlanRef: "README.md"},
+	}
+	if err := ops.SetTaskOutput(fixture.root, &ops.SetTaskOutputInput{TaskID: taskID, AgentID: plannerID, Output: output}); err != nil {
+		t.Fatalf("SetTaskOutput(%s): %v", taskID, err)
+	}
+	if err := ops.WriteCheckpoint(fixture.root, &ops.WriteCheckpointInput{
+		TaskID: taskID, AgentID: plannerID, Intent: "plan non-trivial integration repair",
+		ValidationPlan: "review plan and merge every coding descendant", FilesToModify: []string{planFile}, TDDNotRequired: "planning artifact only",
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint(%s): %v", taskID, err)
+	}
+	reviewCommit := testhelpers.MustGit(t, worktree, "rev-parse", "HEAD")
+	if _, err := ops.SubmitForReview(fixture.root, taskID, reviewCommit, plannerID); err != nil {
+		t.Fatalf("SubmitForReview(%s): %v", taskID, err)
+	}
+	if _, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
+		ProjectRoot: fixture.root, AgentID: reviewerID, Role: "code-plan-reviewer", TaskID: taskID,
+	}); err != nil {
+		t.Fatalf("ClaimReviewerTask(%s): %v", taskID, err)
+	}
+	if _, err := ops.SubmitVerdict(fixture.root, taskID, "APPROVED", "", reviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict(%s): %v", taskID, err)
+	}
+	if _, err := ops.MergeWorktree(fixture.root, taskID, reviewerID); err != nil {
+		t.Fatalf("MergeWorktree(%s): %v", taskID, err)
+	}
+	transitions, err := ops.ExecuteAvailableTransitions(fixture.root, "manual")
+	if err != nil || len(transitions) != 1 || transitions[0].TransitionName != "code-plan-to-coding" || len(transitions[0].ChildTaskIDs) != len(output) {
+		t.Fatalf("code-planning escalation transition: results=%#v err=%v", transitions, err)
+	}
+	for i, childID := range transitions[0].ChildTaskIDs {
+		mergeCodingTask(t, fixture, childID, output[i].Scope)
+	}
+	return transitions[0].ChildTaskIDs
 }
 
 func prepareCodingTaskReview(t *testing.T, fixture *slicedLifecycleFixture, taskID, fileName string) {
@@ -1208,7 +1447,7 @@ func prepareIntegrationAnalysisReview(t *testing.T, fixture *slicedLifecycleFixt
 	t.Helper()
 	analystID := ensureTestAgent(t, fixture, "integration-analyst-1", "integration-analyst")
 	ensureTestAgent(t, fixture, "integration-reviewer-1", "integration-reviewer")
-	if task := fixture.read(t).FindTask(taskID); task != nil && task.Status != models.TaskStatusImplementing {
+	if task := fixture.read(t).FindTask(taskID); task != nil && task.AssignedTo == nil {
 		if _, err := ops.ClaimTask(fixture.root, taskID, analystID); err != nil {
 			t.Fatalf("ClaimTask(%s): %v", taskID, err)
 		}
