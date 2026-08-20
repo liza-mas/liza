@@ -298,6 +298,101 @@ func TestGlobalIntegrationContext(t *testing.T) {
 			assertNotContains(t, output, unwanted)
 		}
 	}
+
+	stateWithIntegration := func(scopes []models.IntegrationScopeSnapshot, coverage []models.IntegrationCoverageRecord) *models.State {
+		updated := *state
+		updated.Goal = state.Goal
+		updated.Goal.Integration = &models.IntegrationLifecycle{
+			ContributingSet: &models.IntegrationContributingSet{Scopes: scopes},
+			Coverage:        coverage,
+		}
+		return &updated
+	}
+
+	t.Run("fewer than two scopes render without coverage", func(t *testing.T) {
+		testCases := []struct {
+			name   string
+			scopes []models.IntegrationScopeSnapshot
+		}{
+			{
+				name: "one scope",
+				scopes: []models.IntegrationScopeSnapshot{
+					{PlanTaskID: "plan-single", RootTaskIDs: []string{"coding-single"}},
+				},
+			},
+			{name: "zero scopes"},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				reduced := stateWithIntegration(testCase.scopes, nil)
+				task := reduced.FindTask("global-analysis")
+				data := &prompts.RoleContextData{}
+				if err := populateGlobalIntegrationContext(task, reduced, data); err != nil {
+					t.Fatalf("populateGlobalIntegrationContext() error = %v", err)
+				}
+				if got := len(data.IntegrationCoverage); got != 0 {
+					t.Fatalf("IntegrationCoverage length = %d, want 0", got)
+				}
+
+				for _, role := range []string{roles.IntegrationAnalyst, roles.IntegrationReviewer} {
+					context := renderIntegrationRoleContext(t, reduced, "global-analysis", role)
+					assertContainsAll(t, context,
+						"GLOBAL INTEGRATION CONTEXT",
+						"no local coverage records; fewer than two contributing scopes bypass local coverage",
+					)
+				}
+			})
+		}
+	})
+
+	t.Run("coverage validation remains fail closed", func(t *testing.T) {
+		testCases := []struct {
+			name     string
+			scopes   []models.IntegrationScopeSnapshot
+			coverage []models.IntegrationCoverageRecord
+			want     string
+		}{
+			{
+				name: "two scopes missing coverage",
+				scopes: []models.IntegrationScopeSnapshot{
+					{PlanTaskID: "plan-single", RootTaskIDs: []string{"coding-single"}},
+					{PlanTaskID: "plan-sliced", RootTaskIDs: []string{"coding-left", "coding-right"}},
+				},
+				coverage: []models.IntegrationCoverageRecord{state.Goal.Integration.Coverage[0]},
+				want:     "lacks coverage for plan",
+			},
+			{
+				name: "coverage outside contributing set",
+				scopes: []models.IntegrationScopeSnapshot{
+					{PlanTaskID: "plan-single", RootTaskIDs: []string{"coding-single"}},
+				},
+				coverage: []models.IntegrationCoverageRecord{state.Goal.Integration.Coverage[0]},
+				want:     "contains coverage outside the frozen contributing set",
+			},
+			{
+				name: "invalid rendered coverage payload",
+				scopes: []models.IntegrationScopeSnapshot{
+					{PlanTaskID: "plan-single", RootTaskIDs: []string{"coding-single"}},
+				},
+				coverage: []models.IntegrationCoverageRecord{
+					{PlanTaskID: "plan-single", Kind: models.IntegrationCoverageApprovalAttestation},
+				},
+				want: "has contradictory payload",
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				broken := stateWithIntegration(testCase.scopes, testCase.coverage)
+				task := broken.FindTask("global-analysis")
+				err := populateGlobalIntegrationContext(task, broken, &prompts.RoleContextData{})
+				if err == nil || !strings.Contains(err.Error(), testCase.want) {
+					t.Fatalf("populateGlobalIntegrationContext() error = %v, want containing %q", err, testCase.want)
+				}
+			})
+		}
+	})
 }
 
 func renderIntegrationRoleContext(t *testing.T, state *models.State, taskID, role string) string {

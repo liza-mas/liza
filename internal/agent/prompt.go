@@ -606,7 +606,10 @@ func populateGlobalIntegrationContext(task *models.Task, state *models.State, da
 		}
 		record, ok := coverageByPlan[scope.PlanTaskID]
 		if !ok {
-			return fmt.Errorf("global integration context for task %s lacks coverage for plan %q", task.ID, scope.PlanTaskID)
+			if len(scopes) >= 2 {
+				return fmt.Errorf("global integration context for task %s lacks coverage for plan %q", task.ID, scope.PlanTaskID)
+			}
+			continue
 		}
 		summary, err := integrationCoverageSummary(state, scope, record)
 		if err != nil {
@@ -614,8 +617,10 @@ func populateGlobalIntegrationContext(task *models.Task, state *models.State, da
 		}
 		data.IntegrationCoverage = append(data.IntegrationCoverage, summary)
 	}
-	if len(coverageByPlan) != len(seenPlans) {
-		return fmt.Errorf("global integration context for task %s contains coverage outside the frozen contributing set", task.ID)
+	for planTaskID := range coverageByPlan {
+		if _, ok := seenPlans[planTaskID]; !ok {
+			return fmt.Errorf("global integration context for task %s contains coverage outside the frozen contributing set", task.ID)
+		}
 	}
 	return nil
 }
