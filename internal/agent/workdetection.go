@@ -6,7 +6,6 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
-	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
 )
 
@@ -112,12 +111,13 @@ func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 // state through the authoritative progress decision and prompt projection.
 func DetectOrchestratorWakeTriggersForProject(projectRoot string, state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
 	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
-		return evaluateEffectiveIntegrationWakeProjection(projectRoot, state)
+		decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
+		return prompts.ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
 	})
 }
 
 // DetectOrchestratorWakeTriggersWithIntegrationProjection exposes the pure
-// adapter used by tests and read-only consumers that already hold Task 1's
+// adapter used by tests and read-only consumers that already hold an
 // authoritative projection.
 func DetectOrchestratorWakeTriggersWithIntegrationProjection(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, projection prompts.EffectiveIntegrationCompletion) OrchestratorWakeResult {
 	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
@@ -183,19 +183,6 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 	}
 
 	return OrchestratorWakeResult{Trigger: WakeTriggerNone}
-}
-
-func evaluateEffectiveIntegrationWakeProjection(projectRoot string, state *models.State) prompts.EffectiveIntegrationCompletion {
-	cfg, err := pipeline.LoadFrozen(projectRoot)
-	if err != nil {
-		return prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("load frozen pipeline: %w", err))
-	}
-	integrationHEAD, err := ops.ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
-	if err != nil {
-		return prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("read integration HEAD: %w", err))
-	}
-	decision, err := ops.EvaluateIntegrationProgress(state, pipeline.NewResolver(cfg).SlicedIntegrationCapability(), integrationHEAD)
-	return prompts.ProjectEffectiveIntegrationCompletion(decision, nil, err)
 }
 
 func projectIntegrationWakeResult(projection prompts.EffectiveIntegrationCompletion, plannedCount int) OrchestratorWakeResult {

@@ -3,6 +3,7 @@ package ops
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -390,6 +391,42 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 			t.Fatalf("task order changed decision:\nfirst:  %#v\nsecond: %#v", first, second)
 		}
 	})
+}
+
+func TestEvaluateLiveIntegrationProgress(t *testing.T) {
+	fixture := newReconcileFixture(t, false)
+	state := fixture.readState(t)
+
+	live, err := EvaluateLiveIntegrationProgress(state, fixture.projectRoot)
+	if err != nil {
+		t.Fatalf("EvaluateLiveIntegrationProgress() error = %v", err)
+	}
+	cfg, err := pipeline.LoadFrozen(fixture.projectRoot)
+	if err != nil {
+		t.Fatalf("pipeline.LoadFrozen() error = %v", err)
+	}
+	want, err := EvaluateIntegrationProgress(state, pipeline.NewResolver(cfg).SlicedIntegrationCapability(), fixture.head)
+	if err != nil {
+		t.Fatalf("EvaluateIntegrationProgress() error = %v", err)
+	}
+	if !reflect.DeepEqual(live, want) {
+		t.Fatalf("live decision = %#v, want %#v", live, want)
+	}
+
+	state.Config.IntegrationBranch = ""
+	if _, err := EvaluateLiveIntegrationProgress(state, fixture.projectRoot); err == nil || !strings.Contains(err.Error(), "read integration HEAD: integration branch is empty") {
+		t.Fatalf("EvaluateLiveIntegrationProgress() empty-branch error = %v", err)
+	}
+
+	if _, err := EvaluateLiveIntegrationProgress(state, t.TempDir()); err == nil || !strings.Contains(err.Error(), "load frozen pipeline:") {
+		t.Fatalf("EvaluateLiveIntegrationProgress() missing-pipeline error = %v", err)
+	}
+
+	state.Config.IntegrationBranch = "integration"
+	state.Tasks = append(state.Tasks, state.Tasks[0])
+	if _, err := EvaluateLiveIntegrationProgress(state, fixture.projectRoot); err == nil || !strings.Contains(err.Error(), "duplicate task id") {
+		t.Fatalf("EvaluateLiveIntegrationProgress() evaluation error = %v", err)
+	}
 }
 
 func integrationProgressState(tasks ...models.Task) *models.State {

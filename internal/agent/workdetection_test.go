@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -1735,6 +1737,45 @@ func TestDetectOrchestratorWakeTriggers_IntegrationExists(t *testing.T) {
 	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
 	if result.Trigger != WakeTriggerSprintComplete {
 		t.Errorf("trigger = %v, want %v", result.Trigger, WakeTriggerSprintComplete)
+	}
+}
+
+func TestDetectOrchestratorWakeTriggersWithIntegrationProjection_Outcomes(t *testing.T) {
+	tests := []struct {
+		name       string
+		decision   ops.IntegrationProgressDecision
+		evaluation error
+		want       OrchestratorWakeTrigger
+		shouldWake bool
+	}{
+		{name: "complete", decision: ops.IntegrationProgressDecision{IntegrationComplete: true}, want: WakeTriggerSprintComplete, shouldWake: true},
+		{name: "waiting", decision: ops.IntegrationProgressDecision{Waiting: &ops.IntegrationProgressReason{Code: "integration_repairs_pending"}}, want: WakeTriggerIntegrationWaiting},
+		{name: "blocked", decision: ops.IntegrationProgressDecision{Blocked: &ops.IntegrationProgressReason{Code: "integration_analysis_blocked"}}, want: WakeTriggerIntegrationBlocked},
+		{name: "exhausted", decision: ops.IntegrationProgressDecision{Exhausted: true, Blocked: &ops.IntegrationProgressReason{Code: "global_generations_exhausted"}}, want: WakeTriggerIntegrationExhausted},
+		{name: "unavailable", evaluation: errors.New("read integration HEAD: missing ref"), want: WakeTriggerIntegrationUnavailable},
+		{name: "reconciliation needed", decision: ops.IntegrationProgressDecision{FreezeContributingSet: true, GlobalRequest: &ops.IntegrationAnalysisRequest{Key: "global:2"}}, want: WakeTriggerCodingComplete, shouldWake: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := testhelpers.CreateValidState()
+			baseCommit := "base-commit"
+			state.Goal.BaseCommit = &baseCommit
+			state.Sprint.Scope.Planned = []string{"task-1"}
+			state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())}
+			projection := prompts.ProjectEffectiveIntegrationCompletion(tt.decision, nil, tt.evaluation)
+
+			result := DetectOrchestratorWakeTriggersWithIntegrationProjection(state, nil, nil, nil, projection)
+			if result.Trigger != tt.want {
+				t.Fatalf("trigger = %q, want %q (projection %#v)", result.Trigger, tt.want, projection)
+			}
+			if result.ShouldWake() != tt.shouldWake {
+				t.Fatalf("ShouldWake() = %t, want %t", result.ShouldWake(), tt.shouldWake)
+			}
+			if result.Integration.Status != projection.Status || result.Integration.ReasonCode != projection.ReasonCode {
+				t.Fatalf("integration = %#v, want projection %#v", result.Integration, projection)
+			}
+		})
 	}
 }
 

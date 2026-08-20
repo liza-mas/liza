@@ -154,20 +154,6 @@ func sortedStringsCopy(values []string) []string {
 	return result
 }
 
-func evaluateEffectiveIntegrationCompletion(state *models.State, projectRoot string) EffectiveIntegrationCompletion {
-	cfg, err := pipeline.LoadFrozen(projectRoot)
-	if err != nil {
-		return ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("load frozen pipeline: %w", err))
-	}
-	resolver := pipeline.NewResolver(cfg)
-	integrationHEAD, err := ops.ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
-	if err != nil {
-		return ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("read integration HEAD: %w", err))
-	}
-	decision, err := ops.EvaluateIntegrationProgress(state, resolver.SlicedIntegrationCapability(), integrationHEAD)
-	return ProjectEffectiveIntegrationCompletion(decision, nil, err)
-}
-
 func writeIntegrationProgressDiagnostic(b *strings.Builder, projection EffectiveIntegrationCompletion) {
 	if projection.Status == "" {
 		return

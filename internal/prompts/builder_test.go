@@ -3476,6 +3476,9 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 		beforeReconciliation := append([]string(nil), reconciliation.CreatedTaskIDs...)
 
 		projection := ProjectEffectiveIntegrationCompletion(decision, reconciliation, nil)
+		if projection.WakeTrigger != "CODING_COMPLETE" || projection.Status != "reconciliation_needed" {
+			t.Fatalf("projection = %#v, want CODING_COMPLETE reconciliation_needed", projection)
+		}
 		wakeData := wakeTemplateData{Integration: projection}
 		first, err := buildInstructionsForWakeTrigger(projection.WakeTrigger, "orchestrator-1", wakeData, nil)
 		if err != nil {

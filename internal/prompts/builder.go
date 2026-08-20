@@ -257,7 +257,8 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
 	var integrationProjection EffectiveIntegrationCompletion
 	if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
-		integrationProjection = evaluateEffectiveIntegrationCompletion(state, projectRoot)
+		decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
+		integrationProjection = ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
 		wakeTrigger = integrationProjection.WakeTrigger
 	}
 	if !wakeOpen && wakeTrigger == "UNKNOWN" {

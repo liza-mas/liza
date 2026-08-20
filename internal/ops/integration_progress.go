@@ -83,6 +83,20 @@ func EvaluateIntegrationProgress(
 	return evaluator.evaluate(capability, integrationHEAD)
 }
 
+// EvaluateLiveIntegrationProgress loads the frozen pipeline capability and
+// current integration branch HEAD before evaluating integration progress.
+func EvaluateLiveIntegrationProgress(state *models.State, projectRoot string) (IntegrationProgressDecision, error) {
+	cfg, err := pipeline.LoadFrozen(projectRoot)
+	if err != nil {
+		return IntegrationProgressDecision{}, fmt.Errorf("load frozen pipeline: %w", err)
+	}
+	integrationHEAD, err := ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
+	if err != nil {
+		return IntegrationProgressDecision{}, fmt.Errorf("read integration HEAD: %w", err)
+	}
+	return EvaluateIntegrationProgress(state, pipeline.NewResolver(cfg).SlicedIntegrationCapability(), integrationHEAD)
+}
+
 type integrationProgressEvaluator struct {
 	state        *models.State
 	tasks        map[string]*models.Task
