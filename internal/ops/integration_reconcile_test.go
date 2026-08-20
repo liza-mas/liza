@@ -360,6 +360,52 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 	})
 }
 
+func TestIntegrationHEADResolutionIsConsistentAcrossLifecycle(t *testing.T) {
+	fixture := newReconcileFixture(t, false)
+	testhelpers.MustGit(t, fixture.projectRoot, "tag", "integration", fixture.base)
+	tagCommit := mustCommit(t, gitpkg.New(fixture.projectRoot), "refs/tags/integration")
+	if tagCommit == fixture.head {
+		t.Fatal("test setup did not separate the integration branch and tag commits")
+	}
+
+	resolvedHEAD, err := ResolveIntegrationHEAD(fixture.projectRoot, "integration")
+	if err != nil {
+		t.Fatalf("ResolveIntegrationHEAD() error = %v", err)
+	}
+	if resolvedHEAD != fixture.head {
+		t.Fatalf("ResolveIntegrationHEAD() = %s, want branch commit %s (tag commit %s)", resolvedHEAD, fixture.head, tagCommit)
+	}
+	_, err = ResolveIntegrationHEAD(fixture.projectRoot, "")
+	testhelpers.RequireErrorContains(t, err, "integration branch is empty")
+
+	fixture.mutateState(t, func(state *models.State) {
+		state.Tasks = slices.DeleteFunc(state.Tasks, func(task models.Task) bool {
+			return task.ID == "plan-multi" || task.ID == "coding-a" || task.ID == "coding-b"
+		})
+		state.Sprint.Scope.Planned = slices.DeleteFunc(state.Sprint.Scope.Planned, func(id string) bool {
+			return id == "plan-multi" || id == "coding-a" || id == "coding-b"
+		})
+	})
+	if _, err := ReconcileIntegrationAnalyses(fixture.projectRoot); err != nil {
+		t.Fatalf("ReconcileIntegrationAnalyses() error = %v", err)
+	}
+	global := fixture.readState(t).FindTask("integration-global-1")
+	if global == nil || global.IntegrationAnalysis == nil {
+		t.Fatalf("reconciled global analysis = %#v", global)
+	}
+	if global.IntegrationAnalysis.SourceCommit != resolvedHEAD {
+		t.Fatalf("global source_commit = %s, want resolved integration HEAD %s", global.IntegrationAnalysis.SourceCommit, resolvedHEAD)
+	}
+
+	verification, err := verifyCleanIntegrationSource(fixture.projectRoot, global.IntegrationAnalysis.SourceCommit)
+	if err != nil {
+		t.Fatalf("verifyCleanIntegrationSource() error = %v", err)
+	}
+	if verification.IntegrationHEAD != resolvedHEAD || !verification.Effective {
+		t.Fatalf("clean-source verification = %#v, want effective comparison against %s", verification, resolvedHEAD)
+	}
+}
+
 type reconcileFixture struct {
 	projectRoot string
 	statePath   string

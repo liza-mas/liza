@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -161,7 +160,7 @@ func evaluateEffectiveIntegrationCompletion(state *models.State, projectRoot str
 		return ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("load frozen pipeline: %w", err))
 	}
 	resolver := pipeline.NewResolver(cfg)
-	integrationHEAD, err := gitpkg.New(projectRoot).GetCommitSHA(state.Config.IntegrationBranch)
+	integrationHEAD, err := ops.ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
 	if err != nil {
 		return ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, fmt.Errorf("read integration HEAD: %w", err))
 	}
