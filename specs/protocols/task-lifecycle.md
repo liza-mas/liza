@@ -405,9 +405,10 @@ each analysis also carries immutable `integration_analysis` metadata.
    evaluations validate and reuse that frozen cohort rather than recomputing it.
    A contributing scope is a pre-integration `code-planning-pair` with at least
    one distinct root coding lineage that produced merged work.
-2. **Apply the zero-slice rule.** Fewer than two contributing scopes means zero
-   slice analyses and direct global analysis. With multiple scopes, every
-   contributing scope requires one coverage record. A one-lineage scope reuses
+2. **Apply the zero-slice rule.** Fewer than two contributing scopes means no
+   coverage records, zero slice analyses, and direct global analysis through an
+   existing valid `integration-pair`. Only with multiple scopes does every
+   contributing scope require one coverage record. A one-lineage scope reuses
    approval attestation evidence for every merged leaf: reviewed task and
    acceptance criteria, reviewed commit, approver, validation, and merge commit.
    It does not persist reviewer reasoning and creates no slice. A scope with at
@@ -429,12 +430,14 @@ each analysis also carries immutable `integration_analysis` metadata.
    task or review exhaustion likewise becomes explicit blocked closure rather
    than silently satisfying coverage.
 5. **Run independent global analysis.** Global analysis waits for planning to be
-   settled, all coding work terminal, all integration repair work terminal,
-   complete coverage for every contributing scope, and every created slice
-   resolved. Local records are navigation evidence, not proof of aggregate
-   correctness. The `integration-pair` independently checks the current
-   goal-wide integration HEAD for cross-scope interaction, shared-interface,
-   test/specification, architectural, and merge-readiness failures.
+   settled and all coding and integration repair work to be terminal. When the
+   frozen cohort has multiple scopes, it additionally waits for complete
+   coverage for every contributing scope and every created slice to be resolved;
+   a zero- or one-scope cohort has no coverage records to await. Local records,
+   when present, are navigation evidence, not proof of aggregate correctness.
+   The `integration-pair` independently checks the current goal-wide integration
+   HEAD for cross-scope interaction, shared-interface, test/specification,
+   architectural, and merge-readiness failures.
 6. **Repeat bounded global generations.** Global metadata uses deterministic
    keys `global:<generation>` and binds each verdict and report commit to an
    immutable source commit. Promoted integration-escalation repairs remain
@@ -455,8 +458,9 @@ each analysis also carries immutable `integration_analysis` metadata.
 projection:
 
 - `contributing_set.scopes[]` freezes each `plan_task_id` and its root task IDs;
-- `coverage[]` is a tagged union of `approval_attestations[]` or one
-  `slice_report` for every contributing scope when the coverage barrier applies;
+- `coverage[]` remains empty for a frozen cohort with fewer than two scopes;
+  when the cohort has at least two scopes, it is a tagged union of
+  `approval_attestations[]` or one `slice_report` for every contributing scope;
 - slice reports and `global_generations[]` record analysis task ID, analysis
   key, verdict (`clean` or `findings`), immutable `source_commit`, and reviewed
   `report_commit`;

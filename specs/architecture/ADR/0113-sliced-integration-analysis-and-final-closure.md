@@ -30,9 +30,11 @@ The resulting contributing set is then frozen as goal-scoped persisted state.
 Code-planning work created later by integration escalation remains repair
 lineage outside the frozen cohort and is covered by a later global generation.
 
-If fewer than two plan scopes contribute merged work, the workflow takes the
-zero-slice bypass and proceeds directly to global analysis. When at least two
-scopes contribute, every scope supplies one bounded coverage record:
+If fewer than two plan scopes contribute merged work, the workflow persists no
+coverage records, creates no slice analyses, and proceeds directly to global
+analysis through the existing valid global integration pair. Only when at
+least two scopes contribute does every scope supply one bounded coverage
+record:
 
 - A one-lineage scope reuses its coding-review approval attestation and creates
   no slice. The attestation records the reviewed task and acceptance criteria,
@@ -55,10 +57,12 @@ than allowing global analysis to begin.
 
 ### Independent global review and bounded rescans
 
-Global analysis waits for settled planning, terminal coding and integration
-repair work, complete coverage for every contributing scope, and resolution of
-every created slice. Its coverage map is navigation evidence, not proof that
-the aggregate branch is correct. The global analyst independently reviews the
+Global analysis waits for settled planning and terminal coding and integration
+repair work. When the frozen cohort has at least two scopes, it also waits for
+complete coverage for every contributing scope and resolution of every created
+slice; a zero- or one-scope cohort has no coverage records to await. The
+coverage map, when present, is navigation evidence, not proof that the
+aggregate branch is correct. The global analyst independently reviews the
 current goal-wide integration source for cross-scope interactions,
 specification and test agreement, architectural drift, and merge readiness.
 
@@ -101,11 +105,15 @@ persisted: there is no blackboard write while the mutation lock is held.
 
 ### Frozen pipeline compatibility
 
-The frozen pipeline is capability-checked for the slice pair, global pair,
-coding repair step, clean states, and both findings-to-fix transitions. A
-legacy frozen pipeline or partial topology fails closed with
-`pipeline_upgrade_required`. Operators must use a fresh workspace or perform a
-manual topology update; the runtime does not silently skip required slices.
+When a frozen cohort with at least two scopes requires a slice, the frozen
+pipeline is capability-checked for the slice pair, global pair, coding repair
+step, clean states, and both findings-to-fix transitions. A qualifying cohort
+whose frozen pipeline lacks that required topology fails closed with
+`pipeline_upgrade_required`; operators must use a fresh workspace or perform a
+manual topology update. A zero- or one-scope cohort requires neither coverage
+records nor sliced-integration capability and may use the direct-global bypass
+through an existing valid global integration pair, even when the unused slice
+topology is incomplete.
 
 ## Consequences
 
@@ -126,8 +134,8 @@ manual topology update; the runtime does not silently skip required slices.
   qualifying multi-lineage scope and multiple bounded global generations.
 - Persisted coverage and mutation receipts add lifecycle state in exchange for
   reproducibility and fail-closed recovery.
-- Legacy frozen pipelines need an explicit topology upgrade before they can run
-  the sliced lifecycle.
+- Legacy frozen pipelines need an explicit topology upgrade before a qualifying
+  cohort can materialize required slices.
 
 ## Relationship to Prior Decisions
 

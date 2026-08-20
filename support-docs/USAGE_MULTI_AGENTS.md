@@ -378,16 +378,17 @@ Integration coverage opens only after planning reaches the settled barrier:
 every pre-integration planning source is terminal, every eligible coding output
 and transition has been consumed, and the resulting coding work is terminal.
 The contributing scope set is then frozen once. If fewer than two contributing
-scopes exist, the workflow creates zero slice analyses and proceeds directly to
-global integration.
+scopes exist, the workflow persists no coverage records, creates zero slice
+analyses, and proceeds directly through an existing valid global
+`integration-pair`.
 
-With multiple contributing scopes, every contributing scope supplies bounded
-coverage. A one-lineage scope reuses its coding-review approval attestation;
-the attestation records the reviewed task and acceptance criteria, reviewed and
-merge commits, approver, and validation, without persisted reviewer reasoning.
-A qualifying multi-lineage scope—one with at least two distinct coding lineages
-that produced merged work—receives exactly one slice analysis. This coverage
-map is navigation evidence, not proof of aggregate correctness.
+Only with multiple contributing scopes does every contributing scope supply
+bounded coverage. A one-lineage scope reuses its coding-review approval
+attestation; the attestation records the reviewed task and acceptance criteria,
+reviewed and merge commits, approver, and validation, without persisted reviewer
+reasoning. A qualifying multi-lineage scope—one with at least two distinct coding
+lineages that produced merged work—receives exactly one slice analysis. This
+coverage map is navigation evidence, not proof of aggregate correctness.
 
 Global analysis begins only after all required coverage and slice repairs are
 resolved, then performs an independent global review of the current aggregate
@@ -402,10 +403,14 @@ Review approval boundaries are unchanged: the integration reviewer still
 approves analysis findings or clean results, and the supervisor retains merge
 authority.
 
-Frozen pipeline capability also fails closed. A legacy frozen pipeline or
-topology that lacks the complete slice and global integration topology returns
-`pipeline_upgrade_required`. The operator must create a fresh workspace or
-perform a manual topology update instead of silently skipping required slices.
+Frozen sliced-integration capability fails closed only when the frozen cohort
+requires slice topology. If such a qualifying cohort's frozen pipeline lacks
+the required topology, it returns `pipeline_upgrade_required`; the operator
+must create a fresh workspace or perform a manual topology update instead of
+silently skipping required slices. A zero- or one-scope cohort needs neither
+coverage records nor sliced-integration capability, so incomplete unused slice
+topology does not block its direct-global bypass when the existing global
+`integration-pair` is valid.
 
 #### Sprint Phases
 
