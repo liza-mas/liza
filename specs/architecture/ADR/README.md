@@ -100,3 +100,4 @@
 | [0097 — Cursor Secondary-Provider Policy Hooks](0097-cursor-secondary-provider-policy-hooks.md) | Configure Cursor's dependent provider setup and policy hooks during initialization. |
 | [0111 — Capability-Aware Global-First Contract Activation](0111-capability-aware-global-first-contract-activation.md) | Prefer documented active global instruction paths without deleting the only usable provider contract. |
 | [0112 — Serialize Integration Working-Tree Mutations](0112-serialize-integration-working-tree-mutations.md) | Use a project-scoped file lock for integration ref advancement and shared-index sync/restore. |
+| [0113 — Sliced Integration Analysis and Final Closure](0113-sliced-integration-analysis-and-final-closure.md) | Add bounded per-scope coverage, independent global rescans, and linearizable current-HEAD closure. |
