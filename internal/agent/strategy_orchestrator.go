@@ -27,6 +27,7 @@ var (
 	orchestratorScipRefresh               = scipsearch.RefreshIndexes
 	orchestratorStacklitRefresh           = stacklit.RefreshIndex
 	orchestratorFunctionalClustersRefresh = functionalclusters.RefreshIndex
+	orchestratorWaitForWorkDetector       = DetectOrchestratorWakeTriggersForProject
 )
 
 const defaultOrchestratorTimeout = 4 * time.Hour
@@ -100,7 +101,7 @@ func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboar
 
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
-			result := DetectOrchestratorWakeTriggersForProject(config.ProjectRoot, state, pipelineTerminals, planningPairs, m2oTransitions)
+			result := orchestratorWaitForWorkDetector(config.ProjectRoot, state, pipelineTerminals, planningPairs, m2oTransitions)
 			if result.ShouldWake() {
 				return true, fmt.Sprintf("Orchestrator wake trigger: %s (count: %d)", result.Trigger, result.Count)
 			}

@@ -279,6 +279,27 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 		if priority.Trigger != WakeTriggerBlocked {
 			t.Fatalf("non-integration priority trigger = %s, want %s", priority.Trigger, WakeTriggerBlocked)
 		}
+
+		projectRoot := t.TempDir()
+		statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+		testhelpers.SetupPipelineConfig(t, projectRoot)
+		state.Tasks = state.Tasks[:1]
+		state.Sprint.Scope.Planned = []string{"coding-1"}
+		testhelpers.WriteInitialState(t, statePath, state)
+
+		originalDetector := orchestratorWaitForWorkDetector
+		t.Cleanup(func() { orchestratorWaitForWorkDetector = originalDetector })
+		detectorCalls := 0
+		orchestratorWaitForWorkDetector = func(_ string, _ *models.State, _ []models.TaskStatus, _ map[string]bool, _ []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
+			detectorCalls++
+			return result
+		}
+		woke, err := (&orchestratorStrategy{}).WaitForWork(
+			context.Background(), db.For(statePath), SupervisorConfig{ProjectRoot: projectRoot}, time.Millisecond, time.Second,
+		)
+		if err != nil || !woke || detectorCalls != 1 {
+			t.Fatalf("production WaitForWork woke=%t detector_calls=%d error=%v, want true, 1, nil", woke, detectorCalls, err)
+		}
 	})
 
 	t.Run("public reconciliation is idempotent across restart", func(t *testing.T) {
@@ -346,6 +367,49 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 			return nil, nil
 		}); err != nil || calls != 0 {
 			t.Fatalf("non-complete resume error=%v calls=%d, want nil and zero", err, calls)
+		}
+
+		projectRoot := t.TempDir()
+		statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+		testhelpers.SetupPipelineConfig(t, projectRoot)
+		state := testhelpers.CreateValidState()
+		state.Config.AutoResume = true
+		state.Sprint.Status = models.SprintStatusCompleted
+		testhelpers.WriteInitialState(t, statePath, state)
+
+		originalResume := resumeCompletedSprint
+		originalStop := stopCompletedGoal
+		t.Cleanup(func() {
+			resumeCompletedSprint = originalResume
+			stopCompletedGoal = originalStop
+		})
+		resumeCalls := 0
+		stopCalls := 0
+		resumeCompletedSprint = func(string, string) (*ops.ResumeResult, error) {
+			resumeCalls++
+			return completeResume, nil
+		}
+		stopCompletedGoal = func(string, string) (*ops.ModeChangeResult, error) {
+			stopCalls++
+			return &ops.ModeChangeResult{}, nil
+		}
+		if err := waitWhilePaused(context.Background(), projectRoot, "orchestrator"); !errors.Is(err, errGoalComplete) {
+			t.Fatalf("production clean completion error = %v, want %v", err, errGoalComplete)
+		}
+		if resumeCalls != 1 || stopCalls != 1 {
+			t.Fatalf("production completion calls resume=%d stop_for_goal_completion=%d, want 1 and 1", resumeCalls, stopCalls)
+		}
+
+		stopFailure := errors.New("clean current-HEAD precondition rejected")
+		stopCompletedGoal = func(string, string) (*ops.ModeChangeResult, error) {
+			stopCalls++
+			return nil, stopFailure
+		}
+		if err := waitWhilePaused(context.Background(), projectRoot, "orchestrator"); !errors.Is(err, stopFailure) || errors.Is(err, errGoalComplete) {
+			t.Fatalf("production rejected completion error = %v, want wrapped stop failure", err)
+		}
+		if resumeCalls != 2 || stopCalls != 2 {
+			t.Fatalf("production rejected calls resume=%d stop_for_goal_completion=%d, want 2 and 2", resumeCalls, stopCalls)
 		}
 
 		cleanRoot := newAgentCleanCompletionProject(t, false)

@@ -54,6 +54,11 @@ func isGoalComplete(result *ops.ResumeResult) bool {
 
 type goalCompletionStopFunc func(projectRoot, reason string) (*ops.ModeChangeResult, error)
 
+var (
+	resumeCompletedSprint = ops.Resume
+	stopCompletedGoal     = ops.StopForGoalCompletion
+)
+
 func stopAfterCompletedResume(projectRoot string, result *ops.ResumeResult, stop goalCompletionStopFunc) error {
 	if !isGoalComplete(result) {
 		return nil
@@ -117,11 +122,11 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 					}
 				case state.Sprint.Status == models.SprintStatusCompleted && state.Config.AutoResume:
 					logger.Info("Auto-resuming from COMPLETED")
-					result, resumeErr := ops.Resume(projectRoot, "auto-resume")
+					result, resumeErr := resumeCompletedSprint(projectRoot, "auto-resume")
 					if resumeErr != nil {
 						logger.Warn("Auto-resume from COMPLETED failed, waiting", "error", resumeErr)
 					} else {
-						if completionErr := stopAfterCompletedResume(projectRoot, result, ops.StopForGoalCompletion); completionErr != nil {
+						if completionErr := stopAfterCompletedResume(projectRoot, result, stopCompletedGoal); completionErr != nil {
 							if errors.Is(completionErr, errGoalComplete) {
 								logger.Info("Goal complete — clean integration evidence stopped the system.")
 							}
