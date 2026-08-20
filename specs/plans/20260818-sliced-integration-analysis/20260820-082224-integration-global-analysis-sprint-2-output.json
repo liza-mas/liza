@@ -1,0 +1,38 @@
+[
+  {
+    "desc": "Build the global integration analysis prompt context for a frozen contributing set with fewer than two scopes, which by design persists no coverage records.",
+    "done_when": "`populateGlobalIntegrationContext` in `internal/agent/prompt.go` returns nil and produces an empty `RoleContextData.IntegrationCoverage` when `goal.integration.contributing_set` holds zero or one scope and `goal.integration.coverage` is empty, so both the integration-analyst and integration-reviewer role contexts render for that state. It still fails when a contributing set of two or more scopes is missing coverage for any scope, still fails when a coverage record names a plan outside the frozen contributing set, and still validates every coverage payload it does render. A new case in `internal/agent/prompt_integration_test.go` renders analyst and reviewer context for a one-scope cohort with empty coverage and for a zero-scope cohort, asserts both succeed and contain the GLOBAL INTEGRATION CONTEXT heading, and fails against the pre-fix implementation with the current `lacks coverage for plan` error.",
+    "scope": "Own `internal/agent/prompt.go` and `internal/agent/prompt_integration_test.go`. The global branch of `internal/prompts/templates/blocks/branch_integration_context.tmpl` may be touched only to make the empty-coverage wording accurate for a bypassed single-scope cohort. Do not change `internal/ops/integration_progress.go`, `internal/ops/integration_reconcile.go`, the persisted coverage model, or the two-or-more-scope coverage requirement.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#global-integration",
+    "validation": [
+      "make sync-embedded",
+      "go test ./internal/agent -count=1",
+      "go test ./internal/prompts -count=1",
+      "pre-commit run --files internal/agent/prompt.go internal/agent/prompt_integration_test.go internal/prompts/templates/blocks/branch_integration_context.tmpl"
+    ]
+  },
+  {
+    "desc": "Resolve live integration HEAD through one shared helper so every sliced-integration consumer compares the same ref resolution.",
+    "done_when": "One shared helper owns integration-HEAD resolution for the integration lifecycle, and `internal/ops/integration_reconcile.go`, `internal/ops/pipeline_ops.go`, `internal/ops/integration_mutation_lock.go`, `internal/prompts/wake.go`, and `internal/agent/workdetection.go` all obtain integration HEAD from it, with one explicit ref form and one documented empty-branch policy instead of today's mix of `GetCommitSHA(state.Config.IntegrationBranch)` and `GetCommitSHA(\"refs/heads/\" + branch)` plus an unreachable `\"\" -> \"main\"` fallback. A new test creates a repository whose integration branch name is also a tag pointing at a different commit, and asserts the helper resolves the branch commit and that a reconciled global analysis `source_commit` equals the commit that `verifyCleanIntegrationSource` compares against; the test fails against the pre-fix implementation. Existing `internal/ops`, `internal/prompts`, `internal/agent`, and `internal/integration` tests stay green.",
+    "scope": "Own the new shared HEAD-resolution helper and its call sites in `internal/ops/integration_reconcile.go`, `internal/ops/pipeline_ops.go`, `internal/ops/integration_mutation_lock.go`, `internal/prompts/wake.go`, `internal/agent/workdetection.go`, plus the tests covering them. Preserve the existing completion -> mutation -> blackboard-read lock order and every current call-site behaviour other than ref resolution. Do not change the evidence model, the progress decision, or unrelated `GetCommitSHA` callers outside the integration lifecycle.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#final-closure",
+    "validation": [
+      "make sync-embedded",
+      "go test ./internal/ops -count=1",
+      "go test ./internal/prompts ./internal/agent -count=1",
+      "go test ./internal/integration -count=1"
+    ]
+  },
+  {
+    "desc": "Consolidate the duplicated integration wake projection and the duplicated analysis phase-to-role-pair mapping onto single owners.",
+    "done_when": "`internal/agent/workdetection.go` no longer contains its own copy of the frozen-pipeline load, integration-HEAD read, and `ProjectEffectiveIntegrationCompletion` call: it calls one exported helper owned by `internal/prompts` that `internal/prompts/builder.go` also uses, and `evaluateEffectiveIntegrationWakeProjection` is gone. `ops.validateIntegrationAnalysisRolePair` in `internal/ops/submit_verdict.go` derives the expected role pair from `ops.analysisRolePair` (or the `sliceIntegrationRolePair` / `globalIntegrationRolePair` constants) instead of repeating the literals, so `rg -n '\"slice-integration-pair\"' internal/ops --glob '!*_test.go'` reports only `internal/ops/integration_reconcile.go`. Behaviour is unchanged: the wake trigger, status projection, and verdict role-pair rejection for every existing test input stay identical and all existing tests in `internal/agent`, `internal/prompts`, and `internal/ops` pass without modification of their assertions.",
+    "scope": "Own `internal/agent/workdetection.go`, `internal/prompts/wake.go`, `internal/ops/submit_verdict.go`, and only the test edits required by the moved symbols. No behaviour change, no new wake vocabulary, no change to the progress decision or evidence model.",
+    "spec_ref": "specs/goals/20260818-sliced-integration-analysis.md#required-properties",
+    "validation": [
+      "make sync-embedded",
+      "go test ./internal/agent ./internal/prompts ./internal/ops -count=1",
+      "pre-commit run --files internal/agent/workdetection.go internal/prompts/wake.go internal/ops/submit_verdict.go"
+    ],
+    "depends_on": ["1"]
+  }
+]
