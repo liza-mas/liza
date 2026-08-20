@@ -1,8 +1,11 @@
 package integration
 
 import (
+	"encoding/json"
 	"errors"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -11,11 +14,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/filelock"
 	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"gopkg.in/yaml.v3"
 )
@@ -28,40 +36,60 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 	}
 
 	t.Run("settled boundary and zero-slice bypass", func(t *testing.T) {
-		fixture := newSlicedLifecycleFixture(t, true)
-		fixture.modify(t, func(state *models.State) {
-			state.FindTask("plan-a").TransitionsExecuted = nil
-		})
+		barriers := []struct {
+			name     string
+			unsettle func(*models.State)
+		}{
+			{name: "planning source", unsettle: func(state *models.State) {
+				plan := mergedPlanTask(time.Now().UTC(), "plan-a")
+				plan.Status = models.TaskStatusReady
+				plan.ReviewCommit, plan.MergeCommit, plan.ApprovedBy = nil, nil, nil
+				*state.FindTask("plan-a") = plan
+			}},
+			{name: "coding-producing transition", unsettle: func(state *models.State) {
+				state.FindTask("plan-a").TransitionsExecuted = nil
+			}},
+			{name: "resulting coding work", unsettle: func(state *models.State) {
+				pending := testhelpers.BuildTaskByStatus("coding-a-1", models.TaskStatusReady, time.Now().UTC())
+				pending.ParentTask = testhelpers.StringPtr("plan-a")
+				pending.RolePair = "coding-pair"
+				*state.FindTask("coding-a-1") = pending
+			}},
+		}
+		for _, barrier := range barriers {
+			t.Run(barrier.name, func(t *testing.T) {
+				fixture := newSlicedLifecycleFixture(t, true)
+				fixture.modify(t, barrier.unsettle)
+				result := reconcileSlicedLifecycle(t, fixture.root)
+				if result.Changed || len(result.CreatedTaskIDs) != 0 || fixture.read(t).Goal.Integration != nil {
+					t.Fatalf("unsettled %s opened integration: result=%#v lifecycle=%#v", barrier.name, result, fixture.read(t).Goal.Integration)
+				}
+			})
+		}
 
-		result := reconcileSlicedLifecycle(t, fixture.root)
-		if result.Changed || len(result.CreatedTaskIDs) != 0 {
-			t.Fatalf("unsettled reconciliation = %#v, want no-op", result)
-		}
-		state := fixture.read(t)
-		if state.Goal.Integration != nil {
-			t.Fatalf("unsettled planning opened integration lifecycle: %#v", state.Goal.Integration)
-		}
-
-		fixture.modify(t, func(state *models.State) {
-			state.FindTask("plan-a").TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
-		})
-		result = reconcileSlicedLifecycle(t, fixture.root)
-		assertTaskIDs(t, result.CreatedTaskIDs, "integration-slice-plan-a", "integration-slice-plan-b")
-		assertMixedCoverage(t, fixture.read(t), fixture.head)
-
-		single := newSlicedLifecycleFixture(t, false)
-		result = reconcileSlicedLifecycle(t, single.root)
-		assertTaskIDs(t, result.CreatedTaskIDs, "integration-global-1")
-		state = single.read(t)
-		if state.Goal.Integration == nil || state.Goal.Integration.ContributingSet == nil || len(state.Goal.Integration.ContributingSet.Scopes) != 1 {
-			t.Fatalf("single-scope contributing set = %#v", state.Goal.Integration)
-		}
-		if len(state.Goal.Integration.Coverage) != 0 || countSlicedTasks(state, models.IntegrationAnalysisPhaseSlice) != 0 {
-			t.Fatalf("single-scope bypass created local coverage: lifecycle=%#v tasks=%#v", state.Goal.Integration, state.Tasks)
-		}
-		global := state.FindTask("integration-global-1")
-		if global == nil || global.IntegrationAnalysis == nil || global.IntegrationAnalysis.SourceCommit != single.head {
-			t.Fatalf("zero-slice global analysis = %#v, want source %s", global, single.head)
+		for _, scopes := range []int{0, 1} {
+			t.Run(string(rune('0'+scopes))+" contributing scopes", func(t *testing.T) {
+				fixture := newSlicedLifecycleFixture(t, false)
+				if scopes == 0 {
+					fixture.modify(t, func(state *models.State) {
+						state.Tasks = nil
+						state.Sprint.Scope.Planned = nil
+					})
+				}
+				result := reconcileSlicedLifecycle(t, fixture.root)
+				assertTaskIDs(t, result.CreatedTaskIDs, "integration-global-1")
+				state := fixture.read(t)
+				if state.Goal.Integration == nil || state.Goal.Integration.ContributingSet == nil || len(state.Goal.Integration.ContributingSet.Scopes) != scopes {
+					t.Fatalf("%d-scope contributing set = %#v", scopes, state.Goal.Integration)
+				}
+				if len(state.Goal.Integration.Coverage) != 0 || countSlicedTasks(state, models.IntegrationAnalysisPhaseSlice) != 0 {
+					t.Fatalf("%d-scope bypass created local coverage", scopes)
+				}
+				global := state.FindTask("integration-global-1")
+				if global == nil || global.IntegrationAnalysis == nil || global.IntegrationAnalysis.SourceCommit != fixture.head {
+					t.Fatalf("%d-scope global analysis = %#v", scopes, global)
+				}
+			})
 		}
 	})
 
@@ -99,22 +127,33 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 		if repeat.Changed || len(repeat.CreatedTaskIDs) != 0 {
 			t.Fatalf("restart reconciliation = %#v, want idempotent no-op", repeat)
 		}
+		assertBoundedSlicePrompts(t, fixture)
 	})
 
-	t.Run("blocked slice fan-in", func(t *testing.T) {
+	t.Run("blocked slice fan-in and replacement resolution", func(t *testing.T) {
 		fixture := newSlicedLifecycleFixture(t, true)
+		seedRealMutationReceipt(t, fixture)
 		reconcileSlicedLifecycle(t, fixture.root)
 		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-a", nil)
 		if result := reconcileSlicedLifecycle(t, fixture.root); len(result.CreatedTaskIDs) != 0 {
 			t.Fatalf("one clean slice opened global analysis: %#v", result)
 		}
 
-		analystID := ensureTestAgent(t, fixture, "integration-analyst-1", "integration-analyst")
-		if _, err := ops.ClaimTask(fixture.root, "integration-slice-plan-b", analystID); err != nil {
-			t.Fatalf("claim blocked slice: %v", err)
+		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-b", []models.OutputEntry{{
+			Desc: "repair slice composition", DoneWhen: "slice composes", Scope: "slice-fix.txt", SpecRef: "README.md",
+		}})
+		markPlanningTransitionsConsumed(t, fixture)
+		transitionResults, err := ops.ExecuteAvailableTransitions(fixture.root, "auto")
+		if err != nil || len(transitionResults) != 1 || len(transitionResults[0].ChildTaskIDs) != 1 {
+			t.Fatalf("create slice fix: results=%#v err=%v", transitionResults, err)
 		}
-		if _, err := ops.MarkBlocked(fixture.root, "integration-slice-plan-b", "slice repair lineage exhausted", []string{"How should the slice be repaired?"}, analystID); err != nil {
-			t.Fatalf("MarkBlocked(slice): %v", err)
+		fixID := transitionResults[0].ChildTaskIDs[0]
+		coderID := ensureTestAgent(t, fixture, "coder-1", "coder")
+		if _, err := ops.ClaimTask(fixture.root, fixID, coderID); err != nil {
+			t.Fatalf("claim slice fix: %v", err)
+		}
+		if _, err := ops.MarkBlocked(fixture.root, fixID, "slice repair cannot complete", []string{"Create replacement?"}, coderID); err != nil {
+			t.Fatalf("MarkBlocked(slice fix): %v", err)
 		}
 		result := reconcileSlicedLifecycle(t, fixture.root)
 		state := fixture.read(t)
@@ -124,10 +163,82 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 		if state.FindTask("integration-global-1") != nil {
 			t.Fatal("blocked slice fan-in created global analysis")
 		}
+
+		addReplacementTask(t, fixture, "slice-fix-replacement")
+		if _, err := ops.SupersedeTask(fixture.root, fixID, []string{"slice-fix-replacement"}, "replace blocked slice repair", "orchestrator-1"); err != nil {
+			t.Fatalf("SupersedeTask(slice fix): %v", err)
+		}
+		mergeCodingTask(t, fixture, "slice-fix-replacement", "slice-fix-replacement.txt")
+		results := reconcileConcurrently(t, fixture.root, 6)
+		assertExactlyOneCreatedTask(t, results, "integration-global-1")
+		state = fixture.read(t)
+		if countTaskID(state, "integration-global-1") != 1 || countString(state.Sprint.Scope.Planned, "integration-global-1") != 1 {
+			t.Fatalf("resolved fan-in duplicated global task")
+		}
+	})
+
+	t.Run("completed slices stay frozen after sibling mutation", func(t *testing.T) {
+		fixture := newSlicedLifecycleFixture(t, true)
+		seedRealMutationReceipt(t, fixture)
+		reconcileSlicedLifecycle(t, fixture.root)
+		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-a", nil)
+		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-b", nil)
+		before := cloneSliceEvidence(fixture.read(t))
+		taskID, reviewerID := prepareApprovedMutation(t, fixture, "later-sibling-mutation")
+		beforeHead := fixture.integrationHead(t)
+		if _, err := ops.MergeWorktree(fixture.root, taskID, reviewerID); err != nil {
+			t.Fatalf("MergeWorktree(sibling): %v", err)
+		}
+		afterHead := fixture.integrationHead(t)
+		assertRealMutationReceipt(t, fixture.read(t), taskID, beforeHead, afterHead)
+		if !reflect.DeepEqual(cloneSliceEvidence(fixture.read(t)), before) {
+			t.Fatal("later sibling mutation rewrote completed slice evidence")
+		}
+		reconcileSlicedLifecycle(t, fixture.root)
+		global := fixture.read(t).FindTask("integration-global-1")
+		if global == nil || global.IntegrationAnalysis.SourceCommit != afterHead {
+			t.Fatalf("global analysis source = %#v, want changed HEAD %s", global, afterHead)
+		}
+	})
+
+	t.Run("slice repair review exhaustion blocks global fan-in", func(t *testing.T) {
+		fixture := newSlicedLifecycleFixture(t, true)
+		fixture.modify(t, func(state *models.State) { state.Config.MaxReviewCycles = 1 })
+		reconcileSlicedLifecycle(t, fixture.root)
+		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-a", nil)
+		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-b", []models.OutputEntry{{
+			Desc: "repair exhausted slice", DoneWhen: "slice repaired", Scope: "slice-exhausted.txt", SpecRef: "README.md",
+		}})
+		markPlanningTransitionsConsumed(t, fixture)
+		transitionResults, err := ops.ExecuteAvailableTransitions(fixture.root, "auto")
+		if err != nil || len(transitionResults) != 1 || len(transitionResults[0].ChildTaskIDs) != 1 {
+			t.Fatalf("create exhausted slice fix: results=%#v err=%v", transitionResults, err)
+		}
+		fixID := transitionResults[0].ChildTaskIDs[0]
+		prepareCodingTaskReview(t, fixture, fixID, "slice-exhausted.txt")
+		firstRejection, err := ops.SubmitVerdict(fixture.root, fixID, "REJECTED", "still violates slice composition", "code-reviewer-1", "")
+		if err != nil || !firstRejection.NewAttemptTriggered {
+			t.Fatalf("SubmitVerdict(first exhaustion cycle): result=%#v err=%v", firstRejection, err)
+		}
+		prepareCodingTaskReview(t, fixture, fixID, "slice-exhausted.txt")
+		secondRejection, err := ops.SubmitVerdict(fixture.root, fixID, "REJECTED", "still violates slice composition", "code-reviewer-1", "")
+		if err != nil || !secondRejection.EscalatedToBlocked {
+			t.Fatalf("SubmitVerdict(second exhaustion cycle): result=%#v err=%v", secondRejection, err)
+		}
+		state := fixture.read(t)
+		if state.FindTask(fixID).Status != models.TaskStatusBlocked {
+			t.Fatalf("exhausted slice fix status = %s", state.FindTask(fixID).Status)
+		}
+		result := reconcileSlicedLifecycle(t, fixture.root)
+		state = fixture.read(t)
+		if result.Reason == nil || state.Goal.Integration.Closure == nil || state.Goal.Integration.Closure.Status != models.IntegrationClosureStatusBlocked || state.FindTask("integration-global-1") != nil {
+			t.Fatalf("slice exhaustion result=%#v closure=%#v", result, state.Goal.Integration.Closure)
+		}
 	})
 
 	t.Run("global fix rescan restart and generation exhaustion", func(t *testing.T) {
 		fixture := newSlicedLifecycleFixture(t, true)
+		seedRealMutationReceipt(t, fixture)
 		fixture.modify(t, func(state *models.State) { state.Config.MaxGlobalIntegrationGenerations = 2 })
 		reconcileSlicedLifecycle(t, fixture.root)
 		completeIntegrationAnalysis(t, fixture, "integration-slice-plan-a", nil)
@@ -222,7 +333,8 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 					state.Sprint.Scope.Planned = []string{"integration-global-1"}
 				})
 				source := fixture.integrationHead(t)
-				taskID, reviewerID := installApprovedMutation(t, fixture, "post-clean-mutation")
+				taskID, reviewerID := prepareApprovedMutation(t, fixture, "post-clean-mutation")
+				before := fixture.integrationHead(t)
 				if _, err := ops.MergeWorktree(fixture.root, taskID, reviewerID); err != nil {
 					t.Fatalf("MergeWorktree(): %v", err)
 				}
@@ -230,6 +342,7 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 				if live == source {
 					t.Fatal("public mutation did not advance integration HEAD")
 				}
+				assertRealMutationReceipt(t, fixture.read(t), taskID, before, live)
 				err := operation.invoke(fixture.root)
 				var precondition *ops.PreconditionError
 				if !errors.As(err, &precondition) || !strings.Contains(precondition.Reason, "integration") {
@@ -256,31 +369,26 @@ func TestSlicedIntegrationFinalizationRace(t *testing.T) {
 	t.Run("mutation before finalization", func(t *testing.T) {
 		fixture := newPendingGlobalFinalizationFixture(t)
 		source := fixture.integrationHead(t)
-		taskID, reviewerID := installApprovedMutation(t, fixture, "mutation-before-finalization")
-
-		mergeStart := make(chan struct{})
+		taskID, reviewerID := prepareApprovedMutation(t, fixture, "mutation-before-finalization")
+		barrier := installMergeBarrier(t, fixture.root)
 		mergeDone := make(chan error, 1)
-		verdictStart := make(chan struct{})
 		verdictDone := make(chan error, 1)
 		go func() {
-			<-mergeStart
 			_, err := ops.MergeWorktree(fixture.root, taskID, reviewerID)
 			mergeDone <- err
 		}()
+		barrier.wait(t)
+		live := fixture.integrationHead(t)
+		if live == source {
+			t.Fatal("mutation did not linearize before finalization")
+		}
 		go func() {
-			<-verdictStart
 			_, err := ops.SubmitVerdict(fixture.root, "integration-global-1", "APPROVED", "", "integration-reviewer-1", "")
 			verdictDone <- err
 		}()
-
-		close(mergeStart)
-		receiveError(t, "mutation", mergeDone)
-		live := fixture.integrationHead(t)
-		if live == source {
-			t.Fatal("mutation-before-finalization did not advance integration HEAD")
-		}
-		close(verdictStart)
 		receiveError(t, "finalization", verdictDone)
+		barrier.release(t)
+		receiveError(t, "mutation", mergeDone)
 
 		state := fixture.read(t)
 		if len(state.Goal.Integration.GlobalGenerations) != 1 || state.Goal.Integration.GlobalGenerations[0].SourceCommit != source {
@@ -295,34 +403,46 @@ func TestSlicedIntegrationFinalizationRace(t *testing.T) {
 		if state = fixture.read(t); state.Config.Mode != models.SystemModeRunning {
 			t.Fatalf("stale finalization left mode %s", state.Config.Mode)
 		}
+		assertRealMutationReceipt(t, state, taskID, source, live)
+		assertIntegrationIncomplete(t, fixture, live)
 	})
 
 	t.Run("mutation after finalization", func(t *testing.T) {
 		fixture := newPendingGlobalFinalizationFixture(t)
 		source := fixture.integrationHead(t)
-		verdictStart := make(chan struct{})
-		verdictDone := make(chan error, 1)
-		go func() {
-			<-verdictStart
-			_, err := ops.SubmitVerdict(fixture.root, "integration-global-1", "APPROVED", "", "integration-reviewer-1", "")
-			verdictDone <- err
-		}()
-		close(verdictStart)
-		receiveError(t, "finalization", verdictDone)
-		if _, err := ops.StopForGoalCompletion(fixture.root, "goal complete"); err != nil {
-			t.Fatalf("StopForGoalCompletion(): %v", err)
+		taskID, reviewerID := prepareApprovedMutation(t, fixture, "mutation-after-finalization")
+		if _, err := ops.SubmitVerdict(fixture.root, "integration-global-1", "APPROVED", "", "integration-reviewer-1", ""); err != nil {
+			t.Fatalf("SubmitVerdict(clean): %v", err)
 		}
-
-		taskID, reviewerID := installApprovedMutation(t, fixture, "mutation-after-finalization")
-		mergeStart := make(chan struct{})
+		releaseCompletion := holdProjectLock(t, fixture.root, "integration-completion")
+		integrationWatcher, integrationOwnerPath := watchProjectLockOwner(t, fixture.root, "integration-mutation")
+		completionWatcher, completionOwnerPath := watchProjectLockOwner(t, fixture.root, "integration-completion")
+		stopDone := make(chan error, 1)
 		mergeDone := make(chan error, 1)
 		go func() {
-			<-mergeStart
+			_, err := ops.StopForGoalCompletion(fixture.root, "goal complete")
+			stopDone <- err
+		}()
+		waitForLockOperation(t, integrationWatcher, integrationOwnerPath, "verify effective integration completion")
+		releaseState := holdBlackboardWriteLock(t, fixture)
+		releaseCompletion()
+		waitForLockOperationOrResult(t, completionWatcher, completionOwnerPath, "goal-complete stop", stopDone)
+		barrier := installMergeBarrier(t, fixture.root)
+		go func() {
 			_, err := ops.MergeWorktree(fixture.root, taskID, reviewerID)
 			mergeDone <- err
 		}()
-		close(mergeStart)
+		releaseState()
+		barrier.wait(t)
+		barrier.release(t)
 		receiveError(t, "mutation", mergeDone)
+		stopErr := receiveOperationResult(t, "goal-complete stop", stopDone)
+		if stopErr != nil {
+			var precondition *ops.PreconditionError
+			if !errors.As(stopErr, &precondition) || !strings.Contains(precondition.Reason, "integration_state_changed") {
+				t.Fatalf("goal-complete stop error = %v, want success or integration_state_changed precondition", stopErr)
+			}
+		}
 
 		live := fixture.integrationHead(t)
 		if live == source {
@@ -338,12 +458,52 @@ func TestSlicedIntegrationFinalizationRace(t *testing.T) {
 		if _, err := ops.StopForGoalCompletion(fixture.root, "stale goal complete"); err == nil {
 			t.Fatal("post-finalization mutation retained effective stale success")
 		}
+		assertRealMutationReceipt(t, state, taskID, source, live)
+		assertIntegrationIncomplete(t, fixture, live)
 		reconcileSlicedLifecycle(t, fixture.root)
 		next := fixture.read(t).FindTask("integration-global-2")
 		if next == nil || next.IntegrationAnalysis == nil || next.IntegrationAnalysis.SourceCommit != live {
 			t.Fatalf("post-finalization mutation next generation = %#v, want source %s", next, live)
 		}
 	})
+}
+
+func TestSlicedIntegrationBarrierHelper(t *testing.T) {
+	address := os.Getenv("LIZA_TEST_SLICED_BARRIER_ADDR")
+	if address == "" {
+		return
+	}
+	if lockPath := os.Getenv("LIZA_TEST_SLICED_LOCK_PATH"); lockPath != "" {
+		lock := filelock.New(lockPath).WithTimeout(slicedIntegrationTimeout)
+		if err := lock.WithLockOperation("external test hold", func() error {
+			connection, err := net.DialTimeout("tcp", address, slicedIntegrationTimeout)
+			if err != nil {
+				return err
+			}
+			defer connection.Close()
+			if _, err := connection.Write([]byte{1}); err != nil {
+				return err
+			}
+			buffer := []byte{0}
+			_, err = connection.Read(buffer)
+			return err
+		}); err != nil {
+			t.Fatalf("hold external sliced integration lock: %v", err)
+		}
+		return
+	}
+	connection, err := net.DialTimeout("tcp", address, slicedIntegrationTimeout)
+	if err != nil {
+		t.Fatalf("connect to sliced integration barrier: %v", err)
+	}
+	defer connection.Close()
+	if _, err := connection.Write([]byte{1}); err != nil {
+		t.Fatalf("signal sliced integration barrier: %v", err)
+	}
+	buffer := []byte{0}
+	if _, err := connection.Read(buffer); err != nil {
+		t.Fatalf("await sliced integration barrier release: %v", err)
+	}
 }
 
 type slicedLifecycleFixture struct {
@@ -359,6 +519,17 @@ type lifecycleProjection struct {
 	Planned   []string
 }
 
+type sliceEvidenceProjection struct {
+	Coverage []models.IntegrationCoverageRecord
+	Tasks    map[string]models.Task
+	Planned  []string
+}
+
+type mergeBarrier struct {
+	listener net.Listener
+	conn     net.Conn
+}
+
 func newSlicedLifecycleFixture(t *testing.T, multipleScopes bool) *slicedLifecycleFixture {
 	t.Helper()
 	db.ResetInstances()
@@ -367,9 +538,9 @@ func newSlicedLifecycleFixture(t *testing.T, multipleScopes bool) *slicedLifecyc
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	base := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
 
-	ids := []string{"coding-single"}
+	ids := []string{"coding-single-leaf-a", "coding-single-leaf-z"}
 	if multipleScopes {
-		ids = []string{"coding-a-1", "coding-a-2", "coding-b-1", "coding-b-2", "coding-single"}
+		ids = []string{"coding-a-1", "coding-a-2", "coding-b-1", "coding-b-2", "coding-single-leaf-a", "coding-single-leaf-z"}
 	}
 	commits := make(map[string]string, len(ids))
 	bases := make(map[string]string, len(ids))
@@ -398,7 +569,20 @@ func newSlicedLifecycleFixture(t *testing.T, multipleScopes bool) *slicedLifecyc
 			tasks = append(tasks, mergedCodingTask(now, id, "plan-b", bases[id], commits[id]))
 		}
 	}
-	tasks = append(tasks, mergedPlanTask(now, "plan-single"), mergedCodingTask(now, "coding-single", "plan-single", bases["coding-single"], commits["coding-single"]))
+	rootTask := testhelpers.BuildTaskByStatus("coding-single", models.TaskStatusSuperseded, now)
+	rootTask.Type = models.TaskTypeCoding
+	rootTask.RolePair = "coding-pair"
+	rootTask.ParentTask = testhelpers.StringPtr("plan-single")
+	rootTask.SupersededBy = []string{"coding-single-leaf-z", "coding-single-leaf-a"}
+	rootTask.RescopeReason = testhelpers.StringPtr("split one lineage into replacement leaves")
+	rootTask.SpecRef = "README.md"
+	rootTask.DoneWhen = "single lineage root replaced"
+	rootTask.Scope = "coding-single.txt"
+	leafA := mergedCodingTask(now, "coding-single-leaf-a", "plan-single", bases["coding-single-leaf-a"], commits["coding-single-leaf-a"])
+	leafA.Supersedes = testhelpers.StringPtr(rootTask.ID)
+	leafZ := mergedCodingTask(now, "coding-single-leaf-z", "plan-single", bases["coding-single-leaf-z"], commits["coding-single-leaf-z"])
+	leafZ.Supersedes = testhelpers.StringPtr(rootTask.ID)
+	tasks = append(tasks, mergedPlanTask(now, "plan-single"), rootTask, leafA, leafZ)
 
 	state := testhelpers.CreateValidState()
 	state.Goal.SpecRef = "README.md"
@@ -440,6 +624,12 @@ func mergedCodingTask(now time.Time, id, planID, base, commit string) models.Tas
 	task.BaseCommit = testhelpers.StringPtr(base)
 	task.ReviewCommit = testhelpers.StringPtr(commit)
 	task.MergeCommit = testhelpers.StringPtr(commit)
+	task.Decomposition = &models.DecompositionManifest{
+		OwnedFiles:      []string{id + ".txt"},
+		OwnedModules:    []string{planID},
+		InterfacesOwned: []string{id + ".Boundary"},
+		CoverageNotes:   "bounded coverage for " + planID,
+	}
 	return task
 }
 
@@ -532,8 +722,19 @@ func assertMixedCoverage(t *testing.T, state *models.State, sourceCommit string)
 		t.Fatalf("initial mixed coverage = %#v, want one attestation", state.Goal.Integration.Coverage)
 	}
 	attestation := state.Goal.Integration.Coverage[0]
-	if attestation.PlanTaskID != "plan-single" || attestation.Kind != models.IntegrationCoverageApprovalAttestation || len(attestation.ApprovalAttestations) != 1 || attestation.ApprovalAttestations[0].ReviewedTaskID != "coding-single" {
+	if attestation.PlanTaskID != "plan-single" || attestation.Kind != models.IntegrationCoverageApprovalAttestation || len(attestation.ApprovalAttestations) != 2 {
 		t.Fatalf("approval attestation = %#v", attestation)
+	}
+	for i, id := range []string{"coding-single-leaf-a", "coding-single-leaf-z"} {
+		leaf := state.FindTask(id)
+		got := attestation.ApprovalAttestations[i]
+		want := models.IntegrationApprovalAttestation{
+			ReviewedTaskID: id, AcceptanceCriteria: leaf.DoneWhen, ReviewedCommit: *leaf.ReviewCommit,
+			Approver: *leaf.ApprovedBy, Validation: []string{"project test"}, MergeCommit: *leaf.MergeCommit,
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("approval attestation %s = %#v, want %#v", id, got, want)
+		}
 	}
 	for _, planID := range []string{"plan-a", "plan-b"} {
 		task := state.FindTask("integration-slice-" + planID)
@@ -541,12 +742,447 @@ func assertMixedCoverage(t *testing.T, state *models.State, sourceCommit string)
 			t.Fatalf("slice %s missing", planID)
 		}
 		metadata := task.IntegrationAnalysis
-		if metadata.Key != "slice:"+planID || metadata.Phase != models.IntegrationAnalysisPhaseSlice || metadata.OriginatingPlanTaskID != planID || metadata.SourceCommit != sourceCommit || len(metadata.RootTaskIDs) != 2 || len(metadata.DescendantChanges) != 2 || len(metadata.AffectedPaths) != 2 || len(metadata.SourceSnapshotPaths) != 2 {
+		rootIDs := []string{"coding-" + strings.TrimPrefix(planID, "plan-") + "-1", "coding-" + strings.TrimPrefix(planID, "plan-") + "-2"}
+		changes := make([]models.IntegrationDescendantChange, 0, len(rootIDs))
+		paths := make([]string, 0, len(rootIDs))
+		for _, id := range rootIDs {
+			changes = append(changes, models.IntegrationDescendantChange{TaskID: id, Commit: *state.FindTask(id).MergeCommit})
+			paths = append(paths, id+".txt")
+		}
+		if metadata.Key != "slice:"+planID || metadata.Phase != models.IntegrationAnalysisPhaseSlice || metadata.OriginatingPlanTaskID != planID || metadata.SourceCommit != sourceCommit ||
+			!reflect.DeepEqual(metadata.RootTaskIDs, rootIDs) || !reflect.DeepEqual(metadata.DescendantChanges, changes) ||
+			!reflect.DeepEqual(metadata.AffectedPaths, paths) || !reflect.DeepEqual(metadata.SourceSnapshotPaths, paths) {
 			t.Fatalf("slice %s metadata = %#v", planID, metadata)
 		}
 	}
 	if state.FindTask("integration-slice-plan-single") != nil {
 		t.Fatal("attestation-only scope received a slice")
+	}
+}
+
+func assertBoundedSlicePrompts(t *testing.T, fixture *slicedLifecycleFixture) {
+	t.Helper()
+	for _, tc := range []struct {
+		planID   string
+		rootIDs  []string
+		otherIDs []string
+		agentID  string
+	}{
+		{planID: "plan-a", rootIDs: []string{"coding-a-1", "coding-a-2"}, otherIDs: []string{"coding-b-1", "coding-b-2"}, agentID: "integration-analyst-11"},
+		{planID: "plan-b", rootIDs: []string{"coding-b-1", "coding-b-2"}, otherIDs: []string{"coding-a-1", "coding-a-2"}, agentID: "integration-analyst-12"},
+	} {
+		taskID := "integration-slice-" + tc.planID
+		ensureTestAgent(t, fixture, tc.agentID, roles.IntegrationAnalyst)
+		if _, err := ops.ClaimTask(fixture.root, taskID, tc.agentID); err != nil {
+			t.Fatalf("ClaimTask(%s): %v", taskID, err)
+		}
+		prompt := buildIntegrationPrompt(t, fixture, taskID, tc.agentID)
+		for _, want := range append([]string{
+			"SLICE INTEGRATION CONTEXT", "SOURCE COMMIT: " + fixture.head, "ORIGINATING PLAN: " + tc.planID,
+			"README.md", tc.planID,
+		}, tc.rootIDs...) {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("slice %s prompt missing %q", tc.planID, want)
+			}
+		}
+		for _, rootID := range tc.rootIDs {
+			for _, want := range []string{fixture.commits[rootID], rootID + ".txt", rootID + ".Boundary", "acceptance for " + rootID} {
+				if !strings.Contains(prompt, want) {
+					t.Fatalf("slice %s prompt missing bounded evidence %q", tc.planID, want)
+				}
+			}
+		}
+		for _, unwanted := range append(tc.otherIDs, "coding-single-leaf-a", "coding-single-leaf-z", "..HEAD", "show HEAD:") {
+			if strings.Contains(prompt, unwanted) {
+				t.Fatalf("slice %s prompt leaked %q", tc.planID, unwanted)
+			}
+		}
+	}
+}
+
+func buildIntegrationPrompt(t *testing.T, fixture *slicedLifecycleFixture, taskID, agentID string) string {
+	t.Helper()
+	frozen, err := pipeline.LoadFrozen(fixture.root)
+	if err != nil {
+		t.Fatalf("LoadFrozen(): %v", err)
+	}
+	strategy, err := agent.NewRoleStrategy(roles.IntegrationAnalyst, pipeline.NewResolver(frozen))
+	if err != nil {
+		t.Fatalf("NewRoleStrategy(): %v", err)
+	}
+	prompt, err := strategy.BuildPrompt(fixture.read(t), agent.SupervisorConfig{
+		Role: roles.IntegrationAnalyst, AgentID: agentID, ProjectRoot: fixture.root,
+		SpecsDir: filepath.Join(fixture.root, "specs"), StatePath: fixture.statePath,
+	}, taskID)
+	if err != nil {
+		t.Fatalf("BuildPrompt(%s): %v", taskID, err)
+	}
+	return prompt
+}
+
+func assertExactlyOneCreatedTask(t *testing.T, results []*ops.ReconcileIntegrationAnalysesResult, taskID string) {
+	t.Helper()
+	created := 0
+	for _, result := range results {
+		for _, id := range result.CreatedTaskIDs {
+			if id == taskID {
+				created++
+			}
+		}
+	}
+	if created != 1 {
+		t.Fatalf("concurrent reconciliation created %s %d times, want 1", taskID, created)
+	}
+}
+
+func cloneSliceEvidence(state *models.State) sliceEvidenceProjection {
+	projection := sliceEvidenceProjection{
+		Coverage: slices.Clone(state.Goal.Integration.Coverage),
+		Tasks:    make(map[string]models.Task),
+	}
+	for _, task := range state.Tasks {
+		if task.IntegrationAnalysis != nil && task.IntegrationAnalysis.Phase == models.IntegrationAnalysisPhaseSlice {
+			projection.Tasks[task.ID] = task
+			if slices.Contains(state.Sprint.Scope.Planned, task.ID) {
+				projection.Planned = append(projection.Planned, task.ID)
+			}
+		}
+	}
+	return projection
+}
+
+func addReplacementTask(t *testing.T, fixture *slicedLifecycleFixture, taskID string) {
+	t.Helper()
+	lp := paths.New(fixture.root)
+	_, err := ops.AddTask(lp.StatePath(), lp.LogPath(), &ops.AddTaskInput{
+		ID: taskID, Type: string(models.TaskTypeCoding), RolePair: "coding-pair",
+		Description: "replace blocked slice repair", SpecRef: "README.md", DoneWhen: "replacement repair merged",
+		Validation: []string{"project test"}, Scope: taskID + ".txt", Priority: 1,
+	}, "orchestrator-1")
+	if err != nil {
+		t.Fatalf("AddTask(%s): %v", taskID, err)
+	}
+}
+
+func prepareCodingTaskReview(t *testing.T, fixture *slicedLifecycleFixture, taskID, fileName string) {
+	t.Helper()
+	coderID := ensureTestAgent(t, fixture, "coder-1", "coder")
+	ensureTestAgent(t, fixture, "code-reviewer-1", "code-reviewer")
+	if _, err := ops.ClaimTask(fixture.root, taskID, coderID); err != nil {
+		t.Fatalf("ClaimTask(%s): %v", taskID, err)
+	}
+	state := fixture.read(t)
+	task := state.FindTask(taskID)
+	if task == nil || task.Worktree == nil {
+		t.Fatalf("claimed coding task %s has no worktree", taskID)
+	}
+	worktree := filepath.Join(fixture.root, *task.Worktree)
+	if err := os.WriteFile(filepath.Join(worktree, fileName), []byte(taskID+"\n"), 0o644); err != nil {
+		t.Fatalf("write coding fixture: %v", err)
+	}
+	testFile := strings.TrimSuffix(fileName, filepath.Ext(fileName)) + "_test.go"
+	if err := os.WriteFile(filepath.Join(worktree, testFile), []byte("package fixture\n"), 0o644); err != nil {
+		t.Fatalf("write coding test fixture: %v", err)
+	}
+	testhelpers.MustGit(t, worktree, "add", fileName, testFile)
+	testhelpers.MustGit(t, worktree, "commit", "-m", "repair integration")
+	if err := ops.WriteCheckpoint(fixture.root, &ops.WriteCheckpointInput{
+		TaskID: taskID, AgentID: coderID, Intent: "repair integration finding", ValidationPlan: "project validation", FilesToModify: []string{fileName, testFile},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint(%s): %v", taskID, err)
+	}
+	reviewCommit := testhelpers.MustGit(t, worktree, "rev-parse", "HEAD")
+	if _, err := ops.SubmitForReview(fixture.root, taskID, reviewCommit, coderID); err != nil {
+		t.Fatalf("SubmitForReview(%s): %v", taskID, err)
+	}
+	if _, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
+		ProjectRoot: fixture.root, AgentID: "code-reviewer-1", Role: "code-reviewer", TaskID: taskID,
+	}); err != nil {
+		t.Fatalf("ClaimReviewerTask(%s): %v", taskID, err)
+	}
+}
+
+func prepareApprovedMutation(t *testing.T, fixture *slicedLifecycleFixture, taskID string) (string, string) {
+	t.Helper()
+	lp := paths.New(fixture.root)
+	fileName := taskID + ".md"
+	if _, err := ops.AddTask(lp.StatePath(), lp.LogPath(), &ops.AddTaskInput{
+		ID: taskID, Type: string(models.TaskTypeArchitecture), RolePair: "architecture-pair",
+		Description: "approved integration mutation", SpecRef: "README.md", DoneWhen: "mutation merged",
+		Scope: fileName, Priority: 1,
+	}, "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask(%s): %v", taskID, err)
+	}
+	architectID := ensureTestAgent(t, fixture, "architect-1", "architect")
+	reviewerID := ensureTestAgent(t, fixture, "architecture-reviewer-1", "architecture-reviewer")
+	if _, err := ops.ClaimTask(fixture.root, taskID, architectID); err != nil {
+		t.Fatalf("ClaimTask(%s): %v", taskID, err)
+	}
+	task := fixture.read(t).FindTask(taskID)
+	if task == nil || task.Worktree == nil {
+		t.Fatalf("claimed architecture task %s has no worktree", taskID)
+	}
+	worktree := filepath.Join(fixture.root, *task.Worktree)
+	if err := os.WriteFile(filepath.Join(worktree, fileName), []byte(taskID+"\n"), 0o644); err != nil {
+		t.Fatalf("write architecture fixture: %v", err)
+	}
+	testhelpers.MustGit(t, worktree, "add", fileName)
+	testhelpers.MustGit(t, worktree, "commit", "-m", "record architecture mutation")
+	if err := ops.WriteCheckpoint(fixture.root, &ops.WriteCheckpointInput{
+		TaskID: taskID, AgentID: architectID, Intent: "record architecture mutation",
+		ValidationPlan: "project validation", FilesToModify: []string{fileName},
+	}); err != nil {
+		t.Fatalf("WriteCheckpoint(%s): %v", taskID, err)
+	}
+	reviewCommit := testhelpers.MustGit(t, worktree, "rev-parse", "HEAD")
+	if _, err := ops.SubmitForReview(fixture.root, taskID, reviewCommit, architectID); err != nil {
+		t.Fatalf("SubmitForReview(%s): %v", taskID, err)
+	}
+	if _, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
+		ProjectRoot: fixture.root, AgentID: reviewerID, Role: "architecture-reviewer", TaskID: taskID,
+	}); err != nil {
+		t.Fatalf("ClaimReviewerTask(%s): %v", taskID, err)
+	}
+	if _, err := ops.SubmitVerdict(fixture.root, taskID, "APPROVED", "", reviewerID, ""); err != nil {
+		t.Fatalf("SubmitVerdict(%s): %v", taskID, err)
+	}
+	return taskID, reviewerID
+}
+
+func seedRealMutationReceipt(t *testing.T, fixture *slicedLifecycleFixture) {
+	t.Helper()
+	const taskID = "fixture-prior-mutation"
+	taskIDOut, reviewerID := prepareApprovedMutation(t, fixture, taskID)
+	before := fixture.integrationHead(t)
+	if _, err := ops.MergeWorktree(fixture.root, taskIDOut, reviewerID); err != nil {
+		t.Fatalf("MergeWorktree(real receipt prefix): %v", err)
+	}
+	after := fixture.integrationHead(t)
+	assertRealMutationReceipt(t, fixture.read(t), taskID, before, after)
+	fixture.head = after
+}
+
+func assertRealMutationReceipt(t *testing.T, state *models.State, taskID, before, after string) {
+	t.Helper()
+	if before == after {
+		t.Fatalf("mutation %s did not advance integration HEAD", taskID)
+	}
+	count := 0
+	for _, receipt := range state.Goal.Integration.MutationReceipts {
+		if receipt.TaskID != taskID {
+			continue
+		}
+		count++
+		if receipt.BeforeCommit != before || receipt.AfterCommit != after {
+			t.Fatalf("mutation receipt %s = %#v, want %s -> %s", taskID, receipt, before, after)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("mutation receipt %s count = %d, want 1", taskID, count)
+	}
+}
+
+func assertIntegrationIncomplete(t *testing.T, fixture *slicedLifecycleFixture, head string) {
+	t.Helper()
+	frozen, err := pipeline.LoadFrozen(fixture.root)
+	if err != nil {
+		t.Fatalf("LoadFrozen(): %v", err)
+	}
+	decision, err := ops.EvaluateIntegrationProgress(fixture.read(t), pipeline.NewResolver(frozen).SlicedIntegrationCapability(), head)
+	if err != nil {
+		t.Fatalf("EvaluateIntegrationProgress(): %v", err)
+	}
+	if decision.IntegrationComplete {
+		t.Fatalf("fresh progress reports stale integration complete at %s", head)
+	}
+}
+
+func installMergeBarrier(t *testing.T, root string) *mergeBarrier {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for merge barrier: %v", err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve test executable: %v", err)
+	}
+	t.Setenv("LIZA_TEST_SLICED_BARRIER_ADDR", listener.Addr().String())
+	t.Setenv("LIZA_TEST_SLICED_BARRIER_HELPER", executable)
+	scriptsDir := filepath.Join(root, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0o755); err != nil {
+		t.Fatalf("create integration scripts dir: %v", err)
+	}
+	script := "#!/bin/sh\nexec \"$LIZA_TEST_SLICED_BARRIER_HELPER\" -test.run '^TestSlicedIntegrationBarrierHelper$'\n"
+	if err := os.WriteFile(filepath.Join(scriptsDir, "integration-test.sh"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write integration merge barrier: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	return &mergeBarrier{listener: listener}
+}
+
+func (barrier *mergeBarrier) wait(t *testing.T) {
+	t.Helper()
+	if tcp, ok := barrier.listener.(*net.TCPListener); ok {
+		if err := tcp.SetDeadline(time.Now().Add(slicedIntegrationTimeout)); err != nil {
+			t.Fatalf("set merge barrier deadline: %v", err)
+		}
+	}
+	connection, err := barrier.listener.Accept()
+	if err != nil {
+		t.Fatalf("await merge barrier: %v", err)
+	}
+	buffer := []byte{0}
+	if _, err := connection.Read(buffer); err != nil {
+		t.Fatalf("read merge barrier signal: %v", err)
+	}
+	barrier.conn = connection
+}
+
+func (barrier *mergeBarrier) release(t *testing.T) {
+	t.Helper()
+	if barrier.conn == nil {
+		t.Fatal("merge barrier released before it was reached")
+	}
+	if _, err := barrier.conn.Write([]byte{1}); err != nil {
+		t.Fatalf("release merge barrier: %v", err)
+	}
+	if err := barrier.conn.Close(); err != nil {
+		t.Fatalf("close merge barrier: %v", err)
+	}
+}
+
+func holdProjectLock(t *testing.T, root, purpose string) func() {
+	t.Helper()
+	return holdExternalLock(t, projectLockProtectedPath(root, purpose))
+}
+
+func holdBlackboardWriteLock(t *testing.T, fixture *slicedLifecycleFixture) func() {
+	t.Helper()
+	return holdExternalLock(t, fixture.statePath)
+}
+
+func holdExternalLock(t *testing.T, protectedPath string) func() {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for external lock barrier: %v", err)
+	}
+	if tcp, ok := listener.(*net.TCPListener); ok {
+		if err := tcp.SetDeadline(time.Now().Add(slicedIntegrationTimeout)); err != nil {
+			t.Fatalf("set external lock barrier deadline: %v", err)
+		}
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve test executable: %v", err)
+	}
+	command := exec.Command(executable, "-test.run", "^TestSlicedIntegrationBarrierHelper$")
+	command.Env = append(os.Environ(),
+		"LIZA_TEST_SLICED_BARRIER_ADDR="+listener.Addr().String(),
+		"LIZA_TEST_SLICED_LOCK_PATH="+protectedPath,
+	)
+	if err := command.Start(); err != nil {
+		t.Fatalf("start external lock helper: %v", err)
+	}
+	connection, err := listener.Accept()
+	if err != nil {
+		t.Fatalf("await external lock helper: %v", err)
+	}
+	buffer := []byte{0}
+	if _, err := connection.Read(buffer); err != nil {
+		t.Fatalf("read external lock signal: %v", err)
+	}
+	return func() {
+		if _, err := connection.Write([]byte{1}); err != nil {
+			t.Fatalf("release external lock helper: %v", err)
+		}
+		if err := connection.Close(); err != nil {
+			t.Fatalf("close external lock connection: %v", err)
+		}
+		if err := command.Wait(); err != nil {
+			t.Fatalf("external lock helper: %v", err)
+		}
+		_ = listener.Close()
+	}
+}
+
+func watchProjectLockOwner(t *testing.T, root, purpose string) (*fsnotify.Watcher, string) {
+	t.Helper()
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("create lock owner watcher: %v", err)
+	}
+	gitDir := filepath.Join(root, ".git")
+	if err := watcher.Add(gitDir); err != nil {
+		t.Fatalf("watch Git lock directory: %v", err)
+	}
+	t.Cleanup(func() { _ = watcher.Close() })
+	return watcher, projectLockProtectedPath(root, purpose) + ".lock.owner.json"
+}
+
+func projectLockProtectedPath(root, purpose string) string {
+	lockName := strings.TrimPrefix(paths.ProjectDirName(), ".") + "-" + purpose
+	return filepath.Join(root, ".git", lockName)
+}
+
+func waitForLockOperation(t *testing.T, watcher *fsnotify.Watcher, ownerPath, operation string) {
+	t.Helper()
+	type ownerMetadata struct {
+		Operation string `json:"operation"`
+	}
+	timer := time.NewTimer(slicedIntegrationTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Name != ownerPath {
+				continue
+			}
+			data, err := os.ReadFile(ownerPath)
+			if err != nil {
+				continue
+			}
+			var owner ownerMetadata
+			if json.Unmarshal(data, &owner) == nil && owner.Operation == operation {
+				return
+			}
+		case err := <-watcher.Errors:
+			t.Fatalf("watch lock owner: %v", err)
+		case <-timer.C:
+			t.Fatalf("timed out waiting for %q lock owner", operation)
+		}
+	}
+}
+
+func waitForLockOperationOrResult(t *testing.T, watcher *fsnotify.Watcher, ownerPath, operation string, result <-chan error) {
+	t.Helper()
+	type ownerMetadata struct {
+		Operation string `json:"operation"`
+	}
+	timer := time.NewTimer(slicedIntegrationTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Name != ownerPath {
+				continue
+			}
+			data, err := os.ReadFile(ownerPath)
+			if err != nil {
+				continue
+			}
+			var owner ownerMetadata
+			if json.Unmarshal(data, &owner) == nil && owner.Operation == operation {
+				return
+			}
+		case err := <-result:
+			t.Fatalf("%s completed before overlap barrier: %v", operation, err)
+		case err := <-watcher.Errors:
+			t.Fatalf("watch lock owner: %v", err)
+		case <-timer.C:
+			t.Fatalf("timed out waiting for %q lock owner", operation)
+		}
 	}
 }
 
@@ -572,8 +1208,10 @@ func prepareIntegrationAnalysisReview(t *testing.T, fixture *slicedLifecycleFixt
 	t.Helper()
 	analystID := ensureTestAgent(t, fixture, "integration-analyst-1", "integration-analyst")
 	ensureTestAgent(t, fixture, "integration-reviewer-1", "integration-reviewer")
-	if _, err := ops.ClaimTask(fixture.root, taskID, analystID); err != nil {
-		t.Fatalf("ClaimTask(%s): %v", taskID, err)
+	if task := fixture.read(t).FindTask(taskID); task != nil && task.Status != models.TaskStatusImplementing {
+		if _, err := ops.ClaimTask(fixture.root, taskID, analystID); err != nil {
+			t.Fatalf("ClaimTask(%s): %v", taskID, err)
+		}
 	}
 	if output != nil {
 		if err := ops.SetTaskOutput(fixture.root, &ops.SetTaskOutputInput{TaskID: taskID, AgentID: analystID, Output: output}); err != nil {
@@ -611,44 +1249,10 @@ func ensureTestAgent(t *testing.T, fixture *slicedLifecycleFixture, id, role str
 
 func mergeCodingTask(t *testing.T, fixture *slicedLifecycleFixture, taskID, fileName string) {
 	t.Helper()
-	coderID := ensureTestAgent(t, fixture, "coder-1", "coder")
-	ensureTestAgent(t, fixture, "code-reviewer-1", "code-reviewer")
-	if _, err := ops.ClaimTask(fixture.root, taskID, coderID); err != nil {
-		t.Fatalf("ClaimTask(%s): %v", taskID, err)
-	}
-	state := fixture.read(t)
-	task := state.FindTask(taskID)
-	if task == nil || task.Worktree == nil {
-		t.Fatalf("claimed coding task %s has no worktree", taskID)
-	}
-	worktree := filepath.Join(fixture.root, *task.Worktree)
-	if err := os.WriteFile(filepath.Join(worktree, fileName), []byte(taskID+"\n"), 0o644); err != nil {
-		t.Fatalf("write coding fixture: %v", err)
-	}
-	testFile := strings.TrimSuffix(fileName, filepath.Ext(fileName)) + "_test.go"
-	if err := os.WriteFile(filepath.Join(worktree, testFile), []byte("package fixture\n"), 0o644); err != nil {
-		t.Fatalf("write coding test fixture: %v", err)
-	}
-	testhelpers.MustGit(t, worktree, "add", fileName, testFile)
-	testhelpers.MustGit(t, worktree, "commit", "-m", "repair integration")
-	if err := ops.WriteCheckpoint(fixture.root, &ops.WriteCheckpointInput{
-		TaskID: taskID, AgentID: coderID, Intent: "repair integration finding", ValidationPlan: "project validation", FilesToModify: []string{fileName, testFile},
-	}); err != nil {
-		t.Fatalf("WriteCheckpoint(%s): %v", taskID, err)
-	}
-	reviewCommit := testhelpers.MustGit(t, worktree, "rev-parse", "HEAD")
-	if _, err := ops.SubmitForReview(fixture.root, taskID, reviewCommit, coderID); err != nil {
-		t.Fatalf("SubmitForReview(%s): %v", taskID, err)
-	}
-	if _, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
-		ProjectRoot: fixture.root, AgentID: "code-reviewer-1", Role: "code-reviewer", TaskID: taskID,
-	}); err != nil {
-		t.Fatalf("ClaimReviewerTask(%s): %v", taskID, err)
-	}
+	prepareCodingTaskReview(t, fixture, taskID, fileName)
 	if _, err := ops.SubmitVerdict(fixture.root, taskID, "APPROVED", "", "code-reviewer-1", ""); err != nil {
 		t.Fatalf("SubmitVerdict(%s): %v", taskID, err)
 	}
-	ensureMutationReceiptPrefix(t, fixture)
 	if _, err := ops.MergeWorktree(fixture.root, taskID, "code-reviewer-1"); err != nil {
 		t.Fatalf("MergeWorktree(%s): %v", taskID, err)
 	}
@@ -657,6 +1261,7 @@ func mergeCodingTask(t *testing.T, fixture *slicedLifecycleFixture, taskID, file
 func newCleanCompletionFixture(t *testing.T) *slicedLifecycleFixture {
 	t.Helper()
 	fixture := newSlicedLifecycleFixture(t, false)
+	seedRealMutationReceipt(t, fixture)
 	reconcileSlicedLifecycle(t, fixture.root)
 	prepareIntegrationAnalysisReview(t, fixture, "integration-global-1", nil)
 	if _, err := ops.SubmitVerdict(fixture.root, "integration-global-1", "APPROVED", "", "integration-reviewer-1", ""); err != nil {
@@ -668,55 +1273,10 @@ func newCleanCompletionFixture(t *testing.T) *slicedLifecycleFixture {
 func newPendingGlobalFinalizationFixture(t *testing.T) *slicedLifecycleFixture {
 	t.Helper()
 	fixture := newSlicedLifecycleFixture(t, false)
+	seedRealMutationReceipt(t, fixture)
 	reconcileSlicedLifecycle(t, fixture.root)
 	prepareIntegrationAnalysisReview(t, fixture, "integration-global-1", nil)
 	return fixture
-}
-
-func installApprovedMutation(t *testing.T, fixture *slicedLifecycleFixture, taskID string) (string, string) {
-	t.Helper()
-	const reviewerID = "code-reviewer-1"
-	worktree := filepath.Join(fixture.root, ".worktrees", taskID)
-	if err := os.MkdirAll(filepath.Dir(worktree), 0o755); err != nil {
-		t.Fatalf("create worktree parent: %v", err)
-	}
-	testhelpers.MustGit(t, fixture.root, "worktree", "add", "-b", "task/"+taskID, worktree, "integration")
-	fileName := taskID + ".txt"
-	if err := os.WriteFile(filepath.Join(worktree, fileName), []byte(taskID+"\n"), 0o644); err != nil {
-		t.Fatalf("write mutation: %v", err)
-	}
-	testhelpers.MustGit(t, worktree, "add", fileName)
-	testhelpers.MustGit(t, worktree, "commit", "-m", "mutate integration after clean analysis")
-	base := fixture.integrationHead(t)
-	review := testhelpers.MustGit(t, worktree, "rev-parse", "HEAD")
-	relative := filepath.Join(".worktrees", taskID)
-	fixture.modify(t, func(state *models.State) {
-		now := time.Now().UTC()
-		if state.Goal.Integration != nil && len(state.Goal.Integration.MutationReceipts) == 0 {
-			state.Goal.Integration.MutationReceipts = []models.IntegrationMutationReceipt{{
-				TaskID: "fixture-prior-mutation", BeforeCommit: "fixture-before", AfterCommit: "fixture-after",
-			}}
-		}
-		state.Tasks = append(state.Tasks, models.Task{
-			ID: taskID, Type: models.TaskTypeCoding, RolePair: "coding-pair", Description: "approved integration mutation",
-			Status: models.TaskStatusApproved, Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "mutation merged", Scope: fileName,
-			ParentTask: testhelpers.StringPtr("integration-global-1"), Worktree: &relative, AssignedTo: testhelpers.StringPtr("coder-1"),
-			BaseCommit: &base, ReviewCommit: &review, ApprovedBy: testhelpers.StringPtr(reviewerID), History: []models.TaskHistoryEntry{},
-			HandoffEvents: []models.HandoffEvent{{Timestamp: now, Agent: "coder-1", Trigger: models.HandoffTriggerSubmission}},
-		})
-	})
-	return taskID, reviewerID
-}
-
-func ensureMutationReceiptPrefix(t *testing.T, fixture *slicedLifecycleFixture) {
-	t.Helper()
-	fixture.modify(t, func(state *models.State) {
-		if state.Goal.Integration != nil && len(state.Goal.Integration.MutationReceipts) == 0 {
-			state.Goal.Integration.MutationReceipts = []models.IntegrationMutationReceipt{{
-				TaskID: "fixture-prior-mutation", BeforeCommit: "fixture-before", AfterCommit: "fixture-after",
-			}}
-		}
-	})
 }
 
 func markPlanningTransitionsConsumed(t *testing.T, fixture *slicedLifecycleFixture) {
@@ -763,13 +1323,19 @@ func freezeLegacyIntegrationPipeline(t *testing.T, root string) {
 
 func receiveError(t *testing.T, operation string, result <-chan error) {
 	t.Helper()
+	if err := receiveOperationResult(t, operation, result); err != nil {
+		t.Fatalf("%s error: %v", operation, err)
+	}
+}
+
+func receiveOperationResult(t *testing.T, operation string, result <-chan error) error {
+	t.Helper()
 	select {
 	case err := <-result:
-		if err != nil {
-			t.Fatalf("%s error: %v", operation, err)
-		}
+		return err
 	case <-time.After(slicedIntegrationTimeout):
 		t.Fatalf("timed out waiting for %s", operation)
+		return nil
 	}
 }
 
