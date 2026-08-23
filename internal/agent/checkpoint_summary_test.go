@@ -17,9 +17,10 @@ import (
 //
 // Those variables are process-wide: the change is visible to every goroutine,
 // not just this test. That is safe here because no test in this package runs in
-// parallel and none outlives itself — a goroutine still reading brand values
-// after its test returned would race with the restore below, and the detector
-// would report it against whichever test happened to be running at the time.
+// parallel and none that reads brand values outlives itself — a goroutine
+// still reading brand values after its test returned would race with the
+// restore below, and the detector would report it against whichever test
+// happened to be running at the time.
 //
 // Only BinaryName and ProjectDirName are captured, since those are what the
 // callers change. Rather than track that list by hand — a mutation of any other
@@ -34,6 +35,9 @@ func withAgentBrandValues(t *testing.T, mutate func()) {
 	t.Cleanup(func() {
 		brand.BinaryName = oldBinaryName
 		brand.ProjectDirName = oldProjectDirName
+		// A field left as "" rather than mutated is masked here: RuntimeValues()
+		// runs withDerivedDefaults(), which refills empty fields from
+		// NameLower, so a blanked field compares equal and this check misses it.
 		if after := brand.RuntimeValues(); after != before {
 			t.Errorf("brand values not restored after the test:\n got  %+v\n want %+v\n"+
 				"mutate() changed a field this helper does not capture — add it, or the change leaks into the tests that follow",
