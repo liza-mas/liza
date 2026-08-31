@@ -438,6 +438,35 @@ juggling: `secpol.msc` → Local Policies → User Rights Assignment → **Creat
 symbolic links** → add your account → sign out and back in. Verify with
 `whoami /priv | Select-String Symbolic`. Group policy may revert this on refresh.
 
+Scripted equivalent, same effect, no UI — useful when Developer Mode itself
+will not stick (both `secpol.msc` and Developer Mode need elevation, but they
+are different mechanisms: a group policy blocking one does not necessarily
+block the other):
+
+```powershell
+# Run first, NOT elevated — the SID must be the working account's, not the
+# elevated session's (they can be different accounts; see above).
+$sid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+Write-Output $sid   # paste into the elevated script below
+
+# Then, in an ELEVATED PowerShell, with the SID from above (the privilege line
+# may not exist in a fresh export, so add rather than assume-and-replace):
+$cfgPath = Join-Path $env:TEMP "secpol_symlink.cfg"
+secedit /export /cfg $cfgPath /areas USER_RIGHTS | Out-Null
+$found = $false
+$content = Get-Content $cfgPath | ForEach-Object {
+    if ($_ -match '^SeCreateSymbolicLinkPrivilege\s*=\s*(.*)$') {
+        $found = $true
+        $existing = $Matches[1].Trim()
+        if ($existing) { "SeCreateSymbolicLinkPrivilege = $existing,*$sid" } else { "SeCreateSymbolicLinkPrivilege = *$sid" }
+    } else { $_ }
+}
+if (-not $found) { $content += "SeCreateSymbolicLinkPrivilege = *$sid" }
+$content | Set-Content $cfgPath
+secedit /configure /db "$env:windir\security\local.sdb" /cfg $cfgPath /areas USER_RIGHTS
+# Sign out and back in, then verify with: whoami /priv | Select-String Symbolic
+```
+
 **Otherwise — elevate, but redirect.** §BRAND_NAME_TITLE§ resolves `~` from
 `HOME` before falling back to the account's profile, so `HOME` is the lever. Git
 needs telling separately that the repository is trustworthy for this account.
