@@ -2671,7 +2671,7 @@ func newPreservedInitialClaimFixtureWithBaseFile(t *testing.T, baseFile, baseCon
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
-	task.Worktree = testhelpers.StringPtr(filepath.Join(paths.WorktreesDirName, "task-1"))
+	task.Worktree = testhelpers.StringPtr(path.Join(paths.WorktreesDirName, "task-1"))
 	task.BaseCommit = &originalBase
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
@@ -2847,7 +2847,7 @@ func newRejectedHandoffFixture(t *testing.T, createArtifact bool) *rejectedHando
 		projectRoot: projectRoot,
 		stateFile:   stateFile,
 		taskID:      "task-1",
-		worktreeRel: filepath.Join(paths.WorktreesDirName, "task-1"),
+		worktreeRel: path.Join(paths.WorktreesDirName, "task-1"),
 		branchName:  paths.TaskBranchPrefix + "task-1",
 		reviewerID:  "code-reviewer-1",
 		reviewLease: now.Add(30 * time.Minute),

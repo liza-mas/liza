@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -160,7 +161,7 @@ func TestWtMergeCommand(t *testing.T) {
 			if tt.taskID != "nonexistent" && tt.taskID != "" {
 				var worktreePath *string
 				if tt.setupWorktree {
-					wt := filepath.Join(".worktrees", tt.taskID)
+					wt := path.Join(".worktrees", tt.taskID)
 					worktreePath = &wt
 				}
 
@@ -440,7 +441,7 @@ func TestWtMergeCommand_PreventsDuplicateFailedBy(t *testing.T) {
 
 	taskID := "duplicate-test"
 	agentID := "agent-1"
-	worktreePath := filepath.Join(".worktrees", taskID)
+	worktreePath := path.Join(".worktrees", taskID)
 	baseCommit := "base123"
 	reviewCommit := "review456"
 

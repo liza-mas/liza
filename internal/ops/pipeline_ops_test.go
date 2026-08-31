@@ -3,6 +3,7 @@ package ops
 import (
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -429,7 +430,7 @@ func (fixture *effectiveCompletionFixture) installPublicIntegrationMutation(t *t
 	testhelpers.MustGit(t, worktreePath, "commit", "-m", "mutate integration after clean analysis")
 	baseCommit := mustCommit(t, gitpkg.New(fixture.projectRoot), "refs/heads/integration")
 	reviewCommit := mustCommit(t, gitpkg.New(worktreePath), "HEAD")
-	relativeWorktree := filepath.Join(".worktrees", taskID)
+	relativeWorktree := path.Join(".worktrees", taskID)
 	approvedBy := "code-reviewer-1"
 	fixture.mutateState(t, func(state *models.State) {
 		now := time.Now().UTC()

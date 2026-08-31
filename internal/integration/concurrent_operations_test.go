@@ -8,6 +8,7 @@ package integration
 import (
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -618,7 +619,7 @@ func TestConcurrentMerges(t *testing.T) {
 			}
 			reviewCommit := strings.TrimSpace(string(output))
 
-			wtRel := filepath.Join(".worktrees", taskID)
+			wtRel := path.Join(".worktrees", taskID)
 			now := time.Now().UTC()
 			task := models.Task{
 				ID:           taskID,
