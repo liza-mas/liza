@@ -391,7 +391,7 @@ func validateStatusFields(task *models.Task, sc *statusClassifier) error {
 	}
 	if sc.IsRejected(task.Status) {
 		if task.Worktree != nil {
-			canonicalWorktree := filepath.Join(paths.WorktreesDirName, task.ID)
+			canonicalWorktree := filepath.ToSlash(filepath.Join(paths.WorktreesDirName, task.ID))
 			if *task.Worktree != canonicalWorktree {
 				return fmt.Errorf("%s task has worktree=%q, want %q", task.Status, *task.Worktree, canonicalWorktree)
 			}
