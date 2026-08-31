@@ -113,14 +113,28 @@ try {
     $target = Join-Path $InstallDir "$BinaryName.exe"
 
     # A running executable cannot be overwritten on Windows, but it can be
-    # renamed out of the way, the same move the self-updater performs.
+    # renamed out of the way, the same move the self-updater performs. The
+    # displaced copy is kept until the new binary is safely in place, so a
+    # failed Move-Item below restores it rather than leaving no installation
+    # at all.
+    $displaced = $null
     if (Test-Path $target) {
         $displaced = "$target.old"
         Remove-Item -Path $displaced -Force -ErrorAction SilentlyContinue
         Rename-Item -Path $target -NewName "$BinaryName.exe.old" -Force
+    }
+    try {
+        Move-Item -Path $binary.FullName -Destination $target -Force
+    }
+    catch {
+        if ($displaced -and (Test-Path $displaced)) {
+            Move-Item -Path $displaced -Destination $target -Force
+        }
+        throw
+    }
+    if ($displaced -and (Test-Path $displaced)) {
         Remove-Item -Path $displaced -Force -ErrorAction SilentlyContinue
     }
-    Move-Item -Path $binary.FullName -Destination $target -Force
 }
 finally {
     Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
