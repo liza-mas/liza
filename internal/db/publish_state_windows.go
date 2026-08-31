@@ -35,10 +35,15 @@ const (
 //
 // On Windows a rename cannot replace a file that another process holds open,
 // whatever share mode that process asked for: every share mode was measured to
-// fail the same way, ERROR_ACCESS_DENIED, FILE_SHARE_DELETE included. POSIX has
-// no such rule — renaming over an open file always succeeds — so publishing
-// state by rename carries a POSIX assumption that does not hold here, and a
-// single concurrent reader is enough to fail the write outright.
+// fail the same way against the destination, ERROR_ACCESS_DENIED, FILE_SHARE_DELETE
+// included. POSIX has no such rule — renaming over an open file always succeeds
+// — so publishing state by rename carries a POSIX assumption that does not hold
+// here, and a single concurrent reader is enough to fail the write outright.
+//
+// The rename has a second operand a reader can block: tmpPath itself, freshly
+// written and closed microseconds earlier. A handle opened there reports
+// ERROR_SHARING_VIOLATION rather than ERROR_ACCESS_DENIED — measured by holding
+// tmpPath open across the rename — so both are retried.
 //
 // Retrying is safe at this point: the caller holds the state lock for the whole
 // attempt, which keeps other writers of this file out, and the temp file is
@@ -46,9 +51,12 @@ const (
 // marshalled. Atomicity is unchanged — one rename still either happens or does
 // not.
 func publishState(tmpPath, statePath string) error {
-	// syscall does not export ERROR_ACCESS_DENIED by name, so compare
-	// numerically, as the process probes in this repository already do.
-	const errAccessDenied = syscall.Errno(5)
+	// syscall does not export these by name, so compare numerically, as the
+	// process probes in this repository already do.
+	const (
+		errAccessDenied     = syscall.Errno(5)
+		errSharingViolation = syscall.Errno(32)
+	)
 
 	deadline := time.Now().Add(publishRetryBudget)
 	for {
@@ -56,7 +64,7 @@ func publishState(tmpPath, statePath string) error {
 		if err == nil {
 			return nil
 		}
-		if !errors.Is(err, errAccessDenied) {
+		if !errors.Is(err, errAccessDenied) && !errors.Is(err, errSharingViolation) {
 			return err
 		}
 		if !time.Now().Before(deadline) {
