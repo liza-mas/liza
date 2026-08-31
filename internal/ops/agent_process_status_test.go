@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,6 +16,15 @@ import (
 
 func TestAgentProcessStatusOwnership(t *testing.T) {
 	now := time.Now().UTC()
+
+	// The two "no procfs" cases below exercise the real native liveness
+	// probe (procscan.ProcessAlive), not a stub, so the source label it
+	// reports is genuinely platform-specific: Unix names its probe
+	// "signal(0)", Windows "OpenProcess+GetExitCodeProcess".
+	nativeProbeSource := "signal(0)"
+	if runtime.GOOS == "windows" {
+		nativeProbeSource = "OpenProcess+GetExitCodeProcess"
+	}
 
 	tests := []struct {
 		name                  string
@@ -56,7 +66,7 @@ func TestAgentProcessStatusOwnership(t *testing.T) {
 			name:                  "pid not found remains degraded while lease is fresh",
 			recordedPID:           987654321,
 			wantRawState:          procscan.AgentProcessDead,
-			wantRawSource:         "signal(0)",
+			wantRawSource:         nativeProbeSource,
 			wantRawDetailContains: "process",
 			wantEffective:         AgentOwnershipUnknownDegraded,
 			wantOccupied:          true,
@@ -67,7 +77,7 @@ func TestAgentProcessStatusOwnership(t *testing.T) {
 			recordedPID:           os.Getpid(),
 			procfsUnavailable:     true,
 			wantRawState:          procscan.AgentProcessUnknown,
-			wantRawSource:         "signal(0)",
+			wantRawSource:         nativeProbeSource,
 			wantRawDetailContains: "procfs unavailable",
 			wantEffective:         AgentOwnershipUnknownDegraded,
 			wantOccupied:          true,
