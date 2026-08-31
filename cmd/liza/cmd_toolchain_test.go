@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -141,6 +142,46 @@ func TestToolchainConfigureWritesFiles(t *testing.T) {
 	}
 	if want := "Run: source " + shellQuote(filepath.Join(globalDir, "toolchain", "env.sh")); !strings.Contains(out.String(), want) {
 		t.Fatalf("configure output missing source instruction %q:\n%s", want, out.String())
+	}
+}
+
+func TestToolchainConfigureWritesPowerShellEnvOnWindows(t *testing.T) {
+	resetRootCmdForTest(t)
+	globalDir := t.TempDir()
+	installDir := filepath.Join(t.TempDir(), "bin")
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs([]string{
+		"toolchain", "configure",
+		"--profile", "lean",
+		"--global-dir", globalDir,
+		"--install-dir", installDir,
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("toolchain configure failed: %v", err)
+	}
+
+	psEnvPath := filepath.Join(globalDir, "toolchain", "env.ps1")
+	_, statErr := os.Stat(psEnvPath)
+	if runtime.GOOS != "windows" {
+		if statErr == nil {
+			t.Fatalf("env.ps1 written on %s, want none", runtime.GOOS)
+		}
+		if strings.Contains(out.String(), "PowerShell") {
+			t.Fatalf("configure output mentions PowerShell on %s:\n%s", runtime.GOOS, out.String())
+		}
+		return
+	}
+	if statErr != nil {
+		t.Fatalf("env.ps1 not written: %v", statErr)
+	}
+	want := `From PowerShell, run: . "` + psEnvPath + `"`
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("configure output missing PowerShell instruction %q:\n%s", want, out.String())
+	}
+	if wantSource := "Run: source " + shellQuote(filepath.Join(globalDir, "toolchain", "env.sh")); !strings.Contains(out.String(), wantSource) {
+		t.Fatalf("configure output dropped the Git Bash instruction %q:\n%s", wantSource, out.String())
 	}
 }
 

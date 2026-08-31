@@ -167,6 +167,10 @@ var toolchainConfigureCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.ProfilePath)
 		fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.EnvPath)
 		fmt.Fprintf(cmd.OutOrStdout(), "Run: source %s\n", shellQuote(result.EnvPath))
+		if result.PowerShellEnvPath != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.PowerShellEnvPath)
+			fmt.Fprintf(cmd.OutOrStdout(), "From PowerShell, run: . \"%s\"\n", result.PowerShellEnvPath)
+		}
 		for _, path := range result.ShellProfilePaths {
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s\n", path)
 		}
