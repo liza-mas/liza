@@ -19,11 +19,15 @@ BINARY_NAME?=$(BRAND_BINARY_NAME)
 
 # Build variables
 # Derived from git rather than pinned, because a pinned default goes stale and
-# then lies: the binary claimed 0.2.0 long after 0.8.0 shipped. The fallback is
-# deliberately not semver — a hand-built binary is not a release, and the
-# updater only considers a valid semver current version, so a source build is
-# left alone instead of being offered a release to overwrite itself with.
-VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+# then lies: the binary claimed 0.2.0 long after 0.8.0 shipped. Only an exact,
+# clean tag produces the semver value — anything else (commits past the tag, a
+# dirty tree, no tags, no git) is the non-semver "dev-<sha>". A prerelease-style
+# value like "v0.8.0-3-gabc123" would still be valid semver but would sort
+# *below* the v0.8.0 release, so the updater would offer to replace a newer
+# dev build with an older one. Non-semver keeps the updater's "valid semver
+# current version required" gate closed, so a source build is left alone
+# instead of being offered a release to overwrite itself with.
+VERSION?=$(shell tag=$$(git describe --tags --exact-match 2>/dev/null); if [ -n "$$tag" ] && [ -z "$$(git status --porcelain 2>/dev/null)" ]; then printf '%s' "$$tag"; else printf 'dev-%s' "$$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; fi)
 GIT_COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS=-ldflags "-X 'github.com/liza-mas/liza/internal/embedded.Version=$(VERSION)' \
