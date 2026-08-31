@@ -391,6 +391,15 @@ Warning: failed to create CLAUDE.md symlink: symlink ... A required privilege is
 
 1. **Enable Developer Mode** (recommended): Settings → System → For developers → toggle Developer Mode on. Then re-run `§BRAND_BINARY_NAME§ setup` and `§BRAND_BINARY_NAME§ init`.
 
+   Same effect, no UI: merge a `.reg` file setting the registry value that toggle writes, then elevate to apply it (a UAC prompt merging one key is still a machine-wide change, unlike installing software as a different elevated account — see below). Takes effect immediately, no sign-out needed.
+
+   ```reg
+   Windows Registry Editor Version 5.00
+
+   [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock]
+   "AllowDevelopmentWithoutDevLicense"=dword:00000001
+   ```
+
 2. **Run elevated**: Open your terminal as Administrator, then re-run the command.
    Check first that elevation keeps you as the same account — see the next
    section, where it does not.
