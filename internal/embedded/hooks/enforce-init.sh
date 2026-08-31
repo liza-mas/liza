@@ -98,8 +98,15 @@ command=$(json_val command)
 # Never do this on Unix: a backslash IS a legal filename character there, so
 # normalising would make the guard validate a different path than the one the
 # command actually reads, and would blunt the metacharacter rejection in
-# is_safe_read_command_for_allowed_paths. The other metacharacters are
-# untouched here, so ";", "&", "|", "<", ">", "`" and "$(" remain rejected.
+# is_safe_read_command_for_allowed_paths. The other metacharacters reject
+# regex covers — ";", "&", "|", "<", ">", "`", "\" and "$(" — are otherwise
+# untouched here, but "\" is the one exception: this rewrite runs on the
+# same $command that regex later checks, so on Windows every "\" is already
+# gone by then and that arm of the regex cannot fire for this call path. No
+# bypass follows from it — the rewrite cannot manufacture any of the other
+# rejected characters, and it cannot turn an already-rejected one back into
+# an accepted one — but a future audit should read this as "unreachable
+# here on Windows", not "unchanged".
 if is_windows_shell; then
   command="${command//\\//}"
   cwd="${cwd//\\//}"
