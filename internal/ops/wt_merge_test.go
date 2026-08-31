@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -231,7 +232,7 @@ func setupMergeTestRepo(t *testing.T, taskID, agentID string) (string, string) {
 	wtCommit := strings.TrimSpace(string(shaOutput))
 
 	// Create task in state
-	worktreePath := filepath.Join(".worktrees", taskID)
+	worktreePath := path.Join(".worktrees", taskID)
 	baseCommit := "base123"
 	approvedBy := "code-reviewer-1"
 	task := models.Task{
@@ -1828,7 +1829,7 @@ func setupArtifactGuardMergeScenario(t *testing.T, opts artifactGuardMergeOption
 	testhelpers.MustGit(t, tmpDir, "checkout", "main")
 
 	now := time.Now().UTC()
-	worktreePath := filepath.Join(".worktrees", opts.taskID)
+	worktreePath := path.Join(".worktrees", opts.taskID)
 	approvedBy := reviewerID
 	state := testhelpers.CreateValidState()
 	state.Config.IntegrationBranch = "integration"
@@ -2113,7 +2114,7 @@ func TestMergeWorktree_CodingPlanApproved(t *testing.T) {
 	}
 	wtCommit := strings.TrimSpace(string(shaOutput))
 
-	worktreePath := filepath.Join(".worktrees", taskID)
+	worktreePath := path.Join(".worktrees", taskID)
 	baseCommit := "base123"
 	approvedBy := agentID
 	task := models.Task{
@@ -2214,7 +2215,7 @@ func TestMergeWorktree_PipelineCodingPairApproved(t *testing.T) {
 	}
 	wtCommit := strings.TrimSpace(string(shaOutput))
 
-	worktreePath := filepath.Join(".worktrees", taskID)
+	worktreePath := path.Join(".worktrees", taskID)
 	baseCommit := "base123"
 	approvedBy := agentID
 	task := models.Task{

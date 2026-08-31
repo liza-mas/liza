@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -150,7 +151,7 @@ func TestWtDeleteCommand(t *testing.T) {
 			if tt.taskID != "nonexistent" && tt.taskID != "" {
 				var worktreePath *string
 				if tt.hasWorktree {
-					wt := filepath.Join(".worktrees", tt.taskID)
+					wt := path.Join(".worktrees", tt.taskID)
 					worktreePath = &wt
 				}
 

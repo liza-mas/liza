@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -135,7 +136,7 @@ func TestWtCreateCommand(t *testing.T) {
 
 			// Add task if not testing nonexistent task
 			if tt.taskID != "nonexistent" && tt.taskID != "" {
-				worktreePath := filepath.Join(".worktrees", tt.taskID)
+				worktreePath := path.Join(".worktrees", tt.taskID)
 				rolePair := "coding-pair"
 				if tt.taskStatus == models.TaskStatusCodePlanning {
 					rolePair = "code-planning-pair"
@@ -266,7 +267,7 @@ func TestWtCreateCommand_PostWorktreeCmd(t *testing.T) {
 
 	now := time.Now().UTC()
 	agent := "coder-1"
-	worktreePath := filepath.Join(".worktrees", "task-postcmd")
+	worktreePath := path.Join(".worktrees", "task-postcmd")
 	leaseExpires := now.Add(30 * time.Minute)
 	postCmd := "touch .post-worktree-ran"
 
@@ -346,7 +347,7 @@ func TestWtCreateCommand_NoPostWorktreeCmd(t *testing.T) {
 
 	now := time.Now().UTC()
 	agent := "coder-1"
-	worktreePath := filepath.Join(".worktrees", "task-nocmd")
+	worktreePath := path.Join(".worktrees", "task-nocmd")
 	leaseExpires := now.Add(30 * time.Minute)
 
 	initialState := &models.State{
@@ -444,7 +445,7 @@ func TestWtCreateCommand_ProvisionClaudeConfig(t *testing.T) {
 
 	now := time.Now().UTC()
 	agent := "coder-1"
-	worktreePath := filepath.Join(".worktrees", "task-config")
+	worktreePath := path.Join(".worktrees", "task-config")
 	leaseExpires := now.Add(30 * time.Minute)
 
 	initialState := &models.State{
@@ -545,7 +546,7 @@ func TestWtCreateCommand_ProvisionClaudeConfig_NoFiles(t *testing.T) {
 
 	now := time.Now().UTC()
 	agent := "coder-1"
-	worktreePath := filepath.Join(".worktrees", "task-noconfig")
+	worktreePath := path.Join(".worktrees", "task-noconfig")
 	leaseExpires := now.Add(30 * time.Minute)
 
 	initialState := &models.State{

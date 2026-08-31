@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -168,7 +169,7 @@ func setupAgentMergeRepo(t *testing.T) (projectRoot, stateFile, taskID string) {
 	state.Config.IntegrationBranch = "integration"
 	state.Goal.SpecRef = "README.md"
 
-	worktreeRel := filepath.Join(".worktrees", taskID)
+	worktreeRel := path.Join(".worktrees", taskID)
 	baseCommit := "base"
 	approvedBy := "code-reviewer-1"
 	state.Tasks = []models.Task{
