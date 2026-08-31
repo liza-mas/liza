@@ -128,7 +128,20 @@ INSTALL_DIR ?= $(subst \,/,$(WINDOWS_HOME))/.local/bin
 # there — it would shadow find, grep and sort with MSYS builds. Naming the shell
 # covers the lines that do reach a shell; the install recipe quotes its paths,
 # which both defeats that shortcut and survives a profile containing a space.
+#
+# A bare "bash" resolves by PATH, and C:\Windows\System32\bash.exe — the WSL
+# launcher — is on the machine PATH ahead of any user-level Git for Windows
+# entry; reordering it needs elevation the managed machines this targets do
+# not grant. The same trap windowsLaunchShell (cmd/liza/cmd_launch.go) and
+# ResolveBashForScripts (internal/testhelpers/utils.go) exist to avoid, so
+# probe the per-user Git for Windows install directly, the way those do, and
+# fall back to PATH only when it is not there.
+GIT_BASH := $(wildcard ${LOCALAPPDATA}/Programs/Git/bin/bash.exe)
+ifneq ($(GIT_BASH),)
+SHELL := $(firstword $(GIT_BASH))
+else
 SHELL := bash
+endif
 .SHELLFLAGS := -c
 # The install directory belongs to the user, and Windows sudo is absent or
 # disabled on managed machines; escalating here only turns a working install
