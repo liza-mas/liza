@@ -93,29 +93,46 @@ func processTreeDeepestFirst(root uint32) ([]uint32, error) {
 		}
 	}
 
-	// Breadth-first from the root, then reversed, which orders any parent after
-	// every one of its descendants.
-	order := []uint32{root}
-	for i := 0; i < len(order); i++ {
-		parent := order[i]
-		parentStart, parentOK := processCreationTime(parent)
-		for _, child := range childrenByParent[parent] {
-			if child == root {
-				continue
-			}
-			childStart, childOK := processCreationTime(child)
-			if parentOK && childOK && childStart < parentStart {
-				// The parent PID was recycled: this process predates the agent.
-				continue
-			}
-			order = append(order, child)
-		}
-	}
+	order := orderProcessTree(root, childrenByParent, processCreationTime)
 
 	for left, right := 0, len(order)-1; left < right; left, right = left+1, right-1 {
 		order[left], order[right] = order[right], order[left]
 	}
 	return order, nil
+}
+
+// orderProcessTree walks childrenByParent breadth-first from root, returning
+// root followed by its descendants in traversal order (reversed by the
+// caller to get children before their parents).
+//
+// visited guards against a cycle in childrenByParent: stale parent pointers
+// plus PID recycling can make A's recorded parent B and B's recorded parent
+// A, and the creation-time check below only breaks that when both
+// processes' times are readable via creationTime. Without visited, the
+// order slice would grow without bound and this would never return.
+//
+// Extracted from processTreeDeepestFirst so the walk itself — the part a
+// cycle can hang — is testable without a real Toolhelp snapshot.
+func orderProcessTree(root uint32, childrenByParent map[uint32][]uint32, creationTime func(uint32) (int64, bool)) []uint32 {
+	order := []uint32{root}
+	visited := map[uint32]bool{root: true}
+	for i := 0; i < len(order); i++ {
+		parent := order[i]
+		parentStart, parentOK := creationTime(parent)
+		for _, child := range childrenByParent[parent] {
+			if visited[child] {
+				continue
+			}
+			childStart, childOK := creationTime(child)
+			if parentOK && childOK && childStart < parentStart {
+				// The parent PID was recycled: this process predates the agent.
+				continue
+			}
+			visited[child] = true
+			order = append(order, child)
+		}
+	}
+	return order
 }
 
 // processCreationTime reports when a process started, as a comparable value.
