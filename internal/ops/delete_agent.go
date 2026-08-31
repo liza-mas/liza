@@ -2,8 +2,6 @@ package ops
 
 import (
 	"fmt"
-	"os"
-	"syscall"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -57,23 +55,6 @@ var agentProcesses = agentProcessOps{
 	signalTree:  signalAgentProcessTree,
 	killTree:    killAgentProcessTree,
 	waitForExit: waitForAgentProcessExit,
-}
-
-// SignalProcess sends SIGTERM to the deleted agent's process if it had a known PID.
-// Verifies the process is an agent via /proc/<pid>/cmdline before signaling,
-// preventing accidental kills from PID reuse. Safe to call unconditionally.
-func (r *DeleteAgentResult) SignalProcess() bool {
-	if r.PID <= 0 {
-		return false
-	}
-	if !agentProcesses.isLizaAgent(r.PID) {
-		return false
-	}
-	proc, err := os.FindProcess(r.PID)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.SIGTERM) == nil
 }
 
 // TerminateAgent stops the registered agent process before removing it

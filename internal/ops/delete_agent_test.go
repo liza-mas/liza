@@ -269,21 +269,6 @@ func TestMatchLizaAgentCmdline(t *testing.T) {
 	}
 }
 
-func TestSignalProcess_ZeroPID(t *testing.T) {
-	r := &DeleteAgentResult{AgentID: "test", PID: 0}
-	if r.SignalProcess() {
-		t.Error("SignalProcess should return false for PID 0")
-	}
-}
-
-func TestSignalProcess_CurrentProcess(t *testing.T) {
-	// os.Getpid() is a go test runner, not "liza agent" — identity check rejects it.
-	r := &DeleteAgentResult{AgentID: "test", PID: os.Getpid()}
-	if r.SignalProcess() {
-		t.Error("SignalProcess should return false for non-liza process")
-	}
-}
-
 func TestTerminateProcess_GracefulExit(t *testing.T) {
 	original := agentProcesses
 	signalCalls := 0
