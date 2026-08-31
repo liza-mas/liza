@@ -173,6 +173,41 @@ func TestInstallLifecycleHooksRefreshesStaleManagedHook(t *testing.T) {
 	}
 }
 
+func TestInstallLifecycleHooksRefreshPreservesUnrelatedStagingFile(t *testing.T) {
+	repo := initGitRepo(t)
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	hookPath := filepath.Join(hooksDir, "post-merge")
+	staleContent := ManagedHookMarker + "\n# stale wrapper from an older Liza release\n"
+	if err := os.WriteFile(hookPath, []byte(staleContent), 0644); err != nil {
+		t.Fatalf("write stale managed hook: %v", err)
+	}
+
+	unrelatedStaged := hookPath + ".tmp"
+	unrelatedContent := "not managed by liza\n"
+	if err := os.WriteFile(unrelatedStaged, []byte(unrelatedContent), 0644); err != nil {
+		t.Fatalf("write unrelated %s: %v", unrelatedStaged, err)
+	}
+
+	result, err := InstallLifecycleHooks(InstallHooksOptions{RepoRoot: repo})
+	if err != nil {
+		t.Fatalf("InstallLifecycleHooks() error = %v", err)
+	}
+
+	index := slices.IndexFunc(result.Hooks, func(got HookInstallResult) bool {
+		return got.Hook == "post-merge"
+	})
+	if index == -1 {
+		t.Fatalf("missing post-merge result: %#v", result.Hooks)
+	}
+	if result.Hooks[index].Action != HookActionUpdated {
+		t.Fatalf("post-merge action = %q, want %q", result.Hooks[index].Action, HookActionUpdated)
+	}
+	got := readFile(t, unrelatedStaged)
+	if got != unrelatedContent {
+		t.Fatalf("unrelated staging file %s was modified: got %q, want %q", unrelatedStaged, got, unrelatedContent)
+	}
+}
+
 func TestManagedHookDispatcherInvokesLocalIndexScriptWithoutLifecycleArguments(t *testing.T) {
 	repo := initGitRepo(t)
 	result, err := InstallLifecycleHooks(InstallHooksOptions{
@@ -231,6 +266,55 @@ func TestManagedHookDispatcherSkipsPostCheckoutFileCheckout(t *testing.T) {
 	}
 	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
 		t.Fatalf("liza-index.sh ran for file checkout; stat err=%v", err)
+	}
+}
+
+func TestManagedHookWrapperPassesHookNameToDispatcherForPostCheckoutFileCheckout(t *testing.T) {
+	repo := initGitRepo(t)
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatalf("create hooks dir: %v", err)
+	}
+
+	dispatcherPath := filepath.Join(hooksDir, hookDispatcherName())
+	if err := os.WriteFile(dispatcherPath, []byte(managedHookDispatcherContent()), 0755); err != nil {
+		t.Fatalf("write dispatcher fixture: %v", err)
+	}
+
+	logPath := filepath.Join(t.TempDir(), "args.log")
+	scriptPath := filepath.Join(hooksDir, scriptName())
+	script := "#!/bin/sh\nprintf 'ran\\n' > \"$LIZA_TEST_HOOK_LOG\"\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+		t.Fatalf("write liza-index.sh fixture: %v", err)
+	}
+
+	wrapper := managedHookContent("post-checkout")
+	if !strings.Contains(wrapper, hookNameEnvVar+"="+shellQuote("post-checkout")) {
+		t.Fatalf("wrapper does not pass %s to the dispatcher:\n%s", hookNameEnvVar, wrapper)
+	}
+	wrapperPath := filepath.Join(hooksDir, "post-checkout")
+	if err := os.WriteFile(wrapperPath, []byte(wrapper), 0755); err != nil {
+		t.Fatalf("write wrapper fixture: %v", err)
+	}
+
+	runWrapper := func(flag string) {
+		t.Helper()
+		cmd := exec.Command(wrapperPath, "old", "new", flag)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "LIZA_TEST_HOOK_LOG="+logPath)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("wrapper hook (flag=%s) failed: %v\n%s", flag, err, output)
+		}
+	}
+
+	runWrapper("0")
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("liza-index.sh ran through the wrapper for a file checkout; stat err=%v", err)
+	}
+
+	runWrapper("1")
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("liza-index.sh did not run through the wrapper for a branch checkout: %v", err)
 	}
 }
 

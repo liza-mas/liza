@@ -955,8 +955,17 @@ func installManagedHook(hookPath, hook string) (HookAction, error) {
 	// or an elevated shell, and filesystems that do not support them. The
 	// wrapper fallback then sees no file, reinstalls from scratch and reports
 	// "installed" on every run instead of "verified" or "updated".
-	staged := hookPath + ".tmp"
-	if err := os.Remove(staged); err != nil && !os.IsNotExist(err) {
+	//
+	// The staging name is unique per invocation (rather than a fixed
+	// "<hook>.tmp") so this never deletes a file it did not create itself.
+	dir := filepath.Dir(hookPath)
+	stagingFile, err := os.CreateTemp(dir, filepath.Base(hookPath)+".tmp-*")
+	if err != nil {
+		return "", fmt.Errorf("stage %s hook: %w", hook, err)
+	}
+	staged := stagingFile.Name()
+	stagingFile.Close()
+	if err := os.Remove(staged); err != nil {
 		return "", fmt.Errorf("clear staged %s hook: %w", hook, err)
 	}
 	if err := os.Symlink(hookDispatcherName(), staged); err != nil {
@@ -1022,6 +1031,7 @@ if [ -z "$repo_root" ]; then
 fi
 
 hook_name="${%s:-$(basename "$0")}"
+unset %s
 if [ "$hook_name" = "post-checkout" ] && [ "${3:-}" = "0" ]; then
 	exit 0
 fi
@@ -1040,7 +1050,7 @@ fi
 
 cd "$repo_root"
 "$script"
-`, ManagedHookMarker, hookNameEnvVar, scriptName())
+`, ManagedHookMarker, hookNameEnvVar, hookNameEnvVar, scriptName())
 }
 
 func looksLikeLegacyHookDispatcher(content string) bool {
