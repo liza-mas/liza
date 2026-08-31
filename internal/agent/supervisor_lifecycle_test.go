@@ -3,20 +3,19 @@ package agent
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	lizagit "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -166,7 +165,9 @@ func TestExecuteAgent_PanicWaitsForProgressWatchdog(t *testing.T) {
 	t.Cleanup(func() { gitenv.DefaultCommandWaitDelay = originalWaitDelay })
 	t.Cleanup(func() {
 		if pid, readErr := readProcessID(pidPath); readErr == nil {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
+			if process, findErr := os.FindProcess(pid); findErr == nil {
+				_ = process.Kill()
+			}
 		}
 	})
 
@@ -220,7 +221,9 @@ func TestExecuteAgent_PanicWaitsForProgressWatchdog(t *testing.T) {
 		t.Fatalf("read fake Git PID: %v", err)
 	}
 	if err := waitForProcessExit(pid, 200*time.Millisecond); err != nil {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
+		if process, findErr := os.FindProcess(pid); findErr == nil {
+			_ = process.Kill()
+		}
 		t.Fatalf("watchdog Git process outlived panic cleanup: %v", err)
 	}
 }
@@ -261,12 +264,12 @@ func waitForProcessExit(pid int, timeout time.Duration) error {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	for {
-		err := syscall.Kill(pid, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			return nil
-		}
+		alive, _, err := procscan.ProcessAlive(pid)
 		if err != nil {
 			return err
+		}
+		if !alive {
+			return nil
 		}
 		select {
 		case <-ticker.C:
