@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -235,7 +236,11 @@ func TestClaimTaskCommand(t *testing.T) {
 				var iteration int
 
 				if tt.hasWorktree {
-					wt := filepath.Join(".worktrees", tt.taskID)
+					// task.Worktree is state, compared against the forward-slash
+					// form claim_task.go stores (path.Join(paths.WorktreesDirName,
+					// taskID)) — not a filesystem path, so it must not take the
+					// native separator filepath.Join would give it here.
+					wt := path.Join(".worktrees", tt.taskID)
 					worktreePath = &wt
 					bc := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
 					baseCommit = &bc
