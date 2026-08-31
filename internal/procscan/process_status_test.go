@@ -17,6 +17,19 @@ func hideProcfs(t *testing.T) {
 	t.Cleanup(func() { defaultProcRoot = old })
 }
 
+// nativeLizaPath returns an argv[0] shaped the way the current OS would
+// actually report it for a running liza binary, so tests that stub the
+// native (procfs-less) argv-reading fallback exercise IsLizaAgentArgv's
+// real per-platform rules — trimExecutableSuffix compares case-sensitively
+// except on Windows, and filepath.Base only splits on '\' there — instead of
+// a fixed Windows-shaped path that can only ever match when GOOS is windows.
+func nativeLizaPath() string {
+	if runtime.GOOS == "windows" {
+		return `C:\bin\liza.EXE`
+	}
+	return "/bin/liza"
+}
+
 func stubNativeCommandLine(t *testing.T, argv []string, err error) *int {
 	t.Helper()
 	calls := 0
@@ -31,7 +44,7 @@ func stubNativeCommandLine(t *testing.T, argv []string, err error) *int {
 
 func TestAgentProcessStatusForPID_NativeIdentityMatches(t *testing.T) {
 	hideProcfs(t)
-	stubNativeCommandLine(t, []string{`C:\bin\liza.EXE`, "agent", "coder", "--agent-id", "coder-1"}, nil)
+	stubNativeCommandLine(t, []string{nativeLizaPath(), "agent", "coder", "--agent-id", "coder-1"}, nil)
 
 	got := AgentProcessStatusForPID(os.Getpid(), "coder", "coder-1", "")
 

@@ -226,7 +226,7 @@ func stubCandidatePIDs(t *testing.T, pids []int, err error) *int {
 func TestFindZombieAgents_NativeScanMatchesOnGoalID(t *testing.T) {
 	hideProcfs(t)
 	stubCandidatePIDs(t, []int{1234}, nil)
-	stubNativeCommandLine(t, []string{`C:\bin\liza.EXE`, "agent", "coder", "--cli", "codex", "--goal-id", "goal-1"}, nil)
+	stubNativeCommandLine(t, []string{nativeLizaPath(), "agent", "coder", "--cli", "codex", "--goal-id", "goal-1"}, nil)
 
 	result, err := FindZombieAgents(ZombieScanOptions{
 		ProjectRoot: t.TempDir(),
