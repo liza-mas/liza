@@ -79,6 +79,65 @@ func TestPublishStateRetriesWhileAReaderHoldsTheTarget(t *testing.T) {
 	}
 }
 
+// TestPublishStateRetriesWhileAReaderHoldsTheSource drives the same real
+// platform behaviour as the target-held test above, but for the rename's other
+// operand: tmpPath itself. A handle there reports ERROR_SHARING_VIOLATION
+// rather than ERROR_ACCESS_DENIED, and both must be retried.
+func TestPublishStateRetriesWhileAReaderHoldsTheSource(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.yaml")
+	tmpPath := filepath.Join(dir, "state.yaml.tmp")
+	if err := os.WriteFile(statePath, []byte("original"), 0644); err != nil {
+		t.Fatalf("seed state file: %v", err)
+	}
+	if err := os.WriteFile(tmpPath, []byte("published"), 0644); err != nil {
+		t.Fatalf("seed temp file: %v", err)
+	}
+
+	reader, err := os.Open(tmpPath)
+	if err != nil {
+		t.Fatalf("hold the source open: %v", err)
+	}
+	readerOpen := true
+	closeReader := func() {
+		if readerOpen {
+			reader.Close()
+			readerOpen = false
+		}
+	}
+	t.Cleanup(closeReader)
+
+	attempts := 0
+	swapRenameState(t, func(from, to string) error {
+		attempts++
+		err := os.Rename(from, to)
+		if attempts == 1 {
+			if err == nil {
+				t.Error("first rename succeeded while a reader held the source; the platform behaviour this retry exists for no longer reproduces")
+			}
+			// Release the reader only once it has actually blocked a publish,
+			// so a passing test cannot mean the collision never happened.
+			closeReader()
+		}
+		return err
+	})
+
+	if err := publishState(tmpPath, statePath); err != nil {
+		t.Fatalf("publishState() = %v, want nil", err)
+	}
+	if attempts != 2 {
+		t.Errorf("rename attempts = %d, want 2", attempts)
+	}
+
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read published state: %v", err)
+	}
+	if string(data) != "published" {
+		t.Errorf("published state = %q, want %q", data, "published")
+	}
+}
+
 // TestPublishStateDoesNotRetryUnrelatedErrors keeps the retry narrow: only the
 // code a blocked replace produces is worth another attempt.
 func TestPublishStateDoesNotRetryUnrelatedErrors(t *testing.T) {
