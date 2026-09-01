@@ -208,9 +208,7 @@ func configureIndexingActivationSembleReady(t *testing.T) {
 
 	binDir := t.TempDir()
 	semblePath := filepath.Join(binDir, "semble")
-	if err := os.WriteFile(semblePath, []byte("#!/bin/sh\nprintf '%s\\n' '[{\"path\":\"prewarm.py\"}]'\n"), 0o755); err != nil {
-		t.Fatalf("WriteFile(fake semble): %v", err)
-	}
+	testhelpers.WriteShellStub(t, semblePath, "#!/bin/sh\nprintf '%s\\n' '[{\"path\":\"prewarm.py\"}]'\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 

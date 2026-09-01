@@ -24,13 +24,14 @@ import (
 func TestProviderLaunchGenerationLinearization(t *testing.T) {
 	t.Run("replacement wins before every start boundary", func(t *testing.T) {
 		cases := []struct {
-			name string
-			run  func(context.Context, LLMAgentLaunchGate, string, string) error
+			name    string
+			prepare func(*testing.T, string)
+			run     func(context.Context, LLMAgentLaunchGate, string, string) error
 		}{
-			{name: "cli run", run: runBlockedCLIForGenerationTest},
-			{name: "cli interactive", run: runBlockedCLIInteractiveForGenerationTest},
-			{name: "acpx session and prompt", run: runBlockedACPXForGenerationTest},
-			{name: "acpx interactive", run: runBlockedACPXInteractiveForGenerationTest},
+			{name: "cli run", prepare: func(t *testing.T, path string) { writeCLIProviderStubForGenerationTest(t, path, false) }, run: runBlockedCLIForGenerationTest},
+			{name: "cli interactive", prepare: func(t *testing.T, path string) { writeCLIProviderStubForGenerationTest(t, path, false) }, run: runBlockedCLIInteractiveForGenerationTest},
+			{name: "acpx session and prompt", prepare: func(t *testing.T, path string) { writeACPXProviderStubsForGenerationTest(t, path, false) }, run: runBlockedACPXForGenerationTest},
+			{name: "acpx interactive", prepare: func(t *testing.T, path string) { writeACPXProviderStubsForGenerationTest(t, path, false) }, run: runBlockedACPXInteractiveForGenerationTest},
 			{name: "legacy execute", run: runBlockedLegacyForGenerationTest(false)},
 			{name: "legacy execute interactive", run: runBlockedLegacyForGenerationTest(true)},
 		}
@@ -39,6 +40,9 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				fixture := newProviderGenerationFixture(t)
 				sideEffectPath := filepath.Join(t.TempDir(), "provider-started")
+				if tc.prepare != nil {
+					tc.prepare(t, sideEffectPath)
+				}
 				atBoundary := make(chan struct{})
 				allowGate := make(chan struct{})
 				realGate := newProviderLaunchGate(fixture.config(fixture.authorityA))
@@ -71,19 +75,21 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 
 	t.Run("built-ins release registration after start before wait", func(t *testing.T) {
 		cases := []struct {
-			name string
-			run  func(context.Context, LLMAgentLaunchGate, string, string) error
+			name    string
+			prepare func(*testing.T, string)
+			run     func(context.Context, LLMAgentLaunchGate, string, string) error
 		}{
-			{name: "cli", run: runSleepingCLIForGenerationTest},
-			{name: "cli interactive", run: runSleepingCLIInteractiveForGenerationTest},
-			{name: "acpx", run: runSleepingACPXForGenerationTest},
-			{name: "acpx interactive", run: runSleepingACPXInteractiveForGenerationTest},
+			{name: "cli", prepare: func(t *testing.T, path string) { writeCLIProviderStubForGenerationTest(t, path, true) }, run: runSleepingCLIForGenerationTest},
+			{name: "cli interactive", prepare: func(t *testing.T, path string) { writeCLIProviderStubForGenerationTest(t, path, true) }, run: runSleepingCLIInteractiveForGenerationTest},
+			{name: "acpx", prepare: func(t *testing.T, path string) { writeACPXProviderStubsForGenerationTest(t, path, true) }, run: runSleepingACPXForGenerationTest},
+			{name: "acpx interactive", prepare: func(t *testing.T, path string) { writeACPXProviderStubsForGenerationTest(t, path, true) }, run: runSleepingACPXInteractiveForGenerationTest},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
 				fixture := newProviderGenerationFixture(t)
 				fixture.expireCurrent(t)
 				sideEffectPath := filepath.Join(t.TempDir(), "provider-started")
+				tc.prepare(t, sideEffectPath)
 				atStart := make(chan struct{})
 				allowStart := make(chan struct{})
 				realGate := newProviderLaunchGate(fixture.config(fixture.authorityA))
@@ -275,9 +281,7 @@ func TestProviderLaunchFenceFailureSemantics(t *testing.T) {
 		sink := &recordingLLMAgentEventSink{}
 		binDir := t.TempDir()
 		acpxPath := filepath.Join(binDir, "acpx")
-		if err := os.WriteFile(acpxPath, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testhelpers.WriteShellStub(t, acpxPath, "#!/bin/sh\nexit 7\n")
 		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 		_, setupErr := NewACPXAgent("").Run(context.Background(), LLMAgentRunRequest{BackendName: "codex-acp", AgentID: fixture.agentID, Generation: fixture.authorityA.Generation, ProjectRoot: fixture.projectRoot, Prompt: "prompt", EventSink: sink, LaunchGate: gate})
 		if setupErr == nil || hasLLMAgentEvent(sink.Events(), LLMAgentEventStarted) {
@@ -334,7 +338,7 @@ func TestAgentProcessGenerationEnv(t *testing.T) {
 				}
 				t.Run(name, func(t *testing.T) {
 					logPath := filepath.Join(t.TempDir(), "env.log")
-					if err := runGenerationEnvProcessForTest(context.Background(), backend, interactive, generation, logPath); err != nil {
+					if err := runGenerationEnvProcessForTest(t, context.Background(), backend, interactive, generation, logPath); err != nil {
 						t.Fatal(err)
 					}
 					data, err := os.ReadFile(logPath)
@@ -459,31 +463,23 @@ func assertAgentLifecycleLockAvailable(t *testing.T, projectRoot, agentID string
 }
 
 func runBlockedCLIForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false, false)
+	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false)
 }
 
 func runBlockedCLIInteractiveForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true, false)
+	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true)
 }
 
 func runSleepingCLIForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false, true)
+	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false)
 }
 
 func runSleepingCLIInteractiveForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true, true)
+	return runCLIProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true)
 }
 
-func runCLIProviderForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string, interactive, sleeping bool) error {
+func runCLIProviderForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string, interactive bool) error {
 	binDir := filepath.Dir(sideEffectPath)
-	executable := filepath.Join(binDir, "gemini")
-	script := fmt.Sprintf("#!/bin/sh\nprintf started > %q\n", sideEffectPath)
-	if sleeping {
-		script += "sleep 1\n"
-	}
-	if err := os.WriteFile(executable, []byte(script), 0o755); err != nil {
-		return err
-	}
 	oldPath := os.Getenv("PATH")
 	if err := os.Setenv("PATH", binDir+string(os.PathListSeparator)+oldPath); err != nil {
 		return err
@@ -499,41 +495,23 @@ func runCLIProviderForGenerationTest(ctx context.Context, gate LLMAgentLaunchGat
 }
 
 func runBlockedACPXForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false, false)
+	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false)
 }
 
 func runBlockedACPXInteractiveForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true, false)
+	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true)
 }
 
 func runSleepingACPXForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false, true)
+	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, false)
 }
 
 func runSleepingACPXInteractiveForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string) error {
-	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true, true)
+	return runACPXProviderForGenerationTest(ctx, gate, generation, sideEffectPath, true)
 }
 
-func runACPXProviderForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string, interactive, sleeping bool) error {
+func runACPXProviderForGenerationTest(ctx context.Context, gate LLMAgentLaunchGate, generation, sideEffectPath string, interactive bool) error {
 	binDir := filepath.Dir(sideEffectPath)
-	acpxPath := filepath.Join(binDir, "acpx")
-	script := "#!/bin/sh\n"
-	if sleeping {
-		script += fmt.Sprintf("case \"$*\" in *\" prompt \"*) printf started > %q; sleep 1; printf '%%s\\n' '{\"result\":{}}';; esac\n", sideEffectPath)
-	} else {
-		script += fmt.Sprintf("case \"$*\" in *\" prompt \"*) printf started > %q; printf '%%s\\n' '{\"result\":{}}';; esac\n", sideEffectPath)
-	}
-	if err := os.WriteFile(acpxPath, []byte(script), 0o755); err != nil {
-		return err
-	}
-	interactivePath := filepath.Join(binDir, "codex")
-	interactiveScript := fmt.Sprintf("#!/bin/sh\nprintf started > %q\n", sideEffectPath)
-	if sleeping {
-		interactiveScript += "sleep 1\n"
-	}
-	if err := os.WriteFile(interactivePath, []byte(interactiveScript), 0o755); err != nil {
-		return err
-	}
 	oldPath := os.Getenv("PATH")
 	if err := os.Setenv("PATH", binDir+string(os.PathListSeparator)+oldPath); err != nil {
 		return err
@@ -601,9 +579,37 @@ func containsExactString(values []string, want string) bool {
 	return false
 }
 
-func runGenerationEnvProcessForTest(ctx context.Context, backend string, interactive bool, generation, logPath string) error {
+func writeCLIProviderStubForGenerationTest(t *testing.T, sideEffectPath string, sleeping bool) {
+	t.Helper()
+	script := fmt.Sprintf("#!/bin/sh\nprintf started > %q\n", filepath.ToSlash(sideEffectPath))
+	if sleeping {
+		script += "sleep 1\n"
+	}
+	testhelpers.WriteShellStub(t, filepath.Join(filepath.Dir(sideEffectPath), "gemini"), script)
+}
+
+func writeACPXProviderStubsForGenerationTest(t *testing.T, sideEffectPath string, sleeping bool) {
+	t.Helper()
+	shellSideEffectPath := filepath.ToSlash(sideEffectPath)
+	script := "#!/bin/sh\n"
+	if sleeping {
+		script += fmt.Sprintf("case \"$*\" in *\" prompt \"*) printf started > %q; sleep 1; printf '%%s\\n' '{\"result\":{}}';; esac\n", shellSideEffectPath)
+	} else {
+		script += fmt.Sprintf("case \"$*\" in *\" prompt \"*) printf started > %q; printf '%%s\\n' '{\"result\":{}}';; esac\n", shellSideEffectPath)
+	}
+	binDir := filepath.Dir(sideEffectPath)
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "acpx"), script)
+	interactiveScript := fmt.Sprintf("#!/bin/sh\nprintf started > %q\n", shellSideEffectPath)
+	if sleeping {
+		interactiveScript += "sleep 1\n"
+	}
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "codex"), interactiveScript)
+}
+
+func runGenerationEnvProcessForTest(t *testing.T, ctx context.Context, backend string, interactive bool, generation, logPath string) error {
+	t.Helper()
 	binDir := filepath.Dir(logPath)
-	script := fmt.Sprintf("#!/bin/sh\nprintf 'brand:%%s\\nlegacy:%%s\\n' \"$ACME_AGENT_GENERATION\" \"$LIZA_AGENT_GENERATION\" >> %q\n", logPath)
+	script := fmt.Sprintf("#!/bin/sh\nprintf 'brand:%%s\\nlegacy:%%s\\n' \"$ACME_AGENT_GENERATION\" \"$LIZA_AGENT_GENERATION\" >> %q\n", filepath.ToSlash(logPath))
 	oldPath := os.Getenv("PATH")
 	if err := os.Setenv("PATH", binDir+string(os.PathListSeparator)+oldPath); err != nil {
 		return err
@@ -611,9 +617,7 @@ func runGenerationEnvProcessForTest(ctx context.Context, backend string, interac
 	defer os.Setenv("PATH", oldPath)
 	gate := LLMAgentLaunchGate(func(_ context.Context, start func() error) error { return start() })
 	if backend == "cli" {
-		if err := os.WriteFile(filepath.Join(binDir, "gemini"), []byte(script), 0o755); err != nil {
-			return err
-		}
+		testhelpers.WriteShellStub(t, filepath.Join(binDir, "gemini"), script)
 		agent := NewCLIAgent("")
 		if interactive {
 			_, err := agent.RunInteractive(ctx, LLMAgentInteractiveRequest{BackendName: "gemini", AgentID: "coder-1", Generation: generation, ProjectRoot: binDir, LaunchGate: gate})
@@ -623,16 +627,12 @@ func runGenerationEnvProcessForTest(ctx context.Context, backend string, interac
 		return err
 	}
 	if interactive {
-		if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte(script), 0o755); err != nil {
-			return err
-		}
+		testhelpers.WriteShellStub(t, filepath.Join(binDir, "codex"), script)
 		_, err := NewACPXAgent("").RunInteractive(ctx, LLMAgentInteractiveRequest{BackendName: "codex-acp", AgentID: "coder-1", Generation: generation, ProjectRoot: binDir, LaunchGate: gate})
 		return err
 	}
 	acpxScript := script + "case \"$*\" in *\" prompt \"*) printf '%s\\n' '{\"result\":{}}';; esac\n"
-	if err := os.WriteFile(filepath.Join(binDir, "acpx"), []byte(acpxScript), 0o755); err != nil {
-		return err
-	}
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "acpx"), acpxScript)
 	_, err := NewACPXAgent("").Run(ctx, LLMAgentRunRequest{BackendName: "codex-acp", AgentID: "coder-1", Generation: generation, ProjectRoot: binDir, Prompt: "prompt", LaunchGate: gate})
 	return err
 }

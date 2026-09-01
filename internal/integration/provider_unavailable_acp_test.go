@@ -108,6 +108,7 @@ func runProviderUnavailableSupervisor(
 
 func writeProviderUnavailableFakeACPX(t *testing.T, executablePath, logPath string) {
 	t.Helper()
+	logPath = filepath.ToSlash(logPath)
 	script := `#!/bin/sh
 case "$*" in
   *" sessions show "*)
@@ -128,9 +129,7 @@ case "$*" in
     ;;
 esac
 `
-	if err := os.WriteFile(executablePath, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake acpx: %v", err)
-	}
+	testhelpers.WriteShellStub(t, executablePath, script)
 }
 
 func TestCodexACPProviderUnavailableStopsSupervisorLifecycle(t *testing.T) {

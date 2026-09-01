@@ -256,10 +256,8 @@ func testE2EProviderGenerationFence(t *testing.T) {
 	binDir := t.TempDir()
 	providerPath := filepath.Join(binDir, "gemini")
 	envOutputPath := filepath.Join(binDir, "provider-env.txt")
-	if err := os.WriteFile(providerPath, []byte("#!/bin/sh\nenv > \"$E2E_PROVIDER_ENV_OUT\"\n"), 0o755); err != nil {
-		t.Fatalf("write provider fixture: %v", err)
-	}
-	t.Setenv("E2E_PROVIDER_ENV_OUT", envOutputPath)
+	testhelpers.WriteShellStub(t, providerPath, "#!/bin/sh\nenv > \"$E2E_PROVIDER_ENV_OUT\"\n")
+	t.Setenv("E2E_PROVIDER_ENV_OUT", filepath.ToSlash(envOutputPath))
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	provider := agentruntime.NewCLIAgent("")
