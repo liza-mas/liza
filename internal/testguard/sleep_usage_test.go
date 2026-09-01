@@ -30,7 +30,11 @@ func TestSleepUsageBudget(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() || !strings.HasSuffix(path, "_test.go") || path == thisFile {
+			sameFile := path == thisFile
+			if runtime.GOOS == "windows" {
+				sameFile = strings.EqualFold(filepath.Clean(path), filepath.Clean(thisFile))
+			}
+			if d.IsDir() || !strings.HasSuffix(path, "_test.go") || sameFile {
 				return nil
 			}
 
