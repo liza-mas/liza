@@ -418,12 +418,7 @@ func validExecutable(value string) bool {
 
 func validRelativePath(value string) bool {
 	value = filepath.Clean(strings.TrimSpace(value))
-	// filepath.IsAbs is platform-dependent: on Windows "/tmp/x" is not absolute.
-	// Treat any leading-slash path as absolute (it is on Unix, and a leading
-	// slash is never a valid repo-relative path on any platform) so the
-	// security check rejects absolute paths consistently across hosts.
-	isAbs := filepath.IsAbs(value) || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "\\")
-	return value != "." && !isAbs && !strings.HasPrefix(value, "..") && !strings.ContainsAny(value, "\x00\r\n")
+	return value != "." && !paths.IsAbsAnyPlatform(value) && !strings.HasPrefix(value, "..") && !strings.ContainsAny(value, "\x00\r\n")
 }
 
 func (c Catalog) ProvidersSorted() []Provider {

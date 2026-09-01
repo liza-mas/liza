@@ -367,6 +367,7 @@ providers:
 			{name: "config dir", field: "config_dir: ../outside"},
 			{name: "skills dir", field: "skills_dir: /tmp/skills"},
 			{name: "extra dir", field: "extra_dirs: [../../outside]"},
+			{name: "Windows drive path", field: "config_dir: C:\\outside"},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

@@ -38,7 +38,7 @@ func NormalizeSpecRef(specRef string) string {
 	if remainder == "" {
 		return specRef
 	}
-	if isAbsAnyPlatform(remainder) {
+	if IsAbsAnyPlatform(remainder) {
 		return specRef
 	}
 	if strings.HasPrefix(remainder, "#") {
@@ -67,19 +67,19 @@ func SplitRefFragment(ref string) string {
 	return ""
 }
 
-// isAbsAnyPlatform returns true if the path is absolute on any platform.
+// IsAbsAnyPlatform returns true if the path is absolute on any platform.
 // filepath.IsAbs is platform-dependent, so we also check for Unix single-leading
-// slash paths and Windows drive-letter prefixes (e.g. "C:\", "D:/") to catch
-// cross-platform inputs. A spec_ref remainder like "/etc/passwd" is absolute on
-// Unix and must be treated as absolute here even when the host is Windows,
-// otherwise NormalizeSpecRef would launder it into a repo-relative path.
-func isAbsAnyPlatform(path string) bool {
+// slash paths, Windows rooted-backslash paths, and drive-letter prefixes (e.g.
+// "C:\", "D:/") to catch cross-platform inputs. A spec_ref remainder like
+// "/etc/passwd" is absolute on Unix and must be treated as absolute here even
+// when the host is Windows, otherwise NormalizeSpecRef would launder it into a
+// repo-relative path.
+func IsAbsAnyPlatform(path string) bool {
 	if filepath.IsAbs(path) {
 		return true
 	}
-	// Unix absolute path: single leading slash. filepath.IsAbs returns false
-	// for this on Windows, so check it explicitly.
-	if strings.HasPrefix(path, "/") {
+	// Each leading separator is rooted on at least one supported platform.
+	if strings.HasPrefix(path, "/") || strings.HasPrefix(path, `\`) {
 		return true
 	}
 	// Windows drive letter: letter + colon (e.g. "C:\", "C:/", "C:file")

@@ -89,3 +89,25 @@ func TestNormalizeSpecRef(t *testing.T) {
 		})
 	}
 }
+
+func TestIsAbsAnyPlatform(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "/etc/passwd", want: true},
+		{path: `\Windows\System32`, want: true},
+		{path: `C:\repo\file`, want: true},
+		{path: "D:/repo/file", want: true},
+		{path: "specs/plan.md", want: false},
+		{path: "docs:C", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := IsAbsAnyPlatform(tt.path); got != tt.want {
+				t.Fatalf("IsAbsAnyPlatform(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
