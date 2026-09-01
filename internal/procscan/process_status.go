@@ -17,6 +17,11 @@ var defaultProcRoot = "/proc"
 // It is a variable so a test can stand in for the host.
 var nativeCommandLine = platformCommandLine
 
+// processAlive is the platform liveness probe. It is replaceable in tests so
+// callers can exercise incomplete-probe results that are difficult to force
+// through the operating-system API itself.
+var processAlive = ProcessAlive
+
 // AgentProcessState classifies a registered agent PID using the strongest
 // available host evidence.
 type AgentProcessState string
@@ -176,7 +181,27 @@ func FindExplicitAgentIdentityPIDs(role, agentID, procRoot string) []int {
 }
 
 func signalProcessStatus(pid int, identityErr error, procfsUnavailable bool) AgentProcessStatus {
-	alive, permDenied, err := ProcessAlive(pid)
+	alive, permDenied, err := processAlive(pid)
+	if alive {
+		probeDetail := "process is alive"
+		if permDenied {
+			probeDetail = "process exists but probe permission was denied"
+		}
+		if err != nil {
+			probeDetail = fmt.Sprintf("process appears alive but probe was incomplete: %v", err)
+		}
+		identityDetail := fmt.Sprintf("identity unavailable: %v", identityErr)
+		if procfsUnavailable {
+			identityDetail = "procfs unavailable"
+		}
+		return AgentProcessStatus{
+			State:  AgentProcessUnknown,
+			Source: processProbeSource(),
+			Detail: probeDetail + "; " + identityDetail,
+			Alive:  true,
+		}
+	}
+
 	if err != nil {
 		// Could not even attempt the probe (e.g. os.FindProcess failed). Treat
 		// as dead so we don't hold onto a phantom agent row.
@@ -187,30 +212,6 @@ func signalProcessStatus(pid int, identityErr error, procfsUnavailable bool) Age
 		}
 	}
 
-	if alive && !permDenied {
-		detail := fmt.Sprintf("process is alive; identity unavailable: %v", identityErr)
-		if procfsUnavailable {
-			detail = "process is alive; procfs unavailable"
-		}
-		return AgentProcessStatus{
-			State:  AgentProcessUnknown,
-			Source: processProbeSource(),
-			Detail: detail,
-			Alive:  true,
-		}
-	}
-	if alive && permDenied {
-		detail := fmt.Sprintf("process exists but probe permission was denied; identity unavailable: %v", identityErr)
-		if procfsUnavailable {
-			detail = "process exists but probe permission was denied; procfs unavailable"
-		}
-		return AgentProcessStatus{
-			State:  AgentProcessUnknown,
-			Source: processProbeSource(),
-			Detail: detail,
-			Alive:  true,
-		}
-	}
 	return AgentProcessStatus{
 		State:  AgentProcessDead,
 		Source: processProbeSource(),

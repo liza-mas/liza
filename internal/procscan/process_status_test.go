@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -42,6 +43,15 @@ func stubNativeCommandLine(t *testing.T, argv []string, err error) *int {
 	return &calls
 }
 
+func stubProcessAlive(t *testing.T, alive, permDenied bool, err error) {
+	t.Helper()
+	old := processAlive
+	processAlive = func(int) (bool, bool, error) {
+		return alive, permDenied, err
+	}
+	t.Cleanup(func() { processAlive = old })
+}
+
 func TestAgentProcessStatusForPID_NativeIdentityMatches(t *testing.T) {
 	hideProcfs(t)
 	stubNativeCommandLine(t, []string{nativeLizaPath(), "agent", "coder", "--agent-id", "coder-1"}, nil)
@@ -67,6 +77,21 @@ func TestAgentProcessStatusForPID_NativeIdentityMismatches(t *testing.T) {
 	}
 	if got.IsLiveOrUnknown() {
 		t.Fatalf("status = %+v, want a mismatched pid to be excluded from live-or-unknown", got)
+	}
+}
+
+func TestAgentProcessStatusForPID_IncompleteAliveProbeStaysUnknown(t *testing.T) {
+	hideProcfs(t)
+	stubNativeCommandLine(t, nil, errors.New("command line unavailable"))
+	stubProcessAlive(t, true, false, errors.New("exit code unavailable"))
+
+	got := AgentProcessStatusForPID(42, "coder", "coder-1", "")
+
+	if got.State != AgentProcessUnknown || !got.Alive || !got.IsLiveOrUnknown() {
+		t.Fatalf("status = %+v, want unknown alive", got)
+	}
+	if !strings.Contains(got.Detail, "probe was incomplete: exit code unavailable") {
+		t.Fatalf("Detail = %q, want incomplete-probe diagnostic", got.Detail)
 	}
 }
 
