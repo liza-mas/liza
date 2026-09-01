@@ -2,6 +2,25 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Windows ops tests can retain stdio handles after timeout
+
+**What:** A process started by an `internal/ops` test can retain an inherited
+stdout or stderr handle after the parent is terminated, preventing `go test`
+from observing EOF and returning. The Windows CI package timeout is 30 minutes
+and the enclosing job is bounded at 90 minutes so this fails visibly instead of
+occupying a runner indefinitely.
+
+**Why deferred:** Isolating the retaining descendant and changing its Windows
+process/pipe ownership requires a native handle-level reproduction. The current
+Windows-support change establishes a bounded CI signal but does not yet provide
+the evidence needed to change process lifetime behavior safely.
+
+**Payback trigger:** On the next Windows CI timeout, retain the `go test -json`
+event stream and process tree, identify the descendant holding the pipe, and add
+a focused regression that proves the command returns after cancellation. Remove
+the job-level workaround once five consecutive Windows CI runs complete without
+the package timeout or retained-handle stall.
+
 ## CI does not yet enforce the split test targets
 
 **What:** Routine `make test` no longer enables the race detector or writes a

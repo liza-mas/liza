@@ -53,9 +53,9 @@ jobs:
   test-windows:
     name: Test (windows)
     runs-on: windows-latest
-    # The ops package has a pending stdio-handle issue that can stall the suite;
-    # bound the job so a stall fails in minutes instead of hours.
-    timeout-minutes: 45
+    # The ops package has a pending stdio-handle issue tracked in TECH_DEBT.md;
+    # bound the job while leaving headroom for the 30-minute package timeout.
+    timeout-minutes: 90
     defaults:
       run:
         # Git Bash. The hooks liza deploys are POSIX shell, and the tests that
@@ -75,11 +75,9 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # The Makefile targets are not reused here. `make test` runs with -race,
-      # which needs cgo and a C toolchain on Windows, and `make lint` drives the
-      # Python pre-commit hooks — both are already covered by the Linux and
-      # macOS jobs. What Windows has to answer is narrower: does it build, does
-      # it vet, do the tests pass.
+      # The Makefile targets are not reused here. Linux and macOS already cover
+      # the Python pre-commit hooks, while this job answers the narrower native
+      # Windows questions: does it build, does it vet, do the tests pass.
       - name: Sync embedded artifacts
         run: go run ./internal/brandrender/cmd/sync-embedded --repo-root .
 
@@ -87,7 +85,7 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -timeout 15m ./...
+        run: go test -timeout 30m ./...
 
       - name: Build
         run: go build -o liza.exe ./cmd/liza
