@@ -81,6 +81,21 @@ func TestInstallScriptRefusesWindowsRelease(t *testing.T) {
 	}
 }
 
+func TestPowerShellInstallerChecksLatestTagWithoutStrictPropertyAccess(t *testing.T) {
+	repoRoot := findRepoRootForInstallScript(t)
+	script, err := os.ReadFile(filepath.Join(repoRoot, "install.ps1"))
+	if err != nil {
+		t.Fatalf("read install.ps1: %v", err)
+	}
+	content := string(script)
+	if !strings.Contains(content, "$release.PSObject.Properties['tag_name']") {
+		t.Fatal("install.ps1 must inspect the tag_name property before reading its value under strict mode")
+	}
+	if strings.Contains(content, "$release.tag_name") {
+		t.Fatal("install.ps1 directly accesses tag_name, which throws before the friendly error when the property is absent")
+	}
+}
+
 func runInstallScriptHelp(t *testing.T, env ...string) (string, error) {
 	t.Helper()
 	return runInstallScript(t, []string{"--help"}, env...)

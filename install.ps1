@@ -54,10 +54,11 @@ if (-not $InstallDir) {
 
 function Get-LatestVersion {
     $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -UseBasicParsing
-    if (-not $release.tag_name) {
+    $tagProperty = $release.PSObject.Properties['tag_name']
+    if (-not $tagProperty -or -not $tagProperty.Value) {
         throw "Could not determine the latest release of $Repo."
     }
-    return $release.tag_name
+    return [string]$tagProperty.Value
 }
 
 function Get-ReleaseArchitecture {
