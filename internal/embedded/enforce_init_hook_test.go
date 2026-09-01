@@ -107,6 +107,43 @@ func TestEnforceInitHook_NativeReadsClearPairingGate(t *testing.T) {
 	}
 }
 
+func TestEnforceInitHook_BashReadUsesValidatedWindowsPathForm(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("native Windows Bash path behavior")
+	}
+
+	hookPath := writeEnforceInitHook(t)
+	projectRoot := t.TempDir()
+	if strings.Contains(projectRoot, " ") {
+		t.Skip("hook read commands intentionally do not support paths containing spaces")
+	}
+	guardrailsPath := filepath.Join(projectRoot, "GUARDRAILS.md")
+	if err := os.WriteFile(guardrailsPath, []byte("required\n"), 0644); err != nil {
+		t.Fatalf("write guardrails: %v", err)
+	}
+
+	sessionID := "test-windows-bash-path-form-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
+	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
+	defer os.RemoveAll(stateDir)
+	donePath := filepath.Join(stateDir, "GUARDRAILS.done")
+
+	nativeCommand := "cat " + guardrailsPath
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, nativeCommand), 2)
+	if _, err := os.Stat(donePath); !os.IsNotExist(err) {
+		t.Fatalf("native-backslash Bash command should not mark guardrails read, stat err: %v", err)
+	}
+
+	forwardCommand := "cat " + filepath.ToSlash(guardrailsPath)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, forwardCommand), 0)
+	cmd := exec.Command(resolveBashForScripts(t), "-c", forwardCommand)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("validated Bash command did not read guardrails: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(donePath); err != nil {
+		t.Fatalf("executed forward-slash command should mark guardrails read: %v", err)
+	}
+}
+
 func TestEnforceInitHook_WrongPathDocumentBasenamesDoNotClearGate(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")

@@ -88,27 +88,20 @@ session_id=$(json_val session_id)
 cwd=$(json_val cwd)
 command=$(json_val command)
 
-# Canonicalise Windows path separators before any validation.
+# Canonicalise Windows filesystem values before any validation.
 #
 # On Windows the backslash is the path separator, but it is also a reserved
 # character that can never appear in a filename — so rewriting it to "/" is
-# lossless there. It is also what makes a native path comparable with
-# $project_dir, which git reports forward-slashed even on Windows.
+# lossless for cwd and project_dir. It is also what makes those native values
+# comparable with paths Git reports using forward slashes.
 #
-# Never do this on Unix: a backslash IS a legal filename character there, so
-# normalising would make the guard validate a different path than the one the
-# command actually reads, and would blunt the metacharacter rejection in
-# is_safe_read_command_for_allowed_paths. The other metacharacters reject
-# regex covers — ";", "&", "|", "<", ">", "`", "\" and "$(" — are otherwise
-# untouched here, but "\" is the one exception: this rewrite runs on the
-# same $command that regex later checks, so on Windows every "\" is already
-# gone by then and that arm of the regex cannot fire for this call path. No
-# bypass follows from it — the rewrite cannot manufacture any of the other
-# rejected characters, and it cannot turn an already-rejected one back into
-# an accepted one — but a future audit should read this as "unreachable
-# here on Windows", not "unchanged".
+# Do not rewrite command. The hook can validate only the exact string Bash will
+# execute, and Bash treats native-path backslashes as escapes. Rewriting a local
+# validation copy would let a command mark a document read even though the Bash
+# tool subsequently executes a different, failing path. Native Windows paths
+# on the Bash surface are therefore rejected by the existing metacharacter
+# check; callers must use the equivalent forward-slash form.
 if is_windows_shell; then
-  command="${command//\\//}"
   cwd="${cwd//\\//}"
   # $HOME needs more than separator rewriting. Git Bash translates it into MSYS
   # form at startup — /c/Users/... , or /tmp/... for a home under the temp
