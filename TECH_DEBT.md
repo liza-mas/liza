@@ -21,6 +21,26 @@ a focused regression that proves the command returns after cancellation. Remove
 the job-level workaround once five consecutive Windows CI runs complete without
 the package timeout or retained-handle stall.
 
+## Toolchain selects two unusable tools on Windows
+
+**What:** `bash-policy` is selected for Windows but its source fallback does not
+compile because file locking uses `syscall.Flock` without platform build tags.
+`scip-python` installs but fails during module initialization because it inserts
+the Windows backslash separator into a regular expression without escaping it.
+Toolchain doctor therefore reports both tools as failed, and Python projects do
+not get SCIP indexing on Windows.
+
+**Why deferred:** Both failures originate in upstream tool implementations. A
+Liza-local fork or compatibility shim would create ownership and release work
+outside the scope of native Liza support; keeping the failures visible in
+doctor is safer than treating installation alone as success.
+
+**Payback trigger:** On the next `bash-policy` or `scip-python` version update,
+run each tool's version command and a minimal functional smoke test on Windows.
+Remove this entry when upstream releases pass those checks. Before claiming the
+full toolchain profile is supported on Windows, either complete that upgrade or
+exclude the unsupported tools from Windows selection with an explicit reason.
+
 ## CI does not yet enforce the split test targets
 
 **What:** Routine `make test` no longer enables the race detector or writes a
