@@ -11,24 +11,16 @@ import (
 //
 // On Unix this is `sh -c`, matching the documented behavior of
 // post_worktree_cmd and other shell-invoked configuration strings.
-func shellCommand(cmdStr, dir string) *exec.Cmd {
+func shellCommand(cmdStr, dir string) (*exec.Cmd, error) {
 	cmd := exec.Command("sh", "-c", cmdStr)
 	cmd.Dir = dir
-	return cmd
+	return cmd, nil
 }
 
 // shellCommandContext is shellCommand bound to a context, for callers that
 // enforce a timeout.
-func shellCommandContext(ctx context.Context, cmdStr, dir string) *exec.Cmd {
+func shellCommandContext(ctx context.Context, cmdStr, dir string) (*exec.Cmd, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 	cmd.Dir = dir
-	return cmd
+	return cmd, nil
 }
-
-// shellMissingError explains (for test/diagnostic clarity) when the platform
-// shell is unavailable. On Unix this never happens in practice, so it returns
-// nil.
-func shellMissingError() error { return nil }
-
-// formatShellMissingHelp returns a platform-specific hint. Empty on Unix.
-func formatShellMissingHelp() string { return "" }

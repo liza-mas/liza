@@ -781,16 +781,21 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		// output at all, so a project's integration tests never ran. The command
 		// stays repo-relative and the shell resolves it against cmd.Dir, which
 		// keeps a native path out of a shell string.
-		cmd := shellCommandContext(ctx, integrationTestCommand, projectRoot)
-		cmd.Stdout = &combinedOutput
-		cmd.Stderr = &combinedOutput
-		// Kill the entire process tree on timeout (Unix: process group kill;
-		// Windows: default CommandContext kill). WaitDelay ensures cmd.Wait
-		// returns even if child processes hold pipes open after kill.
-		configProcessGroupKill(cmd)
-		cmd.WaitDelay = 5 * time.Second
+		cmd, runErr := shellCommandContext(ctx, integrationTestCommand, projectRoot)
+		if runErr == nil {
+			cmd.Stdout = &combinedOutput
+			cmd.Stderr = &combinedOutput
+			// Kill the entire process tree on timeout (Unix: process group kill;
+			// Windows: default CommandContext kill). WaitDelay ensures cmd.Wait
+			// returns even if child processes hold pipes open after kill.
+			configProcessGroupKill(cmd)
+			cmd.WaitDelay = 5 * time.Second
+			runErr = cmd.Run()
+		} else {
+			combinedOutput.WriteString(runErr.Error())
+		}
 
-		if runErr := cmd.Run(); runErr != nil {
+		if runErr != nil {
 			testOutput = combinedOutput.String()
 			if ctx.Err() == context.DeadlineExceeded {
 				testOutput += fmt.Sprintf("\n[%s] integration test killed after %s timeout", brand.BinaryName, DefaultIntegrationTestTimeout)

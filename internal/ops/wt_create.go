@@ -401,10 +401,10 @@ func copyFilePreserveMode(src, dst string) error {
 // repo (same trust boundary as Makefile, .github/workflows/, package.json
 // scripts). No additional confirmation gate is needed.
 func RunPostWorktreeCmd(cmdStr, dir string) error {
-	if err := shellMissingError(); err != nil {
-		return newPostWorktreeSetupError(cmdStr, dir, fmt.Errorf("%w%s", err, formatShellMissingHelp()))
+	cmd, err := shellCommand(cmdStr, dir)
+	if err != nil {
+		return newPostWorktreeSetupError(cmdStr, dir, err)
 	}
-	cmd := shellCommand(cmdStr, dir)
 	if err := cmd.Run(); err != nil {
 		return newPostWorktreeSetupError(cmdStr, dir, err)
 	}

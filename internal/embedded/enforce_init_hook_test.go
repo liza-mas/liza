@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/gitbash"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -865,33 +866,14 @@ func bashPayload(t *testing.T, sessionID, cwd, command string) string {
 	return strings.TrimSpace(buf.String())
 }
 
-// resolveBashForScripts mirrors testhelpers.ResolveBashForScripts. It is
-// duplicated here because internal/testhelpers imports internal/embedded
-// (testhelpers/pipeline.go), and these tests are in package embedded, so
-// importing testhelpers back would create an import cycle.
 func resolveBashForScripts(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS != "windows" {
-		if p, err := exec.LookPath("bash"); err == nil {
-			return p
-		}
-		t.Skip("bash not available")
+	path, err := gitbash.Resolve()
+	if err != nil {
+		t.Skipf("bash not available: %v", err)
 		return ""
 	}
-	for _, candidate := range []string{
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "Git", "bin", "bash.exe"),
-		filepath.Join(os.Getenv("ProgramFiles"), "Git", "bin", "bash.exe"),
-		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Git", "bin", "bash.exe"),
-	} {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-	if p, err := exec.LookPath("bash"); err == nil {
-		return p
-	}
-	t.Skip("bash not available")
-	return ""
+	return path
 }
 
 func runHook(t *testing.T, hookPath, payload string, wantCode int) string {

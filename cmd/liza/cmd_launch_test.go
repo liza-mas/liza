@@ -161,7 +161,10 @@ func TestLaunchShellPrefersGitForWindowsOverAPathMatch(t *testing.T) {
 	t.Setenv("SHELL", "")
 	t.Setenv("PATH", decoyDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	got := launchShell()
+	got, err := launchShell()
+	if err != nil {
+		t.Fatalf("launchShell: %v", err)
+	}
 
 	if strings.EqualFold(got, decoy) {
 		t.Fatalf("launchShell() = %q, the first bash.exe on PATH, want the Git for Windows shell %q", got, gitBash)
@@ -186,7 +189,10 @@ func TestLaunchShellIsExecutableWhenShellIsUnset(t *testing.T) {
 	testhelpers.ResolveBashForScripts(t)
 	t.Setenv("SHELL", "")
 
-	got := launchShell()
+	got, err := launchShell()
+	if err != nil {
+		t.Fatalf("launchShell: %v", err)
+	}
 
 	if runtime.GOOS != "windows" {
 		if got != "/bin/sh" {

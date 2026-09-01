@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/gitbash"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/spf13/cobra"
 )
@@ -497,6 +498,10 @@ func runWeztermLaunch(cmd *cobra.Command, opts weztermLaunchOptions, commands []
 	if len(commands) == 0 {
 		return cliValidationError("no commands to launch")
 	}
+	shell, err := launchShell()
+	if err != nil {
+		return cliValidationWrap("resolve launch shell", err)
+	}
 	script := buildWeztermPaneScript(opts, commands)
 	args := []string{
 		"start",
@@ -504,7 +509,7 @@ func runWeztermLaunch(cmd *cobra.Command, opts weztermLaunchOptions, commands []
 		"--workspace", opts.Workspace,
 		"--cwd", opts.CWD,
 		"--",
-		launchShell(),
+		shell,
 		"-lc",
 		script,
 	}
@@ -529,6 +534,10 @@ func runWeztermInteractiveLaunch(cmd *cobra.Command, opts weztermLaunchOptions, 
 	if len(panes) == 0 {
 		return cliValidationError("no panes to launch")
 	}
+	shell, err := launchShell()
+	if err != nil {
+		return cliValidationWrap("resolve launch shell", err)
+	}
 	script := buildWeztermInteractivePaneScript(opts, panes)
 	args := []string{
 		"start",
@@ -536,7 +545,7 @@ func runWeztermInteractiveLaunch(cmd *cobra.Command, opts weztermLaunchOptions, 
 		"--workspace", opts.Workspace,
 		"--cwd", opts.CWD,
 		"--",
-		launchShell(),
+		shell,
 		"-lc",
 		script,
 	}
@@ -1067,48 +1076,14 @@ func shellSleepSeconds(duration time.Duration) string {
 // launchShell returns the shell the terminal is asked to run the pane script
 // with. The script is POSIX, so Windows needs the shell Git for Windows ships:
 // SHELL is normally unset there, and /bin/sh names nothing the OS can execute.
-func launchShell() string {
+func launchShell() (string, error) {
 	if shell := os.Getenv("SHELL"); shell != "" {
-		return shell
+		return shell, nil
 	}
-	if runtime.GOOS == "windows" {
-		return windowsLaunchShell()
+	if runtime.GOOS != "windows" {
+		return "/bin/sh", nil
 	}
-	return "/bin/sh"
-}
-
-// windowsLaunchShell finds a bash able to run the POSIX pane script.
-//
-// Looking the name up on PATH is not enough. Windows ships
-// C:\Windows\System32\bash.exe — the WSL launcher — and the machine PATH is
-// searched before the user's, so a Git for Windows entry added at user level
-// can never win. Handing a pane script full of C:/... paths to that launcher
-// fails: it addresses the same files as /mnt/c/... . Reordering the machine
-// PATH needs the elevation the locked-down machines this supports do not grant,
-// so the install is located directly instead, and PATH is only consulted after.
-func windowsLaunchShell() string {
-	var candidates []string
-	// A per-user install lands under LOCALAPPDATA\Programs; a machine-wide one
-	// under Program Files. An empty root would make filepath.Join produce a
-	// relative path and match against the working directory.
-	if local := os.Getenv("LOCALAPPDATA"); local != "" {
-		candidates = append(candidates, filepath.Join(local, "Programs", "Git", "bin", "bash.exe"))
-	}
-	for _, programFiles := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")} {
-		if programFiles != "" {
-			candidates = append(candidates, filepath.Join(programFiles, "Git", "bin", "bash.exe"))
-		}
-	}
-
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate
-		}
-	}
-	if bash, err := exec.LookPath("bash"); err == nil {
-		return bash
-	}
-	return "/bin/sh"
+	return gitbash.Resolve()
 }
 
 func shellIdentifier(value string) string {
