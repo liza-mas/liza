@@ -94,11 +94,12 @@ func TestInstallScriptReportsUnsupportedPlatformFromCommandSubstitution(t *testi
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			binDir := t.TempDir()
-			uname := filepath.Join(binDir, "uname")
-			script := "#!/bin/sh\nif [ \"$1\" = \"-s\" ]; then printf '%s\\n' '" + tt.os + "'; else printf '%s\\n' '" + tt.arch + "'; fi\n"
-			testhelpers.WriteShellStub(t, uname, script)
-			t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			bashEnv := filepath.Join(t.TempDir(), "bash-env")
+			script := "uname() {\n  if [ \"$1\" = \"-s\" ]; then printf '%s\\n' '" + tt.os + "'; else printf '%s\\n' '" + tt.arch + "'; fi\n}\n"
+			if err := os.WriteFile(bashEnv, []byte(script), 0o600); err != nil {
+				t.Fatalf("write bash environment: %v", err)
+			}
+			t.Setenv("BASH_ENV", filepath.ToSlash(bashEnv))
 
 			out, err := runInstallScript(t, nil)
 			if err == nil {
