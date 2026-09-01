@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -232,14 +231,6 @@ func registeredFlagToken(cmd *cobra.Command, value string) string {
 	return ""
 }
 
-func checkSupportedPlatform(goos string) error {
-	// Native Windows is supported (requires Git for Windows so that the bash
-	// hooks resolve). No platform is rejected here; the guard is retained as a
-	// single point to add future platform checks if needed.
-	_ = goos
-	return nil
-}
-
 // resolveOrchestratorID resolves the orchestrator agent ID from flag, env var,
 // or workspace state (the registered orchestrator). Used by commands that default
 // to the orchestrator identity when no explicit agent ID is provided.
@@ -336,10 +327,6 @@ func addChangedByFlag(cmd *cobra.Command) {
 }
 
 func main() {
-	if err := checkSupportedPlatform(runtime.GOOS); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
 	if err := updater.MaybeUpdateAndReexec(context.Background(), updater.Config{
 		CurrentVersion: Version,
 		CurrentCommit:  GitCommit,

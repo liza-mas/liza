@@ -34,11 +34,10 @@ type InstallOptions struct {
 type InstallStatus string
 
 const (
-	InstallPlanned     InstallStatus = "planned"
-	InstallSkipped     InstallStatus = "skipped"
-	InstallInstalled   InstallStatus = "installed"
-	InstallUnsupported InstallStatus = "unsupported"
-	InstallFailed      InstallStatus = "failed"
+	InstallPlanned   InstallStatus = "planned"
+	InstallSkipped   InstallStatus = "skipped"
+	InstallInstalled InstallStatus = "installed"
+	InstallFailed    InstallStatus = "failed"
 )
 
 type InstallStep struct {
@@ -337,7 +336,7 @@ func installDirEnvNames(tool Tool) []string {
 func installResultError(steps []InstallStep) error {
 	var failed []string
 	for _, step := range steps {
-		if step.Status == InstallFailed || step.Status == InstallUnsupported {
+		if step.Status == InstallFailed {
 			failed = append(failed, fmt.Sprintf("%s:%s", step.ToolID, step.Status))
 		}
 	}

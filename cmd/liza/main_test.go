@@ -8,16 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestCheckSupportedPlatformAllowsAllSupportedPlatforms(t *testing.T) {
-	for _, goos := range []string{"linux", "darwin", "windows"} {
-		t.Run(goos, func(t *testing.T) {
-			if err := checkSupportedPlatform(goos); err != nil {
-				t.Fatalf("checkSupportedPlatform(%q) = %v, want nil", goos, err)
-			}
-		})
-	}
-}
-
 func TestAddJSONFlag(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	addJSONFlag(cmd)

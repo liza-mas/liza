@@ -2,7 +2,6 @@ package toolchain
 
 import (
 	"fmt"
-	"runtime"
 )
 
 type DoctorOptions struct {
@@ -11,17 +10,15 @@ type DoctorOptions struct {
 	Exclude []string
 	ToolID  string
 	Runner  Runner
-	GOOS    string
 }
 
 type DoctorStatus string
 
 const (
-	DoctorOK          DoctorStatus = "ok"
-	DoctorMissing     DoctorStatus = "missing"
-	DoctorFailed      DoctorStatus = "failed"
-	DoctorManual      DoctorStatus = "manual"
-	DoctorUnsupported DoctorStatus = "unsupported"
+	DoctorOK      DoctorStatus = "ok"
+	DoctorMissing DoctorStatus = "missing"
+	DoctorFailed  DoctorStatus = "failed"
+	DoctorManual  DoctorStatus = "manual"
 )
 
 type DoctorCheck struct {
@@ -48,11 +45,6 @@ func Doctor(opts DoctorOptions) (DoctorResult, error) {
 	if err != nil {
 		return DoctorResult{}, err
 	}
-	goos := opts.GOOS
-	if goos == "" {
-		goos = runtime.GOOS
-	}
-	_ = goos // reserved for future per-OS doctor behavior
 	result := DoctorResult{Profile: selection.Profile}
 	for _, tool := range selection.Tools {
 		result.Checks = append(result.Checks, doctorOne(tool, runner))
