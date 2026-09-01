@@ -112,18 +112,87 @@ func TestInstallScriptReportsUnsupportedPlatformFromCommandSubstitution(t *testi
 	}
 }
 
-func TestPowerShellInstallerChecksLatestTagWithoutStrictPropertyAccess(t *testing.T) {
-	repoRoot := findRepoRootForInstallScript(t)
-	script, err := os.ReadFile(filepath.Join(repoRoot, "install.ps1"))
+func TestPowerShellInstallerHandlesMissingLatestTag(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell installer behavior is exercised by Windows CI")
+	}
+	powerShell, err := exec.LookPath("powershell")
 	if err != nil {
-		t.Fatalf("read install.ps1: %v", err)
+		t.Skipf("Windows PowerShell is unavailable: %v", err)
 	}
-	content := string(script)
-	if !strings.Contains(content, "$release.PSObject.Properties['tag_name']") {
-		t.Fatal("install.ps1 must inspect the tag_name property before reading its value under strict mode")
+
+	repoRoot := findRepoRootForInstallScript(t)
+	installerPath := filepath.Join(repoRoot, "install.ps1")
+	harnessPath := filepath.Join(t.TempDir(), "test-latest-version.ps1")
+	harness := `param([string]$InstallerPath)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $InstallerPath,
+    [ref]$tokens,
+    [ref]$parseErrors
+)
+if ($parseErrors -and $parseErrors.Count -ne 0) {
+    throw "Could not parse installer: $($parseErrors[0].Message)"
+}
+$functionAst = $ast.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Get-LatestVersion'
+}, $true)
+if (-not $functionAst) {
+    throw 'Get-LatestVersion was not found in the installer.'
+}
+Invoke-Expression $functionAst.Extent.Text
+
+$script:Release = $null
+function Invoke-RestMethod {
+    param([string]$Uri, [switch]$UseBasicParsing)
+    return $script:Release
+}
+
+$expectedError = 'Could not determine the latest release of test/repo.'
+$Repo = 'test/repo'
+$script:Release = [pscustomobject]@{}
+try {
+    Get-LatestVersion | Out-Null
+    throw 'Get-LatestVersion unexpectedly accepted a release without tag_name.'
+} catch {
+    if ($_.Exception.Message -ne $expectedError) {
+        throw "Unexpected missing-tag error: $($_.Exception.Message)"
+    }
+}
+
+$script:Release = [pscustomobject]@{ tag_name = 'v1.2.3' }
+$actual = Get-LatestVersion
+if ($actual -ne 'v1.2.3') {
+    throw "Get-LatestVersion returned '$actual', want 'v1.2.3'."
+}
+Write-Output $expectedError
+`
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write PowerShell test harness: %v", err)
 	}
-	if strings.Contains(content, "$release.tag_name") {
-		t.Fatal("install.ps1 directly accesses tag_name, which throws before the friendly error when the property is absent")
+
+	cmd := exec.Command(
+		powerShell,
+		"-NoLogo",
+		"-NoProfile",
+		"-NonInteractive",
+		"-ExecutionPolicy", "Bypass",
+		"-File", harnessPath,
+		"-InstallerPath", installerPath,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("exercise Get-LatestVersion: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "Could not determine the latest release of test/repo.") {
+		t.Fatalf("PowerShell output missing the friendly error:\n%s", out)
 	}
 }
 
