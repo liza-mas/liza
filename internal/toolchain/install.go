@@ -70,7 +70,7 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	}
 	result := InstallResult{Profile: selection.Profile, InstallDir: installDir}
 	for _, tool := range selection.Tools {
-		step := installOne(tool, installDir, opts.DryRun, runner, goos)
+		step := installOne(tool, installDir, goos, opts.DryRun, runner)
 		result.Steps = append(result.Steps, step)
 	}
 	if err := installResultError(result.Steps); err != nil {
@@ -79,7 +79,7 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	return result, nil
 }
 
-func installOne(tool Tool, installDir string, dryRun bool, runner Runner, goos string) InstallStep {
+func installOne(tool Tool, installDir, goos string, dryRun bool, runner Runner) InstallStep {
 	if tool.InstallKind == InstallManualOnly {
 		return InstallStep{ToolID: tool.ID, Status: InstallSkipped, Message: tool.ManualNote}
 	}
