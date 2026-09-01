@@ -199,6 +199,9 @@ func buildDependencyRepairCLI(t *testing.T) string {
 			return
 		}
 		dependencyRepairCLIBuild.binary = filepath.Join(dependencyRepairCLIBuild.tempDir, "liza")
+		if runtime.GOOS == "windows" {
+			dependencyRepairCLIBuild.binary += ".exe"
+		}
 		cmd := exec.Command("go", "build", "-o", dependencyRepairCLIBuild.binary, "./cmd/liza")
 		cmd.Dir = repoRoot
 		dependencyRepairCLIBuild.output, dependencyRepairCLIBuild.err = cmd.CombinedOutput()
