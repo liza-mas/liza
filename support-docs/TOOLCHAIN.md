@@ -79,7 +79,9 @@ the selected directory as their tool binary directory.
 
 With `--write-shell-profile`, `configure` adds the env source line to the
 current shell's startup files: `.zshrc` for Zsh, `.bashrc` and `.profile` for
-Bash, and `.profile` for unknown shells.
+Bash, and `.profile` for unknown shells. On Windows it also queries both
+PowerShell 7 (`pwsh`) and Windows PowerShell (`powershell`) when installed and
+wires each host's `$PROFILE.CurrentUserAllHosts`.
 
 `configure` also supports `--agent-tools auto|skip|force`:
 
@@ -172,8 +174,9 @@ neither in that directory nor on `PATH` afterwards is reported as failed.
 
 **Activation.** PowerShell reads none of the POSIX profiles, so
 `§BRAND_BINARY_NAME§ toolchain configure` writes `env.ps1` beside `env.sh` and
-sources it from `$PROFILE.CurrentUserAllHosts`. Git Bash sessions keep using
-`env.sh`; both are wired in the same run.
+sources it from `$PROFILE.CurrentUserAllHosts` for every installed supported
+host: PowerShell 7 and Windows PowerShell 5.1. Git Bash sessions keep using
+`env.sh`; all installed shells are wired in the same run.
 
 **Known gaps.** Two tools install on Windows without being usable there, and
 nothing here works around either. `bash-policy` does not build: its file locking

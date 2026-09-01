@@ -330,16 +330,45 @@ func TestConfigureWritesPowerShellActivationOnWindows(t *testing.T) {
 		}
 	}
 
-	profilePath := filepath.Join(home, "Documents", "WindowsPowerShell", "profile.ps1")
-	if !slices.Contains(got.ShellProfilePaths, profilePath) {
-		t.Fatalf("ShellProfilePaths = %v, want it to include %s", got.ShellProfilePaths, profilePath)
+	for _, profilePath := range []string{
+		filepath.Join(home, "Documents", "PowerShell", "profile.ps1"),
+		filepath.Join(home, "Documents", "WindowsPowerShell", "profile.ps1"),
+	} {
+		if !slices.Contains(got.ShellProfilePaths, profilePath) {
+			t.Fatalf("ShellProfilePaths = %v, want it to include %s", got.ShellProfilePaths, profilePath)
+		}
+		profile, err := os.ReadFile(profilePath)
+		if err != nil {
+			t.Fatalf("read PowerShell profile: %v", err)
+		}
+		if !strings.Contains(string(profile), got.PowerShellEnvPath) {
+			t.Fatalf("PowerShell profile does not source env.ps1:\n%s", profile)
+		}
 	}
-	profile, err := os.ReadFile(profilePath)
-	if err != nil {
-		t.Fatalf("read PowerShell profile: %v", err)
+}
+
+func TestPowerShellProfilePathsQueriesBothHosts(t *testing.T) {
+	var queried []string
+	paths := powerShellProfilePaths("", func(name string, _ ...string) ([]byte, error) {
+		queried = append(queried, name)
+		switch name {
+		case "pwsh":
+			return []byte("C:\\Users\\agent\\Documents\\PowerShell\\profile.ps1\r\n"), nil
+		case "powershell":
+			return []byte("C:\\Users\\agent\\Documents\\WindowsPowerShell\\profile.ps1\r\n"), nil
+		default:
+			return nil, os.ErrNotExist
+		}
+	})
+
+	if want := []string{"pwsh", "powershell"}; !slices.Equal(queried, want) {
+		t.Fatalf("queried hosts = %v, want %v", queried, want)
 	}
-	if !strings.Contains(string(profile), got.PowerShellEnvPath) {
-		t.Fatalf("PowerShell profile does not source env.ps1:\n%s", profile)
+	if want := []string{
+		`C:\Users\agent\Documents\PowerShell\profile.ps1`,
+		`C:\Users\agent\Documents\WindowsPowerShell\profile.ps1`,
+	}; !slices.Equal(paths, want) {
+		t.Fatalf("profile paths = %v, want %v", paths, want)
 	}
 }
 

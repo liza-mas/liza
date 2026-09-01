@@ -134,13 +134,11 @@ func Configure(opts ConfigureOptions) (ConfigureResult, error) {
 		if powerShellEnvPath != "" {
 			// Windows sessions are as likely to be PowerShell as Git Bash, and a
 			// POSIX profile would never be read by one. Wire both.
-			powerShellProfile, err := appendPowerShellProfileSource(opts.HomeDir, powerShellEnvPath)
+			powerShellProfiles, err := appendPowerShellProfileSources(opts.HomeDir, powerShellEnvPath)
 			if err != nil {
 				return ConfigureResult{}, err
 			}
-			if powerShellProfile != "" {
-				paths = append(paths, powerShellProfile)
-			}
+			paths = append(paths, powerShellProfiles...)
 		}
 		if len(paths) > 0 {
 			result.ShellProfilePath = paths[0]
@@ -339,8 +337,8 @@ func shellProfileNames(shell string) []string {
 	}
 }
 
-// appendPowerShellProfileSource wires the generated env.ps1 into the user's
-// PowerShell profile.
+// appendPowerShellProfileSources wires the generated env.ps1 into every
+// installed PowerShell host's user profile.
 //
 // When homeDir is given the path is derived from it. Asking PowerShell would be
 // more accurate, but it answers with the real profile of the account running the
@@ -350,40 +348,67 @@ func shellProfileNames(shell string) []string {
 // Otherwise PowerShell resolves it, because the path cannot be constructed
 // reliably: it lives under Documents, which may be redirected to OneDrive or a
 // network share, and it differs between Windows PowerShell 5.1 and PowerShell 7.
-// A host with no powershell on PATH is not an error; the POSIX profile was still
-// written, and the caller reports which profiles were touched.
-func appendPowerShellProfileSource(homeDir, envPath string) (string, error) {
-	profilePath := ""
-	if homeDir != "" {
-		profilePath = filepath.Join(homeDir, "Documents", "WindowsPowerShell", "profile.ps1")
-	} else {
-		out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-			"$PROFILE.CurrentUserAllHosts").Output()
-		if err != nil {
-			return "", nil
+// A host missing from PATH is not an error; the POSIX profiles and any other
+// installed PowerShell host are still wired, and the caller reports every path
+// it touched.
+func appendPowerShellProfileSources(homeDir, envPath string) ([]string, error) {
+	profilePaths := powerShellProfilePaths(homeDir, func(name string, args ...string) ([]byte, error) {
+		return exec.Command(name, args...).Output()
+	})
+	for _, profilePath := range profilePaths {
+		if err := appendPowerShellProfileSourceFile(profilePath, envPath); err != nil {
+			return nil, err
 		}
-		profilePath = strings.TrimSpace(string(out))
 	}
-	if profilePath == "" {
-		return "", nil
+	return profilePaths, nil
+}
+
+func powerShellProfilePaths(homeDir string, query func(string, ...string) ([]byte, error)) []string {
+	if homeDir != "" {
+		return []string{
+			filepath.Join(homeDir, "Documents", "PowerShell", "profile.ps1"),
+			filepath.Join(homeDir, "Documents", "WindowsPowerShell", "profile.ps1"),
+		}
 	}
 
+	var profilePaths []string
+	seen := make(map[string]struct{})
+	for _, host := range []string{"pwsh", "powershell"} {
+		out, err := query(host, "-NoProfile", "-NonInteractive", "-Command", "$PROFILE.CurrentUserAllHosts")
+		if err != nil {
+			continue
+		}
+		profilePath := strings.TrimSpace(string(out))
+		key := strings.ToLower(filepath.Clean(profilePath))
+		if profilePath == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		profilePaths = append(profilePaths, profilePath)
+	}
+	return profilePaths
+}
+
+func appendPowerShellProfileSourceFile(profilePath, envPath string) error {
 	existing, err := os.ReadFile(profilePath)
 	if err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("read PowerShell profile: %w", err)
+		return fmt.Errorf("read PowerShell profile: %w", err)
 	}
 	if strings.Contains(string(existing), envPath) {
-		return profilePath, nil
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(profilePath), 0o755); err != nil {
-		return "", fmt.Errorf("create PowerShell profile directory: %w", err)
+		return fmt.Errorf("create PowerShell profile directory: %w", err)
 	}
 	line := fmt.Sprintf("\n# %s toolchain\nif (Test-Path %s) { . %s }\n",
 		brand.NameTitle, powerShellQuote(envPath), powerShellQuote(envPath))
 	if err := os.WriteFile(profilePath, append(existing, []byte(line)...), 0o644); err != nil {
-		return "", fmt.Errorf("write PowerShell profile: %w", err)
+		return fmt.Errorf("write PowerShell profile: %w", err)
 	}
-	return profilePath, nil
+	return nil
 }
 
 func appendProfileSource(profilePath, envPath string) error {
