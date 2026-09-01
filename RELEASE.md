@@ -44,7 +44,8 @@ This creates the following in the `dist/` directory:
 - Binaries for Linux (amd64, arm64)
 - Binaries for macOS (amd64, arm64)
 - Binaries for Windows (amd64, arm64), with a `.exe` suffix
-- SHA256 checksums file
+- SHA256 checksums for the raw binaries (`make package` does not add its later
+  tarballs to this file)
 - Linux and macOS tarballs (if using `make package`)
 
 ### 2. Test the Binaries
