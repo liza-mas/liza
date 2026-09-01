@@ -283,9 +283,9 @@ func TestManagedHookWrapperPassesHookNameToDispatcherForPostCheckoutFileCheckout
 
 	runWrapper := func(flag string) {
 		t.Helper()
-		cmd := exec.Command(wrapperPath, "old", "new", flag)
+		cmd := scriptCommand(t, wrapperPath, "old", "new", flag)
 		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "LIZA_TEST_HOOK_LOG="+logPath)
+		cmd.Env = append(os.Environ(), "LIZA_TEST_HOOK_LOG="+filepath.ToSlash(logPath))
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("wrapper hook (flag=%s) failed: %v\n%s", flag, err, output)
 		}
