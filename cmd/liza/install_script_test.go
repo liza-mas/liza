@@ -98,8 +98,9 @@ func TestInstallScriptReportsUnsupportedPlatformFromCommandSubstitution(t *testi
 			uname := filepath.Join(binDir, "uname")
 			script := "#!/bin/sh\nif [ \"$1\" = \"-s\" ]; then printf '%s\\n' '" + tt.os + "'; else printf '%s\\n' '" + tt.arch + "'; fi\n"
 			testhelpers.WriteShellStub(t, uname, script)
+			t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-			out, err := runInstallScript(t, nil, "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			out, err := runInstallScript(t, nil)
 			if err == nil {
 				t.Fatalf("install.sh succeeded, want platform refusal:\n%s", out)
 			}
