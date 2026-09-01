@@ -41,6 +41,25 @@ Remove this entry when upstream releases pass those checks. Before claiming the
 full toolchain profile is supported on Windows, either complete that upgrade or
 exclude the unsupported tools from Windows selection with an explicit reason.
 
+## RTK has no native Windows arm64 release artifact
+
+**What:** The toolchain catalog uses RTK's
+`rtk-x86_64-pc-windows-msvc.zip` for every Windows architecture. Liza itself
+ships a Windows arm64 binary, so those users receive the x64 RTK executable and
+depend on the host's x64 emulation. RTK v0.46.0 publishes Windows x64 but no
+Windows arm64 archive.
+
+**Why deferred:** There is no upstream Windows arm64 artifact to select. Naming
+an inferred download URL would make installation fail deterministically, while
+maintaining a Liza-owned RTK cross-build would duplicate another project's
+release pipeline.
+
+**Payback trigger:** On each RTK version update, inspect the upstream release
+assets. When a Windows arm64 archive appears, make the catalog URL
+architecture-aware and cover amd64 and arm64 selection in tests. If x64
+emulation fails for a supported Windows arm64 user first, add a documented
+source-build fallback or mark RTK unsupported on that architecture.
+
 ## CI does not yet enforce the split test targets
 
 **What:** Routine `make test` no longer enables the race detector or writes a
