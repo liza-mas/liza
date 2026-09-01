@@ -180,9 +180,8 @@ func newZombieProcess(pid int, argv []string) ZombieProcess {
 // IsLizaAgentArgv reports whether argv identifies an agent supervisor.
 //
 // The executable suffix is dropped before comparing: Go appends .exe for
-// GOOS=windows, so the image an agent runs under is liza.exe there while the
-// configured binary name has no suffix. Trimming it keeps one comparison for
-// both platforms, and a bare "liza" is what a Unix argv[0] already is.
+// GOOS=windows, so the image name gains an .exe suffix while the configured
+// binary name has none. Trimming it keeps one comparison for both platforms.
 func IsLizaAgentArgv(argv []string) bool {
 	if len(argv) < 2 {
 		return false
@@ -197,15 +196,15 @@ func IsLizaAgentArgv(argv []string) bool {
 // on what the image is called.
 func isAgentImageName(base string) bool {
 	bin := trimExecutableSuffix(base)
-	return bin == brand.BinaryName || bin == "liza"
+	return bin == brand.RuntimeValues().BinaryName
 }
 
 // trimExecutableSuffix drops a trailing .exe from an image name.
 //
 // The suffix case is only insignificant on Windows, where PATHEXT resolution
-// decides it: a shell launching a bare "liza" can produce liza.EXE, which a
+// decides it: a shell can report the executable with an uppercase suffix, which
 // case-sensitive trim would leave intact and no comparison would then match.
-// On POSIX, liza.EXE and liza.exe are two different files, so the case stands.
+// On POSIX, names ending in .EXE and .exe are distinct, so the case stands.
 func trimExecutableSuffix(base string) string {
 	const suffix = ".exe"
 	if runtime.GOOS != "windows" {

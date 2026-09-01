@@ -110,6 +110,74 @@ func TestInstallScriptReportsUnsupportedPlatformFromCommandSubstitution(t *testi
 	}
 }
 
+func TestPowerShellInstallerDerivesBinaryNameFromBrandNameLower(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell installer behavior is exercised by Windows CI")
+	}
+	powerShell, err := exec.LookPath("powershell")
+	if err != nil {
+		t.Skipf("Windows PowerShell is unavailable: %v", err)
+	}
+
+	repoRoot := findRepoRootForInstallScript(t)
+	installerPath := filepath.Join(repoRoot, "install.ps1")
+	harnessPath := filepath.Join(t.TempDir(), "test-brand-derivation.ps1")
+	harness := `param([string]$InstallerPath)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+$env:BRAND_NAME_LOWER = 'acme-agent'
+$env:BRAND_BINARY_NAME = $null
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $InstallerPath,
+    [ref]$tokens,
+    [ref]$parseErrors
+)
+if ($parseErrors -and $parseErrors.Count -ne 0) {
+    throw "Could not parse installer: $($parseErrors[0].Message)"
+}
+
+$wanted = @('NameLower', 'BinaryName')
+foreach ($statement in $ast.EndBlock.Statements) {
+    if ($statement -isnot [System.Management.Automation.Language.AssignmentStatementAst]) {
+        continue
+    }
+    $name = $statement.Left.VariablePath.UserPath
+    if ($wanted -contains $name) {
+        Invoke-Expression $statement.Extent.Text
+    }
+}
+
+if ($BinaryName -ne 'acme-agent') {
+    throw "BinaryName was '$BinaryName', want 'acme-agent'."
+}
+Write-Output $BinaryName
+`
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write PowerShell test harness: %v", err)
+	}
+
+	cmd := exec.Command(
+		powerShell,
+		"-NoLogo",
+		"-NoProfile",
+		"-NonInteractive",
+		"-ExecutionPolicy", "Bypass",
+		"-File", harnessPath,
+		"-InstallerPath", installerPath,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("exercise PowerShell brand derivation: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "acme-agent") {
+		t.Fatalf("PowerShell output missing derived binary name:\n%s", out)
+	}
+}
+
 func TestPowerShellInstallerHandlesMissingLatestTag(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell installer behavior is exercised by Windows CI")

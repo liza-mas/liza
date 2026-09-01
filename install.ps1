@@ -39,10 +39,11 @@ Set-StrictMode -Version Latest
 
 # Brand values are substituted at release time the same way install.sh reads
 # them from the environment.
+$NameLower = if ($env:BRAND_NAME_LOWER) { $env:BRAND_NAME_LOWER } else { 'liza' }
 $Repo = if ($env:BRAND_INSTALL_REPO) { $env:BRAND_INSTALL_REPO }
         elseif ($env:BRAND_REPO) { $env:BRAND_REPO }
         else { 'liza-mas/liza' }
-$BinaryName = if ($env:BRAND_BINARY_NAME) { $env:BRAND_BINARY_NAME } else { 'liza' }
+$BinaryName = if ($env:BRAND_BINARY_NAME) { $env:BRAND_BINARY_NAME } else { $NameLower }
 $ArchivePrefix = if ($env:BRAND_ARCHIVE_PREFIX) { $env:BRAND_ARCHIVE_PREFIX } else { $BinaryName }
 $ReleaseRepo = if ($env:BRAND_RELEASE_REPO) { $env:BRAND_RELEASE_REPO } else { $Repo }
 $ReleaseBaseUrl = if ($env:BRAND_RELEASE_BASE_URL) { $env:BRAND_RELEASE_BASE_URL }

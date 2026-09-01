@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 func TestFindZombieAgents_DetectsScopedUnregisteredSupervisor(t *testing.T) {
@@ -327,24 +329,25 @@ func TestFindZombieAgents_InjectedProcRootStaysOffTheHost(t *testing.T) {
 }
 
 func TestIsLizaAgentArgv(t *testing.T) {
+	binaryName := brand.RuntimeValues().BinaryName
 	tests := []struct {
 		name string
 		argv []string
 		want bool
 	}{
-		{name: "liza agent", argv: []string{"/usr/bin/liza", "agent", "coder"}, want: true},
+		{name: "branded agent", argv: []string{filepath.Join("/usr/bin", binaryName), "agent", "coder"}, want: true},
 		// filepath.Base only splits on backslashes when it runs on Windows, so
 		// the path here stays separator-neutral and the suffix is what is
 		// under test.
-		{name: "windows executable suffix", argv: []string{"liza.exe", "agent", "coder"}, want: true},
-		// PATHEXT resolution decides the suffix case: launching a bare "liza"
-		// through MSYS or wezterm yields liza.EXE. Windows names it the same
-		// file; POSIX does not, so the expectation follows the platform.
-		{name: "uppercase suffix", argv: []string{"liza.EXE", "agent", "coder"}, want: runtime.GOOS == "windows"},
-		{name: "mixed case suffix", argv: []string{"liza.Exe", "agent", "coder"}, want: runtime.GOOS == "windows"},
-		{name: "too short", argv: []string{"liza"}, want: false},
-		{name: "other liza command", argv: []string{"liza", "status"}, want: false},
-		{name: "other liza command on windows", argv: []string{"liza.exe", "status"}, want: false},
+		{name: "windows executable suffix", argv: []string{binaryName + ".exe", "agent", "coder"}, want: true},
+		// PATHEXT resolution decides the suffix case: launching a bare binary
+		// through MSYS or wezterm can yield an uppercase suffix. Windows names
+		// it the same file; POSIX does not, so the expectation follows the platform.
+		{name: "uppercase suffix", argv: []string{binaryName + ".EXE", "agent", "coder"}, want: runtime.GOOS == "windows"},
+		{name: "mixed case suffix", argv: []string{binaryName + ".Exe", "agent", "coder"}, want: runtime.GOOS == "windows"},
+		{name: "too short", argv: []string{binaryName}, want: false},
+		{name: "other branded command", argv: []string{binaryName, "status"}, want: false},
+		{name: "other branded command on windows", argv: []string{binaryName + ".exe", "status"}, want: false},
 		{name: "provider cli", argv: []string{"codex", "exec"}, want: false},
 	}
 	for _, tt := range tests {
@@ -353,6 +356,21 @@ func TestIsLizaAgentArgv(t *testing.T) {
 				t.Fatalf("IsLizaAgentArgv(%v) = %v, want %v", tt.argv, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsLizaAgentArgvRejectsAnotherBrand(t *testing.T) {
+	originalBinaryName := brand.BinaryName
+	brand.BinaryName = "acme-agent"
+	t.Cleanup(func() {
+		brand.BinaryName = originalBinaryName
+	})
+
+	if IsLizaAgentArgv([]string{"liza", "agent", "coder"}) {
+		t.Fatal("default-brand executable matched a differently branded build")
+	}
+	if !IsLizaAgentArgv([]string{"acme-agent", "agent", "coder"}) {
+		t.Fatal("runtime-brand executable did not match")
 	}
 }
 

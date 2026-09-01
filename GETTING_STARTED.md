@@ -7,8 +7,8 @@ contract files, activating a project, and choosing Pairing or Multi-Agent mode.
 
 - Linux, macOS, or Windows.
 - On Windows: Git for Windows, with its `bash.exe` on PATH ahead of the WSL
-  launcher in `system32`. The hooks Liza deploys are POSIX shell and run through
-  bash; the WSL launcher cannot reach `C:/...` paths, so it is not a substitute.
+  launcher in `system32`. The installed hooks are POSIX shell scripts and run
+  through bash; the WSL launcher cannot reach `C:/...` paths, so it is not a substitute.
   Symlink creation also needs either Developer Mode or an elevated shell, see
   [Troubleshooting](support-docs/TROUBLESHOOTING.md#symlink-creation-fails-on-windows).
 - Git 2.38+ for worktree support.
