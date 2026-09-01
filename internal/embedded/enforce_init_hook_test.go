@@ -23,6 +23,7 @@ func TestEnforceInitHook_AllowsCodexBashDocReads(t *testing.T) {
 
 	hookPath := writeEnforceInitHook(t)
 	projectRoot := t.TempDir()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 	sessionID := "test-codex-bash-doc-reads-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
@@ -30,8 +31,8 @@ func TestEnforceInitHook_AllowsCodexBashDocReads(t *testing.T) {
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/CORE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,120p' ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+projectRoot+"/REPOSITORY.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+projectRoot+"/docs/USAGE.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+bashProjectRoot+"/REPOSITORY.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+bashProjectRoot+"/docs/USAGE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md"), 0)
 
 	if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); err != nil {
@@ -207,15 +208,16 @@ func TestEnforceInitHook_AllowsConditionalGuardrailsRead(t *testing.T) {
 
 	hookPath := writeEnforceInitHook(t)
 	projectRoot := t.TempDir()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 	sessionID := "test-codex-bash-guardrails-conditional-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
 
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,120p' ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "if [ -f "+projectRoot+"/GUARDRAILS.md ]; then sed -n '1,260p' "+projectRoot+"/GUARDRAILS.md; fi"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+projectRoot+"/REPOSITORY.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+projectRoot+"/docs/USAGE.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "if [ -f "+bashProjectRoot+"/GUARDRAILS.md ]; then sed -n '1,260p' "+bashProjectRoot+"/GUARDRAILS.md; fi"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+bashProjectRoot+"/REPOSITORY.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+bashProjectRoot+"/docs/USAGE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md"), 0)
 
 	if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); err != nil {
@@ -232,12 +234,13 @@ func TestEnforceInitHook_AllowsPairingInitCompanionDocReadsBeforeGateClear(t *te
 
 	hookPath := writeEnforceInitHook(t)
 	projectRoot := t.TempDir()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 	sessionID := "test-codex-bash-pairing-init-docs-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
 
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+projectRoot+"/REPOSITORY.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+projectRoot+"/docs/USAGE.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+bashProjectRoot+"/REPOSITORY.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+bashProjectRoot+"/docs/USAGE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md"), 0)
 
 	if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); !os.IsNotExist(err) {
@@ -252,6 +255,7 @@ func TestEnforceInitHook_BlocksMultiFileInitDocReads(t *testing.T) {
 
 	hookPath := writeEnforceInitHook(t)
 	projectRoot := t.TempDir()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 
 	cases := []struct {
 		name    string
@@ -259,7 +263,7 @@ func TestEnforceInitHook_BlocksMultiFileInitDocReads(t *testing.T) {
 	}{
 		{
 			name:    "multi-file project cat",
-			command: "cat " + projectRoot + "/REPOSITORY.md " + projectRoot + "/docs/USAGE.md",
+			command: "cat " + bashProjectRoot + "/REPOSITORY.md " + bashProjectRoot + "/docs/USAGE.md",
 		},
 		{
 			name:    "multi-file global cat",
@@ -267,7 +271,7 @@ func TestEnforceInitHook_BlocksMultiFileInitDocReads(t *testing.T) {
 		},
 		{
 			name:    "multi-file sed",
-			command: "sed -n '1,5p' " + projectRoot + "/REPOSITORY.md " + projectRoot + "/docs/USAGE.md",
+			command: "sed -n '1,5p' " + bashProjectRoot + "/REPOSITORY.md " + bashProjectRoot + "/docs/USAGE.md",
 		},
 	}
 
@@ -458,6 +462,7 @@ func TestEnforceInitHook_AllowsGuardrailsExistenceProbe(t *testing.T) {
 
 	hookPath := writeEnforceInitHook(t)
 	projectRoot := t.TempDir()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 
 	cases := []struct {
 		name    string
@@ -465,15 +470,15 @@ func TestEnforceInitHook_AllowsGuardrailsExistenceProbe(t *testing.T) {
 	}{
 		{
 			name:    "test builtin style",
-			command: "test -f " + projectRoot + "/GUARDRAILS.md",
+			command: "test -f " + bashProjectRoot + "/GUARDRAILS.md",
 		},
 		{
 			name:    "single bracket style",
-			command: "[ -f " + projectRoot + "/GUARDRAILS.md ]",
+			command: "[ -f " + bashProjectRoot + "/GUARDRAILS.md ]",
 		},
 		{
 			name:    "double bracket style",
-			command: "[[ -f " + projectRoot + "/GUARDRAILS.md ]]",
+			command: "[[ -f " + bashProjectRoot + "/GUARDRAILS.md ]]",
 		},
 	}
 
@@ -498,6 +503,7 @@ func TestEnforceInitHook_AllowsGuardrailsProbeWrappers(t *testing.T) {
 
 	hookPath := writeEnforceInitHook(t)
 	projectRoot := t.TempDir()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 
 	cases := []struct {
 		name        string
@@ -506,12 +512,12 @@ func TestEnforceInitHook_AllowsGuardrailsProbeWrappers(t *testing.T) {
 	}{
 		{
 			name:        "probe with echo branches",
-			command:     `test -f ` + projectRoot + `/GUARDRAILS.md && echo "EXISTS" || echo "ABSENT"`,
+			command:     `test -f ` + bashProjectRoot + `/GUARDRAILS.md && echo "EXISTS" || echo "ABSENT"`,
 			expectClear: false,
 		},
 		{
 			name:        "probe with read then echo",
-			command:     `test -f ` + projectRoot + `/GUARDRAILS.md && cat ` + projectRoot + `/GUARDRAILS.md || echo "GUARDRAILS.md ABSENT"`,
+			command:     `test -f ` + bashProjectRoot + `/GUARDRAILS.md && cat ` + bashProjectRoot + `/GUARDRAILS.md || echo "GUARDRAILS.md ABSENT"`,
 			expectClear: false,
 		},
 	}
@@ -542,15 +548,16 @@ func TestEnforceInitHook_GuardrailsWrapperClearsAfterRequiredDocs(t *testing.T) 
 
 	hookPath := writeEnforceInitHook(t)
 	projectRoot := t.TempDir()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 	sessionID := "test-codex-bash-guardrails-wrapper-clears-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
 
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, `test -f `+projectRoot+`/GUARDRAILS.md && cat `+projectRoot+`/GUARDRAILS.md || echo ABSENT`), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+projectRoot+"/REPOSITORY.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+projectRoot+"/docs/USAGE.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, `test -f `+bashProjectRoot+`/GUARDRAILS.md && cat `+bashProjectRoot+`/GUARDRAILS.md || echo ABSENT`), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+bashProjectRoot+"/REPOSITORY.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+bashProjectRoot+"/docs/USAGE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md"), 0)
 
 	if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); err != nil {
@@ -827,11 +834,12 @@ func writeEnforceInitHook(t *testing.T) string {
 
 func completePairingInit(t *testing.T, hookPath, sessionID, projectRoot string) {
 	t.Helper()
+	bashProjectRoot := filepath.ToSlash(projectRoot)
 
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+projectRoot+"/REPOSITORY.md"), 0)
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+projectRoot+"/docs/USAGE.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+bashProjectRoot+"/REPOSITORY.md"), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,20p' "+bashProjectRoot+"/docs/USAGE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md"), 0)
 }
 

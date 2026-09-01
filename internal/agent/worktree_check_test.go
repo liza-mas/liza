@@ -1002,7 +1002,7 @@ func TestEnsureReviewerWorktree_IntactWorktree_SetupDoesNotHoldLifecycleLock(t *
 	state := testhelpers.CreateValidState()
 	now := time.Now().UTC()
 	// Blocks inside setup so the lock question can be asked mid-flight.
-	postCmd := "touch " + started + "; while [ ! -f " + release + " ]; do sleep 0.01; done"
+	postCmd := "touch " + testhelpers.ShellArg(filepath.ToSlash(started)) + "; while [ ! -f " + testhelpers.ShellArg(filepath.ToSlash(release)) + " ]; do sleep 0.01; done"
 	state.Config.PostWorktreeCmd = &postCmd
 	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, now)}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
