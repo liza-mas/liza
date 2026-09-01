@@ -134,11 +134,16 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 				case <-time.After(700 * time.Millisecond):
 					t.Fatal("replacement waited for built-in provider completion instead of start")
 				}
-				if _, err := os.Stat(sideEffectPath); err != nil {
-					t.Fatalf("provider did not reach start boundary: %v", err)
+				select {
+				case err := <-runDone:
+					t.Fatalf("provider completed before replacement registration: %v", err)
+				default:
 				}
 				if err := <-runDone; err != nil {
 					t.Fatalf("provider run: %v", err)
+				}
+				if _, err := os.Stat(sideEffectPath); err != nil {
+					t.Fatalf("provider did not reach start boundary: %v", err)
 				}
 				assertCurrentGeneration(t, fixture.bb, authorityB)
 			})
