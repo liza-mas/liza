@@ -110,6 +110,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 
 	analyst := renderIntegrationRoleContext(t, state, "slice-analysis", roles.IntegrationAnalyst)
 	reviewer := renderIntegrationRoleContext(t, state, "slice-analysis", roles.IntegrationReviewer)
+	worktreePath := resolveWorktreePath("/project", &worktree)
 
 	assertContainsAll(t, analyst,
 		"SLICE INTEGRATION CONTEXT",
@@ -129,7 +130,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 		"shared.Contract",
 		"shared-read-only",
 		"Read-only output dependencies: 2",
-		"git -C '/project/.worktrees/slice analysis; echo marker' show 'slice-source-123:internal/alpha/a file; echo marker.go'",
+		"git -C "+shellQuoteForTest(worktreePath)+" show 'slice-source-123:internal/alpha/a file; echo marker.go'",
 	)
 	assertContainsAll(t, reviewer,
 		"intra-plan composition",
@@ -258,6 +259,8 @@ func TestGlobalIntegrationContext(t *testing.T) {
 
 	analyst := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationAnalyst)
 	reviewer := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationReviewer)
+	worktreePath := resolveWorktreePath("/project", &worktree)
+	quotedWorktreePath := shellQuoteForTest(worktreePath)
 
 	assertContainsAll(t, analyst,
 		"GLOBAL INTEGRATION CONTEXT",
@@ -272,9 +275,9 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		"plan-sliced",
 		"slice_report",
 		"slice-report-task",
-		"git -C '/project/.worktrees/global analysis; echo marker' diff --name-only 'goal-base-222..global-source-456'",
-		"git -C '/project/.worktrees/global analysis; echo marker' diff --stat 'goal-base-222..global-source-456'",
-		"git -C '/project/.worktrees/global analysis; echo marker' diff 'goal-base-222..global-source-456' -- <path>",
+		"git -C "+quotedWorktreePath+" diff --name-only 'goal-base-222..global-source-456'",
+		"git -C "+quotedWorktreePath+" diff --stat 'goal-base-222..global-source-456'",
+		"git -C "+quotedWorktreePath+" diff 'goal-base-222..global-source-456' -- <path>",
 		"independent aggregate review",
 	)
 	assertContainsAll(t, reviewer,
@@ -293,9 +296,9 @@ func TestGlobalIntegrationContext(t *testing.T) {
 			"Distracting merged task",
 			"..HEAD",
 			"intra-plan composition",
-			"git -C /project/.worktrees/global analysis; echo marker diff --name-only goal-base-222..global-source-456",
-			"git -C /project/.worktrees/global analysis; echo marker diff --stat goal-base-222..global-source-456",
-			"git -C /project/.worktrees/global analysis; echo marker diff goal-base-222..global-source-456 -- <path>",
+			"git -C " + worktreePath + " diff --name-only goal-base-222..global-source-456",
+			"git -C " + worktreePath + " diff --stat goal-base-222..global-source-456",
+			"git -C " + worktreePath + " diff goal-base-222..global-source-456 -- <path>",
 		} {
 			assertNotContains(t, output, unwanted)
 		}
