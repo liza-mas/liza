@@ -124,7 +124,7 @@ detect_platform() {
             exit 1
             ;;
         *)
-            echo -e "${RED}Error: Unsupported operating system: $(uname -s)${NC}"
+            echo -e "${RED}Error: Unsupported operating system: $(uname -s)${NC}" >&2
             exit 1
             ;;
     esac
@@ -134,7 +134,7 @@ detect_platform() {
         x86_64|amd64)   arch="amd64";;
         arm64|aarch64)  arch="arm64";;
         *)
-            echo -e "${RED}Error: Unsupported architecture: $(uname -m)${NC}"
+            echo -e "${RED}Error: Unsupported architecture: $(uname -m)${NC}" >&2
             exit 1
             ;;
     esac

@@ -81,6 +81,37 @@ func TestInstallScriptRefusesWindowsRelease(t *testing.T) {
 	}
 }
 
+func TestInstallScriptReportsUnsupportedPlatformFromCommandSubstitution(t *testing.T) {
+	tests := []struct {
+		name string
+		os   string
+		arch string
+		want string
+	}{
+		{name: "operating system", os: "Plan9", arch: "amd64", want: "Unsupported operating system: Plan9"},
+		{name: "architecture", os: "Linux", arch: "sparc64", want: "Unsupported architecture: sparc64"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binDir := t.TempDir()
+			uname := filepath.Join(binDir, "uname")
+			script := "#!/bin/sh\nif [ \"$1\" = \"-s\" ]; then printf '%s\\n' '" + tt.os + "'; else printf '%s\\n' '" + tt.arch + "'; fi\n"
+			if err := os.WriteFile(uname, []byte(script), 0o755); err != nil {
+				t.Fatalf("write fake uname: %v", err)
+			}
+
+			out, err := runInstallScript(t, nil, "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			if err == nil {
+				t.Fatalf("install.sh succeeded, want platform refusal:\n%s", out)
+			}
+			if !strings.Contains(out, tt.want) {
+				t.Fatalf("install.sh output missing %q:\n%s", tt.want, out)
+			}
+		})
+	}
+}
+
 func TestPowerShellInstallerChecksLatestTagWithoutStrictPropertyAccess(t *testing.T) {
 	repoRoot := findRepoRootForInstallScript(t)
 	script, err := os.ReadFile(filepath.Join(repoRoot, "install.ps1"))
