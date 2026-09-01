@@ -100,7 +100,7 @@ func TestPlanProjectCleanupResolvesRegisteredWorktreeSymlinks(t *testing.T) {
 
 	aliasGitDir := filepath.Join(aliasRoot, paths.WorktreesDirName, "symlink-task", paths.GitDirName)
 	metadataGitDir := filepath.Join(projectRoot, paths.GitDirName, "worktrees", "symlink-task", "gitdir")
-	if err := os.WriteFile(metadataGitDir, []byte(aliasGitDir+"\n"), 0644); err != nil {
+	if err := os.WriteFile(metadataGitDir, []byte(filepath.ToSlash(aliasGitDir)+"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,7 +111,7 @@ func TestPlanProjectCleanupResolvesRegisteredWorktreeSymlinks(t *testing.T) {
 	var recordedAlias bool
 	for _, worktree := range registered {
 		if worktree.Branch == paths.TaskBranchPrefix+"symlink-task" {
-			recordedAlias = worktree.Path == filepath.Join(aliasRoot, paths.WorktreesDirName, "symlink-task")
+			recordedAlias = filepath.Clean(worktree.Path) == filepath.Join(aliasRoot, paths.WorktreesDirName, "symlink-task")
 		}
 	}
 	if !recordedAlias {
