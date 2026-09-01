@@ -76,6 +76,7 @@ func TestSetupTestGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to resolve expected hooks path: %v", err)
 	}
+	expectedHooksPath = filepath.ToSlash(expectedHooksPath)
 	if string(output) != expectedHooksPath+"\n" {
 		t.Errorf("Expected core.hooksPath=%q, got %q", expectedHooksPath, string(output))
 	}
