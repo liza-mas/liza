@@ -132,13 +132,19 @@ INSTALL_DIR ?= $(subst \,/,$(WINDOWS_HOME))/.local/bin
 # A bare "bash" resolves by PATH, and C:\Windows\System32\bash.exe — the WSL
 # launcher — is on the machine PATH ahead of any user-level Git for Windows
 # entry; reordering it needs elevation the managed machines this targets do
-# not grant. The same trap windowsLaunchShell (cmd/liza/cmd_launch.go) and
-# ResolveBashForScripts (internal/testhelpers/utils.go) exist to avoid, so
-# probe the per-user Git for Windows install directly, the way those do, and
-# fall back to PATH only when it is not there.
-GIT_BASH := $(wildcard ${LOCALAPPDATA}/Programs/Git/bin/bash.exe)
+# not grant. The runtime resolver probes the standard per-user and machine-wide
+# Git for Windows locations before PATH, so make must cover the same locations.
+# wildcard needs spaces escaped while probing, but returns the original path;
+# keeping each result in its own variable avoids splitting it with firstword.
+empty :=
+space := $(empty) $(empty)
+escape_spaces = $(subst $(space),\$(space),$(1))
+LOCAL_GIT_BASH := $(if $(LOCALAPPDATA),$(wildcard $(call escape_spaces,$(subst \,/,$(LOCALAPPDATA))/Programs/Git/bin/bash.exe)))
+PROGRAM_FILES_GIT_BASH := $(if $(ProgramFiles),$(wildcard $(call escape_spaces,$(subst \,/,$(ProgramFiles))/Git/bin/bash.exe)))
+PROGRAM_FILES_X86_GIT_BASH := $(if ${ProgramFiles(x86)},$(wildcard $(call escape_spaces,$(subst \,/,${ProgramFiles(x86)})/Git/bin/bash.exe)))
+GIT_BASH := $(if $(LOCAL_GIT_BASH),$(LOCAL_GIT_BASH),$(if $(PROGRAM_FILES_GIT_BASH),$(PROGRAM_FILES_GIT_BASH),$(PROGRAM_FILES_X86_GIT_BASH)))
 ifneq ($(GIT_BASH),)
-SHELL := $(firstword $(GIT_BASH))
+SHELL := $(call escape_spaces,$(GIT_BASH))
 else
 SHELL := bash
 endif
