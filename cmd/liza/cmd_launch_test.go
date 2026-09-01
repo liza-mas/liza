@@ -174,6 +174,31 @@ func TestLaunchShellPrefersGitForWindowsOverAPathMatch(t *testing.T) {
 	}
 }
 
+func TestLaunchShellIgnoresWSLLauncherFromShell(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("SHELL can name the WSL launcher only on Windows")
+	}
+
+	gitBash := testhelpers.ResolveBashForScripts(t)
+	windowsRoot := os.Getenv("SystemRoot")
+	if windowsRoot == "" {
+		windowsRoot = `C:\Windows`
+	}
+	wslLauncher := filepath.Join(windowsRoot, "System32", "bash.exe")
+	t.Setenv("SHELL", wslLauncher)
+
+	got, err := launchShell()
+	if err != nil {
+		t.Fatalf("launchShell: %v", err)
+	}
+	if strings.EqualFold(got, wslLauncher) {
+		t.Fatalf("launchShell() honored SHELL=%q, want Git for Windows %q", wslLauncher, gitBash)
+	}
+	if !strings.EqualFold(got, gitBash) {
+		t.Fatalf("launchShell() = %q, want %q", got, gitBash)
+	}
+}
+
 func statFirstExisting(candidates ...string) string {
 	for _, candidate := range candidates {
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {

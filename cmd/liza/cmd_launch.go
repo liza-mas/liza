@@ -1074,16 +1074,17 @@ func shellSleepSeconds(duration time.Duration) string {
 }
 
 // launchShell returns the shell the terminal is asked to run the pane script
-// with. The script is POSIX, so Windows needs the shell Git for Windows ships:
-// SHELL is normally unset there, and /bin/sh names nothing the OS can execute.
+// with. The script is POSIX, so Windows always needs the shell Git for Windows
+// ships: SHELL may name the WSL launcher, and /bin/sh names nothing the OS can
+// execute.
 func launchShell() (string, error) {
+	if runtime.GOOS == "windows" {
+		return gitbash.Resolve()
+	}
 	if shell := os.Getenv("SHELL"); shell != "" {
 		return shell, nil
 	}
-	if runtime.GOOS != "windows" {
-		return "/bin/sh", nil
-	}
-	return gitbash.Resolve()
+	return "/bin/sh", nil
 }
 
 func shellIdentifier(value string) string {
