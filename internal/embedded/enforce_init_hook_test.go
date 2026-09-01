@@ -739,6 +739,9 @@ func TestEnforceInitHook_BlocksComplexCodexBashDocReads(t *testing.T) {
 	if !strings.Contains(output, "simple read-only doc commands") {
 		t.Fatalf("expected complex Bash doc read to explain the restriction, got:\n%s", output)
 	}
+	if runtime.GOOS != "windows" && strings.Contains(output, "On Windows use forward slashes") {
+		t.Fatalf("non-Windows refusal included irrelevant Windows path guidance:\n%s", output)
+	}
 }
 
 func TestEnforceInitHook_BlocksUnsafeCodexBashDocReads(t *testing.T) {
