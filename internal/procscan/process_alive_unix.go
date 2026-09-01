@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-// processAlive reports whether pid identifies a running process.
+// ProcessAlive reports whether pid identifies a running process.
 //
 // Returns:
 //   - alive: true if the process exists.

@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-// processAlive reports whether pid identifies a running process on Windows.
+// ProcessAlive reports whether pid identifies a running process on Windows.
 //
 // Signal 0 is not supported on Windows (os.Process.Signal returns "not
 // supported"), so the existence probe uses OpenProcess with
