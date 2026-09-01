@@ -129,7 +129,10 @@ func TestEnforceInitHook_BashReadUsesValidatedWindowsPathForm(t *testing.T) {
 	donePath := filepath.Join(stateDir, "GUARDRAILS.done")
 
 	nativeCommand := "cat " + guardrailsPath
-	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, nativeCommand), 2)
+	output := runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, nativeCommand), 2)
+	if !strings.Contains(output, "On Windows use forward slashes: cat C:/proj/GUARDRAILS.md") {
+		t.Fatalf("native-backslash refusal did not explain the valid Windows path form:\n%s", output)
+	}
 	if _, err := os.Stat(donePath); !os.IsNotExist(err) {
 		t.Fatalf("native-backslash Bash command should not mark guardrails read, stat err: %v", err)
 	}

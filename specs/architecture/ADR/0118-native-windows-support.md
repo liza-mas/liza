@@ -60,11 +60,12 @@ Positive:
 - Windows becomes usable without WSL2, and the constraints are stated up front
   rather than discovered.
 - The portability work found four user-visible defects that WSL2 had been hiding,
-  none of which were test-only: the session-init gate rejected every Bash command
-  carrying a native path, so no Pairing session on Windows could clear it; the
-  session-context hook emitted half-native, half-POSIX paths; managed git hooks
-  reinstalled themselves on every run and lost the hook name, so the
-  post-checkout short-circuit never fired; and `liza update` had no way to
+  none of which were test-only: the session-init gate compared native Read paths
+  against a forward-slashed project root, so those reads could not clear it;
+  Bash reads now require forward slashes so the hook validates the same command
+  Bash executes. The session-context hook emitted half-native, half-POSIX paths;
+  managed git hooks reinstalled themselves on every run and lost the hook name,
+  so the post-checkout short-circuit never fired; and `liza update` had no way to
   replace a running executable.
 - The `.cmd` wrapper, the DACL helper and the capability probes are reusable, so
   the next Windows-shaped problem starts from a helper rather than a skip.

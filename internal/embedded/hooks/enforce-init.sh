@@ -401,6 +401,7 @@ BLOCKED — session initialization allows Bash only for simple read-only doc com
 
 Use exactly one file per command and one command per tool call.
 Expected global contract root: ~/__BRAND_GLOBAL_DIRNAME__/
+On Windows use forward slashes: cat C:/proj/GUARDRAILS.md
 Allowed commands: cat, sed, an exact GUARDRAILS.md existence
 probe, or a narrow \`test -f GUARDRAILS.md && ... || ...\` wrapper.
 EOF
