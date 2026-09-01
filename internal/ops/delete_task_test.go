@@ -12,8 +12,8 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/perm"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"github.com/liza-mas/liza/internal/testhelpers/perm"
 )
 
 // setupStateWithDeps creates state containing a target task and a dependent task.

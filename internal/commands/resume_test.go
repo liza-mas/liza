@@ -12,8 +12,8 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/perm"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"github.com/liza-mas/liza/internal/testhelpers/perm"
 )
 
 func TestResumeCommand(t *testing.T) {

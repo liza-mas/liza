@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
-	"github.com/liza-mas/liza/internal/perm"
+	"github.com/liza-mas/liza/internal/testhelpers/perm"
 )
 
 func TestReadContext_CancelsBlockedLockAcquisition(t *testing.T) {
