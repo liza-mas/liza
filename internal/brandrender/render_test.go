@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -187,12 +188,16 @@ func TestSyncEmbeddedRewritesChangedContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat target: %v", err)
 	}
-	if info.Mode().Perm() != 0o644 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o644 {
 		t.Fatalf("target mode = %v, want 0644", info.Mode().Perm())
 	}
 }
 
 func TestSyncEmbeddedRepairsModeWithoutRewritingContent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix permission-bit changes")
+	}
+
 	root := newSyncFixture(t)
 	if err := SyncEmbedded(SyncOptions{RepoRoot: root, Values: brand.RuntimeValues()}); err != nil {
 		t.Fatalf("first SyncEmbedded: %v", err)
