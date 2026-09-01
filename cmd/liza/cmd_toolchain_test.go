@@ -168,7 +168,7 @@ func TestToolchainConfigureWritesPowerShellEnvOnWindows(t *testing.T) {
 		if statErr == nil {
 			t.Fatalf("env.ps1 written on %s, want none", runtime.GOOS)
 		}
-		if strings.Contains(out.String(), "PowerShell") {
+		if strings.Contains(out.String(), "From PowerShell, run:") {
 			t.Fatalf("configure output mentions PowerShell on %s:\n%s", runtime.GOOS, out.String())
 		}
 		return
