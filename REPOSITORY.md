@@ -116,6 +116,7 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `spec-backfill/` | Extracting feature-level specifications from existing code |
 | `code-spec-backfill/` | Backfilling function-level contracts (docstrings, type annotations) |
 | `generic-subagent/` | Delegating read-only work to subagents |
+| `goal-writing/` | Coaching a human through the input document for `liza init --spec` |
 | `systemic-thinking/` | Systemic coherence and risk analysis |
 | `black-box-red-testing/` | Hypothesis-driven red tests that expose real bugs |
 | `white-box-red-testing/` | Target-driven red tests with classified findings |
