@@ -142,7 +142,7 @@ categories describe design emphases and can overlap as products evolve.
 | **Engineering workflow suites** | gstack | Specialist skills and tools across the development lifecycle | A persistent task graph and supervisor-owned merge authority |
 
 These are comparisons of architectural emphasis, not claims that another tool lacks
-every listed mechanism. See the [comparison tables](specs/architecture/competition-survey/comparison-table.md)
+every listed mechanism. See the [comparison matrix](specs/architecture/competition-survey/mas-survey.md#competitive-dimensions-matrix)
 and [detailed BMAD comparison](specs/architecture/competition-survey/liza-vs-bmad-comparison.md)
 for product-level analysis. The distinctive combination here is accountable judgment,
 binding review, mechanical boundaries, and decomposition that composes.
@@ -305,13 +305,13 @@ Liza optimizes cost-to-quality, not cost-to-lets-cross-fingers. These tools redu
 | [MorphLLM MCP](https://www.morphllm.com/) (WarpGrep) | Fast Apply edits via `// ... existing code ...` placeholders + semantic codebase search | Avoids reading full files into context for edits |
 | [jq](https://jqlang.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | Query and extract fields from JSON / YAML / TOML | Avoids reading full structured data files into context |
 | [GitHub CLI](https://cli.github.com/) | GitHub issues, PRs, releases, and API access from the shell | Avoids raw API calls and keeps GitHub workflows authenticated and structured |
-| [filesystem MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-filesystem) | Bulk file operations — multi-file reads, recursive directory trees, file metadata | Batch reads in one call instead of sequential Read tool calls |
+| [filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) | Bulk file operations — multi-file reads, recursive directory trees, file metadata | Batch reads in one call instead of sequential Read tool calls |
 | [perplexity](https://github.com/perplexityai/modelcontextprotocol/) | Current-info web search with synthesis | Lower-context discovery for external libraries, unfamiliar tech, and current information |
 | [context7](https://context7.com/docs/resources/all-clients) | Structured API reference lookup with examples | High-signal library/API docs with consistent formatting |
 | [Ref](https://ref.tools/) | Broad documentation and guide search | Better coverage for tutorials, niche libraries, and how-to material |
 | [fetch MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) | Exact web page retrieval | Raw HTML, pagination, and precise page content without summarization |
 | [deepwiki](https://docs.devin.ai/work-with-devin/deepwiki-mcp) | Repository architecture and code-structure exploration | Fast high-level orientation on unfamiliar repositories |
-| [postgres](https://github.com/modelcontextprotocol/servers#using-an-mcp-client) | Read-only SQL exploration and validation | Direct schema and data inspection when a database MCP is available |
+| [postgres (archived)](https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres) | Read-only SQL exploration and validation | Direct schema and data inspection when a database MCP is available |
 | [claude-usage](https://github.com/phuryn/claude-usage) | Tracks Claude subscription usage with cost breakdown | Textual recommendation only; install it separately if Claude cost visibility matters for your setup |
 
 These tools are referenced in the default `~/.liza/AGENT_TOOLS.md`; see
