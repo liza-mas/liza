@@ -11,7 +11,7 @@ before:
 builds:
   - id: liza
     main: ./cmd/liza
-    binary: '{{ if .Env.BRAND_BINARY_NAME }}{{ .Env.BRAND_BINARY_NAME }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER }}{{ else }}liza{{ end }}'
+    binary: '{{ if index .Env "BRAND_BINARY_NAME" }}{{ index .Env "BRAND_BINARY_NAME" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ index .Env "BRAND_NAME_LOWER" }}{{ else }}liza{{ end }}'
     env:
       - CGO_ENABLED=0
     goos:
@@ -29,18 +29,18 @@ builds:
       - -X github.com/liza-mas/liza/internal/embedded.Version={{.Version}}
       - -X github.com/liza-mas/liza/internal/embedded.GitCommit={{.ShortCommit}}
       - -X github.com/liza-mas/liza/internal/embedded.BuildDate={{.Date}}
-      - -X github.com/liza-mas/liza/internal/brand.NameLower={{ if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER }}{{ else }}liza{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.NameUpper={{ if .Env.BRAND_NAME_UPPER }}{{ .Env.BRAND_NAME_UPPER }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER | replace "-" "_" | upper }}{{ else }}LIZA{{ end }}
-      - "-X 'github.com/liza-mas/liza/internal/brand.NameTitle={{ if .Env.BRAND_NAME_TITLE }}{{ .Env.BRAND_NAME_TITLE }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER | replace \"-\" \" \" | title }}{{ else }}Liza{{ end }}'"
-      - -X github.com/liza-mas/liza/internal/brand.Repo={{ if .Env.BRAND_REPO }}{{ .Env.BRAND_REPO }}{{ else }}liza-mas/liza{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.BinaryName={{ if .Env.BRAND_BINARY_NAME }}{{ .Env.BRAND_BINARY_NAME }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER }}{{ else }}liza{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.GlobalDirName={{ if .Env.BRAND_GLOBAL_DIRNAME }}{{ .Env.BRAND_GLOBAL_DIRNAME }}{{ else if .Env.BRAND_NAME_LOWER }}.{{ .Env.BRAND_NAME_LOWER }}{{ else }}.liza{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.ProjectDirName={{ if .Env.BRAND_PROJECT_DIRNAME }}{{ .Env.BRAND_PROJECT_DIRNAME }}{{ else if .Env.BRAND_NAME_LOWER }}.{{ .Env.BRAND_NAME_LOWER }}{{ else }}.liza{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.EnvPrefix={{ if .Env.BRAND_ENV_PREFIX }}{{ .Env.BRAND_ENV_PREFIX }}{{ else if .Env.BRAND_NAME_UPPER }}{{ .Env.BRAND_NAME_UPPER }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER | replace "-" "_" | upper }}{{ else }}LIZA{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.ArchivePrefix={{ if .Env.BRAND_ARCHIVE_PREFIX }}{{ .Env.BRAND_ARCHIVE_PREFIX }}{{ else if .Env.BRAND_BINARY_NAME }}{{ .Env.BRAND_BINARY_NAME }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER }}{{ else }}liza{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.ReleaseRepo={{ if .Env.BRAND_RELEASE_REPO }}{{ .Env.BRAND_RELEASE_REPO }}{{ else if .Env.BRAND_REPO }}{{ .Env.BRAND_REPO }}{{ else }}liza-mas/liza{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.ReleaseBaseURL={{ if .Env.BRAND_RELEASE_BASE_URL }}{{ .Env.BRAND_RELEASE_BASE_URL }}{{ else }}https://github.com/{{ if .Env.BRAND_RELEASE_REPO }}{{ .Env.BRAND_RELEASE_REPO }}{{ else if .Env.BRAND_REPO }}{{ .Env.BRAND_REPO }}{{ else }}liza-mas/liza{{ end }}/releases/download{{ end }}
-      - -X github.com/liza-mas/liza/internal/brand.ChecksumBaseURL={{ if .Env.BRAND_CHECKSUM_BASE_URL }}{{ .Env.BRAND_CHECKSUM_BASE_URL }}{{ else if .Env.BRAND_RELEASE_BASE_URL }}{{ .Env.BRAND_RELEASE_BASE_URL }}{{ else }}https://github.com/{{ if .Env.BRAND_RELEASE_REPO }}{{ .Env.BRAND_RELEASE_REPO }}{{ else if .Env.BRAND_REPO }}{{ .Env.BRAND_REPO }}{{ else }}liza-mas/liza{{ end }}/releases/download{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.NameLower={{ if index .Env "BRAND_NAME_LOWER" }}{{ index .Env "BRAND_NAME_LOWER" }}{{ else }}liza{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.NameUpper={{ if index .Env "BRAND_NAME_UPPER" }}{{ index .Env "BRAND_NAME_UPPER" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ replace (index .Env "BRAND_NAME_LOWER") "-" "_" | toupper }}{{ else }}LIZA{{ end }}
+      - "-X 'github.com/liza-mas/liza/internal/brand.NameTitle={{ if index .Env \"BRAND_NAME_TITLE\" }}{{ index .Env \"BRAND_NAME_TITLE\" }}{{ else if index .Env \"BRAND_NAME_LOWER\" }}{{ replace (index .Env \"BRAND_NAME_LOWER\") \"-\" \" \" | title }}{{ else }}Liza{{ end }}'"
+      - -X github.com/liza-mas/liza/internal/brand.Repo={{ if index .Env "BRAND_REPO" }}{{ index .Env "BRAND_REPO" }}{{ else }}liza-mas/liza{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.BinaryName={{ if index .Env "BRAND_BINARY_NAME" }}{{ index .Env "BRAND_BINARY_NAME" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ index .Env "BRAND_NAME_LOWER" }}{{ else }}liza{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.GlobalDirName={{ if index .Env "BRAND_GLOBAL_DIRNAME" }}{{ index .Env "BRAND_GLOBAL_DIRNAME" }}{{ else if index .Env "BRAND_NAME_LOWER" }}.{{ index .Env "BRAND_NAME_LOWER" }}{{ else }}.liza{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.ProjectDirName={{ if index .Env "BRAND_PROJECT_DIRNAME" }}{{ index .Env "BRAND_PROJECT_DIRNAME" }}{{ else if index .Env "BRAND_NAME_LOWER" }}.{{ index .Env "BRAND_NAME_LOWER" }}{{ else }}.liza{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.EnvPrefix={{ if index .Env "BRAND_ENV_PREFIX" }}{{ index .Env "BRAND_ENV_PREFIX" }}{{ else if index .Env "BRAND_NAME_UPPER" }}{{ index .Env "BRAND_NAME_UPPER" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ replace (index .Env "BRAND_NAME_LOWER") "-" "_" | toupper }}{{ else }}LIZA{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.ArchivePrefix={{ if index .Env "BRAND_ARCHIVE_PREFIX" }}{{ index .Env "BRAND_ARCHIVE_PREFIX" }}{{ else if index .Env "BRAND_BINARY_NAME" }}{{ index .Env "BRAND_BINARY_NAME" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ index .Env "BRAND_NAME_LOWER" }}{{ else }}liza{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.ReleaseRepo={{ if index .Env "BRAND_RELEASE_REPO" }}{{ index .Env "BRAND_RELEASE_REPO" }}{{ else if index .Env "BRAND_REPO" }}{{ index .Env "BRAND_REPO" }}{{ else }}liza-mas/liza{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.ReleaseBaseURL={{ if index .Env "BRAND_RELEASE_BASE_URL" }}{{ index .Env "BRAND_RELEASE_BASE_URL" }}{{ else }}https://github.com/{{ if index .Env "BRAND_RELEASE_REPO" }}{{ index .Env "BRAND_RELEASE_REPO" }}{{ else if index .Env "BRAND_REPO" }}{{ index .Env "BRAND_REPO" }}{{ else }}liza-mas/liza{{ end }}/releases/download{{ end }}
+      - -X github.com/liza-mas/liza/internal/brand.ChecksumBaseURL={{ if index .Env "BRAND_CHECKSUM_BASE_URL" }}{{ index .Env "BRAND_CHECKSUM_BASE_URL" }}{{ else if index .Env "BRAND_RELEASE_BASE_URL" }}{{ index .Env "BRAND_RELEASE_BASE_URL" }}{{ else }}https://github.com/{{ if index .Env "BRAND_RELEASE_REPO" }}{{ index .Env "BRAND_RELEASE_REPO" }}{{ else if index .Env "BRAND_REPO" }}{{ index .Env "BRAND_REPO" }}{{ else }}liza-mas/liza{{ end }}/releases/download{{ end }}
 
 archives:
   - id: liza-archive
@@ -53,7 +53,7 @@ archives:
         formats:
           - zip
     name_template: >-
-      {{- if .Env.BRAND_ARCHIVE_PREFIX }}{{ .Env.BRAND_ARCHIVE_PREFIX }}{{ else if .Env.BRAND_BINARY_NAME }}{{ .Env.BRAND_BINARY_NAME }}{{ else if .Env.BRAND_NAME_LOWER }}{{ .Env.BRAND_NAME_LOWER }}{{ else }}liza{{ end }}-
+      {{- if index .Env "BRAND_ARCHIVE_PREFIX" }}{{ index .Env "BRAND_ARCHIVE_PREFIX" }}{{ else if index .Env "BRAND_BINARY_NAME" }}{{ index .Env "BRAND_BINARY_NAME" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ index .Env "BRAND_NAME_LOWER" }}{{ else }}liza{{ end }}-
       {{- .Version }}-
       {{- .Os }}-
       {{- .Arch }}
@@ -97,7 +97,7 @@ release:
   prerelease: auto
   mode: replace
   header: |
-    ## {{ if index .Env "BRAND_NAME_TITLE" }}{{ index .Env "BRAND_NAME_TITLE" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ index .Env "BRAND_NAME_LOWER" | replace "-" " " | title }}{{ else }}Liza{{ end }} {{.Tag}}
+    ## {{ if index .Env "BRAND_NAME_TITLE" }}{{ index .Env "BRAND_NAME_TITLE" }}{{ else if index .Env "BRAND_NAME_LOWER" }}{{ replace (index .Env "BRAND_NAME_LOWER") "-" " " | title }}{{ else }}Liza{{ end }} {{.Tag}}
 
     A multi-agent supervision system built in Go.
 
