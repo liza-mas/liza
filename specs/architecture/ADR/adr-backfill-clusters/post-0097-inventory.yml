@@ -1,0 +1,1462 @@
+version: 1
+baseline_exclusive: "2b63bbb7"
+head_inclusive: "73a50ca8d61b73d5766ca466aad73b953b37b0a1"
+scan_date: "2026-09-06"
+commit_count: 108
+touched_path_count: 843
+numbering_policy: "Keep existing IDs; new candidates start at 0119, ordered by earliest author timestamp."
+status: "selected_adrs_generated"
+selection_approved: "2026-09-06"
+user_intent_received: "2026-09-06"
+selected_ids: [121, 123, 124, 125, 129, 130, 131, 132]
+not_selected_ids: [119, 120, 122, 126, 127, 128]
+coverage_limits:
+  - "All commit subjects/bodies were triaged; decision candidates received targeted diffs and source verification. Not every test or squash diff was read in full."
+  - "Touched paths include intermediate additions, deletions and both rename endpoints, not only the final tree diff."
+  - "File categories are routing classifications, not a claim that every file contains a decision."
+  - "Complementary scan covers changes since baseline; unchanged historical documentation is consulted where relevant to existing decisions."
+  - "226 deleted plan artifacts predate baseline and were classified from deletion/addition history, without rereading their full contents."
+  - "User intent was supplied for all eight selected ADRs; the ordinary-blackboard-write tradeoff in ADR-0125 was explicitly confirmed. Other unconfirmed alternatives and tradeoffs remain reconstructed."
+existing_adr_coverage:
+  111: "specs/architecture/ADR/0111-capability-aware-global-first-contract-activation.md"
+  112: "specs/architecture/ADR/0112-serialize-integration-working-tree-mutations.md"
+  113: "specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md"
+  114: "specs/architecture/ADR/0114-terminal-dependency-repair.md"
+  115: "specs/architecture/ADR/0115-declarative-atomic-dependency-repairs.md"
+  116: "specs/architecture/ADR/0116-orchestrator-classifies-defect-objectives.md"
+  117: "specs/architecture/ADR/0117-fail-closed-worktree-readiness.md"
+  118: "specs/architecture/ADR/0118-native-windows-support.md"
+existing_amendments_confirmed:
+  - "ADR-0054 already records the bounded await amendment (2026-08-23)."
+  - "ADR-0085 already describes task-scoped ACP sessions."
+  - "ADR-0077 and ADR-0080 already record dependency-held restoration."
+  - "ADR-0116 already includes decomposition-root and per-output RCA responsibilities."
+complementary_sources:
+  - "specs/protocols/await-primitives.md: enrichment for ADR-0054, not a separate missing decision."
+  - "specs/protocols/circuit-breaker.md: planning churn, acknowledgement and proportional response."
+  - "specs/architecture/supervision-model.md: generation-fenced recovery contract."
+  - "specs/architecture/roles.md: two-sided review closure conditions."
+  - "support-docs/how-to-produce-a-goal.md: human ownership and cold final readiness judge."
+  - "docs/TESTING.md and docs/PERFORMANCE.md: separated routine/race/coverage policy."
+  - "specs/goals/20260818-sliced-integration-analysis.md: covered by ADR-0113."
+file_classification_groups:
+  behavioral_infrastructure:
+    tier: 1
+    observed_change_kinds_by_path:
+      "GUARDRAILS.md": ["M"]
+      "INVARIANTS.md": ["M"]
+      "contracts/AGENT_TOOLS.md": ["M"]
+      "contracts/CORE.md": ["M"]
+      "contracts/MULTI_AGENT_MODE.md": ["M"]
+      "contracts/PAIRING_MODE.md": ["M"]
+      "internal/embedded/hooks/cursor-bash-policy.sh": ["D","M"]
+      "internal/embedded/hooks/enforce-init.sh": ["M"]
+      "internal/embedded/hooks/session-context.sh": ["M"]
+  behavioral_method:
+    tier: 2
+    observed_change_kinds_by_path:
+      "skills/adversarial-pairing/SKILL.md": ["M"]
+      "skills/check-liza-input-readiness/SKILL.md": ["M"]
+      "skills/clean-code/SKILL.md": ["M"]
+      "skills/code-review/SKILL.md": ["M"]
+      "skills/context-engineering/SKILL.md": ["M"]
+      "skills/detailed-spec-writing/SKILL.md": ["M"]
+      "skills/goal-writing/SKILL.md": ["A"]
+      "skills/goal-writing/references/rubrics.md": ["A"]
+      "skills/have-you-considered/SKILL.md": ["M"]
+      "skills/lesson-capture/SKILL.md": ["M"]
+      "skills/liza-logs/SKILL.md": ["M"]
+      "skills/liza-logs/report-format.md": ["M"]
+      "skills/liza-operator/SKILL.md": ["M"]
+  build_and_distribution:
+    tier: 1
+    observed_change_kinds_by_path:
+      ".gitattributes": ["A"]
+      ".github/workflows/ci.yml": ["M"]
+      ".goreleaser.yaml": ["M"]
+      "Makefile": ["M"]
+      "install.ps1": ["A"]
+      "install.sh": ["M"]
+  decision_or_enrichment_document:
+    tier: null
+    observed_change_kinds_by_path:
+      "GETTING_STARTED.md": ["M"]
+      "README.md": ["M"]
+      "RELEASE.md": ["M"]
+      "REPOSITORY.md": ["M"]
+      "TECH_DEBT.md": ["M"]
+      "docs/DEMO.md": ["M"]
+      "docs/PERFORMANCE.md": ["M"]
+      "docs/RECIPES.md": ["M"]
+      "docs/TESTING.md": ["M"]
+      "docs/liza-hardened-mas.md": ["M"]
+      "specs/README.md": ["M"]
+      "specs/architecture/ADR/0009-canonical-contract-root.md": ["M"]
+      "specs/architecture/ADR/0031-configurable-post-worktree-command.md": ["M"]
+      "specs/architecture/ADR/0036-structured-task-output-and-scope-extensions.md": ["M"]
+      "specs/architecture/ADR/0050-brownfield-safe-initialization.md": ["M"]
+      "specs/architecture/ADR/0054-blocking-await-primitives-for-review-flow.md": ["M"]
+      "specs/architecture/ADR/0067-master-planning-task-pattern.md": ["M"]
+      "specs/architecture/ADR/0077-dependency-edge-canonicalization.md": ["M"]
+      "specs/architecture/ADR/0080-claimable-rebase-unblock.md": ["M"]
+      "specs/architecture/ADR/0085-llm-agent-boundary-and-acp-observability.md": ["M"]
+      "specs/architecture/ADR/0086-local-support-toolchain.md": ["A"]
+      "specs/architecture/ADR/0087-terminal-multiplexer-launchers.md": ["A"]
+      "specs/architecture/ADR/0088-aggregate-scip-indexes-across-language-roots.md": ["A"]
+      "specs/architecture/ADR/0089-explicit-project-root-selection.md": ["A"]
+      "specs/architecture/ADR/0090-opt-in-update-checks-and-self-update.md": ["A"]
+      "specs/architecture/ADR/0091-optional-bash-policy-initialization.md": ["A"]
+      "specs/architecture/ADR/0092-build-time-white-label-branding.md": ["A"]
+      "specs/architecture/ADR/0093-shell-completion-from-command-metadata.md": ["A"]
+      "specs/architecture/ADR/0094-entry-point-input-readiness-assessment.md": ["A"]
+      "specs/architecture/ADR/0095-functional-cluster-index-lifecycle.md": ["A"]
+      "specs/architecture/ADR/0096-catalog-backed-provider-registry.md": ["A"]
+      "specs/architecture/ADR/0097-cursor-secondary-provider-policy-hooks.md": ["A"]
+      "specs/architecture/ADR/0098-capability-aware-global-first-contract-activation.md": ["A","R099"]
+      "specs/architecture/ADR/0111-capability-aware-global-first-contract-activation.md": ["M","R099"]
+      "specs/architecture/ADR/0112-serialize-integration-working-tree-mutations.md": ["A"]
+      "specs/architecture/ADR/0113-sliced-integration-analysis-and-final-closure.md": ["A"]
+      "specs/architecture/ADR/0114-terminal-dependency-repair.md": ["A"]
+      "specs/architecture/ADR/0115-declarative-atomic-dependency-repairs.md": ["A"]
+      "specs/architecture/ADR/0116-orchestrator-classifies-defect-objectives.md": ["A","M"]
+      "specs/architecture/ADR/0117-fail-closed-worktree-readiness.md": ["A"]
+      "specs/architecture/ADR/0118-native-windows-support.md": ["A"]
+      "specs/architecture/ADR/README.md": ["M"]
+      "specs/architecture/ADR/adr-backfill-clusters/0076-candidate-artifact-reference-guard.md": ["M"]
+      "specs/architecture/ADR/adr-backfill-clusters/0086-local-support-toolchain.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0087-terminal-multiplexer-launchers.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0088-aggregate-scip-indexes-across-language-roots.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0089-explicit-project-root-selection.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0090-opt-in-update-checks-and-self-update.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0091-optional-bash-policy-initialization.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0092-build-time-white-label-branding.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0093-shell-completion-from-command-metadata.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0094-entry-point-input-readiness-assessment.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0095-functional-cluster-index-lifecycle.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0096-catalog-backed-provider-registry.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-clusters/0097-cursor-secondary-provider-policy-hooks.md": ["A"]
+      "specs/architecture/ADR/adr-backfill-state.yml": ["M"]
+      "specs/architecture/architectural-issues.md": ["M"]
+      "specs/architecture/architecture-review.md": ["M"]
+      "specs/architecture/blackboard-schema.md": ["M"]
+      "specs/architecture/code_quality_assessment.md": ["M"]
+      "specs/architecture/competition-survey/liza-vs-bmad-comparison.md": ["M"]
+      "specs/architecture/coverage-summary-2026-07-25.md": ["A"]
+      "specs/architecture/overview.md": ["M"]
+      "specs/architecture/roles.md": ["M"]
+      "specs/architecture/state-machines.md": ["M"]
+      "specs/architecture/supervision-model.md": ["M"]
+      "specs/build/1.4 - Worktree Isolation.md": ["M"]
+      "specs/build/1.5 - Circuit Breaker.md": ["M"]
+      "specs/build/2 - Sub-pipelines and spec writing.md": ["M"]
+      "specs/build/3 - Declarative Role Definitions.md": ["M"]
+      "specs/functional/1.5 - Circuit Breaker.md": ["M"]
+      "specs/goals/20260326-tui.md": ["M"]
+      "specs/goals/20260330-await-resubmission.md": ["M"]
+      "specs/goals/20260330-await-verdict.md": ["M"]
+      "specs/goals/20260818-sliced-integration-analysis.md": ["A"]
+      "specs/implementation/tooling.md": ["M"]
+      "specs/protocols/await-primitives.md": ["A"]
+      "specs/protocols/circuit-breaker.md": ["M"]
+      "specs/protocols/task-lifecycle.md": ["M"]
+      "specs/protocols/worktree-management.md": ["M"]
+      "support-docs/CONFIGURATION.md": ["M"]
+      "support-docs/SUPPORT.md": ["M"]
+      "support-docs/TOOLCHAIN.md": ["M"]
+      "support-docs/TROUBLESHOOTING.md": ["M"]
+      "support-docs/USAGE_MULTI_AGENTS.md": ["M"]
+      "support-docs/how-to-produce-a-goal.md": ["M"]
+  dependency_manifest:
+    tier: 0
+    observed_change_kinds_by_path:
+      "go.mod": ["M"]
+      "go.sum": ["M"]
+  development_dependency_configuration:
+    tier: 0
+    observed_change_kinds_by_path:
+      ".pre-commit-config.yaml": ["M"]
+  domain_structure:
+    tier: 2
+    observed_change_kinds_by_path:
+      "internal/agent/acpx_agent.go": ["M"]
+      "internal/agent/checkpoint_summary.go": ["M"]
+      "internal/agent/claiming.go": ["M"]
+      "internal/agent/cli_agent.go": ["M"]
+      "internal/agent/heartbeat.go": ["M"]
+      "internal/agent/launch_resolver.go": ["M"]
+      "internal/agent/llm_agent.go": ["M"]
+      "internal/agent/logging.go": ["M"]
+      "internal/agent/progress_watchdog.go": ["M"]
+      "internal/agent/prompt.go": ["M"]
+      "internal/agent/provider_audit.go": ["M"]
+      "internal/agent/provider_unavailable.go": ["M"]
+      "internal/agent/registration.go": ["M"]
+      "internal/agent/strategy_doer.go": ["M"]
+      "internal/agent/strategy_orchestrator.go": ["M"]
+      "internal/agent/strategy_reviewer.go": ["M"]
+      "internal/agent/supervisor.go": ["M"]
+      "internal/agent/systemctl.go": ["M"]
+      "internal/agent/workdetection.go": ["M"]
+      "internal/agent/worktree_check.go": ["M"]
+      "internal/analysis/patterns.go": ["M"]
+      "internal/bash-policy-cli/bash_policy_cli.go": ["M"]
+      "internal/brand/brand.go": ["M"]
+      "internal/brandrender/render.go": ["M"]
+      "internal/codexconfig/permissions.go": ["M"]
+      "internal/commands/add_task.go": ["M"]
+      "internal/commands/add_tasks.go": ["M"]
+      "internal/commands/analyze.go": ["M"]
+      "internal/commands/apply_dependency_repair.go": ["A","M"]
+      "internal/commands/assess_blocked.go": ["M"]
+      "internal/commands/assess_hypothesis_exhausted.go": ["M"]
+      "internal/commands/await_budget.go": ["A"]
+      "internal/commands/await_resubmission.go": ["M"]
+      "internal/commands/await_verdict.go": ["M"]
+      "internal/commands/cancel_task.go": ["M"]
+      "internal/commands/claim_task.go": ["M"]
+      "internal/commands/cleanup.go": ["A"]
+      "internal/commands/delete_agent.go": ["M"]
+      "internal/commands/init.go": ["M"]
+      "internal/commands/inspect.go": ["M"]
+      "internal/commands/inspect_agents.go": ["M"]
+      "internal/commands/inspect_field.go": ["M"]
+      "internal/commands/inspect_tasks.go": ["M"]
+      "internal/commands/inspect_time.go": ["M"]
+      "internal/commands/mark_blocked.go": ["M"]
+      "internal/commands/provider_activation.go": ["A","M"]
+      "internal/commands/providers.go": ["M"]
+      "internal/commands/repair_agent_pool.go": ["M"]
+      "internal/commands/repair_superseded_dependencies.go": ["A","M"]
+      "internal/commands/resume.go": ["M"]
+      "internal/commands/retarget_dependency.go": ["M"]
+      "internal/commands/set_task_output.go": ["M"]
+      "internal/commands/setup.go": ["M"]
+      "internal/commands/status.go": ["M"]
+      "internal/commands/submit_review.go": ["M"]
+      "internal/commands/submit_verdict.go": ["M"]
+      "internal/commands/supersede_task.go": ["M"]
+      "internal/commands/unblock_task.go": ["M"]
+      "internal/commands/validate.go": ["M"]
+      "internal/commands/watch.go": ["M"]
+      "internal/commands/write_checkpoint.go": ["M"]
+      "internal/commands/wt_merge.go": ["M"]
+      "internal/db/blackboard.go": ["M"]
+      "internal/db/publish_state_unix.go": ["A"]
+      "internal/db/publish_state_windows.go": ["A"]
+      "internal/embedded/embedded.go": ["M"]
+      "internal/envgate/envgate.go": ["M"]
+      "internal/filelock/filelock.go": ["M"]
+      "internal/functionalclusters/functionalclusters.go": ["M"]
+      "internal/git/git.go": ["M"]
+      "internal/git/merge.go": ["M"]
+      "internal/git/worktree.go": ["M"]
+      "internal/gitbash/resolve.go": ["A"]
+      "internal/gitenv/gitenv.go": ["M"]
+      "internal/interactive/init_wizard.go": ["M"]
+      "internal/interactive/tty.go": ["M"]
+      "internal/models/agent.go": ["M"]
+      "internal/models/config.go": ["M"]
+      "internal/models/diagnostics.go": ["M"]
+      "internal/models/history.go": ["M"]
+      "internal/models/integration.go": ["A"]
+      "internal/models/sprint.go": ["M"]
+      "internal/models/task.go": ["M"]
+      "internal/ops/add_tasks.go": ["M"]
+      "internal/ops/advance_sprint.go": ["M"]
+      "internal/ops/agent_authority.go": ["A"]
+      "internal/ops/agent_health.go": ["M"]
+      "internal/ops/agent_lifecycle_lock.go": ["A"]
+      "internal/ops/agent_process_status.go": ["M"]
+      "internal/ops/analyze.go": ["M"]
+      "internal/ops/apply_dependency_repair.go": ["A","M"]
+      "internal/ops/assess_blocked.go": ["M"]
+      "internal/ops/assess_hypothesis_exhausted.go": ["M"]
+      "internal/ops/await_resubmission.go": ["M"]
+      "internal/ops/await_verdict.go": ["M"]
+      "internal/ops/cancel_task.go": ["M"]
+      "internal/ops/claim_reviewer_task.go": ["M"]
+      "internal/ops/claim_task.go": ["M"]
+      "internal/ops/claim_task_strategy.go": ["M"]
+      "internal/ops/delete_agent.go": ["M"]
+      "internal/ops/delete_agent_process_unix.go": ["M"]
+      "internal/ops/delete_agent_process_windows.go": ["M"]
+      "internal/ops/dependency_rewrite.go": ["M"]
+      "internal/ops/handoff.go": ["M"]
+      "internal/ops/init_project.go": ["M"]
+      "internal/ops/integration_head.go": ["A"]
+      "internal/ops/integration_mutation_lock.go": ["A","M"]
+      "internal/ops/integration_progress.go": ["A","M"]
+      "internal/ops/integration_reconcile.go": ["A","M"]
+      "internal/ops/lifecycle_authority.go": ["A"]
+      "internal/ops/mark_blocked.go": ["M"]
+      "internal/ops/mode_change.go": ["M"]
+      "internal/ops/pipeline_ops.go": ["M"]
+      "internal/ops/post_worktree_setup_error.go": ["A"]
+      "internal/ops/proceed.go": ["M"]
+      "internal/ops/project_cleanup.go": ["A"]
+      "internal/ops/project_lifecycle_lock.go": ["A","M"]
+      "internal/ops/project_lock.go": ["A"]
+      "internal/ops/reconcile_merged.go": ["M"]
+      "internal/ops/recover_task.go": ["M"]
+      "internal/ops/release_claim.go": ["M"]
+      "internal/ops/repair_superseded_dependencies.go": ["A","M"]
+      "internal/ops/replan.go": ["M"]
+      "internal/ops/resume_handoff.go": ["M"]
+      "internal/ops/resume_owned_task.go": ["M"]
+      "internal/ops/retarget_dependency.go": ["M"]
+      "internal/ops/set_task_output.go": ["M"]
+      "internal/ops/shell_runner_unix.go": ["A"]
+      "internal/ops/shell_runner_windows.go": ["A"]
+      "internal/ops/sprint_checkpoint.go": ["M"]
+      "internal/ops/submit_review.go": ["M"]
+      "internal/ops/submit_verdict.go": ["M"]
+      "internal/ops/supersede_task.go": ["M"]
+      "internal/ops/transition_attempt.go": ["M"]
+      "internal/ops/unblock_task.go": ["M"]
+      "internal/ops/update_sprint_metrics.go": ["M"]
+      "internal/ops/write_checkpoint.go": ["M"]
+      "internal/ops/wt_create.go": ["M"]
+      "internal/ops/wt_merge.go": ["M"]
+      "internal/pairingindex/hooks.go": ["M"]
+      "internal/paths/normalize.go": ["M"]
+      "internal/paths/paths.go": ["M"]
+      "internal/pipeline/config.go": ["M"]
+      "internal/pipeline/resolver.go": ["M"]
+      "internal/process/procattr_windows.go": ["M"]
+      "internal/process/spawn.go": ["M"]
+      "internal/procscan/cmdline_unix.go": ["A"]
+      "internal/procscan/cmdline_windows.go": ["A"]
+      "internal/procscan/enumerate_unix.go": ["A"]
+      "internal/procscan/enumerate_windows.go": ["A"]
+      "internal/procscan/liza_agents.go": ["M"]
+      "internal/procscan/process_alive_unix.go": ["A"]
+      "internal/procscan/process_alive_windows.go": ["A"]
+      "internal/procscan/process_status.go": ["M"]
+      "internal/prompts/builder.go": ["M"]
+      "internal/prompts/role_context.go": ["M"]
+      "internal/prompts/templates/base_prompt.tmpl": ["M"]
+      "internal/prompts/templates/blocks/anomaly_logging.tmpl": ["M"]
+      "internal/prompts/templates/blocks/architect_tools.tmpl": ["M"]
+      "internal/prompts/templates/blocks/await_verdict_loop.tmpl": ["M"]
+      "internal/prompts/templates/blocks/blocking_protocol.tmpl": ["M"]
+      "internal/prompts/templates/blocks/branch_integration_context.tmpl": ["M"]
+      "internal/prompts/templates/blocks/cli_failure_recovery.tmpl": ["A"]
+      "internal/prompts/templates/blocks/code_planner_tools.tmpl": ["M"]
+      "internal/prompts/templates/blocks/coder_tools.tmpl": ["M"]
+      "internal/prompts/templates/blocks/collective_plan_scoping.tmpl": ["M"]
+      "internal/prompts/templates/blocks/epic_planner_tools.tmpl": ["M"]
+      "internal/prompts/templates/blocks/implementation_phase.tmpl": ["M"]
+      "internal/prompts/templates/blocks/integration_analyst_tools.tmpl": ["M"]
+      "internal/prompts/templates/blocks/master_decomposition_mandate.tmpl": ["M"]
+      "internal/prompts/templates/blocks/master_decomposition_review.tmpl": ["M"]
+      "internal/prompts/templates/blocks/prior_feedback_review.tmpl": ["A"]
+      "internal/prompts/templates/blocks/prior_rejection.tmpl": ["M"]
+      "internal/prompts/templates/blocks/rejection_format.tmpl": ["M"]
+      "internal/prompts/templates/blocks/review_instructions.tmpl": ["M"]
+      "internal/prompts/templates/blocks/reviewer_state_transitions.tmpl": ["M"]
+      "internal/prompts/templates/blocks/us_writer_tools.tmpl": ["M"]
+      "internal/prompts/templates/replacement_lineage_policy.tmpl": ["A"]
+      "internal/prompts/templates/wake_blocked_tasks.tmpl": ["M"]
+      "internal/prompts/templates/wake_coding_complete.tmpl": ["M"]
+      "internal/prompts/templates/wake_hypothesis_exhausted.tmpl": ["M"]
+      "internal/prompts/templates/wake_immediate_discovery.tmpl": ["M"]
+      "internal/prompts/templates/wake_initial_planning.tmpl": ["M"]
+      "internal/prompts/wake.go": ["M"]
+      "internal/providers/catalog.go": ["M"]
+      "internal/providers/embedded.go": ["M"]
+      "internal/scipsearch/doc.go": ["M"]
+      "internal/scipsearch/scipsearch.go": ["M"]
+      "internal/semble/doc.go": ["M"]
+      "internal/semble/semble.go": ["M"]
+      "internal/stacklit/doc.go": ["M"]
+      "internal/statehygiene/hygiene.go": ["M"]
+      "internal/statevalidate/integration.go": ["A"]
+      "internal/statevalidate/validate.go": ["M"]
+      "internal/statevalidate/validate_deps.go": ["M"]
+      "internal/statevalidate/validate_task.go": ["M"]
+      "internal/termutil/termutil.go": ["A"]
+      "internal/testguard/cmd/require-go-tests/main.go": ["A"]
+      "internal/toolchain/catalog.go": ["M"]
+      "internal/toolchain/configure.go": ["M"]
+      "internal/toolchain/doctor.go": ["M"]
+      "internal/toolchain/install.go": ["M"]
+      "internal/tui/commands.go": ["M"]
+      "internal/tui/keymap.go": ["M"]
+      "internal/tui/model.go": ["M"]
+      "internal/tui/update.go": ["M"]
+      "internal/tui/view.go": ["M"]
+      "internal/updater/updater.go": ["M"]
+      "internal/worktreeexclude/worktreeexclude.go": ["M"]
+      "plugin/acp/manager.go": ["M"]
+      "skills/liza-logs/scripts/analyze-log.py": ["M"]
+      "skills/liza-logs/scripts/query-log.py": ["M"]
+  generated_index:
+    tier: null
+    observed_change_kinds_by_path:
+      "stacklit-insights.json": ["M"]
+  historical_decision_artifact:
+    tier: null
+    observed_change_kinds_by_path:
+      "specs/arch-plan/20260412-085210-architecture-1.md": ["D"]
+      "specs/arch-plan/20260412-110120-architecture-2a.md": ["D"]
+      "specs/arch-plan/20260412-112517-architecture-3a.md": ["D"]
+      "specs/arch-plan/20260412-120128-architecture-3.md": ["D"]
+      "specs/arch-plan/20260412-124731-architecture-4a.md": ["D"]
+      "specs/arch-plan/20260412-125944-architecture-4.md": ["D"]
+      "specs/arch-plan/20260417-141659-architecture-1.md": ["D"]
+      "specs/arch-plan/20260417-143319-architecture-2.md": ["D"]
+      "specs/arch-plan/20260417-145405-architecture-3.md": ["D"]
+      "specs/arch-plan/20260417-152601-architecture-4.md": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-011938-architecture-1-output.json": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-011938-architecture-1.md": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-012752-architecture-1-output.json": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-012752-architecture-1.md": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-013840-architecture-2-output.json": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-013840-architecture-2.md": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2-output.json": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-015252-architecture-2.md": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-020422-architecture-3-output.json": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-020422-architecture-3.md": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-021340-architecture-4-output.json": ["D"]
+      "specs/arch-plan/20260517-use-scip-search/20260521-021340-architecture-4.md": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-024522-architecture-2.md": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-025848-architecture-1.md": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-111950-architecture-3.md": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-113530-architecture-3-output.json": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-113530-architecture-3.md": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-114521-architecture-3-output.json": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-114521-architecture-3.md": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-115540-architecture-3-output.json": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-115540-architecture-3.md": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-121639-architecture-4-output.json": ["D"]
+      "specs/arch-plan/20260520-artifact-ref-protection/20260520-121639-architecture-4.md": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-024555-architecture-1-output.json": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-024555-architecture-1.md": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-102450-architecture-4-output.json": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-102450-architecture-4.md": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-103617-architecture-2-a-output.json": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-103617-architecture-2-a.md": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-104359-architecture-2-b-output.json": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-104359-architecture-2-b.md": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-105319-architecture-3-b-output.json": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-105319-architecture-3-b.md": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-110234-architecture-5-output.json": ["D"]
+      "specs/arch-plan/20260523-master-planning-task/20260523-110234-architecture-5.md": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-130216-architecture-main-1-output.json": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-130216-architecture-main-1.md": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-133505-architecture-main-1-architecture-0-output.json": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-133505-architecture-main-1-architecture-0.md": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-134006-architecture-main-1-architecture-4-output.json": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-134006-architecture-main-1-architecture-4.md": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-135025-architecture-main-1-architecture-2-output.json": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-135025-architecture-main-1-architecture-2.md": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-135031-architecture-main-1-architecture-1-output.json": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-135031-architecture-main-1-architecture-1.md": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-144312-architecture-main-1-architecture-3-output.json": ["D"]
+      "specs/arch-plan/20260601-integrate-semble/20260601-144312-architecture-main-1-architecture-3.md": ["D"]
+      "specs/plans/20260317-013200-code-planning-1.md": ["D"]
+      "specs/plans/20260323-171702-code-planning-1.md": ["D"]
+      "specs/plans/20260323-173058-code-planning-2.md": ["D"]
+      "specs/plans/20260323-174138-code-planning-2.md": ["D"]
+      "specs/plans/20260323-175242-code-planning-3.md": ["D"]
+      "specs/plans/20260323-175952-code-planning-3.md": ["D"]
+      "specs/plans/20260323-180950-code-planning-3.md": ["D"]
+      "specs/plans/20260323-181823-code-planning-3.md": ["D"]
+      "specs/plans/20260323-182910-code-planning-4.md": ["D"]
+      "specs/plans/20260323-184310-code-planning-4.md": ["D"]
+      "specs/plans/20260323-185257-code-planning-4.md": ["D"]
+      "specs/plans/20260323-190330-code-planning-4.md": ["D"]
+      "specs/plans/20260323-191248-code-planning-5.md": ["D"]
+      "specs/plans/20260323-192237-code-planning-5.md": ["D"]
+      "specs/plans/20260326-154750-code-planning-1.md": ["D"]
+      "specs/plans/20260326-155925-code-planning-2.md": ["D"]
+      "specs/plans/20260326-161411-code-planning-3.md": ["D"]
+      "specs/plans/20260326-163220-code-planning-4.md": ["D"]
+      "specs/plans/20260326-165138-code-planning-5.md": ["D"]
+      "specs/plans/20260327-233616-code-planning-1.md": ["D"]
+      "specs/plans/20260327-234710-code-planning-2.md": ["D"]
+      "specs/plans/20260328-000219-code-planning-3.md": ["D"]
+      "specs/plans/20260328-001207-code-planning-4.md": ["D"]
+      "specs/plans/20260328-002116-code-planning-5.md": ["D"]
+      "specs/plans/20260328-003001-code-planning-5.md": ["D"]
+      "specs/plans/20260330-143050-code-planning-1.md": ["D"]
+      "specs/plans/20260330-143844-code-planning-2.md": ["D"]
+      "specs/plans/20260330-145120-code-planning-3.md": ["D"]
+      "specs/plans/20260330-212130-code-planning-1.md": ["D"]
+      "specs/plans/20260330-213428-code-planning-2.md": ["D"]
+      "specs/plans/20260330-215310-code-planning-3.md": ["D"]
+      "specs/plans/20260405-080503-code-planning-1.md": ["D"]
+      "specs/plans/20260405-081438-code-planning-2.md": ["D"]
+      "specs/plans/20260405-083629-code-planning-3.md": ["D"]
+      "specs/plans/20260405-085805-code-planning-4.md": ["D"]
+      "specs/plans/20260405-180821-code-planning-1.md": ["D"]
+      "specs/plans/20260405-182655-code-planning-2.md": ["D"]
+      "specs/plans/20260405-183919-code-planning-3.md": ["D"]
+      "specs/plans/20260405-190303-code-planning-4.md": ["D"]
+      "specs/plans/20260412-105605-architecture-1-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260412-113208-architecture-1-code-plan-1a.md": ["D"]
+      "specs/plans/20260412-131438-architecture-3-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260412-131612-architecture-2a-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260412-132304-architecture-3-architecture-to-code-plan-3.md": ["D"]
+      "specs/plans/20260412-132309-architecture-3-architecture-to-code-plan-2.md": ["D"]
+      "specs/plans/20260412-133135-architecture-3-architecture-to-code-plan-1.md": ["D"]
+      "specs/plans/20260412-133332-architecture-2a-architecture-to-code-plan-1.md": ["D"]
+      "specs/plans/20260412-133913-architecture-4-architecture-to-code-plan-1.md": ["D"]
+      "specs/plans/20260412-134330-architecture-4-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260412-134820-architecture-4-architecture-to-code-plan-2.md": ["D"]
+      "specs/plans/20260412-135200-architecture-3a-architecture-to-code-plan-1.md": ["D"]
+      "specs/plans/20260412-135917-architecture-3a-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260412-141148-architecture-3a-architecture-to-code-plan-2.md": ["D"]
+      "specs/plans/20260412-141805-architecture-4a-architecture-to-code-plan-1.md": ["D"]
+      "specs/plans/20260412-142009-architecture-4a-architecture-to-code-plan-2.md": ["D"]
+      "specs/plans/20260412-142335-architecture-4a-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260417-163926-architecture-1-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260417-163953-architecture-3-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260417-164021-architecture-3-architecture-to-code-plan-1.md": ["D"]
+      "specs/plans/20260417-164042-architecture-3-architecture-to-code-plan-2.md": ["D"]
+      "specs/plans/20260417-164420-architecture-1-architecture-to-code-plan-1.md": ["D"]
+      "specs/plans/20260417-165003-architecture-3-architecture-to-code-plan-3.md": ["D"]
+      "specs/plans/20260417-165201-architecture-4-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260417-165252-architecture-2-architecture-to-code-plan-0.md": ["D"]
+      "specs/plans/20260417-165252-output.json": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-022342-architecture-4-code-planning-0-output.json": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-022342-architecture-4-code-planning-0.md": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-073929-architecture-2-code-planning-0-output.json": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-073929-architecture-2-code-planning-0.md": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-075141-architecture-2-code-planning-3-output.json": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-075141-architecture-2-code-planning-3.md": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-080454-architecture-2-code-planning-2-output.json": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-080454-architecture-2-code-planning-2.md": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-081912-architecture-2-code-planning-1-output.json": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-081912-architecture-2-code-planning-1.md": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-083258-architecture-3-code-planning-0-output.json": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-083258-architecture-3-code-planning-0.md": ["D"]
+      "specs/plans/20260517-use-scip-search/20260521-integration-analysis-scip-search-1-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-025711-architecture-2-code-planning-0-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-025711-architecture-2-code-planning-0.md": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-111928-architecture-1-code-planning-0-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-111928-architecture-1-code-planning-0.md": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-111957-architecture-2-code-planning-0-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-111957-architecture-2-code-planning-0.md": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-134347-architecture-3-code-planning-0-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-134347-architecture-3-code-planning-0.md": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-135305-architecture-3-code-planning-1-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-135305-architecture-3-code-planning-1.md": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-140421-architecture-4-code-planning-0-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-140421-architecture-4-code-planning-0.md": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-141346-architecture-4-code-planning-1-output.json": ["D"]
+      "specs/plans/20260520-artifact-ref-protection/20260520-141346-architecture-4-code-planning-1.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-125106-architecture-3-b-code-planning-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-125106-architecture-3-b-code-planning-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-130003-architecture-3-b-code-planning-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-130003-architecture-3-b-code-planning-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-134045-architecture-4-code-planning-0-a-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-134045-architecture-4-code-planning-0-a.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-134137-architecture-2-a-code-planning-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-134137-architecture-2-a-code-planning-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-134951-architecture-4-code-planning-0-a-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-134951-architecture-4-code-planning-0-a.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-135215-architecture-2-a-code-planning-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-135215-architecture-2-a-code-planning-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-135815-architecture-4-code-planning-0-a-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-135815-architecture-4-code-planning-0-a.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-142523-architecture-4-code-planning-0-c.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-142631-architecture-4-code-planning-0-b.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-143720-architecture-4-code-planning-0-d-repair-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-143720-architecture-4-code-planning-0-d-repair-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-144938-architecture-4-code-planning-0-b-repair-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-144938-architecture-4-code-planning-0-b-repair-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-145900-architecture-4-code-planning-0-c-repair-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-145900-architecture-4-code-planning-0-c-repair-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-150934-architecture-2-b-code-planning-0-repair-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-150934-architecture-2-b-code-planning-0-repair-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-171755-architecture-5-code-planning-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-171755-architecture-5-code-planning-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-172921-architecture-5-code-planning-1-repair-0-output.json": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-172921-architecture-5-code-planning-1-repair-0.md": ["D"]
+      "specs/plans/20260523-master-planning-task/20260523-201642-integration-analysis-20260523-full-diff-1-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-135022-architecture-main-1-architecture-0-code-planning-0-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-135022-architecture-main-1-architecture-0-code-planning-0.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-141439-architecture-main-1-architecture-0-code-planning-0-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-141439-architecture-main-1-architecture-0-code-planning-0.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-144126-architecture-main-1-architecture-4-code-planning-0-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-144126-architecture-main-1-architecture-4-code-planning-0.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-150653-architecture-main-1-architecture-1-code-planning-0-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-150653-architecture-main-1-architecture-1-code-planning-0.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-155635-architecture-main-1-architecture-2-code-planning-0-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-155635-architecture-main-1-architecture-2-code-planning-0.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-163042-architecture-main-1-architecture-2-code-planning-1-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-163042-architecture-main-1-architecture-2-code-planning-1.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-164506-architecture-main-1-architecture-2-code-planning-1-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-164506-architecture-main-1-architecture-2-code-planning-1.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-165714-architecture-main-1-architecture-3-code-planning-0-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-165714-architecture-main-1-architecture-3-code-planning-0.md": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-185303-architecture-main-1-architecture-3-code-planning-0-output.json": ["D"]
+      "specs/plans/20260601-integrate-semble/20260601-185303-architecture-main-1-architecture-3-code-planning-0.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-121659-code-planning-main-1-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-121659-code-planning-main-1.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-123514-code-planning-main-1-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-123514-code-planning-main-1.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-130414-code-planning-main-1-code-planning-0-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-130414-code-planning-main-1-code-planning-0.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-130539-code-planning-main-1-code-planning-5-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-130539-code-planning-main-1-code-planning-5.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-143043-code-planning-main-1-code-planning-2-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-143043-code-planning-main-1-code-planning-2.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-143151-code-planning-main-1-code-planning-1-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-143151-code-planning-main-1-code-planning-1.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-143152-code-planning-main-1-code-planning-3-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-143152-code-planning-main-1-code-planning-3.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-145844-code-planning-main-1-code-planning-4-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-145844-code-planning-main-1-code-planning-4.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-151325-code-planning-main-1-code-planning-7-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-151325-code-planning-main-1-code-planning-7.md": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-151416-code-planning-main-1-code-planning-6-output.json": ["D"]
+      "specs/plans/20260602-indexing-activation/20260602-151416-code-planning-main-1-code-planning-6.md": ["D"]
+      "specs/plans/cp1-output.json": ["D"]
+      "specs/plans/declarative-roles-phase-4.md": ["D"]
+      "specs/plans/output-cp1.json": ["D"]
+      "specs/plans/output.json": ["D"]
+      "specs/plans/refactoring-pass2-coding-plan.md": ["D"]
+      "specs/plans/sub-pipelines-phase1-steps5-8.md": ["D"]
+      "specs/plans/sub-pipelines-phase2.md": ["D"]
+      "specs/plans/task-output-architecture-3-cp1.json": ["D"]
+      "specs/plans/task-output-architecture-4-cp0.json": ["D"]
+      "specs/plans/task-output.json": ["D"]
+  interface_contract:
+    tier: 3
+    observed_change_kinds_by_path:
+      "cmd/liza/agent_generation.go": ["A"]
+      "cmd/liza/cmd_agent.go": ["M"]
+      "cmd/liza/cmd_cleanup.go": ["A"]
+      "cmd/liza/cmd_init.go": ["M"]
+      "cmd/liza/cmd_launch.go": ["M"]
+      "cmd/liza/cmd_review.go": ["M"]
+      "cmd/liza/cmd_system.go": ["M"]
+      "cmd/liza/cmd_task.go": ["M"]
+      "cmd/liza/cmd_toolchain.go": ["M"]
+      "cmd/liza/cmd_worktree.go": ["M"]
+      "cmd/liza/main.go": ["M"]
+      "cmd/liza/rbac.go": ["M"]
+      "cmd/liza/supervisor_logs.go": ["A"]
+      "internal/embedded/bash-policy.yaml": ["M"]
+      "internal/embedded/claude-settings.json": ["M"]
+      "internal/embedded/codex-config.toml": ["M"]
+      "internal/embedded/codex-hooks.json": ["M"]
+      "internal/embedded/pipeline.yaml": ["M"]
+      "internal/render/templates/status_dashboard.tmpl": ["M"]
+      "provider-catalog.yaml": ["M"]
+  supporting:
+    tier: null
+    observed_change_kinds_by_path:
+      ".bash-policy.yaml": ["M"]
+      ".gitignore": ["M"]
+      "Liza-CLA.md": ["A","M"]
+      "contracts/COLLABORATION_CONTINUITY.md": ["M"]
+      "contracts/CONTRACT_FAILURE_MODE_MAP.md": ["M"]
+      "lessons/agents/rtk-buffered-long-validation.md": ["A","M"]
+      "lessons/agents/rtk-proxy-for-stdin-tools.md": ["A"]
+      "lessons/agents/worktree-build-prerequisites.md": ["M"]
+      "scripts/repro/precommit-bootstrap-greenfield.sh": ["M"]
+  test_and_fixture:
+    tier: null
+    observed_change_kinds_by_path:
+      "cmd/liza/agent_generation_e2e_test.go": ["A","M"]
+      "cmd/liza/agent_generation_test.go": ["A"]
+      "cmd/liza/agent_help_test.go": ["M"]
+      "cmd/liza/brand_smoke_test.go": ["M"]
+      "cmd/liza/cmd_agent_cli_test.go": ["M"]
+      "cmd/liza/cmd_cleanup_test.go": ["A"]
+      "cmd/liza/cmd_init_test.go": ["M"]
+      "cmd/liza/cmd_launch_test.go": ["M"]
+      "cmd/liza/cmd_review_test.go": ["M"]
+      "cmd/liza/cmd_system_test.go": ["M"]
+      "cmd/liza/cmd_toolchain_test.go": ["M"]
+      "cmd/liza/get_test.go": ["M"]
+      "cmd/liza/install_script_test.go": ["M"]
+      "cmd/liza/json_wiring_test.go": ["M"]
+      "cmd/liza/main_test.go": ["M"]
+      "cmd/liza/mutation_wiring_test.go": ["M"]
+      "cmd/liza/provider_catalog_cmd_test.go": ["M"]
+      "cmd/liza/rbac_test.go": ["M"]
+      "cmd/liza/retarget_dependency_diagnostics_test.go": ["A"]
+      "cmd/liza/rootcmd_test_helpers_test.go": ["M"]
+      "cmd/liza/status_pipeline_semantics_test.go": ["A","M"]
+      "cmd/liza/supervisor_logs_test.go": ["A"]
+      "cmd/liza/unblock_status_age_json_test.go": ["A"]
+      "internal/agent/acp_performance_test.go": ["M"]
+      "internal/agent/acpx_agent_test.go": ["M"]
+      "internal/agent/acpx_real_performance_test.go": ["M"]
+      "internal/agent/checkpoint_summary_test.go": ["M"]
+      "internal/agent/claiming_checkpoint_test.go": ["M"]
+      "internal/agent/claiming_test.go": ["M"]
+      "internal/agent/cli_test.go": ["M"]
+      "internal/agent/cursor_acp_manual_test.go": ["M"]
+      "internal/agent/envfile_test.go": ["M"]
+      "internal/agent/generation_fence_test.go": ["A"]
+      "internal/agent/heartbeat_test.go": ["M"]
+      "internal/agent/launch_resolver_test.go": ["M"]
+      "internal/agent/merge_gate_test.go": ["M"]
+      "internal/agent/prompt_integration_test.go": ["A","M"]
+      "internal/agent/prompt_test.go": ["M"]
+      "internal/agent/provider_audit_test.go": ["M"]
+      "internal/agent/provider_launch_generation_test.go": ["A","M"]
+      "internal/agent/provider_unavailable_test.go": ["M"]
+      "internal/agent/quota_test.go": ["M"]
+      "internal/agent/registration_test.go": ["M"]
+      "internal/agent/strategy_orchestrator_scip_test.go": ["M"]
+      "internal/agent/strategy_reviewer_test.go": ["M"]
+      "internal/agent/strategy_test.go": ["M"]
+      "internal/agent/supervisor_lifecycle_test.go": ["A","M"]
+      "internal/agent/supervisor_merge_test.go": ["A","M"]
+      "internal/agent/supervisor_test.go": ["M"]
+      "internal/agent/systemctl_test.go": ["M"]
+      "internal/agent/waitforwork_test.go": ["M"]
+      "internal/agent/workdetection_test.go": ["M"]
+      "internal/agent/worktree_check_test.go": ["M"]
+      "internal/analysis/patterns_test.go": ["M"]
+      "internal/bash-policy-cli/bash_policy_cli_test.go": ["M"]
+      "internal/brand/brand_test.go": ["M"]
+      "internal/brandrender/render_test.go": ["M"]
+      "internal/codexconfig/permissions_test.go": ["M"]
+      "internal/commands/analyze_test.go": ["M"]
+      "internal/commands/assess_blocked_test.go": ["M"]
+      "internal/commands/await_budget_test.go": ["A","M"]
+      "internal/commands/claim_task_test.go": ["M"]
+      "internal/commands/cleanup_test.go": ["A"]
+      "internal/commands/delete_agent_test.go": ["M"]
+      "internal/commands/delete_task_test.go": ["M"]
+      "internal/commands/handoff_test.go": ["M"]
+      "internal/commands/init_cleanup_test.go": ["A"]
+      "internal/commands/init_test.go": ["M"]
+      "internal/commands/inspect_agents_test.go": ["M"]
+      "internal/commands/inspect_field_test.go": ["M"]
+      "internal/commands/inspect_tasks_test.go": ["M"]
+      "internal/commands/inspect_tasks_unblock_age_test.go": ["A"]
+      "internal/commands/inspect_time_test.go": ["M"]
+      "internal/commands/migrate_test.go": ["M"]
+      "internal/commands/provider_activation_test.go": ["A","M"]
+      "internal/commands/provider_catalog_test.go": ["M"]
+      "internal/commands/recover_agent_test.go": ["M"]
+      "internal/commands/repair_agent_pool_test.go": ["M"]
+      "internal/commands/resume_test.go": ["M"]
+      "internal/commands/setup_test.go": ["M"]
+      "internal/commands/status_integration_test.go": ["M"]
+      "internal/commands/status_test.go": ["M"]
+      "internal/commands/submit_review_test.go": ["M"]
+      "internal/commands/submit_verdict_test.go": ["M"]
+      "internal/commands/unblock_task_test.go": ["A"]
+      "internal/commands/validate_test.go": ["M"]
+      "internal/commands/watch_test.go": ["M"]
+      "internal/commands/wt_create_test.go": ["M"]
+      "internal/commands/wt_delete_test.go": ["M"]
+      "internal/commands/wt_merge_test.go": ["M"]
+      "internal/db/blackboard_test.go": ["M"]
+      "internal/db/publish_state_windows_test.go": ["A"]
+      "internal/embedded/blocked_metadata_reconciliation_contract_test.go": ["A"]
+      "internal/embedded/consistency_test.go": ["M"]
+      "internal/embedded/embedded_test.go": ["M"]
+      "internal/embedded/enforce_init_hook_test.go": ["M"]
+      "internal/embedded/session_context_hook_test.go": ["M"]
+      "internal/envgate/envgate_test.go": ["M"]
+      "internal/filelock/filelock_test.go": ["M"]
+      "internal/git/worktree_test.go": ["M"]
+      "internal/gitbash/resolve_test.go": ["A"]
+      "internal/gitenv/gitenv_test.go": ["M"]
+      "internal/integration/await_resubmission_test.go": ["M"]
+      "internal/integration/await_verdict_test.go": ["M"]
+      "internal/integration/blocked_metadata_reconciliation_test.go": ["A"]
+      "internal/integration/circuit_breaker_review_churn_test.go": ["A"]
+      "internal/integration/concurrent_operations_test.go": ["M"]
+      "internal/integration/dependency_repair_test.go": ["A","M"]
+      "internal/integration/e2e_workflow_test.go": ["M"]
+      "internal/integration/full_sprint_test.go": ["M"]
+      "internal/integration/indexing_activation_disabled_test.go": ["M"]
+      "internal/integration/indexing_activation_helpers_test.go": ["M"]
+      "internal/integration/indexing_activation_hooks_test.go": ["M"]
+      "internal/integration/indexing_activation_mas_prompt_test.go": ["M"]
+      "internal/integration/indexing_activation_scip_test.go": ["M"]
+      "internal/integration/indexing_activation_sessionstart_test.go": ["M"]
+      "internal/integration/indexing_activation_stacklit_test.go": ["M"]
+      "internal/integration/provider_unavailable_acp_test.go": ["A","M"]
+      "internal/integration/repair_agent_pool_quorum_test.go": ["A"]
+      "internal/integration/sliced_integration_test.go": ["A","M"]
+      "internal/integration/terminal_dependency_recovery_test.go": ["A"]
+      "internal/integration/unblock_task_test.go": ["A"]
+      "internal/interactive/init_wizard_test.go": ["M"]
+      "internal/models/agent_test.go": ["A"]
+      "internal/models/config_test.go": ["A"]
+      "internal/models/diagnostics_test.go": ["M"]
+      "internal/models/history_test.go": ["M"]
+      "internal/models/integration_test.go": ["A"]
+      "internal/models/state_test.go": ["M"]
+      "internal/models/task_test.go": ["M"]
+      "internal/ops/add_tasks_test.go": ["M"]
+      "internal/ops/advance_sprint_test.go": ["M"]
+      "internal/ops/agent_authority_test.go": ["A"]
+      "internal/ops/agent_health_test.go": ["M"]
+      "internal/ops/agent_lifecycle_lock_test.go": ["A"]
+      "internal/ops/agent_process_status_test.go": ["A","M"]
+      "internal/ops/analyze_test.go": ["M"]
+      "internal/ops/apply_dependency_repair_test.go": ["A","M"]
+      "internal/ops/assess_blocked_test.go": ["M"]
+      "internal/ops/assess_hypothesis_exhausted_test.go": ["M"]
+      "internal/ops/await_resubmission_test.go": ["M"]
+      "internal/ops/await_verdict_test.go": ["M"]
+      "internal/ops/cancel_task_test.go": ["M"]
+      "internal/ops/check_commit_allowed_test.go": ["M"]
+      "internal/ops/claim_reviewer_task_test.go": ["M"]
+      "internal/ops/claim_task_strategy_test.go": ["M"]
+      "internal/ops/claim_task_test.go": ["M"]
+      "internal/ops/clear_stale_review_claims_test.go": ["M"]
+      "internal/ops/delete_agent_process_windows_test.go": ["A"]
+      "internal/ops/delete_agent_test.go": ["M"]
+      "internal/ops/delete_task_test.go": ["M"]
+      "internal/ops/generation_fence_lifecycle_test.go": ["A","M"]
+      "internal/ops/handoff_test.go": ["M"]
+      "internal/ops/init_project_test.go": ["M"]
+      "internal/ops/integration_mutation_lock_test.go": ["A","M"]
+      "internal/ops/integration_progress_test.go": ["A","M"]
+      "internal/ops/integration_reconcile_test.go": ["A","M"]
+      "internal/ops/iteration_limits_test.go": ["M"]
+      "internal/ops/mark_blocked_test.go": ["M"]
+      "internal/ops/mode_change_test.go": ["M"]
+      "internal/ops/operational_error_test.go": ["M"]
+      "internal/ops/pipeline_ops_test.go": ["M"]
+      "internal/ops/post_worktree_setup_error_test.go": ["A"]
+      "internal/ops/predecessor_cleanup_test.go": ["M"]
+      "internal/ops/proceed_test.go": ["M"]
+      "internal/ops/project_cleanup_test.go": ["A","M"]
+      "internal/ops/project_lifecycle_lock_test.go": ["A","M"]
+      "internal/ops/reconcile_merged_test.go": ["M"]
+      "internal/ops/recover_agent_test.go": ["M"]
+      "internal/ops/recover_task_test.go": ["M"]
+      "internal/ops/release_claim_test.go": ["M"]
+      "internal/ops/repair_superseded_dependencies_test.go": ["A","M"]
+      "internal/ops/replan_test.go": ["M"]
+      "internal/ops/resolve_orchestrator_test.go": ["M"]
+      "internal/ops/resume_handoff_test.go": ["M"]
+      "internal/ops/retarget_dependency_test.go": ["M"]
+      "internal/ops/semble_indexing_test.go": ["M"]
+      "internal/ops/set_auto_resume_test.go": ["M"]
+      "internal/ops/set_discovery_disposition_test.go": ["M"]
+      "internal/ops/set_task_output_test.go": ["M"]
+      "internal/ops/shell_test_helpers_test.go": ["A"]
+      "internal/ops/sprint_checkpoint_test.go": ["M"]
+      "internal/ops/submit_review_test.go": ["M"]
+      "internal/ops/submit_verdict_test.go": ["M"]
+      "internal/ops/supersede_task_test.go": ["M"]
+      "internal/ops/task_agent_release_test.go": ["M"]
+      "internal/ops/task_lifecycle_generation_fence_test.go": ["A","M"]
+      "internal/ops/test_detection_test.go": ["M"]
+      "internal/ops/transition_attempt_test.go": ["M"]
+      "internal/ops/unblock_task_test.go": ["M"]
+      "internal/ops/update_review_commit_test.go": ["M"]
+      "internal/ops/update_sprint_metrics_test.go": ["M"]
+      "internal/ops/write_checkpoint_test.go": ["M"]
+      "internal/ops/wt_create_test.go": ["M"]
+      "internal/ops/wt_delete_test.go": ["M"]
+      "internal/ops/wt_merge_test.go": ["M"]
+      "internal/pairingindex/hooks_test.go": ["M"]
+      "internal/paths/normalize_test.go": ["M"]
+      "internal/paths/paths_test.go": ["M"]
+      "internal/pipeline/config_test.go": ["M"]
+      "internal/pipeline/resolver_test.go": ["M"]
+      "internal/process/procattr_windows_test.go": ["A"]
+      "internal/process/spawn_test.go": ["M"]
+      "internal/procscan/cmdline_windows_test.go": ["A"]
+      "internal/procscan/liza_agents_test.go": ["M"]
+      "internal/procscan/process_alive_windows_test.go": ["A"]
+      "internal/procscan/process_status_test.go": ["A"]
+      "internal/prompts/builder_test.go": ["M"]
+      "internal/prompts/cross_transition_dependency_contract_test.go": ["A"]
+      "internal/prompts/dependency_repair_contract_test.go": ["A"]
+      "internal/prompts/role_context_integration_test.go": ["A"]
+      "internal/prompts/role_context_test.go": ["M"]
+      "internal/prompts/semantic_dependency_direction_contract_test.go": ["A"]
+      "internal/prompts/wake_initial_planning_render_test.go": ["M"]
+      "internal/prompts/wake_route_data_test.go": ["M"]
+      "internal/providers/catalog_test.go": ["M"]
+      "internal/scipsearch/scipsearch_test.go": ["M"]
+      "internal/semble/semble_test.go": ["M"]
+      "internal/statehygiene/hygiene_test.go": ["M"]
+      "internal/statevalidate/integration_test.go": ["A"]
+      "internal/statevalidate/validate_deps_test.go": ["M"]
+      "internal/statevalidate/validate_task_test.go": ["M"]
+      "internal/termutil/termutil_test.go": ["A"]
+      "internal/testguard/cmd/require-go-tests/main_test.go": ["A"]
+      "internal/testguard/generation_recovery_docs_test.go": ["A"]
+      "internal/testguard/parallel_usage_test.go": ["M"]
+      "internal/testguard/sleep_usage_test.go": ["M"]
+      "internal/testhelpers/filemode.go": ["A"]
+      "internal/testhelpers/fixtures.go": ["M"]
+      "internal/testhelpers/perm/perm.go": ["A"]
+      "internal/testhelpers/perm/perm_test.go": ["A"]
+      "internal/testhelpers/perm/perm_unix.go": ["A"]
+      "internal/testhelpers/perm/perm_windows.go": ["A"]
+      "internal/testhelpers/pipeline.go": ["M"]
+      "internal/testhelpers/removal.go": ["A"]
+      "internal/testhelpers/removal_test.go": ["A"]
+      "internal/testhelpers/setup.go": ["M"]
+      "internal/testhelpers/setup_test.go": ["M"]
+      "internal/testhelpers/shellstub.go": ["A"]
+      "internal/testhelpers/shellstub_test.go": ["A"]
+      "internal/testhelpers/stubrelay/main.go": ["A"]
+      "internal/testhelpers/utils.go": ["M"]
+      "internal/toolchain/catalog_test.go": ["M"]
+      "internal/toolchain/configure_test.go": ["M"]
+      "internal/toolchain/install_test.go": ["M"]
+      "internal/tui/commands_test.go": ["M"]
+      "internal/tui/keymap_test.go": ["M"]
+      "internal/tui/model_test.go": ["M"]
+      "internal/tui/update_test.go": ["M"]
+      "internal/tui/view_test.go": ["M"]
+      "internal/updater/updater_test.go": ["M"]
+      "internal/worktreeexclude/worktreeexclude_test.go": ["M"]
+      "plugin/acp/clock_test.go": ["A"]
+      "plugin/acp/manager_test.go": ["M"]
+      "skills/liza-logs/scripts/test_analyze_log.py": ["M"]
+      "skills/liza-logs/scripts/test_log_cli_e2e.py": ["A"]
+      "skills/liza-logs/scripts/test_query_log.py": ["M"]
+      "skills/liza-logs/scripts/testdata/claude-rich-init-redacted.ndjson": ["A"]
+commits:
+  "71019b75":
+    author_date: "2026-07-06T12:56:22+02:00"
+    subject: "fix(init): use claude policy for cursor shell hook"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0097","rationale":"Cursor provider/policy setup follow-through already explicitly included in ADR-0097."}]
+  "3f8f8121":
+    author_date: "2026-07-06T16:48:44+02:00"
+    subject: "chore: add .cursor to .gitignore"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "13171b5b":
+    author_date: "2026-07-06T17:05:55+02:00"
+    subject: "feat(toolchain): cover policy and cluster tools"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0086","rationale":"Toolchain catalog/profile coverage and shell guidance under ADR-0086."}]
+  "35e01c88":
+    author_date: "2026-07-06T17:32:03+02:00"
+    subject: "feat(toolchain): print env source instruction"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0086","rationale":"Toolchain catalog/profile coverage and shell guidance under ADR-0086."}]
+  "c98147cf":
+    author_date: "2026-07-06T23:08:59+02:00"
+    subject: "fix(init): delegate cursor bash-policy setup"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0097","rationale":"Cursor provider/policy setup follow-through already explicitly included in ADR-0097."}]
+  "374c1a4a":
+    author_date: "2026-07-06T23:54:02+02:00"
+    subject: "fix(init): expand cursor setup dependencies"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0097","rationale":"Cursor provider/policy setup follow-through already explicitly included in ADR-0097."}]
+  "f35b3ad8":
+    author_date: "2026-07-07T00:24:18+02:00"
+    subject: "feat(init): activate bash-policy after setup"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0091","rationale":"Policy activation completes opt-in delegation already covered by ADR-0091."}]
+  "9e7270ab":
+    author_date: "2026-07-07T01:35:05+02:00"
+    subject: "feat(setup): add cursor setup shortcut"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0097","rationale":"Cursor provider/policy setup follow-through already explicitly included in ADR-0097."}]
+  "f6925e10":
+    author_date: "2026-07-08T16:20:47+02:00"
+    subject: "feat(cli): add yes auto-confirm for setup and init"
+    candidate_ids: [119]
+    other_dispositions: []
+  "255882c3":
+    author_date: "2026-07-08T16:47:27+02:00"
+    subject: "fix(cli): auto-confirm bash-policy init prompts"
+    candidate_ids: [119]
+    other_dispositions: []
+  "8d2d2cc9":
+    author_date: "2026-07-09T02:28:47+02:00"
+    subject: "chore(bash-policy): curate local policy rules"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "281a3d86":
+    author_date: "2026-07-13T23:35:57+02:00"
+    subject: "fix(agent): align reviewer initial-task wait"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0054","rationale":"Targeted reviewer waits now ignore unrelated reviewable work; correctness fix under the existing await/session model."}]
+  "cdd76395":
+    author_date: "2026-07-14T18:04:12+02:00"
+    subject: "fix(brand): use binary name for logs skill"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0092","rationale":"Brand rendering correctness under ADR-0092."}]
+  "24b35b90":
+    author_date: "2026-07-14T18:26:25+02:00"
+    subject: "docs(skills): require log analysis before task recovery"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "1caa2785":
+    author_date: "2026-07-15T12:33:39+02:00"
+    subject: "fix(brandrender): rename operator skill path"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0092","rationale":"Brand rendering correctness under ADR-0092."}]
+  "428217e3":
+    author_date: "2026-07-15T14:40:10+02:00"
+    subject: "chore(claude): allow the bash-policy skill"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "39b71c16":
+    author_date: "2026-07-15T14:54:32+02:00"
+    subject: "feat: add single-key TUI confirmations and preserve CLI input (#98)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "68a376db":
+    author_date: "2026-07-16T14:03:48+02:00"
+    subject: "docs(agent-tools): improve PR body guidance"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "41427917":
+    author_date: "2026-07-16T16:00:13+02:00"
+    subject: "docs(adr): backfill post-acp decisions"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "5872f50e":
+    author_date: "2026-07-16T16:32:12+02:00"
+    subject: "fix(setup): remove retired skill links"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "78cad2c5":
+    author_date: "2026-07-16T20:31:04+02:00"
+    subject: "chore: update stacklit-insights.json"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "048de1f3":
+    author_date: "2026-07-18T01:37:49+02:00"
+    subject: "fix(pairing-index): preserve SCIP indexes after root failures"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0088","rationale":"Retain healthy aggregate indexes under partial root failure; implementation resilience under ADR-0088."}]
+  "64eeef70":
+    author_date: "2026-07-21T11:24:17+02:00"
+    subject: "fix(adversarial-pairing): keep patches in recorded worktree"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0073","rationale":"Enforce recorded worktree patch paths under existing adversarial-pairing isolation."}]
+  "5f9e788e":
+    author_date: "2026-07-21T11:39:57+02:00"
+    subject: "fix(agent-tools): serialize session initialization"
+    candidate_ids: [120]
+    other_dispositions: []
+  "e8328de3":
+    author_date: "2026-07-21T11:48:12+02:00"
+    subject: "fix(contract): preserve untracked files during selective commits"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "5d22b6fa":
+    author_date: "2026-07-21T18:01:23+02:00"
+    subject: "fix(contract): move initialization discipline into core"
+    candidate_ids: [120]
+    other_dispositions: []
+  "029a64c6":
+    author_date: "2026-07-22T16:33:41+02:00"
+    subject: "fix(hooks): harden session initialization guidance"
+    candidate_ids: [120]
+    other_dispositions: []
+  "e592a40d":
+    author_date: "2026-07-22T18:55:20+02:00"
+    subject: "feat(providers): unified provider catalog with ACP synthesis and disabled flag (#100)"
+    candidate_ids: [121]
+    other_dispositions: []
+  "3f6be31c":
+    author_date: "2026-07-23T23:27:55+02:00"
+    subject: "chore: update .bash-policy.yaml"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "a8a584de":
+    author_date: "2026-07-24T18:43:53+02:00"
+    subject: "docs: prune intermediate specs"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "2941cb74":
+    author_date: "2026-07-25T11:11:06+02:00"
+    subject: "fix: fix claude settings"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "26e81498":
+    author_date: "2026-07-25T18:31:48+02:00"
+    subject: "refactor: fix formatting"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "61622a61":
+    author_date: "2026-07-25T19:08:50+02:00"
+    subject: "docs(architecture): reconcile review evidence"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "d140d791":
+    author_date: "2026-07-26T11:19:03+02:00"
+    subject: "fix: allow liza-operator for claude"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "39f2203e":
+    author_date: "2026-07-29T12:08:10+02:00"
+    subject: "feat(tui)!: remove add-task command"
+    candidate_ids: [122]
+    other_dispositions: []
+  "3f8c4a17":
+    author_date: "2026-07-30T01:07:06+02:00"
+    subject: "fix(review): promote faster review convergence"
+    candidate_ids: [123]
+    other_dispositions: []
+  "b7b810ef":
+    author_date: "2026-08-06T19:21:37+02:00"
+    subject: "fix(init): make branded contract and hook activation reliable"
+    candidate_ids: [120]
+    other_dispositions: [{"coverage":"0111","rationale":"Capability-aware activation and ownership are already documented by ADR-0111."}]
+  "f82f7efe":
+    author_date: "2026-08-07T02:58:16+02:00"
+    subject: "feat(providers)!: activate contracts global-first"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0111","rationale":"Capability-aware activation and ownership are already documented by ADR-0111."}]
+  "78eb2951":
+    author_date: "2026-08-07T03:29:13+02:00"
+    subject: "test(ops): stabilize resubmission disappearance test"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "28ec1f95":
+    author_date: "2026-08-07T03:55:12+02:00"
+    subject: "docs(adr): renumber global-first activation decision"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "e4cadd65":
+    author_date: "2026-08-07T04:29:47+02:00"
+    subject: "test(commands): isolate OpenCode contract test environment"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Housekeeping, ergonomics, tests, operational guidance, or existing-record maintenance; no distinct architecture choice recommended."}]
+  "b752d905":
+    author_date: "2026-08-07T06:04:07+02:00"
+    subject: "fix(init): honor provider contract placement"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0111","rationale":"Capability-aware activation and ownership are already documented by ADR-0111."}]
+  "647ea57c":
+    author_date: "2026-08-07T07:42:37+02:00"
+    subject: "fix(init): track repository contract activations"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0111","rationale":"Capability-aware activation and ownership are already documented by ADR-0111."}]
+  "c0eff8fa":
+    author_date: "2026-08-07T14:41:40+02:00"
+    subject: "fix(providers): track effective contract activations"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0111","rationale":"Capability-aware activation and ownership are already documented by ADR-0111."}]
+  "d9922f51":
+    author_date: "2026-08-08T10:55:06+02:00"
+    subject: "test: widen two timing budgets that were within noise of a slow machine"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "ff603810":
+    author_date: "2026-08-08T18:05:38+02:00"
+    subject: "feat(review): make code review two-sided and give disagreement a route"
+    candidate_ids: [123]
+    other_dispositions: []
+  "caf3f364":
+    author_date: "2026-08-09T03:14:23+02:00"
+    subject: "fix(review): close gaps the first real reviews exposed"
+    candidate_ids: [123]
+    other_dispositions: []
+  "1de50e0d":
+    author_date: "2026-08-09T11:28:48+02:00"
+    subject: "fix: fix skill reference"
+    candidate_ids: [123]
+    other_dispositions: []
+  "ce275664":
+    author_date: "2026-08-09T17:29:40+02:00"
+    subject: "docs(guardrails): strengthen architecture safeguards"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "00111804":
+    author_date: "2026-08-09T18:36:41+02:00"
+    subject: "refactor: remove codex model effort and personality from config"
+    candidate_ids: [124]
+    other_dispositions: []
+  "c7e99f19":
+    author_date: "2026-08-09T19:24:51+02:00"
+    subject: "fix(permissions)!: let user settings own the Claude permission mode"
+    candidate_ids: [124]
+    other_dispositions: []
+  "35fda601":
+    author_date: "2026-08-10T16:05:47+02:00"
+    subject: "feat(cleanup): add safe project reset"
+    candidate_ids: [125]
+    other_dispositions: []
+  "92f96324":
+    author_date: "2026-08-11T11:53:05+02:00"
+    subject: "fix(liza-logs): stop guessing context window"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0029","rationale":"Possible dated amendment: unknown context sizes, authoritative usage and truthful diagnostics; no separate architecture choice recommended."}]
+  "645ee8f1":
+    author_date: "2026-08-12T00:45:12+02:00"
+    subject: "fix: set Cursor ACP sessions to agent mode (#101)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0085","rationale":"Task-scoped ACP sessions already documented; Cursor mode and no-progress counter are implementation follow-ups (also ADR-0053/0060)."}]
+  "e09aaaa9":
+    author_date: "2026-08-12T00:53:46+02:00"
+    subject: "fix(merge): serialize integration index mutations"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0112","rationale":"Already recorded integration-index serialization."}]
+  "82f5e543":
+    author_date: "2026-08-12T01:07:25+02:00"
+    subject: "fix(agent): scope ACP sessions to tasks and count no-progress re-claims (DEV-667) (#103)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0085","rationale":"Task-scoped ACP sessions already documented; Cursor mode and no-progress counter are implementation follow-ups (also ADR-0053/0060)."}]
+  "d3e87143":
+    author_date: "2026-08-16T00:34:53+02:00"
+    subject: "fix(lessons): wire discovery through guardrails"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "33a84b78":
+    author_date: "2026-08-16T01:16:44+02:00"
+    subject: "fix(review): bound rejection reasons"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "ead61987":
+    author_date: "2026-08-16T03:25:46+02:00"
+    subject: "fix(procscan): report unreadable cwd scope"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "4a471c76":
+    author_date: "2026-08-16T03:50:31+02:00"
+    subject: "fix(cli): reject flags consumed as reasons"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "d1503309":
+    author_date: "2026-08-16T23:17:41+02:00"
+    subject: "fix(supervisor): persist lifecycle diagnostics"
+    candidate_ids: [126]
+    other_dispositions: []
+  "5fa577c4":
+    author_date: "2026-08-17T14:11:22+02:00"
+    subject: "fix(await): restore bounded review waits (#108)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0054","rationale":"Precursor to bounded await amendment already recorded in ADR-0054."}]
+  "439339e8":
+    author_date: "2026-08-17T14:13:29+02:00"
+    subject: "fix(liza-logs): make diagnostics faithful (#109, #111, #112)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0029","rationale":"Possible dated amendment: unknown context sizes, authoritative usage and truthful diagnostics; no separate architecture choice recommended."}]
+  "208b71d3":
+    author_date: "2026-08-17T14:14:09+02:00"
+    subject: "fix(status)!: align pipeline diagnostics and claims (#110, #116)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0045","rationale":"Possible amendment: configured-role readiness shared by status/claims and separated from provider capacity; retain legacy fields."}]
+  "24430fc7":
+    author_date: "2026-08-17T14:15:19+02:00"
+    subject: "fix(agent): unify Codex provider failures (#113)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0053","rationale":"Possible amendment: canonical provider identity and stderr-owned failure evidence; complements ADR-0085."}]
+  "dd9e2d58":
+    author_date: "2026-08-17T17:24:15+02:00"
+    subject: "docs(legal): add contributor license agreement"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "b3a964b9":
+    author_date: "2026-08-18T02:40:23+02:00"
+    subject: "feat(pipeline): shorten generated task identifiers"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0035","rationale":"Possible amendment: frozen configurable task slugs shorten deterministic child IDs without migrating existing workspaces."}]
+  "c3a421fa":
+    author_date: "2026-08-18T23:13:47+02:00"
+    subject: "fix(skills): require explicit detailed spec invocation"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Test, guardrail/navigation, input-validation, diagnostic correctness, legal or activation-scope follow-ups; no separate architecture record recommended."}]
+  "c4a1766c":
+    author_date: "2026-08-20T23:35:02+02:00"
+    subject: "feat(integration): add sliced analysis and current-head closure (#131)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0113","rationale":"Sliced integration and planning settlement already recorded in ADR-0113."}]
+  "acf4ac26":
+    author_date: "2026-08-21T04:12:02+02:00"
+    subject: "fix(integration): wait for planning decomposition"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0113","rationale":"Sliced integration and planning settlement already recorded in ADR-0113."}]
+  "43a80ee4":
+    author_date: "2026-08-21T23:00:09+02:00"
+    subject: "docs(clean-code): avoid redundant MAS full-suite runs"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "938762e8":
+    author_date: "2026-08-22T19:56:55+02:00"
+    subject: "fix(prompts): preserve replacement lineages"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0058/0067","rationale":"Possible amendment: independent replacement lineages, provider-before-consumer order and executable dependency proof."}]
+  "05b0d8a5":
+    author_date: "2026-08-22T19:58:00+02:00"
+    subject: "fix(ops): recover terminal superseded dependencies"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0114","rationale":"Terminal dependency repair already recorded."}]
+  "c244ea26":
+    author_date: "2026-08-22T19:58:51+02:00"
+    subject: "feat(dependencies): apply repair batches atomically"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0115","rationale":"Atomic declarative dependency repair already recorded."}]
+  "af436422":
+    author_date: "2026-08-22T20:02:12+02:00"
+    subject: "fix(retarget): report dependency cycle diagnostics"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "76fd9b65":
+    author_date: "2026-08-22T20:03:36+02:00"
+    subject: "fix(agent): allow single-provider merge quorum"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "ef546658":
+    author_date: "2026-08-22T20:05:36+02:00"
+    subject: "fix(ops): restore dependency-held tasks"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0077/0080","rationale":"Dependency-held restoration already amended in these records."}]
+  "856e1f62":
+    author_date: "2026-08-22T20:06:19+02:00"
+    subject: "fix(commands): reset task age on unblock"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "dbba4561":
+    author_date: "2026-08-22T20:06:46+02:00"
+    subject: "feat(circuit-breaker): detect planning review churn"
+    candidate_ids: [127]
+    other_dispositions: []
+  "b4425982":
+    author_date: "2026-08-22T20:31:27+02:00"
+    subject: "fix(prompts): enforce dependency direction"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0058/0067","rationale":"Possible amendment: independent replacement lineages, provider-before-consumer order and executable dependency proof."}]
+  "1fe15b96":
+    author_date: "2026-08-22T20:32:07+02:00"
+    subject: "feat(prompts): require executable dependency proofs"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0058/0067","rationale":"Possible amendment: independent replacement lineages, provider-before-consumer order and executable dependency proof."}]
+  "f87de6b7":
+    author_date: "2026-08-22T20:32:49+02:00"
+    subject: "fix(repair): provision reviewer quorum capacity"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0046","rationale":"Possible quorum capacity repair implementation note."}]
+  "36aae2b3":
+    author_date: "2026-08-22T20:39:12+02:00"
+    subject: "fix(ops): reconcile blocked-task metadata"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0063","rationale":"Possible amendment: atomic blocked metadata reconciliation and durable descendant wake cursor."}]
+  "086bad4d":
+    author_date: "2026-08-22T20:39:56+02:00"
+    subject: "fix(timing): stabilize watcher and ACP comparisons"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "be1a0259":
+    author_date: "2026-08-23T01:22:33+02:00"
+    subject: "fix(review): bound session-preserving await loops"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0054","rationale":"Bounded await policy already amended in ADR-0054."}]
+  "f5a2e0e8":
+    author_date: "2026-08-23T13:05:59+02:00"
+    subject: "fix(ops): skip replanned upstreams in inherited dependency resolution"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "27e1e3a3":
+    author_date: "2026-08-23T14:39:17+02:00"
+    subject: "docs(tools): restrict apply_patch to one file"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "daf90df7":
+    author_date: "2026-08-23T15:37:24+02:00"
+    subject: "feat(init): confirm missing worktree setup command"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0117","rationale":"Worktree setup declaration and fail-closed execution already recorded."}]
+  "508c9037":
+    author_date: "2026-08-23T16:34:50+02:00"
+    subject: "feat(planning): require RCA for defect objectives"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0116","rationale":"Task/per-output RCA and master decomposition responsibilities already recorded."}]
+  "cbef7f37":
+    author_date: "2026-08-23T18:30:06+02:00"
+    subject: "fix(worktree): fail closed on setup errors"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0117","rationale":"Worktree setup declaration and fail-closed execution already recorded."}]
+  "3a2cfda6":
+    author_date: "2026-08-23T21:44:05+02:00"
+    subject: "feat(planning): separate decomposition root responsibilities"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0116","rationale":"Task/per-output RCA and master decomposition responsibilities already recorded."}]
+  "b112476e":
+    author_date: "2026-08-24T09:12:07+02:00"
+    subject: "perf(test): accelerate routine suite validation"
+    candidate_ids: [128]
+    other_dispositions: []
+  "8afcaff1":
+    author_date: "2026-08-25T09:49:13+02:00"
+    subject: "docs(cla): narrow the CLA to PR submission"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "76ed9ea7":
+    author_date: "2026-08-27T11:17:02+02:00"
+    subject: "fix(agent): wake blocked tasks on descendant changes"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0063","rationale":"Possible amendment: atomic blocked metadata reconciliation and durable descendant wake cursor."}]
+  "f70ca310":
+    author_date: "2026-08-27T11:18:04+02:00"
+    subject: "fix(commands): scope elapsed time to current assignment"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "0acece1b":
+    author_date: "2026-08-27T11:19:04+02:00"
+    subject: "fix(circuit-breaker): preserve proportional active responses"
+    candidate_ids: [129]
+    other_dispositions: []
+  "b26c209d":
+    author_date: "2026-08-27T11:20:05+02:00"
+    subject: "fix(recovery): align CLI guidance with role authority"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0057/0045","rationale":"Possible amendment: effective capabilities shared by RBAC and recovery prompts; fail closed when recovery authority is missing."}]
+  "a22c1238":
+    author_date: "2026-08-27T11:21:13+02:00"
+    subject: "fix(lifecycle): fence claim and recovery generations"
+    candidate_ids: [130]
+    other_dispositions: []
+  "5c4056fa":
+    author_date: "2026-08-31T11:27:48+02:00"
+    subject: "fix(test): disable automatic maintenance in git fixtures"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "e129bc3c":
+    author_date: "2026-08-31T12:35:06+02:00"
+    subject: "test(agent): stop a leaked agent goroutine from racing with brand values (#106)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"supporting","rationale":"Validation guidance, diagnostics/metadata-key fixes, timing/fixture fixes, established replan exclusion, or legal clarification; no separate architecture record recommended."}]
+  "866c903f":
+    author_date: "2026-08-31T13:54:19+02:00"
+    subject: "fix(test): restore branded environment prefix"
+    candidate_ids: [130]
+    other_dispositions: []
+  "586542f1":
+    author_date: "2026-08-31T13:55:22+02:00"
+    subject: "fix(test): make generation cancellation deterministic"
+    candidate_ids: [130]
+    other_dispositions: []
+  "87c28f44":
+    author_date: "2026-08-31T15:20:19+02:00"
+    subject: "fix: keep managed git hooks intact and derive the build version from git (#105)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0090/0081","rationale":"Mixed squash: development build versions excluded from release self-update (0090), managed-hook fixes (0081/0118); do not combine as one new decision."}]
+  "9f243be0":
+    author_date: "2026-08-31T15:20:58+02:00"
+    subject: "fix(pre-commit): make GOPROXY file:// URLs portable to Git Bash on Windows (#146)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0118","rationale":"Native Windows support and ancillary pre-commit portability already recorded."}]
+  "611910d9":
+    author_date: "2026-09-01T02:41:51+02:00"
+    subject: "refactor(brand): centralize branding-sensitive paths"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0092","rationale":"Brand path centralization completes existing branding decision."}]
+  "698ad2ed":
+    author_date: "2026-09-01T03:33:04+02:00"
+    subject: "fix(git): serialize worktree metadata mutations"
+    candidate_ids: [131]
+    other_dispositions: []
+  "635b6adc":
+    author_date: "2026-09-01T19:27:19+02:00"
+    subject: "feat(windows): restore native support (#147)"
+    candidate_ids: []
+    other_dispositions: [{"coverage":"0118","rationale":"Native Windows support and ancillary pre-commit portability already recorded."}]
+  "73a50ca8":
+    author_date: "2026-09-04T17:35:32+02:00"
+    subject: "feat(skills): add goal-writing workflow"
+    candidate_ids: [132]
+    other_dispositions: []

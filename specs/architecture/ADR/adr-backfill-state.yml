@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-07-16T00:00:00+02:00"
+last_updated: "2026-09-06T12:22:31Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -1323,11 +1323,269 @@ clusters:
     adr_path: "specs/architecture/ADR/0097-cursor-secondary-provider-policy-hooks.md"
     cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0097-cursor-secondary-provider-policy-hooks.md"
 
+# Post-ADR-0097 scan; eight selected ADRs generated, six optional candidates retained.
+  - id: 119
+    title: "Explicit Unattended Setup and Initialization"
+    commit_shas: ["f6925e10","255882c3"]
+    date_range: "2026-07-08 to 2026-07-08"
+    first_author_date: "2026-07-08T16:20:47+02:00"
+    confidence: 0.65
+    status: "skipped"
+    recommendation: "optional"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0119-unattended-setup-and-init.md"
+    selection_note: "Not selected for the eight-record batch approved on 2026-09-06; retain analysis for possible future use."
+    related_adrs: [18,50,91]
+    analysis:
+      intent_hypothesis: "Make setup and initialization usable unattended through explicit --yes, including delegated policy setup prompts."
+      solution_detected: "Thread AutoConfirm through setup/init and provide bounded scripted yes input to bash-policy subprocesses."
+      rationale_status: "Commit messages identify unattended setup as the trigger; alternatives and accepted approval tradeoffs are unconfirmed."
+  - id: 120
+    title: "Path-Validated Sequential Initialization Gate"
+    commit_shas: ["5f9e788e","5d22b6fa","029a64c6","b7b810ef"]
+    date_range: "2026-07-21 to 2026-08-06"
+    first_author_date: "2026-07-21T11:39:57+02:00"
+    confidence: 0.7
+    status: "skipped"
+    recommendation: "optional"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0120-path-validated-initialization-gate.md"
+    selection_note: "Not selected for the eight-record batch approved on 2026-09-06; retain analysis for possible future use."
+    related_adrs: [74,111]
+    analysis:
+      intent_hypothesis: "Stop agents satisfying initialization by mentioning document names or racing initialization reads."
+      solution_detected: "Contract requires sequential reads; enforcement recognizes allowed read command shapes and validated document paths instead of raw payload substrings."
+      rationale_status: "Explicit in 5f9e788e, 029a64c6 and b7b810ef; whether this deserves a separate ADR rather than an ADR-0074 amendment remains a judgment call."
+  - id: 121
+    title: "Unified Provider Catalog with Synthesized ACP Variants"
+    commit_shas: ["e592a40d"]
+    date_range: "2026-07-22 to 2026-07-22"
+    first_author_date: "2026-07-22T18:55:20+02:00"
+    confidence: 0.95
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0121-unified-provider-runtime-catalog.md"
+    adr_path: "specs/architecture/ADR/0121-unified-provider-runtime-catalog.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Make adding a new provider more declarative."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "Historical alternative evaluations were not supplied."
+    related_adrs: [85,96]
+    analysis:
+      intent_hypothesis: "Avoid separate provider entries duplicating setup and detection metadata across CLI and ACP runtimes."
+      solution_detected: "Declare runtime plus optional acp_runtime once per provider, synthesize <id>-acp entries, list both variants but detect only declared providers."
+      rationale_status: "User-confirmed intent: Make adding a new provider more declarative. Remaining gaps are recorded in user_context."
+  - id: 122
+    title: "Keep Task Authoring Outside the TUI"
+    commit_shas: ["39f2203e"]
+    date_range: "2026-07-29 to 2026-07-29"
+    first_author_date: "2026-07-29T12:08:10+02:00"
+    confidence: 0.7
+    status: "skipped"
+    recommendation: "optional"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0122-tui-operations-without-task-authoring.md"
+    selection_note: "Not selected for the eight-record batch approved on 2026-09-06; retain analysis for possible future use."
+    related_adrs: [52]
+    analysis:
+      intent_hypothesis: "Keep TUI operational controls from duplicating orchestrator/operator task-authoring responsibilities."
+      solution_detected: "Remove TUI add-task binding/form/adapters; retain add-task CLI and ordinary runtime controls."
+      rationale_status: "Commit body explicitly says responsibility overlap and few useful cases; full alternatives/tradeoffs need confirmation."
+  - id: 123
+    title: "Two-Sided Review with Bounded Convergence"
+    commit_shas: ["3f8c4a17","ff603810","caf3f364","1de50e0d"]
+    date_range: "2026-07-30 to 2026-08-09"
+    first_author_date: "2026-07-30T01:07:06+02:00"
+    confidence: 0.95
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0123-two-sided-bounded-review.md"
+    adr_path: "specs/architecture/ADR/0123-two-sided-bounded-review.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Real reviews showed doers fixing false-positive findings and non-converging cycles where fixing A broke B and fixing B broke A."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "Whether the July and August changes arose from the same incident was not specified; their grouping remains the approved backfill grouping."
+    related_adrs: [1,20,26]
+    analysis:
+      intent_hypothesis: "Stop reviewer-only guidance and expanding corrective passes from producing endless review loops."
+      solution_detected: "Author/reviewer response protocol with concrete-harm contests, four reviewer responses and routed escalation; full critical-defect inspection every round with bounded lower-severity follow-up."
+      rationale_status: "User-confirmed intent: Real reviews showed doers fixing false-positive findings and non-converging cycles where fixing A broke B and fixing B broke A. Remaining gaps are recorded in user_context."
+  - id: 124
+    title: "User-Owned Provider Preferences and Explicit MAS Launch Policy"
+    commit_shas: ["00111804","c7e99f19"]
+    date_range: "2026-08-09 to 2026-08-09"
+    first_author_date: "2026-08-09T18:36:41+02:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0124-user-owned-provider-preferences.md"
+    adr_path: "specs/architecture/ADR/0124-user-owned-provider-preferences.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Respecting the user's own configuration is a default principle. Claude auto mode was chosen to avoid systematic approval gates on Bash commands."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "Historical alternative evaluations were not supplied."
+    related_adrs: [85,96,111]
+    analysis:
+      intent_hypothesis: "Prevent project defaults from shadowing user provider settings while retaining explicit unattended MAS launch behavior."
+      solution_detected: "Stop injecting Codex model/effort/personality defaults; remove Claude project defaultMode and supply MAS permission mode in launch arguments."
+      rationale_status: "User-confirmed intent: Respecting the user's own configuration is a default principle. Claude auto mode was chosen to avoid systematic approval gates on Bash commands. Remaining gaps are recorded in user_context."
+  - id: 125
+    title: "Safe Project Reset Through a Lifecycle Lock"
+    commit_shas: ["35fda601"]
+    date_range: "2026-08-10 to 2026-08-10"
+    first_author_date: "2026-08-10T16:05:47+02:00"
+    confidence: 0.95
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0125-safe-project-reset-lifecycle-lock.md"
+    adr_path: "specs/architecture/ADR/0125-safe-project-reset-lifecycle-lock.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Cleaning up a previous run was a painful manual task for users, especially worktrees. Leaving ordinary blackboard writes outside the lifecycle lock was a deliberate tradeoff."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "A specific cleanup race incident and historical alternative evaluations were not supplied."
+    related_adrs: [18,22,83,112]
+    analysis:
+      intent_hypothesis: "Allow cleanup and reinitialization without orphaning live agents or worktree resources."
+      solution_detected: "Plan exact owned targets, confirm, acquire exclusive lifecycle lock, revalidate the plan and delete; registration/provisioning/recovery take shared locks."
+      rationale_status: "User-confirmed intent: Cleaning up a previous run was a painful manual task for users, especially worktrees. Leaving ordinary blackboard writes outside the lifecycle lock was a deliberate tradeoff. Remaining gaps are recorded in user_context."
+  - id: 126
+    title: "Child-Owned Supervisor Logs and Bootstrap Readiness"
+    commit_shas: ["d1503309"]
+    date_range: "2026-08-16 to 2026-08-16"
+    first_author_date: "2026-08-16T23:17:41+02:00"
+    confidence: 0.8
+    status: "skipped"
+    recommendation: "optional"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0126-child-owned-supervisor-diagnostics.md"
+    selection_note: "Not selected for the eight-record batch approved on 2026-09-06; retain analysis for possible future use."
+    related_adrs: [29,53,60]
+    analysis:
+      intent_hypothesis: "Make detached supervisor bootstrap and lifecycle failures observable without tying child lifetime to the parent."
+      solution_detected: "Child opens masked logs, parent waits for bootstrap readiness then removes handshake, and shutdown joins diagnostic workers before closing logs."
+      rationale_status: "Explicit commit body; standalone ownership ADR versus dated ADR-0029 amendment is a judgment call."
+  - id: 127
+    title: "Planning Review Churn as Circuit-Breaker Evidence"
+    commit_shas: ["dbba4561"]
+    date_range: "2026-08-22 to 2026-08-22"
+    first_author_date: "2026-08-22T20:06:46+02:00"
+    confidence: 0.75
+    status: "skipped"
+    recommendation: "optional"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0127-planning-review-churn-evidence.md"
+    selection_note: "Not selected for the eight-record batch approved on 2026-09-06; retain analysis for possible future use."
+    related_adrs: [10,53]
+    analysis:
+      intent_hypothesis: "Detect repeated planning rejection that consumes a run without producing anomaly-based circuit-breaker evidence."
+      solution_detected: "Use durable review totals or timestamped rejection history; four cycles qualify, including merged planning tasks; new timestamped evidence is required after acknowledgement."
+      rationale_status: "Commit and protocol establish trigger and mechanics; threshold rationale and standalone versus breaker-redesign grouping need human context."
+  - id: 128
+    title: "Separate Routine, Race and Coverage Validation"
+    commit_shas: ["b112476e"]
+    date_range: "2026-08-24 to 2026-08-24"
+    first_author_date: "2026-08-24T09:12:07+02:00"
+    confidence: 0.7
+    status: "skipped"
+    recommendation: "optional"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0128-separate-validation-costs.md"
+    selection_note: "Not selected for the eight-record batch approved on 2026-09-06; retain analysis for possible future use."
+    related_adrs: [7,17]
+    analysis:
+      intent_hypothesis: "Reduce routine full-suite validation cost without removing the final race-validation obligation."
+      solution_detected: "Keep make test full-suite but uninstrumented; separate test-fast, final test-race, and coverage profiles."
+      rationale_status: "Measured rationale exists in docs; ADR-worthiness for repository development policy needs selection."
+  - id: 129
+    title: "Proportional Circuit-Breaker Responses with Explicit Acknowledgement"
+    commit_shas: ["0acece1b"]
+    date_range: "2026-08-27 to 2026-08-27"
+    first_author_date: "2026-08-27T11:19:04+02:00"
+    confidence: 0.95
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0129-proportional-circuit-breaker-responses.md"
+    adr_path: "specs/architecture/ADR/0129-proportional-circuit-breaker-responses.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Repeated halts from old evidence drove the circuit-breaker redesign."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "The separate historical rationale for choosing checkpoint on uncertain current health was not supplied."
+    related_adrs: [10,53,85]
+    analysis:
+      intent_hypothesis: "Prevent historical provider evidence from repeatedly halting runs, and prevent active safety responses from being silently weakened."
+      solution_detected: "Typed WARNING/CHECKPOINT/HALT responses, exact current registration-health proof for provider HALT, persistent active response and resume-only acknowledgement/release."
+      rationale_status: "User-confirmed intent: Repeated halts from old evidence drove the circuit-breaker redesign. Remaining gaps are recorded in user_context."
+  - id: 130
+    title: "Generation-Fenced Agent Authority and Recovery"
+    commit_shas: ["a22c1238"]
+    gap_commits: ["866c903f","586542f1"]
+    date_range: "2026-08-27 to 2026-08-31"
+    first_author_date: "2026-08-27T11:21:13+02:00"
+    confidence: 0.98
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0130-generation-fenced-agent-authority.md"
+    adr_path: "specs/architecture/ADR/0130-generation-fenced-agent-authority.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Sandbox execution tends to confuse the operator agent; generation-fenced authority provides more robust operation in that environment."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "No specific incident or intentional-debt classification for nil-authority compatibility paths was supplied."
+    related_adrs: [46,51,62,83,85,112]
+    analysis:
+      intent_hypothesis: "Prevent stale same-ID supervisors from mutating replacement registrations or launching duplicate providers and stranding reviewed work."
+      solution_detected: "Opaque registration tokens checked transactionally on agent-authenticated writes, per-agent registration/start lock, lease-first uncertain ownership, approval-preserving takeover and tuple-based rejected recovery."
+      rationale_status: "User-confirmed intent: Sandbox execution tends to confuse the operator agent; generation-fenced authority provides more robust operation in that environment. Remaining gaps are recorded in user_context."
+  - id: 131
+    title: "Serialize Repository Worktree Metadata Mutations"
+    commit_shas: ["698ad2ed"]
+    date_range: "2026-09-01 to 2026-09-01"
+    first_author_date: "2026-09-01T03:33:04+02:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0131-repository-worktree-mutation-lock.md"
+    adr_path: "specs/architecture/ADR/0131-repository-worktree-mutation-lock.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Serialization was chosen because it seemed more robust."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "No specific retry comparison or rationale for the 30-minute timeout was supplied."
+    related_adrs: [22,61,112]
+    analysis:
+      intent_hypothesis: "Prevent concurrent Git worktree operations from colliding on repository-wide metadata."
+      solution_detected: "Repository-scoped file lock covers add/attach/remove and fallback metadata cleanup; claims, indexing and setup remain outside the critical section."
+      rationale_status: "User-confirmed intent: Serialization was chosen because it seemed more robust. Remaining gaps are recorded in user_context."
+  - id: 132
+    title: "Human-Owned Goal Decisions with Independent Readiness Review"
+    commit_shas: ["73a50ca8"]
+    date_range: "2026-09-04 to 2026-09-04"
+    first_author_date: "2026-09-04T17:35:32+02:00"
+    confidence: 0.95
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0132-human-owned-goal-decisions.md"
+    adr_path: "specs/architecture/ADR/0132-human-owned-goal-decisions.md"
+    user_context:
+      selection: "2026-09-06: user approved the eight recommended records and their grouping."
+      intent: "Liza MAS is intended to run without human-in-the-loop intervention. That requires a solid goal document; agents helping humans write goals and check readiness support that requirement."
+      provenance: "Intent supplied directly by the user on 2026-09-06; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "The user did not identify separate incidents involving invented decisions or author self-certification."
+    related_adrs: [13,34,94]
+    analysis:
+      intent_hypothesis: "Prevent AI-authored goals from presenting unmade product or structural decisions as settled human intent."
+      solution_detected: "Entry-point-specific human ownership, elicitation and challenge before drafting, persistent decision provenance, and a cold independent final readiness review."
+      rationale_status: "User-confirmed intent: Liza MAS is intended to run without human-in-the-loop intervention. That requires a solid goal document; agents helping humans write goals and check readiness support that requirement. Remaining gaps are recorded in user_context."
 processing_cursor:
   step: "complete"
-  substep: "post_adr_0085_generated"
-  cluster_index: 97
-  note: "ADRs 0086-0097 generated from post-ADR-0085 history. The minimality-contract candidate was skipped by user selection; ADR-0069 remains skipped by prior user selection."
+  substep: "post_0097_selected_adrs_generated"
+  cluster_index: 132
+  selected_ids: [121, 123, 124, 125, 129, 130, 131, 132]
+  not_selected_ids: [119, 120, 122, 126, 127, 128]
+  note: "108 post-0097 commits triaged; eight approved records generated and six optional candidates not selected. User intent captured for all eight; historical alternatives remain explicitly reconstructed where unconfirmed."
+  inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0097-inventory.yml"
+  reconciled_existing_adrs: [111, 112, 113, 114, 115, 116, 117, 118]
+  numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0119 by earliest author timestamp."
+  user_confirmation: "2026-09-06: resume saved state, accept classification, preserve existing IDs, start new numbering at 0119; subsequently approve the eight recommended records and proceed; provide intent context for all eight."
 
 non_adr_findings:
   - title: "Init Preflight Requires Committed Spec and Valid Integration Branch"
