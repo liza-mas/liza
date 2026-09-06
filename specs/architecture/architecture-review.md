@@ -1,6 +1,7 @@
 # Architecture Review — Liza
 
 **Date:** 2026-07-25
+**Targeted health check:** 2026-09-06 refreshed file sizes and test-structure counts; historical function and coverage measurements remain dated evidence. No issue was closed.
 **Mode:** Adversarial (after pass 22)
 **Reviewer:** software-architecture-review skill
 
@@ -103,7 +104,7 @@ The former MCP server and `liza-mcp` binary are no longer part of the architectu
 
 - Pipeline configuration is loaded per operation, preserving self-contained command behavior.
 - Prompt construction still imports application logic from `internal/ops` for several read-only pipeline and planning queries.
-- `internal/embedded/embedded.go` is now 1,530 lines and contains multiple artifact families.
+- `internal/embedded/embedded.go` is now 1,635 lines and contains multiple artifact families.
 - Direct named tests were not found for `PlanGlobalFiles`, `WritePipelineConfig`, and `WriteGuardrails`, but all three are reached indirectly: 90.9%, 100%, and 66.7% statement coverage respectively. Absence of a named test is not absence of coverage. *(pass 20, Coverage lens)*
 - Two prompt template blocks dominate the template tree: `blocks/review_instructions.tmpl` (392 lines, 26.7 KB) and `blocks/implementation_phase.tmpl` (240 lines, 20.8 KB), together about 36% of all template bytes and larger than `CORE.md`. *(pass 18, Complexity lens)*
 - Both are hardcoded `if/else if` chains over role names with no `else` fallback, so an unrecognized role renders an empty instruction block. *(pass 18, Complexity lens)*
@@ -122,7 +123,7 @@ The former MCP server and `liza-mcp` binary are no longer part of the architectu
 - The catalog is a launch/profile boundary, not a complete provider-extension boundary: activation assets are provider-named, initialization expands Cursor into Claude/Codex dependencies, and operational failure detectors remain Codex-specific outside the catalog. *(pass 22, Coupling lens)*
 - The catalog carries canonical `ProviderKey` metadata into `LaunchPlan`, but no production consumer reads it; supervisor registration persists the raw CLI name instead. *(Adversarial pass)*
 - `ApplyYAMLTimeouts` still switches over concrete strategy types instead of using the strategy interface.
-- `internal/agent/supervisor.go` is 1,129 lines and remains a high-change orchestration surface. Its complexity is concentrated: `RunSupervisor` alone is 442 lines, the longest function in the repository. *(pass 18, Complexity lens)*
+- `internal/agent/supervisor.go` is 1,131 lines and remains a high-change orchestration surface. The pass-18 measurement found concentrated complexity: `RunSupervisor` alone was 442 lines, then the longest function in the repository. *(pass 18, Complexity lens)*
 - `RunSupervisor` maintains five in-memory loop-detection trackers whose resets are hand-paired across six scattered, asymmetric call sites. All are process-local, so a restarted supervisor resets its own circuit breakers. *(pass 18, Complexity lens)*
 - `internal/agent/prompt.go` carries nine near-identical index-adapter functions and three near-identical type families for SCIP, Stacklit, and functional clusters, differing mainly by field name (`Path` vs `IndexPath`). *(pass 18, Complexity lens)*
 - The three `available*IndexRefs` helpers discard discovery errors and return `nil`, so agents can silently lose index references from their prompts with no operator signal. *(pass 18, Complexity lens)*
@@ -137,7 +138,7 @@ The former MCP server and `liza-mcp` binary are no longer part of the architectu
 
 **Observations:**
 
-- `internal/ops/proceed.go` is 1,500 lines and combines graph traversal, recovery, child construction, and dependency propagation.
+- `internal/ops/proceed.go` is 1,563 lines and combines graph traversal, recovery, child construction, and dependency propagation.
 - `await_verdict.go` and `await_resubmission.go` retain parallel watcher/timer/polling loop structures.
 - `AddTasks` accepts state/log paths while most operations accept a project root.
 - `SetTaskOutput` accepts an empty `spec_ref`, while proceeding and validation require one. The CLI also describes it as optional.
@@ -173,7 +174,7 @@ The former MCP server and `liza-mcp` binary are no longer part of the architectu
 - `commands/status.go`, `repair_agent_pool.go`, and `resume.go` import `internal/agent`, so the presentation/application boundary is not one-directional.
 - CLI and TUI resume adapters independently glob and clear both provider stop-signal families after `ops.Resume`; `ops.Resume` itself does not own that recovery semantic. *(pass 21, Duplication lens)*
 - `internal/commands/watch.go` is 1,407 lines and holds twelve top-level timing/retry constants in code.
-- `internal/commands/init.go` is 1,268 lines.
+- `internal/commands/init.go` is 1,418 lines.
 - Formatting helpers use the standard library `slices.Sort`; the former hand-written bubble sort is gone.
 - `internal/tui/view.go` renders agent and task panels through two structurally duplicated routines (`renderAgentPanel`, 140 lines; `renderTaskPanel`, 204 lines), each declaring its own local `column` type with incompatible closure signatures. *(pass 18, Complexity lens)*
 - Both routines contain a verbatim-duplicated stringly-typed `c.header == "STATUS"` ANSI-padding special case. *(pass 18, Complexity lens)*
@@ -254,20 +255,22 @@ The Coupling lens finds that the expensive dependencies are behavioral rather th
 
 ### 1.4 Coverage Checkpoint
 
-#### Largest production Go files
+#### Large production Go files
+
+Files retained from the prior review, remeasured on 2026-09-06 (not a new repository-wide ranking).
 
 | File | Lines |
 |------|------:|
-| `internal/scipsearch/scipsearch.go` | 1,566 |
-| `internal/embedded/embedded.go` | 1,530 |
-| `internal/ops/proceed.go` | 1,500 |
+| `internal/embedded/embedded.go` | 1,635 |
+| `internal/scipsearch/scipsearch.go` | 1,567 |
+| `internal/ops/proceed.go` | 1,563 |
+| `cmd/liza/cmd_task.go` | 1,495 |
+| `internal/commands/init.go` | 1,418 |
 | `internal/commands/watch.go` | 1,407 |
-| `internal/commands/init.go` | 1,268 |
-| `internal/updater/updater.go` | 1,259 |
-| `cmd/liza/cmd_task.go` | 1,258 |
-| `cmd/liza/cmd_launch.go` | 1,142 |
-| `internal/agent/supervisor.go` | 1,129 |
-| `internal/pairingindex/hooks.go` | 1,053 |
+| `internal/updater/updater.go` | 1,323 |
+| `cmd/liza/cmd_launch.go` | 1,159 |
+| `internal/agent/supervisor.go` | 1,131 |
+| `internal/pairingindex/hooks.go` | 1,077 |
 
 #### Longest production Go functions *(pass 18, Complexity lens)*
 
@@ -284,7 +287,7 @@ The Coupling lens finds that the expensive dependencies are behavioral rather th
 | `renderTaskPanel` | `internal/tui/view.go:402` | 204 |
 | `Replan` | `internal/ops/replan.go:35` | 194 |
 
-File size and function depth do not correlate here. The three largest files decompose well — `scipsearch.go` (1,566 lines) has no function above 63 lines, `pairingindex/hooks.go` above 76, `commands/watch.go` above 80, and `embedded.go` is an accessor family. Concentrated complexity sits instead in `supervisor.go`, `commands/init.go`, and the `ops` write path.
+The historical pass-18 function scan found that file size and function depth did not correlate. Its broad modules decomposed well — `scipsearch.go` (1,566 lines) has no function above 63 lines, `pairingindex/hooks.go` above 76, `commands/watch.go` above 80, and `embedded.go` is an accessor family. Concentrated complexity sits instead in `supervisor.go`, `commands/init.go`, and the `ops` write path.
 
 #### Checkpoint questions
 
@@ -724,8 +727,8 @@ The retained summary records **80.7%** over 26,178 statements by profile-block a
 - 118 of 2,314 measured functions are at 0.0%, 59 of them exported. They cluster in `commands` (19), `ops` (17), `cmd/liza` (15), `updater` (10), and `agent` (10). This count excludes the 69 `RunE` bodies, which the measuring tool cannot see at all.
 - `internal/interactive` at 35.8% is small (67 statements) but sits on the first-run initialization path, where failure is user-visible and recovery is manual.
 - `git.ResetHard` is the only destructive Git helper at 0.0%; `MergeTree`, `CreateCommitFromTree`, and `AttachWorktree` are all covered.
-- The test tree currently contains eight `time.Sleep(` and 514 `t.Parallel()` occurrences outside the budget-guard source files. `internal/testguard` retains the 11-sleep ceiling and now ratchets the exact 514-call parallel baseline. *(adjusted 2026-08-24)*
-- The 514 parallel calls span 48 of 282 test files and are concentrated in the audited `internal/ops` set plus sliced-integration lifecycle branches. The remaining large packages still need package-local shared-state audits before broader adoption. *(adjusted 2026-08-24)*
+- The tracked test tree contains ten `time.Sleep(` occurrences outside `internal/testguard/` and 524 `t.Parallel()` text occurrences across all tracked Go test files. `internal/testguard` retains the 11-sleep ceiling and a minimum of 514 parallel occurrences; this is a floor, not an exact count. *(remeasured 2026-09-06)*
+- The 524 parallel occurrences span 51 of 308 tracked Go test files and are concentrated in the audited `internal/ops` set plus sliced-integration lifecycle branches. The remaining large packages still need package-local shared-state audits before broader adoption. *(remeasured 2026-09-06)*
 - `internal/embedded/opencode-tools/exec.ts` is shipped to users' `.opencode/tools/` directories, and no `package.json`, `tsconfig.json`, type-check, or lint step exists anywhere in the repository or CI. Its only assertions are content-identity checks in `embedded_test.go`, which verify that the bytes were copied, not that they run.
 - Integration coverage exists for multi-component task, Git, persistence, and execution flows; no new behavior is being added by this review.
 
@@ -742,7 +745,7 @@ The retained summary records **80.7%** over 26,178 statements by profile-block a
 | **Medium** | ✓ verified | Worktree intelligence refresh has multiple owners | Create, claim, health-check, and review submission repeat slightly different SCIP/Stacklit/functional-clusters refresh sequences and warning policy. | Introduce one refresh coordinator with explicit trigger and failure-policy inputs; keep lifecycle decisions at callers. *(pass 21, Duplication lens; reverified pass 22)* |
 | **Medium** | ✓ verified | Review-submission cleanliness contract gap | `INVARIANTS.md` promises a clean worktree at a boundary that does not enforce it. | Decide whether to enforce cleanliness in `SubmitForReview` or narrow the invariant. |
 | **Medium** | ✓ verified | Verdict-time provider-diversity contract gap | The documented enforcement point and current quorum logic disagree. | Define whether diversity is required, preferred, or claim-time-only, then align contract and code. |
-| **Medium** | ✓ verified | [`ops/proceed.go` at 1,500 lines](architectural-issues.md#decompose-proceedgo-1500-loc) | Graph, recovery, construction, and propagation logic change for different reasons. | Split along existing responsibility boundaries. |
+| **Medium** | ✓ verified | [`ops/proceed.go` at 1,563 lines](architectural-issues.md#decompose-proceedgo-1500-loc) | Graph, recovery, construction, and propagation logic change for different reasons. | Split along existing responsibility boundaries. |
 | **Medium** | ✓ verified | `RunSupervisor` at 442 lines | The longest function in the repository interleaves setup, signal handling, strategy dispatch, exit-code routing, and five loop detectors. | Extract the exit-code dispatch and the loop-detection block; the trackers are a cohesive unit with hand-paired resets. *(pass 18, Complexity lens)* |
 | **Medium** | ✓ verified | Agent lease renewal ignores configured duration | Supervisor registration and heartbeat each rely on a literal/default 1,800-second lease, while runtime configuration says heartbeats extend the configured lease. | Pass the configured lease and terminal identity through one registration/heartbeat runtime context. *(pass 21, Duplication lens; reverified pass 22)* |
 | **Medium** | ✓ verified | Raw Git calls bypass `gitenv` | `ops/init_project.go` and `cmd/liza/cmd_launch.go` invoke `git` directly at five sites, losing `LC_ALL=C` and timeout bounds that sixteen other files get. | Route all Git invocation through `gitenv`. *(pass 18, Complexity lens)* |
@@ -783,7 +786,7 @@ The retained summary records **80.7%** over 26,178 statements by profile-block a
 | **Low** | ~ adjusted | [118 zero-coverage functions, 59 exported](coverage-summary-2026-07-25.md#zero-coverage-functions) | This is a retained pass-20 full-profile measurement, not a claim derived from the current ignored `coverage.out`; the structural concentration in CLI and orchestration adapters remains relevant. | Triage the exported half after the default coverage command is corrected. *(pass 20, Coverage lens)* |
 | **Low** | ✓ verified | Two exported functions with no caller | `commands.UnblockTaskCommand` and `models.(*DependencyResolver).UnmetDependencies` still have no production caller. | Delete both. *(pass 20, Coverage lens)* |
 | **Low** | ~ adjusted | `internal/interactive` at 35.8% | The pass-20 full-profile measurement remains the latest complete figure; the small package is on first-run initialization, where failure is user-visible and recovery is manual. | Cover the prompt/response paths when initialization next changes. *(pass 20, Coverage lens)* |
-| **Low** | ~ adjusted | Remaining serial test packages | There are now 514 `t.Parallel()` calls across 48 of 282 test files with an exact ratchet, but adoption is concentrated in `internal/ops` and sliced integration. | Audit shared state package by package before extending parallelism to `internal/commands`, `internal/agent`, or `cmd/liza`. *(adjusted 2026-08-24)* |
+| **Low** | ~ adjusted | Remaining serial test packages | There are 524 `t.Parallel()` text occurrences across 51 of 308 tracked Go test files, with a guard enforcing a minimum of 514, but adoption is concentrated in `internal/ops` and sliced integration. | Audit shared state package by package before extending parallelism to `internal/commands`, `internal/agent`, or `cmd/liza`. *(remeasured 2026-09-06)* |
 | **Low** | ✓ verified | Stale `specs/plans` reference in tooling | `.pre-commit-config.yaml` still ignores `**/specs/plans/**` after the directory was deleted. | Prune the obsolete ignore independently. *(pass 20, Coverage lens)* |
 | **Low** | ✓ verified | `.gitignore` embedded allowlist drift | `console.sh` and `support.md` are allowlisted but absent; `claudeignore` is tracked but not allowlisted. | Prune and add. *(pass 19, Boundaries lens)* |
 | **Low** | ✓ verified | Pure domain predicates trapped in `ops` | Domain predicates inside `ops` still force `prompts → ops`, while infrastructure probes also live in the same package. | Relocate pure predicates to `models`/`pipeline` and infrastructure probes to `process`. *(pass 19, Boundaries lens)* |

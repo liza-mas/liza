@@ -4,6 +4,8 @@ Persistent record of issues identified by architectural analysis skills.
 
 **Last verified:** 2026-08-20 against the pending worktree.
 
+**Targeted health check:** 2026-09-06 refreshed the claims and measurements noted below; this was not a full revalidation and no issue was closed.
+
 **Skills that contribute here:**
 - `systemic-thinking` — Systemic coherence and risk analysis
 - `software-architecture-review` — Code-level architectural patterns and smells
@@ -336,7 +338,7 @@ Self-reinforcing patterns that can amplify failures.
 **Skill:** systemic-thinking
 **Category:** FEEDBACK
 
-**Issue:** The contract is the mechanism that suppresses agent failure modes. It competes for the same resource agents need to do work: context tokens. The current baseline is 778 lines of CORE.md, 200 lines of MULTI_AGENT_MODE.md, and 252 lines of AGENT_TOOLS.md — 1,230 lines before repository orientation, role-specific skills, blackboard state, or task specifications. The tier architecture and kernel appendix address degradation after it happens, but each new clause still consumes context that makes the remaining rules harder to retain.
+**Issue:** The contract is the mechanism that suppresses agent failure modes. It competes for the same resource agents need to do work: context tokens. The 2026-09-06 repository baseline is 799 lines of `contracts/CORE.md`, 221 lines of `contracts/MULTI_AGENT_MODE.md`, and 252 lines of `contracts/AGENT_TOOLS.md` — 1,272 lines before repository orientation, role-specific skills, blackboard state, or task specifications. The tier architecture and kernel appendix address degradation after it happens, but each new clause still consumes context that makes the remaining rules harder to retain.
 
 **Implication:** The contract will hit a ceiling where adding another clause to prevent failure mode N+1 degrades compliance with clauses 1 through N, and no tier architecture can compensate because the contract must be loaded before tiers can be evaluated.
 
@@ -369,7 +371,7 @@ Self-reinforcing patterns that can amplify failures.
 **Category:** FEEDBACK
 **Related:** [Issue Registry Resolution Drift](#issue-registry-resolution-drift)
 
-**Issue:** The repository's `make test` target generates `coverage.out` without `-coverpkg=./...`, while the architecture review's 80.7% result came from a separate cross-package run whose raw profiles and deduplication implementation were not retained. The profile path is gitignored, so the exact basis cannot be regenerated from repository tooling.
+**Issue:** The repository's `make test` target runs without coverage instrumentation. `make coverage` creates a temporary profile without `-coverpkg=./...`, opens the HTML report, and removes the profile on exit. The architecture review's 80.7% result came from a separate cross-package run whose raw profiles and deduplication implementation were not retained, so that exact basis cannot be regenerated from repository tooling. *(Command behavior verified in `Makefile`, 2026-09-06.)*
 
 **Implication:** Coverage claims can look current after their evidence has disappeared, and repeated reviews must trust prose rather than execute a repository command to verify the same measurement.
 
@@ -448,7 +450,7 @@ Implicit dependencies that constrain system behavior.
 **Skill:** systemic-thinking
 **Category:** ASSUMPTION
 
-**Issue:** The active blackboard schema has exactly one `goal` section, one `sprint` section, and a flat `tasks` array. Completed sprints are preserved in full archive files and summarized in `sprint_history`, so the system now has historical memory. The remaining structural limit is one active goal and sprint at a time: concurrent goals, a visible multi-sprint backlog, and hierarchical task relationships cannot be represented in active state. Historical summaries also retain only a small subset of sprint metrics.
+**Issue:** The active blackboard schema has exactly one `goal` section, one `sprint` section, and a `tasks` array. Tasks represent hierarchical relationships through `ParentTask` and `ParentTasks` (`internal/models/task.go`), populated by transition execution (`internal/ops/proceed.go`). Completed sprints are preserved in full archive files and summarized in `sprint_history`, so the system now has historical memory. The remaining structural limit is one active goal and sprint at a time: concurrent goals and a visible multi-sprint backlog cannot be represented in active state. Historical summaries also retain only a small subset of sprint metrics. *(Hierarchy claim corrected 2026-09-06.)*
 
 **Implication:** Liza remains structurally a single-goal-at-a-time system. Teams that need concurrent objectives or portfolio planning require a schema and query-model change rather than a configuration switch.
 
@@ -936,11 +938,11 @@ Long-term concerns about system evolution.
 **Category:** TRAJECTORY
 **Related:** [Restart/Lease Churn Under Load](#restartlease-churn-under-load), [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration)
 
-**Issue:** Every ownership reconciliation in the architecture resolves to one form of evidence: a PID plus `AgentProcessStatus(...).IsLiveOrUnknown()`. It gates registration collision detection, active and passive review ownership (`roles.md:408`), stale-claim clearing, owned-executing recovery, and blocked-task repair (`state-machines.md`, `blackboard-schema.md:907,911`, `INVARIANTS.md:135`). This binds all recovery to OS process identity. ADR-0085 already carries the other half of the picture: `ACPXAgent` exposes `SessionID`/`WarmUsage`, and warm sessions survive across process restarts (`acp-vs-cli.md`: local `seen` map plus `acpx sessions show`), so conversational state can outlive the process that hosted it. This is **not an unnoticed gap** — ADR-0085:68 records the exclusion deliberately: `WarmUsage` "is best-effort operational metadata … It must not drive correctness-sensitive task transitions." The blackboard schema models no session identity accordingly. The decision is coherent today because every provider backend is a locally-spawned process whose liveness the OS can answer for. It is a decision with an expiry condition, and the condition is not recorded anywhere.
+**Issue:** Recovery still depends on OS process identity at some boundaries: stale review-claim clearing uses `AgentProcessStatus(...).IsLiveOrUnknown()` (`internal/ops/clear_stale_review_claims.go`). Registration instead uses `AgentProcessOwnership(...).Occupied()`, a lease-first decision based on an unexpired lease and a nonzero heartbeat; PID evidence provides classification and diagnostics (`internal/agent/registration.go`, `internal/ops/agent_process_status.go`). Thus process liveness is no longer the universal ownership authority. ADR-0085 already carries the other half of the picture: `ACPXAgent` exposes `SessionID`/`WarmUsage`, and warm sessions survive across process restarts (`acp-vs-cli.md`: local `seen` map plus `acpx sessions show`), so conversational state can outlive the process that hosted it. This is **not an unnoticed gap** — ADR-0085:68 records the exclusion deliberately: `WarmUsage` "is best-effort operational metadata … It must not drive correctness-sensitive task transitions." The blackboard schema models no session identity accordingly. The remaining process-based recovery boundaries assume locally-spawned providers whose liveness the OS can answer for. Their expiry condition remains undocumented. *(Ownership scope corrected 2026-09-06.)*
 
 **Implication:** The exclusion of session state from correctness paths is sound only while providers remain locally-spawned processes; a remote, daemonized, or pooled backend would make PID liveness answer a different question than the one recovery is asking, with no signal that the recorded decision's premise has lapsed.
 
-**Current mitigation:** `IsLiveOrUnknown` fails safe — an unknown process status is treated as live, so reconciliation prefers leaving a claim in place over stealing it. Combined with lease expiry this bounds the damage. ADR-0085's boundary keeps session metadata out of correctness paths, so the two liveness notions cannot currently be confused.
+**Current mitigation:** Registration preserves ownership while the lease is unexpired and a heartbeat is recorded, even when raw process evidence is dead or mismatched. At recovery boundaries still using `IsLiveOrUnknown`, unknown process status is treated as live, preferring to leave a claim in place over stealing it. ADR-0085 keeps session metadata out of correctness paths; that exclusion remains a constraint to revisit for non-process-shaped backends.
 
 **Future options:**
 - Record the premise as an explicit constraint on the `LLMAgent` boundary: backends must be process-addressable for liveness, so a non-conforming backend fails at review rather than silently
@@ -1127,6 +1129,8 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 
 ## Structural Debt
 
+File sizes in issue titles retain the original assessment values to preserve existing anchors. The 2026-09-06 measurements are: `proceed.go` 1,563 lines, `commands/init.go` 1,418, `supervisor.go` 1,131, `watch.go` 1,407, and `embedded.go` 1,635. Function sizes and rankings below are historical 2026-07-24 measurements, not a fresh function-level assessment.
+
 ### Decompose proceed.go (1,500 LOC)
 
 **Skill:** code-quality-assessment
@@ -1193,11 +1197,11 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 **Category:** RECOMMENDATION (P1 — reassessed 2026-07-24)
 **Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#13-decompose-internalagentsupervisorgo)
 
-**Issue:** `internal/agent/supervisor.go` reached 1,129 LOC, up from 831 at the 2026-04-13 assessment. It continues to mix restart tracking, spinning detection, CLI execution, lease behavior, and the supervisor loop. `RunSupervisor` grew from 287 to 442 LOC.
+**Issue:** `internal/agent/supervisor.go` reached 1,129 LOC at the 2026-07-24 assessment, up from 831 at the 2026-04-13 assessment. It continues to mix restart tracking, spinning detection, lease behavior, and the supervisor loop. CLI execution already lives in `internal/agent/cli_agent.go` as `CLIAgent`, with `NewDefaultCLIExecutor` retained as a deprecated constructor alias. The historical assessment measured `RunSupervisor` growing from 287 to 442 LOC.
 
 **Implication:** Policy, process execution, and recovery behavior now compete for attention in the runtime's central loop. The larger function makes lifecycle changes harder to review against concurrency and lease invariants.
 
-**Direction:** Extract restart tracking and spinning policy into focused files, and move `DefaultCLIExecutor` to a dedicated implementation. Then simplify `RunSupervisor` around a small set of named lifecycle phases.
+**Direction:** Extract restart tracking and spinning policy into focused files, then simplify `RunSupervisor` around a small set of named lifecycle phases. Preserve the existing `CLIAgent` execution boundary.
 
 ### Decompose watch.go (1,407 LOC)
 
@@ -1229,7 +1233,7 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 **Category:** CROSS-CUTTING
 **Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#16-enforce-the-multi-language-quality-contract-in-ci)
 
-**Issue:** CI runs `make lint`, `make test`, `make test-e2e`, and `make build`, but `make lint` does not run the full 22-hook pre-commit policy. CI therefore omits staticcheck, goimports verification, duplicate detection, ruff, mypy, and pytest. Python now accounts for 5,114 production LOC and 2,196 test LOC. The pre-commit configuration also resolves goimports and staticcheck through `@latest`.
+**Issue:** CI runs `make lint`, `make test`, `make test-e2e`, and `make build`, but `make lint` does not run the full pre-commit policy. CI now runs `uv run --frozen python3 -m pytest skills/liza-logs/scripts`, but still omits staticcheck, goimports verification, duplicate detection, ruff, mypy, and the other Python test suites. The 2026-07-24 assessment counted 5,114 Python production LOC and 2,196 test LOC. The pre-commit configuration also resolves goimports and staticcheck through `@latest`. *(CI scope verified in `.github/workflows/ci.yml`, 2026-09-06.)*
 
 **Implication:** The repository advertises a broader quality contract than merge protection enforces. Python regressions and several Go/static-analysis failures can merge successfully, while local results depend on mutable tool versions.
 
@@ -1253,11 +1257,11 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 **Category:** SUBSYSTEM CONCERN
 **Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#22-restore-python-utility-test-and-structure-parity)
 
-**Issue:** Python skill utilities total 5,114 production LOC and 2,196 test LOC (0.43:1). `analyze-log.py` is 1,924 LOC, `context-corpus-index.py` is 968 LOC, and two blackboard modules exceed 600 LOC. The context-engineering and white-box-red-testing Python packages have no tests, and no Python checks run in CI.
+**Issue:** The 2026-07-24 assessment counted 5,114 Python production LOC and 2,196 test LOC (0.43:1), with `analyze-log.py` at 1,924 LOC, `context-corpus-index.py` at 968 LOC, and two blackboard modules above 600 LOC. The context-engineering and white-box-red-testing Python packages still have no tests. CI now runs the log-analyzer pytest suite, but does not run the other Python suites or the ruff/mypy checks. *(CI scope verified in `.github/workflows/ci.yml`, 2026-09-06.)*
 
 **Implication:** A material production surface has weaker regression protection and substantially larger modules than the repository's Go conventions. CLI and serialized-output changes can break skill workflows without blocking a merge.
 
-**Direction:** First enforce existing Python tests and tooling in CI. Add behavioral tests for the untested skill packages, then split the largest scripts around parsing, analysis/state operations, and rendering boundaries while preserving their CLI contracts.
+**Direction:** Extend CI beyond the log-analyzer suite to enforce the remaining Python tests and tooling. Add behavioral tests for the untested skill packages, then split the largest scripts around parsing, analysis/state operations, and rendering boundaries while preserving their CLI contracts.
 
 ---
 
