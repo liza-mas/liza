@@ -60,7 +60,7 @@ Externalized context that survives agent restarts. Agents read specs before acti
 specs/
 ├── README.md                           # Reading order and navigation
 ├── build/                              # Build specifications (system implementation)
-│   └── 0 - Vision.md                   # Philosophy, success criteria, foundation spec
+│   └── 1 - Vision.md                   # Philosophy, success criteria, foundation spec
 ├── functional/                         # Functional domain specifications
 │   ├── 1 - Liza.md                     # Liza system overview
 │   └── 1.1.md - 1.6.md                 # Domain-specific specs

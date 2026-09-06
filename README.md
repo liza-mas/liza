@@ -1,8 +1,10 @@
-# Liza: Hardened Multi-Agent Coding
+# Liza: Orchestration of Accountable Agents
 
-> Because *"it worked in the demo"* is not what on-call engineers are looking for.
+> Take the human out of the execution loop, keep them in the room.
 
-The full **[hardening inventory](docs/liza-hardened-mas.md)** to push to production with peace of mind.
+From a goal to reviewed, tested, documented code: a behavioral contract, adversarial
+review, deterministic boundaries, and a software-delivery pipeline. See the
+**[hardening inventory](docs/liza-hardened-mas.md)** for the mechanisms behind it.
 
 ![Liza's TUI](docs/img/liza-tui.png)
 
@@ -14,18 +16,41 @@ The full **[hardening inventory](docs/liza-hardened-mas.md)** to push to product
 
 - [What is Liza?](#what-is-liza)
 - [How Liza Compares](#how-liza-compares)
+- [Choose Your Mode](#choose-your-mode)
 - [Getting Started](#getting-started)
 - [Architecture](#architecture)
 - [Status](#status)
 - [Naming](#naming)
 - [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Credits](#credits)
 
 ## What is Liza?
 
-Liza is simultaneously a **Pairing** and **Multi-Agent System** (MAS)
-optimized for **doing things right on the first pass** — with the auditability to prove it.
-Liza bets on time-to-quality and durable codebase maintainability through automated reviews and documentation
-(e.g. the [ADR Backfill](skills/adr-backfill) skill).
+Liza is a **Pairing** and **Multi-Agent System** (MAS) for software delivery.
+Its multi-agent mode is **graph engineering with a generic graph for software delivery**:
+the graph is already engineered, instantiated for each goal, and adaptable during execution.
+You supply the direction, domain knowledge, and constraints. Agents decompose the goal,
+produce specifications and code, review each other's work, and merge approved changes
+through code-enforced gates. Sprints can execute unattended; humans retain governance,
+steering, and authority over irreversible effects beyond the delegated workflow.
+
+The prerequisite is **agent judgment you can rely on**. If every result needs your
+inspection, throughput remains limited by your attention. The behavioral contract was
+built for pairing first: to make agents reason before acting, admit uncertainty, verify
+claims, and push back when warranted. That experience made delegating review to other
+agents a reasonable next step.
+
+The core design objective is **doing things right on the first pass**: production-ready
+work without human correction rounds. In MAS mode, that means one autonomous delivery
+run, including the internal review and revision cycles needed to get there.
+The metric is **cost to production-ready**:
+tokens plus human time to reach a mergeable change, including correction, tests,
+documentation, and review. See [Status](#status) for evidence and measurement limits.
+
+**Use your existing subscriptions.** The system runs provider coding CLIs, so it can use
+your existing subscription and personal CLI setup. **Claude
+Opus through Claude Code and GPT-5 through Codex are fully supported.**
 
 Liza's behavioral contract — used by both modes — **makes models more thoughtful**:
 > *"I want to wash my car. The car wash is 100 meters away. Should I walk or drive?"<br>*
@@ -34,48 +59,48 @@ Liza's behavioral contract — used by both modes — **makes models more though
 >
 > Sonnet 4.6 **with Liza's contract**: *"Drive. You're already going to a car wash — arriving dirty is the point."*
 
-Liza is a **frontier Multi-Agent System**:
-> Soufiane Keli (Executive Director, IBM) maps AI engineering maturity across 5 levels,
-> from autocomplete (L1) to software factory (L5, still theoretical). He places Liza at L4 – Collaborative Agent Networks:
-> <br>
-> *"Multiple specialized agents work together on design, code, testing, and deployment. Humans orchestrate. This is typically
-> what's happening with BMAD, BEADS, and LIZA. Very few organizations have genuinely reached this level in 2026."*
+In his [field adaptation of Dan Shapiro's AI engineering maturity model](https://www.linkedin.com/posts/soufiane-keli-4610071_jai-ajust%C3%A9-le-mod%C3%A8le-de-dan-shapiro-avec-share-7443546722557054976-sw3J/),
+Soufiane Keli places Liza alongside BMAD and BEADS at **L4 — Collaborative Agent Networks**.
+His description of that level (translated from French):
 
-### Main characteristics:
+> Multiple specialized agents work together on design, code, testing, and deployment. Humans orchestrate.
 
-- **Behavior, Posture, Know-How** — three layers that make coding agents useful:
-  - **Behavior**: A [behavioral contract](contracts/) enforces governance intrinsically — not through external scaffolding as *Harness Engineering* does. Optional project [guardrails](GUARDRAILS.md) extend the contract with project-specific constraints.
-  - **Posture**: Original pairing postures (User Duck, Socratic Coach, Challenger, etc.)
-  - **Know-How**: composable [skills](skills/) encode methodology
-  - *[Full analysis](https://medium.com/@tangi.vass/behavior-posture-know-how-the-three-layers-that-make-ai-agents-useful-d485388442eb)*
-- **Autonomous Spec-driven Coding System:**
-  - From **general goal** to code and tests, with multi-stage decomposition into intermediate artifacts (epics, US, implementation plans)
-    that are AI generated but human reviewed.
-  - Automatic task decomposition based on complexity with dependency management for parallel execution. Many-to-one transitions consolidate sibling tasks (e.g. N user stories → 1 architecture task).
-  - Multi-sprints: agents are fully autonomous within a sprint, user steers between sprints via Liza CLI - review of produced artifacts, continuous improvement, and steering of the next sprint
-  - A TUI (`liza tui`) displays live system state and lets you spawn agents, pause/resume, and trigger checkpoints.
-- **Adversarial architecture:**
-  - One Orchestrator role + 12 others across four pipeline phases.
-  - Every activity is dual — a doer and a reviewer: epic planning, epic writing, US writing, code planning, coding - everything.
-  - They interact like on a PR review — submission, feedback comments, verdict, revised submission, etc. — until approval.
-- **Hybrid hardened architecture:**
-  - LLM agents wrapped by code-enforced supervisors and working on isolated git worktrees.
-  - The supervisor does the **deterministic code-enforced actions** (worktree management, merges, TDD enforcement, etc),
-    leaving the **judgment to the agent**. Strict task state machine with 43+ validation rules.
-  - Agents communicate and act through Liza's **CLI**.
-  - 35k LOC of Go (+92k of tests). Liza is not a prompt collection.
-  - Agent logs and prompts recording for automatic analysis and continuous improvements (token optimization, tool usage analysis, context quality, ...). The `/liza-logs` skill cross-correlates logs across agents to identify frictions — from misconfiguration in early setups to regressions from provider CLI updates in mature ones. The `/context-engineering` skill audits prompt payload shape, context bloat, cacheability, and handoff fit.
-- **Multi-model:**
-  - Liza wraps provider **CLIs**, not their APIs. This means your existing subscription (Claude Max, ChatGPT Pro, etc.) works — no API keys or per-token billing required — and your personal setup is used.
-  - BYOM: Claude Code, Codex CLI, OpenCode, Kimi, Mistral, Gemini. [Not all are made equal though](docs/demo-benchmark).
-- **Structured workflow:**
-  - Defined as a composable and customizable YAML pipeline with declarative sub-pipelines (e.g. specification, coding).
-  - Coordination is performed via an auditable YAML **blackboard** that acts as both the Kanban board of the agents with full historized state details and the support for PR-like comments made by the reviewer agents.
-  - Agents don't discover work — they receive pre-claimed tasks in bootstrap prompt. Eliminates race conditions and cognitive overhead.
-- **Resilience:**
-  - Circuit breaker: pattern detection (loops, repeated failures) triggers automatic sprint checkpoint
-  - Crash recovery: `recover-agent` and `recover-task` commands for idempotent cleanup after hard crashes
-  - Context handoff: agents hand off with structured notes when approaching context limits
+### Four layers for unattended execution
+
+Each layer addresses a different failure class. The contract alone cannot guarantee
+compliance; independent review alone cannot make badly decomposed work compose.
+
+| Layer | Responsibility | What fails without it                                             |
+|---|---|-------------------------------------------------------------------|
+| **Behavioral contract** | Reason before acting, verify claims, expose uncertainty, respect scope | Agents can fake progress instead of solving the problem           |
+| **Adversarial doer/reviewer pairs** | Apply a binding review to every artifact, from epics to code | The author becomes the only judge of its work                     |
+| **Mechanical boundaries** | Deterministic Go enforces state transitions, role boundaries, validation gates, and merge authority | Critical rules depend on the model choosing to follow them        |
+| **Engineered pipeline** | Decompose goals into cohesive, verifiable tasks whose outputs compose | Local progress accumulates without converging on a working system |
+
+The [contract](contracts/) defines professional conduct across roles. **Guidelines
+offer advice; a contract establishes obligations** through explicit states, gates,
+invariants, and consequences for violations. It constrains behavior rather than
+prescribing each action, leaving agents room to exercise judgment. Mechanical
+boundaries back the obligations that must hold even when a model fails to follow them.
+
+**Authority is scarce.** Spend the system prompt's authority on what the agent cannot
+infer for itself. Repeating familiar coding advice or discoverable repository facts
+dilutes the behavioral contract. The review skill illustrates the principle: agents
+already know how to review; what they need is a protocol that makes disagreements
+converge. The contract supplies that operating structure, with clear failure boundaries
+and freedom over how to achieve the intended result.
+
+Optional project [guardrails](GUARDRAILS.md) add local constraints; pairing postures
+such as Coach and Challenger help clarify intent; composable [skills](skills/) supply
+methodology when needed. The aim is to lead accountable peers rather than prescribe
+every step.
+
+The execution system adds isolated Git worktrees, an auditable YAML blackboard,
+pre-claimed tasks, a live TUI, crash recovery, context handoff, and a circuit breaker
+for repeated failures. Recorded prompts and agent logs support investigation through
+the [log-analysis](skills/liza-logs/) and [context-engineering](skills/context-engineering/)
+skills. Provider CLI selection is configurable; compatibility with the contract matters
+alongside raw model capability.
 
 See the complete [vision](<specs/build/1 - Vision.md>) and [genesis](docs/how-liza-grew-up.md) of Liza.
 
@@ -87,66 +112,144 @@ So it spirals. Random changes dressed up as hypotheses. Each iteration more elab
 
 Under the contract, there's a third option: **say "I'm stuck" and mean it.** The contract makes that safe — no penalty for uncertainty, no pressure to perform progress. And the Approval Request mechanism forces agents to write down their reasoning before acting. *"I'll try random things until something works"* is hard to write in a structured plan. Surface the reasoning, and the reasoning improves — no better model required.
 
+**The gate also exists when no human approves it.** In MAS mode, writing the pre-execution checkpoint clears the gate. Its purpose is to force the agent to think before acting; human approval is the pairing-mode form of that mechanism. Mechanical gates separately enforce the boundaries that cannot depend on the agent's disposition.
+
 The shift is visible in tone too. Agents under the contract stop sounding like enthusiastic, consensus-seeking assistants. They become more like senior peers — direct style, actual opinions, willing to push back.
 
 This won't self-correct. Sycophancy drives engagement — that's what gets optimized. Acting fast with little thinking controls inference costs. Model providers optimize for adoption and cost efficiency, not engineering reliability.
 
-Ten months of pairing under this contract, and the vigilance tax dropped to near zero. I can mostly focus on the architecture and more specifically build up a MAS upon the contract.
+The contract has been used in pairing since May 2025. The author's experience of reduced
+vigilance made building an autonomous system on it worthwhile.
 
 Here is a [demo video](https://drive.google.com/drive/folders/1Iea-nNxAazBHeLXL7IElXnG5r1i1E-Ha?usp=sharing) of an implementation of a basic Todo CLI
 using Liza in Multi-agent mode - spec-driven with intermediate epic and User Story creation, fully autonomous agents within sprints, human reviews between sprints.
 
 ## How Liza Compares
 
-### MAS Architecture
+### The multi-agent landscape
 
-The multi-agent coding space splits into six categories:
+The [competitive survey](specs/architecture/competition-survey/mas-survey.md) maps
+different architectural approaches. This table summarizes that dated analysis; the
+categories describe design emphases and can overlap as products evolve.
 
-- **Orchestration frameworks** (CrewAI, LangGraph, AutoGen) — general-purpose multi-agent building blocks; none address behavioral trust in software engineering.
-- **Company simulators** (MetaGPT, ChatDev) — SOP-based pipelines mimicking software teams; trust assumed through process compliance.
-- **Scheduler/runners** (Symphony, Paperclip) — work dispatch and workspace isolation above coding agents; trust delegated to whatever happens inside each session.
-- **Context-engineered systems** (GSD) — thin orchestrators spawn fresh subagents for every operation to prevent "context rot"; trust derives from context freshness plus spec-driven process, not behavioral enforcement.
-- **Methodology / workflow frameworks** (BMAD-METHOD) — multi-phase agile methodology installed into AI IDEs (Claude Code, Cursor, Codex, Copilot); trust via structured process and context engineering, not mechanical enforcement.
-- **Behavioral enforcement** (Liza) — deterministic supervisors enforce state transitions, role boundaries, and merge authority mechanically; agents handle judgment under a behavioral contract addressing 55+ failure modes.
+| Approach | Examples in the survey | Primary emphasis | What this system adds |
+|---|---|---|---|
+| **Orchestration frameworks** | CrewAI, LangGraph, AutoGen | Building blocks for custom agent workflows across domains | An already-engineered software-delivery pipeline |
+| **Company simulators** | MetaGPT, ChatDev | Software-team roles and standard operating procedures | A shared behavioral contract and mechanical lifecycle boundaries |
+| **Schedulers / runners** | Symphony, Paperclip | Work dispatch, workspace isolation, and operational coordination | Accountability inside the execution and review process |
+| **Context-engineered systems** | GSD | Fresh contexts, bounded tasks, and structured handoffs | Behavioral constraints alongside context management |
+| **Methodology / workflow frameworks** | BMAD-METHOD | Guided planning, role-based workflows, and artifact production | Supervisor-enforced transitions and binding review verdicts |
+| **Engineering workflow suites** | gstack | Specialist skills and tools across the development lifecycle | A persistent task graph and supervisor-owned merge authority |
 
-| | Liza | BMAD | CrewAI | Ruflo | Symphony | Paperclip |
-|---|---|---|---|---|---|---|
-| **Trust approach** | Behavioral contract (55+ failure modes) | Prompt-level three-layer adversarial review (advisory) | Post-hoc output validation | Track-record based (Q-learning) | Implementation-dependent | Budget/approval governance |
-| **Review loop** | Adversarial doer/reviewer pairs | 3 parallel reviewers (Blind Hunter / Edge Case / Acceptance) | Optional manager mode | None | None | None |
-| **Role enforcement** | Code-enforced (Go supervisor) | Prompt-level (6 named personas) | Prompt suggestion | Claude hooks (provider-specific) | None (single-agent) | Org chart hierarchy |
-| **Failure handling** | Structural prevention + escalation | `bmad-correct-course` + readiness gate (PASS/CONCERNS/FAIL) | Retry on output failure | Pattern matching from past successes | Implementation-dependent | Budget auto-pause |
+These are comparisons of architectural emphasis, not claims that another tool lacks
+every listed mechanism. See the [comparison tables](specs/architecture/competition-survey/comparison-table.md)
+and [detailed BMAD comparison](specs/architecture/competition-survey/liza-vs-bmad-comparison.md)
+for product-level analysis. The distinctive combination here is accountable judgment,
+binding review, mechanical boundaries, and decomposition that composes.
 
-**Where Liza leads** — no competitor offers any of these:
-- Failure mode catalog (55+) with mechanical countermeasures
-- Adversarial doer/reviewer pairs on every task
-- Code-enforced role boundaries (Go supervisor, not prompt suggestions)
-- Provider compliance matrix tested empirically across 5 providers
-- Multi-sprint continuity, crash recovery, context pressure management
+### Loop engineering: who judges completion?
 
-**Where others lead:**
-- **Ecosystem**: CrewAI (45k stars, production v1.9.0, enterprise product), MetaGPT (64k stars), and BMAD (~45.2k stars, Discord, 5-language docs, corporate sponsorship) have far larger communities
-- **Upstream planning**: BMAD covers brainstorming, market research, PRFAQ, PRD interviews, and UX design — breadth Liza's lighter goal-document entry point doesn't match
-- **Cost tracking**: Paperclip ships per-agent/task/project budgets today; Liza's is planned
-- **Flexibility**: CrewAI works for any domain; Liza is software-engineering-only
+A loop can run an agent until a specified condition passes. That is useful when the
+condition captures the task: a reproducible failure disappears, a build succeeds, or
+a bounded transformation passes its checks. Software delivery also asks whether the
+result is sufficient, coherent, maintainable, and faithful to the intent.
 
-### Spec-Driven Process
+**Exit criteria are a sequencing problem.** When doing the work reveals what a sufficient
+solution requires, you cannot fully specify that solution's stopping condition in
+advance. Making the predicate more elaborate does not supply information that does not
+yet exist. A loose predicate can accept inadequate work or reject a sound solution;
+an exhaustive one requires doing the discovery it was meant to precede. Delegating its
+writing to another agent leaves the same sequencing problem.
 
-Spec-driven development is becoming the standard approach for AI coding. Most tools differ in *what altitude* they expect the input at and *who owns product decisions*.
+**Judging "good enough" when the evidence exists is the more robust method.** A standard
+can state the intended effect upfront while leaving its application to a competent
+judge who has seen the work. That breaks the premise that delivery can be reduced to
+specifying a sufficient exit predicate and looping until it passes.
 
-| | Liza                                              | BMAD | Spec Kit | OpenSpec | Kiro | GSD |
-|---|---------------------------------------------------|---|---|---|---|---|
-| **Input level** | High-level goal (problem, users, behavior, scope) | Full lifecycle (brainstorming → PRFAQ → PRD → Architecture → Stories) | High-level goal → agent-generated spec | Detailed delta-specs on existing system | Interactive 3-doc generation | Detailed spec required |
-| **Who decides what to build** | Human via pairing (Coach/Challenger modes)        | Human via conversational PM-agent interview | Agent generates, human approves | Human (spec pre-decided) | Agent drives, human confirms | Human (pre-written) |
-| **Decomposition** | Orchestrator decomposes into adversarial tasks    | Phase workflows produce artifacts (PRD → Architecture → Epics → Stories) | Agent decomposes spec into tasks | Slash commands structure tasks | Agent decomposes from spec | Planner sizes to context budget |
-| **Review** | Doer/reviewer pairs with quorum                   | Three parallel reviewers at code stage (prompt-level, advisory) | None | Advisory (verify warns, doesn't block) | None (single-agent) | Checker + verifier (not adversarial) |
+There are also **two human bottlenecks**: translating the goal into stopping conditions
+upstream, and inspecting whether their satisfaction was sufficient downstream. More
+elaborate conditions move effort upstream; cheaper ones move it downstream. Neither
+removes the bottleneck, and repeated inspection remains vulnerable to human fatigue.
 
-Most tools either expect the detailed spec already done (OpenSpec, GSD) or have the agent write it (Spec Kit, Kiro, MetaGPT). BMAD spans the broadest altitude range — from brainstorming and PRFAQ at the top through stories and code review at the bottom — but relies on the PM agent interviewing the human conversationally across every workflow. Liza treats goal-setting as a synchronous human-agent collaboration where the human makes product decisions and the agent helps surface gaps — then enforces those decisions mechanically during autonomous pipeline execution.
+**Trading agent deliberation for human vigilance is economically inverted.** Human
+attention is scarce, expensive, and cannot be parallelized like agent work. Agent
+deliberation is comparatively abundant, especially under subscription access. A faster
+run that needs constant senior supervision has moved its cost onto the scarcer resource.
+The contract relocates that work into agent reasoning and review, so human attention can
+go to direction and domain decisions.
 
-The positioning question is not "who starts highest" but "what's the minimum human input that reliably produces working code." BMAD answers with iterative PM-agent interviews; Liza answers with one front-loaded goal doc, then mechanical pipeline execution. A ~200-line goal document describing the "Diagnosis Design" method has been sufficient to produce a complete three-tier application (FastAPI backend, Go CLI, React web UI) in a single Liza run, with human intervention limited to answering questions (checkpoint-summary skill) between goal and merged code; the supporting run artifacts are in a non-public Diagnosis Design repo.
+Here, **mechanical checks establish a floor; an accountable reviewer judges sufficiency**.
+A task's `done_when` is a standard for that judgment: it can combine in plain English concrete tests with
+requirements such as preserving behavior, keeping a change atomic, or avoiding needless
+complexity. It is carried into the agent's instructions, not executed as a stopping
+predicate. The reviewer applies the standard to the actual artifact and evidence.
 
-**Rule of thumb: agents may make implementation choices but not product decisions.** The [goal document](support-docs/how-to-produce-a-goal.md) is where every product decision lives. The goal-setting phase uses pairing (Coach mode for surfacing WHY, Challenger mode for stress-testing WHAT) because this phase has the highest decision density — every ambiguity resolved here prevents wrong turns downstream.
+This still uses iteration. The difference is who owns the judgment and how that judgment
+becomes binding. The [review protocol](skills/code-review/SKILL.md) generalizes the PR
+dynamic to every artifact: submission, findings, revision, approval. A doer can contest
+a finding by naming the concrete harm its fix would cause; the reviewer must Accept,
+Counter, Refute, or Escalate. Repeating the same assertion is not a resolution.
 
-[Full competitive survey →](specs/architecture/mas-survey.md)
+### Graph engineering: a graph you do not have to draw
+
+Designing a graph of agents, dependencies, and handoffs is useful work, but users should
+not have to repeat it for each software goal. The [pipeline](internal/embedded/pipeline.yaml)
+ships that delivery structure: specification, architecture, coding, and integration,
+with doer/reviewer pairs throughout. It is configurable and instantiated into tasks for
+each goal. The orchestrator can supersede tasks and retarget dependencies as the work
+meets reality; dependency constraints are checked in code.
+
+The hard part is **decomposition that composes**. Parallel tasks must be individually
+verifiable and produce parts that fit together. High cohesion, loose coupling, and
+domain boundaries matter here for the same reason they matter to human teams. Review
+effort follows consequence: decomposition roots receive higher quorum and a provider
+diversity policy because an error there propagates furthest. Diversity support does not
+mean every deployment uses different providers; see [limits](#evidence-and-limits).
+
+**Cheap code generation does not make craftsmanship obsolete.** Domain-driven design,
+high cohesion, loose coupling, and clean code are how independently produced parts
+compose and remain understandable. **Context pressure is the agent's version of cognitive
+load**: practices that make a codebase easier for people to reason about also reduce the
+context agents must spend reconstructing it. A healthy codebase is cheaper to evolve in
+tokens; generating more tangled code compounds the cost of every later change.
+
+Documentation and ADRs preserve the explanation alongside the implementation, including
+the intent that code alone cannot recover. For an existing repository, [ADR Backfill](skills/adr-backfill/)
+reconstructs decisions from history and asks the human for intent the commits cannot supply.
+
+### Specifications and the human's role
+
+The [goal document](support-docs/how-to-produce-a-goal.md) holds the human's product
+decisions: what to build, for whom, why, and within which boundaries. Coach and Challenger
+postures help surface gaps before the pipeline runs. Human attention goes to direction
+and the domain's dynamic model — feedback, delays, and downstream consequences. Agents
+can challenge that model and produce the structural decomposition from it.
+
+Specifications become progressively more detailed: vision → epics → stories →
+architecture → code plans → code. Each level governs the next. Agents exercise judgment
+when producing and reviewing an artifact; implementing it is not permission to expand
+its scope. When reality invalidates the split, the orchestrator supersedes and re-cuts
+tasks through recorded operations.
+
+Within a sprint, agents execute and review. Between sprints, humans can resolve domain
+questions and steer the next increment, with artifacts available for inspection.
+Long-term specification consistency still requires the [spec evolution process](specs/protocols/sprint-governance.md);
+mechanical workflow enforcement does not prove semantic agreement between code and specs.
+
+## Choose Your Mode
+
+Adopt the layers to match the work. The contract is usable without the full pipeline.
+
+| Mode | What it adds | Best fit and boundary |
+|---|---|---|
+| **Pairing** | Behavioral contract; you approve and review | Direct collaboration on a task. Human attention remains in the execution loop. |
+| **Adversarial pairing** | Separate doer/reviewer sessions, a dedicated Git worktree, a Markdown blackboard, binding verdicts, and state helpers | One bounded increment. Human approval remains the default; explicit `yolo` delegates doer-side gates. Helpers provide thinner enforcement than the full supervisor. |
+| **Full MAS** | Deterministic supervisors, task graph, worktrees, and thirteen roles | Goals needing decomposition and unattended sprints. More token-intensive; meaningful validation coverage is a prerequisite. |
+
+Adversarial pairing can run independent increments in parallel, but does not supply the
+full pipeline's decomposition within one goal. Its smaller workflow avoids those stages;
+that is a structural cost difference, not a measured savings claim. Full MAS earns its
+overhead when the work needs those stages.
 
 ---
 
@@ -232,22 +335,21 @@ your environment.
 
 ![Liza](docs/img/liza-illustration.png)
 
-Most spec-driven multi-agent systems are LLM-all-the-way-down: agents coordinating agents, with compliance dependent on
-prompt adherence and artifact-based workflows.
-
 Liza is a hybrid system:
 - The agents are the popular coding agent CLIs.
 - The workflow is declarative but relies on a code-enforced state machine
 - The supervisors that wrap every agent and the validation rules are also deterministic Go code.
   This means critical invariants — state transitions, role boundaries, merge authority, TDD gates — are enforced
   mechanically, not by asking a LLM to please follow rules.
-  Liza's mechanical layer cannot fabricate, cannot skip gates, cannot interpret rules flexibly.
+  These boundaries operate outside the agent session; they do not depend on the model's
+  willingness to comply. Their correctness still depends on the implementation and tests.
 - The LLM side is equally differentiated. Liza agents operate under a behavioral contract: 55+ documented
   LLM failure modes each mapped to a specific countermeasure, an explicit state machine
   with forbidden transitions, and tiered rules that define what degrades gracefully
   versus what never bends.
 
-Reliability is built into every component.
+The blackboard records task state and review history; supervisors own the mechanical
+lifecycle while agents supply judgment.
 
 ```mermaid
 graph TB
@@ -282,8 +384,6 @@ graph TB
 Roles aren't composable, Skills are: agents aren't constrained regarding their capabilities by a rigid "Act as a..." prompt
 and may use any skill they consider relevant to adapt to the situation.
 
-**Liza has the built-in capability to do things right on the first pass.**
-
 Liza has 13 roles organized in four pipeline phases:
 - **Specification phase**: orchestrator, epic-planner, epic-plan-reviewer, us-writer, us-reviewer
 - **Architecture phase**: orchestrator, architect, architecture-reviewer
@@ -295,8 +395,8 @@ Master planning role-pairs do not add roles. They reuse the same doer and review
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         Human                               │
-│   (leads specs, observes terminals, reads blackboard,       │
-│               kills agents, pauses system)                  │
+│   (sets direction, supplies domain knowledge, steers        │
+│       between sprints, can inspect and stop execution)      │
 └─────────────────────────────────────────────────────────────┘
                               │
     ┌─────────── Specification Phase ──────────┐
@@ -432,11 +532,33 @@ Example of a task on the blackboard:
 
 See [Release Notes](docs/release_notes/) for version history and [RELEASE.md](RELEASE.md) for maintainer release workflow.
 
-**Where Liza works today:**
-- **Pairing mode** is battle-tested — agents write **~99% of production code** under human supervision
-- **Multi-agent mode** produces solid specs and code through the full goal-to-merge pipeline with 13 roles across 3 phases — starting from release v0.4.0, all major Liza changes are implemented using this mode
+### Evidence and Limits
 
-Liza is a collaborative agent network (L4 AI maturity) but its architecture has been designed to support a software factory (L5) where humans focus on strategy and product vision. Still a long way to go.
+Pairing has been used by the author since May 2025. Multi-agent mode has implemented
+the project's major changes since v0.4.0, through the goal-to-merge pipeline with
+13 roles across four phases. [Release notes](docs/release_notes/) and repository
+history provide a public record of the system's evolution; the [demo](docs/DEMO.md)
+and [recorded runs](docs/demo-benchmark/) show the workflow in practice.
+
+Self-hosting and operator experience support using the system, but do not establish a
+measured production-readiness rate. Reviewer accuracy, human intervention frequency,
+total cost to production-ready, and the contribution of each layer have not been
+independently established for this configuration.
+
+Current boundaries matter:
+
+- **Review is fallible.** Binding verdicts prevent self-approval; they do not prove a
+  reviewer is correct. Re-running supplied tests can reproduce their blind spots.
+  Red-testing skills exist, but an independent attack-generation and execution stage
+  is not part of every review.
+- **Provider diversity is a deployment choice.** Separate doer and reviewer providers
+  are supported and diversity is evaluated, but it is not universally enforced.
+  A pair using the same model can share blind spots.
+- **Spec authority is partly procedural.** Gates enforce the workflow, while sustained
+  spec/code agreement depends on review and the spec evolution process.
+- **Autonomy has a cost.** Full-pipeline runs are token-intensive. Meaningful tests and
+  validation are the floor on which unattended execution relies; human governance and
+  escalation remain necessary.
 
 **Implemented roles:**
 - Orchestrator (decomposes goal into planning tasks)
@@ -458,17 +580,31 @@ Liza is a collaborative agent network (L4 AI maturity) but its architecture has 
 
 ### Provider Compatibility
 
-The contract is a capability test. It requires meta-cognitive machinery—the ability to parse instructions as executable specifications, observe state, pause at gates.
+Supported CLI integrations include **Claude Code, Codex, Cursor, OpenCode, Kimi,
+Qwen Code, and Devin**. The [provider catalog](provider-catalog.yaml) also includes
+**Gemini** and **Mistral Vibe**, currently marked experimental. CLI integration and
+model adherence to the behavioral contract are separate considerations.
 
-| Provider | Classification                          | Notes |
-|----------|-----------------------------------------|-------|
-| Claude Opus 4.x | Fully compatible | Reference provider |
-| GPT-5.x-Codex | Fully compatible | Equally capable |
-| Kimi 2.5 | Compatible but poor on real-world tasks | Responsive to tooling feedback |
-| Mistral Devstral-2 | Partial | Requires explicit activation and supervision |
-| Gemini 2.5 Flash | Incompatible | Architectural limitation—no prompt-level fix |
+**Claude Opus (Claude Code) and GPT-5 (Codex) are fully supported** for pairing and
+multi-agent execution. Doer and reviewer CLI selection is configurable, including
+using different providers for the two roles.
 
-See [Model Capability Assessment](docs/demo-benchmark/wrap-up.md) for detailed analysis.
+**Capability and harnessability are separate requirements.** A model must do the work
+and execute the contract: read required context, verify claims, observe its state, and
+pause at gates. Greater task capability does not guarantee greater protocol adherence;
+adherence can regress between releases and weaken under context pressure.
+
+**Professionalism can matter more than raw capability.** For delegated work, a rigorous
+model that verifies its claims can be more useful than a stronger model that confidently
+skips the checks. The selection rule is to prefer the model whose judgment can be
+entrusted with responsibility, rather than choose on benchmark capability alone. A model
+that needs constant correction gives the vigilance burden back to the human.
+
+The [hello protocol](docs/demo-benchmark/hello-protocol.md) is a quick screening test
+before a real-task pilot. It can exclude a model that does not follow the contract;
+passing does not certify coding competence or reliable long-running autonomy. The
+[recorded assessment](docs/demo-benchmark/wrap-up.md) describes particular tested versions,
+not permanent provider rankings.
 
 ## Naming
 
@@ -492,5 +628,9 @@ The behavioral contract draws on research into LLM failure modes, sycophancy pat
 - **[BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)** — Role templates and workflow patterns
 - **Classical blackboard architecture** — Shared state coordination
 - **[Ralph Wiggum technique](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)** — Iteration until convergence, validated by an adversarial agent instead of mechanical check or self-declaration
-- Stephen Oberther (**[liza-go](https://github.com/smo921/liza-go)**) — Shell to Go CLI migration
 - **[CrewAI](https://github.com/crewAIInc/crewAI)'s composable guardrails concept** — Reduced to Liza's convention-over-code pattern.
+
+## Credits
+
+- Stephen Oberther (**[liza-go](https://github.com/smo921/liza-go)**) — Shell to Go CLI migration
+- Jérôme Gicquel — Windows support
