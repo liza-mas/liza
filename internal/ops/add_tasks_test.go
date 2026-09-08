@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -294,6 +295,79 @@ func TestAddTask_Success(t *testing.T) {
 	lastAlignment := readState.Goal.AlignmentHistory[len(readState.Goal.AlignmentHistory)-1]
 	if !strings.Contains(lastAlignment.Summary, "task-1") {
 		t.Errorf("Alignment history summary should mention task ID, got %q", lastAlignment.Summary)
+	}
+}
+
+func TestAddTask_LongDescription(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		text  string
+		batch bool
+	}{
+		{"short", "Implement feature X", false},
+		{"legacy_summary_at_limit", strings.Repeat("x", statehygiene.MaxStateTextBytes-len("Added task task-1: ")), false},
+		{"legacy_summary_over_limit", strings.Repeat("x", statehygiene.MaxStateTextBytes-len("Added task task-1: ")+1), false},
+		{"long_ascii", strings.Repeat("x", 2*statehygiene.MaxStateTextBytes), false},
+		{"long_unicode", strings.Repeat("界", statehygiene.MaxStateTextBytes), false},
+		{"long_unicode_batch", strings.Repeat("界", statehygiene.MaxStateTextBytes), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
+			testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+			initial := testhelpers.CreateValidState()
+			testhelpers.WriteInitialState(t, stateFile, initial)
+			input := AddTaskInput{
+				ID: "task-1", Description: tc.text,
+				SpecRef: "specs/vision.md", DoneWhen: "Tests pass",
+				Scope: "feature", Priority: 1, RolePair: "coding-pair",
+			}
+			if tc.batch {
+				second := input
+				second.ID, second.Description = "task-2", "Follow-up task"
+				result, err := AddTasks(stateFile, logFile, &AddTasksInput{
+					Tasks: []AddTaskInput{input, second}, OrchestratorID: "orchestrator-1",
+				})
+				if err != nil {
+					t.Fatalf("AddTasks() error: %v", err)
+				}
+				if len(result.Results) != 2 {
+					t.Fatalf("AddTasks() returned %d results, want 2", len(result.Results))
+				}
+				for _, item := range result.Results {
+					if !item.Success || len(item.Warnings) != 0 {
+						t.Fatalf("AddTasks() item = %+v, want success without warnings", item)
+					}
+				}
+			} else {
+				result, err := AddTask(stateFile, logFile, &input, "orchestrator-1")
+				if err != nil {
+					t.Fatalf("AddTask() error: %v", err)
+				}
+				if len(result.Warnings) != 0 {
+					t.Fatalf("AddTask() warnings: %v", result.Warnings)
+				}
+			}
+			updated, err := db.New(stateFile).Read()
+			if err != nil {
+				t.Fatalf("Read() error: %v", err)
+			}
+			task := updated.FindTask(input.ID)
+			if task == nil || task.Description != tc.text {
+				t.Fatal("task description was lost or altered")
+			}
+			entry := updated.Goal.AlignmentHistory[len(initial.Goal.AlignmentHistory)]
+			if entry.Event != models.TaskEventPlanning || entry.Summary != "Added task task-1" {
+				t.Fatalf("alignment entry = %+v, want planning event identifying task-1", entry)
+			}
+			if err := statehygiene.ValidateState(updated); err != nil {
+				t.Fatalf("persisted state violates hygiene: %v", err)
+			}
+		})
 	}
 }
 

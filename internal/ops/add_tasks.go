@@ -175,10 +175,12 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 			state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, input.ID)
 		}
 
+		// Keep the description on the task and in the activity log, not in the
+		// size-limited alignment summary.
 		alignmentEntry := models.AlignmentHistory{
 			Timestamp: now,
 			Event:     models.TaskEventPlanning,
-			Summary:   fmt.Sprintf("Added task %s: %s", input.ID, input.Description),
+			Summary:   fmt.Sprintf("Added task %s", input.ID),
 		}
 		state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, alignmentEntry)
 

@@ -427,6 +427,57 @@ func TestMigrateCommand_ScrubsOversizedLegacyRejectionReason(t *testing.T) {
 	}
 }
 
+func TestMigrateCommand_ScrubsOversizedAlignmentSummary(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+	task.Description = strings.Repeat("界", statehygiene.MaxStateTextBytes)
+	state.Tasks = []models.Task{task}
+	entry := models.AlignmentHistory{
+		Timestamp: task.Created,
+		Event:     models.TaskEventPlanning,
+		Summary:   "Added task task-1: " + task.Description,
+	}
+	state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, entry)
+	// Legacy fixtures must bypass the current write-time hygiene guard.
+	data, err := yaml.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := MigrateCommand(statePath)
+	if err != nil || !changed {
+		t.Fatalf("MigrateCommand() = %v, %v, want true, nil", changed, err)
+	}
+	bb := db.New(statePath)
+	updated, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := updated.FindTask(task.ID); got == nil || got.Description != task.Description {
+		t.Fatal("migration lost or altered the task description")
+	}
+	if len(updated.Goal.AlignmentHistory) != len(state.Goal.AlignmentHistory) {
+		t.Fatal("migration changed alignment history length")
+	}
+	got := updated.Goal.AlignmentHistory[len(updated.Goal.AlignmentHistory)-1]
+	if got.Event != entry.Event || !got.Timestamp.Equal(entry.Timestamp) {
+		t.Fatal("migration altered alignment event metadata")
+	}
+	if !strings.Contains(got.Summary, "raw state payload omitted") || len(got.Summary) > statehygiene.MaxStateTextBytes {
+		t.Fatalf("migrated summary = %q, want bounded scrub message", got.Summary)
+	}
+	if err := bb.Modify(func(*models.State) error { return nil }); err != nil {
+		t.Fatalf("state remains unwritable after migration: %v", err)
+	}
+	if changed, err := MigrateCommand(statePath); err != nil || changed {
+		t.Fatalf("second migration = %v, %v, want false, nil", changed, err)
+	}
+}
+
 func TestMigrateCommand_InvalidStatePath(t *testing.T) {
 	_, err := MigrateCommand("/nonexistent/path/state.yaml")
 	if err == nil {

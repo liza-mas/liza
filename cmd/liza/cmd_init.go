@@ -414,9 +414,9 @@ func warningLines(text string) []string {
 
 var migrateCmd = &cobra.Command{
 	Use:   "migrate [state-file]",
-	Short: "Normalize role names in state.yaml",
-	Long: `Migrate state.yaml by normalizing underscore-form role names to
-their canonical hyphenated form (e.g. code_reviewer → code-reviewer).
+	Short: "Normalize legacy state.yaml fields",
+	Long: `Normalize legacy state.yaml fields: underscore-form role names,
+legacy attempted fields, oversized text fields, and raw provider transcript payloads.
 
 If no state-file argument is provided, defaults to the project runtime state.yaml.
 Reports whether any changes were made.`,
@@ -434,9 +434,9 @@ Reports whether any changes were made.`,
 			return err
 		}
 		if changed {
-			fmt.Println("Migration complete: role names normalized.")
+			fmt.Println("Migration complete: legacy state fields normalized (role names, attempted fields, oversized text, and raw provider transcript payloads where needed).")
 		} else {
-			fmt.Println("No changes needed: state already uses canonical role names.")
+			fmt.Println("No changes needed: no legacy state fields require migration.")
 		}
 		return nil
 	},

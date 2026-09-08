@@ -40,6 +40,13 @@ Verified zombie-agent detection requires procfs and uses process cwd as project-
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```
 
+If a write fails because a legacy `goal.alignment_history[].summary` exceeds
+the 4096-byte state text limit, run `§BRAND_BINARY_NAME§ migrate`, then retry.
+Migration replaces oversized summaries with a bounded scrub notice while
+preserving event metadata and task descriptions. New task creation records
+only the task ID in alignment history; full descriptions remain on tasks and
+in the activity log.
+
 ## System Control
 
 ```bash

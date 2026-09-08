@@ -343,6 +343,11 @@ liza add-task --id TASK_ID --desc DESCRIPTION --spec SPEC_REF \
 # validation degraded.
 ```
 
+Task creation records `Added task <id>` in alignment history. The complete
+description remains on the task and in the activity log, so description length
+does not consume the alignment summary's 4096-byte budget. Batch creation uses
+the same behavior for each task.
+
 **liza validate** — Validate blackboard state
 ```bash
 liza validate [state.yaml]
