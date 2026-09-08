@@ -32,17 +32,25 @@ func executeRootCommandCapture(t *testing.T, projectRoot string, args ...string)
 		t.Fatalf("failed to create stdout pipe: %v", err)
 	}
 	os.Stdout = w
+	var buf bytes.Buffer
+	copyDone := make(chan error, 1)
+	go func() {
+		_, copyErr := io.Copy(&buf, r)
+		copyDone <- copyErr
+	}()
 
 	cmdErr := executeRootCommand(t, projectRoot, args...)
 
-	w.Close()
 	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	if _, copyErr := io.Copy(&buf, r); copyErr != nil {
+	if closeErr := w.Close(); closeErr != nil {
+		t.Fatalf("failed to close captured stdout: %v", closeErr)
+	}
+	if copyErr := <-copyDone; copyErr != nil {
 		t.Fatalf("failed to read captured stdout: %v", copyErr)
 	}
-	r.Close()
+	if closeErr := r.Close(); closeErr != nil {
+		t.Fatalf("failed to close captured stdout reader: %v", closeErr)
+	}
 
 	return buf.String(), cmdErr
 }
