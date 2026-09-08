@@ -34,7 +34,7 @@ type claimRelease struct {
 	clearFn                 func(*models.Task)
 	missingLeaseMsg         string
 	activeLeaseMsg          string
-	preserveRejectedHandoff bool
+	validateRejectedHandoff bool
 }
 
 var reviewerRelease = claimRelease{
@@ -137,8 +137,12 @@ func resolveDoerClaimReleaseStatus(task *models.Task, resolver models.PipelineRe
 		doer.activeStatus = doerActive
 		doer.releasedStatus = doerReleased
 	}
-	if isRejectedDoerRelease(task, resolver) {
-		doer.preserveRejectedHandoff = true
+	rejected := isRejectedDoerRelease(task, resolver)
+	doer.validateRejectedHandoff = rejected
+	preserveAttemptEvidence := rejected || task.Status == models.TaskStatusMerged
+	if preserveAttemptEvidence {
+		// Completed output and review/merge evidence outlive ownership. A
+		// merged task is not starting a new attempt when its claim is released.
 		doer.clearFn = func(t *models.Task) {
 			t.AssignedTo = nil
 			t.LeaseExpires = nil
@@ -292,7 +296,7 @@ func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 			releasedReviewer = released
 		}
 
-		preservedRejectedHandoff := false
+		validateRejectedHandoff := false
 		if role == roles.ClaimDoer || role == roles.ClaimBoth {
 			effectiveCoderRelease := resolveDoerClaimReleaseStatus(task, resolver)
 			released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, force, agentID, reason, now)
@@ -300,13 +304,13 @@ func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 				return err
 			}
 			releasedDoer = released
-			preservedRejectedHandoff = released && effectiveCoderRelease.preserveRejectedHandoff
+			validateRejectedHandoff = released && effectiveCoderRelease.validateRejectedHandoff
 		}
 
 		if !releasedReviewer && !releasedDoer {
 			return &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}
 		}
-		if preservedRejectedHandoff {
+		if validateRejectedHandoff {
 			if err := statevalidate.ValidateState(state, projectRoot, true, io.Discard); err != nil {
 				return fmt.Errorf("released rejected claim produced invalid state: %w", err)
 			}

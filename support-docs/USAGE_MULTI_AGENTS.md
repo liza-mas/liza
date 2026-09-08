@@ -632,7 +632,7 @@ the appropriate supervisor-launched agent session. See
 | **Recovery** |                                                                                                                      |
 | `§BRAND_BINARY_NAME§ recover-task <task-id>` | Recover by task ID while preserving coherent worktree/branch state by default; use `--fresh` to discard intentionally |
 | `§BRAND_BINARY_NAME§ recover-agent <agent-id>` | Recover by agent ID (release claim + remove worktree + delete agent)                                                 |
-| `§BRAND_BINARY_NAME§ release-claim <task-id> [--role R]` | Release claim on a task (manual, granular recovery)                                                                  |
+| `§BRAND_BINARY_NAME§ release-claim <task-id> [--role R]` | Release claim on a task. For `MERGED` tasks, doer release clears ownership and lease only; output, approvals, commit evidence, and status are preserved. |
 | `§BRAND_BINARY_NAME§ delete agent <id>` / `§BRAND_BINARY_NAME§ delete task <id>` | Delete an agent or task from state                                                                                   |
 | **Analysis** |                                                                                                                      |
 | `§BRAND_BINARY_NAME§ validate` | Validate blackboard state against schema invariants                                                                  |
