@@ -17,6 +17,15 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 | `go test -tags e2e ./internal/integration/` | Run e2e full sprint test (gated by `//go:build e2e`, ~40s) |
 | `make test-e2e` | Same as above via Makefile target |
 
+### Windows compatibility
+
+The Windows CI job runs the Go suite natively with Git for Windows on `PATH`.
+Local cross-compilation checks platform-specific code but does not replace that
+runtime check. Fixtures must use native executable names, portable shell stubs,
+and the same home-directory resolver as production. POSIX permission bits are
+not Windows ACLs; tests requiring privacy must check access control rather than
+equating a writable attribute with a private file.
+
 ### Coverage
 
 ```bash

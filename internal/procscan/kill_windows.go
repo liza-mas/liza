@@ -1,0 +1,183 @@
+//go:build windows
+
+package procscan
+
+import (
+	"fmt"
+	"time"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+// KillProcessTree terminates pid and its descendants, deepest first.
+//
+// An agent spawns a provider CLI as a child, and that child may spawn its own.
+// Terminating only the recorded PID leaves them running and reparented, which
+// is what "deleted the agent" would otherwise mean on Windows.
+func KillProcessTree(pid int) error {
+	if pid <= 0 {
+		return fmt.Errorf("invalid pid %d", pid)
+	}
+
+	tree, err := ProcessTreeDeepestFirst(uint32(pid))
+	if err != nil {
+		return err
+	}
+
+	var firstErr error
+	var handles []windows.Handle
+	for _, member := range tree {
+		handle, err := terminateProcessByPID(member)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if handle != 0 {
+			handles = append(handles, handle)
+			defer windows.CloseHandle(handle)
+		}
+	}
+	// TerminateProcess is asynchronous. Wait on the same handles so callers
+	// can remove working directories after cancellation, with one tree-wide bound.
+	deadline := time.Now().Add(5 * time.Second)
+	for _, handle := range handles {
+		var timeout uint32
+		if remaining := time.Until(deadline); remaining > 0 {
+			timeout = uint32((remaining + time.Millisecond - 1) / time.Millisecond)
+		}
+		status, err := windows.WaitForSingleObject(handle, timeout)
+		if err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("wait for terminated process: %w", err)
+		} else if status == uint32(windows.WAIT_TIMEOUT) && firstErr == nil {
+			firstErr = fmt.Errorf("timed out waiting for terminated process tree")
+		}
+	}
+	return firstErr
+}
+
+// ProcessTreeDeepestFirst returns root and its descendants, children before
+// their parents so that nothing is reparented onto a still-running ancestor
+// midway through termination.
+//
+// Descendants are read from a Toolhelp snapshot, which reports a parent PID per
+// process. That field is not authoritative on its own: it keeps pointing at a
+// number after the parent exits, and Windows recycles PIDs aggressively, so an
+// unrelated process started later can appear to be a child. Comparing creation
+// times settles it — a real child cannot predate its parent.
+func ProcessTreeDeepestFirst(root uint32) ([]uint32, error) {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot processes: %w", err)
+	}
+	defer windows.CloseHandle(snapshot)
+
+	childrenByParent := map[uint32][]uint32{}
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	if err := windows.Process32First(snapshot, &entry); err != nil {
+		return nil, fmt.Errorf("read first process entry: %w", err)
+	}
+	for {
+		if entry.ProcessID != entry.ParentProcessID {
+			childrenByParent[entry.ParentProcessID] = append(childrenByParent[entry.ParentProcessID], entry.ProcessID)
+		}
+		if err := windows.Process32Next(snapshot, &entry); err != nil {
+			if err == windows.ERROR_NO_MORE_FILES {
+				break
+			}
+			return nil, fmt.Errorf("read next process entry: %w", err)
+		}
+	}
+
+	order := orderProcessTree(root, childrenByParent, processCreationTime)
+
+	for left, right := 0, len(order)-1; left < right; left, right = left+1, right-1 {
+		order[left], order[right] = order[right], order[left]
+	}
+	return order, nil
+}
+
+// orderProcessTree walks childrenByParent breadth-first from root, returning
+// root followed by its descendants in traversal order (reversed by the
+// caller to get children before their parents).
+//
+// visited guards against a cycle in childrenByParent: stale parent pointers
+// plus PID recycling can make A's recorded parent B and B's recorded parent
+// A, and the creation-time check below only breaks that when both
+// processes' times are readable via creationTime. Without visited, the
+// order slice would grow without bound and this would never return.
+//
+// Extracted from ProcessTreeDeepestFirst so the walk itself — the part a
+// cycle can hang — is testable without a real Toolhelp snapshot.
+func orderProcessTree(root uint32, childrenByParent map[uint32][]uint32, creationTime func(uint32) (int64, bool)) []uint32 {
+	order := []uint32{root}
+	visited := map[uint32]bool{root: true}
+	for i := 0; i < len(order); i++ {
+		parent := order[i]
+		parentStart, parentOK := creationTime(parent)
+		for _, child := range childrenByParent[parent] {
+			if visited[child] {
+				continue
+			}
+			childStart, childOK := creationTime(child)
+			if parentOK && childOK && childStart < parentStart {
+				// The parent PID was recycled: this process predates the agent.
+				continue
+			}
+			visited[child] = true
+			order = append(order, child)
+		}
+	}
+	return order
+}
+
+// processCreationTime reports when a process started, as a comparable value.
+// The second result is false when the process is gone or cannot be opened, in
+// which case the caller has no evidence either way and keeps the candidate.
+func processCreationTime(pid uint32) (int64, bool) {
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return 0, false
+	}
+	defer windows.CloseHandle(handle)
+
+	var creation, exit, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(handle, &creation, &exit, &kernel, &user); err != nil {
+		return 0, false
+	}
+	return creation.Nanoseconds(), true
+}
+
+// terminateProcessByPID stops one process. A process that has already exited is
+// not an error: the goal is that it is not running afterwards.
+func terminateProcessByPID(pid uint32) (windows.Handle, error) {
+	handle, err := windows.OpenProcess(windows.PROCESS_TERMINATE|windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, pid)
+	if err != nil {
+		if err == windows.ERROR_INVALID_PARAMETER {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("open process %d for termination: %w", pid, err)
+	}
+
+	if err := windows.TerminateProcess(handle, 1); err != nil {
+		defer windows.CloseHandle(handle)
+		// TerminateProcess reports access denied for a process that has already
+		// exited, which is indistinguishable from a real permission failure
+		// until the exit code is checked.
+		if exited, codeErr := processHasExited(handle); codeErr == nil && exited {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("terminate process %d: %w", pid, err)
+	}
+	return handle, nil
+}
+
+func processHasExited(handle windows.Handle) (bool, error) {
+	const stillActive = 259
+
+	var code uint32
+	if err := windows.GetExitCodeProcess(handle, &code); err != nil {
+		return false, err
+	}
+	return code != stillActive, nil
+}

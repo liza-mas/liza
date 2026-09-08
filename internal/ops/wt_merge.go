@@ -785,9 +785,9 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		if runErr == nil {
 			cmd.Stdout = &combinedOutput
 			cmd.Stderr = &combinedOutput
-			// Kill the entire process tree on timeout (Unix: process group kill;
-			// Windows: default CommandContext kill). WaitDelay ensures cmd.Wait
-			// returns even if child processes hold pipes open after kill.
+			// Kill the entire process tree on timeout on both Unix and Windows.
+			// WaitDelay ensures cmd.Wait returns even if child processes hold
+			// pipes open after kill.
 			configProcessGroupKill(cmd)
 			cmd.WaitDelay = 5 * time.Second
 			runErr = cmd.Run()
