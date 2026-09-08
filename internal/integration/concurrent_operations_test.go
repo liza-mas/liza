@@ -184,7 +184,9 @@ func TestConcurrentStateModifications(t *testing.T) {
 	testhelpers.SetupPipelineConfig(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
-	bb := testhelpers.WriteInitialState(t, statePath, state)
+	// Exercise atomicity independently of slow CI disk writes and lock contention.
+	// Lock timeout behavior is covered separately in internal/db.
+	bb := testhelpers.WriteInitialState(t, statePath, state).WithLockTimeout(time.Minute)
 
 	// Perform concurrent modifications that increment a counter
 	numGoroutines := 10
