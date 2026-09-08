@@ -6,6 +6,38 @@ Common issues and solutions when running §BRAND_NAME_TITLE§.
 
 ## Agent Issues
 
+### Agent ID required
+
+**Error begins:** `agent ID required (use --agent-id flag or §BRAND_ENV_PREFIX§_AGENT_ID env var`
+
+**Cause:** The command requires an agent ID, but neither the flag nor an
+accepted environment variable supplied one.
+
+**Resolution:** Use the identity supplied to the supervisor-launched agent
+session. If invoking a command explicitly, supply its caller ID using
+`--agent-id <id>` or `§BRAND_ENV_PREFIX§_AGENT_ID`. Agent-authenticated lifecycle
+commands also require the caller's registration generation; setting an ID alone
+does not provide it. See [agent generation required](#agent-generation-required).
+
+### Agent generation required
+
+**Error begins:** `agent generation required (set §BRAND_ENV_PREFIX§_AGENT_GENERATION environment variable`
+The rest of the message names the accepted legacy alias.
+
+**Cause:** An agent-authenticated lifecycle command, such as `unblock-task`,
+has an agent ID but no caller-held registration generation.
+
+**Resolution:** Run the command through the appropriate supervisor-launched
+agent session, which receives `§BRAND_ENV_PREFIX§_AGENT_GENERATION` automatically.
+If already in that session, check whether a shell wrapper or environment filter
+dropped the variable. Preserve the generation supplied at launch; do not fetch
+a replacement generation from state to let an obsolete session continue writing.
+After re-registration, use the new session. Supplying `--agent-id` alone does
+not supply a generation.
+
+This variable is registration-specific, not a value to invent or persist in
+your shell profile. See [agent authority](USAGE_MULTI_AGENTS.md#cli-commands).
+
 ### COLLISION: agent already registered
 
 **Error:**

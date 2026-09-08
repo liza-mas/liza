@@ -575,6 +575,21 @@ The `§BRAND_BINARY_NAME§` binary provides all system operations. Key commands:
 
 Use `§BRAND_BINARY_NAME§ -C <project-root> ...` to select a §BRAND_NAME_TITLE§ project root when invoking state commands from a task worktree or any directory inside it. `-C` does not change the process working directory for unrelated relative file arguments; pass absolute paths or run from the intended directory for those.
 
+**Agent authority:** Agent-authenticated lifecycle commands, including `unblock-task`,
+require `§BRAND_ENV_PREFIX§_AGENT_GENERATION` in addition to the agent ID.
+The supervisor creates an opaque generation on each successful agent registration
+and supplies it, together with `§BRAND_ENV_PREFIX§_AGENT_ID`, to the launched agent
+process. Child commands must preserve this environment. The legacy alias named
+in the CLI diagnostic is also accepted; the branded value takes precedence when both are set.
+The generation must match the caller's current registration; it is not a permanent
+user setting and grants no additional role permissions. Re-registration invalidates
+the previous generation.
+
+A regular shell or Pairing session does not acquire that authority by supplying
+`--agent-id` or by auto-resolving an orchestrator ID. Run these operations through
+the appropriate supervisor-launched agent session. See
+[missing agent generation](TROUBLESHOOTING.md#agent-generation-required) for diagnosis.
+
 | Command | Purpose                                                                                                              |
 |---------|----------------------------------------------------------------------------------------------------------------------|
 | **Setup & Init** |                                                                                                                      |

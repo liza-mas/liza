@@ -156,7 +156,7 @@ func requireAgentID(cmd *cobra.Command) (string, error) {
 		Required:  true,
 	})
 	if err != nil {
-		return "", fmt.Errorf("agent ID required (use --agent-id flag or %s env var; legacy env alias is also accepted): %w", brand.EnvName("AGENT_ID"), err)
+		return "", cliValidationWrap(fmt.Sprintf("agent ID required (use --agent-id flag or %s env var; legacy env alias is also accepted)", brand.EnvName("AGENT_ID")), err)
 	}
 	return agentID, nil
 }

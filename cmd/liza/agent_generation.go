@@ -26,11 +26,11 @@ func requireAgentAuthorityForID(cmd *cobra.Command, agentID string) (models.Agen
 		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", lookup.Warning)
 	}
 	if lookup.Value == "" {
-		return models.AgentAuthority{}, fmt.Errorf(
+		return models.AgentAuthority{}, cliValidationError(fmt.Sprintf(
 			"agent generation required (set %s environment variable; legacy %s alias is also accepted)",
 			brand.EnvName("AGENT_GENERATION"),
 			brand.LegacyEnvName("AGENT_GENERATION"),
-		)
+		))
 	}
 	return models.AgentAuthority{ID: agentID, Generation: lookup.Value}, nil
 }

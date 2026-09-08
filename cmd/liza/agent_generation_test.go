@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +21,16 @@ func TestRequireAgentAuthority(t *testing.T) {
 
 	cmd := &cobra.Command{Use: "test"}
 	addAgentIDFlag(cmd)
+	_, missingIDErr := requireAgentAuthority(cmd)
+	if missingIDErr == nil {
+		t.Fatal("expected missing agent ID error")
+	}
+	idCode, idMessage := jsonout.ClassifyError(missingIDErr)
+	if idCode != "validation" || !strings.Contains(idMessage, "agent ID required") ||
+		!strings.Contains(idMessage, "--agent-id") || !strings.Contains(idMessage, brandedID) {
+		t.Fatalf("missing agent ID JSON error = (%q, %q), want validation naming --agent-id and %s", idCode, idMessage, brandedID)
+	}
+
 	if err := cmd.Flags().Set("agent-id", "coder-1"); err != nil {
 		t.Fatalf("set agent-id flag: %v", err)
 	}
@@ -33,8 +45,14 @@ func TestRequireAgentAuthority(t *testing.T) {
 	}
 
 	t.Setenv(brandedGeneration, "")
-	if _, err := requireAgentAuthority(cmd); err == nil || !strings.Contains(err.Error(), brandedGeneration) {
+	_, err = requireAgentAuthority(cmd)
+	if err == nil || !strings.Contains(err.Error(), brandedGeneration) {
 		t.Fatalf("missing generation error = %v, want %s diagnostic", err, brandedGeneration)
+	}
+	code, message := jsonout.ClassifyError(err)
+	wantMessage := fmt.Sprintf("agent generation required (set %s environment variable; legacy %s alias is also accepted)", brandedGeneration, legacyGeneration)
+	if code != "validation" || message != wantMessage {
+		t.Fatalf("missing generation JSON error = (%q, %q), want (%q, %q)", code, message, "validation", wantMessage)
 	}
 
 	legacyCmd := &cobra.Command{Use: "legacy"}
