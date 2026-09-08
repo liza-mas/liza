@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -58,7 +60,7 @@ func TestRejectedClaimStrategy_MutateTask_PublishesRecoveryTuple(t *testing.T) {
 	}
 }
 
-func TestIntegrationFixClaimStrategy_MutateTask_ClearsStaleAttemptMetadata(t *testing.T) {
+func TestIntegrationFixClaimStrategy_MutateTask_PreservesOutputClearsReviewMetadata(t *testing.T) {
 	t.Parallel()
 
 	reviewCommit := "review-sha"
@@ -66,8 +68,8 @@ func TestIntegrationFixClaimStrategy_MutateTask_ClearsStaleAttemptMetadata(t *te
 	mergeCommit := "merge-sha"
 	task := &models.Task{
 		Output: []models.OutputEntry{{
-			Desc:    "old output",
-			PlanRef: "specs/plans/stale.md",
+			Desc:    "planned output",
+			PlanRef: "specs/plans/feature.md",
 		}},
 		ReviewCommit: &reviewCommit,
 		ApprovedBy:   &approvedBy,
@@ -81,11 +83,12 @@ func TestIntegrationFixClaimStrategy_MutateTask_ClearsStaleAttemptMetadata(t *te
 		IntegrationFailure: map[string]any{"reason": "post-merge state validation failed"},
 	}
 
+	wantOutput := slices.Clone(task.Output)
 	strategy := integrationFixClaimStrategy{}
 	strategy.mutateTask(task, nil)
 
-	if len(task.Output) != 0 {
-		t.Fatalf("Output = %v, want cleared", task.Output)
+	if !reflect.DeepEqual(task.Output, wantOutput) {
+		t.Fatalf("Output = %v, want preserved %v", task.Output, wantOutput)
 	}
 	if task.ReviewCommit != nil {
 		t.Fatalf("ReviewCommit = %v, want nil", *task.ReviewCommit)

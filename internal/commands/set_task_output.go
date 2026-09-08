@@ -11,7 +11,7 @@ import (
 // Delegates business logic to ops.SetTaskOutput.
 func SetTaskOutputCommand(projectRoot string, input *ops.SetTaskOutputInput) error {
 	if err := ops.SetTaskOutput(projectRoot, input); err != nil {
-		return fmt.Errorf("set task output: %w", err)
+		return err
 	}
 
 	fmt.Printf("Output set on task %s (%d entries)\n", input.TaskID, len(input.Output))
@@ -21,7 +21,7 @@ func SetTaskOutputCommand(projectRoot string, input *ops.SetTaskOutputInput) err
 // SetTaskOutputWithAuthorityCommand sets output using generation-fenced authority.
 func SetTaskOutputWithAuthorityCommand(projectRoot string, input *ops.SetTaskOutputInput, authority models.AgentAuthority) error {
 	if err := ops.SetTaskOutputWithAuthority(projectRoot, input, authority); err != nil {
-		return fmt.Errorf("set task output: %w", err)
+		return err
 	}
 
 	fmt.Printf("Output set on task %s (%d entries)\n", input.TaskID, len(input.Output))

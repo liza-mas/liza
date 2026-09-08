@@ -29,7 +29,8 @@ func clearAttemptState(task *models.Task, profile attemptStateCleanupProfile) {
 	case attemptStateRetire:
 		clearSubmittedAttemptState(task)
 	case attemptStateIntegrationFixClaim:
-		task.Output = nil
+		// Repair reuses the worktree and its structured deliverables. Clearing
+		// output here silently loses downstream tasks when the plan is resubmitted.
 		clearSubmittedAttemptState(task)
 	}
 }

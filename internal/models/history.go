@@ -50,6 +50,7 @@ type TaskEventName = string
 const (
 	TaskEventPlanning               TaskEventName = "planning"
 	TaskEventPreExecutionCheckpoint TaskEventName = "pre_execution_checkpoint"
+	TaskEventOutputSet              TaskEventName = "task_output_set"
 	TaskEventSubmittedForReview     TaskEventName = "submitted_for_review"
 	TaskEventApproved               TaskEventName = "approved"
 	TaskEventRejected               TaskEventName = "rejected"

@@ -1,9 +1,12 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -20,7 +23,8 @@ type SetTaskOutputInput struct {
 
 // SetTaskOutput sets the output[] entries on a task. The task must exist, be assigned
 // to the given agent, and be in an executing state (IMPLEMENTING, CODE_PLANNING, or
-// a pipeline-defined executing status). Overwrites any existing output (idempotent).
+// a pipeline-defined executing status). Replaces output and appends a write receipt
+// to task history in the same transaction, including when output is unchanged.
 func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
 	return setTaskOutputWithOptionalAuthority(projectRoot, input, nil)
 }
@@ -34,7 +38,33 @@ func SetTaskOutputWithAuthority(projectRoot string, input *SetTaskOutputInput, a
 	return setTaskOutputWithOptionalAuthority(projectRoot, input, &authority)
 }
 
-func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority) error {
+func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority) (retErr error) {
+	phase := "validate-output"
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		details := map[string]any{
+			"operation": "set-task-output", "task_id": input.TaskID,
+			"state_path": paths.New(projectRoot).StatePath(), "output_count": len(input.Output),
+			"recovery_hint": "Inspect the task state and history before retrying; a later reset may clear a previously saved output.",
+		}
+		// Preserve opted-in diagnostics (including generation fencing) while
+		// exposing only the OS error text, never arbitrary wrapped payloads.
+		var detailed interface{ SafeDetails() map[string]any }
+		if errors.As(retErr, &detailed) {
+			for key, value := range detailed.SafeDetails() {
+				if _, exists := details[key]; !exists {
+					details[key] = value
+				}
+			}
+		}
+		var errno syscall.Errno
+		if errors.As(retErr, &errno) {
+			details["cause"] = errno.Error()
+		}
+		retErr = &OperationalError{Phase: phase, Message: "failed to set task output", Details: details, Err: retErr}
+	}()
 	if input.TaskID == "" {
 		return &PreconditionError{Reason: "task_id is required"}
 	}
@@ -82,6 +112,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 	bb := db.For(lp.StatePath())
 
 	// Collect pipeline executing statuses
+	phase = "load-pipeline"
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to load pipeline config: %w", err)
@@ -93,6 +124,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 		}
 	}
 
+	phase = "persist-output"
 	return lifecycleMutation(bb, authority)(func(state *models.State) error {
 		task := state.FindTask(input.TaskID)
 		if task == nil {
@@ -139,7 +171,12 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			}
 		}
 
+		previousCount := len(task.Output)
 		task.Output = input.Output
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time: time.Now().UTC(), Event: models.TaskEventOutputSet, Agent: &input.AgentID,
+			Extra: map[string]any{"previous_output_count": previousCount, "output_count": len(input.Output)},
+		})
 		return nil
 	})
 }

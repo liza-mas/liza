@@ -1194,7 +1194,11 @@ Example:
 
 		if isJSON(cmd) {
 			err := ops.SetTaskOutputWithAuthority(projectRoot, input, authority)
-			return jsonout.WriteResult(os.Stdout, nil, nil, err)
+			result := map[string]any{
+				"task_id": taskID, "output_count": len(input.Output),
+				"state_path": paths.New(projectRoot).StatePath(),
+			}
+			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
 		return commands.SetTaskOutputWithAuthorityCommand(projectRoot, input, authority)
 	},

@@ -285,6 +285,16 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
 
+`set-task-output --json` returns a write receipt with `task_id`, `output_count`,
+and `state_path`. The same transaction appends a `task_output_set` history event
+with the agent, timestamp, `previous_output_count`, and `output_count`, including
+repeated writes and explicit empty output. A receipt confirms the completed
+write; it does not prevent a later lifecycle reset from clearing output. Compare
+the receipt with subsequent task history when investigating missing entries.
+Failures include operation, phase, task, state path, attempted output count, and
+recovery context. Filesystem failures also expose the OS cause without dumping
+arbitrary error payloads.
+
 **OutputEntry fields:**
 
 Required:
@@ -374,7 +384,9 @@ rework. Doer claim release clears `output[]` and review metadata while
 preserving `failed_by`. Fresh-attempt reset paths clear `output[]`, review
 metadata, and `failed_by`; retire paths clear review/failure metadata while
 keeping terminal context such as `output[]` and `failed_by`. Historical evidence
-remains in `history[]` entries where those entries recorded it.
+remains in `history[]` entries where those entries recorded it. Integration-fix
+claims preserve `output[]` alongside the reused worktree while clearing stale
+review/failure metadata; the doer updates output if repair changes the deliverables.
 
 **`arch_ref` Propagation:**
 

@@ -2,6 +2,25 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Missing planning output is not a hard status/validate finding
+
+**What:** Issue #150's requested hard `status`/`validate` finding for missing
+`output[]` remains unimplemented. The repair-path regression proves that an
+integration-fix claim previously erased output, but the reporter's affected task
+histories have not been checked, so that mechanism is not yet confirmed as the
+cause of the reported incidents.
+
+**Why deferred:** The current change preserves output during integration repair
+and adds write receipts and diagnostics. A global validation rule needs to
+distinguish tasks whose configured transitions consume output from tasks that
+legitimately have none; applying a blanket rule would reject valid state.
+
+**Payback trigger:** Before closing #150, inspect the affected task histories for
+`claimed_for_integration_fix` and settle the pipeline-aware missing-output rule.
+Add status/validate coverage for output-consuming transitions and valid empty
+cases; investigate a second loss path if the histories do not match the repair
+reproduction.
+
 ## Windows ops tests can retain stdio handles after timeout
 
 **What:** A process started by an `internal/ops` test can retain an inherited
