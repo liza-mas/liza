@@ -233,15 +233,17 @@ func (m Model) renderAgentPanel(budget int) string {
 		return fmt.Sprintf("%d", a.PID)
 	}
 
+	idWidth, roleWidth := m.agentIdentityColumnWidths()
+
 	// Build column list based on tier
 	cols := []column{
-		{"ID", 20, func(id string, _ models.Agent) string { return id }},
+		{"ID", idWidth, func(id string, _ models.Agent) string { return id }},
 		{"STATUS", 14, statusVal},
 	}
 
 	if m.columnTier >= ColumnTierStandard {
 		cols = append(cols,
-			column{"ROLE", 16, func(_ string, a models.Agent) string { return a.Role }},
+			column{"ROLE", roleWidth, func(_ string, a models.Agent) string { return a.Role }},
 			column{"CLI", 10, cliVal},
 			column{"HEALTH", 10, healthVal},
 			column{"CURRENT_TASK", m.agentCurrentTaskColumnWidth(), currentTaskVal},
@@ -306,11 +308,17 @@ func (m Model) renderAgentPanel(budget int) string {
 	return m.styles.AgentPanel.MaxHeight(budget).Render(content)
 }
 
+func (m Model) agentIdentityColumnWidths() (idWidth, roleWidth int) {
+	const expandedIdentityMinWidth = 90
+	if m.width < expandedIdentityMinWidth {
+		return 20, 16
+	}
+	return 25, 21
+}
+
 func (m Model) agentCurrentTaskColumnWidth() int {
 	const (
-		idWidth            = 20
 		statusWidth        = 14
-		roleWidth          = 16
 		cliWidth           = 10
 		healthWidth        = 10
 		lastHeartbeatWidth = 16
@@ -320,6 +328,7 @@ func (m Model) agentCurrentTaskColumnWidth() int {
 		minCurrentTask     = 6
 	)
 
+	idWidth, roleWidth := m.agentIdentityColumnWidths()
 	fixedWidth := idWidth + statusWidth + roleWidth + cliWidth + healthWidth
 	if m.columnTier >= ColumnTierWide {
 		fixedWidth += lastHeartbeatWidth
@@ -526,7 +535,7 @@ func (m Model) renderTaskPanel(budget int) string {
 	// Build column list based on tier
 	cols := []column{
 		{"ID", taskIDWidth, func(t models.Task) string { return t.ID }},
-		{"STATUS", 24, statusVal},
+		{"STATUS", 29, statusVal},
 	}
 
 	if m.columnTier >= ColumnTierStandard {
@@ -609,9 +618,9 @@ func (m Model) renderTaskPanel(budget int) string {
 
 func (m Model) taskIDColumnWidth() int {
 	const (
-		preferredIDWidth  = 72
+		preferredIDWidth  = 67
 		minIDWidth        = 8
-		statusWidth       = 24
+		statusWidth       = 29
 		attemptWidth      = 6
 		assignedWidth     = 16
 		reviewingWidth    = 16

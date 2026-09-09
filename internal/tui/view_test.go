@@ -479,44 +479,50 @@ func TestRenderAgentPanel_ColumnTierStandard(t *testing.T) {
 }
 
 func TestRenderAgentPanel_StandardTierFitsNarrowWidth(t *testing.T) {
-	const width = 80
-	m := Model{
-		width:      width,
-		height:     40,
-		columnTier: ColumnTierStandard,
-		styles:     NewStyles(width),
-		state: &models.State{
-			Agents: map[string]models.Agent{
-				"agent-1": {
-					Role:        "coder",
-					Status:      models.AgentStatusWorking,
-					CurrentTask: strPtr("task-with-a-very-long-id-that-must-truncate"),
-					Heartbeat:   time.Now(),
-					Provider:    "codex-acp",
-					PID:         12345,
+	for width := 80; width < 90; width++ {
+		t.Run(fmt.Sprintf("width_%d", width), func(t *testing.T) {
+			m := Model{
+				width:      width,
+				height:     40,
+				columnTier: ColumnTierStandard,
+				styles:     NewStyles(width),
+				state: &models.State{
+					Agents: map[string]models.Agent{
+						"agent-1": {
+							Role:        "coder",
+							Status:      models.AgentStatusWorking,
+							CurrentTask: strPtr("task-with-a-very-long-id-that-must-truncate"),
+							Heartbeat:   time.Now(),
+							Provider:    "codex-acp",
+							PID:         12345,
+						},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	out := m.renderAgentPanel(10)
-	header := findHeaderLine(out)
-	if header == "" {
-		t.Fatal("no header line found")
-	}
-	assertContains(t, header, "CLI", "standard tier should show CLI column")
-	assertContains(t, out, "codex-acp", "standard tier should show CLI value")
+			out := m.renderAgentPanel(10)
+			header := findHeaderLine(out)
+			if header == "" {
+				t.Fatal("no header line found")
+			}
+			assertContains(t, header, "CLI", "standard tier should show CLI column")
+			assertContains(t, out, "codex-acp", "standard tier should show CLI value")
+			if got, want := lineCount(out), 5; got != want {
+				t.Fatalf("agent panel line count = %d, want %d; a logical row wrapped:\n%s", got, want, out)
+			}
 
-	for _, line := range strings.Split(out, "\n") {
-		if got := lipgloss.Width(line); got > width {
-			t.Fatalf("agent panel line width = %d, want <= %d; line: %q\nfull output:\n%s", got, width, line, out)
-		}
+			for _, line := range strings.Split(out, "\n") {
+				if got := lipgloss.Width(line); got > width {
+					t.Fatalf("agent panel line width = %d, want <= %d; line: %q\nfull output:\n%s", got, width, line, out)
+				}
+			}
+		})
 	}
 }
 
 func TestRenderAgentPanel_CurrentTaskUsesRemainingWidth(t *testing.T) {
 	const width = 180
-	taskID := "task-with-long-name-that-fits-when-current-task-uses-the-available-width"
+	taskID := "task-with-long-name-that-fits-when-current-task-uses-available-width"
 	m := Model{
 		width:      width,
 		height:     40,
@@ -543,6 +549,35 @@ func TestRenderAgentPanel_CurrentTaskUsesRemainingWidth(t *testing.T) {
 		if got := lipgloss.Width(line); got > width {
 			t.Fatalf("agent panel line width = %d, want <= %d; line: %q\nfull output:\n%s", got, width, line, out)
 		}
+	}
+}
+
+func TestRenderAgentPanel_IdentityColumnsUseExpandedWidths(t *testing.T) {
+	const width = 90
+	m := Model{
+		width:      width,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(width),
+		state: &models.State{
+			Agents: map[string]models.Agent{
+				"code-plan-reviewer-1": {
+					Role:        "code-plan-reviewer",
+					Status:      models.AgentStatusIdle,
+					CurrentTask: strPtr("task-1"),
+					Heartbeat:   time.Now(),
+					Provider:    "codex",
+					PID:         12345,
+				},
+			},
+		},
+	}
+
+	out := m.renderAgentPanel(10)
+	assertContains(t, out, "code-plan-reviewer-1", "expanded ID column should show common agent IDs in full")
+	assertContains(t, out, "code-plan-reviewer", "expanded ROLE column should show common roles in full")
+	if got, want := m.agentCurrentTaskColumnWidth(), 6; got != want {
+		t.Fatalf("agentCurrentTaskColumnWidth() = %d, want %d", got, want)
 	}
 }
 
@@ -900,7 +935,7 @@ func TestRenderTaskPanel_ColumnTierFull(t *testing.T) {
 
 func TestRenderTaskPanel_TaskIDPrefersWiderColumnWhenSpaceAllows(t *testing.T) {
 	const width = 240
-	taskID := "code-planning-1-code-plan-to-coding-task-with-long-descriptive-suffix"
+	taskID := "code-planning-1-code-plan-to-coding-task-with-descriptive-suffix"
 	task := makeTask(taskID, models.TaskStatusImplementing, 1)
 	task.Description = "Short description"
 
@@ -915,12 +950,52 @@ func TestRenderTaskPanel_TaskIDPrefersWiderColumnWhenSpaceAllows(t *testing.T) {
 	}
 
 	out := m.renderTaskPanel(10)
-	assertContains(t, out, taskID, "wide task panel should show long task IDs when 72-cell ID column fits")
+	assertContains(t, out, taskID, "wide task panel should show long task IDs when 67-cell ID column fits")
+	if got, want := m.taskIDColumnWidth(), 67; got != want {
+		t.Fatalf("taskIDColumnWidth() = %d, want %d", got, want)
+	}
 
 	for _, line := range strings.Split(out, "\n") {
 		if got := lipgloss.Width(line); got > width {
 			t.Fatalf("task panel line width = %d, want <= %d; line: %q\nfull output:\n%s", got, width, line, out)
 		}
+	}
+}
+
+func TestRenderTaskPanel_LongStatusPreservesColumnAlignment(t *testing.T) {
+	const width = 240
+	task := makeTask("task-1", models.TaskStatusPartiallyApproved, 1)
+	task.Description = "Short description"
+	m := Model{
+		width:      width,
+		height:     40,
+		columnTier: ColumnTierFull,
+		styles:     NewStyles(width),
+		state: &models.State{
+			Tasks: []models.Task{task},
+		},
+	}
+
+	out := m.renderTaskPanel(10)
+	header := findTaskHeaderLine(out)
+	var taskRow string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, task.ID) {
+			taskRow = line
+			break
+		}
+	}
+	if header == "" || taskRow == "" {
+		t.Fatalf("task panel is missing its header or task row:\n%s", out)
+	}
+
+	headerAttempt := strings.Index(header, "ATT")
+	rowAttempt := strings.Index(taskRow, "1.0")
+	if headerAttempt == -1 || rowAttempt == -1 {
+		t.Fatalf("task panel is missing the ATT header or attempt value:\n%s", out)
+	}
+	if got, want := lipgloss.Width(taskRow[:rowAttempt]), lipgloss.Width(header[:headerAttempt]); got != want {
+		t.Fatalf("attempt column starts at cell %d, want %d; long status shifted later columns:\n%s", got, want, out)
 	}
 }
 
