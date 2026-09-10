@@ -633,4 +633,4 @@ The behavioral contract draws on research into LLM failure modes, sycophancy pat
 ## Credits
 
 - Stephen Oberther (**[liza-go](https://github.com/smo921/liza-go)**) — Shell to Go CLI migration
-- Jérôme Gicquel — Windows support
+- Jérôme Gicquel — Windows support (experimental)

@@ -5,8 +5,8 @@ contract files, activating a project, and choosing Pairing or Multi-Agent mode.
 
 ## Requirements
 
-- Linux, macOS, or Windows.
-- On Windows: Git for Windows, with its `bash.exe` on PATH ahead of the WSL
+- Linux, macOS, or Windows (experimental).
+- On Windows (experimental): Git for Windows, with its `bash.exe` on PATH ahead of the WSL
   launcher in `system32`. The installed hooks are POSIX shell scripts and run
   through bash; the WSL launcher cannot reach `C:/...` paths, so it is not a substitute.
   Symlink creation also needs either Developer Mode or an elevated shell, see
