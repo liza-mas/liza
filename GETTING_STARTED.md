@@ -292,6 +292,14 @@ Then run:
 liza tui
 ```
 
+After the TUI opens, press `s` and spawn `orchestrator` first. The orchestrator
+is the only role that is not auto-spawned.
+
+Alongside the TUI, open a separate Pairing-mode coding-agent session in the
+project and invoke the [operator skill](skills/liza-operator/SKILL.md). Keep
+that session running to supervise progress, intervene on concerns, and record
+operational issues.
+
 Read [Multi-Agent Usage](support-docs/USAGE_MULTI_AGENTS.md) before running a
 multi-agent pipeline. Liza is a complex system, and the usage guide explains
 roles, checkpoints, worktrees, TUI controls, and review flow.

@@ -166,6 +166,11 @@ Operational reference content (blackboard fields, anomaly types, etc.) is inline
 
 **2. Start Agents**
 
+Start by spawning an orchestrator—the only role that auto-repair does not
+spawn. Press `s` in the TUI and select `orchestrator`, run
+`§BRAND_BINARY_NAME§ agent orchestrator` in another terminal, or use one of
+the launcher presets below.
+
 The TUI (`§BRAND_BINARY_NAME§ tui`) is the primary way to spawn and monitor agents. Press `s` to spawn with the configured default CLI (role names autocomplete from the pipeline config), or `S` to pick a specific CLI.
 
 Alternatively, spawn agents from the CLI: `§BRAND_BINARY_NAME§ agent <role>`. Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `§BRAND_ENV_PREFIX§_AGENT_ID` environment variable. After resolution, `§BRAND_BINARY_NAME§ agent` exports that ID as `§BRAND_ENV_PREFIX§_AGENT_ID` to the spawned provider CLI, including `-i` interactive sessions, so hooks select Multi-Agent mode rather than Pairing mode.
@@ -285,6 +290,12 @@ Multiple agents of the same role can run in parallel (IDs auto-increment):
 **3. Observe and control**
 
 `§BRAND_BINARY_NAME§ tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn (default cli), `S` spawn (pick cli), `p` pause, `r` resume, `a` add task, `c` checkpoint, `y` yolo (toggle auto-resume), `Q` stop.
+
+**Recommended:** Alongside the TUI, open a separate Pairing-mode coding-agent
+session in the project directory and invoke `/§BRAND_BINARY_NAME§-operator`.
+The operator skill continuously watches the run, intervenes when progress or
+agent capacity becomes a concern, and records interventions and significant
+agent friction in `§BRAND_PROJECT_DIRNAME§/operator-notes.md`.
 
 From the CLI:
 ```bash

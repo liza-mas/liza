@@ -1,18 +1,19 @@
 ---
 name: §BRAND_BINARY_NAME§-operator
-description: "Operate a running §BRAND_NAME_TITLE§ multi-agent run from outside the agent pool: keep the orchestrator healthy, review checkpoints, recover stalls, wire agent environments, plan the next run, and escalate to the human only at genuine forks. Use when operating/babysitting a §BRAND_NAME_TITLE§ run (interactive `§BRAND_BINARY_NAME§ tui` or a headless watch loop), not when authoring the work yourself."
+description: "Continuously watch and operate a running §BRAND_NAME_TITLE§ multi-agent run from outside the agent pool: keep work progressing, intervene on concerns, maintain an operational journal, and escalate only at genuine forks. Use when operating/babysitting a §BRAND_NAME_TITLE§ run, not when authoring the work yourself."
 ---
 
 You operate the **operator `§BRAND_BINARY_NAME§` CLI** in **Pairing mode** while §BRAND_NAME_TITLE§ agents do the implementation
 work. Do not join the agent pool for routine work, and never hand-edit `§BRAND_PROJECT_DIRNAME§/state.yaml`; that
 bypasses the state machine. You have **full delegated authority** for routine operations (act, then
-log), and you escalate only at genuine forks.
+log), and you escalate only at genuine forks. Your objective is to keep the run progressing smoothly.
+Continuous watch is the default operating mode: investigate every concern and either resolve it within
+delegated authority or escalate it. Merely reporting a concern and continuing is not sufficient.
 
-This skill is a **living operations log**. Beware Maginot-line fixes: defenses built around the last
-failure often miss the next one. Capture the *transferable principle* and a *generalizing trigger*,
-not one incident's exact coordinates — and **retire a lesson the moment it stops
-matching reality** (especially version-specific §BRAND_BINARY_NAME§-isms, which get fixed). Tag version-specific
-notes "(as of <build/date>; verify)".
+The run's `§BRAND_PROJECT_DIRNAME§/operator-notes.md` is its durable incident journal: retain resolved
+incidents and append their outcomes. Its separate timeless-lessons list is curated guidance; update or retire
+a lesson when it stops matching reality. Capture transferable principles and generalizing triggers, and tag
+version-specific guidance "(as of <build/date>; verify)".
 
 ---
 
@@ -23,9 +24,10 @@ notes "(as of <build/date>; verify)".
    last-known-good, rebuild, re-verify. Rebuild after pulling §BRAND_BINARY_NAME§ source (e.g. `go build` the binary you run).
 2. **Goal** — what feature, where's the spec? Unclear → ask first.
 3. **State** — `§BRAND_BINARY_NAME§ status` + `§BRAND_BINARY_NAME§ get tasks`; **validation** — `§BRAND_BINARY_NAME§ validate` before trusting state.
-4. **Watch cadence** — on-call ("report") or a standing interval (`/loop`, default 10 minutes).
-   If a standing interval is chosen, keep running watch rounds until the human stops the watch, the run
-   reaches a terminal state, or an escalation blocks progress; do not stop after the first report.
+4. **Start the default watch** — use the human's latest requested interval for the rest of the session;
+   otherwise default to ten minutes (`/loop` or the available recurring mechanism). Use on-call reporting
+   only when explicitly requested. Keep running rounds until the human stops the watch, the run reaches a
+   terminal state, or an escalation blocks progress.
 5. **First report** — report starting state + the goal you understood.
 
 # Operating constraints (never bypassed, even with full authority)
@@ -37,32 +39,70 @@ notes "(as of <build/date>; verify)".
 4. **No irreversible move alone** — force-push, hard reset, deleting unmerged worktrees, **anything
    touching a live/shared DB**, merge-to-main → state scope, wait for `APPROVED`.
 5. **The spec controls scope** — execute it, don't rewrite it. Ambiguity/scope changes go up.
+6. **Generation fencing is a credential boundary** — never print, paste, log, or persist agent-generation
+   values. Run fenced mutations through the registered agent or a prepared launcher. If the operator's
+   sandbox lacks the fence, route the repair to the orchestrator or give the human an exact host command.
 
 Conflict between "keep moving" and an operating constraint → the constraint wins; escalate.
 
 # The watch (each round — idempotent: read state, act on what changed, safe to repeat)
-1. **Observe** — `§BRAND_BINARY_NAME§ status`, `§BRAND_BINARY_NAME§ get tasks`, `§BRAND_BINARY_NAME§ analyze` (circuit breaker/thrash),
-   `§BRAND_BINARY_NAME§ get anomalies`, `§BRAND_BINARY_NAME§ validate`. Diff against last round.
-2. **Health** — scan for drift (below).
-3. **Act** — within authority; keep the run moving.
+1. **Observe** — `§BRAND_BINARY_NAME§ status`, `§BRAND_BINARY_NAME§ get tasks`, `§BRAND_BINARY_NAME§ get agents`,
+   `§BRAND_BINARY_NAME§ analyze` (circuit breaker/thrash), `§BRAND_BINARY_NAME§ get anomalies`, and
+   `§BRAND_BINARY_NAME§ validate`. Use bounded projections and sequential state reads; blank or truncated
+   output is tool uncertainty, not an empty run. Diff against last round.
+2. **Health** — investigate every concern immediately. At minimum, detect:
+   - BLOCKED tasks the orchestrator has attempted but cannot unblock;
+   - claimable/reviewable work that remains unclaimed after a bounded recheck, including missing or
+     ineligible role capacity;
+   - disagreement between task ownership and agent `current_task`/status;
+   - duplicate owners, stopped registrations counted as capacity, or a provider log advancing without a
+     matching task claim.
+3. **Act** — resolve confirmed concerns within authority; otherwise hold and escalate. Distinguish
+   transition races and intentional dependency metering from genuine stalls before mutating state.
 4. **Forks** — anything past authority: hold, escalate.
 5. **Report** — report (format below).
-6. **Log** — append any lesson; name it in the report so the human can veto/amend.
+6. **Notes** — update `§BRAND_PROJECT_DIRNAME§/operator-notes.md` for interventions and significant agent
+   friction; name new entries in the report so the human can veto/amend.
 7. **Queue** — is the next goal ready? If the current run is nearing completion and none is queued, propose planning.
 
 Quiet round → one line: *"Steady: no changes, no forks."*
 
-**Instruments.** Read-only under `§BRAND_PROJECT_DIRNAME§/`: `state.yaml` (blackboard — the truth), `log.yaml` (history;
+**Instruments.** Read-only under `§BRAND_PROJECT_DIRNAME§/`: `state.yaml` (authoritative for task transitions), `log.yaml` (history;
 the watcher daemon parses it — a YAML-corrupting char blinds drift/breaker detection), `alerts.log`
 (watch daemon — it only *warns*, never auto-recovers), `archive/` (terminal tasks), `.worktrees/`
 (per-task workspaces). Task lifecycle: `initial → executing → submitted → reviewing → approved →
 MERGED` (+ `BLOCKED`, `SUPERSEDED`, `ABANDONED`, `INTEGRATION_FAILED`). A task past its lease, or
 bouncing `executing ⇄ rejected`, needs you.
 
+**Review-liveness gate.** Reconcile each submitted, reviewing, or rejected task's owner, commit, status, and
+lease with its reviewer's task, role, status, heartbeat, and log. Ownership agreement establishes the review;
+recent log growth establishes only that some provider turn is active. Growth without a claim is a leaked turn,
+not capacity. A rejected task may retain a waiting reviewer only with current `await-resubmission` evidence.
+Recheck suspected races after a short agent-poll interval, independent of reporting cadence.
+
+# Operator notes
+Create or resume `§BRAND_PROJECT_DIRNAME§/operator-notes.md` at session start. Record every issue that
+required operator intervention and every significant friction observed in agent work, even when it
+self-recovered.
+
+The header records run/goal ID, spec, operator role, exact binary build/version, watch interval, creation time,
+and last-updated time. Incident entries are permanent; mark them resolved rather than deleting them.
+
+For each issue, capture:
+- timestamp plus task and agent identifiers;
+- symptom and operational impact;
+- concrete evidence and evidence locations;
+- expected automatic behavior and why it did not resolve the issue;
+- intervention, resulting state, and validation;
+- root-cause hypothesis and durable follow-up, explicitly marking unknowns.
+
+Maintain a current-watch summary, deduplicated systemic follow-up defects, and a separate timeless-lessons
+list. Avoid secrets and raw transcript dumps; symptom repair without reproducible causal evidence is incomplete.
+
 # Agent host model — exactly one orchestrator agent
 `§BRAND_BINARY_NAME§ tui` is the monitor/spawner, not the orchestrator. A healthy run needs a live registered
-`orchestrator` agent process. Check `§BRAND_BINARY_NAME§ status` and `§BRAND_BINARY_NAME§ get agents` for registered live capacity;
-use `pgrep -af "[l]iza agent"` only as supporting process evidence.
+`orchestrator` agent process. Check `§BRAND_BINARY_NAME§ status`, `§BRAND_BINARY_NAME§ get agents`, and the
+process-identity guidance below.
 - **TUI alive does not prove an orchestrator exists.** If no live usable orchestrator is registered,
   spawn one through the TUI or one detached headless command
   (`setsid nohup §BRAND_BINARY_NAME§ agent orchestrator >> … & disown`), then re-verify in a **separate** command
@@ -72,6 +112,21 @@ use `pgrep -af "[l]iza agent"` only as supporting process evidence.
 - **Missing claimable-role capacity is normally auto-repaired.** TUI/headless watch auto-runs the
   repair-agent-pool behavior by default; use manual spawning only when auto-repair is disabled, failing,
   or too slow for the run.
+
+# Sandboxes, PID namespaces, and zombie agents
+Read `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` process-status and zombie guidance first. PID visibility is namespace-
+and platform-dependent. Across a known namespace boundary, recent log growth is stronger evidence than
+`process_status: stopped` alone, but it does not prove identity or authority. Otherwise, contradictory signals
+remain ambiguous; correlate ownership, heartbeat/lease, two log observations, worktree progress, and host identity.
+
+- **Namespace mismatch/race:** observe, then recheck after a short agent-poll interval.
+- **Ghost registration:** run **Preserve before destructive release**, prefer deleting the registration, and leave
+  destructive `recover-agent` as the last resort with the same preservation evidence.
+- **Orphan/leaked process:** preserve valuable work/logs, verify identity, and fence authority before replacement;
+  stop only the exact process for resource pressure, unsafe duplication, or at a safe boundary.
+
+Use procfs checks on Linux and native equivalents elsewhere. If sandboxed, give the human exact read-only host
+commands. Never dump process environments, use broad `pkill`, or kill an unverified PID.
 
 # Do not join the agent pool
 The orchestrator creates and manages task flow across roles such as writers, reviewers, architects,
@@ -132,14 +187,21 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   or read the merged artifact(s) against the spec, flag concerns, and report a summary. In auto-resume
   mode, do not manually `§BRAND_BINARY_NAME§ resume`/`proceed`; agents advance those gates. In manual mode, resume or
   proceed only after review. "The agents merged it" is not "I verified it" — performing the review is the point.
-- **Hold the line** — `§BRAND_BINARY_NAME§ pause` for a hard stop. Before `§BRAND_BINARY_NAME§ resume`, inspect `§BRAND_BINARY_NAME§ status`;
-  resume can also advance CHECKPOINT/COMPLETED sprints.
+- **Hold the line** — `§BRAND_BINARY_NAME§ pause` for a hard stop. Verify `PAUSED`, stop the recurring watch
+  and only operator-launched attached sessions, and record queued work plus the resume checklist. Do not
+  terminate user-launched agents merely because the run is paused. Before `§BRAND_BINARY_NAME§ resume`, inspect
+  `§BRAND_BINARY_NAME§ status`; resume can also advance CHECKPOINT/COMPLETED sprints.
 - **Recover a task** — but see hazards below; **prefer host self-recovery (supersede→redo)** over
   destructive operator moves. Before trusting a clean/claimable state, use `/§BRAND_BINARY_NAME§-logs`
   on the agents that already touched the task; blackboard task data alone is not enough.
 - **Re-run** a flaky validation **once** before believing a red.
 
 # Recovery patterns & hazards
+- **Preserve before destructive release** — before cleanup, `recover-agent`, supersession, or replacement,
+  record the task branch, HEAD, and worktree status, then preserve task-owned changes in a commit; pin its SHA
+  with a tag when cleanup removes the branch. If the operator cannot legitimately author that commit, keep the
+  task blocked and route preservation to its agent or the human. This commit rule does not apply to the documented
+  `unblock-task --rebase-on --allow-dirty` path: snapshot first, then verify HEAD and restored tracked changes.
 - **Clean state is not recovery evidence** — if a task was BLOCKED, rejected repeatedly,
   superseded, abandoned, integration-failed, or recovered after multiple agent attempts, analyze the
   involved agent logs with `/§BRAND_BINARY_NAME§-logs` before reassigning. If the same failure mode
@@ -160,6 +222,10 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   risks are refused. Rebase conflicts remain `BLOCKED` with fresh repair metadata.
 - **Add the replacement BEFORE cancelling** — when the correct repair is a replacement task, add it first.
   Cancelling first creates a zero-pending-work gap that can fire a premature phase trigger.
+- **Audit the graph after replacement** — verify the replacement has only its intended upstream providers,
+  every non-terminal consumer points to the replacement, no dependency points backward or cycles, and task
+  counts plus global validation reconcile. Do not retarget an actively executing task; first move it to a safe
+  state or let its current transition finish.
 - **Inject a new requirement via the source spec, not the merged phase output** — editing a merged phase's
   output JSON does **not** change already-created tasks (only re-derived/superseded ones re-read it);
   edit the goal spec + the `spec_ref`/`arch_ref` doc agents read, verify at the next checkpoint, and
@@ -196,7 +262,7 @@ I handled: <actions + one-line why | "nothing — steady">
 Human call: <decision · Options (1)…(2)… · my read> | "none"
 Health: <steady | drift on task-X | thrash on coding-pair>
 Queue: <next goal: empty | drafting | ready>
-Logged: <lesson title | none>
+Logged: <operator-notes entry | durable lesson promoted | none>
 ```
 Quiet: `Steady — phase <x>, <n> tasks in flight, no forks.`
 
@@ -209,8 +275,10 @@ scope) → draft the goal doc → **human reviews** → cold review + `/systemic
 --spec` once approved *and* the current run is clear.
 
 # Process hygiene
-- Match §BRAND_BINARY_NAME§ processes with the bracket trick to avoid self-matching your own command:
-  `pgrep -af "[l]iza agent"`. **Kill by explicit PID** — `pkill -f "§BRAND_BINARY_NAME§ agent"` self-kills your shell.
+- Use `pgrep -af "§BRAND_BINARY_NAME§[ ]agent"` only to discover candidate processes without matching the `pgrep`
+  command itself. Before acting, verify the candidate's null-delimited argv and cwd; exclude the current
+  process and its ancestors. **Kill by explicit verified PID** — `pkill -f "§BRAND_BINARY_NAME§ agent"`
+  can kill the operator's own shell.
 - Re-verify §BRAND_BINARY_NAME§ state in a **separate** command after backgrounding (cwd disruption → false
   `…/§BRAND_PROJECT_DIRNAME§/state.yaml.lock`).
 - **One run per repo** (`§BRAND_PROJECT_DIRNAME§`/`.worktrees`/`task/…` are repo-global). A parallel effort needs a
@@ -219,8 +287,8 @@ scope) → draft the goal doc → **human reviews** → cold review + `/systemic
   branch-state assumptions. Let normal submit/recovery paths handle staleness, or coordinate an explicit
   repair. For preserved blocked worktrees, use `§BRAND_BINARY_NAME§ unblock-task --rebase-on` so state, `base_commit`,
   and repair metadata stay coherent.
-- **Capture operator/tool lessons as you go** (a markdown feedback file + the `§BRAND_PROJECT_DIRNAME§/` blackboard) so
-  the §BRAND_NAME_TITLE§ developers get ground-truth evidence, not just summaries.
+- **Capture run-specific interventions in `§BRAND_PROJECT_DIRNAME§/operator-notes.md`.** Promote a transferable
+  lesson into maintained project guidance when warranted; do not create an unspecified parallel journal.
 
 ---
 
