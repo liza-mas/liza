@@ -183,6 +183,13 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 - Anchors (`#section`) are not validated (human responsibility to maintain)
 - Missing file is an ERROR, not warning — fail fast prevents cascade of blocked tasks at runtime
 
+For prospective reference-first artifacts (ADR-0133), `spec_ref`, `epic_ref`, `plan_ref`, and
+`arch_ref` are carrier locators. Before provider launch, the compositor loads strict scalar
+carriers, complete direct-parent reviewed ranges, and the current review range at one captured
+integration HEAD. It validates declared revision/path/anchor spans and rejects stale inherited
+blobs. Marker-free artifacts and slug-like scalar fragments retain the legacy behavior above; no
+state-schema migration is implied.
+
 **`done_when` Guidelines:**
 - State the observable behavior, not the implementation approach
 - Include specific endpoints, status codes, or data formats where applicable
@@ -479,6 +486,21 @@ For code reviews, current integration drift is checked separately immediately be
 - Orchestrator may need to rescope task based on spec delta
 
 **v1 Limitation:** No automated spec_hash tracking. Code Reviewer must manually verify spec currency by checking `spec_changes` section in blackboard.
+
+### Reference-First Planning Artifact Review
+
+Epic Plan, US, Architecture, and Code Plan Reviewers apply `spec-review` plus the shared
+Reference-First Authoring contract. They review the assigned carrier and declared direct-reference
+spans, not every ancestor by default. Mechanical revision, path, freshness, and exact-heading span
+checks occur before launch. Reviewers remain responsible for semantic completeness: every assigned
+behavior, boundary, dependency, proof, and effective finding must map to a carrier whose span
+actually contains it. Material changes outside the declared read set still require reviewer
+judgment and the existing current-spec/spec-change process.
+
+Reviewers reject copied inherited authority, undeclared requirements or interfaces, owner
+conflicts, full-parent reads when an assigned anchor suffices, detailed Markdown duplicated into
+`output[]`, correction history that retains resolved material, and uncovered obligations.
+Marker-free legacy artifacts keep their existing review path.
 
 Code Reviewer does NOT evaluate:
 - Style preferences

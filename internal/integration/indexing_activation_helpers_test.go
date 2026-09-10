@@ -18,6 +18,7 @@ import (
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func newIndexingActivationProject(t *testing.T) string {
@@ -46,6 +47,24 @@ func writeIndexingActivationFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q): %v", path, err)
 	}
+}
+
+func prepareIndexingActivationPromptRepo(t *testing.T, projectRoot, specPath string) string {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(projectRoot, ".git")); os.IsNotExist(err) {
+		testhelpers.SetupTestGitRepo(t, projectRoot)
+	} else if err != nil {
+		t.Fatalf("stat prompt fixture repository: %v", err)
+	}
+	absoluteSpecPath := filepath.Join(projectRoot, filepath.FromSlash(specPath))
+	if _, err := os.Stat(absoluteSpecPath); os.IsNotExist(err) {
+		writeIndexingActivationFile(t, absoluteSpecPath, "# Legacy indexing fixture\n")
+		testhelpers.MustGit(t, projectRoot, "add", "--", specPath)
+		testhelpers.MustGit(t, projectRoot, "commit", "-m", "Add legacy indexing spec")
+	} else if err != nil {
+		t.Fatalf("stat prompt fixture spec: %v", err)
+	}
+	return testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
 }
 
 func runSessionStartContextHook(t *testing.T, projectDir string) string {
@@ -116,6 +135,7 @@ func buildDisabledOptionalIndexPrompt(t *testing.T, projectRoot string) string {
 	writeIndexingActivationFile(t, filepath.Join(taskWorktree, paths.ProjectDirName(), "scip", "go.scip"), "stale go index")
 	writeIndexingActivationFile(t, filepath.Join(taskWorktree, "functional-clusters.json"), "{}\n")
 	writeIndexingActivationFile(t, filepath.Join(taskWorktree, ".sembleignore"), semble.DefaultIgnorePayload())
+	prepareIndexingActivationPromptRepo(t, projectRoot, "specs/goals/indexing.md")
 
 	state := &models.State{
 		Goal: models.Goal{

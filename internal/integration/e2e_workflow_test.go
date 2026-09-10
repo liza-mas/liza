@@ -2031,6 +2031,19 @@ func buildIntegrationTaskPrompt(t *testing.T, projectDir string, state *models.S
 	if err != nil {
 		t.Fatalf("NewRoleStrategy(%s) failed: %v", role, err)
 	}
+	roleType, err := resolver.RoleType(role)
+	if err != nil {
+		t.Fatalf("RoleType(%s) failed: %v", role, err)
+	}
+	if task := state.FindTask(taskID); roleType == "reviewer" && task != nil && task.BaseCommit == nil && task.ReviewCommit == nil {
+		fixtureState := *state
+		fixtureState.Tasks = append([]models.Task(nil), state.Tasks...)
+		fixtureTask := fixtureState.FindTask(taskID)
+		reviewBoundary := testhelpers.MustGit(t, projectDir, "rev-parse", state.Config.IntegrationBranch)
+		fixtureTask.BaseCommit = &reviewBoundary
+		fixtureTask.ReviewCommit = &reviewBoundary
+		state = &fixtureState
+	}
 
 	prompt, err := strategy.BuildPrompt(state, agent.SupervisorConfig{
 		AgentID:     agentID,

@@ -1,3 +1,9 @@
 {{- define "artifact-ref-fallback" -}}
+{{- if ne .ResolvedReferenceContext ""}}
+Strict carriers and declared direct references are already pinned and freshness-checked in
+RESOLVED REFERENCE CONTEXT. Use those spans; do not re-read them from the worktree or branch.
+Any marker-free task refs retain their explicit legacy routes in that same context.
+{{- else}}
 Artifact refs below are repo-relative. Read {{.Worktree}}/<ref> first; if absent, use `git -C {{.Worktree}} show {{.IntegrationBranch}}:<file-ref>` where <file-ref> is the part before #.
+{{- end}}
 {{- end -}}

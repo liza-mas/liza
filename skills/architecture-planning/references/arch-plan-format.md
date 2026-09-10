@@ -2,23 +2,28 @@
 
 Status: draft/review/approved
 
+## Source References
+Source revision: "<40 lowercase hexadecimal Git object ID>"
+
+### Direct References
+- "<reference-id>": "<repo-relative-clean-markdown-path>#<exact-heading-text>"
+- "<reference-id>": "<repo-relative-clean-markdown-path>#<exact-heading-text>" @ "<40 lowercase hexadecimal Git object ID>"
+
+### Obligation Coverage
+- "<obligation-id>" -> "<reference-id>"
+- "<obligation-id>" -> "<reference-id>", "<reference-id>"
+
 ## Goal
 
 One sentence. The structural vision for implementing the goal spec.
 
 ## Context
 
-How this change fits in the broader system. What exists today. Why structural decisions are
-needed beyond what the spec prescribes.
-
-### References
-- Goal spec: <path>
-- Parent tasks: <task IDs of upstream deliverables>
-- Codebase: <relevant files/packages explored>
+Architecture-local context and the repository evidence used for new structural decisions. Cite
+inherited product behavior and parent decisions through Source References instead of copying them.
 
 ### Constraints
-Existing architectural constraints that bound the design: invariants, conventions, integration
-points that cannot change.
+New scope-local constraints plus IDs and direct-reference IDs for inherited constraints.
 
 ### Assumptions
 - **ASM-001**: <architectural assumption> — *Why*: <reasoning> — Confidence: HIGH | MEDIUM | LOW
@@ -90,9 +95,24 @@ Each scope becomes a code-planning child task.
 
 ### Spec Coverage
 
-| Spec Requirement | Scope |
-|------------------|-------|
-| <FR/feature from goal spec> | Scope N |
-| ... | ... |
+| Obligation ID | Direct reference ID | Scope |
+|---------------|---------------------|-------|
+| <FR/feature ID> | <reference ID> | Scope N |
+| ... | ... | ... |
 
-Every requirement in the goal spec must map to at least one scope. Unmapped requirements are gaps.
+Every assigned obligation must map to an anchor whose span contains it and at least one scope.
+Unmapped obligations are gaps.
+
+## Output
+
+For each downstream `output[]` entry, record its scope ID, concise intent, boundary, dependencies,
+validation observation, and anchored architecture reference. If `desc` exceeds 160 characters or
+`done_when`/`scope` exceeds 400 characters, explain why the longer value is executable at dispatch
+and has no authoritative home behind a reference.
+
+## Correction Delta *(only when correcting an approved artifact)*
+
+- **Corrected anchors:** <artifact and exact heading references>
+- **Replacement decisions:** <new architecture-local decision and rationale>
+- **Unchanged contracts:** <direct-reference IDs>
+- **Effective superseding reference:** <reference ID and revision>

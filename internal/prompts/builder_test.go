@@ -2329,7 +2329,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"TIMESTAMP-task-planner-output.json",
 			"Update only planning artifacts required by DONE WHEN",
 			"validation (optional canonical commands",
-			"Verify any validation[] command is character-identical to the plan",
+			"Verify every validation[] command is semantically and referentially consistent with the plan",
 			"Automatic child dependency inheritance applies only when an upstream dependency executed the same transition name",
 			"For ordering across different transition names, set output[].task_depends_on to existing concrete task IDs",
 			"If the required concrete dependency task does not exist, mark the planning task BLOCKED",
@@ -3699,6 +3699,7 @@ func TestReviewTask_RendersIntegrationBranchOnlyForCodeReviewer(t *testing.T) {
 	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
 		"templates/blocks/review_task.tmpl",
 		"templates/blocks/task_decomposition_metadata.tmpl",
+		"templates/blocks/resolved_reference_context.tmpl",
 	))
 
 	for _, tc := range []struct {

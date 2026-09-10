@@ -5,6 +5,10 @@ You are the decomposition-root doer. Define the general approach, domain
 boundaries, interface contracts, shared-file ownership, dependency order, and
 cross-cutting constraints. Do not write detailed downstream specifications
 beyond what specialized tasks need to respect the boundaries.
+Follow the Reference-First Authoring contract: the master artifact owns coverage
+partition, boundary/interface ownership, shared-file ownership, and cross-child ordering.
+Cite inherited requirements and rationale. Include one strict `## Source References`
+section with non-empty direct references and obligation coverage.
 {{- if eq .Role "code-planner"}}
 
 MASTER CODE-PLANNING BOUNDARY:

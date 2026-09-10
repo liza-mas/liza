@@ -55,6 +55,17 @@ Open Questions within the coder contract.
 
 *For the Coder. Implementation-ready acceptance criteria and context.*
 
+## Source References
+Source revision: "<40 lowercase hexadecimal Git object ID>"
+
+### Direct References
+- "<reference-id>": "<repo-relative-clean-markdown-path>#<exact-heading-text>"
+- "<reference-id>": "<repo-relative-clean-markdown-path>#<exact-heading-text>" @ "<40 lowercase hexadecimal Git object ID>"
+
+### Obligation Coverage
+- "<obligation-id>" -> "<reference-id>"
+- "<obligation-id>" -> "<reference-id>", "<reference-id>"
+
 ## Goal
 One sentence. What this set of stories achieves when implemented. Measurable.
 
@@ -62,33 +73,31 @@ One sentence. What this set of stories achieves when implemented. Measurable.
 <path to epic document — capability CAP-NNN, or "none" if written without an epic>
 
 ## Context
-Why this matters. How it fits in the broader system. Dependencies on other story documents or existing components. Keep it brief — the Coder needs orientation, not a lecture.
+Story-local orientation and interpretation decisions only. Cite inherited product rationale through
+Source References instead of copying it.
 
 ## Personas
-- **<Persona name>**: <one-line description of who they are and what they care about>
+- **<inherited persona ID>** -> <direct-reference ID>: <story-local applicability or exclusion>
 - ...
 
 ## General Information
 
 Applies to: the entire scope (all stories).
 
-### References
-- <ref-type>: <path or link> — <section/line range if applicable>
-- ...
-
 ### Non-Functional Requirements
-- NFR-000-1: <requirement> — architectural constraints, performance, security, observability, technology mandates, compatibility requirements, etc.
+- <inherited NFR ID> -> <direct-reference ID>
+- <new story-local NFR ID>: <requirement and why this story owns it>
 - ...
 
 ### Related External Components
-Summary of all the external components referenced by this document:
-- Component C-002 - <component name>
+Only story-local applicability or exclusions; cite inherited definitions:
+- Component C-002 -> <direct-reference ID>: <story-local role or exclusion>
 - ...
 
 ### Interfaces *(include only when this document defines component boundaries)*
 
-Summary of all the external interfaces referenced by this document:
-- I-002-001 - <interface name> (Interface 001 of Component C-002): <protocol/contract description>
+Only story-local use or newly owned boundary decisions; cite inherited definitions:
+- I-002-001 -> <direct-reference ID>: <story-local use or new boundary decision>
 - ...
 
 ### Out of Scope
@@ -110,8 +119,8 @@ Questions you cannot resolve by assumption. These MUST be answered by a human be
 
 ## Story ST-001 - <story name>
 
-### References
-- <ref-type>: <path or link> — <section/line range if applicable>
+### Inherited Obligations
+- <obligation ID> -> <direct-reference ID>
 - ...
 
 ### User Story
@@ -149,3 +158,12 @@ Questions you cannot resolve by assumption. These MUST be answered by a human be
 Implementation ordering:
 - Story ST-001 - <story name>
 ...
+
+---
+
+## Correction Delta *(only when correcting an approved artifact)*
+
+- **Corrected anchors:** <artifact and exact heading references>
+- **Replacement decisions:** <new story-local decision and rationale>
+- **Unchanged contracts:** <direct-reference IDs>
+- **Effective superseding reference:** <reference ID and revision>

@@ -14,9 +14,13 @@ Story Writers and the Orchestrator everything they need to decompose and impleme
 is optional.
 
 The Execution Contract is the primary input to the **user-story-writing** skill. Each capability
-section becomes a Story Writer task: the Story Writer reads the epic's Personas, General
-Information, and the capability section — nothing else. Write accordingly. A capability that
-requires the Story Writer to re-read the vision to understand what they're building is incomplete.
+section becomes a Story Writer task. It must be locally actionable from that section, its declared
+direct references, and the task envelope. Inherited product intent remains authoritative at its
+source; do not copy it into the capability to manufacture self-containment.
+
+Follow the shared [Reference-First Authoring contract](../shared/references/reference-first-authoring.md).
+This skill adds only epic-local ownership: capability interpretation, story boundaries, local
+exclusions, and new epic-level decisions.
 
 An epic bounds one cohesive capability area, serving a coherent persona cluster, expected to
 decompose into **3–8 user stories** across its capabilities. It lives one level above user stories.
@@ -32,19 +36,25 @@ Use this skill when:
 
 # Inputs
 
-- **References** to one or more sections of source material (vision doc, product brief,
-  strategy doc, OKRs, or prior epics)
+- **Anchored direct references** to the assigned sections of source material (vision doc, product
+  brief, strategy doc, OKRs, or prior epics) and their source revision
 - **Output file path**: In §BRAND_NAME_TITLE§ mode, assigned by the Orchestrator on the blackboard. In Pairing
   mode, propose a path under the project's epic directory and confirm with the human before writing.
 
 **Scope discipline (two-tier):**
-- **Upfront:** Read task references and scan existing epics in the same domain for consistency.
+- **Upfront:** Read the assigned anchors and their declared direct references; scan existing epics
+  in the same domain for consistency.
   Same domain = same parent directory, or epics referenced by the same vision doc section.
   This minimal consistency check is always permitted.
 - **Reviewer-driven:** Broader expansion only when the reviewer's feedback identifies specific
   additional material to consult.
 
-In both cases, declare what you read and why in the References section.
+In both cases, declare the selected anchors in the strict `Source References` section and map
+every assigned obligation to a direct-reference ID.
+
+Every new epic must contain exactly one strict `## Source References` section using the shared
+contract's JSON-quoted grammar, a 40-lowercase-hex source revision, non-empty direct references,
+and non-empty obligation coverage. Use exact eligible ATX heading text in fragments, not slugs.
 
 # Output Format
 
@@ -81,11 +91,11 @@ brief hold.
 
 ## 1. Parse
 
-Read the source material. Before writing anything, identify:
+Read the assigned anchor spans and declared direct references. Before writing anything, identify:
 
 1. **The outcome**: what ships, what changes for the user, how success is measured
-2. **The personas**: who benefits and in what context — if the source doesn't name them, infer the
-   minimum set from the described actions
+2. **The personas**: which inherited persona IDs apply and in what context — if the source does not
+   name them, raise an Open Question rather than inventing a new owner definition
 3. **The capabilities**: the coarse functional groupings that together constitute the epic
 4. **What is explicitly excluded**: the source material almost always implies adjacent scope; name it
 5. **What is unresolved**: gaps, contradictions, or decisions the source defers
@@ -99,9 +109,9 @@ A capability is a user-facing behavior the team can build, test, and hand off to
 a bounded unit. It is not a technical module, a sprint, or a story. It is a slice of product
 behavior.
 
-Each capability must pass the self-containment test defined in the Objective: a Story Writer
-handed the Personas, General Information, and this capability section can begin writing without
-reading the vision source.
+Each capability must pass the local-sufficiency test defined in the shared contract: a Story Writer
+can begin from the assigned capability, its direct references, and the task envelope without a
+broad ancestor read.
 
 **Capability heuristics:**
 - A capability named after a technical concern ("database layer", "API integration") is
@@ -190,7 +200,7 @@ Before submitting for review, verify:
 - [ ] Completion criteria are falsifiable — all story ACs passing satisfies them
 - [ ] Epic decomposes into 3–8 user stories (use story document count as a proxy)
 - [ ] Every capability traces to a source reference — none invented
-- [ ] Every capability passes the Story Writer self-containment test
+- [ ] Every capability is locally sufficient without copied inherited prose
 - [ ] Every capability has a clear user-facing description (not technical framing)
 - [ ] Personas include environment or skill-level detail where it affects product behavior
 - [ ] Out of Scope names adjacent capabilities the source implies but this epic excludes
@@ -200,7 +210,8 @@ Before submitting for review, verify:
 - [ ] No assumption overlaps with an Open Question — if overlap exists, keep the OQ
 - [ ] Capability ordering constraints are true dependencies, not merely convenient ones
 - [ ] Story document titles are scoped correctly — a Story Writer can own each one independently
-- [ ] Re-read the source material — every source section maps to a capability (no gaps), and nothing was added beyond scope
+- [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
+- [ ] Local decisions do not silently redefine inherited authority
 - [ ] Sibling ambiguities from the same source gap treated consistently across capabilities
 
 If self-review reveals issues, fix before submitting.
@@ -239,9 +250,8 @@ If self-review reveals issues, fix before submitting.
   If "User" could be anyone, it tells Story Writers nothing about constraints or expectations.
 - **False Dependencies**: CAP-B depends on CAP-A only because they share a concept, not because
   CAP-B's implementation requires CAP-A's output. Over-constraining the plan delays delivery.
-- **Opaque Capability**: The Story Writer needs to re-read the vision to understand what to build.
-  Every capability must be self-contained enough that it can be handed to a Story Writer as a
-  complete task brief.
+- **Opaque Capability**: The Story Writer cannot act from the capability, its direct references,
+  and task envelope. Add the missing anchored reference or local decision; do not copy the vision.
 - **Buried Interpretation**: A consequential judgment call (scope boundary, signal interpretation,
   ownership split) is embedded in capability prose instead of surfaced in the Interpretation
   Decisions ledger. The intent owner will miss it during review.
@@ -281,7 +291,7 @@ If it reads like a goal in an OKR, it's too high. Narrow it to something a Story
 
 | Skill | Relationship |
 |-------|-------------|
-| **user-story-writing** | Direct downstream consumer. Each capability section is a Story Writer task brief. The Story Writer reads the Personas, General Information, and the capability section — nothing else. Unresolved epic assumptions and Open Questions block story-writing from starting. |
+| **user-story-writing** | Direct downstream consumer. Each capability section and its direct references form the Story Writer task brief. Unresolved epic assumptions and Open Questions block story-writing from starting. |
 | **detailed-spec-writing** | Complementary. Epics capture product intent; PRDs capture system requirements. An approved epic can seed a PRD for a capability. |
 | **spec-review** | Downstream. Validates epics against completeness/consistency/testability. |
 
@@ -302,6 +312,6 @@ planner's decomposition of a vision into multiple epics.
 | "Epic would produce >8 stories — where to split?" | Find the natural persona or subsystem seam; flag split rationale in Context |
 | "Epic would produce <2 stories — merge or promote?" | Flag to Orchestrator via BLOCKED with merge/promote recommendation |
 | "This assumption is LOW confidence — resolve?" | Surface in Assumptions section; blocks story-writing until resolved by human |
-| "Adjacent epic may conflict — check?" | Read adjacent document, declare in References, note in Context |
+| "Adjacent epic may conflict — check?" | Add the exact needed anchor to Direct References, map its obligation, and note the epic-local effect in Context |
 | "Cannot identify a clear persona for this epic" | Surface as Open Question — an epic without a persona cannot produce well-bounded stories |
 | "Cannot write falsifiable completion criteria" | Surface as Open Question — scope is not yet understood |

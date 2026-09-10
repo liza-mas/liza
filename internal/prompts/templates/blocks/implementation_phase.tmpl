@@ -2,6 +2,19 @@
 {{- if eq .Role "coder"}}
 
 --- IMPLEMENTATION PHASE ---
+{{- if ne .ResolvedReferenceContext ""}}
+Use the strict carrier and direct-reference spans in RESOLVED REFERENCE CONTEXT. Do not re-read
+their worktree or branch copies. Follow any legacy task-ref routes listed in that context.
+{{- if ne .PlanRef ""}}
+Use the implementation plan context identified by {{.PlanRef}} for task decomposition.
+{{- end}}
+{{- if ne .ArchRef ""}}
+Use the architecture context identified by {{.ArchRef}} for component boundaries.
+{{- end}}
+{{- if ne .EpicRef ""}}
+Use the epic context identified by {{.EpicRef}} and user stories at specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
+{{- end}}
+{{- else}}
 {{- if or .PlanRef .ArchRef .EpicRef}}
 {{template "artifact-ref-fallback" .}}
 {{- end}}
@@ -13,6 +26,7 @@ Read the architecture document at {{.ArchRef}} for structural context and compon
 {{- end}}
 {{- if ne .EpicRef ""}}
 Read the epic at {{.EpicRef}} for requirement context and user stories at specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
+{{- end}}
 {{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
@@ -31,16 +45,20 @@ Read the epic at {{.EpicRef}} for requirement context and user stories at specs/
 {{- else if eq .Role "code-planner"}}
 
 IMPLEMENTATION PHASE:
+REFERENCE-FIRST AUTHORING: Own concrete change units, file ownership, ordering,
+tests, and requirement-to-task allocation. Cite inherited requirements and
+architecture; do not restate their prose. Every new plan must include the strict
+`## Source References` section with non-empty direct references and obligation coverage.
 {{- if or .ArchRef .EpicRef}}
 {{template "artifact-ref-fallback" .}}
 {{- end}}
 {{- if ne .ArchRef ""}}
 ARCHITECTURE REFERENCE: {{.ArchRef}}
-Read the architecture document for structural context before planning.
+Use its assigned carrier and declared direct-reference spans for structural context.
 {{- end}}
 {{- if ne .EpicRef ""}}
 EPIC REFERENCE: {{.EpicRef}}
-Read the epic for requirement context. User stories are at specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
+Use its assigned carrier and declared direct-reference spans for requirement context. User stories are at specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/.
 {{- end}}
 NOTE: You are planning, not implementing. The codebase may not contain the directories
 listed in SCOPE yet. Do NOT explore implementation directories that don't exist —
@@ -87,7 +105,8 @@ planning against a hypothesis.
    Automatic child dependency inheritance applies only when an upstream dependency executed the same transition name.
    For ordering across different transition names, set output[].task_depends_on to existing concrete task IDs.
    If the required concrete dependency task does not exist, mark the planning task BLOCKED for authoritative graph reconciliation; do not claim future ordering.
-   Extract each field verbatim from the plan file — do not compose from memory or paraphrase.
+   Keep each field semantically and referentially consistent with the plan. The
+   envelope stays concise; it does not duplicate detailed plan prose.
 4. Update only planning artifacts required by DONE WHEN (plan file and task-output JSON).
 5. Validate done_when criteria with concrete checks.
 6. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{binaryName}} submit-for-review --json until all pass):
@@ -103,7 +122,7 @@ planning against a hypothesis.
       | 2 | <requirement summary> | <spec section/line> | — | GAP |
 
       Rules:
-      - Extract requirements by re-reading the spec — do not work from memory.
+      - Map requirements from the assigned carrier and declared direct-reference spans.
       - Every functional requirement, constraint, and acceptance criterion gets a row.
       - Source must identify the spec location (section heading, step number, or line).
       - Task(s) column references your plan's task IDs (e.g., "Task 1", "CP3").
@@ -117,10 +136,12 @@ planning against a hypothesis.
         N/A requires justification (e.g., "internal refactor, no user-visible change").
    d. output[] completeness: one entry per planned coding task, each with required fields
       (desc, done_when, scope, spec_ref, plan_ref) populated. depends_on set where tasks have ordering constraints.
-   e. output[] parity: re-read the plan file at the path chosen in step 2 and verify each output[]
-      entry's desc, done_when, scope, and spec_ref is character-identical to the plan.
-      If any field was paraphrased, replace it with the verbatim text before submitting.
-      Verify any validation[] command is character-identical to the plan, satisfiable for the task scope, and agent-executable under the validation command-shape rule.
+   e. output[] parity: verify each entry's concise intent, completion observation,
+      scope boundary, validation, and anchored artifact refs are semantically and
+      referentially consistent with the plan. Detailed plan prose remains in Markdown;
+      do not copy it into the orchestration envelope merely for textual identity.
+      Verify every validation[] command is semantically and referentially consistent with the plan,
+      satisfiable for the task scope, and agent-executable under the validation command-shape rule.
       Verify depends_on indices match the dependency order described in the plan.
    f. Shared-file audit: for each file appearing in more than one task's scope,
       verify a depends_on chain exists between those tasks. Missing dependency on
@@ -136,9 +157,13 @@ planning against a hypothesis.
 {{- else if eq .Role "epic-planner"}}
 
 IMPLEMENTATION PHASE:
+REFERENCE-FIRST AUTHORING: Own capability partitioning, scope/interface ownership,
+and cross-child ordering. Cite inherited goal requirements and rationale; do not
+copy them. Every new epic must include the strict `## Source References` section
+with non-empty direct references and obligation coverage.
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Invoke skill: epic-writing FIRST.
-3. Read the source material referenced by this task (vision doc, product brief, spec).
+3. Use the assigned source carrier and its declared direct-reference spans.
 4. Follow the skill protocol: Size → Parse → Decompose → Write → Self-Review.
 5. Epic document location:
    Run: mkdir -p {{.Worktree}}/specs/epics/{{.GoalSlug}}
@@ -153,7 +178,7 @@ IMPLEMENTATION PHASE:
    validation (optional canonical commands; hook/check intent must appear in the epic/story text, desc, or done_when). Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
    depends_on (optional array of sibling index strings for capability ordering),
    task_depends_on (optional array of existing concrete task IDs outside this output[]).
-   desc: extract verbatim from the capability's one-sentence description in the epic.
+   desc: provide a concise intent semantically consistent with the capability.
    done_when: derive a falsifiable condition from the capability description and story documents.
    scope: derive from the capability's story documents table and out-of-scope section.
    spec_ref: set to {{.SpecRef}} for all entries (the task's own spec_ref, which is the goal spec).
@@ -164,8 +189,8 @@ IMPLEMENTATION PHASE:
 9. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{binaryName}} submit-for-review --json until all pass):
    a. output[] completeness: one entry per capability in the epic, each with all five fields
       (desc, done_when, scope, spec_ref, epic_ref) populated.
-   b. output[] parity: re-read the epic document in the worktree and verify:
-      - desc is character-identical to the capability's one-sentence description.
+   b. output[] parity: verify semantic and referential consistency with the epic:
+      - desc is a concise intent consistent with the capability.
       - done_when is consistent with the capability description and story documents.
       - scope is consistent with the capability's story documents and out-of-scope section.
       - spec_ref equals {{.SpecRef}} (the goal spec reference, same for all entries).
@@ -178,11 +203,20 @@ IMPLEMENTATION PHASE:
 {{- else if eq .Role "us-writer"}}
 
 IMPLEMENTATION PHASE:
+REFERENCE-FIRST AUTHORING: Own story behavior, acceptance criteria, edge cases,
+and story-local exclusions. Cite inherited personas, shared non-functional
+requirements, and contracts; do not copy them. Every new story artifact must
+include the strict `## Source References` section with non-empty direct references
+and obligation coverage.
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Invoke skill: user-story-writing FIRST.
+{{- if ne .ResolvedReferenceContext ""}}
+3. Use strict spans and any explicit legacy task-ref route in RESOLVED REFERENCE CONTEXT.
+   Locate your assigned capability by matching task SCOPE.
+{{- else}}
 3. Artifact refs are repo-relative. Read {{.Worktree}}/{{.EpicRef}} first; if absent, use `git -C {{.Worktree}} show {{.IntegrationBranch}}:{{.EpicRef}}`.{{- if ne .EpicSection ""}} Then use section #{{.EpicSection}}.{{- end}}
    Locate your assigned capability by matching task SCOPE.
-   Read only Personas + General Information + that capability section.
+{{- end}}
 4. Follow the skill protocol: Parse → Write → Self-Review.
 5. Story file location:
    Run: mkdir -p {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}
@@ -196,11 +230,16 @@ IMPLEMENTATION PHASE:
 {{- else if eq .Role "architect"}}
 
 IMPLEMENTATION PHASE:
+REFERENCE-FIRST AUTHORING: Own component boundaries, interfaces, data flow, and
+failure handling at the assigned architectural level. Cite inherited product
+behavior and shared architecture; do not restate them. Every new architecture
+artifact must include the strict `## Source References` section with non-empty
+direct references and obligation coverage.
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
-2. Read the goal spec ({{.SpecRef}}) thoroughly to understand what must be built.
+2. Use the assigned goal carrier and declared direct-reference spans for inherited product behavior.
 {{- if gt (len .ParentTaskContexts) 0}}
-3. Review the parent task context above — these are the upstream deliverables you are consolidating.
-   Read any referenced spec or plan documents to understand the full scope.
+3. Review the parent task context above. Treat strict parent carriers as locally
+   owned architecture inputs and follow only their declared direct references.
 {{- end}}
 4. Explore the codebase to understand the existing architecture and relevant components.
 ARCHITECTURE BOUNDARY:
@@ -226,7 +265,8 @@ document and output[] entries only.
    validation (optional canonical commands; hook/check intent must appear in the arch doc, desc, or done_when). Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
    depends_on (optional array of sibling index strings for ordering constraints),
    task_depends_on (optional array of existing concrete task IDs outside this output[]).
-   Extract each field verbatim from the arch doc — do not compose from memory or paraphrase.
+   Keep each field semantically and referentially consistent with the architecture
+   document while leaving detailed architecture prose in Markdown.
 
 BOOTSTRAP-PRECOMMIT REQUIREMENTS:
 A bootstrap-precommit entry is the typed marker the pipeline uses to dedup pre-commit-config bootstrap across replans, parallel architect invocations, and cross-goal races. Emit at most one such entry per architect invocation, and only when neither omission condition below holds.

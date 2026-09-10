@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/functionalclusters"
+	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -31,11 +32,103 @@ import (
 func testBuildPrompt(t *testing.T, state *models.State, config SupervisorConfig, taskID string) (string, error) {
 	t.Helper()
 	resolver := testResolver(t)
+	prepareLegacyReferenceContext(t, state, config, resolver, taskID)
 	strategy, err := NewRoleStrategy(config.Role, resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy(%q) error = %v", config.Role, err)
 	}
 	return strategy.BuildPrompt(state, config, taskID)
+}
+
+func testBuildPromptWithContext(t *testing.T, state *models.State, config SupervisorConfig, taskID string, resolver *pipeline.Resolver) (string, error) {
+	t.Helper()
+	prepareLegacyReferenceContext(t, state, config, resolver, taskID)
+	return buildPromptWithContext(state, config, taskID, resolver)
+}
+
+func testBuildTaskRoleContextData(t *testing.T, task *models.Task, state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) (*prompts.RoleContextData, error) {
+	t.Helper()
+	prepareLegacyReferenceContext(t, state, config, resolver, task.ID)
+	return buildTaskRoleContextData(task, state, config, resolver)
+}
+
+// prepareLegacyReferenceContext gives prompt tests that predate strict source
+// carriers a real integration snapshot containing their marker-free references.
+func prepareLegacyReferenceContext(t *testing.T, state *models.State, config SupervisorConfig, resolver *pipeline.Resolver, taskID string) {
+	t.Helper()
+	if config.ProjectRoot == "" {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(config.ProjectRoot, ".git")); os.IsNotExist(err) {
+		testhelpers.SetupTestGitRepo(t, config.ProjectRoot)
+	} else if err != nil {
+		t.Fatalf("stat test repository: %v", err)
+	}
+
+	pathsToAdd := make([]string, 0, 4)
+	if task := state.FindTask(taskID); task != nil {
+		for _, ref := range []string{task.SpecRef, task.EpicRef, task.PlanRef, task.ArchRef} {
+			path := filepath.Clean(paths.SplitRefFile(ref))
+			if ref == "" || path == "." || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) {
+				continue
+			}
+			absolutePath := filepath.Join(config.ProjectRoot, path)
+			if _, err := os.Stat(absolutePath); err == nil {
+				continue
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("stat legacy reference %q: %v", path, err)
+			}
+			writePromptTestFile(t, absolutePath, "# Legacy prompt fixture\n")
+			pathsToAdd = append(pathsToAdd, filepath.ToSlash(path))
+		}
+	}
+	if len(pathsToAdd) > 0 {
+		testhelpers.MustGit(t, config.ProjectRoot, append([]string{"add", "--"}, pathsToAdd...)...)
+		testhelpers.MustGit(t, config.ProjectRoot, "commit", "-m", "Add legacy prompt references")
+	}
+	branch := state.Config.IntegrationBranch
+	if branch != "" && branch != testhelpers.MustGit(t, config.ProjectRoot, "branch", "--show-current") {
+		testhelpers.MustGit(t, config.ProjectRoot, "branch", "-f", branch, "HEAD")
+	}
+	roleType, err := resolver.RoleType(config.Role)
+	if err != nil || roleType != "reviewer" {
+		return
+	}
+	task := state.FindTask(taskID)
+	if task == nil {
+		return
+	}
+	originalBase, originalReview := task.BaseCommit, task.ReviewCommit
+	t.Cleanup(func() {
+		task.BaseCommit = originalBase
+		task.ReviewCommit = originalReview
+	})
+	head := testhelpers.MustGit(t, config.ProjectRoot, "rev-parse", "HEAD")
+	ensureLegacyReviewRevision(t, config.ProjectRoot, &task.BaseCommit, head)
+	ensureLegacyReviewRevision(t, config.ProjectRoot, &task.ReviewCommit, head)
+}
+
+func ensureLegacyReviewRevision(t *testing.T, repo string, revision **string, head string) {
+	t.Helper()
+	if *revision == nil || **revision == "" {
+		value := head
+		*revision = &value
+		return
+	}
+	if _, err := gitenv.CombinedOutput(repo, "rev-parse", "--verify", "--end-of-options", **revision+"^{commit}"); err == nil {
+		return
+	}
+	if len(**revision) == 40 {
+		value := head
+		*revision = &value
+		return
+	}
+	if _, err := gitenv.CombinedOutput(repo, "check-ref-format", "--branch", **revision); err == nil {
+		testhelpers.MustGit(t, repo, "branch", "-f", **revision, head)
+		return
+	}
+	value := head
+	*revision = &value
 }
 
 // TestBuildPrompt tests the buildPrompt function
@@ -306,7 +399,7 @@ func TestBuildPromptWithContextScipIndexesUseTaskWorktree(t *testing.T) {
 		StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 	}
 
-	prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+	prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 	if err != nil {
 		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
@@ -385,7 +478,7 @@ func TestBuildPromptWithContextScipSearchGateOmitsStaleIndexes(t *testing.T) {
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -441,7 +534,7 @@ func TestBuildPromptWithContextStacklitIndexUsesTaskWorktree(t *testing.T) {
 		StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 	}
 
-	prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+	prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 	if err != nil {
 		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
@@ -499,7 +592,7 @@ func TestBuildPromptWithContextFunctionalClustersUsesTaskWorktree(t *testing.T) 
 		StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 	}
 
-	prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+	prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 	if err != nil {
 		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
@@ -569,7 +662,7 @@ func TestBuildPromptWithContextSembleSearchUsesRoleWorktreeRoot(t *testing.T) {
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -634,7 +727,7 @@ func TestBuildPromptWithContextSembleSearchOmittedWhenPromptMetadataUnavailable(
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -708,7 +801,7 @@ func TestBuildPromptWithContextSembleSearchRequiresCompleteTaskIgnore(t *testing
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -765,7 +858,7 @@ func TestBuildPromptWithContext_DecompositionRootDoerMandate(t *testing.T) {
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", resolver)
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -860,7 +953,7 @@ func TestBuildPromptWithContext_DecompositionRootReviewerReview(t *testing.T) {
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", resolver)
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -937,7 +1030,7 @@ func TestBuildPromptWithContext_NonRootDoersRenderNoMasterMandate(t *testing.T) 
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", resolver)
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -1001,7 +1094,7 @@ func TestBuildPromptWithContext_NonRootReviewersRenderNoMasterReview(t *testing.
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", resolver)
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -1041,7 +1134,7 @@ func TestBuildPromptWithContext_CustomDecompositionRootDoerUsesConfiguredArtifac
 		StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 	}
 
-	prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+	prompt, err := testBuildPromptWithContext(t, state, config, "task-1", resolver)
 	if err != nil {
 		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
@@ -1083,8 +1176,7 @@ func TestBuildPromptWithContext_CustomDecompositionRootReviewerUsesConfiguredArt
 		SpecsDir:    filepath.Join(projectRoot, "specs"),
 		StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 	}
-
-	prompt, err := buildPromptWithContext(state, config, "task-1", resolver)
+	prompt, err := testBuildPromptWithContext(t, state, config, "task-1", resolver)
 	if err != nil {
 		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
@@ -1258,7 +1350,7 @@ func TestBuildPromptWithContextScipSearchOmitsEmptyAvailableIndexes(t *testing.T
 		StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 	}
 
-	prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+	prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 	if err != nil {
 		t.Fatalf("buildPromptWithContext() error = %v", err)
 	}
@@ -1322,7 +1414,7 @@ func TestBuildPromptWithContextScipAvailableIndexErrorOmitsScipAndKeepsStacklit(
 				StatePath:   filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml"),
 			}
 
-			prompt, err := buildPromptWithContext(state, config, "task-1", testResolver(t))
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
 			if err != nil {
 				t.Fatalf("buildPromptWithContext() error = %v", err)
 			}
@@ -3223,10 +3315,10 @@ func TestBuildTaskRoleContextData_RCARequired(t *testing.T) {
 		{name: "code-plan-reviewer", agentID: "code-plan-reviewer-1"},
 	} {
 		t.Run(role.name, func(t *testing.T) {
-			config := SupervisorConfig{Role: role.name, AgentID: role.agentID}
+			config := SupervisorConfig{Role: role.name, AgentID: role.agentID, ProjectRoot: t.TempDir()}
 
 			state := makeState(true)
-			data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+			data, err := testBuildTaskRoleContextData(t, &state.Tasks[0], state, config, resolver)
 			if err != nil {
 				t.Fatalf("buildTaskRoleContextData: %v", err)
 			}
@@ -3235,7 +3327,7 @@ func TestBuildTaskRoleContextData_RCARequired(t *testing.T) {
 			}
 
 			state = makeState(false)
-			data, err = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+			data, err = testBuildTaskRoleContextData(t, &state.Tasks[0], state, config, resolver)
 			if err != nil {
 				t.Fatalf("buildTaskRoleContextData (unflagged): %v", err)
 			}
@@ -3981,11 +4073,12 @@ func TestBuildTaskRoleContextData_IntegrationReviewer(t *testing.T) {
 	}
 
 	config := SupervisorConfig{
-		Role:    "integration-reviewer",
-		AgentID: "integration-reviewer-1",
+		Role:        "integration-reviewer",
+		AgentID:     "integration-reviewer-1",
+		ProjectRoot: t.TempDir(),
 	}
 
-	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+	data, err := testBuildTaskRoleContextData(t, &state.Tasks[0], state, config, resolver)
 	if err != nil {
 		t.Fatalf("buildTaskRoleContextData: %v", err)
 	}
@@ -4183,6 +4276,7 @@ func TestBuildTaskRoleContextData_ArchRef(t *testing.T) {
 		AgentID:     "architect-1",
 		ProjectRoot: tmpDir,
 	}
+	prepareLegacyReferenceContext(t, state, config, resolver, "arch-task-1")
 
 	data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
 	if err != nil {
@@ -4497,6 +4591,7 @@ func TestBuildPromptWithContext_Architect(t *testing.T) {
 		SpecsDir:    filepath.Join(tmpDir, "specs"),
 		StatePath:   filepath.Join(tmpDir, "state.yaml"),
 	}
+	prepareLegacyReferenceContext(t, state, config, resolver, "arch-1")
 
 	strategy, err := NewRoleStrategy(config.Role, resolver)
 	if err != nil {
@@ -4598,6 +4693,7 @@ func TestBuildPromptWithContext_ArchitectureReviewer(t *testing.T) {
 		SpecsDir:    filepath.Join(tmpDir, "specs"),
 		StatePath:   filepath.Join(tmpDir, "state.yaml"),
 	}
+	prepareLegacyReferenceContext(t, state, config, resolver, "arch-1")
 
 	strategy, err := NewRoleStrategy(config.Role, resolver)
 	if err != nil {
@@ -4791,13 +4887,25 @@ func TestBuildTaskRoleContextData_PreCommitFields_NonArchitect(t *testing.T) {
 
 	for _, role := range []string{"coder", "code-reviewer"} {
 		t.Run(role, func(t *testing.T) {
+			projectRoot := nonGitDir
+			if role == "code-reviewer" {
+				// Reviewer prompt assembly legitimately needs Git for its immutable
+				// review range; the architect-only pre-commit probe remains absent.
+				projectRoot = t.TempDir()
+			}
 			config := SupervisorConfig{
 				Role:        role,
 				AgentID:     role + "-1",
-				ProjectRoot: nonGitDir,
+				ProjectRoot: projectRoot,
 			}
 
-			data, err := buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+			var data *prompts.RoleContextData
+			var err error
+			if role == "code-reviewer" {
+				data, err = testBuildTaskRoleContextData(t, &state.Tasks[0], state, config, resolver)
+			} else {
+				data, err = buildTaskRoleContextData(&state.Tasks[0], state, config, resolver)
+			}
 			if err != nil {
 				t.Fatalf("buildTaskRoleContextData: %v (unexpected — helper must not run for non-architect)", err)
 			}

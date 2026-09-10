@@ -13,6 +13,28 @@ Use this skill when:
 - User asks to review specs, documentation, or technical designs
 - User asks to find inconsistencies or gaps in documentation
 
+## Reference-First Planning Artifacts
+
+When the reviewed artifact contains `## Source References`, apply the shared
+[Reference-First Authoring contract](../shared/references/reference-first-authoring.md) and ADR-0133.
+The assigned carrier plus its declared direct references is the review corpus; do not require a
+broad parent or ancestor read when those spans are sufficient. Mechanical path, revision, anchor,
+and freshness checks are compositor-owned. The reviewer owns semantic coverage and authority.
+
+Reject a strict planning artifact for any of these contract violations:
+
+1. an inherited requirement, constraint, threshold, or interface has no direct reference;
+2. unchanged inherited prose is presented as a local decision;
+3. the artifact requires a full-parent read when an assigned anchor is sufficient;
+4. a local statement conflicts with its inherited owner;
+5. `output[]` is used as a second detailed specification;
+6. detailed prose is duplicated only to make Markdown and `output[]` character-identical;
+7. a correction accumulates unchanged or resolved history; or
+8. an assigned obligation maps to no reference, or its mapped anchor span omits that obligation.
+
+Repeated labels and IDs, short task intents, exact action-boundary values, and clearly marked
+quotations are permitted. Marker-free legacy artifacts retain the existing review path.
+
 ## Inputs
 
 The user should provide:

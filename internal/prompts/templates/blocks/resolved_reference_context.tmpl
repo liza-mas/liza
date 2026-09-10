@@ -1,0 +1,21 @@
+{{- define "resolved-reference-context" -}}
+{{- if ne .ResolvedReferenceContext ""}}
+
+=== RESOLVED REFERENCE CONTEXT ===
+The compositor resolved and freshness-checked the strict carrier content and its
+declared direct references before launch. Treat this bounded context as inherited
+authority. Do not re-read or replace its pinned source paths with worktree content.
+Read outside it only for evidence owned by your stage or an unresolved dependency
+that the assigned context identifies.
+
+{{.ResolvedReferenceContext}}
+{{- if .LegacyArtifactReferences}}
+
+=== LEGACY ARTIFACT REFERENCES ===
+These task refs were not strict carriers at integration HEAD and retain the legacy read path:
+{{- range .LegacyArtifactReferences}}
+- {{.Field}} {{.Ref}}: read {{$.Worktree}}/{{.File}} first; if absent, use `git -C {{$.Worktree}} show {{$.IntegrationBranch}}:{{.File}}`.
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end -}}

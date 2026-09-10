@@ -10,9 +10,13 @@ code-planners can implement independently.
 
 Output: a git-tracked architecture document (`specs/arch-plan/<goal-slug>/<timestamp>-<task-id>.md`) plus
 structured `output[]` entries, one per code-planning scope. Each output entry becomes a
-code-planning child task — the code-planner reads the architecture document and its scope entry,
-the goal spec, and referenced material. Write accordingly: the arch doc should be self-contained
-for structural decisions, leaving behavioral detail to the spec.
+code-planning child task. The code-planner reads its assigned architecture scope and declared
+direct references. Write a locally sufficient structural delta; leave behavioral authority at its
+source rather than copying it into the architecture document.
+
+Follow the shared [Reference-First Authoring contract](../shared/references/reference-first-authoring.md).
+This skill owns scope-local structure, interfaces, data flow, failure handling, and structural
+rationale. It references inherited behavior and shared architecture.
 
 The architect bridges *what* (spec) and *how* (code plan). Spec says what to build; the architect
 says where each piece goes and how pieces connect. Code-planners turn each scope into
@@ -32,9 +36,16 @@ Your task provides:
 - An **output mechanism** — `set-task-output` for each code-planning scope
 
 **Scope discipline:**
-- **Upfront:** Read goal spec + parent task deliverables + explore relevant codebase areas
+- **Upfront:** Read assigned goal/parent anchors and their declared direct references; explore
+  relevant codebase areas
 - **On demand:** Broader exploration only when structural questions require it
-- Declare what you read and why in References
+- Declare selected source anchors in the strict `Source References` section and map every assigned
+  obligation to a direct-reference ID
+
+Every new architecture plan must contain exactly one strict `## Source References` section using
+the shared contract's JSON-quoted grammar, a 40-lowercase-hex source revision, non-empty direct
+references, and non-empty obligation coverage. Use exact eligible ATX heading text in fragments,
+not slugs.
 
 # Output Format
 
@@ -44,11 +55,12 @@ Your task provides:
 
 ## 1. Consolidate
 
-Read and synthesize all inputs before making any structural decisions.
+Read and synthesize the assigned anchor spans and direct references before making structural decisions.
 
-1. Read the goal spec — the authoritative source for *what* must be built
-2. Read all parent task deliverables (descriptions, outputs, referenced specs/plans)
-3. Synthesize scope: what is the full extent of what must be built?
+1. Read the assigned goal-spec anchors — the authoritative source for *what* must be built
+2. Read parent task envelopes and their assigned artifact anchors; follow only declared direct
+   references needed for an unresolved dependency
+3. Synthesize the assigned obligations and structural scope
 4. Identify:
    - **Overlaps** — parent deliverables that touch the same area
    - **Gaps** — scope in the goal spec not covered by any parent deliverable
@@ -120,10 +132,11 @@ Before submitting:
 - [ ] Each scope has a falsifiable `done_when`
 - [ ] `depends_on` captures true ordering constraints only
 - [ ] Shared-file conflicts identified and resolved
-- [ ] Architecture document is self-contained for code-planners
+- [ ] Architecture scopes are locally sufficient from their direct references and task envelopes
 - [ ] No decisions prescribe implementation detail below interface level
 - [ ] Cross-cutting concerns addressed for all components
-- [ ] Re-read goal spec — nothing from spec left unassigned
+- [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
+- [ ] Structural decisions do not silently redefine inherited behavior
 
 Fix issues before submitting.
 

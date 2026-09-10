@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/liza-mas/liza/internal/gitenv"
 )
 
 // TreePathMode returns the raw Git object mode for a path in a treeish.
@@ -34,6 +36,60 @@ func (g *Git) TreePathMode(treeish, path string) (mode string, present bool, err
 
 func literalPathspec(path string) string {
 	return ":(literal)" + path
+}
+
+// ResolveCommit resolves ref to a full commit object ID in the project
+// repository. --end-of-options keeps untrusted ref text out of Git's option
+// parser.
+func (g *Git) ResolveCommit(ref string) (string, error) {
+	if ref == "" {
+		return "", fmt.Errorf("commit resolution requires a non-empty ref")
+	}
+	commit, err := g.exec("rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve commit ref %q: %w", ref, err)
+	}
+	return commit, nil
+}
+
+// ReadBlob returns the exact bytes of path at revision without consulting the
+// working tree. It deliberately bypasses exec, whose text-oriented contract
+// trims leading and trailing whitespace.
+func (g *Git) ReadBlob(revision, path string) (string, error) {
+	if revision == "" || path == "" {
+		return "", fmt.Errorf("blob read requires a non-empty revision and path")
+	}
+	oid, err := g.BlobOID(revision, path)
+	if err != nil {
+		return "", err
+	}
+	output, err := gitenv.CombinedOutput(g.projectRoot,
+		"cat-file", "blob", oid)
+	if err != nil {
+		return "", fmt.Errorf("failed to read blob %q at %q: %w\nOutput: %s", path, revision, err, output)
+	}
+	return string(output), nil
+}
+
+// BlobOID returns the blob object ID for path at revision without consulting
+// the working tree.
+func (g *Git) BlobOID(revision, path string) (string, error) {
+	if revision == "" || path == "" {
+		return "", fmt.Errorf("blob OID lookup requires a non-empty revision and path")
+	}
+	spec := revision + ":" + path
+	oid, err := g.exec("rev-parse", "--verify", "--end-of-options", spec)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve blob OID for %q at %q: %w", path, revision, err)
+	}
+	objectType, err := g.exec("cat-file", "-t", oid)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect object for %q at %q: %w", path, revision, err)
+	}
+	if objectType != "blob" {
+		return "", fmt.Errorf("object for %q at %q is %s, not a blob", path, revision, objectType)
+	}
+	return oid, nil
 }
 
 // CalculateDrift returns the number of commits between baseCommit and targetBranch

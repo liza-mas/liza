@@ -6,9 +6,21 @@
 {{template "artifact-ref-fallback" .}}
 {{- if gt .TotalPlanTasks 1}}
 This task is {{.TaskOrdinal}} of {{.TotalPlanTasks}} in the current sprint plan.
-Read the full goal spec ({{.GoalSpecRef}}) to understand {{- if eq .RoleType "reviewer"}} the complete picture.
-Verify {{- if eq .Role "us-reviewer"}} stories stay within scope — flag Scope Absorption into sibling territory.{{- else if eq .Role "code-plan-reviewer"}} the plan stays within scope — flag scope creep into sibling territory.{{- else if eq .Role "epic-plan-reviewer"}} the epic stays within scope — flag scope creep into sibling territory.{{- else}} the implementation stays within scope — flag scope creep as a blocker.{{- end}}
-{{- else}} how your work integrates.
+{{- if ne .ResolvedReferenceContext ""}}
+Use the assigned strict carrier and direct-reference spans to understand the shared picture.
+{{- else}}
+Read the full goal spec ({{.GoalSpecRef}}) to understand the shared picture.
+{{- end}}
+{{- if eq .Role "us-reviewer"}}
+Verify stories stay within scope — flag Scope Absorption into sibling territory.
+{{- else if eq .Role "code-plan-reviewer"}}
+Verify the plan stays within scope — flag scope creep into sibling territory.
+{{- else if eq .Role "epic-plan-reviewer"}}
+Verify the epic stays within scope — flag scope creep into sibling territory.
+{{- else}}
+Use the shared picture to understand how your work integrates.
+{{- end}}
+{{- end}}
 Your scope is LIMITED to what is described in SCOPE above.
 {{- if eq .Role "us-writer"}}
 Do NOT write stories that belong to a sibling task's scope — this is Scope Absorption.
@@ -20,8 +32,6 @@ Do NOT plan capabilities that belong to a sibling task's scope.
 If you must modify a file outside your scope, declare it in scope_extensions with justification.
 Do NOT silently modify out-of-scope files — undeclared scope changes will be rejected.
 If you discover work needed outside your scope that you cannot handle, log it as a spec_gap anomaly.
-{{- end}}
-{{- end}}
 {{- end}}
 
 RELEVANT TASK GRAPH DIGEST:

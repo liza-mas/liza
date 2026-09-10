@@ -20,6 +20,9 @@ PLAN: {{.PlanRef}}
 {{- end}}
 {{- end}}
 
-Read referenced specs and plans to understand the full scope of each parent deliverable.
+For strict carriers, use the rendered local carrier content and declared direct
+references. Do not recursively read ancestor artifacts or sibling sections.
+Follow the legacy fallback above only for marker-free refs that are not already
+presented in resolved context.
 {{- end}}
 {{- end -}}

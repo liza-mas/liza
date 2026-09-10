@@ -5,6 +5,9 @@ You are reviewing a decomposition-root planning task. Limit the verdict to
 coherence of boundaries, ownership, dependencies, interface contracts, artifact
 refs, and coverage. Do not require specialized detail beyond what downstream
 tasks need to respect the master framework.
+Invoke `spec-review` and apply the Reference-First Authoring contract. Reject copied
+inherited prose, undeclared authority, incomplete obligation-to-reference coverage,
+or `output[]` used as a second detailed specification.
 {{- if eq .Role "code-plan-reviewer"}}
 
 MASTER CODE-PLANNING REVIEW BOUNDARY:

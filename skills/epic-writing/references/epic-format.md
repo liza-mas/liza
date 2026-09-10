@@ -45,6 +45,17 @@ Open Questions within the execution contract.
 
 *For Story Writers and the Orchestrator. Operational detail for decomposition and implementation.*
 
+## Source References
+Source revision: "<40 lowercase hexadecimal Git object ID>"
+
+### Direct References
+- "<reference-id>": "<repo-relative-clean-markdown-path>#<exact-heading-text>"
+- "<reference-id>": "<repo-relative-clean-markdown-path>#<exact-heading-text>" @ "<40 lowercase hexadecimal Git object ID>"
+
+### Obligation Coverage
+- "<obligation-id>" -> "<reference-id>"
+- "<obligation-id>" -> "<reference-id>", "<reference-id>"
+
 ## Goal
 One sentence. What this epic achieves when fully delivered. Measurable at the product level.
 
@@ -53,19 +64,15 @@ Why this matters now. How it fits within the product vision. What problem it sol
 Keep it brief — the Orchestrator needs orientation, not a lecture.
 
 ## Personas
-- **<Persona name>**: <one-line description of who they are, their environment, and what they care about>
+- **<inherited persona ID>**: <direct-reference ID; add only epic-local applicability or exclusion>
 - ...
 
 ## General Information
 
 Applies to: the entire epic scope.
 
-### References
-- <ref-type>: <path or link> — <section/line range if applicable>
-- ...
-
 ### Epic Dependencies
-- <dependency on another epic, if any>
+- <dependency ID and direct-reference ID; state only the epic-local ordering reason>
 - ...
 
 ### Completion Criteria
@@ -77,18 +84,18 @@ without data loss across sessions. Operators can monitor task volume and error r
 If you cannot write this yet, surface it as OQ-000-N.>
 
 ### Non-Functional Requirements
-- NFR-000-1: <requirement> — architectural constraints, performance, security, observability,
-  technology mandates, compatibility requirements, etc.
+- <inherited NFR obligation ID> -> <direct-reference ID>
+- <new epic-local NFR ID>: <requirement and why this stage owns it>
 - ...
 
 ### Related External Components
-Summary of all external components referenced by this epic:
-- Component C-NNN - <component name>: <one-line role in this epic>
+Only epic-local component applicability or exclusions; cite inherited definitions:
+- Component C-NNN -> <direct-reference ID>: <epic-local role or exclusion>
 - ...
 
 ### Interfaces *(include only when this epic defines component boundaries)*
-Summary of all external interfaces referenced by this epic:
-- I-NNN-NNN - <interface name> (Interface NNN of Component C-NNN): <protocol/contract description>
+Only epic-local interface use or newly owned boundary decisions; cite inherited definitions:
+- I-NNN-NNN -> <direct-reference ID>: <epic-local use or new boundary decision>
 - ...
 
 ### Out of Scope
@@ -110,8 +117,8 @@ Questions that cannot be resolved by assumption. Must be answered before Story W
 
 One sentence: what this capability delivers and for whom.
 
-### References
-- <ref-type>: <path or link> — <section/line range if applicable>
+### Inherited Obligations
+- <obligation ID> -> <direct-reference ID>
 - ...
 
 ### Description
@@ -148,3 +155,17 @@ What this capability explicitly excludes. Prevents Story Writer scope absorption
 ### Depends on:
 - Capability CAP-001 - <name>: <why>
 - ...
+
+## Output
+
+For each downstream `output[]` entry, record its capability ID, short intent, scope,
+dependencies, validation observation, and anchored artifact reference. If `desc` exceeds 160
+characters or `done_when`/`scope` exceeds 400 characters, explain why the longer value is
+executable at dispatch and has no authoritative home behind a reference.
+
+## Correction Delta *(only when correcting an approved artifact)*
+
+- **Corrected anchors:** <artifact and exact heading references>
+- **Replacement decisions:** <new local decision and rationale>
+- **Unchanged contracts:** <direct-reference IDs>
+- **Effective superseding reference:** <reference ID and revision>

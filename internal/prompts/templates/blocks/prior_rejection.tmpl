@@ -3,10 +3,12 @@
 {{- if eq .RoleType "reviewer"}}
 
 === PRIOR REJECTION (iteration {{sub .IterationNum 1}}) ===
+Only the unresolved findings and closure conditions below remain authoritative.
 {{.PriorRejection}}
 {{- else}}
 
 === PRIOR REJECTION FEEDBACK ===
+Only the unresolved findings and closure conditions below remain authoritative.
 REQUIRED: blockers, overreach, and rejection-worthy concerns.
 ADVISORY: suggestions and nits.
 {{.PriorRejection}}

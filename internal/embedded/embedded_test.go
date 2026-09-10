@@ -31,17 +31,18 @@ func TestListEmbeddedFiles(t *testing.T) {
 
 	// Verify key files exist
 	requiredFiles := map[string]bool{
-		"contracts/CORE.md":                     false,
-		"contracts/PAIRING_MODE.md":             false,
-		"contracts/MULTI_AGENT_MODE.md":         false,
-		"contracts/AGENT_TOOLS.md":              false,
-		"contracts/COLLABORATION_CONTINUITY.md": false,
-		"skills/adr-backfill/SKILL.md":          false,
-		"skills/code-review/SKILL.md":           false,
-		"skills/debugging/SKILL.md":             false,
-		"skills/clean-code/languages/go.md":     false,
-		"support-docs/SUPPORT.md":               false,
-		"support-docs/USAGE_MULTI_AGENTS.md":    false,
+		"contracts/CORE.md":                                     false,
+		"contracts/PAIRING_MODE.md":                             false,
+		"contracts/MULTI_AGENT_MODE.md":                         false,
+		"contracts/AGENT_TOOLS.md":                              false,
+		"contracts/COLLABORATION_CONTINUITY.md":                 false,
+		"skills/adr-backfill/SKILL.md":                          false,
+		"skills/code-review/SKILL.md":                           false,
+		"skills/debugging/SKILL.md":                             false,
+		"skills/clean-code/languages/go.md":                     false,
+		"skills/shared/references/reference-first-authoring.md": false,
+		"support-docs/SUPPORT.md":                               false,
+		"support-docs/USAGE_MULTI_AGENTS.md":                    false,
 	}
 
 	for _, file := range files {
@@ -444,6 +445,7 @@ func TestWriteGlobalFiles(t *testing.T) {
 		filepath.Join(tmpDir, "skills", "adr-backfill", "SKILL.md"),
 		filepath.Join(tmpDir, "skills", "code-review", "SKILL.md"),
 		filepath.Join(tmpDir, "skills", "clean-code", "languages", "go.md"),
+		filepath.Join(tmpDir, "skills", "shared", "references", "reference-first-authoring.md"),
 	}
 
 	for _, file := range expectedFiles {

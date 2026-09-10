@@ -528,7 +528,11 @@ Partial failure modes with unclear recovery.
 
 **Implication:** Spec drift during task execution is undetectable. A PRD produced by a spec-authoring agent and consumed by the Orchestrator can change between when the Orchestrator decomposes it and when the Coder implements the resulting tasks. The blackboard's `spec_changes` log tracks that changes occurred, not which tasks were affected by which changes.
 
-**Current mitigation:** Code Reviewer validates against "current spec version" and logs `spec_changed` anomaly if material changes detected.
+**Current mitigation:** Code Reviewer validates against "current spec version" and logs
+`spec_changed` when material changes are detected. ADR-0133 adds prospective, strict pre-dispatch
+blob-freshness and exact-anchor checks for new reference-first artifacts without changing scalar
+state fields. This is a partial mitigation only: marker-free legacy `spec_ref` values remain
+unversioned, and semantic changes outside a declared read set still depend on reviewer judgment.
 
 **Future options:**
 - Include commit SHA or content hash in `spec_ref`

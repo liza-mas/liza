@@ -6,8 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/referencecontract"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+var _ referencecontract.Repository = (*Git)(nil)
 
 func TestCalculateDrift(t *testing.T) {
 	repoDir := setupTestRepo(t)
@@ -155,6 +158,82 @@ func TestTreePathMode(t *testing.T) {
 				t.Errorf("%s: TreePathMode(%q, %q) mode = %q, want %q", tt.requirement, treeish, tt.path, mode, tt.wantMode)
 			}
 		})
+	}
+}
+
+func TestReferenceContractRepositoryQueriesImmutableGitObjects(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+	path := "--literal reference.md"
+	committedContent := "  leading spaces\nbody\n\n"
+	if err := os.WriteFile(filepath.Join(repoDir, path), []byte(committedContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, repoDir, "add", "--", path)
+	testhelpers.MustGit(t, repoDir, "commit", "-m", "Add immutable blob fixture")
+
+	resolved, err := git.ResolveCommit("HEAD")
+	if err != nil {
+		t.Fatalf("ResolveCommit() error = %v", err)
+	}
+	wantCommit := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD")
+	if resolved != wantCommit {
+		t.Errorf("ResolveCommit(HEAD) = %q, want %q", resolved, wantCommit)
+	}
+
+	content, err := git.ReadBlob(resolved, path)
+	if err != nil {
+		t.Fatalf("ReadBlob() error = %v", err)
+	}
+	if content != committedContent {
+		t.Errorf("ReadBlob() = %q, want exact bytes %q", content, committedContent)
+	}
+
+	oid, err := git.BlobOID(resolved, path)
+	if err != nil {
+		t.Fatalf("BlobOID() error = %v", err)
+	}
+	wantOID := testhelpers.MustGit(t, repoDir, "rev-parse", resolved+":"+path)
+	if oid != wantOID {
+		t.Errorf("BlobOID() = %q, want %q", oid, wantOID)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, path), []byte("dirty worktree\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	content, err = git.ReadBlob(resolved, path)
+	if err != nil {
+		t.Fatalf("ReadBlob() after worktree edit error = %v", err)
+	}
+	if content != committedContent {
+		t.Errorf("ReadBlob() consulted worktree: got %q, want %q", content, committedContent)
+	}
+}
+
+func TestReferenceContractRepositoryQueriesRejectInvalidInputs(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+
+	if _, err := git.ResolveCommit(""); err == nil {
+		t.Error("ResolveCommit(empty) error = nil")
+	}
+	if _, err := git.ResolveCommit("--help"); err == nil {
+		t.Error("ResolveCommit(option-like ref) error = nil")
+	}
+	if _, err := git.ReadBlob("HEAD", "missing.md"); err == nil {
+		t.Error("ReadBlob(missing path) error = nil")
+	}
+	if _, err := git.ReadBlob("", "README.md"); err == nil {
+		t.Error("ReadBlob(empty revision) error = nil")
+	}
+	if _, err := git.BlobOID("HEAD", "missing.md"); err == nil {
+		t.Error("BlobOID(missing path) error = nil")
+	}
+	if _, err := git.BlobOID("HEAD", "."); err == nil {
+		t.Error("BlobOID(tree path) error = nil, want blob-type rejection")
+	}
+	if _, err := git.ReadBlob("HEAD", "."); err == nil {
+		t.Error("ReadBlob(tree path) error = nil, want blob-type rejection")
 	}
 }
 

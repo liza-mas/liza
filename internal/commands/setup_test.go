@@ -706,6 +706,18 @@ func TestSetupCommand_AgentClaude(t *testing.T) {
 	if len(entries) != len(sourceEntries) {
 		t.Errorf("got %d symlinks, want %d (matching source skills)", len(entries), len(sourceEntries))
 	}
+
+	sharedLink := filepath.Join(skillsDir, "shared")
+	if info, err := os.Lstat(sharedLink); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("shared reference subtree is not symlinked: info=%v err=%v", info, err)
+	}
+	sharedReference := filepath.Join(sharedLink, "references", "reference-first-authoring.md")
+	if content, err := os.ReadFile(sharedReference); err != nil || !strings.Contains(string(content), "# Reference-First Authoring") {
+		t.Fatalf("shared reference is not reachable through provider skills: err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sharedLink, "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatalf("shared asset subtree must not expose SKILL.md: %v", err)
+	}
 }
 
 func TestSetupCommand_AgentOpenCode(t *testing.T) {

@@ -15,6 +15,10 @@ The output is a user story artifact — a markdown document, git-tracked, treate
 One story document per task; one cohesive capability per document. A capability is the document's scope.
 Individual user stories are its constituent parts — each story maps to one Coder-sized unit of work.
 
+Follow the shared [Reference-First Authoring contract](../shared/references/reference-first-authoring.md).
+This skill owns story behavior, acceptance criteria, edge cases, story-local exclusions, and new
+story-level decisions. It references inherited personas, NFRs, and contracts without restating them.
+
 # Trigger
 
 Use this skill when:
@@ -26,21 +30,28 @@ Use this skill when:
 
 Your task provides:
 - An **output file path** assigned by the Orchestrator on the blackboard
-- **References** to one or more sections of source material (epic, vision doc, prior specs,
-  existing code)
+- **Anchored direct references** to the assigned source sections (epic, vision doc, prior specs,
+  existing code) and their source revision
 
-When the source is a parent epic, read its Personas, General Information, and the assigned
-capability section — nothing else. The epic's personas, NFRs, assumptions, and open questions
-apply to all stories in this document. Inherit them; do not contradict them.
+When the source is a parent epic, read the assigned capability anchor and its declared direct
+references. Inherited personas, NFRs, assumptions, and open questions remain authoritative in the
+epic or its sources. Cite them; do not copy or contradict them.
 
 **Scope discipline (two-tier):**
-- **Upfront:** Read task references and scan existing stories in the same domain for consistency.
+- **Upfront:** Read the assigned anchors and declared direct references; scan existing stories in
+  the same domain for consistency.
   Same domain = same parent directory, or stories referenced by the same source section.
   This minimal consistency check is always permitted.
 - **Reviewer-driven:** Broader expansion (new source material, adjacent codepaths, external docs) only when the
   Story Reviewer's feedback identifies specific additional material to consult.
 
-In both cases, declare what you read and why in the References section.
+In both cases, declare the selected anchors in the strict `Source References` section and map
+every assigned obligation to a direct-reference ID.
+
+Every new story artifact must contain exactly one strict `## Source References` section using the
+shared contract's JSON-quoted grammar, a 40-lowercase-hex source revision, non-empty direct
+references, and non-empty obligation coverage. Use exact eligible ATX heading text in fragments,
+not slugs.
 
 # Output Format
 
@@ -51,14 +62,15 @@ Use the [User Story format](references/user-story-format.md) template.
 
 ## 1. Parse
 
-Read the source material. Identify what is said, what is implied, and what is missing. Do not start writing stories
+Read the assigned anchor spans and direct references. Identify what is said, what is implied, and what is missing. Do not start writing stories
 until you can distinguish the three.
 
-Identify the personas. If the source material does not name them, infer the minimum set from the actions described.
-A story without a clear persona is a sign that the requirement is not yet understood from the user's perspective.
+Identify the applicable inherited persona IDs. If the source material does not name them, raise an
+Open Question; the story stage does not own new persona definitions. A story without a clear
+persona is a sign that the requirement is not yet understood from the user's perspective.
 
 A useful persona drives design decisions. "User" tells the Coder nothing about context, expectations, or constraints.
-Include environment and skill level when they affect how the feature should behave. Compare:
+Reference inherited environment and skill-level details when they affect behavior. Compare:
 "User: a person managing their todo list" vs. "Terminal User: a developer or power user who manages personal tasks
 from the command line and expects standard CLI conventions (flags, non-zero exit codes, concise output)." The second
 persona tells the Coder that `--help` should exist and errors should go to stderr.
@@ -155,8 +167,9 @@ Before submitting for review, verify:
 - [ ] Every AC maps to its parent story and describes user-observable behavior
 - [ ] No LOW-confidence assumptions leaked into stories (they belong in Assumptions)
 - [ ] Out of Scope is explicit — not just what's excluded, but adjacent concerns the Coder might drift into
-- [ ] A Coder reading only this document and the referenced files can implement it (no hidden context dependencies)
-- [ ] Re-read the source material — did you miss anything? Did you add anything not in scope?
+- [ ] A Coder can act from the assigned story, its direct references, and task envelope (no hidden context dependencies)
+- [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
+- [ ] Local story decisions do not silently redefine inherited authority
 - [ ] No assumption prescribes implementation (data types, formats, libraries) or states something nobody would dispute (reclassify as NFR)
 - [ ] No assumption overlaps with an OQ — if overlap exists, keep the OQ and drop the assumption
 - [ ] Every AC traces to stated or implied source behavior — unmentioned scenarios belong in Assumptions or Open Questions, not ACs
@@ -227,5 +240,5 @@ Do not invent new prefixes. If something doesn't fit these categories, it likely
 |----------------|---------------|
 | "Source material contains multiple capabilities — split?" | Flag to Orchestrator via BLOCKED with split recommendation |
 | "This assumption is LOW confidence — resolve?" | Surface in Assumptions section; Human resolves at the end of the sprint, before coding starts in the next sprint. |
-| "Adjacent story doc may conflict — check?" | Read adjacent document, declare in References, note in Context |
+| "Adjacent story doc may conflict — check?" | Add the exact needed anchor to Direct References, map its obligation, and note the story-local effect in Context |
 | "Cannot identify a clear persona for this requirement" | Surface as Open Question — a requirement without a persona may not be a user story |

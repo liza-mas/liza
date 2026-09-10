@@ -211,6 +211,7 @@ pipeline:
         - mandatory-docs
         - skills-affinity
       skills:
+        - spec-review
         - software-architecture-review
         - systemic-thinking
       mandatory-docs: []
@@ -338,6 +339,7 @@ pipeline:
         - mandatory-docs
         - skills-affinity
       skills:
+        - spec-review
         - systemic-thinking
       mandatory-docs: []
 

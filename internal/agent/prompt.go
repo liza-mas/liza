@@ -440,6 +440,13 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		data.PreCommitKind = precommit.Kind
 	}
 
+	resolvedContext, legacyReferences, err := buildReferenceContext(task, state, config, roleType)
+	if err != nil {
+		return nil, fmt.Errorf("reference context for task %q: %w: %w", task.ID, precommit.ErrContextBuild, err)
+	}
+	data.ResolvedReferenceContext = resolvedContext
+	data.LegacyArtifactReferences = legacyReferences
+
 	return data, nil
 }
 

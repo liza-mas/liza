@@ -6,8 +6,10 @@ Invoke skill: epic-writing when writing each epic for this task.
 
 Key principles from the skill:
 - An epic bounds one cohesive capability area, expected to decompose into 3–8 user stories
-- Each capability section is a Story Writer task brief — must be self-contained
-- The Story Writer reads Personas + General Information + capability section — nothing else
+- Each capability section is locally actionable from its assigned content and
+  declared direct references; do not copy inherited goal requirements or rationale
+- The Story Writer uses the assigned capability carrier plus its declared direct
+  references, without recursively reading sibling or ancestor sections
 - Completion criteria must be falsifiable: all story ACs passing satisfies them
 - Personas must include environment/skill level where it affects product behavior
 - Out of Scope is not optional — it protects Story Writers from scope absorption
@@ -22,7 +24,7 @@ Anti-patterns to avoid:
 - Storified Epic: capabilities written at story granularity (Given/When/Then)
 - Unfalsifiable Completion Criteria: "users have a better experience" — not falsifiable
 - Scope Absorption: vision says X, you write capabilities for X, Y, and Z
-- Opaque Capability: Story Writer needs to re-read the vision to understand what to build
+- Opaque Capability: assigned content and declared references omit information the Story Writer needs
 {{- else if eq .Role "us-writer"}}
 
 USER-STORY-WRITING SKILL:
@@ -52,11 +54,10 @@ Anti-patterns to avoid:
 CAPABILITY SCOPING:
 The parent epic document contains multiple capabilities. Your task covers ONE capability only.
 {{- if ne .EpicRef ""}}
-The parent epic ref is {{.EpicRef}}. Read {{.Worktree}}/{{.EpicRef}} first; if absent, use `git -C {{.Worktree}} show {{.IntegrationBranch}}:{{.EpicRef}}`.{{- if ne .EpicSection ""}} Then use section #{{.EpicSection}}.{{- end}}
+The parent epic ref is {{.EpicRef}}. {{template "artifact-ref-fallback" .}}{{- if ne .EpicSection ""}} The assigned section is #{{.EpicSection}}.{{- end}}
 {{- end}}
-When reading the epic, use only these sections as input:
-- Personas and General Information (shared context for all capabilities)
-- Your assigned capability section (match by task SCOPE)
-Do NOT read or write stories for other capability sections — those are sibling US Writer tasks.
+Use the assigned capability content and declared direct-reference spans rendered
+above. For a marker-free legacy epic only, retain the existing assigned capability
+scope. Do not read or write stories for sibling capability sections.
 {{- end}}
 {{- end -}}

@@ -218,7 +218,11 @@ func prepareOptionalIndexTargetRoot(t *testing.T, targetRoot string) {
 	if err := os.MkdirAll(targetRoot, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", targetRoot, err)
 	}
-	testhelpers.SetupTestGitRepo(t, targetRoot)
+	if _, err := os.Stat(filepath.Join(targetRoot, ".git")); os.IsNotExist(err) {
+		testhelpers.SetupTestGitRepo(t, targetRoot)
+	} else if err != nil {
+		t.Fatalf("stat target repository: %v", err)
+	}
 	writeIndexingActivationFile(t, filepath.Join(targetRoot, "go.mod"), "module example.com/indexing\n")
 	testhelpers.MustGit(t, targetRoot, "add", "go.mod")
 	testhelpers.MustGit(t, targetRoot, "commit", "-m", "Add go module")
@@ -232,10 +236,12 @@ func buildIndexingActivationMASPrompt(t *testing.T, projectRoot, role, agentID, 
 	t.Helper()
 
 	testhelpers.SetupPipelineConfig(t, projectRoot)
+	const specPath = "specs/goals/20260602-indexing-activation.md"
+	reviewBoundary := prepareIndexingActivationPromptRepo(t, projectRoot, specPath)
 	state := &models.State{
 		Goal: models.Goal{
 			Description: "Indexing activation",
-			SpecRef:     "specs/goals/20260602-indexing-activation.md",
+			SpecRef:     specPath,
 		},
 		Config: models.Config{
 			IntegrationBranch: "main",
@@ -250,14 +256,23 @@ func buildIndexingActivationMASPrompt(t *testing.T, projectRoot, role, agentID, 
 				Status:      models.TaskStatusImplementing,
 				DoneWhen:    "Optional index prompt sections follow target metadata",
 				Scope:       "Integration",
-				SpecRef:     "specs/goals/20260602-indexing-activation.md",
+				SpecRef:     specPath,
 				RolePair:    "coding-pair",
 				Worktree:    &worktreeRel,
 			},
 		}
 	}
 
-	strategy, err := agent.NewRoleStrategy(role, embeddedPipelineResolver(t))
+	resolver := embeddedPipelineResolver(t)
+	roleType, err := resolver.RoleType(role)
+	if err != nil {
+		t.Fatalf("RoleType(%q): %v", role, err)
+	}
+	if taskID != "" && roleType == "reviewer" {
+		state.Tasks[0].BaseCommit = &reviewBoundary
+		state.Tasks[0].ReviewCommit = &reviewBoundary
+	}
+	strategy, err := agent.NewRoleStrategy(role, resolver)
 	if err != nil {
 		t.Fatalf("NewRoleStrategy(%q): %v", role, err)
 	}

@@ -104,7 +104,8 @@ FIRST ACTIONS:
 {{- end}}
 3. Read the current spec reference:
 {{- if .TaskID}}
-   Use the assigned task JSON from step 2. Read its `spec_ref`; if it is repo-relative and the task has a worktree, read it from that worktree. If `spec_ref` is empty, run `{{binaryName}} get goal.spec_ref --json` and read that returned ref.
+   If role context contains `RESOLVED REFERENCE CONTEXT`, use its freshness-checked carrier and direct-reference spans; do not re-read those pinned sources from the worktree.
+   Otherwise preserve legacy behavior. Use the assigned task JSON from step 2. Read its `spec_ref`; if it is repo-relative and the task has a worktree, read it from that worktree. If `spec_ref` is empty, run `{{binaryName}} get goal.spec_ref --json` and read that returned ref.
 {{- else}}
    Run `{{binaryName}} get goal.spec_ref --json`, then read the returned ref from the project root.
 {{- end}}

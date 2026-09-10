@@ -453,12 +453,15 @@ func sliceAnalysisSurface(
 	affectedPaths := make([]string, 0)
 	for _, taskID := range descendantIDs {
 		task := state.FindTask(taskID)
-		if task == nil || task.MergeCommit == nil || *task.MergeCommit == "" ||
-			task.BaseCommit == nil || *task.BaseCommit == "" || task.ReviewCommit == nil || *task.ReviewCommit == "" {
+		if task == nil {
+			return nil, nil, nil, fmt.Errorf("merged descendant %q lacks reviewed change attribution", taskID)
+		}
+		baseCommit, reviewCommit, present, rangeErr := MergedReviewedRange(task)
+		if rangeErr != nil || !present {
 			return nil, nil, nil, fmt.Errorf("merged descendant %q lacks reviewed change attribution", taskID)
 		}
 		changes = append(changes, models.IntegrationDescendantChange{TaskID: taskID, Commit: *task.MergeCommit})
-		paths, diffErr := gitWrapper.DiffFiles(projectRoot, *task.BaseCommit, *task.ReviewCommit)
+		paths, diffErr := gitWrapper.DiffFiles(projectRoot, baseCommit, reviewCommit)
 		if diffErr != nil {
 			return nil, nil, nil, fmt.Errorf("diff descendant %q review range: %w", taskID, diffErr)
 		}

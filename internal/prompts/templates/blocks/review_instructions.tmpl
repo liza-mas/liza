@@ -88,6 +88,11 @@ If the harness backgrounds await-resubmission and says it will notify on complet
 - TERMINAL/ABORTED: exit normally
 {{- else if eq .Role "code-plan-reviewer"}}
 
+REFERENCE-FIRST REVIEW:
+Invoke skill: spec-review and apply the shared Reference-First Authoring contract. Reject missing
+strict source references, copied inherited prose, uncovered obligations, semantic owner conflicts,
+correction-history accumulation, or detailed plan prose duplicated into `output[]`.
+
 REVIEW CHECKLIST:
 | Gate | Reject if |
 |------|-----------|
@@ -101,7 +106,7 @@ REVIEW CHECKLIST:
 | output[] populated | Task has no output[] entries (planner must call {{binaryName}} set-task-output --json) |
 | Plan file location | Plan artifact not in diff at specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}.md |
 | Task-output JSON location | Task-output JSON artifact missing from diff next to the plan artifact at specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}-output.json, or any committed task-output JSON appears under {{projectDirName}}/agent-outputs/ |
-| output[] matches plan | For each output[] entry, compare desc, done_when, scope, spec_ref, validation, depends_on, and task_depends_on against the plan artifact in the worktree — they must be identical, not paraphrased or extended |
+| output[] matches plan | Each output[] entry's concise intent, boundary, dependencies, validation, and anchored refs are semantically and referentially consistent with the plan; reject detailed Markdown copied merely for character identity |
 | validation satisfiable | An output[] validation command can exit 0 without exercising its intended check, or hook/check intent is not declared in durable plan/task text |
 | validation command shape | A validation[] command is not single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. |
 | Cross-reference consistency | For every cross-reference in the plan ("owned by CPx", "depends on CPx", "out of scope for CPx"), the referenced task must explicitly state that responsibility, dependency, or exclusion. Reject if any dangling reference. |
@@ -149,11 +154,11 @@ REVIEW PHASE:
 3. Inspect worktree changes by targeted path/hunk, not by unbounded full diff:
    git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}} -- <path>
    If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
-4. Validate spec compliance matrix: read the spec, then the plan's
+4. Validate spec compliance matrix from the plan's declared direct-reference spans, then read the plan's
    "## Spec Compliance Matrix" section. Verify:
    a. Matrix exists in the plan file.
    b. No GAP rows remain.
-   c. Requirements accurately extracted from spec (no fabrication, no omission).
+   c. Requirements accurately mapped from the declared spans (no fabrication, no omission).
    d. Task mappings correct (listed task(s) actually address the requirement).
    Do NOT trust the matrix at face value — independently verify against the spec.
 5. Validate done_when criteria are satisfied.
@@ -165,6 +170,9 @@ REVIEW PHASE:
 
 EPIC-WRITING SKILL:
 Invoke skill: epic-writing for full anti-pattern and quality criteria.
+Invoke skill: spec-review and apply the shared Reference-First Authoring contract. Reject missing
+strict source references, copied inherited prose, uncovered obligations, semantic owner conflicts,
+correction-history accumulation, or detailed epic prose duplicated into `output[]`.
 
 The review checklist below covers sizing and structural gates. The skill covers
 additional anti-patterns not duplicated here — check both when evaluating.
@@ -172,7 +180,7 @@ additional anti-patterns not duplicated here — check both when evaluating.
 Key anti-patterns beyond the checklist gates:
 - Vision Laundering: capabilities named after technical layers instead of user-facing behavior
 - Storified Epic: capabilities written at story granularity (Given/When/Then) — wrong altitude
-- Opaque Capability: Story Writer needs to re-read the vision to understand what to build
+- Opaque Capability: the assigned capability and its declared references are not locally sufficient
 - Missing Out of Scope: adjacent capabilities left unnamed — Story Writers will absorb them
 - Assumption Burial: strategic assumptions embedded in descriptions instead of surfaced
 - Premature Solutioning: capability descriptions name specific technologies instead of behavioral needs
@@ -244,7 +252,7 @@ QUALITY GATES:
 
 CAPABILITY SCOPING:
 This task covers ONE capability from the parent epic.
-{{- if ne .EpicRef ""}} The epic ref is {{.EpicRef}}. Read {{.Worktree}}/{{.EpicRef}} first; if absent, use `git -C {{.Worktree}} show {{.IntegrationBranch}}:{{.EpicRef}}`.{{- if ne .EpicSection ""}} Then use section #{{.EpicSection}}.{{- end}}{{- end}}
+{{- if ne .EpicRef ""}} The epic ref is {{.EpicRef}}. {{template "artifact-ref-fallback" .}}{{- if ne .EpicSection ""}} The assigned section is #{{.EpicSection}}.{{- end}}{{- end}}
 Sibling US Writer tasks cover the other capabilities. Verify stories only address
 the assigned capability (match by task SCOPE). Stories covering other capabilities in the
 same epic are Scope Absorption — reject.
@@ -259,8 +267,8 @@ REVIEW PHASE:
    git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}} -- <path>
    If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
 4. Invoke both skills before evaluating: spec-review and user-story-writing.
-5. Read the epic ref above. Locate the assigned capability by matching task SCOPE.
-   Verify stories only cover that capability section — not others in the same epic.
+5. Use the pinned assigned capability and declared reference spans when present; otherwise use the
+   marker-free legacy epic ref above. Verify stories only cover that capability — not its siblings.
 6. Validate done_when criteria are satisfied.
 7. Check each user story against the anti-pattern checklist above.
 8. Verify SMARC criteria compliance for every story.
@@ -279,6 +287,11 @@ DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- end}}
 10. Submit verdict with {{binaryName}} submit-verdict.
 {{- else if eq .Role "architecture-reviewer"}}
+
+REFERENCE-FIRST REVIEW:
+Invoke skill: spec-review and apply the shared Reference-First Authoring contract. Reject missing
+strict source references, copied inherited behavior, uncovered obligations, semantic owner
+conflicts, correction-history accumulation, or detailed architecture prose duplicated into `output[]`.
 
 REVIEW CHECKLIST:
 | Gate | Reject if |
@@ -319,12 +332,13 @@ REVIEW PHASE:
    git -C {{.Worktree}} diff --name-only {{.BaseCommit}}..{{.ReviewCommit}}
    git -C {{.Worktree}} diff --stat {{.BaseCommit}}..{{.ReviewCommit}}
    Read touched files/artifacts from this list before any broad repository search; use supporting rg/glob only after the changed-file map gives you a specific question.
-3. Invoke skill: systemic-thinking for cross-cutting coherence analysis.
+3. Invoke skills: systemic-thinking for cross-cutting coherence and spec-review for authority/coverage.
 4. Inspect worktree changes by targeted path/hunk, not by unbounded full diff:
    git -C {{.Worktree}} diff {{.BaseCommit}}..{{.ReviewCommit}} -- <path>
    If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
-5. Read the architecture document in the worktree (look for the arch doc in specs/arch-plan/{{.GoalSlug}}/).
-6. Validate the decomposition: does it cover the full scope of the goal spec?
+5. Use the strict reviewed architecture carrier and declared reference spans when present; otherwise
+   retain the marker-free legacy worktree review path under specs/arch-plan/{{.GoalSlug}}/.
+6. Validate the decomposition: does it cover every assigned obligation in the declared read set?
 7. Verify output[] entries: run {{binaryName}} get {{.TaskID}} --json and confirm
    output[] has one entry per code-planning scope with valid desc, done_when, scope, spec_ref, arch_ref, any declared validation with durable check/hook intent, and task_depends_on.
 8. Check each proposed scope against the review checklist above.

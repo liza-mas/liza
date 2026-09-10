@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/roles"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestSliceIntegrationContext(t *testing.T) {
@@ -108,9 +109,14 @@ func TestSliceIntegrationContext(t *testing.T) {
 		Config: models.Config{IntegrationBranch: "integration"},
 	}
 
-	analyst := renderIntegrationRoleContext(t, state, "slice-analysis", roles.IntegrationAnalyst)
-	reviewer := renderIntegrationRoleContext(t, state, "slice-analysis", roles.IntegrationReviewer)
-	worktreePath := resolveWorktreePath("/project", &worktree)
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	reviewBoundary := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+	state.Tasks[0].BaseCommit = &reviewBoundary
+	state.Tasks[0].ReviewCommit = &reviewBoundary
+	analyst := renderIntegrationRoleContext(t, state, "slice-analysis", roles.IntegrationAnalyst, projectRoot)
+	reviewer := renderIntegrationRoleContext(t, state, "slice-analysis", roles.IntegrationReviewer, projectRoot)
+	worktreePath := resolveWorktreePath(projectRoot, &worktree)
 
 	assertContainsAll(t, analyst,
 		"SLICE INTEGRATION CONTEXT",
@@ -164,7 +170,7 @@ func TestSliceIntegrationContext(t *testing.T) {
 			},
 			SourceCommit: "slice-source-123",
 		}
-		_, err := buildTaskRoleContextData(&broken.Tasks[0], &broken, integrationSupervisorConfig(roles.IntegrationAnalyst), embeddedPipelineResolver(t))
+		_, err := buildTaskRoleContextData(&broken.Tasks[0], &broken, integrationSupervisorConfig(roles.IntegrationAnalyst, projectRoot), embeddedPipelineResolver(t))
 		if err == nil || !strings.Contains(err.Error(), "missing-task") {
 			t.Fatalf("buildTaskRoleContextData error = %v, want missing descendant failure", err)
 		}
@@ -257,9 +263,14 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		Config: models.Config{IntegrationBranch: "integration"},
 	}
 
-	analyst := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationAnalyst)
-	reviewer := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationReviewer)
-	worktreePath := resolveWorktreePath("/project", &worktree)
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	reviewBoundary := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+	state.Tasks[0].BaseCommit = &reviewBoundary
+	state.Tasks[0].ReviewCommit = &reviewBoundary
+	analyst := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationAnalyst, projectRoot)
+	reviewer := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationReviewer, projectRoot)
+	worktreePath := resolveWorktreePath(projectRoot, &worktree)
 	quotedWorktreePath := shellQuoteForTest(worktreePath)
 
 	assertContainsAll(t, analyst,
@@ -341,7 +352,7 @@ func TestGlobalIntegrationContext(t *testing.T) {
 				}
 
 				for _, role := range []string{roles.IntegrationAnalyst, roles.IntegrationReviewer} {
-					context := renderIntegrationRoleContext(t, reduced, "global-analysis", role)
+					context := renderIntegrationRoleContext(t, reduced, "global-analysis", role, projectRoot)
 					assertContainsAll(t, context,
 						"GLOBAL INTEGRATION CONTEXT",
 						"no local coverage records; fewer than two contributing scopes bypass local coverage",
@@ -400,13 +411,13 @@ func TestGlobalIntegrationContext(t *testing.T) {
 	})
 }
 
-func renderIntegrationRoleContext(t *testing.T, state *models.State, taskID, role string) string {
+func renderIntegrationRoleContext(t *testing.T, state *models.State, taskID, role, projectRoot string) string {
 	t.Helper()
 	task := state.FindTask(taskID)
 	if task == nil {
 		t.Fatalf("missing task %q", taskID)
 	}
-	data, err := buildTaskRoleContextData(task, state, integrationSupervisorConfig(role), embeddedPipelineResolver(t))
+	data, err := buildTaskRoleContextData(task, state, integrationSupervisorConfig(role, projectRoot), embeddedPipelineResolver(t))
 	if err != nil {
 		t.Fatalf("buildTaskRoleContextData(%s): %v", role, err)
 	}
@@ -421,12 +432,12 @@ func renderIntegrationRoleContext(t *testing.T, state *models.State, taskID, rol
 	return context
 }
 
-func integrationSupervisorConfig(role string) SupervisorConfig {
+func integrationSupervisorConfig(role, projectRoot string) SupervisorConfig {
 	return SupervisorConfig{
 		Role:        role,
 		AgentID:     role + "-1",
-		ProjectRoot: "/project",
-		SpecsDir:    "/project/specs",
-		StatePath:   "/project/" + paths.ProjectDirName() + "/state.yaml",
+		ProjectRoot: projectRoot,
+		SpecsDir:    projectRoot + "/specs",
+		StatePath:   projectRoot + "/" + paths.ProjectDirName() + "/state.yaml",
 	}
 }

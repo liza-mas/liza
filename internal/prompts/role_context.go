@@ -135,6 +135,14 @@ type FunctionalClusterIndexRef struct {
 	Path string
 }
 
+// LegacyArtifactReference preserves the existing read route for one task
+// scalar ref that was not classified as a strict carrier at integration HEAD.
+type LegacyArtifactReference struct {
+	Field string
+	Ref   string
+	File  string
+}
+
 // RoleContextData is the unified template data type for all role template blocks.
 // Each field group is populated as appropriate for the role being rendered.
 // Fields not relevant to a particular role remain at their zero value.
@@ -145,28 +153,30 @@ type RoleContextData struct {
 	RoleType string // "doer", "reviewer", or "orchestrator"
 
 	// Task (populated for doer and reviewer roles)
-	TaskID                string
-	Description           string
-	DoneWhen              string
-	Scope                 string
-	SpecRef               string
-	EpicRef               string // epic document path only (no fragment)
-	EpicSection           string // epic anchor fragment (capability section), empty if none
-	EpicSlug              string // filesystem-safe slug derived from EpicRef filename
-	PlanRef               string // coding plan path only (no fragment)
-	PlanSection           string // coding plan anchor fragment, empty if none
-	ArchRef               string // path to architecture document, empty if none
-	RCARequired           bool   // objective is a defect fix: plan must carry a reviewed RCA
-	ValidationCommands    []string
-	DestructiveDB         bool
-	TaskDecomposition     *models.DecompositionManifest
-	ValidationPlan        string
-	Worktree              string // resolved absolute path
-	IterationNum          int
-	AttemptNum            int
-	PriorRejection        string // empty if no prior rejection
-	PriorAttemptOutcome   string // reason from prior attempt (empty unless AttemptNum == 2)
-	PriorAttemptRejection string // reviewer feedback from prior attempt (empty unless AttemptNum == 2 and Note present)
+	TaskID                   string
+	Description              string
+	DoneWhen                 string
+	Scope                    string
+	SpecRef                  string
+	EpicRef                  string // epic document path only (no fragment)
+	EpicSection              string // epic anchor fragment (capability section), empty if none
+	EpicSlug                 string // filesystem-safe slug derived from EpicRef filename
+	PlanRef                  string // coding plan path only (no fragment)
+	PlanSection              string // coding plan anchor fragment, empty if none
+	ArchRef                  string // path to architecture document, empty if none
+	RCARequired              bool   // objective is a defect fix: plan must carry a reviewed RCA
+	ValidationCommands       []string
+	DestructiveDB            bool
+	TaskDecomposition        *models.DecompositionManifest
+	ValidationPlan           string
+	Worktree                 string // resolved absolute path
+	IterationNum             int
+	AttemptNum               int
+	PriorRejection           string // empty if no prior rejection
+	PriorAttemptOutcome      string // reason from prior attempt (empty unless AttemptNum == 2)
+	PriorAttemptRejection    string // reviewer feedback from prior attempt (empty unless AttemptNum == 2 and Note present)
+	ResolvedReferenceContext string // pre-rendered strict carrier and direct-reference spans, empty for legacy-only context
+	LegacyArtifactReferences []LegacyArtifactReference
 
 	// Review (populated for reviewer roles)
 	BaseCommit      string // git diff base for reviewer
