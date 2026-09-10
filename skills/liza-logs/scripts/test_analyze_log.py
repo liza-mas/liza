@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ PROVIDER_BACKGROUND_RESULT_WITH_SUFFIX = (
     "(ID: bdcgot1os). Output is being written to: /tmp/provider-output/bdcgot1os.log"
 )
 NATIVE_CLAUDE_RICH_INIT_FIXTURE = Path(__file__).parent / "testdata" / "claude-rich-init-redacted.ndjson"
+BROWSER_ANALYZER = next((Path(__file__).parents[1] / "tools").glob("*-session-analyzer.html"))
 
 
 def load_analyzer() -> Any:
@@ -23,6 +25,32 @@ def load_analyzer() -> Any:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def probe_browser_command_normalization(commands: list[str]) -> list[dict[str, Any]]:
+    source = BROWSER_ANALYZER.read_text()
+    start = source.index("// Commands where exit code 1")
+    end = source.index("function extractCommandDetail")
+    script = (
+        source[start:end]
+        + r"""
+const commands = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const results = commands.map(command => ({
+  name: extractCommandName(command),
+  usageName: toolUsageName("Bash", { command }),
+  benignExitOne: isBenignExit(command, 1),
+}));
+console.log(JSON.stringify(results));
+"""
+    )
+    completed = subprocess.run(
+        ["node", "-e", script],
+        input=json.dumps(commands),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
 
 
 def as_lines(*events: dict[str, Any]) -> list[str]:
@@ -211,7 +239,7 @@ def test_sparse_turn_timeline_omits_unavailable_duration_column() -> None:
     assert "0.0s" not in rendered
 
 
-def test_sparse_rtk_command_shows_wrapped_command_in_tool_name() -> None:
+def test_sparse_commands_aggregate_by_underlying_executable() -> None:
     analyzer = load_analyzer()
 
     report = analyzer.parse_sparse(
@@ -220,19 +248,20 @@ def test_sparse_rtk_command_shows_wrapped_command_in_tool_name() -> None:
             {"type": "turn.started"},
             command_completed_event("item_1", "rtk git status --short"),
             command_completed_event("item_2", "/usr/bin/zsh -lc 'rtk pytest -q'"),
+            command_completed_event("item_3", "git diff --stat"),
+            command_completed_event("item_4", "/bin/bash -lc 'rtk git log --oneline'"),
+            command_completed_event("item_5", "/usr/bin/git branch --show-current"),
             {"type": "turn.completed", "usage": {"input_tokens": 1, "cached_input_tokens": 0, "output_tokens": 1}},
         )
     )
 
-    assert report.tool_calls == {"rtk git": 1, "rtk pytest": 1}
-    assert report.actions[0].tool_name == "rtk git"
-    assert report.actions[1].tool_name == "rtk pytest"
+    assert report.tool_calls == {"git": 4, "pytest": 1}
+    assert [action.tool_name for action in report.actions] == ["git", "pytest", "git", "git", "git"]
 
-    rendered = analyzer.render_turn_timeline(report)
+    rendered = analyzer.render_tool_calls(report)
 
-    assert "rtk git" in rendered
-    assert "rtk pytest" in rendered
-    assert "rtk                  " not in rendered
+    assert "rtk git" not in rendered
+    assert "rtk pytest" not in rendered
 
 
 def test_sparse_rtk_rg_exit_one_is_not_error() -> None:
@@ -248,9 +277,48 @@ def test_sparse_rtk_rg_exit_one_is_not_error() -> None:
         )
     )
 
-    assert report.actions[0].tool_name == "rtk rg"
+    assert report.actions[0].tool_name == "rg"
     assert report.actions[0].is_error is False
     assert report.actions[1].is_error is True
+
+
+def test_sparse_wrapped_setup_preamble_rtk_rg_exit_one_is_not_error() -> None:
+    analyzer = load_analyzer()
+
+    report = analyzer.parse_sparse(
+        as_lines(
+            {"type": "thread.started", "thread_id": "t"},
+            {"type": "turn.started"},
+            command_completed_event(
+                "item_1",
+                "/bin/bash -lc 'set +e; rtk rg -n missing internal'",
+                exit_code=1,
+            ),
+            {"type": "turn.completed", "usage": {"input_tokens": 1, "cached_input_tokens": 0, "output_tokens": 1}},
+        )
+    )
+
+    assert report.tool_calls == {"rg": 1}
+    assert report.actions[0].tool_name == "rg"
+    assert report.actions[0].is_error is False
+
+
+def test_browser_command_normalization_matches_python() -> None:
+    analyzer = load_analyzer()
+    commands = [
+        "rtk git status --short",
+        "/usr/bin/zsh -lc 'rtk pytest -q'",
+        "/bin/bash -lc 'set +e; rtk rg -n missing internal'",
+        "/bin/sh -c 'git diff --stat'",
+    ]
+
+    browser_results = probe_browser_command_normalization(commands)
+    expected_names = [analyzer._extract_command_name(command) for command in commands]
+
+    assert expected_names == ["git", "pytest", "rg", "git"]
+    assert [result["name"] for result in browser_results] == expected_names
+    assert [result["usageName"] for result in browser_results] == expected_names
+    assert browser_results[2]["benignExitOne"] is True
 
 
 def test_rich_bash_rtk_rg_exit_one_empty_result_is_not_error() -> None:
@@ -290,6 +358,7 @@ def test_rich_bash_rtk_rg_exit_one_empty_result_is_not_error() -> None:
         )
     )
 
+    assert report.tool_calls == {"rg": 1}
     assert report.actions[0].is_error is False
 
 

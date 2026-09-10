@@ -202,7 +202,8 @@ Do not present a fix-localization finding until the relevant prompt/output pair 
 
 ### 7. Synthesis
 
-Produce findings in this format:
+Produce findings in this format and save the completed report to
+`§BRAND_PROJECT_DIRNAME§/context-engineering.md`:
 
 ```markdown
 # Context Engineering Report

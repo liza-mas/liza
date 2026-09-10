@@ -1,6 +1,7 @@
 # §BRAND_NAME_TITLE§ Logs Report Format
 
-Use this format for `/§BRAND_BINARY_NAME§-logs` findings. Combine analyzer output from
+Use this format for `/§BRAND_BINARY_NAME§-logs` findings and save the completed
+report to `§BRAND_PROJECT_DIRNAME§/log-analysis.md`. Combine analyzer output from
 `§BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt`, task friction evidence from `§BRAND_PROJECT_DIRNAME§/state.yaml`, and
 raw log excerpts only when needed to validate a specific claim.
 
@@ -9,8 +10,10 @@ raw log excerpts only when needed to validate a specific claim.
 Date:
 Scope:
 Logs analyzed:
+Supervisor logs analyzed:
 State file analyzed:
 Roles covered:
+Changes made:
 
 Start with the primary lifecycle friction. If any task has >=4 rejections or
 review cycles, list the highest-churn task first even when it eventually merged.
@@ -21,25 +24,6 @@ all later tool-error counts should be interpreted.
 
 | Priority | Friction | Evidence | Impact | Recommended fix |
 |----------|----------|----------|--------|-----------------|
-
-### Usage and Content Authority
-
-| Usage Source | Authority | Reporting rule |
-|--------------|-----------|----------------|
-| `terminal` | Authoritative aggregate fresh input, cache-create, cache-read, and output usage | Keep per-turn rows envelope-derived; do not reconstruct exact per-turn values from terminal totals |
-| `envelope-partial` | Partial aggregate evidence when terminal usage is absent | Do not infer terminal-only values or present the aggregate as complete |
-| `unknown` | No usable aggregate usage record; displayed zeros may be an undercount rather than measured zero | Treat aggregate token usage as unavailable and do not infer missing values |
-
-Rich per-turn tables identify `Turn Usage Source` as assistant message envelopes
-and state whether those rows reconcile with the aggregate. When they diverge,
-use `TOKEN SUMMARY` for authoritative aggregate totals rather than summing rows.
-
-For content accounting, count each string- or list-encoded `tool_result`
-payload exactly once. Preserve ordinary user `text` as text; it is not a tool
-result. In a `--summary-by-role` report, include `Usage Sources` and the
-per-role `Partial` count. `Partial` counts only `envelope-partial` logs;
-`unknown` logs remain visible in `Usage Sources` and must not be read as
-complete merely because they are excluded from `Partial`.
 
 ## 2. State Friction Inventory
 
@@ -93,7 +77,17 @@ missing, count task `history` events named `rejected` or
 | Task | Reason/history | Last status before abandon | Failed by | Impact | Follow-up |
 |------|----------------|----------------------------|-----------|--------|-----------|
 
-## 3. Permission & Policy Friction
+## 3. Per-Role Results
+
+State whether token input includes cached input and whether error counts are
+raw analyzer signals or classified actionable failures.
+
+| Role | Logs | Input | Cache | Actions / errors | Struggles | Main finding |
+|------|-----:|------:|------:|------------------:|----------:|--------------|
+
+Use concrete representative log filenames for non-trivial role findings.
+
+## 4. Permission & Policy Friction
 
 Required when permission prompts, hook policy blocks, command-shape rejections,
 filesystem allowlist blocks, or §BRAND_NAME_TITLE§ project-root mismatches appear.
@@ -111,7 +105,42 @@ Keep these categories distinct:
 Do not mix permission/policy blocks with command exit failures such as failing
 tests, validation errors, missing files, or lint failures.
 
-## 4. Log Friction Inventory
+## 5. Tool Usage
+
+Aggregate shell commands by underlying executable: unwrap supported shell
+launchers, ignore a leading `rtk`, discard executable path prefixes, and ignore
+all arguments. For example, `rtk git status` and `git diff` both count as
+`git`. State which non-command actions were excluded; do not equate Bash
+invocation counts with broader analyzer action totals.
+
+| Generic command | Calls | Share |
+|-----------------|------:|------:|
+
+| Role | Bash calls | Top normalized commands |
+|------|-----------:|-------------------------|
+
+### Reading Classification
+
+| Target class | Calls | Share | Result volume |
+|--------------|------:|------:|--------------:|
+
+Separate legitimate initialization and targeted evidence gathering from
+duplicated reads, oversized whole-artifact reads, and repeated result payloads.
+Reading volume alone is not a finding.
+
+### Tool Result Breakdown
+
+Use the analyzer's `TOOL RESULT BREAKDOWN` section to identify tools that return
+large or repetitive payloads.
+
+| Log file | Agent | Tool | Calls | Total result | Avg result | Max result | Interpretation |
+|----------|-------|------|------:|-------------:|-----------:|-----------:|----------------|
+
+Interpret high-volume tool output as friction only when it is unnecessary,
+duplicated, or prevents progress. Large output from a targeted diagnostic may be
+valid evidence rather than waste.
+
+## 6. Errors and Log Friction
 
 | Log file | Agent | Signal | Evidence | Related task | Interpretation |
 |----------|-------|--------|----------|--------------|----------------|
@@ -146,17 +175,91 @@ Use raw logs to verify repeated errors before proposing fixes. Do not count
 benign no-match `rg`/`grep`/`diff` exit code 1 as friction unless the raw log
 shows the agent treated it as a failure.
 
-### Tool Result Breakdown
+### Significant Error Analysis
 
-Use the analyzer's `TOOL RESULT BREAKDOWN` section to identify tools that return
-large or repetitive payloads.
+Classify actionable failures separately from benign or expected diagnostics,
+including useful red tests, assertion gates, state discovery, missing-path
+probes, and diff probes. State that significant events are not necessarily
+distinct product defects.
 
-| Log file | Agent | Tool | Calls | Total result | Avg result | Max result | Interpretation |
-|----------|-------|------|------:|-------------:|-----------:|-----------:|----------------|
+| Classification | Errors | Share | Included events |
+|----------------|-------:|------:|-----------------|
 
-Interpret high-volume tool output as friction only when it is unnecessary,
-duplicated, or prevents progress. Large output from a targeted diagnostic may be
-valid evidence rather than waste.
+| Significant class | Errors | Share of all errors | Interpretation |
+|-------------------|-------:|--------------------:|----------------|
+
+### Role-Level Error Patterns
+
+| Role | Errors | Dominant patterns | Representative log | Interpretation |
+|------|-------:|-------------------|--------------------|----------------|
+
+## 7. Struggle Sequences
+
+A struggle sequence is a retry-cluster signal, not proof of poor reasoning.
+Distinguish expected TDD or assertion-driven correction from repeated actions
+that cannot progress without a state, capability, or environment change.
+
+| Role | Sequences | Recurring sequence | Assessment |
+|------|----------:|--------------------|------------|
+
+## 8. Supervisor Evidence
+
+Keep supervisor lifecycle failures separate from provider-tool errors. Use
+bounded supervisor log evidence and quantify repeated identical failures by
+count and duration when possible.
+
+| Supervisor/role | Evidence file | Pattern | Frequency/duration | Interpretation |
+|-----------------|---------------|---------|--------------------|----------------|
+
+## 9. Usage, Content, and Initialization
+
+### Usage and Content Authority
+
+| Usage Source | Authority | Reporting rule |
+|--------------|-----------|----------------|
+| `terminal` | Authoritative aggregate fresh input, cache-create, cache-read, and output usage | Keep per-turn rows envelope-derived; do not reconstruct exact per-turn values from terminal totals |
+| `envelope-partial` | Partial aggregate evidence when terminal usage is absent | Do not infer terminal-only values or present the aggregate as complete |
+| `unknown` | No usable aggregate usage record; displayed zeros may be an undercount rather than measured zero | Treat aggregate token usage as unavailable and do not infer missing values |
+
+Rich per-turn tables identify `Turn Usage Source` as assistant message envelopes
+and state whether those rows reconcile with the aggregate. When they diverge,
+use `TOKEN SUMMARY` for authoritative aggregate totals rather than summing rows.
+
+For content accounting, count each string- or list-encoded `tool_result`
+payload exactly once. Preserve ordinary user `text` as text; it is not a tool
+result. In a `--summary-by-role` report, include `Usage Sources` and the
+per-role `Partial` count. `Partial` counts only `envelope-partial` logs;
+`unknown` logs remain visible in `Usage Sources` and must not be read as
+complete merely because they are excluded from `Partial`.
+
+### Aggregate Usage and Provenance
+
+| Metric | Value | Authority / notes |
+|--------|------:|-------------------|
+| Fresh input | N | |
+| Cache-create input | N | |
+| Cache-read input | N | |
+| Output | N | |
+| Usage provenance | | terminal / envelope-partial / unknown counts |
+| Transcript formats | | rich / sparse / unsupported counts |
+
+### Content and Size Outliers
+
+| Role/log | Content or tool | Size | Repeated? | Interpretation |
+|----------|-----------------|-----:|-----------|----------------|
+
+Attribute large provider transcript or tool-result volume to a concrete
+behavior before calling it waste. Include top items by size and distinguish
+routine cached context from avoidable repeated payloads.
+
+### MCP, Skills, and Initialization
+
+| Signal | Count / coverage | Evidence | Interpretation |
+|--------|------------------|----------|----------------|
+
+Report MCP usage, skill-invocation evidence, and telemetry gaps. Do not treat
+zero recorded skill invocations as proof that skills were skipped when
+transcript evidence shows explicit skill reads.
 
 ### Empty Turns and Breadcrumb Applicability
 
@@ -177,7 +280,13 @@ agent-message text items in sparse logs, stopping earlier when breadcrumbs are
 found. Tool-only and empty envelopes do not consume this initialization window;
 text after the fifth block is outside the breadcrumb search.
 
-## 5. Cross-Correlation
+### Rich-Log Detail
+
+When rich logs provide the evidence, include per-turn context growth, the
+longest turns, a bounded turn timeline, and cost breakdown with system-prompt
+replay cost. Omit unavailable detail for sparse logs rather than inferring it.
+
+## 10. Cross-Correlation
 
 | Friction ID | Task | State evidence | Log evidence | Likely cause | Confidence |
 |-------------|------|----------------|--------------|--------------|------------|
@@ -187,19 +296,19 @@ Confidence:
 - Medium: state shows symptom, logs show plausible cause
 - Low: state shows symptom but log evidence is incomplete
 
-## 6. Recommendations
+## 11. Recommendations
 
 Group recommendations by root cause, not by individual task.
 
 | Priority | Recommendation | Fixes frictions | Evidence | Owner | Validation |
 |----------|----------------|-----------------|----------|-------|------------|
 
-## 7. Non-Findings / False Positives
+## 12. Non-Findings / False Positives
 
 | Signal | Why not a finding | Evidence |
 |--------|-------------------|----------|
 
-## 8. Appendix
+## 13. Appendix
 
 ### Files Analyzed
 

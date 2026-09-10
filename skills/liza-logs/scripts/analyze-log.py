@@ -570,9 +570,12 @@ def parse_rich(lines: list[str]) -> SessionReport:
                     if msg_id:
                         turn_has_tool[msg_id] = True
                     name = block.get("name", "unknown")
-                    report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
-                    # Track skill invocations (Skill tool or direct file read)
                     input_data = block.get("input", {})
+                    tool_call_name = name
+                    if name == "Bash":
+                        tool_call_name = _extract_command_name(input_data.get("command", "")) or name
+                    report.tool_calls[tool_call_name] = report.tool_calls.get(tool_call_name, 0) + 1
+                    # Track skill invocations (Skill tool or direct file read)
                     if name == "Skill":
                         skill_name = input_data.get("skill", "")
                         if skill_name:
@@ -613,10 +616,7 @@ def parse_rich(lines: list[str]) -> SessionReport:
                 # (e.g., rg/grep with no matches produce empty output)
                 effective_error = is_error
                 if is_error and name == "Bash" and detail:
-                    bash_cmd = _display_command_name(
-                        detail.strip().split()[0].rsplit("/", 1)[-1],
-                        detail,
-                    )
+                    bash_cmd = _extract_command_name(detail)
                     if _is_benign_exit(bash_cmd, 1) and not result_preview.strip():
                         effective_error = False
                 report.actions.append(
@@ -734,29 +734,25 @@ def _measure_sparse_item(item: dict) -> ContentItem:
 
 
 def _extract_command_name(cmd: str) -> str:
-    """Extract a short command name from a shell command string."""
+    """Extract the underlying executable used to aggregate shell commands."""
     # Strip shell wrappers like `/usr/bin/zsh -lc "..."`
     for prefix in ("/usr/bin/zsh -lc ", "/bin/bash -lc ", "/bin/sh -c "):
         if cmd.startswith(prefix):
-            inner = cmd[len(prefix) :].strip().strip("'\"")
-            # Get first token of the inner command
-            first = inner.split()[0] if inner.split() else cmd
-            # Strip 'set +e;' or similar preambles
-            if first in ("set", "echo", "if", "cd"):
-                parts = inner.split("&&")
-                if len(parts) > 1:
-                    first = parts[-1].strip().split()[0]
-            return first
-    return cmd.split()[0] if cmd.split() else cmd
+            cmd = cmd[len(prefix) :].strip().strip("'\"")
+            # Skip recognized setup statements before the first substantive command.
+            segments = re.split(r"\s*(?:&&|;)\s*", cmd)
+            for segment in segments:
+                segment = segment.strip()
+                parts = segment.split()
+                if parts and parts[0] not in ("set", "echo", "if", "cd"):
+                    cmd = segment
+                    break
+            break
 
-
-def _display_command_name(name: str, cmd: str) -> str:
-    """Return the command label used in reports."""
-    if name == "rtk":
-        parts = cmd.split()
-        if len(parts) > 1:
-            return f"rtk {parts[1]}"
-    return name
+    parts = cmd.split()
+    if parts and parts[0] == "rtk":
+        parts = parts[1:]
+    return parts[0].rsplit("/", 1)[-1] if parts else cmd
 
 
 def parse_sparse(lines: list[str]) -> SessionReport:
@@ -871,17 +867,16 @@ def parse_sparse(lines: list[str]) -> SessionReport:
                             detail = cmd[len(prefix) :].strip().strip("'\"")
                             break
                     name = _extract_command_name(cmd)
-                    display_name = _display_command_name(name, detail)
-                    report.tool_calls[display_name] = report.tool_calls.get(display_name, 0) + 1
+                    report.tool_calls[name] = report.tool_calls.get(name, 0) + 1
                     output = item.get("aggregated_output", "") or ""
                     exit_code = item.get("exit_code", 0)
                     report.actions.append(
                         TurnAction(
                             turn_num=current_turn_num,
-                            tool_name=display_name,
+                            tool_name=name,
                             detail=detail[:80],
                             result_chars=len(output),
-                            is_error=exit_code != 0 and not _is_benign_exit(display_name, exit_code),
+                            is_error=exit_code != 0 and not _is_benign_exit(name, exit_code),
                             result_preview=output[:120].replace("\n", " "),
                             result_hash=_hash_result(output),
                         )

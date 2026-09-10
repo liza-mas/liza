@@ -263,14 +263,8 @@ function detectAndParse(text) {
 // Commands where exit code 1 means "no matches/differences found", not an error.
 const BENIGN_EXIT1_COMMANDS = new Set(["rg", "grep", "egrep", "fgrep", "ag", "ack", "diff"]);
 
-function benignExitCommandName(cmdName) {
-  const parts = String(cmdName || "").trim().split(/\s+/);
-  if (parts[0] === "rtk" && parts.length > 1) return parts[1];
-  return parts[0] || "";
-}
-
 function isBenignExit(cmdName, exitCode) {
-  return exitCode === 1 && BENIGN_EXIT1_COMMANDS.has(benignExitCommandName(cmdName));
+  return exitCode === 1 && BENIGN_EXIT1_COMMANDS.has(extractCommandName(cmdName));
 }
 
 function extractCommandName(cmd) {
@@ -278,24 +272,26 @@ function extractCommandName(cmd) {
   const prefixes = ["/usr/bin/zsh -lc ", "/bin/bash -lc ", "/bin/sh -c "];
   for (const prefix of prefixes) {
     if (cmd.startsWith(prefix)) {
-      const inner = cmd.slice(prefix.length).trim().replace(/^['"]|['"]$/g, "");
-      let first = (inner.split(/\s+/)[0] || cmd);
-      if (["set", "echo", "if", "cd"].includes(first)) {
-        const parts = inner.split("&&");
-        if (parts.length > 1) first = parts[parts.length - 1].trim().split(/\s+/)[0];
+      cmd = cmd.slice(prefix.length).trim().replace(/^['"]|['"]$/g, "");
+      const segments = cmd.split(/\s*(?:&&|;)\s*/);
+      for (const segment of segments) {
+        const parts = segment.trim().split(/\s+/);
+        if (parts[0] && !["set", "echo", "if", "cd"].includes(parts[0])) {
+          cmd = segment.trim();
+          break;
+        }
       }
-      return first;
+      break;
     }
   }
-  return cmd.split(/\s+/)[0] || cmd;
+  const parts = cmd.trim().split(/\s+/);
+  if (parts[0] === "rtk") parts.shift();
+  return (parts[0] || cmd).split("/").pop();
 }
 
-function displayCommandName(name, cmd) {
-  if (name === "rtk") {
-    const parts = (cmd || "").trim().split(/\s+/);
-    if (parts.length > 1) return `rtk ${parts[1]}`;
-  }
-  return name;
+function toolUsageName(name, input) {
+  if (name !== "Bash") return name;
+  return extractCommandName(input?.command || "") || name;
 }
 
 function extractCommandDetail(cmd) {
@@ -606,13 +602,12 @@ function analyzeCodex(parsed) {
       if (item.type === "command_execution") {
         const cmdName = extractCommandName(item.command);
         const detail = extractCommandDetail(item.command);
-        const displayName = displayCommandName(cmdName, detail);
         const exitCode = item.exitCode;
         timeline.push({
-          turnNum: turn.turnNum, toolName: displayName,
+          turnNum: turn.turnNum, toolName: cmdName,
           detail,
           resultChars: item.outputLen || 0,
-          isError: exitCode != null && exitCode !== 0 && !isBenignExit(displayName, exitCode),
+          isError: exitCode != null && exitCode !== 0 && !isBenignExit(cmdName, exitCode),
           preview: item.outputPreview || "",
           resultHash: item.resultHash || "",
         });
@@ -787,8 +782,7 @@ function analyzeClaudeCode(parsed) {
       // For Bash commands, check if exit code 1 is benign (rg/grep no matches)
       let effectiveError = !!ev.isError;
       if (effectiveError && pending.name === "Bash" && pending.detail) {
-        const bashCmd = displayCommandName(pending.detail.trim().split(/\s+/)[0].split("/").pop(), pending.detail);
-        if (isBenignExit(bashCmd, 1) && !(ev.preview || "").trim()) {
+        if (isBenignExit(pending.detail, 1) && !(ev.preview || "").trim()) {
           effectiveError = false;
         }
       }
@@ -1315,7 +1309,10 @@ function ClaudeCodeReport({ parsed }) {
   const { summary, turns, mcpStatus, perMsgUsage, contentByType, totalCharsAll,
     topItems, longestTurns, timeline, toolResultBreakdown, efficiencyInsights, permissionFriction, systemPromptEstimate,
     struggleSequences, mcpUsage, emptyTurnStats, skillInvocations, secretWordsLines } = analysis;
-  const toolCalls = turns.flatMap(t => t.actions.filter(a => a.contentType === "tool_use").map(a => a.toolName)).filter(Boolean);
+  const toolCalls = turns.flatMap(t => t.actions
+    .filter(a => a.contentType === "tool_use")
+    .map(a => toolUsageName(a.toolName, a.toolInput)))
+    .filter(Boolean);
   const toolFreq = {};
   for (const t of toolCalls) toolFreq[t] = (toolFreq[t] || 0) + 1;
 

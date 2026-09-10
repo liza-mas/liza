@@ -65,6 +65,9 @@ usage, efficiency insights, and struggle sequences. Rich format adds per-turn
 context growth, top longest turns, cost breakdown with system-prompt replay cost,
 and MCP server status. Sparse logs have aggregate usage only; do not infer exact
 per-turn growth or cost.
+Aggregate shell-command usage by underlying executable: unwrap supported shell
+launchers, ignore a leading `rtk`, and discard arguments. For example,
+`rtk git status` and `git diff` both count as `git`.
 Context-fill percentages are authoritative only when the provider records
 context-window metadata. Do not infer historical window size or compaction
 thresholds from the analyzer process environment.
@@ -117,7 +120,8 @@ python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_BINARY_NAME§-logs/scripts/que
    - Read one agent prompt of the relevant role in `§BRAND_PROJECT_DIRNAME§/agent-prompts/`
    - Check the contract files in `~/§BRAND_GLOBAL_DIRNAME§/` (CORE.md, AGENT_TOOLS.md, MULTI_AGENT_MODE.md)
 
-6. Write the final report using `skills/§BRAND_BINARY_NAME§-logs/report-format.md`.
+6. Write the final report using `skills/§BRAND_BINARY_NAME§-logs/report-format.md`
+   and save it to `§BRAND_PROJECT_DIRNAME§/log-analysis.md`.
 
 7. Propose fixes whenever possible.
 

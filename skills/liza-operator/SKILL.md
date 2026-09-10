@@ -81,12 +81,25 @@ not capacity. A rejected task may retain a waiting reviewer only with current `a
 Recheck suspected races after a short agent-poll interval, independent of reporting cadence.
 
 # Operator notes
-Create or resume `§BRAND_PROJECT_DIRNAME§/operator-notes.md` at session start. Record every issue that
-required operator intervention and every significant friction observed in agent work, even when it
-self-recovered.
+Create or resume `§BRAND_PROJECT_DIRNAME§/operator-notes.md` at session start.
+It is a rolling evidence-backed operational report, not only a chronological
+scratchpad. Record every intervention and significant friction, including
+self-recovered issues, and retain resolved incidents with their outcomes.
 
-The header records run/goal ID, spec, operator role, exact binary build/version, watch interval, creation time,
-and last-updated time. Incident entries are permanent; mark them resolved rather than deleting them.
+Keep these sections current:
+- run header: goal/spec, operator, exact tool builds, watch interval, timestamps,
+  run status, and evidence scope;
+- executive summary: prioritized friction table with evidence, impact, action,
+  recommended durable fix, and status;
+- primary lifecycle friction: the highest-churn or highest-impact task first,
+  even if it eventually merged;
+- settled human decisions and their downstream effect;
+- incident journal;
+- run-wide role, supervisor, environment, tool, error, struggle, and context
+  patterns, quantified when evidence supports it;
+- current watch state;
+- deduplicated follow-up defects with owner, validation, and status;
+- non-findings that prevent repeated investigation.
 
 For each issue, capture:
 - timestamp plus task and agent identifiers;
@@ -96,8 +109,18 @@ For each issue, capture:
 - intervention, resulting state, and validation;
 - root-cause hypothesis and durable follow-up, explicitly marking unknowns.
 
-Maintain a current-watch summary, deduplicated systemic follow-up defects, and a separate timeless-lessons
-list. Avoid secrets and raw transcript dumps; symptom repair without reproducible causal evidence is incomplete.
+Before a terminal-state or human handoff, run `/§BRAND_BINARY_NAME§-logs` over
+the complete run and reconcile its
+`§BRAND_PROJECT_DIRNAME§/log-analysis.md` with the operator report. Add missed
+incidents, quantify repeated patterns, distinguish significant failures from
+expected diagnostics, and cite exact tasks and provider/supervisor logs. When
+evidence points to prompt or context design, run `/context-engineering` and
+reference `§BRAND_PROJECT_DIRNAME§/context-engineering.md`.
+
+Reference the analysis reports instead of copying bulk analyzer output. End
+with the sources checked for every load-bearing conclusion. Maintain timeless
+lessons separately. Avoid secrets and raw transcript dumps; symptom repair
+without reproducible causal evidence is incomplete.
 
 # Agent host model — exactly one orchestrator agent
 `§BRAND_BINARY_NAME§ tui` is the monitor/spawner, not the orchestrator. A healthy run needs a live registered
