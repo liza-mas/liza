@@ -177,7 +177,7 @@ func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {
 	resetHelpFlag(t, cmd)
 	for _, name := range []string{
 		"agent-id", "changed-by", "json", "format", "review-commit", "summary", "output-summary", "active", "zombies",
-		"reason", "questions", "repair-operation", "repair-target", "repair-command", "repair-evidence", "repair-validation", "repair-request-file", "recoverability-command", "assign-to", "rebase-on", "allow-dirty",
+		"reason", "reason-file", "questions", "repair-operation", "repair-target", "repair-command", "repair-evidence", "repair-validation", "repair-request-file", "recoverability-command", "assign-to", "rebase-on", "allow-dirty",
 		"class", "workspace", "cwd", "dry-run", "preset", "role", "no-tui", "doer-cli", "goal", "reviewer", "prompt-delay", "yolo",
 		"spec", "config", "entry-point", "branch", "post-worktree-cmd", "copy-worktree-env-files", "auto-resume", "no-follow-up", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "scip-search-plan", "provider", "cli", "profile", "explain-launch", "supervisor-stdout-log", "supervisor-stderr-log", "supervisor-ready-file", "claude", "codex", "opencode", "gemini", "mistral",
 		"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file",

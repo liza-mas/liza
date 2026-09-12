@@ -154,6 +154,39 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 	})
 
+	t.Run("submit-verdict reads a multiline reason from stdin", func(t *testing.T) {
+		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
+			now := time.Now().UTC()
+			state.Tasks = []models.Task{
+				testhelpers.BuildTaskByStatus("task-reason-stdin", models.TaskStatusReviewing, now),
+			}
+			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
+			state.Agents["code-reviewer-8"] = mutationTestAgent("code-reviewer")
+		})
+
+		const reason = "---\n# Blockers\nArchitecture plan missing\n"
+		rootCmd.SetIn(strings.NewReader(reason))
+		defer rootCmd.SetIn(nil)
+		t.Setenv("LIZA_AGENT_ID", "code-reviewer-8")
+		err := executeRootCommand(t, projectRoot,
+			"submit-verdict", "task-reason-stdin", "REJECTED",
+			"--review-commit", quarantinedVerdictTestCommit, "--reason-file", "-",
+		)
+		if err != nil {
+			t.Fatalf("submit-verdict execute failed: %v", err)
+		}
+
+		state := readState(t, statePath)
+		task := mustFindTask(t, state, "task-reason-stdin")
+		wantReason := strings.TrimSpace(reason)
+		if task.RejectionReason == nil {
+			t.Fatal("rejection_reason = nil, want stdin content")
+		}
+		if *task.RejectionReason != wantReason {
+			t.Fatalf("rejection_reason = %q, want stdin content %q", *task.RejectionReason, wantReason)
+		}
+	})
+
 	t.Run("submit-verdict rejects a registered flag consumed as reason", func(t *testing.T) {
 		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 			now := time.Now().UTC()
@@ -1071,6 +1104,52 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 		if last.Agent == nil || *last.Agent != "auditor-7" {
 			t.Fatalf("history agent = %v, want auditor-7", last.Agent)
+		}
+	})
+}
+
+func TestVerdictReasonFileValidation(t *testing.T) {
+	t.Run("reads stdin byte-exactly", func(t *testing.T) {
+		resetRootCmdForTest(t)
+		if err := submitVerdictCmd.Flags().Set("reason-file", "-"); err != nil {
+			t.Fatal(err)
+		}
+		const reason = "# Blocker\n`code` and $literal remain unchanged\n"
+		submitVerdictCmd.SetIn(strings.NewReader(reason))
+		defer submitVerdictCmd.SetIn(nil)
+
+		got, err := verdictReason(submitVerdictCmd, []string{"task-1", "REJECTED"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != reason {
+			t.Fatalf("verdictReason() = %q, want exact stdin content %q", got, reason)
+		}
+	})
+
+	t.Run("rejects another reason source", func(t *testing.T) {
+		resetRootCmdForTest(t)
+		if err := submitVerdictCmd.Flags().Set("reason-file", "-"); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := verdictReason(submitVerdictCmd, []string{"task-1", "REJECTED", "positional"})
+		if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+			t.Fatalf("verdictReason() error = %v, want mutually exclusive input error", err)
+		}
+	})
+
+	t.Run("bounds stdin before passing it to state mutation", func(t *testing.T) {
+		resetRootCmdForTest(t)
+		if err := submitVerdictCmd.Flags().Set("reason-file", "-"); err != nil {
+			t.Fatal(err)
+		}
+		submitVerdictCmd.SetIn(strings.NewReader(strings.Repeat("x", 4097)))
+		defer submitVerdictCmd.SetIn(nil)
+
+		_, err := verdictReason(submitVerdictCmd, []string{"task-1", "REJECTED"})
+		if err == nil || !strings.Contains(err.Error(), "exceeds 4096-byte limit") {
+			t.Fatalf("verdictReason() error = %v, want bounded-input error", err)
 		}
 	})
 }

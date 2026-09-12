@@ -1910,9 +1910,7 @@ func TestRenderedVerdictCommandsBindReviewedCommit(t *testing.T) {
 	withPromptBrandValues(t, func() { brand.BinaryName = "acme-cli" })
 	const commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	for _, section := range []string{
-		"verdict-submission", "architecture-reviewer-tools", "epic-plan-reviewer-tools",
-		"us-reviewer-tools", "code-plan-reviewer-tools", "integration-reviewer-tools",
-		"cli-failure-recovery",
+		"verdict-submission", "cli-failure-recovery",
 	} {
 		t.Run(section, func(t *testing.T) {
 			output, err := BuildRoleContext("code-reviewer", []string{section}, &RoleContextData{
@@ -1933,6 +1931,37 @@ func TestRenderedVerdictCommandsBindReviewedCommit(t *testing.T) {
 			}
 			if count == 0 {
 				t.Fatal("no branded executable verdict command rendered")
+			}
+		})
+	}
+}
+
+func TestRenderedReviewerVerdictRecipeRespectsBashConstraints(t *testing.T) {
+	withPromptBrandValues(t, func() { brand.BinaryName = "acme-cli" })
+	const commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	for _, toolSection := range []string{
+		"architecture-reviewer-tools", "epic-plan-reviewer-tools", "us-reviewer-tools",
+		"code-plan-reviewer-tools", "integration-reviewer-tools",
+	} {
+		t.Run(toolSection, func(t *testing.T) {
+			output, err := BuildRoleContext("code-reviewer", []string{toolSection, "verdict-submission"}, &RoleContextData{
+				Role: "code-reviewer", RoleType: "reviewer", TaskID: "task-boundary",
+				AgentID: "code-reviewer-1", ReviewCommit: commit,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(output, "reason=$(cat") {
+				t.Fatalf("reviewer prompt contains forbidden command substitution:\n%s", output)
+			}
+			if count := strings.Count(output, "--reason-file -"); count != 1 {
+				t.Fatalf("reviewer prompt contains %d multiline verdict recipes, want 1:\n%s", count, output)
+			}
+			if !strings.Contains(output, "--json <<'VERDICT'") {
+				t.Fatalf("reviewer prompt missing quoted stdin heredoc:\n%s", output)
+			}
+			if !strings.Contains(output, "\nVERDICT\n") {
+				t.Fatalf("reviewer prompt heredoc delimiter is not at column zero:\n%s", output)
 			}
 		})
 	}

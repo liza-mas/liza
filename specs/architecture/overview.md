@@ -253,7 +253,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza add-task --id X ...` | Add task to backlog |
 | `liza claim-task <task> <agent>` | Atomically claim task for agent |
 | `liza submit-for-review <task> [commit-ref]` | Submit work for review (defaults to worktree `HEAD`) |
-| `liza submit-verdict <task> <V> [--reason "<reason>"]` | Record review verdict |
+| `liza submit-verdict <task> <V> [--reason "<reason>" \| --reason-file <path\|->]` | Record review verdict; `--reason-file -` reads a bounded multiline reason from stdin |
 | `liza release-claim <task> [--role R]` | Release claim on task or review |
 | `liza clear-stale-review-claims` | Clean up abandoned reviews |
 | `liza update-sprint-metrics` | Sprint statistics |

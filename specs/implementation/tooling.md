@@ -35,7 +35,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza agent <role> --agent-id x [--cli C] [--goal-id G]` | Agent supervisor (`--cli`: claude, codex, gemini, mistral, kimi; `--goal-id` marks the process for diagnostics) |
 | `liza claim-task <task> <agent>` | Claim task with two-phase commit (called by supervisor) |
 | `liza submit-for-review <task> [commit-ref]` | Resolve `[commit-ref]` in the task worktree (default `HEAD`), validate it matches pre-rebase worktree HEAD, then set READY_FOR_REVIEW + post-rebase `review_commit` + history |
-| `liza submit-verdict <task> <V> [--reason "<reason>"]` | Atomically set APPROVED/REJECTED + review fields + history |
+| `liza submit-verdict <task> <V> [--reason "<reason>" \| --reason-file <path\|->]` | Atomically set APPROVED/REJECTED + review fields + history; `--reason-file -` reads a bounded multiline reason from stdin |
 | `liza wt-create <task> [--fresh]` | Create worktree for task |
 | `liza wt-merge <task>` | Merge approved worktree (supervisor-executed after APPROVED) |
 | `liza wt-delete <task>` | Clean up abandoned/merged worktree |
@@ -431,6 +431,10 @@ hint.
 ```bash
 liza submit-verdict task-3 APPROVED
 liza submit-verdict task-3 REJECTED --reason "Missing error handling for 429 responses"
+liza submit-verdict task-3 REJECTED --reason-file - <<'VERDICT'
+# Blockers
+Missing error handling for 429 responses.
+VERDICT
 ```
 
 **liza wt-create** — Create worktree (supervisor-only)

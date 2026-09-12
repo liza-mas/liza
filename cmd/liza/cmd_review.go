@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/roles"
+	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/spf13/cobra"
 )
 
@@ -178,7 +179,8 @@ Requirements:
   - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in a reviewing status (resolved from pipeline config)
   - --review-commit must be the full immutable commit SHA actually reviewed
-  - For REJECTED verdicts, a rejection reason of at most 4096 bytes is required (via --reason flag or positional arg)
+  - For REJECTED verdicts, a rejection reason of at most 4096 bytes is required
+    (via --reason, --reason-file, or positional arg)
 
 A generation-fenced substantive verdict is retained as quarantined evidence;
 it cannot change task or agent state. Conflicting evidence requires an
@@ -212,14 +214,9 @@ For REJECTED verdict:
 
 		taskID := args[0]
 		verdict := args[1]
-		reason := ""
-		if len(args) == 3 {
-			reason = args[2]
-		}
-		// --reason flag overrides positional arg (avoids shell quoting issues
-		// with markdown content containing --- or # in positional args).
-		if flagReason, _ := cmd.Flags().GetString("reason"); flagReason != "" {
-			reason = flagReason
+		reason, err := verdictReason(cmd, args)
+		if err != nil {
+			return err
 		}
 
 		authority, err := requireAgentAuthority(cmd)
@@ -250,6 +247,49 @@ For REJECTED verdict:
 		}
 		return commands.SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit)
 	},
+}
+
+func verdictReason(cmd *cobra.Command, args []string) (string, error) {
+	reason := ""
+	if len(args) == 3 {
+		reason = args[2]
+	}
+
+	// --reason overrides the positional argument for backward compatibility.
+	if flagReason, _ := cmd.Flags().GetString("reason"); flagReason != "" {
+		reason = flagReason
+	}
+
+	reasonFile, _ := cmd.Flags().GetString("reason-file")
+	if reasonFile == "" {
+		return reason, nil
+	}
+	if len(args) == 3 || cmd.Flags().Changed("reason") {
+		return "", cliValidationError("--reason-file cannot be combined with a positional rejection reason or --reason")
+	}
+
+	reader := cmd.InOrStdin()
+	var file *os.File
+	if reasonFile != "-" {
+		var err error
+		file, err = os.Open(reasonFile)
+		if err != nil {
+			return "", cliValidationWrap("opening --reason-file", err)
+		}
+		defer file.Close()
+		reader = file
+	}
+
+	data, err := io.ReadAll(io.LimitReader(reader, statehygiene.MaxStateTextBytes+1))
+	if err != nil {
+		return "", cliValidationWrap("reading --reason-file", err)
+	}
+	if len(data) > statehygiene.MaxStateTextBytes {
+		return "", cliValidationError(fmt.Sprintf(
+			"rejection reason exceeds %d-byte limit", statehygiene.MaxStateTextBytes,
+		))
+	}
+	return string(data), nil
 }
 
 var releaseClaimCmd = &cobra.Command{
@@ -594,6 +634,7 @@ func init() {
 	submitVerdictCmd.Flags().String("review-commit", "", "required full commit SHA actually reviewed")
 	submitVerdictCmd.Flags().String("impact", "", "impact classification (standard, significant, architecture)")
 	submitVerdictCmd.Flags().String("reason", "", "rejection reason, at most 4096 bytes (alternative to positional argument, avoids shell quoting issues)")
+	submitVerdictCmd.Flags().String("reason-file", "", "read rejection reason from a file, or - for stdin (mutually exclusive with --reason and positional argument)")
 
 	// Release-claim command flags
 	releaseClaimCmd.Flags().String("role", roles.ClaimReviewer, "claim type to release (doer, reviewer, both)")
