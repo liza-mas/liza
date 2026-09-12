@@ -16,6 +16,13 @@ integration blob. Existing strict Source References continue to own requirement
 meaning; the acceptance declaration allocates those IDs rather than creating a
 second requirement catalogue.
 
+Independent approval compares the reviewer with the planning author. A released
+live assignment does not erase authorship: retained `submitted_for_review` history
+for the exact parent `review_commit` supplies it. A retained assignee remains
+compatible with legacy history, but conflicting identities, an unknown author,
+or self-approval cannot authorize the allocation. Older submissions and claim
+history cannot stand in for the reviewed boundary.
+
 Claim records `acceptance_source`: ref, commit, blob, parent task and parent review
 commit. Claim/reclaim checks parent evidence and allocation again in the final
 transaction. Reviewed upstream corrections can refresh this snapshot and clear

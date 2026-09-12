@@ -217,6 +217,16 @@ whole review wait, not a new per-call allowance.
 
 ### Doer: Submit → Await → Handle
 
+If a strict coding claim reports `acceptance.source: requires allocation by a
+direct independently approved merged planning parent`, inspect the direct
+parent's merged review, output allocation and author evidence. Ownership release
+after submission may clear `assigned_to`; the exact reviewed submission history
+still establishes its author. Builds with this recovery accept that retained
+evidence without restoring a live owner. Missing/conflicting author evidence,
+self-approval or changed allocation remains a refusal. Do not fabricate an
+assignee or remove the acceptance declaration. `update-review-commit` repairs
+submitted/reviewing candidates, not the metadata of a MERGED parent.
+
 ```
 §BRAND_BINARY_NAME§ submit-for-review → §BRAND_BINARY_NAME§ await-verdict → handle result
 ```

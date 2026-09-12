@@ -157,6 +157,84 @@ func TestAcceptanceProvenance_RequiresIndependentPlanningAllocation(t *testing.T
 	}
 }
 
+func TestAcceptanceProvenance_ParentSubmissionSurvivesOwnershipRelease(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*models.Task)
+		allow  bool
+	}{
+		{name: "released author", allow: true},
+		{name: "empty live author", allow: true, mutate: func(parent *models.Task) {
+			parent.AssignedTo = testhelpers.StringPtr("")
+		}},
+		{name: "missing submission", mutate: func(parent *models.Task) {
+			parent.History = nil
+		}},
+		{name: "empty author without submission", mutate: func(parent *models.Task) {
+			parent.AssignedTo = testhelpers.StringPtr("")
+			parent.History = nil
+		}},
+		{name: "different submitted revision", mutate: func(parent *models.Task) {
+			parent.History[0].Commit = parent.BaseCommit
+		}},
+		{name: "claim is not submission", mutate: func(parent *models.Task) {
+			parent.History[0].Event = models.TaskEventClaimed
+		}},
+		{name: "missing historical author", mutate: func(parent *models.Task) {
+			parent.History[0].Agent = nil
+		}},
+		{name: "self approval", mutate: func(parent *models.Task) {
+			parent.ApprovedBy = parent.History[0].Agent
+			parent.Approvals = []models.Approval{{Agent: *parent.History[0].Agent}}
+		}},
+		{name: "conflicting submission authors", mutate: func(parent *models.Task) {
+			other := parent.History[0]
+			other.Agent = testhelpers.StringPtr("code-planner-2")
+			parent.History = append(parent.History, other)
+		}},
+		{name: "conflicting live author", mutate: func(parent *models.Task) {
+			parent.AssignedTo = testhelpers.StringPtr("code-planner-2")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
+			if err := bb.Modify(func(state *models.State) error {
+				parent := state.FindTask("acceptance-parent")
+				parent.History = []models.TaskHistoryEntry{{
+					Event: models.TaskEventSubmittedForReview,
+					Agent: parent.AssignedTo, Commit: parent.ReviewCommit,
+				}}
+				parent.AssignedTo = nil
+				if tc.mutate != nil {
+					tc.mutate(parent)
+				}
+				task := state.FindTask(taskID)
+				clearAttemptState(task, attemptStateInitialReset)
+				task.Status = models.TaskStatusReady
+				task.AssignedTo, task.LeaseExpires = nil, nil
+				state.Agents[agentID] = testhelpers.RegisteredTestAgent(models.RoleCoder)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			before := readAcceptanceState(t, bb)
+			_, err := ClaimTask(root, taskID, agentID)
+			if !tc.allow {
+				requireAcceptanceError(t, err, taskID)
+				requireAcceptanceStateUnchanged(t, bb, before)
+				return
+			}
+			if err != nil {
+				t.Fatalf("reviewed parent lost authority after ownership release: %v", err)
+			}
+			task := readAcceptanceState(t, bb).FindTask(taskID)
+			if task.Status != models.TaskStatusImplementing || task.AcceptanceSource == nil || task.AcceptanceSource.ParentTask != "acceptance-parent" || task.AcceptanceSource.ParentReviewCommit != *before.FindTask("acceptance-parent").ReviewCommit {
+				t.Fatal("claim did not retain the independently reviewed allocation")
+			}
+		})
+	}
+}
+
 func TestAcceptanceProvenance_RejectsDisconnectedParentBase(t *testing.T) {
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 	parent := readAcceptanceState(t, bb).FindTask("acceptance-parent")

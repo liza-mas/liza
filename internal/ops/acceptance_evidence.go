@@ -126,12 +126,16 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 	var source *models.AcceptanceSource
 	for _, parentID := range task.EffectiveParentTasks() {
 		parent := state.FindTask(parentID)
-		if parent == nil || parent.EffectiveType() != models.TaskTypePlanning || parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil || parent.AssignedTo == nil {
+		if parent == nil || parent.EffectiveType() != models.TaskTypePlanning || parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil {
 			continue
 		}
-		approved := parent.ApprovedBy != nil && *parent.ApprovedBy != "" && *parent.ApprovedBy != *parent.AssignedTo
+		author := acceptanceParentAuthor(parent)
+		if author == "" {
+			continue
+		}
+		approved := parent.ApprovedBy != nil && *parent.ApprovedBy != "" && *parent.ApprovedBy != author
 		for _, approval := range parent.Approvals {
-			approved = approved || (approval.Agent != "" && approval.Agent != *parent.AssignedTo)
+			approved = approved || (approval.Agent != "" && approval.Agent != author)
 		}
 		if !approved {
 			continue
@@ -180,6 +184,26 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		source: *source, contract: contract,
 		specRef: task.SpecRef, destructiveDB: task.DestructiveDB,
 	}, nil
+}
+
+// Ownership can be released after submission without invalidating its review.
+// Only submissions of this exact reviewed commit can recover the author; stale
+// submissions, claim history and conflicting identities cannot establish it.
+func acceptanceParentAuthor(parent *models.Task) string {
+	var author string
+	if parent.AssignedTo != nil {
+		author = *parent.AssignedTo
+	}
+	for _, entry := range parent.History {
+		if entry.Event != models.TaskEventSubmittedForReview || entry.Commit == nil || *entry.Commit != *parent.ReviewCommit {
+			continue
+		}
+		if entry.Agent == nil || *entry.Agent == "" || (author != "" && author != *entry.Agent) {
+			return ""
+		}
+		author = *entry.Agent
+	}
+	return author
 }
 
 // Parent metadata must identify the actual immutable reviewed history, not a
