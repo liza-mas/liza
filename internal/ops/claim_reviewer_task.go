@@ -11,6 +11,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -25,17 +26,19 @@ const defaultReviewClaimCooldown = 60 * time.Second
 
 // ClaimReviewerTaskInput contains the parameters for claiming a reviewer task.
 type ClaimReviewerTaskInput struct {
-	ProjectRoot   string
-	AgentID       string
-	Role          string
-	TaskID        string
-	LeaseDuration int
-	Authority     *models.AgentAuthority
-	Session       *ValidationSession
+	ProjectRoot    string
+	AgentID        string
+	Role           string
+	TaskID         string
+	LeaseDuration  int
+	Authority      *models.AgentAuthority
+	Session        *ValidationSession
+	RequestOptions LifecycleRequestOptions
 }
 
 // ClaimReviewerTaskResult contains the outcome of a successful reviewer task claim.
 type ClaimReviewerTaskResult struct {
+	models.LifecycleOutcome
 	TaskID       string
 	Worktree     string
 	ReviewCommit string
@@ -115,7 +118,27 @@ func filterByReviewerClaimEligibility(
 // Claim priority: partially_approved candidates are selected before submitted
 // candidates at the same priority level. Within each status tier, provider
 // diversity is used as a soft preference for candidate selection.
-func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, error) {
+func ClaimReviewerTask(input ClaimReviewerTaskInput) (result *ClaimReviewerTaskResult, err error) {
+	invocation := &ownershipInvocation{operation: "claim-reviewer-task", opts: input.RequestOptions, authority: input.Authority, metrics: NewLifecycleInvocation(input.ProjectRoot)}
+	defer func() { err = invocation.finish(input.ProjectRoot, err) }()
+	if input.AgentID == "" {
+		return nil, &PreconditionError{Reason: "agent ID is required"}
+	}
+	if err := ValidateLifecycleRequestOptions(input.RequestOptions); err != nil {
+		return nil, &PreconditionError{Reason: err.Error()}
+	}
+	if input.RequestOptions.RequestID != "" && input.TaskID == "" {
+		return nil, &PreconditionError{Reason: "task ID is required with reviewer claim request options"}
+	}
+	err = WithProjectLifecycleSharedLock(input.ProjectRoot, "claim-reviewer-task", func() error {
+		var inner error
+		result, inner = claimReviewerTask(input, invocation)
+		return inner
+	})
+	return result, err
+}
+
+func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvocation) (_ *ClaimReviewerTaskResult, resultErr error) {
 	if input.AgentID == "" {
 		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
@@ -160,9 +183,37 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 
 	var preflight *ValidationPreflight
 	var selected *models.Task
-	for {
-		needsPreflight := false
-		err = lifecycleMutation(bb, input.Authority)(func(state *models.State) error {
+	var preparation *models.LifecyclePreparation
+	defer func() {
+		if preparation == nil {
+			return
+		}
+		effects := "none"
+		if invocation.effects {
+			effects = "unknown"
+		}
+		resultErr = retireFailedLifecyclePreparation(bb, selected.ID, input.Authority, preparation, resultErr, effects)
+	}()
+	var needsPreflight, needsTaskLock, taskLocked bool
+	requestFor := func(task *models.Task) (LifecycleRequest, error) {
+		if selected != nil {
+			return invocation.request, nil
+		}
+		return NewLifecycleRequest("claim-reviewer-task", task, input.AgentID, input.Authority, input.RequestOptions, struct {
+			Role          string
+			LeaseDuration int
+		}{role, input.LeaseDuration})
+	}
+	checkRequest := func(task *models.Task, request LifecycleRequest) (*models.LifecycleReceipt, error) {
+		if preparation != nil {
+			return nil, ValidateLifecyclePreparation(task, request)
+		}
+		return CheckLifecycleRequest(task, request)
+	}
+	attempt := func() error {
+		needsPreflight = false
+		var pendingPreparation *models.LifecyclePreparation
+		err := lifecycleMutation(bb, input.Authority)(func(state *models.State) error {
 			claimingAgent, err := requireRegisteredClaimAgent(state, input.AgentID, role)
 			if err != nil {
 				return err
@@ -173,6 +224,31 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 				task := state.FindTask(input.TaskID)
 				if task == nil {
 					return &lizaerrors.NotFoundError{Entity: "task", ID: input.TaskID}
+				}
+				invocation.observe(task)
+				expectedRole, err := pb.resolver.ReviewerRole(task.RolePair)
+				if err != nil {
+					return err
+				}
+				if expectedRole != role {
+					return &PreconditionError{Reason: "agent role cannot review this task"}
+				}
+				request, err := requestFor(task)
+				if err != nil {
+					return err
+				}
+				receipt, err := checkRequest(task, request)
+				if err != nil {
+					return err
+				}
+				if receipt != nil {
+					invocation.outcome = LifecycleReplayOutcome(task, receipt, input.AgentID)
+					lease, _ := time.Parse(time.RFC3339Nano, receipt.Projection.LeaseExpires)
+					result = ClaimReviewerTaskResult{LifecycleOutcome: invocation.outcome, TaskID: task.ID, ReviewCommit: receipt.Projection.ReviewCommit, LeaseExpires: lease}
+					if task.Worktree != nil {
+						result.Worktree = *task.Worktree
+					}
+					return errLifecycleReplay
 				}
 				if !task.IsClaimable(role, state.Tasks, pr) {
 					return &PreconditionError{
@@ -240,8 +316,16 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 				if task == nil {
 					break
 				}
-				if selected != nil && task.ID != selected.ID {
+				if selected != nil && (task.ID != selected.ID || optionalValue(task.Worktree) != optionalValue(selected.Worktree)) {
 					return validationError("candidate_changed")
+				}
+				invocation.observe(task)
+				request, err := requestFor(task)
+				if err != nil {
+					return err
+				}
+				if _, err := checkRequest(task, request); err != nil {
+					return err
 				}
 
 				if err := validateReviewBoundaryForAssignment(input.ProjectRoot, state, task); err != nil {
@@ -263,6 +347,7 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 					if markErr := markReviewBoundaryIntegrationFailed(state, task, input.AgentID, pb.transitions, err); markErr != nil {
 						return markErr
 					}
+					invocation.effects = true
 					candidates = removeCandidate(candidates, task)
 					continue
 				}
@@ -270,12 +355,25 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 				if task.RolePair == "" {
 					return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", task.ID)}
 				}
-				if len(task.ValidationPrerequisites) > 0 && preflight == nil {
+				if !taskLocked {
 					copyTask := *task
 					selected = &copyTask
+					invocation.request = request
+					needsTaskLock = true
+					// Commit earlier candidates' boundary failures before taking
+					// this candidate's worktree lock outside the blackboard lock.
+					return nil
+				}
+				if len(task.ValidationPrerequisites) > 0 && preflight == nil {
+					if task.Worktree == nil || *task.Worktree == "" {
+						return validationError("worktree_unavailable")
+					}
+					if err := PrepareLifecycleRequest(task, request); err != nil {
+						return err
+					}
+					copyPreparation := *task.Lifecycle.Preparation
+					pendingPreparation = &copyPreparation
 					needsPreflight = true
-					// Commit boundary failures found on earlier candidates before
-					// probing this candidate outside the blackboard lock.
 					return nil
 				}
 				if err := preflight.CheckCurrent(state); err != nil {
@@ -317,31 +415,46 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 					result.ReviewCommit = *task.ReviewCommit
 				}
 				result.LeaseExpires = leaseExpires
-
-				return nil
+				invocation.outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{ReviewCommit: result.ReviewCommit, LeaseExpires: leaseExpires.Format(time.RFC3339Nano)})
+				result.LifecycleOutcome = invocation.outcome
+				if err == nil {
+					invocation.effects = true
+				}
+				return err
 			}
 
 			return nil
 		})
-		if err != nil || !needsPreflight {
-			break
+		if err == nil && pendingPreparation != nil {
+			preparation = pendingPreparation
 		}
-		if selected.Worktree == nil || *selected.Worktree == "" {
-			return nil, validationError("worktree_unavailable")
-		}
-		preflight, err = prepareResumedValidation(input.ProjectRoot, selected.ID, input.AgentID, *selected.Worktree, input.Session, input.Authority)
-		if err != nil {
-			return nil, err
-		}
-		if preflight == nil {
-			return nil, validationError("context_changed")
-		}
-		// The second transaction selects this same candidate and rechecks every
-		// eligibility and boundary invariant after probes ran without state locks.
-		input.TaskID = selected.ID
+		return err
 	}
-
-	if err != nil {
+	err = attempt()
+	if err == nil && needsTaskLock {
+		lock := filelock.New(claimTaskWorktreeLockPath(lp.StatePath(), selected.ID))
+		err = lock.WithLockOperation("claim-reviewer-task", func() error {
+			taskLocked = true
+			input.TaskID = selected.ID
+			for {
+				if err := attempt(); err != nil || !needsPreflight {
+					return err
+				}
+				// The durable preparation precedes resumed setup and probes.
+				// Final assignment rechecks that exact reservation and preflight.
+				invocation.effects = true
+				var err error
+				preflight, err = prepareResumedValidation(input.ProjectRoot, selected.ID, input.AgentID, *selected.Worktree, input.Session, input.Authority)
+				if err != nil {
+					return err
+				}
+				if preflight == nil {
+					return validationError("context_changed")
+				}
+			}
+		})
+	}
+	if err != nil && !isLifecycleReplay(err) {
 		return nil, err
 	}
 	if reviewBoundaryErr != nil && result.TaskID == "" {

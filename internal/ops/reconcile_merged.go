@@ -91,6 +91,7 @@ func reconcileMergedWithOptionalAuthority(projectRoot, taskID, mergeCommit, prUR
 		currentTask.ReviewLeaseExpires = nil
 		currentTask.MergeCommit = &resolvedCommit
 		currentTask.IntegrationFailure = nil
+		models.AdvanceLifecycle(currentTask)
 
 		currentTask.HandoffEvents = append(currentTask.HandoffEvents, models.HandoffEvent{
 			Timestamp: now,

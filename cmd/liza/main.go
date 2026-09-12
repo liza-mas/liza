@@ -174,8 +174,21 @@ func cliValidationWrap(message string, err error) error {
 
 // validateCLIInputs rejects ambiguous free-text flag values before command
 // handlers can read state or perform mutations.
-func validateCLIInputs(cmd *cobra.Command, _ []string) error {
+func validateCLIInputs(cmd *cobra.Command, args []string) error {
 	matchedFlag, err := validateReasonFlag(cmd)
+	if cmd.Flags().Lookup("request-id") != nil {
+		if err == nil {
+			_, err = lifecycleRequestOptions(cmd)
+		}
+		if err == nil {
+			if requiredErr := cmd.ValidateRequiredFlags(); requiredErr != nil {
+				err = cliValidationWrap("required flags", requiredErr)
+			}
+		}
+		if err != nil {
+			beginLifecycleCLI(cmd, args).finish(&err)
+		}
+	}
 	if err == nil {
 		return nil
 	}

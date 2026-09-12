@@ -22,7 +22,11 @@ func ClaimTaskCommand(projectRoot, taskID, agentID string) error {
 
 // ClaimTaskWithAuthorityCommand claims a task using generation-fenced authority.
 func ClaimTaskWithAuthorityCommand(projectRoot, taskID string, authority models.AgentAuthority) error {
-	result, err := ops.ClaimTaskWithAuthority(projectRoot, taskID, authority)
+	return ClaimTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, authority, ops.LifecycleRequestOptions{})
+}
+
+func ClaimTaskWithAuthorityAndOptionsCommand(projectRoot, taskID string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.ClaimTaskWithRequest(projectRoot, taskID, authority.ID, &authority, request)
 	if err != nil {
 		return err
 	}
@@ -32,6 +36,9 @@ func ClaimTaskWithAuthorityCommand(projectRoot, taskID string, authority models.
 }
 
 func printClaimResult(r *ops.ClaimResult) {
+	if printLifecycleResult(r.LifecycleOutcome) {
+		return
+	}
 	switch r.SourceStatus {
 	case models.TaskStatusRejected:
 		if r.PreviousAssignee == r.AgentID {

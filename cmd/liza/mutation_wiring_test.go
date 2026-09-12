@@ -72,6 +72,7 @@ func TestMutationCommandWiring(t *testing.T) {
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-review-flag", models.TaskStatusReviewing, now),
 			}
+			state.Tasks[0].ReviewingBy = testhelpers.StringPtr("code-reviewer-9")
 			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
 			state.Agents["code-reviewer-9"] = mutationTestAgent("code-reviewer")
 		})
@@ -97,6 +98,7 @@ func TestMutationCommandWiring(t *testing.T) {
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-review-env", models.TaskStatusReviewing, now),
 			}
+			state.Tasks[0].ReviewingBy = testhelpers.StringPtr("code-reviewer-8")
 			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
 			state.Agents["code-reviewer-8"] = mutationTestAgent("code-reviewer")
 		})
@@ -136,6 +138,7 @@ func TestMutationCommandWiring(t *testing.T) {
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-reason-flag", models.TaskStatusReviewing, now),
 			}
+			state.Tasks[0].ReviewingBy = testhelpers.StringPtr("code-reviewer-8")
 			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
 			state.Agents["code-reviewer-8"] = mutationTestAgent("code-reviewer")
 		})
@@ -161,6 +164,7 @@ func TestMutationCommandWiring(t *testing.T) {
 				testhelpers.BuildTaskByStatus("task-reason-stdin", models.TaskStatusReviewing, now),
 			}
 			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
+			state.Tasks[0].ReviewingBy = testhelpers.StringPtr("code-reviewer-8")
 			state.Agents["code-reviewer-8"] = mutationTestAgent("code-reviewer")
 		})
 
@@ -233,6 +237,7 @@ func TestMutationCommandWiring(t *testing.T) {
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-wt-merge", models.TaskStatusReady, now),
 			}
+			state.Agents["code-reviewer-3"] = mutationTestAgent("code-reviewer")
 		})
 
 		err := executeRootCommand(t, projectRoot, "wt-merge", "task-wt-merge", "--agent-id", "code-reviewer-3")

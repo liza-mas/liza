@@ -28,6 +28,7 @@ WORKFLOW:
    Run tests in the worktree. Verify done_when criteria still met.
 
 5. SUBMIT
-   {{binaryName}} submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
+   Capture git -C {{.Worktree}} rev-parse HEAD once as <submission-sha>; reuse the full SHA on retry.
+   {{binaryName}} submit-for-review {{.TaskID}} <submission-sha> --agent-id {{.AgentID}} --json
 {{- end}}
 {{- end -}}

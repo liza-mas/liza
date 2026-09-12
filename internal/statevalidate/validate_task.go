@@ -181,6 +181,9 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 	sc := newStatusClassifier(resolver, cfg)
 
 	for _, task := range state.Tasks {
+		if err := ValidateTaskLifecycle(&task); err != nil {
+			return err
+		}
 		if err := validateStatusFields(&task, &sc); err != nil {
 			return err
 		}

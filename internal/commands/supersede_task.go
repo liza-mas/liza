@@ -19,7 +19,12 @@ func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, r
 
 // SupersedeTaskWithAuthorityCommand supersedes a task using generation-fenced authority.
 func SupersedeTaskWithAuthorityCommand(projectRoot, taskID string, replacementIDs []string, reason, recoverabilityCommand string, authority models.AgentAuthority) error {
+	return SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, replacementIDs, reason, recoverabilityCommand, authority, ops.LifecycleRequestOptions{})
+}
+
+func SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID string, replacementIDs []string, reason, recoverabilityCommand string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
 	result, err := ops.SupersedeTaskWithAuthority(projectRoot, taskID, replacementIDs, reason, authority, ops.SupersedeTaskOptions{
+		Request:               request,
 		RecoverabilityCommand: recoverabilityCommand,
 	})
 	return printSupersedeTaskResult(result, err)
@@ -28,6 +33,10 @@ func SupersedeTaskWithAuthorityCommand(projectRoot, taskID string, replacementID
 func printSupersedeTaskResult(result *ops.SupersedeResult, err error) error {
 	if err != nil {
 		return fmt.Errorf("supersede task: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	if len(result.ReplacementIDs) > 0 {

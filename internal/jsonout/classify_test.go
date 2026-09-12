@@ -337,8 +337,8 @@ func TestClassifyError_RaceCondition(t *testing.T) {
 		if code != "race_condition" {
 			t.Errorf("input=%q: code = %q, want %q", s, code, "race_condition")
 		}
-		if msg != "state changed concurrently, retry" {
-			t.Errorf("input=%q: message = %q, want %q", s, msg, "state changed concurrently, retry")
+		if msg != "state changed concurrently, requery current state" {
+			t.Errorf("input=%q: message = %q, want %q", s, msg, "state changed concurrently, requery current state")
 		}
 	}
 }
@@ -388,7 +388,7 @@ func TestClassifyError_OperationalErrorPreservesTransientCodes(t *testing.T) {
 			name:     "race condition surfaces through OperationalError",
 			inner:    fmt.Errorf("state changed concurrently"),
 			wantCode: "race_condition",
-			wantMsg:  "state changed concurrently, retry",
+			wantMsg:  "state changed concurrently, requery current state",
 		},
 		{
 			name:     "generic inner error falls back to OperationalError message",

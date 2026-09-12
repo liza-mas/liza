@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"bytes"
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -515,12 +517,26 @@ func TestCancelTask_RejectFromMerged(t *testing.T) {
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now),
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
+	before, err := os.ReadFile(stateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	_, err := CancelTask(tmpDir, "task-1", "reason", "orchestrator-1")
+	_, err = CancelTask(tmpDir, "task-1", "reason", "orchestrator-1")
 	if err == nil {
 		t.Fatal("Expected error for MERGED task")
 	}
-	testhelpers.AssertErrorContains(t, err, "transition")
+	var lifecycleErr *LifecycleError
+	if !stderrors.As(err, &lifecycleErr) || lifecycleErr.Outcome.Outcome != models.LifecycleAlreadyTransitioned || lifecycleErr.Outcome.SafeAction != "stop" || lifecycleErr.Outcome.TaskStatus != models.TaskStatusMerged {
+		t.Fatalf("terminal cancellation = %v, want ALREADY_TRANSITIONED/stop/MERGED", err)
+	}
+	after, err := os.ReadFile(stateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("terminal cancellation changed state")
+	}
 }
 
 func TestCancelTask_TaskNotFound(t *testing.T) {

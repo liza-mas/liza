@@ -173,6 +173,24 @@ When enabled, agents auto-call `§BRAND_BINARY_NAME§ resume` on CHECKPOINT or C
 
 ## Agent Review Cycles
 
+Mutating lifecycle commands return `result.outcome` and one server-selected
+`result.safe_action`, including on `ok:false` failures. Follow that field:
+`continue` proceeds, `stop` ends task work, `requery` inspects current state
+and possible effects, `retry` repeats the original request serially under the
+bounded retry policy, and `correct_input` fixes the named invalid fields.
+Never derive retry from error text. Preserve the original
+`--request-id` + `--expected-transition` pair and payload across retries;
+refreshing the token creates a new request and requires reevaluation.
+After a returned acceptance refusal, the command retires its own matching
+preparation when authority and the task boundary still match. Prior rebase or
+test effects remain unknown, and the original request stays stale. Inspect the
+task and worktree, repair the evidence, then submit its current immutable SHA
+with a fresh request and inspected transition; registration need not change.
+Process abandonment and uncertain merge completion retain their preparations
+and require inspected recovery before further work.
+See [Lifecycle Results](../specs/protocols/lifecycle-results.md) for receipt
+expiry, interrupted preparations and best-effort sprint counters.
+
 Both `§BRAND_BINARY_NAME§ await-verdict` and
 `§BRAND_BINARY_NAME§ await-resubmission` are foreground calls. Each invocation
 waits at most 100 seconds. `--timeout-seconds` is the remaining budget for the
@@ -192,6 +210,13 @@ whole review wait, not a new per-call allowance.
 ```
 §BRAND_BINARY_NAME§ submit-for-review → §BRAND_BINARY_NAME§ await-verdict → handle result
 ```
+
+Capture the full committed SHA once with `git -C <worktree> rev-parse HEAD`,
+submit that literal SHA, and retain it on retry. Wait for submission to finish
+with `COMPLETED` or `ALREADY_COMPLETED` and `safe_action=continue` before
+awaiting; never run submission and await concurrently. After authorized
+handoff/restart, inspect current state and capture the current immutable SHA
+for a fresh submission.
 
 - **REJECTED**: Fix issues, resubmit (session stays alive — no cold restart)
 - **ALREADY_TRANSITIONED**: Verdict was recovered after the task moved onward; follow `safe_action` (`stop` means exit without more worktree commands, `revise` means you still own it)
@@ -215,8 +240,9 @@ existing scripts by preserving that reviewed SHA; do not look up a replacement
 task boundary after a generation-fence error and pretend it was reviewed.
 
 A valid fenced verdict still fails authorization, but its bounded substantive
-evidence is retained separately. Diagnostics name the finding ID and generation
-fingerprints; the record preserves the immutable boundary. Missing generation,
+evidence is retained separately. Diagnostics name the finding ID and direct the
+caller to stop without exposing generations or their fingerprints; the stored
+record preserves the immutable boundary and provenance. Missing generation,
 malformed input,
 unknown task, and invalid or oversized reason are administrative failures
 without a substantive record. A valid unknown boundary is retained as unmatched

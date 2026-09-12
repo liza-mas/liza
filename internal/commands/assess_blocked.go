@@ -33,6 +33,10 @@ func printAssessBlockedResult(result *ops.AssessBlockedResult, err error) error 
 		return fmt.Errorf("assess blocked: %w", err)
 	}
 
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
+	}
+
 	fmt.Printf("Task %s assessed by orchestrator\n", result.TaskID)
 	if result.Reason != "" {
 		questions, err := json.Marshal(result.Questions)

@@ -3,6 +3,7 @@ package integration
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -289,7 +290,10 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 	})
 
 	t.Run("slice repair review exhaustion blocks global fan-in", func(t *testing.T) {
-		t.Parallel()
+		// Recreated worktrees must produce distinct attempt commits even when
+		// their content, parent, and Git timestamps are identical.
+		t.Setenv("GIT_AUTHOR_DATE", "2026-09-12T14:18:44Z")
+		t.Setenv("GIT_COMMITTER_DATE", "2026-09-12T14:18:44Z")
 
 		fixture := newSlicedLifecycleFixture(t, true)
 		fixture.modify(t, func(state *models.State) { state.Config.MaxReviewCycles = 1 })
@@ -1185,7 +1189,8 @@ func prepareCodingTaskReview(t *testing.T, fixture *slicedLifecycleFixture, task
 		t.Fatalf("write coding test fixture: %v", err)
 	}
 	testhelpers.MustGit(t, worktree, "add", fileName, testFile)
-	testhelpers.MustGit(t, worktree, "commit", "-m", "repair integration")
+	message := fmt.Sprintf("repair integration attempt %d iteration %d", task.EffectiveAttempt(), task.Iteration)
+	testhelpers.MustGit(t, worktree, "commit", "-m", message)
 	if err := ops.WriteCheckpoint(fixture.root, &ops.WriteCheckpointInput{
 		TaskID: taskID, AgentID: coderID, Intent: "repair integration finding", ValidationPlan: "project validation", FilesToModify: []string{fileName, testFile},
 	}); err != nil {

@@ -28,6 +28,8 @@ func UpdateSprintMetricsCommand(projectRoot string) error {
 		metrics.TaskSubmittedForReviewCount,
 		metrics.TaskOutcomeApprovalRatePercent)
 
+	fmt.Print(formatLifecycleMetrics(metrics.LifecycleOutcomes))
+
 	// Check for suspicious approval rates (>95%)
 	warnings := ops.CheckSuspiciousRates(metrics)
 	if len(warnings) > 0 {

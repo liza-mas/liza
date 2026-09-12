@@ -24,6 +24,7 @@ const integrationOperationSubmitForReview = "submit-for-review"
 
 // SubmitForReviewResult contains the outcome of submitting a task for review.
 type SubmitForReviewResult struct {
+	models.LifecycleOutcome
 	TaskID       string   `json:"task_id"`
 	ReviewCommit string   `json:"review_commit"`
 	AgentID      string   `json:"agent_id"`
@@ -42,26 +43,16 @@ var (
 // then atomically transitions the task to READY_FOR_REVIEW.
 // No terminal I/O.
 func SubmitForReview(projectRoot, taskID, commitRef, agentID string) (*SubmitForReviewResult, error) {
-	return submitForReview(projectRoot, taskID, commitRef, agentID, nil)
+	return submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID, nil, LifecycleRequestOptions{})
 }
 
 // SubmitForReviewWithAuthority is the authenticated command entry point. The
 // caller-held generation is revalidated inside every state transaction.
 func SubmitForReviewWithAuthority(projectRoot, taskID, commitRef string, authority models.AgentAuthority) (*SubmitForReviewResult, error) {
-	return submitForReview(projectRoot, taskID, commitRef, authority.ID, &authority)
+	return submitForReviewLifecycle(projectRoot, taskID, commitRef, authority.ID, &authority, LifecycleRequestOptions{})
 }
 
-func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *models.AgentAuthority) (*SubmitForReviewResult, error) {
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
-	}
-	if commitRef == "" {
-		return nil, &PreconditionError{Reason: "commit ref is required"}
-	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
-	}
-
+func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, invocation *submissionInvocation) (*preparedSubmission, error) {
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
@@ -74,6 +65,19 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
+	}
+	if authority != nil {
+		if err := RequireAgentAuthority(state, *authority); err != nil {
+			return nil, err
+		}
+	}
+	invocation.task = task
+	request, receipt, err := submissionRequest(task, commitRef, agentID, authority, opts)
+	if err != nil {
+		return nil, err
+	}
+	if receipt != nil {
+		return replaySubmission(task, receipt, agentID), nil
 	}
 
 	// Resolve expected statuses from pipeline config
@@ -95,7 +99,10 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	if task.Status != expectedCurrentStatus {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)}
+		return nil, &LifecycleError{
+			Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, task, models.LifecycleAlreadyTransitioned, "stop", "none"),
+			Err:     &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)},
+		}
 	}
 
 	if task.AssignedTo == nil || *task.AssignedTo != agentID {
@@ -103,7 +110,10 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 		if task.AssignedTo != nil {
 			currentAgent = *task.AssignedTo
 		}
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)}
+		return nil, &LifecycleError{
+			Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, task, models.LifecycleStaleCaller, "stop", "none"),
+			Err:     &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)},
+		}
 	}
 
 	if task.Worktree == nil {
@@ -118,7 +128,7 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 		return nil, err
 	}
 
-	// Phase 2: Execute git operations outside the lock
+	// Git work holds the task lock, never the blackboard lock.
 	g := gitpkg.New(projectRoot)
 	wtPath := g.GetWorktreePath(taskID)
 
@@ -174,6 +184,16 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 	}
 	if resolvedCommit != preRebaseCommit {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit ref %q resolved to %s, which does not match worktree HEAD %s", commitRef, resolvedCommit, preRebaseCommit)}
+	}
+	if opts.RequestID == "" {
+		// Persist the immutable input even when the first legacy call used HEAD.
+		request, receipt, err = submissionRequest(task, resolvedCommit, agentID, authority, opts)
+		if err != nil {
+			return nil, err
+		}
+		if receipt != nil {
+			return replaySubmission(task, receipt, agentID), nil
+		}
 	}
 
 	// TDD enforcement: code tasks must include test files (doer roles only).
@@ -235,6 +255,28 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 		}
 	}
 
+	var preparation models.LifecyclePreparation
+	if err := modifyLifecycleState(bb, authority, func(current *models.State) error {
+		live := current.FindTask(taskID)
+		if live == nil {
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if live.Status != expectedCurrentStatus || live.AssignedTo == nil || *live.AssignedTo != agentID {
+			return &LifecycleError{Outcome: NewLifecycleOutcome(request.Operation, live, models.LifecycleStateChanged, "requery", "none"), Err: fmt.Errorf("submission ownership changed before preparation")}
+		}
+		if err := validateOutputArtifactRefScalars(taskID, live.Output); err != nil {
+			return err
+		}
+		if err := PrepareLifecycleRequest(live, request); err != nil {
+			return err
+		}
+		preparation = *live.Lifecycle.Preparation
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	invocation.preparation = &preparation
+	invocation.effects = true
 	if err := g.RebaseOnto(wtPath, rebaseBase); err != nil {
 		// Abort rebase to restore clean worktree state — don't leave agents
 		// in a mid-rebase state where they struggle with --continue/--abort.
@@ -259,7 +301,7 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 		// Transition to INTEGRATION_FAILED so the orchestrator re-queues the task.
 		// This catches conflicts early (before review), avoiding a wasted review cycle.
 		// See also: markIntegrationFailed in wt_merge.go (sibling for post-review merge path).
-		markErr := markSubmitRebaseConflict(bb, taskID, agentID, authority, pipelineTransitions)
+		markErr := markSubmitRebaseConflict(bb, taskID, agentID, authority, pipelineTransitions, request)
 		if markErr != nil {
 			return nil, &OperationalError{
 				Code:    "state_write",
@@ -298,99 +340,145 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 		return nil, err
 	}
 
-	indexWarnings := refreshSubmitReviewScipIndexes(wtPath, state.Config.ScipSearch)
-	indexWarnings = append(indexWarnings, refreshSubmitReviewStacklitIndex(wtPath)...)
-	indexWarnings = append(indexWarnings, refreshSubmitReviewFunctionalClustersIndex(wtPath, state.Config.ScipSearch)...)
-	receipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, postRebaseCommit)
-	if err != nil {
-		return nil, err
-	}
-
-	// Phase 3: Atomic update with new commit SHA
-	now := time.Now().UTC()
-	if submitReviewBeforeModifyTestHook != nil {
-		submitReviewBeforeModifyTestHook()
-	}
-
-	err = modifyLifecycleState(bb, authority, func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-
-		if task.Status != expectedCurrentStatus {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)}
-		}
-
-		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			currentAgent := "none"
-			if task.AssignedTo != nil {
-				currentAgent = *task.AssignedTo
+	return &preparedSubmission{
+		refresh: func() []string {
+			warnings := refreshSubmitReviewScipIndexes(wtPath, state.Config.ScipSearch)
+			warnings = append(warnings, refreshSubmitReviewStacklitIndex(wtPath)...)
+			return append(warnings, refreshSubmitReviewFunctionalClustersIndex(wtPath, state.Config.ScipSearch)...)
+		},
+		complete: func() (*SubmitForReviewResult, error) {
+			// Indexing ran without task locking. Recheck Git before publishing its candidate.
+			liveBranch, err := g.GetWorktreeBranch(wtPath)
+			if err != nil {
+				return nil, err
 			}
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)}
-		}
-		if err := validateOutputArtifactRefScalars(taskID, task.Output); err != nil {
-			return err
-		}
+			liveHEAD, err := g.GetWorktreeHEAD(taskID)
+			if err != nil {
+				return nil, err
+			}
+			if liveBranch != expectedBranch || liveHEAD != postRebaseCommit {
+				return nil, &LifecycleError{Outcome: NewLifecycleOutcome(request.Operation, invocation.task, models.LifecycleStateChanged, "requery", "unknown"), Err: fmt.Errorf("worktree candidate changed while refreshing indexes")}
+			}
 
-		if err := recheckAcceptanceReceipt(projectRoot, state, task, acceptance, receipt); err != nil {
-			return err
-		}
-		if receipt != nil {
-			task.AcceptanceSource = &receipt.Source
-		}
-		task.AcceptanceReceipt = receipt
-		if err := task.TransitionWith(targetSubmittedStatus, pipelineTransitions); err != nil {
-			return err
-		}
-		task.ReviewCommit = &postRebaseCommit
-		// Update BaseCommit from "branched from" to "rebased onto" — this is the
-		// integration HEAD the rebase targeted, ensuring the reviewer diffs only
-		// the coder's changes (not integration commits that landed since claim).
-		task.BaseCommit = &rebaseBase
+			current, err := bb.Read()
+			if err != nil {
+				return nil, err
+			}
+			if authority != nil {
+				if err := RequireAgentAuthority(current, *authority); err != nil {
+					return nil, err
+				}
+			}
+			if err := ValidateLifecyclePreparation(current.FindTask(taskID), request); err != nil {
+				return nil, err
+			}
+			acceptanceReceipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, postRebaseCommit)
+			if err != nil {
+				return nil, err
+			}
 
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventSubmittedForReview,
-			Agent:  &agentID,
-			Commit: &postRebaseCommit,
-		})
+			// Phase 3: Atomic update with new commit SHA
+			var outcome models.LifecycleOutcome
+			now := time.Now().UTC()
+			if submitReviewBeforeModifyTestHook != nil {
+				submitReviewBeforeModifyTestHook()
+			}
 
-		task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
-			Timestamp: now,
-			Agent:     agentID,
-			Trigger:   models.HandoffTriggerSubmission,
-		})
+			err = modifyLifecycleState(bb, authority, func(state *models.State) error {
+				task := state.FindTask(taskID)
+				if task == nil {
+					return &errors.NotFoundError{Entity: "task", ID: taskID}
+				}
+				invocation.task = task
+				if err := ValidateLifecyclePreparation(task, request); err != nil {
+					return err
+				}
+				if task.Worktree == nil || *task.Worktree != *reviewBoundaryTask.Worktree {
+					return &LifecycleError{Outcome: NewLifecycleOutcome(request.Operation, task, models.LifecycleStateChanged, "requery", "unknown"), Err: fmt.Errorf("task worktree changed before submission")}
+				}
 
-		if agent, ok := state.Agents[agentID]; ok {
-			agent.Status = models.AgentStatusWaiting
-			agent.CurrentTask = nil
-			agent.LeaseExpires = nil
-			state.Agents[agentID] = agent
-		}
+				if task.Status != expectedCurrentStatus {
+					return &PreconditionError{Reason: fmt.Sprintf("task %s is not %s (current status: %s)", taskID, expectedCurrentStatus, task.Status)}
+				}
 
-		return nil
-	})
+				if task.AssignedTo == nil || *task.AssignedTo != agentID {
+					currentAgent := "none"
+					if task.AssignedTo != nil {
+						currentAgent = *task.AssignedTo
+					}
+					return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)}
+				}
+				if err := validateOutputArtifactRefScalars(taskID, task.Output); err != nil {
+					return err
+				}
 
-	if err != nil {
-		return nil, &OperationalError{
-			Code:    "state_write",
-			Phase:   "write-state",
-			Message: "failed to submit task for review",
-			Details: map[string]any{
-				"operation":     integrationOperationSubmitForReview,
-				"task_id":       taskID,
-				"recovery_hint": "Re-read task state, resolve any concurrent state change or validation issue, then retry submit-for-review.",
-			},
-			Err: err,
-		}
-	}
+				if err := recheckAcceptanceReceipt(projectRoot, state, task, acceptance, acceptanceReceipt); err != nil {
+					return err
+				}
+				if acceptanceReceipt != nil {
+					task.AcceptanceSource = &acceptanceReceipt.Source
+				}
+				task.AcceptanceReceipt = acceptanceReceipt
+				if err := task.TransitionWith(targetSubmittedStatus, pipelineTransitions); err != nil {
+					return err
+				}
+				task.ReviewCommit = &postRebaseCommit
+				// Update BaseCommit from "branched from" to "rebased onto" — this is the
+				// integration HEAD the rebase targeted, ensuring the reviewer diffs only
+				// the coder's changes (not integration commits that landed since claim).
+				task.BaseCommit = &rebaseBase
 
-	return &SubmitForReviewResult{
-		TaskID:       taskID,
-		ReviewCommit: postRebaseCommit,
-		AgentID:      agentID,
-		Warnings:     indexWarnings,
+				task.History = append(task.History, models.TaskHistoryEntry{
+					Time:                  now,
+					Event:                 models.TaskEventSubmittedForReview,
+					Agent:                 &agentID,
+					Commit:                &postRebaseCommit,
+					SubmissionInputCommit: preRebaseCommit,
+					SubmissionAttempt:     task.EffectiveAttempt(),
+				})
+
+				task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
+					Timestamp: now,
+					Agent:     agentID,
+					Trigger:   models.HandoffTriggerSubmission,
+				})
+
+				if agent, ok := state.Agents[agentID]; ok {
+					agent.Status = models.AgentStatusWaiting
+					agent.CurrentTask = nil
+					agent.LeaseExpires = nil
+					state.Agents[agentID] = agent
+				}
+
+				var completeErr error
+				outcome, completeErr = CompleteLifecycleRequest(task, request, models.LifecycleProjection{
+					InputCommit: preRebaseCommit, ReviewCommit: postRebaseCommit, BaseCommit: rebaseBase,
+					Attempt: task.EffectiveAttempt(), Iteration: task.Iteration, SourceStatus: expectedCurrentStatus,
+				})
+				return completeErr
+			})
+
+			if err != nil {
+				return nil, &OperationalError{
+					Code:    "state_write",
+					Phase:   "write-state",
+					Message: "failed to submit task for review",
+					Details: map[string]any{
+						"operation":     integrationOperationSubmitForReview,
+						"task_id":       taskID,
+						"recovery_hint": "Re-read task state, resolve any concurrent state change or validation issue, then retry submit-for-review.",
+					},
+					Err: err,
+				}
+			}
+
+			return &SubmitForReviewResult{
+				LifecycleOutcome: outcome,
+				TaskID:           taskID,
+				ReviewCommit:     postRebaseCommit,
+				AgentID:          agentID,
+			}, nil
+		},
 	}, nil
 }
 
@@ -488,12 +576,15 @@ func truncateForDiagnostics(s string, limit int) string {
 // Sibling: markIntegrationFailed in wt_merge.go handles the post-review merge path.
 // Both share the pattern: transition → append FailedBy → write history entry.
 // They differ in pre-conditions (approved vs implementing) and post-actions (agent release).
-func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, pipelineTransitions map[models.TaskStatus][]models.TaskStatus) error {
+func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, request LifecycleRequest) error {
 	reason := IntegrationReasonMergeConflict
 	return modifyLifecycleState(bb, authority, func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if err := ValidateLifecyclePreparation(t, request); err != nil {
+			return err
 		}
 		if err := t.TransitionWith(models.TaskStatusIntegrationFailed, pipelineTransitions); err != nil {
 			return err
@@ -502,6 +593,7 @@ func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, authori
 		t.IntegrationFix = false
 		t.AssignedTo = nil
 		t.LeaseExpires = nil
+		models.AdvanceLifecycle(t)
 
 		now := time.Now().UTC()
 		diagnostic := map[string]any{

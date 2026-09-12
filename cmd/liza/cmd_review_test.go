@@ -370,11 +370,26 @@ func TestSubmitForReviewCLI_JSONIncludesScipWarnings(t *testing.T) {
 		t.Fatalf("unmarshal json: %v\n%s", err, stdout)
 	}
 	warnings, ok := env["warnings"].([]any)
-	if !ok || len(warnings) != 1 {
-		t.Fatalf("warnings = %#v, want one scip warning", env["warnings"])
+	if !ok {
+		t.Fatalf("warnings = %#v, want scip warning", env["warnings"])
 	}
-	if !strings.Contains(warnings[0].(string), "scip-search go:") || !strings.Contains(warnings[0].(string), "fake scip-go failed") {
-		t.Fatalf("warning = %q, want scip-search go failure", warnings[0])
+	scipWarnings := 0
+	for _, warning := range warnings {
+		message, ok := warning.(string)
+		if !ok {
+			t.Fatalf("warning = %#v, want string", warning)
+		}
+		if strings.HasPrefix(message, "scip-search go:") {
+			scipWarnings++
+			if !strings.Contains(message, "fake scip-go failed") {
+				t.Fatalf("warning = %q, want scip-search go failure", message)
+			}
+		} else if message != "lifecycle metrics unavailable: unknown sprint identity" {
+			t.Fatalf("unexpected warning: %q", message)
+		}
+	}
+	if scipWarnings != 1 {
+		t.Fatalf("scip warnings = %d, want exactly one", scipWarnings)
 	}
 
 	state, err := db.For(statePath).Read()

@@ -18,13 +18,21 @@ func RepairSupersededDependenciesCommand(projectRoot, taskID, reason, agentID st
 
 // RepairSupersededDependenciesWithAuthorityCommand repairs dependencies using generation-fenced authority.
 func RepairSupersededDependenciesWithAuthorityCommand(projectRoot, taskID, reason string, authority models.AgentAuthority) error {
-	result, err := ops.RepairSupersededDependenciesWithAuthority(projectRoot, taskID, reason, authority)
+	return RepairSupersededDependenciesWithAuthorityAndOptionsCommand(projectRoot, taskID, reason, authority, ops.LifecycleRequestOptions{})
+}
+
+func RepairSupersededDependenciesWithAuthorityAndOptionsCommand(projectRoot, taskID, reason string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.RepairSupersededDependenciesWithAuthorityAndOptions(projectRoot, taskID, reason, authority, request)
 	return printRepairSupersededDependenciesResult(result, err)
 }
 
 func printRepairSupersededDependenciesResult(result *ops.RepairSupersededDependenciesResult, err error) error {
 	if err != nil {
 		return fmt.Errorf("repair superseded dependencies: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("Repaired superseded dependencies for %s\n", result.TaskID)

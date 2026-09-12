@@ -20,23 +20,28 @@ type AgentAuthorityError struct {
 }
 
 func (e *AgentAuthorityError) Error() string {
-	return fmt.Sprintf(
-		"agent %s authority rejected: losing generation fingerprint %s, current generation fingerprint %s",
-		nonEmptyGeneration(e.AgentID),
-		generationFingerprint(e.LosingGeneration),
-		generationFingerprint(e.CurrentGeneration),
-	)
+	reason := "registration changed"
+	if e.LosingGeneration == "" || e.CurrentGeneration == "" {
+		reason = "missing registration authority"
+	}
+	return fmt.Sprintf("agent %s authority rejected: %s; stop", nonEmptyGeneration(e.AgentID), reason)
 }
 
-// SafeDetails exposes structured generation diagnostics to JSON error writers.
+// SafeDetails identifies a rejected caller without disclosing registration values.
 func (e *AgentAuthorityError) SafeDetails() map[string]any {
 	return map[string]any{
-		"agent_id":                       e.AgentID,
-		"losing_generation_fingerprint":  generationFingerprint(e.LosingGeneration),
-		"current_generation_fingerprint": generationFingerprint(e.CurrentGeneration),
+		"agent_id":    e.AgentID,
+		"outcome":     "STALE_CALLER",
+		"safe_action": "stop",
+		"effects":     "none",
 	}
 }
 
+// LifecycleResult lets presentation adapters expose recovery even when authority
+// was rejected before a task could safely be observed.
+func (e *AgentAuthorityError) LifecycleResult() any { return e.SafeDetails() }
+
+// generationFingerprint remains internal provenance for quarantined evidence.
 func generationFingerprint(value string) string {
 	if value == "" {
 		return missingAgentGeneration

@@ -25,6 +25,7 @@ import (
 
 // ClaimResult contains the outcome of a successful task claim.
 type ClaimResult struct {
+	models.LifecycleOutcome
 	TaskID            string            `json:"task_id"`
 	AgentID           string            `json:"agent_id"`
 	SourceStatus      models.TaskStatus `json:"source_status"`
@@ -66,10 +67,26 @@ func ClaimTaskWithAuthority(projectRoot, taskID string, authority models.AgentAu
 }
 
 func claimTaskWithOptionalAuthority(projectRoot, taskID, agentID string, authority *models.AgentAuthority, sessions ...*ValidationSession) (*ClaimResult, error) {
-	var result *ClaimResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "task-claim-worktree", func() error {
+	return ClaimTaskWithRequest(projectRoot, taskID, agentID, authority, LifecycleRequestOptions{}, sessions...)
+}
+
+// ClaimTaskWithRequest preserves the caller's original claim identity across
+// retries, including after the task has moved beyond its claimed state.
+func ClaimTaskWithRequest(projectRoot, taskID, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, sessions ...*ValidationSession) (result *ClaimResult, err error) {
+	invocation := &ownershipInvocation{operation: "claim-task", opts: opts, authority: authority, metrics: NewLifecycleInvocation(projectRoot)}
+	defer func() { err = invocation.finish(projectRoot, err) }()
+	if taskID == "" {
+		return nil, &PreconditionError{Reason: "task ID is required"}
+	}
+	if agentID == "" {
+		return nil, &PreconditionError{Reason: "agent ID is required"}
+	}
+	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+		return nil, &PreconditionError{Reason: err.Error()}
+	}
+	err = WithProjectLifecycleSharedLock(projectRoot, "task-claim-worktree", func() error {
 		var claimErr error
-		result, claimErr = claimTask(projectRoot, taskID, agentID, authority, sessions...)
+		result, claimErr = claimTask(projectRoot, taskID, agentID, authority, invocation, sessions...)
 		return claimErr
 	})
 	if err != nil {
@@ -119,14 +136,7 @@ func degradeOnPostWorktreeSetupFailure(projectRoot, taskID, agentID string, auth
 	return fmt.Errorf("%w: %w", ErrAgentDegraded, err)
 }
 
-func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAuthority, sessions ...*ValidationSession) (*ClaimResult, error) {
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
-	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "agent ID is required"}
-	}
-
+func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAuthority, invocation *ownershipInvocation, sessions ...*ValidationSession) (*ClaimResult, error) {
 	// Worktree path is deterministic from taskID — always "worktrees/<taskID>".
 	// This is the canonical path regardless of task status or prior claim history.
 	lp := paths.New(projectRoot)
@@ -152,6 +162,12 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	if err != nil {
 		return nil, err
 	}
+	if authority != nil {
+		if err := RequireAgentAuthority(state, *authority); err != nil {
+			return nil, err
+		}
+	}
+	invocation.observe(task)
 
 	runtimeRole, err := identity.ExtractRole(agentID)
 	if err != nil {
@@ -184,6 +200,25 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	doerRole, err := resolver.DoerRole(task.RolePair)
 	if err != nil {
 		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	if runtimeRole != doerRole {
+		return nil, &PreconditionError{Reason: "agent role cannot claim this task"}
+	}
+	if _, err := requireRegisteredClaimAgent(state, agentID, runtimeRole); err != nil {
+		return nil, err
+	}
+	request, err := NewLifecycleRequest("claim-task", task, agentID, authority, invocation.opts, nil)
+	if err != nil {
+		return nil, err
+	}
+	invocation.request = request
+	receipt, err := CheckLifecycleRequest(task, request)
+	if err != nil {
+		return nil, err
+	}
+	if receipt != nil {
+		invocation.outcome = LifecycleReplayOutcome(task, receipt, agentID)
+		return replayClaimResult(task, receipt, agentID), nil
 	}
 
 	// Sentinel guard: reject claims on tasks in transition (e.g. "$transitioning"
@@ -228,6 +263,8 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	}
 	maxCoderIterations = effectiveCoderIterationLimit(task, state.Config)
 	claimCtx = claimContext{
+		authority:           authority,
+		request:             &invocation.request,
 		taskID:              taskID,
 		agentID:             agentID,
 		taskStatus:          taskStatus,
@@ -262,17 +299,21 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 				if taErr != nil {
 					return nil, fmt.Errorf("failed to transition to new attempt: %w", taErr)
 				}
-				return nil, &PreconditionError{Reason: fmt.Sprintf(
+				invocation.effects = true
+				outcome := result.LifecycleOutcome
+				outcome.Operation, outcome.Outcome, outcome.SafeAction = "claim-task", models.LifecycleAlreadyTransitioned, "stop"
+				return nil, &LifecycleError{Outcome: outcome, Err: &PreconditionError{Reason: fmt.Sprintf(
 					"task %s exhausted limits, transitioned to attempt %d — claimable on next cycle",
 					taskID, result.NewAttempt,
-				)}
+				)}}
 			case LimitActionBlocked:
-				if err := enforceBlockedEscalation(bb, taskID, agentID, taskStatus, pipelineTransitions, escalation, authority); err != nil {
+				if err := enforceBlockedEscalation(bb, taskID, agentID, taskStatus, pipelineTransitions, escalation, authority, &invocation.outcome); err != nil {
 					return nil, fmt.Errorf("failed to enforce escalation limit: %w", err)
 				}
-				return nil, &PreconditionError{Reason: fmt.Sprintf(
+				invocation.effects = true
+				return nil, &LifecycleError{Outcome: invocation.outcome, Err: &PreconditionError{Reason: fmt.Sprintf(
 					"task %s transitioned to BLOCKED — %s", taskID, escalation.reason,
-				)}
+				)}}
 			}
 		}
 	}
@@ -300,6 +341,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 			pipelineTransitions,
 			resolver,
 			authority,
+			invocation,
 			validationSession(sessions),
 		)
 		return lockedErr
@@ -333,8 +375,29 @@ func completeClaimTaskAfterValidation(
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus,
 	resolver models.PipelineResolver,
 	authority *models.AgentAuthority,
+	invocation *ownershipInvocation,
 	sessions ...*ValidationSession,
-) (*ClaimResult, error) {
+) (result *ClaimResult, retErr error) {
+	// A concurrent identical call may have completed while this invocation
+	// waited for the task lock. Replay before checking ordinary claimability.
+	state, current, readErr := readTaskState(bb, taskID)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if authority != nil {
+		if err := RequireAgentAuthority(state, *authority); err != nil {
+			return nil, err
+		}
+	}
+	invocation.observe(current)
+	receipt, checkErr := CheckLifecycleRequest(current, invocation.request)
+	if checkErr != nil {
+		return nil, checkErr
+	}
+	if receipt != nil {
+		invocation.outcome = LifecycleReplayOutcome(current, receipt, agentID)
+		return replayClaimResult(current, receipt, agentID), nil
+	}
 	// --- Phase 2: Handle Worktree ---
 	lockedTask, err := recheckClaimTaskBeforeWorktree(
 		bb,
@@ -375,6 +438,40 @@ func completeClaimTaskAfterValidation(
 	if err != nil {
 		return nil, err
 	}
+	// Reserve the external effect while both the task worktree lock and the
+	// generation-fenced state transaction establish the current boundary.
+	var preparation models.LifecyclePreparation
+	if err := lifecycleMutation(bb, authority)(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		invocation.observe(task)
+		if task.Status != taskStatus {
+			return fmt.Errorf("task changed before claim preparation")
+		}
+		if _, err := requireRegisteredClaimAgent(state, agentID, runtimeRole); err != nil {
+			return err
+		}
+		if reason := models.DoerClaimBlockedReason(state, task, runtimeRole, agentID, resolver, time.Now().UTC()); reason != "" {
+			return &PreconditionError{Reason: reason}
+		}
+		if err := PrepareLifecycleRequest(task, invocation.request); err != nil {
+			return err
+		}
+		preparation = *task.Lifecycle.Preparation
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	// Arm retirement only after our preparation is persisted. Ordinary returns
+	// unwind Git cleanup first; a panic never assigns retErr and stays fenced.
+	defer func() {
+		if retErr != nil {
+			retErr = retireFailedLifecyclePreparation(bb, taskID, authority, &preparation, retErr, "unknown")
+		}
+	}()
+	invocation.effects = true
 
 	worktreePhase, err := handleClaimTaskWorktreePhase(
 		bb,
@@ -454,13 +551,16 @@ func completeClaimTaskAfterValidation(
 		if len(task.ValidationPrerequisites) > 0 && preflight == nil {
 			return validationError("context_changed")
 		}
-
+		invocation.observe(task)
 		if task.Status != taskStatus {
 			return fmt.Errorf("race condition: task status changed from %s to %s", taskStatus, task.Status)
 		}
 
 		if reason := models.DoerClaimBlockedReason(state, task, runtimeRole, agentID, resolver, now); reason != "" {
 			return &PreconditionError{Reason: reason}
+		}
+		if err := ValidateLifecyclePreparation(task, invocation.request); err != nil {
+			return err
 		}
 
 		// Verify worktree health before committing state (unconditional —
@@ -517,7 +617,11 @@ func completeClaimTaskAfterValidation(
 			}
 		}
 
-		return nil
+		var completeErr error
+		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, models.LifecycleProjection{
+			SourceStatus: taskStatus, BaseCommit: claimCtx.baseCommit, LeaseExpires: leaseExpires.Format(time.RFC3339Nano), Attempt: task.EffectiveAttempt(), Iteration: task.Iteration,
+		})
+		return completeErr
 	}
 
 	if _, preserveInitial := strategy.(preservedInitialClaimStrategy); preserveInitial {
@@ -595,6 +699,7 @@ func completeClaimTaskAfterValidation(
 	warnings = append(warnings, functionalClustersWarnings...)
 
 	return &ClaimResult{
+		LifecycleOutcome:  invocation.outcome,
 		TaskID:            taskID,
 		AgentID:           agentID,
 		SourceStatus:      taskStatus,
@@ -640,6 +745,13 @@ func recheckClaimTaskBeforeWorktree(
 		return nil, fmt.Errorf("race condition: agent %s became busy with %s", agentID, *agent.CurrentTask)
 	}
 	return task, nil
+}
+
+func replayClaimResult(task *models.Task, receipt *models.LifecycleReceipt, actor string) *ClaimResult {
+	lease, _ := time.Parse(time.RFC3339Nano, receipt.Projection.LeaseExpires)
+	return &ClaimResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, actor), TaskID: task.ID, AgentID: actor,
+		SourceStatus: receipt.Projection.SourceStatus, WorktreeRel: path.Join(paths.WorktreesDirName, task.ID), BaseCommit: receipt.Projection.BaseCommit,
+		LeaseExpires: lease, IntegrationFix: receipt.Projection.SourceStatus == models.TaskStatusIntegrationFailed}
 }
 
 func unmetDependencies(task *models.Task, state *models.State) []models.DependencySatisfaction {
@@ -838,6 +950,7 @@ func enforceBlockedEscalation(
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus,
 	escalation limitEscalation,
 	authority *models.AgentAuthority,
+	outcomes ...*models.LifecycleOutcome,
 ) error {
 	now := time.Now().UTC()
 
@@ -881,6 +994,7 @@ func enforceBlockedEscalation(
 			}
 		}
 		task.AssignedTo = nil
+		models.AdvanceLifecycle(task)
 
 		agentPtr := &agentID
 		reasonPtr := &blockedReason
@@ -890,6 +1004,9 @@ func enforceBlockedEscalation(
 			Agent:  agentPtr,
 			Reason: reasonPtr,
 		})
+		for _, outcome := range outcomes {
+			*outcome = NewLifecycleOutcome("claim-task", task, models.LifecycleAlreadyTransitioned, "stop", "committed")
+		}
 
 		return nil
 	})

@@ -9,9 +9,17 @@ import (
 // ReleaseClaimCommand releases claims on a task and prints the result to stdout.
 // Delegates business logic to ops.ReleaseClaim.
 func ReleaseClaimCommand(projectRoot, taskID, role string, force bool, reason, agentID string) error {
-	result, err := ops.ReleaseClaim(projectRoot, taskID, role, force, reason, agentID)
+	return ReleaseClaimWithOptionsCommand(projectRoot, taskID, role, force, reason, agentID, ops.LifecycleRequestOptions{})
+}
+
+func ReleaseClaimWithOptionsCommand(projectRoot, taskID, role string, force bool, reason, agentID string, request ops.LifecycleRequestOptions) error {
+	result, err := ops.ReleaseClaimWithRequest(projectRoot, taskID, role, force, reason, agentID, nil, request)
 	if err != nil {
 		return fmt.Errorf("release claim: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	if result.ReleasedReviewer {

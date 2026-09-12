@@ -18,13 +18,21 @@ func ApplyDependencyRepairCommand(projectRoot, sourceTaskID, reason, agentID str
 
 // ApplyDependencyRepairWithAuthorityCommand applies a repair using generation-fenced authority.
 func ApplyDependencyRepairWithAuthorityCommand(projectRoot, sourceTaskID, reason string, authority models.AgentAuthority) error {
-	result, err := ops.ApplyDependencyRepairWithAuthority(projectRoot, sourceTaskID, reason, authority)
+	return ApplyDependencyRepairWithAuthorityAndOptionsCommand(projectRoot, sourceTaskID, reason, authority, ops.LifecycleRequestOptions{})
+}
+
+func ApplyDependencyRepairWithAuthorityAndOptionsCommand(projectRoot, sourceTaskID, reason string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.ApplyDependencyRepairWithAuthorityAndOptions(projectRoot, sourceTaskID, reason, authority, request)
 	return printApplyDependencyRepairResult(result, err)
 }
 
 func printApplyDependencyRepairResult(result *ops.ApplyDependencyRepairResult, err error) error {
 	if err != nil {
 		return fmt.Errorf("apply dependency repair: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("Applied dependency repair requested by %s\n", result.SourceTaskID)

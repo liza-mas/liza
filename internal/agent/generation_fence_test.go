@@ -210,7 +210,7 @@ func TestSupervisorDispatchGenerationFence(t *testing.T) {
 	})
 }
 
-func assertSupervisorAuthorityError(t *testing.T, err error, agentID string) {
+func assertSupervisorAuthorityError(t *testing.T, err error, agentID string, generations ...string) {
 	t.Helper()
 	var authorityErr *ops.AgentAuthorityError
 	if !errors.As(err, &authorityErr) {
@@ -218,17 +218,22 @@ func assertSupervisorAuthorityError(t *testing.T, err error, agentID string) {
 	}
 	for _, want := range []string{
 		agentID,
-		fmt.Sprintf("losing generation fingerprint %x", sha256.Sum256([]byte(generationA))),
-		fmt.Sprintf("current generation fingerprint %x", sha256.Sum256([]byte(generationB))),
+		"stop",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
 		}
 	}
-	for _, raw := range []string{generationA, generationB} {
-		if strings.Contains(err.Error(), raw) {
-			t.Error("authority error exposes a raw registration generation")
+	if len(generations) == 0 {
+		generations = []string{generationA, generationB}
+	}
+	for _, generation := range generations {
+		if strings.Contains(err.Error(), generation) || strings.Contains(err.Error(), fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))) {
+			t.Error("authority error exposes a registration generation or fingerprint")
 		}
+	}
+	if authorityErr.SafeDetails()["safe_action"] != "stop" {
+		t.Error("authority rejection must direct the caller to stop")
 	}
 }
 

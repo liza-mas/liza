@@ -50,6 +50,13 @@ This pattern prevents TOCTOU races in multi-agent scenarios.`,
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
 			return err
@@ -67,11 +74,12 @@ This pattern prevents TOCTOU races in multi-agent scenarios.`,
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.ClaimTaskWithAuthority(projectRoot, taskID, authority)
+			result, err := ops.ClaimTaskWithRequest(projectRoot, taskID, authority.ID, &authority, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.ClaimTaskWithAuthorityCommand(projectRoot, taskID, authority)
+		return commands.ClaimTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, authority, requestOpts)
 	},
 }
 
@@ -254,6 +262,13 @@ Examples:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 
 		reason, _ := cmd.Flags().GetString("reason")
@@ -284,13 +299,15 @@ Examples:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
 			result, err := ops.SupersedeTaskWithAuthority(projectRoot, taskID, replacementIDs, reason, authority, ops.SupersedeTaskOptions{
+				Request:               requestOpts,
 				RecoverabilityCommand: recoverabilityCommand,
 			})
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.SupersedeTaskWithAuthorityCommand(projectRoot, taskID, replacementIDs, reason, recoverabilityCommand, authority)
+		return commands.SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, replacementIDs, reason, recoverabilityCommand, authority, requestOpts)
 	},
 }
 
@@ -322,6 +339,13 @@ Examples:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		oldDependency := args[1]
 		newDependencies := strings.Split(args[2], ",")
@@ -345,15 +369,16 @@ Examples:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.RetargetDependencyWithAuthority(projectRoot, taskID, oldDependency, newDependencies, reason, authority)
+			result, err := ops.RetargetDependencyWithAuthorityAndOptions(projectRoot, taskID, oldDependency, newDependencies, reason, authority, requestOpts)
 			verbose, _ := cmd.Flags().GetBool("verbose")
 			if verbose {
 				writeRetargetDependencyVerboseDiagnostic(os.Stderr, err)
 			}
 			return jsonout.WriteResult(os.Stdout, result, resultWarnings(result), err)
 		}
-		return commands.RetargetDependencyWithAuthorityCommand(projectRoot, taskID, oldDependency, newDependencies, reason, authority)
+		return commands.RetargetDependencyWithAuthorityAndOptionsCommand(projectRoot, taskID, oldDependency, newDependencies, reason, authority, requestOpts)
 	},
 }
 
@@ -404,6 +429,13 @@ Example:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		sourceTaskID := args[0]
 		reason, _ := cmd.Flags().GetString("reason")
 
@@ -425,11 +457,12 @@ Example:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.ApplyDependencyRepairWithAuthority(projectRoot, sourceTaskID, reason, authority)
+			result, err := ops.ApplyDependencyRepairWithAuthorityAndOptions(projectRoot, sourceTaskID, reason, authority, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, resultWarnings(result), err)
 		}
-		return commands.ApplyDependencyRepairWithAuthorityCommand(projectRoot, sourceTaskID, reason, authority)
+		return commands.ApplyDependencyRepairWithAuthorityAndOptionsCommand(projectRoot, sourceTaskID, reason, authority, requestOpts)
 	},
 }
 
@@ -457,6 +490,13 @@ Example:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		reason, _ := cmd.Flags().GetString("reason")
 
@@ -478,11 +518,12 @@ Example:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.RepairSupersededDependenciesWithAuthority(projectRoot, taskID, reason, authority)
+			result, err := ops.RepairSupersededDependenciesWithAuthorityAndOptions(projectRoot, taskID, reason, authority, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, resultWarnings(result), err)
 		}
-		return commands.RepairSupersededDependenciesWithAuthorityCommand(projectRoot, taskID, reason, authority)
+		return commands.RepairSupersededDependenciesWithAuthorityAndOptionsCommand(projectRoot, taskID, reason, authority, requestOpts)
 	},
 }
 
@@ -524,6 +565,13 @@ Effects:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 
 		reason, _ := cmd.Flags().GetString("reason")
@@ -551,6 +599,8 @@ Effects:
 			return err
 		}
 
+		opts.Request = requestOpts
+		invocation.calledOps = true
 		if isJSON(cmd) {
 			result, err := ops.MarkBlockedWithAuthority(projectRoot, taskID, reason, questions, authority, opts)
 			return jsonout.WriteResult(os.Stdout, result, resultWarnings(result), err)
@@ -583,6 +633,13 @@ var unblockTaskCmd = &cobra.Command{
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		assignTo, _ := cmd.Flags().GetString("assign-to")
 		if !cmd.Flags().Changed("assign-to") {
@@ -598,6 +655,7 @@ var unblockTaskCmd = &cobra.Command{
 			allowDirty = false
 		}
 		opts := ops.UnblockTaskOptions{
+			Request:    requestOpts,
 			AssignTo:   assignTo,
 			RebaseOn:   rebaseOn,
 			AllowDirty: allowDirty,
@@ -621,6 +679,7 @@ var unblockTaskCmd = &cobra.Command{
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
 			result, err := ops.UnblockTaskWithAuthority(projectRoot, taskID, reason, authority, opts)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
@@ -752,6 +811,13 @@ Requirements:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 
 		note, _ := cmd.Flags().GetString("note")
@@ -778,6 +844,8 @@ Requirements:
 			return err
 		}
 
+		opts.Request = requestOpts
+		invocation.calledOps = true
 		if isJSON(cmd) {
 			result, err := ops.AssessBlockedWithAuthority(projectRoot, taskID, note, authority, opts)
 			return jsonout.WriteResult(os.Stdout, result, resultWarnings(result), err)
@@ -842,6 +910,13 @@ Requirements:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 
 		note, _ := cmd.Flags().GetString("note")
@@ -864,11 +939,12 @@ Requirements:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.AssessHypothesisExhaustedWithAuthority(projectRoot, taskID, note, authority)
+			result, err := ops.AssessHypothesisExhaustedWithAuthorityAndOptions(projectRoot, taskID, note, authority, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.AssessHypothesisExhaustedWithAuthorityCommand(projectRoot, taskID, note, authority)
+		return commands.AssessHypothesisExhaustedWithAuthorityAndOptionsCommand(projectRoot, taskID, note, authority, requestOpts)
 	},
 }
 
@@ -906,6 +982,13 @@ Example:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		reason := args[1]
 
@@ -927,11 +1010,12 @@ Example:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.CancelTaskWithAuthority(projectRoot, taskID, reason, authority)
+			result, err := ops.CancelTaskWithAuthorityAndOptions(projectRoot, taskID, reason, authority, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.CancelTaskWithAuthorityCommand(projectRoot, taskID, reason, authority)
+		return commands.CancelTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, reason, authority, requestOpts)
 	},
 }
 
@@ -1148,6 +1232,13 @@ Example:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 
 		authority, err := requireAgentAuthority(cmd)
@@ -1188,18 +1279,20 @@ Example:
 		}
 
 		input := &ops.SetTaskOutputInput{
+			Request: requestOpts,
 			TaskID:  taskID,
 			AgentID: authority.ID,
 			Output:  entries,
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			err := ops.SetTaskOutputWithAuthority(projectRoot, input, authority)
-			result := map[string]any{
-				"task_id": taskID, "output_count": len(input.Output),
-				"state_path": paths.New(projectRoot).StatePath(),
+			result, err := ops.SetTaskOutputWithAuthorityAndOptions(projectRoot, input, authority)
+			var warnings []string
+			if result != nil {
+				warnings = result.Warnings
 			}
-			return jsonout.WriteResult(os.Stdout, result, nil, err)
+			return jsonout.WriteResult(os.Stdout, result, warnings, err)
 		}
 		return commands.SetTaskOutputWithAuthorityCommand(projectRoot, input, authority)
 	},
@@ -1331,6 +1424,9 @@ Disposition values:
 }
 
 func init() {
+	for _, cmd := range []*cobra.Command{cancelTaskCmd, supersedeTaskCmd, unblockTaskCmd, setTaskOutputCmd, claimTaskCmd, retargetDependencyCmd, applyDependencyRepairCmd, repairSupersededDependenciesCmd, assessHypothesisExhaustedCmd, markBlockedCmd, assessBlockedCmd} {
+		addLifecycleFlags(cmd)
+	}
 	rootCmd.AddCommand(claimTaskCmd)
 	rootCmd.AddCommand(addTaskCmd)
 	rootCmd.AddCommand(addTasksCmd)

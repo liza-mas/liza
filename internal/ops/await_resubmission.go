@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"log"
+	"reflect"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -154,7 +155,8 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 	}
 
 	// Acquire ownership only when actually waiting for the doer's submission.
-	if err := acquireReviewOwnership(bb, agentID, taskID, authority, timeout); err != nil {
+	ownership, err := acquireReviewOwnershipSnapshot(bb, agentID, taskID, authority, timeout)
+	if err != nil {
 		return nil, &OperationalError{Message: "failed to acquire review ownership", Err: err}
 	}
 	defer func() {
@@ -166,14 +168,28 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 		// while retaining the doer's resubmission and any subsequent reassignment.
 		cleanupErr := modifyLifecycleState(bb, authority, func(s *models.State) error {
 			currentTask := s.FindTask(taskID)
-			if currentTask != nil && currentTask.ReviewingBy != nil && *currentTask.ReviewingBy == agentID {
-				currentTask.ReviewingBy = task.ReviewingBy
-				currentTask.ReviewLeaseExpires = task.ReviewLeaseExpires
+			restoredOwnership := false
+			if currentTask != nil && currentTask.ReviewingBy != nil && *currentTask.ReviewingBy == agentID &&
+				currentTask.ReviewLeaseExpires != nil && currentTask.ReviewLeaseExpires.Equal(ownership.leaseExpires) {
+				// Undo only our temporary revision. A changed status keeps both the
+				// pre-wait and waiting tokens stale; never revive an old preparation
+				// or overwrite a completion written during the wait. Otherwise
+				// retain receipts and retire pending work at the ownership boundary.
+				if currentTask.Status != ownership.task.Status &&
+					(ownership.task.Lifecycle == nil || ownership.task.Lifecycle.Preparation == nil) &&
+					reflect.DeepEqual(currentTask.Lifecycle, ownership.lifecycle) {
+					currentTask.Lifecycle = ownership.task.Lifecycle
+				} else {
+					models.AdvanceLifecycle(currentTask)
+				}
+				currentTask.ReviewingBy = ownership.task.ReviewingBy
+				currentTask.ReviewLeaseExpires = ownership.task.ReviewLeaseExpires
+				restoredOwnership = true
 			}
-			if agent, ok := s.Agents[agentID]; ok && agent.Status == models.AgentStatusWaiting &&
+			if agent, ok := s.Agents[agentID]; restoredOwnership && ok && agent.Status == models.AgentStatusWaiting &&
 				agent.CurrentTask != nil && *agent.CurrentTask == taskID {
-				agent.Status = state.Agents[agentID].Status
-				agent.CurrentTask = state.Agents[agentID].CurrentTask
+				agent.Status = ownership.agent.Status
+				agent.CurrentTask = ownership.agent.CurrentTask
 				s.Agents[agentID] = agent
 			}
 			return nil
@@ -302,8 +318,23 @@ func checkLastRejectingReviewer(task *models.Task, agentID string) error {
 // acquireReviewOwnership atomically sets ReviewingBy and ReviewLeaseExpires on
 // the task, and sets the agent's status to WAITING with CurrentTask.
 func acquireReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority *models.AgentAuthority, timeout time.Duration) error {
+	_, err := acquireReviewOwnershipSnapshot(bb, agentID, taskID, authority, timeout)
+	return err
+}
+
+type reviewOwnershipSnapshot struct {
+	task         models.Task
+	agent        models.Agent
+	lifecycle    *models.TaskLifecycle
+	leaseExpires time.Time
+}
+
+// Capture the rollback boundary in the acquisition transaction, so concurrent
+// changes between admission and ownership acquisition cannot be undone later.
+func acquireReviewOwnershipSnapshot(bb *db.Blackboard, agentID, taskID string, authority *models.AgentAuthority, timeout time.Duration) (*reviewOwnershipSnapshot, error) {
 	leaseExpiry := time.Now().Add(timeout + reviewOwnershipLeaseMargin)
-	return modifyLifecycleState(bb, authority, func(s *models.State) error {
+	var snapshot reviewOwnershipSnapshot
+	err := modifyLifecycleState(bb, authority, func(s *models.State) error {
 		agent, ok := s.Agents[agentID]
 		if !ok {
 			return &errors.NotFoundError{Entity: "agent", ID: agentID}
@@ -313,6 +344,20 @@ func acquireReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
+		if task.ReviewingBy != nil && *task.ReviewingBy != agentID {
+			return WrapLifecycleError("claim-reviewer-task", task, fmt.Errorf("review ownership changed"), models.LifecycleStateChanged, "requery", "none")
+		}
+		snapshot = reviewOwnershipSnapshot{task: *task, agent: agent, leaseExpires: leaseExpiry}
+		if task.Lifecycle != nil {
+			snapshot.task.Lifecycle = cloneTaskLifecycle(task.Lifecycle)
+		}
+		if task.ReviewingBy == nil {
+			models.AdvanceLifecycle(task)
+		}
+		snapshot.lifecycle = cloneTaskLifecycle(task.Lifecycle)
+		if task.Lifecycle == nil {
+			snapshot.lifecycle = nil
+		}
 		task.ReviewingBy = &agentID
 		task.ReviewLeaseExpires = &leaseExpiry
 		agent.Status = models.AgentStatusWaiting
@@ -320,6 +365,7 @@ func acquireReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority
 		s.Agents[agentID] = agent
 		return nil
 	})
+	return &snapshot, err
 }
 
 // releaseReviewOwnership clears the reviewer's ownership from both the task
@@ -332,7 +378,8 @@ func releaseReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority
 			s.Agents[agentID] = agent
 		}
 		task := s.FindTask(taskID)
-		if task != nil {
+		if task != nil && task.ReviewingBy != nil && *task.ReviewingBy == agentID {
+			models.AdvanceLifecycle(task)
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
 		}
@@ -465,6 +512,7 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 		if err := task.TransitionWith(reviewing, transitions); err != nil {
 			return fmt.Errorf("reclaim transition failed: %w", err)
 		}
+		models.AdvanceLifecycle(task)
 
 		task.ReviewLeaseExpires = &freshLease
 		task.ReviewingBy = &agentID

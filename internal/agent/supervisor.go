@@ -155,6 +155,7 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, task
 		task.BlockedQuestions = questions
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
+		models.AdvanceLifecycle(task)
 		task.ReviewingBy = nil
 		task.ReviewLeaseExpires = nil
 		task.History = append(task.History, models.TaskHistoryEntry{
@@ -244,6 +245,8 @@ func exit42TaskProgressSignature(task *models.Task) string {
 	snapshot.Iteration = 0
 	snapshot.Exit42RestartCount = 0
 	snapshot.History = nil
+	// Claim/release receipts describe ownership bookkeeping, not task progress.
+	snapshot.Lifecycle = nil
 
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
@@ -261,6 +264,8 @@ func successfulTurnTaskProgressSignature(task *models.Task) string {
 	snapshot.Iteration = 0
 	snapshot.Exit42RestartCount = 0
 	snapshot.History = nil
+	// Claim/release receipts describe ownership bookkeeping, not task progress.
+	snapshot.Lifecycle = nil
 
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
@@ -341,6 +346,7 @@ func blockTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, auth
 		}
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
+		models.AdvanceLifecycle(task)
 		task.ReviewingBy = nil
 		task.ReviewLeaseExpires = nil
 		task.History = append(task.History, models.TaskHistoryEntry{

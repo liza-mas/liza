@@ -13,6 +13,8 @@ import (
 )
 
 type claimContext struct {
+	authority           *models.AgentAuthority
+	request             *LifecycleRequest
 	taskID              string
 	agentID             string
 	taskStatus          models.TaskStatus
@@ -232,7 +234,7 @@ func markPreservedInitialClaimRecovery(
 		repairCommand = fmt.Sprintf("git -C %s rebase %s", ctx.worktreeRel, ctx.baseCommit)
 		validation = append(validation, repairCommand)
 	}
-	return bb.Modify(func(state *models.State) error {
+	return lifecycleMutation(bb, ctx.authority)(func(state *models.State) error {
 		task := state.FindTask(ctx.taskID)
 		if task == nil {
 			return fmt.Errorf("task %s not found while recording preserved claim recovery", ctx.taskID)
@@ -240,11 +242,17 @@ func markPreservedInitialClaimRecovery(
 		if task.Status != ctx.taskStatus {
 			return fmt.Errorf("race condition: task status changed from %s to %s", ctx.taskStatus, task.Status)
 		}
+		if ctx.request != nil {
+			if err := ValidateLifecyclePreparation(task, *ctx.request); err != nil {
+				return err
+			}
+		}
 		if err := task.TransitionWith(models.TaskStatusBlocked, ctx.pipelineTransitions); err != nil {
 			return err
 		}
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
+		models.AdvanceLifecycle(task)
 		task.BlockedReason = &reason
 		task.BlockedQuestions = []string{question}
 		task.RepairRequest = &models.RepairRequest{

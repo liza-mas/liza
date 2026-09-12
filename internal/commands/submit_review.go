@@ -16,6 +16,10 @@ func SubmitForReviewCommand(projectRoot, taskID, commitRef, agentID string) erro
 		return fmt.Errorf("submit for review: %w", err)
 	}
 
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
+	}
+
 	fmt.Printf("SUBMITTED FOR REVIEW: %s\n", result.TaskID)
 	fmt.Printf("  review_commit: %s\n", result.ReviewCommit)
 	fmt.Printf("  submitted_by: %s\n", result.AgentID)
@@ -27,9 +31,17 @@ func SubmitForReviewCommand(projectRoot, taskID, commitRef, agentID string) erro
 
 // SubmitForReviewCommandWithAuthority is the authenticated command adapter.
 func SubmitForReviewCommandWithAuthority(projectRoot, taskID, commitRef string, authority models.AgentAuthority) error {
-	result, err := ops.SubmitForReviewWithAuthority(projectRoot, taskID, commitRef, authority)
+	return SubmitForReviewCommandWithAuthorityAndOptions(projectRoot, taskID, commitRef, authority, ops.LifecycleRequestOptions{})
+}
+
+func SubmitForReviewCommandWithAuthorityAndOptions(projectRoot, taskID, commitRef string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.SubmitForReviewWithAuthorityAndOptions(projectRoot, taskID, commitRef, authority, request)
 	if err != nil {
 		return fmt.Errorf("submit for review: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("SUBMITTED FOR REVIEW: %s\n", result.TaskID)

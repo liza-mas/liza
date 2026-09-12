@@ -81,18 +81,29 @@ type SprintTimeline struct {
 
 // SprintMetrics tracks sprint progress and quality
 type SprintMetrics struct {
-	TasksDone                        int            `yaml:"tasks_done" json:"tasks_done"`
-	TasksInProgress                  int            `yaml:"tasks_in_progress" json:"tasks_in_progress"`
-	TasksBlocked                     int            `yaml:"tasks_blocked" json:"tasks_blocked"`
-	IterationsTotal                  int            `yaml:"iterations_total" json:"iterations_total"`
-	ReviewCyclesTotal                int            `yaml:"review_cycles_total" json:"review_cycles_total"`
-	ReviewVerdictApprovals           int            `yaml:"review_verdict_approvals" json:"review_verdict_approvals"`
-	ReviewVerdictRejections          int            `yaml:"review_verdict_rejections" json:"review_verdict_rejections"`
-	ReviewVerdictCount               int            `yaml:"review_verdict_count" json:"review_verdict_count"`
-	ReviewVerdictApprovalRatePercent int            `yaml:"review_verdict_approval_rate_percent" json:"review_verdict_approval_rate_percent"`
-	TaskSubmittedForReviewCount      int            `yaml:"task_submitted_for_review_count" json:"task_submitted_for_review_count"`
-	TaskOutcomeApprovalRatePercent   int            `yaml:"task_outcome_approval_rate_percent" json:"task_outcome_approval_rate_percent"`
-	Extra                            map[string]any `yaml:",inline" json:"-"`
+	LifecycleOutcomes                *LifecycleOutcomeMetrics `yaml:"lifecycle_outcomes,omitempty" json:"lifecycle_outcomes,omitempty"`
+	TasksDone                        int                      `yaml:"tasks_done" json:"tasks_done"`
+	TasksInProgress                  int                      `yaml:"tasks_in_progress" json:"tasks_in_progress"`
+	TasksBlocked                     int                      `yaml:"tasks_blocked" json:"tasks_blocked"`
+	IterationsTotal                  int                      `yaml:"iterations_total" json:"iterations_total"`
+	ReviewCyclesTotal                int                      `yaml:"review_cycles_total" json:"review_cycles_total"`
+	ReviewVerdictApprovals           int                      `yaml:"review_verdict_approvals" json:"review_verdict_approvals"`
+	ReviewVerdictRejections          int                      `yaml:"review_verdict_rejections" json:"review_verdict_rejections"`
+	ReviewVerdictCount               int                      `yaml:"review_verdict_count" json:"review_verdict_count"`
+	ReviewVerdictApprovalRatePercent int                      `yaml:"review_verdict_approval_rate_percent" json:"review_verdict_approval_rate_percent"`
+	TaskSubmittedForReviewCount      int                      `yaml:"task_submitted_for_review_count" json:"task_submitted_for_review_count"`
+	TaskOutcomeApprovalRatePercent   int                      `yaml:"task_outcome_approval_rate_percent" json:"task_outcome_approval_rate_percent"`
+	Extra                            map[string]any           `yaml:",inline" json:"-"`
+}
+
+// LifecycleOutcomeMetrics describes an observation window, not lossless sprint
+// accounting. Process death and unavailable telemetry can omit invocations.
+type LifecycleOutcomeMetrics struct {
+	Available     bool                         `yaml:"available" json:"available"`
+	ObservedSince *time.Time                   `yaml:"observed_since,omitempty" json:"observed_since,omitempty"`
+	LastUpdated   *time.Time                   `yaml:"last_updated,omitempty" json:"last_updated,omitempty"`
+	Counts        map[string]map[string]uint64 `yaml:"counts,omitempty" json:"counts,omitempty"`
+	Warning       string                       `yaml:"warning,omitempty" json:"warning,omitempty"`
 }
 
 // ComputeSprintMetrics calculates sprint metrics from the current state snapshot.

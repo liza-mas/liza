@@ -18,6 +18,7 @@ const repairSupersededDependenciesOperation = "repair-superseded-dependencies"
 
 // RepairSupersededDependenciesResult contains the audited dependency cleanup.
 type RepairSupersededDependenciesResult struct {
+	models.LifecycleOutcome
 	TaskID               string   `json:"task_id"`
 	RemovedDependencies  []string `json:"removed_dependencies"`
 	RetainedDependencies []string `json:"retained_dependencies"`
@@ -43,7 +44,38 @@ func RepairSupersededDependenciesWithAuthority(projectRoot, taskID, reason strin
 	return repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reason, authority.ID, &authority)
 }
 
-func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reason, agentID string, authority *models.AgentAuthority) (*RepairSupersededDependenciesResult, error) {
+// RepairSupersededDependenciesWithOptions identifies a terminal metadata repair.
+func RepairSupersededDependenciesWithOptions(projectRoot, taskID, reason, agentID string, opts LifecycleRequestOptions) (*RepairSupersededDependenciesResult, error) {
+	return repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reason, agentID, nil, opts)
+}
+
+// RepairSupersededDependenciesWithAuthorityAndOptions fences an identified repair.
+func RepairSupersededDependenciesWithAuthorityAndOptions(projectRoot, taskID, reason string, authority models.AgentAuthority, opts LifecycleRequestOptions) (*RepairSupersededDependenciesResult, error) {
+	return repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reason, authority.ID, &authority, opts)
+}
+
+func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reason, agentID string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) (returned *RepairSupersededDependenciesResult, retErr error) {
+	invocation := NewLifecycleInvocation(projectRoot)
+	const operation = repairSupersededDependenciesOperation
+	var opts LifecycleRequestOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	var observed *models.Task
+	effects := "none"
+	defer func() {
+		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		var outcome models.LifecycleOutcome
+		var warnings *[]string
+		if returned != nil {
+			outcome = returned.LifecycleOutcome
+			warnings = &returned.Warnings
+		}
+		invocation.FinishResult(operation, outcome, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+		return nil, err
+	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -58,15 +90,32 @@ func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reas
 	bb := db.For(lp.StatePath())
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+		return nil, WrapLifecycleError(operation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, "requery", "none")
 	}
 
 	var result RepairSupersededDependenciesResult
 	now := time.Now().UTC()
-	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
+	err = lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
+		defer func() {
+			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
+		}()
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		copy := *task
+		observed = &copy
+		request, err := NewLifecycleRequest(operation, task, agentID, authority, opts, reason)
+		if err != nil {
+			return err
+		}
+		receipt, err := CheckLifecycleRequest(task, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			result = RepairSupersededDependenciesResult{TaskID: taskID, LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID)}
+			return errLifecycleReplay
 		}
 		if task.Status != models.TaskStatusSuperseded {
 			return &PreconditionError{Reason: fmt.Sprintf("cannot repair dependencies on task %s in status %s (must be SUPERSEDED)", taskID, task.Status)}
@@ -77,7 +126,7 @@ func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reas
 			return err
 		}
 		if len(removed) == 0 {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s has no illegal downstream dependencies", taskID)}
+			return WrapLifecycleError(operation, task, &PreconditionError{Reason: fmt.Sprintf("task %s has no illegal downstream dependencies", taskID)}, models.LifecycleStateChanged, "requery", "none")
 		}
 
 		task.DependsOn = retained
@@ -105,10 +154,17 @@ func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reas
 			RemovedDependencies:  append([]string(nil), removed...),
 			RetainedDependencies: append([]string(nil), retained...),
 		}
-		return nil
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		if err == nil {
+			effects = "unknown"
+		}
+		return err
 	})
+	if isLifecycleReplay(err) {
+		return &result, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to repair superseded dependencies: %w", err)
+		return nil, WrapLifecycleError(operation, observed, fmt.Errorf("failed to repair superseded dependencies: %w", err), models.LifecycleStateChanged, "requery", effects)
 	}
 
 	logEntry := log.Entry{

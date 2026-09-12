@@ -15,6 +15,10 @@ func HandoffCommand(projectRoot string, input *ops.HandoffInput) error {
 		return fmt.Errorf("handoff: %w", err)
 	}
 
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
+	}
+
 	fmt.Printf("HANDOFF: %s\n", result.TaskID)
 	fmt.Printf("  by: %s\n", result.AgentID)
 	return nil

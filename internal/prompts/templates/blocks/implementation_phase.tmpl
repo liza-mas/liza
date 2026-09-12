@@ -151,9 +151,9 @@ planning against a hypothesis.
       and confirm the referenced task explicitly states that responsibility,
       dependency, or exclusion. If any reference points to a task that does not claim it,
       fix the plan before submitting.
-   h. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
+   h. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    i. Submission proof: `{{binaryName}} submit-for-review` is not optional bookkeeping. It must actually run successfully after step h; do not treat plan/output artifacts alone as submission.
-7. Submit using {{binaryName}} submit-for-review --json only after all checks in step 6 pass, using HEAD.
+7. Submit using {{binaryName}} submit-for-review --json only after all checks in step 6 pass, using the captured full SHA.
 {{- else if eq .Role "epic-planner"}}
 
 IMPLEMENTATION PHASE:
@@ -197,9 +197,9 @@ with non-empty direct references and obligation coverage.
       - epic_ref is the epic document path with a #section-anchor matching the capability heading.
    c. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       Any validation[] command is satisfiable for the capability scope and agent-executable under the validation command-shape rule.
-   d. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
+   d. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    e. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9d; do not stop at "ready for review".
-10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using HEAD.
+10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA.
 {{- else if eq .Role "us-writer"}}
 
 IMPLEMENTATION PHASE:
@@ -224,9 +224,9 @@ and obligation coverage.
 6. Validate done_when criteria with concrete checks.
 7. PRE-SUBMIT SELF-CHECK (MANDATORY — do NOT call {{binaryName}} submit-for-review --json until all pass):
    a. The required story files exist under {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/ and match the assigned capability scope.
-   b. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
+   b. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    c. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 7b; do not stop at "ready for review".
-8. Submit using {{binaryName}} submit-for-review --json only after all checks in step 7 pass, using HEAD.
+8. Submit using {{binaryName}} submit-for-review --json only after all checks in step 7 pass, using the captured full SHA.
 {{- else if eq .Role "architect"}}
 
 IMPLEMENTATION PHASE:
@@ -295,8 +295,8 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
    d. All output[] entries have arch_ref set to the arch doc path.
    e. Spec compliance: the decomposition covers the full scope of the goal spec.
    f. Shared-file audit: if two output[] entries may touch the same files, add depends_on.
-   g. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then submit with HEAD.
+   g. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    h. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9g; do not treat the arch doc plus `{{binaryName}} set-task-output` as sufficient.
-10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using HEAD.
+10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA.
 {{- end}}
 {{- end -}}

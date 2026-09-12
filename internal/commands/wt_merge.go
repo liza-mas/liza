@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -15,7 +16,8 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 	result, err := ops.MergeWorktree(projectRoot, taskID, agentID)
 	if err != nil {
 		// Print context for integration failures
-		if intErr, ok := err.(*ops.IntegrationFailedError); ok {
+		var intErr *ops.IntegrationFailedError
+		if errors.As(err, &intErr) {
 			printIntegrationFailure(taskID, intErr)
 		}
 		return err
@@ -27,9 +29,14 @@ func WtMergeCommand(projectRoot, taskID, agentID string) error {
 
 // WtMergeCommandWithAuthority is the authenticated command adapter.
 func WtMergeCommandWithAuthority(projectRoot, taskID string, authority models.AgentAuthority) error {
-	result, err := ops.MergeWorktreeWithAuthority(projectRoot, taskID, authority)
+	return WtMergeCommandWithAuthorityAndOptions(projectRoot, taskID, authority, ops.LifecycleRequestOptions{})
+}
+
+func WtMergeCommandWithAuthorityAndOptions(projectRoot, taskID string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.MergeWorktreeWithAuthorityAndOptions(projectRoot, taskID, authority, request)
 	if err != nil {
-		if intErr, ok := err.(*ops.IntegrationFailedError); ok {
+		var intErr *ops.IntegrationFailedError
+		if errors.As(err, &intErr) {
 			printIntegrationFailure(taskID, intErr)
 		}
 		return err
@@ -69,6 +76,9 @@ func printIntegrationFailure(taskID string, intErr *ops.IntegrationFailedError) 
 }
 
 func printMergeResult(r *ops.MergeResult) {
+	if printLifecycleResult(r.LifecycleOutcome) {
+		return
+	}
 	if r.FastForward {
 		fmt.Printf("✓ Fast-forward merge successful\n")
 	} else {

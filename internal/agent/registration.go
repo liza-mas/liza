@@ -298,6 +298,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 		}
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
+		models.AdvanceLifecycle(task)
 
 	case "reviewer":
 		if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
@@ -312,6 +313,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 			}
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
+			models.AdvanceLifecycle(task)
 		}
 
 	default:
@@ -323,6 +325,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 			}
 			task.AssignedTo = nil
 			task.LeaseExpires = nil
+			models.AdvanceLifecycle(task)
 		} else if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
 			activeReviewing, releasedSubmitted, err := resolveReviewerRelease()
 			if err != nil {
@@ -335,6 +338,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 			}
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
+			models.AdvanceLifecycle(task)
 		} else {
 			return nil
 		}

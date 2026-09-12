@@ -1101,6 +1101,20 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 				t.Fatal("approved task or review_commit missing")
 			}
 			reviewCommit := *task.ReviewCommit
+			authority := models.AgentAuthority{ID: agentID, Generation: "merge-before-restart"}
+			bb := db.For(stateFile)
+			register := func() {
+				t.Helper()
+				if err := bb.Modify(func(state *models.State) error {
+					agent := state.Agents[agentID]
+					agent.Generation = authority.Generation
+					state.Agents[agentID] = agent
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			register()
 
 			previousHook := mergeFinalStateTestHook
 			t.Cleanup(func() { mergeFinalStateTestHook = previousHook })
@@ -1113,7 +1127,7 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 							t.Fatalf("interrupted merge panic = %v, want %q", recovered, interrupted)
 						}
 					}()
-					_, _ = MergeWorktree(projectRoot, taskID, agentID)
+					_, _ = MergeWorktreeWithAuthority(projectRoot, taskID, authority)
 				}()
 
 				interruptedState := readStateForTest(t, stateFile)
@@ -1123,6 +1137,26 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 				if got := testhelpers.MustGit(t, projectRoot, "rev-parse", "refs/heads/integration"); got != reviewCommit {
 					t.Fatalf("integration HEAD after interruption = %s, want %s", got, reviewCommit)
 				}
+				beforeRetry, err := os.ReadFile(stateFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = MergeWorktreeWithAuthority(projectRoot, taskID, authority)
+				var pending *LifecycleError
+				if !errors.As(err, &pending) || pending.Outcome.Outcome != models.LifecycleStateChanged || pending.Outcome.SafeAction != "requery" {
+					t.Fatalf("interrupted same-generation merge = %v, want requery", err)
+				}
+				afterRetry, err := os.ReadFile(stateFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(beforeRetry, afterRetry) {
+					t.Fatal("pending retry changed state")
+				}
+				// A registered replacement can reconcile the approved immutable
+				// commit after the interrupted generation has been fenced.
+				authority.Generation = "merge-after-restart"
+				register()
 			}
 
 			arrived := make(chan struct{}, 2)
@@ -1142,7 +1176,7 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 			outcomes := make(chan mergeOutcome, 2)
 			for range 2 {
 				go func() {
-					result, err := MergeWorktree(projectRoot, taskID, agentID)
+					result, err := MergeWorktreeWithAuthority(projectRoot, taskID, authority)
 					outcomes <- mergeOutcome{result: result, err: err}
 				}()
 			}
@@ -1186,7 +1220,7 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 			}
 
 			mergeFinalStateTestHook = nil
-			if repeated, err := MergeWorktree(projectRoot, taskID, agentID); err == nil || repeated != nil {
+			if repeated, err := MergeWorktreeWithAuthority(projectRoot, taskID, authority); err == nil || repeated != nil {
 				t.Fatalf("repeated merge = (%+v, %v), want stable no-result rejection", repeated, err)
 			}
 
@@ -1764,6 +1798,55 @@ func TestArtifactGuardHookReturnsFreshestValidationDiagnostics(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "specs/stale.md") || strings.Contains(err.Error(), "stale-owner") {
 		t.Fatalf("error = %q, should not return stale first-snapshot diagnostic", err.Error())
+	}
+}
+
+func TestMergeWorktree_NormalPostCASFailureRetainsPreparation(t *testing.T) {
+	const taskID, agentID = "merge-returned-failure", "coder-1"
+	projectRoot, statePath := setupMergeTestRepo(t, taskID, agentID)
+	bb := db.For(statePath)
+	task, err := bb.GetTask(taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := LifecycleRequestOptions{RequestID: "failed-merge", ExpectedTransition: models.TaskTransitionID(task)}
+	beforeHEAD := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
+	failure := errors.New("post-update observation failed")
+	calls := 0
+	previous := artifactGuardPostUpdateTestHook
+	t.Cleanup(func() { artifactGuardPostUpdateTestHook = previous })
+	artifactGuardPostUpdateTestHook = func() error {
+		calls++
+		return failure
+	}
+
+	_, err = mergeWorktreeLifecycle(projectRoot, taskID, agentID, nil, opts)
+	if !errors.Is(err, failure) {
+		t.Fatalf("merge lost the returned post-CAS error: %v", err)
+	}
+	requireLifecycleError(t, err, models.LifecycleStateChanged, "requery", "unknown")
+	afterHEAD := testhelpers.MustGit(t, projectRoot, "rev-parse", "integration")
+	if afterHEAD == beforeHEAD {
+		t.Fatal("failure did not occur after integration ref movement")
+	}
+	task, err = bb.GetTask(taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Status != models.TaskStatusApproved || task.Lifecycle == nil ||
+		task.Lifecycle.Preparation == nil || task.Lifecycle.Preparation.RequestID != opts.RequestID ||
+		len(task.Lifecycle.Receipts) != 0 {
+		t.Fatalf("uncertain merge lost its preparation or claimed completion: %+v", task)
+	}
+	beforeRetry := ownershipStateBytes(t, statePath)
+	for _, requestID := range []string{opts.RequestID, "fresh-inspection"} {
+		retry := LifecycleRequestOptions{RequestID: requestID, ExpectedTransition: models.TaskTransitionID(task)}
+		_, err := mergeWorktreeLifecycle(projectRoot, taskID, agentID, nil, retry)
+		requireLifecycleError(t, err, models.LifecycleStateChanged, "requery", "unknown")
+	}
+	if calls != 1 || testhelpers.MustGit(t, projectRoot, "rev-parse", "integration") != afterHEAD ||
+		!bytes.Equal(beforeRetry, ownershipStateBytes(t, statePath)) {
+		t.Fatal("uncertain merge retry repeated effects or changed persistent state")
 	}
 }
 

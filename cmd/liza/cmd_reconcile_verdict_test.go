@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -58,8 +60,8 @@ func TestReconcileVerdictCLIRequiresCurrentOrchestrator(t *testing.T) {
 	}{
 		{"missing generation", "orchestrator-1", "", "generation required", false},
 		{"wrong role", "coder-1", testhelpers.TestAgentGeneration, "requires role type", false},
-		{"stale generation", "orchestrator-1", "quarantine-cli-stale-fixture", "generation", false},
-		{"replacement after admission", "orchestrator-1", testhelpers.TestAgentGeneration, "generation", true},
+		{"stale generation", "orchestrator-1", "quarantine-cli-stale-fixture", "registration changed; stop", false},
+		{"replacement after admission", "orchestrator-1", testhelpers.TestAgentGeneration, "registration changed; stop", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, statePath, findingID := setupQuarantinedVerdictCLI(t)
@@ -89,6 +91,14 @@ func TestReconcileVerdictCLIRequiresCurrentOrchestrator(t *testing.T) {
 				"--reason", "The existing check covers the boundary", "--agent-id", tc.agentID)
 			if err == nil || !strings.Contains(stdout, tc.want) {
 				t.Fatalf("unauthorized reconciliation = %v, output %s; want %q", err, stdout, tc.want)
+			}
+			if tc.name == "stale generation" || tc.swap {
+				assertLifecycleFailurePolicy(t, parseEnvelope(t, stdout), models.LifecycleStaleCaller, "stop")
+				for _, generation := range []string{tc.generation, testhelpers.TestAgentGeneration, "quarantine-cli-replacement-fixture"} {
+					if strings.Contains(stdout, generation) || strings.Contains(stdout, fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))) {
+						t.Fatal("reconciliation diagnostic exposes generation or fingerprint")
+					}
+				}
 			}
 			if tc.swap && !replaced {
 				t.Fatal("did not exercise replacement after admission")

@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -14,6 +15,7 @@ import (
 
 // TransitionAttemptResult contains the outcome of transitioning to a new attempt.
 type TransitionAttemptResult struct {
+	models.LifecycleOutcome
 	TaskID          string
 	NewAttempt      int
 	WorktreeDeleted bool
@@ -45,16 +47,53 @@ var testTransitionHooks *transitionTestHooks
 // Phase 3 (bb.Modify): Re-check sentinel, clear AssignedTo/RejectionReason/
 // Worktree/BaseCommit, transition to initial pipeline status.
 func TransitionToNewAttempt(projectRoot, taskID, reason string) (*TransitionAttemptResult, error) {
-	return transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason, nil)
+	return transitionToNewAttemptWithProjectLock(projectRoot, taskID, reason, nil)
 }
 
 // TransitionToNewAttemptWithAuthority fences both state phases for an
 // authenticated lifecycle caller.
 func TransitionToNewAttemptWithAuthority(projectRoot, taskID, reason string, authority models.AgentAuthority) (*TransitionAttemptResult, error) {
-	return transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason, &authority)
+	return transitionToNewAttemptWithProjectLock(projectRoot, taskID, reason, &authority)
+}
+
+func transitionToNewAttemptWithProjectLock(projectRoot, taskID, reason string, authority *models.AgentAuthority) (*TransitionAttemptResult, error) {
+	var result *TransitionAttemptResult
+	err := WithProjectLifecycleSharedLock(projectRoot, "transition-attempt", func() error {
+		var inner error
+		result, inner = transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason, authority)
+		return inner
+	})
+	return result, err
 }
 
 func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason string, authority *models.AgentAuthority) (*TransitionAttemptResult, error) {
+	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, "")
+}
+
+// transitionToNewAttemptAfterVerdict runs only after the outer verdict review
+// lock is released, while its project lifecycle lock remains held. The token
+// prevents a delayed rejection follow-up from resetting an intervening claim.
+func transitionToNewAttemptAfterVerdict(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string) (*TransitionAttemptResult, error) {
+	if !lifecycleDigestValid(expectedCompletionToken) {
+		return nil, &PreconditionError{Reason: "attempt rollover requires the completed verdict transition token"}
+	}
+	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, expectedCompletionToken)
+}
+
+func transitionToNewAttemptAtBoundary(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string) (*TransitionAttemptResult, error) {
+	// Claim invokes rollover before taking this same task lock; verdict invokes
+	// it only after releasing its final state transaction.
+	lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
+	var result *TransitionAttemptResult
+	err := lock.WithLockOperation("transition-attempt", func() error {
+		var inner error
+		result, inner = transitionToNewAttemptLocked(projectRoot, taskID, reason, authority, expectedCompletionToken)
+		return inner
+	})
+	return result, err
+}
+
+func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string) (*TransitionAttemptResult, error) {
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
@@ -64,10 +103,11 @@ func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason str
 	}
 
 	var (
-		worktreePath   string
-		previousAgent  string
-		originalStatus models.TaskStatus
-		initialStatus  models.TaskStatus
+		worktreePath     string
+		previousAgent    string
+		originalStatus   models.TaskStatus
+		initialStatus    models.TaskStatus
+		lifecycleOutcome models.LifecycleOutcome
 	)
 
 	// Phase 1: mark attempt boundary, block claims via sentinel.
@@ -75,6 +115,9 @@ func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason str
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if expectedCompletionToken != "" && models.TaskTransitionID(task) != expectedCompletionToken {
+			return &PreconditionError{Reason: "task boundary changed after verdict completion; attempt rollover was not applied"}
 		}
 
 		if task.EffectiveAttempt() != 1 {
@@ -107,6 +150,7 @@ func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason str
 		}
 
 		// Mutations.
+		models.AdvanceLifecycle(task)
 		task.Attempt = 2
 		task.Iteration = 0
 		task.ReviewCyclesCurrent = 0
@@ -177,6 +221,7 @@ func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason str
 		}
 
 		task.AssignedTo = nil
+		models.AdvanceLifecycle(task)
 		task.RejectionReason = nil
 		task.Worktree = nil
 		task.BaseCommit = nil
@@ -184,16 +229,21 @@ func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason str
 		task.ReviewLeaseExpires = nil
 		clearAttemptState(task, attemptStateInitialReset)
 
-		return task.TransitionWith(initialStatus, pb.transitions)
+		if err := task.TransitionWith(initialStatus, pb.transitions); err != nil {
+			return err
+		}
+		lifecycleOutcome = NewLifecycleOutcome("transition-attempt", task, models.LifecycleCompleted, "continue", "committed")
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("phase 3 failed: %w", err)
 	}
 
 	return &TransitionAttemptResult{
-		TaskID:          taskID,
-		NewAttempt:      2,
-		WorktreeDeleted: worktreeDeleted,
-		InitialStatus:   initialStatus,
+		LifecycleOutcome: lifecycleOutcome,
+		TaskID:           taskID,
+		NewAttempt:       2,
+		WorktreeDeleted:  worktreeDeleted,
+		InitialStatus:    initialStatus,
 	}, nil
 }

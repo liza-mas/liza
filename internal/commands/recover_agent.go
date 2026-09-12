@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
 
@@ -22,9 +23,20 @@ func buildRespawnArgs(role, agentID, cli string) []string {
 // RecoverAgentCommand recovers a crashed agent (release claims, remove worktree,
 // delete agent) and optionally respawns it via syscall.Exec.
 func RecoverAgentCommand(projectRoot, agentID string, force bool, cli, reason string) error {
-	result, err := ops.RecoverAgent(projectRoot, agentID, force, reason)
+	return RecoverAgentWithOptionsCommand(projectRoot, agentID, force, cli, reason, ops.LifecycleRequestOptions{})
+}
+
+func RecoverAgentWithOptionsCommand(projectRoot, agentID string, force bool, cli, reason string, request ops.LifecycleRequestOptions) error {
+	result, err := ops.RecoverAgentWithOptions(projectRoot, agentID, force, reason, request)
 	if err != nil {
 		return fmt.Errorf("recover agent: %w", err)
+	}
+
+	// A failed process replacement must emit only its final requery policy.
+	if cli == "" || result.Outcome != models.LifecycleCompleted {
+		if printLifecycleResult(result.LifecycleOutcome) {
+			return nil
+		}
 	}
 
 	if result.AlreadyClean {
@@ -48,29 +60,32 @@ func RecoverAgentCommand(projectRoot, agentID string, force bool, cli, reason st
 		}
 	}
 
-	// Respawn if --cli provided
 	if cli != "" {
-		if result.AlreadyClean || result.Role == "" {
-			return fmt.Errorf("cannot respawn: agent role unknown (agent was already clean)")
-		}
-
-		fmt.Printf("Respawning agent %s as %s with %s...\n", agentID, result.Role, cli)
-
-		// Build the branded agent command.
-		lizaBin, err := os.Executable()
-		if err != nil {
-			// Fall back to finding the branded binary in PATH.
-			lizaBin, err = exec.LookPath(brand.BinaryName)
-			if err != nil {
-				return fmt.Errorf("cannot find %s binary: %w", brand.BinaryName, err)
-			}
-		}
-
-		args := buildRespawnArgs(result.Role, agentID, cli)
-
-		// Replace current process with the new agent
-		return syscall.Exec(lizaBin, args, os.Environ())
+		return respawnRecoveredAgent(result, cli, syscall.Exec)
 	}
-
 	return nil
+}
+
+// The recovery transaction has already committed. Process replacement failure
+// cannot invite replaying that mutation, and must retain its completion receipt.
+func respawnRecoveredAgent(result *ops.RecoverAgentResult, cli string, execProcess func(string, []string, []string) error) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			outcome := result.LifecycleOutcome
+			outcome.Outcome, outcome.SafeAction, outcome.Effects = models.LifecycleStateChanged, "requery", "committed"
+			retErr = &ops.LifecycleError{Outcome: outcome, Err: retErr}
+		}
+	}()
+	if result.AlreadyClean || result.Role == "" {
+		return fmt.Errorf("cannot respawn: agent role unknown (agent was already clean)")
+	}
+	fmt.Printf("Respawning agent %s as %s with %s...\n", result.AgentID, result.Role, cli)
+	binary, err := os.Executable()
+	if err != nil {
+		binary, err = exec.LookPath(brand.BinaryName)
+		if err != nil {
+			return fmt.Errorf("cannot find %s binary: %w", brand.BinaryName, err)
+		}
+	}
+	return execProcess(binary, buildRespawnArgs(result.Role, result.AgentID, cli), os.Environ())
 }

@@ -11,12 +11,21 @@ import (
 // recoverable work by default. With fresh=true it explicitly resets the task
 // branch/worktree from integration. Prints results to stdout.
 func RecoverTaskCommand(projectRoot, taskID string, force bool, fresh bool, reason string) error {
+	return RecoverTaskWithRequestCommand(projectRoot, taskID, force, fresh, reason, ops.LifecycleRequestOptions{})
+}
+
+func RecoverTaskWithRequestCommand(projectRoot, taskID string, force bool, fresh bool, reason string, request ops.LifecycleRequestOptions) error {
 	result, err := ops.RecoverTaskWithOptions(projectRoot, taskID, reason, ops.RecoverTaskOptions{
-		Force: force,
-		Fresh: fresh,
+		RequestOptions: request,
+		Force:          force,
+		Fresh:          fresh,
 	})
 	if err != nil {
 		return fmt.Errorf("recover task: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	// Print warnings first — they're relevant even when "nothing to recover"

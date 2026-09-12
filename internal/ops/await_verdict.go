@@ -840,6 +840,7 @@ func releaseDepartedDoerAssignment(projectRoot, taskID, agentID string, authorit
 
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
+		models.AdvanceLifecycle(task)
 
 		reason := "await budget exhausted; doer session ended"
 		task.History = append(task.History, models.TaskHistoryEntry{

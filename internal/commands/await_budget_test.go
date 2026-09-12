@@ -454,14 +454,16 @@ func TestAwaitVerdictWithAuthority_BudgetCleanupPropagatesGenerationFence(t *tes
 	if !errors.As(err, &authorityErr) {
 		t.Fatalf("error = %T %v, want *ops.AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{boundedAwaitCoderID, fmt.Sprintf("%x", sha256.Sum256([]byte("generation-a"))), fmt.Sprintf("%x", sha256.Sum256([]byte("generation-b")))} {
+	for _, want := range []string{boundedAwaitCoderID, "stop"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
 		}
 	}
 	for _, generation := range []string{"generation-a", "generation-b"} {
-		if strings.Contains(err.Error(), generation) {
-			t.Fatal("budget cleanup diagnostic exposes reusable generation")
+		for _, forbidden := range []string{generation, fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))} {
+			if strings.Contains(err.Error(), forbidden) {
+				t.Fatal("budget cleanup diagnostic exposes generation or fingerprint")
+			}
 		}
 	}
 	if result == nil || result.Verdict != ops.VerdictTimeout {

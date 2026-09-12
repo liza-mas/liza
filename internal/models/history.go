@@ -89,14 +89,16 @@ const (
 
 // TaskHistoryEntry represents a single event in a task's history
 type TaskHistoryEntry struct {
-	Time             time.Time      `yaml:"time"`
-	Event            string         `yaml:"event"`
-	Agent            *string        `yaml:"agent,omitempty"`
-	PreviousAssignee *string        `yaml:"previous_assignee,omitempty"`
-	Reason           *string        `yaml:"reason,omitempty"`
-	Commit           *string        `yaml:"commit,omitempty"`
-	Note             *string        `yaml:"note,omitempty"`
-	Extra            map[string]any `yaml:",inline"`
+	Time                  time.Time      `yaml:"time"`
+	Event                 string         `yaml:"event"`
+	Agent                 *string        `yaml:"agent,omitempty"`
+	PreviousAssignee      *string        `yaml:"previous_assignee,omitempty"`
+	Reason                *string        `yaml:"reason,omitempty"`
+	Commit                *string        `yaml:"commit,omitempty"`
+	Note                  *string        `yaml:"note,omitempty"`
+	SubmissionInputCommit string         `yaml:"submission_input_commit,omitempty" json:"submission_input_commit,omitempty"`
+	SubmissionAttempt     int            `yaml:"submission_attempt,omitempty" json:"submission_attempt,omitempty"`
+	Extra                 map[string]any `yaml:",inline"`
 }
 
 // Discovery represents a finding by an agent during work

@@ -19,13 +19,21 @@ func RetargetDependencyCommand(projectRoot, taskID, oldDependency string, newDep
 
 // RetargetDependencyWithAuthorityCommand retargets an edge using generation-fenced authority.
 func RetargetDependencyWithAuthorityCommand(projectRoot, taskID, oldDependency string, newDependencies []string, reason string, authority models.AgentAuthority) error {
-	result, err := ops.RetargetDependencyWithAuthority(projectRoot, taskID, oldDependency, newDependencies, reason, authority)
+	return RetargetDependencyWithAuthorityAndOptionsCommand(projectRoot, taskID, oldDependency, newDependencies, reason, authority, ops.LifecycleRequestOptions{})
+}
+
+func RetargetDependencyWithAuthorityAndOptionsCommand(projectRoot, taskID, oldDependency string, newDependencies []string, reason string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.RetargetDependencyWithAuthorityAndOptions(projectRoot, taskID, oldDependency, newDependencies, reason, authority, request)
 	return printRetargetDependencyResult(result, err)
 }
 
 func printRetargetDependencyResult(result *ops.RetargetDependencyResult, err error) error {
 	if err != nil {
 		return fmt.Errorf("retarget dependency: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("Retargeted dependency for %s: %s -> %s\n",

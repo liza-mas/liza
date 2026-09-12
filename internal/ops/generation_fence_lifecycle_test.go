@@ -660,10 +660,18 @@ func assertLifecycleAuthorityError(t *testing.T, err error, agentID string) {
 	if !errors.As(err, &authorityErr) {
 		t.Fatalf("error = %T %v, want *AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{agentID, generationFingerprint(lifecycleGenerationA), generationFingerprint(lifecycleGenerationB)} {
+	for _, want := range []string{agentID, "stop"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
 		}
+	}
+	for _, forbidden := range []string{lifecycleGenerationA, lifecycleGenerationB, generationFingerprint(lifecycleGenerationA), generationFingerprint(lifecycleGenerationB)} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Error("authority error exposes a registration generation or fingerprint")
+		}
+	}
+	if authorityErr.SafeDetails()["safe_action"] != "stop" {
+		t.Error("authority rejection must direct the caller to stop")
 	}
 }
 

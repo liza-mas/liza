@@ -179,6 +179,8 @@ func TestSubmitVerdictCommand(t *testing.T) {
 			wantErr: false,
 			setupState: func(s *models.State) {
 				reviewCommit := "ghi789"
+				reviewingBy := "code-reviewer-1"
+				reviewLeaseExpires := time.Now().UTC().Add(30 * time.Minute)
 				s.Tasks = []models.Task{
 					{
 						ID:                  "t3",
@@ -186,6 +188,8 @@ func TestSubmitVerdictCommand(t *testing.T) {
 						Status:              models.TaskStatusReviewing,
 						RolePair:            "coding-pair",
 						ReviewCommit:        &reviewCommit,
+						ReviewingBy:         &reviewingBy,
+						ReviewLeaseExpires:  &reviewLeaseExpires,
 						ReviewCyclesCurrent: 2,
 						ReviewCyclesTotal:   5,
 						Created:             time.Now().UTC(),

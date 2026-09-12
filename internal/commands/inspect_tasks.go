@@ -28,6 +28,7 @@ type inspectTasksOptions struct {
 // taskInfo represents task information with computed fields
 type taskInfo struct {
 	ID                 string                        `json:"id" yaml:"id"`
+	TransitionID       string                        `json:"transition_id" yaml:"transition_id"`
 	Description        string                        `json:"description" yaml:"description"`
 	Status             string                        `json:"status" yaml:"status"`
 	Priority           int                           `json:"priority" yaml:"priority"`
@@ -70,6 +71,7 @@ type dependencyRepairReceipt struct {
 // taskSummaryInfo is a compact task projection for agent orchestration.
 type taskSummaryInfo struct {
 	ID               string                `json:"id" yaml:"id"`
+	TransitionID     string                `json:"transition_id" yaml:"transition_id"`
 	Status           string                `json:"status" yaml:"status"`
 	RolePair         string                `json:"role_pair,omitempty" yaml:"role_pair,omitempty"`
 	Priority         int                   `json:"priority" yaml:"priority"`
@@ -90,10 +92,11 @@ type taskSummaryInfo struct {
 
 // taskOutputSummaryInfo is a compact projection of output[] for downstream orientation.
 type taskOutputSummaryInfo struct {
-	ID       string                   `json:"id" yaml:"id"`
-	Status   string                   `json:"status" yaml:"status"`
-	RolePair string                   `json:"role_pair,omitempty" yaml:"role_pair,omitempty"`
-	Output   []outputEntrySummaryInfo `json:"output" yaml:"output"`
+	ID           string                   `json:"id" yaml:"id"`
+	TransitionID string                   `json:"transition_id" yaml:"transition_id"`
+	Status       string                   `json:"status" yaml:"status"`
+	RolePair     string                   `json:"role_pair,omitempty" yaml:"role_pair,omitempty"`
+	Output       []outputEntrySummaryInfo `json:"output" yaml:"output"`
 }
 
 type outputEntrySummaryInfo struct {
@@ -189,6 +192,7 @@ func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (
 func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 	info := taskInfo{
 		ID:                 task.ID,
+		TransitionID:       models.TaskTransitionID(task),
 		Description:        task.Description,
 		Status:             string(task.Status),
 		Priority:           task.Priority,
@@ -281,6 +285,7 @@ func historyExtraStringSlice(value any) ([]string, bool) {
 func buildTaskSummaryInfo(task *models.Task) taskSummaryInfo {
 	info := taskSummaryInfo{
 		ID:               task.ID,
+		TransitionID:     models.TaskTransitionID(task),
 		Status:           string(task.Status),
 		RolePair:         task.RolePair,
 		Priority:         task.Priority,
@@ -309,10 +314,11 @@ func buildTaskSummaryInfo(task *models.Task) taskSummaryInfo {
 
 func buildTaskOutputSummaryInfo(task *models.Task) taskOutputSummaryInfo {
 	info := taskOutputSummaryInfo{
-		ID:       task.ID,
-		Status:   string(task.Status),
-		RolePair: task.RolePair,
-		Output:   make([]outputEntrySummaryInfo, 0, len(task.Output)),
+		ID:           task.ID,
+		TransitionID: models.TaskTransitionID(task),
+		Status:       string(task.Status),
+		RolePair:     task.RolePair,
+		Output:       make([]outputEntrySummaryInfo, 0, len(task.Output)),
 	}
 
 	for i, entry := range task.Output {
@@ -545,6 +551,7 @@ func formatTaskOutputSummariesTable(tasks []taskOutputSummaryInfo) string {
 func formatTaskSummaryValue(task taskSummaryInfo) string {
 	lines := []string{
 		fmt.Sprintf("ID: %s", task.ID),
+		fmt.Sprintf("Transition ID: %s", task.TransitionID),
 		fmt.Sprintf("Status: %s", task.Status),
 		fmt.Sprintf("Role Pair: %s", task.RolePair),
 		fmt.Sprintf("Priority: %d", task.Priority),
@@ -583,6 +590,7 @@ func formatTaskSummaryValue(task taskSummaryInfo) string {
 func formatTaskOutputSummaryValue(task taskOutputSummaryInfo) string {
 	lines := []string{
 		fmt.Sprintf("ID: %s", task.ID),
+		fmt.Sprintf("Transition ID: %s", task.TransitionID),
 		fmt.Sprintf("Status: %s", task.Status),
 		fmt.Sprintf("Role Pair: %s", task.RolePair),
 	}
@@ -724,6 +732,7 @@ func formatTasksTable(tasks []taskInfo) string {
 func formatTaskValue(task taskInfo) string {
 	lines := []string{
 		fmt.Sprintf("ID: %s", task.ID),
+		fmt.Sprintf("Transition ID: %s", task.TransitionID),
 		fmt.Sprintf("Description: %s", task.Description),
 		fmt.Sprintf("Status: %s", task.Status),
 		fmt.Sprintf("Priority: %d", task.Priority),

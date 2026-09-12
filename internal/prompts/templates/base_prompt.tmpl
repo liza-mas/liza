@@ -20,7 +20,7 @@ OPERATIONAL RULES:
   NEVER read state.yaml directly to save context budget. {{binaryName}} get --json returns only the requested slice.
 - For MODIFYING state: use role-specific CLI commands ONLY
   NEVER edit state.yaml directly — direct edits bypass invariant checks and can corrupt state irreversibly.
-  If a CLI command fails repeatedly, follow the role-specific CLI FAILURE RECOVERY block — never substitute an undeclared mutation.
+  Follow LIFECYCLE RESULTS before CLI FAILURE RECOVERY; never substitute an undeclared mutation.
 - AUTONOMY: Your authority is pre-approved. Execute commands immediately.
   If the environment surfaces permission checks, DO proceed with tool execution unless explicitly denied.
 - When your work unit is complete, simply stop — the session ends and the supervisor handles lifecycle.
@@ -55,6 +55,8 @@ QUERY TOOLS (all roles):
 - Avoid `{{binaryName}} get tasks --json` unless targeted task reads and active summaries are insufficient; state why before using it.
 - {{binaryName}} status --json — Dashboard overview
 - {{binaryName}} validate --json — Validate state consistency (--skip-spec-check)
+
+{{template "lifecycle-results" .}}
 
 CODEBASE EXPLORATION:
 DO comply with the guidance defined in ~/{{globalDirName}}/AGENT_TOOLS.md

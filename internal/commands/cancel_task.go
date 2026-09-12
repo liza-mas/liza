@@ -16,13 +16,21 @@ func CancelTaskCommand(projectRoot, taskID, reason, agentID string) error {
 
 // CancelTaskWithAuthorityCommand cancels a task using generation-fenced authority.
 func CancelTaskWithAuthorityCommand(projectRoot, taskID, reason string, authority models.AgentAuthority) error {
-	result, err := ops.CancelTaskWithAuthority(projectRoot, taskID, reason, authority)
+	return CancelTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, reason, authority, ops.LifecycleRequestOptions{})
+}
+
+func CancelTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, reason string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.CancelTaskWithAuthorityAndOptions(projectRoot, taskID, reason, authority, request)
 	return printCancelTaskResult(result, err)
 }
 
 func printCancelTaskResult(result *ops.CancelResult, err error) error {
 	if err != nil {
 		return fmt.Errorf("cancel task: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("Cancelled task %s (was %s)\n", result.TaskID, result.OriginalStatus)

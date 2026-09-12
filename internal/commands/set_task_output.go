@@ -10,8 +10,13 @@ import (
 // SetTaskOutputCommand sets output entries on a task.
 // Delegates business logic to ops.SetTaskOutput.
 func SetTaskOutputCommand(projectRoot string, input *ops.SetTaskOutputInput) error {
-	if err := ops.SetTaskOutput(projectRoot, input); err != nil {
+	result, err := ops.SetTaskOutputWithOptions(projectRoot, input)
+	if err != nil {
 		return err
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("Output set on task %s (%d entries)\n", input.TaskID, len(input.Output))
@@ -20,8 +25,13 @@ func SetTaskOutputCommand(projectRoot string, input *ops.SetTaskOutputInput) err
 
 // SetTaskOutputWithAuthorityCommand sets output using generation-fenced authority.
 func SetTaskOutputWithAuthorityCommand(projectRoot string, input *ops.SetTaskOutputInput, authority models.AgentAuthority) error {
-	if err := ops.SetTaskOutputWithAuthority(projectRoot, input, authority); err != nil {
+	result, err := ops.SetTaskOutputWithAuthorityAndOptions(projectRoot, input, authority)
+	if err != nil {
 		return err
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("Output set on task %s (%d entries)\n", input.TaskID, len(input.Output))

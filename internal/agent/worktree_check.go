@@ -251,6 +251,7 @@ func blockReviewerTask(bb *db.Blackboard, taskID string, authority models.AgentA
 		// Clear reviewer claim.
 		t.ReviewingBy = nil
 		t.ReviewLeaseExpires = nil
+		models.AdvanceLifecycle(t)
 
 		now := time.Now().UTC()
 		t.History = append(t.History, models.TaskHistoryEntry{

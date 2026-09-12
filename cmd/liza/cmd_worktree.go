@@ -136,6 +136,13 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		authority, err := requireAgentAuthority(cmd)
 		if err != nil {
 			return err
@@ -155,15 +162,17 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.MergeWorktreeWithAuthority(projectRoot, taskID, authority)
+			result, err := ops.MergeWorktreeWithAuthorityAndOptions(projectRoot, taskID, authority, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.WtMergeCommandWithAuthority(projectRoot, taskID, authority)
+		return commands.WtMergeCommandWithAuthorityAndOptions(projectRoot, taskID, authority, requestOpts)
 	},
 }
 
 func init() {
+	addLifecycleFlags(wtMergeCmd)
 	rootCmd.AddCommand(wtCreateCmd)
 	rootCmd.AddCommand(wtDeleteCmd)
 	rootCmd.AddCommand(wtMergeCmd)

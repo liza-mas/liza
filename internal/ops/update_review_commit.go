@@ -150,6 +150,7 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (*UpdateReviewCom
 			task.AcceptanceSource = &receipt.Source
 		}
 		task.AcceptanceReceipt = receipt
+		models.AdvanceLifecycle(task)
 		task.ReviewCommit = &wtHEAD
 		task.BaseCommit = &effectiveBase
 

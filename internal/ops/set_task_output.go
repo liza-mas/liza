@@ -16,9 +16,18 @@ import (
 
 // SetTaskOutputInput contains the parameters for setting output entries on a task.
 type SetTaskOutputInput struct {
+	Request LifecycleRequestOptions
 	TaskID  string
 	AgentID string
 	Output  []models.OutputEntry
+}
+
+type SetTaskOutputResult struct {
+	models.LifecycleOutcome
+	TaskID      string   `json:"task_id"`
+	OutputCount int      `json:"output_count"`
+	StatePath   string   `json:"state_path"`
+	Warnings    []string `json:"warnings,omitempty"`
 }
 
 // SetTaskOutput sets the output[] entries on a task. The task must exist, be assigned
@@ -26,19 +35,65 @@ type SetTaskOutputInput struct {
 // a pipeline-defined executing status). Replaces output and appends a write receipt
 // to task history in the same transaction, including when output is unchanged.
 func SetTaskOutput(projectRoot string, input *SetTaskOutputInput) error {
-	return setTaskOutputWithOptionalAuthority(projectRoot, input, nil)
+	_, err := SetTaskOutputWithOptions(projectRoot, input)
+	return err
+}
+
+func SetTaskOutputWithOptions(projectRoot string, input *SetTaskOutputInput) (*SetTaskOutputResult, error) {
+	return setTaskOutputResult(projectRoot, input, nil)
 }
 
 // SetTaskOutputWithAuthority fences the output write with the caller's
 // registration generation.
 func SetTaskOutputWithAuthority(projectRoot string, input *SetTaskOutputInput, authority models.AgentAuthority) error {
-	if err := requireAuthorityActor(authority, input.AgentID); err != nil {
-		return err
-	}
-	return setTaskOutputWithOptionalAuthority(projectRoot, input, &authority)
+	_, err := SetTaskOutputWithAuthorityAndOptions(projectRoot, input, authority)
+	return err
 }
 
-func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority) (retErr error) {
+func SetTaskOutputWithAuthorityAndOptions(projectRoot string, input *SetTaskOutputInput, authority models.AgentAuthority) (*SetTaskOutputResult, error) {
+	return setTaskOutputResult(projectRoot, input, &authority)
+}
+
+func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority) (result *SetTaskOutputResult, retErr error) {
+	if input == nil {
+		return nil, WrapLifecycleError("set-task-output", nil, fmt.Errorf("output input is required"), models.LifecycleInvalidInput, "correct_input", "none")
+	}
+	invocation := NewLifecycleInvocation(projectRoot)
+	var outcome models.LifecycleOutcome
+	defer func() {
+		failure, action := models.LifecycleStateChanged, "requery"
+		var invalid *PreconditionError
+		if errors.As(retErr, &invalid) {
+			failure, action = models.LifecycleInvalidInput, "correct_input"
+		}
+		retErr = WrapLifecycleError("set-task-output", nil, retErr, failure, action, "none")
+		// The requested task ID remains useful when storage fails before a task
+		// observation is available; do not invent its status or ownership.
+		var lifecycleErr *LifecycleError
+		if errors.As(retErr, &lifecycleErr) && lifecycleErr.Outcome.TaskID == "" {
+			lifecycleErr.Outcome.TaskID = input.TaskID
+		}
+		var warnings *[]string
+		if result != nil {
+			warnings = &result.Warnings
+		}
+		invocation.FinishResult("set-task-output", outcome, &retErr, warnings)
+	}()
+	if authority != nil {
+		if err := requireAuthorityActor(*authority, input.AgentID); err != nil {
+			return nil, err
+		}
+	}
+	if err := ValidateLifecycleRequestOptions(input.Request); err != nil {
+		return nil, &PreconditionError{Reason: err.Error()}
+	}
+	if err := setTaskOutputWithOptionalAuthority(projectRoot, input, authority, &outcome); err != nil {
+		return nil, err
+	}
+	return &SetTaskOutputResult{LifecycleOutcome: outcome, TaskID: input.TaskID, OutputCount: len(input.Output), StatePath: paths.New(projectRoot).StatePath()}, nil
+}
+
+func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority, outcome *models.LifecycleOutcome) (retErr error) {
 	phase := "validate-output"
 	defer func() {
 		if retErr == nil {
@@ -128,14 +183,26 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 	}
 
 	phase = "persist-output"
-	return lifecycleMutation(bb, authority)(func(state *models.State) error {
+	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		task := state.FindTask(input.TaskID)
 		if task == nil {
-			return fmt.Errorf("task %s not found", input.TaskID)
+			return &PreconditionError{Reason: fmt.Sprintf("task %s not found", input.TaskID)}
+		}
+		request, err := NewLifecycleRequest("set-task-output", task, input.AgentID, authority, input.Request, input.Output)
+		if err != nil {
+			return err
+		}
+		receipt, err := CheckLifecycleRequest(task, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			*outcome = LifecycleReplayOutcome(task, receipt, input.AgentID)
+			return errLifecycleReplay
 		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)}
+			return WrapLifecycleError("set-task-output", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != input.AgentID {
@@ -143,7 +210,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			if task.AssignedTo != nil {
 				currentAgent = *task.AssignedTo
 			}
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}
+			return WrapLifecycleError("set-task-output", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}, models.LifecycleStaleCaller, "stop", "none")
 		}
 
 		if err := validateDecompositionRootOutput(state, resolver, task.RolePair, input.Output); err != nil {
@@ -180,8 +247,13 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			Time: time.Now().UTC(), Event: models.TaskEventOutputSet, Agent: &input.AgentID,
 			Extra: map[string]any{"previous_output_count": previousCount, "output_count": len(input.Output)},
 		})
-		return nil
+		*outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		return err
 	})
+	if isLifecycleReplay(err) {
+		return nil
+	}
+	return err
 }
 
 func validateOutputArtifactRefScalars(taskID string, output []models.OutputEntry) error {

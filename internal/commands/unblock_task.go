@@ -29,6 +29,10 @@ func printUnblockTaskResult(result *ops.UnblockTaskResult, err error) error {
 		return fmt.Errorf("unblock task: %w", err)
 	}
 
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
+	}
+
 	if result.AssignedTo != "" {
 		fmt.Printf("Task %s unblocked: %s -> %s, assigned to %s\n",
 			result.TaskID, result.FromStatus, result.ToStatus, result.AssignedTo)

@@ -878,8 +878,9 @@ func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
 		t.Error("setAgentToOrchestratingStatus() should return error for non-existent agent")
 	}
 
-	if !strings.Contains(err.Error(), "current generation fingerprint <missing>") {
-		t.Errorf("expected missing current-generation diagnostic, got %T: %v", err, err)
+	assertSupervisorAuthorityError(t, err, "orchestrator-999", "test-generation")
+	if !strings.Contains(err.Error(), "missing registration authority") {
+		t.Errorf("expected missing authority diagnostic, got %T: %v", err, err)
 	}
 }
 
@@ -898,8 +899,9 @@ func TestResetAgentToIdle_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nonexistent agent")
 	}
-	if !strings.Contains(err.Error(), "current generation fingerprint <missing>") {
-		t.Errorf("expected missing current-generation diagnostic, got %T: %v", err, err)
+	assertSupervisorAuthorityError(t, err, "nonexistent", "test-generation")
+	if !strings.Contains(err.Error(), "missing registration authority") {
+		t.Errorf("expected missing authority diagnostic, got %T: %v", err, err)
 	}
 }
 
@@ -1111,8 +1113,9 @@ func TestResetAgentAfterExit_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nonexistent agent")
 	}
-	if !strings.Contains(err.Error(), "current generation fingerprint <missing>") {
-		t.Errorf("expected missing current-generation diagnostic, got %T: %v", err, err)
+	assertSupervisorAuthorityError(t, err, "nonexistent", "test-generation")
+	if !strings.Contains(err.Error(), "missing registration authority") {
+		t.Errorf("expected missing authority diagnostic, got %T: %v", err, err)
 	}
 }
 

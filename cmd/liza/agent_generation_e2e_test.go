@@ -45,26 +45,26 @@ type atomicFenceInventoryEntry struct {
 
 var atomicGenerationFenceInventory = []atomicFenceInventoryEntry{
 	{name: "reconcile-verdict", command: "reconcile-verdict", sourceFile: "cmd/liza/cmd_reconcile_verdict.go", declaration: "reconcileVerdictCmd", call: "ops.ReconcileVerdict", authorityBinding: "authority"},
-	{name: "submit-for-review", command: "submit-for-review", sourceFile: "cmd/liza/cmd_review.go", declaration: "submitForReviewCmd", call: "ops.SubmitForReviewWithAuthority", authorityBinding: "authority"},
+	{name: "submit-for-review", command: "submit-for-review", sourceFile: "cmd/liza/cmd_review.go", declaration: "submitForReviewCmd", call: "ops.SubmitForReviewWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "handoff", command: "handoff", sourceFile: "cmd/liza/cmd_review.go", declaration: "handoffCmd", call: "ops.Handoff", authorityField: "Authority", authorityBinding: "&authority"},
-	{name: "submit-verdict", command: "submit-verdict", sourceFile: "cmd/liza/cmd_review.go", declaration: "submitVerdictCmd", call: "ops.SubmitVerdictWithAuthority", authorityBinding: "authority"},
+	{name: "submit-verdict", command: "submit-verdict", sourceFile: "cmd/liza/cmd_review.go", declaration: "submitVerdictCmd", call: "ops.SubmitVerdictWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "await-verdict", command: "await-verdict", sourceFile: "cmd/liza/cmd_review.go", declaration: "awaitVerdictCmd", call: "awaitVerdict", authorityBinding: "authority"},
 	{name: "await-resubmission", command: "await-resubmission", sourceFile: "cmd/liza/cmd_review.go", declaration: "awaitResubmissionCmd", call: "awaitResubmission", authorityBinding: "authority"},
-	{name: "wt-merge", command: "wt-merge", sourceFile: "cmd/liza/cmd_worktree.go", declaration: "wtMergeCmd", call: "ops.MergeWorktreeWithAuthority", authorityBinding: "authority"},
-	{name: "claim-task", command: "claim-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "claimTaskCmd", call: "ops.ClaimTaskWithAuthority", authorityBinding: "authority"},
+	{name: "wt-merge", command: "wt-merge", sourceFile: "cmd/liza/cmd_worktree.go", declaration: "wtMergeCmd", call: "ops.MergeWorktreeWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "claim-task", command: "claim-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "claimTaskCmd", call: "ops.ClaimTaskWithRequest", authorityBinding: "&authority"},
 	{name: "mark-blocked", command: "mark-blocked", sourceFile: "cmd/liza/cmd_task.go", declaration: "markBlockedCmd", call: "ops.MarkBlockedWithAuthority", authorityBinding: "authority"},
 	{name: "write-checkpoint", command: "write-checkpoint", sourceFile: "cmd/liza/cmd_task.go", declaration: "writeCheckpointCmd", call: "ops.WriteCheckpointWithAuthority", authorityBinding: "authority"},
-	{name: "set-task-output", command: "set-task-output", sourceFile: "cmd/liza/cmd_task.go", declaration: "setTaskOutputCmd", call: "ops.SetTaskOutputWithAuthority", authorityBinding: "authority"},
+	{name: "set-task-output", command: "set-task-output", sourceFile: "cmd/liza/cmd_task.go", declaration: "setTaskOutputCmd", call: "ops.SetTaskOutputWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "add-task", command: "add-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "addTaskCmd", call: "ops.AddTaskWithAuthority", authorityBinding: "authority"},
 	{name: "add-tasks", command: "add-tasks", sourceFile: "cmd/liza/cmd_task.go", declaration: "addTasksCmd", call: "ops.AddTasksWithAuthority", authorityBinding: "authority"},
 	{name: "supersede-task", command: "supersede-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "supersedeTaskCmd", call: "ops.SupersedeTaskWithAuthority", authorityBinding: "authority"},
-	{name: "retarget-dependency", command: "retarget-dependency", sourceFile: "cmd/liza/cmd_task.go", declaration: "retargetDependencyCmd", call: "ops.RetargetDependencyWithAuthority", authorityBinding: "authority"},
-	{name: "apply-dependency-repair", command: "apply-dependency-repair", sourceFile: "cmd/liza/cmd_task.go", declaration: "applyDependencyRepairCmd", call: "ops.ApplyDependencyRepairWithAuthority", authorityBinding: "authority"},
-	{name: "repair-superseded-dependencies", command: "repair-superseded-dependencies", sourceFile: "cmd/liza/cmd_task.go", declaration: "repairSupersededDependenciesCmd", call: "ops.RepairSupersededDependenciesWithAuthority", authorityBinding: "authority"},
+	{name: "retarget-dependency", command: "retarget-dependency", sourceFile: "cmd/liza/cmd_task.go", declaration: "retargetDependencyCmd", call: "ops.RetargetDependencyWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "apply-dependency-repair", command: "apply-dependency-repair", sourceFile: "cmd/liza/cmd_task.go", declaration: "applyDependencyRepairCmd", call: "ops.ApplyDependencyRepairWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "repair-superseded-dependencies", command: "repair-superseded-dependencies", sourceFile: "cmd/liza/cmd_task.go", declaration: "repairSupersededDependenciesCmd", call: "ops.RepairSupersededDependenciesWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "unblock-task", command: "unblock-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "unblockTaskCmd", call: "ops.UnblockTaskWithAuthority", authorityBinding: "authority"},
 	{name: "assess-blocked", command: "assess-blocked", sourceFile: "cmd/liza/cmd_task.go", declaration: "assessBlockedCmd", call: "ops.AssessBlockedWithAuthority", authorityBinding: "authority"},
-	{name: "assess-hypothesis-exhausted", command: "assess-hypothesis-exhausted", sourceFile: "cmd/liza/cmd_task.go", declaration: "assessHypothesisExhaustedCmd", call: "ops.AssessHypothesisExhaustedWithAuthority", authorityBinding: "authority"},
-	{name: "cancel-task", command: "cancel-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "cancelTaskCmd", call: "ops.CancelTaskWithAuthority", authorityBinding: "authority"},
+	{name: "assess-hypothesis-exhausted", command: "assess-hypothesis-exhausted", sourceFile: "cmd/liza/cmd_task.go", declaration: "assessHypothesisExhaustedCmd", call: "ops.AssessHypothesisExhaustedWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "cancel-task", command: "cancel-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "cancelTaskCmd", call: "ops.CancelTaskWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "reconcile-merged", command: "reconcile-merged", sourceFile: "cmd/liza/cmd_task.go", declaration: "reconcileMergedCmd", call: "ops.ReconcileMergedWithAuthority", authorityBinding: "authority"},
 	{name: "claim-doer", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ClaimTaskWithAuthority", authorityBinding: "*authority"},
 	{name: "resume-handoff", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ResumeHandoff", authorityField: "Authority", authorityBinding: "authority"},
@@ -607,15 +607,19 @@ func assertE2EJSONAuthorityError(t *testing.T, stdout, agentID string) {
 	if envelope["ok"] != false {
 		t.Fatalf("stale JSON envelope = %v, want ok=false", envelope)
 	}
-	for _, want := range []string{agentID, fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationA))), fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationB)))} {
+	for _, want := range []string{agentID, "STALE_CALLER", "stop"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("JSON error = %s, want %q", stdout, want)
 		}
 	}
 	for _, generation := range []string{e2eGenerationA, e2eGenerationB} {
-		if strings.Contains(stdout, generation) {
-			t.Fatal("JSON error exposes reusable generation")
+		if strings.Contains(stdout, generation) || strings.Contains(stdout, fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))) {
+			t.Fatal("JSON error exposes registration generation or fingerprint")
 		}
+	}
+	details := envelope["error"].(map[string]any)["details"].(map[string]any)
+	if details["safe_action"] != "stop" {
+		t.Fatal("JSON authority rejection must direct the caller to stop")
 	}
 }
 
@@ -624,14 +628,14 @@ func assertE2EAuthorityError(t *testing.T, err error, agentID string) {
 	if !ops.IsAgentAuthorityError(err) {
 		t.Fatalf("error = %T %v, want AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{agentID, fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationA))), fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationB)))} {
+	for _, want := range []string{agentID, "stop"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
 		}
 	}
 	for _, generation := range []string{e2eGenerationA, e2eGenerationB} {
-		if strings.Contains(err.Error(), generation) {
-			t.Fatal("error exposes reusable generation")
+		if strings.Contains(err.Error(), generation) || strings.Contains(err.Error(), fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))) {
+			t.Fatal("error exposes registration generation or fingerprint")
 		}
 	}
 }

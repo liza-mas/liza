@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -8,6 +10,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"gopkg.in/yaml.v3"
 )
@@ -87,7 +90,7 @@ func TestCancelTaskCommand(t *testing.T) {
 			taskStatus:  models.TaskStatusMerged,
 			reason:      "test",
 			wantErr:     true,
-			errContains: "transition",
+			errContains: models.LifecycleAlreadyTransitioned,
 		},
 		{
 			name:        "error: empty reason",
@@ -180,6 +183,19 @@ func TestCancelTaskCommand(t *testing.T) {
 					t.Errorf("Expected error containing %q, got nil", tt.errContains)
 				} else if !strings.Contains(err.Error(), tt.errContains) {
 					t.Errorf("Expected error containing %q, got %q", tt.errContains, err.Error())
+				}
+				if tt.taskStatus == models.TaskStatusMerged {
+					var lifecycleErr *ops.LifecycleError
+					if !errors.As(err, &lifecycleErr) || lifecycleErr.Outcome.Outcome != models.LifecycleAlreadyTransitioned || lifecycleErr.Outcome.SafeAction != "stop" {
+						t.Fatalf("terminal cancellation = %v, want ALREADY_TRANSITIONED/stop", err)
+					}
+					after, readErr := os.ReadFile(statePath)
+					if readErr != nil {
+						t.Fatal(readErr)
+					}
+					if !bytes.Equal(stateYAML, after) {
+						t.Fatal("terminal cancellation changed state")
+					}
 				}
 				return
 			}

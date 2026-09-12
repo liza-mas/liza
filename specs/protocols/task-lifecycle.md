@@ -5,6 +5,9 @@
 Tasks flow through a lifecycle managed by Planner, Coder, and Code Reviewer roles. Each transition has explicit triggers and validation requirements.
 
 For state diagrams and valid transitions, see [State Machines](../architecture/state-machines.md).
+For duplicate/stale commands, explicit retry identity and safe next actions, see
+[Lifecycle Results](lifecycle-results.md). Await review only after the submission
+command completes with a result that permits continuing.
 
 ## Task Type and Role Workflow
 
@@ -562,6 +565,7 @@ Per-slice immutable source snapshots are recorded separately.
 - [Acceptance Evidence](acceptance-evidence.md) — strict coding-task admission, execution receipts and evidence repair
 - [Agent Initialization](agent-initialization.md) — startup sequence from spawn to first action
 - [State Machines](../architecture/state-machines.md) — state transitions
+- [Lifecycle Results](lifecycle-results.md) — authoritative outcomes, bounded replay and crash recovery
 - [Roles](../architecture/roles.md) — role responsibilities
 - [Worktree Management](worktree-management.md) — worktree operations
 - [Sprint Governance](sprint-governance.md) — checkpoints, retrospectives

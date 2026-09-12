@@ -169,6 +169,7 @@ func dependencyDescendantTasks(state *models.State, task *models.Task) []*models
 
 // AssessBlockedResult contains the outcome of recording an orchestrator assessment.
 type AssessBlockedResult struct {
+	models.LifecycleOutcome
 	TaskID        string                `json:"task_id"`
 	Reason        string                `json:"reason,omitempty"`
 	Questions     []string              `json:"questions,omitempty"`
@@ -188,6 +189,7 @@ func (r *AssessBlockedResult) GetWarnings() []string {
 // both Reason and one to three Questions. A nil RepairRequest clears any prior
 // request from the canonical blocker state.
 type AssessBlockedOptions struct {
+	Request       LifecycleRequestOptions
 	Reason        string
 	Questions     []string
 	RepairRequest *models.RepairRequest
@@ -215,7 +217,24 @@ func AssessBlockedWithAuthority(projectRoot, taskID, note string, authority mode
 	return assessBlockedWithOptionalAuthority(projectRoot, taskID, note, authority.ID, opts, &authority)
 }
 
-func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID string, opts AssessBlockedOptions, authority *models.AgentAuthority) (*AssessBlockedResult, error) {
+func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID string, opts AssessBlockedOptions, authority *models.AgentAuthority) (returned *AssessBlockedResult, retErr error) {
+	invocation := NewLifecycleInvocation(projectRoot)
+	const operation = "assess-blocked"
+	var observed *models.Task
+	effects := "none"
+	defer func() {
+		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		var outcome models.LifecycleOutcome
+		var warnings *[]string
+		if returned != nil {
+			outcome = returned.LifecycleOutcome
+			warnings = &returned.Warnings
+		}
+		invocation.FinishResult(operation, outcome, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
+		return nil, err
+	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -226,7 +245,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 	// so this must be restricted to orchestrator agents even though the MCP handler
 	// also gates via resolveOrchestratorID.
 	if err := identity.ValidateRole(agentID, roles.Orchestrator); err != nil {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}
+		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
 	}
 
 	reconcile := opts.Reason != "" || len(opts.Questions) > 0 || opts.RepairRequest != nil
@@ -253,14 +272,35 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 	now := time.Now().UTC()
 	result := AssessBlockedResult{TaskID: taskID}
 
-	err := lifecycleMutation(bb, authority)(func(state *models.State) error {
+	err := lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
+		defer func() {
+			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
+		}()
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
+		copy := *task
+		observed = &copy
+		request, err := NewLifecycleRequest(operation, task, agentID, authority, opts.Request, struct {
+			Note, Reason  string
+			Questions     []string
+			RepairRequest *models.RepairRequest
+		}{note, opts.Reason, opts.Questions, repairRequest})
+		if err != nil {
+			return err
+		}
+		receipt, err := CheckLifecycleRequest(task, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			result.LifecycleOutcome = LifecycleReplayOutcome(task, receipt, agentID)
+			return errLifecycleReplay
+		}
 
 		if task.Status != models.TaskStatusBlocked {
-			return &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}
+			return WrapLifecycleError(operation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 
 		entry := models.TaskHistoryEntry{
@@ -294,11 +334,18 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			result.Questions = append([]string(nil), opts.Questions...)
 			result.RepairRequest = repairRequest
 		}
-		return nil
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		if err == nil {
+			effects = "unknown"
+		}
+		return err
 	})
+	if isLifecycleReplay(err) {
+		return &result, nil
+	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to assess blocked task: %w", err)
+		return nil, WrapLifecycleError(operation, observed, fmt.Errorf("failed to assess blocked task: %w", err), models.LifecycleStateChanged, "requery", effects)
 	}
 
 	message := taskID

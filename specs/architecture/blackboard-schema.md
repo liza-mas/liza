@@ -10,6 +10,7 @@
 |------|---------|---------------|
 | `state.yaml` | Current state | Atomic read-modify-write |
 | `log.yaml` | Activity history | Append-only |
+| `lifecycle-metrics/` | Fixed operation/outcome counters per sprint, with observation-window metadata | Locked atomic replacement per sprint |
 | `alerts.log` | Persistent watcher alerts | Append-only |
 | `archive/` | Terminal-state tasks older than threshold | Periodic pruning |
 | `circuit_breaker_report.md` | Latest qualifying circuit-breaker response report | Rewritten by `analyze` for each qualifying response |
@@ -488,6 +489,53 @@ circular `depends_on` prevents topological ordering. Semantics:
 - Checkpoint auto-trigger (`sprint_checkpoint.go`) still uses `IsUnconsumedPlanningOutput` today
 - Idempotent per (taskID, transitionName, sorted cycle member IDs)
 - Cycle members stored in `Extra["cycle_members"]` (sorted task ID list)
+
+### Lifecycle Receipt Metadata
+
+The optional task `lifecycle` field has three members:
+
+| Member | Shape and constraint |
+|--------|----------------------|
+| `revision` | Monotonic unsigned counter advanced by effective covered mutations; absent metadata starts at zero |
+| `receipts` | Completed identities/projections, latest four per operation and at most sixteen per task |
+| `preparation` | At most one unresolved request/boundary reservation, separate from receipt pruning |
+
+Each receipt contains `operation`, `actor`, optional `request_id`,
+`expected_transition`, `payload_digest`, completion `sequence`,
+`transition_id` and a compact `projection`. Generation digests used for
+internal authority matching are persistence-only and must be redacted from
+inspection and presentation. Preparation retains the request identity and
+live `boundary`; it does not assert completion.
+
+Receipt/preparation projections are limited to 1 KiB serialized. No arbitrary
+notes, output reports or edge lists are copied into them. Validate known
+operations, count/size limits and unique monotonic versions. Replay never
+appends metadata or repeats a domain event. Retention is the intersection of
+both count bounds, with no guaranteed per-operation slots or time-based expiry.
+Keep completed receipts at terminal transitions; expired requests requery/stop
+instead of silently mutating again.
+
+Authorized ownership/attempt-ending transactions and current-generation
+turnover retire obsolete preparations while advancing revision. Denied/no-op
+calls, passive heartbeat renewal and receipt pruning cannot retire a live
+preparation. Retirement creates no completion receipt and promises no rollback.
+
+The existing single `submitted_for_review` history event additionally records
+original full input SHA and attempt boundary. It can detect expired legacy SHA
+requests without claiming exact replay or adding an unbounded receipt list.
+Old state/history without this metadata remains valid.
+
+Task inspection and lifecycle results expose a current `transition_id`,
+separate from a receipt's original completion identity. The token detects
+ownership/history changes, including release/reacquire ABA, without changing
+on passive lease renewal. See [Lifecycle Results](../protocols/lifecycle-results.md)
+for request-pair identity, replay and preparation semantics.
+
+Sprint outcome counters live outside task state and domain history. Their
+optional metrics projection reports availability and `observed_since`.
+Missing/corrupt data is unavailable, not zero; a first write starts a new
+observation window. Counter snapshots are scoped to sprint identity and cannot
+claim lossless coverage across process death or manual deletion.
 
 ### Iteration Field Lifecycle
 
@@ -1361,4 +1409,5 @@ diagnostics exclude raw environment values, probe output and process errors.
 
 - [State Machines](state-machines.md) — state transitions
 - [Task Lifecycle](../protocols/task-lifecycle.md) — operational flow
+- [Lifecycle Results](../protocols/lifecycle-results.md) — request identity, receipt retention and safe actions
 - [Tooling](../implementation/tooling.md) — CLI commands for blackboard operations

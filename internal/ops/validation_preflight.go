@@ -384,6 +384,7 @@ func ReleaseValidationOwnership(projectRoot, taskID, agentID string, authority *
 		if task == nil {
 			return nil
 		}
+		releasedOwnership := false
 		if task.AssignedTo != nil && *task.AssignedTo == agentID {
 			executing, e := pb.resolver.ExecutingStatus(task.RolePair)
 			if e != nil {
@@ -399,6 +400,7 @@ func ReleaseValidationOwnership(projectRoot, taskID, agentID string, authority *
 			task.AssignedTo = nil
 			task.LeaseExpires = nil
 			task.HandoffPending = false
+			releasedOwnership = true
 		}
 		if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
 			active, released, e := ResolveReviewerReleaseStatus(task, pb.pr)
@@ -410,6 +412,10 @@ func ReleaseValidationOwnership(projectRoot, taskID, agentID string, authority *
 			}
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
+			releasedOwnership = true
+		}
+		if releasedOwnership {
+			models.AdvanceLifecycle(task)
 		}
 		if agent, ok := state.Agents[agentID]; ok && agent.CurrentTask != nil && *agent.CurrentTask == taskID {
 			state.ReleaseAgent(agentID)

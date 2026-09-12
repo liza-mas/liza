@@ -32,6 +32,10 @@ func printMarkBlockedResult(result *ops.MarkBlockedResult, err error) error {
 		return fmt.Errorf("mark blocked: %w", err)
 	}
 
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
+	}
+
 	fmt.Printf("Task %s marked as BLOCKED\nReason: %s\n", result.TaskID, result.Reason)
 	if len(result.DependsOn) > 0 {
 		fmt.Printf("Depends on: %v\n", result.DependsOn)

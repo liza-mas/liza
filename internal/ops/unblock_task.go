@@ -20,6 +20,8 @@ const integrationOperationUnblockTask = "unblock-task"
 
 // UnblockTaskResult contains the outcome of restoring a repaired BLOCKED task.
 type UnblockTaskResult struct {
+	models.LifecycleOutcome
+	Warnings     []string                 `json:"warnings,omitempty"`
 	TaskID       string                   `json:"task_id"`
 	FromStatus   models.TaskStatus        `json:"from_status"`
 	ToStatus     models.TaskStatus        `json:"to_status"`
@@ -31,6 +33,7 @@ type UnblockTaskResult struct {
 
 // UnblockTaskOptions configures unblock-task behavior.
 type UnblockTaskOptions struct {
+	Request    LifecycleRequestOptions
 	AssignTo   string
 	RebaseOn   string
 	AllowDirty bool
@@ -107,7 +110,34 @@ func UnblockTaskWithAuthority(projectRoot, taskID, reason string, authority mode
 	return unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, authority.ID, opts, &authority)
 }
 
-func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID string, opts UnblockTaskOptions, authority *models.AgentAuthority) (*UnblockTaskResult, error) {
+func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID string, opts UnblockTaskOptions, authority *models.AgentAuthority) (result *UnblockTaskResult, retErr error) {
+	invocation := NewLifecycleInvocation(projectRoot)
+	effects := false
+	defer func() {
+		outcome, action, effect := models.LifecycleInvalidInput, "correct_input", "none"
+		if effects {
+			outcome, action, effect = models.LifecycleStateChanged, "requery", "unknown"
+		}
+		retErr = WrapLifecycleError("unblock-task", nil, retErr, outcome, action, effect)
+		var value models.LifecycleOutcome
+		var warnings *[]string
+		if result != nil {
+			value, warnings = result.LifecycleOutcome, &result.Warnings
+		}
+		invocation.FinishResult("unblock-task", value, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
+		return nil, err
+	}
+	retErr = withOwnershipTaskLock(projectRoot, taskID, "unblock-task", func() error {
+		var err error
+		result, err = unblockTaskLifecycle(projectRoot, taskID, reason, agentID, opts, authority, &effects)
+		return err
+	})
+	return result, retErr
+}
+
+func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts UnblockTaskOptions, authority *models.AgentAuthority, effects *bool) (*UnblockTaskResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -139,32 +169,56 @@ func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID strin
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
-	if opts.AssignTo != "" {
-		_, task, err := readTaskState(bb, taskID)
-		if err != nil {
-			return nil, err
-		}
-		if len(task.ValidationPrerequisites) > 0 {
-			return nil, &PreconditionError{Reason: "validation preflight requires the target session; unblock without --assign-to and let its supervisor claim the task"}
-		}
-	}
-
-	rebaseResult, err := maybeRebaseTaskBeforeUnblock(bb, lp.ProjectRoot(), taskID, agentID, opts, authority)
+	preflight, err := bb.Read()
 	if err != nil {
 		return nil, err
 	}
+	if authority != nil {
+		if err := RequireAgentAuthority(preflight, *authority); err != nil {
+			return nil, err
+		}
+	}
+	observed := preflight.FindTask(taskID)
+	if observed == nil {
+		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
+	}
+	request, err := NewLifecycleRequest("unblock-task", observed, agentID, authority, opts.Request, struct {
+		Reason, AssignTo, RebaseOn string
+		AllowDirty                 bool
+	}{reason, opts.AssignTo, opts.RebaseOn, opts.AllowDirty})
+	if err != nil {
+		return nil, err
+	}
+	var rebaseResult *UnblockTaskRebaseResult
+	prepared, dryRun := false, true
 
 	var result UnblockTaskResult
-	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
+	mutate := func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
+		if prepared {
+			if err := ValidateLifecyclePreparation(task, request); err != nil {
+				return err
+			}
+		} else {
+			receipt, err := checkOwnerEndingRequest(task, request)
+			if err != nil {
+				return err
+			}
+			if receipt != nil {
+				result = UnblockTaskResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, FromStatus: receipt.Projection.SourceStatus, ToStatus: task.Status, AssignedTo: opts.AssignTo}
+				return errLifecycleReplay
+			}
+		}
+		// Exact replay has no new assignment; fresh protected work must be
+		// claimed by its own validated provider session.
 		if opts.AssignTo != "" && len(task.ValidationPrerequisites) > 0 {
-			return validationError("target_session_required")
+			return &PreconditionError{Reason: "validation preflight requires the target session; unblock without --assign-to and let its supervisor claim the task"}
 		}
 		if task.Status != models.TaskStatusBlocked {
-			return &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}
+			return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 		if task.RolePair == "" {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
@@ -296,8 +350,44 @@ func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID strin
 		if opts.AssignTo != "" {
 			result.LeaseExpires = &leaseExpires
 		}
-		return nil
-	})
+		if dryRun {
+			return nil
+		}
+		models.AdvanceLifecycle(task)
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{SourceStatus: fromStatus})
+		return err
+	}
+	// Validate every state-dependent input on an isolated snapshot before Git.
+	if err := mutate(preflight); err != nil {
+		if isLifecycleReplay(err) {
+			return &result, nil
+		}
+		return nil, err
+	}
+	dryRun = false
+	if strings.TrimSpace(opts.RebaseOn) != "" {
+		prepare := func() error {
+			err := lifecycleMutation(bb, authority)(func(state *models.State) error {
+				task := state.FindTask(taskID)
+				if task == nil {
+					return &errors.NotFoundError{Entity: "task", ID: taskID}
+				}
+				return prepareOwnerEndingRequest(task, request)
+			})
+			if err == nil {
+				prepared, *effects = true, true
+			}
+			return err
+		}
+		rebaseResult, err = maybeRebaseTaskBeforeUnblock(bb, lp.ProjectRoot(), taskID, agentID, opts, authority, request, prepare)
+		if err != nil {
+			return nil, err
+		}
+	}
+	err = lifecycleMutation(bb, authority)(mutate)
+	if isLifecycleReplay(err) {
+		return &result, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to unblock task: %w", err)
 	}
@@ -335,7 +425,7 @@ func validateUnblockDirectDependencies(state *models.State, resolver *pipeline.R
 	return nil
 }
 
-func maybeRebaseTaskBeforeUnblock(bb *db.Blackboard, projectRoot, taskID, agentID string, opts UnblockTaskOptions, authority *models.AgentAuthority) (*UnblockTaskRebaseResult, error) {
+func maybeRebaseTaskBeforeUnblock(bb *db.Blackboard, projectRoot, taskID, agentID string, opts UnblockTaskOptions, authority *models.AgentAuthority, request LifecycleRequest, prepare func() error) (*UnblockTaskRebaseResult, error) {
 	if strings.TrimSpace(opts.RebaseOn) == "" {
 		return nil, nil
 	}
@@ -357,6 +447,9 @@ func maybeRebaseTaskBeforeUnblock(bb *db.Blackboard, projectRoot, taskID, agentI
 	}
 
 	autostash := opts.AllowDirty && len(trackedStatusLines(snapshot.StatusShort)) > 0
+	if err := prepare(); err != nil {
+		return nil, err
+	}
 	if err := gitWrapper.RebaseOntoWithOptions(snapshot.WorktreePath, snapshot.TargetSHA, gitpkg.RebaseOptions{Autostash: autostash}); err != nil {
 		if abortErr := gitWrapper.AbortRebase(snapshot.WorktreePath); abortErr != nil {
 			return nil, &OperationalError{
@@ -377,7 +470,7 @@ func maybeRebaseTaskBeforeUnblock(bb *db.Blackboard, projectRoot, taskID, agentI
 				Err:     err,
 			}
 		}
-		if markErr := markUnblockRebaseConflict(bb, taskID, agentID, snapshot, err, authority); markErr != nil {
+		if markErr := markUnblockRebaseConflict(bb, taskID, agentID, snapshot, err, authority, request); markErr != nil {
 			return nil, markErr
 		}
 		return nil, &UnblockRebaseConflictError{
@@ -488,7 +581,7 @@ func revalidateUnblockRebase(projectRoot string, task *models.Task, rebase *Unbl
 	return nil
 }
 
-func markUnblockRebaseConflict(bb *db.Blackboard, taskID, agentID string, snapshot unblockRebaseSnapshot, cause error, authority *models.AgentAuthority) error {
+func markUnblockRebaseConflict(bb *db.Blackboard, taskID, agentID string, snapshot unblockRebaseSnapshot, cause error, authority *models.AgentAuthority, request LifecycleRequest) error {
 	now := time.Now().UTC()
 	reason := fmt.Sprintf("unblock-task rebase conflict onto %s (%s)", snapshot.TargetRef, shortSHA(snapshot.TargetSHA))
 	questions := []string{
@@ -517,6 +610,10 @@ func markUnblockRebaseConflict(bb *db.Blackboard, taskID, agentID string, snapsh
 		if task.Worktree == nil || *task.Worktree != snapshot.WorktreeRel {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s worktree changed during unblock rebase conflict handling", taskID)}
 		}
+		if err := ValidateLifecyclePreparation(task, request); err != nil {
+			return err
+		}
+		models.AdvanceLifecycle(task)
 		task.BlockedReason = &reason
 		task.BlockedQuestions = questions
 		task.RepairRequest = &models.RepairRequest{

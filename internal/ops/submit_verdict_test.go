@@ -2,6 +2,7 @@ package ops
 
 import (
 	"bytes"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -343,9 +344,14 @@ func TestSubmitVerdict_RejectionReasonByteLimit(t *testing.T) {
 		reason := strings.Repeat("x", statehygiene.MaxStateTextBytes+1)
 
 		_, err = SubmitVerdict(projectRoot, "task-1", "REJECTED", reason, "code-reviewer-1", "")
-		precondition, ok := err.(*PreconditionError)
-		if !ok {
+		var precondition *PreconditionError
+		if !stderrors.As(err, &precondition) {
 			t.Fatalf("SubmitVerdict() error = %T %v, want *PreconditionError", err, err)
+		}
+		var lifecycleErr *LifecycleError
+		if !stderrors.As(err, &lifecycleErr) || lifecycleErr.Outcome.Outcome != models.LifecycleInvalidInput ||
+			lifecycleErr.Outcome.SafeAction != "correct_input" || lifecycleErr.Outcome.Effects != "none" {
+			t.Fatalf("oversized verdict must remain a pre-effect hard failure: %v", err)
 		}
 		for _, part := range []string{"4097 bytes", "4096-byte maximum", paths.ProjectDirName() + "/agent-outputs/", "bounded summary", "artifact reference"} {
 			if !strings.Contains(precondition.Reason, part) {
@@ -477,29 +483,20 @@ func TestSubmitVerdict_WrongStatus(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf("read state error: %v", readErr)
 	}
-	if len(readState.Anomalies) != 1 {
-		t.Fatalf("anomaly count = %d, want 1", len(readState.Anomalies))
+	if len(readState.Anomalies) != 0 {
+		t.Fatal("late verdict must not mutate anomaly history")
 	}
-	anomaly := readState.Anomalies[0]
-	if anomaly.Type != "stale_verdict" || anomaly.Task != "task-1" || anomaly.Reporter != "code-reviewer-1" {
-		t.Fatalf("anomaly = %+v, want stale_verdict for task-1 by code-reviewer-1", anomaly)
-	}
-	if anomaly.Details["attempted_verdict"] != "REJECTED" {
-		t.Fatalf("attempted_verdict = %v, want REJECTED", anomaly.Details["attempted_verdict"])
-	}
-	if anomaly.Details["current_status"] != string(models.TaskStatusImplementing) {
-		t.Fatalf("current_status = %v, want %s", anomaly.Details["current_status"], models.TaskStatusImplementing)
-	}
-	if anomaly.Details["reason"] != "late finding" {
-		t.Fatalf("reason = %v, want late finding", anomaly.Details["reason"])
+	var late *LifecycleError
+	if !stderrors.As(err, &late) || late.Outcome.Outcome != models.LifecycleAlreadyTransitioned || late.Outcome.SafeAction != "stop" {
+		t.Fatalf("late verdict recovery = %v", err)
 	}
 	agent := readState.Agents["code-reviewer-1"]
-	if agent.CurrentTask != nil {
-		t.Fatalf("reviewer CurrentTask = %q, want nil after stale verdict", *agent.CurrentTask)
+	if agent.CurrentTask == nil || *agent.CurrentTask != taskRef {
+		t.Fatal("late verdict changed reviewer ownership")
 	}
 }
 
-func TestSubmitVerdict_RecordsStaleVerdictWhenTaskLeavesReviewBeforeModify(t *testing.T) {
+func TestSubmitVerdict_RequeriesWhenTaskLeavesReviewBeforeModify(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -536,28 +533,21 @@ func TestSubmitVerdict_RecordsStaleVerdictWhenTaskLeavesReviewBeforeModify(t *te
 	t.Cleanup(func() { testSubmitVerdictHooks = nil })
 
 	_, err := SubmitVerdict(tmpDir, "task-1", "REJECTED", "late finding", "code-reviewer-1", "")
-	testhelpers.RequireErrorContains(t, err, "not in a reviewing state")
+	var changed *LifecycleError
+	if !stderrors.As(err, &changed) || changed.Outcome.Outcome != models.LifecycleStateChanged || changed.Outcome.SafeAction != "requery" {
+		t.Fatalf("raced verdict recovery = %v", err)
+	}
 
 	readState, readErr := bb.Read()
 	if readErr != nil {
 		t.Fatalf("read state error: %v", readErr)
 	}
-	if len(readState.Anomalies) != 1 {
-		t.Fatalf("anomaly count = %d, want 1", len(readState.Anomalies))
-	}
-	anomaly := readState.Anomalies[0]
-	if anomaly.Type != "stale_verdict" || anomaly.Task != "task-1" || anomaly.Reporter != "code-reviewer-1" {
-		t.Fatalf("anomaly = %+v, want stale_verdict for task-1 by code-reviewer-1", anomaly)
-	}
-	if anomaly.Details["current_status"] != string(models.TaskStatusImplementing) {
-		t.Fatalf("current_status = %v, want %s", anomaly.Details["current_status"], models.TaskStatusImplementing)
-	}
-	if anomaly.Details["attempted_verdict"] != "REJECTED" {
-		t.Fatalf("attempted_verdict = %v, want REJECTED", anomaly.Details["attempted_verdict"])
+	if len(readState.Anomalies) != 0 {
+		t.Fatal("raced verdict mutated anomaly history")
 	}
 	agent := readState.Agents["code-reviewer-1"]
-	if agent.CurrentTask != nil {
-		t.Fatalf("reviewer CurrentTask = %q, want nil after stale verdict", *agent.CurrentTask)
+	if agent.CurrentTask == nil || *agent.CurrentTask != taskRef {
+		t.Fatal("raced verdict changed reviewer ownership")
 	}
 }
 
@@ -1626,6 +1616,9 @@ func TestSubmitVerdict_CleanScanRouting(t *testing.T) {
 		if rolePair == "coding-pair" {
 			reviewerAgent = "code-reviewer-1"
 		}
+		state.Tasks[0].ReviewingBy = &reviewerAgent
+		lease := now.Add(time.Hour)
+		state.Tasks[0].ReviewLeaseExpires = &lease
 		state.Agents[reviewerAgent] = models.Agent{
 			Role:   strings.TrimSuffix(reviewerAgent, "-1"),
 			Status: models.AgentStatusReviewing,

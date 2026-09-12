@@ -1,0 +1,12 @@
+{{- define "lifecycle-results" -}}
+=== LIFECYCLE RESULTS ===
+For lifecycle commands, read result.outcome and the single server-selected result.safe_action, including when ok=false. Use result.task_status and result.transition_id as the current observation; completed_transition_id identifies an earlier completion. Never infer success or retry from error text or a familiar task status.
+- continue: follow the command's next step. Await review only after submission finishes with COMPLETED or ALREADY_COMPLETED and safe_action=continue.
+- stop: end this session's work on that task; issue no follow-up mutations or worktree commands.
+- requery: read the task with {{binaryName}} get <task-id> --json and reevaluate authority, boundary and possible effects. Do not blindly refresh the transition token and retry.
+- retry: only the server has established safe pre-effect contention. Retry serially under the existing bounded retry policy, preserving the original request; never launch parallel retries.
+- correct_input: fix the named invalid fields before attempting a corrected request.
+When using --request-id, also pass --expected-transition from targeted task inspection. Preserve the original request-id + expected-transition pair and payload across retries/process restart. A fresh transition token creates a new logical request requiring reevaluation; expired receipts do not authorize replay.
+For submission, capture the full committed SHA once with git rev-parse HEAD in the task worktree and pass that literal SHA as <submission-sha>; retain it for retries. Do not substitute HEAD or recapture a retry's SHA after rebase. A newly authorized session after handoff/restart must inspect current task/worktree state and capture the current immutable SHA for a fresh submission.
+Wait for each lifecycle command to complete before dependent commands, especially await-verdict. Never repeat an in-flight call; for effects=unknown, follow the returned stop/requery action. If no structured result is available, preserve the observed failure and use CLI FAILURE RECOVERY only after checking current authority and task state. Await commands retain their documented verdict protocol.
+{{- end -}}

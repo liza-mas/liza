@@ -126,12 +126,18 @@ func TestQuarantinedVerdictAuthorityDiagnosticsDoNotExposeGenerations(t *testing
 		if !strings.Contains(diagnostic, "code-reviewer-1") {
 			t.Errorf("%s lost the reviewer identity", name)
 		}
+		if !strings.Contains(diagnostic, "stop") {
+			t.Errorf("%s must direct the rejected reviewer to stop", name)
+		}
 		for _, generation := range []string{oldGeneration, currentGeneration} {
-			want := fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))
-			if !strings.Contains(diagnostic, want) {
-				t.Errorf("%s lost the SHA-256 generation fingerprint", name)
+			fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))
+			if strings.Contains(diagnostic, fingerprint) {
+				t.Errorf("%s exposes a SHA-256 generation fingerprint", name)
 			}
 		}
+	}
+	if authorityErr.SafeDetails()["safe_action"] != "stop" {
+		t.Error("authority rejection must direct the caller to stop")
 	}
 	firstFingerprint := generationFingerprint(oldGeneration)
 	if firstFingerprint == "" || firstFingerprint != generationFingerprint(oldGeneration) || firstFingerprint == generationFingerprint(currentGeneration) {

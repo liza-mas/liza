@@ -1102,27 +1102,57 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 	tracker := newExit42RestartTracker()
+	authority := testSupervisorAuthority(t, bb, agentID)
+	var pending ops.LifecycleRequest
+	if err := bb.Modify(func(state *models.State) error {
+		current := state.FindTask(task.ID)
+		var err error
+		pending, err = ops.NewLifecycleRequest("submit-for-review", current, agentID, &authority,
+			ops.LifecycleRequestOptions{RequestID: "pending-submission", ExpectedTransition: models.TaskTransitionID(current)},
+			map[string]string{"commit": strings.Repeat("a", 40)})
+		if err != nil {
+			return err
+		}
+		return ops.PrepareLifecycleRequest(current, pending)
+	}); err != nil {
+		t.Fatalf("prepare submission: %v", err)
+	}
+	assertPreparationPreserved := func() {
+		t.Helper()
+		current, err := bb.GetTask(task.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ops.ValidateLifecyclePreparation(current, pending); err != nil {
+			t.Fatalf("allowed restart invalidated pending submission: %v", err)
+		}
+		if models.TaskTransitionID(current) != pending.ExpectedTransition || len(current.Lifecycle.Receipts) != 0 {
+			t.Fatal("allowed restart changed transition or invented a completion receipt")
+		}
+	}
 
 	// First attempt
-	outcome, err := tracker.Handle(bb, tmpDir, "coder", task.ID, testSupervisorAuthority(t, bb, agentID))
+	outcome, err := tracker.Handle(bb, tmpDir, "coder", task.ID, authority)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 1: %v", err)
 	}
 	if outcome.BlockedTask {
 		t.Fatalf("Handle() should not block on first attempt")
 	}
+	assertPreparationPreserved()
 
 	// Second attempt (at threshold)
-	outcome, err = tracker.Handle(bb, tmpDir, "coder", task.ID, testSupervisorAuthority(t, bb, agentID))
+	outcome, err = tracker.Handle(bb, tmpDir, "coder", task.ID, authority)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 2: %v", err)
 	}
 	if outcome.BlockedTask {
 		t.Fatalf("Handle() should not block at threshold")
 	}
+	assertPreparationPreserved()
 
 	// Third attempt (over threshold)
-	outcome, err = tracker.Handle(bb, tmpDir, "coder", task.ID, testSupervisorAuthority(t, bb, agentID))
+	outcome, err = tracker.Handle(bb, tmpDir, "coder", task.ID, authority)
 	if err != nil {
 		t.Fatalf("Handle() error on attempt 3: %v", err)
 	}
@@ -1137,6 +1167,17 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 	updatedTask := updatedState.FindTask(task.ID)
 	if updatedTask == nil {
 		t.Fatalf("task %q not found", task.ID)
+	}
+	if updatedTask.Status != models.TaskStatusBlocked || updatedTask.Lifecycle == nil || updatedTask.Lifecycle.Preparation != nil {
+		t.Fatal("restart-limit block did not retire the pending submission")
+	}
+	if models.TaskTransitionID(updatedTask) == pending.ExpectedTransition || len(updatedTask.Lifecycle.Receipts) != 0 {
+		t.Fatal("restart-limit block retained the old transition or invented a completion receipt")
+	}
+	var lifecycleErr *ops.LifecycleError
+	if err := ops.ValidateLifecyclePreparation(updatedTask, pending); !stderrors.As(err, &lifecycleErr) ||
+		lifecycleErr.Outcome.Outcome != models.LifecycleStateChanged || lifecycleErr.Outcome.SafeAction != "requery" {
+		t.Fatalf("retired submission finalization = %v, want STATE_CHANGED/requery", err)
 	}
 
 	wantReason := "exit code 42 restart loop detected"

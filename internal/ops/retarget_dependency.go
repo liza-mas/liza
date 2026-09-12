@@ -26,6 +26,7 @@ const (
 // RetargetDependencyResult contains the outcome of retargeting one task
 // dependency edge.
 type RetargetDependencyResult struct {
+	models.LifecycleOutcome
 	TaskID                string   `json:"task_id"`
 	OldDependency         string   `json:"old_dependency"`
 	NewDependencies       []string `json:"new_dependencies"`
@@ -54,7 +55,37 @@ func RetargetDependencyWithAuthority(projectRoot, taskID, oldDependency string, 
 	return retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency, newDependencies, reason, authority.ID, &authority)
 }
 
-func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency string, newDependencies []string, reason, agentID string, authority *models.AgentAuthority) (*RetargetDependencyResult, error) {
+// RetargetDependencyWithOptions identifies a dependency replacement invocation.
+func RetargetDependencyWithOptions(projectRoot, taskID, oldDependency string, newDependencies []string, reason, agentID string, opts LifecycleRequestOptions) (*RetargetDependencyResult, error) {
+	return retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency, newDependencies, reason, agentID, nil, opts)
+}
+
+// RetargetDependencyWithAuthorityAndOptions fences an identified replacement.
+func RetargetDependencyWithAuthorityAndOptions(projectRoot, taskID, oldDependency string, newDependencies []string, reason string, authority models.AgentAuthority, opts LifecycleRequestOptions) (*RetargetDependencyResult, error) {
+	return retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency, newDependencies, reason, authority.ID, &authority, opts)
+}
+
+func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency string, newDependencies []string, reason, agentID string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) (returned *RetargetDependencyResult, retErr error) {
+	invocation := NewLifecycleInvocation(projectRoot)
+	var opts LifecycleRequestOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	var observed *models.Task
+	effects := "none"
+	defer func() {
+		retErr = WrapLifecycleError(retargetDependencyOperation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		var outcome models.LifecycleOutcome
+		var warnings *[]string
+		if returned != nil {
+			outcome = returned.LifecycleOutcome
+			warnings = &returned.Warnings
+		}
+		invocation.FinishResult(retargetDependencyOperation, outcome, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+		return nil, err
+	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -77,22 +108,43 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 	bb := db.For(lp.StatePath())
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+		return nil, WrapLifecycleError(retargetDependencyOperation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, "requery", "none")
 	}
 
 	var result RetargetDependencyResult
 	now := time.Now().UTC()
 
-	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
+	err = lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
+		defer func() {
+			callbackErr = WrapLifecycleError(retargetDependencyOperation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
+		}()
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
+		copy := *task
+		observed = &copy
+		request, err := NewLifecycleRequest(retargetDependencyOperation, task, agentID, authority, opts, struct {
+			OldDependency   string
+			NewDependencies []string
+			Reason          string
+		}{oldDependency, normalizedNewDeps, reason})
+		if err != nil {
+			return err
+		}
+		receipt, err := CheckLifecycleRequest(task, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			result = RetargetDependencyResult{TaskID: taskID, LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID)}
+			return errLifecycleReplay
+		}
 		if task.Status.IsTerminal() {
-			return &PreconditionError{Reason: fmt.Sprintf("cannot retarget dependencies on terminal task %s (%s)", taskID, task.Status)}
+			return WrapLifecycleError(retargetDependencyOperation, task, &PreconditionError{Reason: fmt.Sprintf("cannot retarget dependencies on terminal task %s (%s)", taskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 		if !slices.Contains(task.DependsOn, oldDependency) {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s does not depend on %s", taskID, oldDependency)}
+			return WrapLifecycleError(retargetDependencyOperation, task, &PreconditionError{Reason: fmt.Sprintf("task %s does not depend on %s", taskID, oldDependency)}, models.LifecycleStateChanged, "requery", "none")
 		}
 		for _, depID := range normalizedNewDeps {
 			if depID == task.ID {
@@ -151,14 +203,21 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 			CanonicalDependencies: append([]string(nil), canonical...),
 			RepairRequestCleared:  repairRequestCleared,
 		}
-		return nil
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		if err == nil {
+			effects = "unknown"
+		}
+		return err
 	})
+	if isLifecycleReplay(err) {
+		return &result, nil
+	}
 	if err != nil {
 		var cycleErr *statevalidate.DependencyCycleError
 		if stderrors.As(err, &cycleErr) {
 			cyclePath := slices.Clone(cycleErr.CyclePath)
 			recordRetargetDependencyRejection(lp.LogPath(), now, agentID, taskID, oldDependency, normalizedNewDeps, cyclePath, reason, err)
-			return nil, &OperationalError{
+			return nil, WrapLifecycleError(retargetDependencyOperation, observed, &OperationalError{
 				Code:    "validation",
 				Phase:   retargetDependencyCandidateValidation,
 				Message: "retarget dependency rejected because the candidate state contains a dependency cycle",
@@ -171,9 +230,9 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 					"diagnostic_action": retargetDependencyRejectedAction,
 				},
 				Err: err,
-			}
+			}, models.LifecycleInvalidInput, "correct_input", "none")
 		}
-		return nil, fmt.Errorf("failed to retarget dependency: %w", err)
+		return nil, WrapLifecycleError(retargetDependencyOperation, observed, fmt.Errorf("failed to retarget dependency: %w", err), models.LifecycleStateChanged, "requery", effects)
 	}
 
 	logger := log.New(lp.LogPath())

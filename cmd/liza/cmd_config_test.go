@@ -98,8 +98,13 @@ func TestConfigAgentCapabilityAndGeneration(t *testing.T) {
 		t.Fatalf("stale generation accepted: %s", stdout)
 	}
 	details := parseEnvelope(t, stdout)["error"].(map[string]any)["details"].(map[string]any)
-	if details["current_generation_fingerprint"] != fmt.Sprintf("%x", sha256.Sum256([]byte("replacement-generation"))) {
-		t.Fatalf("missing fence evidence: %s", stdout)
+	if details["outcome"] != "STALE_CALLER" || details["safe_action"] != "stop" {
+		t.Fatalf("missing safe fence outcome: %s", stdout)
+	}
+	if details["current_generation"] != nil || details["losing_generation"] != nil ||
+		details["current_generation_fingerprint"] != nil || details["losing_generation_fingerprint"] != nil ||
+		strings.Contains(stdout, fmt.Sprintf("%x", sha256.Sum256([]byte("replacement-generation")))) {
+		t.Fatal("fence diagnostics exposed registration values or fingerprints")
 	}
 	if strings.Contains(stdout, "replacement-generation") {
 		t.Fatal("fence diagnostic exposes reusable generation")

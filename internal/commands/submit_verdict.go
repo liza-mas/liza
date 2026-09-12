@@ -21,7 +21,11 @@ func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID, impact 
 
 // SubmitVerdictCommandWithAuthority is the authenticated command adapter.
 func SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact, reviewCommit string) error {
-	result, err := ops.SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit)
+	return SubmitVerdictCommandWithAuthorityAndOptions(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit, ops.LifecycleRequestOptions{})
+}
+
+func SubmitVerdictCommandWithAuthorityAndOptions(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact, reviewCommit string, request ops.LifecycleRequestOptions) error {
+	result, err := ops.SubmitVerdictWithAuthorityAndOptions(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit, request)
 	if err != nil {
 		return fmt.Errorf("submit verdict: %w", err)
 	}
@@ -31,6 +35,9 @@ func SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason stri
 }
 
 func printVerdictResult(r *ops.VerdictResult) {
+	if printLifecycleResult(r.LifecycleOutcome) {
+		return
+	}
 	if r.Verdict == "APPROVED" {
 		fmt.Printf("APPROVED: %s\n", r.TaskID)
 		fmt.Printf("  approved_by: %s\n", r.AgentID)

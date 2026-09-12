@@ -35,8 +35,14 @@ func WriteResult(w io.Writer, result any, warnings []string, err error) error {
 
 	if err != nil {
 		code, msg := ClassifyError(err)
+		var lifecycle interface{ LifecycleResult() any }
+		var recovery any
+		if errors.As(err, &lifecycle) {
+			recovery = lifecycle.LifecycleResult()
+		}
 		env := Envelope{
 			OK:       false,
+			Result:   recovery,
 			Warnings: warnings,
 			Error: &ErrorDetail{
 				Code:    code,

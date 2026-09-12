@@ -8,7 +8,8 @@ const ValidationRetryInterval = time.Minute
 
 // ValidationReadiness retains only the latest sanitized observation per agent/task.
 type ValidationReadiness struct {
-	Generation     string    `yaml:"generation" json:"generation"`
+	// Generation binds persisted evidence to registration authority, never diagnostics.
+	Generation     string    `yaml:"generation,omitempty" json:"-" inspect:"-"`
 	TaskID         string    `yaml:"task_id" json:"task_id"`
 	Commit         string    `yaml:"commit" json:"commit"`
 	ReviewCommit   string    `yaml:"review_commit,omitempty" json:"review_commit,omitempty"`

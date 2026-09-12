@@ -305,6 +305,7 @@ type Task struct {
 	IntegrationFailure      map[string]any           `yaml:"integration_failure,omitempty" json:"integration_failure,omitempty"`
 
 	IntegrationAnalysis *IntegrationAnalysisMetadata `yaml:"integration_analysis,omitempty" json:"integration_analysis,omitempty"`
+	Lifecycle           *TaskLifecycle               `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
 
 	Attempt        int                `yaml:"attempt,omitempty"`
 	DependsOn      []string           `yaml:"depends_on,omitempty"`

@@ -52,6 +52,7 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 					staleReviewer := *task.ReviewingBy
 					task.ReviewingBy = nil
 					task.ReviewLeaseExpires = nil
+					models.AdvanceLifecycle(task)
 
 					if a, ok := state.Agents[staleReviewer]; ok {
 						if a.CurrentTask != nil && *a.CurrentTask == task.ID {
@@ -94,6 +95,7 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 			}
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
+			models.AdvanceLifecycle(task)
 
 			if a, ok := state.Agents[staleReviewer]; ok {
 				if a.CurrentTask != nil && *a.CurrentTask == task.ID {

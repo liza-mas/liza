@@ -19,6 +19,39 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+func TestSupervisorProgressIgnoresLifecycleBookkeeping(t *testing.T) {
+	for name, signature := range map[string]func(*models.Task) string{
+		"crash": exit42TaskProgressSignature, "successful-turn": successfulTurnTaskProgressSignature,
+	} {
+		t.Run(name, func(t *testing.T) {
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC())
+			spin, crash := newSpinningTracker(), newCrashRestartTracker()
+			for attempt := 1; attempt <= 3; attempt++ {
+				if got := spin.Track(task.ID, signature(&task)); got != attempt {
+					t.Fatalf("receipt-only change reset spin count to %d, want %d", got, attempt)
+				}
+				if got := crash.Increment(task.ID, signature(&task)); got != attempt {
+					t.Fatalf("receipt-only change reset crash count to %d, want %d", got, attempt)
+				}
+				models.AdvanceLifecycle(&task)
+				task.Lifecycle.CompletionSequence++
+				task.Lifecycle.Receipts = append(task.Lifecycle.Receipts, models.LifecycleReceipt{
+					LifecycleIdentity: models.LifecycleIdentity{Operation: "claim-task", Actor: "coder-1"},
+					Sequence:          uint64(attempt), TransitionID: models.TaskTransitionID(&task),
+				})
+				task.Iteration++
+			}
+			task.DoneWhen += "; additional verified requirement"
+			if got := spin.Track(task.ID, signature(&task)); got != 1 {
+				t.Fatalf("domain change did not reset spin count: %d", got)
+			}
+			if got := crash.Increment(task.ID, signature(&task)); got != 1 {
+				t.Fatalf("domain change did not reset crash count: %d", got)
+			}
+		})
+	}
+}
+
 func TestStartSupervisorHeartbeat_StopWaitsForWorker(t *testing.T) {
 	var logs bytes.Buffer
 	restoreLogger := UseLoggerOutput(&logs)

@@ -107,6 +107,7 @@ func (e *IntegrationFailedError) Unwrap() error {
 
 // MergeResult contains the outcome of a successful worktree merge.
 type MergeResult struct {
+	models.LifecycleOutcome
 	TaskID            string   `json:"task_id"`
 	MergeCommit       string   `json:"merge_commit"`
 	FastForward       bool     `json:"fast_forward"`
@@ -173,6 +174,7 @@ func markIntegrationFailedWithDiagnosticAuthority(
 	reason, mergeCommit string,
 	pb *pipelineBundle,
 	diagnostic map[string]any,
+	request ...LifecycleRequest,
 ) error {
 	var pr models.PipelineResolver
 	if pb != nil {
@@ -186,9 +188,15 @@ func markIntegrationFailedWithDiagnosticAuthority(
 		if !models.IsApprovedForMerge(t, pr) {
 			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
 		}
+		if len(request) > 0 {
+			if err := ValidateLifecyclePreparation(t, request[0]); err != nil {
+				return err
+			}
+		}
 		if err := pipelineTransition(t, models.TaskStatusIntegrationFailed, pb); err != nil {
 			return err
 		}
+		models.AdvanceLifecycle(t)
 		t.FailedBy = appendUniqueAgentID(t.FailedBy, agentID)
 		now := time.Now().UTC()
 		entry := models.TaskHistoryEntry{
@@ -586,31 +594,51 @@ func handlePreUpdateHookFailure(gw *git.Git, integrationRef, preMergeHEAD string
 //
 // No terminal I/O — integration test output is captured and returned in the result or error.
 func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string]any) (*MergeResult, error) {
-	return mergeWorktreeWithReviewLock(projectRoot, taskID, agentID, nil, mergeExtra...)
+	return mergeWorktreeLifecycle(projectRoot, taskID, agentID, nil, LifecycleRequestOptions{}, mergeExtra...)
 }
 
 // MergeWorktreeWithAuthority is the authenticated command entry point. Every
 // state write in the merge, rollback, failure, and finalization paths checks
 // the caller-held generation in its own transaction.
 func MergeWorktreeWithAuthority(projectRoot, taskID string, authority models.AgentAuthority, mergeExtra ...map[string]any) (*MergeResult, error) {
-	return mergeWorktreeWithReviewLock(projectRoot, taskID, authority.ID, &authority, mergeExtra...)
+	return MergeWorktreeWithAuthorityAndOptions(projectRoot, taskID, authority, LifecycleRequestOptions{}, mergeExtra...)
 }
 
-func mergeWorktreeWithReviewLock(projectRoot, taskID, agentID string, authority *models.AgentAuthority, mergeExtra ...map[string]any) (result *MergeResult, retErr error) {
+func MergeWorktreeWithAuthorityAndOptions(projectRoot, taskID string, authority models.AgentAuthority, opts LifecycleRequestOptions, mergeExtra ...map[string]any) (*MergeResult, error) {
+	return mergeWorktreeLifecycle(projectRoot, taskID, authority.ID, &authority, opts, mergeExtra...)
+}
+
+func mergeWorktreeLifecycle(projectRoot, taskID, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, mergeExtra ...map[string]any) (result *MergeResult, retErr error) {
+	invocation := NewLifecycleInvocation(projectRoot)
+	defer func() {
+		retErr = WrapLifecycleError(integrationOperationWTMerge, nil, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		var outcome models.LifecycleOutcome
+		var warnings *[]string
+		if result != nil {
+			outcome, warnings = result.LifecycleOutcome, &result.Warnings
+		}
+		invocation.FinishResult(integrationOperationWTMerge, outcome, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+		return nil, err
+	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if agentID == "" {
 		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
-	retErr = withTaskReviewLock(projectRoot, taskID, "wt-merge", func() error {
-		result, retErr = mergeWorktree(projectRoot, taskID, agentID, authority, mergeExtra...)
-		return retErr
+	retErr = WithProjectLifecycleSharedLock(projectRoot, integrationOperationWTMerge, func() error {
+		return withTaskReviewLock(projectRoot, taskID, integrationOperationWTMerge, func() error {
+			var err error
+			result, err = mergeWorktree(projectRoot, taskID, agentID, authority, opts, mergeExtra...)
+			return err
+		})
 	})
 	return result, retErr
 }
 
-func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentAuthority, mergeExtra ...map[string]any) (*MergeResult, error) {
+func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, mergeExtra ...map[string]any) (result *MergeResult, retErr error) {
 	// Setup paths
 	statePath := paths.New(projectRoot).StatePath()
 
@@ -620,6 +648,34 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	if err != nil {
 		return nil, err
 	}
+	if authority != nil {
+		if err := RequireAgentAuthority(state, *authority); err != nil {
+			return nil, err
+		}
+	}
+	request, err := NewLifecycleRequest(integrationOperationWTMerge, task, agentID, authority, opts, mergeExtra)
+	if err != nil {
+		return nil, err
+	}
+	receipt, err := CheckLifecycleRequest(task, request)
+	if err != nil {
+		return nil, err
+	}
+	if receipt != nil {
+		return &MergeResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, MergeCommit: receipt.Projection.MergeCommit}, nil
+	}
+	effects := "none"
+	defer func() {
+		if retErr != nil {
+			task = readLifecycleTask(projectRoot, taskID, authority)
+			outcome, action := models.LifecycleStateChanged, "requery"
+			var invalid *PreconditionError
+			if effects == "none" && errors.As(retErr, &invalid) {
+				outcome, action = models.LifecycleInvalidInput, "correct_input"
+			}
+			retErr = WrapLifecycleError(integrationOperationWTMerge, task, retErr, outcome, action, effects)
+		}
+	}()
 
 	// Load pipeline bundle once for all pipeline-aware checks
 	pb, pbErr := loadPipelineBundle(projectRoot)
@@ -629,7 +685,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	pr := pb.pr
 
 	if !models.IsApprovedForMerge(task, pr) {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task must be in an approved state to merge (current status: %s)", task.Status)}
+		return nil, WrapLifecycleError(integrationOperationWTMerge, task, &PreconditionError{Reason: fmt.Sprintf("task must be in an approved state to merge (current status: %s)", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 	}
 
 	if task.ReviewCommit == nil {
@@ -665,6 +721,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 			if err := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonHEADMismatch, "", pb, diagnostic); err != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", err)
 			}
+			effects = "committed"
 
 			return nil, &IntegrationFailedError{Reason: IntegrationReasonHEADMismatch}
 		}
@@ -679,6 +736,35 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	}
 
 	integrationRef := "refs/heads/" + integrationBranch
+	// Persist the request before touching the integration ref. A concurrent or
+	// restarted invocation must requery while this preparation is unresolved.
+	var preparation models.LifecyclePreparation
+	err = modifyLifecycleState(bb, authority, func(s *models.State) error {
+		live := s.FindTask(taskID)
+		if live == nil {
+			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if !models.IsApprovedForMerge(live, pr) || live.ReviewCommit == nil || *live.ReviewCommit != reviewCommit {
+			return WrapLifecycleError(integrationOperationWTMerge, live, fmt.Errorf("approved review boundary changed"), models.LifecycleStateChanged, "requery", "none")
+		}
+		if err := PrepareLifecycleRequest(live, request); err != nil {
+			return err
+		}
+		preparation = *live.Lifecycle.Preparation
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	effects = "unknown"
+	casStarted := false
+	defer func() {
+		// Once CAS starts, a returned error can leave the ref or main checkout
+		// partially updated. Preserve that fence for inspected recovery.
+		if retErr != nil && !casStarted {
+			retErr = retireFailedLifecyclePreparation(bb, taskID, authority, &preparation, retErr, effects)
+		}
+	}()
 
 	artifactGuardHook := buildArtifactGuardHook(bb, projectRoot, gitWrapper, taskID)
 	var outcome *casMergeOutcome
@@ -686,6 +772,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	err = withEffectiveIntegrationCompletionLinearization(projectRoot, "forward "+taskID, func() error {
 		mutationErr := withIntegrationMutationLock(projectRoot, "forward "+taskID, func() error {
 			var mergeErr error
+			casStarted = true
 			outcome, mergeErr = performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, artifactGuardHook)
 			if mergeErr != nil || outcome.conflict {
 				return mergeErr
@@ -724,7 +811,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		var artifactErr *candidateArtifactGuardError
 		if errors.As(err, &artifactErr) {
 			diagnostic := integrationFailureDiagnosticWithDetail(IntegrationReasonStateInvalid, err.Error(), "", "", nil)
-			if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonStateInvalid, "", pb, diagnostic); updateErr != nil {
+			if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonStateInvalid, "", pb, diagnostic, request); updateErr != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 			}
 			return nil, &IntegrationFailedError{Reason: IntegrationReasonStateInvalid, Cause: err}
@@ -732,7 +819,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		return nil, err
 	}
 	if outcome.conflict {
-		if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonMergeConflict, "", pb, integrationFailureDiagnostic(IntegrationReasonMergeConflict, "", "", nil)); updateErr != nil {
+		if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonMergeConflict, "", pb, integrationFailureDiagnostic(IntegrationReasonMergeConflict, "", "", nil), request); updateErr != nil {
 			return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 		}
 		return nil, &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
@@ -767,7 +854,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	if err := statevalidate.ValidateMergeArtifactRefs(currentState, projectRoot, taskID); err != nil {
 		rollbackErr := rollbackMergedCommitAndPersist(bb, projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, rollbackRestoreRef, taskID, authority)
 		diagnostic := integrationFailureDiagnosticWithDetail(IntegrationReasonStateInvalid, err.Error(), mergeCommit, "", rollbackErr)
-		if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonStateInvalid, mergeCommit, pb, diagnostic); updateErr != nil {
+		if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonStateInvalid, mergeCommit, pb, diagnostic, request); updateErr != nil {
 			return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 		}
 		return nil, &IntegrationFailedError{
@@ -816,7 +903,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 			rollbackErr := rollbackMergedCommitAndPersist(bb, projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, rollbackRestoreRef, taskID, authority)
 
 			diagnostic := integrationFailureDiagnostic(IntegrationReasonTestsFailed, mergeCommit, testOutput, rollbackErr)
-			if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonTestsFailed, mergeCommit, pb, diagnostic); updateErr != nil {
+			if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonTestsFailed, mergeCommit, pb, diagnostic, request); updateErr != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 			}
 
@@ -862,6 +949,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	// worktree still exists for investigation; reverse order would lose the worktree
 	// while state still says APPROVED)
 	var autoConfiguredPostWorktreeCmd bool
+	var lifecycleOutcome models.LifecycleOutcome
 	if mergeFinalStateTestHook != nil {
 		mergeFinalStateTestHook()
 	}
@@ -869,6 +957,9 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		t := s.FindTask(taskID)
 		if t == nil {
 			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if err := ValidateLifecyclePreparation(t, request); err != nil {
+			return err
 		}
 		// Re-validate status under lock to prevent concurrent transition
 		if !models.IsApprovedForMerge(t, pr) {
@@ -918,12 +1009,15 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		}
 		t.History = append(t.History, historyEntry)
 
-		return nil
+		var completeErr error
+		lifecycleOutcome, completeErr = CompleteLifecycleRequest(t, request, models.LifecycleProjection{ReviewCommit: expectedCommit, MergeCommit: mergeCommit})
+		return completeErr
 	})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to update state to MERGED: %w", err)
 	}
+	effects = "committed"
 	if postWorktreeCmdAmbiguous && !autoConfiguredPostWorktreeCmd {
 		warnings = append(warnings, fmt.Sprintf(
 			"post_worktree_cmd remains unset: detected Node projects in %s; configure manually",
@@ -955,6 +1049,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	}
 
 	return &MergeResult{
+		LifecycleOutcome:  lifecycleOutcome,
 		TaskID:            taskID,
 		MergeCommit:       mergeCommit,
 		FastForward:       fastForward,

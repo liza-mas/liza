@@ -466,6 +466,7 @@ func setupSuccessfulSubmitScenario(t *testing.T) (string, string, string, string
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
 	initialState := &models.State{
+		Sprint: models.Sprint{ID: "sprint-1", Number: 1, Timeline: models.SprintTimeline{Started: time.Now().UTC()}},
 		Config: models.Config{
 			IntegrationBranch: "integration",
 			LeaseDuration:     1800,
@@ -721,6 +722,7 @@ func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransiti
 	leaseExpires := time.Now().UTC().Add(30 * time.Minute)
 	worktree := g.GetWorktreeRelPath(taskID)
 	initialState := &models.State{
+		Sprint: models.Sprint{ID: "sprint-1", Number: 1, Timeline: models.SprintTimeline{Started: time.Now().UTC()}},
 		Config: models.Config{
 			IntegrationBranch: "integration",
 			LeaseDuration:     1800,

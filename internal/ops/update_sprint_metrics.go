@@ -36,10 +36,11 @@ func updateSprintMetricsWithOptionalAuthority(projectRoot string, authority *mod
 		return models.SprintMetrics{}, err
 	}
 	metrics := state.ComputeSprintMetricsWithTerminalStates(terminalStates)
+	sprint := CaptureLifecycleSprint(state.Sprint)
+	metrics.LifecycleOutcomes = ReadLifecycleOutcomes(projectRoot, sprint)
 
 	err = lifecycleMutation(blackboard, authority)(func(s *models.State) error {
-		s.Sprint.Metrics = metrics
-		return nil
+		return applyLifecycleSprintMetrics(s, sprint, metrics)
 	})
 
 	if err != nil {

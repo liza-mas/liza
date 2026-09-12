@@ -34,9 +34,10 @@ func TestJSON_SetTaskOutput_AssignmentMismatchPreservesValidation(t *testing.T) 
 	}
 	env := parseEnvelope(t, stdout)
 	errObj, ok := env["error"].(map[string]any)
-	if env["ok"] != false || !ok || errObj["code"] != "validation" {
-		t.Fatalf("expected validation envelope, got %s", stdout)
+	if env["ok"] != false || !ok || errObj["code"] != "stale_caller" {
+		t.Fatalf("expected stale-caller envelope, got %s", stdout)
 	}
+	assertLifecycleFailurePolicy(t, env, models.LifecycleStaleCaller, "stop")
 	message, _ := errObj["message"].(string)
 	if !strings.Contains(message, "not assigned to agent code-planner-1 (currently assigned to: code-planner-2)") {
 		t.Fatalf("missing assignment diagnostic: %s", stdout)

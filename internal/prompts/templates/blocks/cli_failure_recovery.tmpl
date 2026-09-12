@@ -2,6 +2,7 @@
 
 === CLI FAILURE RECOVERY ===
 After repeated CLI failure, stop retrying and preserve the exact failing command and observed error.
+Structured safe_action takes precedence. Use this fallback only when no lifecycle result is available and a fresh task query confirms your authority and the recovery operation's preconditions; otherwise stop or requery without a mutation.
 
 {{if eq .RoleType "doer"}}EXECUTABLE RECOVERY COMMAND:
 `{{binaryName}} mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "Repeated CLI failure. Exact command: <exact failing command>. Observed error: <observed error>." --questions "Which prerequisite or external state must change?" --json`

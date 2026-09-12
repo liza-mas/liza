@@ -55,6 +55,7 @@ func RepairInvalidReviewOwnership(statePath, projectRoot, logPath, reason string
 			}
 			task.ReviewingBy = nil
 			task.ReviewLeaseExpires = nil
+			models.AdvanceLifecycle(task)
 
 			if reviewerID != "" {
 				if agent, ok := state.Agents[reviewerID]; ok {

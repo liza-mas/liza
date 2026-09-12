@@ -14,8 +14,10 @@ import (
 
 // HandoffResult contains the outcome of a successful handoff initiation.
 type HandoffResult struct {
-	TaskID  string `json:"task_id"`
-	AgentID string `json:"agent_id"`
+	models.LifecycleOutcome
+	Warnings []string `json:"warnings,omitempty"`
+	TaskID   string   `json:"task_id"`
+	AgentID  string   `json:"agent_id"`
 }
 
 // HandoffInput carries all parameters for a handoff operation.
@@ -24,6 +26,7 @@ type HandoffResult struct {
 // it is used directly; otherwise Summary maps to Succeeded: [summary].
 // NextAction always maps to HandoffEvent.NextStep.
 type HandoffInput struct {
+	Request     LifecycleRequestOptions
 	ProjectRoot string
 	TaskID      string
 	Summary     string // required — legacy field
@@ -40,7 +43,24 @@ type HandoffInput struct {
 // Handoff atomically marks a task for context-exhaustion handoff: sets
 // handoff_pending, appends a HandoffEvent to the task, and transitions
 // the initiating agent to HANDOFF status. No terminal I/O.
-func Handoff(input *HandoffInput) (*HandoffResult, error) {
+func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
+	if input == nil {
+		return nil, WrapLifecycleError("handoff", nil, fmt.Errorf("handoff input is required"), models.LifecycleInvalidInput, "correct_input", "none")
+	}
+	invocation := NewLifecycleInvocation(input.ProjectRoot)
+	var observed *models.Task
+	defer func() {
+		retErr = WrapLifecycleError("handoff", observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		var outcome models.LifecycleOutcome
+		var warnings *[]string
+		if result != nil {
+			outcome, warnings = result.LifecycleOutcome, &result.Warnings
+		}
+		invocation.FinishResult("handoff", outcome, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(input.Request); err != nil {
+		return nil, err
+	}
 	if input.TaskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -87,18 +107,39 @@ func Handoff(input *HandoffInput) (*HandoffResult, error) {
 	if handoffBeforeModifyTestHook != nil {
 		handoffBeforeModifyTestHook()
 	}
+	var outcome models.LifecycleOutcome
 	err = modifyLifecycleState(bb, input.Authority, func(state *models.State) error {
 		task := state.FindTask(input.TaskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: input.TaskID}
 		}
+		observed = task
+		payload := struct {
+			Summary, NextAction, Hypothesis       string
+			Succeeded, Failed, KeyFiles, DeadEnds []string
+		}{input.Summary, input.NextAction, input.Hypothesis, succeeded, input.Failed, input.KeyFiles, input.DeadEnds}
+		request, err := NewLifecycleRequest("handoff", task, agentID, input.Authority, input.Request, payload)
+		if err != nil {
+			return err
+		}
+		receipt, err := CheckLifecycleRequest(task, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			outcome = LifecycleReplayOutcome(task, receipt, agentID)
+			return errLifecycleReplay
+		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", input.TaskID, task.Status)}
+			return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", input.TaskID, agentID)}
+			return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", input.TaskID, agentID)}, models.LifecycleStaleCaller, "stop", "none")
+		}
+		if task.HandoffPending {
+			return WrapLifecycleError("handoff", task, fmt.Errorf("handoff is already pending"), models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 
 		task.HandoffPending = true
@@ -131,15 +172,17 @@ func Handoff(input *HandoffInput) (*HandoffResult, error) {
 		agent.Heartbeat = now
 		state.Agents[agentID] = agent
 
-		return nil
+		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		return err
 	})
-	if err != nil {
+	if err != nil && !isLifecycleReplay(err) {
 		return nil, fmt.Errorf("failed to initiate handoff: %w", err)
 	}
 
 	return &HandoffResult{
-		TaskID:  input.TaskID,
-		AgentID: agentID,
+		LifecycleOutcome: outcome,
+		TaskID:           input.TaskID,
+		AgentID:          agentID,
 	}, nil
 }
 

@@ -68,13 +68,22 @@ func TestTaskLifecycleMutationGenerationFence(t *testing.T) {
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
 		})
 		setPostWorktreeCommand(t, fixture, "exit 1")
-		interleaving := fixture.replaceAtLifecycleWrite(t, 1)
+		// The per-blackboard hook observes preparation and degradation.
+		// Retirement uses modifyLifecycleState's separate hook between them.
+		interleaving := fixture.replaceAtLifecycleWrite(t, 2)
 
 		_, err := ClaimTaskWithAuthority(fixture.projectRoot, "task-1", fixture.authorityA)
 		if !errors.Is(err, ErrAgentDegraded) {
 			t.Fatalf("claim error = %v, want ErrAgentDegraded", err)
 		}
 		interleaving.requireReplacedAndUnchanged(t)
+		task, readErr := db.For(fixture.statePath).GetTask("task-1")
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if task.Lifecycle == nil || task.Lifecycle.Preparation != nil || task.Lifecycle.Revision == 0 {
+			t.Fatal("generation replacement did not reach degradation after setup-failure retirement")
+		}
 	})
 
 	t.Run("claim-task-blocked-escalation-follow-up", func(t *testing.T) {
@@ -227,10 +236,47 @@ func TestOrchestratorLifecycleMutationGenerationFence(t *testing.T) {
 	})
 
 	t.Run("unblock-task", func(t *testing.T) {
-		testMissingTaskOrchestratorFence(t, func(f lifecycleGenerationFixture, authority models.AgentAuthority) error {
-			_, err := UnblockTaskWithAuthority(f.projectRoot, "missing-task", "repair", authority, UnblockTaskOptions{})
-			return err
-		})
+		fixture := newOrchestratorLifecycleFixture(t, false, models.TaskStatusBlocked)
+		if err := db.For(fixture.statePath).Modify(func(state *models.State) error {
+			// A task without preserved work can resume without a base commit.
+			state.FindTask("task-1").Worktree = nil
+			return nil
+		}); err != nil {
+			t.Fatalf("prepare valid unblock fixture: %v", err)
+		}
+		interleaving := fixture.replaceAtLifecycleWrite(t, 1)
+
+		_, err := UnblockTaskWithAuthority(fixture.projectRoot, "task-1", "repair", fixture.authorityA, UnblockTaskOptions{})
+		interleaving.requireStaleAndUnchanged(t, err)
+
+		result, err := UnblockTaskWithAuthority(fixture.projectRoot, "task-1", "repair", fixture.authorityB, UnblockTaskOptions{})
+		if err != nil {
+			t.Fatalf("current generation unblock-task: %v", err)
+		}
+		if result.Outcome != models.LifecycleCompleted || result.ToStatus == models.TaskStatusBlocked {
+			t.Fatalf("current generation did not unblock task: %+v", result)
+		}
+	})
+
+	t.Run("unblock-task-missing-task-stale-authority", func(t *testing.T) {
+		fixture := newOrchestratorLifecycleFixture(t, false, models.TaskStatusReady)
+		fixture.replaceGeneration(t)
+		before := fixture.stateBytes(t)
+
+		_, err := UnblockTaskWithAuthority(fixture.projectRoot, "missing-task", "repair", fixture.authorityA, UnblockTaskOptions{})
+		var authorityErr *AgentAuthorityError
+		if !errors.As(err, &authorityErr) {
+			t.Fatalf("error = %T %v, want *AgentAuthorityError before missing-task validation", err, err)
+		}
+		if !bytes.Equal(before, fixture.stateBytes(t)) {
+			t.Fatal("stale missing-task request changed state")
+		}
+
+		_, err = UnblockTaskWithAuthority(fixture.projectRoot, "missing-task", "repair", fixture.authorityB, UnblockTaskOptions{})
+		requireValidationErrorContaining(t, err, "missing-task")
+		if !bytes.Equal(before, fixture.stateBytes(t)) {
+			t.Fatal("missing-task validation changed state")
+		}
 	})
 
 	t.Run("assess-blocked", func(t *testing.T) {
@@ -283,9 +329,14 @@ func TestOrchestratorLifecycleMutationGenerationFence(t *testing.T) {
 		if len(result.Warnings) != 1 {
 			t.Fatalf("warnings = %v, want one stale-generation metrics warning", result.Warnings)
 		}
-		for _, want := range []string{fixture.authorityA.ID, generationFingerprint(taskLifecycleGenerationA), generationFingerprint(taskLifecycleGenerationB)} {
+		for _, want := range []string{fixture.authorityA.ID, "stop"} {
 			if !strings.Contains(result.Warnings[0], want) {
 				t.Errorf("warning = %q, want %q", result.Warnings[0], want)
+			}
+		}
+		for _, forbidden := range []string{taskLifecycleGenerationA, taskLifecycleGenerationB, generationFingerprint(taskLifecycleGenerationA), generationFingerprint(taskLifecycleGenerationB)} {
+			if strings.Contains(result.Warnings[0], forbidden) {
+				t.Error("metrics warning exposes a registration generation or fingerprint")
 			}
 		}
 	})
@@ -500,10 +551,18 @@ func (i *lifecycleMutationInterleaving) requireStaleAndUnchanged(t *testing.T, e
 	if !errors.As(err, &authorityErr) {
 		t.Fatalf("error = %T %v, want *AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{i.fixture.authorityA.ID, generationFingerprint(taskLifecycleGenerationA), generationFingerprint(taskLifecycleGenerationB)} {
+	for _, want := range []string{i.fixture.authorityA.ID, "stop"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
 		}
+	}
+	for _, forbidden := range []string{taskLifecycleGenerationA, taskLifecycleGenerationB, generationFingerprint(taskLifecycleGenerationA), generationFingerprint(taskLifecycleGenerationB)} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Error("authority error exposes a registration generation or fingerprint")
+		}
+	}
+	if authorityErr.SafeDetails()["safe_action"] != "stop" {
+		t.Error("authority rejection must direct the caller to stop")
 	}
 	i.requireReplacedAndUnchanged(t)
 }

@@ -2,8 +2,8 @@
 
 ARCHITECT TOOLS:
 - {{binaryName}} submit-for-review — Submit architecture plan for review
-  {{binaryName}} submit-for-review {{.TaskID}} HEAD --agent-id {{.AgentID}} --json
-  Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then submit with HEAD. Do NOT submit the pre-change HEAD.
+  {{binaryName}} submit-for-review {{.TaskID}} <submission-sha> --agent-id {{.AgentID}} --json
+  Submission requires a new worktree commit for this task: stage the intended files, create the submission commit, confirm `git -C {{.Worktree}} status --short` is clean, then capture `git -C {{.Worktree}} rev-parse HEAD` once as <submission-sha>. Submit that full SHA and reuse it on retry. Do NOT submit the pre-change HEAD.
 {{template "await-verdict-loop" .}}
 - {{binaryName}} write-checkpoint — Write pre-execution checkpoint (REQUIRED before submission)
   {{binaryName}} write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json

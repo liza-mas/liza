@@ -1,6 +1,7 @@
 package ops
 
 import (
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,12 +10,14 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
 // MarkBlockedResult contains the outcome of marking a task as blocked.
 type MarkBlockedResult struct {
+	models.LifecycleOutcome
 	TaskID        string                `json:"task_id"`
 	Reason        string                `json:"reason"`
 	DependsOn     []string              `json:"depends_on,omitempty"`
@@ -31,6 +34,7 @@ func (r *MarkBlockedResult) GetWarnings() []string {
 
 // MarkBlockedOptions contains optional metadata for a block transition.
 type MarkBlockedOptions struct {
+	Request       LifecycleRequestOptions
 	RepairRequest *models.RepairRequest
 	DependsOn     []string
 }
@@ -54,7 +58,35 @@ func MarkBlockedWithAuthority(projectRoot, taskID, reason string, questions []st
 	return markBlockedWithOptionalAuthority(projectRoot, taskID, reason, questions, authority.ID, opts, &authority)
 }
 
-func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questions []string, agentID string, opts MarkBlockedOptions, authority *models.AgentAuthority) (*MarkBlockedResult, error) {
+func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questions []string, agentID string, opts MarkBlockedOptions, authority *models.AgentAuthority) (result *MarkBlockedResult, retErr error) {
+	var observed *models.Task
+	mutationStarted := false
+	invocation := NewLifecycleInvocation(projectRoot)
+	defer func() {
+		if retErr != nil {
+			outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
+			var invalid *PreconditionError
+			if stderrors.As(retErr, &invalid) {
+				outcome, action = models.LifecycleInvalidInput, "correct_input"
+			} else if mutationStarted {
+				effects = "unknown"
+			}
+			if IsAgentAuthorityError(retErr) || filelock.IsLockErrorType(retErr, filelock.LockErrorTimeout) {
+				effects = "none"
+			}
+			observed = readLifecycleTask(projectRoot, taskID, authority)
+			retErr = WrapLifecycleError("mark-blocked", observed, retErr, outcome, action, effects)
+		}
+		var outcome models.LifecycleOutcome
+		var warnings *[]string
+		if result != nil {
+			outcome, warnings = result.LifecycleOutcome, &result.Warnings
+		}
+		invocation.FinishResult("mark-blocked", outcome, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
+		return nil, WrapLifecycleError("mark-blocked", nil, err, models.LifecycleInvalidInput, "correct_input", "none")
+	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -83,6 +115,8 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
 	var resultDependsOn []string
+	var outcome models.LifecycleOutcome
+	var replay bool
 
 	// Load pipeline config for status checks and transitions.
 	resolver, _, err := loadResolver(projectRoot)
@@ -102,18 +136,39 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
+		observed = task
+		request, err := NewLifecycleRequest("mark-blocked", task, agentID, authority, opts.Request, struct {
+			Reason       string
+			Questions    []string
+			Repair       *models.RepairRequest
+			Dependencies []string
+		}{reason, questions, repairRequest, dependsOn})
+		if err != nil {
+			return err
+		}
+		receipt, err := checkOwnerEndingRequest(task, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			outcome, replay = LifecycleReplayOutcome(task, receipt, agentID), true
+			return errLifecycleReplay
+		}
 
 		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}
+			return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			return &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}
+			return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}, models.LifecycleStaleCaller, "stop", "none")
 		}
 		if err := validateDependsOnForBlockedTask(state, task, dependsOn); err != nil {
 			return err
 		}
 
+		// Blocking ends the authorized owner's work and retires its unfinished preparation.
+		mutationStarted = true
+		models.AdvanceLifecycle(task)
 		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
 			return err
 		}
@@ -135,11 +190,18 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 			Reason: &reason,
 		})
 
-		return nil
+		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		return err
 	})
 
+	if isLifecycleReplay(err) && replay {
+		err = nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to mark task as blocked: %w", err)
+	}
+	if replay {
+		return &MarkBlockedResult{LifecycleOutcome: outcome, TaskID: taskID}, nil
 	}
 
 	var warnings []string
@@ -153,11 +215,12 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 	}
 
 	return &MarkBlockedResult{
-		TaskID:        taskID,
-		Reason:        reason,
-		DependsOn:     resultDependsOn,
-		RepairRequest: repairRequest,
-		Warnings:      warnings,
+		LifecycleOutcome: outcome,
+		TaskID:           taskID,
+		Reason:           reason,
+		DependsOn:        resultDependsOn,
+		RepairRequest:    repairRequest,
+		Warnings:         warnings,
 	}, nil
 }
 

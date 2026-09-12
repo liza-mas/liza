@@ -18,6 +18,7 @@ import (
 
 // SupersedeResult contains the outcome of superseding a task.
 type SupersedeResult struct {
+	models.LifecycleOutcome
 	TaskID         string            `json:"task_id"`
 	OriginalStatus models.TaskStatus `json:"original_status"`
 	ReplacementIDs []string          `json:"replacement_ids"`
@@ -26,6 +27,7 @@ type SupersedeResult struct {
 
 // SupersedeTaskOptions configures supersession behavior.
 type SupersedeTaskOptions struct {
+	Request LifecycleRequestOptions
 	// RecoverabilityCommand records the operator-provided audit command for
 	// unreplaced supersession. Liza records the command but does not execute it.
 	RecoverabilityCommand string
@@ -51,7 +53,21 @@ func SupersedeTaskWithAuthority(projectRoot, taskID string, replacementIDs []str
 	return supersedeTaskWithOptionalAuthority(projectRoot, taskID, replacementIDs, reason, authority.ID, opts, &authority)
 }
 
-func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementIDs []string, reason, agentID string, opts SupersedeTaskOptions, authority *models.AgentAuthority) (*SupersedeResult, error) {
+func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementIDs []string, reason, agentID string, opts SupersedeTaskOptions, authority *models.AgentAuthority) (result *SupersedeResult, retErr error) {
+	invocation := NewLifecycleInvocation(projectRoot)
+	var observed *models.Task
+	defer func() {
+		retErr = WrapLifecycleError("supersede-task", observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		var outcome models.LifecycleOutcome
+		var warnings *[]string
+		if result != nil {
+			outcome, warnings = result.LifecycleOutcome, &result.Warnings
+		}
+		invocation.FinishResult("supersede-task", outcome, &retErr, warnings)
+	}()
+	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
+		return nil, err
+	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -73,7 +89,15 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 	} else if recoverabilityCommand != "" {
 		return nil, &PreconditionError{Reason: "recoverability command is only valid when superseding without replacements"}
 	}
+	retErr = withOwnershipTaskLock(projectRoot, taskID, "supersede-task", func() error {
+		var err error
+		result, err = supersedeTaskLifecycle(projectRoot, taskID, replacementIDs, reason, agentID, recoverabilityCommand, opts, authority, &observed)
+		return err
+	})
+	return result, retErr
+}
 
+func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string, reason, agentID, recoverabilityCommand string, opts SupersedeTaskOptions, authority *models.AgentAuthority, observed **models.Task) (*SupersedeResult, error) {
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	gw := git.New(projectRoot)
@@ -84,12 +108,33 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 	}
 
 	// Phase 1: Read and Validate (no lock held)
-	_, task, err := readTaskState(bb, taskID)
+	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
 	}
+	if authority != nil {
+		if err := RequireAgentAuthority(state, *authority); err != nil {
+			return nil, err
+		}
+	}
+	*observed = task
+	request, err := NewLifecycleRequest("supersede-task", task, agentID, authority, opts.Request, struct {
+		Replacements                  []string
+		Reason, RecoverabilityCommand string
+	}{replacementIDs, reason, recoverabilityCommand})
+	if err != nil {
+		return nil, err
+	}
+	receipt, err := checkOwnerEndingRequest(task, request)
+	if err != nil {
+		return nil, err
+	}
+	if receipt != nil {
+		return &SupersedeResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, OriginalStatus: receipt.Projection.SourceStatus, ReplacementIDs: replacementIDs}, nil
+	}
 
 	originalStatus := task.Status
+	var outcome models.LifecycleOutcome
 
 	// Supersede is allowed from: any initial (DRAFT_*) state, any rejected
 	// state, BLOCKED, or INTEGRATION_FAILED when external repair/replacement
@@ -113,7 +158,7 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 		allowed = originalStatus == models.TaskStatusReady || originalStatus == models.TaskStatusRejected
 	}
 	if !allowed {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s in status %s (must be initial, rejected, or BLOCKED)", taskID, originalStatus)}
+		return nil, WrapLifecycleError("supersede-task", task, &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s in status %s (must be initial, rejected, or BLOCKED)", taskID, originalStatus)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 	}
 
 	var salvage map[string]any
@@ -131,9 +176,19 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 		if currentTask == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
+		*observed = currentTask
+		receipt, err := checkOwnerEndingRequest(currentTask, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			outcome = LifecycleReplayOutcome(currentTask, receipt, agentID)
+			originalStatus = receipt.Projection.SourceStatus
+			return errLifecycleReplay
+		}
 
 		if currentTask.Status != originalStatus {
-			return &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s: status changed from %s to %s", taskID, originalStatus, currentTask.Status)}
+			return WrapLifecycleError("supersede-task", currentTask, fmt.Errorf("task status changed before supersession"), models.LifecycleStateChanged, "requery", "none")
 		}
 
 		if err := validateDependencyDirection(state, pb.resolver, currentTask.ID, currentTask.RolePair, replacementIDs); err != nil {
@@ -144,6 +199,7 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 			return err
 		}
 		currentTask.DependsOn = retainedDependencies
+		models.AdvanceLifecycle(currentTask)
 
 		if err := currentTask.TransitionWith(models.TaskStatusSuperseded, pb.transitions); err != nil {
 			return err
@@ -195,8 +251,12 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 			}
 		}
 
-		return nil
+		outcome, err = CompleteLifecycleRequest(currentTask, request, models.LifecycleProjection{SourceStatus: originalStatus})
+		return err
 	})
+	if isLifecycleReplay(err) {
+		return &SupersedeResult{LifecycleOutcome: outcome, TaskID: taskID, OriginalStatus: originalStatus, ReplacementIDs: replacementIDs}, nil
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to supersede task: %w", err)
@@ -230,10 +290,11 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 	warnings = append(warnings, cleanupPredecessorBranches(bb, gw, taskID)...)
 
 	return &SupersedeResult{
-		TaskID:         taskID,
-		OriginalStatus: originalStatus,
-		ReplacementIDs: replacementIDs,
-		Warnings:       warnings,
+		LifecycleOutcome: outcome,
+		TaskID:           taskID,
+		OriginalStatus:   originalStatus,
+		ReplacementIDs:   replacementIDs,
+		Warnings:         warnings,
 	}, nil
 }
 

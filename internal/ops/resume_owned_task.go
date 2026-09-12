@@ -149,6 +149,7 @@ func resumeOwnedCandidate(bb *db.Blackboard, taskID, agentID string, authority *
 		}
 
 		worktree = *task.Worktree
+		models.AdvanceLifecycle(task)
 		renewLease(state, task)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
@@ -204,6 +205,7 @@ func blockOwnedResumeCandidate(
 
 		task.BlockedReason = &reason
 		task.BlockedQuestions = questions
+		models.AdvanceLifecycle(task)
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
 		releaseAgentsForTask(state, taskID)

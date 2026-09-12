@@ -225,8 +225,12 @@ func TestJSON_ClaimTask_Error(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error to be object, got %T", env["error"])
 	}
-	if errObj["code"] != "not_found" {
-		t.Errorf("error code = %v, want not_found", errObj["code"])
+	if errObj["code"] != "state_changed" {
+		t.Errorf("error code = %v, want state_changed", errObj["code"])
+	}
+	assertLifecycleFailurePolicy(t, env, models.LifecycleStateChanged, "requery")
+	if message, _ := errObj["message"].(string); !strings.Contains(message, "not found") {
+		t.Fatalf("error message = %q, want missing-task diagnostic", message)
 	}
 }
 
@@ -1158,9 +1162,10 @@ func TestJSON_RetargetDependency_RejectsTransitiveCycle(t *testing.T) {
 		t.Fatalf("error.code = %v, want validation", errObj["code"])
 	}
 	const wantMessage = "retarget dependency rejected because the candidate state contains a dependency cycle"
-	if errObj["message"] != wantMessage {
-		t.Fatalf("error.message = %q, want %q", errObj["message"], wantMessage)
+	if message, _ := errObj["message"].(string); !strings.Contains(message, wantMessage) {
+		t.Fatalf("error.message = %q, want containing %q", message, wantMessage)
 	}
+	assertLifecycleFailurePolicy(t, env, models.LifecycleInvalidInput, "correct_input")
 	wantDetails := map[string]any{
 		"operation":         "retarget-dependency",
 		"task_id":           "A",
@@ -1169,6 +1174,12 @@ func TestJSON_RetargetDependency_RejectsTransitiveCycle(t *testing.T) {
 		"phase":             "candidate-state-validation",
 		"cycle_path":        []any{"A", "B", "C", "A"},
 		"diagnostic_action": "retarget_dependency_rejected",
+		"current_assignee":  *before.AssignedTo,
+		"outcome":           models.LifecycleInvalidInput,
+		"safe_action":       "correct_input",
+		"effects":           "none",
+		"task_status":       string(before.Status),
+		"transition_id":     models.TaskTransitionID(before),
 	}
 	if !reflect.DeepEqual(errObj["details"], wantDetails) {
 		t.Fatalf("error.details = %#v, want %#v", errObj["details"], wantDetails)
@@ -1182,7 +1193,7 @@ func TestJSON_RetargetDependency_RejectsTransitiveCycle(t *testing.T) {
 	if err := assertJSONStreamEOF(stderrDecoder); err != nil {
 		t.Fatalf("stderr contains output beyond one safe diagnostic: %v", err)
 	}
-	if len(diagnostic) != 2 || diagnostic["message"] != wantMessage || !reflect.DeepEqual(diagnostic["details"], wantDetails) {
+	if len(diagnostic) != 2 || diagnostic["message"] != errObj["message"] || !reflect.DeepEqual(diagnostic["details"], wantDetails) {
 		t.Fatalf("verbose stderr diagnostic = %#v, want safe message and details", diagnostic)
 	}
 	if strings.Contains(stdout, sentinel) || strings.Contains(stderr, sentinel) {
@@ -2219,9 +2230,10 @@ func TestJSON_ProjectRootDetectionErrorReportsActionableContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error to be object, got %T", env["error"])
 	}
-	if errObj["code"] != "project_root" {
-		t.Fatalf("error.code = %v, want project_root", errObj["code"])
+	if errObj["code"] != "state_changed" {
+		t.Fatalf("error.code = %v, want state_changed", errObj["code"])
 	}
+	assertLifecycleFailurePolicy(t, env, models.LifecycleStateChanged, "requery")
 	msg, _ := errObj["message"].(string)
 	if msg == "" || msg == "internal error" {
 		t.Fatalf("error.message = %q, want actionable project root detection details", msg)
@@ -2256,9 +2268,10 @@ func TestJSON_PipelineConfigErrorReportsActionableContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error to be object, got %T", env["error"])
 	}
-	if errObj["code"] != "pipeline_config" {
-		t.Fatalf("error.code = %v, want pipeline_config", errObj["code"])
+	if errObj["code"] != "state_changed" {
+		t.Fatalf("error.code = %v, want state_changed", errObj["code"])
 	}
+	assertLifecycleFailurePolicy(t, env, models.LifecycleStateChanged, "requery")
 	msg, _ := errObj["message"].(string)
 	if msg == "" || msg == "internal error" || !strings.Contains(msg, "pipeline config") {
 		t.Fatalf("error.message = %q, want actionable pipeline config details", msg)
@@ -2318,9 +2331,10 @@ func TestJSON_StateTransitionSchemaErrorReportsActionableContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error to be object, got %T", env["error"])
 	}
-	if errObj["code"] != "state_schema" {
-		t.Fatalf("error.code = %v, want state_schema", errObj["code"])
+	if errObj["code"] != "state_changed" {
+		t.Fatalf("error.code = %v, want state_changed", errObj["code"])
 	}
+	assertLifecycleFailurePolicy(t, env, models.LifecycleStateChanged, "requery")
 	msg, _ := errObj["message"].(string)
 	if msg == "" || msg == "internal error" || !strings.Contains(msg, "state schema") {
 		t.Fatalf("error.message = %q, want actionable state schema details", msg)
@@ -2331,6 +2345,7 @@ func TestJSON_WorktreeContextErrorReportsActionableContext(t *testing.T) {
 	projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
 		now := time.Now().UTC()
 		agentID := "coder-1"
+		state.Agents[agentID] = mutationTestAgent("coder")
 		task := testhelpers.BuildTaskByStatus("task-worktree-json", models.TaskStatusImplementing, now)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
@@ -2358,9 +2373,10 @@ func TestJSON_WorktreeContextErrorReportsActionableContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error to be object, got %T", env["error"])
 	}
-	if errObj["code"] != "worktree_context" {
-		t.Fatalf("error.code = %v, want worktree_context", errObj["code"])
+	if errObj["code"] != "state_changed" {
+		t.Fatalf("error.code = %v, want state_changed", errObj["code"])
 	}
+	assertLifecycleFailurePolicy(t, env, models.LifecycleStateChanged, "requery")
 	msg, _ := errObj["message"].(string)
 	if msg == "" || msg == "internal error" || !strings.Contains(msg, "worktree") {
 		t.Fatalf("error.message = %q, want actionable worktree context details", msg)

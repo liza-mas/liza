@@ -39,6 +39,29 @@ func requireAcceptanceStateUnchanged(t *testing.T, bb *db.Blackboard, before *mo
 	}
 }
 
+func requireAcceptancePreparationRetired(t *testing.T, bb *db.Blackboard, before *models.State, taskID string) {
+	t.Helper()
+	previous := before.FindTask(taskID).Lifecycle
+	if previous == nil || previous.Preparation == nil {
+		t.Fatal("competing snapshot did not capture the pending submission")
+	}
+	after := readAcceptanceState(t, bb)
+	current := after.FindTask(taskID).Lifecycle
+	if current == nil || current.Preparation != nil || current.Revision <= previous.Revision {
+		t.Fatalf("refusal did not retire its preparation: %+v", current)
+	}
+	if current.CompletionSequence != previous.CompletionSequence || len(current.Receipts) != 0 {
+		t.Fatalf("source refusal recorded a completion: %+v", current)
+	}
+	// Normalize only the two retirement fields; preserve every concurrent
+	// allocation change and every other lifecycle/domain field for comparison.
+	current.Revision = previous.Revision
+	current.Preparation = previous.Preparation
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("source refusal changed the competing snapshot beyond preparation retirement")
+	}
+}
+
 func TestAcceptanceProvenance_PlanningScopePreservesPriorAdoption(t *testing.T) {
 	for _, adopted := range []bool{false, true} {
 		name := "planning task without adoption"
@@ -256,7 +279,34 @@ func TestAcceptanceProvenance_ExecutionCannotChangeCandidate(t *testing.T) {
 			testhelpers.MustGit(t, wt, "add", "boundary_test.sh")
 			testhelpers.MustGit(t, wt, "commit", "-m", "test: validation failure or candidate mutation")
 			commit := testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
-			requireAcceptanceSubmitRejected(t, root, taskID, commit, agentID, bb, tc.field)
+			before := readAcceptanceState(t, bb)
+			_, err := SubmitForReview(root, taskID, commit, agentID)
+			var evidenceErr *AcceptanceEvidenceError
+			if !errors.As(err, &evidenceErr) || evidenceErr.TaskID != taskID || evidenceErr.Field != tc.field {
+				t.Fatalf("submission error = %v, want acceptance refusal at %s", err, tc.field)
+			}
+			var lifecycleErr *LifecycleError
+			if !errors.As(err, &lifecycleErr) || lifecycleErr.Outcome.Outcome != models.LifecycleStateChanged ||
+				lifecycleErr.Outcome.SafeAction != "requery" || lifecycleErr.Outcome.Effects != "unknown" {
+				t.Fatalf("post-execution refusal must retain uncertainty: %v", err)
+			}
+			after := readAcceptanceState(t, bb)
+			task := after.FindTask(taskID)
+			if task.Lifecycle == nil || task.Lifecycle.Preparation != nil {
+				t.Fatal("returned refusal retained its preparation")
+			}
+			if models.TaskTransitionID(task) == models.TaskTransitionID(before.FindTask(taskID)) {
+				t.Fatal("retirement did not invalidate the refused request's boundary")
+			}
+			// Only retirement revision may change. Review admission, receipts,
+			// task history, ownership and every other blackboard field stay intact.
+			if task.Lifecycle.Revision == 0 || task.Lifecycle.CompletionSequence != 0 || len(task.Lifecycle.Receipts) != 0 {
+				t.Fatalf("rejected admission recorded a lifecycle completion: %+v", task.Lifecycle)
+			}
+			task.Lifecycle = before.FindTask(taskID).Lifecycle
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("rejected admission changed state beyond its retirement revision")
+			}
 		})
 	}
 }
@@ -287,7 +337,7 @@ func TestAcceptanceProvenance_ConcurrentAllocationChange(t *testing.T) {
 	if !errors.As(err, &evidenceErr) || evidenceErr.Field != "acceptance.source" {
 		t.Fatalf("concurrent allocation error = %T %v", err, err)
 	}
-	requireAcceptanceStateUnchanged(t, bb, competingState)
+	requireAcceptancePreparationRetired(t, bb, competingState, taskID)
 }
 
 func TestAcceptanceProvenance_ConcurrentMatchingSpecRefChange(t *testing.T) {
@@ -317,7 +367,7 @@ func TestAcceptanceProvenance_ConcurrentMatchingSpecRefChange(t *testing.T) {
 		task := readAcceptanceState(t, bb).FindTask(taskID)
 		t.Fatalf("concurrent matching spec_ref change error = %T %v; status = %s, receipt recorded = %t; want stale allocation rejection", err, err, task.Status, task.AcceptanceReceipt != nil)
 	}
-	requireAcceptanceStateUnchanged(t, bb, competingState)
+	requireAcceptancePreparationRetired(t, bb, competingState, taskID)
 }
 
 func TestAcceptanceProvenance_ConcurrentGenerationChange(t *testing.T) {

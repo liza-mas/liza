@@ -166,6 +166,7 @@ func invalidActiveDoerOwnershipReason(state *models.State, task *models.Task, pr
 }
 
 func clearDoerClaimFields(task *models.Task) {
+	models.AdvanceLifecycle(task)
 	task.AssignedTo = nil
 	task.LeaseExpires = nil
 	task.Worktree = nil

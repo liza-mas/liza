@@ -16,13 +16,21 @@ func AssessHypothesisExhaustedCommand(projectRoot, taskID, note, agentID string)
 
 // AssessHypothesisExhaustedWithAuthorityCommand records an assessment using generation-fenced authority.
 func AssessHypothesisExhaustedWithAuthorityCommand(projectRoot, taskID, note string, authority models.AgentAuthority) error {
-	result, err := ops.AssessHypothesisExhaustedWithAuthority(projectRoot, taskID, note, authority)
+	return AssessHypothesisExhaustedWithAuthorityAndOptionsCommand(projectRoot, taskID, note, authority, ops.LifecycleRequestOptions{})
+}
+
+func AssessHypothesisExhaustedWithAuthorityAndOptionsCommand(projectRoot, taskID, note string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+	result, err := ops.AssessHypothesisExhaustedWithAuthorityAndOptions(projectRoot, taskID, note, authority, request)
 	return printAssessHypothesisExhaustedResult(result, err)
 }
 
 func printAssessHypothesisExhaustedResult(result *ops.AssessHypothesisExhaustedResult, err error) error {
 	if err != nil {
 		return fmt.Errorf("assess hypothesis-exhausted: %w", err)
+	}
+
+	if printLifecycleResult(result.LifecycleOutcome) {
+		return nil
 	}
 
 	fmt.Printf("Task %s assessed by orchestrator (hypothesis-exhausted)\n", result.TaskID)

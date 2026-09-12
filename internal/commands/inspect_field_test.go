@@ -179,6 +179,11 @@ func TestGetField_DiscoversAllTaggedConfigAndSprintFields(t *testing.T) {
 				ReviewVerdictApprovalRatePercent: 77,
 				TaskSubmittedForReviewCount:      8,
 				TaskOutcomeApprovalRatePercent:   63,
+				LifecycleOutcomes: &models.LifecycleOutcomeMetrics{
+					Available: true, ObservedSince: &now, LastUpdated: &now,
+					Counts:  map[string]map[string]uint64{"submit-for-review": {models.LifecycleCompleted: 2}},
+					Warning: "observation window began after sprint start",
+				},
 			},
 			Retrospective: &retrospective,
 		},

@@ -17,17 +17,18 @@ type inspectMetricsOptions struct {
 
 // metricsInfo represents sprint metrics information
 type metricsInfo struct {
-	TasksDone                        int `json:"tasks_done" yaml:"tasks_done"`
-	TasksInProgress                  int `json:"tasks_in_progress" yaml:"tasks_in_progress"`
-	TasksBlocked                     int `json:"tasks_blocked" yaml:"tasks_blocked"`
-	IterationsTotal                  int `json:"iterations_total" yaml:"iterations_total"`
-	ReviewCyclesTotal                int `json:"review_cycles_total" yaml:"review_cycles_total"`
-	ReviewVerdictApprovals           int `json:"review_verdict_approvals" yaml:"review_verdict_approvals"`
-	ReviewVerdictRejections          int `json:"review_verdict_rejections" yaml:"review_verdict_rejections"`
-	ReviewVerdictCount               int `json:"review_verdict_count" yaml:"review_verdict_count"`
-	ReviewVerdictApprovalRatePercent int `json:"review_verdict_approval_rate_percent" yaml:"review_verdict_approval_rate_percent"`
-	TaskSubmittedForReviewCount      int `json:"task_submitted_for_review_count" yaml:"task_submitted_for_review_count"`
-	TaskOutcomeApprovalRatePercent   int `json:"task_outcome_approval_rate_percent" yaml:"task_outcome_approval_rate_percent"`
+	LifecycleOutcomes                *models.LifecycleOutcomeMetrics `json:"lifecycle_outcomes,omitempty" yaml:"lifecycle_outcomes,omitempty"`
+	TasksDone                        int                             `json:"tasks_done" yaml:"tasks_done"`
+	TasksInProgress                  int                             `json:"tasks_in_progress" yaml:"tasks_in_progress"`
+	TasksBlocked                     int                             `json:"tasks_blocked" yaml:"tasks_blocked"`
+	IterationsTotal                  int                             `json:"iterations_total" yaml:"iterations_total"`
+	ReviewCyclesTotal                int                             `json:"review_cycles_total" yaml:"review_cycles_total"`
+	ReviewVerdictApprovals           int                             `json:"review_verdict_approvals" yaml:"review_verdict_approvals"`
+	ReviewVerdictRejections          int                             `json:"review_verdict_rejections" yaml:"review_verdict_rejections"`
+	ReviewVerdictCount               int                             `json:"review_verdict_count" yaml:"review_verdict_count"`
+	ReviewVerdictApprovalRatePercent int                             `json:"review_verdict_approval_rate_percent" yaml:"review_verdict_approval_rate_percent"`
+	TaskSubmittedForReviewCount      int                             `json:"task_submitted_for_review_count" yaml:"task_submitted_for_review_count"`
+	TaskOutcomeApprovalRatePercent   int                             `json:"task_outcome_approval_rate_percent" yaml:"task_outcome_approval_rate_percent"`
 }
 
 // AgentMetricsInfo represents per-agent performance metrics
@@ -76,6 +77,7 @@ func inspectMetrics(state *models.State, opts inspectMetricsOptions) (any, error
 // buildMetricsInfo converts SprintMetrics to metricsInfo
 func buildMetricsInfo(metrics models.SprintMetrics) metricsInfo {
 	return metricsInfo{
+		LifecycleOutcomes:                metrics.LifecycleOutcomes,
 		TasksDone:                        metrics.TasksDone,
 		TasksInProgress:                  metrics.TasksInProgress,
 		TasksBlocked:                     metrics.TasksBlocked,
@@ -204,7 +206,11 @@ func formatAgentMetricsOutput(metrics []AgentMetricsInfo, format string) (string
 
 // formatMetricsValue formats sprint metrics as key-value pairs
 func formatMetricsValue(metrics metricsInfo) (string, error) {
-	return render.ExecuteTemplate("metrics_value", metrics)
+	text, err := render.ExecuteTemplate("metrics_value", metrics)
+	if err != nil {
+		return "", err
+	}
+	return text + "\n" + formatLifecycleMetrics(metrics.LifecycleOutcomes), nil
 }
 
 // formatAgentMetricsTable formats per-agent metrics as a table

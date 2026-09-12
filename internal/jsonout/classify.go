@@ -28,7 +28,7 @@ var stringErrorRules = []stringRule{
 	{
 		patterns: []string{"race condition", "changed concurrently", "concurrent modification", "sentinel replaced"},
 		code:     "race_condition",
-		message:  "state changed concurrently, retry",
+		message:  "state changed concurrently, requery current state",
 	},
 	{
 		patterns: []string{
@@ -46,6 +46,23 @@ var stringErrorRules = []stringRule{
 // Typed errors use controlled fields. Untyped errors use fixed messages
 // to prevent leaking implementation details.
 func ClassifyError(err error) (code string, message string) {
+	// The operation's observed outcome outranks a wrapped legacy precondition.
+	// In particular, an already-transitioned task is not malformed input.
+	var lifecycle *ops.LifecycleError
+	if errors.As(err, &lifecycle) {
+		code = strings.ToLower(lifecycle.Outcome.Outcome)
+		switch lifecycle.Outcome.Outcome {
+		case "INVALID_INPUT":
+			code = "validation"
+		case "FORBIDDEN":
+			code = "permission_denied"
+		}
+		return code, lifecycle.Error()
+	}
+	var authority *ops.AgentAuthorityError
+	if errors.As(err, &authority) {
+		return "stale_caller", authority.Error()
+	}
 	// Type-based checks (preferred).
 	var nfe *lizaerrors.NotFoundError
 	if errors.As(err, &nfe) {

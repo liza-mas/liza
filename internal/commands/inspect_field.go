@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/errors"
@@ -104,7 +106,53 @@ func normalizeFieldValue(value reflect.Value) any {
 	if value.Kind() == reflect.String {
 		return value.String()
 	}
+	// Raw fields can be rendered as YAML/value as well as JSON. JSON exclusion
+	// tags alone do not protect persistence-only lifecycle authority.
+	switch tasks := value.Interface().(type) {
+	case models.Task:
+		return redactTaskLifecycleForInspection(tasks)
+	case []models.Task:
+		result := slices.Clone(tasks)
+		for i := range result {
+			result[i] = redactTaskLifecycleForInspection(result[i])
+		}
+		return result
+	case models.ValidationReadiness:
+		tasks.Generation = ""
+		return tasks
+	case map[string]map[string]models.ValidationReadiness:
+		result := maps.Clone(tasks)
+		for agentID, records := range result {
+			records = maps.Clone(records)
+			for taskID, record := range records {
+				record.Generation = ""
+				records[taskID] = record
+			}
+			result[agentID] = records
+		}
+		return result
+	}
 	return value.Interface()
+}
+
+// Copy only the metadata being redacted; inspection must not mutate the state
+// used by lifecycle authority or receipt matching.
+func redactTaskLifecycleForInspection(task models.Task) models.Task {
+	if task.Lifecycle == nil {
+		return task
+	}
+	lifecycle := *task.Lifecycle
+	lifecycle.Receipts = slices.Clone(lifecycle.Receipts)
+	for i := range lifecycle.Receipts {
+		lifecycle.Receipts[i].GenerationDigest = ""
+	}
+	if lifecycle.Preparation != nil {
+		preparation := *lifecycle.Preparation
+		preparation.GenerationDigest = ""
+		lifecycle.Preparation = &preparation
+	}
+	task.Lifecycle = &lifecycle
+	return task
 }
 
 func derefReflectValue(value reflect.Value) reflect.Value {
@@ -267,6 +315,8 @@ func getTaskComputedField(state *models.State, taskID, field string) (any, error
 	}
 
 	switch field {
+	case "transition_id":
+		return models.TaskTransitionID(task), nil
 	case "age":
 		duration := calculateTaskAge(task)
 		return render.FormatDuration(duration), nil

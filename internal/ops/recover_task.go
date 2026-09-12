@@ -14,6 +14,7 @@ import (
 
 // RecoverTaskResult contains the outcome of recovering a task.
 type RecoverTaskResult struct {
+	models.LifecycleOutcome
 	TaskID            string
 	InState           bool   // true if task was found in state
 	AgentID           string // primary agent that held the claim, if any
@@ -31,6 +32,7 @@ type RecoverTaskResult struct {
 
 // RecoverTaskOptions configures task recovery.
 type RecoverTaskOptions struct {
+	RequestOptions LifecycleRequestOptions
 	// Force bypasses live-PID checks. For tasks absent from state, it also enables
 	// git-only artifact cleanup.
 	Force bool
@@ -107,17 +109,27 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 }
 
 // RecoverTaskWithOptions performs task recovery with explicit reset options.
-func RecoverTaskWithOptions(projectRoot, taskID string, reason string, opts RecoverTaskOptions) (*RecoverTaskResult, error) {
-	var result *RecoverTaskResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "task-recover-worktree", func() error {
+func RecoverTaskWithOptions(projectRoot, taskID string, reason string, opts RecoverTaskOptions) (result *RecoverTaskResult, err error) {
+	invocation := &ownershipInvocation{operation: "recover-task", opts: opts.RequestOptions, metrics: NewLifecycleInvocation(projectRoot)}
+	defer func() { err = invocation.finish(projectRoot, err) }()
+	if taskID == "" {
+		return nil, &PreconditionError{Reason: "task ID required"}
+	}
+	if err := paths.ValidateTaskID(taskID); err != nil {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid task ID: %v", err)}
+	}
+	if err := ValidateLifecycleRequestOptions(opts.RequestOptions); err != nil {
+		return nil, &PreconditionError{Reason: err.Error()}
+	}
+	err = withOwnershipTaskLock(projectRoot, taskID, "task-recover-worktree", func() error {
 		var recoverErr error
-		result, recoverErr = recoverTaskWithOptions(projectRoot, taskID, reason, opts)
+		result, recoverErr = recoverTaskWithOptions(projectRoot, taskID, reason, opts, invocation)
 		return recoverErr
 	})
 	return result, err
 }
 
-func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts RecoverTaskOptions) (*RecoverTaskResult, error) {
+func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts RecoverTaskOptions, invocation *ownershipInvocation) (*RecoverTaskResult, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID required")
 	}
@@ -144,6 +156,27 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 	}
 	if task != nil {
 		result.InState = true
+		invocation.observe(task)
+		request, err := NewLifecycleRequest("recover-task", task, "human", nil, opts.RequestOptions, struct {
+			Force, Fresh bool
+			Reason       string
+		}{opts.Force, opts.Fresh, reason})
+		if err != nil {
+			return nil, err
+		}
+		invocation.request = request
+		receipt, err := checkOwnerEndingRequest(task, request)
+		if err != nil {
+			return nil, err
+		}
+		if receipt != nil {
+			invocation.outcome = LifecycleReplayOutcome(task, receipt, "human")
+			result.LifecycleOutcome = invocation.outcome
+			result.ClaimReleased = receipt.Projection.ReleasedDoer || receipt.Projection.ReleasedReviewer
+			result.FreshReset = opts.Fresh
+			result.PreservedWorktree = !opts.Fresh && receipt.Projection.BaseCommit != ""
+			return result, nil
+		}
 		if err := recoverTaskCheckLiveClaims(taskID, task, state, opts.Force, opts.Fresh, result); err != nil {
 			return nil, err
 		}
@@ -153,9 +186,16 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 
 	artifact := inspectRecoverTaskArtifacts(gitWrapper, taskID, result)
 	if !result.InState {
+		if opts.RequestOptions.RequestID != "" {
+			return nil, &PreconditionError{Reason: "cannot bind a recovery request to an absent task"}
+		}
+		invocation.effects = true
 		if err := recoverTaskCleanupGitArtifacts(gitWrapper, taskID, artifact, result); err != nil {
 			return result, fmt.Errorf("cleanup git artifacts: %w", err)
 		}
+		invocation.outcome = NewLifecycleOutcome("recover-task", nil, models.LifecycleCompleted, "continue", "committed")
+		invocation.outcome.TaskID = taskID
+		result.LifecycleOutcome = invocation.outcome
 		return result, nil
 	}
 	if task.Status.IsTerminal() {
@@ -172,9 +212,25 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 		return nil, fmt.Errorf("task %s role_pair %q has no initial status", taskID, task.RolePair)
 	}
 	snapshot := newRecoverTaskSnapshot(task)
+	if err := bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return fmt.Errorf("task disappeared before recovery preparation")
+		}
+		if err := snapshot.validate(taskID, task); err != nil {
+			return err
+		}
+		if err := recoverTaskCheckLiveClaims(taskID, task, state, opts.Force, opts.Fresh, result); err != nil {
+			return err
+		}
+		return prepareOwnerEndingRequest(task, invocation.request)
+	}); err != nil {
+		return nil, err
+	}
+	invocation.effects = true
 
 	if opts.Fresh {
-		return recoverTaskFreshReset(bb, gitWrapper, taskID, reason, statuses, artifact, snapshot, result)
+		return recoverTaskFreshReset(bb, gitWrapper, taskID, reason, statuses, artifact, snapshot, result, invocation)
 	}
 
 	preserve, err := recoverTaskPreserveArtifacts(gitWrapper, task, statuses, &artifact, result)
@@ -189,9 +245,13 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return nil
+			return fmt.Errorf("task disappeared before recovery completion")
 		}
+		invocation.observe(task)
 		if err := snapshot.validate(taskID, task); err != nil {
+			return err
+		}
+		if err := ValidateLifecyclePreparation(task, invocation.request); err != nil {
 			return err
 		}
 
@@ -225,7 +285,10 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 			}
 		}
 		state.HumanNotes = append(state.HumanNotes, recoverTaskHumanNote(taskID, reason, agentsToRecover, now))
-		return nil
+		var completeErr error
+		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, recoverTaskProjection(task, snapshot))
+		result.LifecycleOutcome = invocation.outcome
+		return completeErr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to recover task: %w", err)
@@ -463,7 +526,7 @@ func recoverTaskPreserveArtifacts(gitWrapper *git.Git, task *models.Task, status
 	return true, nil
 }
 
-func recoverTaskFreshReset(bb *db.Blackboard, gitWrapper *git.Git, taskID, reason string, statuses recoverTaskStatusSet, artifact recoverTaskArtifactSnapshot, snapshot recoverTaskSnapshot, result *RecoverTaskResult) (*RecoverTaskResult, error) {
+func recoverTaskFreshReset(bb *db.Blackboard, gitWrapper *git.Git, taskID, reason string, statuses recoverTaskStatusSet, artifact recoverTaskArtifactSnapshot, snapshot recoverTaskSnapshot, result *RecoverTaskResult, invocation *ownershipInvocation) (*RecoverTaskResult, error) {
 	outcome, err := recoverTaskFreshOutcomeForStatus(snapshot.status, statuses)
 	if err != nil {
 		return nil, err
@@ -480,7 +543,11 @@ func recoverTaskFreshReset(bb *db.Blackboard, gitWrapper *git.Git, taskID, reaso
 		if task == nil {
 			return fmt.Errorf("task %s not found in state", taskID)
 		}
+		invocation.observe(task)
 		if err := snapshot.validate(taskID, task); err != nil {
+			return err
+		}
+		if err := ValidateLifecyclePreparation(task, invocation.request); err != nil {
 			return err
 		}
 		if _, err := gitWrapper.GetCommitSHA(state.Config.IntegrationBranch); err != nil {
@@ -531,7 +598,10 @@ func recoverTaskFreshReset(bb *db.Blackboard, gitWrapper *git.Git, taskID, reaso
 			},
 		})
 		state.HumanNotes = append(state.HumanNotes, recoverTaskHumanNote(taskID, reason, agentsToRecover, now))
-		return nil
+		var completeErr error
+		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, recoverTaskProjection(task, snapshot))
+		result.LifecycleOutcome = invocation.outcome
+		return completeErr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to record fresh recovery: %w", err)
@@ -556,6 +626,7 @@ func releaseRecoverTaskSnapshotAgents(state *models.State, agentsToRecover map[s
 }
 
 func recoverTaskMarkFreshCreationFailure(state *models.State, task *models.Task, snapshot recoverTaskSnapshot, outcome recoverTaskFreshOutcome, reason string, now time.Time, createErr error, result *RecoverTaskResult) {
+	models.AdvanceLifecycle(task)
 	agentsToRecover := snapshot.agentsToRecover()
 	releaseRecoverTaskSnapshotAgents(state, agentsToRecover, result)
 
@@ -675,6 +746,7 @@ func recoverTaskReleaseClaims(state *models.State, task *models.Task, resolver m
 }
 
 func releaseRecoverTaskAgent(state *models.State, task *models.Task, agentID string) {
+	models.AdvanceLifecycle(task)
 	if agent, ok := state.Agents[agentID]; ok {
 		if agent.CurrentTask != nil && *agent.CurrentTask == task.ID {
 			state.ReleaseAgent(agentID)
@@ -685,6 +757,7 @@ func releaseRecoverTaskAgent(state *models.State, task *models.Task, agentID str
 }
 
 func releaseRecoverTaskReviewerAgent(state *models.State, task *models.Task, agentID string) {
+	models.AdvanceLifecycle(task)
 	if agent, ok := state.Agents[agentID]; ok {
 		if agent.CurrentTask != nil && *agent.CurrentTask == task.ID {
 			state.ReleaseAgent(agentID)
@@ -696,6 +769,14 @@ func releaseRecoverTaskReviewerAgent(state *models.State, task *models.Task, age
 
 func recoverTaskNeedsReviewCommitReset(task *models.Task, statuses recoverTaskStatusSet) bool {
 	return task.ReviewCommit == nil && isRecoverTaskReviewCandidate(task.Status, statuses)
+}
+
+func recoverTaskProjection(task *models.Task, snapshot recoverTaskSnapshot) models.LifecycleProjection {
+	projection := models.LifecycleProjection{SourceStatus: snapshot.status, ReleasedDoer: snapshot.hasAssignedTo && task.AssignedTo == nil, ReleasedReviewer: snapshot.hasReviewingBy && task.ReviewingBy == nil}
+	if task.BaseCommit != nil {
+		projection.BaseCommit = *task.BaseCommit
+	}
+	return projection
 }
 
 func isRecoverTaskReviewCandidate(status models.TaskStatus, statuses recoverTaskStatusSet) bool {

@@ -51,7 +51,7 @@ func TestAgentAuthorityMutationFence(t *testing.T) {
 		if !errors.As(err, &authorityErr) {
 			t.Fatalf("error = %T %v, want *AgentAuthorityError", err, err)
 		}
-		for _, want := range []string{agentID, generationFingerprint(generationB)} {
+		for _, want := range []string{agentID, "stop"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want %q", err, want)
 			}
@@ -60,8 +60,11 @@ func TestAgentAuthorityMutationFence(t *testing.T) {
 			if !strings.Contains(err.Error(), "missing") {
 				t.Errorf("missing-authority error = %q, want missing diagnostic", err)
 			}
-		} else if !strings.Contains(err.Error(), generationFingerprint(generationA)) {
-			t.Errorf("stale-authority error lacks losing-generation fingerprint: %v", err)
+		}
+		for _, generation := range []string{generationA, generationB} {
+			if strings.Contains(err.Error(), generation) {
+				t.Error("authority rejection disclosed a registration generation")
+			}
 		}
 
 		after, err := os.ReadFile(statePath)

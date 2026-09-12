@@ -17,6 +17,7 @@ import (
 
 // ReleaseClaimResult contains the outcome of releasing a claim.
 type ReleaseClaimResult struct {
+	models.LifecycleOutcome
 	TaskID           string `json:"task_id"`
 	Role             string `json:"role"`
 	ReleasedReviewer bool   `json:"released_reviewer"`
@@ -217,6 +218,7 @@ func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, p
 	}
 
 	cfg.clearFn(task)
+	models.AdvanceLifecycle(task)
 
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:   now,
@@ -242,6 +244,32 @@ func ReleaseClaimWithAuthority(projectRoot, taskID, role string, force bool, rea
 }
 
 func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID string, authority *models.AgentAuthority) (*ReleaseClaimResult, error) {
+	return ReleaseClaimWithRequest(projectRoot, taskID, role, force, reason, agentID, authority, LifecycleRequestOptions{})
+}
+
+// ReleaseClaimWithRequest binds release retries to the inspected ownership
+// boundary. Legacy human/admin callers may omit authority and request options.
+func ReleaseClaimWithRequest(projectRoot, taskID, role string, force bool, reason, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions) (result *ReleaseClaimResult, err error) {
+	invocation := &ownershipInvocation{operation: "release-claim", opts: opts, authority: authority, metrics: NewLifecycleInvocation(projectRoot)}
+	defer func() { err = invocation.finish(projectRoot, err) }()
+	if taskID == "" {
+		return nil, &PreconditionError{Reason: "task ID is required"}
+	}
+	if role != roles.ClaimReviewer && role != roles.ClaimDoer && role != roles.ClaimBoth {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("role must be reviewer, doer, or both, got: %s", role)}
+	}
+	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+		return nil, &PreconditionError{Reason: err.Error()}
+	}
+	err = withOwnershipTaskLock(projectRoot, taskID, "release-claim", func() error {
+		var inner error
+		result, inner = releaseClaimLocked(projectRoot, taskID, role, force, reason, agentID, authority, invocation)
+		return inner
+	})
+	return result, err
+}
+
+func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, agentID string, authority *models.AgentAuthority, invocation *ownershipInvocation) (*ReleaseClaimResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -283,6 +311,25 @@ func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
+		invocation.observe(task)
+		request, err := NewLifecycleRequest("release-claim", task, agentID, authority, invocation.opts, struct {
+			Role   string
+			Force  bool
+			Reason string
+		}{role, force, reason})
+		if err != nil {
+			return err
+		}
+		invocation.request = request
+		receipt, err := checkOwnerEndingRequest(task, request)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			invocation.outcome = LifecycleReplayOutcome(task, receipt, agentID)
+			releasedDoer, releasedReviewer = receipt.Projection.ReleasedDoer, receipt.Projection.ReleasedReviewer
+			return errLifecycleReplay
+		}
 
 		if role == roles.ClaimReviewer || role == roles.ClaimBoth {
 			effectiveReviewerRelease, err := resolveReviewerClaimReleaseStatus(task, resolver)
@@ -308,7 +355,7 @@ func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 		}
 
 		if !releasedReviewer && !releasedDoer {
-			return &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}
+			return &LifecycleError{Outcome: NewLifecycleOutcome("release-claim", task, models.LifecycleAlreadyTransitioned, "stop", "none"), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
 		}
 		if validateRejectedHandoff {
 			if err := statevalidate.ValidateState(state, projectRoot, true, io.Discard); err != nil {
@@ -316,10 +363,14 @@ func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 			}
 		}
 
-		return nil
+		invocation.outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{ReleasedDoer: releasedDoer, ReleasedReviewer: releasedReviewer})
+		if err == nil {
+			invocation.effects = true
+		}
+		return err
 	})
 
-	if err != nil {
+	if err != nil && !isLifecycleReplay(err) {
 		return nil, fmt.Errorf("failed to release claim: %w", err)
 	}
 
@@ -329,11 +380,12 @@ func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 	// cleanup deletes a worktree that a concurrent ClaimTask just created.
 	// Orphaned worktrees in .worktrees/ are gitignored and harmless until re-claimed.
 	// See handleReadyClaimWorktree in claim_task.go for the cleanup path.
-	if releasedDoer {
+	if releasedDoer && !isLifecycleReplay(err) {
 		log.Printf("INFO: release-claim %s: worktree cleanup deferred to next claim", taskID)
 	}
 
 	return &ReleaseClaimResult{
+		LifecycleOutcome: invocation.outcome,
 		TaskID:           taskID,
 		Role:             role,
 		ReleasedReviewer: releasedReviewer,

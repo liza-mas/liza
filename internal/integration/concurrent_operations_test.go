@@ -6,6 +6,7 @@ package integration
 // race conditions when multiple agents operate simultaneously.
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -372,8 +374,14 @@ func TestConcurrentClaimWithWorktreeConflict(t *testing.T) {
 			failureCount++
 			t.Logf("Agent %s failed to claim: %v", agentIDs[i], err)
 			// Should fail with one of the expected race condition errors
+			var lifecycleErr *ops.LifecycleError
+			pendingClaim := errors.As(err, &lifecycleErr) &&
+				lifecycleErr.Outcome.Operation == "claim-task" &&
+				lifecycleErr.Outcome.Outcome == models.LifecycleStateChanged &&
+				lifecycleErr.Outcome.SafeAction == "requery" &&
+				(lifecycleErr.Outcome.Effects == "none" || lifecycleErr.Outcome.Effects == "unknown")
 			errMsg := err.Error()
-			if !strings.Contains(errMsg, "race condition") &&
+			if !pendingClaim && !strings.Contains(errMsg, "race condition") &&
 				!strings.Contains(errMsg, "worktree") &&
 				!strings.Contains(errMsg, "branch") &&
 				!strings.Contains(errMsg, "is IMPLEMENTING") {

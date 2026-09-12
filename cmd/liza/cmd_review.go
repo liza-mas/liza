@@ -59,6 +59,13 @@ Updates:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		commitRef := "HEAD"
 		if len(args) == 2 {
@@ -84,15 +91,16 @@ Updates:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.SubmitForReviewWithAuthority(projectRoot, taskID, commitRef, authority)
+			result, err := ops.SubmitForReviewWithAuthorityAndOptions(projectRoot, taskID, commitRef, authority, requestOpts)
 			var warnings []string
 			if result != nil {
 				warnings = result.Warnings
 			}
 			return jsonout.WriteResult(os.Stdout, result, warnings, err)
 		}
-		return commands.SubmitForReviewCommandWithAuthority(projectRoot, taskID, commitRef, authority)
+		return commands.SubmitForReviewCommandWithAuthorityAndOptions(projectRoot, taskID, commitRef, authority, requestOpts)
 	},
 }
 
@@ -124,6 +132,13 @@ Updates:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		summary := args[1]
 		nextAction := args[2]
@@ -147,8 +162,10 @@ Updates:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
 			result, err := ops.Handoff(&ops.HandoffInput{
+				Request:     requestOpts,
 				ProjectRoot: projectRoot,
 				TaskID:      taskID,
 				Summary:     summary,
@@ -159,6 +176,7 @@ Updates:
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
 		return commands.HandoffCommand(projectRoot, &ops.HandoffInput{
+			Request:    requestOpts,
 			TaskID:     taskID,
 			Summary:    summary,
 			NextAction: nextAction,
@@ -212,6 +230,13 @@ For REJECTED verdict:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		verdict := args[1]
 		reason, err := verdictReason(cmd, args)
@@ -241,11 +266,12 @@ For REJECTED verdict:
 		impact, _ := cmd.Flags().GetString("impact")
 		reviewCommit, _ := cmd.Flags().GetString("review-commit")
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit)
+			result, err := ops.SubmitVerdictWithAuthorityAndOptions(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit)
+		return commands.SubmitVerdictCommandWithAuthorityAndOptions(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit, requestOpts)
 	},
 }
 
@@ -326,6 +352,13 @@ Agent ID for audit trail:
 			}()
 		}
 
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
 		taskID := args[0]
 		role, _ := cmd.Flags().GetString("role")
 		force, _ := cmd.Flags().GetBool("force")
@@ -343,11 +376,12 @@ Agent ID for audit trail:
 			return err
 		}
 
+		invocation.calledOps = true
 		if isJSON(cmd) {
-			result, err := ops.ReleaseClaim(projectRoot, taskID, role, force, reason, agentID)
+			result, err := ops.ReleaseClaimWithRequest(projectRoot, taskID, role, force, reason, agentID, nil, requestOpts)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.ReleaseClaimCommand(projectRoot, taskID, role, force, reason, agentID)
+		return commands.ReleaseClaimWithOptionsCommand(projectRoot, taskID, role, force, reason, agentID, requestOpts)
 	},
 }
 
@@ -593,6 +627,9 @@ Requirements:
 }
 
 func init() {
+	for _, cmd := range []*cobra.Command{handoffCmd, submitForReviewCmd, submitVerdictCmd, releaseClaimCmd} {
+		addLifecycleFlags(cmd)
+	}
 	rootCmd.AddCommand(submitForReviewCmd)
 	rootCmd.AddCommand(handoffCmd)
 	rootCmd.AddCommand(submitVerdictCmd)

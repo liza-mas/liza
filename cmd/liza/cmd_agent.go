@@ -16,7 +16,9 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/identity"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/spf13/cobra"
@@ -333,7 +335,21 @@ a hard crash.
 
 Idempotent: safe to run multiple times.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
 		taskID := args[0]
 		force, _ := cmd.Flags().GetBool("force")
 		fresh, _ := cmd.Flags().GetBool("fresh")
@@ -342,7 +358,16 @@ Idempotent: safe to run multiple times.`,
 		if err != nil {
 			return err
 		}
-		return commands.RecoverTaskCommand(projectRoot, taskID, force, fresh, reason)
+		invocation.calledOps = true
+		if isJSON(cmd) {
+			result, err := ops.RecoverTaskWithOptions(projectRoot, taskID, reason, ops.RecoverTaskOptions{Force: force, Fresh: fresh, RequestOptions: requestOpts})
+			var warnings []string
+			if result != nil {
+				warnings = result.Warnings
+			}
+			return jsonout.WriteResult(os.Stdout, result, warnings, err)
+		}
+		return commands.RecoverTaskWithRequestCommand(projectRoot, taskID, force, fresh, reason, requestOpts)
 	},
 }
 
@@ -358,7 +383,21 @@ var recoverAgentCmd = &cobra.Command{
 Idempotent: safe to run multiple times (no error if agent already gone).
 By default, refuses to recover agents whose PID is still alive.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
 		agentID := args[0]
 		force, _ := cmd.Flags().GetBool("force")
 		cli, _ := cmd.Flags().GetString("cli")
@@ -367,7 +406,19 @@ By default, refuses to recover agents whose PID is still alive.`,
 		if err != nil {
 			return err
 		}
-		return commands.RecoverAgentCommand(projectRoot, agentID, force, cli, reason)
+		if isJSON(cmd) && cli != "" {
+			return cliValidationError("--json cannot be combined with --cli respawn")
+		}
+		invocation.calledOps = true
+		if isJSON(cmd) {
+			result, err := ops.RecoverAgentWithOptions(projectRoot, agentID, force, reason, requestOpts)
+			var warnings []string
+			if result != nil {
+				warnings = result.Warnings
+			}
+			return jsonout.WriteResult(os.Stdout, result, warnings, err)
+		}
+		return commands.RecoverAgentWithOptionsCommand(projectRoot, agentID, force, cli, reason, requestOpts)
 	},
 }
 
@@ -475,6 +526,10 @@ current tasks.`,
 }
 
 func init() {
+	for _, cmd := range []*cobra.Command{recoverTaskCmd, recoverAgentCmd} {
+		addLifecycleFlags(cmd)
+		addJSONFlag(cmd)
+	}
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(recoverTaskCmd)
 	rootCmd.AddCommand(recoverAgentCmd)
