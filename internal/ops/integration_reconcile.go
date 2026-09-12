@@ -524,12 +524,14 @@ func globalAnalysisParents(
 			}
 		}
 	}
-	if generation > 1 {
+	firstGeneration := state.Goal.Integration.FirstGlobalGeneration()
+	if generation > firstGeneration {
 		generations := state.Goal.Integration.GlobalGenerations
-		if len(generations) < generation-1 {
+		previousIndex := generation - firstGeneration - 1
+		if len(generations) <= previousIndex || generations[previousIndex].Generation != generation-1 {
 			return nil, fmt.Errorf("global generation %d lacks generation %d provenance", generation, generation-1)
 		}
-		parents = append(parents, generations[generation-2].AnalysisTaskID)
+		parents = append(parents, generations[previousIndex].AnalysisTaskID)
 	}
 	return uniqueSortedStrings(parents), nil
 }

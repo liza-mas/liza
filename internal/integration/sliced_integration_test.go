@@ -511,6 +511,22 @@ func TestSlicedIntegrationFinalizationRace(t *testing.T) {
 
 	t.Run("mutation after finalization", func(t *testing.T) {
 		fixture := newPendingGlobalFinalizationFixture(t)
+		// This race needs an independent documentation mutation, not unfinished
+		// architecture that can still produce coding work and must block closure.
+		config, err := pipeline.LoadFrozen(fixture.root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config.Pipeline.PipelineTransitions = slices.DeleteFunc(config.Pipeline.PipelineTransitions, func(transition pipeline.TransitionDef) bool {
+			return transition.Name == "architecture-to-code-plan"
+		})
+		data, err := yaml.Marshal(config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(fixture.root, paths.ProjectDirName(), "pipeline.yaml"), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
 		source := fixture.integrationHead(t)
 		taskID, reviewerID := prepareApprovedMutation(t, fixture, "mutation-after-finalization")
 		if _, err := ops.SubmitVerdict(fixture.root, "integration-global-1", "APPROVED", "", "integration-reviewer-1", ""); err != nil {

@@ -30,6 +30,9 @@ func validateIntegrationLifecycle(state *models.State, _ string, _ bool) error {
 	if lifecycle == nil {
 		return nil
 	}
+	if err := validatePrematureRecovery(state); err != nil {
+		return err
+	}
 	frozenRoots, err := validateContributingSet(lifecycle.ContributingSet)
 	if err != nil {
 		return err
@@ -37,7 +40,7 @@ func validateIntegrationLifecycle(state *models.State, _ string, _ bool) error {
 	if err := validateIntegrationCoverage(lifecycle.Coverage, frozenRoots, tasksByID); err != nil {
 		return err
 	}
-	if err := validateGlobalGenerations(lifecycle.GlobalGenerations, tasksByID); err != nil {
+	if err := validateGlobalGenerations(lifecycle.GlobalGenerations, tasksByID, lifecycle.FirstGlobalGeneration()); err != nil {
 		return err
 	}
 	if err := validateMutationReceipts(lifecycle.MutationReceipts); err != nil {
@@ -280,9 +283,13 @@ func validateSliceReport(
 	return nil
 }
 
-func validateGlobalGenerations(generations []models.IntegrationGlobalGeneration, tasksByID map[string]*models.Task) error {
+func validateGlobalGenerations(generations []models.IntegrationGlobalGeneration, tasksByID map[string]*models.Task, firstGeneration ...int) error {
+	first := 1
+	if len(firstGeneration) > 0 {
+		first = firstGeneration[0]
+	}
 	for i, generation := range generations {
-		expected := i + 1
+		expected := i + first
 		if generation.Generation != expected {
 			return fmt.Errorf("global generation %d, want %d", generation.Generation, expected)
 		}
@@ -352,10 +359,16 @@ func validateIntegrationClosure(closure *models.IntegrationClosure, generations 
 		if closure.SourceCommit == "" {
 			return fmt.Errorf("clean integration closure source commit is empty")
 		}
-		if closure.Generation <= 0 || closure.Generation > len(generations) {
+		var generation *models.IntegrationGlobalGeneration
+		for i := range generations {
+			if generations[i].Generation == closure.Generation {
+				generation = &generations[i]
+				break
+			}
+		}
+		if generation == nil {
 			return fmt.Errorf("clean integration closure references missing generation %d", closure.Generation)
 		}
-		generation := generations[closure.Generation-1]
 		if generation.Verdict != models.IntegrationAnalysisVerdictClean {
 			return fmt.Errorf("clean integration closure references non-clean generation %d", closure.Generation)
 		}
@@ -383,11 +396,23 @@ func ValidateIntegrationLifecycleTransition(previous, candidate *models.State) e
 	}
 	previousLifecycle := previous.Goal.Integration
 	candidateLifecycle := candidate.Goal.Integration
+	if previousLifecycle == nil && candidateLifecycle != nil && candidateLifecycle.PrematureRecovery != nil {
+		return fmt.Errorf("premature recovery requires a prior empty frozen cohort")
+	}
+	recovering := previousLifecycle != nil && previousLifecycle.PrematureRecovery == nil && candidateLifecycle != nil && candidateLifecycle.PrematureRecovery != nil
+	if recovering {
+		if err := validatePrematureRecoveryTransition(previous, candidate); err != nil {
+			return err
+		}
+	}
 	if previousLifecycle != nil {
 		if candidateLifecycle == nil {
 			return fmt.Errorf("integration lifecycle cannot be cleared")
 		}
-		if previousLifecycle.ContributingSet != nil {
+		if previousLifecycle.PrematureRecovery != nil && !reflect.DeepEqual(previousLifecycle.PrematureRecovery, candidateLifecycle.PrematureRecovery) {
+			return fmt.Errorf("integration premature recovery receipt cannot change")
+		}
+		if previousLifecycle.ContributingSet != nil && !recovering {
 			if candidateLifecycle.ContributingSet == nil {
 				return fmt.Errorf("integration contributing set cannot be cleared")
 			}
@@ -422,6 +447,51 @@ func ValidateIntegrationLifecycleTransition(previous, candidate *models.State) e
 		if !sameAnalysisMetadata(previousTask.IntegrationAnalysis, candidateTask.IntegrationAnalysis) {
 			return fmt.Errorf("task %s integration analysis metadata cannot change", previousTask.ID)
 		}
+	}
+	return nil
+}
+
+func validatePrematureRecovery(state *models.State) error {
+	lifecycle := state.Goal.Integration
+	if lifecycle == nil || lifecycle.PrematureRecovery == nil {
+		return nil
+	}
+	recovery := lifecycle.PrematureRecovery
+	if recovery.At.IsZero() || recovery.Reason == "" || recovery.ReportCommit == "" || recovery.SourceCommit == "" || recovery.PreservationRef != "refs/integration-recovery/"+recovery.AnalysisTaskID || len(recovery.PreviousContributingSet.Scopes) != 0 {
+		return fmt.Errorf("invalid integration premature recovery receipt")
+	}
+	task := state.FindTask(recovery.AnalysisTaskID)
+	if task == nil || task.Status != models.TaskStatusAbandoned || task.IntegrationAnalysis == nil {
+		return fmt.Errorf("premature recovery must retain its abandoned analysis task")
+	}
+	m := task.IntegrationAnalysis
+	if m.Key != "global:1" || m.Phase != models.IntegrationAnalysisPhaseGlobal || m.Generation != 1 || m.SourceCommit != recovery.SourceCommit || len(m.DescendantChanges) != 0 {
+		return fmt.Errorf("premature recovery does not match retained global analysis metadata")
+	}
+	return nil
+}
+
+func validatePrematureRecoveryTransition(previous, candidate *models.State) error {
+	if err := validatePrematureRecovery(candidate); err != nil {
+		return err
+	}
+	old, next := previous.Goal.Integration, candidate.Goal.Integration
+	r := next.PrematureRecovery
+	if previous.Config.Mode != models.SystemModePaused || candidate.Config.Mode != models.SystemModePaused || old.ContributingSet == nil || len(old.ContributingSet.Scopes) != 0 || next.ContributingSet != nil || len(old.Coverage) != 0 || len(old.GlobalGenerations) != 0 || old.Closure != nil || len(next.Coverage) != 0 || len(next.GlobalGenerations) != 0 || next.Closure != nil {
+		return fmt.Errorf("premature recovery requires paused empty cohort without accepted integration evidence")
+	}
+	task := previous.FindTask(r.AnalysisTaskID)
+	if task == nil || task.Status.IsTerminal() || task.ReviewingBy != nil || task.ReviewCommit == nil || *task.ReviewCommit != r.ReportCommit || task.MergeCommit != nil || len(task.Approvals) != 0 || task.ApprovedBy != nil {
+		return fmt.Errorf("premature recovery requires an unreviewed submitted analysis")
+	}
+	count := 0
+	for _, t := range previous.Tasks {
+		if t.IntegrationAnalysis != nil {
+			count++
+		}
+	}
+	if count != 1 {
+		return fmt.Errorf("premature recovery requires exactly one integration analysis")
 	}
 	return nil
 }

@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // IntegrationCoverageKind identifies the evidence variant stored for a
 // contributing plan scope.
 type IntegrationCoverageKind string
@@ -67,6 +69,28 @@ type IntegrationLifecycle struct {
 	GlobalGenerations []IntegrationGlobalGeneration `yaml:"global_generations,omitempty" json:"global_generations,omitempty"`
 	MutationReceipts  []IntegrationMutationReceipt  `yaml:"mutation_receipts,omitempty" json:"mutation_receipts,omitempty"`
 	Closure           *IntegrationClosure           `yaml:"closure,omitempty" json:"closure,omitempty"`
+	PrematureRecovery *IntegrationPrematureRecovery `yaml:"premature_recovery,omitempty" json:"premature_recovery,omitempty"`
+}
+
+// IntegrationPrematureRecovery preserves an unreviewed, empty-cohort global
+// analysis retired by the operator before upstream planning was finished.
+type IntegrationPrematureRecovery struct {
+	At                      time.Time                  `yaml:"at" json:"at"`
+	Reason                  string                     `yaml:"reason" json:"reason"`
+	AnalysisTaskID          string                     `yaml:"analysis_task_id" json:"analysis_task_id"`
+	PreviousContributingSet IntegrationContributingSet `yaml:"previous_contributing_set" json:"previous_contributing_set"`
+	SourceCommit            string                     `yaml:"source_commit" json:"source_commit"`
+	ReportCommit            string                     `yaml:"report_commit" json:"report_commit"`
+	PreservationRef         string                     `yaml:"preservation_ref" json:"preservation_ref"`
+}
+
+// FirstGlobalGeneration reserves the retired analysis identity without consuming
+// the budget of accepted global generations.
+func (lifecycle *IntegrationLifecycle) FirstGlobalGeneration() int {
+	if lifecycle != nil && lifecycle.PrematureRecovery != nil {
+		return 2
+	}
+	return 1
 }
 
 // IntegrationContributingSet freezes the plan scopes that contribute merged

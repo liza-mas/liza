@@ -33,6 +33,7 @@ Verified zombie-agent detection requires procfs and uses process cwd as project-
 §BRAND_BINARY_NAME§ recover-task <task-id>        # Release claims + preserve/reattach coherent worktree/branch
 §BRAND_BINARY_NAME§ recover-task <task-id> --fresh # Explicitly discard worktree/branch and reset non-blocked task to initial
 §BRAND_BINARY_NAME§ recover-agent <agent-id>      # Release claim + remove worktree + delete agent
+§BRAND_BINARY_NAME§ recover-integration <task-id> --reason "..." --dry-run # Preview premature empty-cohort recovery
 §BRAND_BINARY_NAME§ release-claim <task-id>       # Granular: release claim only
 §BRAND_BINARY_NAME§ clear-stale-review-claims     # Clear all expired review leases
 §BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason <reason> # Repair illegal terminal dependency edges
@@ -495,6 +496,48 @@ The candidate dependency, repair request, and task history remain unchanged, and
 **Symptom**: Task in INTEGRATION_FAILED state.
 **Diagnosis**: Merge conflict between task worktree and integration branch.
 **Fix**: A coder can claim it (`integration_fix: true`). The worktree is preserved for conflict resolution.
+
+### Global analysis started before implementation planning
+
+**Symptom**: A global integration analysis exists while upstream epic, story,
+architecture, or code planning is unfinished, and
+`goal.integration.contributing_set.scopes` is empty.
+
+**Impact**: The frozen empty cohort omits later local coverage. An early report
+cannot establish completion of the implementation. Pause the run while repairing
+the lifecycle. An absent operator checkpoint audit route is a separate issue;
+it does not cause this integration failure.
+
+**Recovery**: Install the corrected engine and replace all older supervisors and
+monitors before recovery; older state writers do not preserve the recovery
+receipt. Keep the run PAUSED and preserve any in-flight work. Then preview:
+
+```bash
+§BRAND_BINARY_NAME§ recover-integration integration-global-1 --reason "Premature empty cohort before planning settled" --dry-run --json
+```
+
+Inspect the returned task, source/report commits, and preservation ref, then run
+the same command without `--dry-run`. The command accepts only the initial empty
+cohort with unfinished upstream planning and no accepted integration verdict,
+coverage, or repair descendants. It requires a clean submitted analysis
+worktree. Dirty or inconsistent work must be preserved and reconciled first.
+Any remaining owner registration blocks recovery, even when its PID appears
+stopped. Preserve its work, remove its authority through the supported
+`delete agent` operation, and verify the old supervisor has stopped before
+retrying. PID invisibility across namespaces is not proof of quiescence.
+
+Recovery pins the report in Git, retires the premature analysis through the task
+lifecycle, and records an immutable receipt before clearing the empty cohort.
+The old task and source metadata remain historical evidence. Its task branch and
+worktree are cleaned up only after preservation and the state transaction.
+Other planning tasks remain intact. Repeating a completed recovery returns its
+receipt. The next valid global analysis uses generation 2; the discarded first
+analysis does not consume the valid global review budget.
+
+Run `§BRAND_BINARY_NAME§ validate` and inspect `§BRAND_BINARY_NAME§ status` before
+`§BRAND_BINARY_NAME§ resume`. Planning must settle, including all eligible
+upstream transitions, before a new contributing cohort can freeze. Never repair
+this by editing `state.yaml` or deleting only the analysis task.
 
 ### Sprint stuck at CHECKPOINT
 **Symptom**: All agents idle, sprint in CHECKPOINT.

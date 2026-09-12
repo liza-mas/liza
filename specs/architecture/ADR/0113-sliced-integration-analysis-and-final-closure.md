@@ -30,6 +30,12 @@ The resulting contributing set is then frozen as goal-scoped persisted state.
 Code-planning work created later by integration escalation remains repair
 lineage outside the frozen cohort and is covered by a later global generation.
 
+Upstream producers are derived from the frozen pipeline's transition graph,
+including epic, story, architecture, and master planning stages. An absent
+code-planning task is not proof of settlement. Pending one-to-one and
+many-to-one transitions also prevent settlement when their sources have no
+`output[]`; an empty per-subtask source produces no children.
+
 If fewer than two plan scopes contribute merged work, the workflow persists no
 coverage records, creates no slice analyses, and proceeds directly to global
 analysis through the existing valid global integration pair. Only when at
@@ -78,6 +84,24 @@ collision checks make repeated wakes and restart recovery reuse an identical
 materialization instead of creating duplicate analyses. Approval coverage,
 slice reports, global generations, and mutation receipts are append-only
 evidence.
+
+### Recovery of a premature initial empty cohort
+
+The operator-only `recover-integration` command repairs the historical case
+where global generation 1 started before upstream planning settled. It requires
+a paused run, an empty frozen cohort, unfinished upstream planning, a clean
+submitted initial analysis, and no accepted integration verdict, coverage, or
+repair descendants. A dry run exposes the proposed recovery without mutation.
+
+Recovery preserves the report under a durable Git ref, retires the analysis
+through the task lifecycle, and atomically records an immutable recovery receipt
+with the prior empty cohort and report/source identity before clearing that
+cohort. Task metadata and historical evidence remain intact. Cleanup follows
+preservation and the state transaction; unrelated task work is retained.
+Repeated recovery returns the existing receipt. The next global identity is
+generation 2, and only valid reviewed generations consume the configured budget.
+Ordinary lifecycle mutations still cannot clear a frozen cohort or alter the
+receipt. All state writers must run a recovery-aware engine before this repair.
 
 ### Clean current-HEAD completion and linearizable finalization
 

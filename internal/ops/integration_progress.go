@@ -83,6 +83,18 @@ func EvaluateIntegrationProgress(
 	return evaluator.evaluate(capability, integrationHEAD)
 }
 
+// UnsettledPreIntegrationPlanningTasks returns sorted upstream planning task IDs
+// that can still produce coding work. It ignores persisted cohort state and
+// integration repair ancestry, so recovery can inspect a premature freeze.
+// A settled graph returns nil; malformed task graphs return an error.
+func UnsettledPreIntegrationPlanningTasks(state *models.State, capability pipeline.SlicedIntegrationCapability) ([]string, error) {
+	evaluator, err := newIntegrationProgressEvaluator(state)
+	if err != nil {
+		return nil, err
+	}
+	return evaluator.unsettledPreIntegrationPlanningTasks(capability)
+}
+
 // EvaluateLiveIntegrationProgress loads the frozen pipeline capability and
 // current integration branch HEAD before evaluating integration progress.
 func EvaluateLiveIntegrationProgress(state *models.State, projectRoot string) (IntegrationProgressDecision, error) {
@@ -229,7 +241,7 @@ func (e *integrationProgressEvaluator) evaluate(
 
 	cohort, freeze, settled, err := e.contributingSet(
 		lifecycle.ContributingSet,
-		capability.PreIntegrationDecompositionRoot,
+		capability,
 	)
 	if err != nil {
 		return decision, err
@@ -263,13 +275,13 @@ func (e *integrationProgressEvaluator) evaluate(
 
 func (e *integrationProgressEvaluator) contributingSet(
 	persisted *models.IntegrationContributingSet,
-	decompositionRootRolePair string,
+	capability pipeline.SlicedIntegrationCapability,
 ) (*models.IntegrationContributingSet, bool, bool, error) {
-	settled, err := e.decompositionRootTasksSettled(decompositionRootRolePair)
+	pending, err := e.unsettledPreIntegrationPlanningTasks(capability)
 	if err != nil {
 		return nil, false, false, err
 	}
-	if !settled {
+	if len(pending) > 0 {
 		return nil, false, false, nil
 	}
 
@@ -322,27 +334,55 @@ func (e *integrationProgressEvaluator) contributingSet(
 	return cohort, true, true, nil
 }
 
-func (e *integrationProgressEvaluator) decompositionRootTasksSettled(rolePair string) (bool, error) {
-	if rolePair == "" {
-		return true, nil
-	}
+func (e *integrationProgressEvaluator) unsettledPreIntegrationPlanningTasks(capability pipeline.SlicedIntegrationCapability) ([]string, error) {
+	var pending []string
 	for i := range e.state.Tasks {
 		task := &e.state.Tasks[i]
-		if task.RolePair != rolePair {
+		transitions, upstream := capability.PreIntegrationPlanningTransitions[task.RolePair]
+		if capability.PreIntegrationPlanningTransitions == nil {
+			// Preserve the legacy pure evaluator input when no topology is supplied.
+			upstream = task.RolePair == "code-planning-pair" ||
+				(capability.PreIntegrationDecompositionRoot != "" && task.RolePair == capability.PreIntegrationDecompositionRoot)
+		}
+		if !upstream || task.IntegrationAnalysis != nil {
+			continue
+		}
+		repair, err := e.hasAnalysisAncestor(task.ID)
+		if err != nil {
+			return nil, err
+		}
+		if repair {
 			continue
 		}
 		resolution, err := e.resolveLineage(task.ID, false)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		if !resolution.settled {
-			return false, nil
+			pending = append(pending, task.ID)
+			continue
 		}
-		if task.Status == models.TaskStatusMerged && len(task.Output) > 0 && !hasExecutedOutputTransition(task.TransitionsExecuted) {
-			return false, nil
+		if task.Status != models.TaskStatusMerged {
+			continue
+		}
+		if transitions == nil && len(task.Output) > 0 && !hasExecutedOutputTransition(task.TransitionsExecuted) {
+			pending = append(pending, task.ID)
+		}
+		for _, transition := range transitions {
+			if e.state.Config.NoFollowUp && capability.PreIntegrationFollowUpTransitions[transition.Name] {
+				continue
+			}
+			if transition.Cardinality == "per-subtask" && len(task.Output) == 0 {
+				continue
+			}
+			if !task.TransitionsExecuted[transition.Name] {
+				pending = append(pending, task.ID)
+				break
+			}
 		}
 	}
-	return true, nil
+	sort.Strings(pending)
+	return pending, nil
 }
 
 func (e *integrationProgressEvaluator) preIntegrationPlans() ([]*models.Task, error) {
@@ -679,7 +719,7 @@ func (e *integrationProgressEvaluator) evaluateGlobal(
 	lifecycle *models.IntegrationLifecycle,
 	integrationHEAD string,
 ) (IntegrationProgressDecision, error) {
-	if err := e.validateGlobalGenerations(lifecycle.GlobalGenerations); err != nil {
+	if err := e.validateGlobalGenerations(lifecycle.GlobalGenerations, lifecycle.FirstGlobalGeneration()); err != nil {
 		return IntegrationProgressDecision{}, err
 	}
 	if len(lifecycle.GlobalGenerations) > 0 {
@@ -718,8 +758,8 @@ func (e *integrationProgressEvaluator) evaluateGlobal(
 	}
 
 	limit := models.NormalizeGlobalIntegrationGenerationLimit(e.state.Config.MaxGlobalIntegrationGenerations)
-	nextGeneration := len(lifecycle.GlobalGenerations) + 1
-	if nextGeneration > limit {
+	nextGeneration := len(lifecycle.GlobalGenerations) + lifecycle.FirstGlobalGeneration()
+	if len(lifecycle.GlobalGenerations)+1 > limit {
 		decision.Exhausted = true
 		decision.Blocked = &IntegrationProgressReason{
 			Code:     integrationProgressBlockedExhausted,
@@ -746,9 +786,9 @@ func (e *integrationProgressEvaluator) evaluateGlobal(
 	return decision, nil
 }
 
-func (e *integrationProgressEvaluator) validateGlobalGenerations(generations []models.IntegrationGlobalGeneration) error {
+func (e *integrationProgressEvaluator) validateGlobalGenerations(generations []models.IntegrationGlobalGeneration, firstGeneration int) error {
 	for i, generation := range generations {
-		wantGeneration := i + 1
+		wantGeneration := i + firstGeneration
 		wantKey := globalAnalysisKey(wantGeneration)
 		if generation.Generation != wantGeneration || generation.AnalysisKey != wantKey || generation.SourceCommit == "" {
 			return fmt.Errorf("integration progress: malformed global generation at index %d", i)

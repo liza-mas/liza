@@ -756,6 +756,11 @@ func snapshotIntegrationLifecycleState(state *models.State) *models.State {
 		return &previous
 	}
 	lifecycleCopy := *lifecycle
+	if lifecycle.PrematureRecovery != nil {
+		recoveryCopy := *lifecycle.PrematureRecovery
+		recoveryCopy.PreviousContributingSet.Scopes = slices.Clone(lifecycle.PrematureRecovery.PreviousContributingSet.Scopes)
+		lifecycleCopy.PrematureRecovery = &recoveryCopy
+	}
 	if lifecycle.ContributingSet != nil {
 		setCopy := *lifecycle.ContributingSet
 		setCopy.Scopes = slices.Clone(lifecycle.ContributingSet.Scopes)

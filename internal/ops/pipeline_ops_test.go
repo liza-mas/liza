@@ -14,7 +14,9 @@ import (
 	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"gopkg.in/yaml.v3"
 )
 
 func TestEffectiveIntegrationCompletionGate(t *testing.T) {
@@ -603,30 +605,56 @@ func effectiveCompletionPaths() []effectiveCompletionPath {
 		{
 			name: "manual proceed",
 			prepare: func(t *testing.T, fixture *effectiveCompletionFixture) {
+				prepareCompletionReportTransition(t, fixture.projectRoot)
 				fixture.mutateState(t, func(state *models.State) {
 					state.Sprint.Status = models.SprintStatusCompleted
-					plan := state.FindTask(fixture.planID)
-					plan.TransitionsExecuted = nil
 				})
 			},
 			invoke: func(root string) error {
-				_, err := Proceed(root, "plan-single", "code-plan-to-coding")
+				_, err := Proceed(root, "plan-single", "code-plan-to-report")
 				return err
 			},
 			assertRejected: func(t *testing.T, fixture *effectiveCompletionFixture) {
 				state := fixture.readState(t)
 				plan := state.FindTask(fixture.planID)
-				if plan.TransitionsExecuted["code-plan-to-coding"] || state.FindTask("plan-single-code-0") != nil {
+				if plan.TransitionsExecuted["code-plan-to-report"] || state.FindTask("plan-single-report-0") != nil {
 					t.Fatalf("proceed mutation persisted: plan=%#v", plan)
 				}
 			},
 			assertAllowed: func(t *testing.T, fixture *effectiveCompletionFixture) {
 				state := fixture.readState(t)
-				if !state.FindTask(fixture.planID).TransitionsExecuted["code-plan-to-coding"] || state.FindTask("plan-single-code-0") == nil {
+				if !state.FindTask(fixture.planID).TransitionsExecuted["code-plan-to-report"] || state.FindTask("plan-single-report-0") == nil {
 					t.Fatal("proceed did not create its child")
 				}
 			},
 		},
+	}
+}
+
+func prepareCompletionReportTransition(t *testing.T, root string) {
+	t.Helper()
+	// Exercise a real post-completion transition without reopening initial
+	// coding work: that would invalidate the fixture's supposedly clean cohort.
+	cfg, err := pipeline.LoadFrozen(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Pipeline.PipelineTransitions = slices.DeleteFunc(cfg.Pipeline.PipelineTransitions, func(transition pipeline.TransitionDef) bool {
+		return transition.Name == "architecture-to-code-plan"
+	})
+	coding := cfg.Pipeline.SubPipelines["coding-subpipeline"]
+	coding.Steps = append(coding.Steps, "architecture-pair")
+	coding.Transitions = append(coding.Transitions, pipeline.TransitionDef{
+		Name: "code-plan-to-report", TaskSlug: "report", From: "code-planning-pair.approved",
+		To: "architecture-pair.initial", Trigger: "manual", Cardinality: "per-subtask",
+	})
+	cfg.Pipeline.SubPipelines["coding-subpipeline"] = coding
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, paths.ProjectDirName(), "pipeline.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
