@@ -346,7 +346,13 @@ affected tasks and their planning/decomposition context. Confirm that a
 consumer depends on its provider. If another relationship requires the inverse
 edge, name that relationship as an explicit exception rationale in the repair
 reason. Structural candidate-state validation cannot supply this semantic
-proof.
+proof. An exception rationale does not bypass pipeline-direction validation.
+
+`mark-blocked --depends-on` also rejects new downstream-role dependencies before
+changing task status or ownership. If an earlier stage must await a later-stage
+source correction, block with an explicit reason and questions without adding
+an illegal edge. The orchestrator must track that correction and assess the
+blocked task after the corrected source is effective.
 
 The dependency request file contains operation `apply-dependency-repair`, the
 blocked source task as `target`, unique `dependency_updates` with explicit

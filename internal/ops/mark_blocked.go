@@ -165,6 +165,10 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 		if err := validateDependsOnForBlockedTask(state, task, dependsOn); err != nil {
 			return err
 		}
+		// Validate added edges without preventing emergency blocking to repair existing metadata.
+		if err := validateDependencyDirection(state, resolver, task.ID, task.RolePair, dependsOn); err != nil {
+			return err
+		}
 
 		// Blocking ends the authorized owner's work and retires its unfinished preparation.
 		mutationStarted = true
