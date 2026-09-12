@@ -349,6 +349,7 @@ func blockTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, auth
 		models.AdvanceLifecycle(task)
 		task.ReviewingBy = nil
 		task.ReviewLeaseExpires = nil
+		ops.ReleaseAgentsForTask(s, taskID)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
 			Event:  models.TaskEventBlocked,

@@ -2456,6 +2456,10 @@ func TestSupervisor_BuildPromptFailure_BlocksTask(t *testing.T) {
 	if task.LeaseExpires != nil {
 		t.Errorf("task.LeaseExpires = %v, want nil (cleared by block)", *task.LeaseExpires)
 	}
+	owner := stateAfter.Agents[agentID]
+	if owner.Status != models.AgentStatusIdle || owner.CurrentTask != nil || owner.LeaseExpires != nil {
+		t.Errorf("prompt failure left agent attached to blocked task: status=%s current_task=%v lease=%v", owner.Status, owner.CurrentTask, owner.LeaseExpires)
+	}
 	// TaskEventBlocked in the history.
 	found := false
 	for _, h := range task.History {

@@ -27,6 +27,11 @@ PID-based `process_status` is local to the namespace running the command. In con
 Agent health is separate from lifecycle status. A degraded agent epoch remains visible in status/get-agents health fields and does not count as repair-agent-pool capacity until it is cleared or a newer successful claim proves capacity. If the agent process exits and unregisters, the health marker stays visible as degraded capacity context for repair/status output.
 Verified zombie-agent detection requires procfs and uses process cwd as project-scope evidence. A matching cwd verifies a current-project process, while a different readable cwd excludes a foreign process. When cwd is unreadable, confirmed agent processes are reported as unknown scope: `§BRAND_BINARY_NAME§ validate` remains successful but warns that the scan is partial, and `§BRAND_BINARY_NAME§ get agents --zombies` reports only verified zombies while emitting the same warning. Goal IDs do not promote unknown-scope candidates to zombies when a project root is supplied. Unknown scope means unverified, not unowned; do not stop a process solely on the basis of this warning. On hosts without procfs, `§BRAND_BINARY_NAME§ validate` warns and skips the live-process check, while `§BRAND_BINARY_NAME§ get agents --zombies` reports that scanning is unavailable.
 
+A prompt-context build failure blocks the task and releases every task-linked
+agent in the same authority-fenced state transaction. Correct the failed source
+input or task routing before unblocking; cleared ownership alone does not repair
+a stale authoritative reference.
+
 ## Recovery Commands
 
 ```bash
