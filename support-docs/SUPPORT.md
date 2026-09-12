@@ -56,13 +56,17 @@ in the activity log.
 ## System Control
 
 ```bash
-§BRAND_BINARY_NAME§ pause                         # Pause all agents (sets CHECKPOINT)
+§BRAND_BINARY_NAME§ pause                         # Pause new agent work (sets PAUSED)
 §BRAND_BINARY_NAME§ resume                        # Resume or advance sprint (see Sprint Lifecycle)
 §BRAND_BINARY_NAME§ stop                          # Abort system
 §BRAND_BINARY_NAME§ sprint-checkpoint             # Force checkpoint (halt + summary)
 §BRAND_BINARY_NAME§ replan [task-id]              # Invalidate planner output, create new planning task
 §BRAND_BINARY_NAME§ proceed <task-id> <transition> # Create child tasks for next role-pair
 ```
+
+Pause is cooperative: an active provider turn may finish. Supervisors already
+waiting for work recheck pause before claiming newly available work; resume
+reopens that admission path. Stop makes supervisors exit at their next check.
 
 ## Pipeline Structure
 

@@ -848,6 +848,27 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			return nil
 		}
 
+		// Work can become available after a pause while WaitForWork is parked.
+		// Recheck the role-aware gate before claiming; existing providers are
+		// unaffected, and transition checkpoints retain their role exceptions.
+		if err := waitWhilePausedForSupervisor(supervisorCtx, config.ProjectRoot, roleType); err != nil {
+			if hbErr := checkHeartbeat(); hbErr != nil {
+				return hbErr
+			}
+			if errors.Is(err, errGoalComplete) {
+				GetLogger().Info("Goal complete, supervisor exiting")
+				return nil
+			}
+			return err
+		}
+		if supervisorCtx.Err() != nil {
+			continue // Preserve the existing cancellation/heartbeat exit handling.
+		}
+		if checkAbort(config.ProjectRoot) {
+			GetLogger().Info("ABORT signal received, system shutting down")
+			return nil
+		}
+
 		// Claim task
 		taskID, claimedTaskID, err := strategy.ClaimTask(config, bb)
 		if err != nil {
