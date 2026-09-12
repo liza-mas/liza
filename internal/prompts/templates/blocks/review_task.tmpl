@@ -45,4 +45,23 @@ CANONICAL VALIDATION:
 {{- end }}
 {{template "task-decomposition-metadata" .}}
 {{template "resolved-reference-context" .}}
+{{- if eq .Role "code-reviewer"}}
+{{template "acceptance-source" .}}
+{{- if .AcceptanceReceipt}}
+RECEIPT REVIEW COMMIT: {{.AcceptanceReceipt.ReviewCommit}}
+MANIFEST: {{.AcceptanceReceipt.ManifestPath}} (blob {{.AcceptanceReceipt.ManifestBlob}})
+VALIDATED MAPPINGS:
+{{range .AcceptanceReceipt.Mappings -}}
+- {{.ObligationID}}: {{if .ApprovedReferenceID}}approved non-executable reference {{.ApprovedReferenceID}}{{else}}{{.File}} :: {{.Assertion}}; command[{{.CommandIndex}}]{{end}}
+{{end -}}
+EXECUTION RESULTS:
+{{range $index, $result := .AcceptanceReceipt.Commands -}}
+- command[{{$index}}]: {{$result.Command}}; exit {{$result.ExitCode}}; {{$result.StartedAt}} → {{$result.FinishedAt}}
+{{end -}}
+Inspect full recorded, masked output: {{binaryName}} get tasks {{.TaskID}} --format json
+{{- else if .AcceptanceSource}}
+No acceptance receipt is available. Do not treat this strict task as evidenced; repair with
+{{binaryName}} update-review-commit {{.TaskID}} before review.
+{{- end}}
+{{- end}}
 {{- end -}}

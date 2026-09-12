@@ -3698,6 +3698,7 @@ func TestReviewInstructions_CodeReviewerBoundsIntegrationDriftWhenBranchPresent(
 func TestReviewTask_RendersIntegrationBranchOnlyForCodeReviewer(t *testing.T) {
 	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
 		"templates/blocks/review_task.tmpl",
+		"templates/blocks/assigned_task.tmpl",
 		"templates/blocks/task_decomposition_metadata.tmpl",
 		"templates/blocks/resolved_reference_context.tmpl",
 	))

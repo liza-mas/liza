@@ -508,6 +508,7 @@ Per-slice immutable source snapshots are recorded separately.
 
 ## Related Documents
 
+- [Acceptance Evidence](acceptance-evidence.md) — strict coding-task admission, execution receipts and evidence repair
 - [Agent Initialization](agent-initialization.md) — startup sequence from spawn to first action
 - [State Machines](../architecture/state-machines.md) — state transitions
 - [Roles](../architecture/roles.md) — role responsibilities

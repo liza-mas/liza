@@ -39,4 +39,27 @@ SCOPE:
 {{.Scope}}
 {{template "task-decomposition-metadata" .}}
 {{template "resolved-reference-context" .}}
+{{- if eq .Role "coder"}}
+{{template "acceptance-source" .}}
+{{- if .AcceptanceSource}}
+Read the Acceptance Contract in that pinned task section for its manifest path and complete
+allocated obligation IDs. Commit one proof mapping per ID; submission executes the exact
+reviewed canonical commands and records results at the post-rebase review commit.
+Use the shared acceptance-evidence.md guide; source corrections require upstream review.
+{{- end}}
+{{- end}}
+{{- end -}}
+
+{{- define "acceptance-source" -}}
+
+ACCEPTANCE EVIDENCE:
+{{- if .AcceptanceSource}}
+SOURCE: {{.AcceptanceSource.Ref}}
+SOURCE COMMIT: {{.AcceptanceSource.Commit}}
+SOURCE BLOB: {{.AcceptanceSource.Blob}}
+APPROVED PARENT: {{.AcceptanceSource.ParentTask}} at {{.AcceptanceSource.ParentReviewCommit}}
+{{- else}}
+Legacy task: acceptance evidence was not machine-validated. Review requirement coverage and
+execution evidence explicitly; a green suite alone does not establish acceptance completeness.
+{{- end}}
 {{- end -}}

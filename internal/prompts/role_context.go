@@ -166,6 +166,8 @@ type RoleContextData struct {
 	ArchRef                  string // path to architecture document, empty if none
 	RCARequired              bool   // objective is a defect fix: plan must carry a reviewed RCA
 	ValidationCommands       []string
+	AcceptanceSource         *models.AcceptanceSource
+	AcceptanceReceipt        *models.AcceptanceReceipt
 	DestructiveDB            bool
 	TaskDecomposition        *models.DecompositionManifest
 	ValidationPlan           string

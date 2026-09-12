@@ -46,6 +46,8 @@ type taskInfo struct {
 	Worktree           *string                       `json:"worktree,omitempty" yaml:"worktree,omitempty"`
 	DoneWhen           string                        `json:"done_when,omitempty" yaml:"done_when,omitempty"`
 	Validation         []string                      `json:"validation,omitempty" yaml:"validation,omitempty"`
+	AcceptanceSource   *models.AcceptanceSource      `json:"acceptance_source,omitempty" yaml:"acceptance_source,omitempty"`
+	AcceptanceReceipt  *models.AcceptanceReceipt     `json:"acceptance_receipt,omitempty" yaml:"acceptance_receipt,omitempty"`
 	DestructiveDB      bool                          `json:"destructive_db,omitempty" yaml:"destructive_db,omitempty"`
 	RCARequired        bool                          `json:"rca_required,omitempty" yaml:"rca_required,omitempty"`
 	Scope              string                        `json:"scope,omitempty" yaml:"scope,omitempty"`
@@ -202,6 +204,8 @@ func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 		Worktree:           task.Worktree,
 		DoneWhen:           task.DoneWhen,
 		Validation:         task.Validation,
+		AcceptanceSource:   task.AcceptanceSource,
+		AcceptanceReceipt:  task.AcceptanceReceipt,
 		DestructiveDB:      task.DestructiveDB,
 		RCARequired:        task.RCARequired,
 		Scope:              task.Scope,

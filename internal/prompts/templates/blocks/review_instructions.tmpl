@@ -39,6 +39,14 @@ INSTRUCTIONS:
    structural refactoring are NOT behavioral test changes — do not reject for these.
 8. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
 9. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
+{{- if .AcceptanceSource}}
+   Inspect the acceptance receipt with {{binaryName}} get tasks {{.TaskID}} --format json.
+   Verify source allocation, manifest mappings and execution results name this REVIEW_COMMIT.
+   Read the mapped assertions and independently assess semantic coverage, committed observations,
+   failure atomicity and required concurrency orders. A complete mapping plus exit 0 can still
+   hide weak tests or missing upstream obligations. Check approved proof exceptions against
+   their pinned references; the coder cannot waive an obligation.
+{{- end}}
 {{- if ne .IntegrationBranch ""}}
 10. Before verdict, run current integration drift check by map/stat first:
    git -C {{.Worktree}} diff --name-only {{.IntegrationBranch}}..{{.ReviewCommit}}
@@ -92,6 +100,10 @@ REFERENCE-FIRST REVIEW:
 Invoke skill: spec-review and apply the shared Reference-First Authoring contract. Reject missing
 strict source references, copied inherited prose, uncovered obligations, semantic owner conflicts,
 correction-history accumulation, or detailed plan prose duplicated into `output[]`.
+For each coding child, apply the shared acceptance-evidence.md guide: reject a missing
+Acceptance Contract, omitted allocated obligation IDs, canonical-command/output mismatch,
+or unjustified non-executable proof exceptions. Review the allocation's semantic completeness;
+the runtime can check only the declared set.
 
 REVIEW CHECKLIST:
 | Gate | Reject if |

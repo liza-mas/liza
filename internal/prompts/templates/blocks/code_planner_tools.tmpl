@@ -27,6 +27,11 @@ CODE PLANNER TOOLS:
   ]
 {{- end}}
   validation: optional ordered array of canonical commands the child task should run; each must be satisfiable for the child scope. Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
+  For every coding child, emit an Acceptance Contract in its exact plan_ref section using
+  the shared acceptance-evidence.md guide. Allocate existing Source References obligation IDs,
+  a committed manifest path, and the exact same ordered validation commands as output[].
+  Declare non-executable proof exceptions with pinned references and rationale for independent
+  plan review. Keep semantic requirements behind their existing references.
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.
   task_depends_on: optional array of existing concrete task IDs. Use this for dependencies on tasks outside this output[].

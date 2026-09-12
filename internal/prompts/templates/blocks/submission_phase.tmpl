@@ -2,6 +2,11 @@
 
 --- SUBMISSION (MANDATORY - DO NOT SKIP) ---
 After implementation and tests pass, you MUST submit for review:
+{{- if .AcceptanceSource}}
+Commit the declared acceptance manifest with a complete obligation-to-proof mapping first.
+Submission reruns canonical validation on clean committed code after rebase. Missing mappings,
+failed commands, dirty files, or stale source/commit evidence block before reviewer assignment.
+{{- end}}
 1. Stage the intended files for this task: git -C {{.Worktree}} add <files>
 2. Create the submission commit for this task using the required git commit workflow for this environment.
 3. Verify the worktree is clean: git -C {{.Worktree}} status --short

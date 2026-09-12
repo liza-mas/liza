@@ -6,6 +6,8 @@ and never silently changes inherited behavior, constraints, or rationale.
 Local sufficiency means actionable from declared references, not a copy of the
 upstream corpus. See
 [ADR-0133](../../../specs/architecture/ADR/0133-reference-first-planning-artifacts.md).
+Coding-child allocations also follow [Acceptance Evidence](acceptance-evidence.md),
+which maps these existing obligation IDs to proofs and execution receipts.
 
 ## Ownership
 
@@ -87,7 +89,8 @@ section and exact strict subsection fragments; reviewers reject omission.
 Marker-free artifacts and scalar fragments keep legacy behavior. Complete
 direct-parent reviewed ranges enable strict discovery. An all-absent range on a
 pre-existing merged parent remains legacy; partial or inconsistent attribution
-fails closed. No state migration or new field is introduced.
+fails closed. Reference-first resolution alone adds no state fields or migration;
+the linked acceptance-evidence contract adds provenance and execution receipts.
 
 ## Markdown and Structured Output
 
