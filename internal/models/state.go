@@ -6,21 +6,22 @@ import (
 
 // State represents the complete Liza state.yaml structure
 type State struct {
-	Version         int                    `yaml:"version"`
-	PipelineVersion int                    `yaml:"pipeline_version,omitempty"`
-	Goal            Goal                   `yaml:"goal"`
-	Tasks           []Task                 `yaml:"tasks"`
-	Agents          map[string]Agent       `yaml:"agents"`
-	AgentHealth     map[string]AgentHealth `yaml:"agent_health,omitempty"`
-	Discovered      []Discovery            `yaml:"discovered"`
-	HumanNotes      []HumanNote            `yaml:"human_notes"`
-	SpecChanges     []SpecChange           `yaml:"spec_changes"`
-	Anomalies       []Anomaly              `yaml:"anomalies"`
-	Sprint          Sprint                 `yaml:"sprint"`
-	SprintHistory   []SprintSummary        `yaml:"sprint_history,omitempty"`
-	CircuitBreaker  CircuitBreaker         `yaml:"circuit_breaker"`
-	Config          Config                 `yaml:"config"`
-	Extra           map[string]any         `yaml:",inline"`
+	Version             int                    `yaml:"version"`
+	PipelineVersion     int                    `yaml:"pipeline_version,omitempty"`
+	Goal                Goal                   `yaml:"goal"`
+	Tasks               []Task                 `yaml:"tasks"`
+	Agents              map[string]Agent       `yaml:"agents"`
+	AgentHealth         map[string]AgentHealth `yaml:"agent_health,omitempty"`
+	Discovered          []Discovery            `yaml:"discovered"`
+	HumanNotes          []HumanNote            `yaml:"human_notes"`
+	SpecChanges         []SpecChange           `yaml:"spec_changes"`
+	Anomalies           []Anomaly              `yaml:"anomalies"`
+	QuarantinedVerdicts []QuarantinedVerdict   `yaml:"quarantined_verdicts,omitempty"`
+	Sprint              Sprint                 `yaml:"sprint"`
+	SprintHistory       []SprintSummary        `yaml:"sprint_history,omitempty"`
+	CircuitBreaker      CircuitBreaker         `yaml:"circuit_breaker"`
+	Config              Config                 `yaml:"config"`
+	Extra               map[string]any         `yaml:",inline"`
 }
 
 // FindTask returns a pointer to the task with the given ID, or nil if not found.

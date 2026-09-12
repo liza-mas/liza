@@ -17,6 +17,7 @@ pipeline:
         - repair-superseded-dependencies
         - cancel-task
         - reconcile-merged
+        - reconcile-verdict
         - unblock-task
         - sprint-checkpoint
         - analyze

@@ -284,6 +284,7 @@ func TestRejectedTaskHandoff(t *testing.T) {
 		"preserve the rejected handoff",
 		reviewerAuthority,
 		"",
+		fixture.branchSHA,
 	); err != nil {
 		t.Fatalf("SubmitVerdictWithAuthority(REJECTED) error: %v", err)
 	}

@@ -641,8 +641,11 @@ and escape embedded quotes with a backslash:
 
 ```powershell
 $reason = 'the guard rejects \"draft\" states'
-§BRAND_BINARY_NAME§ submit-verdict task-1 REJECTED --reason="$reason"
+§BRAND_BINARY_NAME§ submit-verdict task-1 REJECTED --review-commit $reviewedCommit --reason="$reason"
 ```
+
+Here `$reviewedCommit` is the full SHA inspected during review, not a branch
+name or a newly looked-up replacement boundary.
 
 ### Error: specs/vision.md required
 
@@ -757,6 +760,27 @@ EOF
 ---
 
 ## Recovery Procedures
+
+### Approval or merge is held by a quarantined verdict
+
+The generation fence refused a stale caller's authority while preserving a
+substantive judgment. Read `§BRAND_BINARY_NAME§ get quarantined_verdicts --json`
+and locate the finding ID from the refusal. Review its immutable commit, reason,
+and existing dispositions. Unmatched records are retained for diagnosis and do
+not impose a hold.
+
+Route the judgment through a current registered orchestrator with the
+`reconcile-verdict` capability and inherited authority. Record `refuted` or
+`superseded` with evidence to clear a hold, `accepted` when the finding stands,
+or `escalated` when further judgment is needed. Accepted rejection and
+escalation keep unchanged work blocked. Do not change generations, directly
+edit the evidence, or treat rebase alone as reconciliation.
+
+If the finding arrived after merge, the task remains terminal; inspect its
+substance and route corrective work. If a lock timeout or persistence failure
+occurred, the CLI does not claim evidence was saved. Preserve the original
+reason and reviewed SHA for an explicit retry. See the
+[reconciliation procedure](SUPPORT.md#quarantined-verdicts-and-conflicting-approval).
 
 ### Agent crashed with IMPLEMENTING task (usage limit, OOM, etc.)
 

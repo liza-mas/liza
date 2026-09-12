@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"sort"
@@ -23,6 +25,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -41,6 +44,7 @@ type atomicFenceInventoryEntry struct {
 }
 
 var atomicGenerationFenceInventory = []atomicFenceInventoryEntry{
+	{name: "reconcile-verdict", command: "reconcile-verdict", sourceFile: "cmd/liza/cmd_reconcile_verdict.go", declaration: "reconcileVerdictCmd", call: "ops.ReconcileVerdict", authorityBinding: "authority"},
 	{name: "submit-for-review", command: "submit-for-review", sourceFile: "cmd/liza/cmd_review.go", declaration: "submitForReviewCmd", call: "ops.SubmitForReviewWithAuthority", authorityBinding: "authority"},
 	{name: "handoff", command: "handoff", sourceFile: "cmd/liza/cmd_review.go", declaration: "handoffCmd", call: "ops.Handoff", authorityField: "Authority", authorityBinding: "&authority"},
 	{name: "submit-verdict", command: "submit-verdict", sourceFile: "cmd/liza/cmd_review.go", declaration: "submitVerdictCmd", call: "ops.SubmitVerdictWithAuthority", authorityBinding: "authority"},
@@ -156,14 +160,15 @@ func testE2EReviewerGenerationFence(t *testing.T) {
 	)
 	projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 		state.Tasks = []models.Task{testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReviewing, time.Now().UTC())}
+		state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
 		state.Agents[agentID] = e2eAgent(models.RoleCodeReviewer, e2eGenerationA)
 	})
 
 	runStaleGenerationCLI(t, projectRoot, statePath, agentID,
-		"submit-verdict", taskID, "APPROVED", "--agent-id", agentID,
+		"submit-verdict", taskID, "APPROVED", "--review-commit", quarantinedVerdictTestCommit, "--agent-id", agentID,
 	)
 	runCurrentGenerationCLI(t, projectRoot, e2eGenerationB,
-		"submit-verdict", taskID, "APPROVED", "--agent-id", agentID,
+		"submit-verdict", taskID, "APPROVED", "--review-commit", quarantinedVerdictTestCommit, "--agent-id", agentID,
 	)
 	assertNoE2EGenerationA(t, mustReadE2EStateBytes(t, statePath))
 }
@@ -302,7 +307,7 @@ func testE2EAtomicFenceInventory(t *testing.T) {
 		"add-task", "add-tasks", "apply-dependency-repair", "approved-merge-dispatch",
 		"assess-blocked", "assess-hypothesis-exhausted", "await-resubmission", "await-verdict",
 		"cancel-task", "claim-degradation", "claim-doer", "claim-reviewer", "claim-task",
-		"clear-claim-degradation", "handoff", "mark-blocked", "reconcile-merged",
+		"clear-claim-degradation", "handoff", "mark-blocked", "reconcile-merged", "reconcile-verdict",
 		"release-reviewer-claim", "repair-superseded-dependencies", "resume-handoff",
 		"resume-owned-task", "retarget-dependency", "set-task-output", "submit-for-review",
 		"submit-verdict", "supersede-task", "unblock-task", "watchdog-block", "write-checkpoint",
@@ -471,7 +476,22 @@ func runStaleGenerationCLI(t *testing.T, projectRoot, statePath, agentID string,
 		t.Fatal("stale command succeeded")
 	}
 	assertE2EJSONAuthorityError(t, stdout, agentID)
-	assertE2EStateBytes(t, statePath, winnerBytes, "stale CLI command")
+	if args[0] == "submit-verdict" {
+		var before models.State
+		if err := yaml.Unmarshal(winnerBytes, &before); err != nil {
+			t.Fatal(err)
+		}
+		after := readState(t, statePath)
+		if len(after.QuarantinedVerdicts) != 1 || after.QuarantinedVerdicts[0].ReviewCommit != quarantinedVerdictTestCommit {
+			t.Fatal("stale verdict did not retain immutable evidence")
+		}
+		after.QuarantinedVerdicts = nil
+		if !reflect.DeepEqual(&before, after) {
+			t.Fatal("stale verdict changed state beyond quarantined evidence")
+		}
+	} else {
+		assertE2EStateBytes(t, statePath, winnerBytes, "stale CLI command")
+	}
 }
 
 func runCurrentGenerationCLI(t *testing.T, projectRoot, generation string, args ...string) map[string]any {
@@ -587,9 +607,14 @@ func assertE2EJSONAuthorityError(t *testing.T, stdout, agentID string) {
 	if envelope["ok"] != false {
 		t.Fatalf("stale JSON envelope = %v, want ok=false", envelope)
 	}
-	for _, want := range []string{agentID, e2eGenerationA, e2eGenerationB} {
+	for _, want := range []string{agentID, fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationA))), fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationB)))} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("JSON error = %s, want %q", stdout, want)
+		}
+	}
+	for _, generation := range []string{e2eGenerationA, e2eGenerationB} {
+		if strings.Contains(stdout, generation) {
+			t.Fatal("JSON error exposes reusable generation")
 		}
 	}
 }
@@ -599,9 +624,14 @@ func assertE2EAuthorityError(t *testing.T, err error, agentID string) {
 	if !ops.IsAgentAuthorityError(err) {
 		t.Fatalf("error = %T %v, want AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{agentID, e2eGenerationA, e2eGenerationB} {
+	for _, want := range []string{agentID, fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationA))), fmt.Sprintf("%x", sha256.Sum256([]byte(e2eGenerationB)))} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
+		}
+	}
+	for _, generation := range []string{e2eGenerationA, e2eGenerationB} {
+		if strings.Contains(err.Error(), generation) {
+			t.Fatal("error exposes reusable generation")
 		}
 	}
 }

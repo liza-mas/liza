@@ -25,6 +25,12 @@ func TestResetRootCmdForTestResetsIdentityFlags(t *testing.T) {
 	if err := rootCmd.PersistentFlags().Set("project-root", "/tmp/liza-project"); err != nil {
 		t.Fatalf("set --project-root failed: %v", err)
 	}
+	if err := submitVerdictCmd.Flags().Set("review-commit", quarantinedVerdictTestCommit); err != nil {
+		t.Fatalf("set --review-commit failed: %v", err)
+	}
+	if err := getCmd.Flags().Set("format", "yaml"); err != nil {
+		t.Fatalf("set --format failed: %v", err)
+	}
 
 	resetRootCmdForTest(t)
 
@@ -57,6 +63,11 @@ func TestResetRootCmdForTestResetsIdentityFlags(t *testing.T) {
 	}
 	if projectRoot != "" {
 		t.Fatalf("--project-root = %q, want empty", projectRoot)
+	}
+	for _, flag := range []*pflag.Flag{submitVerdictCmd.Flags().Lookup("review-commit"), getCmd.Flags().Lookup("format")} {
+		if flag.Value.String() != flag.DefValue || flag.Changed {
+			t.Fatalf("--%s retained prior invocation state", flag.Name)
+		}
 	}
 }
 
@@ -165,7 +176,7 @@ func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {
 	t.Helper()
 	resetHelpFlag(t, cmd)
 	for _, name := range []string{
-		"agent-id", "changed-by", "json", "summary", "output-summary", "active", "zombies",
+		"agent-id", "changed-by", "json", "format", "review-commit", "summary", "output-summary", "active", "zombies",
 		"reason", "questions", "repair-operation", "repair-target", "repair-command", "repair-evidence", "repair-validation", "repair-request-file", "recoverability-command", "assign-to", "rebase-on", "allow-dirty",
 		"class", "workspace", "cwd", "dry-run", "preset", "role", "no-tui", "doer-cli", "goal", "reviewer", "prompt-delay", "yolo",
 		"spec", "config", "entry-point", "branch", "post-worktree-cmd", "copy-worktree-env-files", "auto-resume", "no-follow-up", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "scip-search-plan", "provider", "cli", "profile", "explain-launch", "supervisor-stdout-log", "supervisor-stderr-log", "supervisor-ready-file", "claude", "codex", "opencode", "gemini", "mistral",

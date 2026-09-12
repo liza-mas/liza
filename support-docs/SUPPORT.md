@@ -201,11 +201,61 @@ whole review wait, not a new per-call allowance.
 ### Reviewer: Verdict → Await → Re-review
 
 ```
-§BRAND_BINARY_NAME§ submit-verdict REJECTED → §BRAND_BINARY_NAME§ await-resubmission → review new changes
+§BRAND_BINARY_NAME§ submit-verdict TASK REJECTED --review-commit FULL_SHA --reason FEEDBACK → §BRAND_BINARY_NAME§ await-resubmission → review new changes
 ```
 
-- **RESUBMITTED**: Review again (session stays alive)
+- **RESUBMITTED**: Review again (session stays alive), then pass the returned full `review_commit` on the next verdict
 - **TERMINAL** / **ABORTED**: Safe stop and exit normally
+
+### Quarantined verdicts and conflicting approval
+
+Every authenticated `submit-verdict` now requires `--review-commit FULL_SHA`
+(40 or 64 hex characters), bound to the commit actually inspected. Migrate
+existing scripts by preserving that reviewed SHA; do not look up a replacement
+task boundary after a generation-fence error and pretend it was reviewed.
+
+A valid fenced verdict still fails authorization, but its bounded substantive
+evidence is retained separately. Diagnostics name the finding ID and generation
+fingerprints; the record preserves the immutable boundary. Missing generation,
+malformed input,
+unknown task, and invalid or oversized reason are administrative failures
+without a substantive record. A valid unknown boundary is retained as unmatched
+and never creates a merge hold, even if a later task happens to use that SHA.
+
+Inspect the records through `§BRAND_BINARY_NAME§ get quarantined_verdicts --json`.
+Explicit `delete task` also removes that task's findings and reconciliation
+audit. Export the records first if you need to retain them after deletion.
+Applicable unresolved conflicts block approval and every merge route, including
+already-advanced Git recovery. Explicit `review_commit_updated` lineage carries
+the finding across rebases; a new SHA does not automatically resolve it.
+
+An authorized current-generation orchestrator records the decision:
+
+```bash
+§BRAND_BINARY_NAME§ reconcile-verdict TASK FINDING_ID refuted --reason "The named check covers this boundary; validation evidence is in the review" --agent-id ORCHESTRATOR --json
+```
+
+| Disposition | Effect |
+|-------------|--------|
+| `refuted` | Clear the hold with evidence explaining why the finding is incorrect |
+| `superseded` | Clear the hold with explanation of the replacement/correction and its boundary |
+| `accepted` | Record that the finding stands; accepted rejection still blocks unchanged work and accepted approval creates no quorum |
+| `escalated` | Retain the hold and record what further judgment is required |
+
+The actor is the actual registered orchestrator, checked again in the write
+transaction. The orchestrator may decide directly or route an escalation to a
+human. Use its inherited authority; never copy a registration generation into
+an operator shell. There is no `--changed-by` or missing-generation bypass.
+Matching frozen orchestrator roles receive the new capability automatically
+through `LoadFrozen`'s in-memory operation migration; no manual file edit is
+needed. Custom roles still need their configured capability and orchestrator type.
+
+Reconciliation appends actor, time, disposition, and reason without changing
+task status, approval actors, or quorum. Identical retries are idempotent.
+Evidence ordered before merge prevents a conflicting merge. Evidence arriving
+after a completed merge remains available for reconciliation and corrective-work
+routing; it does not reopen or roll back the task. A task-review lock timeout
+is retryable and does not claim that evidence was saved.
 
 ## Agent Log Analysis
 

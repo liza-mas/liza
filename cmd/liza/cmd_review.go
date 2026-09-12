@@ -177,7 +177,12 @@ Used by reviewer agents to approve or reject work.
 Requirements:
   - Agent ID must be provided (via --agent-id flag or ` + brand.EnvName("AGENT_ID") + ` env var)
   - Task must be in a reviewing status (resolved from pipeline config)
+  - --review-commit must be the full immutable commit SHA actually reviewed
   - For REJECTED verdicts, a rejection reason of at most 4096 bytes is required (via --reason flag or positional arg)
+
+A generation-fenced substantive verdict is retained as quarantined evidence;
+it cannot change task or agent state. Conflicting evidence requires an
+authorized orchestrator's reconcile-verdict decision before approval or merge.
 
 For APPROVED verdict:
   - status = role-pair's approved status (e.g. CODE_APPROVED, CODING_PLAN_APPROVED)
@@ -237,12 +242,13 @@ For REJECTED verdict:
 		}
 
 		impact, _ := cmd.Flags().GetString("impact")
+		reviewCommit, _ := cmd.Flags().GetString("review-commit")
 
 		if isJSON(cmd) {
-			result, err := ops.SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason, authority, impact)
+			result, err := ops.SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason, authority, impact)
+		return commands.SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit)
 	},
 }
 
@@ -585,6 +591,7 @@ func init() {
 	awaitResubmissionCmd.Flags().Int("timeout-seconds", awaitBudgetSecondsDefault, awaitBudgetFlagUsage)
 
 	// Submit-verdict flags
+	submitVerdictCmd.Flags().String("review-commit", "", "required full commit SHA actually reviewed")
 	submitVerdictCmd.Flags().String("impact", "", "impact classification (standard, significant, architecture)")
 	submitVerdictCmd.Flags().String("reason", "", "rejection reason, at most 4096 bytes (alternative to positional argument, avoids shell quoting issues)")
 

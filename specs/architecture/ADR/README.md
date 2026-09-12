@@ -116,3 +116,4 @@
 | [0132 — Human-Owned Goal Decisions with Independent Readiness Review](0132-human-owned-goal-decisions.md) | Elicit human-owned decisions before drafting and require independent final readiness review. |
 | [0133 — Reference-First Planning Artifacts](0133-reference-first-planning-artifacts.md) | Keep inherited authority behind anchored references while downstream artifacts record only local decisions and concise orchestration projections. |
 | [0134 — Acceptance Evidence Admission](0134-acceptance-evidence-admission.md) | Require complete mappings and bounded canonical execution receipts at immutable review commits for independently allocated strict coding tasks. |
+| [0135 — Quarantined Verdict Evidence and Reconciliation](0135-quarantined-verdict-evidence.md) | Retain fenced review judgments without lifecycle authority, serialize same-task merge against evidence capture, and require authorized reconciliation of conflicts. |

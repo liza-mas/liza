@@ -283,7 +283,7 @@ func TestOrchestratorLifecycleMutationGenerationFence(t *testing.T) {
 		if len(result.Warnings) != 1 {
 			t.Fatalf("warnings = %v, want one stale-generation metrics warning", result.Warnings)
 		}
-		for _, want := range []string{fixture.authorityA.ID, taskLifecycleGenerationA, taskLifecycleGenerationB} {
+		for _, want := range []string{fixture.authorityA.ID, generationFingerprint(taskLifecycleGenerationA), generationFingerprint(taskLifecycleGenerationB)} {
 			if !strings.Contains(result.Warnings[0], want) {
 				t.Errorf("warning = %q, want %q", result.Warnings[0], want)
 			}
@@ -500,7 +500,7 @@ func (i *lifecycleMutationInterleaving) requireStaleAndUnchanged(t *testing.T, e
 	if !errors.As(err, &authorityErr) {
 		t.Fatalf("error = %T %v, want *AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{i.fixture.authorityA.ID, taskLifecycleGenerationA, taskLifecycleGenerationB} {
+	for _, want := range []string{i.fixture.authorityA.ID, generationFingerprint(taskLifecycleGenerationA), generationFingerprint(taskLifecycleGenerationB)} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
 		}

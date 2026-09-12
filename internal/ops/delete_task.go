@@ -199,6 +199,12 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 		state.Sprint.Scope.Planned = slices.DeleteFunc(state.Sprint.Scope.Planned, func(id string) bool { return id == taskID })
 		state.Sprint.Scope.Stretch = slices.DeleteFunc(state.Sprint.Scope.Stretch, func(id string) bool { return id == taskID })
 
+		// Explicit task deletion also removes its evidence and reconciliation
+		// audit; orphaned findings would invalidate all remaining task operations.
+		state.QuarantinedVerdicts = slices.DeleteFunc(state.QuarantinedVerdicts, func(finding models.QuarantinedVerdict) bool {
+			return finding.TaskID == taskID
+		})
+
 		// Add HumanNote for audit trail
 		now := time.Now().UTC()
 		humanNote := models.HumanNote{

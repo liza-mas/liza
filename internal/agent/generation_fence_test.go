@@ -2,7 +2,9 @@ package agent
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -214,9 +216,18 @@ func assertSupervisorAuthorityError(t *testing.T, err error, agentID string) {
 	if !errors.As(err, &authorityErr) {
 		t.Fatalf("error = %T %v, want *ops.AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{agentID, generationA, generationB} {
+	for _, want := range []string{
+		agentID,
+		fmt.Sprintf("losing generation fingerprint %x", sha256.Sum256([]byte(generationA))),
+		fmt.Sprintf("current generation fingerprint %x", sha256.Sum256([]byte(generationB))),
+	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
+		}
+	}
+	for _, raw := range []string{generationA, generationB} {
+		if strings.Contains(err.Error(), raw) {
+			t.Error("authority error exposes a raw registration generation")
 		}
 	}
 }
@@ -323,15 +334,7 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 			}
 
 			err = tt.mutate(bb, projectRoot, statePath)
-			var authorityErr *ops.AgentAuthorityError
-			if !errors.As(err, &authorityErr) {
-				t.Fatalf("error = %T %v, want *ops.AgentAuthorityError", err, err)
-			}
-			for _, want := range []string{agentID, generationA, generationB} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error = %q, want %q", err, want)
-				}
-			}
+			assertSupervisorAuthorityError(t, err, agentID)
 			after, err := os.ReadFile(statePath)
 			if err != nil {
 				t.Fatalf("read state after mutation: %v", err)

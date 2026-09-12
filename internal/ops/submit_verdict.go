@@ -19,7 +19,6 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/secretmask"
-	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -105,51 +104,83 @@ func ResolveEffectiveImpact(history []models.TaskHistoryEntry) string {
 // the reviewer's impact classification; it cannot downgrade the effective impact.
 // No terminal I/O.
 func SubmitVerdict(projectRoot, taskID, verdict, reason, agentID, impact string) (result *VerdictResult, retErr error) {
-	return submitVerdict(projectRoot, taskID, verdict, reason, agentID, nil, impact, false)
+	verdict = strings.ToUpper(verdict)
+	if err := validateVerdictInput(taskID, verdict, reason, agentID, impact); err != nil {
+		return nil, err
+	}
+	retErr = withTaskReviewLock(projectRoot, taskID, "submit-verdict", func() error {
+		result, retErr = submitVerdict(projectRoot, taskID, verdict, reason, agentID, nil, impact, "", false)
+		return retErr
+	})
+	return result, retErr
 }
 
 // SubmitVerdictWithAuthority is the authenticated command entry point. The
-// caller-held generation is revalidated inside every state transaction.
-func SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact string) (result *VerdictResult, retErr error) {
-	return submitVerdict(projectRoot, taskID, verdict, reason, authority.ID, &authority, impact, false)
+// caller supplies the immutable commit actually reviewed. Generation fencing
+// preserves only quarantined evidence; every lifecycle transaction still checks
+// the caller-held generation and current review boundary.
+func SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact, reviewCommit string) (result *VerdictResult, retErr error) {
+	verdict = strings.ToUpper(verdict)
+	reviewCommit = strings.ToLower(reviewCommit)
+	if err := validateAuthenticatedVerdict(taskID, verdict, reason, impact, reviewCommit, authority); err != nil {
+		return nil, err
+	}
+	if _, err := identity.ExtractRole(authority.ID); err != nil {
+		return nil, fmt.Errorf("invalid agent ID: %w", err)
+	}
+	retErr = withTaskReviewLock(projectRoot, taskID, "submit-verdict", func() error {
+		bb := db.For(paths.New(projectRoot).StatePath())
+		state, _, err := readTaskState(bb, taskID)
+		if err != nil {
+			return err
+		}
+		if err := RequireAgentAuthority(state, authority); err != nil {
+			if authority.Generation == "" {
+				return err
+			}
+			return quarantineFencedVerdict(bb, taskID, verdict, reason, reviewCommit, authority)
+		}
+		safeReason := sanitizeVerdictReason(reason, state, authority)
+		result, err = submitVerdict(projectRoot, taskID, verdict, safeReason, authority.ID, &authority, impact, reviewCommit, false)
+		if IsAgentAuthorityError(err) {
+			// Registration can be replaced after the first read. The rejected
+			// lifecycle transaction writes nothing; retain only its evidence.
+			return quarantineFencedVerdict(bb, taskID, verdict, reason, reviewCommit, authority)
+		}
+		return err
+	})
+	return result, retErr
 }
 
-func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact string, completionLinearized bool) (result *VerdictResult, retErr error) {
+func validateVerdictInput(taskID, verdict, reason, agentID, impact string) error {
 	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
+		return &PreconditionError{Reason: "task ID is required"}
 	}
 	if verdict == "" {
-		return nil, &PreconditionError{Reason: "verdict is required"}
+		return &PreconditionError{Reason: "verdict is required"}
 	}
 	if agentID == "" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
+		return &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
 	}
 
-	verdict = strings.ToUpper(verdict)
 	if verdict != "APPROVED" && verdict != "REJECTED" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("verdict must be APPROVED or REJECTED, got: %s", verdict)}
+		return &PreconditionError{Reason: "verdict must be APPROVED or REJECTED"}
 	}
 
-	if verdict == "REJECTED" && reason == "" {
-		return nil, &PreconditionError{Reason: "rejection reason is required for REJECTED verdict"}
+	if verdict == "REJECTED" && strings.TrimSpace(reason) == "" {
+		return &PreconditionError{Reason: "rejection reason is required for REJECTED verdict"}
 	}
 
 	if !IsValidImpact(impact) {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid impact value: %s (must be standard, significant, or architecture)", impact)}
+		return &PreconditionError{Reason: "invalid impact value (must be standard, significant, or architecture)"}
 	}
 	if verdict == "REJECTED" {
-		reasonBytes := len([]byte(reason))
-		if reasonBytes > statehygiene.MaxStateTextBytes {
-			return nil, &PreconditionError{Reason: fmt.Sprintf(
-				"rejection reason is %d bytes, exceeds the %d-byte maximum; store raw evidence under %s/%s/ and submit a bounded summary with an artifact reference",
-				reasonBytes,
-				statehygiene.MaxStateTextBytes,
-				paths.ProjectDirName(),
-				paths.AgentOutputsDirName,
-			)}
-		}
+		return validateVerdictReasonSize(reason)
 	}
+	return nil
+}
 
+func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit string, completionLinearized bool) (result *VerdictResult, retErr error) {
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	recordFailure := true
@@ -164,8 +195,11 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 	}
 
 	// Phase 1: Read state and validate preconditions
-	_, task, err := readTaskStateForSubmitVerdict(bb, taskID)
+	state, task, err := readTaskStateForSubmitVerdict(bb, taskID)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateVerdictReviewBoundary(state, task, verdict, reviewCommit); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +278,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		callbackEntered := false
 		linearizationErr := withEffectiveIntegrationCompletionLinearization(projectRoot, "clean integration verdict "+taskID, func() error {
 			callbackEntered = true
-			result, retErr = submitVerdict(projectRoot, taskID, verdict, reason, agentID, authority, impact, true)
+			result, retErr = submitVerdict(projectRoot, taskID, verdict, reason, agentID, authority, impact, reviewCommit, true)
 			return retErr
 		})
 		if callbackEntered {
@@ -284,6 +318,9 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if err := validateVerdictReviewBoundary(state, task, verdict, reviewCommit); err != nil {
+			return err
 		}
 
 		if !isReviewingStatus(task.Status, expectedReviewingStatus, expectedReviewing2Status) {

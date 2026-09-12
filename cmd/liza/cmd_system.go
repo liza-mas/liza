@@ -500,6 +500,7 @@ Query Types:
     agents <agent-id>              - Show specific agent
     metrics                        - Show sprint metrics
     anomalies                      - List all anomalies
+    quarantined_verdicts            - List fenced review evidence and reconciliation history
 
   ID shorthand:
     <task-id>                      - Show specific task (any ID format, e.g., task-1, fix-auth-bug)

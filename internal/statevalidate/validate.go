@@ -211,6 +211,9 @@ func ValidateState(state *models.State, projectRoot string, skipSpecFileCheck bo
 		},
 		validateDiscovered,
 		validateAnomalies,
+		func(state *models.State, _ string, _ bool) error {
+			return ValidateQuarantinedVerdicts(state)
+		},
 		validateHandoffEvents,
 		validateSprint,
 	}

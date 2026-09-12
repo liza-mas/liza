@@ -2,6 +2,26 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Quarantined verdict retention
+
+**What:** Issue #153 retains unique quarantined judgments, generation
+fingerprints, and append-only reconciliation history in active `state.yaml`.
+Deduplication limits repeated identical attempts but does not bound unique
+findings or their provenance and decision history.
+
+**Why deferred:** Automatic eviction could erase an unresolved merge barrier or
+the reason it was cleared. Safe archival needs a queryable audit identity and a
+durable lookup for still-relevant holds across restart.
+
+**Payback trigger:** Before a run reaches 1,000 unique quarantined records or
+1 MiB of serialized quarantine evidence, or before operating a run expected to
+exceed either threshold. These are operational triggers, not measured
+performance cliffs. Archive resolved terminal evidence while preserving
+unresolved/relevant holds and queryable audit identity; never silently drop
+evidence to enforce a cap.
+
+**Related:** [Blackboard Growth Without Pruning](specs/architecture/architectural-issues.md#blackboard-growth-without-pruning).
+
 ## Missing planning output is not a hard status/validate finding
 
 **What:** Issue #150's requested hard `status`/`validate` finding for missing

@@ -72,10 +72,11 @@ func TestMutationCommandWiring(t *testing.T) {
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-review-flag", models.TaskStatusReviewing, now),
 			}
+			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
 			state.Agents["code-reviewer-9"] = mutationTestAgent("code-reviewer")
 		})
 
-		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-review-flag", "APPROVED", "--agent-id", "code-reviewer-9")
+		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-review-flag", "APPROVED", "--review-commit", quarantinedVerdictTestCommit, "--agent-id", "code-reviewer-9")
 		if err != nil {
 			t.Fatalf("submit-verdict execute failed: %v", err)
 		}
@@ -96,11 +97,12 @@ func TestMutationCommandWiring(t *testing.T) {
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-review-env", models.TaskStatusReviewing, now),
 			}
+			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
 			state.Agents["code-reviewer-8"] = mutationTestAgent("code-reviewer")
 		})
 
 		t.Setenv("LIZA_AGENT_ID", "code-reviewer-8")
-		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-review-env", "REJECTED", "needs-work")
+		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-review-env", "REJECTED", "needs-work", "--review-commit", quarantinedVerdictTestCommit)
 		if err != nil {
 			t.Fatalf("submit-verdict execute failed: %v", err)
 		}
@@ -134,12 +136,13 @@ func TestMutationCommandWiring(t *testing.T) {
 			state.Tasks = []models.Task{
 				testhelpers.BuildTaskByStatus("task-reason-flag", models.TaskStatusReviewing, now),
 			}
+			state.Tasks[0].ReviewCommit = testhelpers.StringPtr(quarantinedVerdictTestCommit)
 			state.Agents["code-reviewer-8"] = mutationTestAgent("code-reviewer")
 		})
 
 		// Pass both positional reason and --reason flag; flag should win
 		t.Setenv("LIZA_AGENT_ID", "code-reviewer-8")
-		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-reason-flag", "REJECTED", "positional-reason", "--reason", "---\n# Blockers\nArchitecture plan missing")
+		err := executeRootCommand(t, projectRoot, "submit-verdict", "task-reason-flag", "REJECTED", "positional-reason", "--review-commit", quarantinedVerdictTestCommit, "--reason", "---\n# Blockers\nArchitecture plan missing")
 		if err != nil {
 			t.Fatalf("submit-verdict execute failed: %v", err)
 		}

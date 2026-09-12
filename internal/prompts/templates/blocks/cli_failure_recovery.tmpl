@@ -6,7 +6,7 @@ After repeated CLI failure, stop retrying and preserve the exact failing command
 {{if eq .RoleType "doer"}}EXECUTABLE RECOVERY COMMAND:
 `{{binaryName}} mark-blocked {{.TaskID}} --agent-id {{.AgentID}} --reason "Repeated CLI failure. Exact command: <exact failing command>. Observed error: <observed error>." --questions "Which prerequisite or external state must change?" --json`
 {{else if eq .RoleType "reviewer"}}EXECUTABLE RECOVERY COMMAND:
-`{{binaryName}} submit-verdict {{.TaskID}} REJECTED --reason "Repeated CLI failure. Exact command: <exact failing command>. Observed error: <observed error>." --agent-id {{.AgentID}} --json`
+`{{binaryName}} submit-verdict {{.TaskID}} REJECTED --review-commit {{.ReviewCommit}} --reason "Repeated CLI failure. Exact command: <exact failing command>. Observed error: <observed error>." --agent-id {{.AgentID}} --json`
 
 NON-EXECUTABLE REFERENCE:
 `{{binaryName}} mark-blocked` is doer-only and MUST NOT be executed by reviewers.

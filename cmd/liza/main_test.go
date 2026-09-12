@@ -107,13 +107,17 @@ func TestReasonCommandsInheritRootValidationHook(t *testing.T) {
 		t.Fatal("root command has no persistent CLI validation hook")
 	}
 
-	const wantReasonCommands = 19
+	const wantReasonCommands = 20
 	reasonCommands := 0
+	reconcileVerdictIncluded := false
 	var walk func(*cobra.Command)
 	walk = func(parent *cobra.Command) {
 		for _, cmd := range parent.Commands() {
 			if cmd.Flags().Lookup("reason") != nil {
 				reasonCommands++
+				if cmd == reconcileVerdictCmd {
+					reconcileVerdictIncluded = true
+				}
 				for ancestor := cmd; ancestor != nil && ancestor != rootCmd; ancestor = ancestor.Parent() {
 					if ancestor.PersistentPreRun != nil || ancestor.PersistentPreRunE != nil {
 						t.Errorf("%s shadows root CLI validation with a persistent pre-run hook", cmd.CommandPath())
@@ -125,6 +129,9 @@ func TestReasonCommandsInheritRootValidationHook(t *testing.T) {
 	}
 	walk(rootCmd)
 
+	if !reconcileVerdictIncluded {
+		t.Fatal("reconcile-verdict is missing from the inherited reason-validation inventory")
+	}
 	if reasonCommands != wantReasonCommands {
 		t.Fatalf("commands with --reason = %d, want %d; review the root validation policy for the new registration", reasonCommands, wantReasonCommands)
 	}

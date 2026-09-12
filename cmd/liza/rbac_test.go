@@ -132,6 +132,7 @@ func TestIntegrationReviewerRenderedCLIFailureRecovery(t *testing.T) {
 		task.RolePair = rolePair
 		task.Status = reviewingStatus
 		task.ReviewingBy = testhelpers.StringPtr(reviewerID)
+		task.ReviewCommit = testhelpers.StringPtr(testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD"))
 		state.Tasks = []models.Task{task}
 		state.Agents[reviewerID] = mutationTestAgent(roleName)
 		testhelpers.WriteInitialState(t, statePath, state)
@@ -139,7 +140,7 @@ func TestIntegrationReviewerRenderedCLIFailureRecovery(t *testing.T) {
 		return projectRoot, statePath, resolver, rejectedStatus
 	}
 
-	renderedRecoveryOperation := func(t *testing.T, resolver *pipeline.Resolver) string {
+	renderedRecoveryOperation := func(t *testing.T, resolver *pipeline.Resolver, reviewCommit string) string {
 		t.Helper()
 
 		capabilities, err := resolver.EffectiveRoleCapabilities(roleName)
@@ -151,13 +152,17 @@ func TestIntegrationReviewerRenderedCLIFailureRecovery(t *testing.T) {
 			t.Fatalf("ContextSections(%q): %v", roleName, err)
 		}
 		rendered, err := prompts.BuildRoleContext(roleName, sections, &prompts.RoleContextData{
-			Role:     roleName,
-			RoleType: capabilities.RoleType,
-			AgentID:  reviewerID,
-			TaskID:   taskID,
+			Role:         roleName,
+			RoleType:     capabilities.RoleType,
+			AgentID:      reviewerID,
+			TaskID:       taskID,
+			ReviewCommit: reviewCommit,
 		})
 		if err != nil {
 			t.Fatalf("BuildRoleContext(%q): %v", roleName, err)
+		}
+		if !strings.Contains(rendered, "--review-commit "+reviewCommit) {
+			t.Fatal("rendered recovery omitted the immutable reviewed boundary")
 		}
 
 		const executableLabel = "EXECUTABLE RECOVERY COMMAND:"
@@ -191,13 +196,15 @@ func TestIntegrationReviewerRenderedCLIFailureRecovery(t *testing.T) {
 
 	t.Run("executes authorized recovery and records exact evidence", func(t *testing.T) {
 		projectRoot, statePath, resolver, rejectedStatus := setupProject(t)
-		operation := renderedRecoveryOperation(t, resolver)
+		reviewCommit := *mustFindTask(t, readState(t, statePath), taskID).ReviewCommit
+		operation := renderedRecoveryOperation(t, resolver, reviewCommit)
 		if operation != "submit-verdict" {
 			t.Fatalf("rendered recovery operation = %q, want submit-verdict", operation)
 		}
 
 		stdout, err := executeRootCommandCapture(t, projectRoot,
 			operation, taskID, "REJECTED",
+			"--review-commit", reviewCommit,
 			"--reason", rejectionReason,
 			"--agent-id", reviewerID,
 			"--json",
@@ -229,6 +236,9 @@ func TestIntegrationReviewerRenderedCLIFailureRecovery(t *testing.T) {
 		}
 		if last.Reason == nil || *last.Reason != rejectionReason {
 			t.Fatalf("history reason = %v, want exact CLI failure evidence %q", last.Reason, rejectionReason)
+		}
+		if last.Commit == nil || *last.Commit != reviewCommit {
+			t.Fatalf("history commit = %v, want immutable reviewed boundary %s", last.Commit, reviewCommit)
 		}
 	})
 

@@ -878,7 +878,7 @@ func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
 		t.Error("setAgentToOrchestratingStatus() should return error for non-existent agent")
 	}
 
-	if !strings.Contains(err.Error(), "current generation <missing>") {
+	if !strings.Contains(err.Error(), "current generation fingerprint <missing>") {
 		t.Errorf("expected missing current-generation diagnostic, got %T: %v", err, err)
 	}
 }
@@ -898,7 +898,7 @@ func TestResetAgentToIdle_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nonexistent agent")
 	}
-	if !strings.Contains(err.Error(), "current generation <missing>") {
+	if !strings.Contains(err.Error(), "current generation fingerprint <missing>") {
 		t.Errorf("expected missing current-generation diagnostic, got %T: %v", err, err)
 	}
 }
@@ -1111,7 +1111,7 @@ func TestResetAgentAfterExit_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nonexistent agent")
 	}
-	if !strings.Contains(err.Error(), "current generation <missing>") {
+	if !strings.Contains(err.Error(), "current generation fingerprint <missing>") {
 		t.Errorf("expected missing current-generation diagnostic, got %T: %v", err, err)
 	}
 }

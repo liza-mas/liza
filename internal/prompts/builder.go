@@ -471,6 +471,13 @@ func hasIntegrationTaskInSprint(state *models.State) bool {
 // control ({{- -}} trimming), which is fragile and linter-hostile. Each non-empty
 // block is TrimSpace'd and joined with a blank-line separator.
 func BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error) {
+	missingReviewBoundary := data != nil && data.RoleType == "reviewer" && data.ReviewCommit == ""
+	if missingReviewBoundary {
+		// Keep the absent boundary explicit without changing the caller's task data.
+		copy := *data
+		copy.ReviewCommit = "REVIEW_COMMIT_MISSING"
+		data = &copy
+	}
 	var blocks []string
 	for _, section := range sectionNames {
 		var sectionBuf bytes.Buffer
@@ -485,6 +492,9 @@ func BuildRoleContext(role string, sectionNames []string, data *RoleContextData)
 	}
 	if len(blocks) == 0 {
 		return "", nil
+	}
+	if missingReviewBoundary {
+		blocks = append([]string{"REVIEW BOUNDARY MISSING: Stop; do not review or submit a verdict, including failure recovery. REVIEW_COMMIT_MISSING is a placeholder, not a reviewed SHA. Ask the authorized orchestrator to repair review_commit, then restart review with that explicit boundary. Do not infer a SHA or borrow another agent's authority."}, blocks...)
 	}
 	// Leading \n\n separates from base prompt; \n\n between blocks = one blank line.
 	return "\n\n" + strings.Join(blocks, "\n\n") + "\n", nil

@@ -75,6 +75,35 @@ if iterations >= max_iterations and task.state != APPROVED:
 
 **Logging:** Coder MUST log anomalies as they occur (not at end of task). See [Roles](../architecture/roles.md#coder-logging-duties) for required anomaly types.
 
+### Quarantined Verdicts
+
+Authenticated `submit-verdict` requires `--review-commit FULL_SHA`, the immutable
+40- or 64-hex commit actually reviewed. A fenced substantive attempt is retained
+as bounded evidence while the caller still receives an authority error. It
+cannot advance task state, release a replacement agent, or contribute quorum.
+Missing generation, malformed input, or an unknown task does not manufacture
+substantive evidence. A valid unknown boundary is retained as permanently
+unmatched, non-gating evidence for operator review.
+
+An unresolved rejection blocks approval and merge of its matched boundary.
+A stale approval conflicting with authoritative rejection history must also be
+reconciled before that unchanged boundary can later merge. A current authorized
+rejection may proceed; quarantined approval never forces acceptance. Matching
+judgments without an opposite authoritative verdict do not impose a hold.
+Evidence at A follows explicit chronological `review_commit_updated` A→B
+history, including chains; unrelated resubmission does not inherit it. Relevant
+ambiguous lineage fails closed with reconciliation guidance.
+
+`reconcile-verdict TASK FINDING_ID DISPOSITION --reason TEXT --agent-id ORCHESTRATOR`
+requires current registered orchestrator authority and capability. `refuted`
+and `superseded` resolve a hold with justification; accepted rejection still
+blocks the unchanged boundary, accepted approval creates no quorum, and
+`escalated` keeps the hold pending for further judgment. Decisions append
+actor/time/reason without changing the task lifecycle. Identical retries are
+idempotent; changed decisions retain their predecessors. Findings arriving
+after merge remain visible for operator reconciliation without reopening the
+terminal task.
+
 ### Iteration Limits
 
 | Role | Default Max | Rationale |

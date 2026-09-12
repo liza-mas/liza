@@ -95,7 +95,7 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 
 // isKnownEntityType returns true if the query is a known entity type
 func isKnownEntityType(query string) bool {
-	knownTypes := []string{"config", "sprint", "tasks", "agents", "metrics", "anomalies"}
+	knownTypes := []string{"config", "sprint", "tasks", "agents", "metrics", "anomalies", "quarantined_verdicts"}
 	return slices.Contains(knownTypes, query)
 }
 
@@ -174,6 +174,8 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 		return asString(inspectMetrics(state, inspectMetricsOptions{Format: opts.Format}))
 	case "anomalies":
 		return asString(inspectAnomalies(state, inspectAnomaliesOptions{Format: opts.Format}))
+	case "quarantined_verdicts":
+		return formatOutput(state.QuarantinedVerdicts, opts.Format)
 	default:
 		return "", &errors.NotFoundError{Entity: entity}
 	}

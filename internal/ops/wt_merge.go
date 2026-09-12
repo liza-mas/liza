@@ -586,24 +586,31 @@ func handlePreUpdateHookFailure(gw *git.Git, integrationRef, preMergeHEAD string
 //
 // No terminal I/O — integration test output is captured and returned in the result or error.
 func MergeWorktree(projectRoot, taskID, agentID string, mergeExtra ...map[string]any) (*MergeResult, error) {
-	return mergeWorktree(projectRoot, taskID, agentID, nil, mergeExtra...)
+	return mergeWorktreeWithReviewLock(projectRoot, taskID, agentID, nil, mergeExtra...)
 }
 
 // MergeWorktreeWithAuthority is the authenticated command entry point. Every
 // state write in the merge, rollback, failure, and finalization paths checks
 // the caller-held generation in its own transaction.
 func MergeWorktreeWithAuthority(projectRoot, taskID string, authority models.AgentAuthority, mergeExtra ...map[string]any) (*MergeResult, error) {
-	return mergeWorktree(projectRoot, taskID, authority.ID, &authority, mergeExtra...)
+	return mergeWorktreeWithReviewLock(projectRoot, taskID, authority.ID, &authority, mergeExtra...)
 }
 
-func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentAuthority, mergeExtra ...map[string]any) (*MergeResult, error) {
+func mergeWorktreeWithReviewLock(projectRoot, taskID, agentID string, authority *models.AgentAuthority, mergeExtra ...map[string]any) (result *MergeResult, retErr error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if agentID == "" {
 		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
+	retErr = withTaskReviewLock(projectRoot, taskID, "wt-merge", func() error {
+		result, retErr = mergeWorktree(projectRoot, taskID, agentID, authority, mergeExtra...)
+		return retErr
+	})
+	return result, retErr
+}
 
+func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentAuthority, mergeExtra ...map[string]any) (*MergeResult, error) {
 	// Setup paths
 	statePath := paths.New(projectRoot).StatePath()
 
@@ -627,6 +634,9 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 
 	if task.ReviewCommit == nil {
 		return nil, &PreconditionError{Reason: "task has no review_commit"}
+	}
+	if err := requireReconciledVerdicts(state, task, *task.ReviewCommit); err != nil {
+		return nil, err
 	}
 
 	// Initialize git wrapper

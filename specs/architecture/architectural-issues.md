@@ -853,6 +853,10 @@ Long-term concerns about system evolution.
 
 **Current mitigation:** Full sprint records are archived to `.liza/archive/`, and current state retains lightweight sprint summaries.
 
+Issue #153 adds durable quarantined verdict evidence without automatic
+eviction. Its explicit archival trigger and preservation requirements are
+tracked in [Quarantined verdict retention](../../TECH_DEBT.md#quarantined-verdict-retention).
+
 **Future options:**
 - Archive or compact terminal tasks and associated audit entries after a retention window
 - Prune history older than N days

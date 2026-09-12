@@ -245,6 +245,7 @@ func TestJSON_SubmitVerdict_OversizedReasonIsActionableAndSideEffectFree(t *test
 
 	stdout, err := executeRootCommandCapture(t, projectRoot,
 		"submit-verdict", "task-json-review", "REJECTED",
+		"--review-commit", quarantinedVerdictTestCommit,
 		"--reason", reason,
 		"--agent-id", "code-reviewer-1",
 		"--json",

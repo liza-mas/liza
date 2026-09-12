@@ -1146,19 +1146,30 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 					outcomes <- mergeOutcome{result: result, err: err}
 				}()
 			}
-			for range 2 {
-				select {
-				case <-arrived:
-				case <-time.After(10 * time.Second):
-					releaseHandlers()
-					t.Fatal("timed out waiting for concurrent merge handlers")
-				}
+			select {
+			case <-arrived:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timed out waiting for the first merge handler")
+			}
+			// The task review lock covers finalization. A second merge must
+			// wait for the first to finish, then reject its terminal task.
+			select {
+			case <-arrived:
+				t.Fatal("second merge entered finalization before the first released the task review lock")
+			case outcome := <-outcomes:
+				t.Fatalf("merge finished before finalization was released: %+v", outcome)
+			case <-time.After(100 * time.Millisecond):
 			}
 			releaseHandlers()
 
 			successes := 0
 			for range 2 {
-				outcome := <-outcomes
+				var outcome mergeOutcome
+				select {
+				case outcome = <-outcomes:
+				case <-time.After(10 * time.Second):
+					t.Fatal("timed out waiting for serialized merge handlers to finish")
+				}
 				if outcome.err == nil {
 					successes++
 					if outcome.result == nil || outcome.result.MergeCommit != reviewCommit {

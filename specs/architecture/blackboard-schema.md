@@ -20,6 +20,7 @@
 | Section | Purpose | Write Pattern |
 |---------|---------|---------------|
 | `anomalies` | Execution observations | Append by Coders/Code Reviewers |
+| `quarantined_verdicts` | Bounded substantive verdicts from fenced registrations | Evidence-only append/deduplication; authorized append-only reconciliation |
 | `spec_changes` | Spec modification history | Append-only |
 | `sprint` | Current sprint state | Atomic update |
 | `circuit_breaker` | CB status and history | Atomic update |
@@ -956,6 +957,41 @@ watermark. Later `OK` entries do not move it. If `status == TRIGGERED` or
 
 ---
 
+## Quarantined Verdict Evidence
+
+`quarantined_verdicts` is an optional top-level sequence; existing state without
+it remains valid. Each record contains:
+
+| Field | Contract |
+|-------|----------|
+| `id` | Deterministic `qv-` plus 64 lowercase hex SHA-256 identity |
+| `task_id`, `reviewer_id` | Existing task and submitting reviewer identity |
+| `review_commit` | Immutable full 40- or 64-hex SHA, canonicalized lowercase |
+| `verdict`, `reason` | APPROVED or REJECTED, sanitized reason at most 4096 UTF-8 bytes; rejection requires nonblank content |
+| `timestamp` | First capture time in UTC, unchanged by retries |
+| `generation_fingerprints` | Deduplicated SHA-256 fingerprints, never reusable generations |
+| `matched` | Fixed at capture: supplied boundary was known in the task's live/history review boundaries |
+| `reconciliations` | Append-only entries with `actor`, UTC `timestamp`, `disposition`, and nonblank bounded `reason` |
+
+Judgment identity is task + reviewed commit + reviewer + verdict + canonicalized
+sanitized reason. Generation is provenance, not identity: the same judgment
+across registrations adds a fingerprint to the existing record. Identical
+retries do not append a record or change its timestamp. Validation rejects
+malformed records and duplicate identities.
+
+`matched: false` records remain non-gating even if a later task happens to use
+their SHA. Matched evidence applies along explicit chronological
+`review_commit_updated` lineage without rewriting its original commit.
+Unresolved conflicting evidence gates approval and merge. Reconciliation
+supports `accepted`, `refuted`, `superseded`, and `escalated`; see
+[task lifecycle](../protocols/task-lifecycle.md#quarantined-verdicts).
+It cannot mutate task status or quorum. Evidence retention is deliberate debt
+with a concrete trigger in [TECH_DEBT.md](../../TECH_DEBT.md#quarantined-verdict-retention).
+
+Explicit task deletion atomically removes its quarantined findings and their
+reconciliation audit. Findings for remaining tasks are preserved; orphaned
+findings are invalid state.
+
 ## log.yaml Schema
 
 ```yaml
@@ -1094,6 +1130,13 @@ If an agent runs a 6-minute test suite without heartbeating, its lease expires m
 
 ## Locking
 
+Verdict submission, reconciliation, and merge also use a cross-process per-task
+review lock. Public entries acquire it once; recursive clean-integration
+submission stays inside that acquisition. Existing outer lifecycle locks precede
+task review → integration completion → integration mutation → blackboard read.
+Blackboard writes occur after releasing integration mutation. Administrative
+failure does not append a substantive finding.
+
 All writes to `state.yaml` use `flock`:
 
 ```bash
@@ -1116,6 +1159,8 @@ Reads do not require lock (eventual consistency acceptable for reads).
 | Claim review | Supervisor | Lock → verify READY_FOR_REVIEW → set REVIEWING + write reviewing_by + review_lease_expires → unlock |
 | Extend review lease | Code Reviewer | Lock → update review_lease_expires → unlock |
 | Submit verdict | Code Reviewer | Lock → verify REVIEWING + commit SHA matches + reviewing_by matches self → set APPROVED/REJECTED + reason + set approved_by on approval + clear review lease → unlock |
+| Quarantine fenced verdict | Fenced reviewer submission | Preserve immutable reviewed SHA and sanitized evidence only; never mutate task/agent lifecycle state |
+| Reconcile verdict | Current-generation orchestrator with capability | Task review lock → transactionally validate authority and append justified disposition; no task or quorum mutation |
 | Execute merge | Supervisor | After Code Reviewer sets APPROVED → supervisor runs `liza wt-merge` → update state to MERGED |
 | Mark blocked | Any | Lock → set state BLOCKED + diagnosis → unlock |
 | Rescope task | Orchestrator | Lock → prune the retiring task's illegal downstream edges + set original SUPERSEDED + rewrite active consumers/create replacements + validate candidate → unlock |

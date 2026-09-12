@@ -311,6 +311,22 @@ if task.base_commit != EXPECTED_BASE:
 
 ## Concurrent Merge Safety
 
+A task review lock serializes verdict capture, reconciliation, and the complete
+merge/finalization path for that task. Both authenticated and supervisor/legacy
+merge entries read fresh quarantined evidence before Git effects, including
+recovery where the reviewed commit is already an integration ancestor.
+Applicable unresolved conflicts refuse merge with finding IDs and
+`reconcile-verdict` guidance. A SHA movement alone never silently supersedes a
+finding; only explicit `review_commit_updated` lineage carries it forward.
+
+The lock is acquired once at public entry, outside recursive helpers. Existing
+outer project/agent lifecycle locks precede task review → completion → mutation
+→ blackboard read; writes happen after releasing mutation. No review operation
+acquires project/agent lifecycle locks inside this chain. A timeout is an
+explicit retryable failure, and a long integration test can delay a same-task
+verdict. If merge finishes first, later fenced evidence is retained for operator
+review; it does not retroactively reopen or roll back the terminal task.
+
 Multiple reviewers can merge approved tasks concurrently without lost ref updates or shared-index collisions:
 
 **Before (race-prone):**

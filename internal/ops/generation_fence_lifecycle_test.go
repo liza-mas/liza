@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -585,6 +587,8 @@ func testSubmitVerdictMutationGenerationFence(t *testing.T) {
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReviewing, time.Now().UTC())}
+	commit := strings.Repeat("a", 40)
+	state.Tasks[0].ReviewCommit = &commit
 	state.Agents[agentID] = models.Agent{Role: "code-reviewer", Status: models.AgentStatusWorking, Generation: lifecycleGenerationA}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 	stale := models.AgentAuthority{ID: agentID, Generation: lifecycleGenerationA}
@@ -598,14 +602,25 @@ func testSubmitVerdictMutationGenerationFence(t *testing.T) {
 	}}
 	t.Cleanup(func() { testSubmitVerdictHooks = previousHooks })
 
-	_, err := SubmitVerdictWithAuthority(projectRoot, taskID, "APPROVED", "", stale, "")
+	_, err := SubmitVerdictWithAuthority(projectRoot, taskID, "APPROVED", "", stale, "", commit)
 	assertLifecycleAuthorityError(t, err, agentID)
-	if after := readStateBytes(t, statePath); !bytes.Equal(after, before) {
-		t.Fatal("stale submit-verdict changed generation-B state")
+	var beforeState models.State
+	if err := yaml.Unmarshal(before, &beforeState); err != nil {
+		t.Fatal(err)
+	}
+	after, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !reflect.DeepEqual(after.Tasks, beforeState.Tasks) || !reflect.DeepEqual(after.Agents, beforeState.Agents) {
+		t.Fatal("stale submit-verdict changed generation-B task or agent state")
+	}
+	if len(after.QuarantinedVerdicts) != 1 || after.QuarantinedVerdicts[0].ReviewCommit != commit {
+		t.Fatal("generation replacement at final write lost fenced verdict evidence")
 	}
 
 	testSubmitVerdictHooks = nil
-	if _, err := SubmitVerdictWithAuthority(projectRoot, taskID, "APPROVED", "", current, ""); err != nil {
+	if _, err := SubmitVerdictWithAuthority(projectRoot, taskID, "APPROVED", "", current, "", commit); err != nil {
 		t.Fatalf("current submit-verdict failed: %v", err)
 	}
 }
@@ -645,7 +660,7 @@ func assertLifecycleAuthorityError(t *testing.T, err error, agentID string) {
 	if !errors.As(err, &authorityErr) {
 		t.Fatalf("error = %T %v, want *AgentAuthorityError", err, err)
 	}
-	for _, want := range []string{agentID, lifecycleGenerationA, lifecycleGenerationB} {
+	for _, want := range []string{agentID, generationFingerprint(lifecycleGenerationA), generationFingerprint(lifecycleGenerationB)} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %q, want %q", err, want)
 		}

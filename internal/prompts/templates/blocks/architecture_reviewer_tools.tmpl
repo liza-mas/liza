@@ -5,14 +5,15 @@ ARCHITECTURE REVIEWER TOOLS:
   {{binaryName}} get {{.TaskID}} --json
 - {{binaryName}} submit-verdict — Submit review verdict
   ⚠️  You MUST run this CLI command in this session:
-  APPROVED: {{binaryName}} submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json
+  APPROVED: {{binaryName}} submit-verdict {{.TaskID}} APPROVED --review-commit {{.ReviewCommit}} --agent-id {{.AgentID}} --json
   REJECTED (use heredoc to avoid shell quoting issues):
     reason=$(cat <<'VERDICT'
     <detailed rejection reason>
     VERDICT
     )
-    {{binaryName}} submit-verdict {{.TaskID}} REJECTED --reason "$reason" --agent-id {{.AgentID}} --json
+    {{binaryName}} submit-verdict {{.TaskID}} REJECTED --review-commit {{.ReviewCommit}} --reason "$reason" --agent-id {{.AgentID}} --json
 - {{binaryName}} await-resubmission — Block until doer resubmits after rejection (call after submit-verdict REJECTED)
   {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
   On RESUBMITTED, use the returned `base_commit` and `review_commit` for every diff command in this same session.
+  After reviewing that boundary, also substitute its full `review_commit` in the next submit-verdict command. Never reuse the initial SHA for revised work.
 {{- end -}}

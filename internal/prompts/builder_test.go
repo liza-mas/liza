@@ -1906,6 +1906,88 @@ func TestBuildRoleContext_MasterDecompositionReview(t *testing.T) {
 	}
 }
 
+func TestRenderedVerdictCommandsBindReviewedCommit(t *testing.T) {
+	withPromptBrandValues(t, func() { brand.BinaryName = "acme-cli" })
+	const commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	for _, section := range []string{
+		"verdict-submission", "architecture-reviewer-tools", "epic-plan-reviewer-tools",
+		"us-reviewer-tools", "code-plan-reviewer-tools", "integration-reviewer-tools",
+		"cli-failure-recovery",
+	} {
+		t.Run(section, func(t *testing.T) {
+			output, err := BuildRoleContext("code-reviewer", []string{section}, &RoleContextData{
+				Role: "code-reviewer", RoleType: "reviewer", TaskID: "task-boundary",
+				AgentID: "code-reviewer-1", ReviewCommit: commit,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			count := 0
+			for _, line := range strings.Split(output, "\n") {
+				if strings.Contains(line, "acme-cli submit-verdict task-boundary ") {
+					count++
+					if !strings.Contains(line, "--review-commit "+commit) {
+						t.Fatalf("verdict command lost immutable boundary: %s", line)
+					}
+				}
+			}
+			if count == 0 {
+				t.Fatal("no branded executable verdict command rendered")
+			}
+		})
+	}
+}
+
+func TestRenderedReviewerContextMissingReviewBoundary(t *testing.T) {
+	withPromptBrandValues(t, func() { brand.BinaryName = "acme-cli" })
+	cfg, err := pipeline.LoadEmbeddedReference()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+	for _, role := range resolver.ReviewerRoleNames() {
+		t.Run(role, func(t *testing.T) {
+			sections, err := resolver.ContextSections(role)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data := &RoleContextData{
+				Role: role, RoleType: "reviewer", TaskID: "task-boundary", AgentID: role + "-1",
+				TotalPlanTasks: 2, PhaseDependencyTasks: []SiblingTaskSummary{{ID: "prior-plan"}},
+			}
+			output, err := BuildRoleContext(role, sections, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if data.ReviewCommit != "" {
+				t.Fatal("rendering changed the caller's missing review boundary")
+			}
+			for _, want := range []string{
+				"REVIEW BOUNDARY MISSING: Stop; do not review or submit a verdict, including failure recovery.",
+				"REVIEW_COMMIT_MISSING is a placeholder, not a reviewed SHA.",
+				"Ask the authorized orchestrator to repair review_commit",
+				"Do not infer a SHA or borrow another agent's authority.",
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("missing-boundary prompt lacks %q", want)
+				}
+			}
+			count := 0
+			for _, line := range strings.Split(output, "\n") {
+				if strings.Contains(line, "acme-cli submit-verdict task-boundary ") {
+					count++
+					if !strings.Contains(line, "--review-commit REVIEW_COMMIT_MISSING ") {
+						t.Fatalf("verdict command conceals missing boundary: %s", line)
+					}
+				}
+			}
+			if count < 3 {
+				t.Fatalf("expected approval, rejection and recovery commands, got %d", count)
+			}
+		})
+	}
+}
+
 func TestRenderedCLIFailureRecoveryMatchesEffectiveCapabilities(t *testing.T) {
 	cfg, err := pipeline.LoadEmbeddedReference()
 	if err != nil {

@@ -61,7 +61,7 @@ This task depends on prior planning task(s):
 {{- end}}
 {{- if eq .RoleType "reviewer"}}
 If the reviewed task CANNOT be made consistent with those prior plans:
-- Reject it via {{binaryName}} submit-verdict {{.TaskID}} REJECTED --reason "<which prior task constraint conflicts and why; what must change in prior plans>" --agent-id {{.AgentID}} --json.
+- Reject it via {{binaryName}} submit-verdict {{.TaskID}} REJECTED --review-commit {{.ReviewCommit}} --reason "<which prior task constraint conflicts and why; what must change in prior plans>" --agent-id {{.AgentID}} --json.
 {{- else}}
 If your plan CANNOT be made consistent with those prior plans:
 - Do NOT iterate with the reviewer — mark BLOCKED immediately via {{binaryName}} mark-blocked --json.

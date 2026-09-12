@@ -2,14 +2,19 @@
 
 --- VERDICT SUBMISSION (MANDATORY - DO NOT SKIP) ---
 ⚠️  You MUST execute the {{binaryName}} submit-verdict CLI command IN THIS SAME SESSION:
-  APPROVED: {{binaryName}} submit-verdict {{.TaskID}} APPROVED --agent-id {{.AgentID}} --json
+  APPROVED: {{binaryName}} submit-verdict {{.TaskID}} APPROVED --review-commit {{.ReviewCommit}} --agent-id {{.AgentID}} --json
   REJECTED (use heredoc to avoid shell quoting issues with markdown):
     reason=$(cat <<'VERDICT'
     <detailed rejection — markdown, backticks, apostrophes all safe here>
     VERDICT
     )
-    {{binaryName}} submit-verdict {{.TaskID}} REJECTED --reason "$reason" --agent-id {{.AgentID}} --json
+    {{binaryName}} submit-verdict {{.TaskID}} REJECTED --review-commit {{.ReviewCommit}} --reason "$reason" --agent-id {{.AgentID}} --json
 After submitting verdict, EXIT immediately. Your work is complete.
+The --review-commit value must name the commit you actually inspected. If an
+await-resubmission response supplied a newer review_commit in this session,
+review that boundary and substitute its full SHA in the verdict command.
+On a generation-fence error, preserve the finding ID and stop; never borrow a
+replacement generation or change the reviewed SHA to bypass the fence.
 
 ❌ FAILURE MODE: Completing review, saying "I recommend APPROVED", then exiting WITHOUT running the command.
 The CLI command IS the deliverable. Analysis without command execution = nothing happened.

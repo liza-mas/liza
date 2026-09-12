@@ -630,7 +630,9 @@ the appropriate supervisor-launched agent session. See
 | `§BRAND_BINARY_NAME§ add-tasks --tasks-file <path>` | Add multiple tasks independently from JSON. Valid items can persist even while unrelated state remains degraded; each successful item carries a warning when the post-add full validation still fails. |
 | `§BRAND_BINARY_NAME§ claim-task <task-id> <agent-id>` | Atomically claim a task for a doer agent (creates worktree, updates state)                                           |
 | `§BRAND_BINARY_NAME§ submit-for-review <task-id> [commit-ref]` | Submit a task for review (doer agents; defaults to worktree `HEAD`)                                                  |
-| `§BRAND_BINARY_NAME§ submit-verdict <task-id> <APPROVED\|REJECTED> [--reason "<reason>"]` | Submit a review verdict (reviewer agents; `--reason` required for REJECTED)                                          |
+| `§BRAND_BINARY_NAME§ submit-verdict <task-id> <APPROVED\|REJECTED> --review-commit <full-sha> [--reason "<reason>"]` | Submit a verdict bound to the immutable commit inspected; rejection requires a nonblank reason |
+| `§BRAND_BINARY_NAME§ get quarantined_verdicts --json` | Read fenced review evidence and its reconciliation audit |
+| `§BRAND_BINARY_NAME§ reconcile-verdict <task-id> <finding-id> <disposition> --reason "<reason>" --agent-id <orchestrator-id>` | Current-generation orchestrator records accepted, refuted, superseded, or escalated judgment; conflicts hold approval/merge until resolved |
 | `§BRAND_BINARY_NAME§ mark-blocked <task-id>` | Mark a task as BLOCKED with reason/questions; optional `--depends-on` records blocking task IDs for scheduling and orchestrator re-wake. Use `--repair-request-file <path>` for a complete declarative dependency repair; individual `--repair-*` flags remain for command-based non-dependency repairs. |
 | `§BRAND_BINARY_NAME§ assess-blocked <task-id>` | Reconcile a BLOCKED task's canonical reason, questions, and optional repair request after partial repair, or use `--note` alone for a history-only assessment that raises an `UNRESOLVED BLOCKED` alert |
 | `§BRAND_BINARY_NAME§ retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason "..."` | Orchestrator-only repair for one direct edge on a non-terminal task. Replaces the old edge with one or more existing task IDs, canonicalizes dependencies, validates the full candidate state, and leaves task status unchanged. |
@@ -910,15 +912,23 @@ Doer agents (coders, planners, writers) use a blocking workflow for review cycle
 
 Reviewer agents use a blocking workflow after non-terminal rejections:
 
-1. `§BRAND_BINARY_NAME§ submit-verdict <task-id> REJECTED --agent-id <agent-id> --reason <feedback> --json` — issue the rejection
+1. `§BRAND_BINARY_NAME§ submit-verdict <task-id> REJECTED --review-commit <full-reviewed-sha> --agent-id <agent-id> --reason <feedback> --json` — issue the rejection
 2. `§BRAND_BINARY_NAME§ await-resubmission <task-id> --agent-id <agent-id> --json` — wait for the doer within the remaining overall budget; one foreground call lasts at most 100 seconds
 3. Handle result:
   - **POLL**: Call `await-resubmission` again in the foreground with the smaller returned `timeout_seconds`
-  - **RESUBMITTED**: Review the new changes (session stays alive — no cold restart)
+  - **RESUBMITTED**: Review the new changes and pass the returned `review_commit` in the next verdict (session stays alive — no cold restart)
   - **TIMEOUT**: The overall budget is exhausted; stop waiting and exit normally
   - **TERMINAL** / **ABORTED**: Exit normally
 
 `--timeout-seconds` has the same remaining-budget meaning as it does for `await-verdict`. This reduces per-rejection overhead from ~47s (cold restart) to near-zero for reviewers. Do not call after terminal rejections (`EscalatedToBlocked` or `NewAttemptTriggered`).
+
+Generation-fenced substantive verdicts remain available as quarantined evidence
+without gaining task or quorum authority. A conflicting same-boundary approval
+or merge requires an authorized orchestrator's justified reconciliation.
+Existing scripts must now pass the full SHA they reviewed. See
+[quarantine recovery](SUPPORT.md#quarantined-verdicts-and-conflicting-approval)
+for disposition semantics, automatic frozen-role capability migration, and
+post-merge handling.
 
 ### Differences from Pairing Mode
 

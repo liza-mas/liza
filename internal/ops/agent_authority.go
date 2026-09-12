@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -13,27 +14,34 @@ const missingAgentGeneration = "<missing>"
 // AgentAuthorityError reports a caller that no longer owns the current
 // registration generation for an agent ID.
 type AgentAuthorityError struct {
-	AgentID           string
-	LosingGeneration  string
-	CurrentGeneration string
+	AgentID           string `json:"agent_id"`
+	LosingGeneration  string `json:"-" yaml:"-"`
+	CurrentGeneration string `json:"-" yaml:"-"`
 }
 
 func (e *AgentAuthorityError) Error() string {
 	return fmt.Sprintf(
-		"agent %s authority rejected: losing generation %s, current generation %s",
+		"agent %s authority rejected: losing generation fingerprint %s, current generation fingerprint %s",
 		nonEmptyGeneration(e.AgentID),
-		nonEmptyGeneration(e.LosingGeneration),
-		nonEmptyGeneration(e.CurrentGeneration),
+		generationFingerprint(e.LosingGeneration),
+		generationFingerprint(e.CurrentGeneration),
 	)
 }
 
 // SafeDetails exposes structured generation diagnostics to JSON error writers.
 func (e *AgentAuthorityError) SafeDetails() map[string]any {
 	return map[string]any{
-		"agent_id":           e.AgentID,
-		"losing_generation":  e.LosingGeneration,
-		"current_generation": e.CurrentGeneration,
+		"agent_id":                       e.AgentID,
+		"losing_generation_fingerprint":  generationFingerprint(e.LosingGeneration),
+		"current_generation_fingerprint": generationFingerprint(e.CurrentGeneration),
 	}
+}
+
+func generationFingerprint(value string) string {
+	if value == "" {
+		return missingAgentGeneration
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
 }
 
 // IsAgentAuthorityError reports whether err contains a rejected generation.

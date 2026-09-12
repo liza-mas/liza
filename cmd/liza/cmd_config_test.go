@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -96,8 +98,11 @@ func TestConfigAgentCapabilityAndGeneration(t *testing.T) {
 		t.Fatalf("stale generation accepted: %s", stdout)
 	}
 	details := parseEnvelope(t, stdout)["error"].(map[string]any)["details"].(map[string]any)
-	if details["current_generation"] != "replacement-generation" {
+	if details["current_generation_fingerprint"] != fmt.Sprintf("%x", sha256.Sum256([]byte("replacement-generation"))) {
 		t.Fatalf("missing fence evidence: %s", stdout)
+	}
+	if strings.Contains(stdout, "replacement-generation") {
+		t.Fatal("fence diagnostic exposes reusable generation")
 	}
 	if readState(t, statePath).Config.PostWorktreeCmd != nil {
 		t.Fatal("stale generation wrote config")

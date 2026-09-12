@@ -20,8 +20,8 @@ func SubmitVerdictCommand(projectRoot, taskID, verdict, reason, agentID, impact 
 }
 
 // SubmitVerdictCommandWithAuthority is the authenticated command adapter.
-func SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact string) error {
-	result, err := ops.SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason, authority, impact)
+func SubmitVerdictCommandWithAuthority(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact, reviewCommit string) error {
+	result, err := ops.SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit)
 	if err != nil {
 		return fmt.Errorf("submit verdict: %w", err)
 	}
