@@ -281,6 +281,65 @@ covers another mutation, stop and record an orchestrator-only repair request;
 do not work around the state machine. Run `§BRAND_BINARY_NAME§ validate` after
 recovery to verify the whole blackboard.
 
+### Changing worktree setup during a run
+
+Read the current value with `§BRAND_BINARY_NAME§ config get config.post_worktree_cmd --json`.
+The general query `§BRAND_BINARY_NAME§ get config.post_worktree_cmd --json` is equivalent;
+an unset value is `null`. Both config subcommands use the same dotted key.
+
+After scaffolding is committed and merged, validate the proposed command from a fresh
+checkout of that commit. It must provide the required build/test environment, run
+noninteractively using project-scoped tooling, and succeed on repeated execution.
+Generated artifacts must be gitignored or already committed, and a second run must
+change nothing observable. Git status must stay clean. Check `git status --porcelain` for
+staged, unstaged, and untracked files. Put required ignore rules in the scaffold itself.
+Reference environment variables for credentials; do not embed secret values in commands
+or reasons.
+
+```bash
+§BRAND_BINARY_NAME§ config set config.post_worktree_cmd "make setup" --json
+# Explicitly replace a different existing value:
+§BRAND_BINARY_NAME§ config set config.post_worktree_cmd "make bootstrap" --replace --reason "Correct project setup" --json
+```
+
+Only `config.post_worktree_cmd` is supported. Empty, multiline, NUL-containing,
+invalid UTF-8, and whitespace-padded commands are rejected. A repeated identical set
+succeeds with outcome `unchanged`; a different existing value returns a nonzero exit
+and a JSON `validation` error with `details.conflict: existing_value` unless `--replace`
+and a non-empty `--reason` are supplied. Replacement flags guard against mistakes;
+they do not authenticate a human caller. The command is stored, not executed or certified
+by `config set`. Re-read it afterward to verify the current configuration.
+
+The value comparison and write share one locked transaction. With an agent ID (flag or
+environment), the role must explicitly allow `config-set-post-worktree-cmd`, and the
+registration generation is checked in that transaction. No default role is granted this
+capability. Without an ID, the operator path uses the ordinary locked mutation.
+
+Existing configuration takes precedence over automatic Node detection at merge. If the
+operator write commits first, detection leaves it alone. If detection commits first,
+a different operator set requires explicit replacement. Existing provider sessions are
+not restarted; subsequent setup on claim, resume, review, recovery, or recreation uses
+the configuration read by that operation. An already-running setup may have read the
+previous value. Configured command failures still fail closed: fix the command or its
+environment in the retained worktree, then follow agent recovery guidance. Do not clear
+the setting to bypass readiness failures.
+
+**Audit location:** each set attempt passing the domain operation's input validation emits one
+greppable `config_set key=config.post_worktree_cmd` process-log record on stderr, also in
+JSON mode. It is **not** persisted in `state.yaml` or the activity log; retain stderr if
+history is needed. Records include actor, project, outcome (`set`, `replaced`, `unchanged`,
+`conflict`, or `failed`), a command SHA-256 fingerprint, and masked, bounded command/reason
+excerpts. The detector comparison is observational at invocation time: `match`, `different`,
+or `none`. CLI admission failures and in-operation input validation failures (malformed
+commands or replacement requests without a non-empty reason) return errors without
+emitting these audit records.
+
+Count successful explicit changes (`set`/`replaced`) with `detector=different` or `none`
+as candidates for follow-up. Classify missed conventional layouts into the detection
+backlog; repeated custom workflows requiring operator intervention provide evidence for
+considering planner declarations. Mismatches alone do not establish that need. Log loss,
+masking, truncation, and subsequent repository changes limit retrospective classification.
+
 ### Known Gotchas
 
 - **`|N` block scalars**: Go writes indentation indicators for multi-line fields (for example `rejection_reason`). YAML serializers can make live state unparseable. Restore a trusted backup or use a supported migration/recovery command; do not hand-edit a live blackboard.

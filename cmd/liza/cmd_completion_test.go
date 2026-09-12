@@ -39,6 +39,19 @@ func TestShellCompleteCompletionCommandShellNames(t *testing.T) {
 	}
 }
 
+func TestShellCompleteConfigKeys(t *testing.T) {
+	for _, args := range [][]string{{"config", "get", "config."}, {"config", "set", "config."}, {"get", "config."}} {
+		output := executeShellComplete(t, args...)
+		if !completionOutputContains(output, "config.post_worktree_cmd") {
+			t.Fatalf("missing config key: %s", output)
+		}
+	}
+	output := executeShellComplete(t, "config", "set", "config.post_worktree_cmd", "")
+	if completionOutputContains(output, "config.post_worktree_cmd") {
+		t.Fatalf("key offered as command value: %s", output)
+	}
+}
+
 func TestShellCompleteAgentRoleAndCLIFlag(t *testing.T) {
 	roleOutput := executeShellComplete(t, "agent", "co")
 	for _, want := range []string{"code-reviewer", "coder"} {

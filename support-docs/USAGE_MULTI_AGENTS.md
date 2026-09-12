@@ -125,6 +125,12 @@ Use this section once the global setup is complete.
 # If no single setup command can be detected and the flag is still unset, init warns
 # that worktrees will have no dependencies or build artifacts and asks for confirmation
 # (--yes skips it).
+# Empty repos may continue without a command. After scaffolding merges, supported
+# layouts may be detected automatically; otherwise validate and configure setup:
+#   §BRAND_BINARY_NAME§ config get config.post_worktree_cmd --json
+#   §BRAND_BINARY_NAME§ config set config.post_worktree_cmd "make setup" --json
+# A different existing value requires --replace and --reason. See SUPPORT.md,
+# "Changing worktree setup during a run", including process-log-only audit details.
 # Once configured, the command must succeed: a failure stops the claim, resume, or
 # review rather than warning, and degrades that agent (ADR-0117).
 # See CONFIGURATION.md "Worktree Setup" for details.

@@ -1378,7 +1378,8 @@ func confirmMissingPostWorktreeCmd(params InitParams, projectRoot string, stdin 
 		fmt.Fprintln(os.Stderr, "⚠️  No --post-worktree-cmd set, and auto-detection found no Node.js project layout.")
 	}
 	fmt.Fprintln(os.Stderr, "Task worktrees are fresh checkouts: no installed dependencies, no build artifacts. Agent builds and tests can fail for environment reasons and burn iterations.")
-	fmt.Fprintf(os.Stderr, "Set one with: %s init \"<goal>\" --post-worktree-cmd \"make setup\", or add post_worktree_cmd to %s/state.yaml later.\n", brand.BinaryName, paths.ProjectDirName())
+	fmt.Fprintf(os.Stderr, "Set one with: %s init \"<goal>\" --post-worktree-cmd \"make setup\", or %s config set config.post_worktree_cmd \"make setup\" later.\n", brand.BinaryName, brand.BinaryName)
+	fmt.Fprintln(os.Stderr, "For an empty repository, you can continue without a setup command. After scaffolding merges, supported layouts may be detected automatically; otherwise validate and set your project's command.")
 	if !params.ForceInteractive && !params.AutoConfirm && !isInteractive(rawStdin) {
 		return nil
 	}

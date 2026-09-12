@@ -1232,6 +1232,50 @@ func TestMergeWorktree_AutoSetsPostWorktreeCmd(t *testing.T) {
 	}
 }
 
+func TestMergeWorktree_ConfigSetWinsBeforeFinalTransaction(t *testing.T) {
+	taskID := "merge-config-race"
+	root, stateFile := setupMergeTestRepo(t, taskID, "coder-1")
+	advanceApprovedTaskWithFiles(t, root, stateFile, taskID, map[string]string{
+		"package.json": `{"name":"bootstrap"}`,
+	})
+	previous := mergeFinalStateTestHook
+	t.Cleanup(func() { mergeFinalStateTestHook = previous })
+	mergeFinalStateTestHook = func() {
+		// Detection has already read an unset value. The inside-the-lock
+		// nil check must preserve this write when MERGED is persisted.
+		if _, err := SetPostWorktreeCmd(root, SetPostWorktreeCmdInput{Command: "make setup"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := MergeWorktree(root, taskID, "coder-1"); err != nil {
+		t.Fatal(err)
+	}
+	state := readStateForTest(t, stateFile)
+	if state.FindTask(taskID).Status != models.TaskStatusMerged || state.Config.PostWorktreeCmd == nil || *state.Config.PostWorktreeCmd != "make setup" {
+		t.Fatal("merge overwrote explicit configuration or did not complete")
+	}
+}
+
+func TestMergeWorktree_DetectionWinsBeforeConfigSet(t *testing.T) {
+	taskID := "merge-before-config"
+	root, stateFile := setupMergeTestRepo(t, taskID, "coder-1")
+	advanceApprovedTaskWithFiles(t, root, stateFile, taskID, map[string]string{
+		"package.json": `{"name":"bootstrap"}`,
+	})
+	if _, err := MergeWorktree(root, taskID, "coder-1"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := SetPostWorktreeCmd(root, SetPostWorktreeCmdInput{Command: "make setup"})
+	var conflict *PreconditionError
+	if !errors.As(err, &conflict) || conflict.Details["conflict"] != "existing_value" {
+		t.Fatalf("expected structured conflict after detection committed, got %v", err)
+	}
+	state := readStateForTest(t, stateFile)
+	if state.Config.PostWorktreeCmd == nil || *state.Config.PostWorktreeCmd != "npm install" {
+		t.Fatal("explicit set without replace overwrote detected configuration")
+	}
+}
+
 func TestMergeWorktree_LeavesPostWorktreeCmdUnsetWhenAmbiguous(t *testing.T) {
 	taskID := "merge-node-ambiguous"
 	agentID := "coder-1"
@@ -2403,6 +2447,9 @@ func TestMergeWorktree_IntegrationTestFailure(t *testing.T) {
 	taskID := "merge-testfail"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
+	advanceApprovedTaskWithFiles(t, tmpDir, stateFile, taskID, map[string]string{
+		"package.json": `{"name":"failed-scaffold"}`,
+	})
 
 	// Create a failing integration test script
 	scriptsDir := filepath.Join(tmpDir, "scripts")
@@ -2451,6 +2498,9 @@ func TestMergeWorktree_IntegrationTestFailure(t *testing.T) {
 	}
 	if task.Status != models.TaskStatusIntegrationFailed {
 		t.Errorf("Task status = %v, want INTEGRATION_FAILED", task.Status)
+	}
+	if state.Config.PostWorktreeCmd != nil {
+		t.Fatal("failed merge activated detected setup command")
 	}
 
 	// Verify integration branch was rolled back (should not contain the merge)

@@ -7,6 +7,7 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
@@ -114,6 +115,7 @@ func completeAgentIDArgs(maxArgs int) cobra.CompletionFunc {
 func completeGetQueries(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	values := []string{
 		"config.mode",
+		ops.PostWorktreeConfigKey,
 		"sprint.status",
 		"sprint.elapsed",
 		"sprint.metrics.tasks_done",
@@ -127,6 +129,13 @@ func completeGetQueries(cmd *cobra.Command, _ []string, toComplete string) ([]st
 		values = append(values, agentIDsFromState(state)...)
 	}
 	return filterCompletionValues(values, toComplete), cobra.ShellCompDirectiveNoFileComp
+}
+
+func completeConfigKeys(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return filterCompletionValues([]string{ops.PostWorktreeConfigKey}, toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
 func completionState(cmd *cobra.Command) (*models.State, bool) {

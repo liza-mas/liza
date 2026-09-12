@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	activitylog "github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
@@ -88,6 +89,83 @@ func assertJSONError(t *testing.T, stdout string, wantCode string, wantMessagePa
 		if !strings.Contains(msg, part) {
 			t.Fatalf("error.message = %q, want substring %q", msg, part)
 		}
+	}
+}
+
+func TestJSON_ConfigReadWrite(t *testing.T) {
+	projectRoot, statePath := setupMutationTestProject(t, nil)
+	for _, query := range [][]string{{"config", "get", ops.PostWorktreeConfigKey, "--json"}, {"get", ops.PostWorktreeConfigKey, "--json"}} {
+		stdout, err := executeRootCommandCapture(t, projectRoot, query...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := parseEnvelope(t, stdout)
+		if env["ok"] != true || env["result"] != nil {
+			t.Fatalf("unset read = %s", stdout)
+		}
+	}
+	for _, tc := range []struct {
+		command, outcome string
+		flags            []string
+	}{
+		{"make setup", "set", nil},
+		{"make setup", "unchanged", nil},
+		{"make corrected", "replaced", []string{"--replace", "--reason", "Correct bootstrap"}},
+	} {
+		args := append([]string{"config", "set", ops.PostWorktreeConfigKey, tc.command, "--json"}, tc.flags...)
+		stdout, err := executeRootCommandCapture(t, projectRoot, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := parseEnvelope(t, stdout)
+		result, ok := env["result"].(map[string]any)
+		if env["ok"] != true || !ok || result["key"] != ops.PostWorktreeConfigKey || result["outcome"] != tc.outcome {
+			t.Fatalf("set = %s", stdout)
+		}
+	}
+	for _, query := range [][]string{{"config", "get", ops.PostWorktreeConfigKey, "--json"}, {"get", ops.PostWorktreeConfigKey, "--json"}} {
+		stdout, err := executeRootCommandCapture(t, projectRoot, query...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if parseEnvelope(t, stdout)["result"] != "make corrected" {
+			t.Fatalf("configured read = %s", stdout)
+		}
+	}
+	stdout, err := executeRootCommandCapture(t, projectRoot, "config", "set", ops.PostWorktreeConfigKey, "make conflict", "--json")
+	if err == nil {
+		t.Fatal("conflicting set returned success")
+	}
+	assertJSONError(t, stdout, "validation", "already set", "--replace")
+	details := parseEnvelope(t, stdout)["error"].(map[string]any)["details"].(map[string]any)
+	if details["key"] != ops.PostWorktreeConfigKey || details["conflict"] != "existing_value" {
+		t.Fatalf("conflict details = %v", details)
+	}
+	if got := readState(t, statePath).Config.PostWorktreeCmd; got == nil || *got != "make corrected" {
+		t.Fatal("conflict changed config")
+	}
+}
+
+func TestJSON_ConfigInvalidInput(t *testing.T) {
+	projectRoot, statePath := setupMutationTestProject(t, nil)
+	for _, args := range [][]string{
+		{"config", "get"},
+		{"config", "get", "config.mode"},
+		{"config", "set", ops.PostWorktreeConfigKey},
+		{"config", "set", "post-worktree-cmd", "make setup"},
+		{"config", "set", ops.PostWorktreeConfigKey, ""},
+		{"config", "set", ops.PostWorktreeConfigKey, "make setup\nnext"},
+		{"config", "set", ops.PostWorktreeConfigKey, "make setup", "--replace"},
+		{"config", "set", ops.PostWorktreeConfigKey, "make setup", "--replace", "--reason", "--json"},
+	} {
+		stdout, err := executeRootCommandCapture(t, projectRoot, append(args, "--json")...)
+		if err == nil {
+			t.Fatalf("invalid invocation succeeded: %v", args)
+		}
+		assertJSONError(t, stdout, "validation")
+	}
+	if readState(t, statePath).Config.PostWorktreeCmd != nil {
+		t.Fatal("invalid invocation changed config")
 	}
 }
 

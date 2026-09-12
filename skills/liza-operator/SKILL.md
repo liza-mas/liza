@@ -162,6 +162,13 @@ for that role and auto-repair is disabled, failing, or too slow for the run. *(I
 it — `setsid nohup … & disown`; harness-backgrounded `§BRAND_BINARY_NAME§ agent` gets reaped, `context canceled`.)*
 
 # Giving agents an environment (test DBs, config)
+After scaffolding merges, inspect `§BRAND_BINARY_NAME§ config get config.post_worktree_cmd --json`.
+For a missing command, validate the project's bootstrap, then use
+`§BRAND_BINARY_NAME§ config set config.post_worktree_cmd "<command>" --json`.
+Read `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` → **Changing worktree setup during a run** for
+clean-checkout/repeatability checks, explicit replacement, concurrency, and log-only audit.
+Do not overwrite an existing command as routine scaffolding activation or edit state.yaml.
+
 Agents run in **isolated git worktrees** and inherit env only from the spawning host; a gitignored
 `.env` does not reach a worktree on its own. The supported lever:
 - **`§BRAND_ENV_PREFIX§_ENABLE_COPY_ENV_FILES=1`** (or `§BRAND_BINARY_NAME§ init --copy-worktree-env-files` / `CopyWorktreeEnvFiles`

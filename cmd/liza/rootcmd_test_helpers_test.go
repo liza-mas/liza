@@ -171,7 +171,7 @@ func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {
 		"spec", "config", "entry-point", "branch", "post-worktree-cmd", "copy-worktree-env-files", "auto-resume", "no-follow-up", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "scip-search-plan", "provider", "cli", "profile", "explain-launch", "supervisor-stdout-log", "supervisor-stderr-log", "supervisor-ready-file", "claude", "codex", "opencode", "gemini", "mistral",
 		"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file",
 		"profile", "include", "exclude", "tool", "install-dir", "dry-run", "yes", "global-dir", "agent-tools", "write-shell-profile", "agents", "project",
-		"project-root", "check-update", "update-channel",
+		"project-root", "check-update", "update-channel", "replace",
 	} {
 		resetFlagIfPresent(cmd, name)
 	}

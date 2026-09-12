@@ -82,5 +82,28 @@ continue.
 
 Implemented in `internal/commands/init.go` (`confirmMissingPostWorktreeCmd`).
 
+## Amendment: runtime configuration (2026-09-12)
+
+Operators can now use `config get config.post_worktree_cmd` and
+`config set config.post_worktree_cmd "<command>"`; the general `get` query remains
+supported. The key spelling is shared across reads and writes. Setting the command
+does not execute it. Identical values are successful no-ops, while replacement of a
+different value requires `--replace` and a reason. Comparison and mutation share one
+locked transaction, with registration-generation fencing for identified agents and
+no new capability granted to default roles. These conventions do not authenticate
+human identity or introduce a new shell sandbox.
+
+The existing post-merge Node detector already writes inside the MERGED transaction
+and rechecks that the value is unset; operator configuration retains precedence.
+No detector expansion, planner declarations, task fields, or prompt changes are
+needed for this increment. Empty-repository init explains deferring configuration
+until scaffolding is available without promising planner activation.
+
+Audit records remain in the process log, including in JSON mode, to avoid extending
+the blackboard schema. A greppable outcome and detector comparison help distinguish
+custom workflows from missing conventional detection rules. Logs are not durable
+state and must be retained externally for longitudinal evidence. The support
+reference defines the validation procedure and this evidence's limits.
+
 ---
 *Reconstructed from commits c2aba97, 0a53d76, cc20f98, 7f682dd (2026-02-27 to 2026-03-07)*

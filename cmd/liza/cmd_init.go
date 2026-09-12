@@ -105,7 +105,8 @@ All worktrees branch from and merge back to this branch.
 Use --post-worktree-cmd to specify a shell command that runs after every worktree
 creation (e.g. 'make setup', 'npm install'). This ensures worktrees are
 build/test-ready without hardcoding project-specific tooling into %[1]s.
-Existing workspaces can add post_worktree_cmd to state.yaml's config section.
+For existing workspaces, use %[4]s config get config.post_worktree_cmd or
+%[4]s config set config.post_worktree_cmd "<command>".
 
 Use --copy-worktree-env-files to explicitly authorize copying ignored root env
 files into task worktrees before post-worktree setup runs.

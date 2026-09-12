@@ -47,12 +47,22 @@ func TestNonDefaultBrandBuildSmoke(t *testing.T) {
 
 	agentHelp := runBrandSmokeCommand(t, bin, "agent", "--help")
 	assertContains(t, agentHelp, "ACME_AGENT_AGENT_ID")
+	configHelp := runBrandSmokeCommand(t, bin, "config", "--help")
+	assertContains(t, configHelp, "acme-agent get config.post_worktree_cmd")
+	configGetHelp := runBrandSmokeCommand(t, bin, "config", "get", "--help")
+	assertContains(t, configGetHelp, "acme-agent get config.post_worktree_cmd")
+	configSetHelp := runBrandSmokeCommand(t, bin, "config", "set", "--help")
+	assertContains(t, configSetHelp, "acme-agent config get config.post_worktree_cmd")
+	assertContains(t, configSetHelp, "--replace")
 
 	for label, output := range map[string]string{
-		"version":    version,
-		"root help":  rootHelp,
-		"init help":  initHelp,
-		"agent help": agentHelp,
+		"version":         version,
+		"root help":       rootHelp,
+		"init help":       initHelp,
+		"agent help":      agentHelp,
+		"config help":     configHelp,
+		"config get help": configGetHelp,
+		"config set help": configSetHelp,
 	} {
 		assertNoDefaultBrandLeaks(t, label, output)
 	}

@@ -4573,6 +4573,25 @@ func TestConfirmMissingPostWorktreeCmd_MultipleNodeSubdirsExplainsAmbiguity(t *t
 	}
 }
 
+func TestConfirmMissingPostWorktreeCmdExplainsDeferredSetup(t *testing.T) {
+	root := t.TempDir()
+	input := strings.NewReader("y\n")
+	stderr, err := captureStderrForTest(func() error {
+		return confirmMissingPostWorktreeCmd(InitParams{ForceInteractive: true}, root, bufio.NewReader(input), input)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"For an empty repository", "After scaffolding merges", "config set config.post_worktree_cmd", "Continue without"} {
+		if !strings.Contains(stderr, required) {
+			t.Fatalf("missing %q: %s", required, stderr)
+		}
+	}
+	if strings.Contains(stderr, "state.yaml later") {
+		t.Fatal("init still recommends direct state editing")
+	}
+}
+
 func TestInitCommandWithConfig_MissingPostWorktreeCmdDeclined(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)

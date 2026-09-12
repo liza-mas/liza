@@ -15,6 +15,25 @@ import (
 )
 
 func TestMutationCommandWiring(t *testing.T) {
+	t.Run("config set preserves value unless explicitly replaced", func(t *testing.T) {
+		projectRoot, statePath := setupMutationTestProject(t, nil)
+		for _, args := range [][]string{
+			{"config", "set", "config.post_worktree_cmd", "make setup"},
+			{"config", "set", "config.post_worktree_cmd", "make setup"},
+			{"config", "set", "config.post_worktree_cmd", "make other", "--replace", "--reason", "Correct bootstrap"},
+		} {
+			if err := executeRootCommand(t, projectRoot, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := executeRootCommand(t, projectRoot, "config", "set", "config.post_worktree_cmd", "make third"); err == nil {
+			t.Fatal("conflicting set succeeded (or --replace leaked from a prior invocation)")
+		}
+		state := readState(t, statePath)
+		if state.Config.PostWorktreeCmd == nil || *state.Config.PostWorktreeCmd != "make other" {
+			t.Fatal("config set did not persist replacement")
+		}
+	})
 	t.Run("claim-task wires positional args to handler", func(t *testing.T) {
 		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 			now := time.Now().UTC()

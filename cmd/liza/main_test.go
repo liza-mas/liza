@@ -107,7 +107,7 @@ func TestReasonCommandsInheritRootValidationHook(t *testing.T) {
 		t.Fatal("root command has no persistent CLI validation hook")
 	}
 
-	const wantReasonCommands = 18
+	const wantReasonCommands = 19
 	reasonCommands := 0
 	var walk func(*cobra.Command)
 	walk = func(parent *cobra.Command) {

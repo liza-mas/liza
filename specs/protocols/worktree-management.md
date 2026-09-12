@@ -77,6 +77,30 @@ the masked command, the worktree path, and the exit status are recorded.
 Reproduce a failure by rerunning the command in the named worktree. See
 ADR-0117.
 
+**Runtime setup configuration:** Operators read and write `config.post_worktree_cmd`
+with `config get` and `config set`; the general `get` query remains equivalent.
+Setting stores the shell command without executing it. An identical value is a
+successful no-op; a different existing value requires `--replace` and a non-empty
+`--reason`. Compare and write run in one blackboard transaction: `bb.Modify` for
+operators, or `ModifyWithAgentAuthority` for identified, capability-authorized agents.
+No default role receives the `config-set-post-worktree-cmd` capability. Replacement
+flags prevent accidental writes; they do not establish authenticated human identity.
+
+Existing merge-time detection remains unchanged: after a successful merge, it checks
+for an unset value again inside the transaction marking the task MERGED. Thus an
+operator write committed first wins; if detection commits first, a different explicit
+set returns a conflict. Settings apply when subsequent setup operations read them;
+already-running setup and provider sessions are not restarted. No task metadata or
+planner activation mechanism is involved.
+
+Before setting a command, validate it against committed scaffolding in a fresh checkout.
+Generated artifacts must be gitignored or already committed, and a second run must
+change nothing observable. Git status must stay clean, including untracked files.
+The setter validates representation, not shell safety or project readiness.
+Its `config_set` audit is process-log-only (stderr), including outcome and detector
+comparison; it adds no blackboard fields or activity-log entries. See the support
+reference's “Changing worktree setup during a run” section for operational details.
+
 **Ignored env-file provisioning:** Worktree env-file copying is disabled by
 default. When `config.copy_worktree_env_files` is true, worktree setup may copy
 only root-level regular files matching `.env`, `.env.*`, `*.env`, or `.envrc`.

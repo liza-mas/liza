@@ -483,6 +483,9 @@ var getCmd = &cobra.Command{
 	Short: "Query and get state data",
 	Long: fmt.Sprintf(`Query and retrieve %s state data with flexible formatting.
 
+For runtime setup configuration, also use %[3]s config get config.post_worktree_cmd
+or %[3]s config set config.post_worktree_cmd "<command>".
+
 Query Types:
   Field queries:
     config.mode                    - Get a specific field value
