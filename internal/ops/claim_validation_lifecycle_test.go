@@ -10,9 +10,11 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestClaimValidationLifecycleRetryAndReplay(t *testing.T) {
+	shell := testhelpers.ResolveBashForScripts(t)
 	f := newAssignmentPreflightFixture(t, models.TaskStatusReady)
 	setupMarker := filepath.Join(t.TempDir(), "setup")
 	probeMarker := filepath.Join(t.TempDir(), "probe")
@@ -20,7 +22,7 @@ func TestClaimValidationLifecycleRetryAndReplay(t *testing.T) {
 		setup := fmt.Sprintf("printf x >> %q", setupMarker)
 		state.Config.PostWorktreeCmd = &setup
 		state.FindTask("task-1").ValidationPrerequisites[0].Probes = [][]string{
-			{"/bin/sh", "-c", `printf x >> "$1"`, "probe", probeMarker},
+			{shell, "-c", `printf x >> "$1"`, "probe", probeMarker},
 		}
 		return nil
 	}); err != nil {

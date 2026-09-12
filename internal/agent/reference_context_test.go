@@ -174,7 +174,7 @@ func TestBuildPromptPreservesMixedStrictAndLegacyScalarRoutes(t *testing.T) {
 		"=== RESOLVED REFERENCE CONTEXT ===",
 		"Strict task authority.",
 		"=== LEGACY ARTIFACT REFERENCES ===",
-		"plan_ref specs/legacy-plan.md#task-plan: read " + filepath.Join(repo, worktree, "specs/legacy-plan.md") + " first",
+		"plan_ref specs/legacy-plan.md#task-plan: read " + filepath.Join(repo, worktree) + "/specs/legacy-plan.md first",
 		"show main:specs/legacy-plan.md",
 	} {
 		if !strings.Contains(prompt, want) {

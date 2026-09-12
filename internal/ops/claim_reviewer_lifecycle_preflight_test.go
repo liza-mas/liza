@@ -16,7 +16,7 @@ import (
 )
 
 func TestReviewerClaimLifecyclePreflightRepairAndReplay(t *testing.T) {
-	requirePosixShell(t)
+	shell := testhelpers.ResolveBashForScripts(t)
 	f := newAssignmentPreflightFixture(t, models.TaskStatusReadyForReview)
 	authority := models.AgentAuthority{ID: "code-reviewer-1", Generation: lifecycleGenerationA}
 	setupCount := filepath.Join(t.TempDir(), "setup-count")
@@ -25,7 +25,7 @@ func TestReviewerClaimLifecyclePreflightRepairAndReplay(t *testing.T) {
 		setup := "printf 'setup\\n' >> " + testhelpers.ShellArg(setupCount)
 		state.Config.PostWorktreeCmd = &setup
 		state.FindTask("task-1").ValidationPrerequisites[0].Probes = [][]string{{
-			"/bin/sh", "-c", `printf 'probe\n' >> "$1"`, "probe", probeCount,
+			shell, "-c", `printf 'probe\n' >> "$1"`, "probe", probeCount,
 		}}
 		return nil
 	}); err != nil {

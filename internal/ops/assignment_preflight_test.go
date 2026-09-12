@@ -480,10 +480,11 @@ func TestResumeValidationPreflightSetupFailureStillDegrades(t *testing.T) {
 }
 
 func TestValidationPreflightForcedRepairClearsCooldown(t *testing.T) {
+	shell := testhelpers.ResolveBashForScripts(t)
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	marker := filepath.Join(t.TempDir(), "repaired")
 	if err := f.bb.Modify(func(s *models.State) error {
-		s.FindTask("task-1").ValidationPrerequisites[0].Probes = [][]string{{"/bin/sh", "-c", `test -f "$1"`, "probe", marker}}
+		s.FindTask("task-1").ValidationPrerequisites[0].Probes = [][]string{{shell, "-c", `test -f "$1"`, "probe", marker}}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
