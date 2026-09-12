@@ -12,17 +12,18 @@ import (
 // TaskInput represents the input parameters for adding a task.
 // Can be loaded from a YAML file or constructed from CLI flags.
 type TaskInput struct {
-	ID            string   `yaml:"id"`
-	Type          string   `yaml:"type,omitempty"`
-	RolePair      string   `yaml:"role_pair,omitempty"`
-	Description   string   `yaml:"description"`
-	SpecRef       string   `yaml:"spec_ref"`
-	DoneWhen      string   `yaml:"done_when"`
-	Validation    []string `yaml:"validation,omitempty"`
-	DestructiveDB bool     `yaml:"destructive_db,omitempty"`
-	Scope         string   `yaml:"scope"`
-	Priority      int      `yaml:"priority"`
-	DependsOn     []string `yaml:"depends_on,omitempty"`
+	ID                      string                          `yaml:"id"`
+	Type                    string                          `yaml:"type,omitempty"`
+	RolePair                string                          `yaml:"role_pair,omitempty"`
+	Description             string                          `yaml:"description"`
+	SpecRef                 string                          `yaml:"spec_ref"`
+	DoneWhen                string                          `yaml:"done_when"`
+	Validation              []string                        `yaml:"validation,omitempty"`
+	ValidationPrerequisites []models.ValidationPrerequisite `yaml:"validation_prerequisites,omitempty"`
+	DestructiveDB           bool                            `yaml:"destructive_db,omitempty"`
+	Scope                   string                          `yaml:"scope"`
+	Priority                int                             `yaml:"priority"`
+	DependsOn               []string                        `yaml:"depends_on,omitempty"`
 }
 
 // LoadTaskInputFromFile loads task input from a YAML file.
@@ -57,17 +58,18 @@ func AddTaskWithAuthorityCommand(statePath, logPath string, input *TaskInput, au
 
 func addTaskCommand(statePath, logPath string, input *TaskInput, add func(*ops.AddTaskInput) (*ops.AddTaskResult, error)) error {
 	opsInput := &ops.AddTaskInput{
-		ID:            input.ID,
-		Type:          input.Type,
-		RolePair:      input.RolePair,
-		Description:   input.Description,
-		SpecRef:       input.SpecRef,
-		DoneWhen:      input.DoneWhen,
-		Validation:    input.Validation,
-		DestructiveDB: input.DestructiveDB,
-		Scope:         input.Scope,
-		Priority:      input.Priority,
-		DependsOn:     input.DependsOn,
+		ID:                      input.ID,
+		Type:                    input.Type,
+		RolePair:                input.RolePair,
+		Description:             input.Description,
+		SpecRef:                 input.SpecRef,
+		DoneWhen:                input.DoneWhen,
+		Validation:              input.Validation,
+		ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
+		DestructiveDB:           input.DestructiveDB,
+		Scope:                   input.Scope,
+		Priority:                input.Priority,
+		DependsOn:               input.DependsOn,
 	}
 
 	result, err := add(opsInput)

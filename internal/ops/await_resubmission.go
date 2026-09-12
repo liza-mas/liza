@@ -416,11 +416,37 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 	var baseCommit string
 	var reviewCycle int
 	var reviewBoundaryErr error
+	_, candidate, readErr := readTaskState(bb, taskID)
+	if readErr != nil {
+		return finishAwaitResubmission(bb, agentID, taskID, authority, nil, readErr)
+	}
+	var preflight *ValidationPreflight
+	if len(candidate.ValidationPrerequisites) > 0 {
+		if candidate.Worktree == nil || *candidate.Worktree == "" {
+			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, validationError("worktree_unavailable"))
+		}
+		preflight, err = prepareResumedValidation(projectRoot, taskID, agentID, *candidate.Worktree, nil, authority)
+		if err != nil {
+			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, err)
+		}
+	}
 
 	modErr := modifyLifecycleState(bb, authority, func(s *models.State) error {
+		if err := preflight.CheckCurrent(s); err != nil {
+			return err
+		}
 		task := s.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if len(task.ValidationPrerequisites) > 0 && preflight == nil {
+			return validationError("context_changed")
+		}
+		// Early resubmission has no reservation yet. Preserve the ownership
+		// observed before preflight and never take another reviewer's claim.
+		if optionalValue(task.ReviewingBy) != optionalValue(candidate.ReviewingBy) ||
+			(task.ReviewingBy != nil && *task.ReviewingBy != agentID) {
+			return validationError("ownership_changed")
 		}
 
 		if err := validateReviewBoundaryForAssignment(projectRoot, s, task); err != nil {

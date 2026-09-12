@@ -209,6 +209,10 @@ func runReviewerWorktreeSetup(bb *db.Blackboard, taskID, wtPath string) error {
 	if state.Config.PostWorktreeCmd == nil {
 		return nil
 	}
+	if task := state.FindTask(taskID); task != nil && len(task.ValidationPrerequisites) > 0 {
+		// Protected reviewer claims ran setup before preflight and assignment.
+		return nil
+	}
 	postErr := ops.RunPostWorktreeCmd(*state.Config.PostWorktreeCmd, wtPath)
 	if postErr != nil {
 		GetLogger().Error("post-worktree-cmd failed for reviewer worktree", "task_id", taskID, "error", postErr)

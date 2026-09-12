@@ -56,14 +56,27 @@ type DegradedAgentCapacity struct {
 }
 
 type RepairAgentPoolResult struct {
-	CLI      string                  `json:"cli"`
-	RoleCLIs map[string]string       `json:"role_clis,omitempty"`
-	DryRun   bool                    `json:"dry_run"`
-	Missing  []MissingRoleWork       `json:"missing"`
-	Degraded []DegradedAgentCapacity `json:"degraded,omitempty"`
-	Spawned  []SpawnedAgent          `json:"spawned,omitempty"`
-	Failed   []FailedAgentSpawn      `json:"failed,omitempty"`
-	Commands []string                `json:"commands,omitempty"`
+	CLI        string                    `json:"cli"`
+	RoleCLIs   map[string]string         `json:"role_clis,omitempty"`
+	DryRun     bool                      `json:"dry_run"`
+	Missing    []MissingRoleWork         `json:"missing"`
+	Degraded   []DegradedAgentCapacity   `json:"degraded,omitempty"`
+	Spawned    []SpawnedAgent            `json:"spawned,omitempty"`
+	Failed     []FailedAgentSpawn        `json:"failed,omitempty"`
+	Commands   []string                  `json:"commands,omitempty"`
+	Validation []ValidationAgentCapacity `json:"validation,omitempty"`
+}
+
+// ValidationAgentCapacity is a task-specific observation, not a reusable proof
+// of readiness. Unverified registrations may try preflight; failed ones need
+// repair/revalidation rather than equivalent replacement processes.
+type ValidationAgentCapacity struct {
+	AgentID     string `json:"agent_id"`
+	Role        string `json:"role"`
+	TaskID      string `json:"task_id"`
+	Status      string `json:"status"`
+	Code        string `json:"code,omitempty"`
+	RecoverHint string `json:"recover_hint"`
 }
 
 var repairAgentPoolSpawn = func(projectRoot, role, cli string) (int, error) {
@@ -129,10 +142,11 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 
 	missing := filterMissingRoleWork(FindMissingRolesWithClaimableWork(state, pr), opts.Roles)
 	result := &RepairAgentPoolResult{
-		CLI:      opts.CLI,
-		DryRun:   opts.DryRun,
-		Missing:  missing,
-		Degraded: findCurrentDegradedAgentCapacity(state),
+		CLI:        opts.CLI,
+		DryRun:     opts.DryRun,
+		Missing:    missing,
+		Degraded:   findCurrentDegradedAgentCapacity(state),
+		Validation: findValidationAgentCapacity(state, pr, opts.Roles),
 	}
 
 	commonImplicitCLI := ""
@@ -278,7 +292,12 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 		}
 		if models.IsRoleTaskReady(state, task, reviewerRuntime, pr, now) {
 			hasClaimEligibleReviewer := false
+			hasValidationFailure := false
 			for _, agentID := range registeredAgentsByRole[reviewerRuntime] {
+				if models.ValidationTaskKnownFailed(state, task, agentID, now) {
+					hasValidationFailure = true
+					continue
+				}
 				if reviewerPolicy != nil && ops.ReviewerClaimEligible(ops.ReviewerClaimEligibilityInput{
 					State: state, Task: task, AgentID: agentID,
 					ReviewerRole: reviewerRuntime, Now: now, Resolver: reviewerPolicy,
@@ -287,7 +306,7 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 					break
 				}
 			}
-			if !hasClaimEligibleReviewer {
+			if !hasClaimEligibleReviewer && !hasValidationFailure {
 				missingRoleTasks[reviewerRuntime] = append(missingRoleTasks[reviewerRuntime], task.ID)
 			}
 		}
@@ -310,6 +329,42 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 		})
 	}
 	return missing
+}
+
+func findValidationAgentCapacity(state *models.State, pr models.PipelineResolver, roles []string) []ValidationAgentCapacity {
+	var result []ValidationAgentCapacity
+	now := time.Now().UTC()
+	window := models.NormalizeHeartbeatInterval(state.Config.HeartbeatInterval) + models.LeaseExpiryGracePeriod
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if len(task.ValidationPrerequisites) == 0 {
+			continue
+		}
+		for id, agent := range state.Agents {
+			if len(roles) > 0 && !slices.Contains(roles, agent.Role) {
+				continue
+			}
+			if !agentHasLiveRegistration(agent, now, window) || !models.IsRoleTaskReady(state, task, agent.Role, pr, now) {
+				continue
+			}
+			entry := ValidationAgentCapacity{AgentID: id, Role: agent.Role, TaskID: task.ID, Status: "unverified", RecoverHint: "Let this session run fresh validation preflight; successful observations are not reusable launch authorization."}
+			if record, ok := models.CurrentValidationReadiness(state, task, id, now); ok {
+				entry.Status = record.Result
+				entry.Code = record.Code
+				if record.Result == "failed" {
+					entry.RecoverHint = "Repair the named session prerequisite, then revalidate; unchanged failures retry after 60 seconds. Do not spawn an equivalent replacement context."
+				}
+			}
+			result = append(result, entry)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TaskID != result[j].TaskID {
+			return result[i].TaskID < result[j].TaskID
+		}
+		return result[i].AgentID < result[j].AgentID
+	})
+	return result
 }
 
 func agentHasLiveRegistration(agentState models.Agent, now time.Time, nilLeaseHeartbeatWindow time.Duration) bool {
@@ -364,9 +419,15 @@ func findCurrentDegradedAgentCapacity(state *models.State) []DegradedAgentCapaci
 }
 
 func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
-	if len(result.Missing) == 0 && len(result.Degraded) == 0 {
+	if len(result.Missing) == 0 && len(result.Degraded) == 0 && len(result.Validation) == 0 {
 		fmt.Println("No missing roles with claimable work.")
 		return
+	}
+	if len(result.Validation) > 0 {
+		fmt.Println("Task validation capacity (last observation):")
+		for _, entry := range result.Validation {
+			fmt.Printf("  %s (%s), task %s: %s %s\n    hint: %s\n", entry.AgentID, entry.Role, entry.TaskID, entry.Status, entry.Code, entry.RecoverHint)
+		}
 	}
 
 	if len(result.Degraded) > 0 {

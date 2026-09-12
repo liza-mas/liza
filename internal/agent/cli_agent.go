@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,6 +68,8 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 		RuntimeConfig:  runtimeConfig,
 		EventSink:      req.EventSink,
 		LaunchGate:     req.LaunchGate,
+		Environment:    req.Environment,
+		SessionScope:   req.SessionScope,
 	})
 	if err != nil {
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
@@ -88,13 +89,14 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 
 	var stdoutBuf, stderrBuf strings.Builder
 	var stdoutLog, stderrLog *streamingOutputFile
+	outputEventsReady := make(chan struct{})
 	progress := executionProgressCallback(ctx)
 	if d.outputsDir != "" {
 		timestamp := time.Now().UTC().Format("20060102-150405")
 		stdoutLog = newStreamingOutputFile(d.outputsDir, agentID, "txt", timestamp, d.masker)
 		stderrLog = newStreamingOutputFile(d.outputsDir, agentID, "err", timestamp, d.masker)
-		stdoutWriters := []io.Writer{os.Stdout, &stdoutBuf, stdoutLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout"}}
-		stderrWriters := []io.Writer{os.Stderr, &stderrBuf, stderrLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr"}}
+		stdoutWriters := []io.Writer{os.Stdout, &stdoutBuf, stdoutLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout", ready: outputEventsReady}}
+		stderrWriters := []io.Writer{os.Stderr, &stderrBuf, stderrLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr", ready: outputEventsReady}}
 		if progress != nil {
 			pw := progressWriter{mark: progress}
 			stdoutWriters = append(stdoutWriters, pw)
@@ -103,8 +105,8 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 		cmd.Stdout = io.MultiWriter(stdoutWriters...)
 		cmd.Stderr = io.MultiWriter(stderrWriters...)
 	} else {
-		stdoutEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout"}
-		stderrEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr"}
+		stdoutEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout", ready: outputEventsReady}
+		stderrEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr", ready: outputEventsReady}
 		if progress != nil {
 			pw := progressWriter{mark: progress}
 			cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf, pw, stdoutEventWriter)
@@ -119,6 +121,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 
 	err = req.LaunchGate.launch(ctx, cmd.Start)
 	if err != nil {
+		close(outputEventsReady)
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 			Kind:        LLMAgentEventCompleted,
 			BackendName: cliName,
@@ -142,6 +145,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 			"mode": "run",
 		},
 	})
+	close(outputEventsReady)
 	err = cmd.Wait()
 	stdout := stdoutBuf.String()
 	stderr := stderrBuf.String()
@@ -197,7 +201,6 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	agentID := req.AgentID
 	projectRoot := req.ProjectRoot
 	_ = req.AdditionalDirs // CLI execution does not use this; ACP implementations may.
-	cmdEnv := agentProcessEnv(os.Environ(), agentID, req.Generation)
 	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
 		ToolName:      cliName,
 		ProfileName:   req.ProfileName,
@@ -214,7 +217,14 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	if plan.Backend != ToolBackendCLI {
 		return 1, fmt.Errorf("interactive mode is not supported by %s", cliName)
 	}
-	cmd := exec.CommandContext(ctx, plan.Executable, plan.Args...)
+	cmdEnv, err := resolveLaunchEnvironment(plan, projectRoot, agentID, req.Generation, req.Environment)
+	if err != nil {
+		return 0, err
+	}
+	cmd, err := snapshotCommand(ctx, plan.Executable, projectRoot, cmdEnv, plan.Args...)
+	if err != nil {
+		return 0, err
+	}
 
 	cmd.Dir = projectRoot
 	cmd.Stdout = os.Stdout
@@ -283,11 +293,17 @@ type llmAgentEventWriter struct {
 	sink   LLMAgentEventSink
 	base   LLMAgentEvent
 	stream string
+	ready  <-chan struct{}
 }
 
 func (w llmAgentEventWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
+	}
+	// Start activates exec's copy goroutines before its caller can emit Started.
+	// Keep output events behind that successful start observation.
+	if w.ready != nil {
+		<-w.ready
 	}
 	event := w.base
 	event.Kind = LLMAgentEventOutputChunk
@@ -329,7 +345,10 @@ func (d *CLIAgent) ExecuteInteractive(ctx context.Context, cliName string, agent
 }
 
 func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) (*exec.Cmd, func(), error) {
-	cmdEnv := os.Environ()
+	cmdEnv := req.Environment
+	if cmdEnv == nil {
+		cmdEnv = os.Environ()
+	}
 	disableSubagents := brandedEnvListGateValue(cmdEnv, "DISABLE_CLAUDE_SUBAGENTS") == "1"
 	promptFile := req.PromptFile
 	cleanup := func() {}
@@ -393,33 +412,30 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 		return nil, nil, fmt.Errorf("%s is not a CLI backend", req.BackendName)
 	}
 
-	for _, envFile := range plan.EnvFiles {
-		if envFile == "" {
-			continue
-		}
-		if !filepath.IsAbs(envFile) {
-			envFile = filepath.Join(req.ProjectRoot, envFile)
-		}
-		if extra := loadEnvFile(envFile); len(extra) > 0 {
-			cmdEnv = append(cmdEnv, extra...)
-			if d.masker != nil {
-				d.masker.AddEntries(extra)
-			}
-		}
+	cmdEnv, err = resolveLaunchEnvironment(plan, req.ProjectRoot, req.AgentID, req.Generation, req.Environment)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
 	}
-	cmdEnv = agentProcessEnv(cmdEnv, req.AgentID, req.Generation)
+	if d.masker != nil {
+		d.masker.AddEntries(cmdEnv)
+	}
 
 	var cmd *exec.Cmd
 	if plan.RequiresCodexWrapper {
 		codexConfig := resolveCodexLaunchConfig(req.RuntimeConfig, cmdEnv)
-		var err error
 		cmd, err = codexCommandContext(ctx, codexConfig.PackageVersion, plan.Args)
 		if err != nil {
 			cleanup()
 			return nil, nil, err
 		}
+		cmd, err = snapshotCommand(ctx, cmd.Args[0], req.ProjectRoot, cmdEnv, cmd.Args[1:]...)
 	} else {
-		cmd = exec.CommandContext(ctx, plan.Executable, plan.Args...)
+		cmd, err = snapshotCommand(ctx, plan.Executable, req.ProjectRoot, cmdEnv, plan.Args...)
+	}
+	if err != nil {
+		cleanup()
+		return nil, nil, err
 	}
 
 	cmd.Dir = req.ProjectRoot
@@ -556,27 +572,6 @@ func agentProcessEnv(base []string, agentID, generation string) []string {
 		out = append(out, legacyGenerationName+"="+generation)
 	}
 	return out
-}
-
-func loadEnvFile(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var env []string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if idx := strings.Index(line, " #"); idx >= 0 {
-			line = strings.TrimRight(line[:idx], " ")
-		}
-		if strings.Contains(line, "=") {
-			env = append(env, line)
-		}
-	}
-	return env
 }
 
 func closeAgentOutputLogs(stdoutLog, stderrLog *streamingOutputFile, agentID string) {

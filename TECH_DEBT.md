@@ -22,6 +22,23 @@ evidence to enforce a cap.
 
 **Related:** [Blackboard Growth Without Pruning](specs/architecture/architectural-issues.md#blackboard-growth-without-pruning).
 
+## Signed validation artifacts for unavailable execution contexts
+
+**What:** Issue #154's optional signed validation artifact capability is deferred.
+`validation_execution: artifact-only` fails closed and cannot exempt a task from
+direct session preflight. There is no artifact task field, verifier or trusted-key
+configuration in this change.
+
+**Why deferred:** Cryptographic trust setup is separate from assignment and
+concurrency enforcement. Keeping it out bounds this change while preventing an
+unverified artifact from becoming an execution-readiness bypass.
+
+**Payback trigger:** A project needs a validation exemption for an intentionally
+unavailable direct execution context. Before enabling `artifact-only`, define
+immutable sanitized payloads, exact task/command/commit binding, explicit project
+policy, trust-key handling, and adversarial verification tests for tampering,
+staleness and untrusted signers. See [ADR-0136](specs/architecture/ADR/0136-validation-session-prerequisites.md).
+
 ## Missing planning output is not a hard status/validate finding
 
 **What:** Issue #150's requested hard `status`/`validate` finding for missing

@@ -141,7 +141,11 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (string, string, error) {
 	logger := GetLogger()
 
-	taskID, _, reviewCommit, err := claimReviewerTaskForRoleWithAuthority(config.ProjectRoot, config.Authority, s.role, config.InitialTask, 1800, bb)
+	session, err := prepareClaimSession(config, bb)
+	if err != nil {
+		return "", "", err
+	}
+	taskID, _, reviewCommit, err := claimReviewerTaskForRoleWithAuthority(config.ProjectRoot, config.Authority, s.role, config.InitialTask, 1800, bb, session)
 	if err != nil {
 		return "", "", err
 	}

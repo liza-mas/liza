@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -44,6 +45,10 @@ type LaunchPlan struct {
 	PromptTransport      string
 	PromptFile           string
 	EnvFiles             []string
+	OptionalEnvFiles     bool
+	ValidationExecution  string
+	Environment          []string
+	Directory            string
 	RequiredExecutables  []string
 	ContractKey          string
 	UsesStdin            bool
@@ -69,6 +74,7 @@ type LaunchPlanRequest struct {
 	AgentID          string
 	TaskID           string
 	SessionID        string
+	SessionScope     string
 	OutputsDir       string
 	RuntimeConfig    models.Config
 	DisableSubagents bool
@@ -234,6 +240,9 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		if scope := acpxSessionTaskScope(req.TaskID); scope != "" && !templateIncludesTaskID {
 			renderedSessionName = renderedSessionName + "-" + scope
 		}
+		if req.SessionScope != "" {
+			renderedSessionName += "-" + req.SessionScope
+		}
 		vars["sessionName"] = renderedSessionName
 	}
 
@@ -260,6 +269,7 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 
 	return LaunchPlan{
 		ToolName:             toolName,
+		Directory:            req.ProjectRoot,
 		ProfileName:          req.ProfileName,
 		Backend:              backend,
 		Executable:           executable,
@@ -267,6 +277,8 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		PromptTransport:      transport,
 		PromptFile:           req.PromptFile,
 		EnvFiles:             append([]string(nil), tool.EnvFiles...),
+		OptionalEnvFiles:     len(req.RuntimeConfig.AgentTools[toolName].EnvFiles) == 0 && slices.Equal(tool.EnvFiles, embeddedCatalog.RuntimeTools()[toolName].EnvFiles),
+		ValidationExecution:  tool.ValidationExecution,
 		RequiredExecutables:  append([]string(nil), tool.RequiredExecutables...),
 		ContractKey:          strings.TrimSpace(tool.ContractKey),
 		UsesStdin:            transport == PromptTransportStdin,
@@ -285,6 +297,9 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 
 func mergeAgentToolConfig(name string, base, override models.AgentToolConfig) models.AgentToolConfig {
 	out := base
+	if override.ValidationExecution != "" {
+		out.ValidationExecution = override.ValidationExecution
+	}
 	if override.Backend != "" {
 		out.Backend = override.Backend
 	}

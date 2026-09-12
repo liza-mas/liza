@@ -417,6 +417,28 @@ Before agents can run, human must initialize the project:
 7. **For iteration 2+:** Compare current submission against prior rejection — report which issues are RESOLVED, STILL PRESENT, or PARTIAL
 8. On approval: execute merge
 
+## Validation Session Readiness
+
+For tasks declaring `validation_prerequisites`, successful worktree setup is
+followed by checks in the effective assigned session environment before fresh
+claim, owned/handoff resume, reviewer claim or await-based executable reclaim.
+A passive reviewer waiting for resubmission must check the submitted commit
+before resuming review. The final provider launch gate revalidates independently.
+Legacy tasks without declarations retain their existing prerequisite behavior.
+
+The checks bind to the current generation, exact canonical command contract,
+worktree/review commit and integration revision. They run outside the blackboard
+lock, with identity revalidation before assignment/start. A merged dependency
+or a prior success cannot make an existing session ready without a fresh check.
+Failure preserves worktree, output and review evidence, releases executable
+ownership coherently, and does not count as a coding/review iteration failure.
+
+An operator unblocks a declared task without `--assign-to`; the target supervisor
+must claim it from its own execution context. Pool repair distinguishes recent
+task-specific prerequisite failure from absent role capacity. See the
+[validation prerequisite protocol](validation-prerequisites.md) for declarations,
+bounded retry, safe diagnostics, and repaired-session revalidation.
+
 ## Integration Phase
 
 Integration reverses planning's fan-out: it first establishes bounded local

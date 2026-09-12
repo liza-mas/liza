@@ -77,6 +77,9 @@ tasks:
     done_when: "UserAPI.get_user() retries 3x on 5xx errors with exponential backoff"
     validation:
       - make test
+    validation_prerequisites:  # optional; exact command association, names only
+      - command: make test
+        executables: [make]
     history:
       - { time: "2025-01-17T14:05:00Z", event: "created" }
       - { time: "2025-01-17T14:06:00Z", event: "claimed", agent: "coder-1" }
@@ -701,6 +704,24 @@ agents:
     heartbeat: 2025-01-17T14:51:00Z
     terminal: /dev/pts/1
 
+validation_readiness:  # latest safe audit observation per registration/task
+  coder-1:
+    task-2:
+      generation: registration-generation
+      task_id: task-2
+      commit: task-worktree-sha
+      review_commit: submitted-review-sha  # optional metadata, distinct from actual HEAD
+      integration_sha: integration-sha
+      digest: command-and-prerequisite-digest
+      fingerprint: opaque-process-local-hmac
+      checked_at: 2025-01-17T14:52:00Z
+      method: direct
+      result: failed
+      code: environment_missing
+      command_index: 0  # diagnostic only, not command identity
+      check_index: 0
+      variable: DATABASE_URL  # never the value
+
 agent_health:
   coder-1:
     state: degraded
@@ -1318,6 +1339,23 @@ invariants:
 ```
 
 **Enforcement Note:** Static invariants (above the "Transition invariants" comment) are validated by `liza validate`. Transition invariants are runtime constraints enforced by agents performing atomic operations during state transitions — they cannot be verified post-hoc without history event analysis.
+
+## Validation prerequisite evidence
+
+Tasks and `output[]` accept optional `validation_prerequisites` entries with
+`command`, `env`, `executables`, and argv-vector `probes`. When declared, every
+unique canonical command requires one non-vacuous exact-text association; task
+creation, output persistence, child generation and state validation enforce the
+same contract. See [limits and execution semantics](../protocols/validation-prerequisites.md).
+
+`validation_readiness` is task-specific audit evidence, separate from global
+`agent_health`. Its command/prerequisite digest, registration generation and
+actual worktree `commit` identify the observation. Optional `review_commit`
+separately captures task review metadata; a changed review reference invalidates
+that observation even when the worktree HEAD is unchanged. `passed` never authorizes another claim or
+launch without fresh checks. HMAC fingerprints use a private per-process key
+and cannot prove environment equality across processes or restarts. Records and
+diagnostics exclude raw environment values, probe output and process errors.
 
 ## Related Documents
 

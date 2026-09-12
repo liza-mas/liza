@@ -256,52 +256,53 @@ func (r RepairRequest) HasStructuredFailureEvidence() bool {
 
 // Task represents a single task in the Liza system
 type Task struct {
-	ID                  string                 `yaml:"id"`
-	Type                TaskType               `yaml:"type,omitempty"`
-	RolePair            string                 `yaml:"role_pair,omitempty"`
-	Description         string                 `yaml:"description"`
-	Status              TaskStatus             `yaml:"status"`
-	Priority            int                    `yaml:"priority"`
-	AssignedTo          *string                `yaml:"assigned_to,omitempty"`
-	Worktree            *string                `yaml:"worktree,omitempty"`
-	BaseCommit          *string                `yaml:"base_commit,omitempty"`
-	Iteration           int                    `yaml:"iteration,omitempty"`
-	Output              []OutputEntry          `yaml:"output,omitempty"`
-	Decomposition       *DecompositionManifest `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
-	ParentTask          *string                `yaml:"parent_task,omitempty"`
-	ParentTasks         []string               `yaml:"parent_tasks,omitempty"`
-	TransitionsExecuted map[string]bool        `yaml:"transitions_executed,omitempty"`
-	Exit42RestartCount  int                    `yaml:"exit42_restart_count,omitempty"`
-	ReviewCyclesCurrent int                    `yaml:"review_cycles_current,omitempty"`
-	ReviewCyclesTotal   int                    `yaml:"review_cycles_total,omitempty"`
-	ReviewCommit        *string                `yaml:"review_commit,omitempty"`
-	AcceptanceSource    *AcceptanceSource      `yaml:"acceptance_source,omitempty" json:"acceptance_source,omitempty"`
-	AcceptanceReceipt   *AcceptanceReceipt     `yaml:"acceptance_receipt,omitempty" json:"acceptance_receipt,omitempty"`
-	ReviewingBy         *string                `yaml:"reviewing_by,omitempty"`
-	ReviewLeaseExpires  *time.Time             `yaml:"review_lease_expires,omitempty"`
-	ApprovedBy          *string                `yaml:"approved_by,omitempty"`
-	Approvals           []Approval             `yaml:"approvals,omitempty"`
-	MergeCommit         *string                `yaml:"merge_commit,omitempty"`
-	LeaseExpires        *time.Time             `yaml:"lease_expires,omitempty"`
-	SpecRef             string                 `yaml:"spec_ref"`
-	EpicRef             string                 `yaml:"epic_ref,omitempty"`
-	PlanRef             string                 `yaml:"plan_ref,omitempty"`
-	ArchRef             string                 `yaml:"arch_ref,omitempty"`
-	Kind                string                 `yaml:"kind,omitempty"`
-	RCARequired         bool                   `yaml:"rca_required,omitempty" json:"rca_required,omitempty"`
-	DoneWhen            string                 `yaml:"done_when"`
-	Validation          []string               `yaml:"validation,omitempty" json:"validation,omitempty"`
-	DestructiveDB       bool                   `yaml:"destructive_db,omitempty" json:"destructive_db,omitempty"`
-	Scope               string                 `yaml:"scope"`
-	RejectionReason     *string                `yaml:"rejection_reason,omitempty"`
-	BlockedReason       *string                `yaml:"blocked_reason,omitempty"`
-	BlockedQuestions    []string               `yaml:"blocked_questions,omitempty"`
-	RepairRequest       *RepairRequest         `yaml:"repair_request,omitempty" json:"repair_request,omitempty"`
-	SupersededBy        []string               `yaml:"superseded_by,omitempty"`
-	Supersedes          *string                `yaml:"supersedes,omitempty"`
-	RescopeReason       *string                `yaml:"rescope_reason,omitempty"`
-	FailedBy            []string               `yaml:"failed_by,omitempty"`
-	IntegrationFailure  map[string]any         `yaml:"integration_failure,omitempty" json:"integration_failure,omitempty"`
+	ID                      string                   `yaml:"id"`
+	Type                    TaskType                 `yaml:"type,omitempty"`
+	RolePair                string                   `yaml:"role_pair,omitempty"`
+	Description             string                   `yaml:"description"`
+	Status                  TaskStatus               `yaml:"status"`
+	Priority                int                      `yaml:"priority"`
+	AssignedTo              *string                  `yaml:"assigned_to,omitempty"`
+	Worktree                *string                  `yaml:"worktree,omitempty"`
+	BaseCommit              *string                  `yaml:"base_commit,omitempty"`
+	Iteration               int                      `yaml:"iteration,omitempty"`
+	Output                  []OutputEntry            `yaml:"output,omitempty"`
+	Decomposition           *DecompositionManifest   `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
+	ParentTask              *string                  `yaml:"parent_task,omitempty"`
+	ParentTasks             []string                 `yaml:"parent_tasks,omitempty"`
+	TransitionsExecuted     map[string]bool          `yaml:"transitions_executed,omitempty"`
+	Exit42RestartCount      int                      `yaml:"exit42_restart_count,omitempty"`
+	ReviewCyclesCurrent     int                      `yaml:"review_cycles_current,omitempty"`
+	ReviewCyclesTotal       int                      `yaml:"review_cycles_total,omitempty"`
+	ReviewCommit            *string                  `yaml:"review_commit,omitempty"`
+	AcceptanceSource        *AcceptanceSource        `yaml:"acceptance_source,omitempty" json:"acceptance_source,omitempty"`
+	AcceptanceReceipt       *AcceptanceReceipt       `yaml:"acceptance_receipt,omitempty" json:"acceptance_receipt,omitempty"`
+	ReviewingBy             *string                  `yaml:"reviewing_by,omitempty"`
+	ReviewLeaseExpires      *time.Time               `yaml:"review_lease_expires,omitempty"`
+	ApprovedBy              *string                  `yaml:"approved_by,omitempty"`
+	Approvals               []Approval               `yaml:"approvals,omitempty"`
+	MergeCommit             *string                  `yaml:"merge_commit,omitempty"`
+	LeaseExpires            *time.Time               `yaml:"lease_expires,omitempty"`
+	SpecRef                 string                   `yaml:"spec_ref"`
+	EpicRef                 string                   `yaml:"epic_ref,omitempty"`
+	PlanRef                 string                   `yaml:"plan_ref,omitempty"`
+	ArchRef                 string                   `yaml:"arch_ref,omitempty"`
+	Kind                    string                   `yaml:"kind,omitempty"`
+	RCARequired             bool                     `yaml:"rca_required,omitempty" json:"rca_required,omitempty"`
+	DoneWhen                string                   `yaml:"done_when"`
+	Validation              []string                 `yaml:"validation,omitempty" json:"validation,omitempty"`
+	ValidationPrerequisites []ValidationPrerequisite `yaml:"validation_prerequisites,omitempty" json:"validation_prerequisites,omitempty"`
+	DestructiveDB           bool                     `yaml:"destructive_db,omitempty" json:"destructive_db,omitempty"`
+	Scope                   string                   `yaml:"scope"`
+	RejectionReason         *string                  `yaml:"rejection_reason,omitempty"`
+	BlockedReason           *string                  `yaml:"blocked_reason,omitempty"`
+	BlockedQuestions        []string                 `yaml:"blocked_questions,omitempty"`
+	RepairRequest           *RepairRequest           `yaml:"repair_request,omitempty" json:"repair_request,omitempty"`
+	SupersededBy            []string                 `yaml:"superseded_by,omitempty"`
+	Supersedes              *string                  `yaml:"supersedes,omitempty"`
+	RescopeReason           *string                  `yaml:"rescope_reason,omitempty"`
+	FailedBy                []string                 `yaml:"failed_by,omitempty"`
+	IntegrationFailure      map[string]any           `yaml:"integration_failure,omitempty" json:"integration_failure,omitempty"`
 
 	IntegrationAnalysis *IntegrationAnalysisMetadata `yaml:"integration_analysis,omitempty" json:"integration_analysis,omitempty"`
 
@@ -355,19 +356,20 @@ type DecompositionManifest struct {
 // OutputEntry represents a structured subtask definition produced by a doer role.
 // When a task completes with output[], each entry defines a downstream child task.
 type OutputEntry struct {
-	Desc          string                 `yaml:"desc" json:"desc"`
-	DoneWhen      string                 `yaml:"done_when" json:"done_when"`
-	Scope         string                 `yaml:"scope" json:"scope"`
-	SpecRef       string                 `yaml:"spec_ref" json:"spec_ref"`
-	EpicRef       string                 `yaml:"epic_ref,omitempty" json:"epic_ref,omitempty"`
-	PlanRef       string                 `yaml:"plan_ref,omitempty" json:"plan_ref,omitempty"`
-	ArchRef       string                 `yaml:"arch_ref,omitempty" json:"arch_ref,omitempty"`
-	Kind          string                 `yaml:"kind,omitempty" json:"kind,omitempty"`
-	Validation    []string               `yaml:"validation,omitempty" json:"validation,omitempty"`
-	DestructiveDB bool                   `yaml:"destructive_db,omitempty" json:"destructive_db,omitempty"`
-	RCARequired   *bool                  `yaml:"rca_required,omitempty" json:"rca_required,omitempty"`
-	DependsOn     []string               `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
-	Decomposition *DecompositionManifest `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
+	Desc                    string                   `yaml:"desc" json:"desc"`
+	DoneWhen                string                   `yaml:"done_when" json:"done_when"`
+	Scope                   string                   `yaml:"scope" json:"scope"`
+	SpecRef                 string                   `yaml:"spec_ref" json:"spec_ref"`
+	EpicRef                 string                   `yaml:"epic_ref,omitempty" json:"epic_ref,omitempty"`
+	PlanRef                 string                   `yaml:"plan_ref,omitempty" json:"plan_ref,omitempty"`
+	ArchRef                 string                   `yaml:"arch_ref,omitempty" json:"arch_ref,omitempty"`
+	Kind                    string                   `yaml:"kind,omitempty" json:"kind,omitempty"`
+	Validation              []string                 `yaml:"validation,omitempty" json:"validation,omitempty"`
+	ValidationPrerequisites []ValidationPrerequisite `yaml:"validation_prerequisites,omitempty" json:"validation_prerequisites,omitempty"`
+	DestructiveDB           bool                     `yaml:"destructive_db,omitempty" json:"destructive_db,omitempty"`
+	RCARequired             *bool                    `yaml:"rca_required,omitempty" json:"rca_required,omitempty"`
+	DependsOn               []string                 `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
+	Decomposition           *DecompositionManifest   `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
 	// TaskDependsOn names existing concrete task IDs to copy onto generated child tasks.
 	TaskDependsOn []string `yaml:"task_depends_on,omitempty" json:"task_depends_on,omitempty"`
 }

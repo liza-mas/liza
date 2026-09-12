@@ -17,6 +17,7 @@ type ResumeOwnedTaskInput struct {
 	ProjectRoot string
 	AgentID     string
 	Authority   *models.AgentAuthority
+	Session     *ValidationSession
 }
 
 // ResumeOwnedTaskResult contains the outcome of owned-task recovery.
@@ -104,7 +105,14 @@ func ResumeOwnedTask(input ResumeOwnedTaskInput) (*ResumeOwnedTaskResult, error)
 			continue
 		}
 
-		resumed, result, err := resumeOwnedCandidate(bb, task.ID, input.AgentID, input.Authority, resolver)
+		preflight, err := prepareResumedValidation(input.ProjectRoot, task.ID, input.AgentID, *task.Worktree, input.Session, input.Authority)
+		if err != nil {
+			if releaseErr := ReleaseValidationOwnership(input.ProjectRoot, task.ID, input.AgentID, input.Authority); releaseErr != nil {
+				return nil, releaseErr
+			}
+			return nil, err
+		}
+		resumed, result, err := resumeOwnedCandidate(bb, task.ID, input.AgentID, input.Authority, resolver, preflight)
 		if err != nil {
 			return nil, err
 		}
@@ -116,14 +124,22 @@ func ResumeOwnedTask(input ResumeOwnedTaskInput) (*ResumeOwnedTaskResult, error)
 	return &ResumeOwnedTaskResult{Found: false}, nil
 }
 
-func resumeOwnedCandidate(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, pr models.PipelineResolver) (bool, *ResumeOwnedTaskResult, error) {
+func resumeOwnedCandidate(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, pr models.PipelineResolver, preflights ...*ValidationPreflight) (bool, *ResumeOwnedTaskResult, error) {
 	now := time.Now().UTC()
 	var worktree string
 
 	err := lifecycleMutation(bb, authority)(func(state *models.State) error {
+		for _, preflight := range preflights {
+			if err := preflight.CheckCurrent(state); err != nil {
+				return err
+			}
+		}
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if len(task.ValidationPrerequisites) > 0 && (len(preflights) == 0 || preflights[0] == nil) {
+			return validationError("context_changed")
 		}
 		if !models.IsResumableOwnedTask(state, task, agentID, pr) {
 			return nil

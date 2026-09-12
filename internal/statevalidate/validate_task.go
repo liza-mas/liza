@@ -188,6 +188,10 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			return fmt.Errorf("task %s %w", task.ID, err)
 		}
 
+		if err := models.ValidateValidationPrerequisites(task.Validation, task.ValidationPrerequisites); err != nil {
+			return fmt.Errorf("task %s %w", task.ID, err)
+		}
+
 		// Track assignments for duplicate check (executing tasks count as active)
 		if task.AssignedTo != nil && sc.IsExecuting(task.Status) {
 			assignments[*task.AssignedTo] = append(assignments[*task.AssignedTo], task.ID)
@@ -582,6 +586,9 @@ func validateTaskOutput(task *models.Task, validateArtifactRefs bool) error {
 		}
 		if err := models.ValidateValidationSafety(fmt.Sprintf("output[%d].validation", i), entry.Validation, entry.DestructiveDB); err != nil {
 			return fmt.Errorf("task %s %w", task.ID, err)
+		}
+		if err := models.ValidateValidationPrerequisites(entry.Validation, entry.ValidationPrerequisites); err != nil {
+			return fmt.Errorf("task %s output[%d]: %w", task.ID, i, err)
 		}
 		if !validateArtifactRefs {
 			continue

@@ -39,11 +39,19 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 		AgentID:       req.AgentID,
 		TaskID:        req.TaskID,
 		SessionID:     req.SessionID,
+		SessionScope:  req.SessionScope,
 		OutputsDir:    a.outputsDir,
 		RuntimeConfig: req.RuntimeConfig,
 	})
 	if err != nil {
 		return LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
+	}
+	plan.Environment, err = resolveLaunchEnvironment(plan, req.ProjectRoot, req.AgentID, req.Generation, req.Environment)
+	if err != nil {
+		return LLMAgentRunResult{ExitCode: 1}, err
+	}
+	if a.masker != nil {
+		a.masker.AddEntries(plan.Environment)
 	}
 	acpxAgent := plan.ACPXAgent
 	sessionName := plan.ACPXSessionName
@@ -176,12 +184,18 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 		return 1, fmt.Errorf("interactive mode is not supported by %s", req.BackendName)
 	}
 
-	cmd := exec.CommandContext(ctx, executable)
+	env, err := resolveLaunchEnvironment(plan, req.ProjectRoot, req.AgentID, req.Generation, req.Environment)
+	if err != nil {
+		return 0, err
+	}
+	cmd, err := snapshotCommand(ctx, executable, req.ProjectRoot, env)
+	if err != nil {
+		return 0, err
+	}
 	cmd.Dir = req.ProjectRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Env = agentProcessEnv(os.Environ(), req.AgentID, req.Generation)
 
 	err = req.LaunchGate.launch(ctx, cmd.Start)
 	if err == nil {
@@ -249,7 +263,7 @@ func (a *ACPXAgent) ensureSession(ctx context.Context, agentID, generation, proj
 		}
 		args = []string{"--cwd", projectRoot, plan.ACPXAgent, "sessions", "ensure", "--name", plan.ACPXSessionName}
 	}
-	out, err := a.runACPX(ctx, plan.Executable, agentID, generation, args, "")
+	out, err := a.runACPX(ctx, plan, args, "")
 	if err != nil {
 		return fmt.Errorf("acpx sessions ensure: %w\n%s", err, out)
 	}
@@ -260,7 +274,7 @@ func (a *ACPXAgent) configureSession(ctx context.Context, agentID, generation st
 	if len(plan.ACPXSetModeArgs) == 0 {
 		return nil
 	}
-	out, err := a.runACPX(ctx, plan.Executable, agentID, generation, plan.ACPXSetModeArgs, "")
+	out, err := a.runACPX(ctx, plan, plan.ACPXSetModeArgs, "")
 	if err != nil {
 		return fmt.Errorf("acpx set-mode: %w\n%s", err, out)
 	}
@@ -279,20 +293,22 @@ func (a *ACPXAgent) sessionExists(ctx context.Context, _ string, agentID, genera
 	if len(plan.ACPXShowArgs) == 0 {
 		return false
 	}
-	_, err := a.runACPX(ctx, plan.Executable, agentID, generation, plan.ACPXShowArgs, "")
+	_, err := a.runACPX(ctx, plan, plan.ACPXShowArgs, "")
 	return err == nil
 }
 
-func (a *ACPXAgent) runACPX(ctx context.Context, executable, agentID, generation string, args []string, stdin string) (string, error) {
-	cmd := exec.CommandContext(ctx, executable, args...)
-	cmd.Env = agentProcessEnv(os.Environ(), agentID, generation)
+func (a *ACPXAgent) runACPX(ctx context.Context, plan LaunchPlan, args []string, stdin string) (string, error) {
+	cmd, err := snapshotCommand(ctx, plan.Executable, plan.Directory, plan.Environment, args...)
+	if err != nil {
+		return "", err
+	}
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	return stdout.String() + stderr.String(), err
 }
 
@@ -308,8 +324,10 @@ type acpxPromptProcess struct {
 }
 
 func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest, plan LaunchPlan) (*acpxPromptProcess, error) {
-	cmd := exec.CommandContext(ctx, plan.Executable, plan.ACPXPromptArgs...)
-	cmd.Env = agentProcessEnv(os.Environ(), req.AgentID, req.Generation)
+	cmd, err := snapshotCommand(ctx, plan.Executable, req.ProjectRoot, plan.Environment, plan.ACPXPromptArgs...)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Stdin = strings.NewReader(req.Prompt)
 
 	stdout, err := cmd.StdoutPipe()

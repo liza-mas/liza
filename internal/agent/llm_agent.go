@@ -37,6 +37,8 @@ type LLMAgentEvent struct {
 	Payload     map[string]any
 }
 
+// LLMAgentEventSink implementations must return promptly: blocking event delivery
+// also blocks provider output draining and may stall the child process.
 type LLMAgentEventSink interface {
 	RecordLLMAgentEvent(ctx context.Context, event LLMAgentEvent)
 }
@@ -80,6 +82,10 @@ type LLMAgentRunRequest struct {
 	RuntimeConfig  models.Config
 	EventSink      LLMAgentEventSink
 	LaunchGate     LLMAgentLaunchGate
+	// Environment is the frozen launch snapshot also used by task preflight.
+	// Nil lets direct adapter callers resolve their environment once.
+	Environment  []string
+	SessionScope string
 }
 
 // LLMAgentRunResult contains the result of an LLM agent execution.
@@ -106,6 +112,7 @@ type LLMAgentInteractiveRequest struct {
 	BackendName    string
 	AgentID        string
 	Generation     string
+	TaskID         string
 	SessionID      string
 	ProfileName    string
 	ProfileVars    map[string]string
@@ -114,6 +121,8 @@ type LLMAgentInteractiveRequest struct {
 	RuntimeConfig  models.Config
 	EventSink      LLMAgentEventSink
 	LaunchGate     LLMAgentLaunchGate
+	Environment    []string
+	SessionScope   string
 }
 
 // LLMAgent is the semantic boundary for something that can run an LLM agent turn.

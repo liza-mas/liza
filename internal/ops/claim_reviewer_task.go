@@ -4,6 +4,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type ClaimReviewerTaskInput struct {
 	TaskID        string
 	LeaseDuration int
 	Authority     *models.AgentAuthority
+	Session       *ValidationSession
 }
 
 // ClaimReviewerTaskResult contains the outcome of a successful reviewer task claim.
@@ -63,10 +65,11 @@ type reviewerClaimEligibility struct {
 	alreadyApproved        bool
 	inCooldown             bool
 	blockedByDoerDiversity bool
+	validationFailed       bool
 }
 
 func (e reviewerClaimEligibility) eligible() bool {
-	return e.registrationErr == nil && !e.alreadyApproved && !e.inCooldown && !e.blockedByDoerDiversity
+	return e.registrationErr == nil && !e.alreadyApproved && !e.inCooldown && !e.blockedByDoerDiversity && !e.validationFailed
 }
 
 // ReviewerClaimEligible projects the agent-specific reviewer claim gates for
@@ -87,6 +90,7 @@ func projectReviewerClaimEligibility(input ReviewerClaimEligibilityInput) review
 		alreadyApproved:        input.Task.HasApprovalFromAgent(input.AgentID),
 		inCooldown:             isInReviewClaimCooldown(input.Task, input.AgentID, input.Now.Add(-defaultReviewClaimCooldown)),
 		blockedByDoerDiversity: isBlockedByDoerDiversityAt(input.Task, agent.Provider, input.AgentID, input.State, input.Resolver, input.Now),
+		validationFailed:       models.ValidationTaskKnownFailed(input.State, input.Task, input.AgentID, input.Now),
 	}
 }
 
@@ -154,145 +158,188 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 	}
 	pr := pb.pr
 
-	err = lifecycleMutation(bb, input.Authority)(func(state *models.State) error {
-		claimingAgent, err := requireRegisteredClaimAgent(state, input.AgentID, role)
-		if err != nil {
-			return err
-		}
-
-		var candidates []*models.Task
-		if input.TaskID != "" {
-			task := state.FindTask(input.TaskID)
-			if task == nil {
-				return &lizaerrors.NotFoundError{Entity: "task", ID: input.TaskID}
-			}
-			if !task.IsClaimable(role, state.Tasks, pr) {
-				return &PreconditionError{
-					Reason: fmt.Sprintf("task %s is not reviewable by %s (current status: %s)", input.TaskID, role, task.Status),
-				}
-			}
-			candidates = append(candidates, task)
-		} else {
-			// Find reviewable task with highest priority.
-			for i := range state.Tasks {
-				if state.Tasks[i].IsClaimable(role, state.Tasks, pr) {
-					candidates = append(candidates, &state.Tasks[i])
-				}
-			}
-		}
-
-		if len(candidates) == 0 {
-			return &PreconditionError{Reason: "no reviewable tasks found"}
-		}
-
-		projected := make(map[*models.Task]reviewerClaimEligibility, len(candidates))
-		for _, task := range candidates {
-			projected[task] = projectReviewerClaimEligibility(ReviewerClaimEligibilityInput{
-				State: state, Task: task, AgentID: input.AgentID,
-				ReviewerRole: role, Now: now, Resolver: pb.resolver,
-			})
-		}
-
-		// Independent-review filter: skip tasks the claiming agent already
-		// approved. Without this, a reviewer-1 polling loop would re-claim
-		// its own partially_approved task and self-rubber-stamp the quorum.
-		candidates = filterByReviewerClaimEligibility(candidates, projected, func(e reviewerClaimEligibility) bool {
-			return e.registrationErr == nil && !e.alreadyApproved
-		})
-		if len(candidates) == 0 {
-			return &PreconditionError{Reason: "no reviewable tasks found (all candidates already approved by claimer)"}
-		}
-
-		// Filter out candidates in claim cooldown to prevent claim-release spin.
-		candidates = filterByReviewerClaimEligibility(candidates, projected, func(e reviewerClaimEligibility) bool {
-			return !e.inCooldown
-		})
-		if len(candidates) == 0 {
-			return &PreconditionError{Reason: "all reviewable tasks in claim cooldown"}
-		}
-
-		// Look up claiming reviewer's provider from agent state.
-		claimerProvider := claimingAgent.Provider
-
-		// Filter by doer-provider diversity: when provider-diversity is configured,
-		// block reviewers that share the doer's provider if a different-provider
-		// reviewer is registered (even if busy).
-		candidates = filterByReviewerClaimEligibility(candidates, projected, func(e reviewerClaimEligibility) bool {
-			return !e.blockedByDoerDiversity
-		})
-		if len(candidates) == 0 {
-			return &PreconditionError{Reason: "no reviewable tasks found"}
-		}
-
-		for len(candidates) > 0 {
-			task := selectBestCandidate(candidates, pr, claimerProvider, input.AgentID, state)
-			if task == nil {
-				break
-			}
-
-			if err := validateReviewBoundaryForAssignment(input.ProjectRoot, state, task); err != nil {
-				reviewBoundaryErr = err
-				var evidenceErr *AcceptanceEvidenceError
-				if stderrors.As(err, &evidenceErr) {
-					acceptanceErrors = append(acceptanceErrors, evidenceErr)
-					candidates = removeCandidate(candidates, task)
-					continue
-				}
-				var repairNeeded *ReviewBoundaryRepairNeededError
-				if stderrors.As(err, &repairNeeded) {
-					repairNeededTaskIDs = append(repairNeededTaskIDs, task.ID)
-					candidates = removeCandidate(candidates, task)
-					continue
-				}
-				if markErr := markReviewBoundaryIntegrationFailed(state, task, input.AgentID, pb.transitions, err); markErr != nil {
-					return markErr
-				}
-				candidates = removeCandidate(candidates, task)
-				continue
-			}
-
-			if task.RolePair == "" {
-				return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", task.ID)}
-			}
-
-			// Determine target reviewing status based on task's current state.
-			targetStatus, err := resolveReviewingTarget(task, pr)
+	var preflight *ValidationPreflight
+	var selected *models.Task
+	for {
+		needsPreflight := false
+		err = lifecycleMutation(bb, input.Authority)(func(state *models.State) error {
+			claimingAgent, err := requireRegisteredClaimAgent(state, input.AgentID, role)
 			if err != nil {
 				return err
 			}
-			if err := task.TransitionWith(targetStatus, pb.transitions); err != nil {
-				return err
+
+			var candidates []*models.Task
+			if input.TaskID != "" {
+				task := state.FindTask(input.TaskID)
+				if task == nil {
+					return &lizaerrors.NotFoundError{Entity: "task", ID: input.TaskID}
+				}
+				if !task.IsClaimable(role, state.Tasks, pr) {
+					return &PreconditionError{
+						Reason: fmt.Sprintf("task %s is not reviewable by %s (current status: %s)", input.TaskID, role, task.Status),
+					}
+				}
+				candidates = append(candidates, task)
+			} else {
+				// Find reviewable task with highest priority.
+				for i := range state.Tasks {
+					if state.Tasks[i].IsClaimable(role, state.Tasks, pr) {
+						if ValidationRetryPending(input.ProjectRoot, state, &state.Tasks[i], input.AgentID, input.Session) {
+							continue
+						}
+						candidates = append(candidates, &state.Tasks[i])
+					}
+				}
 			}
-			task.ReviewingBy = &input.AgentID
-			task.ReviewLeaseExpires = &leaseExpires
-			task.History = append(task.History, models.TaskHistoryEntry{
-				Time:  now,
-				Event: models.TaskEventClaimed,
-				Agent: &input.AgentID,
+
+			if len(candidates) == 0 {
+				return &PreconditionError{Reason: "no reviewable tasks found"}
+			}
+
+			projected := make(map[*models.Task]reviewerClaimEligibility, len(candidates))
+			for _, task := range candidates {
+				projected[task] = projectReviewerClaimEligibility(ReviewerClaimEligibilityInput{
+					State: state, Task: task, AgentID: input.AgentID,
+					ReviewerRole: role, Now: now, Resolver: pb.resolver,
+				})
+			}
+
+			// Independent-review filter: skip tasks the claiming agent already
+			// approved. Without this, a reviewer-1 polling loop would re-claim
+			// its own partially_approved task and self-rubber-stamp the quorum.
+			candidates = filterByReviewerClaimEligibility(candidates, projected, func(e reviewerClaimEligibility) bool {
+				return e.registrationErr == nil && !e.alreadyApproved
 			})
-
-			agent := claimingAgent
-			agent.Status = models.AgentStatusReviewing
-			currentTask := task.ID
-			agent.CurrentTask = &currentTask
-			agent.Heartbeat = now
-			agent.LeaseExpires = &leaseExpires
-			state.Agents[input.AgentID] = agent
-
-			result.TaskID = task.ID
-			if task.Worktree != nil {
-				result.Worktree = *task.Worktree
+			if len(candidates) == 0 {
+				return &PreconditionError{Reason: "no reviewable tasks found (all candidates already approved by claimer)"}
 			}
-			if task.ReviewCommit != nil {
-				result.ReviewCommit = *task.ReviewCommit
+
+			// Filter out candidates in claim cooldown to prevent claim-release spin.
+			candidates = filterByReviewerClaimEligibility(candidates, projected, func(e reviewerClaimEligibility) bool {
+				return !e.inCooldown
+			})
+			if len(candidates) == 0 {
+				return &PreconditionError{Reason: "all reviewable tasks in claim cooldown"}
 			}
-			result.LeaseExpires = leaseExpires
+
+			// Look up claiming reviewer's provider from agent state.
+			claimerProvider := claimingAgent.Provider
+
+			// Filter by doer-provider diversity: when provider-diversity is configured,
+			// block reviewers that share the doer's provider if a different-provider
+			// reviewer is registered (even if busy).
+			candidates = filterByReviewerClaimEligibility(candidates, projected, func(e reviewerClaimEligibility) bool {
+				return !e.blockedByDoerDiversity
+			})
+			if len(candidates) == 0 {
+				return &PreconditionError{Reason: "no reviewable tasks found"}
+			}
+
+			for len(candidates) > 0 {
+				task := selectBestCandidate(candidates, pr, claimerProvider, input.AgentID, state)
+				if task == nil {
+					break
+				}
+				if selected != nil && task.ID != selected.ID {
+					return validationError("candidate_changed")
+				}
+
+				if err := validateReviewBoundaryForAssignment(input.ProjectRoot, state, task); err != nil {
+					reviewBoundaryErr = err
+					var evidenceErr *AcceptanceEvidenceError
+					if stderrors.As(err, &evidenceErr) {
+						acceptanceErrors = append(acceptanceErrors, evidenceErr)
+						candidates = removeCandidate(candidates, task)
+						continue
+					}
+					var repairNeeded *ReviewBoundaryRepairNeededError
+					if stderrors.As(err, &repairNeeded) {
+						if !slices.Contains(repairNeededTaskIDs, task.ID) {
+							repairNeededTaskIDs = append(repairNeededTaskIDs, task.ID)
+						}
+						candidates = removeCandidate(candidates, task)
+						continue
+					}
+					if markErr := markReviewBoundaryIntegrationFailed(state, task, input.AgentID, pb.transitions, err); markErr != nil {
+						return markErr
+					}
+					candidates = removeCandidate(candidates, task)
+					continue
+				}
+
+				if task.RolePair == "" {
+					return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", task.ID)}
+				}
+				if len(task.ValidationPrerequisites) > 0 && preflight == nil {
+					copyTask := *task
+					selected = &copyTask
+					needsPreflight = true
+					// Commit boundary failures found on earlier candidates before
+					// probing this candidate outside the blackboard lock.
+					return nil
+				}
+				if err := preflight.CheckCurrent(state); err != nil {
+					return err
+				}
+				if input.Session != nil && input.Session.PreparationError != nil {
+					return input.Session.PreparationError
+				}
+
+				// Determine target reviewing status based on task's current state.
+				targetStatus, err := resolveReviewingTarget(task, pr)
+				if err != nil {
+					return err
+				}
+				if err := task.TransitionWith(targetStatus, pb.transitions); err != nil {
+					return err
+				}
+				task.ReviewingBy = &input.AgentID
+				task.ReviewLeaseExpires = &leaseExpires
+				task.History = append(task.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: models.TaskEventClaimed,
+					Agent: &input.AgentID,
+				})
+
+				agent := claimingAgent
+				agent.Status = models.AgentStatusReviewing
+				currentTask := task.ID
+				agent.CurrentTask = &currentTask
+				agent.Heartbeat = now
+				agent.LeaseExpires = &leaseExpires
+				state.Agents[input.AgentID] = agent
+
+				result.TaskID = task.ID
+				if task.Worktree != nil {
+					result.Worktree = *task.Worktree
+				}
+				if task.ReviewCommit != nil {
+					result.ReviewCommit = *task.ReviewCommit
+				}
+				result.LeaseExpires = leaseExpires
+
+				return nil
+			}
 
 			return nil
+		})
+		if err != nil || !needsPreflight {
+			break
 		}
-
-		return nil
-	})
+		if selected.Worktree == nil || *selected.Worktree == "" {
+			return nil, validationError("worktree_unavailable")
+		}
+		preflight, err = prepareResumedValidation(input.ProjectRoot, selected.ID, input.AgentID, *selected.Worktree, input.Session, input.Authority)
+		if err != nil {
+			return nil, err
+		}
+		if preflight == nil {
+			return nil, validationError("context_changed")
+		}
+		// The second transaction selects this same candidate and rechecks every
+		// eligibility and boundary invariant after probes ran without state locks.
+		input.TaskID = selected.ID
+	}
 
 	if err != nil {
 		return nil, err
@@ -471,7 +518,7 @@ func isDiversitySatisfiable(
 		// Check if this agent is a reviewer for the same role-pair.
 		// agent.Role stores the runtime role name (e.g., "code-reviewer"),
 		// which matches the format returned by pr.ReviewerRole().
-		if !hasReviewerCapacity(agent, reviewerRole, now) {
+		if !hasReviewerCapacity(agent, reviewerRole, now) || models.ValidationTaskKnownFailed(state, task, agentID, now) {
 			continue
 		}
 		if agent.Provider != claimerProvider {
@@ -583,7 +630,7 @@ func isBlockedByDoerDiversityAt(
 		if agentID == claimerAgentID {
 			continue
 		}
-		if !hasReviewerCapacity(agent, reviewerRole, now) {
+		if !hasReviewerCapacity(agent, reviewerRole, now) || models.ValidationTaskKnownFailed(state, task, agentID, now) {
 			continue
 		}
 		if agent.Provider != doerAgent.Provider {

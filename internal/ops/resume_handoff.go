@@ -15,6 +15,7 @@ type ResumeHandoffInput struct {
 	ProjectRoot string
 	AgentID     string
 	Authority   *models.AgentAuthority
+	Session     *ValidationSession
 }
 
 // ResumeHandoffResult contains the outcome of a successful handoff resumption.
@@ -56,12 +57,12 @@ func ResumeHandoff(input ResumeHandoffInput) (*ResumeHandoffResult, error) {
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}
 
-	return resumeHandoffWithState(bb, state, input.AgentID, input.Authority, executingStatuses)
+	return resumeHandoffWithState(bb, state, input.AgentID, input.Authority, executingStatuses, input)
 }
 
 // resumeHandoffWithState performs the handoff resumption with an already-read state.
 // This allows for efficient checking without re-reading state.
-func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID string, authority *models.AgentAuthority, executingStatuses []models.TaskStatus) (*ResumeHandoffResult, error) {
+func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID string, authority *models.AgentAuthority, executingStatuses []models.TaskStatus, inputs ...ResumeHandoffInput) (*ResumeHandoffResult, error) {
 	now := time.Now().UTC()
 
 	for i := range state.Tasks {
@@ -75,11 +76,30 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 
 		id := task.ID
 		wt := *task.Worktree
+		var preflight *ValidationPreflight
+		if len(inputs) > 0 {
+			var err error
+			preflight, err = prepareResumedValidation(inputs[0].ProjectRoot, id, agentID, wt, inputs[0].Session, authority)
+			if err != nil {
+				if releaseErr := ReleaseValidationOwnership(inputs[0].ProjectRoot, id, agentID, authority); releaseErr != nil {
+					return nil, releaseErr
+				}
+				return nil, err
+			}
+		} else if len(task.ValidationPrerequisites) > 0 {
+			return nil, validationError("current_session_required")
+		}
 
 		err := lifecycleMutation(bb, authority)(func(s *models.State) error {
+			if err := preflight.CheckCurrent(s); err != nil {
+				return err
+			}
 			t := s.FindTask(id)
 			if t == nil {
 				return &lizaerrors.NotFoundError{Entity: "task", ID: id}
+			}
+			if len(t.ValidationPrerequisites) > 0 && preflight == nil {
+				return validationError("context_changed")
 			}
 			if !isExecutingStatus(t.Status, executingStatuses) {
 				return &PreconditionError{Reason: fmt.Sprintf("task %s is no longer in an executing state (current: %s)", id, t.Status)}
@@ -109,7 +129,7 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 			return nil
 		})
 		if err != nil {
-			if IsAgentAuthorityError(err) {
+			if IsAgentAuthorityError(err) || preflight != nil {
 				return nil, err
 			}
 			// Conflict on this candidate, try next

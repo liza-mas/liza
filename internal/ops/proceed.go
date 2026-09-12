@@ -1322,27 +1322,28 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 	}
 
 	return models.Task{
-		ID:            childID,
-		Type:          taskType,
-		RolePair:      targetRolePair,
-		Description:   entry.Desc,
-		Status:        targetStatus,
-		Priority:      1,
-		ParentTasks:   []string{parentID},
-		SpecRef:       paths.NormalizeSpecRef(entry.SpecRef),
-		EpicRef:       paths.NormalizeSpecRef(epicRef),
-		PlanRef:       paths.NormalizeSpecRef(entry.PlanRef),
-		ArchRef:       paths.NormalizeSpecRef(archRef),
-		Decomposition: entry.Decomposition,
-		Kind:          entry.Kind,
-		RCARequired:   rcaRequired,
-		DoneWhen:      entry.DoneWhen,
-		Validation:    slices.Clone(entry.Validation),
-		DestructiveDB: entry.DestructiveDB,
-		Scope:         entry.Scope,
-		DependsOn:     deps,
-		Created:       now,
-		History:       []models.TaskHistoryEntry{},
+		ID:                      childID,
+		Type:                    taskType,
+		RolePair:                targetRolePair,
+		Description:             entry.Desc,
+		Status:                  targetStatus,
+		Priority:                1,
+		ParentTasks:             []string{parentID},
+		SpecRef:                 paths.NormalizeSpecRef(entry.SpecRef),
+		EpicRef:                 paths.NormalizeSpecRef(epicRef),
+		PlanRef:                 paths.NormalizeSpecRef(entry.PlanRef),
+		ArchRef:                 paths.NormalizeSpecRef(archRef),
+		Decomposition:           entry.Decomposition,
+		Kind:                    entry.Kind,
+		RCARequired:             rcaRequired,
+		DoneWhen:                entry.DoneWhen,
+		Validation:              slices.Clone(entry.Validation),
+		ValidationPrerequisites: models.CloneValidationPrerequisites(entry.ValidationPrerequisites),
+		DestructiveDB:           entry.DestructiveDB,
+		Scope:                   entry.Scope,
+		DependsOn:               deps,
+		Created:                 now,
+		History:                 []models.TaskHistoryEntry{},
 	}
 }
 
@@ -1396,6 +1397,9 @@ func validateOutputEntry(entry models.OutputEntry, index, totalEntries int) erro
 	}
 	if err := models.ValidateValidationSafety(fmt.Sprintf("output[%d].validation", index), entry.Validation, entry.DestructiveDB); err != nil {
 		return err
+	}
+	if err := models.ValidateValidationPrerequisites(entry.Validation, entry.ValidationPrerequisites); err != nil {
+		return fmt.Errorf("output[%d]: %w", index, err)
 	}
 	return models.ValidateDependsOn(entry.DependsOn, index, totalEntries)
 }

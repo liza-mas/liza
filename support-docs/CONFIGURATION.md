@@ -1095,6 +1095,55 @@ Headless watch automatically runs the repair-agent-pool behavior when a task is 
 | `devin` | Devin CLI from the remote provider catalog. Use `§BRAND_BINARY_NAME§ setup --provider devin` for global skills and `§BRAND_BINARY_NAME§ init --provider devin` to link §BRAND_NAME_TITLE§'s contract at the catalog-defined repo path. |
 | `devin-acp` | Devin through ACPX from the remote provider catalog. Requires both `acpx` and `devin` on `PATH`; ACPX is invoked with `--agent "devin acp"` because Devin's ACP server is the `devin acp` command, not a standalone executable. Reuses Devin's catalog-defined contract setup. |
 
+### Validation execution prerequisites
+
+Tasks can declare `validation_prerequisites` for their exact canonical validation
+commands. The selected tool must explicitly declare how those checks can run:
+
+```yaml
+config:
+  agent_tools:
+    codex:
+      validation_execution: local
+      env_files: [validation.env]
+```
+
+`local` is an operator assertion that this provider's validation tools execute
+locally with the supplied environment and task worktree. It does not change
+permissions or establish equivalence with a sandbox or remote wrapper. Unset or
+unsupported values fail closed for tasks with prerequisites. `artifact-only`
+also fails closed: signed validation artifacts are not implemented and cannot
+grant an exemption. Tasks without prerequisite declarations do not need this
+policy.
+
+Each claim/launch attempt freezes its effective environment for both probes and
+provider start. Executable lookup uses that snapshot's PATH. Configured env-file
+overlays refresh for CLI and ACPX, including interactive launches. Relative paths
+are project-root-relative; files retain the existing KEY=VALUE format without
+shell expansion or quote interpretation. An explicitly configured unreadable
+file fails before execution, including for tasks without prerequisites. Missing
+optional built-in catalog defaults remain optional. Empty files are valid but
+do not satisfy missing required variables. Do not store credential values in
+task declarations or check argv.
+
+Changing `post_worktree_cmd` or merging dependencies does not refresh a running
+supervisor's inherited environment. Repair the selected environment/dependencies,
+refresh its overlay or restart the supervisor as needed, then let it preflight
+again. Protected retained ACPX sessions receive a new scope when relevant
+generation, commit or environment identity changes.
+
+Inspect `§BRAND_BINARY_NAME§ repair-agent-pool --dry-run --json` for task-specific
+validation capacity. Recent failure is distinct from an absent role; an
+unverified registration is not proof of readiness. Automatic selection waits at
+least 60 seconds after an unchanged failure in the same process; final launch and
+authenticated in-session operations still check afresh. For a blocked task with declared
+prerequisites, unblock without `--assign-to` so the target supervisor checks its
+own context before claiming it. Diagnostics identify safe codes, check indices
+and required variable names, never variable values or probe output.
+
+See the [validation prerequisite protocol](../specs/protocols/validation-prerequisites.md)
+for task/output YAML examples, exact command matching, limits and evidence rules.
+
 ## Provider Catalog
 
 §BRAND_NAME_TITLE§ loads provider definitions through a cache at

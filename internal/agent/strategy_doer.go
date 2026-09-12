@@ -101,7 +101,11 @@ func (s *doerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, confi
 }
 
 func (s *doerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (string, string, error) {
-	taskID, _, err := claimDoerTaskWithAuthority(config.ProjectRoot, config.Authority, s.role, bb)
+	session, err := prepareClaimSession(config, bb)
+	if err != nil {
+		return "", "", err
+	}
+	taskID, _, err := claimDoerTaskWithAuthority(config.ProjectRoot, config.Authority, s.role, bb, session)
 	if err != nil {
 		return "", "", err
 	}

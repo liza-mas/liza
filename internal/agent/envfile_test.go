@@ -3,16 +3,26 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/sessionvalidation"
 )
 
-func TestLoadEnvFile(t *testing.T) {
-	t.Run("missing file returns nil", func(t *testing.T) {
+func TestResolveOptionalEnvFile(t *testing.T) {
+	loadEnvFile := func(path string) []string {
+		t.Helper()
+		env, err := sessionvalidation.ResolveEnvironment(nil, "", []string{path}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return env
+	}
+	t.Run("missing optional file adds no variables", func(t *testing.T) {
 		got := loadEnvFile("/nonexistent/path/claude.env")
-		if got != nil {
-			t.Fatalf("expected nil, got %v", got)
+		if len(got) != 0 {
+			t.Fatalf("expected no variables, got %v", got)
 		}
 	})
 
@@ -26,6 +36,7 @@ func TestLoadEnvFile(t *testing.T) {
 
 		got := loadEnvFile(envFile)
 		want := []string{"FOO=bar", "BAZ=qux"}
+		slices.Sort(want)
 		if len(got) != len(want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
@@ -46,6 +57,7 @@ func TestLoadEnvFile(t *testing.T) {
 
 		got := loadEnvFile(envFile)
 		want := []string{"FOO=bar", "BAZ=qux"}
+		slices.Sort(want)
 		if len(got) != len(want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
@@ -81,6 +93,7 @@ func TestLoadEnvFile(t *testing.T) {
 
 		got := loadEnvFile(envFile)
 		want := []string{"FOO=bar", "BAZ=qux"}
+		slices.Sort(want)
 		if len(got) != len(want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}

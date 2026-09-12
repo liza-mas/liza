@@ -61,15 +61,15 @@ func ClaimTask(projectRoot, taskID, agentID string) (*ClaimResult, error) {
 
 // ClaimTaskWithAuthority fences the phase-three claim write and every
 // claim-triggered follow-up write with the caller's registration generation.
-func ClaimTaskWithAuthority(projectRoot, taskID string, authority models.AgentAuthority) (*ClaimResult, error) {
-	return claimTaskWithOptionalAuthority(projectRoot, taskID, authority.ID, &authority)
+func ClaimTaskWithAuthority(projectRoot, taskID string, authority models.AgentAuthority, sessions ...*ValidationSession) (*ClaimResult, error) {
+	return claimTaskWithOptionalAuthority(projectRoot, taskID, authority.ID, &authority, sessions...)
 }
 
-func claimTaskWithOptionalAuthority(projectRoot, taskID, agentID string, authority *models.AgentAuthority) (*ClaimResult, error) {
+func claimTaskWithOptionalAuthority(projectRoot, taskID, agentID string, authority *models.AgentAuthority, sessions ...*ValidationSession) (*ClaimResult, error) {
 	var result *ClaimResult
 	err := WithProjectLifecycleSharedLock(projectRoot, "task-claim-worktree", func() error {
 		var claimErr error
-		result, claimErr = claimTask(projectRoot, taskID, agentID, authority)
+		result, claimErr = claimTask(projectRoot, taskID, agentID, authority, sessions...)
 		return claimErr
 	})
 	if err != nil {
@@ -119,7 +119,7 @@ func degradeOnPostWorktreeSetupFailure(projectRoot, taskID, agentID string, auth
 	return fmt.Errorf("%w: %w", ErrAgentDegraded, err)
 }
 
-func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAuthority) (*ClaimResult, error) {
+func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAuthority, sessions ...*ValidationSession) (*ClaimResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -300,6 +300,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 			pipelineTransitions,
 			resolver,
 			authority,
+			validationSession(sessions),
 		)
 		return lockedErr
 	})
@@ -332,6 +333,7 @@ func completeClaimTaskAfterValidation(
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus,
 	resolver models.PipelineResolver,
 	authority *models.AgentAuthority,
+	sessions ...*ValidationSession,
 ) (*ClaimResult, error) {
 	// --- Phase 2: Handle Worktree ---
 	lockedTask, err := recheckClaimTaskBeforeWorktree(
@@ -426,6 +428,11 @@ func completeClaimTaskAfterValidation(
 		log.Printf("WARNING: claim-task %s: %s", taskID, warning)
 	}
 
+	preflight, err := PrepareValidationPreflight(projectRoot, taskID, agentID, claimCtx.worktreeDir, validationSession(sessions))
+	if err != nil {
+		return nil, err
+	}
+
 	// --- Phase 3: Re-validate and Commit ---
 	now := time.Now().UTC()
 	leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
@@ -436,10 +443,16 @@ func completeClaimTaskAfterValidation(
 	}
 
 	modifyClaimState := func(state *models.State) error {
+		if err := preflight.CheckCurrent(state); err != nil {
+			return err
+		}
 		// Re-check task exists and status hasn't changed
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if len(task.ValidationPrerequisites) > 0 && preflight == nil {
+			return validationError("context_changed")
 		}
 
 		if task.Status != taskStatus {

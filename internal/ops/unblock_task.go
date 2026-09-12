@@ -139,6 +139,15 @@ func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID strin
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
+	if opts.AssignTo != "" {
+		_, task, err := readTaskState(bb, taskID)
+		if err != nil {
+			return nil, err
+		}
+		if len(task.ValidationPrerequisites) > 0 {
+			return nil, &PreconditionError{Reason: "validation preflight requires the target session; unblock without --assign-to and let its supervisor claim the task"}
+		}
+	}
 
 	rebaseResult, err := maybeRebaseTaskBeforeUnblock(bb, lp.ProjectRoot(), taskID, agentID, opts, authority)
 	if err != nil {
@@ -150,6 +159,9 @@ func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID strin
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if opts.AssignTo != "" && len(task.ValidationPrerequisites) > 0 {
+			return validationError("target_session_required")
 		}
 		if task.Status != models.TaskStatusBlocked {
 			return &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}

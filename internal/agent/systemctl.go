@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/sessionvalidation"
 )
 
 // errGoalComplete is a sentinel error returned by waitWhilePaused when
@@ -174,6 +175,10 @@ func checkpointBlocksRole(state *models.State, roleType string) (bool, string) {
 }
 
 func newProviderLaunchGate(config SupervisorConfig) LLMAgentLaunchGate {
+	return newTaskProviderLaunchGate(config, "", nil)
+}
+
+func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validation *ops.ValidationPreflight) LLMAgentLaunchGate {
 	return func(ctx context.Context, start func() error) error {
 		return ops.WithAgentLifecycleLock(ctx, config.ProjectRoot, config.Authority.ID, "provider-start", func() error {
 			state, err := db.For(config.StatePath).ReadContext(ctx)
@@ -181,6 +186,14 @@ func newProviderLaunchGate(config SupervisorConfig) LLMAgentLaunchGate {
 				return fmt.Errorf("read current agent authority before provider start: %w", err)
 			}
 			if err := ops.RequireAgentAuthority(state, config.Authority); err != nil {
+				return err
+			}
+			// A legacy task can acquire prerequisites after preparation. Such a
+			// change needs a fresh observation before any provider process starts.
+			if task := state.FindTask(taskID); task != nil && len(task.ValidationPrerequisites) > 0 && validation == nil {
+				return &sessionvalidation.Error{Code: "context_changed", CommandIndex: -1, CheckIndex: -1}
+			}
+			if err := validation.CheckLaunchCurrent(state); err != nil {
 				return err
 			}
 			return start()
@@ -196,7 +209,26 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	if err != nil {
 		return 0, "", err
 	}
-	launchGate := newProviderLaunchGate(config)
+	session, err := prepareSupervisorSession(config, runtimeConfig)
+	if err != nil {
+		return 0, "", err
+	}
+	// A provider start always probes freshly. Claim-loop failures alone are
+	// rate-limited; repaired dependency files need not change the environment.
+	session.ForceCheck = true
+	var validation *ops.ValidationPreflight
+	if taskID != "" {
+		validation, err = ops.PrepareValidationPreflight(config.ProjectRoot, taskID, config.AgentID, "", session)
+		if err != nil {
+			return 0, "", releaseFailedValidation(config, taskID, err)
+		}
+	} else if session.PreparationError != nil {
+		return 0, "", session.PreparationError
+	}
+	checkedGate := newTaskProviderLaunchGate(config, taskID, validation)
+	launchGate := LLMAgentLaunchGate(func(ctx context.Context, start func() error) error {
+		return releaseFailedValidation(config, taskID, checkedGate.launch(ctx, start))
+	})
 
 	// Interactive mode: launch CLI without -p so user can paste the prompt
 	if config.Interactive {
@@ -207,6 +239,7 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 			BackendName:    config.CLIName,
 			AgentID:        config.AgentID,
 			Generation:     config.Authority.Generation,
+			TaskID:         taskID,
 			SessionID:      taskID,
 			ProfileName:    config.ProfileName,
 			ProfileVars:    config.ProfileVars,
@@ -214,6 +247,8 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 			AdditionalDirs: additionalDirs,
 			RuntimeConfig:  runtimeConfig,
 			LaunchGate:     launchGate,
+			Environment:    session.Environment,
+			SessionScope:   validation.SessionScope(),
 		})
 		return exitCode, "", err
 	}
@@ -251,6 +286,8 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 		RuntimeConfig:  runtimeConfig,
 		EventSink:      supervisorLLMAgentEventSink{},
 		LaunchGate:     launchGate,
+		Environment:    session.Environment,
+		SessionScope:   validation.SessionScope(),
 	})
 	watchdogResult := stopWatchdog()
 	if watchdogResult.Blocked {

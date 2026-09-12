@@ -427,7 +427,12 @@ func handleVerdictResult(bb *db.Blackboard, task *models.Task, agentID string, a
 		// Attempt auto-reclaim via ClaimTask. ClaimTask internally checks
 		// limits via classifyLimitEscalation — AwaitVerdict doesn't need
 		// its own same-vs-new-attempt detection.
-		_, claimErr := ClaimTask(projectRoot, task.ID, agentID)
+		var claimErr error
+		if authority != nil {
+			_, claimErr = ClaimTaskWithAuthority(projectRoot, task.ID, *authority)
+		} else {
+			_, claimErr = ClaimTask(projectRoot, task.ID, agentID)
+		}
 		if claimErr != nil {
 			var pe *PreconditionError
 			if stderrors.As(claimErr, &pe) {

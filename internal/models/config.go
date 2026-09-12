@@ -175,7 +175,9 @@ type Config struct {
 
 // AgentToolConfig describes how Liza launches a CLI-backed agent tool.
 type AgentToolConfig struct {
-	Backend             string   `yaml:"backend,omitempty"`
+	Backend string `yaml:"backend,omitempty"`
+	// ValidationExecution explicitly declares local validation or unsupported artifact-only execution.
+	ValidationExecution string   `yaml:"validation_execution,omitempty"`
 	ProviderKey         string   `yaml:"provider_key,omitempty"`
 	Executable          string   `yaml:"executable,omitempty"`
 	PromptTransport     string   `yaml:"prompt_transport,omitempty"`

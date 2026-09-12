@@ -24,17 +24,22 @@ func claimDoerTask(projectRoot, agentID, role string, bb *db.Blackboard) (taskID
 	return claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role, nil, bb)
 }
 
-func claimDoerTaskWithAuthority(projectRoot string, authority models.AgentAuthority, role string, bb *db.Blackboard) (taskID, worktree string, err error) {
-	return claimDoerTaskWithOptionalAuthority(projectRoot, authority.ID, role, &authority, bb)
+func claimDoerTaskWithAuthority(projectRoot string, authority models.AgentAuthority, role string, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree string, err error) {
+	return claimDoerTaskWithOptionalAuthority(projectRoot, authority.ID, role, &authority, bb, sessions...)
 }
 
-func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, authority *models.AgentAuthority, bb *db.Blackboard) (taskID, worktree string, err error) {
+func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, authority *models.AgentAuthority, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree string, err error) {
 	logger := GetLogger()
+	var session *ops.ValidationSession
+	if len(sessions) > 0 {
+		session = sessions[0]
+	}
 
 	handoffResult, err := ops.ResumeHandoff(ops.ResumeHandoffInput{
 		ProjectRoot: projectRoot,
 		AgentID:     agentID,
 		Authority:   authority,
+		Session:     session,
 	})
 	if err != nil {
 		return "", "", err
@@ -53,6 +58,7 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 		ProjectRoot: projectRoot,
 		AgentID:     agentID,
 		Authority:   authority,
+		Session:     session,
 	})
 	if err != nil {
 		return "", "", err
@@ -85,7 +91,8 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 	var candidates []*models.Task
 	now := time.Now().UTC()
 	for i := range state.Tasks {
-		if models.IsDoerClaimableByAgent(state, &state.Tasks[i], role, agentID, pr, now) {
+		if models.IsDoerClaimableByAgent(state, &state.Tasks[i], role, agentID, pr, now) &&
+			!ops.ValidationRetryPending(projectRoot, state, &state.Tasks[i], agentID, session) {
 			candidates = append(candidates, &state.Tasks[i])
 		}
 	}
@@ -104,7 +111,7 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 		if authority == nil {
 			result, claimErr = ops.ClaimTask(projectRoot, task.ID, agentID)
 		} else {
-			result, claimErr = ops.ClaimTaskWithAuthority(projectRoot, task.ID, *authority)
+			result, claimErr = ops.ClaimTaskWithAuthority(projectRoot, task.ID, *authority, session)
 		}
 		if claimErr != nil {
 			logger.Warn("Claim attempt failed, trying next candidate",
@@ -155,6 +162,10 @@ func ensureDoerWorktreeSetup(projectRoot, agentID, role, taskID, worktreeRel str
 		return fmt.Errorf("read state for worktree setup: %w", err)
 	}
 	if state.Config.PostWorktreeCmd == nil {
+		return nil
+	}
+	if task := state.FindTask(taskID); task != nil && len(task.ValidationPrerequisites) > 0 {
+		// Protected resumes ran setup before preflight and ownership renewal.
 		return nil
 	}
 	setupErr := ops.RunPostWorktreeCmd(*state.Config.PostWorktreeCmd, filepath.Join(projectRoot, worktreeRel))
@@ -229,12 +240,16 @@ func claimReviewerTaskForRole(projectRoot, agentID, role, targetTaskID string, l
 	return claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, targetTaskID, leaseDuration, nil, bb)
 }
 
-func claimReviewerTaskForRoleWithAuthority(projectRoot string, authority models.AgentAuthority, role, targetTaskID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
-	return claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, authority.ID, role, targetTaskID, leaseDuration, &authority, bb)
+func claimReviewerTaskForRoleWithAuthority(projectRoot string, authority models.AgentAuthority, role, targetTaskID string, leaseDuration int, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree, reviewCommit string, err error) {
+	return claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, authority.ID, role, targetTaskID, leaseDuration, &authority, bb, sessions...)
 }
 
-func claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, targetTaskID string, leaseDuration int, authority *models.AgentAuthority, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
+func claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, targetTaskID string, leaseDuration int, authority *models.AgentAuthority, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree, reviewCommit string, err error) {
 	logger := GetLogger()
+	var session *ops.ValidationSession
+	if len(sessions) > 0 {
+		session = sessions[0]
+	}
 
 	result, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
 		ProjectRoot:   projectRoot,
@@ -243,6 +258,7 @@ func claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, t
 		TaskID:        targetTaskID,
 		LeaseDuration: leaseDuration,
 		Authority:     authority,
+		Session:       session,
 	})
 	if err != nil {
 		logger.Error("Review claim error", "error", err)

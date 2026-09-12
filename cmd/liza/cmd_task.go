@@ -200,17 +200,18 @@ Example YAML file format:
 
 		if isJSON(cmd) {
 			opsInput := &ops.AddTaskInput{
-				ID:            input.ID,
-				Type:          input.Type,
-				RolePair:      input.RolePair,
-				Description:   input.Description,
-				SpecRef:       input.SpecRef,
-				DoneWhen:      input.DoneWhen,
-				Validation:    input.Validation,
-				DestructiveDB: input.DestructiveDB,
-				Scope:         input.Scope,
-				Priority:      input.Priority,
-				DependsOn:     input.DependsOn,
+				ID:                      input.ID,
+				Type:                    input.Type,
+				RolePair:                input.RolePair,
+				Description:             input.Description,
+				SpecRef:                 input.SpecRef,
+				DoneWhen:                input.DoneWhen,
+				Validation:              input.Validation,
+				ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
+				DestructiveDB:           input.DestructiveDB,
+				Scope:                   input.Scope,
+				Priority:                input.Priority,
+				DependsOn:               input.DependsOn,
 			}
 			result, err := ops.AddTaskWithAuthority(statePath, logPath, opsInput, authority)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
