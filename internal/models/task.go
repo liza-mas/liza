@@ -275,6 +275,8 @@ type Task struct {
 	ReviewCyclesCurrent int                    `yaml:"review_cycles_current,omitempty"`
 	ReviewCyclesTotal   int                    `yaml:"review_cycles_total,omitempty"`
 	ReviewCommit        *string                `yaml:"review_commit,omitempty"`
+	AcceptanceSource    *AcceptanceSource      `yaml:"acceptance_source,omitempty" json:"acceptance_source,omitempty"`
+	AcceptanceReceipt   *AcceptanceReceipt     `yaml:"acceptance_receipt,omitempty" json:"acceptance_receipt,omitempty"`
 	ReviewingBy         *string                `yaml:"reviewing_by,omitempty"`
 	ReviewLeaseExpires  *time.Time             `yaml:"review_lease_expires,omitempty"`
 	ApprovedBy          *string                `yaml:"approved_by,omitempty"`
