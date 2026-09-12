@@ -45,7 +45,7 @@ func prematureRecoveryFixture(t *testing.T) (*reconcileFixture, string) {
 		}
 		analysis.BaseCommit = testhelpers.StringPtr(f.head)
 		analysis.ReviewCommit = testhelpers.StringPtr(report)
-		analysis.Worktree = testhelpers.StringPtr(filepath.Join(paths.WorktreesDirName, id))
+		analysis.Worktree = testhelpers.StringPtr(g.GetWorktreeRelPath(id))
 		analysis.History = []models.TaskHistoryEntry{{Time: time.Now().UTC(), Event: models.TaskEventSubmittedForReview, Commit: &report}}
 		s.Tasks = []models.Task{planner, analysis}
 		s.Sprint.Scope.Planned = []string{planner.ID, id}
