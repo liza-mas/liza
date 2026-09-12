@@ -30,7 +30,12 @@ func (e *ReviewBoundaryRepairNeededError) Error() string {
 // validateReviewBoundaryForAssignment verifies that assigning a reviewer would
 // point them at the same commit currently checked out in the task worktree and
 // the current effective review base.
-func validateReviewBoundaryForAssignment(projectRoot string, task *models.Task, integrationBranch string) error {
+func validateReviewBoundaryForAssignment(projectRoot string, state *models.State, task *models.Task) error {
+	if task.Worktree != nil || task.AcceptanceSource != nil {
+		if err := validateAcceptanceForAssignment(projectRoot, state, task); err != nil {
+			return err
+		}
+	}
 	if task.Worktree == nil {
 		return nil
 	}
@@ -38,6 +43,7 @@ func validateReviewBoundaryForAssignment(projectRoot string, task *models.Task, 
 		return &PreconditionError{Reason: fmt.Sprintf("task %s has no review_commit — cannot assign for review", task.ID)}
 	}
 	g := gitpkg.New(projectRoot)
+	integrationBranch := state.Config.IntegrationBranch
 	expectedBase, err := g.GetMergeBase(*task.ReviewCommit, integrationBranch)
 	if err != nil {
 		return &OperationalError{

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -101,8 +102,22 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (*UpdateReviewCom
 
 	oldReviewCommit := cloneStringPtr(task.ReviewCommit)
 	oldBaseCommit := cloneStringPtr(task.BaseCommit)
+	integrationCommit, err := g.GetCommitSHA(state.Config.IntegrationBranch)
+	if err != nil {
+		return nil, err
+	}
+	acceptance, err := loadAcceptanceInput(projectRoot, state, task, integrationCommit)
+	if err != nil {
+		return nil, err
+	}
 	if oldReviewCommit != nil && *oldReviewCommit == wtHEAD && oldBaseCommit != nil && *oldBaseCommit == effectiveBase {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("review boundary already matches worktree HEAD %s and base %s — no update needed", wtHEAD, effectiveBase)}
+		if acceptance == nil || validateAcceptanceForAssignment(projectRoot, state, task) == nil {
+			return nil, &PreconditionError{Reason: fmt.Sprintf("review boundary already matches worktree HEAD %s and base %s — no update needed", wtHEAD, effectiveBase)}
+		}
+	}
+	receipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, wtHEAD)
+	if err != nil {
+		return nil, err
 	}
 
 	// Phase 3: Atomic state update
@@ -125,6 +140,16 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (*UpdateReviewCom
 		}
 
 		// Update the full review boundary.
+		if !reflect.DeepEqual(task.ReviewCommit, oldReviewCommit) || !reflect.DeepEqual(task.BaseCommit, oldBaseCommit) {
+			return &PreconditionError{Reason: "review boundary changed during repair"}
+		}
+		if err := recheckAcceptanceReceipt(projectRoot, state, task, acceptance, receipt); err != nil {
+			return err
+		}
+		if receipt != nil {
+			task.AcceptanceSource = &receipt.Source
+		}
+		task.AcceptanceReceipt = receipt
 		task.ReviewCommit = &wtHEAD
 		task.BaseCommit = &effectiveBase
 

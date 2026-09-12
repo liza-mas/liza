@@ -365,6 +365,14 @@ func completeClaimTaskAfterValidation(
 		}
 	}
 	claimCtx.baseCommit = baseCommit
+	acceptanceState, err := bb.Read()
+	if err != nil {
+		return nil, err
+	}
+	acceptance, err := loadAcceptanceInput(projectRoot, acceptanceState, lockedTask, baseCommit)
+	if err != nil {
+		return nil, err
+	}
 
 	worktreePhase, err := handleClaimTaskWorktreePhase(
 		bb,
@@ -465,6 +473,9 @@ func completeClaimTaskAfterValidation(
 		}
 
 		// Update task
+		if err := recheckAcceptanceReceipt(projectRoot, state, task, acceptance, nil); err != nil {
+			return err
+		}
 		if err := task.TransitionWith(claimCtx.targetStatus, pipelineTransitions); err != nil {
 			return err
 		}
@@ -475,6 +486,10 @@ func completeClaimTaskAfterValidation(
 		task.Iteration++
 
 		strategy.mutateTask(task, &claimCtx)
+		if acceptance != nil {
+			task.AcceptanceSource = &acceptance.source
+			task.AcceptanceReceipt = nil
+		}
 		task.History = append(task.History, strategy.historyEntry(now, &claimCtx))
 
 		// Update agent

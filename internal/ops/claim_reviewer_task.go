@@ -144,6 +144,7 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 
 	var result ClaimReviewerTaskResult
 	var reviewBoundaryErr error
+	var acceptanceErrors []error
 	var repairNeededTaskIDs []string
 
 	// Load pipeline config once for both IsClaimable and transition.
@@ -229,8 +230,14 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 				break
 			}
 
-			if err := validateReviewBoundaryForAssignment(input.ProjectRoot, task, state.Config.IntegrationBranch); err != nil {
+			if err := validateReviewBoundaryForAssignment(input.ProjectRoot, state, task); err != nil {
 				reviewBoundaryErr = err
+				var evidenceErr *AcceptanceEvidenceError
+				if stderrors.As(err, &evidenceErr) {
+					acceptanceErrors = append(acceptanceErrors, evidenceErr)
+					candidates = removeCandidate(candidates, task)
+					continue
+				}
 				var repairNeeded *ReviewBoundaryRepairNeededError
 				if stderrors.As(err, &repairNeeded) {
 					repairNeededTaskIDs = append(repairNeededTaskIDs, task.ID)
@@ -291,6 +298,9 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (*ClaimReviewerTaskResult, 
 		return nil, err
 	}
 	if reviewBoundaryErr != nil && result.TaskID == "" {
+		if len(acceptanceErrors) > 0 {
+			return nil, stderrors.Join(acceptanceErrors...)
+		}
 		if len(repairNeededTaskIDs) > 0 {
 			return nil, &PreconditionError{
 				Reason: fmt.Sprintf(

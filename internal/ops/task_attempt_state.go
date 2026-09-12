@@ -36,6 +36,7 @@ func clearAttemptState(task *models.Task, profile attemptStateCleanupProfile) {
 }
 
 func clearSubmittedAttemptState(task *models.Task) {
+	task.AcceptanceReceipt = nil
 	task.ReviewCommit = nil
 	task.ApprovedBy = nil
 	task.ClearApprovals()

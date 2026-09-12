@@ -93,7 +93,7 @@ func AwaitResubmissionWithAuthorityOptions(ctx context.Context, projectRoot, tas
 	return awaitResubmissionWithOptions(ctx, projectRoot, taskID, authority.ID, &authority, timeout, opts)
 }
 
-func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agentID string, authority *models.AgentAuthority, timeout time.Duration, opts AwaitResubmissionOptions) (*AwaitResubmissionResult, error) {
+func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agentID string, authority *models.AgentAuthority, timeout time.Duration, opts AwaitResubmissionOptions) (result *AwaitResubmissionResult, resultErr error) {
 	opts = opts.normalized()
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -146,17 +146,40 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 		return nil, err
 	}
 
-	// Acquire review ownership atomically.
-	if err := acquireReviewOwnership(bb, agentID, taskID, authority, timeout); err != nil {
-		return nil, &OperationalError{Message: "failed to acquire review ownership", Err: err}
-	}
-
 	// Early resubmission: if task is already in submitted status, skip the
-	// wait loop and reclaim immediately.
+	// wait loop and validate evidence before acquiring any ownership.
 	submitted, _ := resolver.SubmittedStatus(task.RolePair)
 	if task.Status == submitted {
 		return reclaimForReview(projectRoot, bb, taskID, agentID, authority, resolver, task.RolePair)
 	}
+
+	// Acquire ownership only when actually waiting for the doer's submission.
+	if err := acquireReviewOwnership(bb, agentID, taskID, authority, timeout); err != nil {
+		return nil, &OperationalError{Message: "failed to acquire review ownership", Err: err}
+	}
+	defer func() {
+		var evidenceErr *AcceptanceEvidenceError
+		if !stderrors.As(resultErr, &evidenceErr) {
+			return
+		}
+		// Evidence refusal must undo the wait's ownership, including WAITING,
+		// while retaining the doer's resubmission and any subsequent reassignment.
+		cleanupErr := modifyLifecycleState(bb, authority, func(s *models.State) error {
+			currentTask := s.FindTask(taskID)
+			if currentTask != nil && currentTask.ReviewingBy != nil && *currentTask.ReviewingBy == agentID {
+				currentTask.ReviewingBy = task.ReviewingBy
+				currentTask.ReviewLeaseExpires = task.ReviewLeaseExpires
+			}
+			if agent, ok := s.Agents[agentID]; ok && agent.Status == models.AgentStatusWaiting &&
+				agent.CurrentTask != nil && *agent.CurrentTask == taskID {
+				agent.Status = state.Agents[agentID].Status
+				agent.CurrentTask = state.Agents[agentID].CurrentTask
+				s.Agents[agentID] = agent
+			}
+			return nil
+		})
+		resultErr = joinAwaitCleanupError(resultErr, cleanupErr)
+	}()
 
 	// --- Event loop: block until resubmission or terminal state ---
 	rolePair := task.RolePair
@@ -400,8 +423,12 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
 
-		if err := validateReviewBoundaryForAssignment(projectRoot, task, s.Config.IntegrationBranch); err != nil {
+		if err := validateReviewBoundaryForAssignment(projectRoot, s, task); err != nil {
 			reviewBoundaryErr = err
+			var evidenceErr *AcceptanceEvidenceError
+			if stderrors.As(err, &evidenceErr) {
+				return err
+			}
 			var repairNeeded *ReviewBoundaryRepairNeededError
 			if stderrors.As(err, &repairNeeded) {
 				return err
@@ -414,7 +441,7 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 		}
 
 		task.ReviewLeaseExpires = &freshLease
-		// ReviewingBy stays set from acquireReviewOwnership.
+		task.ReviewingBy = &agentID
 
 		if task.ReviewCommit != nil {
 			reviewCommit = *task.ReviewCommit
@@ -434,6 +461,10 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 		return nil
 	})
 	if modErr != nil {
+		var evidenceErr *AcceptanceEvidenceError
+		if stderrors.As(modErr, &evidenceErr) {
+			return nil, evidenceErr
+		}
 		var repairNeeded *ReviewBoundaryRepairNeededError
 		if stderrors.As(modErr, &repairNeeded) {
 			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, repairNeeded)

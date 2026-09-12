@@ -1,6 +1,7 @@
 package statevalidate
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -281,6 +282,9 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		if err := validateTaskOutput(&task, validateArtifactRefs); err != nil {
 			return err
 		}
+		if err := validateAcceptanceState(&task); err != nil {
+			return err
+		}
 
 		// Attempt must be 0 (unset/legacy), 1, or 2
 		if task.Attempt < 0 || task.Attempt > 2 {
@@ -305,6 +309,53 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		}
 	}
 
+	return nil
+}
+
+// Admission performs repository checks. State validation only checks persisted
+// shape, leaving missing receipts repairable through update-review-commit.
+func validateAcceptanceState(task *models.Task) error {
+	source := task.AcceptanceSource
+	if source == nil {
+		if task.AcceptanceReceipt != nil {
+			return fmt.Errorf("task %s acceptance_receipt requires acceptance_source", task.ID)
+		}
+		return nil
+	}
+	if source.Ref == "" || source.ParentTask == "" {
+		return fmt.Errorf("task %s acceptance_source requires ref and parent_task", task.ID)
+	}
+	for _, value := range []string{source.Commit, source.Blob, source.ParentReviewCommit} {
+		if _, err := hex.DecodeString(value); err != nil || len(value) != 40 || strings.ToLower(value) != value {
+			return fmt.Errorf("task %s acceptance_source requires immutable lowercase object IDs", task.ID)
+		}
+	}
+	receipt := task.AcceptanceReceipt
+	if receipt == nil {
+		return nil
+	}
+	if receipt.Version != 1 || task.ReviewCommit == nil || receipt.ReviewCommit != *task.ReviewCommit || receipt.Source != *source {
+		return fmt.Errorf("task %s acceptance_receipt does not match its source and review_commit", task.ID)
+	}
+	if receipt.ManifestPath == "" || len(receipt.Mappings) == 0 || len(receipt.Mappings) > 256 || len(receipt.Commands) > 64 {
+		return fmt.Errorf("task %s acceptance_receipt has invalid manifest or result bounds", task.ID)
+	}
+	if _, err := hex.DecodeString(receipt.ManifestBlob); err != nil || len(receipt.ManifestBlob) != 40 {
+		return fmt.Errorf("task %s acceptance_receipt requires manifest blob identity", task.ID)
+	}
+	totalOutput := 0
+	for _, command := range receipt.Commands {
+		totalOutput += len(command.Output)
+		if command.ExitCode != 0 || command.StartedAt.IsZero() || command.FinishedAt.Before(command.StartedAt) {
+			return fmt.Errorf("task %s acceptance_receipt contains unsuccessful execution", task.ID)
+		}
+		if _, err := hex.DecodeString(command.CommandSHA256); err != nil || len(command.CommandSHA256) != 64 {
+			return fmt.Errorf("task %s acceptance_receipt requires canonical command identity", task.ID)
+		}
+	}
+	if totalOutput > 1024*1024 {
+		return fmt.Errorf("task %s acceptance_receipt output exceeds 1 MiB", task.ID)
+	}
 	return nil
 }
 

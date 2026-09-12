@@ -222,6 +222,19 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 		}
 	}
 
+	acceptance, err := loadAcceptanceInput(projectRoot, state, task, rebaseBase)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := prepareAcceptanceReceipt(projectRoot, task, acceptance, preRebaseCommit); err != nil {
+		return nil, err
+	}
+	if acceptance != nil {
+		if err := checkAcceptanceWorktree(projectRoot, task.ID, preRebaseCommit); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := g.RebaseOnto(wtPath, rebaseBase); err != nil {
 		// Abort rebase to restore clean worktree state — don't leave agents
 		// in a mid-rebase state where they struggle with --continue/--abort.
@@ -288,6 +301,10 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 	indexWarnings := refreshSubmitReviewScipIndexes(wtPath, state.Config.ScipSearch)
 	indexWarnings = append(indexWarnings, refreshSubmitReviewStacklitIndex(wtPath)...)
 	indexWarnings = append(indexWarnings, refreshSubmitReviewFunctionalClustersIndex(wtPath, state.Config.ScipSearch)...)
+	receipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, postRebaseCommit)
+	if err != nil {
+		return nil, err
+	}
 
 	// Phase 3: Atomic update with new commit SHA
 	now := time.Now().UTC()
@@ -316,6 +333,13 @@ func submitForReview(projectRoot, taskID, commitRef, agentID string, authority *
 			return err
 		}
 
+		if err := recheckAcceptanceReceipt(projectRoot, state, task, acceptance, receipt); err != nil {
+			return err
+		}
+		if receipt != nil {
+			task.AcceptanceSource = &receipt.Source
+		}
+		task.AcceptanceReceipt = receipt
 		if err := task.TransitionWith(targetSubmittedStatus, pipelineTransitions); err != nil {
 			return err
 		}
