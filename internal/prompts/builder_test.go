@@ -1069,6 +1069,68 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 	}
 }
 
+func TestRenderOrchestratorDashboard_AssessedTasksAllowPlanningHandoff(t *testing.T) {
+	assessedAt := time.Date(2026, time.September, 13, 13, 0, 0, 0, time.UTC)
+	projectRoot := setupPipelineConfig(t)
+	for _, kind := range []struct {
+		name    string
+		status  models.TaskStatus
+		trigger string
+		counter string
+	}{
+		{"blocked", models.TaskStatusBlocked, "BLOCKED_TASKS", "- Blocked: 1"},
+		{"exhausted", models.TaskStatusReady, "HYPOTHESIS_EXHAUSTED", "- Hypothesis exhausted: 1"},
+	} {
+		for _, activity := range []string{"unassessed", "assessed", "assessment only", "new task activity"} {
+			t.Run(kind.name+"/"+activity, func(t *testing.T) {
+				state := testhelpers.CreateValidState()
+				planning := testhelpers.BuildTaskByStatus("provider-plan", models.TaskStatusMerged, assessedAt.Add(-time.Hour))
+				planning.RolePair = "code-planning-pair"
+				planning.Output = []models.OutputEntry{{Desc: "Implement provider", DoneWhen: "Provider contract passes", Scope: "provider"}}
+				consumer := testhelpers.BuildTaskByStatus("consumer", kind.status, assessedAt.Add(-time.Hour))
+				consumer.FailedBy = []string{"coder-1", "coder-2"}
+				consumer.DependsOn = []string{planning.ID}
+				if activity != "unassessed" {
+					consumer.History = append(consumer.History, models.TaskHistoryEntry{
+						Time: assessedAt, Event: models.TaskEventOrchestratorAssessment,
+					})
+				}
+				switch activity {
+				case "assessment only":
+					consumer.History = append(consumer.History, models.TaskHistoryEntry{
+						Time: assessedAt.Add(time.Minute), Event: models.TaskEventOrchestratorAssessment,
+					})
+				case "new task activity":
+					consumer.History = append(consumer.History, models.TaskHistoryEntry{
+						Time: assessedAt.Add(time.Minute), Event: models.TaskEventDependenciesRewritten,
+					})
+				}
+				state.Tasks = []models.Task{planning, consumer}
+				state.Sprint.Scope.Planned = []string{planning.ID, consumer.ID}
+
+				dashboard, instruction, err := RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantTrigger := kind.trigger
+				if activity == "assessed" || activity == "assessment only" {
+					wantTrigger = "PLANNING_COMPLETE"
+					if !strings.Contains(instruction, "Create checkpoint for human review") ||
+						strings.Contains(instruction, "Do NOT call "+brand.BinaryName+" sprint-checkpoint") {
+						t.Errorf("assessed unchanged task must permit planning handoff; instruction: %s", instruction)
+					}
+				}
+				if !strings.Contains(dashboard, "WAKE TRIGGER: "+wantTrigger+"\n") {
+					t.Errorf("expected wake %s; dashboard: %s", wantTrigger, dashboard)
+				}
+				if !strings.Contains(dashboard, kind.counter) {
+					t.Errorf("assessment must preserve total task counts: missing %q", kind.counter)
+				}
+			})
+		}
+	}
+}
+
 func TestRenderOrchestratorDashboard_BlockedDependencyRepairsRequireSemanticDirection(t *testing.T) {
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()

@@ -254,7 +254,7 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 		m2oReadyCount = countReadyM2OCohorts(state, m2oTransitions)
 	}
 
-	wakeTrigger := determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
+	wakeTrigger := determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
 	var integrationProjection EffectiveIntegrationCompletion
 	if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
 		decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
