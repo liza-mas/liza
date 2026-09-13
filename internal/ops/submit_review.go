@@ -195,6 +195,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 			return replaySubmission(task, receipt, agentID), nil
 		}
 	}
+	if err := validatePlanningOutputAcceptance(projectRoot, task, preRebaseCommit); err != nil {
+		return nil, err
+	}
 
 	// TDD enforcement: code tasks must include test files (doer roles only).
 	roleType, _ := resolver.RoleType(runtimeRole)
@@ -267,6 +270,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		if err := validateOutputArtifactRefScalars(taskID, live.Output); err != nil {
 			return err
 		}
+		if err := checkPlanningOutputSnapshot(task, live); err != nil {
+			return err
+		}
 		if err := PrepareLifecycleRequest(live, request); err != nil {
 			return err
 		}
@@ -331,6 +337,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 			},
 			Err: err,
 		}
+	}
+	if err := validatePlanningOutputAcceptance(projectRoot, task, postRebaseCommit); err != nil {
+		return nil, err
 	}
 	// Validate against the boundary that will be written below; the state copy
 	// still contains the pre-submit claim base.
@@ -409,6 +418,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 					return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)}
 				}
 				if err := validateOutputArtifactRefScalars(taskID, task.Output); err != nil {
+					return err
+				}
+				if err := checkPlanningOutputSnapshot(&reviewBoundaryTask, task); err != nil {
 					return err
 				}
 

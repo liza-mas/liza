@@ -33,6 +33,18 @@ are identified as not machine acceptance-evidenced.
 
 ## Admission boundaries
 
+Planning submission preflights each prospective child's selected `plan_ref`
+(otherwise `spec_ref`) in the candidate commit. Strict declarations use the same
+parser as coding admission and must match the output's ordered validation commands.
+Validation runs before submission preparation/rebase and again after rebase;
+the final transaction requires the output allocation to remain unchanged. Regular
+marker-free sources retain their existing behavior. Present nonregular or oversized
+sources fail here using the same limits already enforced by coding admission.
+This gate checks the declared
+contract, not future implementation: it does not require the child's manifest,
+proof files or runnable validation tools and does not establish parent approval.
+Coding claim and submission still enforce those later boundaries independently.
+
 1. Submission preflight resolves the committed manifest and validates exact-set
    obligation coverage before rebase or execution. Field diagnostics identify
    missing mappings, invalid proof files and unapproved exceptions.

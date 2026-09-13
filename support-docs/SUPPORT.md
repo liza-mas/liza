@@ -217,6 +217,18 @@ whole review wait, not a new per-call allowance.
 
 ### Doer: Submit → Await → Handle
 
+Planning submission checks prospective child Acceptance Contracts in the committed
+output source before rebase and again at the submitted boundary. The declaration
+must parse and its ordered validation commands must match the output allocation;
+future coder manifests, test files and executables are not required at planning
+time. If the error reports `unexpected content after JSON fence`, move prose out
+of the Acceptance Contract section using a sibling heading. Preserve the JSON
+and the prose's obligations. For an already-consumed MERGED plan, route a bounded
+independently reviewed planning correction, generate its actual replacement, then
+reconcile dependencies and supersede the malformed child. Editing historical
+output does not repair an existing child; do not weaken the parser or erase the
+declaration to make a claim pass.
+
 If a strict coding claim reports `acceptance.source: requires allocation by a
 direct independently approved merged planning parent`, inspect the direct
 parent's merged review, output allocation and author evidence. Ownership release
