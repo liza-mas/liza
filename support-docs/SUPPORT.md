@@ -629,7 +629,16 @@ this by editing `state.yaml` or deleting only the analysis task.
 ### Provider audit degraded
 **Symptom**: Agent work may complete, but `§BRAND_PROJECT_DIRNAME§/agent-outputs/*.err` or `§BRAND_PROJECT_DIRNAME§/alerts.log` contains `PROVIDER AUDIT DEGRADED`, for example Codex `failed to record rollout items: thread ... not found`.
 **Impact**: Treat task state and explicit task outputs as the source of truth. The provider transcript or rollout audit trail may be incomplete for the affected session.
-**Diagnosis**: Upgrade or retest the provider CLI first. Then inspect `§BRAND_PROJECT_DIRNAME§/agent-outputs/*.err`, `§BRAND_PROJECT_DIRNAME§/alerts.log`, task state, and blackboard outputs before relying on the session transcript.
+**Diagnosis**: Inspect the affected session's `§BRAND_PROJECT_DIRNAME§/agent-outputs/*.err`, alerts, task state and explicit outputs. Distinguish current provider diagnostics from historical errors quoted by a log-reading command. For genuine persistence errors, retest or upgrade the provider CLI before relying on its transcript.
+
+Audit, quota and provider-unavailable detection ignores structured command/tool
+output and assistant messages; supported provider error events and plain
+diagnostics remain recognized. Audit anomalies store a canonical bounded message,
+with the original session logs retaining the detailed evidence. Older engines can
+mistake a quoted log for a fresh failure and exit when state hygiene rejects the
+raw transcript payload. Update the engine and restart the affected supervisor;
+installing a binary does not replace a resident detector. Preserve state hygiene
+and historical evidence rather than deleting anomalies to hide the symptom.
 **Response**: A single occurrence does not stop workers. A qualifying
 same-provider group is classified as `ACKNOWLEDGED_HISTORICAL`, `NEW`, or
 `CONTINUING`. Historical-only evidence is `WARNING` and takes no

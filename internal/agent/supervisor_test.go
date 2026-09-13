@@ -894,6 +894,16 @@ fi
 }
 
 func TestSupervisor_Exit0ProviderAuditDegradedContinuesPostExecution(t *testing.T) {
+	t.Run("real provider diagnostic", func(t *testing.T) {
+		testSupervisorAuditPostExecution(t, `ERROR codex_core::session: failed to record rollout items: thread missing not found`, 1)
+	})
+	t.Run("quoted historical diagnostic", func(t *testing.T) {
+		testSupervisorAuditPostExecution(t, `{"type":"item.completed","item":{"type":"command_execution","command":"cat historical.log","aggregated_output":"ERROR codex_core::session: failed to record rollout items: thread historical not found","exit_code":0}}`, 0)
+	})
+}
+
+func testSupervisorAuditPostExecution(t *testing.T, auditOutput string, wantAnomalies int) {
+	t.Helper()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
@@ -907,7 +917,6 @@ func TestSupervisor_Exit0ProviderAuditDegradedContinuesPostExecution(t *testing.
 	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus(taskID, models.TaskStatusReady, now)}
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
-	auditOutput := `ERROR codex_core::session: failed to record rollout items: thread 019e983f-f3a2-7071-8a66-aa1774db9101 not found`
 	mock := &MockLLMAgent{
 		ExitCode: 0,
 		Output:   auditOutput,
@@ -963,8 +972,18 @@ func TestSupervisor_Exit0ProviderAuditDegradedContinuesPostExecution(t *testing.
 	if task.Status != models.TaskStatusReadyForReview {
 		t.Fatalf("task.Status = %q, want %q", task.Status, models.TaskStatusReadyForReview)
 	}
-	if len(updated.Anomalies) != 1 {
-		t.Fatalf("len(Anomalies) = %d, want 1", len(updated.Anomalies))
+	if len(updated.Anomalies) != wantAnomalies {
+		t.Fatalf("len(Anomalies) = %d, want %d", len(updated.Anomalies), wantAnomalies)
+	}
+	if wantAnomalies == 0 {
+		alerts, err := os.ReadFile(paths.New(projectRoot).AlertsLogPath())
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(alerts), "PROVIDER AUDIT DEGRADED") {
+			t.Fatal("quoted historical diagnostic created a current provider alert")
+		}
+		return
 	}
 	if updated.Anomalies[0].Type != ProviderAuditDegradedAnomalyType {
 		t.Fatalf("anomaly.Type = %q, want %q", updated.Anomalies[0].Type, ProviderAuditDegradedAnomalyType)

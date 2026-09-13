@@ -43,7 +43,7 @@ type QuotaExhaustion struct {
 // Returns non-nil if a known pattern is found.
 func DetectQuotaExhaustion(output, cliName string) *QuotaExhaustion {
 	provider := canonicalQuotaProvider(cliName)
-	for _, line := range strings.Split(output, "\n") {
+	for _, line := range providerDiagnosticLines(output) {
 		for _, p := range quotaPatterns {
 			if p.Provider != provider {
 				continue

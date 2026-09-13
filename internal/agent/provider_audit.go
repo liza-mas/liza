@@ -12,14 +12,16 @@ import (
 const ProviderAuditDegradedAnomalyType = "provider_audit_degraded"
 
 type providerAuditPattern struct {
-	Provider string
-	Needles  []string
+	Provider   string
+	Needles    []string
+	Diagnostic string
 }
 
 var providerAuditPatterns = []providerAuditPattern{
 	{
-		Provider: "codex",
-		Needles:  []string{"failed to record rollout items:", "thread ", " not found"},
+		Provider:   "codex",
+		Needles:    []string{"failed to record rollout items:", "thread ", " not found"},
+		Diagnostic: "failed to record rollout items: thread not found",
 	},
 }
 
@@ -38,7 +40,7 @@ func DetectProviderAuditDegraded(output, cliName string) *ProviderAuditDegraded 
 		if p.Provider != provider {
 			continue
 		}
-		for _, line := range strings.Split(output, "\n") {
+		for _, line := range providerDiagnosticLines(output) {
 			matched := true
 			for _, needle := range p.Needles {
 				if !strings.Contains(line, needle) {
@@ -49,7 +51,7 @@ func DetectProviderAuditDegraded(output, cliName string) *ProviderAuditDegraded 
 			if matched {
 				return &ProviderAuditDegraded{
 					Provider: p.Provider,
-					Message:  strings.TrimSpace(line),
+					Message:  p.Diagnostic,
 				}
 			}
 		}

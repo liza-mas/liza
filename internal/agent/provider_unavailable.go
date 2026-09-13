@@ -51,7 +51,7 @@ func classifyProviderUnavailable(output, cliName string) (*ProviderUnavailable, 
 		if p.Provider != provider {
 			continue
 		}
-		for _, line := range strings.Split(output, "\n") {
+		for _, line := range providerDiagnosticLines(output) {
 			matched := true
 			for _, needle := range p.Needles {
 				if !strings.Contains(line, needle) {
