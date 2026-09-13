@@ -53,7 +53,7 @@ Verified zombie-agent detection requires procfs and uses process cwd as project-
 
 ## Pipeline Structure
 
-Tasks flow through role-pairs organized in sub-pipelines. The project's frozen pipeline is in `§BRAND_PROJECT_DIRNAME§/pipeline.yaml` — inspect it for actual role-pairs, transitions, and state names.
+Tasks flow through role-pairs organized in sub-pipelines. The project's frozen pipeline is in `§BRAND_PROJECT_DIRNAME§/pipeline.yaml` â€” inspect it for actual role-pairs, transitions, and state names.
 
 Transitions with `trigger: manual` are human gates; `trigger: auto` transitions run without one. Use `§BRAND_BINARY_NAME§ status` to see currently available manual transitions.
 
@@ -85,18 +85,18 @@ Transition names appear under `transitions:` within each sub-pipeline and under 
 Every role-pair in `§BRAND_PROJECT_DIRNAME§/pipeline.yaml` defines its own state names under `states:`. The generic flow is:
 
 ```
-initial → executing → submitted → reviewing → approved (sprint-terminal)
-               │ ↑                      ↓
-               │ └───── rejected ──────┘
-               └──→ BLOCKED
+initial â†’ executing â†’ submitted â†’ reviewing â†’ approved (sprint-terminal)
+               â”‚ â†‘                      â†“
+               â”‚ â””â”€â”€â”€â”€â”€ rejected â”€â”€â”€â”€â”€â”€â”˜
+               â””â”€â”€â†’ BLOCKED
 ```
 
 Cross-pair states (not pair-specific):
-- **BLOCKED** — Cannot proceed; see `blocked_reason` and `blocked_questions`
-- **SUPERSEDED** — Replaced by tasks in `superseded_by`, or completed externally with no replacements (terminal)
-- **ABANDONED** — Killed by orchestrator (terminal)
-- **MERGED** — Merged to integration branch (terminal, coding pair only)
-- **INTEGRATION_FAILED** — Merge conflict or test failure (coding pair only)
+- **BLOCKED** â€” Cannot proceed; see `blocked_reason` and `blocked_questions`
+- **SUPERSEDED** â€” Replaced by tasks in `superseded_by`, or completed externally with no replacements (terminal)
+- **ABANDONED** â€” Killed by orchestrator (terminal)
+- **MERGED** â€” Merged to integration branch (terminal, coding pair only)
+- **INTEGRATION_FAILED** â€” Merge conflict or test failure (coding pair only)
 
 To find the actual state names for a role-pair, check `role-pairs.<name>.states` in `§BRAND_PROJECT_DIRNAME§/pipeline.yaml`. Some pairs define extra states (e.g. `partially-approved`, `reviewing-2` for quorum review, or `clean` for no-issues-found).
 
@@ -105,7 +105,7 @@ Supervisors automatically block a still-owned executing task when the child prov
 ## Sprint Lifecycle
 
 ```
-IN_PROGRESS → CHECKPOINT → COMPLETED → (new sprint) IN_PROGRESS
+IN_PROGRESS â†’ CHECKPOINT â†’ COMPLETED â†’ (new sprint) IN_PROGRESS
 ```
 
 ### `§BRAND_BINARY_NAME§ resume` behavior depends on sprint state:
@@ -114,7 +114,7 @@ IN_PROGRESS → CHECKPOINT → COMPLETED → (new sprint) IN_PROGRESS
 |--------------|-----------|--------|
 | CHECKPOINT | Not all tasks terminal | Back to IN_PROGRESS (resume current sprint) |
 | CHECKPOINT | All tasks terminal | Mark COMPLETED |
-| COMPLETED | — | Archive sprint, create new one, execute pipeline transitions |
+| COMPLETED | â€” | Archive sprint, create new one, execute pipeline transitions |
 
 **Two-step advance:** To move from one pipeline phase to the next, run `§BRAND_BINARY_NAME§ resume` twice: first marks COMPLETED, second archives and advances.
 Approved transition-source output can make a task sprint-terminal before it is integrated. The second `§BRAND_BINARY_NAME§ resume` refuses to advance/archive until approved planning output is merged; run `§BRAND_BINARY_NAME§ wt-merge <task-id>` first.
@@ -141,7 +141,7 @@ When a transition checkpoint fires, the human reviews proposed downstream work b
 
 ```bash
 # Typical replan workflow
-# 1. Find planner output files — check the task's output[] in state.yaml
+# 1. Find planner output files â€” check the task's output[] in state.yaml
 §BRAND_BINARY_NAME§ get tasks                         # identify the planning task
 # 2. Edit the planner's output docs (e.g. specs/plan.md, specs/stories/*.md)
 vim specs/plan.md                      # amend planner deliverables
@@ -180,21 +180,21 @@ whole review wait, not a new per-call allowance.
   notification, safe stop by ending the agent turn. Do not monitor the process
   or start another await call.
 
-### Doer: Submit → Await → Handle
+### Doer: Submit â†’ Await â†’ Handle
 
 ```
-§BRAND_BINARY_NAME§ submit-for-review → §BRAND_BINARY_NAME§ await-verdict → handle result
+§BRAND_BINARY_NAME§ submit-for-review â†’ §BRAND_BINARY_NAME§ await-verdict â†’ handle result
 ```
 
-- **REJECTED**: Fix issues, resubmit (session stays alive — no cold restart)
+- **REJECTED**: Fix issues, resubmit (session stays alive â€” no cold restart)
 - **ALREADY_TRANSITIONED**: Verdict was recovered after the task moved onward; follow `safe_action` (`stop` means exit without more worktree commands, `revise` means you still own it)
 - **APPROVED** / **TERMINAL** with `safe_action: stop`: Safe stop and exit normally; do not run more worktree commands because merge cleanup may remove the task worktree
 - **NEW_ATTEMPT** / **ABORTED**: Safe stop and exit normally
 
-### Reviewer: Verdict → Await → Re-review
+### Reviewer: Verdict â†’ Await â†’ Re-review
 
 ```
-§BRAND_BINARY_NAME§ submit-verdict REJECTED → §BRAND_BINARY_NAME§ await-resubmission → review new changes
+§BRAND_BINARY_NAME§ submit-verdict REJECTED â†’ §BRAND_BINARY_NAME§ await-resubmission â†’ review new changes
 ```
 
 - **RESUBMITTED**: Review again (session stays alive)
@@ -204,14 +204,14 @@ whole review wait, not a new per-call allowance.
 
 Agent logs (`§BRAND_PROJECT_DIRNAME§/agent-outputs/`) are the primary diagnostic tool.
 
-**LLM-assisted** — use `/§BRAND_BINARY_NAME§-logs` in any pairing agent session to cross-correlate logs, diagnose patterns, and propose fixes.
+**LLM-assisted** â€” use `/§BRAND_BINARY_NAME§-logs` in any pairing agent session to cross-correlate logs, diagnose patterns, and propose fixes.
 
 **CLI analyzer** (stdlib Python 3.12+):
 ```bash
 python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_BINARY_NAME§-logs/scripts/analyze-log.py §BRAND_PROJECT_DIRNAME§/agent-outputs/*.txt
 ```
 
-**Browser analyzer** — drag-and-drop visual charts:
+**Browser analyzer** â€” drag-and-drop visual charts:
 ```bash
 open ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_BINARY_NAME§-logs/tools/§BRAND_BINARY_NAME§-session-analyzer.html   # or xdg-open on Linux
 ```
@@ -219,31 +219,31 @@ open ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_BINARY_NAME§-logs/tools/§BRAND_
 ## state.yaml
 
 Key task fields:
-- `status` — current state
-- `assigned_to` — which agent holds the task (doer)
-- `reviewing_by` — which agent is reviewing
-- `lease_expires` / `review_lease_expires` — when the claim expires
-- `base_commit` — review diff base; for submitted/reviewing tasks with a worktree, the merge-base of `review_commit` and the configured integration branch
-- `review_commit` — commit submitted for review; must match task worktree HEAD
-- `merge_commit` — commit on integration branch after merge
-- `iteration` — doer iteration count
-- `review_cycles_current` / `review_cycles_total` — rejection count
-- `blocked_reason` / `blocked_questions` — why the task is stuck
-- `repair_request` — optional complete orchestrator-only repair request captured when the blocker is a state transition the assigned agent cannot perform (`operation`, `target`, `evidence`, `validation`, and either `command` for command-based non-dependency requests or `dependency_updates` for `apply-dependency-repair`)
-- `rejection_reason` — reviewer feedback on rejection
-- `depends_on` — task IDs that must be directly MERGED before this task is claimable and must not point downstream in the pipeline
-- `output[]` — structured output entries (used by `§BRAND_BINARY_NAME§ proceed` to create child tasks)
-  - `output[].depends_on` — sibling output indexes resolved during `proceed`
-  - `output[].task_depends_on` — existing concrete task IDs copied to generated child tasks
-  - `output[].destructive_db` — requires non-empty validation, with every command starting `§BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 ` or `env §BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 `; copied only to per-subtask children
-- `history[]` — timestamped event log per task
+- `status` â€” current state
+- `assigned_to` â€” which agent holds the task (doer)
+- `reviewing_by` â€” which agent is reviewing
+- `lease_expires` / `review_lease_expires` â€” when the claim expires
+- `base_commit` â€” review diff base; for submitted/reviewing tasks with a worktree, the merge-base of `review_commit` and the configured integration branch
+- `review_commit` â€” commit submitted for review; must match task worktree HEAD
+- `merge_commit` â€” commit on integration branch after merge
+- `iteration` â€” doer iteration count
+- `review_cycles_current` / `review_cycles_total` â€” rejection count
+- `blocked_reason` / `blocked_questions` â€” why the task is stuck
+- `repair_request` â€” optional complete orchestrator-only repair request captured when the blocker is a state transition the assigned agent cannot perform (`operation`, `target`, `evidence`, `validation`, and either `command` for command-based non-dependency requests or `dependency_updates` for `apply-dependency-repair`)
+- `rejection_reason` â€” reviewer feedback on rejection
+- `depends_on` â€” task IDs that must be directly MERGED before this task is claimable and must not point downstream in the pipeline
+- `output[]` â€” structured output entries (used by `§BRAND_BINARY_NAME§ proceed` to create child tasks)
+  - `output[].depends_on` â€” sibling output indexes resolved during `proceed`
+  - `output[].task_depends_on` â€” existing concrete task IDs copied to generated child tasks
+  - `output[].destructive_db` â€” requires non-empty validation, with every command starting `§BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 ` or `env §BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 `; copied only to per-subtask children
+- `history[]` â€” timestamped event log per task
 
 Key agent fields:
-- `id` — e.g. `coder-1`, `code-reviewer-2`
-- `role` — runtime role name
-- `status` — STARTING, IDLE, WORKING, REVIEWING, WAITING, HANDOFF
-- `lease_expires` — agent registration expiry
-- `current_task` — task ID being worked on
+- `id` â€” e.g. `coder-1`, `code-reviewer-2`
+- `role` â€” runtime role name
+- `status` â€” STARTING, IDLE, WORKING, REVIEWING, WAITING, HANDOFF
+- `lease_expires` â€” agent registration expiry
+- `current_task` â€” task ID being worked on
 
 ### Modifying state.yaml
 
@@ -282,7 +282,7 @@ recovery to verify the whole blackboard.
 - **Field names**: SUPERSEDED tasks require `rescope_reason` (not `superseded_reason`). Check `§BRAND_BINARY_NAME§ validate` for correct field names.
 - **Status constraints**: `§BRAND_BINARY_NAME§ supersede-task` works from BLOCKED, REJECTED, or any pipeline-declared initial state. Without replacements, pass `--recoverability-command "<single-line command>"` to record the operator audit command before branch/worktree cleanup; do not include secrets. Unsupported status changes require escalation, not a direct edit.
 - **Dependency edits**: Use `§BRAND_BINARY_NAME§ retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason "..."` for one direct edge on a non-terminal task. For multiple active tasks or complete lists, persist a command-free request through `§BRAND_BINARY_NAME§ mark-blocked --repair-request-file <path>` and apply it atomically with `§BRAND_BINARY_NAME§ apply-dependency-repair <blocked-task-id> --reason "..."`. Use `§BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason "..."` for all illegal downstream direct edges on a `SUPERSEDED` task.
-- **Holding a task from review**: Add a `depends_on` on the task that should be reviewed first — the system enforces ordering. Alternatively, set status to the pre-review state.
+- **Holding a task from review**: Add a `depends_on` on the task that should be reviewed first â€” the system enforces ordering. Alternatively, set status to the pre-review state.
 
 ## Agent Exit Codes
 
@@ -292,7 +292,7 @@ recovery to verify the whole blackboard.
 | 42 | Graceful abort (context exhaustion, lease lost, pause) | Restart immediately |
 | Other | Crash | Restart with backoff |
 
-Exit 42 with `handoff_pending: true` on the task means context exhaustion — the restarted agent reads handoff notes and continues.
+Exit 42 with `handoff_pending: true` on the task means context exhaustion â€” the restarted agent reads handoff notes and continues.
 
 ## Common Failure Patterns
 
@@ -304,7 +304,7 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 
 ### Stuck task (stale lease)
 **Symptom**: Task in executing or reviewing state but agent is gone.
-**Diagnosis**: `§BRAND_BINARY_NAME§ get tasks` — check `lease_expires` is in the past (see Lease defaults above).
+**Diagnosis**: `§BRAND_BINARY_NAME§ get tasks` â€” check `lease_expires` is in the past (see Lease defaults above).
 **Fix**: `§BRAND_BINARY_NAME§ recover-task <task-id>` or `§BRAND_BINARY_NAME§ release-claim <task-id>`.
 
 ### Agent crash loop
@@ -315,6 +315,22 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 ### BLOCKED task
 **Symptom**: Task in BLOCKED state, agents skip it.
 **Diagnosis**: Read `blocked_reason`, `blocked_questions`, `depends_on`, and optional `repair_request` in state.yaml. A `BLOCKED` alert is raised when a task blocks; if the orchestrator assesses but cannot resolve it, an `UNRESOLVED BLOCKED` alert is raised.
+An assessed task remains visible in total blocked counts, but unchanged blockers do not override another wake such as `PLANNING_COMPLETE`. Wake detection and rendered instructions use the same assessment-aware checks, including new dependency or descendant activity and targeted human notes. The same rule applies to assessed hypothesis exhaustion. If status selects planning completion while a newly saved prompt still instructs blocked-task assessment, verify the engine build and restart the resident orchestrator supervisor after installing the repair; replacing the executable alone does not reload its prompt builder.
+
+To deliver new operator input after an assessment, write a concise UTF-8 note and
+run `§BRAND_BINARY_NAME§ add-human-note <task-id|all> --note-file <path> --json`.
+The target must exist unless it is `all`. Notes are limited to4096 bytes and must
+pass state hygiene; reference larger evidence by path instead of pasting logs.
+A newer note makes its assessed target actionable for the next orchestrator poll;
+it does not resume a paused run, clear a block, change task status or grant an
+approval. Notes on a dependency do not wake all its consumers; target those tasks
+explicitly or use `all`. Updating an external handoff file alone is not a note.
+The command preserves earlier notes, records operator provenance, and returns
+only target, timestamp and byte count. If it reports that the note persisted but
+the activity log failed, do not append it again. Identified agent sessions cannot
+use this local operator command. An absent agent identity is not authentication
+of a human author; the note is input, not proof of a product decision.
+
 **Fix**: If the blocker was another task, the blocked task should list it in `depends_on` so the orchestrator wakes when that task changes. If one direct edge is wrong, use `§BRAND_BINARY_NAME§ retarget-dependency <id> <old-dep-id> <new-dep-id[,new-dep-id]> --reason "..."`. For multiple tasks or complete lists, the blocked agent stores the command-free request through `§BRAND_BINARY_NAME§ mark-blocked --repair-request-file <path>` and the orchestrator runs `§BRAND_BINARY_NAME§ apply-dependency-repair <blocked-task-id> --reason "..."`; stale or invalid batches leave every dependency, audit entry, and request unchanged. The task remains BLOCKED until its repair validation passes and it is explicitly unblocked or assessed. Unassigned `§BRAND_BINARY_NAME§ unblock-task <id> --reason "..."` may restore a repaired task with valid pending dependencies to its role-pair initial status, but that task remains dependency-held and unclaimable until every direct dependency is `MERGED`. Adding `--assign-to <doer-agent-id>` is a direct-resume path and remains rejected while any dependency is unmet.
 If the task has a preserved worktree and integration moved while it was blocked, use `§BRAND_BINARY_NAME§ unblock-task <id> --rebase-on <integration-branch> --reason "..."`. Tracked worktree changes require `--allow-dirty`, which rebases with Git autostash; untracked files that would be overwritten are refused. Submit/merge conflicts move tasks to `INTEGRATION_FAILED`; unblock-time rebase conflicts remain `BLOCKED` with fresh repair metadata so the preserved worktree can be repaired and unblocked again. Once dependencies merge, claim-time recovery rebases and validates the preserved branch on one captured integration SHA, then uses the completion lock to order the final ref equality check and assignment against cooperating integration movement, without holding the integration mutation lock across the blackboard write.
 Supersede/cancel operations rewrite active downstream dependencies first; stale edges to SUPERSEDED or ABANDONED tasks must not remain on active tasks. Supersession also prunes the retiring task's own illegal downstream edges, retains legal historical dependencies, audits removed IDs, and validates the candidate before commit. Otherwise use `§BRAND_BINARY_NAME§ supersede-task <id> [replacements] --reason "..."` to replace with new tasks, `§BRAND_BINARY_NAME§ supersede-task <id> --reason "..." --recoverability-command "§BRAND_BINARY_NAME§ recover-task <id>"` to mark completed externally with no replacements, or `§BRAND_BINARY_NAME§ recover-task <id>` to reset.
@@ -356,7 +372,7 @@ The candidate dependency, repair request, and task history remain unchanged, and
 
 ### Sprint stuck at CHECKPOINT
 **Symptom**: All agents idle, sprint in CHECKPOINT.
-**Diagnosis**: `§BRAND_BINARY_NAME§ status` — check checkpoint trigger.
+**Diagnosis**: `§BRAND_BINARY_NAME§ status` â€” check checkpoint trigger.
 **Fix**: `§BRAND_BINARY_NAME§ resume` to continue, or `§BRAND_BINARY_NAME§ proceed` + `§BRAND_BINARY_NAME§ resume` to advance to next pipeline phase.
 
 ### Orphaned worktree
@@ -366,7 +382,7 @@ The candidate dependency, repair request, and task history remain unchanged, and
 
 ### Ghost agent
 **Symptom**: Agent registered in state.yaml but process is dead or the registered PID now belongs to a different process.
-**Diagnosis**: `§BRAND_BINARY_NAME§ get agents` — check `process_status`, `process_status_source`, `process_status_detail`, and lease expiry. Watch alerts report active-lease registered agents whose PID is dead or mismatched; unknown process identity is treated conservatively as still live.
+**Diagnosis**: `§BRAND_BINARY_NAME§ get agents` â€” check `process_status`, `process_status_source`, `process_status_detail`, and lease expiry. Watch alerts report active-lease registered agents whose PID is dead or mismatched; unknown process identity is treated conservatively as still live.
 **Fix**: `§BRAND_BINARY_NAME§ recover-agent <agent-id>` or `§BRAND_BINARY_NAME§ delete agent <id>`.
 
 ### Zombie agent process
@@ -377,7 +393,7 @@ The candidate dependency, repair request, and task history remain unchanged, and
 ### Provider quota exhausted
 **Symptom**: All agents using a provider (e.g. Claude) have stopped. System mode is still RUNNING, sprint still IN_PROGRESS. Signal file `§BRAND_PROJECT_DIRNAME§/provider-quota-exhausted-<provider>` exists.
 **Diagnosis**: `ls §BRAND_PROJECT_DIRNAME§/provider-quota-exhausted-*` or check `§BRAND_PROJECT_DIRNAME§/alerts.log` for `PROVIDER QUOTA EXHAUSTED`. `PROVIDER QUOTA SPAWN BLOCKED` means a spawn was attempted while the quota signal was still set; delete the flag file or run `§BRAND_BINARY_NAME§ pause` then `§BRAND_BINARY_NAME§ resume` before spawning again.
-**Fix**: `§BRAND_BINARY_NAME§ pause` then `§BRAND_BINARY_NAME§ resume` — pause transitions RUNNING → PAUSED, resume clears quota signals and restarts the sprint. Then restart agents. (`§BRAND_BINARY_NAME§ resume` alone fails because the system is still RUNNING, not PAUSED.)
+**Fix**: `§BRAND_BINARY_NAME§ pause` then `§BRAND_BINARY_NAME§ resume` â€” pause transitions RUNNING â†’ PAUSED, resume clears quota signals and restarts the sprint. Then restart agents. (`§BRAND_BINARY_NAME§ resume` alone fails because the system is still RUNNING, not PAUSED.)
 
 ### Provider unavailable
 **Symptom**: Agents for a provider stop before doing useful work, often after startup/session errors such as Codex failing to access `~/.codex/sessions`. Signal file `§BRAND_PROJECT_DIRNAME§/provider-unavailable-<provider>` exists.
@@ -422,7 +438,7 @@ record. Legacy circuit-breaker state without `current_response`, `response`,
 
 | Condition | Action |
 |-----------|--------|
-| Agent crash loop (3× in 5min) | Supervisor stops the agent |
+| Agent crash loop (3Ã— in 5min) | Supervisor stops the agent |
 | Blackboard validation fails | All agents pause |
 | Submit/merge integration branch conflict | Task set to INTEGRATION_FAILED |
 | Unblock-time `--rebase-on` conflict | Task remains BLOCKED with fresh repair metadata |
