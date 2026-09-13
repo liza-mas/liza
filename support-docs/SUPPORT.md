@@ -236,6 +236,15 @@ an engine update; do not add dummy tests or waive behavioral work to bypass it.
 Filename recognition proves presence only; canonical acceptance execution and
 independent review still establish whether the tests pass and cover the work.
 
+If submission fails at `acceptance.execution[N]`, inspect the error's masked
+command-output excerpt for the failing assertion or setup error. `N` is zero-based
+in the reviewed canonical command list. Excerpts are capped at 8 KiB and marked
+when truncated; timeouts and output-limit failures omit the excerpt. A failure does not create
+an acceptance receipt. Older engines discarded failed-command output entirely;
+it cannot be recovered afterward from task state. Preserve the candidate and
+diagnose with an updated engine before another authorized submission. A later
+direct test pass does not explain the original gate failure or replace admission.
+
 ```
 §BRAND_BINARY_NAME§ submit-for-review → §BRAND_BINARY_NAME§ await-verdict → handle result
 ```

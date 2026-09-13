@@ -54,6 +54,15 @@ names its own containing commit would require circular commit identity.
 Precondition failures do not spend review cycles, release the doer, assign a
 reviewer or mark `INTEGRATION_FAILED`.
 
+Failed execution returns the failing command's combined stdout/stderr in the
+error, masked before an 8 KiB excerpt limit and explicitly marked if truncated.
+Timeout and output-limit errors return no excerpt, since incomplete capture may
+split a secret.
+Diagnostic excerpts are not successful receipts; admission still fails and no
+partial execution results are published as evidence.
+Both successful output and failure diagnostics mask the current branded and legacy
+agent-generation environment values as well as known secrets and connection values.
+
 ## Assignment, repair and cleanup
 
 Normal and returning-reviewer assignment require a receipt matching the strict

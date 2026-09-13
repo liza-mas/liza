@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/liza-mas/liza/internal/brand"
 )
 
 func TestAcceptanceExecutionSuccess(t *testing.T) {
@@ -39,7 +41,7 @@ func TestAcceptanceExecutionFailureStopsBatch(t *testing.T) {
 	requirePosixShell(t)
 	dir := t.TempDir()
 	results, err := executeAcceptanceCommands("task-failure", dir, []string{"touch first-completed", "printf diagnostic >&2; exit 7", "touch should-not-exist"}, 5)
-	if err == nil || !strings.Contains(err.Error(), "acceptance.execution[1]") || !strings.Contains(err.Error(), "exit 7") {
+	if err == nil || !strings.Contains(err.Error(), "acceptance.execution[1]") || !strings.Contains(err.Error(), "exit 7") || !strings.Contains(err.Error(), "diagnostic") {
 		t.Fatalf("want actionable failed-command error, got %v", err)
 	}
 	if results != nil {
@@ -50,6 +52,53 @@ func TestAcceptanceExecutionFailureStopsBatch(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "should-not-exist")); !os.IsNotExist(err) {
 		t.Fatalf("batch continued after failure: %v", err)
+	}
+}
+
+func TestAcceptanceExecutionFailureOutputIsMaskedBeforeTruncation(t *testing.T) {
+	requirePosixShell(t)
+	t.Setenv("ACCEPTANCE_TEST_TOKEN", "synthetic-private-value")
+	// Put a credential across the diagnostic excerpt boundary. Truncating raw
+	// output before masking would disclose a partial credential.
+	command := `printf 'assertion failed\n'; head -c 8165 /dev/zero | tr '\000' x; printf '%s\n' "$ACCEPTANCE_TEST_TOKEN"; head -c 10000 /dev/zero | tr '\000' y; exit 7`
+	results, err := executeAcceptanceCommands("task-failure-output", t.TempDir(), []string{command}, 5)
+	if err == nil || results != nil {
+		t.Fatal("failed command must return an error without trusted results")
+	}
+	diagnostic := err.Error()
+	if !strings.Contains(diagnostic, "assertion failed") || !strings.Contains(diagnostic, "***") || !strings.Contains(diagnostic, "output truncated") {
+		t.Fatal("failure omitted the assertion, masked value or truncation disclosure")
+	}
+	if strings.Contains(diagnostic, "synthetic") || len(diagnostic) > 8500 {
+		t.Fatal("failure output exposed a partial credential or exceeded the diagnostic bound")
+	}
+}
+
+func TestAcceptanceExecutionMasksAgentGeneration(t *testing.T) {
+	requirePosixShell(t)
+	for _, name := range []string{brand.EnvName("AGENT_GENERATION"), brand.LegacyEnvName("AGENT_GENERATION")} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "synthetic-authority-value")
+			for _, suffix := range []string{"", "; exit 7"} {
+				command := fmt.Sprintf(`printf 'assertion context: %%s\n' "$%s"`, name) + suffix
+				results, err := executeAcceptanceCommands("task-generation-mask", t.TempDir(), []string{command}, 5)
+				var diagnostic string
+				if suffix == "" {
+					if err != nil || len(results) != 1 {
+						t.Fatal("expected one successful execution")
+					}
+					diagnostic = results[0].Output
+				} else {
+					if err == nil || results != nil {
+						t.Fatal("expected failed execution without a receipt")
+					}
+					diagnostic = err.Error()
+				}
+				if strings.Contains(diagnostic, "synthetic-authority-value") || !strings.Contains(diagnostic, "assertion context: ***") {
+					t.Fatal("agent authority was not masked in acceptance output")
+				}
+			}
+		})
 	}
 }
 
@@ -138,8 +187,16 @@ func TestAcceptanceExecutionMasksCredentials(t *testing.T) {
 	if results[0].Command == command || results[0].CommandSHA256 != fmt.Sprintf("%x", sha256.Sum256([]byte(command))) {
 		t.Fatal("masked display lost canonical command identity")
 	}
-	results, err = executeAcceptanceCommands("task-synthetic-token-152", t.TempDir(), []string{"exit 9"}, 5)
+	results, err = executeAcceptanceCommands("task-synthetic-token-152", t.TempDir(), []string{command + "; exit 9"}, 5)
 	if err == nil || !strings.Contains(err.Error(), "exit 9") || strings.Contains(err.Error(), "synthetic-token-152") || results != nil {
 		t.Fatal("failed batch did not return only its masked error")
+	}
+	for _, value := range []string{"postgres://tester:q7@localhost/sample", "q7", "synthetic dsn password"} {
+		if strings.Contains(err.Error(), value) {
+			t.Fatal("failed command output exposed a synthetic connection credential")
+		}
+	}
+	if strings.Count(err.Error(), "***") < 5 {
+		t.Fatal("failed command output was discarded instead of masked")
 	}
 }

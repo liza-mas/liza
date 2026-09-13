@@ -14,11 +14,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/secretmask"
 )
 
 const acceptanceOutputLimit = 1 << 20
+const acceptanceFailureExcerptLimit = 8 << 10
 
 var errAcceptanceOutputLimit = errors.New("acceptance execution output limit exceeded")
 
@@ -81,9 +83,19 @@ func executeAcceptanceCommands(taskID, worktree string, commands []string, timeo
 			return nil, fail(i, "command batch timed out")
 		}
 		if err != nil {
+			// Bound only after masking the complete captured output: a raw
+			// excerpt could split a credential and evade exact-value redaction.
+			reason := fmt.Sprintf("command failed (exit %d): %s", result.ExitCode, err)
+			excerpt, truncated := persistedOutputExcerpt(result.Output, acceptanceFailureExcerptLimit)
+			if truncated {
+				excerpt += "\n[output truncated]"
+			}
+			if excerpt != "" {
+				reason += "\ncommand output (masked):\n" + excerpt
+			}
 			// Execution errors may contain paths or shell diagnostics; mask them
 			// and discard all results from the failed batch.
-			return nil, fail(i, fmt.Sprintf("command failed (exit %d): %s", result.ExitCode, err))
+			return nil, fail(i, reason)
 		}
 	}
 	return results, nil
@@ -128,7 +140,8 @@ func acceptanceExecutionMask(environ []string) func(string) string {
 		}
 		upper := strings.ToUpper(key)
 		connection := strings.HasSuffix(upper, "URL") || strings.HasSuffix(upper, "DSN")
-		if connection || secretmask.IsSecretKey(key) {
+		generation := key == brand.EnvName("AGENT_GENERATION") || key == brand.LegacyEnvName("AGENT_GENERATION")
+		if connection || generation || secretmask.IsSecretKey(key) {
 			credentials = append(credentials, value)
 		}
 		if !connection {

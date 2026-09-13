@@ -212,7 +212,7 @@ func TestAcceptanceLifecycleSameHEADRepair(t *testing.T) {
 func TestAcceptanceLifecycleFailedSameHEADRepairIsAtomic(t *testing.T) {
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	wt := git.New(root).GetWorktreePath(taskID)
-	if err := os.WriteFile(filepath.Join(wt, "boundary_test.sh"), []byte("set -eu\nif [ \"${ACCEPTANCE_FIXTURE_FAIL:-}\" = yes ]; then exit 7; fi\nprintf 'PASS identity assertion\\n'\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(wt, "boundary_test.sh"), []byte("set -eu\nif [ \"${ACCEPTANCE_FIXTURE_FAIL:-}\" = yes ]; then printf 'FAIL identity assertion\\n' >&2; exit 7; fi\nprintf 'PASS identity assertion\\n'\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	testhelpers.MustGit(t, wt, "add", "boundary_test.sh")
@@ -235,7 +235,7 @@ func TestAcceptanceLifecycleFailedSameHEADRepairIsAtomic(t *testing.T) {
 	t.Setenv("ACCEPTANCE_FIXTURE_FAIL", "yes")
 	_, err := UpdateReviewCommit(root, taskID, "human")
 	requireAcceptanceError(t, err, taskID)
-	if !strings.Contains(err.Error(), "exit 7") {
+	if !strings.Contains(err.Error(), "exit 7") || !strings.Contains(err.Error(), "FAIL identity assertion") {
 		t.Fatalf("repair did not execute failing canonical command: %v", err)
 	}
 	after := readAcceptanceState(t, bb)
