@@ -453,6 +453,13 @@ masking, truncation, and subsequent repository changes limit retrospective class
 
 ### Known Gotchas
 
+- **Indented acceptance output**: Older builds can reject review submission at
+  `phase=write-state` after successful validation when command output mixes
+  indented and unindented lines (for example .NET test output). Acceptance receipts
+  now quote command/output strings to preserve their exact whitespace. Install a
+  fixed build, preserve the task worktree, and use supported recovery before a fresh
+  submission. A failed submission may already have rebased HEAD; do not change the
+  original SHA during an immutable-request retry or edit the live state/receipt.
 - **`|N` block scalars**: Go writes indentation indicators for multi-line fields (for example `rejection_reason`). YAML serializers can make live state unparseable. Restore a trusted backup or use a supported migration/recovery command; do not hand-edit a live blackboard.
 - **Timestamps**: Python's `yaml.dump` can convert `2026-04-14T14:29:31Z` to `2026-04-14 14:29:31+00:00`. Go rejects this. Never round-trip the blackboard through a YAML library.
 - **Concurrent writes**: Agents and CLI write concurrently. Only CLI mutations participate in the required lock and validation protocol.

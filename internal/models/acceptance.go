@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/referencecontract"
+	"gopkg.in/yaml.v3"
 )
 
 // AcceptanceSource records the immutable, independently reviewed allocation
@@ -25,6 +26,20 @@ type AcceptanceCommandResult struct {
 	StartedAt     time.Time `yaml:"started_at" json:"started_at"`
 	FinishedAt    time.Time `yaml:"finished_at" json:"finished_at"`
 	Output        string    `yaml:"output" json:"output"`
+}
+
+// MarshalYAML quotes execution text because go-yaml's block-scalar indentation
+// can reject mixed-indentation output or silently strip its leading whitespace.
+// Quoting preserves the exact masked command and output, including blank lines.
+func (r AcceptanceCommandResult) MarshalYAML() (any, error) {
+	return map[string]any{
+		"command":        &yaml.Node{Kind: yaml.ScalarNode, Style: yaml.DoubleQuotedStyle, Value: r.Command},
+		"command_sha256": r.CommandSHA256,
+		"exit_code":      r.ExitCode,
+		"started_at":     r.StartedAt,
+		"finished_at":    r.FinishedAt,
+		"output":         &yaml.Node{Kind: yaml.ScalarNode, Style: yaml.DoubleQuotedStyle, Value: r.Output},
+	}, nil
 }
 
 // AcceptanceReceipt binds validated mappings and successful executions to one
