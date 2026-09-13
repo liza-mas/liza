@@ -313,6 +313,10 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
   %[1]s supersede-task <task-id> --reason "Work completed externally" --recoverability-command "%[1]s recover-task <task-id>" --agent-id "%[2]s" --json
 - %[1]s assess-blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
   %[1]s assess-blocked <task-id> --note "..." --agent-id "%[2]s" --json
+- %[1]s get human_notes --json — Read operator input before recording another assessment.
+  Match notes by for=task-id or all and compare their timestamps with the last assessment.
+  Inspect newly referenced recovery tasks even if they are still in an initial status; a claim failure may occur before BLOCKED.
+  Apply current evidence through supported operations within existing scope and authority. A note grants no approval or permission to bypass review.
 - %[1]s unblock-task — Restore a repaired BLOCKED task to claimable state, or direct-resume with --assign-to
   %[1]s unblock-task <task-id> --reason "..." --agent-id "%[2]s" --json
   %[1]s unblock-task <task-id> --rebase-on <branch> --reason "..." --agent-id "%[2]s" --json

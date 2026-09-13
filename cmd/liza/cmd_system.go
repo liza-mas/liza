@@ -500,6 +500,7 @@ Query Types:
     agents <agent-id>              - Show specific agent
     metrics                        - Show sprint metrics
     anomalies                      - List all anomalies
+    human_notes                    - Read operator notes and their targets
     quarantined_verdicts            - List fenced review evidence and reconciliation history
 
   ID shorthand:
@@ -526,6 +527,7 @@ Examples:
   %[2]s agents --zombies        # Show live %[3]s agent processes missing from state
   %[2]s agents --format yaml
   %[2]s metrics
+  %[2]s human_notes --json
   %[2]s anomalies`, brand.NameTitle, brand.Command("get"), brand.BinaryName),
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {

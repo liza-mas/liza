@@ -9,11 +9,80 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"gopkg.in/yaml.v3"
 )
+
+func TestGetHumanNotesCLI(t *testing.T) {
+	for _, empty := range []bool{false, true} {
+		t.Run(map[bool]string{false: "append then agent reads", true: "empty list"}[empty], func(t *testing.T) {
+			root, notePath := setupHumanNoteCLI(t)
+			if !empty {
+				for _, target := range []string{"target", "all"} {
+					if _, err := executeRootCommandCapture(t, root, "add-human-note", target, "--note-file", notePath, "--json"); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			lp := paths.New(root)
+			before, err := os.ReadFile(lp.StatePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			beforeLog, err := os.ReadFile(lp.LogPath())
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			logAbsent := os.IsNotExist(err)
+			t.Setenv(brand.EnvName("AGENT_ID"), "orchestrator-1")
+			stdout, err := executeRootCommandCapture(t, root, "get", "human_notes", "--json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			envelope := parseEnvelope(t, stdout)
+			notes, ok := envelope["result"].([]any)
+			if envelope["ok"] != true || !ok {
+				t.Fatalf("expected successful list: %s", stdout)
+			}
+			if empty {
+				if len(notes) != 0 {
+					t.Fatal("empty history returned notes")
+				}
+			} else {
+				if len(notes) != 2 {
+					t.Fatalf("notes=%v; want both appended notes", notes)
+				}
+				for i, target := range []string{"target", "all"} {
+					note := notes[i].(map[string]any)
+					if note["message"] != "Recovery guidance, not an approval.\n" || note["for"] != target || note["source"] != "operator_cli" || note["operation"] != "add-human-note" {
+						t.Fatalf("append/read mismatch: %v", note)
+					}
+					stamp, ok := note["timestamp"].(string)
+					if !ok {
+						t.Fatal("timestamp missing")
+					}
+					if _, err := time.Parse(time.RFC3339Nano, stamp); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			after, err := os.ReadFile(lp.StatePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			afterLog, err := os.ReadFile(lp.LogPath())
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(before, after) || !bytes.Equal(beforeLog, afterLog) || logAbsent != os.IsNotExist(err) {
+				t.Fatal("read changed state or activity log")
+			}
+		})
+	}
+}
 
 func TestGetCommand(t *testing.T) {
 	// Create a temporary directory for the test

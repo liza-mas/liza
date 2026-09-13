@@ -95,7 +95,7 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 
 // isKnownEntityType returns true if the query is a known entity type
 func isKnownEntityType(query string) bool {
-	knownTypes := []string{"config", "sprint", "tasks", "agents", "metrics", "anomalies", "quarantined_verdicts"}
+	knownTypes := []string{"config", "sprint", "tasks", "agents", "metrics", "anomalies", "quarantined_verdicts", "human_notes"}
 	return slices.Contains(knownTypes, query)
 }
 
@@ -176,9 +176,34 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 		return asString(inspectAnomalies(state, inspectAnomaliesOptions{Format: opts.Format}))
 	case "quarantined_verdicts":
 		return formatOutput(state.QuarantinedVerdicts, opts.Format)
+	case "human_notes":
+		if len(args) != 0 {
+			return "", fmt.Errorf("human_notes does not accept a task ID; query the list and select notes by for")
+		}
+		return formatOutput(humanNotesForInspect(state.HumanNotes), opts.Format)
 	default:
 		return "", &errors.NotFoundError{Entity: entity}
 	}
+}
+
+// humanNotesForInspect exposes note content and factual operator provenance,
+// without publishing arbitrary inline metadata as part of the query contract.
+func humanNotesForInspect(notes []models.HumanNote) []map[string]any {
+	result := make([]map[string]any, 0, len(notes))
+	for _, note := range notes {
+		item := map[string]any{
+			"timestamp": note.Timestamp,
+			"message":   note.Message,
+			"for":       note.For,
+		}
+		for _, key := range []string{"source", "operation"} {
+			if value, ok := note.Extra[key].(string); ok {
+				item[key] = value
+			}
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 // asString extracts the string result from an (any, error) return pair.

@@ -1,6 +1,9 @@
 package commands
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +11,63 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+func TestInspectHumanNotes(t *testing.T) {
+	root := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, root)
+	state := testhelpers.CreateValidState()
+	state.HumanNotes = []models.HumanNote{{
+		Timestamp: time.Date(2026, 9, 13, 16, 30, 0, 0, time.UTC),
+		For:       "task-1",
+		Message:   "Read docs/recovery.md before reassessment.\nPreserve the current worktree.",
+		Extra:     map[string]any{"source": "operator_cli", "operation": "add-human-note", "private_metadata": "not part of query"},
+	}}
+	testhelpers.WriteInitialState(t, statePath, state)
+	before, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []string{"json", "yaml", "value"} {
+		t.Run(format, func(t *testing.T) {
+			output, err := InspectCommand([]string{"human_notes"}, InspectOptions{ProjectRoot: root, Format: format})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(output, "Preserve the current worktree.") || strings.Contains(output, "private_metadata") {
+				t.Fatalf("incorrect note projection: %s", output)
+			}
+			if format == "json" {
+				var notes []map[string]any
+				if err := json.Unmarshal([]byte(output), &notes); err != nil {
+					t.Fatal(err)
+				}
+				if len(notes) != 1 || notes[0]["message"] != state.HumanNotes[0].Message || notes[0]["for"] != "task-1" || notes[0]["timestamp"] != "2026-09-13T16:30:00Z" || notes[0]["source"] != "operator_cli" || notes[0]["operation"] != "add-human-note" {
+					t.Fatalf("missing note content/provenance: %v", notes)
+				}
+			}
+		})
+	}
+	for _, tc := range []struct {
+		args []string
+		opts InspectOptions
+	}{
+		{[]string{"human_notes", "task-1"}, InspectOptions{Format: "json"}},
+		{[]string{"human_notes"}, InspectOptions{Format: "json", Summary: true}},
+		{[]string{"human_notes"}, InspectOptions{Format: "json", Zombies: true}},
+	} {
+		tc.opts.ProjectRoot = root
+		if _, err := InspectCommand(tc.args, tc.opts); err == nil {
+			t.Fatalf("unsupported query accepted: %v %+v", tc.args, tc.opts)
+		}
+	}
+	after, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("inspection changed state")
+	}
+}
 
 func TestInspectCommand(t *testing.T) {
 	// Create test state
