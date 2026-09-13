@@ -227,6 +227,15 @@ self-approval or changed allocation remains a refusal. Do not fabricate an
 assignee or remove the acceptance declaration. `update-review-commit` repairs
 submitted/reviewing candidates, not the metadata of a MERGED parent.
 
+If submission says `code tasks must include test files`, inspect the reported
+`changed_files_considered`, `test_files_matched` and `matcher_patterns` for the
+exact committed range. C# test filenames ending in `Test.cs` or `Tests.cs` are
+recognized, including nested paths. A `.csproj` or arbitrary `.cs` helper under
+`tests/` does not satisfy this check. Older builds without C# recognition need
+an engine update; do not add dummy tests or waive behavioral work to bypass it.
+Filename recognition proves presence only; canonical acceptance execution and
+independent review still establish whether the tests pass and cover the work.
+
 ```
 §BRAND_BINARY_NAME§ submit-for-review → §BRAND_BINARY_NAME§ await-verdict → handle result
 ```

@@ -72,6 +72,18 @@ func TestIsTestFile(t *testing.T) {
 		{"Kotlin Test prefix", "TestFoo.kt", true},
 		{"Kotlin non-test", "Foo.kt", false},
 
+		// C#
+		{"CSharp Test suffix", "SessionTest.cs", true},
+		{"CSharp nested Tests suffix", "tests/access/authority/SessionTests.cs", true},
+		{"CSharp configuration tests", "tests/access/authority/ConfigurationTests.cs", true},
+		{"CSharp diagnostics tests", "tests/access/authority/DiagnosticsTests.cs", true},
+		{"CSharp production file", "Session.cs", false},
+		{"CSharp fixture in tests directory", "tests/AuthorityFixture.cs", false},
+		{"CSharp helper prefix", "TestHelpers.cs", false},
+		{"CSharp test project", "Access.Authority.Tests.csproj", false},
+		{"CSharp backup file", "SessionTests.cs.bak", false},
+		{"CSharp casing mismatch", "Sessiontests.cs", false},
+
 		// Rust
 		{"Rust _test.rs", "foo_test.rs", true},
 		{"Rust tests/ dir", "tests/integration.rs", true},

@@ -24,6 +24,8 @@ var testFileMatcherPatterns = []string{
 	"*Test.kt",
 	"Test*.kt",
 	"*Tests.kt",
+	"*Test.cs",
+	"*Tests.cs",
 	"*_test.rs",
 	"tests/*.rs",
 }
@@ -49,7 +51,7 @@ func (d TestFileDiagnostics) Details() map[string]any {
 }
 
 // isTestFile returns true if the filename matches known test file patterns
-// across Go, Python, JS/TS, Shell, Ruby, Java, Kotlin, and Rust.
+// across Go, Python, JS/TS, Shell, Ruby, Java, Kotlin, C#, and Rust.
 func isTestFile(name string) bool {
 	base := filepath.Base(name)
 
@@ -98,6 +100,11 @@ func isTestFile(name string) bool {
 	// Kotlin: *Test.kt, Test*.kt, *Tests.kt
 	if strings.HasSuffix(base, "Test.kt") || strings.HasSuffix(base, "Tests.kt") ||
 		(strings.HasPrefix(base, "Test") && strings.HasSuffix(base, ".kt")) {
+		return true
+	}
+
+	// C#: *Test.cs, *Tests.cs
+	if strings.HasSuffix(base, "Test.cs") || strings.HasSuffix(base, "Tests.cs") {
 		return true
 	}
 
