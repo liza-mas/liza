@@ -457,7 +457,10 @@ masking, truncation, and subsequent repository changes limit retrospective class
   `phase=write-state` after successful validation when command output mixes
   indented and unindented lines (for example .NET test output). Acceptance receipts
   now quote command/output strings to preserve their exact whitespace. Install a
-  fixed build, preserve the task worktree, and use supported recovery before a fresh
+  fixed build and stop/restart the TUI and all agent supervisors onto it before
+  recovery. Replacing the binary does not update resident processes: their old
+  serializer can reject heartbeat, checkpoint and cleanup writes once a new receipt
+  exists. Preserve the task worktree and use supported recovery before a fresh
   submission. A failed submission may already have rebased HEAD; do not change the
   original SHA during an immutable-request retry or edit the live state/receipt.
 - **`|N` block scalars**: Go writes indentation indicators for multi-line fields (for example `rejection_reason`). YAML serializers can make live state unparseable. Restore a trusted backup or use a supported migration/recovery command; do not hand-edit a live blackboard.
