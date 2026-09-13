@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -113,8 +114,7 @@ func TestAwaitResubmission_RejectResubmitFlow(t *testing.T) {
 	// --- Phase 3: Reviewer calls the public command adapter ---
 	awaitCall := startAwaitResubmission(projectDir, "task-1", reviewerID, 30*time.Second)
 
-	// Let AwaitResubmission start watching before coder acts
-	testhelpers.WaitForAsyncSetup()
+	waitForResubmissionOwnership(t, bb, "task-1", reviewerID, awaitCall)
 
 	// --- Phase 4: Coder reclaims, fixes, resubmits ---
 	if err := commands.ClaimTaskCommand(projectDir, "task-1", coderID); err != nil {
@@ -192,7 +192,7 @@ func TestAwaitResubmission_TerminalFlow(t *testing.T) {
 
 	awaitCall := startAwaitResubmission(
 		fixture.projectRoot, awaitTaskID, awaitReviewerID, 30*time.Second)
-	testhelpers.WaitForAsyncSetup()
+	waitForResubmissionOwnership(t, fixture.bb, awaitTaskID, awaitReviewerID, awaitCall)
 	if err := commands.ClaimTaskCommand(fixture.projectRoot, awaitTaskID, awaitCoderID); err != nil {
 		t.Fatalf("ClaimTask (reclaim) failed: %v", err)
 	}
@@ -214,6 +214,41 @@ func TestAwaitResubmission_TerminalFlow(t *testing.T) {
 		t.Fatalf("Task status = %q, want %q", result.TaskStatus, models.TaskStatusBlocked)
 	}
 	assertBoundedAwaitState(t, fixture, true)
+}
+
+// Acquiring passive reviewer ownership changes the lifecycle boundary. Wait for
+// that transaction before reclaiming instead of racing it after a fixed sleep.
+func waitForResubmissionOwnership(t *testing.T, bb *db.Blackboard, taskID, reviewerID string, call <-chan awaitResubmissionCall) {
+	t.Helper()
+	timeout := time.NewTimer(10 * time.Second)
+	defer timeout.Stop()
+	for {
+		state, err := bb.Read()
+		if err != nil {
+			t.Fatalf("Read reviewer ownership: %v", err)
+		}
+		task := state.FindTask(taskID)
+		if task == nil {
+			t.Fatalf("Task %s disappeared while waiting for reviewer ownership", taskID)
+		}
+		reviewer := state.Agents[reviewerID]
+		if task.Status == models.TaskStatusRejected &&
+			task.ReviewingBy != nil && *task.ReviewingBy == reviewerID &&
+			task.ReviewLeaseExpires != nil && task.ReviewLeaseExpires.After(time.Now()) &&
+			reviewer.Status == models.AgentStatusWaiting &&
+			reviewer.CurrentTask != nil && *reviewer.CurrentTask == taskID {
+			return
+		}
+		select {
+		case outcome := <-call:
+			t.Fatalf("AwaitResubmission returned before ownership: result=%+v err=%v", outcome.result, outcome.err)
+		case <-timeout.C:
+			t.Fatalf("Reviewer %s did not acquire waiting ownership of %s (status=%s, reviewing_by=%v, review_lease=%v, reviewer_status=%s, current_task=%v)", reviewerID, taskID, task.Status, task.ReviewingBy, task.ReviewLeaseExpires, reviewer.Status, reviewer.CurrentTask)
+		case <-time.After(200 * time.Millisecond):
+			// Read takes an exclusive lock. Start the delay after it returns so
+			// a slow read cannot consume the interval and starve the writer.
+		}
+	}
 }
 
 func startAwaitResubmission(
