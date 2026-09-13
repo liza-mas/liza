@@ -3,6 +3,7 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/git"
@@ -31,6 +32,16 @@ func TestIsTestFile(t *testing.T) {
 		{"JS .test.js", "foo.test.js", true},
 		{"JS .spec.js", "foo.spec.js", true},
 		{"JS non-test", "foo.js", false},
+		{"Node ESM test", "experiments/offline-lifecycle/tests/harness.test.mjs", true},
+		{"Node ESM spec", "foo.spec.mjs", true},
+		{"Node CommonJS test", "foo.test.cjs", true},
+		{"Node CommonJS spec", "foo.spec.cjs", true},
+		{"Node ESM non-test", "server.mjs", false},
+		{"Node CommonJS non-test", "server.cjs", false},
+		{"Node ESM helper in tests directory", "tests/fixture.mjs", false},
+		{"Node CommonJS helper in tests directory", "tests/fixture.cjs", false},
+		{"Node ESM backup", "harness.test.mjs.bak", false},
+		{"Node CommonJS backup", "harness.spec.cjs.bak", false},
 
 		// TypeScript
 		{"TS .test.ts", "foo.test.ts", true},
@@ -49,6 +60,8 @@ func TestIsTestFile(t *testing.T) {
 		{"TS __tests__ nested", "src/__tests__/bar.ts", true},
 		{"TSX __tests__", "components/__tests__/Button.tsx", true},
 		{"JS not in __tests__", "src/foo.js", false},
+		{"Node ESM __tests__", "__tests__/foo.mjs", true},
+		{"Node CommonJS nested __tests__", "src/__tests__/foo.cjs", true},
 
 		// Shell
 		{"Shell test_ prefix", "test_integration.sh", true},
@@ -103,6 +116,50 @@ func TestIsTestFile(t *testing.T) {
 				t.Errorf("isTestFile(%q) = %v, want %v", tt.file, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAnalyzeTestFiles_NodeModules(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	g := git.New(tmpDir)
+	taskID := "node-tests"
+	baseCommit, err := g.CreateWorktree(taskID, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wtPath := g.GetWorktreePath(taskID)
+	testFiles := []string{
+		"experiments/offline-lifecycle/tests/harness.spec.cjs",
+		"experiments/offline-lifecycle/tests/harness.spec.mjs",
+		"experiments/offline-lifecycle/tests/harness.test.cjs",
+		"experiments/offline-lifecycle/tests/harness.test.mjs",
+	}
+	for _, name := range append(slices.Clone(testFiles), "experiments/offline-lifecycle/tests/fixture.mjs", "experiments/offline-lifecycle/server.cjs") {
+		path := filepath.Join(wtPath, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("// Test-file recognition fixture.\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	testhelpers.MustGit(t, wtPath, "add", ".")
+	testhelpers.MustGit(t, wtPath, "commit", "-m", "Add Node modules")
+
+	diagnostics, err := AnalyzeTestFiles(g, taskID, baseCommit, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(diagnostics.TestFilesMatched, testFiles) {
+		t.Errorf("matched test files = %v, want %v", diagnostics.TestFilesMatched, testFiles)
+	}
+	for _, pattern := range []string{"*.test.{js,ts,jsx,tsx,mjs,cjs}", "*.spec.{js,ts,jsx,tsx,mjs,cjs}", "__tests__/*.{js,ts,jsx,tsx,mjs,cjs}"} {
+		if !slices.Contains(diagnostics.MatcherPatterns, pattern) {
+			t.Errorf("diagnostic matcher patterns omit %q", pattern)
+		}
 	}
 }
 

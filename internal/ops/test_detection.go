@@ -11,9 +11,9 @@ var testFileMatcherPatterns = []string{
 	"*_test.go",
 	"*_test.py",
 	"test_*.py",
-	"*.test.{js,ts,jsx,tsx}",
-	"*.spec.{js,ts,jsx,tsx}",
-	"__tests__/*.{js,ts,jsx,tsx}",
+	"*.test.{js,ts,jsx,tsx,mjs,cjs}",
+	"*.spec.{js,ts,jsx,tsx,mjs,cjs}",
+	"__tests__/*.{js,ts,jsx,tsx,mjs,cjs}",
 	"test_*.sh",
 	"*_test.sh",
 	"*_test.rb",
@@ -65,8 +65,8 @@ func isTestFile(name string) bool {
 		return true
 	}
 
-	// JS/TS: *.test.{js,ts,jsx,tsx}, *.spec.{js,ts,jsx,tsx}, or any file under __tests__/
-	for _, ext := range []string{".js", ".ts", ".jsx", ".tsx"} {
+	// JS/TS: .test/.spec files or modules under __tests__, including Node ESM/CommonJS.
+	for _, ext := range []string{".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"} {
 		if strings.HasSuffix(base, ".test"+ext) || strings.HasSuffix(base, ".spec"+ext) {
 			return true
 		}

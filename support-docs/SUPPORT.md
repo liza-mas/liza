@@ -231,8 +231,11 @@ If submission says `code tasks must include test files`, inspect the reported
 `changed_files_considered`, `test_files_matched` and `matcher_patterns` for the
 exact committed range. C# test filenames ending in `Test.cs` or `Tests.cs` are
 recognized, including nested paths. A `.csproj` or arbitrary `.cs` helper under
-`tests/` does not satisfy this check. Older builds without C# recognition need
-an engine update; do not add dummy tests or waive behavioral work to bypass it.
+`tests/` does not satisfy this check. Node `.test.mjs`, `.spec.mjs`, `.test.cjs`
+and `.spec.cjs` files are recognized, as are those module extensions under
+`__tests__/`; ordinary module helpers under `tests/` do not qualify. Older builds
+missing these patterns need an engine update; do not add dummy tests, rename a
+reviewed mandatory file, or waive behavioral work to bypass recognition.
 Filename recognition proves presence only; canonical acceptance execution and
 independent review still establish whether the tests pass and cover the work.
 
