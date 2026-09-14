@@ -31,11 +31,13 @@ type Blackboard struct {
 	fileLock  *filelock.FileLock
 
 	// Cache fields for performance optimization
-	// We cache raw YAML bytes (not a parsed struct) so that each ReadCached
-	// call returns a fresh *models.State. This prevents callers from silently
-	// corrupting a shared cached struct.
+	// We cache the parsed, normalized state keyed by file mtime: waiting
+	// supervisors re-read unchanged state on every tick, and re-parsing
+	// megabyte-scale YAML per call starves the CPU the lock holders need.
+	// The cached value is never handed out directly — ReadCached returns a
+	// deep copy so callers keep a state they may mutate freely.
 	cacheMu     sync.RWMutex
-	cachedData  []byte
+	cachedState *models.State
 	cachedMtime time.Time
 }
 
@@ -88,14 +90,14 @@ func ResetInstance(statePath string) {
 // short-lived specialization for callers that need different lock behavior.
 func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 	bb.cacheMu.RLock()
-	cachedData := bb.cachedData
+	cachedState := bb.cachedState
 	cachedMtime := bb.cachedMtime
 	bb.cacheMu.RUnlock()
 
 	newBB := &Blackboard{
 		statePath:   bb.statePath,
 		fileLock:    filelock.New(bb.statePath).WithTimeout(timeout),
-		cachedData:  cachedData,
+		cachedState: cachedState,
 		cachedMtime: cachedMtime,
 	}
 	return newBB
@@ -171,9 +173,9 @@ func (bb *Blackboard) ReadRaw() ([]byte, error) {
 }
 
 // ReadCached reads the current state with caching based on file mtime.
-// This method avoids disk I/O when the file hasn't changed by caching raw
-// YAML bytes. Each call returns a freshly-parsed *models.State, so callers
-// can safely mutate the result without corrupting other readers.
+// This method avoids both disk I/O and YAML parsing when the file hasn't
+// changed. Each call returns a deep copy of the cached state, so callers can
+// safely mutate the result without corrupting other readers.
 func (bb *Blackboard) ReadCached() (*models.State, error) {
 	fileInfo, err := os.Stat(bb.statePath)
 	if err != nil {
@@ -184,24 +186,18 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	currentMtime := fileInfo.ModTime()
 
 	bb.cacheMu.RLock()
-	cachedData := bb.cachedData
+	cachedState := bb.cachedState
 	cachedMtime := bb.cachedMtime
 	bb.cacheMu.RUnlock()
 
-	var data []byte
-	if cachedData != nil && currentMtime.Equal(cachedMtime) {
-		data = cachedData
-	} else {
-		data, err = os.ReadFile(bb.statePath)
-		if err != nil {
-			bb.InvalidateCache()
-			return nil, err
-		}
+	if cachedState != nil && currentMtime.Equal(cachedMtime) {
+		return cloneState(cachedState), nil
+	}
 
-		bb.cacheMu.Lock()
-		bb.cachedData = data
-		bb.cachedMtime = currentMtime
-		bb.cacheMu.Unlock()
+	data, err := os.ReadFile(bb.statePath)
+	if err != nil {
+		bb.InvalidateCache()
+		return nil, err
 	}
 
 	var state models.State
@@ -211,13 +207,19 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 
 	normalizeAgentRoles(&state)
 	normalizeTaskAttempts(&state)
-	return &state, nil
+
+	bb.cacheMu.Lock()
+	bb.cachedState = &state
+	bb.cachedMtime = currentMtime
+	bb.cacheMu.Unlock()
+
+	return cloneState(&state), nil
 }
 
 // InvalidateCache forces the next ReadCached call to reload from disk.
 func (bb *Blackboard) InvalidateCache() {
 	bb.cacheMu.Lock()
-	bb.cachedData = nil
+	bb.cachedState = nil
 	bb.cachedMtime = time.Time{}
 	bb.cacheMu.Unlock()
 }
