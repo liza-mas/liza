@@ -28,7 +28,7 @@ func TestRenderCarriersElidesReferenceInlinedAsCarrier(t *testing.T) {
 		t.Errorf("section text appears %d times, want exactly once (in the carrier):\n%s",
 			strings.Count(out, "contract text"), out)
 	}
-	pointer := `DIRECT REFERENCE "specs/a.md#Contract" @ head — inlined above as CARRIER "specs/a.md"`
+	pointer := `DIRECT REFERENCE "specs/a.md#Contract" @ head — inlined in this context as CARRIER "specs/a.md"`
 	if !strings.Contains(out, pointer) {
 		t.Errorf("elided reference lost its pointer line; the reference must stay discoverable:\n%s", out)
 	}
@@ -53,7 +53,7 @@ func TestRenderCarriersKeepsStaleReferenceInFull(t *testing.T) {
 	if !strings.Contains(out, "earlier contract text") {
 		t.Errorf("stale reference was elided; its text differs from the inlined carrier and must be kept:\n%s", out)
 	}
-	if strings.Contains(out, "inlined above as CARRIER") {
+	if strings.Contains(out, "inlined in this context as CARRIER") {
 		t.Errorf("stale reference rendered as a pointer to a carrier with different content:\n%s", out)
 	}
 }
@@ -141,7 +141,7 @@ func TestRenderCarriersReductionIsMeasured(t *testing.T) {
 	var want int
 	for _, r := range refs {
 		full := len(`DIRECT REFERENCE "specs/a.md#`+r.Heading+`" @ head`+"\n") + len(r.Span)
-		pointer := len(`DIRECT REFERENCE "specs/a.md#` + r.Heading + `" @ head — inlined above as CARRIER "specs/a.md"` + "\n")
+		pointer := len(`DIRECT REFERENCE "specs/a.md#` + r.Heading + `" @ head — inlined in this context as CARRIER "specs/a.md"` + "\n")
 		want += full - pointer
 	}
 	if saved != want {

@@ -18,6 +18,7 @@ ARCHITECT TOOLS:
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.
   task_depends_on: optional array of existing concrete task IDs. Use this for dependencies on tasks outside this output[].
+  inherit_inputs: optional. Omitted = this child waits for every child of every upstream phase this task depends on. To wait only for named upstream outputs: {"mode": "selected", "selections": [{"upstream_task": "<id in this task's depends_on>", "outputs": [<indexes into that task's output[]>]}]}. An unresolvable selection fails the transition; it never drops a prerequisite.
 - {{binaryName}} handoff — Context near exhaustion (~90%)
   {{binaryName}} handoff {{.TaskID}} "<what is done>" "<exact next step>" --agent-id {{.AgentID}} --json
 - {{binaryName}} mark-blocked — Cannot proceed

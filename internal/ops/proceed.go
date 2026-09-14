@@ -621,7 +621,16 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 				if err != nil {
 					return err
 				}
-				mergedDeps := mergeInheritedDeps(canonicalDeps, inheritedDeps.all)
+				// The surviving child inherits exactly what the uninterrupted
+				// generation would have given it. Merging the whole-phase set
+				// here would silently widen a selective child back to the full
+				// barrier and leave it inconsistent with siblings recreated
+				// below through forEntry.
+				entryInherited, err := inheritedDeps.forEntry(canonicalOutput[i], i)
+				if err != nil {
+					return err
+				}
+				mergedDeps := mergeInheritedDeps(canonicalDeps, entryInherited)
 				mergedDeps, _, err = canonicalizeChildDependsOn(s, resolver, existing.ID, existing.RolePair, mergedDeps, allowedMissingDeps)
 				if err != nil {
 					return err
@@ -1488,7 +1497,6 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 		byUpstream: map[string][]string{},
 		selectable: td.Cardinality == "per-subtask",
 	}
-	inherited := &set.all
 	for _, depID := range task.DependsOn {
 		depTask := s.FindTask(depID)
 		if depTask == nil || !depTask.TransitionsExecuted[transitionName] {
@@ -1517,7 +1525,7 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 				// Recorded by upstream output position: that is what an
 				// InputSelection names.
 				set.byUpstream[depID] = append(set.byUpstream[depID], childID)
-				*inherited = append(*inherited, childID)
+				set.all = append(set.all, childID)
 			}
 		case "one-to-one":
 			childID := oneToOneChildID(depID, slug)
@@ -1525,7 +1533,7 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 				return inheritedDepSet{}, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
 			}
 			set.byUpstream[depID] = append(set.byUpstream[depID], childID)
-			*inherited = append(*inherited, childID)
+			set.all = append(set.all, childID)
 		case "many-to-one":
 			cohortParentID := depTask.CohortParentID()
 			if cohortParentID == "" {
@@ -1541,9 +1549,9 @@ func computeInheritedDeps(s *models.State, task *models.Task, transitionName str
 			if s.FindTask(childID) == nil {
 				return inheritedDepSet{}, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
 			}
-			if !slices.Contains(*inherited, childID) {
+			if !slices.Contains(set.all, childID) {
 				set.byUpstream[depID] = append(set.byUpstream[depID], childID)
-				*inherited = append(*inherited, childID)
+				set.all = append(set.all, childID)
 			}
 		}
 	}

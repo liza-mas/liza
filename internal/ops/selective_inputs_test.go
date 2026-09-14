@@ -4,8 +4,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // Selective dependency generation (W6).
@@ -341,4 +344,115 @@ func TestValidateInheritInputs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test 7 (W6): crash recovery gives a surviving selective child exactly the
+// dependencies an uninterrupted generation would have — not the whole-phase
+// barrier merged back in.
+//
+// Recovery's existing-child branch and its missing-child branch must resolve
+// selections through the same path. If they diverge, the children that
+// existed at the crash carry the full barrier while the ones recreated carry
+// the selection, and INVARIANTS.md §3.4's "crash recovery validates the same
+// final child depends_on set" is false.
+func TestSelectiveInputs_CrashRecoveryPreservesSelection(t *testing.T) {
+	t.Parallel()
+
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusInProgress
+
+	// Upstream plan-1 already fanned out to three children.
+	plan1 := testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusMerged, now)
+	plan1.RolePair = "code-planning-pair"
+	plan1.Output = []models.OutputEntry{
+		{Desc: "u0", DoneWhen: "u", Scope: "u", SpecRef: "s.md"},
+		{Desc: "u1", DoneWhen: "u", Scope: "u", SpecRef: "s.md"},
+		{Desc: "u2", DoneWhen: "u", Scope: "u", SpecRef: "s.md"},
+	}
+	plan1.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+	var upstreamChildren []models.Task
+	for i := range 3 {
+		c := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-1", "code-plan-to-coding", i), models.TaskStatus("DRAFT_CODE"), now)
+		c.RolePair = "coding-pair"
+		upstreamChildren = append(upstreamChildren, c)
+	}
+	selectedID := upstreamChildren[1].ID
+
+	// plan-2 selects only output 1 of plan-1 for both its children. Its
+	// transition is marked executed but crashed after child-0 was written
+	// (without inherited deps) and before child-1 was.
+	selecting := func(desc string) models.OutputEntry {
+		return models.OutputEntry{
+			Desc: desc, DoneWhen: "d", Scope: "d", SpecRef: "s.md",
+			InheritInputs: &models.InheritInputs{
+				Mode:       models.InheritModeSelected,
+				Selections: []models.InputSelection{{UpstreamTask: "plan-1", Outputs: []int{1}}},
+			},
+		}
+	}
+	plan2 := testhelpers.BuildTaskByStatus("plan-2", models.TaskStatusMerged, now)
+	plan2.RolePair = "code-planning-pair"
+	plan2.Output = []models.OutputEntry{selecting("d0"), selecting("d1")}
+	plan2.DependsOn = []string{"plan-1"}
+	plan2.TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
+
+	survivor := testhelpers.BuildTaskByStatus(perSubtaskChildID("plan-2", "code-plan-to-coding", 0), models.TaskStatus("DRAFT_CODE"), now)
+	survivor.RolePair = "coding-pair"
+
+	state.Tasks = append(state.Tasks, plan1)
+	state.Tasks = append(state.Tasks, upstreamChildren...)
+	state.Tasks = append(state.Tasks, plan2, survivor)
+	state.Sprint.Scope.Planned = []string{"plan-1", "plan-2", survivor.ID}
+	for _, c := range upstreamChildren {
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, c.ID)
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	results, err := ExecuteAvailableTransitions(tmpDir, "manual")
+	if err != nil {
+		t.Fatalf("ExecuteAvailableTransitions: %v", err)
+	}
+	if len(results) != 1 || len(results[0].ChildTaskIDs) != 1 {
+		t.Fatalf("expected one recovered child, got %+v", results)
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	recovered := readState.FindTask(results[0].ChildTaskIDs[0])
+	patched := readState.FindTask(survivor.ID)
+	if recovered == nil || patched == nil {
+		t.Fatal("recovered or surviving child not found")
+	}
+
+	// Both carry exactly the selected upstream child and nothing else from
+	// plan-1.
+	for name, child := range map[string]*models.Task{"recovered": recovered, "survivor": patched} {
+		if !slices.Contains(child.DependsOn, selectedID) {
+			t.Errorf("%s child missing selected dep %s; DependsOn = %v", name, selectedID, child.DependsOn)
+		}
+		for _, unwanted := range []string{upstreamChildren[0].ID, upstreamChildren[2].ID} {
+			if slices.Contains(child.DependsOn, unwanted) {
+				t.Errorf("%s child inherited %s, which it did not select — the whole-phase barrier leaked back in; DependsOn = %v",
+					name, unwanted, child.DependsOn)
+			}
+		}
+	}
+
+	// And they are identical to each other: recovery did not produce two
+	// different answers for the same intent.
+	if !slices.Equal(sortedCopy(recovered.DependsOn), sortedCopy(patched.DependsOn)) {
+		t.Errorf("recovered %v != survivor %v; crash recovery must yield the same final depends_on set",
+			recovered.DependsOn, patched.DependsOn)
+	}
+}
+
+func sortedCopy(in []string) []string {
+	out := slices.Clone(in)
+	slices.Sort(out)
+	return out
 }

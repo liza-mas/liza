@@ -193,10 +193,32 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			candidate := &state.Tasks[i]
 			for entryIndex := range candidate.Output {
 				entry := &candidate.Output[entryIndex]
-				if _, named := entry.InheritInputs.SelectionFor(task.ID); !named {
+				retired, named := entry.InheritInputs.SelectionFor(task.ID)
+				if !named {
 					continue
 				}
 				entry.InheritInputs = &models.InheritInputs{Mode: models.InheritModeAll}
+
+				// Persisted on the producer, not only returned to the caller:
+				// the seam was chosen for a durable record at the moment of
+				// cause, and after this command returns the state would
+				// otherwise show Mode "all" with no trace it was ever
+				// selective or why.
+				note := fmt.Sprintf("output[%d] selection into replanned task %s retired to whole-phase inheritance",
+					entryIndex, task.ID)
+				candidate.History = append(candidate.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: models.TaskEventDependenciesRewritten,
+					Agent: &input.ChangedBy,
+					Note:  &note,
+					Extra: map[string]any{
+						"output_index":           entryIndex,
+						"replanned_task":         task.ID,
+						"replacement_task":       newTaskID,
+						"retired_output_index":   retired,
+						"rewrote_inherit_inputs": true,
+					},
+				})
 				warnings = append(warnings, fmt.Sprintf(
 					"task %s output[%d] selected specific outputs of replanned task %s; "+
 						"selection retired to whole-phase inheritance (replacement %s)",

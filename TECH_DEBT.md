@@ -329,3 +329,24 @@ no children by design. The lost barrier is this entry, not that one.
 after a replan, or any change touching `replan.go`'s retarget loop —
 whichever comes first. This path currently relies on a human reading a
 warning, so it should not wait for a third trigger.
+
+## Prompt benchmark cannot detect fixture drift against a live run
+
+**What:** `internal/prompts/promptbench` measures a synthetic fixture
+calibrated once from a real run (`testdata/run-calibration.json`). The plan
+that chose a synthetic fixture over vendoring real prompts named drift as its
+known limitation and a `-state <path>` mode — render a live `state.yaml` and
+report the same per-row table — as the drift detector. The flag exists and
+skips; the renderer behind it is not built.
+
+**Why deferred:** Rendering real state needs the full prompt-build path
+(carrier resolution against a git repository, role resolution, task graph),
+which is a separate piece of work from the measurement pass. Building it under
+the same change would have widened a benchmark commit into an agent-package
+integration.
+
+**Payback trigger:** Before the next regeneration of `testdata/baseline.json`
+for any reason other than an intended payload change, or before the next
+multi-agent run at a scale comparable to the calibration run — whichever comes
+first. Without it, a fixture that has drifted from real prompt shape will keep
+reporting reductions that real runs do not see.

@@ -88,7 +88,7 @@ func RenderCarriers(observations []Carrier) (string, error) {
 			}
 			seenRefs[key] = true
 			if inlined, ok := winners[ref.Path]; ok && inlined.BlobOID == ref.BlobOID && strings.Contains(inlined.Span, ref.Span) {
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined above as CARRIER %s\n",
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined in this context as CARRIER %s\n",
 					strconv.Quote(ref.Path+"#"+ref.Heading), ref.Revision, strconv.Quote(ref.Path))
 				continue
 			}

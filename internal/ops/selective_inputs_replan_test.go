@@ -102,15 +102,36 @@ func TestReplan_RetiresSelectionsOnMergedProducer(t *testing.T) {
 			untouched.Selections)
 	}
 
-	// The retirement is recorded rather than silent.
-	var recorded bool
-	for _, w := range result.Warnings {
-		if strings.Contains(w, "code-planning-2 output[0]") && strings.Contains(w, "retired") {
-			recorded = true
+	// The retirement is persisted on the producer, not only returned to the
+	// caller. After the command returns the state would otherwise show
+	// Mode "all" with no trace it was ever selective or why.
+	var persisted *models.TaskHistoryEntry
+	for i := range got.History {
+		h := &got.History[i]
+		if h.Event == models.TaskEventDependenciesRewritten && h.Extra["rewrote_inherit_inputs"] == true {
+			persisted = h
 		}
 	}
-	if !recorded {
-		t.Errorf("retirement not recorded in warnings: %v", result.Warnings)
+	if persisted == nil {
+		t.Fatalf("no %s history entry on the producer; retirement is not recorded in state. History = %+v",
+			models.TaskEventDependenciesRewritten, got.History)
+	}
+	if persisted.Extra["replanned_task"] != "code-planning-1" || persisted.Extra["replacement_task"] != "code-planning-1-replan-1" {
+		t.Errorf("history entry does not name the replanned task and its replacement: %+v", persisted.Extra)
+	}
+	if idx, ok := persisted.Extra["output_index"].(int); !ok || idx != 0 {
+		t.Errorf("history entry output_index = %v, want 0", persisted.Extra["output_index"])
+	}
+
+	// The caller-facing warning is a courtesy, not the record.
+	var warned bool
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "code-planning-2 output[0]") && strings.Contains(w, "retired") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("retirement not surfaced to the caller: %v", result.Warnings)
 	}
 }
 

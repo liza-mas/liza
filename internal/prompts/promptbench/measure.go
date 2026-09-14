@@ -194,7 +194,7 @@ func MeasureRendered(rendered string) Report {
 // JSON renders the report for the committed baseline artifact.
 func (r Report) JSON() ([]byte, error) { return json.MarshalIndent(r, "", "  ") }
 
-var carrierOrRefHeader = regexp.MustCompile(`(?m)^(CARRIER "([^"]*)" @ \S+|DIRECT REFERENCE "([^"#]*)#[^"]*" @ \S+)( — inlined above as CARRIER "[^"]*")?$`)
+var carrierOrRefHeader = regexp.MustCompile(`(?m)^(CARRIER "([^"]*)" @ \S+|DIRECT REFERENCE "([^"#]*)#[^"]*" @ \S+)( — inlined in this context as CARRIER "[^"]*")?$`)
 
 // measureDuplicateReferences finds DIRECT REFERENCE blocks whose span is a
 // verbatim substring of a CARRIER inlined at the same path in the same
