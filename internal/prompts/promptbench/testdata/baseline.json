@@ -1,0 +1,65 @@
+{
+  "total_bytes": 194219,
+  "carrier_block": {
+    "name": "RESOLVED REFERENCE CONTEXT",
+    "bytes": 180282
+  },
+  "sections": [
+    {
+      "name": "RESOLVED REFERENCE CONTEXT",
+      "bytes": 180282
+    },
+    {
+      "name": "ORCHESTRATOR CONTEXT",
+      "bytes": 7188
+    },
+    {
+      "name": "SLICE INTEGRATION CONTEXT",
+      "bytes": 4897
+    },
+    {
+      "name": "COLLECTIVE PLAN SCOPING",
+      "bytes": 1851
+    }
+  ],
+  "depends_on_sites": [
+    {
+      "site": "site2_descendant_dependencies",
+      "source": "blocks/branch_integration_context.tmpl:22-23",
+      "occurrences": 8,
+      "bytes": 2504,
+      "longest_run_bytes": 313,
+      "note": "uncapped; O(descendants x deps)"
+    },
+    {
+      "site": "site3_sibling_consistency_rule",
+      "source": "blocks/collective_plan_scoping.tmpl:55-61",
+      "occurrences": 4,
+      "bytes": 248,
+      "longest_run_bytes": 62,
+      "note": "uncapped; role-pair filtered, so a fixture without same-role-pair phase deps measures zero"
+    },
+    {
+      "site": "site4_active_task_digest",
+      "source": "builder.go:385-386",
+      "occurrences": 12,
+      "bytes": 3060,
+      "longest_run_bytes": 266,
+      "note": "task count capped at 12, dependency count uncapped; where per-subtask fan-out lands"
+    },
+    {
+      "site": "site5_task_graph_digest",
+      "source": "blocks/collective_plan_scoping.tmpl:78",
+      "occurrences": 0,
+      "bytes": 0,
+      "longest_run_bytes": 0,
+      "note": "bounded by maxTaskGraphChildDeps within maxTaskGraphEntries=16; not separately extracted"
+    }
+  ],
+  "depends_on_total_bytes": 5812,
+  "depends_on_share_of_total": 0.029924981592944048,
+  "carrier_share_of_total": 0.928240800333644,
+  "carrier_headings": 100,
+  "carrier_sections": 100,
+  "mean_carrier_section_bytes": 1802
+}
