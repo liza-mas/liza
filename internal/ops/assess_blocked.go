@@ -52,6 +52,27 @@ func BuildDependencyDescendantWakeSnapshot(state *models.State, task *models.Tas
 	return snapshot
 }
 
+// dropSupersededWakeSnapshots removes dependency-descendant wake snapshots from
+// a task's existing orchestrator_assessment entries. Wake detection reads only
+// the most recent assessment (isTaskActionableSinceAssessment), so once a newer
+// assessment is recorded the earlier cursors are dead payload that every state
+// read, parse and write still pays for.
+func dropSupersededWakeSnapshots(task *models.Task) {
+	for i := range task.History {
+		entry := &task.History[i]
+		if entry.Event != models.TaskEventOrchestratorAssessment {
+			continue
+		}
+		if _, ok := entry.Extra[DependencyDescendantWakeSnapshotExtraKey]; !ok {
+			continue
+		}
+		delete(entry.Extra, DependencyDescendantWakeSnapshotExtraKey)
+		if len(entry.Extra) == 0 {
+			entry.Extra = nil
+		}
+	}
+}
+
 // NormalizeDependencyDescendantWakeSnapshot accepts both the producer's typed
 // value and the generic maps/slices produced by YAML decoding.
 func NormalizeDependencyDescendantWakeSnapshot(value any) ([]DependencyDescendantWakeSnapshotEntry, bool) {
@@ -325,6 +346,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			entry.Extra["repair_request"] = repairRequest
 		}
 
+		dropSupersededWakeSnapshots(task)
 		task.History = append(task.History, entry)
 		if reconcile {
 			if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {

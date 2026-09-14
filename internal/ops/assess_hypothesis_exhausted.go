@@ -136,6 +136,7 @@ func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, a
 			entry.Note = &note
 		}
 
+		dropSupersededWakeSnapshots(task)
 		task.History = append(task.History, entry)
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
 		if err == nil {

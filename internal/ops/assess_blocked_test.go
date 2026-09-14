@@ -429,6 +429,64 @@ func TestAssessBlocked_RecordsDependencyDescendantWakeSnapshot(t *testing.T) {
 	}
 }
 
+func TestAssessBlocked_PrunesSupersededWakeSnapshots(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	baseTime := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
+	state := testhelpers.CreateValidState()
+	blocked := testhelpers.BuildTaskByStatus("blocked-evaluator", models.TaskStatusBlocked, baseTime)
+	blocked.AssignedTo = nil
+	blocked.DependsOn = []string{"provider-plan"}
+	provider := testhelpers.BuildTaskByStatus("provider-plan", models.TaskStatusMerged, baseTime)
+	child := testhelpers.BuildTaskByStatus("child", models.TaskStatusReady, baseTime)
+	child.ParentTasks = []string{"provider-plan"}
+	state.Tasks = []models.Task{blocked, provider, child}
+	setTaskSpecRefs(state)
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	for _, note := range []string{"first", "second", "third"} {
+		if _, err := AssessBlocked(tmpDir, "blocked-evaluator", note, "orchestrator-1"); err != nil {
+			t.Fatalf("AssessBlocked(%q) error: %v", note, err)
+		}
+	}
+
+	task := readAssessBlockedTask(t, stateFile, "blocked-evaluator")
+	var assessments []int
+	for i := range task.History {
+		if task.History[i].Event == models.TaskEventOrchestratorAssessment {
+			assessments = append(assessments, i)
+		}
+	}
+	if len(assessments) != 3 {
+		t.Fatalf("assessment entries = %d, want 3", len(assessments))
+	}
+	for _, i := range assessments[:len(assessments)-1] {
+		if _, ok := task.History[i].Extra[DependencyDescendantWakeSnapshotExtraKey]; ok {
+			t.Errorf("superseded assessment at history[%d] still carries a wake snapshot", i)
+		}
+		if task.History[i].Note == nil {
+			t.Errorf("pruning dropped the note of superseded assessment at history[%d]", i)
+		}
+	}
+	last := task.History[assessments[len(assessments)-1]]
+	if _, ok := last.Extra[DependencyDescendantWakeSnapshotExtraKey]; !ok {
+		t.Fatalf("latest assessment lost its wake snapshot: %#v", last.Extra)
+	}
+
+	// Wake suppression depends on the latest snapshot only; pruning the
+	// earlier ones must not make an already-triaged task actionable again.
+	currentState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if isTaskActionableSinceAssessment(currentState.FindTask("blocked-evaluator"), currentState) {
+		t.Error("task became actionable again after superseded snapshots were pruned")
+	}
+}
+
 func TestAssessBlocked_CandidateValidationRollback(t *testing.T) {
 	t.Parallel()
 

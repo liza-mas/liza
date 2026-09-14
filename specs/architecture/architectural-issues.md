@@ -853,6 +853,11 @@ Long-term concerns about system evolution.
 
 **Current mitigation:** Full sprint records are archived to `.liza/archive/`, and current state retains lightweight sprint summaries.
 
+Recording a new orchestrator assessment drops the dependency-descendant wake
+snapshots from that task's earlier assessments. Wake detection reads only the
+latest assessment, so this bounds one append-only payload without a retention
+window. Assessment notes and terminal task records are still unbounded.
+
 Issue #153 adds durable quarantined verdict evidence without automatic
 eviction. Its explicit archival trigger and preservation requirements are
 tracked in [Quarantined verdict retention](../../TECH_DEBT.md#quarantined-verdict-retention).
@@ -1377,7 +1382,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 
 ### Cache Coherence Gap in Multi-Process Deployments
 
-**Resolution:** `ReadCached()` performs `os.Stat` on the shared `state.yaml` path for every call and reloads bytes when the file modification time changes. Independent processes therefore observe atomic writes without process-to-process invalidation messages.
+**Resolution:** `ReadCached()` performs `os.Stat` on the shared `state.yaml` path for every call and reloads and reparses the file when the file modification time changes. Between changes it serves deep copies of the cached parsed state, so callers keep a mutable result without paying the parse. Independent processes therefore observe atomic writes without process-to-process invalidation messages.
 
 **Evidence:** `internal/db/blackboard.go` and cache invalidation/external-modification tests.
 
