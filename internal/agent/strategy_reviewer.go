@@ -14,12 +14,31 @@ import (
 
 const defaultMaxMergeRetries = 3
 
+const pendingMergeStallAnomalyType = "retry_loop"
+
+// Overridable in tests, which must not spend the production cadence to observe
+// one round of it.
+var (
+	// pendingMergeWakeInterval bounds how long a reviewer holding an unmerged
+	// approved task waits before retrying. The role's normal wait is hours long
+	// and wakes only on reviewable work, which an owned pending merge is not —
+	// and downstream work is gated on that merge, so nothing would ever wake it.
+	pendingMergeWakeInterval = 30 * time.Second
+
+	// maxPendingMergeStallRounds bounds the retry loop itself. A merge that has
+	// not converged after this many rounds needs attention rather than another
+	// attempt, so the reviewer records an anomaly and returns to its normal wait
+	// instead of retrying forever and never reviewing again.
+	maxPendingMergeStallRounds = 20
+)
+
 // reviewerStrategy handles review roles: code-reviewer, code-plan-reviewer,
 // epic-plan-reviewer, us-reviewer.
 type reviewerStrategy struct {
 	role             string             // role name in hyphenated form
 	resolver         *pipeline.Resolver // pipeline resolver for context sections
 	mergeRetries     int                // current retry counter (mutable per-loop state)
+	mergeStallRounds int                // bounded wake rounds spent on an unconverged owned merge
 	maxRetries       int                // max merge retries before proceeding (0 = use default)
 	executionTimeout time.Duration      // from YAML; 0 = use type default
 	yamlPollSec      int                // from YAML; 0 = use type default
@@ -48,7 +67,7 @@ func (s *reviewerStrategy) WaitConfig(state *models.State) (pollInterval, maxWai
 	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
 }
 
-func (s *reviewerStrategy) PreWork(_ context.Context, bb *db.Blackboard, config SupervisorConfig) (bool, error) {
+func (s *reviewerStrategy) PreWork(ctx context.Context, bb *db.Blackboard, config SupervisorConfig) (bool, error) {
 	logger := GetLogger()
 
 	pr, prErr := ops.LoadResolverForModels(config.ProjectRoot)
@@ -75,7 +94,7 @@ func (s *reviewerStrategy) PreWork(_ context.Context, bb *db.Blackboard, config 
 	}
 
 	// If there are still pending merges (transient errors), retry with
-	// backoff up to a max count, then proceed to waitForWork
+	// backoff up to a max count, then keep retrying on a bounded wake.
 	if prErr == nil && hasPendingMerges(bb, config.AgentID, pr) {
 		s.mergeRetries++
 		if s.mergeRetries <= s.effectiveMaxRetries() {
@@ -87,15 +106,96 @@ func (s *reviewerStrategy) PreWork(_ context.Context, bb *db.Blackboard, config 
 			time.Sleep(delay)
 			return true, nil // shouldContinue: restart loop iteration
 		}
-		logger.Warn("Max merge retries reached, proceeding to wait for work",
+
+		// Quick retries are spent. Returning to the role's normal wait here
+		// parks the reviewer for hours on a predicate that cannot see the merge
+		// it owns, while every downstream task waits on that merge. Retry on a
+		// bounded wake instead, yielding as soon as there is review work to do.
+		s.mergeStallRounds++
+		if s.mergeStallRounds <= maxPendingMergeStallRounds {
+			yield, err := s.awaitPendingMergeWake(ctx, bb, config, pr)
+			if err != nil {
+				return false, err
+			}
+			if yield {
+				s.resetMergeCounters()
+				return false, nil
+			}
+			s.mergeRetries = s.effectiveMaxRetries()
+			return true, nil // shouldContinue: retry the merge
+		}
+
+		logger.Warn("Pending merge has not converged, returning to normal wait",
 			"agent_id", config.AgentID,
-			"retries", s.mergeRetries)
-		s.mergeRetries = 0
+			"rounds", s.mergeStallRounds)
+		s.recordPendingMergeStall(bb, config)
+		s.resetMergeCounters()
 	} else {
-		s.mergeRetries = 0
+		s.resetMergeCounters()
 	}
 
 	return false, nil
+}
+
+func (s *reviewerStrategy) resetMergeCounters() {
+	s.mergeRetries = 0
+	s.mergeStallRounds = 0
+}
+
+// awaitPendingMergeWake waits up to pendingMergeWakeInterval for the situation
+// to change. It returns yield=true when the reviewer should stop retrying and
+// go through its normal wait — because review work appeared, or because the
+// merge it was retrying is no longer pending for it.
+func (s *reviewerStrategy) awaitPendingMergeWake(ctx context.Context, bb *db.Blackboard, config SupervisorConfig, pr models.PipelineResolver) (bool, error) {
+	logger := GetLogger()
+
+	// waitForWorkEventDriven reports ABORT as "no work" without consulting the
+	// predicate below, which would read as "keep retrying". Checking before the
+	// wait keeps a stopped system from collecting a merge attempt per round.
+	// An ABORT arriving mid-wait costs one further attempt, caught here on the
+	// next round or by the supervisor loop's own ABORT check.
+	if state, err := bb.ReadCached(); err == nil {
+		if stopped, reason := isSystemStopped(state); stopped {
+			logger.Info("ABORT detected while a merge is pending", "agent_id", config.AgentID, "reason", reason)
+			return true, nil
+		}
+	}
+
+	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pendingMergeWakeInterval, pendingMergeWakeInterval,
+		func(state *models.State) (bool, string) {
+			if !hasPendingMergesInState(state, config.AgentID, pr) {
+				logger.Info("Pending merge resolved, returning to normal wait", "agent_id", config.AgentID)
+				return true, ""
+			}
+			if config.InitialTask != "" || models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr) > 0 {
+				logger.Info("Review work available while a merge is pending, yielding merge retry",
+					"agent_id", config.AgentID)
+				return true, ""
+			}
+			return false, ""
+		})
+}
+
+// recordPendingMergeStall leaves durable evidence that automatic merge
+// convergence gave up, so the stall is visible without reading supervisor logs.
+func (s *reviewerStrategy) recordPendingMergeStall(bb *db.Blackboard, config SupervisorConfig) {
+	err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
+		state.Anomalies = append(state.Anomalies, models.Anomaly{
+			Timestamp: time.Now().UTC(),
+			Reporter:  config.AgentID,
+			Type:      pendingMergeStallAnomalyType,
+			Details: map[string]any{
+				"agent_id": config.AgentID,
+				"role":     s.role,
+				"rounds":   s.mergeStallRounds,
+				"impact":   "an approved task this reviewer owns has not merged; downstream work stays gated until it does",
+			},
+		})
+		return nil
+	})
+	if err != nil {
+		GetLogger().Warn("Failed to record pending merge stall anomaly", "agent_id", config.AgentID, "error", err)
+	}
 }
 
 func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, config SupervisorConfig, pollInterval, maxWait time.Duration) (bool, error) {

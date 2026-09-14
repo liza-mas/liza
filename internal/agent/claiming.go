@@ -487,7 +487,12 @@ func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResol
 	if err != nil {
 		return false // Safe default: proceed to normal wait
 	}
+	return hasPendingMergesInState(state, agentID, pr)
+}
 
+// hasPendingMergesInState answers the same question against a state the caller
+// already holds — wait predicates run on every watcher event and must not read.
+func hasPendingMergesInState(state *models.State, agentID string, pr models.PipelineResolver) bool {
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if approvedMergePending(task, state, agentID, pr) {
