@@ -341,7 +341,6 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		GoalSpecRef:          state.Goal.SpecRef,
 		TotalPlanTasks:       totalPlanTasks,
 		TaskOrdinal:          taskOrdinal,
-		DependsOn:            task.DependsOn,
 		TaskRolePair:         task.RolePair,
 		PhaseDependencyTasks: collectPhaseDependencyTasks(state, task),
 		TaskGraph:            buildRelevantTaskGraph(state, task),

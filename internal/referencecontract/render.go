@@ -38,7 +38,16 @@ type Reference struct {
 }
 
 // RenderCarriers reconciles observations of the same path and renders the
-// resolved reference context. Duplicate direct references are emitted once.
+// resolved reference context.
+//
+// Duplicate direct references are emitted once. A direct reference whose
+// target is already inlined in full as a carrier at the same path and blob
+// OID is also emitted once — as a one-line pointer to that carrier rather
+// than a second copy of the section. At an equal OID the section is a
+// substring of the carrier by construction, and containment is checked on
+// the bytes anyway; if either fails, the reference is emitted in full. A
+// reference pinned at a different blob than the inlined carrier carries
+// different text and is never elided.
 func RenderCarriers(observations []Carrier) (string, error) {
 	if len(observations) == 0 {
 		return "", nil
@@ -78,6 +87,11 @@ func RenderCarriers(observations []Carrier) (string, error) {
 				continue
 			}
 			seenRefs[key] = true
+			if inlined, ok := winners[ref.Path]; ok && inlined.BlobOID == ref.BlobOID && strings.Contains(inlined.Span, ref.Span) {
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined above as CARRIER %s\n",
+					strconv.Quote(ref.Path+"#"+ref.Heading), ref.Revision, strconv.Quote(ref.Path))
+				continue
+			}
 			fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s\n%s", strconv.Quote(ref.Path+"#"+ref.Heading), ref.Revision, ref.Span)
 			if !strings.HasSuffix(ref.Span, "\n") {
 				out.WriteByte('\n')
