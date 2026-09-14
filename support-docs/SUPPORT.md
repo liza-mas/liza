@@ -377,6 +377,7 @@ role authorization, audit history, and all-or-nothing candidate validation.
 Use the dedicated CLI operation for every state mutation. In particular:
 
 - use `§BRAND_BINARY_NAME§ retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason <reason>` for one direct edge on a non-terminal task;
+- use `§BRAND_BINARY_NAME§ narrow-inherited-dependencies <producer-task-id> --selections <file> --reason <reason>` to apply ADR-0137 `inherit_inputs` to a MERGED plan whose children were generated with the whole-phase barrier; only children still in their initial status are rewritten, only inherited edges are removed, and the whole operation writes nothing if any selection cannot be resolved;
 - for multiple active tasks or complete dependency lists, store a command-free `apply-dependency-repair` JSON request with `§BRAND_BINARY_NAME§ mark-blocked --repair-request-file <path>`, then have the orchestrator run `§BRAND_BINARY_NAME§ apply-dependency-repair <blocked-task-id> --reason <reason>`;
 - use `§BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason <reason>` for all illegal downstream direct edges on one `SUPERSEDED` task;
 - use `§BRAND_BINARY_NAME§ unblock-task`, `§BRAND_BINARY_NAME§ cancel-task`, `§BRAND_BINARY_NAME§ supersede-task`, `§BRAND_BINARY_NAME§ release-claim`, or `§BRAND_BINARY_NAME§ recover-task` for their declared transitions.

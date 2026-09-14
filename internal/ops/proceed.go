@@ -1461,6 +1461,9 @@ func (d inheritedDepSet) forEntry(entry models.OutputEntry, entryIndex int) ([]s
 	if !entry.InheritInputs.IsSelective() || !d.selectable {
 		return d.all, nil
 	}
+	if entry.InheritInputs.InheritsNothing() {
+		return nil, nil
+	}
 
 	var selected []string
 	for selectionIndex, selection := range entry.InheritInputs.Selections {

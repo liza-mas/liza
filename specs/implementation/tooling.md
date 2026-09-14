@@ -53,6 +53,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza assess-blocked` | Reconcile canonical blocker metadata after partial repair, or record a note-only assessment |
 | `liza supersede-task` | Supersede a task; no-replacement cleanup requires an operator-provided `--recoverability-command` audit string |
 | `liza retarget-dependency` | Replace one direct dependency edge on a non-terminal task through an orchestrator-only validated repair |
+| `liza narrow-inherited-dependencies` | Apply `inherit_inputs` to a MERGED producer after generation and remove unselected phase-gate edges from its initial-status children (ADR-0138) |
 | `liza repair-superseded-dependencies` | Remove all illegal downstream direct dependencies from one SUPERSEDED task through an orchestrator-only audited repair |
 | `liza delete agent\|task` | Delete agent or task entry |
 
@@ -180,6 +181,7 @@ CLI commands are divided into agent-callable and supervisor-only:
 | `liza mark-blocked` | All doer roles | Mark task as blocked |
 | `liza assess-blocked` | Orchestrator | Reconcile canonical blocker metadata after partial repair, or record a note-only assessment |
 | `liza retarget-dependency` | Orchestrator | Replace one direct edge on a non-terminal task and validate the candidate state |
+| `liza narrow-inherited-dependencies` | Orchestrator | Persist post-hoc `inherit_inputs` on a producer and narrow its initial-status children, validating the candidate state |
 | `liza repair-superseded-dependencies` | Orchestrator | Atomically remove illegal downstream edges from a SUPERSEDED task with full validation and audit history |
 | `liza wt-merge` | Supervisor | Merge after Code Reviewer approves |
 | `liza wt-delete` | Planner | Clean up abandoned tasks |

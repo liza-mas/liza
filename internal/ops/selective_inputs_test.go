@@ -278,6 +278,25 @@ func TestSelectiveInputs_InertOnSingleEdgeCardinality(t *testing.T) {
 // Authoring-time structural validation. Index bounds are deliberately absent
 // here — the upstream's output[] does not exist yet — and are covered by the
 // fail-closed generation tests above.
+// mode "none": the child declared no external prerequisite, so it inherits
+// no phase-gate edge at all. Its ordering is carried by sibling and
+// task_depends_on edges only.
+func TestSelectiveInputs_NoneInheritsNoPhaseEdge(t *testing.T) {
+	t.Parallel()
+
+	entry := models.OutputEntry{
+		Desc: "tooling", DoneWhen: "d", Scope: "d", SpecRef: "s.md",
+		InheritInputs: &models.InheritInputs{Mode: models.InheritModeNone},
+	}
+	deps, err := selResolve(t, selState(t, 3, []models.OutputEntry{entry}), entry)
+	if err != nil {
+		t.Fatalf("forEntry: %v", err)
+	}
+	if len(deps) != 0 {
+		t.Fatalf("deps = %v, want none", deps)
+	}
+}
+
 func TestValidateInheritInputs(t *testing.T) {
 	t.Parallel()
 
@@ -288,6 +307,12 @@ func TestValidateInheritInputs(t *testing.T) {
 	}{
 		{name: "omitted is valid", inherit: nil},
 		{name: "all is valid", inherit: &models.InheritInputs{Mode: models.InheritModeAll}},
+		{name: "none is valid", inherit: &models.InheritInputs{Mode: models.InheritModeNone}},
+		{
+			name:    "none must not carry selections",
+			inherit: &models.InheritInputs{Mode: models.InheritModeNone, Selections: []models.InputSelection{{UpstreamTask: "u", Outputs: []int{0}}}},
+			wantErr: "must not carry selections",
+		},
 		{
 			name:    "unknown mode",
 			inherit: &models.InheritInputs{Mode: "some"},
