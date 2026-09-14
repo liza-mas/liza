@@ -354,6 +354,119 @@ func persistIntegrationMutationReceipt(bb *db.Blackboard, mutation *integrationR
 	})
 }
 
+// provenMergeEffect returns the integration-ref movement this task already
+// made, or nil when no live proof of it exists.
+//
+// Between the CAS merge and the MERGED write the integration ref has moved and
+// persistIntegrationMutationReceipt has durably recorded that this task moved
+// it. Two independent conditions make that record proof rather than a hint: the
+// recorded commit must contain the approved review commit, which excludes the
+// reverse receipt written by a rollback, and it must still be an ancestor of the
+// integration ref, which excludes a merge that was later rolled back or lost.
+func provenMergeEffect(state *models.State, gw *git.Git, integrationRef, taskID, expectedCommit string) (*integrationRefMutation, error) {
+	if state.Goal.Integration == nil {
+		return nil, nil
+	}
+	var candidate *models.IntegrationMutationReceipt
+	for i := range state.Goal.Integration.MutationReceipts {
+		if state.Goal.Integration.MutationReceipts[i].TaskID == taskID {
+			candidate = &state.Goal.Integration.MutationReceipts[i]
+		}
+	}
+	if candidate == nil || candidate.AfterCommit == "" {
+		return nil, nil
+	}
+	carriesApproved, err := gw.IsAncestor(expectedCommit, candidate.AfterCommit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check recorded merge ancestry: %w", err)
+	}
+	if !carriesApproved {
+		return nil, nil
+	}
+	head, err := gw.GetCommitSHA(integrationRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get integration HEAD: %w", err)
+	}
+	stillLive, err := gw.IsAncestor(candidate.AfterCommit, head)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check recorded merge liveness: %w", err)
+	}
+	if !stillLive {
+		return nil, nil
+	}
+	return &integrationRefMutation{
+		taskID:       taskID,
+		beforeCommit: candidate.BeforeCommit,
+		afterCommit:  candidate.AfterCommit,
+	}, nil
+}
+
+// interruptedMergePreparation reports whether the refusal in the caller's way is
+// this actor's own unresolved wt-merge preparation at this exact boundary — the
+// state left behind when the integration ref moved but the MERGED write did not
+// land.
+func interruptedMergePreparation(task *models.Task, request LifecycleRequest) bool {
+	if task == nil || task.Lifecycle == nil || task.Lifecycle.Preparation == nil {
+		return false
+	}
+	p := task.Lifecycle.Preparation
+	return p.Operation == integrationOperationWTMerge && p.Actor == request.Actor &&
+		preparationStillCurrent(task, request)
+}
+
+// retireProvenMergePreparation clears an interrupted wt-merge preparation whose
+// external effect is proven, so the merge can be finished instead of requerying
+// forever. The fence it lifts exists because an unresolved preparation means
+// uncertain effects; the receipt and ancestry checks in provenMergeEffect remove
+// that uncertainty. Exactly-once does not rest on this fence — the locked
+// approved-status recheck before publication refuses any duplicate.
+func retireProvenMergePreparation(bb *db.Blackboard, taskID string, authority *models.AgentAuthority, prepared models.LifecyclePreparation, request LifecycleRequest) error {
+	return modifyLifecycleState(bb, authority, func(state *models.State) error {
+		task := state.FindTask(taskID)
+		if task == nil {
+			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if !interruptedMergePreparation(task, request) ||
+			!sameLifecycleRequest(task.Lifecycle.Preparation.LifecycleIdentity, prepared.LifecycleIdentity) ||
+			task.Lifecycle.Preparation.Boundary != prepared.Boundary {
+			return fmt.Errorf("interrupted merge preparation changed before it could be retired")
+		}
+		models.AdvanceLifecycle(task)
+		return nil
+	})
+}
+
+// resumeInterruptedMerge admits a retry that CheckLifecycleRequest refused,
+// when the refusal is this actor's own interrupted wt-merge and the integration
+// effect it left behind is proven. It reports false, with no state change, for
+// every other refusal.
+func resumeInterruptedMerge(bb *db.Blackboard, projectRoot string, state *models.State, task *models.Task, request LifecycleRequest, authority *models.AgentAuthority) (bool, error) {
+	if !interruptedMergePreparation(task, request) || task.ReviewCommit == nil {
+		return false, nil
+	}
+	gitWrapper := git.New(projectRoot)
+	expectedCommit, err := gitWrapper.GetCommitSHA(*task.ReviewCommit)
+	if err != nil {
+		return false, nil // An unresolvable review commit is not proof of anything.
+	}
+	integrationBranch := state.Config.IntegrationBranch
+	if integrationBranch == "" {
+		integrationBranch = "main"
+	}
+	proven, err := provenMergeEffect(state, gitWrapper, "refs/heads/"+integrationBranch, task.ID, expectedCommit)
+	if err != nil {
+		return false, err
+	}
+	if proven == nil {
+		return false, nil
+	}
+	log.Printf("wt-merge %s: resuming interrupted merge — integration already carries %s", task.ID, shortSHA(proven.afterCommit))
+	if err := retireProvenMergePreparation(bb, task.ID, authority, *task.Lifecycle.Preparation, request); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func rollbackMergedCommit(projectRoot string, gitWrapper *git.Git, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID string) (*integrationRefMutation, error) {
 	var mutation *integrationRefMutation
 	err := withIntegrationMutationLock(projectRoot, "rollback "+taskID, func() error {
@@ -382,9 +495,19 @@ func rollbackMergedCommit(projectRoot string, gitWrapper *git.Git, integrationRe
 	return mutation, err
 }
 
-func rollbackMergedCommitAndPersist(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID string, authority *models.AgentAuthority) error {
-	return withEffectiveIntegrationCompletionLinearization(projectRoot, "rollback "+taskID, func() error {
+// rollbackMergedCommitAndPersist reports whether the integration ref actually
+// moved back. It does not when another merge landed on top, and it cannot when
+// the baseline equals the merge commit — a resumed merge whose own pre-merge
+// HEAD is no longer known from this invocation. Callers must not describe those
+// outcomes as a rollback: the task's commit is still in the integration branch.
+func rollbackMergedCommitAndPersist(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID string, authority *models.AgentAuthority) (bool, error) {
+	rewound := false
+	err := withEffectiveIntegrationCompletionLinearization(projectRoot, "rollback "+taskID, func() error {
+		if preMergeHEAD == "" || preMergeHEAD == mergeCommit {
+			return nil
+		}
 		mutation, rollbackErr := rollbackMergedCommit(projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID)
+		rewound = mutation != nil
 		if receiptErr := persistIntegrationMutationReceipt(bb, mutation, authority); receiptErr != nil {
 			receiptErr = fmt.Errorf("failed to persist rollback integration mutation receipt: %w", receiptErr)
 			if rollbackErr != nil {
@@ -394,6 +517,17 @@ func rollbackMergedCommitAndPersist(bb *db.Blackboard, projectRoot string, gitWr
 		}
 		return rollbackErr
 	})
+	return rewound, err
+}
+
+// integrationRetentionDetail names the state Git is actually left in when a
+// failed merge was not rolled back, so the recorded diagnostic cannot imply a
+// rewind that never happened.
+func integrationRetentionDetail(rewound bool, rollbackErr error, mergeCommit string) string {
+	if rewound || rollbackErr != nil {
+		return ""
+	}
+	return fmt.Sprintf("integration branch retains %s: it was not rolled back", shortSHA(mergeCommit))
 }
 
 func buildArtifactGuardHook(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, taskID string) func(candidateTreeish string) error {
@@ -659,7 +793,32 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	}
 	receipt, err := CheckLifecycleRequest(task, request)
 	if err != nil {
-		return nil, err
+		// A caller that pinned an expected transition asked to act on the exact
+		// boundary it inspected. Resuming retires the preparation and advances
+		// that boundary, so such a caller requeries instead — and must see no
+		// state change from having asked.
+		if opts.ExpectedTransition != "" {
+			return nil, err
+		}
+		resumed, resumeErr := resumeInterruptedMerge(bb, projectRoot, state, task, request, authority)
+		if resumeErr != nil {
+			return nil, errors.Join(err, resumeErr)
+		}
+		if !resumed {
+			return nil, err
+		}
+		// Retiring the preparation advanced the task boundary, so the request
+		// built against the old one is stale. Rebuild and re-check against the
+		// state the merge will actually finish from.
+		if state, task, err = readTaskState(bb, taskID); err != nil {
+			return nil, err
+		}
+		if request, err = NewLifecycleRequest(integrationOperationWTMerge, task, agentID, authority, opts, mergeExtra); err != nil {
+			return nil, err
+		}
+		if receipt, err = CheckLifecycleRequest(task, request); err != nil {
+			return nil, err
+		}
 	}
 	if receipt != nil {
 		return &MergeResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, MergeCommit: receipt.Projection.MergeCommit}, nil
@@ -829,6 +988,30 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	preMergeHEAD := outcome.preMergeHEAD
 	fastForward := outcome.fastForward
 
+	// CAS found the approved commit already merged, so outcome.mergeCommit is
+	// whatever the integration ref points at now — which is another task's merge
+	// commit if one landed since. Where a receipt records what this task
+	// published, that is the commit to attribute to it.
+	// rollbackBaseline is the commit a failed validation must rewind the
+	// integration ref to. On the forward path that is the HEAD this invocation
+	// merged onto; on a resume the ref already carries the merge, so only the
+	// recorded receipt knows what preceded it.
+	rollbackBaseline := preMergeHEAD
+	if outcome.preMergeHEAD == outcome.mergeCommit {
+		recordedState, readErr := bb.Read()
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read state for merge attribution: %w", readErr)
+		}
+		recorded, provenErr := provenMergeEffect(recordedState, gitWrapper, integrationRef, taskID, expectedCommit)
+		if provenErr != nil {
+			return nil, provenErr
+		}
+		if recorded != nil {
+			mergeCommit = recorded.afterCommit
+			rollbackBaseline = recorded.beforeCommit
+		}
+	}
+
 	// Detect current branch early — needed for working tree restore on both
 	// success and rollback paths.
 	var warnings []string
@@ -852,8 +1035,12 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		return nil, fmt.Errorf("failed to read state for post-merge artifact validation: %w", err)
 	}
 	if err := statevalidate.ValidateMergeArtifactRefs(currentState, projectRoot, taskID); err != nil {
-		rollbackErr := rollbackMergedCommitAndPersist(bb, projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, rollbackRestoreRef, taskID, authority)
-		diagnostic := integrationFailureDiagnosticWithDetail(IntegrationReasonStateInvalid, err.Error(), mergeCommit, "", rollbackErr)
+		rewound, rollbackErr := rollbackMergedCommitAndPersist(bb, projectRoot, gitWrapper, integrationRef, rollbackBaseline, mergeCommit, rollbackRestoreRef, taskID, authority)
+		detail := err.Error()
+		if retained := integrationRetentionDetail(rewound, rollbackErr, mergeCommit); retained != "" {
+			detail = detail + "; " + retained
+		}
+		diagnostic := integrationFailureDiagnosticWithDetail(IntegrationReasonStateInvalid, detail, mergeCommit, "", rollbackErr)
 		if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonStateInvalid, mergeCommit, pb, diagnostic, request); updateErr != nil {
 			return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 		}
@@ -900,9 +1087,10 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 
 			// CAS rollback: only rewind if ref still points to our merge commit.
 			// If someone else merged on top, rewinding would drop their work.
-			rollbackErr := rollbackMergedCommitAndPersist(bb, projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, rollbackRestoreRef, taskID, authority)
+			rewound, rollbackErr := rollbackMergedCommitAndPersist(bb, projectRoot, gitWrapper, integrationRef, rollbackBaseline, mergeCommit, rollbackRestoreRef, taskID, authority)
 
-			diagnostic := integrationFailureDiagnostic(IntegrationReasonTestsFailed, mergeCommit, testOutput, rollbackErr)
+			diagnostic := integrationFailureDiagnosticWithDetail(IntegrationReasonTestsFailed,
+				integrationRetentionDetail(rewound, rollbackErr, mergeCommit), mergeCommit, testOutput, rollbackErr)
 			if updateErr := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonTestsFailed, mergeCommit, pb, diagnostic, request); updateErr != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", updateErr)
 			}

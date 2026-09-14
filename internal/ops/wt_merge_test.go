@@ -1089,7 +1089,7 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 		interruptAfterGit bool
 	}{
 		{name: "git not advanced"},
-		{name: "git already advanced and state still approved", interruptAfterGit: true},
+		{name: "git advanced with no recorded proof", interruptAfterGit: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			taskID := "takeover-" + strings.ReplaceAll(tc.name, " ", "-")
@@ -1117,10 +1117,19 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 			register()
 
 			previousHook := mergeFinalStateTestHook
-			t.Cleanup(func() { mergeFinalStateTestHook = previousHook })
+			previousReceiptHook := integrationMutationReceiptPersistTestHook
+			t.Cleanup(func() {
+				mergeFinalStateTestHook = previousHook
+				integrationMutationReceiptPersistTestHook = previousReceiptHook
+			})
 			if tc.interruptAfterGit {
+				// Interrupt after the ref moved but BEFORE the mutation receipt
+				// records that this task moved it. With no durable proof of the
+				// effect, the preparation fence must still hold: a same-generation
+				// retry requeries, and only a new generation reconciles.
+				// TestInterruptedMergeResumesOnProvenEffect covers the other branch.
 				const interrupted = "interrupt after git advancement"
-				mergeFinalStateTestHook = func() { panic(interrupted) }
+				integrationMutationReceiptPersistTestHook = func(models.IntegrationMutationReceipt) { panic(interrupted) }
 				func() {
 					defer func() {
 						if recovered := recover(); recovered != interrupted {
@@ -1129,6 +1138,7 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 					}()
 					_, _ = MergeWorktreeWithAuthority(projectRoot, taskID, authority)
 				}()
+				integrationMutationReceiptPersistTestHook = nil
 
 				interruptedState := readStateForTest(t, stateFile)
 				if got := interruptedState.FindTask(taskID).Status; got != models.TaskStatusApproved {

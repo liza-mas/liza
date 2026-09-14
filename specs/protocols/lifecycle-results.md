@@ -151,7 +151,9 @@ unresolved preparation is separate from receipt retention and is never evicted
 by receipt pruning. Finalization compares its reservation, commits the result
 receipt, advances revision and clears the marker in one state transaction.
 An interrupted preparation reports `effects=unknown` and `requery`; it does
-not authorize repeating arbitrary setup, tests, deletion or merge.
+not authorize repeating arbitrary setup, tests, deletion or merge. The single
+exception is an effect proven by a durable, task-attributed record, described
+for merge below.
 When an invocation returns a normal error before committing its transition,
 it may retire only the preparation it successfully reserved, in a blackboard
 transaction that verifies current authority while holding the project lifecycle
@@ -221,7 +223,14 @@ lock. A Git/YAML crash gap does not establish exactly-once shell execution or
 permit inferring an earlier merge result from live integration HEAD.
 If integration may already have advanced but merge completion is uncertain,
 retain the preparation: a returned error alone cannot make that merge safe to
-repeat.
+repeat. Certainty comes from the durable mutation receipt, not from the error
+and not from live HEAD: when a receipt attributes an integration-ref commit to
+this task, that commit carries the approved review commit, and it is still an
+ancestor of the integration ref, the effect is proven rather than uncertain.
+A later attempt then retires the preparation and finishes the merge once. The
+CAS merge re-verifies ancestry and performs no second ref write, and the task's
+merge commit is taken from the receipt so an intervening merge is not
+misattributed.
 Administrative `recover-task --force` with missing/unreadable state keeps its
 capability while explicitly reporting that durable receipt evidence is
 unavailable.
