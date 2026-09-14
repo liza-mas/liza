@@ -13,6 +13,7 @@ pipeline:
         - add-tasks
         - supersede-task
         - retarget-dependency
+        - narrow-inherited-dependencies
         - apply-dependency-repair
         - repair-superseded-dependencies
         - cancel-task

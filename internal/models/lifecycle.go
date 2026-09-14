@@ -103,7 +103,7 @@ func IsLifecycleOperation(value string) bool {
 	switch value {
 	case "submit-for-review", "submit-verdict", "mark-blocked", "assess-blocked",
 		"assess-hypothesis-exhausted", "claim-task", "claim-reviewer-task", "release-claim",
-		"wt-merge", "recover-task", "retarget-dependency", "apply-dependency-repair",
+		"wt-merge", "recover-task", "retarget-dependency", "narrow-inherited-dependencies", "apply-dependency-repair",
 		"repair-superseded-dependencies", "cancel-task", "supersede-task", "unblock-task",
 		"set-task-output", "handoff", "recover-agent", "transition-attempt":
 		return true

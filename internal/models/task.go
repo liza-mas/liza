@@ -388,6 +388,12 @@ const (
 	// InheritModeSelected waits only for the upstream outputs named in
 	// Selections.
 	InheritModeSelected = "selected"
+	// InheritModeNone waits for no upstream phase output at all: the child's
+	// cross-phase ordering is fully expressed by its sibling and
+	// task_depends_on edges. It is the explicit spelling of "external
+	// prerequisites: none added", which mode "selected" cannot express because
+	// it requires at least one selection.
+	InheritModeNone = "none"
 )
 
 // InheritInputs expresses a planner's dependency intent for one generated
@@ -415,9 +421,16 @@ type InputSelection struct {
 }
 
 // IsSelective reports whether this entry narrows its inherited dependencies.
-// Nil and mode "all" are both whole-phase barriers.
+// Nil and mode "all" are both whole-phase barriers; "selected" and "none"
+// both narrow, to named outputs and to nothing respectively.
 func (i *InheritInputs) IsSelective() bool {
-	return i != nil && i.Mode == InheritModeSelected
+	return i != nil && (i.Mode == InheritModeSelected || i.Mode == InheritModeNone)
+}
+
+// InheritsNothing reports whether this entry declares that no upstream phase
+// output is a prerequisite.
+func (i *InheritInputs) InheritsNothing() bool {
+	return i != nil && i.Mode == InheritModeNone
 }
 
 // SelectionFor returns the selected output indexes for one upstream task and
@@ -444,15 +457,15 @@ func ValidateInheritInputs(inherit *InheritInputs, entryIndex int) error {
 		return nil
 	}
 	switch inherit.Mode {
-	case InheritModeAll:
+	case InheritModeAll, InheritModeNone:
 		if len(inherit.Selections) > 0 {
-			return fmt.Errorf("output[%d].inherit_inputs: mode %q must not carry selections", entryIndex, InheritModeAll)
+			return fmt.Errorf("output[%d].inherit_inputs: mode %q must not carry selections", entryIndex, inherit.Mode)
 		}
 		return nil
 	case InheritModeSelected:
 	default:
-		return fmt.Errorf("output[%d].inherit_inputs: mode must be %q or %q (got %q)",
-			entryIndex, InheritModeAll, InheritModeSelected, inherit.Mode)
+		return fmt.Errorf("output[%d].inherit_inputs: mode must be %q, %q or %q (got %q)",
+			entryIndex, InheritModeAll, InheritModeSelected, InheritModeNone, inherit.Mode)
 	}
 
 	if len(inherit.Selections) == 0 {

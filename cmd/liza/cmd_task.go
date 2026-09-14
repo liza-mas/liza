@@ -404,6 +404,95 @@ func writeRetargetDependencyVerboseDiagnostic(stderr io.Writer, err error) {
 	_ = json.NewEncoder(stderr).Encode(diagnostic)
 }
 
+var narrowInheritedDependenciesCmd = &cobra.Command{
+	Use:   "narrow-inherited-dependencies <producer-task-id> --selections <file> --reason <reason>",
+	Short: "Narrow generated children to selected upstream outputs",
+	Long: fmt.Sprintf(`Apply inherit_inputs to a MERGED planning task after its children were generated.
+
+ADR-0137 lets a plan output name the upstream outputs its child actually needs,
+but only at generation time. This orchestrator-only metadata repair authors
+that intent after the fact: it records inherit_inputs on the producer's
+output[] entries named in the selections file, then removes from each generated
+child still in its initial status the inherited phase-gate edges the selection
+does not keep. Sibling, task_depends_on, and manually retargeted edges are never
+removed. Terminal, claimed, executing, reviewing, and blocked children are left
+untouched and reported as skipped.
+
+The whole operation fails closed: an unresolvable or out-of-range selection
+writes nothing. The transition is auto-detected when the producer executed
+exactly one per-subtask transition; pass --transition otherwise.
+
+Selections file (YAML or JSON):
+  outputs:
+    - index: 0
+      inherit_inputs:
+        mode: selected
+        selections:
+          - upstream_task: records-plan
+            outputs: [0, 2]
+    - index: 3
+      inherit_inputs:
+        mode: all      # restore the whole-phase barrier on this child
+
+Example:
+  %s records-plan-cp-0 --selections narrow.yaml --reason "Docs child needs only the schema contract"`, brand.Command("narrow-inherited-dependencies")),
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
+		if isJSON(cmd) {
+			log.SetOutput(io.Discard)
+			defer log.SetOutput(os.Stderr)
+			defer func() {
+				if retErr != nil && !errors.Is(retErr, jsonout.ErrAlreadyWritten) {
+					_ = jsonout.WriteResult(os.Stdout, nil, nil, retErr)
+					retErr = jsonout.ErrAlreadyWritten
+				}
+			}()
+		}
+
+		invocation := beginLifecycleCLI(cmd, args)
+		defer invocation.finish(&retErr)
+		requestOpts, err := lifecycleRequestOptions(cmd)
+		if err != nil {
+			return err
+		}
+
+		producerID := args[0]
+		transition, _ := cmd.Flags().GetString("transition")
+		selectionsPath, _ := cmd.Flags().GetString("selections")
+		reason, _ := cmd.Flags().GetString("reason")
+
+		selections, err := ops.LoadNarrowSelectionsFile(selectionsPath)
+		if err != nil {
+			return err
+		}
+
+		authority, err := resolveOrchestratorAuthority(cmd)
+		if err != nil {
+			return err
+		}
+
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+
+		resolver, err := loadResolverForRBAC(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := validateAllowedOperation(resolver, authority.ID, "narrow-inherited-dependencies"); err != nil {
+			return err
+		}
+
+		invocation.calledOps = true
+		if isJSON(cmd) {
+			result, err := ops.NarrowInheritedDependenciesWithAuthorityAndOptions(projectRoot, producerID, transition, selections, reason, authority, requestOpts)
+			return jsonout.WriteResult(os.Stdout, result, resultWarnings(result), err)
+		}
+		return commands.NarrowInheritedDependenciesWithAuthorityAndOptionsCommand(projectRoot, producerID, transition, selections, reason, authority, requestOpts)
+	},
+}
+
 var applyDependencyRepairCmd = &cobra.Command{
 	Use:   "apply-dependency-repair <blocked-task-id> --reason <reason>",
 	Short: "Apply one stored dependency repair atomically",
@@ -1433,7 +1522,7 @@ Disposition values:
 }
 
 func init() {
-	for _, cmd := range []*cobra.Command{cancelTaskCmd, supersedeTaskCmd, unblockTaskCmd, setTaskOutputCmd, claimTaskCmd, retargetDependencyCmd, applyDependencyRepairCmd, repairSupersededDependenciesCmd, assessHypothesisExhaustedCmd, markBlockedCmd, assessBlockedCmd} {
+	for _, cmd := range []*cobra.Command{cancelTaskCmd, supersedeTaskCmd, unblockTaskCmd, setTaskOutputCmd, claimTaskCmd, retargetDependencyCmd, narrowInheritedDependenciesCmd, applyDependencyRepairCmd, repairSupersededDependenciesCmd, assessHypothesisExhaustedCmd, markBlockedCmd, assessBlockedCmd} {
 		addLifecycleFlags(cmd)
 	}
 	rootCmd.AddCommand(claimTaskCmd)
@@ -1441,6 +1530,7 @@ func init() {
 	rootCmd.AddCommand(addTasksCmd)
 	rootCmd.AddCommand(supersedeTaskCmd)
 	rootCmd.AddCommand(retargetDependencyCmd)
+	rootCmd.AddCommand(narrowInheritedDependenciesCmd)
 	rootCmd.AddCommand(applyDependencyRepairCmd)
 	rootCmd.AddCommand(repairSupersededDependenciesCmd)
 	rootCmd.AddCommand(cancelTaskCmd)
@@ -1465,6 +1555,7 @@ func init() {
 	}
 	supersedeTaskCmd.ValidArgsFunction = completeTaskIDArgs(2)
 	retargetDependencyCmd.ValidArgsFunction = completeTaskIDArgs(3)
+	narrowInheritedDependenciesCmd.ValidArgsFunction = completeTaskIDArgs(1)
 	applyDependencyRepairCmd.ValidArgsFunction = completeTaskIDArgs(1)
 	repairSupersededDependenciesCmd.ValidArgsFunction = completeTaskIDArgs(1)
 	cancelTaskCmd.ValidArgsFunction = completeTaskIDArgs(1)
@@ -1482,6 +1573,7 @@ func init() {
 	addJSONFlag(addTasksCmd)
 	addJSONFlag(supersedeTaskCmd)
 	addJSONFlag(retargetDependencyCmd)
+	addJSONFlag(narrowInheritedDependenciesCmd)
 	addJSONFlag(applyDependencyRepairCmd)
 	addJSONFlag(repairSupersededDependenciesCmd)
 	addJSONFlag(cancelTaskCmd)
@@ -1502,6 +1594,12 @@ func init() {
 	addAgentIDFlag(retargetDependencyCmd)
 	retargetDependencyCmd.Flags().String("reason", "", "reason for retargeting this dependency (required)")
 	retargetDependencyCmd.MarkFlagRequired("reason")
+	addAgentIDFlag(narrowInheritedDependenciesCmd)
+	narrowInheritedDependenciesCmd.Flags().String("selections", "", "YAML or JSON file naming output indexes and their inherit_inputs (required)")
+	narrowInheritedDependenciesCmd.Flags().String("transition", "", "per-subtask transition that generated the children (auto-detected when unambiguous)")
+	narrowInheritedDependenciesCmd.Flags().String("reason", "", "reason for narrowing these dependencies (required)")
+	narrowInheritedDependenciesCmd.MarkFlagRequired("selections")
+	narrowInheritedDependenciesCmd.MarkFlagRequired("reason")
 	addAgentIDFlag(applyDependencyRepairCmd)
 	applyDependencyRepairCmd.Flags().String("reason", "", "reason for applying the stored dependency repair (required)")
 	applyDependencyRepairCmd.MarkFlagRequired("reason")

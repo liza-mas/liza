@@ -41,11 +41,19 @@ precedent: a purely additive field that leaves `depends_on` and
 
 ```yaml
 inherit_inputs:
-  mode: selected          # or "all"
+  mode: selected          # or "all", or "none"
   selections:
     - upstream_task: plan-1
       outputs: [0, 2]     # indexes into plan-1's own output[]
 ```
+
+**`mode: none` means no phase-gate edge at all** (added with ADR-0138). It is
+the explicit spelling of a plan's "external prerequisites: none added": the
+child's cross-phase ordering is carried entirely by its sibling `depends_on`
+and concrete `task_depends_on` edges. `selected` cannot express this because
+it requires at least one selection, and that requirement stays — an empty
+selection list is still ambiguous with an authoring mistake, whereas `none`
+is a deliberate word.
 
 **Omitted means the whole-phase barrier.** A nil `inherit_inputs` reproduces
 ADR-0048's behavior exactly, so every existing and frozen run keeps its
