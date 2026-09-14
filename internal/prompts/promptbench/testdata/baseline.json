@@ -1,13 +1,13 @@
 {
-  "total_bytes": 194219,
+  "total_bytes": 218537,
   "carrier_block": {
     "name": "RESOLVED REFERENCE CONTEXT",
-    "bytes": 180282
+    "bytes": 204600
   },
   "sections": [
     {
       "name": "RESOLVED REFERENCE CONTEXT",
-      "bytes": 180282
+      "bytes": 204600
     },
     {
       "name": "ORCHESTRATOR CONTEXT",
@@ -57,9 +57,15 @@
     }
   ],
   "depends_on_total_bytes": 5812,
-  "depends_on_share_of_total": 0.029924981592944048,
-  "carrier_share_of_total": 0.928240800333644,
-  "carrier_headings": 100,
-  "carrier_sections": 100,
-  "mean_carrier_section_bytes": 1802
+  "depends_on_share_of_total": 0.02659503882637723,
+  "carrier_share_of_total": 0.9362259022499623,
+  "duplicate_references": {
+    "duplicated_blocks": 12,
+    "duplicated_bytes": 22496,
+    "elided_pointers": 0,
+    "share_of_total": 0.10293909040574364
+  },
+  "carrier_headings": 113,
+  "carrier_sections": 113,
+  "mean_carrier_section_bytes": 1810
 }

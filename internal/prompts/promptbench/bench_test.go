@@ -278,3 +278,27 @@ func TestCarrierDominatesPayload(t *testing.T) {
 			report.CarrierShare, loadCalibration(t).CarrierBlock.ShareOfCorpus)
 	}
 }
+
+// TestFixtureContainsDuplicateReferences asserts the fixture carries direct
+// references that duplicate an inlined carrier — the pattern the reduction
+// targets — and at least one stale reference that must survive it.
+//
+// Same reasoning as TestCarrierStructureIsCalibrated: a fixture without the
+// pattern makes the reduction unmeasurable, and the fixture is committed
+// before the reduction lands.
+func TestFixtureContainsDuplicateReferences(t *testing.T) {
+	report := promptbench.MeasureRendered(renderFixture(t))
+	shape := promptbench.CalibratedShape()
+
+	if got := report.DuplicateReferences.DuplicatedBlocks + report.DuplicateReferences.ElidedPointers; got != shape.DuplicateRefs {
+		t.Errorf("duplicate references found = %d (dup %d + elided %d), fixture declares %d",
+			got, report.DuplicateReferences.DuplicatedBlocks, report.DuplicateReferences.ElidedPointers, shape.DuplicateRefs)
+	}
+	if shape.StaleRefs == 0 {
+		t.Fatal("fixture declares no stale reference; the no-elision guard is untested")
+	}
+	if report.DuplicateReferences.ShareOfTotal > 0 && report.DuplicateReferences.ShareOfTotal < 0.05 {
+		t.Errorf("duplicate share %.3f is far below the measured ~0.117; fixture has drifted",
+			report.DuplicateReferences.ShareOfTotal)
+	}
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/precommit"
+	"github.com/liza-mas/liza/internal/referencecontract"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -305,7 +306,7 @@ func TestResolvedReferenceContextReviewCandidateMayBeAbsentAtHead(t *testing.T) 
 		t.Fatalf("buildResolvedReferenceContext: %v", err)
 	}
 	if !strings.Contains(context, "Candidate-only decision.") || !strings.Contains(context, "Inherited contract.") {
-		t.Fatalf("review context omitted candidate or inherited span:\n%s", context)
+		t.Fatalf("review context omitted candidate or inherited Span:\n%s", context)
 	}
 	if _, err := os.Stat(filepath.Join(repo, "specs", "candidate.md")); !os.IsNotExist(err) {
 		t.Fatalf("candidate unexpectedly exists at integration HEAD: %v", err)
@@ -405,9 +406,9 @@ func TestResolvedReferenceContextParentReviewedRangeCompatibility(t *testing.T) 
 func TestReconcileCarrierPrecedenceAndParentConflict(t *testing.T) {
 	t.Parallel()
 
-	context, err := reconcileAndRenderCarriers([]carrierObservation{
-		{path: "specs/carrier.md", span: "scalar content\n", revision: "head", class: carrierScalar, blobOID: "scalar"},
-		{path: "specs/carrier.md", span: "review content\n", revision: "review", class: carrierReview, blobOID: "review"},
+	context, err := referencecontract.RenderCarriers([]referencecontract.Carrier{
+		{Path: "specs/carrier.md", Span: "scalar content\n", Revision: "head", Class: referencecontract.CarrierScalar, BlobOID: "scalar"},
+		{Path: "specs/carrier.md", Span: "review content\n", Revision: "review", Class: referencecontract.CarrierReview, BlobOID: "review"},
 	})
 	if err != nil {
 		t.Fatalf("reconcileAndRenderCarriers: %v", err)
@@ -416,9 +417,9 @@ func TestReconcileCarrierPrecedenceAndParentConflict(t *testing.T) {
 		t.Fatalf("review candidate did not win precedence:\n%s", context)
 	}
 
-	_, err = reconcileAndRenderCarriers([]carrierObservation{
-		{path: "specs/carrier.md", span: "parent one\n", revision: "one", class: carrierParent, blobOID: "one"},
-		{path: "specs/carrier.md", span: "parent two\n", revision: "two", class: carrierParent, blobOID: "two"},
+	_, err = referencecontract.RenderCarriers([]referencecontract.Carrier{
+		{Path: "specs/carrier.md", Span: "parent one\n", Revision: "one", Class: referencecontract.CarrierParent, BlobOID: "one"},
+		{Path: "specs/carrier.md", Span: "parent two\n", Revision: "two", Class: referencecontract.CarrierParent, BlobOID: "two"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "conflicting carrier provenance") {
 		t.Fatalf("parent conflict error = %v", err)
@@ -428,12 +429,12 @@ func TestReconcileCarrierPrecedenceAndParentConflict(t *testing.T) {
 func TestReconcileCarrierDeduplicatesEquivalentDirectReferenceRevisions(t *testing.T) {
 	t.Parallel()
 
-	shared := resolvedReference{path: "specs/source.md", heading: "Contract", revision: "revision-one", blobOID: "same-blob", span: "## Contract\nshared span\n"}
+	shared := referencecontract.Reference{Path: "specs/source.md", Heading: "Contract", Revision: "revision-one", BlobOID: "same-blob", Span: "## Contract\nshared span\n"}
 	alias := shared
-	alias.revision = "revision-two"
-	context, err := reconcileAndRenderCarriers([]carrierObservation{
-		{path: "specs/a.md", span: "carrier a\n", revision: "head", class: carrierScalar, blobOID: "a", refs: []resolvedReference{shared}},
-		{path: "specs/b.md", span: "carrier b\n", revision: "head", class: carrierScalar, blobOID: "b", refs: []resolvedReference{alias}},
+	alias.Revision = "revision-two"
+	context, err := referencecontract.RenderCarriers([]referencecontract.Carrier{
+		{Path: "specs/a.md", Span: "carrier a\n", Revision: "head", Class: referencecontract.CarrierScalar, BlobOID: "a", Refs: []referencecontract.Reference{shared}},
+		{Path: "specs/b.md", Span: "carrier b\n", Revision: "head", Class: referencecontract.CarrierScalar, BlobOID: "b", Refs: []referencecontract.Reference{alias}},
 	})
 	if err != nil {
 		t.Fatalf("reconcileAndRenderCarriers: %v", err)

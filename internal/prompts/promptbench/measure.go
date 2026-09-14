@@ -26,16 +26,30 @@ type SiteMeasurement struct {
 // Report is the benchmark's output: total rendered bytes, the carrier block,
 // and every dependency render site.
 type Report struct {
-	TotalBytes       int               `json:"total_bytes"`
-	CarrierBlock     SectionMeasure    `json:"carrier_block"`
-	Sections         []SectionMeasure  `json:"sections"`
-	DependsOnSites   []SiteMeasurement `json:"depends_on_sites"`
-	DependsOnTotal   int               `json:"depends_on_total_bytes"`
-	DependsOnShare   float64           `json:"depends_on_share_of_total"`
-	CarrierShare     float64           `json:"carrier_share_of_total"`
-	CarrierHeadings  int               `json:"carrier_headings"`
-	CarrierSections  int               `json:"carrier_sections"`
-	MeanSectionBytes int               `json:"mean_carrier_section_bytes"`
+	TotalBytes     int               `json:"total_bytes"`
+	CarrierBlock   SectionMeasure    `json:"carrier_block"`
+	Sections       []SectionMeasure  `json:"sections"`
+	DependsOnSites []SiteMeasurement `json:"depends_on_sites"`
+	DependsOnTotal int               `json:"depends_on_total_bytes"`
+	DependsOnShare float64           `json:"depends_on_share_of_total"`
+	CarrierShare   float64           `json:"carrier_share_of_total"`
+	// DuplicateReferences is the byte weight of DIRECT REFERENCE blocks whose
+	// span is already present verbatim in a CARRIER inlined at the same path
+	// in the same prompt. ElidedReferences counts references rendered as a
+	// one-line pointer to such a carrier instead of a second copy.
+	DuplicateReferences ReferenceMeasure `json:"duplicate_references"`
+	CarrierHeadings     int              `json:"carrier_headings"`
+	CarrierSections     int              `json:"carrier_sections"`
+	MeanSectionBytes    int              `json:"mean_carrier_section_bytes"`
+}
+
+// ReferenceMeasure reports direct-reference duplication against inlined
+// carriers.
+type ReferenceMeasure struct {
+	DuplicatedBlocks int     `json:"duplicated_blocks"`
+	DuplicatedBytes  int     `json:"duplicated_bytes"`
+	ElidedPointers   int     `json:"elided_pointers"`
+	ShareOfTotal     float64 `json:"share_of_total"`
 }
 
 // SectionMeasure is the byte weight of one rendered `=== NAME ===` section.
@@ -120,6 +134,11 @@ func MeasureRendered(rendered string) Report {
 		}
 	}
 
+	r.DuplicateReferences = measureDuplicateReferences(rendered)
+	if r.TotalBytes > 0 {
+		r.DuplicateReferences.ShareOfTotal = float64(r.DuplicateReferences.DuplicatedBytes) / float64(r.TotalBytes)
+	}
+
 	site4Occ, site4Bytes, site4Longest := 0, 0, 0
 	for _, m := range site4Run.FindAllString(rendered, -1) {
 		site4Occ++
@@ -174,3 +193,67 @@ func MeasureRendered(rendered string) Report {
 
 // JSON renders the report for the committed baseline artifact.
 func (r Report) JSON() ([]byte, error) { return json.MarshalIndent(r, "", "  ") }
+
+var carrierOrRefHeader = regexp.MustCompile(`(?m)^(CARRIER "([^"]*)" @ \S+|DIRECT REFERENCE "([^"#]*)#[^"]*" @ \S+)( — inlined above as CARRIER "[^"]*")?$`)
+
+// measureDuplicateReferences finds DIRECT REFERENCE blocks whose span is a
+// verbatim substring of a CARRIER inlined at the same path in the same
+// prompt. Path equality alone is not enough — a reference pinned at a
+// different blob than the inlined carrier carries different text and is not a
+// duplicate — so containment is checked on the bytes.
+func measureDuplicateReferences(rendered string) ReferenceMeasure {
+	var m ReferenceMeasure
+	locs := carrierOrRefHeader.FindAllStringSubmatchIndex(rendered, -1)
+	if len(locs) == 0 {
+		return m
+	}
+	type block struct {
+		isCarrier bool
+		path      string
+		elided    bool
+		start     int // header start
+		body      string
+		size      int // header + body bytes
+	}
+	blocks := make([]block, 0, len(locs))
+	for i, loc := range locs {
+		end := len(rendered)
+		if i+1 < len(locs) {
+			end = locs[i+1][0]
+		}
+		// Stop a block at the next section banner so trailing sections do
+		// not count as the last reference's body.
+		if next := strings.Index(rendered[loc[1]:end], "\n=== "); next >= 0 {
+			end = loc[1] + next + 1
+		}
+		b := block{start: loc[0], size: end - loc[0]}
+		if loc[4] >= 0 {
+			b.isCarrier, b.path = true, rendered[loc[4]:loc[5]]
+		} else {
+			b.path = rendered[loc[6]:loc[7]]
+		}
+		b.elided = loc[8] >= 0
+		b.body = strings.TrimSpace(rendered[loc[1]:end])
+		blocks = append(blocks, b)
+	}
+	carriers := map[string]string{}
+	for _, b := range blocks {
+		if b.isCarrier {
+			carriers[b.path] = b.body
+		}
+	}
+	for _, b := range blocks {
+		if b.isCarrier {
+			continue
+		}
+		if b.elided {
+			m.ElidedPointers++
+			continue
+		}
+		if inlined, ok := carriers[b.path]; ok && b.body != "" && strings.Contains(inlined, b.body) {
+			m.DuplicatedBlocks++
+			m.DuplicatedBytes += b.size
+		}
+	}
+	return m
+}

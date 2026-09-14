@@ -47,6 +47,17 @@
     "mean_section_bytes": 1791
   },
 
+  "duplicate_direct_references": {
+    "_comment": "DIRECT REFERENCE blocks whose span is a verbatim substring of a CARRIER inlined in full at the same path in the same prompt. Verified by byte containment, not path match alone.",
+    "prompts_containing": 167,
+    "contained_blocks": 1101,
+    "contained_bytes": 9501128,
+    "share_of_corpus": 0.1168,
+    "not_contained_blocks": 38,
+    "not_contained_bytes": 985518,
+    "note": "the not-contained blocks are pinned at a different blob than the inlined carrier and must never be elided; corpus total for this pass was 81352099 bytes under utf-8 replacement decoding"
+  },
+
   "depends_on_sites": {
     "_comment": "Four real render sites. Zeros are recorded as zeros deliberately: absence in this run is a finding, not a reason to omit the row.",
 
