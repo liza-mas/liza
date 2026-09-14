@@ -296,3 +296,36 @@ Observed behavior when the model is unsupported (`claude -p --permission-mode au
 **Why deferred:** Detecting it means parsing `--model` out of args and profiles and maintaining Anthropic's list of auto-capable models inside Liza — a vendor-owned list that drifts silently and would be wrong in exactly the cases that matter. Liza also does not set the model by default, so in the common configuration there is nothing to inspect. The constraint is documented in `support-docs/CONFIGURATION.md` instead.
 
 **Payback trigger:** First report of a MAS agent that runs but produces no edits. If Claude Code gains a queryable capability check (something like `claude auto-mode config` reporting gate status for the resolved model), use that rather than a hardcoded list.
+
+## Replan retarget skips terminal producers with unconsumed output
+
+**What:** `replan.go`'s retarget loop rewrites downstream `DependsOn` from the
+replanned task to its replacement, but skips tasks where
+`Status.IsTerminal()`. `MERGED` is terminal *and* is the status children are
+generated from (`proceed.go` accepts it as a source, and
+`IsUnconsumedPlanningOutput` in `advance_sprint.go` describes the shape). So a
+`MERGED` producer with unconsumed `output[]` keeps pointing at the replanned
+upstream. At generation, `computeInheritedDeps` hits the `replanned` guard,
+skips that upstream, and the producer's children inherit no phase-gate barrier
+from the replacement at all.
+
+**Why deferred:** The fix changes dependency generation for runs that use no
+selective inputs, so it is not W6's to make. It needs its own review and its
+own regression evidence rather than riding on ADR-0137.
+
+**Findability:** `replan.go` already detects this exact condition and
+downgrades it to a human warning — "task %s is %s and depends on replanned
+task %s — consider replanning %s too". Treat that warning as the
+known-incomplete half of the retarget, not as the mitigation it currently is.
+`IsUnconsumedPlanningOutput` (`advance_sprint.go`) is the predicate the fix
+needs and already exists.
+
+**Scope note:** ADR-0137's degradation pass makes the *persisted selection*
+honest in this case — it retires to whole-phase inheritance and records the
+retirement — but it cannot recover the barrier, because a replanned task has
+no children by design. The lost barrier is this entry, not that one.
+
+**Payback trigger:** The next observed instance of a phase-gate barrier lost
+after a replan, or any change touching `replan.go`'s retarget loop —
+whichever comes first. This path currently relies on a human reading a
+warning, so it should not wait for a third trigger.
