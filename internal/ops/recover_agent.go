@@ -171,11 +171,13 @@ func RecoverAgent(projectRoot, agentID string, force bool, reason string) (*Reco
 			result.Warnings = append(result.Warnings, fmt.Sprintf("agent %s preserved because one or more claims could not be released", agentID))
 		}
 
-		state.HumanNotes = append(state.HumanNotes, models.HumanNote{
+		recoveryNote := models.HumanNote{
 			Timestamp: now,
 			Message:   fmt.Sprintf("Agent %s recovered (%s): %s", agentID, role, reason),
 			For:       agentID,
-		})
+		}
+		recoveryNote.MarkSeenByOrchestrator(now) // audit record, not a request
+		state.HumanNotes = append(state.HumanNotes, recoveryNote)
 
 		return nil
 	})

@@ -1,0 +1,24 @@
+{{- define "wake_human_note" -}}
+An operator left {{len .Notes}} note(s) you have not acted on. Treat each as a
+direct human request within your existing authority and role capabilities:
+
+{{range .Notes -}}
+--- OPERATOR NOTE ({{.Timestamp}}, for: {{.For}}) ---
+{{.Message}}
+--- END NOTE ---
+
+{{end -}}
+1. Read each note completely before acting.
+2. Carry out the request exactly as written, in this session, with your
+   registered identity. Do not substitute a different operation, widen the
+   request, or change any task status the note does not ask you to change.
+3. Where a note gives exact commands, run them in the order given and stop at
+   the first failure; report the failing command and its error verbatim in
+   your assessment instead of retrying with different arguments.
+4. If a request is outside your allowed operations or unsafe, do nothing for
+   that note and say so explicitly in your assessment.
+5. Notes are marked seen when this session exits successfully; a note you
+   could not complete is shown again on your next wake.
+
+Do NOT call {{binaryName}} sprint-checkpoint for a note unless the note asks for it.
+{{- end -}}

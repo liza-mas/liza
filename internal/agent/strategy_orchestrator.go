@@ -143,6 +143,33 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 		m2oTransitions = detCtx.ManyToOneTransitions
 	}
 
+	// A HUMAN_NOTE turn rendered every pre-turn note (the prompt builder ranks
+	// triggers identically). Any other turn consumed only the notes whose
+	// target it assessed: the blocked-task instructions read human_notes before
+	// recording an assessment, so re-rendering those as fresh requests would
+	// execute them twice. Only notes that existed when the prompt was built
+	// qualify. A turn that exits non-zero never reaches here and the notes
+	// wake the orchestrator again.
+	if ops.CountUnseenHumanNotes(stateBefore) > 0 {
+		trigger := DetectOrchestratorWakeTriggers(stateBefore, pipelineTerminals, planningPairs, m2oTransitions).Trigger
+		rendered := len(stateBefore.HumanNotes)
+		if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
+			consumed := func(*models.HumanNote) bool { return true }
+			if trigger != WakeTriggerHumanNote {
+				assessed := ops.TasksAssessedBetween(stateBefore, state)
+				consumed = func(note *models.HumanNote) bool {
+					return assessed[note.For] || (note.For == "all" && len(assessed) > 0)
+				}
+			}
+			if stamped := ops.MarkHumanNotesSeen(state, time.Now().UTC(), rendered, consumed); stamped > 0 {
+				GetLogger().Info("Marked operator notes as seen by orchestrator", "count", stamped, "trigger", trigger)
+			}
+			return nil
+		}); err != nil {
+			GetLogger().Warn("Failed to mark operator notes as seen", "error", err)
+		}
+	}
+
 	if err := verifyOrchestratorStateChanges(bb, stateBefore, pipelineTerminals, planningPairs, m2oTransitions); err != nil {
 		GetLogger().Warn("Orchestrator state verification failed",
 			"error", err,

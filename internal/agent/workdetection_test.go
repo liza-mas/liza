@@ -260,6 +260,7 @@ func TestOrchestratorWakeTriggerSpecs(t *testing.T) {
 		WakeTriggerBlocked,
 		WakeTriggerHypothesisExhausted,
 		WakeTriggerImmediateDiscovery,
+		WakeTriggerHumanNote,
 	}
 
 	if len(orchestratorWakeTriggerSpecs) != len(wantOrder) {
@@ -970,6 +971,36 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			}(),
 			wantTrigger: WakeTriggerImmediateDiscovery,
 			wantCount:   1,
+		},
+		{
+			name: "unseen operator note wakes an idle orchestrator",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+				}
+				state.HumanNotes = []models.HumanNote{
+					{Timestamp: now, For: "all", Message: "run the repair"},
+				}
+				return state
+			}(),
+			wantTrigger: WakeTriggerHumanNote,
+			wantCount:   1,
+		},
+		{
+			name: "seen operator note does not re-wake",
+			state: func() *models.State {
+				state := testhelpers.CreateValidState()
+				state.Tasks = []models.Task{
+					testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, now),
+				}
+				seen := models.HumanNote{Timestamp: now, For: "all", Message: "already handled"}
+				seen.MarkSeenByOrchestrator(now)
+				state.HumanNotes = []models.HumanNote{seen}
+				return state
+			}(),
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
 		},
 		{
 			name: "no triggers (tasks in progress)",

@@ -348,6 +348,9 @@ func TestDeleteTask_AddsAuditTrail(t *testing.T) {
 	if !strings.Contains(lastNote.Message, "no longer needed") {
 		t.Errorf("Note message = %q, want to contain reason", lastNote.Message)
 	}
+	if !lastNote.SeenByOrchestrator() {
+		t.Error("audit note must be stamped seen so it does not wake the orchestrator")
+	}
 	if lastNote.For != "all" {
 		t.Errorf("Note For = %q, want 'all'", lastNote.For)
 	}

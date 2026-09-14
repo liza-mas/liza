@@ -18,7 +18,9 @@ var addHumanNoteCmd = &cobra.Command{
 	Short: "Record bounded operator input for an existing task or all tasks",
 	Long: `Append an operator note without changing task status, clearing blocks,
 or granting approvals. A note newer than an assessment makes its blocked target
-actionable for the orchestrator. Input must be a nonempty UTF-8 file of at most
+actionable for the orchestrator, and any note also wakes an idle orchestrator
+once (HUMAN_NOTE): the turn renders the note verbatim and marks it seen on
+success. Input must be a nonempty UTF-8 file of at most
 4096 bytes; reference larger evidence by path. Note content is not echoed.
 Identified agent sessions cannot use this command. As with local operator
 recovery, absence of an agent identity is not authentication of a human author.`,

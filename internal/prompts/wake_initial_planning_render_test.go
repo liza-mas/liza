@@ -78,7 +78,7 @@ func TestWakeInitialPlanningExplicitRoutesRenderResolvedTargets(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildWakeTemplateData: %v", err)
 			}
-			rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil)
+			rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil, nil)
 			if err != nil {
 				t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 			}
@@ -115,7 +115,7 @@ func TestWakeInitialPlanningClassificationRendersResolvedRouteData(t *testing.T)
 	if err != nil {
 		t.Fatalf("buildWakeTemplateData: %v", err)
 	}
-	rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil)
+	rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil, nil)
 	if err != nil {
 		t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestWakeInitialPlanningMissingMasterRendersSpecializedFallback(t *testing.T
 	if err != nil {
 		t.Fatalf("buildWakeTemplateData: %v", err)
 	}
-	rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil)
+	rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil, nil)
 	if err != nil {
 		t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestWakeInitialPlanningRendersDefectClassification(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildWakeTemplateData: %v", err)
 			}
-			rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil)
+			rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil, nil)
 			if err != nil {
 				t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 			}
@@ -230,7 +230,7 @@ func TestWakeInitialPlanningRejectsOldMultiTaskGuidance(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildWakeTemplateData: %v", err)
 			}
-			rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil)
+			rendered, err := buildInstructionsForWakeTrigger("INITIAL_PLANNING", "orchestrator-1", data, nil, nil)
 			if err != nil {
 				t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 			}

@@ -281,6 +281,9 @@ func TestRecoverAgent_CoderWithImplementingTask(t *testing.T) {
 	if !strings.Contains(lastNote.Message, "coder-1") {
 		t.Errorf("Note message = %q, want to contain agent ID", lastNote.Message)
 	}
+	if !lastNote.SeenByOrchestrator() {
+		t.Error("audit note must be stamped seen so it does not wake the orchestrator")
+	}
 }
 
 func TestRecoverAgent_ReviewerWithReviewingTask(t *testing.T) {
