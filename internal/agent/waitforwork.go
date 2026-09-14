@@ -40,6 +40,15 @@ type stateWatcher interface {
 	Close() error
 }
 
+// abortTickInterval is the period of the ABORT/TOCTOU fallback tick in
+// waitForWorkEventDriven. Both ABORT and new work are state.yaml changes that
+// fsnotify already delivers, so this tick only covers the gap between the
+// initial check and watcher setup, and events fsnotify misses. Every tick
+// re-reads state in every waiting supervisor, so it is kept well above the
+// one-second scale that made idle supervisors a dominant CPU cost.
+// Overridable in tests.
+var abortTickInterval = 5 * time.Second
+
 // newStateWatcher creates a watcher for state file changes.
 // Overridable in tests to inject a silent (no-event) watcher.
 var newStateWatcher = func(bb *db.Blackboard) (stateWatcher, error) {
@@ -100,7 +109,7 @@ func waitForWorkEventDriven(
 
 	// Add ticker for periodic ABORT checks (file-based fallback).
 	// Keep this well below typical maxWait to avoid racing with context deadlines.
-	abortTicker := time.NewTicker(1 * time.Second)
+	abortTicker := time.NewTicker(abortTickInterval)
 	defer abortTicker.Stop()
 
 	// Deadline timer — created once to avoid timer leak in the select loop

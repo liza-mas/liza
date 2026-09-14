@@ -463,6 +463,8 @@ func TestOrchestratorRespectsMaxWaitConfig(t *testing.T) {
 
 // TestWaitForWorkEventDriven tests that agents wake quickly on state changes
 func TestWaitForWorkEventDriven(t *testing.T) {
+	withAbortTickInterval(t, 200*time.Millisecond)
+
 	tests := []struct {
 		name        string
 		role        string
@@ -552,7 +554,8 @@ func TestWaitForWorkEventDriven(t *testing.T) {
 				resultCh <- hasWork
 			}()
 
-			// Wait a bit for watcher to start
+			// Wait a bit for watcher to start. The tick is shortened above so a
+			// slow watcher registration stays inside the wake bound asserted.
 			time.Sleep(200 * time.Millisecond)
 
 			// Modify state to create work
@@ -680,6 +683,10 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// The state change below can land before the watcher is registered, leaving
+	// the fallback tick as the only detector; keep it inside the bound asserted.
+	withAbortTickInterval(t, 200*time.Millisecond)
+
 	startTime := time.Now()
 	resultCh := make(chan bool, 1)
 	errCh := make(chan error, 1)
@@ -720,7 +727,7 @@ func TestWaitForWorkEventDrivenAbortStateMode(t *testing.T) {
 		}
 
 		// Should respond well before the 5s context deadline.
-		// fsnotify detects instantly; ticker fallback takes up to 1s.
+		// fsnotify detects instantly; the shortened tick backs it up.
 		if elapsed > 1500*time.Millisecond {
 			t.Errorf("ABORT detection took %v, expected < 1.5s", elapsed)
 		}
@@ -1274,6 +1281,17 @@ func TestWaitForCoderWorkDetectsResumableHandoff(t *testing.T) {
 	}
 }
 
+// withAbortTickInterval shortens the ABORT/TOCTOU fallback tick for tests whose
+// timing bound must hold even when fsnotify loses the race to observe a state
+// change. Production keeps a deliberately slow tick, so tests that assert
+// sub-second reactions must not silently depend on its value.
+func withAbortTickInterval(t *testing.T, d time.Duration) {
+	t.Helper()
+	original := abortTickInterval
+	abortTickInterval = d
+	t.Cleanup(func() { abortTickInterval = original })
+}
+
 // silentWatcher is a watcher whose Events channel never fires,
 // simulating the TOCTOU race where fsnotify misses a state change.
 type silentWatcher struct {
@@ -1293,9 +1311,13 @@ func (w *silentWatcher) Errors() <-chan error    { return w.errors }
 func (w *silentWatcher) Close() error            { return nil }
 
 // TestWaitForWork_AbortTickerDetectsWork_TOCTOU verifies that the
-// abortTicker (1s) detects work even when fsnotify misses the state
+// abortTicker detects work even when fsnotify misses the state
 // change — the TOCTOU race between initial check and watcher setup.
 func TestWaitForWork_AbortTickerDetectsWork_TOCTOU(t *testing.T) {
+	// Shorten the fallback tick so the test exercises the mechanism
+	// without waiting a production interval for it.
+	withAbortTickInterval(t, 200*time.Millisecond)
+
 	// Inject a silent watcher with a handshake: the factory signals
 	// watcherReady when newStateWatcher is called, guaranteeing the
 	// state mutation happens AFTER the initial check AND after watcher
@@ -1350,7 +1372,7 @@ func TestWaitForWork_AbortTickerDetectsWork_TOCTOU(t *testing.T) {
 	}
 
 	// Add claimable work — the silent watcher won't notify,
-	// so only the abortTicker (1s) can detect this.
+	// so only the abortTicker can detect this.
 	if err := bb.Modify(func(s *models.State) error {
 		s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()))
 		return nil
@@ -1367,9 +1389,9 @@ func TestWaitForWork_AbortTickerDetectsWork_TOCTOU(t *testing.T) {
 		if !hasWork {
 			t.Fatal("expected work to be detected")
 		}
-		// abortTicker fires every 1s; allow up to 2s for scheduling jitter
-		if elapsed > 2*time.Second {
-			t.Errorf("abortTicker took %v to detect work, expected < 2s", elapsed)
+		// abortTicker fires every 200ms here; allow 1s for scheduling jitter
+		if elapsed > time.Second {
+			t.Errorf("abortTicker took %v to detect work, expected < 1s", elapsed)
 		}
 	case <-time.After(4 * time.Second):
 		t.Fatal("Timeout: abortTicker did not detect work within 4s")
