@@ -373,6 +373,126 @@ type OutputEntry struct {
 	Decomposition           *DecompositionManifest   `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
 	// TaskDependsOn names existing concrete task IDs to copy onto generated child tasks.
 	TaskDependsOn []string `yaml:"task_depends_on,omitempty" json:"task_depends_on,omitempty"`
+	// InheritInputs declares whether this child waits for a whole upstream
+	// phase or only for selected upstream outputs. Nil means the whole-phase
+	// barrier, which is the pre-existing behavior.
+	InheritInputs *InheritInputs `yaml:"inherit_inputs,omitempty" json:"inherit_inputs,omitempty"`
+}
+
+// Inherit-input modes. Omitting inherit_inputs entirely is equivalent to
+// InheritModeAll and remains the default.
+const (
+	// InheritModeAll waits for every child of every upstream dependency —
+	// the phase-gate barrier described by ADR-0048.
+	InheritModeAll = "all"
+	// InheritModeSelected waits only for the upstream outputs named in
+	// Selections.
+	InheritModeSelected = "selected"
+)
+
+// InheritInputs expresses a planner's dependency intent for one generated
+// child: wait for the whole upstream phase, or only for named outputs of it.
+//
+// Omitted intent is not the same as an empty selection. A nil InheritInputs
+// inherits every upstream child (ADR-0048's automatic phase gate); a
+// "selected" mode with no resolvable selection is an error, never an empty
+// dependency set. Dropping a prerequisite silently is the failure this
+// distinction exists to prevent.
+type InheritInputs struct {
+	Mode       string           `yaml:"mode" json:"mode"`
+	Selections []InputSelection `yaml:"selections,omitempty" json:"selections,omitempty"`
+}
+
+// InputSelection names specific outputs of one upstream task.
+//
+// Outputs are indexes into the upstream task's own output[], not task IDs:
+// the upstream's children usually do not exist when a planner authors this,
+// so they cannot be named directly. Resolution to concrete child IDs is
+// deferred to generation.
+type InputSelection struct {
+	UpstreamTask string `yaml:"upstream_task" json:"upstream_task"`
+	Outputs      []int  `yaml:"outputs" json:"outputs"`
+}
+
+// IsSelective reports whether this entry narrows its inherited dependencies.
+// Nil and mode "all" are both whole-phase barriers.
+func (i *InheritInputs) IsSelective() bool {
+	return i != nil && i.Mode == InheritModeSelected
+}
+
+// SelectionFor returns the selected output indexes for one upstream task and
+// whether that upstream was named at all. Callers must distinguish "named,
+// selecting nothing from it" from "not named": only the latter means the
+// upstream contributes no edges.
+func (i *InheritInputs) SelectionFor(upstreamTaskID string) ([]int, bool) {
+	if !i.IsSelective() {
+		return nil, false
+	}
+	for _, selection := range i.Selections {
+		if selection.UpstreamTask == upstreamTaskID {
+			return selection.Outputs, true
+		}
+	}
+	return nil, false
+}
+
+// ValidateInheritInputs checks authoring-time structure. Index bounds and
+// upstream materialization are deliberately not checked here — the upstream's
+// output[] may not exist yet — and are enforced at generation instead.
+func ValidateInheritInputs(inherit *InheritInputs, entryIndex int) error {
+	if inherit == nil {
+		return nil
+	}
+	switch inherit.Mode {
+	case InheritModeAll:
+		if len(inherit.Selections) > 0 {
+			return fmt.Errorf("output[%d].inherit_inputs: mode %q must not carry selections", entryIndex, InheritModeAll)
+		}
+		return nil
+	case InheritModeSelected:
+	default:
+		return fmt.Errorf("output[%d].inherit_inputs: mode must be %q or %q (got %q)",
+			entryIndex, InheritModeAll, InheritModeSelected, inherit.Mode)
+	}
+
+	if len(inherit.Selections) == 0 {
+		return fmt.Errorf("output[%d].inherit_inputs: mode %q requires at least one selection; "+
+			"to wait for every upstream output use mode %q or omit inherit_inputs",
+			entryIndex, InheritModeSelected, InheritModeAll)
+	}
+
+	seenUpstream := make(map[string]struct{}, len(inherit.Selections))
+	for selectionIndex, selection := range inherit.Selections {
+		upstream := strings.TrimSpace(selection.UpstreamTask)
+		if upstream == "" || upstream != selection.UpstreamTask {
+			return fmt.Errorf("output[%d].inherit_inputs.selections[%d]: upstream_task must be non-empty and trimmed",
+				entryIndex, selectionIndex)
+		}
+		if _, duplicate := seenUpstream[upstream]; duplicate {
+			return fmt.Errorf("output[%d].inherit_inputs.selections[%d]: duplicate upstream_task %q",
+				entryIndex, selectionIndex, upstream)
+		}
+		seenUpstream[upstream] = struct{}{}
+
+		if len(selection.Outputs) == 0 {
+			return fmt.Errorf("output[%d].inherit_inputs.selections[%d]: upstream_task %q selects no outputs; "+
+				"remove the selection to depend on nothing from it, or name the outputs required",
+				entryIndex, selectionIndex, upstream)
+		}
+		seenOutput := make(map[int]struct{}, len(selection.Outputs))
+		for _, output := range selection.Outputs {
+			if output < 0 {
+				return fmt.Errorf("output[%d].inherit_inputs.selections[%d]: negative output index %d",
+					entryIndex, selectionIndex, output)
+			}
+			if _, duplicate := seenOutput[output]; duplicate {
+				return fmt.Errorf("output[%d].inherit_inputs.selections[%d]: duplicate output index %d",
+					entryIndex, selectionIndex, output)
+			}
+			seenOutput[output] = struct{}{}
+		}
+	}
+	return nil
 }
 
 // validKinds is the registry of non-empty OutputEntry.Kind / Task.Kind values.

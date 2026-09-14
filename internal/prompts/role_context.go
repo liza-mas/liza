@@ -191,7 +191,6 @@ type RoleContextData struct {
 	GoalSpecRef          string
 	TotalPlanTasks       int
 	TaskOrdinal          int // 1-based position in visible sprint plan
-	DependsOn            []string
 	TaskRolePair         string
 	DecompositionRoot    bool
 	MasterOutputRefField string

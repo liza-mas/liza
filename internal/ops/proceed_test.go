@@ -1270,7 +1270,7 @@ func TestProceed_RecoverCrashedTransitionRejectsPatchedDownstreamDependency(t *t
 	state := &models.State{Tasks: []models.Task{architectureTask, existingChild, codingTask}}
 
 	result := &ProceedResult{SourceTaskID: "architecture-1", TransitionName: "architecture-to-code-plan"}
-	err = proceedInner(state, "architecture-1", "architecture-to-code-plan", tDef, []string{"coding-1"}, resolver, now, result)
+	err = proceedInner(state, "architecture-1", "architecture-to-code-plan", tDef, inheritedDepSet{all: []string{"coding-1"}}, resolver, now, result)
 	testhelpers.RequireErrorContains(t, err, "role_pair coding-pair is downstream of code-planning-pair")
 	if got := state.FindTask(childID).DependsOn; len(got) != 0 {
 		t.Fatalf("existing child DependsOn mutated on rejection: %v", got)
@@ -2457,13 +2457,13 @@ func TestProceed_CodePlanningRootCrashRecoveryPersistsRCAClassification(t *testi
 func proceedCodePlanningRootTransition(t *testing.T, projectRoot string, state *models.State, parentID string, result *ProceedResult) error {
 	t.Helper()
 	resolver, tDef := codePlanningRootTransitionDef(t, projectRoot)
-	return proceedInner(state, parentID, "code-plan-decompose", tDef, nil, resolver, time.Now().UTC(), result)
+	return proceedInner(state, parentID, "code-plan-decompose", tDef, inheritedDepSet{}, resolver, time.Now().UTC(), result)
 }
 
 func recoverCodePlanningRootTransition(t *testing.T, projectRoot string, state *models.State, parentID string, result *ProceedResult) error {
 	t.Helper()
 	resolver, tDef := codePlanningRootTransitionDef(t, projectRoot)
-	return recoverCrashedTransition(state, state.FindTask(parentID), parentID, "code-plan-decompose", tDef, nil, resolver, time.Now().UTC(), result)
+	return recoverCrashedTransition(state, state.FindTask(parentID), parentID, "code-plan-decompose", tDef, inheritedDepSet{}, resolver, time.Now().UTC(), result)
 }
 
 func codePlanningRootTransitionDef(t *testing.T, projectRoot string) (*pipeline.Resolver, transitionDef) {
@@ -4158,13 +4158,13 @@ func TestComputeInheritedDeps_UpstreamExecutedSameTransition(t *testing.T) {
 		t.Fatalf("computeInheritedDeps: %v", err)
 	}
 
-	if len(inherited) != 3 {
-		t.Fatalf("inherited count = %d, want 3", len(inherited))
+	if len(inherited.all) != 3 {
+		t.Fatalf("inherited count = %d, want 3", len(inherited.all))
 	}
 	for i := 0; i < 3; i++ {
 		expected := perSubtaskChildID(upstreamID, transitionName, i)
-		if inherited[i] != expected {
-			t.Errorf("inherited[%d] = %q, want %q", i, inherited[i], expected)
+		if inherited.all[i] != expected {
+			t.Errorf("inherited[%d] = %q, want %q", i, inherited.all[i], expected)
 		}
 	}
 }
@@ -4200,8 +4200,8 @@ func TestComputeInheritedDeps_UpstreamDidNotExecuteTransition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("computeInheritedDeps: %v", err)
 	}
-	if len(inherited) != 0 {
-		t.Errorf("inherited count = %d, want 0 (upstream hasn't executed transition)", len(inherited))
+	if len(inherited.all) != 0 {
+		t.Errorf("inherited count = %d, want 0 (upstream hasn't executed transition)", len(inherited.all))
 	}
 }
 
@@ -4238,8 +4238,8 @@ func TestComputeInheritedDeps_UpstreamExecutedDifferentTransition(t *testing.T) 
 	if err != nil {
 		t.Fatalf("computeInheritedDeps: %v", err)
 	}
-	if len(inherited) != 0 {
-		t.Errorf("inherited count = %d, want 0 (upstream executed different transition)", len(inherited))
+	if len(inherited.all) != 0 {
+		t.Errorf("inherited count = %d, want 0 (upstream executed different transition)", len(inherited.all))
 	}
 }
 
@@ -4333,8 +4333,8 @@ func TestComputeInheritedDeps_ReplannedUpstream_SkippedNotError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("computeInheritedDeps returned an error for a replanned upstream: %v", err)
 	}
-	if len(inherited) != 0 {
-		t.Errorf("inherited = %v, want none — a replanned upstream contributes no phase-gate dependencies", inherited)
+	if len(inherited.all) != 0 {
+		t.Errorf("inherited = %v, want none — a replanned upstream contributes no phase-gate dependencies", inherited.all)
 	}
 }
 
@@ -4952,7 +4952,7 @@ func TestProceedInner_InheritedDepsAppendedAfterSiblingDeps(t *testing.T) {
 	inheritedDeps := []string{"upstream-child-0", "upstream-child-1"}
 	result := &ProceedResult{SourceTaskID: "plan-1", TransitionName: "code-plan-to-coding"}
 
-	err := proceedInner(s, "plan-1", "code-plan-to-coding", tDef, inheritedDeps, nil, now, result)
+	err := proceedInner(s, "plan-1", "code-plan-to-coding", tDef, inheritedDepSet{all: inheritedDeps}, nil, now, result)
 	if err != nil {
 		t.Fatalf("proceedInner: %v", err)
 	}
@@ -5015,7 +5015,7 @@ func TestProceedInner_PerSubtaskDedupesDependenciesInStableOrder(t *testing.T) {
 	inheritedDeps := []string{"external-task", "inherited-task", siblingID}
 	result := &ProceedResult{SourceTaskID: "plan-1", TransitionName: "code-plan-to-coding"}
 
-	err := proceedInner(s, "plan-1", "code-plan-to-coding", tDef, inheritedDeps, nil, now, result)
+	err := proceedInner(s, "plan-1", "code-plan-to-coding", tDef, inheritedDepSet{all: inheritedDeps}, nil, now, result)
 	if err != nil {
 		t.Fatalf("proceedInner: %v", err)
 	}
@@ -6017,11 +6017,11 @@ func TestComputeInheritedDeps_ManyToOne(t *testing.T) {
 
 	// Both us-1 and us-2 are in the same cohort, so they produce the same child ID
 	// Dedup should result in only one inherited dep
-	if len(inherited) != 1 {
-		t.Fatalf("inherited deps count = %d, want 1 (dedup same cohort child)", len(inherited))
+	if len(inherited.all) != 1 {
+		t.Fatalf("inherited deps count = %d, want 1 (dedup same cohort child)", len(inherited.all))
 	}
-	if inherited[0] != childID {
-		t.Errorf("inherited[0] = %q, want %q", inherited[0], childID)
+	if inherited.all[0] != childID {
+		t.Errorf("inherited.all[0] = %q, want %q", inherited.all[0], childID)
 	}
 }
 
@@ -6071,7 +6071,7 @@ func TestComputeInheritedDeps_ManyToOne_IntraCohortSkipsSelfDep(t *testing.T) {
 		t.Fatalf("computeInheritedDeps: %v", err)
 	}
 
-	if len(inherited) != 0 {
+	if len(inherited.all) != 0 {
 		t.Errorf("inherited deps = %v, want empty (intra-cohort dep should be skipped to avoid self-reference)", inherited)
 	}
 }
@@ -6316,7 +6316,7 @@ func TestProceedManyToOne_CrashRecovery_ChildExists(t *testing.T) {
 
 	now := time.Now().UTC()
 	result := &ProceedResult{}
-	err = proceedInner(state, cohort[0].ID, "us-to-coding", tDef, nil, resolver, now, result)
+	err = proceedInner(state, cohort[0].ID, "us-to-coding", tDef, inheritedDepSet{}, resolver, now, result)
 
 	// Should return errTransitionAlreadyExecuted
 	if err == nil {
@@ -6370,7 +6370,7 @@ func TestProceedManyToOne_CrashRecoveryRejectsPatchedDownstreamDependency(t *tes
 
 	now := time.Now().UTC()
 	result := &ProceedResult{}
-	err = proceedInner(state, cohort[0].ID, "us-to-coding", tDef, []string{"coding-1"}, resolver, now, result)
+	err = proceedInner(state, cohort[0].ID, "us-to-coding", tDef, inheritedDepSet{all: []string{"coding-1"}}, resolver, now, result)
 	testhelpers.RequireErrorContains(t, err, "role_pair coding-pair is downstream of architecture-pair")
 	if got := state.FindTask(childID).DependsOn; len(got) != 0 {
 		t.Fatalf("existing child DependsOn mutated on rejection: %v", got)

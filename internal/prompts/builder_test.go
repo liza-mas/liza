@@ -3437,7 +3437,6 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 			TaskOrdinal:          2,
 			GoalSpecRef:          "specs/goal.md",
 			TaskRolePair:         "code-planning-pair",
-			DependsOn:            []string{"plan-1"},
 			PhaseDependencyTasks: []SiblingTaskSummary{{ID: "plan-1", Description: "Phase 1 planning", Status: "MERGED", PlanRef: "specs/plan-phase1.md", RolePair: "code-planning-pair"}},
 		}
 
@@ -3490,7 +3489,6 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 			TaskOrdinal:    2,
 			GoalSpecRef:    "specs/goal.md",
 			TaskRolePair:   "code-planning-pair",
-			DependsOn:      []string{"plan-1"},
 		}
 
 		output, err := BuildRoleContext("code-planner", []string{"collective-plan-scoping"}, data)
@@ -3511,7 +3509,6 @@ func TestCollectivePlanScoping_PhaseConsistencyRule(t *testing.T) {
 			TaskOrdinal:          1,
 			GoalSpecRef:          "specs/goal.md",
 			TaskRolePair:         "code-planning-pair",
-			DependsOn:            []string{"plan-old"},
 			PhaseDependencyTasks: []SiblingTaskSummary{{ID: "plan-old", Description: "Old phase planning", Status: "SUPERSEDED", PlanRef: "specs/plan-old.md", RolePair: "code-planning-pair"}},
 		}
 

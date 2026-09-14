@@ -348,6 +348,33 @@ Self-reinforcing patterns that can amplify failures.
 - Structural enforcement replacing behavioral rules (move more rules into Go code, reducing contract size)
 - Measure contract-to-work ratio across sessions to detect the ceiling empirically
 
+**Partial address (2026-09-14):** measurement of a complete multi-agent run
+found the rendered prompt, not the contract, to be the dominant payload —
+the resolved reference context (inlined carrier documents) was 85% of all
+prompt bytes, and 11.7% of all bytes were direct-reference sections already
+present verbatim in a carrier inlined in full in the same prompt.
+`internal/referencecontract.RenderCarriers` now emits such a reference as a
+one-line pointer to the carrier instead of a second copy; the reference stays
+discoverable and its provenance stated, and a reference pinned at a different
+blob than the inlined carrier is never elided.
+`internal/prompts/promptbench` is the instrument: a synthetic fixture
+calibrated to the measured run's shape, a per-section and per-site
+measurement, and a committed baseline. On that fixture the change removed
+9.5% of the rendered prompt with every non-carrier section byte-identical.
+This is the "measure ... empirically" option, partly instrumented; the
+contract-side options above are unaddressed.
+
+**Routed out, open attribution:** the same run showed ~40 KB per session of
+duplicate skill/reference reads — two skills read twice each. Those are
+agent-side reads, not rendered prompt bytes; the engine emits only the skill
+*names* (`skills-affinity` block, `mandatory-docs: []` for every role), so no
+render change can dedupe them. Untested either way: the `skills-affinity`
+block names skills to roles whose CORE.md Protocol References separately
+mandate the same reads, and two independent read instructions for one skill
+is a plausible engine-side cause of the doubled read. That attribution is
+recorded here as an open question, not a finding, so it is not lost with the
+routing.
+
 ### Systemic Discovery Channel Has Two Loss Modes
 
 **Skill:** systemic-thinking

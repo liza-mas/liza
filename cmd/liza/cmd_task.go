@@ -1197,6 +1197,15 @@ destructive_db, rca_required, depends_on, task_depends_on, decomposition.
 depends_on contains sibling output indexes, e.g. "0" for output[0].
 task_depends_on contains existing concrete task IDs to copy onto generated
 child tasks.
+inherit_inputs declares whether this child waits for a whole upstream phase or
+only for selected upstream outputs. Omitting it inherits every child of every
+upstream dependency, which is the default. To narrow it:
+  {"mode": "selected", "selections": [{"upstream_task": "plan-1", "outputs": [0, 2]}]}
+outputs are indexes into that upstream task's own output[], not task IDs — the
+upstream's children usually do not exist yet. upstream_task must be a
+dependency of the producing task. An unresolvable or out-of-range selection
+fails the transition rather than dropping the dependency. Use
+{"mode": "all"} to record a deliberate whole-phase barrier.
 An explicit output value overrides the parent task's rca_required value; an
 omitted value inherits the parent default. A decomposition root whose configured
 consumer is code planning must provide rca_required on every output entry, along

@@ -3,6 +3,7 @@ package ops
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -151,6 +153,9 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 		if err := validateTaskDependsOn(entry.TaskDependsOn, i); err != nil {
 			return &PreconditionError{Reason: err.Error()}
 		}
+		if err := models.ValidateInheritInputs(entry.InheritInputs, i); err != nil {
+			return &PreconditionError{Reason: err.Error()}
+		}
 	}
 	if err := validateOutputArtifactRefScalars(input.TaskID, input.Output); err != nil {
 		return err
@@ -227,6 +232,10 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 					return &PreconditionError{Reason: fmt.Sprintf("output[%d].task_depends_on references terminal non-MERGED task %q (status: %s)", i, depID, depTask.Status)}
 				}
 			}
+		}
+
+		if err := validateInheritInputsAgainstState(resolver, task, input.Output); err != nil {
+			return err
 		}
 
 		consumerRolePairs, err := resolver.OutputConsumerRolePairs(task.RolePair)
@@ -547,6 +556,55 @@ func validateTaskDependsOn(deps []string, entryIndex int) error {
 		}
 		if err := paths.ValidateTaskID(trimmed); err != nil {
 			return fmt.Errorf("output[%d].task_depends_on contains invalid task ID %q: %w", entryIndex, depID, err)
+		}
+	}
+	return nil
+}
+
+// validateInheritInputsAgainstState checks the parts of a selective
+// inherit_inputs that need the producing task and the pipeline topology.
+//
+// Index bounds are deliberately not checked here. A selection names positions
+// in an upstream task's output[], and that upstream has usually not produced
+// its output when this runs — bounds are enforced at generation, where the
+// real upstream output exists.
+func validateInheritInputsAgainstState(resolver *pipeline.Resolver, task *models.Task, entries []models.OutputEntry) error {
+	selective := false
+	for _, entry := range entries {
+		if entry.InheritInputs.IsSelective() {
+			selective = true
+			break
+		}
+	}
+	if !selective {
+		return nil
+	}
+
+	// OutputConsumerRolePairs only reports per-subtask consumers. No consumer
+	// means no transition from this task fans out, so there is nothing for a
+	// selection to narrow and the planner has misunderstood the topology.
+	consumers, err := resolver.OutputConsumerRolePairs(task.RolePair)
+	if err != nil {
+		return err
+	}
+	if len(consumers) == 0 {
+		return &PreconditionError{Reason: fmt.Sprintf(
+			"task %s role_pair %q has no per-subtask consumer transition, so inherit_inputs mode %q selects from nothing; "+
+				"omit inherit_inputs to inherit the whole upstream phase",
+			task.ID, task.RolePair, models.InheritModeSelected)}
+	}
+
+	for i, entry := range entries {
+		if !entry.InheritInputs.IsSelective() {
+			continue
+		}
+		for selectionIndex, selection := range entry.InheritInputs.Selections {
+			if !slices.Contains(task.DependsOn, selection.UpstreamTask) {
+				return &PreconditionError{Reason: fmt.Sprintf(
+					"output[%d].inherit_inputs.selections[%d]: upstream_task %q is not a dependency of %s; "+
+						"a child can only select from phases its producing task waits for",
+					i, selectionIndex, selection.UpstreamTask, task.ID)}
+			}
 		}
 	}
 	return nil

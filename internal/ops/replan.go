@@ -165,8 +165,68 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			}
 		}
 
-		// Warn about terminal tasks that still depend on the old ID
 		var warnings []string
+
+		// Retire selective inherit_inputs that name the replanned task.
+		//
+		// Deliberately NOT filtered by IsTerminal(), unlike the retarget loop
+		// above. That loop concerns a task's own DependsOn, and a terminal
+		// task will not be claimed again. Output[].InheritInputs on a MERGED
+		// task is different: MERGED is terminal *and* is the status children
+		// are generated from, so a merged producer's output is live input to
+		// generation, not historical audit data.
+		//
+		// Indexes are not retargeted onto the replacement. Replanning exists
+		// to change the upstream's output[], so index k no longer denotes
+		// what the planner selected; carrying it across would silently
+		// reinterpret the selection, which is worse than losing it because
+		// nothing would detect it. Degrading to the whole-phase barrier is
+		// the safe direction — it is a superset of any selection, it cannot
+		// fail, and it is the same behavior as omitted intent.
+		//
+		// This makes the state honest; it does not recover the prerequisite.
+		// When the producer is terminal its DependsOn still names the
+		// replanned task (the retarget loop skipped it), that task has no
+		// children by design, and the barrier is lost either way. The warning
+		// below is the existing mitigation for that; see TECH_DEBT.md.
+		for i := range state.Tasks {
+			candidate := &state.Tasks[i]
+			for entryIndex := range candidate.Output {
+				entry := &candidate.Output[entryIndex]
+				retired, named := entry.InheritInputs.SelectionFor(task.ID)
+				if !named {
+					continue
+				}
+				entry.InheritInputs = &models.InheritInputs{Mode: models.InheritModeAll}
+
+				// Persisted on the producer, not only returned to the caller:
+				// the seam was chosen for a durable record at the moment of
+				// cause, and after this command returns the state would
+				// otherwise show Mode "all" with no trace it was ever
+				// selective or why.
+				note := fmt.Sprintf("output[%d] selection into replanned task %s retired to whole-phase inheritance",
+					entryIndex, task.ID)
+				candidate.History = append(candidate.History, models.TaskHistoryEntry{
+					Time:  now,
+					Event: models.TaskEventDependenciesRewritten,
+					Agent: &input.ChangedBy,
+					Note:  &note,
+					Extra: map[string]any{
+						"output_index":           entryIndex,
+						"replanned_task":         task.ID,
+						"replacement_task":       newTaskID,
+						"retired_output_index":   retired,
+						"rewrote_inherit_inputs": true,
+					},
+				})
+				warnings = append(warnings, fmt.Sprintf(
+					"task %s output[%d] selected specific outputs of replanned task %s; "+
+						"selection retired to whole-phase inheritance (replacement %s)",
+					candidate.ID, entryIndex, task.ID, newTaskID))
+			}
+		}
+
+		// Warn about terminal tasks that still depend on the old ID
 		for i := range state.Tasks {
 			if !state.Tasks[i].Status.IsTerminal() {
 				continue

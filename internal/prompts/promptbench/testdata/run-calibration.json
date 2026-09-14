@@ -1,0 +1,105 @@
+{
+  "_comment": [
+    "Measured shape of a real multi-agent run, used to calibrate the synthetic",
+    "fixture in fixture.go. NUMBERS ONLY: no source-run document text, carrier",
+    "content, or prompt file is reproduced here or anywhere in this repository.",
+    "",
+    "The synthetic fixture reproduces these proportions with generated filler",
+    "text. See plan revision 5 (P7) on the blackboard for why the real corpus is",
+    "not vendored, and revision 5 S1 for why carrier internal structure is",
+    "calibrated and not only carrier size.",
+    "",
+    "DRIFT: these figures are a single-run snapshot. Re-measure with",
+    "'go test ./internal/prompts/promptbench -run TestCalibrationDrift -state <path>'",
+    "against a live run to detect divergence."
+  ],
+
+  "source": {
+    "measured_utc": "2026-09-14",
+    "prompt_count": 424,
+    "note": "external repository, not vendored; path supplied by the operator at measurement time"
+  },
+
+  "corpus": {
+    "total_bytes": 80115692,
+    "largest_prompt_bytes": 879982
+  },
+
+  "carrier_block": {
+    "bytes": 68163964,
+    "share_of_corpus": 0.851,
+    "prompts_containing": 236,
+    "measurement_note": "LC_ALL=C byte count; an earlier character count read 67942249 and was a slight under-estimate"
+  },
+
+  "carriers": {
+    "occurrences": 767,
+    "distinct": 279,
+    "mean_bytes": 88870,
+    "note": "occurrences exceed distinct because the same carrier at the same blob OID is inlined into many prompts; this is what produces the high cache-read rate"
+  },
+
+  "carrier_structure": {
+    "_comment": "S1: section-scoped inclusion is only measurable if fixture carriers have sections to scope to",
+    "total_headings": 38067,
+    "by_depth": { "h1": 2218, "h2": 17496, "h3": 18134, "h4": 219 },
+    "mean_headings_per_carrier": 49.6,
+    "mean_section_bytes": 1791
+  },
+
+  "duplicate_direct_references": {
+    "_comment": "DIRECT REFERENCE blocks whose span is a verbatim substring of a CARRIER inlined in full at the same path in the same prompt. Verified by byte containment, not path match alone.",
+    "prompts_containing": 167,
+    "contained_blocks": 1101,
+    "contained_bytes": 9501128,
+    "share_of_corpus": 0.1168,
+    "not_contained_blocks": 38,
+    "not_contained_bytes": 985518,
+    "note": "the not-contained blocks are pinned at a different blob than the inlined carrier and must never be elided; corpus total for this pass was 81352099 bytes under utf-8 replacement decoding"
+  },
+
+  "depends_on_sites": {
+    "_comment": "Four real render sites. Zeros are recorded as zeros deliberately: absence in this run is a finding, not a reason to omit the row.",
+
+    "site2_descendant_dependencies": {
+      "template": "blocks/branch_integration_context.tmpl:22-23",
+      "occurrences": 0,
+      "bytes": 0,
+      "note": "slice-integration section absent from this run; uncapped and O(descendants x deps) when present"
+    },
+    "site3_sibling_consistency_rule": {
+      "template": "blocks/collective_plan_scoping.tmpl:55-61",
+      "prompts_containing": 123,
+      "lines": 539,
+      "bytes": 74811,
+      "note": "uncapped; role-pair filtered, so a fixture without same-role-pair phase deps silently measures zero"
+    },
+    "site4_active_task_digest": {
+      "source": "builder.go:385-386 via RenderOrchestratorDashboard",
+      "occurrences": 1656,
+      "content_bytes": 481138,
+      "bytes_with_line_separators": 482794,
+      "longest_single_list_bytes": 905,
+      "mean_bytes": 290,
+      "note": "task count capped at 12, dependency count uncapped; this is where per-subtask inherited fan-out lands"
+    },
+    "site5_task_graph_digest": {
+      "template": "blocks/collective_plan_scoping.tmpl:78",
+      "bounded_by": "maxTaskGraphChildDeps, container maxTaskGraphEntries=16",
+      "measured": false,
+      "note": "bounded by construction; not separately measured"
+    },
+
+    "true_surface_bytes": 557605,
+    "share_of_corpus": 0.0070
+  },
+
+  "dead_data": {
+    "RoleContext.DependsOn": {
+      "populated_at": "internal/agent/prompt.go:344",
+      "declared_at": "internal/prompts/role_context.go:194",
+      "read_by_templates": 0,
+      "note": "flagged for deletion in commit 3; branch_integration_context.tmpl:22 reads IntegrationDescendantSummary.DependsOn, a different field"
+    }
+  }
+}
