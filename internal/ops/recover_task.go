@@ -798,9 +798,11 @@ func recoverTaskHumanNote(taskID, reason string, agentsToRecover map[string]bool
 	} else if len(recoveredAgents) > 1 {
 		msg = fmt.Sprintf("Task %s recovered (was held by %v): %s", taskID, recoveredAgents, reason)
 	}
-	return models.HumanNote{
+	note := models.HumanNote{
 		Timestamp: now,
 		Message:   msg,
 		For:       taskID,
 	}
+	note.MarkSeenByOrchestrator(now) // audit record, not a request
+	return note
 }

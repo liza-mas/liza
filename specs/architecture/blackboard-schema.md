@@ -855,6 +855,10 @@ human_notes:
   - timestamp: 2025-01-17T15:00:00Z
     message: "Consider using existing retry util in src/utils/retry.py"
     for: task-2
+    # Absent until an orchestrator turn renders (HUMAN_NOTE) or consumes
+    # (assessment of the target) the note; delete/recover audit entries set
+    # it at creation. Unmarked notes wake an idle orchestrator.
+    orchestrator_seen_at: 2025-01-17T15:30:00Z
 
 spec_changes:  # Append-only log of spec modifications
   - timestamp: 2025-01-17T14:00:00Z

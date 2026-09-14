@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -217,7 +218,30 @@ func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bo
 	return result
 }
 
-func determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries int, sprintComplete, codingComplete bool, planningTasks []planningTaskData, m2oReadyCount int) string {
+// wakeHumanNoteData feeds the HUMAN_NOTE wake template.
+type wakeHumanNoteData struct {
+	Notes []wakeHumanNoteEntry
+}
+
+type wakeHumanNoteEntry struct {
+	Timestamp string
+	For       string
+	Message   string
+}
+
+func buildWakeHumanNoteData(notes []models.HumanNote) wakeHumanNoteData {
+	var data wakeHumanNoteData
+	for _, note := range notes {
+		data.Notes = append(data.Notes, wakeHumanNoteEntry{
+			Timestamp: note.Timestamp.UTC().Format(time.RFC3339),
+			For:       note.For,
+			Message:   note.Message,
+		})
+	}
+	return data
+}
+
+func determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDiscoveries, unseenNotes int, sprintComplete, codingComplete bool, planningTasks []planningTaskData, m2oReadyCount int) string {
 	if totalTasks == 0 {
 		return "INITIAL_PLANNING"
 	}
@@ -229,6 +253,9 @@ func determineWakeTrigger(totalTasks, blocked, hypothesisExhausted, immediateDis
 	}
 	if immediateDiscoveries > 0 {
 		return "IMMEDIATE_DISCOVERY"
+	}
+	if unseenNotes > 0 {
+		return "HUMAN_NOTE"
 	}
 	if len(planningTasks) > 0 {
 		return "PLANNING_COMPLETE"
@@ -385,9 +412,11 @@ func resolveTaskType(resolver *pipeline.Resolver, rolePair string) string {
 	return string(tt)
 }
 
-func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeTemplateData, planningTasks []planningTaskData) (string, error) {
+func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeTemplateData, planningTasks []planningTaskData, unseenNotes []models.HumanNote) (string, error) {
 	agentData := wakeTemplateData{AgentID: agentID}
 	switch wakeTrigger {
+	case "HUMAN_NOTE":
+		return executeTemplate("wake_human_note", buildWakeHumanNoteData(unseenNotes))
 	case "INITIAL_PLANNING":
 		wakeData.AgentID = agentID
 		return executeTemplate("wake_initial_planning", wakeData)

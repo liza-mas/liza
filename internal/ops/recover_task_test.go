@@ -184,6 +184,9 @@ func TestRecoverTask_ImplementingTask_WithAgent(t *testing.T) {
 	if !strings.Contains(lastNote.Message, "task-1") || !strings.Contains(lastNote.Message, "coder-1") {
 		t.Errorf("Note message = %q, want to contain task and agent IDs", lastNote.Message)
 	}
+	if !lastNote.SeenByOrchestrator() {
+		t.Error("audit note must be stamped seen so it does not wake the orchestrator")
+	}
 }
 
 func TestRecoverTask_ReviewingTask(t *testing.T) {

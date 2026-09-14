@@ -4035,11 +4035,11 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 			t.Fatalf("projection = %#v, want CODING_COMPLETE reconciliation_needed", projection)
 		}
 		wakeData := wakeTemplateData{Integration: projection}
-		first, err := buildInstructionsForWakeTrigger(projection.WakeTrigger, "orchestrator-1", wakeData, nil)
+		first, err := buildInstructionsForWakeTrigger(projection.WakeTrigger, "orchestrator-1", wakeData, nil, nil)
 		if err != nil {
 			t.Fatalf("buildInstructionsForWakeTrigger() first render error = %v", err)
 		}
-		second, err := buildInstructionsForWakeTrigger(projection.WakeTrigger, "orchestrator-1", wakeData, nil)
+		second, err := buildInstructionsForWakeTrigger(projection.WakeTrigger, "orchestrator-1", wakeData, nil, nil)
 		if err != nil {
 			t.Fatalf("buildInstructionsForWakeTrigger() second render error = %v", err)
 		}
@@ -4115,6 +4115,7 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 					"orchestrator-1",
 					wakeTemplateData{Integration: projection},
 					nil,
+					nil,
 				)
 				if err != nil {
 					t.Fatalf("buildInstructionsForWakeTrigger() error = %v", err)
@@ -4179,7 +4180,7 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 
 func TestDetermineWakeTrigger_CodingComplete(t *testing.T) {
 	// sprintComplete=true, codingComplete=true → CODING_COMPLETE
-	got := determineWakeTrigger(5, 0, 0, 0, true, true, nil, 0)
+	got := determineWakeTrigger(5, 0, 0, 0, 0, true, true, nil, 0)
 	if got != "CODING_COMPLETE" {
 		t.Errorf("expected CODING_COMPLETE, got %s", got)
 	}
@@ -4389,7 +4390,7 @@ func TestBuildRoleContext_ArchRef(t *testing.T) {
 
 func TestDetermineWakeTrigger_SprintCompleteNotCoding(t *testing.T) {
 	// sprintComplete=true, codingComplete=false → SPRINT_COMPLETE
-	got := determineWakeTrigger(5, 0, 0, 0, true, false, nil, 0)
+	got := determineWakeTrigger(5, 0, 0, 0, 0, true, false, nil, 0)
 	if got != "SPRINT_COMPLETE" {
 		t.Errorf("expected SPRINT_COMPLETE, got %s", got)
 	}
@@ -4427,7 +4428,7 @@ func TestRenderOrchestratorDashboard_ManyToOneReady(t *testing.T) {
 
 func TestBuildInstructionsForWakeTrigger_ManyToOneReady(t *testing.T) {
 	wakeData := wakeTemplateData{AgentID: "orchestrator-1"}
-	instructions, err := buildInstructionsForWakeTrigger("MANY_TO_ONE_READY", "orchestrator-1", wakeData, nil)
+	instructions, err := buildInstructionsForWakeTrigger("MANY_TO_ONE_READY", "orchestrator-1", wakeData, nil, nil)
 	if err != nil {
 		t.Fatalf("buildInstructionsForWakeTrigger: %v", err)
 	}

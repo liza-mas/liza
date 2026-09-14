@@ -30,14 +30,7 @@ func CountActionableBlockedTasks(state *models.State) int {
 //
 // Used by both BLOCKED and HYPOTHESIS_EXHAUSTED wake triggers.
 func isTaskActionableSinceAssessment(task *models.Task, state *models.State) bool {
-	// Find the last orchestrator_assessment (reverse scan).
-	var lastAssessment *models.TaskHistoryEntry
-	for i := len(task.History) - 1; i >= 0; i-- {
-		if task.History[i].Event == models.TaskEventOrchestratorAssessment {
-			lastAssessment = &task.History[i]
-			break
-		}
-	}
+	lastAssessment := lastOrchestratorAssessment(task)
 
 	// Never assessed → actionable.
 	if lastAssessment == nil {
@@ -87,6 +80,17 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 	return false
 }
 
+// lastOrchestratorAssessment returns the task's most recent
+// orchestrator_assessment history entry, or nil if it was never assessed.
+func lastOrchestratorAssessment(task *models.Task) *models.TaskHistoryEntry {
+	for i := len(task.History) - 1; i >= 0; i-- {
+		if task.History[i].Event == models.TaskEventOrchestratorAssessment {
+			return &task.History[i]
+		}
+	}
+	return nil
+}
+
 func dependencySatisfactionChangedAfterAssessment(state *models.State, result models.DependencySatisfaction, after time.Time) bool {
 	if state == nil || !result.Satisfied() {
 		return false
@@ -121,6 +125,77 @@ func CountActionableHypothesisExhaustedTasks(state *models.State) int {
 			isTaskActionableSinceAssessment(&state.Tasks[i], state) {
 			count++
 		}
+	}
+	return count
+}
+
+// CountUnseenHumanNotes counts operator notes no completed orchestrator turn
+// has rendered yet. Each such note wakes an idle orchestrator once; the turn
+// that renders it marks it seen on completion, so a note whose instructions
+// were not carried out is shown again rather than silently dropped.
+func CountUnseenHumanNotes(state *models.State) int {
+	count := 0
+	for i := range state.HumanNotes {
+		if !state.HumanNotes[i].SeenByOrchestrator() {
+			count++
+		}
+	}
+	return count
+}
+
+// UnseenHumanNotes returns the notes CountUnseenHumanNotes counts, in
+// recording order.
+func UnseenHumanNotes(state *models.State) []models.HumanNote {
+	var notes []models.HumanNote
+	for i := range state.HumanNotes {
+		if !state.HumanNotes[i].SeenByOrchestrator() {
+			notes = append(notes, state.HumanNotes[i])
+		}
+	}
+	return notes
+}
+
+// TasksAssessedBetween returns the IDs of tasks that gained an orchestrator
+// assessment between before and after. History is append-only, so an entry
+// count comparison is immune to same-instant re-assessments.
+func TasksAssessedBetween(before, after *models.State) map[string]bool {
+	assessed := map[string]bool{}
+	for i := range after.Tasks {
+		task := &after.Tasks[i]
+		previous := 0
+		if beforeTask := before.FindTask(task.ID); beforeTask != nil {
+			previous = countOrchestratorAssessments(beforeTask)
+		}
+		if countOrchestratorAssessments(task) > previous {
+			assessed[task.ID] = true
+		}
+	}
+	return assessed
+}
+
+func countOrchestratorAssessments(task *models.Task) int {
+	count := 0
+	for i := range task.History {
+		if task.History[i].Event == models.TaskEventOrchestratorAssessment {
+			count++
+		}
+	}
+	return count
+}
+
+// MarkHumanNotesSeen stamps the unseen notes among the first rendered entries
+// (state.HumanNotes is append-only, so notes added after the prompt was built
+// sit past that index) that consumed accepts, and returns how many it stamped.
+// A HUMAN_NOTE turn consumes every rendered note; any other turn only the
+// notes an assessment it recorded consumed.
+func MarkHumanNotesSeen(state *models.State, at time.Time, rendered int, consumed func(*models.HumanNote) bool) int {
+	count := 0
+	for i := 0; i < rendered && i < len(state.HumanNotes); i++ {
+		if state.HumanNotes[i].SeenByOrchestrator() || !consumed(&state.HumanNotes[i]) {
+			continue
+		}
+		state.HumanNotes[i].MarkSeenByOrchestrator(at)
+		count++
 	}
 	return count
 }

@@ -463,10 +463,11 @@ when the watcher fails or errors. It wakes on specific conditions, in priority o
 2. **BLOCKED_TASKS**: actionable blocked tasks awaiting escalation
 3. **HYPOTHESIS_EXHAUSTED**: 2+ coders failed the same task
 4. **IMMEDIATE_DISCOVERY**: new discoveries not yet converted to tasks
-5. **PLANNING_COMPLETE**: all planned tasks terminal, and merged planning tasks have unconsumed output
+5. **HUMAN_NOTE**: operator notes no completed turn has rendered or consumed
+6. **PLANNING_COMPLETE**: all planned tasks terminal, and merged planning tasks have unconsumed output
    (pipeline transitions execute via `liza proceed <task> <transition>` for a single task,
    or automatically in batch after checkpoint and human `liza resume`)
-6. **SPRINT_COMPLETE**: all planned tasks terminal (no unconsumed planning output remains)
+7. **SPRINT_COMPLETE**: all planned tasks terminal (no unconsumed planning output remains)
 
 Re-wake loop prevention: if sprint is already CHECKPOINT or COMPLETED, SPRINT_COMPLETE is suppressed.
 

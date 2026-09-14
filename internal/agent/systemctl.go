@@ -411,6 +411,12 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 			return fmt.Errorf("orchestrator completed with HYPOTHESIS_EXHAUSTED trigger but unresolved exhausted count didn't decrease (before: %d, after: %d)", exhaustedBefore, exhaustedAfter)
 		}
 
+	case WakeTriggerHumanNote:
+		// HUMAN_NOTE: the note carries the operator's request; there is no
+		// single expected state change. Log for the audit trail only.
+		logger.Info("Orchestrator completed an operator-note turn",
+			"unseen_before", ops.CountUnseenHumanNotes(stateBefore))
+
 	case WakeTriggerImmediateDiscovery:
 		// IMMEDIATE_DISCOVERY: expect discoveries to be converted to tasks
 		immediateBefore := 0

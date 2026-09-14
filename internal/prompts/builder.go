@@ -254,7 +254,8 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 		m2oReadyCount = countReadyM2OCohorts(state, m2oTransitions)
 	}
 
-	wakeTrigger := determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
+	unseenNotes := ops.UnseenHumanNotes(state)
+	wakeTrigger := determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, len(unseenNotes), sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
 	var integrationProjection EffectiveIntegrationCompletion
 	if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
 		decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
@@ -271,7 +272,7 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	}
 	wakeData.Integration = integrationProjection
 
-	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeData, planningTasks)
+	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeData, planningTasks, unseenNotes)
 	if instrErr != nil {
 		return "", "", fmt.Errorf("building wake instructions: %w", instrErr)
 	}
@@ -298,6 +299,7 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	b.WriteString(fmt.Sprintf("- Integration failed: %d\n", integrationFailed))
 	b.WriteString(fmt.Sprintf("- Hypothesis exhausted: %d\n", hypothesisExhausted))
 	b.WriteString(fmt.Sprintf("- Immediate discoveries: %d\n", immediateDiscoveries))
+	b.WriteString(fmt.Sprintf("- Unseen operator notes: %d\n", len(unseenNotes)))
 	if cycleBlocked > 0 {
 		b.WriteString(fmt.Sprintf("- Cycle-blocked planning: %d\n", cycleBlocked))
 	}

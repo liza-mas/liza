@@ -522,6 +522,8 @@ func buildOrchestratorStatusFromWakeResult(state *models.State, result agent.Orc
 		ps.Reason = fmt.Sprintf("%d task(s) exhausted hypotheses (2+ failures)", count)
 	case "IMMEDIATE_DISCOVERY":
 		ps.Reason = fmt.Sprintf("%d immediate discovery(ies) need to be converted to tasks", count)
+	case "HUMAN_NOTE":
+		ps.Reason = fmt.Sprintf("%d operator note(s) not yet rendered in a completed turn", count)
 	case "PLANNING_COMPLETE":
 		ps.Reason = fmt.Sprintf("%d planning task(s) merged with output[]; ready for coding task expansion", count)
 	case "MANY_TO_ONE_READY":

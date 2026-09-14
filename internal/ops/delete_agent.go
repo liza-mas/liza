@@ -259,11 +259,13 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 
 		delete(state.Agents, agentID)
 
+		now := time.Now().UTC()
 		humanNote := models.HumanNote{
-			Timestamp: time.Now().UTC(),
+			Timestamp: now,
 			Message:   fmt.Sprintf("Agent %s deleted: %s", agentID, reason),
 			For:       agentID,
 		}
+		humanNote.MarkSeenByOrchestrator(now) // audit record, not a request
 		state.HumanNotes = append(state.HumanNotes, humanNote)
 
 		return nil

@@ -314,7 +314,7 @@ The supervisor passes context via the initial prompt, including structured task 
 # - TASK ID, WORKTREE, COMMIT TO REVIEW, AUTHOR, DESCRIPTION, DONE WHEN, INSTRUCTIONS
 
 # Planner prompt includes "=== PLANNING CONTEXT ===" section with:
-# - WAKE TRIGGER: INITIAL_PLANNING | BLOCKED_TASKS | HYPOTHESIS_EXHAUSTED | IMMEDIATE_DISCOVERY
+# - WAKE TRIGGER: INITIAL_PLANNING | BLOCKED_TASKS | HYPOTHESIS_EXHAUSTED | IMMEDIATE_DISCOVERY | HUMAN_NOTE
 # - SPRINT STATE: total tasks, merged, in_progress, unclaimed, blocked, integration_failed, hypothesis_exhausted, immediate_discoveries
 # - INSTRUCTIONS: trigger-specific guidance (varies by wake trigger)
 ```

@@ -117,6 +117,7 @@ Role-specific decision tree for what to do first.
    - BLOCKED_TASKS: Tasks are blocked, analyze blockers and resolve
    - HYPOTHESIS_EXHAUSTED: Multiple coders failed same task, re-evaluate approach
    - IMMEDIATE_DISCOVERY: Urgent discoveries need triage
+   - HUMAN_NOTE: Operator notes not yet rendered in a completed turn
 
 3. Follow instructions for current wake trigger
 

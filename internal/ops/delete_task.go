@@ -212,6 +212,7 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 			Message:   fmt.Sprintf("Task %s deleted (was %s): %s", taskID, currentTask.Status, reason),
 			For:       "all",
 		}
+		humanNote.MarkSeenByOrchestrator(now) // audit record, not a request
 		state.HumanNotes = append(state.HumanNotes, humanNote)
 
 		return nil

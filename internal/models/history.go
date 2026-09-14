@@ -157,6 +157,31 @@ type HumanNote struct {
 	Extra     map[string]any `yaml:",inline"`
 }
 
+// HumanNoteOrchestratorSeenKey marks a note no orchestrator turn owes: either
+// a completed HUMAN_NOTE turn rendered it, or it was recorded as an audit
+// entry (delete/recover) rather than a request. Unmarked notes wake an idle
+// orchestrator (HUMAN_NOTE).
+const HumanNoteOrchestratorSeenKey = "orchestrator_seen_at"
+
+// SeenByOrchestrator reports whether no orchestrator turn owes this note any
+// more (see HumanNoteOrchestratorSeenKey).
+func (n *HumanNote) SeenByOrchestrator() bool {
+	if n == nil || n.Extra == nil {
+		return false
+	}
+	_, seen := n.Extra[HumanNoteOrchestratorSeenKey]
+	return seen
+}
+
+// MarkSeenByOrchestrator records that no orchestrator turn owes this note:
+// a turn rendered or consumed it, or it is an audit entry.
+func (n *HumanNote) MarkSeenByOrchestrator(at time.Time) {
+	if n.Extra == nil {
+		n.Extra = map[string]any{}
+	}
+	n.Extra[HumanNoteOrchestratorSeenKey] = at.UTC().Format(time.RFC3339)
+}
+
 // SpecChange tracks modifications to specification documents
 type SpecChange struct {
 	Timestamp   time.Time      `yaml:"timestamp"`

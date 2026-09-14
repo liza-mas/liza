@@ -16,6 +16,7 @@ const (
 	WakeTriggerBlocked                OrchestratorWakeTrigger = "BLOCKED_TASKS"
 	WakeTriggerHypothesisExhausted    OrchestratorWakeTrigger = "HYPOTHESIS_EXHAUSTED"
 	WakeTriggerImmediateDiscovery     OrchestratorWakeTrigger = "IMMEDIATE_DISCOVERY"
+	WakeTriggerHumanNote              OrchestratorWakeTrigger = "HUMAN_NOTE"
 	WakeTriggerPlanningComplete       OrchestratorWakeTrigger = "PLANNING_COMPLETE"
 	WakeTriggerManyToOneReady         OrchestratorWakeTrigger = "MANY_TO_ONE_READY"
 	WakeTriggerCodingComplete         OrchestratorWakeTrigger = "CODING_COMPLETE"
@@ -82,6 +83,11 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 		Description: "Immediate discoveries need orchestrator triage.",
 		Count:       countImmediateDiscoveries,
 	},
+	{
+		Trigger:     WakeTriggerHumanNote,
+		Description: "Operator notes not yet rendered in a completed orchestrator turn.",
+		Count:       ops.CountUnseenHumanNotes,
+	},
 	// WakeTriggerSprintComplete is handled separately in DetectOrchestratorWakeTriggers
 	// because it requires pipeline-aware terminal state checking.
 }
@@ -97,9 +103,10 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // 2. Blocked tasks
 // 3. Hypothesis exhausted (2+ failed_by)
 // 4. Immediate discoveries (not yet converted to tasks)
-// 5. Planning complete (merged planning tasks have output[])
-// 6. Many-to-one transition ready
-// 7. Sprint complete (all planned tasks terminal)
+// 5. Operator notes not yet rendered in a completed turn
+// 6. Planning complete (merged planning tasks have output[])
+// 7. Many-to-one transition ready
+// 8. Sprint complete (all planned tasks terminal)
 func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
 	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, nil)
 }
