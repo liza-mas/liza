@@ -407,7 +407,7 @@ func TestResolvedReferenceContextAncestorReferencesArePointers(t *testing.T) {
 	if strings.Contains(context, "GOAL-SCOPE-TEXT") {
 		t.Errorf("ancestor reference rendered in full:\n%s", context)
 	}
-	pointer := `DIRECT REFERENCE "specs/goal.md#Scope" @ ` + sourceRevision + ` — not inlined; read with git show ` + sourceRevision + `:specs/goal.md if needed`
+	pointer := `DIRECT REFERENCE "specs/goal.md#Scope" @ ` + sourceRevision + ` — not inlined; read with git show "` + sourceRevision + `:specs/goal.md" if needed`
 	if count := strings.Count(context, pointer); count != 1 {
 		t.Errorf("ancestor pointer rendered %d times, want once:\n%s", count, context)
 	}

@@ -164,7 +164,7 @@ func TestRenderCarriersElidedReferenceIsPointerToRevision(t *testing.T) {
 	if strings.Contains(out, "GOAL-SCOPE-TEXT") {
 		t.Fatalf("elided reference span rendered:\n%s", out)
 	}
-	want := `DIRECT REFERENCE "specs/goal.md#Scope" @ pinned — not inlined; read with git show pinned:specs/goal.md if needed`
+	want := `DIRECT REFERENCE "specs/goal.md#Scope" @ pinned — not inlined; read with git show "pinned:specs/goal.md" if needed`
 	if !strings.Contains(out, want) {
 		t.Fatalf("missing pointer %q in:\n%s", want, out)
 	}
@@ -214,7 +214,7 @@ func TestRenderCarriersDifferentBlobsAreDistinctReferences(t *testing.T) {
 	if strings.Contains(out, "OLD-SCOPE-TEXT") {
 		t.Fatalf("elided older revision rendered in full:\n%s", out)
 	}
-	if !strings.Contains(out, `"specs/goal.md#Scope" @ older — not inlined; read with git show older:specs/goal.md`) {
+	if !strings.Contains(out, `"specs/goal.md#Scope" @ older — not inlined; read with git show "older:specs/goal.md"`) {
 		t.Fatalf("older revision should be a revision pointer:\n%s", out)
 	}
 	if strings.Count(out, "NEW-SCOPE-TEXT") != 1 {
@@ -271,7 +271,7 @@ func TestRenderCarriersAncestorElisionIsMeasured(t *testing.T) {
 	var want int
 	for _, r := range refs {
 		header := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned`) + 1
-		pointer := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned — not inlined; read with git show pinned:specs/goal.md if needed`) + 1
+		pointer := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned — not inlined; read with git show "pinned:specs/goal.md" if needed`) + 1
 		want += header + len(r.Span) - pointer
 	}
 	if saved := len(before) - len(after); saved != want {

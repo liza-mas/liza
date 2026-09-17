@@ -50,7 +50,7 @@ gets the complete context rather than a silently reduced one.
 ## Consequences
 
 - On the calibrated fixture the rendered prompt drops from 413,308 to
-  278,942 bytes (-32.5%), all of it in the ancestor rows; every other section
+  278,994 bytes (-32.5%), all of it in the ancestor rows; every other section
   is byte-identical.
 - A planner that under-declared its own references and relied on transitive
   inclusion now leaves the coder a pointer instead of a section. That is the

@@ -85,12 +85,9 @@ func RenderCarriers(observations []Carrier) (string, error) {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
-	containedIn := func(ref Reference) (string, bool) {
+	containedIn := func(ref Reference) bool {
 		inlined, ok := winners[ref.Path]
-		if ok && inlined.BlobOID == ref.BlobOID && strings.Contains(inlined.Span, ref.Span) {
-			return inlined.Path, true
-		}
-		return "", false
+		return ok && inlined.BlobOID == ref.BlobOID && strings.Contains(inlined.Span, ref.Span)
 	}
 	// Which carrier emits each reference in full, decided before rendering so
 	// an elided carrier that sorts earlier can point at it.
@@ -105,7 +102,7 @@ func RenderCarriers(observations []Carrier) (string, error) {
 			if _, done := emittedBy[key]; done {
 				continue
 			}
-			if _, contained := containedIn(ref); contained {
+			if containedIn(ref) {
 				continue
 			}
 			emittedBy[key] = path
@@ -126,10 +123,10 @@ func RenderCarriers(observations []Carrier) (string, error) {
 				continue
 			}
 			target := strconv.Quote(ref.Path + "#" + ref.Heading)
-			if inlinedPath, contained := containedIn(ref); contained {
+			if containedIn(ref) {
 				seenRefs[key] = true
 				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined in this context as CARRIER %s\n",
-					target, ref.Revision, strconv.Quote(inlinedPath))
+					target, ref.Revision, strconv.Quote(ref.Path))
 				continue
 			}
 			if carrier.ElideRefs {
@@ -142,8 +139,10 @@ func RenderCarriers(observations []Carrier) (string, error) {
 					continue
 				}
 				seenRefs[key] = true
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — not inlined; read with git show %s:%s if needed\n",
-					target, ref.Revision, ref.Revision, ref.Path)
+				// Quoted so the command survives a verbatim paste when the
+				// path contains spaces.
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — not inlined; read with git show %s if needed\n",
+					target, ref.Revision, strconv.Quote(ref.Revision+":"+ref.Path))
 				continue
 			}
 			seenRefs[key] = true
