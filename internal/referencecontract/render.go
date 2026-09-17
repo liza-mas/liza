@@ -19,13 +19,19 @@ const (
 
 // Carrier is one strict carrier resolved for a prompt: its pinned span and
 // the direct references it declares.
+//
+// ElideRefs marks a carrier inherited from further up the lineage than the
+// task's assigned artifacts: its declared references are rendered as one-line
+// pointers rather than spans. The zero value renders every reference in full,
+// so a caller that does not classify carriers gets the complete context.
 type Carrier struct {
-	Path     string
-	Span     string
-	Revision string
-	Class    CarrierClass
-	BlobOID  string
-	Refs     []Reference
+	Path      string
+	Span      string
+	Revision  string
+	Class     CarrierClass
+	BlobOID   string
+	Refs      []Reference
+	ElideRefs bool
 }
 
 // Reference is one resolved direct reference: a section of a pinned file.
@@ -48,6 +54,12 @@ type Reference struct {
 // the bytes anyway; if either fails, the reference is emitted in full. A
 // reference pinned at a different blob than the inlined carrier carries
 // different text and is never elided.
+//
+// References declared by a carrier with ElideRefs set are pointers: to the
+// carrier that inlines the same reference in full when one does, otherwise
+// to the pinned revision, which the agent can read with git show. A pointer
+// never consumes the once-only slot of a full emission, so a reference shared
+// by an elided and a full carrier is still rendered in full exactly once.
 func RenderCarriers(observations []Carrier) (string, error) {
 	if len(observations) == 0 {
 		return "", nil
@@ -73,8 +85,35 @@ func RenderCarriers(observations []Carrier) (string, error) {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	containedIn := func(ref Reference) (string, bool) {
+		inlined, ok := winners[ref.Path]
+		if ok && inlined.BlobOID == ref.BlobOID && strings.Contains(inlined.Span, ref.Span) {
+			return inlined.Path, true
+		}
+		return "", false
+	}
+	// Which carrier emits each reference in full, decided before rendering so
+	// an elided carrier that sorts earlier can point at it.
+	emittedBy := make(map[string]string)
+	for _, path := range paths {
+		carrier := winners[path]
+		if carrier.ElideRefs {
+			continue
+		}
+		for _, ref := range carrier.Refs {
+			key := refKey(ref)
+			if _, done := emittedBy[key]; done {
+				continue
+			}
+			if _, contained := containedIn(ref); contained {
+				continue
+			}
+			emittedBy[key] = path
+		}
+	}
 	var out strings.Builder
 	seenRefs := make(map[string]bool)
+	seenPointers := make(map[string]bool)
 	for _, path := range paths {
 		carrier := winners[path]
 		fmt.Fprintf(&out, "CARRIER %s @ %s\n%s", strconv.Quote(path), carrier.Revision, carrier.Span)
@@ -82,21 +121,41 @@ func RenderCarriers(observations []Carrier) (string, error) {
 			out.WriteByte('\n')
 		}
 		for _, ref := range carrier.Refs {
-			key := ref.Path + "\x00" + ref.Heading + "\x00" + ref.BlobOID
+			key := refKey(ref)
 			if seenRefs[key] {
 				continue
 			}
-			seenRefs[key] = true
-			if inlined, ok := winners[ref.Path]; ok && inlined.BlobOID == ref.BlobOID && strings.Contains(inlined.Span, ref.Span) {
+			target := strconv.Quote(ref.Path + "#" + ref.Heading)
+			if inlinedPath, contained := containedIn(ref); contained {
+				seenRefs[key] = true
 				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined in this context as CARRIER %s\n",
-					strconv.Quote(ref.Path+"#"+ref.Heading), ref.Revision, strconv.Quote(ref.Path))
+					target, ref.Revision, strconv.Quote(inlinedPath))
 				continue
 			}
-			fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s\n%s", strconv.Quote(ref.Path+"#"+ref.Heading), ref.Revision, ref.Span)
+			if carrier.ElideRefs {
+				if emitter, ok := emittedBy[key]; ok {
+					if !seenPointers[key] {
+						seenPointers[key] = true
+						fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined in this context under CARRIER %s\n",
+							target, ref.Revision, strconv.Quote(emitter))
+					}
+					continue
+				}
+				seenRefs[key] = true
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — not inlined; read with git show %s:%s if needed\n",
+					target, ref.Revision, ref.Revision, ref.Path)
+				continue
+			}
+			seenRefs[key] = true
+			fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s\n%s", target, ref.Revision, ref.Span)
 			if !strings.HasSuffix(ref.Span, "\n") {
 				out.WriteByte('\n')
 			}
 		}
 	}
 	return strings.TrimRight(out.String(), "\n"), nil
+}
+
+func refKey(ref Reference) string {
+	return ref.Path + "\x00" + ref.Heading + "\x00" + ref.BlobOID
 }

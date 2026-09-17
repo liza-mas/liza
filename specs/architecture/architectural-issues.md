@@ -364,6 +364,19 @@ measurement, and a committed baseline. On that fixture the change removed
 This is the "measure ... empirically" option, partly instrumented; the
 contract-side options above are unaddressed.
 
+**Second partial address (2026-09-17):** the same corpus, re-measured at 558
+prompts, put the direct references declared by *ancestor* carriers — the
+epic behind an architecture plan, the architecture plan behind a code plan —
+at 23% of all prompt bytes (31% of coder prompts). `roles.md` already
+limited the read set to the assigned carrier and its declared references;
+the renderer over-delivered. `RenderCarriers` now renders an ancestor
+carrier's references as one-line pointers to their pinned revision
+(`Carrier.ElideRefs`, set by the compositor per ADR-0139); validation of
+every reference is unchanged. On the calibrated fixture: 413,308 -> 278,942
+bytes (-32.5%), all of it in the two ancestor rows. Whether agents re-read
+the pointed sections, and how often, is the open question the next run's
+cache-read accounting should answer.
+
 **Routed out, open attribution:** the same run showed ~40 KB per session of
 duplicate skill/reference reads — two skills read twice each. Those are
 agent-side reads, not rendered prompt bytes; the engine emits only the skill

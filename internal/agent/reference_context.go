@@ -51,14 +51,23 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 
 	var observations []referencecontract.Carrier
 	var legacyReferences []prompts.LegacyArtifactReference
+	// The most specific strict scalar carrier is the task's assigned artifact
+	// and keeps its declared references inlined; the other scalar carriers
+	// are ancestors whose references render as pointers. Parent and review
+	// carriers are always assigned. When the assigned artifact also arrives
+	// through a parent range, that observation wins the path and is assigned
+	// anyway, so the scalar route is the fallback for a parent that is not
+	// merged or has no reviewed range.
+	assignedIndex, assignedRank := -1, -1
 	for _, scalar := range []struct {
 		field string
 		ref   string
+		rank  int // specificity: spec < epic < arch < plan
 	}{
-		{field: "spec_ref", ref: task.SpecRef},
-		{field: "epic_ref", ref: task.EpicRef},
-		{field: "plan_ref", ref: task.PlanRef},
-		{field: "arch_ref", ref: task.ArchRef},
+		{field: "spec_ref", ref: task.SpecRef, rank: 0},
+		{field: "epic_ref", ref: task.EpicRef, rank: 1},
+		{field: "plan_ref", ref: task.PlanRef, rank: 3},
+		{field: "arch_ref", ref: task.ArchRef, rank: 2},
 	} {
 		if scalar.ref == "" {
 			continue
@@ -72,6 +81,10 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 			return "", nil, loadErr
 		}
 		if strict {
+			observation.ElideRefs = true
+			if scalar.rank > assignedRank {
+				assignedIndex, assignedRank = len(observations), scalar.rank
+			}
 			observations = append(observations, observation)
 			continue
 		}
@@ -80,6 +93,9 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 			Ref:   scalar.ref,
 			File:  paths.SplitRefFile(scalar.ref),
 		})
+	}
+	if assignedIndex >= 0 {
+		observations[assignedIndex].ElideRefs = false
 	}
 
 	for _, parentID := range task.EffectiveParentTasks() {

@@ -376,6 +376,71 @@ func TestResolvedReferenceContextDirectParentFanIn(t *testing.T) {
 	}
 }
 
+// Ancestor scalar carriers keep their declared references as pointers; the
+// assigned carrier — the merged parent's plan — keeps them inlined.
+func TestResolvedReferenceContextAncestorReferencesArePointers(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/goal.md", "# Goal\n\n## Scope\nGOAL-SCOPE-TEXT\n")
+	writeReferenceFixture(t, repo, "specs/story.md", "# Story\n\n## Acceptance\nSTORY-AC-TEXT\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add upstream sources")
+	writeReferenceFixture(t, repo, "specs/epic.md", strictCarrier(sourceRevision, "SCOPE", "specs/goal.md", "Scope", "# Epic\n\nEPIC-LOCAL-TEXT\n"))
+	writeReferenceFixture(t, repo, "specs/arch.md", strictCarrier(sourceRevision, "SCOPE", "specs/goal.md", "Scope", "# Architecture\n\nARCH-LOCAL-TEXT\n"))
+	commitReferenceFixture(t, repo, "test: add ancestor carriers")
+	base := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	writeReferenceFixture(t, repo, "specs/plan.md", strictCarrier(sourceRevision, "AC", "specs/story.md", "Acceptance", "# Plan\n\nPLAN-LOCAL-TEXT\n"))
+	review := commitReferenceFixture(t, repo, "test: add reviewed plan")
+	planner := models.Task{ID: "planner", Status: models.TaskStatusMerged, BaseCommit: &base, ReviewCommit: &review, MergeCommit: &review}
+	plannerID := planner.ID
+	coder := models.Task{ID: "coder", ParentTask: &plannerID, PlanRef: "specs/plan.md", ArchRef: "specs/arch.md", EpicRef: "specs/epic.md"}
+	state := referenceTestState(planner, coder)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	for _, text := range []string{"EPIC-LOCAL-TEXT", "ARCH-LOCAL-TEXT", "PLAN-LOCAL-TEXT", "STORY-AC-TEXT"} {
+		if count := strings.Count(context, text); count != 1 {
+			t.Errorf("%q rendered %d times, want once:\n%s", text, count, context)
+		}
+	}
+	if strings.Contains(context, "GOAL-SCOPE-TEXT") {
+		t.Errorf("ancestor reference rendered in full:\n%s", context)
+	}
+	pointer := `DIRECT REFERENCE "specs/goal.md#Scope" @ ` + sourceRevision + ` — not inlined; read with git show ` + sourceRevision + `:specs/goal.md if needed`
+	if count := strings.Count(context, pointer); count != 1 {
+		t.Errorf("ancestor pointer rendered %d times, want once:\n%s", count, context)
+	}
+}
+
+// With no merged parent, the most specific scalar carrier is the assigned
+// artifact: its references render in full, less specific ones as pointers.
+func TestResolvedReferenceContextMostSpecificScalarIsAssigned(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/goal.md", "# Goal\n\n## Scope\nGOAL-SCOPE-TEXT\n")
+	writeReferenceFixture(t, repo, "specs/story.md", "# Story\n\n## Acceptance\nSTORY-AC-TEXT\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add upstream sources")
+	writeReferenceFixture(t, repo, "specs/epic.md", strictCarrier(sourceRevision, "SCOPE", "specs/goal.md", "Scope", "# Epic\n\nEPIC-LOCAL-TEXT\n"))
+	writeReferenceFixture(t, repo, "specs/plan.md", strictCarrier(sourceRevision, "AC", "specs/story.md", "Acceptance", "# Plan\n\nPLAN-LOCAL-TEXT\n"))
+	commitReferenceFixture(t, repo, "test: add scalar carriers")
+	plannerID := "planner"
+	planner := models.Task{ID: plannerID, Status: models.TaskStatus("REVIEW")}
+	coder := models.Task{ID: "coder", ParentTask: &plannerID, PlanRef: "specs/plan.md", EpicRef: "specs/epic.md"}
+	state := referenceTestState(planner, coder)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	if count := strings.Count(context, "STORY-AC-TEXT"); count != 1 {
+		t.Errorf("assigned plan reference rendered %d times, want once:\n%s", count, context)
+	}
+	if strings.Contains(context, "GOAL-SCOPE-TEXT") || !strings.Contains(context, `"specs/goal.md#Scope" @ `+sourceRevision+` — not inlined`) {
+		t.Errorf("epic reference should be a pointer:\n%s", context)
+	}
+}
+
 func TestResolvedReferenceContextParentReviewedRangeCompatibility(t *testing.T) {
 	repo := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, repo)

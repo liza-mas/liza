@@ -148,3 +148,136 @@ func TestRenderCarriersReductionIsMeasured(t *testing.T) {
 		t.Errorf("saved %d bytes, want exactly %d", saved, want)
 	}
 }
+
+// An elided carrier's reference to a document inlined nowhere is a pointer
+// to its pinned revision; the span is not rendered.
+func TestRenderCarriersElidedReferenceIsPointerToRevision(t *testing.T) {
+	t.Parallel()
+
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/epic.md", Span: "epic body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-e", ElideRefs: true,
+			Refs: []Reference{{Path: "specs/goal.md", Heading: "Scope", Revision: "pinned", BlobOID: "blob-g", Span: "## Scope\nGOAL-SCOPE-TEXT\n"}}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if strings.Contains(out, "GOAL-SCOPE-TEXT") {
+		t.Fatalf("elided reference span rendered:\n%s", out)
+	}
+	want := `DIRECT REFERENCE "specs/goal.md#Scope" @ pinned — not inlined; read with git show pinned:specs/goal.md if needed`
+	if !strings.Contains(out, want) {
+		t.Fatalf("missing pointer %q in:\n%s", want, out)
+	}
+}
+
+// A reference declared by both an elided and a full carrier is rendered in
+// full exactly once, by the full carrier, even when the elided carrier sorts
+// first — a pointer must not consume the once-only slot.
+func TestRenderCarriersSharedReferenceStaysFullOnce(t *testing.T) {
+	t.Parallel()
+
+	shared := Reference{Path: "specs/goal.md", Heading: "Scope", Revision: "pinned", BlobOID: "blob-g", Span: "## Scope\nGOAL-SCOPE-TEXT\n"}
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/a-epic.md", Span: "epic body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-e", ElideRefs: true, Refs: []Reference{shared}},
+		{Path: "specs/b-epic.md", Span: "second epic body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-e2", ElideRefs: true, Refs: []Reference{shared}},
+		{Path: "specs/plan.md", Span: "plan body\n", Revision: "review", Class: CarrierParent, BlobOID: "blob-p", Refs: []Reference{shared}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if count := strings.Count(out, "GOAL-SCOPE-TEXT"); count != 1 {
+		t.Fatalf("shared reference rendered %d times, want once:\n%s", count, out)
+	}
+	pointer := `DIRECT REFERENCE "specs/goal.md#Scope" @ pinned — inlined in this context under CARRIER "specs/plan.md"`
+	if count := strings.Count(out, pointer); count != 1 {
+		t.Fatalf("pointer rendered %d times, want once:\n%s", count, out)
+	}
+	if strings.Index(out, pointer) > strings.Index(out, "GOAL-SCOPE-TEXT") {
+		t.Fatalf("pointer should precede the full emission it names:\n%s", out)
+	}
+}
+
+// The dedup key includes the blob: the same path#heading pinned at different
+// blobs by an elided and a full carrier renders as a pointer and a span.
+func TestRenderCarriersDifferentBlobsAreDistinctReferences(t *testing.T) {
+	t.Parallel()
+
+	older := Reference{Path: "specs/goal.md", Heading: "Scope", Revision: "older", BlobOID: "blob-old", Span: "## Scope\nOLD-SCOPE-TEXT\n"}
+	newer := Reference{Path: "specs/goal.md", Heading: "Scope", Revision: "newer", BlobOID: "blob-new", Span: "## Scope\nNEW-SCOPE-TEXT\n"}
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/epic.md", Span: "epic body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-e", ElideRefs: true, Refs: []Reference{older}},
+		{Path: "specs/plan.md", Span: "plan body\n", Revision: "review", Class: CarrierParent, BlobOID: "blob-p", Refs: []Reference{newer}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if strings.Contains(out, "OLD-SCOPE-TEXT") {
+		t.Fatalf("elided older revision rendered in full:\n%s", out)
+	}
+	if !strings.Contains(out, `"specs/goal.md#Scope" @ older — not inlined; read with git show older:specs/goal.md`) {
+		t.Fatalf("older revision should be a revision pointer:\n%s", out)
+	}
+	if strings.Count(out, "NEW-SCOPE-TEXT") != 1 {
+		t.Fatalf("newer revision should render in full once:\n%s", out)
+	}
+}
+
+// Same-path observations collapse to the highest class, and the winner's
+// ElideRefs rules: a scalar observation marked elided loses to the parent
+// observation of the same path, whose references render in full.
+func TestRenderCarriersWinnerDecidesElision(t *testing.T) {
+	t.Parallel()
+
+	ref := Reference{Path: "specs/goal.md", Heading: "Scope", Revision: "pinned", BlobOID: "blob-g", Span: "## Scope\nGOAL-SCOPE-TEXT\n"}
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/plan.md", Span: "plan at head\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-p", ElideRefs: true, Refs: []Reference{ref}},
+		{Path: "specs/plan.md", Span: "plan at review\n", Revision: "review", Class: CarrierParent, BlobOID: "blob-p", Refs: []Reference{ref}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if strings.Count(out, "GOAL-SCOPE-TEXT") != 1 || strings.Contains(out, "not inlined") {
+		t.Fatalf("parent winner's reference should render in full:\n%s", out)
+	}
+}
+
+// The saving from eliding ancestor references is exactly header+span minus
+// the pointer line, per reference, with everything else byte-identical.
+func TestRenderCarriersAncestorElisionIsMeasured(t *testing.T) {
+	t.Parallel()
+
+	var refs []Reference
+	for i := range 13 {
+		heading := "S" + string(rune('a'+i))
+		refs = append(refs, Reference{Path: "specs/goal.md", Heading: heading, Revision: "pinned", BlobOID: "blob-g",
+			Span: "## " + heading + "\n" + strings.Repeat("x", 5200) + "\n"})
+	}
+	full := []Carrier{
+		{Path: "specs/epic.md", Span: "epic body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-e", Refs: refs},
+		{Path: "specs/plan.md", Span: "plan body\n", Revision: "review", Class: CarrierParent, BlobOID: "blob-p"},
+	}
+	before, err := RenderCarriers(full)
+	if err != nil {
+		t.Fatalf("RenderCarriers (full): %v", err)
+	}
+	elided := make([]Carrier, len(full))
+	copy(elided, full)
+	elided[0].ElideRefs = true
+	after, err := RenderCarriers(elided)
+	if err != nil {
+		t.Fatalf("RenderCarriers (elided): %v", err)
+	}
+
+	var want int
+	for _, r := range refs {
+		header := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned`) + 1
+		pointer := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned — not inlined; read with git show pinned:specs/goal.md if needed`) + 1
+		want += header + len(r.Span) - pointer
+	}
+	if saved := len(before) - len(after); saved != want {
+		t.Errorf("saved %d bytes, want exactly %d", saved, want)
+	}
+	if !strings.HasSuffix(after, "CARRIER \"specs/plan.md\" @ review\nplan body") {
+		t.Errorf("non-elided tail changed:\n%s", after)
+	}
+}

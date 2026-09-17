@@ -187,8 +187,11 @@ For prospective reference-first artifacts (ADR-0133), `spec_ref`, `epic_ref`, `p
 `arch_ref` are carrier locators. Before provider launch, the compositor loads strict scalar
 carriers, complete direct-parent reviewed ranges, and the current review range at one captured
 integration HEAD. It validates declared revision/path/anchor spans and rejects stale inherited
-blobs. Marker-free artifacts and slug-like scalar fragments retain the legacy behavior above; no
-state-schema migration is implied.
+blobs. Every carrier is inlined, but only the assigned carriers' declared references are inlined
+with it: parent and review carriers, plus the most specific scalar ref (`plan_ref` > `arch_ref` >
+`epic_ref` > `spec_ref`). References declared by the remaining ancestor carriers render as one-line
+pointers to their pinned revision (ADR-0139). Marker-free artifacts and slug-like scalar fragments
+retain the legacy behavior above; no state-schema migration is implied.
 
 **`done_when` Guidelines:**
 - State the observable behavior, not the implementation approach
