@@ -38,9 +38,14 @@ type Report struct {
 	// in the same prompt. ElidedReferences counts references rendered as a
 	// one-line pointer to such a carrier instead of a second copy.
 	DuplicateReferences ReferenceMeasure `json:"duplicate_references"`
-	CarrierHeadings     int              `json:"carrier_headings"`
-	CarrierSections     int              `json:"carrier_sections"`
-	MeanSectionBytes    int              `json:"mean_carrier_section_bytes"`
+	// ReferencesByCarrier is the direct-reference payload each inlined
+	// carrier declares, in rendered order. Only the assigned carrier's
+	// references are the task's read set; the rest are inherited from
+	// ancestors, and this row is where a reduction of them shows up.
+	ReferencesByCarrier []CarrierReferenceMeasure `json:"references_by_carrier"`
+	CarrierHeadings     int                       `json:"carrier_headings"`
+	CarrierSections     int                       `json:"carrier_sections"`
+	MeanSectionBytes    int                       `json:"mean_carrier_section_bytes"`
 }
 
 // ReferenceMeasure reports direct-reference duplication against inlined
@@ -50,6 +55,16 @@ type ReferenceMeasure struct {
 	DuplicatedBytes  int     `json:"duplicated_bytes"`
 	ElidedPointers   int     `json:"elided_pointers"`
 	ShareOfTotal     float64 `json:"share_of_total"`
+}
+
+// CarrierReferenceMeasure is the direct-reference payload declared by one
+// inlined carrier: blocks rendered in full, and blocks rendered as a one-line
+// pointer of any kind.
+type CarrierReferenceMeasure struct {
+	Carrier  string `json:"carrier"`
+	Blocks   int    `json:"blocks"`
+	Bytes    int    `json:"bytes"`
+	Pointers int    `json:"pointers"`
 }
 
 // SectionMeasure is the byte weight of one rendered `=== NAME ===` section.
@@ -134,7 +149,7 @@ func MeasureRendered(rendered string) Report {
 		}
 	}
 
-	r.DuplicateReferences = measureDuplicateReferences(rendered)
+	r.DuplicateReferences, r.ReferencesByCarrier = measureReferences(rendered)
 	if r.TotalBytes > 0 {
 		r.DuplicateReferences.ShareOfTotal = float64(r.DuplicateReferences.DuplicatedBytes) / float64(r.TotalBytes)
 	}
@@ -194,24 +209,33 @@ func MeasureRendered(rendered string) Report {
 // JSON renders the report for the committed baseline artifact.
 func (r Report) JSON() ([]byte, error) { return json.MarshalIndent(r, "", "  ") }
 
-var carrierOrRefHeader = regexp.MustCompile(`(?m)^(CARRIER "([^"]*)" @ \S+|DIRECT REFERENCE "([^"#]*)#[^"]*" @ \S+)( — inlined in this context as CARRIER "[^"]*")?$`)
+var carrierOrRefHeader = regexp.MustCompile(`(?m)^(CARRIER "([^"]*)" @ \S+|DIRECT REFERENCE "([^"#]*)#[^"]*" @ \S+)( — (.*))?$`)
 
-// measureDuplicateReferences finds DIRECT REFERENCE blocks whose span is a
-// verbatim substring of a CARRIER inlined at the same path in the same
-// prompt. Path equality alone is not enough — a reference pinned at a
-// different blob than the inlined carrier carries different text and is not a
-// duplicate — so containment is checked on the bytes.
-func measureDuplicateReferences(rendered string) ReferenceMeasure {
+// A header suffix beginning with this is the containment elision: the
+// reference is a pointer to a carrier inlined in full at the same path.
+const inlinedAsCarrierSuffix = "inlined in this context as CARRIER "
+
+// measureReferences walks the CARRIER and DIRECT REFERENCE blocks and reports
+// two views of the direct references: duplication against inlined carriers,
+// and the reference payload declared by each carrier.
+//
+// A duplicate is a DIRECT REFERENCE block whose span is a verbatim substring
+// of a CARRIER inlined at the same path in the same prompt. Path equality
+// alone is not enough — a reference pinned at a different blob than the
+// inlined carrier carries different text and is not a duplicate — so
+// containment is checked on the bytes.
+func measureReferences(rendered string) (ReferenceMeasure, []CarrierReferenceMeasure) {
 	var m ReferenceMeasure
 	locs := carrierOrRefHeader.FindAllStringSubmatchIndex(rendered, -1)
 	if len(locs) == 0 {
-		return m
+		return m, nil
 	}
 	type block struct {
 		isCarrier bool
 		path      string
-		elided    bool
-		start     int // header start
+		elided    bool // containment pointer
+		pointer   bool // any one-line pointer
+		start     int  // header start
 		body      string
 		size      int // header + body bytes
 	}
@@ -232,7 +256,8 @@ func measureDuplicateReferences(rendered string) ReferenceMeasure {
 		} else {
 			b.path = rendered[loc[6]:loc[7]]
 		}
-		b.elided = loc[8] >= 0
+		b.pointer = loc[8] >= 0
+		b.elided = b.pointer && strings.HasPrefix(rendered[loc[10]:loc[11]], inlinedAsCarrierSuffix)
 		b.body = strings.TrimSpace(rendered[loc[1]:end])
 		blocks = append(blocks, b)
 	}
@@ -242,12 +267,26 @@ func measureDuplicateReferences(rendered string) ReferenceMeasure {
 			carriers[b.path] = b.body
 		}
 	}
+	var byCarrier []CarrierReferenceMeasure
 	for _, b := range blocks {
 		if b.isCarrier {
+			byCarrier = append(byCarrier, CarrierReferenceMeasure{Carrier: b.path})
 			continue
+		}
+		if len(byCarrier) > 0 {
+			current := &byCarrier[len(byCarrier)-1]
+			current.Bytes += b.size
+			if b.pointer {
+				current.Pointers++
+			} else {
+				current.Blocks++
+			}
 		}
 		if b.elided {
 			m.ElidedPointers++
+			continue
+		}
+		if b.pointer {
 			continue
 		}
 		if inlined, ok := carriers[b.path]; ok && b.body != "" && strings.Contains(inlined, b.body) {
@@ -255,5 +294,5 @@ func measureDuplicateReferences(rendered string) ReferenceMeasure {
 			m.DuplicatedBytes += b.size
 		}
 	}
-	return m
+	return m, byCarrier
 }

@@ -302,3 +302,28 @@ func TestFixtureContainsDuplicateReferences(t *testing.T) {
 			report.DuplicateReferences.ShareOfTotal)
 	}
 }
+
+// TestFixtureContainsAncestorReferences asserts the fixture carries the
+// pattern the next reduction targets: scalar ancestor carriers whose declared
+// references are rendered although the task's read set is the assigned
+// carrier and its references. Same reasoning as the two guards above — the
+// fixture is committed before the reduction lands.
+func TestFixtureContainsAncestorReferences(t *testing.T) {
+	report := promptbench.MeasureRendered(renderFixture(t))
+	shape := promptbench.CalibratedShape()
+
+	ancestors := 0
+	for _, c := range report.ReferencesByCarrier {
+		if !strings.Contains(c.Carrier, "fixture-ancestor-") {
+			continue
+		}
+		ancestors++
+		if got := c.Blocks + c.Pointers; got != shape.AncestorRefs {
+			t.Errorf("%s declares %d references (%d full + %d pointers), fixture says %d",
+				c.Carrier, got, c.Blocks, c.Pointers, shape.AncestorRefs)
+		}
+	}
+	if ancestors != shape.AncestorCarriers {
+		t.Errorf("ancestor carriers rendered = %d, fixture declares %d", ancestors, shape.AncestorCarriers)
+	}
+}

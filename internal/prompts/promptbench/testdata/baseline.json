@@ -1,13 +1,13 @@
 {
-  "total_bytes": 198438,
+  "total_bytes": 413308,
   "carrier_block": {
     "name": "RESOLVED REFERENCE CONTEXT",
-    "bytes": 184014
+    "bytes": 398884
   },
   "sections": [
     {
       "name": "RESOLVED REFERENCE CONTEXT",
-      "bytes": 184014
+      "bytes": 398884
     },
     {
       "name": "ORCHESTRATOR CONTEXT",
@@ -57,15 +57,41 @@
     }
   ],
   "depends_on_total_bytes": 5812,
-  "depends_on_share_of_total": 0.029288745099224946,
-  "carrier_share_of_total": 0.9273123091343392,
+  "depends_on_share_of_total": 0.014062152196424942,
+  "carrier_share_of_total": 0.9651010868408064,
   "duplicate_references": {
     "duplicated_blocks": 0,
     "duplicated_bytes": 0,
     "elided_pointers": 12,
     "share_of_total": 0
   },
-  "carrier_headings": 101,
-  "carrier_sections": 101,
-  "mean_carrier_section_bytes": 1821
+  "references_by_carrier": [
+    {
+      "carrier": "specs/generated/fixture-ancestor-0.md",
+      "blocks": 13,
+      "bytes": 69728,
+      "pointers": 0
+    },
+    {
+      "carrier": "specs/generated/fixture-ancestor-1.md",
+      "blocks": 13,
+      "bytes": 69728,
+      "pointers": 0
+    },
+    {
+      "carrier": "specs/generated/fixture-carrier-0.md",
+      "blocks": 0,
+      "bytes": 0,
+      "pointers": 0
+    },
+    {
+      "carrier": "specs/generated/fixture-carrier-1.md",
+      "blocks": 1,
+      "bytes": 3789,
+      "pointers": 12
+    }
+  ],
+  "carrier_headings": 169,
+  "carrier_sections": 169,
+  "mean_carrier_section_bytes": 2360
 }

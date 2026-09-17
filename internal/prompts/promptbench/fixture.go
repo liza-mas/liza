@@ -43,6 +43,18 @@ type Shape struct {
 	// from the inlined carrier's. These must never be elided.
 	StaleRefs int
 
+	// AncestorCarriers are scalar-class carriers inherited from further up
+	// the lineage (the epic behind an architecture plan, the architecture
+	// plan behind a code plan). Each declares AncestorRefs direct references
+	// into documents that are not themselves inlined, each of about
+	// AncestorRefBytes. The measured run renders every such reference in
+	// full although only the assigned carrier's references are the task's
+	// read set (roles.md, "Reference-First Planning Artifact Review").
+	AncestorCarriers     int
+	AncestorCarrierBytes int
+	AncestorRefs         int
+	AncestorRefBytes     int
+
 	// PhaseDependencies drives site 3 (SIBLING CONSISTENCY RULE). These must
 	// share the current task's role pair or collectPhaseDependencyTasks
 	// filters them out and the site silently measures zero.
@@ -71,6 +83,10 @@ type Shape struct {
 //	HeadingsPerCarrier  38067 headings / 767 carriers    ~= 50
 //	HeadingDepthMix     2218:17496:18134:219             ~= 6:46:48:1 (percent)
 //	DuplicateRefs       9501128 bytes / 424 prompts / ~1800 bytes per section ~= 12
+//	AncestorCarriers    589 carriers / 286 prompts       ~= 2.06, rounded to 2
+//	AncestorCarrierBytes 37647 mean span bytes
+//	AncestorRefs        7354 refs / 589 carriers         ~= 12.5, rounded to 13
+//	AncestorRefBytes    5261 mean bytes per reference
 //	PhaseDependencies   539 lines / 123 prompts          ~= 4
 //	ActiveTasks         renderer cap
 //	DepsPerActiveTask   290 mean bytes / ~24 bytes per id ~= 12
@@ -83,6 +99,11 @@ func CalibratedShape() Shape {
 
 		DuplicateRefs: 12,
 		StaleRefs:     1,
+
+		AncestorCarriers:     2,
+		AncestorCarrierBytes: 37647,
+		AncestorRefs:         13,
+		AncestorRefBytes:     5261,
 
 		PhaseDependencies: 4,
 
@@ -122,8 +143,14 @@ func filler(n int, seed string) string {
 // section structure and returns it alongside the (heading, section-text)
 // pairs, so a reference into it can be built from a real section.
 func carrierSections(shape Shape, seed string) (string, []carrierSection) {
-	headings := max(shape.HeadingsPerCarrier, 1)
-	sectionBytes := shape.CarrierBytes / headings
+	return sectionedBody(shape, shape.CarrierBytes, seed)
+}
+
+// sectionedBody generates a body of about totalBytes at the calibrated
+// section granularity (CarrierBytes / HeadingsPerCarrier per section).
+func sectionedBody(shape Shape, totalBytes int, seed string) (string, []carrierSection) {
+	sectionBytes := max(shape.CarrierBytes/max(shape.HeadingsPerCarrier, 1), 1)
+	headings := max(totalBytes/sectionBytes, 1)
 	depths := expandDepthMix(shape.HeadingDepthMix, headings)
 
 	var b strings.Builder
@@ -191,6 +218,35 @@ func GenerateCarriers(shape Shape) []referencecontract.Carrier {
 			BlobOID:  fmt.Sprintf("%040x", 0xdead),
 			Span:     strings.Replace(sec.text, "generated filler", "earlier revision", 1),
 		})
+	}
+	carriers = append(carriers, generateAncestorCarriers(shape)...)
+	return carriers
+}
+
+// generateAncestorCarriers builds the inherited scalar carriers and their
+// references into documents that are not inlined anywhere in the prompt.
+func generateAncestorCarriers(shape Shape) []referencecontract.Carrier {
+	carriers := make([]referencecontract.Carrier, 0, shape.AncestorCarriers)
+	for i := range shape.AncestorCarriers {
+		span, _ := sectionedBody(shape, shape.AncestorCarrierBytes, fmt.Sprintf("a%d", i))
+		carrier := referencecontract.Carrier{
+			Path:     fmt.Sprintf("specs/generated/fixture-ancestor-%d.md", i),
+			Span:     span,
+			Revision: "fixture-head",
+			Class:    referencecontract.CarrierScalar,
+			BlobOID:  fmt.Sprintf("%040x", 0xa000+i),
+		}
+		for r := range shape.AncestorRefs {
+			heading := fmt.Sprintf("External %d", r)
+			carrier.Refs = append(carrier.Refs, referencecontract.Reference{
+				Path:     fmt.Sprintf("specs/generated/fixture-external-%d-%d.md", i, r),
+				Heading:  heading,
+				Revision: "fixture-head",
+				BlobOID:  fmt.Sprintf("%040x", 0xe000+i*shape.AncestorRefs+r),
+				Span:     fmt.Sprintf("\n## %s\n\n%s", heading, filler(shape.AncestorRefBytes, fmt.Sprintf("a%d-e%d", i, r))),
+			})
+		}
+		carriers = append(carriers, carrier)
 	}
 	return carriers
 }

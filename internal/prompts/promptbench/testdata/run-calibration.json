@@ -58,6 +58,24 @@
     "note": "the not-contained blocks are pinned at a different blob than the inlined carrier and must never be elided; corpus total for this pass was 81352099 bytes under utf-8 replacement decoding"
   },
 
+  "ancestor_carrier_references": {
+    "_comment": "DIRECT REFERENCE blocks declared by inherited scalar carriers (the epic behind an architecture plan, the architecture plan behind a code plan) rather than by the assigned carrier. Measured 2026-09-17 on the same run after it grew to 558 prompts / 136133968 bytes. Classification is textual: within one prompt, carriers at the majority revision are taken as scalar (loaded at integration HEAD), the others as parent/review carriers; the most specific scalar by path kind (plan > arch-plan > epic > other) is counted as assigned unless a parent/review carrier of equal or higher kind is present. Prompts whose carriers all share one revision (64) cannot be classified this way and are excluded.",
+    "prompts_classified": 286,
+    "classified_bytes": 118518411,
+    "ancestor_carriers": 589,
+    "ancestor_carrier_mean_span_bytes": 37647,
+    "ancestor_references": 7354,
+    "ancestor_reference_mean_bytes": 5261,
+    "assigned_references": 5705,
+    "assigned_reference_mean_bytes": 4536,
+    "elidable_bytes_upper_bound": 40218536,
+    "elidable_bytes_with_assigned_rule": 31734534,
+    "share_of_classified_prompts": 0.268,
+    "share_of_corpus": 0.233,
+    "by_role_share_of_classified": { "coder": 0.314, "code-reviewer": 0.321, "architect": 0.117, "architecture-reviewer": 0.138, "code-planner": 0.113, "code-plan-reviewer": 0.093 },
+    "note": "an estimate, not the rule's exact effect: path-kind inference stands in for the task's scalar ref fields, which the rendered text does not carry"
+  },
+
   "depends_on_sites": {
     "_comment": "Four real render sites. Zeros are recorded as zeros deliberately: absence in this run is a finding, not a reason to omit the row.",
 
