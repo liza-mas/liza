@@ -16,7 +16,13 @@ source rather than copying it into the architecture document.
 
 Follow the shared [Reference-First Authoring contract](../shared/references/reference-first-authoring.md).
 This skill owns scope-local structure, interfaces, data flow, failure handling, and structural
-rationale. It references inherited behavior and shared architecture.
+rationale. It references inherited behavior and shared architecture. Map components, interfaces,
+and proof obligations to the requirements they serve, separating the minimum mechanism Must scope
+needs from optional extensions; check consequential platform assumptions and place each proof at
+its stage per [Priority, Commitments and Proof
+Stage](../shared/references/reference-first-authoring.md#priority-commitments-and-proof-stage).
+A master groups a shared uncertainty and names its specialist owner instead of investigating it
+in every child.
 
 The architect bridges *what* (spec) and *how* (code plan). Spec says what to build; the architect
 says where each piece goes and how pieces connect. Code-planners turn each scope into

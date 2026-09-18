@@ -27,6 +27,41 @@ Only an owner may redefine its information class. Route a needed change to that
 owner or block. A later human decision becomes effective only after an owner
 correction or decision record gives it an explicit revision override.
 
+## Priority, Commitments and Proof Stage
+
+Each scoped requirement or output carries an effective MoSCoW label and source
+anchor. Must and Won't bind: Must requires inclusion, Won't requires exclusion
+this run. Should and Could may be deferred with a recorded disposition (prefer
+Should when both are ready and costs do not dictate otherwise); deferral never
+waives correctness, safety, or acceptance obligations of included work.
+Splitting or merging keeps constituent priorities; a shared prerequisite a Must
+needs stays necessary without promoting optional features that share it. Never
+relabel scope: a Must that needs a Should/Could or Won't capability is a source
+conflict for the human. A missing label is neither Must nor optional — resolve
+it at the source; frozen runs keep their obligations until a reviewed scope
+decision.
+
+Where it affects scope, observable behavior, feasibility, ordering, or
+acceptance, distinguish a human requirement, a necessary implication, a design
+choice, and an unresolved assumption. A consequential unresolved commitment is
+recorded once, in the owning artifact: source anchor or decision, claim, owner,
+evidence needed, affected outputs, settling stage. Downstream cites it. A
+consequential API or platform assumption is checked against the implementation,
+primary documentation, or a targeted probe — a test of an invented adapter
+proves nothing about the real one.
+
+Priority, readiness, and proof stage are separate properties:
+
+| Proof kind | Treatment |
+|---|---|
+| Design prerequisite | Resolve before dependent architecture, or allocate a bounded investigation with an explicit hold. |
+| Implementation prerequisite | Affected work waits for the delivered provider or harness; unrelated work proceeds. |
+| Final acceptance evidence | Named owner, prerequisites, explicit final hold; not a pre-coding gate without a concrete dependency reason. |
+
+An unavailable acceptance target neither blocks all implementation nor waives
+the test. A human-mandated proof stage or guarantee changes only by the human's
+decision; a known incompatibility is escalated, not postponed.
+
 ## References and Local Sufficiency
 
 New semantic artifacts opt into strict validation with exactly this section:
@@ -49,34 +84,16 @@ reference IDs. Paths are slash-separated, repository-relative, cleaned Markdown
 paths: no absolute path, `.`/`..` segment, backslash, control character, or `#`
 inside the path. An adjacent override binds only its line.
 
-The fragment is the exact trimmed eligible ATX heading source text, decoded from
-the JSON string and matched case-sensitively. A heading has zero to three leading
-spaces, one to six `#` characters, and a following space or line end. A shared
-scanner excludes headings inside backtick or tilde fences, indented code,
-blockquotes, and setext headings. Zero matches fail missing; multiple matches
-fail ambiguous. A heading span ends before the next eligible heading of the same
-or higher level.
-
-At one captured integration HEAD, strict carriers come only from task scalar
-refs, complete retained review ranges of direct merged parents, and the current
-task's review range. Marker-free scalar fragments remain display-only legacy
-scope hints. Strict scalar fragments select exact heading text; an empty strict
-fragment assigns the whole file. A strict Markdown file discovered inside an
-immutable reviewed range is a whole-file local artifact.
-
-Every carrier observation completes its own freshness checks before precedence
-selects rendered content. Per path, current-review content precedes parent
-content, which precedes scalar content; losing observations still validate.
-Conflicting same-class provenance blocks. Differing eligible parent blobs are
-defensively rejected at observation reconciliation even though normal
-HEAD-identity eligibility makes that state unreachable.
-
-Declared direct references resolve at their default or adjacent override
-revision and must have blob identity with the same path at captured HEAD. Read
-the selected local carrier once, then its deduplicated direct-reference spans.
-Do not recursively read every ancestor. Missing, stale, deleted, ambiguous,
-structurally invalid, contradictory, or obligation-incomplete references block;
-consumers do not reconstruct authority from memory.
+The fragment is the exact trimmed ATX heading text, matched case-sensitively;
+headings inside code fences do not count, and an ambiguous or missing heading
+blocks. A strict scalar ref with an empty fragment assigns the whole file. The
+compositor resolves declared references at their revision, checks
+them against integration HEAD, and renders the assigned carrier with its
+deduplicated reference spans (ADR-0133 has the discovery and precedence rules).
+Read that rendered context once; do not recursively read every ancestor.
+Missing, stale, ambiguous, structurally invalid, contradictory, or
+obligation-incomplete references block; consumers do not reconstruct authority
+from memory.
 
 An artifact is locally sufficient when its consumer can act from the assigned
 section, direct references, task envelope, and stage-owned repository evidence.
@@ -84,13 +101,8 @@ Local sufficiency does not permit copied upstream rationale or acceptance text.
 Exact task IDs, paths, commands, schema fragments, protocol examples, and other
 action-boundary values may be materialized when their source is labeled.
 
-Strict enforcement is prospective. Updated producer formats emit the strict
-section and exact strict subsection fragments; reviewers reject omission.
-Marker-free artifacts and scalar fragments keep legacy behavior. Complete
-direct-parent reviewed ranges enable strict discovery. An all-absent range on a
-pre-existing merged parent remains legacy; partial or inconsistent attribution
-fails closed. Reference-first resolution alone adds no state fields or migration;
-the linked acceptance-evidence contract adds provenance and execution receipts.
+Strict enforcement is prospective: updated producer formats emit the section;
+reviewers reject omission; marker-free artifacts keep legacy behavior.
 
 ## Markdown and Structured Output
 
@@ -125,8 +137,20 @@ Reject:
 4. a semantic conflict with an inherited owner;
 5. `output[]` used as a second detailed specification;
 6. detailed prose duplicated only to make representations character-identical;
-7. a correction that accumulates unchanged history; or
-8. a declared read set whose anchor spans omit an assigned obligation.
+7. a correction that accumulates unchanged history;
+8. a declared read set whose anchor spans omit an assigned obligation;
+9. a priority silently promoted, demoted, or dropped, missing Must coverage,
+   or Won't scope included;
+10. a handoff the next role cannot act on without inventing policy,
+    reconstructing stale authority, or waiting on an unallocated prerequisite,
+    or evidence demanded at the wrong stage; or
+11. a consequential guarantee with no owner and evidence — an unsupported
+    assumption presented as established.
 
-Repeated labels, IDs, short task intents, exact action-boundary values, and
-clearly marked quotations are allowed.
+A finding cannot create a commitment: before blocking, name the binding
+obligation or real defect the artifact violates; a demand for a Should/Could
+feature, a stronger unspecified guarantee, or Won't scope is at most a
+non-blocking suggestion. Inspect what each dependency supplies and its inherited
+consequences, and the strongest boundary cases, in the first review. Repeated
+labels, IDs, short task intents, exact action-boundary values, and clearly
+marked quotations are allowed.

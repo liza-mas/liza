@@ -29,8 +29,18 @@ Reject a strict planning artifact for any of these contract violations:
 4. a local statement conflicts with its inherited owner;
 5. `output[]` is used as a second detailed specification;
 6. detailed prose is duplicated only to make Markdown and `output[]` character-identical;
-7. a correction accumulates unchanged or resolved history; or
-8. an assigned obligation maps to no reference, or its mapped anchor span omits that obligation.
+7. a correction accumulates unchanged or resolved history;
+8. an assigned obligation maps to no reference, or its mapped anchor span omits that obligation;
+9. a priority is silently promoted, demoted, or dropped, Must coverage is missing, or Won't scope
+   is included;
+10. the next role cannot act from the assigned scope and references without inventing policy or
+    waiting on an unallocated prerequisite, or evidence is demanded at the wrong stage; or
+11. a consequential guarantee has no owner and evidence.
+
+A finding cannot create a commitment: before blocking, name the binding requirement, exclusion,
+or correctness obligation the artifact violates. A demand for a Should/Could feature, a stronger
+unspecified guarantee, or Won't scope is at most a non-blocking suggestion; a real Must conflict
+is reported with evidence and routed to the human.
 
 Repeated labels and IDs, short task intents, exact action-boundary values, and clearly marked
 quotations are permitted. Marker-free legacy artifacts retain the existing review path.

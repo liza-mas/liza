@@ -20,7 +20,12 @@ source; do not copy it into the capability to manufacture self-containment.
 
 Follow the shared [Reference-First Authoring contract](../shared/references/reference-first-authoring.md).
 This skill adds only epic-local ownership: capability interpretation, story boundaries, local
-exclusions, and new epic-level decisions.
+exclusions, and new epic-level decisions. Map each capability to its source requirements and
+carry their priority; a mixed-priority epic keeps item-level labels, and no capability is
+promoted, demoted, or a Won't included without the human ([Priority, Commitments and Proof
+Stage](../shared/references/reference-first-authoring.md#priority-commitments-and-proof-stage)).
+Expose a missing product policy before writing a binding capability; do not strengthen a
+requirement because the stricter reading is easier to state.
 
 An epic bounds one cohesive capability area, serving a coherent persona cluster, expected to
 decompose into **3–8 user stories** across its capabilities. It lives one level above user stories.

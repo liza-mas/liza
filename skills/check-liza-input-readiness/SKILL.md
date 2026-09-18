@@ -59,6 +59,7 @@ Check every input document for:
 | Edge cases | Important error states, boundaries, and exclusions are named. |
 | Dependencies | External systems, prerequisites, sequencing, and constraints are explicit. |
 | Ambiguity | Critical-path TBDs, open questions, contradictions, and low-confidence assumptions are surfaced. |
+| Priority | Each outcome and constraint carries Must/Should/Could/Won't. The Must set is coherent and independently useful at the entry point and respects every Won't; a Must that needs a Won't capability is a source conflict, not a readiness pass. Uncertainty confined to separable optional scope is a note; uncertainty on Must feasibility, shared interfaces, or mandatory constraints is a blocker. |
 | Non-functional constraints | Load, latency, availability, security, privacy, regulatory, stack, operability, and cost bounds are stated wherever they apply. |
 | Leanness | No detail takes a decision a downstream stage still had. Detail recording a decision already made elsewhere is a constraint, not excess. |
 
