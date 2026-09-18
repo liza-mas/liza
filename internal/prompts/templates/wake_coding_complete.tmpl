@@ -10,4 +10,7 @@ Reconciled task IDs: {{ range $index, $id := .Integration.CreatedTaskIDs }}{{ if
 {{- end }}
 
 The runtime owns reconciliation and restart idempotency. Do not create a checkpoint or advance terminal state manually.
+
+{{template "delivery_report" .}}
+Distinguish merged implementation from demonstrated integration and final acceptance: coding complete is not delivery.
 {{- end -}}
