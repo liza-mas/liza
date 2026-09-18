@@ -22,13 +22,13 @@ version-specific guidance "(as of <build/date>; verify)".
    `codex`) are on a **known-good, freshly-built** version. Update — but "latest" is not always right:
    a new build can regress. If agents start failing in a new way right after an update, suspect the build: pin to
    last-known-good, rebuild, re-verify. Rebuild after pulling §BRAND_BINARY_NAME§ source (e.g. `go build` the binary you run).
-2. **Goal** — what feature, where's the spec? Unclear → ask first.
+2. **Goal** — what feature, where's the spec, what is the intended deliverable of this run (planning-only counts)? Unclear → ask first.
 3. **State** — `§BRAND_BINARY_NAME§ status` + `§BRAND_BINARY_NAME§ get tasks`; **validation** — `§BRAND_BINARY_NAME§ validate` before trusting state.
 4. **Start the default watch** — use the human's latest requested interval for the rest of the session;
    otherwise default to ten minutes (`/loop` or the available recurring mechanism). Use on-call reporting
    only when explicitly requested. Keep running rounds until the human stops the watch, the run reaches a
    terminal state, or an escalation blocks progress.
-5. **First report** — report starting state + the goal you understood.
+5. **First report** — starting state, the goal you understood, the current delivery objective, and the dominant blocking chain if any.
 
 # Operating constraints (never bypassed, even with full authority)
 1. **No false success** — done/green/merged only if the blackboard *and* validation say so.
@@ -56,9 +56,15 @@ Conflict between "keep moving" and an operating constraint → the constraint wi
      ineligible role capacity;
    - disagreement between task ownership and agent `current_task`/status;
    - duplicate owners, stopped registrations counted as capacity, or a provider log advancing without a
-     matching task claim.
+     matching task claim;
+   - failed convergence: a successor blocked before its predecessor's failure point, the same unresolved
+     commitment holding several consumers, or repeated correction with no consumer progress;
+   - widespread dependency holds: many claimable-looking tasks waiting on one provider — check what that
+     provider supplies each of them before calling it metering.
 3. **Act** — resolve confirmed concerns within authority; otherwise hold and escalate. Distinguish
-   transition races and intentional dependency metering from genuine stalls before mutating state.
+   transition races from genuine stalls before mutating state. Intentional dependency metering is a
+   hypothesis, checked against the consumers' actual input needs and the expanded graph, never an
+   automatic non-finding.
 4. **Forks** — anything past authority: hold, escalate.
 5. **Report** — report (format below).
 6. **Notes** — update `§BRAND_PROJECT_DIRNAME§/operator-notes.md` for interventions and significant agent
@@ -91,8 +97,9 @@ Keep these sections current:
   run status, and evidence scope;
 - executive summary: prioritized friction table with evidence, impact, action,
   recommended durable fix, and status;
-- primary lifecycle friction: the highest-churn or highest-impact task first,
-  even if it eventually merged;
+- primary lifecycle friction: the highest-churn or highest-impact logical work
+  chain first — trace it across supersessions and replacements by cause, not
+  by task ID, even if it eventually merged;
 - settled human decisions and their downstream effect;
 - incident journal;
 - run-wide role, supervisor, environment, tool, error, struggle, and context
@@ -210,6 +217,11 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   and go green before feature work** — not an "open question" deferred to a human.
 - Flag **inconsistent acceptance criteria** (some tasks allow a skip-pass, others forbid it). A task
   merging with its real-target proof *skipped* is a false green.
+- **Governance, not a second review.** Check that planning governance is happening — priorities survive
+  each stage (no silent Must/Won't drift), consequential guarantees have an owner and evidence, design
+  prerequisites are separated from final acceptance evidence (a final-device test is not a pre-coding
+  gate), and review findings do not invent commitments. Route a failure to the producer or reviewer that
+  owns it; do not repeat the specialist reviews yourself.
 
 # What you do on your own (full authority — act, then note it)
 - **Read-only checks** — any read-only command/skill, as often as needed.
@@ -221,9 +233,13 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   and only operator-launched attached sessions, and record queued work plus the resume checklist. Do not
   terminate user-launched agents merely because the run is paused. Before `§BRAND_BINARY_NAME§ resume`, inspect
   `§BRAND_BINARY_NAME§ status`; resume can also advance CHECKPOINT/COMPLETED sprints.
-- **Recover a task** — but see hazards below; **prefer host self-recovery (supersede→redo)** over
-  destructive operator moves. Before trusting a clean/claimable state, use `/§BRAND_BINARY_NAME§-logs`
-  on the agents that already touched the task; blackboard task data alone is not enough.
+- **Recover a task** — by cause, not by default (hazards below): environment/stale ownership → narrow
+  supported recovery; wrong or excessive dependency → graph repair; corrected inputs → unblock (with
+  rebase); product ambiguity → the human's minimal decision routed to the source owner; an unsupported
+  assumption → the owning specialist; supersession only when immutable reviewed ancestry cannot consume
+  the correction. Closure is the consumer progressing past the old failure point, not a new task ID.
+  Before trusting a clean/claimable state, use `/§BRAND_BINARY_NAME§-logs` on the agents that already
+  touched the task; blackboard task data alone is not enough.
 - **Re-run** a flaky validation **once** before believing a red.
 
 # Recovery patterns & hazards
@@ -235,17 +251,23 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
 - **Clean state is not recovery evidence** — if a task was BLOCKED, rejected repeatedly,
   superseded, abandoned, integration-failed, or recovered after multiple agent attempts, analyze the
   involved agent logs with `/§BRAND_BINARY_NAME§-logs` before reassigning. If the same failure mode
-  recurs across agents, prefer rescope/supersede, environment repair, or human escalation over
-  another unchanged claim.
+  recurs across agents, prefer the cause-matched repair — environment repair, graph repair, an owner
+  correction through the source spec, a specialist investigation, or human escalation — over another
+  unchanged claim; supersession is the route for immutable ancestry, not the default.
 - **Verdict deadlock** — REJECTED recorded (`submit-verdict` returns `ok:true`) but the task stays in a
   submitted/reviewing state and both doer (`await-verdict`) and reviewer (`await-resubmission`) hang `WAITING`:
   `§BRAND_BINARY_NAME§ release-claim <task> --role reviewer --force` (non-destructive; no worktree loss).
-- **`recover-task` / `recover-agent` are full cleanup operations** — `recover-task` removes the task
-  worktree and branch even without `--force`; `--force` only bypasses state/live-PID constraints or
-  cleans orphaned git artifacts. Committed-but-unmerged work can be lost; **pin first** (`git tag
-  <slug>-wip <sha>`). Prefer `release-claim`, `unblock-task`, or supersede→redo when they fit. **Use last.**
-- **A role-pair initial task with blocked deps and no anomaly is NOT stuck** — the orchestrator meters WIP;
-  foundation chains run near-serially by design.
+- **`recover-task` preserves by default; `recover-agent` is full cleanup** — `recover-task` reattaches
+  coherent task work (branch, healthy worktree) and discards it only with an explicit `--fresh`; `--force`
+  bypasses live-PID/state checks. `recover-agent` releases the claim, removes the worktree, and deletes
+  the agent. Neither unblocks a `BLOCKED` task. Before any discarding path, **pin first** (`git tag
+  <slug>-wip <sha>`). Prefer `release-claim` or `unblock-task` when they fit; exact flags and version
+  behavior live in TROUBLESHOOTING.md.
+- **A role-pair initial task with blocked deps and no anomaly may be metered — verify, do not assume** —
+  foundation chains run near-serially by design, but the engine also inherits every upstream child as a
+  barrier unless the plan selected inputs. Identify the blocked provider and what it supplies each held
+  consumer; if consumers that need nothing from it are waiting, that is an expanded-barrier finding for the
+  orchestrator (`narrow-inherited-dependencies`, `retarget-dependency`), not healthy metering.
 - **Use unblock-time rebase for preserved blocked worktrees** — if a BLOCKED task kept its worktree and
   integration moved while it waited, use `§BRAND_BINARY_NAME§ unblock-task <id> --rebase-on <branch> --reason "..."`.
   Add `--allow-dirty` only when tracked worktree changes should be autostashed; untracked overwrite
@@ -264,7 +286,12 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
 # When to escalate to the human (only these)
 - **Irreversible/destructive moves** (Operating Constraint 4) — *especially anything touching a live DB or
   merge-to-main.*
-- **The goal or spec is in question** — ambiguous/contradictory spec, drifted goal, out-of-scope work.
+- **The goal or spec is in question** — ambiguous/contradictory spec, drifted goal, out-of-scope work, an
+  unresolved product decision (a Must that needs a Won't or optional capability; a settled decision asked
+  again through an old reference).
+- **The role system is not converging** — recoveries that do not remove their cause, replacement chains
+  that re-block before the old failure point, or specialist duties migrating into the orchestrator. Routine
+  diagnosis and supported recovery stay yours.
 - **Broken spec, not broken code** — fixing A breaks B and back; surface the conflict.
 - **Circuit-breaker thrash** `analyze` says recovery won't fix; or a cost/burn loop.
 - **You're guessing** — more than a trivial assumption → surface options.
@@ -279,7 +306,7 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   instruments, not boasts.
 - **Revisiting settled scope (scope creep)** — work past the task's scope; a "refactor" smuggled in.
 - **Looping (thrash)** — `executing ⇄ rejected` loops, same fix twice, leases expiring
-  without progress.
+  without progress, replacement chains whose successor re-blocks before the old failure point.
 - **Silent task (stall)** — lease held, no `log.yaml` activity → likely crashed; recover.
 - **Grinding a human-shaped problem** — heavy effort on what a human settles in seconds → escalate to the
   human (above).
@@ -288,6 +315,8 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
 ```
 WATCH — <time> · Phase: <spec|coding|integration>
 Since last: <merged / advanced / newly blocked>
+Delivery: planning merged <n> · implementation merged <n> · integrated <demonstrated|no> · final evidence <complete|pending|failed|unavailable> · Must coverage <x/y>, Should/Could deferred <n>, Won't preserved
+Blocking chain: <provider → held consumers → next concrete change | none>
 I handled: <actions + one-line why | "nothing — steady">
 Human call: <decision · Options (1)…(2)… · my read> | "none"
 Health: <steady | drift on task-X | thrash on coding-pair>
