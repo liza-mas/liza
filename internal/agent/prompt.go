@@ -77,7 +77,7 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 	if err != nil {
 		return "", fmt.Errorf("context sections for role %q: %w", config.Role, err)
 	}
-	sections, err = taskContextSections(sections, task, data, resolver)
+	sections, err = TaskContextSections(sections, task, data, resolver)
 	if err != nil {
 		return "", err
 	}
@@ -714,7 +714,10 @@ func cloneDecompositionManifest(manifest *models.DecompositionManifest) *models.
 	return &clone
 }
 
-func taskContextSections(base []string, task *models.Task, data *prompts.RoleContextData, resolver *pipeline.Resolver) ([]string, error) {
+// TaskContextSections extends a role's configured context sections with the
+// decomposition-root variant when the task's role pair is a root. Exported so
+// the role budget can render the same variants the compositor does.
+func TaskContextSections(base []string, task *models.Task, data *prompts.RoleContextData, resolver *pipeline.Resolver) ([]string, error) {
 	sections := append([]string(nil), base...)
 	if task.RolePair == "" || (data.RoleType != "doer" && data.RoleType != "reviewer") {
 		return sections, nil

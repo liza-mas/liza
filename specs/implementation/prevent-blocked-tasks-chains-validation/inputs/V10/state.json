@@ -1,0 +1,24 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "arch-2",
+      "status": "MERGED",
+      "role_pair": "architecture-pair",
+      "desc": "Architecture for CAP-2",
+      "depends_on": []
+    },
+    {
+      "id": "cp-2",
+      "status": "READY",
+      "role_pair": "code-planning-pair",
+      "desc": "Code plan for CAP-2",
+      "depends_on": [
+        "arch-2"
+      ]
+    }
+  ]
+}

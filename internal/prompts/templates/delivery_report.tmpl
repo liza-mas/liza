@@ -1,0 +1,7 @@
+{{- define "delivery_report" -}}
+DELIVERY REPORT (final response, from state and evidence; task counts do not replace it):
+- Merged planning/architecture; merged implementation; integrated behavior demonstrated; final acceptance complete/pending/failed/unavailable — with task or artifact refs, unknowns stated.
+- Must coverage and outstanding proof; delivered and deferred Should/Could; Won't exclusions preserved.
+- Dominant blocking chain, its consumers, the next concrete change; whether the latest recovery removed its cause and advanced its consumer.
+Compare within one lineage — replacements add no delivery; heartbeats and log growth are activity, not progress. Judge a planning-only run against its intended deliverable, not against absent coding. Report observed counts and elapsed intervals with their scope; invent no planning-to-coding ratio, stall duration, or halt threshold; unknown accounting stays unknown. Report only: no extra checkpoint, no prose over the sprint summary, no analysis tasks.
+{{- end -}}

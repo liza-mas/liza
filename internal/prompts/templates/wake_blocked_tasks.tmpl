@@ -7,9 +7,14 @@ Tasks are BLOCKED. Analyze and resolve immediately:
 2. Determine if blocker is:
    - Structured repair_request present → verify the target state still needs repair, then complete the shared semantic gate below before applying a valid orchestrator-only operation
    - Missing dependency → create prerequisite task (run {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW)
-   - Spec ambiguity → clarify spec, then supersede with corrected task
-   - External dependency → document, possibly supersede task
-   - Wrong approach → supersede task, create alternative (run commands NOW)
+   - Runtime/environment failure or stale ownership → diagnose the host/session; narrow supported recovery, work preserved
+   - Wrong or excessive dependency → state what each disputed edge supplies and what fails without it, then graph repair below; never delete all inherited edges (documentation can be a real provider)
+   - Corrected inputs, valid task → unblock (--rebase-on when integration moved); run commands NOW
+   - Genuine product ambiguity → assess-blocked with the minimal unresolved decision for the human, then route the answer to the source owner; not supersession by default
+   - Unsupported technical assumption → the owning specialist investigates or proposes a feasible alternative; a product trade-off goes to the human
+   - Earlier stage awaiting a later-stage correction → record the hold, route to the source owner; never a backward edge
+   - Immutable reviewed ancestry cannot consume the correction → reviewed producer, normal generation, supported supersession, lineages preserved
+   - Scope removed (Won't) → cancel-task for removed-only scope; reviewed replacement + supersede-task for mixed; corrective task for merged work; none proves frozen integration coverage
 3. Before either stored apply-dependency-repair or direct retarget-dependency operation:
    a. Re-read every affected task and its planning/decomposition context.
    b. Verify provider-before-consumer direction for every proposed edge: a consumer may depend on its provider; a provider must not depend on its consumer.
@@ -56,11 +61,13 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    d. Run: {{binaryName}} supersede-task <task-id> <new-id-1>,<new-id-2> --reason "Split due to complexity" --agent-id {{.AgentID}} --json
    e. Run: {{binaryName}} wt-delete <task-id> --json (if worktree exists)
 5. After analyzing each blocked task:
-   - If you resolved it (unblocked or superseded): no further action needed for that task
+   - If you resolved it (unblocked or superseded): name the closure evidence — the intended consumer is eligible or progresses beyond the old failure point; a new task ID or transition alone is not closure
    - If you CANNOT resolve it (genuine spec ambiguity, external dependency) and canonical blocker metadata is already current: run note-only {{binaryName}} assess-blocked to record your assessment
      Run: {{binaryName}} assess-blocked <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
      This history-only form prevents re-waking without replacing canonical blocker fields. The task will trigger again only when new information arrives (dependency changes, human notes).
 6. Execute all state-modifying commands in this session. Do NOT defer.
+
+{{template "delivery_report" .}}
 
 Do NOT call {{binaryName}} sprint-checkpoint. If you cannot resolve a blocker, assess it and exit. Other tasks must continue uninterrupted.
 {{- end -}}

@@ -1,0 +1,303 @@
+{
+  "gate": true,
+  "variants": [
+    {
+      "variant": "architect",
+      "role": "architect",
+      "rendered_bytes": 22815,
+      "base_prompt_bytes": 9076,
+      "mandatory_read_bytes": 19612,
+      "reads": [
+        "skills/architecture-planning/SKILL.md",
+        "skills/shared/references/reference-first-authoring.md"
+      ]
+    },
+    {
+      "variant": "architect (decomposition root)",
+      "role": "architect",
+      "rendered_bytes": 25285,
+      "base_prompt_bytes": 9076,
+      "mandatory_read_bytes": 19612,
+      "reads": [
+        "skills/architecture-planning/SKILL.md",
+        "skills/shared/references/reference-first-authoring.md"
+      ]
+    },
+    {
+      "variant": "architecture-reviewer",
+      "role": "architecture-reviewer",
+      "rendered_bytes": 20460,
+      "base_prompt_bytes": 9112,
+      "mandatory_read_bytes": 28149,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/spec-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "architecture-reviewer (decomposition root)",
+      "role": "architecture-reviewer",
+      "rendered_bytes": 22602,
+      "base_prompt_bytes": 9112,
+      "mandatory_read_bytes": 28149,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/spec-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "code-plan-reviewer",
+      "role": "code-plan-reviewer",
+      "rendered_bytes": 23769,
+      "base_prompt_bytes": 9103,
+      "mandatory_read_bytes": 59457,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/software-architecture-review/SKILL.md",
+        "skills/spec-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "code-plan-reviewer (decomposition root)",
+      "role": "code-plan-reviewer",
+      "rendered_bytes": 20726,
+      "base_prompt_bytes": 9103,
+      "mandatory_read_bytes": 59457,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/software-architecture-review/SKILL.md",
+        "skills/spec-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "code-planner",
+      "role": "code-planner",
+      "rendered_bytes": 27778,
+      "base_prompt_bytes": 9085,
+      "mandatory_read_bytes": 31308,
+      "reads": [
+        "skills/software-architecture-review/SKILL.md"
+      ]
+    },
+    {
+      "variant": "code-planner (decomposition root)",
+      "role": "code-planner",
+      "rendered_bytes": 21934,
+      "base_prompt_bytes": 9085,
+      "mandatory_read_bytes": 31308,
+      "reads": [
+        "skills/software-architecture-review/SKILL.md"
+      ]
+    },
+    {
+      "variant": "code-reviewer",
+      "role": "code-reviewer",
+      "rendered_bytes": 24067,
+      "base_prompt_bytes": 9088,
+      "mandatory_read_bytes": 65404,
+      "reads": [
+        "skills/code-review/SKILL.md",
+        "skills/software-architecture-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "coder",
+      "role": "coder",
+      "rendered_bytes": 23328,
+      "base_prompt_bytes": 9064,
+      "mandatory_read_bytes": 26862,
+      "reads": [
+        "skills/clean-code/SKILL.md",
+        "skills/debugging/SKILL.md",
+        "skills/testing/SKILL.md"
+      ]
+    },
+    {
+      "variant": "epic-plan-reviewer",
+      "role": "epic-plan-reviewer",
+      "rendered_bytes": 22263,
+      "base_prompt_bytes": 9103,
+      "mandatory_read_bytes": 28149,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/spec-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "epic-plan-reviewer (decomposition root)",
+      "role": "epic-plan-reviewer",
+      "rendered_bytes": 24405,
+      "base_prompt_bytes": 9103,
+      "mandatory_read_bytes": 28149,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/spec-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "epic-planner",
+      "role": "epic-planner",
+      "rendered_bytes": 22949,
+      "base_prompt_bytes": 9085,
+      "mandatory_read_bytes": 38097,
+      "reads": [
+        "skills/epic-writing/SKILL.md",
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "epic-planner (decomposition root)",
+      "role": "epic-planner",
+      "rendered_bytes": 25419,
+      "base_prompt_bytes": 9085,
+      "mandatory_read_bytes": 38097,
+      "reads": [
+        "skills/epic-writing/SKILL.md",
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "integration-analyst",
+      "role": "integration-analyst",
+      "rendered_bytes": 24484,
+      "base_prompt_bytes": 9106,
+      "mandatory_read_bytes": 39733,
+      "reads": [
+        "skills/clean-code/SKILL.md",
+        "skills/code-review/SKILL.md"
+      ]
+    },
+    {
+      "variant": "integration-reviewer",
+      "role": "integration-reviewer",
+      "rendered_bytes": 23235,
+      "base_prompt_bytes": 9109,
+      "mandatory_read_bytes": 40419,
+      "reads": [
+        "skills/software-architecture-review/SKILL.md",
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake INITIAL_PLANNING)",
+      "role": "orchestrator",
+      "rendered_bytes": 12210,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake BLOCKED_TASKS)",
+      "role": "orchestrator",
+      "rendered_bytes": 18309,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake HYPOTHESIS_EXHAUSTED)",
+      "role": "orchestrator",
+      "rendered_bytes": 12559,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake IMMEDIATE_DISCOVERY)",
+      "role": "orchestrator",
+      "rendered_bytes": 11036,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake PLANNING_COMPLETE)",
+      "role": "orchestrator",
+      "rendered_bytes": 10655,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake MANY_TO_ONE_READY)",
+      "role": "orchestrator",
+      "rendered_bytes": 10682,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake CODING_COMPLETE)",
+      "role": "orchestrator",
+      "rendered_bytes": 10381,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake SPRINT_COMPLETE)",
+      "role": "orchestrator",
+      "rendered_bytes": 10459,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "orchestrator (wake HUMAN_NOTE)",
+      "role": "orchestrator",
+      "rendered_bytes": 9918,
+      "base_prompt_bytes": 8955,
+      "mandatory_read_bytes": 9111,
+      "reads": [
+        "skills/systemic-thinking/SKILL.md"
+      ]
+    },
+    {
+      "variant": "us-reviewer",
+      "role": "us-reviewer",
+      "rendered_bytes": 21406,
+      "base_prompt_bytes": 9082,
+      "mandatory_read_bytes": 19038,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/spec-review/SKILL.md"
+      ]
+    },
+    {
+      "variant": "us-writer",
+      "role": "us-writer",
+      "rendered_bytes": 18919,
+      "base_prompt_bytes": 9076,
+      "mandatory_read_bytes": 24547,
+      "reads": [
+        "skills/shared/references/reference-first-authoring.md",
+        "skills/user-story-writing/SKILL.md"
+      ]
+    }
+  ]
+}

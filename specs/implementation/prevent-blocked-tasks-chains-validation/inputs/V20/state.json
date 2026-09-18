@@ -1,0 +1,7 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": []
+}

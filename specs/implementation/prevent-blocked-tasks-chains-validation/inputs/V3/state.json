@@ -1,0 +1,17 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "cp-2",
+      "status": "EXECUTING",
+      "role_pair": "code-planning-pair",
+      "desc": "Code plan for CAP-2",
+      "depends_on": [],
+      "spec_ref": "specs/goal.md",
+      "arch_ref": "specs/arch/cap-2.md"
+    }
+  ]
+}

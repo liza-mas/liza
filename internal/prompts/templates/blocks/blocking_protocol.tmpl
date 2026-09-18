@@ -2,10 +2,11 @@
 
 BLOCKING PROTOCOL:
 Required fields: blocked_reason (what's blocking + what you attempted), blocked_questions (1-3 specific questions)
+blocked_reason is a compact diagnosis: the observed failure, its source or command evidence, the owning role, the smallest missing decision or deliverable, what work is preserved, and the observable closure. Name affected consumers and independent work that can continue when known. A clear source contradiction or an inaccessible tool needs no root-cause proof.
 If a CLI command, git command, or tool invocation is the blocker, blocked_reason MUST include the exact failing command and the observed stderr/error text. Do NOT speculate about root cause without captured failure output.
-If another concrete task is blocking this task, include it as a structural dependency on {{binaryName}} mark-blocked:
+If a concrete task that pipeline direction allows as a prerequisite is blocking this task, include it as a structural dependency on {{binaryName}} mark-blocked:
   --depends-on "<blocking-task-id>"
-This is both the scheduling guard and the orchestrator re-wake signal when the blocker changes.
+This is both the scheduling guard and the orchestrator re-wake signal when the blocker changes. A correction owed by a later stage or an earlier-stage source owner is a hold, not an edge: describe it in blocked_reason and blocked_questions for the orchestrator to route; the engine rejects backward dependencies.
 For a dependency-graph repair that changes more than one task or complete dependency list, write a command-free JSON request with operation `apply-dependency-repair`, target set to this blocked task, explicit `dependency_updates`, evidence, and validation; pass it with `--repair-request-file <path>`. Do not encode dependency repairs as command sequences.
 For other orchestrator-only state repairs, use the individual `--repair-*` fields with one complete command.
 Do NOT block for: questions answerable by reading specs, style preferences, missing nice-to-haves.

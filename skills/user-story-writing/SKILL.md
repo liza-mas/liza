@@ -18,6 +18,9 @@ Individual user stories are its constituent parts — each story maps to one Cod
 Follow the shared [Reference-First Authoring contract](../shared/references/reference-first-authoring.md).
 This skill owns story behavior, acceptance criteria, edge cases, story-local exclusions, and new
 story-level decisions. It references inherited personas, NFRs, and contracts without restating them.
+Each story carries its inherited priority; optional behavior is written apart from mandatory ACs
+so omitting it cannot fail a Must story, and Won't scope is excluded ([Priority, Commitments and
+Proof Stage](../shared/references/reference-first-authoring.md#priority-commitments-and-proof-stage)).
 
 # Trigger
 

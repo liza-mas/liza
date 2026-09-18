@@ -1,0 +1,21 @@
+## Origin of the edges
+
+All four children (`code-3-1..4`) inherited `depends_on: ["doc-1"]` from the same place: `cp-3` (the parent plan) depends on `cp-access`, and `cp-access`'s only output is `doc-1`. The receipt shows `"inherit_inputs":null` on every child — none of them declared a scoped input. That means the plan-level edge `cp-3 → cp-access(doc-1)` was propagated wholesale onto all four children at decomposition time, rather than being derived per-child from actual consumption of the interface doc.
+
+- **code-3-2 (Access adapter):** edge is genuine — it consumes the access interface doc-1 documents.
+- **code-3-1 (migration), code-3-3 (Scan UI), code-3-4 (sync worker):** edges are spurious byproducts of blanket inheritance, not real consumption dependencies.
+
+## Repair assessment
+
+None of the four children is BLOCKED — only `doc-1` is. The retarget-dependency/apply-dependency-repair flow in the FIRST ACTIONS protocol is scoped to *blocked* tasks; it doesn't apply to `code-3-1/3-3/3-4`. Separately, `retarget-dependency` only re-points an edge to a replacement dependency — there's no "remove edge" primitive, and these three tasks need zero dependency on the doc-1 lineage, not a substitute one.
+
+Per REPLACEMENT LINEAGE POLICY: even if a removal mechanism existed, the migration, the UI, and the sync worker are three independently scoped originals with no semantic inseparability — sharing the same root-cause incident (over-propagated inheritance) is not sufficient grounds for one shared replan. Each would need its own independently reviewable correction.
+
+**Conclusion: no supported repair to execute right now.**
+- `doc-1`'s blocker ("awaiting owner decision on token format") is a genuine spec-ambiguity/external blocker unrelated to graph structure — no repair_request, no dependency edges to correct.
+- `code-3-1/3-3/3-4`'s spurious edges are real but out of scope for the blocked-task repair trigger and unsupported by available commands; forcing a fix here would exceed documented orchestrator authority for this cycle.
+
+PROPOSE: `liza get doc-1 --json` (confirm blocker unchanged before closing)
+PROPOSE: `liza assess-blocked doc-1 --note "Blocker is a genuine owner/spec decision (token format), independent of the dependency graph; doc-1 has no depends_on edges to repair. Separately noting for planning: code-3-1, code-3-3, code-3-4 carry spurious inherited depends_on:doc-1 edges from cp-3's plan-level dependency on cp-access — only code-3-2 actually consumes the interface. No supported CLI repair applies since those tasks aren't BLOCKED and no dependency-removal primitive exists; recommend decomposition-template fix at next planning cycle, tracked as three separate corrections per REPLACEMENT LINEAGE POLICY, not one shared replan." --agent-id orchestrator-1 --json`
+
+No other mutation is executed this cycle.

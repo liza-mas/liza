@@ -39,6 +39,7 @@ INSTRUCTIONS:
    structural refactoring are NOT behavioral test changes — do not reject for these.
 8. Test discovery (e.g. pytest, python -m unittest discover) finding 0 tests is a blocker — tests must be discoverable, not just runnable when explicitly named
 9. Verify the done_when criteria are met AND tests exercise those criteria (for code tasks)
+10. A finding cannot create a commitment: block only on a binding requirement, exclusion, or real defect in included behavior; a Should/Could enhancement or stronger unspecified guarantee is a non-blocking suggestion. When the defect is in the inherited contract, not the code, label the finding a contract defect naming the owning artifact and role — reject if the delivered behavior is wrong, comment if it is still correct — so the coder can block for source-owner routing.
 {{- if .AcceptanceSource}}
    Inspect the acceptance receipt with {{binaryName}} get tasks {{.TaskID}} --format json.
    Verify source allocation, manifest mappings and execution results name this REVIEW_COMMIT.
@@ -97,9 +98,7 @@ If the harness backgrounds await-resubmission and says it will notify on complet
 {{- else if eq .Role "code-plan-reviewer"}}
 
 REFERENCE-FIRST REVIEW:
-Invoke skill: spec-review and apply the shared Reference-First Authoring contract. Reject missing
-strict source references, copied inherited prose, uncovered obligations, semantic owner conflicts,
-correction-history accumulation, or detailed plan prose duplicated into `output[]`.
+Invoke skill: spec-review and apply its Reference-First rejection classes (1–11) to the plan and its `output[]`.
 For each coding child, apply the shared acceptance-evidence.md guide: reject a missing
 Acceptance Contract, omitted allocated obligation IDs, canonical-command/output mismatch,
 or unjustified non-executable proof exceptions. Review the allocation's semantic completeness;
@@ -123,6 +122,8 @@ REVIEW CHECKLIST:
 | validation command shape | A validation[] command is not single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. |
 | Cross-reference consistency | For every cross-reference in the plan ("owned by CPx", "depends on CPx", "out of scope for CPx"), the referenced task must explicitly state that responsibility, dependency, or exclusion. Reject if any dangling reference. |
 | e2e/doc coverage | Spec compliance matrix missing mandatory E2E or DOC impact rows, or rows marked N/A without justification, or feature adds user-visible behavior but no e2e test or doc update task planned |
+{{template "handoff-review-rows"}}
+| Dependency meaning | For a depends_on, task_depends_on, or inherit_inputs choice the plan does not say what the input supplies, or the inherited phase barrier would hold a child that needs nothing from that upstream (see inherit_inputs in TOOLS) |
 {{- if .RCARequired}}
 | Root cause evidence | Plan has no "## Root Cause Analysis" section; a source or code-path claim lacks a file:line you can check; or a runtime claim lacks a checkable artifact — exact command and output, log excerpt, or explicit reporter attribution |
 | Mechanism, not category | RCA names a failure category ("race condition", "state corruption") without the code path that produces it |
@@ -157,6 +158,7 @@ DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- template "prior-feedback-review" .}}
 {{- end}}
 
+{{template "finding-boundary"}}
 REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Changed-file map and stat first:
@@ -182,9 +184,7 @@ REVIEW PHASE:
 
 EPIC-WRITING SKILL:
 Invoke skill: epic-writing for full anti-pattern and quality criteria.
-Invoke skill: spec-review and apply the shared Reference-First Authoring contract. Reject missing
-strict source references, copied inherited prose, uncovered obligations, semantic owner conflicts,
-correction-history accumulation, or detailed epic prose duplicated into `output[]`.
+Invoke skill: spec-review and apply its Reference-First rejection classes (1–11) to the epic and its `output[]`.
 
 The review checklist below covers sizing and structural gates. The skill covers
 additional anti-patterns not duplicated here — check both when evaluating.
@@ -208,10 +208,12 @@ REVIEW CHECKLIST:
 | Persona coherence | Epic mixes unrelated persona clusters — US Writer would need to context-switch |
 | Independence | Epic has unnecessary coupling to other epics — verify cross-epic dependencies are true ordering constraints |
 | Vision coverage | Epics collectively miss or exceed vision scope — reject with gap/scope-absorption note |
+{{template "handoff-review-rows"}}
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}
 {{- end}}
 
+{{template "finding-boundary"}}
 REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Changed-file map and stat first:
@@ -258,6 +260,9 @@ QUALITY GATES:
 - Acceptance criteria are contracts — they define done
 - Acceptance criteria must be user-observable
 - Assumptions are first-class outputs that resolve behavioral ambiguity
+- Each story carries its inherited priority; optional (Should/Could) behavior sits apart from Must ACs, and Won't scope is absent
+- No consequential guarantee or platform assumption is presented as established without its owner and evidence; proof is required at its stage, not earlier
+- The Story Writer's next stage can act from the story and its declared references without inventing policy
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}
 {{- end}}
@@ -269,6 +274,7 @@ Sibling US Writer tasks cover the other capabilities. Verify stories only addres
 the assigned capability (match by task SCOPE). Stories covering other capabilities in the
 same epic are Scope Absorption — reject.
 
+{{template "finding-boundary"}}
 REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Changed-file map and stat first:
@@ -301,9 +307,7 @@ DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- else if eq .Role "architecture-reviewer"}}
 
 REFERENCE-FIRST REVIEW:
-Invoke skill: spec-review and apply the shared Reference-First Authoring contract. Reject missing
-strict source references, copied inherited behavior, uncovered obligations, semantic owner
-conflicts, correction-history accumulation, or detailed architecture prose duplicated into `output[]`.
+Invoke skill: spec-review and apply its Reference-First rejection classes (1–11) to the architecture and its `output[]`.
 
 REVIEW CHECKLIST:
 | Gate | Reject if |
@@ -322,6 +326,8 @@ REVIEW CHECKLIST:
 | Shared-file dependencies | Two output[] entries may modify the same files without depends_on |
 | arch_ref set | Output[] entries missing arch_ref pointing to the architecture document |
 | Spec alignment | Architecture decisions contradict or ignore spec requirements |
+{{template "handoff-review-rows"}}
+| Minimal Must mechanism | Must mechanism not separated from optional extensions, or optional features sharing a component promoted with it |
 {{- if .ValidationCommands }}
 
 CANONICAL VALIDATION:
@@ -338,6 +344,7 @@ DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- template "prior-feedback-review" .}}
 {{- end}}
 
+{{template "finding-boundary"}}
 REVIEW PHASE:
 1. Early drift check: git -C {{.Worktree}} rev-parse HEAD — if it doesn't match REVIEW_COMMIT ({{.ReviewCommit}}), stop early (verdict submission will reject the mismatch).
 2. Changed-file map and stat first:
@@ -430,4 +437,15 @@ If the harness backgrounds await-resubmission and says it will notify on complet
 - RESUBMITTED: discard prompt-time BASE COMMIT / REVIEW_COMMIT and re-review using the returned base_commit..review_commit boundary
 - TERMINAL/ABORTED: exit normally
 {{- end}}
+{{- end -}}
+
+{{- define "handoff-review-rows" -}}
+| Handoff usable | The next role cannot act from the assigned scope and references without inventing policy or waiting on an unallocated prerequisite |
+| Priority propagation | An inherited Must/Should/Could/Won't label is dropped or changed, Must coverage is missing, Won't scope is included, or optional scope is made a required handoff condition |
+| Consequential commitment | A guarantee, constraint, or platform assumption is presented as established without owner and evidence |
+| Proof stage | Evidence is demanded at the wrong stage, e.g. a final-target test made a pre-coding gate without a concrete dependency reason |
+{{- end -}}
+
+{{- define "finding-boundary" -}}
+A finding cannot create a commitment: block only on a binding requirement, exclusion, or real defect; Should/Could requests and stronger unspecified guarantees are non-blocking suggestions. Raise the strongest boundary cases now; round limits never force approval of unsafe work.
 {{- end -}}

@@ -1,0 +1,16 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "cp-sync",
+      "status": "EXECUTING",
+      "role_pair": "code-planning-pair",
+      "desc": "Code plan for sync",
+      "depends_on": [],
+      "spec_ref": "specs/goal.md"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "code-2-2",
+      "status": "EXECUTING",
+      "role_pair": "coding-pair",
+      "desc": "Records API",
+      "depends_on": []
+    },
+    {
+      "id": "doc-1",
+      "status": "BLOCKED",
+      "role_pair": "coding-pair",
+      "desc": "Access doc",
+      "depends_on": []
+    },
+    {
+      "id": "code-3-2",
+      "status": "READY",
+      "role_pair": "coding-pair",
+      "desc": "Adapter",
+      "depends_on": [
+        "doc-1"
+      ]
+    }
+  ]
+}

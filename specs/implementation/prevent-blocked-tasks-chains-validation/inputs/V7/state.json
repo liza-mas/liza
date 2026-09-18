@@ -1,0 +1,27 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "code-3-2",
+      "status": "SUPERSEDED",
+      "role_pair": "coding-pair",
+      "desc": "Access adapter",
+      "depends_on": [],
+      "superseded_by": [
+        "code-3-2b"
+      ]
+    },
+    {
+      "id": "code-3-2b",
+      "status": "BLOCKED",
+      "role_pair": "coding-pair",
+      "desc": "Access adapter (replacement)",
+      "depends_on": [],
+      "blocked_reason": "token format undecided",
+      "parent_task": "code-3-2"
+    }
+  ]
+}

@@ -147,6 +147,7 @@ Then, throughout:
 - Ask specific, instance-cued questions. When one goes unanswered, raise specificity before insistence.
 - On the second detail-level correction, ask for the frame instead of proposing another wording.
 - Do not accept approval where a decision was owed. Name the missing contribution and stay in the phase.
+- Settle priority with the human, not by default: each outcome and constraint is Must, Should, Could, or Won't this run, and mandatory outcomes are separated from desired enhancements. Must and Won't bind every downstream stage; a missing label is an unclaimed decision, not an implicit Must (shared contract: [Priority, Commitments and Proof Stage](../shared/references/reference-first-authoring.md#priority-commitments-and-proof-stage)).
 - Close each turn with the useful next move. This is direction, not a continuation gate: a habitual *shall I continue?* trains the human to answer without reading.
 
 ## Tells
