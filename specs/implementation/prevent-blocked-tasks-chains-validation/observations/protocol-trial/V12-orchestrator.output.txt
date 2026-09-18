@@ -1,0 +1,42 @@
+## Result: Checkpoint NOT executed — request premise contradicted by state
+
+The instruction claims "all planned sprint tasks have reached terminal state," but `state.json` shows 3 tasks in `READY` and 1 in `BLOCKED`:
+
+| Task | Status | Depends on |
+|---|---|---|
+| code-3-1 | READY | doc-1 |
+| code-3-2 | READY | doc-1 |
+| code-3-3 | READY | doc-1 |
+| doc-1 | **BLOCKED** | (none) |
+
+`receipts.md` corroborates this independently ("7 MERGED, 3 READY, 1 BLOCKED"). Per Rule 5 (validate against external reality) and the Source Contradiction Protocol, I will not run `update-sprint-metrics` / `sprint-checkpoint` on a false "sprint complete" premise — doing so would fabricate a completion state (T0.2/T0.4).
+
+**PROPOSE:** `liza get doc-1 --json` — determine why doc-1 is BLOCKED with no unmet dependencies (likely external/human input, per its "Access doc" description).
+
+## Watch Report
+
+- **Terminal:** epic-1, us-1, arch-2, cp-2, cp-3, cp-4, code-2-1 — all MERGED (7/11).
+- **Non-terminal:** doc-1 (BLOCKED, no deps — external blocker), code-3-1/3-2/3-3 (READY, all gated solely on doc-1).
+- **Integration:** none run. **Final acceptance:** not started.
+- **Bottleneck:** doc-1 is a single blocking node gating 100% of remaining work (3/3 READY tasks). No other path to progress exists until it clears.
+
+## Systemic finding (for blackboard `discovered`, per systemic-thinking scope — MAM mode)
+
+```
+[FRAGILITY]
+All remaining sprint throughput (3 READY tasks) funnels through one BLOCKED
+task (doc-1) with no fallback path. doc-1 itself has no listed dependencies,
+meaning its blocker is external to the task graph and invisible to the
+orchestrator's automated resolution.
+
+Implication: Sprint completion is fully hostage to a single external
+unblock event with no visibility into ETA or owner.
+```
+
+**PROPOSE:** `liza discover --json` (or equivalent) to log this finding with `severity: high`, `urgency: immediate` (it blocks 100% of remaining in-progress work), `during: doc-1`.
+
+## Decision
+
+- **Do not** run `update-sprint-metrics` or `sprint-checkpoint` — sprint is not complete.
+- Escalate doc-1's blocker to the human/supervisor for resolution (out of orchestrator authority — no CLI command unblocks external access issues).
+- Stop here; this is not a terminal-state sprint and no checkpoint artifact should be generated claiming otherwise.

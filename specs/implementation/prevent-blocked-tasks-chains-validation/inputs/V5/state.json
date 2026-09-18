@@ -1,0 +1,52 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "doc-1",
+      "status": "BLOCKED",
+      "role_pair": "coding-pair",
+      "desc": "Access interface documentation",
+      "depends_on": [],
+      "blocked_reason": "awaiting owner decision on token format"
+    },
+    {
+      "id": "code-3-1",
+      "status": "READY",
+      "role_pair": "coding-pair",
+      "desc": "Records table migration",
+      "depends_on": [
+        "doc-1"
+      ]
+    },
+    {
+      "id": "code-3-2",
+      "status": "READY",
+      "role_pair": "coding-pair",
+      "desc": "Access adapter",
+      "depends_on": [
+        "doc-1"
+      ]
+    },
+    {
+      "id": "code-3-3",
+      "status": "READY",
+      "role_pair": "coding-pair",
+      "desc": "Scan UI",
+      "depends_on": [
+        "doc-1"
+      ]
+    },
+    {
+      "id": "code-3-4",
+      "status": "READY",
+      "role_pair": "coding-pair",
+      "desc": "Sync worker",
+      "depends_on": [
+        "doc-1"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "code-3-1",
+      "status": "BLOCKED",
+      "role_pair": "coding-pair",
+      "desc": "Records table migration",
+      "depends_on": [],
+      "blocked_reason": "npm ci: EINTEGRITY on lockfile entry",
+      "worktree": ".worktrees/code-3-1"
+    }
+  ]
+}

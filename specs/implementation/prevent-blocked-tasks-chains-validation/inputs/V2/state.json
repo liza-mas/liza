@@ -1,0 +1,16 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "arch-main",
+      "status": "EXECUTING",
+      "role_pair": "architecture-main-pair",
+      "desc": "Master architecture",
+      "depends_on": [],
+      "spec_ref": "specs/goal.md"
+    }
+  ]
+}

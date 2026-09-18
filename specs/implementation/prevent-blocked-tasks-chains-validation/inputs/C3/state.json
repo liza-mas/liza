@@ -1,0 +1,16 @@
+{
+  "goal": {
+    "spec_ref": "specs/goal.md",
+    "integration_branch": "main"
+  },
+  "tasks": [
+    {
+      "id": "code-4-1",
+      "status": "BLOCKED",
+      "role_pair": "coding-pair",
+      "desc": "Sync against staging",
+      "depends_on": [],
+      "blocked_reason": "credential expired; renewal requires account owner"
+    }
+  ]
+}

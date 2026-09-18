@@ -1,0 +1,91 @@
+## Decision
+
+Two code-planning scopes: **(1) client capture + local durable persistence** and **(2) backend sync/ingestion**, connected by a record interface where a client-observed timestamp and a server-assigned timestamp are kept as two distinct fields — because the goal is silent on clock synchronisation and durability-before-leaving-site forces offline capture, I will not assert that device clocks are trustworthy or synchronized.
+
+## Architecture Plan (content of `specs/arch-plan/cap-2-scan-record/<ts>-arch-2.md`)
+
+**Note on Source References:** I have no repository access in this exercise, so I cannot produce a real 40-hex `Source revision` or verify heading anchors. I am not fabricating one. In a live run: `PROPOSE: git -C /work/.worktrees/arch-2 rev-parse HEAD` to obtain it before writing the strict section.
+
+### Component boundaries
+
+| Component | Responsibility |
+|---|---|
+| **Capture Client** (mobile browser) | Scan object code, assemble a work record, write it to local durable storage synchronously, before any network call and before the user is told it's saved. |
+| **Local Durable Store** | Browser-native persistence (e.g. IndexedDB) that survives tab close/reload without a server round-trip. Owns the "durable before leaving site" guarantee. |
+| **Sync Agent** (client, background) | Drains the local store opportunistically when connectivity exists; delivers records to the backend; retries idempotently. |
+| **Ingestion Endpoint** (backend) | Accepts records, assigns authoritative receipt time, deduplicates by client-generated record ID. |
+
+### Interface contract: Work Record
+
+Crosses the Capture Client → Local Durable Store → Sync Agent → Ingestion Endpoint boundary unchanged except for one field added at ingestion:
+
+- `record_id` (client-generated, unique) — dedup key across retries.
+- `object_code` — scan payload.
+- `capture_time` — **client device clock at scan time.**
+- `ingested_at` — **added by the backend on receipt.** Absent until synced.
+
+### Guarantees introduced (and source)
+
+| Guarantee | Source |
+|---|---|
+| Record write completes to local durable storage before the user can leave the capture flow | Goal spec, `specs/goal.md#Scope` — "records must be durable before the worker leaves the site" (direct) |
+| A record has a `capture_time` populated from the client device clock | **ASSUMPTION**, architect-introduced. Not in goal. Forced by the durability requirement: an authoritative server timestamp cannot exist until sync, and sync cannot be required for durability without contradicting the site-departure guarantee. |
+| `capture_time` is **not** claimed to be accurate, monotonic across devices, or synchronized | **ASSUMPTION**, architect-introduced, precisely because the goal is silent on clock sync. I am deliberately not asserting a guarantee the spec doesn't support. |
+| `ingested_at` (server-assigned) is the authoritative time for any cross-device ordering | **DERIVED** from the above — if `capture_time` can't be trusted, ordering-sensitive consumers need a time source that can. This is a structural consequence, not a spec requirement. |
+| Records eventually reach a backend/ingestion point, not just the device | **DERIVED**, not explicit in the quoted goal text ("durable" is only specified relative to leaving the site). Flagged below as an Open Question rather than silently built in. |
+
+### Open Questions (unresolved from spec, need goal-owner decision)
+
+1. Is a backend ingestion/sync scope actually in CAP-2, or does "durable" mean local-only and sync is a separate capability? I've assumed sync is in scope because a record that never leaves the device has no described business use, but the quoted goal text only commits to local durability.
+2. Does anything downstream (audit, billing, dispute resolution) depend on `capture_time` being correct? If yes, this architecture is insufficient as-is and needs a trusted-time strategy (e.g., signed server challenge before scan, or explicit "best-effort, unverified" labeling surfaced to end users/auditors) — that's a product decision the goal spec doesn't make.
+
+I'm not blocking on these — proceeding with the dual-timestamp design keeps both scopes buildable and reversible; nothing here forecloses either answer.
+
+### Bootstrap-precommit entry
+
+Cannot verify `PreCommitConfigExists` / `PreCommitBootstrapInFlight` without repo/state queries unavailable in this exercise (`PROPOSE: liza get tasks --active --summary --json`, `PROPOSE: git -C /work/.worktrees/arch-2 ls-files .pre-commit-config.yaml`). Per omission rule, absent confirmation that both flags are false, I omit the bootstrap entry rather than fabricate the check result.
+
+## output[] entries
+
+```json
+[
+  {
+    "desc": "Client-side scan capture and local durable persistence of work records before site departure",
+    "done_when": "A record created while offline, immediately followed by closing the browser tab, is present in local durable storage on reopen with zero network calls having occurred; capture_time is recorded from the device clock and is never blocked on connectivity.",
+    "scope": "Capture Client + Local Durable Store components and the Work Record schema's record_id/object_code/capture_time fields. Excludes sync, backend, and any timestamp trust/reconciliation logic.",
+    "spec_ref": "specs/goal.md",
+    "arch_ref": "specs/arch-plan/cap-2-scan-record/<ts>-arch-2.md",
+    "validation": []
+  },
+  {
+    "desc": "Background sync of queued local records to backend ingestion, idempotent by record_id, server assigns ingested_at",
+    "done_when": "A record synced twice under retry produces exactly one stored record server-side (dedup by record_id); every synced record carries a distinct server-assigned ingested_at separate from client capture_time.",
+    "scope": "Sync Agent + Ingestion Endpoint. Consumes the record shape defined in scope 0; does not modify capture_time semantics.",
+    "spec_ref": "specs/goal.md",
+    "arch_ref": "specs/arch-plan/cap-2-scan-record/<ts>-arch-2.md",
+    "validation": [],
+    "depends_on": ["0"]
+  }
+]
+```
+
+## Commands I would run (not executed — no tools/repo in this exercise)
+
+```
+PROPOSE: mkdir -p /work/.worktrees/arch-2/specs/arch-plan/cap-2-scan-record
+PROPOSE: date -u +'%Y%m%d-%H%M%S'
+PROPOSE: git -C /work/.worktrees/arch-2 rev-parse HEAD
+PROPOSE: liza write-checkpoint arch-2 --agent-id architect-1 --intent "Author CAP-2 architecture: capture+local-durability and sync+ingestion scopes with dual-timestamp design" --validation-plan "Self-review checklist in architecture-planning skill; confirm output[] done_when are falsifiable" --files-to-modify "specs/arch-plan/cap-2-scan-record/<ts>-arch-2.md" --json
+PROPOSE: liza set-task-output arch-2 --output cap2-output.json --agent-id architect-1 --json
+PROPOSE: git -C /work/.worktrees/arch-2 add specs/arch-plan/cap-2-scan-record/<ts>-arch-2.md
+PROPOSE: git -C /work/.worktrees/arch-2 commit -F - <<'EOF'
+docs(arch): architecture plan for CAP-2 scan-and-record
+
+Decomposes into client capture/local durability and backend sync scopes.
+Introduces dual-timestamp design (client capture_time, server ingested_at)
+because goal spec does not address clock synchronisation.
+EOF
+PROPOSE: git -C /work/.worktrees/arch-2 status --short
+PROPOSE: git -C /work/.worktrees/arch-2 rev-parse HEAD
+PROPOSE: liza submit-for-review arch-2 <submission-sha> --agent-id architect-1 --json
+```
