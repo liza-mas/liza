@@ -313,6 +313,77 @@ func TestResolvedReferenceContextReviewCandidateMayBeAbsentAtHead(t *testing.T) 
 	}
 }
 
+func TestResolvedReferenceContextReviewCarrierMayReferenceTaskIntroducedPath(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "README.md", "# Base\n")
+	commitReferenceFixture(t, repo, "test: base")
+	base := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	testhelpers.MustGit(t, repo, "checkout", "-b", "candidate")
+	writeReferenceFixture(t, repo, "specs/digest.md", "# Digest\n\n## Issue\nVerbatim issue body.\n")
+	digestRevision := commitReferenceFixture(t, repo, "test: add task-introduced digest")
+	writeReferenceFixture(t, repo, "specs/candidate.md", strictCarrier(digestRevision, "ISSUE", "specs/digest.md", "Issue", "# Candidate\n\nPlan anchored to the digest.\n"))
+	review := commitReferenceFixture(t, repo, "test: add review candidate")
+	testhelpers.MustGit(t, repo, "checkout", "main")
+
+	task := models.Task{ID: "review-1", BaseCommit: &base, ReviewCommit: &review}
+	state := referenceTestState(task)
+	context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "reviewer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	if !strings.Contains(context, "Plan anchored to the digest.") || !strings.Contains(context, "Verbatim issue body.") {
+		t.Fatalf("review context omitted candidate or task-introduced reference Span:\n%s", context)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "specs", "digest.md")); !os.IsNotExist(err) {
+		t.Fatalf("digest unexpectedly exists at integration HEAD: %v", err)
+	}
+}
+
+func TestResolvedReferenceContextReviewCarrierReferenceDeletedAtHeadBlocks(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	base := sourceRevision
+	testhelpers.MustGit(t, repo, "checkout", "-b", "candidate")
+	writeReferenceFixture(t, repo, "specs/candidate.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Candidate\n\nCandidate decision.\n"))
+	review := commitReferenceFixture(t, repo, "test: add review candidate")
+	testhelpers.MustGit(t, repo, "checkout", "main")
+	testhelpers.MustGit(t, repo, "rm", "-q", "specs/source.md")
+	commitReferenceFixture(t, repo, "test: delete source at integration HEAD")
+
+	task := models.Task{ID: "review-1", BaseCommit: &base, ReviewCommit: &review}
+	state := referenceTestState(task)
+	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "reviewer")
+	if err == nil || !strings.Contains(err.Error(), "deleted at integration HEAD") {
+		t.Fatalf("deleted inherited reference error = %v, want deleted-at-HEAD error", err)
+	}
+}
+
+func TestResolvedReferenceContextReviewCarrierStaleAtReviewCommitBlocks(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "README.md", "# Base\n")
+	commitReferenceFixture(t, repo, "test: base")
+	base := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	testhelpers.MustGit(t, repo, "checkout", "-b", "candidate")
+	writeReferenceFixture(t, repo, "specs/digest.md", "# Digest\n\n## Issue\nVerbatim issue body.\n")
+	digestRevision := commitReferenceFixture(t, repo, "test: add task-introduced digest")
+	writeReferenceFixture(t, repo, "specs/candidate.md", strictCarrier(digestRevision, "ISSUE", "specs/digest.md", "Issue", "# Candidate\n\nPlan anchored to the digest.\n"))
+	commitReferenceFixture(t, repo, "test: add review candidate")
+	writeReferenceFixture(t, repo, "specs/digest.md", "# Digest\n\n## Issue\nEdited after the carrier pinned it.\n")
+	review := commitReferenceFixture(t, repo, "test: modify digest after pinning")
+	testhelpers.MustGit(t, repo, "checkout", "main")
+
+	task := models.Task{ID: "review-1", BaseCommit: &base, ReviewCommit: &review}
+	state := referenceTestState(task)
+	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "reviewer")
+	if err == nil || !strings.Contains(err.Error(), "stale at review commit") {
+		t.Fatalf("stale task-introduced reference error = %v, want stale-at-review-commit error", err)
+	}
+}
+
 func TestBuildPromptStrictReviewCandidateSuppressesSamePathLegacyRoute(t *testing.T) {
 	repo := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, repo)

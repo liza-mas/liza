@@ -191,7 +191,7 @@ func loadScalarCarrier(repo referenceContextRepository, head, ref string) (refer
 	if err != nil {
 		return referencecontract.Carrier{}, false, err
 	}
-	refs, err := resolveDeclaredReferences(repo, head, contract)
+	refs, err := resolveDeclaredReferences(repo, head, "", "", contract)
 	if err != nil {
 		return referencecontract.Carrier{}, false, fmt.Errorf("scalar carrier %q: %w", path, err)
 	}
@@ -240,7 +240,13 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 				return nil, fmt.Errorf("reviewed carrier %q is stale at integration HEAD", path)
 			}
 		}
-		refs, resolveErr := resolveDeclaredReferences(repo, head, contract)
+		// Current-review carriers may declare references to paths their own
+		// reviewed range introduced; those resolve at the review commit.
+		localBase, localReview := "", ""
+		if !requireFresh {
+			localBase, localReview = base, review
+		}
+		refs, resolveErr := resolveDeclaredReferences(repo, head, localBase, localReview, contract)
 		if resolveErr != nil {
 			return nil, fmt.Errorf("reviewed carrier %q: %w", path, resolveErr)
 		}
@@ -249,7 +255,12 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 	return observations, nil
 }
 
-func resolveDeclaredReferences(repo referencecontract.Repository, head string, contract *referencecontract.Contract) ([]referencecontract.Reference, error) {
+// resolveDeclaredReferences pins each direct reference at its declared revision
+// and requires blob identity at integration HEAD. When localBase/localReview
+// are non-empty, a path absent at both HEAD and localBase was introduced in
+// the reviewed range and matches at localReview instead; a path present at
+// localBase but absent at HEAD was deleted and still blocks.
+func resolveDeclaredReferences(repo referenceContextRepository, head, localBase, localReview string, contract *referencecontract.Contract) ([]referencecontract.Reference, error) {
 	refs := make([]referencecontract.Reference, 0, len(contract.DirectReferences))
 	for _, ref := range contract.DirectReferences {
 		revision, err := repo.ResolveCommit(ref.EffectiveRevision(contract.SourceRevision))
@@ -264,12 +275,27 @@ func resolveDeclaredReferences(repo referencecontract.Repository, head string, c
 		if err != nil {
 			return nil, err
 		}
-		headOID, err := repo.BlobOID(head, ref.Path)
+		_, presentAtHead, err := repo.TreePathMode(head, ref.Path)
 		if err != nil {
 			return nil, err
 		}
-		if pinnedOID != headOID {
-			return nil, fmt.Errorf("direct reference %q is stale at integration HEAD", ref.ID)
+		freshRevision, where := head, "integration HEAD"
+		if !presentAtHead && localReview != "" {
+			_, presentAtBase, baseErr := repo.TreePathMode(localBase, ref.Path)
+			if baseErr != nil {
+				return nil, baseErr
+			}
+			if presentAtBase {
+				return nil, fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID)
+			}
+			freshRevision, where = localReview, "review commit"
+		}
+		freshOID, err := repo.BlobOID(freshRevision, ref.Path)
+		if err != nil {
+			return nil, err
+		}
+		if pinnedOID != freshOID {
+			return nil, fmt.Errorf("direct reference %q is stale at %s", ref.ID, where)
 		}
 		span, err := referencecontract.ExtractSection(content, ref.Heading)
 		if err != nil {

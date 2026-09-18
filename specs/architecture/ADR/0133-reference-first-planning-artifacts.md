@@ -78,7 +78,9 @@ The normative decision is:
    provenance blocks; differing eligible parent blobs are defensively rejected
    even though normal HEAD-identity eligibility makes that state unreachable.
    Declared inherited references are read at their default or override revisions
-   and must have blob identity with the same paths at captured HEAD. Missing,
+   and must have blob identity with the same paths at captured HEAD, except that
+   a current-review carrier may reference paths introduced in its own reviewed
+   range, which resolve at the current `ReviewCommit`. Missing,
    stale, deleted, ambiguous, or structurally invalid strict content blocks
    before launch.
 5. Corrections are deltas naming corrected anchors, replacement decisions and
