@@ -444,3 +444,17 @@ func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeT
 		return "", nil
 	}
 }
+
+// WakeTriggers lists the wake triggers that select an orchestrator
+// instruction template, in a stable order.
+var WakeTriggers = []string{
+	"INITIAL_PLANNING", "BLOCKED_TASKS", "HYPOTHESIS_EXHAUSTED", "IMMEDIATE_DISCOVERY",
+	"PLANNING_COMPLETE", "MANY_TO_ONE_READY", "CODING_COMPLETE", "SPRINT_COMPLETE", "HUMAN_NOTE",
+}
+
+// RenderWakeInstructions renders the instruction template for one wake
+// trigger with empty run data, so the instruction text can be measured on its
+// own. It is not the compositor's path; RenderOrchestratorDashboard is.
+func RenderWakeInstructions(wakeTrigger, agentID string) (string, error) {
+	return buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeTemplateData{}, nil, nil)
+}

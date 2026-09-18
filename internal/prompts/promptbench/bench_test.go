@@ -3,15 +3,11 @@ package promptbench_test
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/liza-mas/liza/internal/embedded"
-	"github.com/liza-mas/liza/internal/models"
-	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/prompts/promptbench"
 )
@@ -28,61 +24,7 @@ const baselinePath = "testdata/baseline.json"
 func renderFixture(t *testing.T) string {
 	t.Helper()
 	shape := promptbench.CalibratedShape()
-
-	phaseDeps := make([]prompts.SiblingTaskSummary, 0, shape.PhaseDependencies)
-	for i := range shape.PhaseDependencies {
-		phaseDeps = append(phaseDeps, prompts.SiblingTaskSummary{
-			ID:       fmt.Sprintf("fixture-plan-%d", i),
-			Status:   "MERGED",
-			PlanRef:  fmt.Sprintf("specs/generated/plan-%d.md", i),
-			RolePair: "code-planning-pair",
-		})
-	}
-
-	descendants := make([]prompts.IntegrationDescendantSummary, 0, shape.Descendants)
-	for i := range shape.Descendants {
-		deps := make([]string, 0, shape.DepsPerDescendant)
-		for j := range shape.DepsPerDescendant {
-			deps = append(deps, fmt.Sprintf("fixture-cp-%d-code-%d", i%3, j))
-		}
-		descendants = append(descendants, prompts.IntegrationDescendantSummary{
-			ID:          fmt.Sprintf("fixture-cp-1-code-%d", i),
-			Description: "generated descendant standing in for an attributed task",
-			DoneWhen:    "generated acceptance criteria",
-			SpecRef:     "specs/generated/goal.md",
-			Commit:      fmt.Sprintf("%040x", i+1),
-			DependsOn:   deps,
-		})
-	}
-
-	data := &prompts.RoleContextData{
-		Role: "code-plan-reviewer", AgentID: "code-plan-reviewer-1", RoleType: "reviewer",
-		TaskID: "fixture-cp-1", Description: "generated task", DoneWhen: "generated",
-		SpecRef: "specs/generated/goal.md", GoalSpecRef: "specs/generated/goal.md",
-		Worktree: "/generated/worktree", IntegrationBranch: "integration",
-		BaseCommit: strings.Repeat("a", 40), ReviewCommit: strings.Repeat("b", 40),
-
-		ResolvedReferenceContext: promptbench.GenerateResolvedReferenceContext(shape),
-
-		TaskRolePair:         "code-planning-pair",
-		PhaseDependencyTasks: phaseDeps,
-		TotalPlanTasks:       19,
-		TaskOrdinal:          3,
-
-		// IntegrationPhase "slice" is what gates the descendant block. The
-		// measured run contained no slice-integration prompts, so site 2 is
-		// zero there; the fixture still renders it so a reduction targeting
-		// site 2 is measurable rather than structurally invisible.
-		IntegrationPhase:        models.IntegrationAnalysisPhaseSlice,
-		IntegrationDescendants:  descendants,
-		IntegrationSourceCommit: strings.Repeat("c", 40),
-		IntegrationRootTaskIDs:  []string{"fixture-cp-1", "fixture-cp-4"},
-		IntegrationOriginatingPlan: &prompts.IntegrationPlanSummary{
-			ID: "fixture-cp-1", Description: "generated originating plan",
-			DoneWhen: "generated", SpecRef: "specs/generated/goal.md",
-			PlanRef: "specs/generated/plan.md", ArchRef: "specs/generated/arch.md",
-		},
-	}
+	data := promptbench.FixtureRoleContext(shape, "code-plan-reviewer", "code-plan-reviewer-1", "reviewer")
 
 	sections := []string{
 		"resolved-reference-context",
@@ -97,45 +39,15 @@ func renderFixture(t *testing.T) string {
 	// Site 4 renders through the orchestrator dashboard, a separate entry
 	// point. Measuring only the role context would report site 4 as zero and
 	// look like a finding rather than a gap in the harness.
-	state := fixtureState(shape)
-	dashboard, _, err := prompts.RenderOrchestratorDashboard(state, fixtureProjectRoot(t), "orchestrator-1")
+	root := t.TempDir()
+	if err := promptbench.WriteFixtureProjectRoot(root); err != nil {
+		t.Fatalf("fixture project root: %v", err)
+	}
+	dashboard, _, err := prompts.RenderOrchestratorDashboard(promptbench.FixtureState(shape), root, "orchestrator-1")
 	if err != nil {
 		t.Fatalf("RenderOrchestratorDashboard: %v", err)
 	}
 	return rendered + "\n" + dashboard
-}
-
-// fixtureProjectRoot lays out the minimum on-disk workspace the dashboard
-// renderer needs, using the embedded default pipeline so the harness measures
-// the shipped topology rather than a hand-written stand-in.
-func fixtureProjectRoot(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	runtimeDir := filepath.Join(dir, paths.ProjectDirName())
-	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
-		t.Fatalf("mkdir project runtime directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(runtimeDir, "pipeline.yaml"), embedded.PipelineConfigContent(), 0o644); err != nil {
-		t.Fatalf("write pipeline.yaml: %v", err)
-	}
-	return dir
-}
-
-func fixtureState(shape promptbench.Shape) *models.State {
-	state := &models.State{}
-	for i := range shape.ActiveTasks {
-		deps := make([]string, 0, shape.DepsPerActiveTask)
-		for j := range shape.DepsPerActiveTask {
-			deps = append(deps, fmt.Sprintf("fixture-cp-%d-code-%d", i%3, j))
-		}
-		state.Tasks = append(state.Tasks, models.Task{
-			ID:        fmt.Sprintf("fixture-active-%d", i),
-			Status:    models.TaskStatusReady,
-			RolePair:  "coding-pair",
-			DependsOn: deps,
-		})
-	}
-	return state
 }
 
 // TestBaseline measures the fixture and compares it against the committed
