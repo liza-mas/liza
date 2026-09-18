@@ -8,7 +8,10 @@ beyond what specialized tasks need to respect the boundaries.
 Follow the Reference-First Authoring contract: the master artifact owns coverage
 partition, boundary/interface ownership, shared-file ownership, and cross-child ordering.
 Cite inherited requirements and rationale. Include one strict `## Source References`
-section with non-empty direct references and obligation coverage.
+section with non-empty direct references and obligation coverage. Preserve each scope's
+inherited priority; group a shared uncertainty, order the scopes it affects, and name the
+specialist owner who investigates it — do not perform every child's feasibility probe or RCA
+here.
 {{- if eq .Role "code-planner"}}
 
 MASTER CODE-PLANNING BOUNDARY:

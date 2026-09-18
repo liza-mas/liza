@@ -49,6 +49,9 @@ Reject if any output[] entry is missing `{{.MasterOutputRefField}}`, has missing
    `{{.MasterOutputRefField}}` and treats it as the structural framework.
 6. Completeness. The union of output[] scopes covers the full task scope with
    no gaps between entries.
+7. Priority and uncertainty. Scopes keep inherited priority labels; a shared
+   uncertainty is grouped, ordered, and assigned to one named specialist, not
+   guessed or spread across scopes.
 
 Reject an internally plausible decomposition when the entries conflict,
 overlap, omit coverage, lack required artifact refs, or lack typed decomposition

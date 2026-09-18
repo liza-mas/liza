@@ -49,6 +49,12 @@ REFERENCE-FIRST AUTHORING: Own concrete change units, file ownership, ordering,
 tests, and requirement-to-task allocation. Cite inherited requirements and
 architecture; do not restate their prose. Every new plan must include the strict
 `## Source References` section with non-empty direct references and obligation coverage.
+Carry each requirement's effective priority (Must/Should/Could/Won't) into the matrix rows
+and outputs; keep optional work separately deferrable. For every depends_on, task_depends_on,
+and inherit_inputs choice, state in the plan what the input supplies; an output that needs
+nothing from an upstream phase must not inherit its whole barrier (see inherit_inputs in TOOLS).
+Record a consequential unresolved commitment once, at its owner, and distinguish a new semantic
+decision from a demonstrated implementation bug (contract: Priority, Commitments and Proof Stage).
 {{- if or .ArchRef .EpicRef}}
 {{template "artifact-ref-fallback" .}}
 {{- end}}
@@ -160,7 +166,10 @@ IMPLEMENTATION PHASE:
 REFERENCE-FIRST AUTHORING: Own capability partitioning, scope/interface ownership,
 and cross-child ordering. Cite inherited goal requirements and rationale; do not
 copy them. Every new epic must include the strict `## Source References` section
-with non-empty direct references and obligation coverage.
+with non-empty direct references and obligation coverage. Map each capability to its
+source requirements and keep their priority at item level; expose a missing product policy
+before binding a capability rather than strengthening the requirement (contract: Priority,
+Commitments and Proof Stage).
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Invoke skill: epic-writing FIRST.
 3. Use the assigned source carrier and its declared direct-reference spans.
@@ -207,7 +216,9 @@ REFERENCE-FIRST AUTHORING: Own story behavior, acceptance criteria, edge cases,
 and story-local exclusions. Cite inherited personas, shared non-functional
 requirements, and contracts; do not copy them. Every new story artifact must
 include the strict `## Source References` section with non-empty direct references
-and obligation coverage.
+and obligation coverage. Carry each story's inherited priority; write optional behavior
+apart from Must acceptance criteria so omitting it cannot fail a Must story, and exclude
+Won't scope (contract: Priority, Commitments and Proof Stage).
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Invoke skill: user-story-writing FIRST.
 {{- if ne .ResolvedReferenceContext ""}}
@@ -234,7 +245,13 @@ REFERENCE-FIRST AUTHORING: Own component boundaries, interfaces, data flow, and
 failure handling at the assigned architectural level. Cite inherited product
 behavior and shared architecture; do not restate them. Every new architecture
 artifact must include the strict `## Source References` section with non-empty
-direct references and obligation coverage.
+direct references and obligation coverage. Map components, interfaces, and proof
+obligations to the requirements they serve; separate the minimum mechanism Must scope
+needs from optional extensions; check a consequential platform or API assumption against
+the implementation, primary documentation, or a targeted probe before it becomes an
+interface guarantee; and place each proof at its stage — design prerequisite,
+implementation prerequisite, or final acceptance evidence — with a named owner and
+hold, never a pre-coding gate without a concrete dependency reason.
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Use the assigned goal carrier and declared direct-reference spans for inherited product behavior.
 {{- if gt (len .ParentTaskContexts) 0}}
