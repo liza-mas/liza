@@ -1454,6 +1454,11 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		"exclude node_modules with",
 		`--glob '!**/node_modules/**'`,
 		"sed/awk for file editing",
+		"hard 600 s foreground cap",
+		"poll the background job",
+		"with TaskOutput in the same turn",
+		"Never end a turn with a validation still running",
+		"does not apply to await-* commands",
 	})
 
 	// --- QUERY TOOLS: available to all roles ---
