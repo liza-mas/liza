@@ -2634,3 +2634,196 @@ func TestExit42TaskProgressSignatureIgnoresClaimIteration(t *testing.T) {
 		t.Fatal("signature must change on real status progress")
 	}
 }
+
+func TestDetectAbandonedBackgroundTask_StoppedJob(t *testing.T) {
+	output := `{"type":"system","subtype":"task_started","task_id":"bnajie1ul","summary":"Run full race test suite"}
+{"type":"system","subtype":"task_notification","task_id":"bnajie1ul","status":"stopped","summary":"Run full race test suite"}`
+
+	abandoned := detectAbandonedBackgroundTask(output)
+	if abandoned == nil {
+		t.Fatal("detectAbandonedBackgroundTask() = nil, want abandoned job")
+	}
+	if abandoned.TaskID != "bnajie1ul" {
+		t.Fatalf("TaskID = %q, want bnajie1ul", abandoned.TaskID)
+	}
+	if abandoned.Summary != "Run full race test suite" {
+		t.Fatalf("Summary = %q, want the job summary", abandoned.Summary)
+	}
+}
+
+func TestDetectAbandonedBackgroundTask_CompletedJobIsNotAbandoned(t *testing.T) {
+	output := `{"type":"system","subtype":"task_started","task_id":"b6mrpyu8t","summary":"Race test internal/ops"}
+{"type":"system","subtype":"task_notification","task_id":"b6mrpyu8t","status":"completed","summary":"Race test internal/ops"}`
+
+	if abandoned := detectAbandonedBackgroundTask(output); abandoned != nil {
+		t.Fatalf("detectAbandonedBackgroundTask() = %+v, want nil for a completed job", abandoned)
+	}
+}
+
+func TestDetectAbandonedBackgroundTask_FailedJobIsNotAbandoned(t *testing.T) {
+	output := `{"type":"system","subtype":"task_notification","task_id":"bfailed01","status":"failed","summary":"Run make test-race"}`
+
+	if abandoned := detectAbandonedBackgroundTask(output); abandoned != nil {
+		t.Fatalf("detectAbandonedBackgroundTask() = %+v, want nil: a failed job ran to completion", abandoned)
+	}
+}
+
+func TestDetectAbandonedBackgroundTask_LaterCompletionSupersedesStop(t *testing.T) {
+	output := `{"type":"system","subtype":"task_notification","task_id":"bretry001","status":"stopped","summary":"Run full race test suite"}
+{"type":"system","subtype":"task_notification","task_id":"bretry001","status":"completed","summary":"Run full race test suite"}`
+
+	if abandoned := detectAbandonedBackgroundTask(output); abandoned != nil {
+		t.Fatalf("detectAbandonedBackgroundTask() = %+v, want nil: last status wins", abandoned)
+	}
+}
+
+func TestDetectAbandonedBackgroundTask_NoBackgroundEventsFailsClosed(t *testing.T) {
+	output := `{"type":"assistant","message":{"content":[{"type":"text","text":"done"}]}}`
+
+	if abandoned := detectAbandonedBackgroundTask(output); abandoned != nil {
+		t.Fatalf("detectAbandonedBackgroundTask() = %+v, want nil when no background events exist", abandoned)
+	}
+}
+
+func TestDetectAbandonedBackgroundTask_DeliberateTaskStopIsNotAbandoned(t *testing.T) {
+	output := `{"type":"system","subtype":"task_notification","task_id":"bfcta5atr","status":"stopped","summary":"Run ops tests to enumerate breakage"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"{\"message\":\"Successfully stopped task: bfcta5atr (go test ./internal/ops/)\"}"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Killed the broad run; scoping it instead."}]}}`
+
+	if abandoned := detectAbandonedBackgroundTask(output); abandoned != nil {
+		t.Fatalf("detectAbandonedBackgroundTask() = %+v, want nil: the agent stopped this job on purpose", abandoned)
+	}
+}
+
+func TestDetectAbandonedBackgroundTask_DeliberateStopDoesNotMaskARealOne(t *testing.T) {
+	output := `{"type":"system","subtype":"task_notification","task_id":"bkilled01","status":"stopped","summary":"Broad ops run"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"{\"message\":\"Successfully stopped task: bkilled01\"}"}]}}
+{"type":"system","subtype":"task_notification","task_id":"babandoned","status":"stopped","summary":"Run full race test suite"}`
+
+	abandoned := detectAbandonedBackgroundTask(output)
+	if abandoned == nil {
+		t.Fatal("detectAbandonedBackgroundTask() = nil, want the job that was not deliberately stopped")
+	}
+	if abandoned.TaskID != "babandoned" {
+		t.Fatalf("TaskID = %q, want babandoned", abandoned.TaskID)
+	}
+}
+
+func TestAbandonedBackgroundTaskRetry_PreservesClaimThenBlocksOverThreshold(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+
+	now := time.Now().UTC()
+	taskID := "task-abandoned-background"
+	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Config.SpinningRestartThreshold = 2
+	state.Tasks = []models.Task{task}
+	state.Agents[agentID] = models.Agent{Role: models.RoleCoder, Status: models.AgentStatusWorking, CurrentTask: &taskID}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	config := SupervisorConfig{
+		AgentID:     agentID,
+		Authority:   testSupervisorAuthority(t, bb, agentID),
+		Role:        models.RoleCoder,
+		ProjectRoot: projectRoot,
+		StatePath:   statePath,
+		CLIName:     "claude",
+	}
+	spinTracker := newSpinningTracker()
+	backgroundTracker := newRuntimeFailureTracker()
+	abandoned := abandonedBackgroundTask{TaskID: "bnajie1ul", Summary: "Run full race test suite"}
+
+	// Below the threshold the claim is preserved: the task keeps its assignment
+	// so the next session resumes it rather than re-claiming a dirty worktree.
+	for i := 1; i <= state.Config.SpinningRestartThreshold; i++ {
+		if blocked := handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, backgroundTracker, spinTracker); blocked {
+			t.Fatalf("abandoned background attempt %d blocked, want below threshold", i)
+		}
+		current, err := bb.Read()
+		if err != nil {
+			t.Fatalf("bb.Read: %v", err)
+		}
+		currentTask := current.FindTask(taskID)
+		if currentTask.Status != models.TaskStatusImplementing {
+			t.Fatalf("attempt %d status = %s, want the task still IMPLEMENTING_CODE", i, currentTask.Status)
+		}
+		if currentTask.AssignedTo == nil || *currentTask.AssignedTo != agentID {
+			t.Fatalf("attempt %d released the claim, want it preserved", i)
+		}
+	}
+
+	if blocked := handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, backgroundTracker, spinTracker); !blocked {
+		t.Fatal("abandoned background over threshold did not block task")
+	}
+
+	updated, err := bb.Read()
+	if err != nil {
+		t.Fatalf("bb.Read: %v", err)
+	}
+	updatedTask := updated.FindTask(taskID)
+	if updatedTask.Status != models.TaskStatusBlocked {
+		t.Fatalf("task status = %s, want BLOCKED", updatedTask.Status)
+	}
+	if updatedTask.BlockedReason == nil || !strings.Contains(*updatedTask.BlockedReason, "abandoned background job loop") {
+		t.Fatalf("BlockedReason = %v, want the abandoned-background reason", updatedTask.BlockedReason)
+	}
+}
+
+func TestAbandonedBackgroundTaskRetry_DoesNotConsumeSpinBudget(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+
+	now := time.Now().UTC()
+	taskID := "task-abandoned-spin"
+	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Config.SpinningRestartThreshold = 3
+	state.Tasks = []models.Task{task}
+	state.Agents[agentID] = models.Agent{Role: models.RoleCoder, Status: models.AgentStatusWorking, CurrentTask: &taskID}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	config := SupervisorConfig{
+		AgentID:     agentID,
+		Authority:   testSupervisorAuthority(t, bb, agentID),
+		Role:        models.RoleCoder,
+		ProjectRoot: projectRoot,
+		StatePath:   statePath,
+		CLIName:     "claude",
+	}
+	spinTracker := newSpinningTracker()
+	backgroundTracker := newRuntimeFailureTracker()
+	abandoned := abandonedBackgroundTask{TaskID: "bnajie1ul", Summary: "Run full race test suite"}
+	signature := "same-task-state"
+
+	if count := spinTracker.Track(taskID, signature); count != 1 {
+		t.Fatalf("spin count = %d, want 1", count)
+	}
+	handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, backgroundTracker, spinTracker)
+	if count := spinTracker.Track(taskID, signature); count != 1 {
+		t.Fatalf("spin count after preservation = %d, want 1: preservation is not a no-progress spin", count)
+	}
+}
+
+func TestDetectAbandonedBackgroundTask_ProseMentionDoesNotMaskAbandonment(t *testing.T) {
+	output := `{"type":"system","subtype":"task_notification","task_id":"babandoned","status":"stopped","summary":"Run full race test suite"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"The review noted that Successfully stopped task: babandoned would exclude it."}]}}`
+
+	abandoned := detectAbandonedBackgroundTask(output)
+	if abandoned == nil {
+		t.Fatal("detectAbandonedBackgroundTask() = nil: prose quoting the stop acknowledgement must not mask a real abandonment")
+	}
+	if abandoned.TaskID != "babandoned" {
+		t.Fatalf("TaskID = %q, want babandoned", abandoned.TaskID)
+	}
+}
