@@ -106,12 +106,43 @@ func lifecycleRequestError(task *models.Task, request LifecycleRequest, outcome,
 
 // preparationStillCurrent never infers process death without two authenticated
 // generations. The caller must have validated current authority and eligibility.
-func preparationStillCurrent(task *models.Task, request LifecycleRequest) bool {
+// The second generation is either the requester's, when it is the same actor
+// retrying, or the preparing actor's own live registration: without the latter
+// a preparation left by a dead generation blocks every other agent forever,
+// because identity supersession is same-actor only.
+func preparationStillCurrent(task *models.Task, request LifecycleRequest, agents map[string]models.Agent) bool {
 	p := task.Lifecycle.Preparation
 	if p.Boundary != models.TaskTransitionID(task) {
 		return false
 	}
-	return !lifecycleGenerationSuperseded(p.LifecycleIdentity, request)
+	return !preparationRetired(p.LifecycleIdentity, request, agents)
+}
+
+// preparingGenerationRetired reports whether the registry authenticates a
+// different, current generation for the preparing actor — it restarted, so the
+// generation holding the preparation is demonstrably gone (lifecycle-results.md
+// "a newly authorized current generation may replace an older generation's
+// preparation"). Absence from the registry is deliberately NOT retirement:
+// process abandonment retains its marker until inspected recovery, and an
+// administrative call without a generation cannot infer process death. An
+// absent registry or an unauthenticated preparation stays conservative.
+func preparingGenerationRetired(prepared models.LifecycleIdentity, agents map[string]models.Agent) bool {
+	if agents == nil || prepared.Actor == "" || prepared.GenerationDigest == "" {
+		return false
+	}
+	agent, registered := agents[prepared.Actor]
+	if !registered || agent.Generation == "" {
+		return false
+	}
+	return lifecycleDigest([]byte(agent.Generation)) != prepared.GenerationDigest
+}
+
+// preparationRetired is the single retirement conclusion the check and the
+// completion guard must share: the requester's own newer generation, or the
+// preparing actor's authenticated restart. Reaching it in only one of the two
+// leaves metadata-only operations passing the check and failing at completion.
+func preparationRetired(prepared models.LifecycleIdentity, request LifecycleRequest, agents map[string]models.Agent) bool {
+	return lifecycleGenerationSuperseded(prepared, request) || preparingGenerationRetired(prepared, agents)
 }
 
 func lifecycleGenerationSuperseded(prepared, current models.LifecycleIdentity) bool {
@@ -121,7 +152,7 @@ func lifecycleGenerationSuperseded(prepared, current models.LifecycleIdentity) b
 // CheckLifecycleRequest is read-only and must precede domain mutation. Retained
 // exact receipts win over current-token rejection. Empty IDs never prove replay.
 // Obsolete preparations do not block an authorized fresh boundary/generation.
-func CheckLifecycleRequest(task *models.Task, request LifecycleRequest) (*models.LifecycleReceipt, error) {
+func CheckLifecycleRequest(task *models.Task, request LifecycleRequest, agents map[string]models.Agent) (*models.LifecycleReceipt, error) {
 	if task == nil {
 		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "none", "task state is unavailable")
 	}
@@ -143,7 +174,7 @@ func CheckLifecycleRequest(task *models.Task, request LifecycleRequest) (*models
 			return nil, lifecycleRequestError(task, request, models.LifecycleInvalidInput, "correct_input", "none", "prepared request identity has a different payload")
 		}
 	}
-	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil && preparationStillCurrent(task, request) {
+	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil && preparationStillCurrent(task, request, agents) {
 		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "unknown", "an unresolved preparation remains at this ownership boundary")
 	}
 	if request.ExpectedTransition != models.TaskTransitionID(task) {
@@ -155,8 +186,8 @@ func CheckLifecycleRequest(task *models.Task, request LifecycleRequest) (*models
 // PrepareLifecycleRequest reserves external work in an existing authorized
 // transaction. Retiring an obsolete marker is not completion or rollback.
 // All validation happens on a copy, so a helper error leaves metadata unchanged.
-func PrepareLifecycleRequest(task *models.Task, request LifecycleRequest) error {
-	receipt, err := CheckLifecycleRequest(task, request)
+func PrepareLifecycleRequest(task *models.Task, request LifecycleRequest, agents map[string]models.Agent) error {
+	receipt, err := CheckLifecycleRequest(task, request, agents)
 	if err != nil {
 		return err
 	}
@@ -191,7 +222,7 @@ func ValidateLifecyclePreparation(task *models.Task, request LifecycleRequest) e
 // CompleteLifecycleRequest follows the caller's checked domain mutation in the
 // SAME transaction. For metadata-only calls CheckLifecycleRequest must run
 // first; external-effect calls use ValidateLifecyclePreparation before mutation.
-func CompleteLifecycleRequest(task *models.Task, request LifecycleRequest, projection models.LifecycleProjection) (models.LifecycleOutcome, error) {
+func CompleteLifecycleRequest(task *models.Task, request LifecycleRequest, projection models.LifecycleProjection, agents map[string]models.Agent) (models.LifecycleOutcome, error) {
 	if task == nil {
 		return models.LifecycleOutcome{}, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "unknown", "task disappeared before completion")
 	}
@@ -199,7 +230,7 @@ func CompleteLifecycleRequest(task *models.Task, request LifecycleRequest, proje
 		p := task.Lifecycle.Preparation
 		// CheckLifecycleRequest established the original boundary before the
 		// caller's metadata-only mutation. Do not compare the changed task here.
-		if !sameLifecycleRequest(p.LifecycleIdentity, request) && p.Boundary == request.ExpectedTransition && !lifecycleGenerationSuperseded(p.LifecycleIdentity, request) {
+		if !sameLifecycleRequest(p.LifecycleIdentity, request) && p.Boundary == request.ExpectedTransition && !preparationRetired(p.LifecycleIdentity, request, agents) {
 			return models.LifecycleOutcome{}, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "unknown", "another request owns the preparation")
 		}
 	}

@@ -1132,7 +1132,7 @@ func TestExit42RestartTracker_Blocking(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return ops.PrepareLifecycleRequest(current, pending)
+		return ops.PrepareLifecycleRequest(current, pending, state.Agents)
 	}); err != nil {
 		t.Fatalf("prepare submission: %v", err)
 	}

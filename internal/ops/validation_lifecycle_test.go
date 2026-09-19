@@ -15,7 +15,7 @@ func TestValidationPreflightPreservesPreparationUntilContractChanges(t *testing.
 	if err := f.bb.Modify(func(state *models.State) error {
 		task := state.FindTask("task-1")
 		request = lifecycleTestRequest(t, task, "submit-for-review", "pending-validation", f.authority.Generation, nil)
-		return PrepareLifecycleRequest(task, request)
+		return PrepareLifecycleRequest(task, request, nil)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestReleaseValidationOwnershipRetiresOnlyReleasedTaskPreparation(t *testing
 				if err != nil {
 					return err
 				}
-				return PrepareLifecycleRequest(task, request)
+				return PrepareLifecycleRequest(task, request, nil)
 			}); err != nil {
 				t.Fatal(err)
 			}

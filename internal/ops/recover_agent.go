@@ -312,7 +312,7 @@ func recoverAgentLifecycle(projectRoot, agentID string, force bool, reason strin
 			task := state.FindTask(anchor.ID)
 			models.AdvanceLifecycle(task)
 			var err error
-			result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+			result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 			return err
 		}
 		result.LifecycleOutcome = NewLifecycleOutcome("recover-agent", nil, models.LifecycleCompleted, "continue", "committed")

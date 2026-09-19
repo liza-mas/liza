@@ -192,6 +192,10 @@ rolled back. A new claim follows existing recovery/setup semantics.
 A newly registered caller with current authority and the required task
 ownership/role may atomically retire a preparation from a different generation
 and reserve a fresh request, even if task assignment and attempt are unchanged.
+Reservation is not a precondition of that retirement: a metadata-only operation,
+which reserves nothing, retires the same foreign-generation preparation at
+completion. Both the pre-mutation check and the completion guard reach that
+conclusion identically, so an admitted request is never refused after its work.
 Validate current worktree/HEAD and capture its **current immutable SHA** for
 that fresh submission. Same-generation concurrent calls at the same live
 boundary requery without a second rebase/refresh. Stale/missing authority fails

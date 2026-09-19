@@ -72,7 +72,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		}
 	}
 	invocation.task = task
-	request, receipt, err := submissionRequest(task, commitRef, agentID, authority, opts)
+	request, receipt, err := submissionRequest(task, commitRef, agentID, authority, opts, state.Agents)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	}
 	if opts.RequestID == "" {
 		// Persist the immutable input even when the first legacy call used HEAD.
-		request, receipt, err = submissionRequest(task, resolvedCommit, agentID, authority, opts)
+		request, receipt, err = submissionRequest(task, resolvedCommit, agentID, authority, opts, state.Agents)
 		if err != nil {
 			return nil, err
 		}
@@ -273,7 +273,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		if err := checkPlanningOutputSnapshot(task, live); err != nil {
 			return err
 		}
-		if err := PrepareLifecycleRequest(live, request); err != nil {
+		if err := PrepareLifecycleRequest(live, request, state.Agents); err != nil {
 			return err
 		}
 		preparation = *live.Lifecycle.Preparation
@@ -466,7 +466,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 				outcome, completeErr = CompleteLifecycleRequest(task, request, models.LifecycleProjection{
 					InputCommit: preRebaseCommit, ReviewCommit: postRebaseCommit, BaseCommit: rebaseBase,
 					Attempt: task.EffectiveAttempt(), Iteration: task.Iteration, SourceStatus: expectedCurrentStatus,
-				})
+				}, state.Agents)
 				return completeErr
 			})
 

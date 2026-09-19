@@ -150,7 +150,7 @@ func cancelTaskLifecycle(projectRoot, taskID, reason, agentID string, authority 
 			return err
 		}
 
-		outcome, err = CompleteLifecycleRequest(currentTask, request, models.LifecycleProjection{SourceStatus: originalStatus})
+		outcome, err = CompleteLifecycleRequest(currentTask, request, models.LifecycleProjection{SourceStatus: originalStatus}, state.Agents)
 		return err
 	})
 	if isLifecycleReplay(err) {

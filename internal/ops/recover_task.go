@@ -286,7 +286,7 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 		}
 		state.HumanNotes = append(state.HumanNotes, recoverTaskHumanNote(taskID, reason, agentsToRecover, now))
 		var completeErr error
-		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, recoverTaskProjection(task, snapshot))
+		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, recoverTaskProjection(task, snapshot), state.Agents)
 		result.LifecycleOutcome = invocation.outcome
 		return completeErr
 	})
@@ -599,7 +599,7 @@ func recoverTaskFreshReset(bb *db.Blackboard, gitWrapper *git.Git, taskID, reaso
 		})
 		state.HumanNotes = append(state.HumanNotes, recoverTaskHumanNote(taskID, reason, agentsToRecover, now))
 		var completeErr error
-		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, recoverTaskProjection(task, snapshot))
+		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, recoverTaskProjection(task, snapshot), state.Agents)
 		result.LifecycleOutcome = invocation.outcome
 		return completeErr
 	})

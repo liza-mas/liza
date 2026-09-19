@@ -197,7 +197,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 		if err != nil {
 			return err
 		}
-		receipt, err := CheckLifecycleRequest(task, request)
+		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 		if err != nil {
 			return err
 		}
@@ -256,7 +256,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			Time: time.Now().UTC(), Event: models.TaskEventOutputSet, Agent: &input.AgentID,
 			Extra: map[string]any{"previous_output_count": previousCount, "output_count": len(input.Output)},
 		})
-		*outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		*outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		return err
 	})
 	if isLifecycleReplay(err) {

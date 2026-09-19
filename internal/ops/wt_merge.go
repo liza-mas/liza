@@ -410,8 +410,11 @@ func interruptedMergePreparation(task *models.Task, request LifecycleRequest) bo
 		return false
 	}
 	p := task.Lifecycle.Preparation
+	// Registry omitted deliberately: this path already requires the preparer to
+	// be the requester, so the requester's own generation is the authenticated
+	// second generation and a registry lookup cannot add evidence.
 	return p.Operation == integrationOperationWTMerge && p.Actor == request.Actor &&
-		preparationStillCurrent(task, request)
+		preparationStillCurrent(task, request, nil)
 }
 
 // retireProvenMergePreparation clears an interrupted wt-merge preparation whose
@@ -791,7 +794,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	if err != nil {
 		return nil, err
 	}
-	receipt, err := CheckLifecycleRequest(task, request)
+	receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 	if err != nil {
 		// A caller that pinned an expected transition asked to act on the exact
 		// boundary it inspected. Resuming retires the preparation and advances
@@ -816,7 +819,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		if request, err = NewLifecycleRequest(integrationOperationWTMerge, task, agentID, authority, opts, mergeExtra); err != nil {
 			return nil, err
 		}
-		if receipt, err = CheckLifecycleRequest(task, request); err != nil {
+		if receipt, err = CheckLifecycleRequest(task, request, state.Agents); err != nil {
 			return nil, err
 		}
 	}
@@ -906,7 +909,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		if !models.IsApprovedForMerge(live, pr) || live.ReviewCommit == nil || *live.ReviewCommit != reviewCommit {
 			return WrapLifecycleError(integrationOperationWTMerge, live, fmt.Errorf("approved review boundary changed"), models.LifecycleStateChanged, "requery", "none")
 		}
-		if err := PrepareLifecycleRequest(live, request); err != nil {
+		if err := PrepareLifecycleRequest(live, request, state.Agents); err != nil {
 			return err
 		}
 		preparation = *live.Lifecycle.Preparation
@@ -1198,7 +1201,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		t.History = append(t.History, historyEntry)
 
 		var completeErr error
-		lifecycleOutcome, completeErr = CompleteLifecycleRequest(t, request, models.LifecycleProjection{ReviewCommit: expectedCommit, MergeCommit: mergeCommit})
+		lifecycleOutcome, completeErr = CompleteLifecycleRequest(t, request, models.LifecycleProjection{ReviewCommit: expectedCommit, MergeCommit: mergeCommit}, state.Agents)
 		return completeErr
 	})
 

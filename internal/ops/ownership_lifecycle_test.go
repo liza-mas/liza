@@ -310,7 +310,7 @@ func TestOwnershipLifecycleRecoveryRetiresPreparationAndReplays(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return PrepareLifecycleRequest(task, abandoned)
+		return PrepareLifecycleRequest(task, abandoned, nil)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +354,7 @@ func TestOwnershipLifecycleAttemptRolloverInvalidatesPreparation(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return PrepareLifecycleRequest(task, abandoned)
+		return PrepareLifecycleRequest(task, abandoned, nil)
 	}); err != nil {
 		t.Fatal(err)
 	}

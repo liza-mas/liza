@@ -109,7 +109,7 @@ func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reas
 		if err != nil {
 			return err
 		}
-		receipt, err := CheckLifecycleRequest(task, request)
+		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 		if err != nil {
 			return err
 		}
@@ -154,7 +154,7 @@ func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reas
 			RemovedDependencies:  append([]string(nil), removed...),
 			RetainedDependencies: append([]string(nil), retained...),
 		}
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			effects = "unknown"
 		}

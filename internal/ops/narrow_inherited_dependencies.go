@@ -181,7 +181,7 @@ func narrowInheritedDependenciesWithOptionalAuthority(projectRoot, producerID, t
 		if err != nil {
 			return err
 		}
-		receipt, err := CheckLifecycleRequest(producer, request)
+		receipt, err := CheckLifecycleRequest(producer, request, state.Agents)
 		if err != nil {
 			return err
 		}
@@ -388,7 +388,7 @@ func narrowInheritedDependenciesWithOptionalAuthority(projectRoot, producerID, t
 			return err
 		}
 
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(producer, request, models.LifecycleProjection{})
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(producer, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			effects = "unknown"
 		}

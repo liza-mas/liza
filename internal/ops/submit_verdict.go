@@ -287,7 +287,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 	if err != nil {
 		return nil, err
 	}
-	receipt, err := CheckLifecycleRequest(task, request)
+	receipt, err := CheckLifecycleRequest(task, request, initialState.Agents)
 	if err != nil {
 		recordFailure = false
 		return nil, err
@@ -419,7 +419,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
 		}
-		receipt, checkErr := CheckLifecycleRequest(task, request)
+		receipt, checkErr := CheckLifecycleRequest(task, request, state.Agents)
 		if checkErr != nil {
 			recordFailure = false
 			return checkErr
@@ -615,7 +615,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		}
 
 		var completeErr error
-		lifecycleOutcome, completeErr = CompleteLifecycleRequest(task, request, models.LifecycleProjection{Verdict: verdict})
+		lifecycleOutcome, completeErr = CompleteLifecycleRequest(task, request, models.LifecycleProjection{Verdict: verdict}, state.Agents)
 		return completeErr
 	})
 

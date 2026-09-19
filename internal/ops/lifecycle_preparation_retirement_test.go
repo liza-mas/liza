@@ -25,7 +25,7 @@ func TestRetireFailedLifecyclePreparation(t *testing.T) {
 				task := state.FindTask("task-1")
 				*task = testhelpers.BuildTaskByStatus(task.ID, models.TaskStatusImplementing, task.Created)
 				request := lifecycleTestRequest(t, task, "submit-for-review", "failed-submission", authority.Generation, strings.Repeat("a", 40))
-				if err := PrepareLifecycleRequest(task, request); err != nil {
+				if err := PrepareLifecycleRequest(task, request, nil); err != nil {
 					return err
 				}
 				preparation = *task.Lifecycle.Preparation

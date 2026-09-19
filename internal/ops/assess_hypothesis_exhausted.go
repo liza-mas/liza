@@ -107,7 +107,7 @@ func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, a
 		if err != nil {
 			return err
 		}
-		receipt, err := CheckLifecycleRequest(task, request)
+		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 		if err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, a
 
 		dropSupersededWakeSnapshots(task)
 		task.History = append(task.History, entry)
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			effects = "unknown"
 		}

@@ -194,7 +194,7 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 			Reason: &reason,
 		})
 
-		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		return err
 	})
 

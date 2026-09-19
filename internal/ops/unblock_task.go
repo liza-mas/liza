@@ -354,7 +354,7 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 			return nil
 		}
 		models.AdvanceLifecycle(task)
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{SourceStatus: fromStatus})
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{SourceStatus: fromStatus}, state.Agents)
 		return err
 	}
 	// Validate every state-dependent input on an isolated snapshot before Git.

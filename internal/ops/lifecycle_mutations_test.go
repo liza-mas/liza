@@ -200,7 +200,7 @@ func TestLifecycleBlockedRetiresOnlyAuthorizedPreparation(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return PrepareLifecycleRequest(task, unfinished)
+		return PrepareLifecycleRequest(task, unfinished, nil)
 	}); err != nil {
 		t.Fatal(err)
 	}

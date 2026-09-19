@@ -52,7 +52,7 @@ func TestAwaitResubmissionRefusalPreservesLifecycleBoundaries(t *testing.T) {
 					task.Status = models.TaskStatusReadyForReview
 					task.AcceptanceReceipt = nil
 					if completed {
-						if _, err := CompleteLifecycleRequest(task, completedRequest, models.LifecycleProjection{ReviewCommit: commit}); err != nil {
+						if _, err := CompleteLifecycleRequest(task, completedRequest, models.LifecycleProjection{ReviewCommit: commit}, nil); err != nil {
 							return err
 						}
 						completedReceipt = task.Lifecycle.Receipts[len(task.Lifecycle.Receipts)-1]
@@ -73,7 +73,7 @@ func TestAwaitResubmissionRefusalPreservesLifecycleBoundaries(t *testing.T) {
 				t.Fatal("refusal retained temporary review ownership")
 			}
 			if completed {
-				receipt, err := CheckLifecycleRequest(task, completedRequest)
+				receipt, err := CheckLifecycleRequest(task, completedRequest, nil)
 				if err != nil || receipt == nil || !reflect.DeepEqual(*receipt, completedReceipt) {
 					t.Fatalf("refusal lost or changed concurrent completion: receipt=%+v err=%v", receipt, err)
 				}
@@ -86,7 +86,7 @@ func TestAwaitResubmissionRefusalPreservesLifecycleBoundaries(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := CheckLifecycleRequest(task, request); err == nil {
+				if _, err := CheckLifecycleRequest(task, request, nil); err == nil {
 					t.Fatal("refusal revived an obsolete transition token")
 				}
 			}

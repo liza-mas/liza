@@ -132,7 +132,7 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 		if err != nil {
 			return err
 		}
-		receipt, err := CheckLifecycleRequest(task, request)
+		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 		if err != nil {
 			return err
 		}
@@ -203,7 +203,7 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 			CanonicalDependencies: append([]string(nil), canonical...),
 			RepairRequestCleared:  repairRequestCleared,
 		}
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			effects = "unknown"
 		}

@@ -122,7 +122,7 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 		if err != nil {
 			return err
 		}
-		receipt, err := CheckLifecycleRequest(task, request)
+		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 		if err != nil {
 			return err
 		}
@@ -172,7 +172,7 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 		agent.Heartbeat = now
 		state.Agents[agentID] = agent
 
-		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{})
+		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		return err
 	})
 	if err != nil && !isLifecycleReplay(err) {

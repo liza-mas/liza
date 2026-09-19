@@ -212,7 +212,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 		return nil, err
 	}
 	invocation.request = request
-	receipt, err := CheckLifecycleRequest(task, request)
+	receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ func completeClaimTaskAfterValidation(
 		}
 	}
 	invocation.observe(current)
-	receipt, checkErr := CheckLifecycleRequest(current, invocation.request)
+	receipt, checkErr := CheckLifecycleRequest(current, invocation.request, state.Agents)
 	if checkErr != nil {
 		return nil, checkErr
 	}
@@ -456,7 +456,7 @@ func completeClaimTaskAfterValidation(
 		if reason := models.DoerClaimBlockedReason(state, task, runtimeRole, agentID, resolver, time.Now().UTC()); reason != "" {
 			return &PreconditionError{Reason: reason}
 		}
-		if err := PrepareLifecycleRequest(task, invocation.request); err != nil {
+		if err := PrepareLifecycleRequest(task, invocation.request, state.Agents); err != nil {
 			return err
 		}
 		preparation = *task.Lifecycle.Preparation
@@ -620,7 +620,7 @@ func completeClaimTaskAfterValidation(
 		var completeErr error
 		invocation.outcome, completeErr = CompleteLifecycleRequest(task, invocation.request, models.LifecycleProjection{
 			SourceStatus: taskStatus, BaseCommit: claimCtx.baseCommit, LeaseExpires: leaseExpires.Format(time.RFC3339Nano), Attempt: task.EffectiveAttempt(), Iteration: task.Iteration,
-		})
+		}, state.Agents)
 		return completeErr
 	}
 

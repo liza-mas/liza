@@ -363,7 +363,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 			}
 		}
 
-		invocation.outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{ReleasedDoer: releasedDoer, ReleasedReviewer: releasedReviewer})
+		invocation.outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{ReleasedDoer: releasedDoer, ReleasedReviewer: releasedReviewer}, state.Agents)
 		if err == nil {
 			invocation.effects = true
 		}

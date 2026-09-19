@@ -108,7 +108,7 @@ func fullSubmissionSHA(value string) bool {
 
 // submissionRequest proves implicit legacy replay only with a full immutable
 // input SHA from a retained receipt at the same attempt/iteration boundary.
-func submissionRequest(task *models.Task, commitRef, actor string, authority *models.AgentAuthority, opts LifecycleRequestOptions) (LifecycleRequest, *models.LifecycleReceipt, error) {
+func submissionRequest(task *models.Task, commitRef, actor string, authority *models.AgentAuthority, opts LifecycleRequestOptions, agents map[string]models.Agent) (LifecycleRequest, *models.LifecycleReceipt, error) {
 	if fullSubmissionSHA(commitRef) {
 		commitRef = strings.ToLower(commitRef)
 	}
@@ -130,7 +130,7 @@ func submissionRequest(task *models.Task, commitRef, actor string, authority *mo
 			}
 		}
 	}
-	receipt, err := CheckLifecycleRequest(task, request)
+	receipt, err := CheckLifecycleRequest(task, request, agents)
 	if err != nil || receipt != nil {
 		return request, receipt, err
 	}

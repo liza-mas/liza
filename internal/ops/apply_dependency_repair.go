@@ -121,7 +121,7 @@ func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reaso
 		if err != nil {
 			return err
 		}
-		receipt, err := CheckLifecycleRequest(source, lifecycleRequest)
+		receipt, err := CheckLifecycleRequest(source, lifecycleRequest, state.Agents)
 		if err != nil {
 			return err
 		}
@@ -249,7 +249,7 @@ func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reaso
 			SourceTaskID: sourceTaskID,
 			Updates:      updates,
 		}
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(source, lifecycleRequest, models.LifecycleProjection{})
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(source, lifecycleRequest, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			effects = "unknown"
 		}

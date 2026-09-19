@@ -204,11 +204,11 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 			LeaseDuration int
 		}{role, input.LeaseDuration})
 	}
-	checkRequest := func(task *models.Task, request LifecycleRequest) (*models.LifecycleReceipt, error) {
+	checkRequest := func(task *models.Task, request LifecycleRequest, agents map[string]models.Agent) (*models.LifecycleReceipt, error) {
 		if preparation != nil {
 			return nil, ValidateLifecyclePreparation(task, request)
 		}
-		return CheckLifecycleRequest(task, request)
+		return CheckLifecycleRequest(task, request, agents)
 	}
 	attempt := func() error {
 		needsPreflight = false
@@ -237,7 +237,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 				if err != nil {
 					return err
 				}
-				receipt, err := checkRequest(task, request)
+				receipt, err := checkRequest(task, request, state.Agents)
 				if err != nil {
 					return err
 				}
@@ -324,7 +324,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 				if err != nil {
 					return err
 				}
-				if _, err := checkRequest(task, request); err != nil {
+				if _, err := checkRequest(task, request, state.Agents); err != nil {
 					return err
 				}
 
@@ -368,7 +368,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 					if task.Worktree == nil || *task.Worktree == "" {
 						return validationError("worktree_unavailable")
 					}
-					if err := PrepareLifecycleRequest(task, request); err != nil {
+					if err := PrepareLifecycleRequest(task, request, state.Agents); err != nil {
 						return err
 					}
 					copyPreparation := *task.Lifecycle.Preparation
@@ -415,7 +415,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 					result.ReviewCommit = *task.ReviewCommit
 				}
 				result.LeaseExpires = leaseExpires
-				invocation.outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{ReviewCommit: result.ReviewCommit, LeaseExpires: leaseExpires.Format(time.RFC3339Nano)})
+				invocation.outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{ReviewCommit: result.ReviewCommit, LeaseExpires: leaseExpires.Format(time.RFC3339Nano)}, state.Agents)
 				result.LifecycleOutcome = invocation.outcome
 				if err == nil {
 					invocation.effects = true

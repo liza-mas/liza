@@ -61,7 +61,9 @@ func checkOwnerEndingRequest(task *models.Task, request LifecycleRequest) (*mode
 	copy := *task
 	copy.Lifecycle = cloneTaskLifecycle(task.Lifecycle)
 	copy.Lifecycle.Preparation = nil
-	return CheckLifecycleRequest(&copy, request)
+	// Registry omitted deliberately: the preparation was just cleared, so no
+	// retirement question remains for it to answer.
+	return CheckLifecycleRequest(&copy, request, nil)
 }
 
 // prepareOwnerEndingRequest reserves explicit recovery after the caller has

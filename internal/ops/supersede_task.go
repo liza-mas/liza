@@ -251,7 +251,7 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 			}
 		}
 
-		outcome, err = CompleteLifecycleRequest(currentTask, request, models.LifecycleProjection{SourceStatus: originalStatus})
+		outcome, err = CompleteLifecycleRequest(currentTask, request, models.LifecycleProjection{SourceStatus: originalStatus}, state.Agents)
 		return err
 	})
 	if isLifecycleReplay(err) {
