@@ -304,6 +304,14 @@ No clear resolution: **flag conflict, present both options, do not choose.**
 
 **§BRAND_NAME_TITLE§ (multi-agent):** No interactive prompts. Do not run repository-wide `$TEST_CMD` or `$COVERAGE_CMD`; the coder's pre-submission gate and reviewer's independent gate own full-suite validation. Use task-focused tests and existing task-scoped coverage evidence only.
 
+**§BRAND_NAME_TITLE§ charter — post-hoc findings only.** Analysis is restricted to
+what the written diff reveals and foresight cannot: **DRY** against code that already
+existed, and **Dead code removal** for symbols this change orphaned. The rest of the
+Principle Catalog is already carried by CORE Rule 6 (Minimality Ladder, DRY Gate) while
+the code is written, and by the reviewer afterwards; re-sweeping it here duplicates both
+and has no diff to justify it. Report an empty result plainly — "no duplication, no
+orphans" is the expected outcome on a clean change, not a failure to look.
+
 | Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | Mode announcement | Announce, no prompt |
@@ -326,6 +334,8 @@ No clear resolution: **flag conflict, present both options, do not choose.**
 | No evidence | Mechanical only |
 
 When downgraded, Analysis filters violations to allowed set. Log skipped violations.
+The charter above applies first: it bounds which principles are in scope at all, and the
+coverage table then bounds which of those may be transformed.
 
 §BRAND_NAME_TITLE§ anti-pattern overrides: "without user approval" → "without task scope authorization"; "explicit approval" → task scope serves as authorization.
 
@@ -337,4 +347,4 @@ code → stage → **clean** → review → commit
 
 Runs BEFORE code review. Reviewer sees clean code.
 
-**Relations:** Testing skill if coverage insufficient. Code Review is complementary (cleaner: style/structure; review: correctness/architecture).
+**Relations:** Testing skill if coverage insufficient. Code Review is complementary (cleaner: style/structure; review: correctness/architecture). Under §BRAND_NAME_TITLE§ the split is narrower still — see the charter in Mode-Specific Behavior.
