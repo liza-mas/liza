@@ -32,8 +32,11 @@ command, not as validation retries. Continue waiting within the tool's documente
 foreground mechanism, provide periodic status updates when required, and interrupt
 only when there is independent evidence of a stall or a configured timeout expires.
 Do not launch a duplicate validation command to obtain visible output, and never end a
-turn with a validation still running — hold the foreground session until it exits, then
-commit and submit within the same turn.
+turn with a validation still running. A repo-wide race or coverage run exceeds the 600s
+foreground cap and the tool will force it to the background on its own; when that happens,
+stay in the same turn and poll the job with TaskOutput until it exits, then commit and
+submit. The completion notice never arrives, because the supervisor ends the session at
+end_turn.
 
 Account for repetition when choosing the timeout. For example, `go test
 -race -count=10` runs ten copies inside one package process; the default

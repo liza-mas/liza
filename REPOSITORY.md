@@ -131,7 +131,11 @@ Skills execute within contract constraints — contract gates are non-negotiable
 
 All Liza system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](specs/architecture/ADR/0012-go-cli-replaces-bash-scripts.md).
 
-**Build requirement:** The Go binary embeds contracts, skills, and config files via `//go:embed`. Contracts and skills are copied from the repo root by `make sync-embedded` (a prerequisite of `make build`, `make test-fast`, `make test`, `make test-race`, and `make coverage`). Config files (`claude-settings.json`) and hooks are mastered directly in `internal/embedded/`. Use `make test` for the required routine full-suite check instead of bare `go test ./...`, then run `make test-race` once during final pre-commit/merge validation. Without the sync step, the `internal/embedded` package fails to compile.
+**Build requirement:** The Go binary embeds contracts, skills, and config files via `//go:embed`. Contracts and skills are copied from the repo root by `make sync-embedded` (a prerequisite of `make build`, `make test-fast`, `make test`, `make test-race`, and `make coverage`). Config files (`claude-settings.json`) and hooks are mastered directly in `internal/embedded/`. Use `make test` for the required routine full-suite check instead of bare `go test ./...`, then run `make test-race` once during final pre-commit/merge validation. It exceeds the
+600s foreground limit of agent shell tools, so run it scoped to the packages the change
+touches (`go test -race -count=1 ./internal/<pkg>/...`); if you run the full suite and the
+tool forces it to the background, stay in the same turn and poll it to completion with
+TaskOutput — ending the turn while it runs abandons the task. Without the sync step, the `internal/embedded` package fails to compile.
 
 Key command groups:
 
