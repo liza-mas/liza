@@ -186,8 +186,10 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 For prospective reference-first artifacts (ADR-0133), `spec_ref`, `epic_ref`, `plan_ref`, and
 `arch_ref` are carrier locators. Before provider launch, the compositor loads strict scalar
 carriers, complete direct-parent reviewed ranges, and the current review range at one captured
-integration HEAD. It validates declared revision/path/anchor spans and rejects stale inherited
-blobs. Every carrier is inlined, but only the assigned carriers' declared references are inlined
+integration HEAD. It validates declared revision/path/anchor spans and rejects an inherited
+section whose text changed at that HEAD; an unrelated edit elsewhere in the same file is not
+staleness, and a parent carrier a later merge changed is adopted at that HEAD (only deletion
+blocks). Every carrier is inlined, but only the assigned carriers' declared references are inlined
 with it: parent and review carriers, plus the most specific scalar ref (`plan_ref` > `arch_ref` >
 `epic_ref` > `spec_ref`). References declared by the remaining ancestor carriers render as one-line
 pointers to their pinned revision (ADR-0139). Marker-free artifacts and slug-like scalar fragments

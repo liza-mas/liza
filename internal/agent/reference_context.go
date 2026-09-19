@@ -231,13 +231,35 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 		if oidErr != nil {
 			return nil, oidErr
 		}
+		revision := review
 		if requireFresh {
+			// A merged parent's carrier can be edited by later merges. The
+			// integrated version is the current agreed content, so adopt it
+			// rather than refusing to build context; only deletion blocks.
+			_, presentAtHead, headErr := repo.TreePathMode(head, path)
+			if headErr != nil {
+				return nil, fmt.Errorf("freshness check %q: %w", path, headErr)
+			}
+			if !presentAtHead {
+				return nil, fmt.Errorf("reviewed carrier %q was deleted at integration HEAD", path)
+			}
 			headOID, headErr := repo.BlobOID(head, path)
 			if headErr != nil {
 				return nil, fmt.Errorf("freshness check %q: %w", path, headErr)
 			}
 			if oid != headOID {
-				return nil, fmt.Errorf("reviewed carrier %q is stale at integration HEAD", path)
+				headContent, readHeadErr := repo.ReadBlob(head, path)
+				if readHeadErr != nil {
+					return nil, readHeadErr
+				}
+				headContract, parseHeadErr := referencecontract.Parse(headContent)
+				if parseHeadErr != nil {
+					return nil, fmt.Errorf("parse reviewed carrier %q at integration HEAD: %w", path, parseHeadErr)
+				}
+				if headContract == nil {
+					return nil, fmt.Errorf("reviewed carrier %q lost its Source References at integration HEAD", path)
+				}
+				content, contract, oid, revision = headContent, headContract, headOID, head
 			}
 		}
 		// Current-review carriers may declare references to paths their own
@@ -250,13 +272,14 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 		if resolveErr != nil {
 			return nil, fmt.Errorf("reviewed carrier %q: %w", path, resolveErr)
 		}
-		observations = append(observations, referencecontract.Carrier{Path: path, Span: content, Revision: review, Class: class, BlobOID: oid, Refs: refs})
+		observations = append(observations, referencecontract.Carrier{Path: path, Span: content, Revision: revision, Class: class, BlobOID: oid, Refs: refs})
 	}
 	return observations, nil
 }
 
 // resolveDeclaredReferences pins each direct reference at its declared revision
-// and requires blob identity at integration HEAD. When localBase/localReview
+// and requires the referenced section to be unchanged at integration HEAD
+// (blob identity is the fast path). When localBase/localReview
 // are non-empty, a path absent at both HEAD and localBase was introduced in
 // the reviewed range and matches at localReview instead; a path present at
 // localBase but absent at HEAD was deleted and still blocks.
@@ -294,12 +317,25 @@ func resolveDeclaredReferences(repo referenceContextRepository, head, localBase,
 		if err != nil {
 			return nil, err
 		}
-		if pinnedOID != freshOID {
-			return nil, fmt.Errorf("direct reference %q is stale at %s", ref.ID, where)
-		}
 		span, err := referencecontract.ExtractSection(content, ref.Heading)
 		if err != nil {
 			return nil, err
+		}
+		if pinnedOID != freshOID {
+			// Staleness is a property of the referenced section, not of the
+			// whole file: an unrelated edit elsewhere in the file leaves the
+			// inherited obligation intact.
+			freshContent, readErr := repo.ReadBlob(freshRevision, ref.Path)
+			if readErr != nil {
+				return nil, readErr
+			}
+			freshSpan, spanErr := referencecontract.ExtractSection(freshContent, ref.Heading)
+			if spanErr != nil {
+				return nil, fmt.Errorf("direct reference %q is stale at %s: %w", ref.ID, where, spanErr)
+			}
+			if freshSpan != span {
+				return nil, fmt.Errorf("direct reference %q is stale at %s", ref.ID, where)
+			}
 		}
 		refs = append(refs, referencecontract.Reference{Path: ref.Path, Heading: ref.Heading, Revision: revision, BlobOID: pinnedOID, Span: span})
 	}

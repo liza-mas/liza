@@ -68,21 +68,23 @@ The normative decision is:
    fragments select exact eligible ATX heading text; an empty strict scalar
    fragment assigns the whole file. Strict Markdown files discovered inside an
    immutable reviewed range are whole-file local artifacts. Scalar carriers
-   load at captured HEAD; parent carriers load at the parent's `ReviewCommit`
-   and must have blob identity at captured HEAD; current-review carriers load
-   at the current `ReviewCommit` and may be absent or different at HEAD. Every
-   observation completes its own required freshness checks before precedence
-   is applied. Per path, current-review content precedes parent content, which
-   precedes scalar content; precedence selects rendered local content but never
-   suppresses validation of another observation. Conflicting same-class
-   provenance blocks; differing eligible parent blobs are defensively rejected
-   even though normal HEAD-identity eligibility makes that state unreachable.
-   Declared inherited references are read at their default or override revisions
-   and must have blob identity with the same paths at captured HEAD, except that
-   a current-review carrier may reference paths introduced in its own reviewed
-   range, which resolve at the current `ReviewCommit`. Missing,
-   stale, deleted, ambiguous, or structurally invalid strict content blocks
-   before launch.
+   load at captured HEAD; parent carriers load at the parent's `ReviewCommit`,
+   and where a later merge changed that path the integrated version at captured
+   HEAD is adopted instead, so only deletion or a stripped contract at HEAD
+   blocks; current-review carriers load at the current `ReviewCommit` and may be
+   absent or different at HEAD. Every observation completes its own required
+   freshness checks before precedence is applied. Per path, current-review
+   content precedes parent content, which precedes scalar content; precedence
+   selects rendered local content but never suppresses validation of another
+   observation. Conflicting same-class provenance blocks; differing eligible
+   parent blobs are defensively rejected even though HEAD adoption makes that
+   state unreachable. Declared inherited references are read at their default or
+   override revisions and their referenced section must be unchanged at captured
+   HEAD; whole-path blob identity is the fast path, and an unrelated edit
+   elsewhere in that file does not make the reference stale. A current-review
+   carrier may reference paths introduced in its own reviewed range, which
+   resolve at the current `ReviewCommit`. Missing, stale, deleted, ambiguous, or
+   structurally invalid strict content blocks before launch.
 5. Corrections are deltas naming corrected anchors, replacement decisions and
    rationale, unchanged inherited refs, and the effective superseding ref.
    Rendered retry context carries only unresolved effective findings and

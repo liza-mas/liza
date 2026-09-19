@@ -384,6 +384,119 @@ func TestResolvedReferenceContextReviewCarrierStaleAtReviewCommitBlocks(t *testi
 	}
 }
 
+func TestResolvedReferenceContextDirectReferenceSurvivesUnrelatedEditAtHead(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n\n## Lessons\nrow one\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Carrier\n\nLocal decision.\n"))
+	commitReferenceFixture(t, repo, "test: add scalar carrier")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n\n## Lessons\nrow one\nrow two\n")
+	commitReferenceFixture(t, repo, "test: append an unrelated lessons row")
+
+	task := models.Task{ID: "task-1", SpecRef: "specs/carrier.md"}
+	state := referenceTestState(task)
+	context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	if !strings.Contains(context, "Inherited contract.") {
+		t.Fatalf("context omitted the still-current referenced span:\n%s", context)
+	}
+	if strings.Contains(context, "row two") {
+		t.Fatalf("context leaked an undeclared sibling section:\n%s", context)
+	}
+}
+
+func TestResolvedReferenceContextDirectReferenceStillBlocksWhenItsSectionChanges(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Carrier\n\nLocal decision.\n"))
+	commitReferenceFixture(t, repo, "test: add scalar carrier")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nContract rewritten without an owner correction.\n")
+	commitReferenceFixture(t, repo, "test: change the referenced section")
+
+	task := models.Task{ID: "task-1", SpecRef: "specs/carrier.md"}
+	state := referenceTestState(task)
+	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err == nil || !strings.Contains(err.Error(), "stale at integration HEAD") {
+		t.Fatalf("changed referenced section error = %v, want stale-at-HEAD error", err)
+	}
+}
+
+func TestResolvedReferenceContextParentCarrierAdoptsIntegrationHeadContent(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	writeReferenceFixture(t, repo, "specs/parent.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Parent\n\nParent decision as reviewed.\n"))
+	parentReview := commitReferenceFixture(t, repo, "test: add parent carrier")
+	writeReferenceFixture(t, repo, "specs/parent.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Parent\n\nParent decision after a later merge.\n"))
+	commitReferenceFixture(t, repo, "test: edit the merged parent carrier")
+
+	parentMerge := parentReview
+	parent := models.Task{ID: "parent-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentMerge}
+	child := models.Task{ID: "child-1", ParentTasks: []string{"parent-1"}}
+	state := referenceTestState(parent, child)
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	if !strings.Contains(context, "Parent decision after a later merge.") {
+		t.Fatalf("context did not adopt the integrated parent carrier:\n%s", context)
+	}
+	if strings.Contains(context, "Parent decision as reviewed.") {
+		t.Fatalf("context rendered the superseded parent carrier:\n%s", context)
+	}
+}
+
+func TestResolvedReferenceContextParentCarrierDeletedAtHeadBlocks(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	writeReferenceFixture(t, repo, "specs/parent.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Parent\n\nParent decision.\n"))
+	parentReview := commitReferenceFixture(t, repo, "test: add parent carrier")
+	testhelpers.MustGit(t, repo, "rm", "-q", "specs/parent.md")
+	commitReferenceFixture(t, repo, "test: delete the parent carrier")
+
+	parentMerge := parentReview
+	parent := models.Task{ID: "parent-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentMerge}
+	child := models.Task{ID: "child-1", ParentTasks: []string{"parent-1"}}
+	state := referenceTestState(parent, child)
+	_, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err == nil || !strings.Contains(err.Error(), "deleted at integration HEAD") {
+		t.Fatalf("deleted parent carrier error = %v, want deleted-at-HEAD error", err)
+	}
+}
+
+func TestResolvedReferenceContextParentCarrierLosingItsContractAtHeadBlocks(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	writeReferenceFixture(t, repo, "specs/parent.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Parent\n\nParent decision.\n"))
+	parentReview := commitReferenceFixture(t, repo, "test: add parent carrier")
+	// A later merge strips the carrier's Source References: adopting that
+	// version would silently drop the inherited authority it declared.
+	writeReferenceFixture(t, repo, "specs/parent.md", "# Parent\n\nParent decision without a contract.\n")
+	commitReferenceFixture(t, repo, "test: strip the parent contract")
+
+	parentMerge := parentReview
+	parent := models.Task{ID: "parent-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentMerge}
+	child := models.Task{ID: "child-1", ParentTasks: []string{"parent-1"}}
+	state := referenceTestState(parent, child)
+	_, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err == nil || !strings.Contains(err.Error(), "lost its Source References at integration HEAD") {
+		t.Fatalf("contract-stripped parent carrier error = %v, want lost-contract error", err)
+	}
+}
+
 func TestBuildPromptStrictReviewCandidateSuppressesSamePathLegacyRoute(t *testing.T) {
 	repo := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, repo)
@@ -594,6 +707,10 @@ func TestResolvedReferenceContextValidatesLosingParentBeforeReviewPrecedence(t *
 	testhelpers.MustGit(t, repo, "checkout", "main")
 	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "SHARED", "specs/source.md", "Shared", "# Carrier\n\ncurrent scalar\n"))
 	commitReferenceFixture(t, repo, "test: current carrier")
+	// The losing parent's own declared reference is genuinely stale: its
+	// referenced section changed at HEAD with no owner correction.
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Shared\nSource rewritten without an owner correction.\n")
+	commitReferenceFixture(t, repo, "test: change the referenced section")
 	currentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
 	testhelpers.MustGit(t, repo, "checkout", "-b", "current-review")
 	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "SHARED", "specs/source.md", "Shared", "# Carrier\n\nwinning review\n"))
@@ -606,7 +723,7 @@ func TestResolvedReferenceContextValidatesLosingParentBeforeReviewPrecedence(t *
 	task := models.Task{ID: "review", SpecRef: "specs/carrier.md", ParentTask: &parentID, BaseCommit: &currentBase, ReviewCommit: &currentReview}
 	state := referenceTestState(parent, task)
 	_, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "reviewer")
-	if err == nil || !strings.Contains(err.Error(), "reviewed carrier \"specs/carrier.md\" is stale") {
+	if err == nil || !strings.Contains(err.Error(), "direct reference \"source\" is stale at integration HEAD") {
 		t.Fatalf("losing parent freshness error = %v", err)
 	}
 }

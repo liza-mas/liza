@@ -118,17 +118,12 @@ func TestRenderCarriersReductionIsMeasured(t *testing.T) {
 		t.Fatalf("RenderCarriers: %v", err)
 	}
 
-	// A true pre-reduction render: identical spans, but the references are
-	// pinned at a blob that does not match the inlined carrier, so elision
-	// cannot fire. The header line carries the revision, not the OID, so the
-	// output is byte-identical to what the pre-reduction code emitted.
+	// A true pre-reduction render: the inlined carrier's body is replaced by
+	// filler of exactly the same length, so no reference span is contained in
+	// it and elision cannot fire, while both renders stay byte-comparable.
 	unelided := make([]Carrier, len(carriers))
 	copy(unelided, carriers)
-	unelided[1].Refs = make([]Reference, len(refs))
-	for i, r := range refs {
-		r.BlobOID = "not-the-inlined-blob"
-		unelided[1].Refs[i] = r
-	}
+	unelided[0].Span = strings.Repeat("y", len(body.String())-1) + "\n"
 	before, err := RenderCarriers(unelided)
 	if err != nil {
 		t.Fatalf("RenderCarriers (unelided): %v", err)

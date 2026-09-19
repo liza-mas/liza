@@ -35,6 +35,8 @@ type Carrier struct {
 }
 
 // Reference is one resolved direct reference: a section of a pinned file.
+// BlobOID records the blob the section was read from; it is provenance for
+// callers and test fixtures, not an identity used by rendering.
 type Reference struct {
 	Path     string
 	Heading  string
@@ -46,14 +48,13 @@ type Reference struct {
 // RenderCarriers reconciles observations of the same path and renders the
 // resolved reference context.
 //
-// Duplicate direct references are emitted once. A direct reference whose
-// target is already inlined in full as a carrier at the same path and blob
-// OID is also emitted once — as a one-line pointer to that carrier rather
-// than a second copy of the section. At an equal OID the section is a
-// substring of the carrier by construction, and containment is checked on
-// the bytes anyway; if either fails, the reference is emitted in full. A
-// reference pinned at a different blob than the inlined carrier carries
-// different text and is never elided.
+// Duplicate direct references are emitted once, identified by the text they
+// render rather than by the blob they were pinned at. A direct reference whose
+// section is already present in a carrier inlined in full at the same path is
+// also emitted once — as a one-line pointer to that carrier rather than a
+// second copy of the section. Containment is checked on the bytes, so a
+// reference pinned at an older revision of a file edited elsewhere still
+// elides; if the section is not present, the reference is emitted in full.
 //
 // References declared by a carrier with ElideRefs set are pointers: to the
 // carrier that inlines the same reference in full when one does, otherwise
@@ -85,9 +86,12 @@ func RenderCarriers(observations []Carrier) (string, error) {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	// Identity is the rendered section, not the file blob: freshness admits a
+	// reference whose section is unchanged while the rest of its file moved
+	// (ADR-0133), so blob equality would miss real duplicates.
 	containedIn := func(ref Reference) bool {
 		inlined, ok := winners[ref.Path]
-		return ok && inlined.BlobOID == ref.BlobOID && strings.Contains(inlined.Span, ref.Span)
+		return ok && strings.Contains(inlined.Span, ref.Span)
 	}
 	// Which carrier emits each reference in full, decided before rendering so
 	// an elided carrier that sorts earlier can point at it.
@@ -155,6 +159,9 @@ func RenderCarriers(observations []Carrier) (string, error) {
 	return strings.TrimRight(out.String(), "\n"), nil
 }
 
+// refKey identifies a reference by what it renders. Two carriers citing the
+// same section pinned at different revisions emit it once; a genuinely
+// different section text under the same heading still emits separately.
 func refKey(ref Reference) string {
-	return ref.Path + "\x00" + ref.Heading + "\x00" + ref.BlobOID
+	return ref.Path + "\x00" + ref.Heading + "\x00" + ref.Span
 }
