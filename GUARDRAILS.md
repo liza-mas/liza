@@ -72,7 +72,7 @@ Operational lessons from project experience. Read when a trigger matches.
 | Running `go build` or `go test` in a Liza worktree | [worktree-build-prerequisites.md](lessons/agents/worktree-build-prerequisites.md) |
 | When reading Go test files (`*_test.go`) | [large-test-file-reads.md](lessons/agents/large-test-file-reads.md) |
 | Piping or redirecting stdin through an RTK-wrapped tool | [rtk-proxy-for-stdin-tools.md](lessons/agents/rtk-proxy-for-stdin-tools.md) |
-| When a long RTK-wrapped foreground validation returns a session ID but no incremental output | [rtk-buffered-long-validation.md](lessons/agents/rtk-buffered-long-validation.md) |
+| Before backgrounding any validation, or when a long RTK-wrapped foreground validation returns a session ID but no incremental output | [rtk-buffered-long-validation.md](lessons/agents/rtk-buffered-long-validation.md) |
 
 ### G2.2: Contract and prompt conciseness
 
