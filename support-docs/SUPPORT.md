@@ -46,6 +46,12 @@ a stale authoritative reference.
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```
 
+If every mutation fails with `lease_expires without assigned_to: <task-id>`,
+that task carries half an ownership tuple written by an older binary. Global
+post-mutation validation means no command can repair it — each one is refused
+by the record it would fix. Run `§BRAND_BINARY_NAME§ migrate` to clear the
+stranded lease, then retry.
+
 If a write fails because a legacy `goal.alignment_history[].summary` exceeds
 the 4096-byte state text limit, run `§BRAND_BINARY_NAME§ migrate`, then retry.
 Migration replaces oversized summaries with a bounded scrub notice while

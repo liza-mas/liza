@@ -484,3 +484,54 @@ func TestMigrateCommand_InvalidStatePath(t *testing.T) {
 		t.Error("MigrateCommand() error = nil, want error for nonexistent file")
 	}
 }
+
+// A rejection that landed while its doer was already gone used to renew a lease
+// on an unassigned task. The surviving half-tuple fails validation, and because
+// post-mutation validation is global it blocks every later mutation — including
+// the repairs that would clear it — so migration is where it gets normalized.
+func TestMigrateCommand_ClearsLeaseWithoutAssignee(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	dangling := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	dangling.AssignedTo = nil
+	stale := now.Add(-time.Hour)
+	dangling.LeaseExpires = &stale
+	owner := "coder-1"
+	owned := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now)
+	owned.AssignedTo = &owner
+	ownedLease := now.Add(time.Hour)
+	owned.LeaseExpires = &ownedLease
+	state.Tasks = []models.Task{dangling, owned}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	changed, err := MigrateCommand(statePath)
+	if err != nil {
+		t.Fatalf("MigrateCommand() error = %v", err)
+	}
+	if !changed {
+		t.Fatal("MigrateCommand() changed = false, want true")
+	}
+
+	bb := db.New(statePath)
+	updated, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read migrated state: %v", err)
+	}
+	if lease := updated.FindTask("task-1").LeaseExpires; lease != nil {
+		t.Errorf("unassigned task kept lease_expires = %v, want nil", lease)
+	}
+	if lease := updated.FindTask("task-2").LeaseExpires; lease == nil {
+		t.Error("owned task lost its lease")
+	}
+
+	again, err := MigrateCommand(statePath)
+	if err != nil {
+		t.Fatalf("second MigrateCommand() error = %v", err)
+	}
+	if again {
+		t.Error("second MigrateCommand() changed = true, want idempotent")
+	}
+}
