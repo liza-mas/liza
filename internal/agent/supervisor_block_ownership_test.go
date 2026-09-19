@@ -86,3 +86,28 @@ func TestSupervisorBlockReleasesAllTaskOwners(t *testing.T) {
 		})
 	}
 }
+
+// A reviewer holds a review claim, not a doer claim, so claimedTaskID is empty
+// for it. Before this guard existed, a prompt-context build failure on the
+// reviewer path escaped the supervisor loop and ended the session; auto-repair
+// then respawned into the identical failure instead of leaving a BLOCKED task
+// carrying the reason.
+func TestPromptFailureBlockTarget(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		strategy      RoleStrategy
+		claimedTaskID string
+		taskID        string
+		want          string
+	}{
+		{name: "doer reports its own claim", strategy: &doerStrategy{}, claimedTaskID: "task-1", taskID: "task-1", want: "task-1"},
+		{name: "reviewer falls back to the task under review", strategy: &reviewerStrategy{}, claimedTaskID: "", taskID: "task-2", want: "task-2"},
+		{name: "orchestrator has no task to block", strategy: &orchestratorStrategy{}, claimedTaskID: "", taskID: "", want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := promptFailureBlockTarget(tc.strategy, tc.claimedTaskID, tc.taskID); got != tc.want {
+				t.Fatalf("promptFailureBlockTarget() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

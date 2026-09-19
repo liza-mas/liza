@@ -322,6 +322,27 @@ func isReviewingStatus(task *models.Task, pr models.PipelineResolver) bool {
 	return err == nil && task.Status == reviewing
 }
 
+// promptFailureBlockTarget names the task a prompt-context build failure must
+// block. Doers report the task they claimed; reviewers hold a review claim
+// rather than a doer claim, so claimedTaskID is empty for them and the task
+// under review is the target. Without a target the failure escapes the
+// supervisor loop and ends the session, and auto-repair respawns into the same
+// failure instead of surfacing a BLOCKED task carrying the reason.
+//
+// This currently equals effectiveTask for all three strategies, and the
+// narrowing is deliberate: blocking is an ownership-bearing write, so a future
+// strategy that reports a taskID it does not own must opt in here rather than
+// inherit the fallback.
+func promptFailureBlockTarget(strategy RoleStrategy, claimedTaskID, taskID string) string {
+	if claimedTaskID != "" {
+		return claimedTaskID
+	}
+	if _, isReviewer := strategy.(*reviewerStrategy); isReviewer {
+		return taskID
+	}
+	return ""
+}
+
 // blockTaskFromSupervisor marks a task as BLOCKED and releases the assignment.
 func blockTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, authority models.AgentAuthority, reason string) error {
 	agentID := authority.ID
@@ -960,14 +981,19 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		prompt, err := strategy.BuildPrompt(stateBefore, config, taskID)
 		if err != nil {
-			if claimedTaskID != "" && errors.Is(err, precommit.ErrContextBuild) {
+			// Reviewers hold a review claim, not a doer claim, so claimedTaskID
+			// is empty for them. Without this the failure escapes the loop and
+			// kills the supervisor, and auto-repair respawns into the same
+			// failure instead of surfacing a BLOCKED task with its reason.
+			blockTarget := promptFailureBlockTarget(strategy, claimedTaskID, taskID)
+			if blockTarget != "" && errors.Is(err, precommit.ErrContextBuild) {
 				reason := fmt.Sprintf("prompt context build failed: %v", err)
 				GetLogger().Warn("Task blocked due to prompt-context build failure",
 					"agent_id", config.AgentID,
-					"task_id", claimedTaskID,
+					"task_id", blockTarget,
 					"error", err)
-				if blockErr := blockTaskFromSupervisor(bb, config.ProjectRoot, claimedTaskID, config.Authority, reason); blockErr != nil {
-					GetLogger().Warn("Failed to block task from supervisor", "error", blockErr, "task_id", claimedTaskID)
+				if blockErr := blockTaskFromSupervisor(bb, config.ProjectRoot, blockTarget, config.Authority, reason); blockErr != nil {
+					GetLogger().Warn("Failed to block task from supervisor", "error", blockErr, "task_id", blockTarget)
 				}
 				spinTracker.reset(effectiveTask)
 				continue
