@@ -137,6 +137,32 @@ To find the actual state names for a role-pair, check `role-pairs.<name>.states`
 
 Supervisors automatically block a still-owned executing task when the child provider process makes no observable progress for `config.agent_progress_timeout` seconds. Observable progress is task state movement, worktree HEAD/status movement including untracked files, or provider stdout/stderr output. This prevents a stale `WORKING` agent from holding a task indefinitely when its provider process stalls. The watchdog cancels the provider and waits for it to exit before cleaning the worktree.
 
+### Reading a STALLED alert
+
+`⚠️ STALLED: no task progress for N minutes` names which of two situations it
+found, because they need opposite responses:
+
+- `… claims are being refused, not unstaffed` — there is claimable work *and*
+  live idle agents for that role, so a claim precondition is failing. The reason
+  is in the supervisor logs, not in state: `grep "Claim attempt failed"
+  §BRAND_PROJECT_DIRNAME§/agent-outputs/supervisor-<role>-*.stdout.log`. Typical
+  causes are acceptance-source refusals and dependency or ownership
+  preconditions. Spawning more agents will not help.
+- `… no live agent for that role` — the work is unstaffed. Restore capacity
+  (auto-repair, or `§BRAND_BINARY_NAME§ agent <role> --cli <cli>`).
+- `… N task(s) held (read blocked_reason)` — `BLOCKED`, not a dependency wait.
+  Read the reason (`§BRAND_BINARY_NAME§ get tasks`, or `blocked_reason` in
+  state) and intervene; the orchestrator owns repairable blocks, but one it
+  cannot clear stays. An `INTEGRATION_FAILED` task is not counted here: it stays
+  claimable through the integration-fix path, so it appears as refused or
+  unstaffed above.
+- `… N task(s) waiting on dependencies` — the run is waiting on its own graph,
+  not stuck.
+
+`§BRAND_BINARY_NAME§ validate`, `analyze` and `get anomalies` all stayed green
+through the 5h40m refusal stall on 2026-09-20; none of them surfaced it. The
+alert is the signal that distinguishes a waiting run from a stopped one.
+
 ## Sprint Lifecycle
 
 ```

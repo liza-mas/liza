@@ -21,6 +21,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -3766,4 +3767,176 @@ func TestParseAlertLine_Malformed(t *testing.T) {
 			t.Errorf("ParseAlertLine(%q) should return false", line)
 		}
 	}
+}
+
+// A stall alert has to say which of the two situations it is: work nobody can
+// claim, or work live agents are refusing. They need opposite responses, and
+// the bare message reads identically for both.
+func TestCheckStalled_DiagnosesRefusedVersusUnstaffed(t *testing.T) {
+	now := time.Now().UTC()
+	resolver := stallDiagnosisResolver()
+
+	staleTask := func() models.Task {
+		return models.Task{
+			ID:       "t1",
+			Status:   models.TaskStatusReady,
+			RolePair: "coding-pair",
+			History: []models.TaskHistoryEntry{{
+				Time:  now.Add(-31 * time.Minute),
+				Event: "created",
+			}},
+		}
+	}
+	liveIdle := func(role string) models.Agent {
+		lease := now.Add(time.Hour)
+		return models.Agent{Role: role, Status: models.AgentStatusIdle, Heartbeat: now, LeaseExpires: &lease}
+	}
+
+	tests := []struct {
+		name     string
+		state    *models.State
+		wantPart string
+		notPart  string
+	}{
+		{
+			name: "claimable work with idle agents is a refusal",
+			state: &models.State{
+				Tasks:  []models.Task{staleTask()},
+				Agents: map[string]models.Agent{"coder-1": liveIdle("coder")},
+			},
+			wantPart: "claims are being refused",
+		},
+		{
+			name: "claimable work with no agent is unstaffed",
+			state: &models.State{
+				Tasks:  []models.Task{staleTask()},
+				Agents: map[string]models.Agent{},
+			},
+			wantPart: "no live agent for that role",
+			notPart:  "refused",
+		},
+		{
+			name: "a BLOCKED task is not dependency waiting",
+			state: &models.State{
+				Tasks: []models.Task{{
+					ID:       "t1",
+					Status:   models.TaskStatusBlocked,
+					RolePair: "coding-pair",
+					History: []models.TaskHistoryEntry{{
+						Time:  now.Add(-31 * time.Minute),
+						Event: "blocked",
+					}},
+				}},
+				Agents: map[string]models.Agent{},
+			},
+			wantPart: "1 task(s) held (read blocked_reason)",
+			notPart:  "waiting on dependencies",
+		},
+		{
+			name: "a dependency-held task reports as waiting",
+			state: &models.State{
+				Tasks: []models.Task{
+					{
+						ID:       "dep",
+						Status:   models.TaskStatusImplementing,
+						RolePair: "coding-pair",
+						History: []models.TaskHistoryEntry{{
+							Time:  now.Add(-31 * time.Minute),
+							Event: "claimed",
+						}},
+					},
+					{
+						ID:        "t1",
+						Status:    models.TaskStatusReady,
+						RolePair:  "coding-pair",
+						DependsOn: []string{"dep"},
+					},
+				},
+				Agents: map[string]models.Agent{},
+			},
+			wantPart: "waiting on dependencies",
+			notPart:  "held (read blocked_reason)",
+		},
+		{
+			name: "an INTEGRATION_FAILED task stays claimable, not held",
+			state: &models.State{
+				Tasks: []models.Task{{
+					ID:       "t1",
+					Status:   models.TaskStatusIntegrationFailed,
+					RolePair: "coding-pair",
+					History: []models.TaskHistoryEntry{{
+						Time:  now.Add(-31 * time.Minute),
+						Event: "integration_failed",
+					}},
+				}},
+				Agents: map[string]models.Agent{},
+			},
+			wantPart: "no live agent for that role",
+			notPart:  "held (read blocked_reason)",
+		},
+		{
+			name: "refused and unstaffed roles are reported together",
+			state: &models.State{
+				Tasks: []models.Task{
+					{
+						ID:       "t1",
+						Status:   models.TaskStatusReady,
+						RolePair: "coding-pair",
+						History: []models.TaskHistoryEntry{{
+							Time:  now.Add(-31 * time.Minute),
+							Event: "created",
+						}},
+					},
+					{
+						ID:           "t2",
+						Status:       models.TaskStatusReadyForReview,
+						RolePair:     "coding-pair",
+						ReviewCommit: testhelpers.StringPtr("abc123"),
+					},
+				},
+				Agents: map[string]models.Agent{"coder-1": liveIdle("coder")},
+			},
+			wantPart: "claims refused",
+		},
+		{
+			name: "a working agent is not idle capacity",
+			state: &models.State{
+				Tasks:  []models.Task{staleTask()},
+				Agents: map[string]models.Agent{"coder-1": {Role: "coder", Status: models.AgentStatusWorking, Heartbeat: now}},
+			},
+			wantPart: "no live agent for that role",
+			notPart:  "refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			alerts := checkStalled(tt.state, map[string]time.Time{}, resolver)
+			if len(alerts) != 1 {
+				t.Fatalf("alerts = %d, want 1", len(alerts))
+			}
+			if !strings.Contains(alerts[0].Message, "no task progress") {
+				t.Fatalf("message lost its subject: %q", alerts[0].Message)
+			}
+			if !strings.Contains(alerts[0].Message, tt.wantPart) {
+				t.Fatalf("message = %q, want it to contain %q", alerts[0].Message, tt.wantPart)
+			}
+			if tt.notPart != "" && strings.Contains(alerts[0].Message, tt.notPart) {
+				t.Fatalf("message = %q, must not contain %q", alerts[0].Message, tt.notPart)
+			}
+		})
+	}
+}
+
+func stallDiagnosisResolver() models.PipelineResolver {
+	return pipeline.NewResolver(&pipeline.PipelineConfig{Pipeline: pipeline.Pipeline{
+		Roles: map[string]pipeline.RoleDef{
+			"coder":         {Type: "doer"},
+			"code-reviewer": {Type: "reviewer"},
+		},
+		RolePairs: map[string]pipeline.RolePairDef{
+			"coding-pair": statusRolePair("coder", "code-reviewer",
+				"DRAFT_CODE", "IMPLEMENTING_CODE", "CODE_TO_REVIEW", "REVIEWING_CODE", "CODE_APPROVED", "CODE_REJECTED"),
+		},
+	}})
 }

@@ -259,7 +259,7 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 	registeredRoles := make(map[string]bool)
 	registeredAgentsByRole := make(map[string][]string)
 	now := time.Now().UTC()
-	nilLeaseHeartbeatWindow := models.NormalizeHeartbeatInterval(state.Config.HeartbeatInterval) + models.LeaseExpiryGracePeriod
+	nilLeaseHeartbeatWindow := agentLivenessWindow(state.Config)
 	for agentID, agentState := range state.Agents {
 		if agentHasLiveRegistration(agentState, now, nilLeaseHeartbeatWindow) {
 			if agentHealthIsCurrentDegraded(state.AgentHealth[agentID], agentState) {
@@ -334,7 +334,7 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 func findValidationAgentCapacity(state *models.State, pr models.PipelineResolver, roles []string) []ValidationAgentCapacity {
 	var result []ValidationAgentCapacity
 	now := time.Now().UTC()
-	window := models.NormalizeHeartbeatInterval(state.Config.HeartbeatInterval) + models.LeaseExpiryGracePeriod
+	window := agentLivenessWindow(state.Config)
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if len(task.ValidationPrerequisites) == 0 {
@@ -365,6 +365,14 @@ func findValidationAgentCapacity(state *models.State, pr models.PipelineResolver
 		return result[i].AgentID < result[j].AgentID
 	})
 	return result
+}
+
+// agentLivenessWindow is how long a registration without a lease stays live on
+// heartbeat alone. Shared so every reader of "is this agent live" — pool
+// repair and stall diagnosis — agrees by construction rather than by three
+// copies of the same expression.
+func agentLivenessWindow(config models.Config) time.Duration {
+	return models.NormalizeHeartbeatInterval(config.HeartbeatInterval) + models.LeaseExpiryGracePeriod
 }
 
 func agentHasLiveRegistration(agentState models.Agent, now time.Time, nilLeaseHeartbeatWindow time.Duration) bool {
