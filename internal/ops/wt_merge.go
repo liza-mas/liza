@@ -1239,6 +1239,19 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		warnings = append(warnings, fmt.Sprintf("failed to update sprint metrics: %v", err))
 	}
 
+	// Report obligation drift this merge introduced — non-fatal, and after the
+	// state commit on purpose. A merge is the only way the content an approved
+	// obligation rests on can move, and surfacing it must never be able to
+	// refuse the merge that surfaced it.
+	if drifted, err := RecordObligationContentDrift(bb, projectRoot, mergeCommit, agentID); err != nil {
+		warnings = append(warnings, fmt.Sprintf("failed to check obligation drift: %v", err))
+	} else {
+		for _, section := range drifted {
+			warnings = append(warnings, fmt.Sprintf(
+				"obligation content drifted since approval: %s — recorded for review", section))
+		}
+	}
+
 	return &MergeResult{
 		LifecycleOutcome:  lifecycleOutcome,
 		TaskID:            taskID,

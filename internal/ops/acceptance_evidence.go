@@ -294,7 +294,10 @@ func reviewedReferencesResolveAlike(root, reviewCommit, integrationCommit, path,
 	// — but it makes a re-pin that points an obligation at legitimately
 	// extended content indistinguishable from a substitution, and blocks the
 	// whole plan's children with no supported way to re-review a merged plan.
-	// That tension is real and unresolved; see D13.
+	// That tension is real, and the resolution is not to block here but to
+	// report: RecordObligationContentDrift runs at merge and records one
+	// reviewable anomaly per changed section. This boundary stays a gate for
+	// approved proofs only.
 	//
 	// What still observes obligation drift, precisely: reference_context.go
 	// compares a reference's section at its pinned revision against the same
@@ -303,7 +306,7 @@ func reviewedReferencesResolveAlike(root, reviewCommit, integrationCommit, path,
 	// different path or heading whose content agrees between its new pin and
 	// HEAD, because both sides of that comparison move together. Staleness is
 	// covered; substitution against an obligation with no asserted proof is
-	// not, and that is the half D13 leaves open.
+	// not caught here; the merge-time drift record surfaces it instead.
 	//
 	// An approved proof stays compared by content here, so the substitution
 	// this check exists to stop — repointing an approved reference at material
@@ -356,12 +359,40 @@ func carrierReferences(root, commit, path string) (*referencecontract.Contract, 
 // resolveDeclaredReference returns the section text a declared reference points
 // at, following its effective revision.
 func resolveDeclaredReference(root string, refs *referencecontract.Contract, referenceID string) (string, bool) {
+	return resolveDeclaredReferenceCached(nil, root, refs, referenceID)
+}
+
+// blobCache memoizes file content by revision and path within one pass. A nil
+// cache reads every time, which is what the acceptance boundary wants: it
+// resolves a handful of references and must not hold stale content across
+// calls. A caller comparing many references that cite the same file at the
+// same revision passes a cache and pays one read instead of one per reference.
+type blobCache map[string]string
+
+func (c blobCache) read(root, revision, path string) (string, bool) {
+	key := revision + "\x00" + path
+	if c != nil {
+		if content, ok := c[key]; ok {
+			return content, true
+		}
+	}
+	content, _, err := readAcceptanceBlob(root, revision, path)
+	if err != nil {
+		return "", false
+	}
+	if c != nil {
+		c[key] = content
+	}
+	return content, true
+}
+
+func resolveDeclaredReferenceCached(cache blobCache, root string, refs *referencecontract.Contract, referenceID string) (string, bool) {
 	for _, direct := range refs.DirectReferences {
 		if direct.ID != referenceID {
 			continue
 		}
-		content, _, err := readAcceptanceBlob(root, direct.EffectiveRevision(refs.SourceRevision), direct.Path)
-		if err != nil {
+		content, ok := cache.read(root, direct.EffectiveRevision(refs.SourceRevision), direct.Path)
+		if !ok {
 			return "", false
 		}
 		section, err := referencecontract.ExtractSection(strings.ReplaceAll(content, "\r\n", "\n"), direct.Heading)
@@ -392,13 +423,20 @@ func carrierSpanIdentity(content, heading string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	// sha1 here is a content address, not an integrity digest: it is what Git
-	// computes for these same bytes. The sha256 below, over canonical commands,
-	// is the integrity digest. Different jobs — do not unify them.
+	return spanObjectID(span), true
+}
+
+// spanObjectID is the Git object id of a section's bytes.
+//
+// sha1 here is a content address, not an integrity digest: it is what Git
+// computes for these same bytes, so `git hash-object` on the extracted section
+// reproduces it. The sha256 elsewhere in this file, over canonical commands, is
+// the integrity digest. Different jobs — do not unify them.
+func spanObjectID(span string) string {
 	hasher := sha1.New()
 	fmt.Fprintf(hasher, "blob %d\x00", len(span))
 	hasher.Write([]byte(span))
-	return hex.EncodeToString(hasher.Sum(nil)), true
+	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 // carrierSpan isolates the part of a carrier a reviewer's verdict covers: the

@@ -192,6 +192,13 @@ type SpecChange struct {
 	Extra       map[string]any `yaml:",inline"`
 }
 
+// AnomalyTypeObligationContentDrifted records that the content an approved
+// plan's obligation rests on is no longer what the reviewer saw. It is a
+// reviewable event, never a block: refusing here would strand every child of a
+// merged plan whose review boundary no command can move (ADR-0133 clause 4).
+// Detail validation is owned by statevalidate.
+const AnomalyTypeObligationContentDrifted = "obligation_content_drifted"
+
 // Anomaly represents an execution anomaly that may trigger circuit breaker
 type Anomaly struct {
 	Timestamp time.Time      `yaml:"timestamp"`
@@ -210,6 +217,7 @@ func (a *Anomaly) IsValidType() bool {
 		"spec_changed", "hypothesis_exhaustion", "spec_gap", "review_budget_exhausted",
 		"review_exhaustion", "reviewer_loop", "stale_verdict", "system_ambiguity",
 		"provider_audit_degraded", "agent_degraded", "submit_verdict_failed",
+		AnomalyTypeObligationContentDrifted,
 	}
 	return slices.Contains(validTypes, a.Type)
 }

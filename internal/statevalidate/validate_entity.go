@@ -2,6 +2,7 @@ package statevalidate
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -68,6 +69,19 @@ func validateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 		case "submit_verdict_failed":
 			if anomaly.Details["verdict"] == nil || anomaly.Details["error"] == nil {
 				return fmt.Errorf("submit_verdict_failed anomaly at index %d missing required details (verdict, error)", i)
+			}
+		case models.AnomalyTypeObligationContentDrifted:
+			// A reviewer re-reads the section this names, so the record must
+			// locate it and say whose obligations rest on it; without the
+			// identities there is nothing to compare against the approval.
+			// current_section must be present but may be empty: a dropped
+			// section has no current content to read, only the reviewed
+			// content the obligation no longer rests on.
+			missing := missingAnomalyDetails(anomaly, "path", "heading", "change",
+				"reviewed_section", "current_section", "carriers", "obligations")
+			if len(missing) > 0 {
+				return fmt.Errorf("%s anomaly at index %d missing required details (%s)",
+					models.AnomalyTypeObligationContentDrifted, i, strings.Join(missing, ", "))
 			}
 		}
 	}
@@ -144,4 +158,16 @@ func isPostSubmissionStatus(status models.TaskStatus) bool {
 		return true
 	}
 	return false
+}
+
+// missingAnomalyDetails lists the required detail fields absent from anomaly, in
+// the order given, so the error names what the writer failed to record.
+func missingAnomalyDetails(anomaly models.Anomaly, required ...string) []string {
+	var missing []string
+	for _, field := range required {
+		if anomaly.Details[field] == nil {
+			missing = append(missing, field)
+		}
+	}
+	return missing
 }

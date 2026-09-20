@@ -113,7 +113,24 @@ The normative decision is:
    integration HEAD, which catches a pin left behind while its target moved,
    but not a reference repointed at a different target that agrees with HEAD.
    Staleness is caught; substitution against an obligation asserting no proof
-   is not. An ambiguous or unresolvable heading refuses rather than
+   is not — so it is reported instead. A merge is the only way that content can
+   move, whether it edits a referenced section or a carrier's pins, so each
+   merge compares what every obligation-backing reference resolved to at the
+   review commit that authorized a child against what it resolves to at the
+   merge commit, and records one `obligation_content_drifted` anomaly per
+   changed section: keyed on the section, not the carrier, so one re-pin across
+   seven plans is one reviewable event naming all seven rather than seven
+   events. Comparison is per (section location, section content) pair through
+   the obligation, never by reference ID and never by content alone: an ID is a
+   name the carrier chose, so following it would miss a rename, while content
+   alone would let one reference's unchanged section answer for a sibling
+   redirected onto it. A re-pin and a retarget are distinguished by path and
+   heading alone, since a re-pin moves the revision by definition, and a
+   section the obligation rested on and no longer does is recorded as `dropped`
+   with an empty current section — suppressed only where the same location also
+   gained content, which is one re-pin rather than a loss and a gain. The record never refuses
+   anything — it is written after the merge commits, and acceptance keeps
+   comparing approved proofs exactly as before. An ambiguous or unresolvable heading refuses rather than
    falling back to whole-file scope. The adopted identity recorded for a child
    is the object id of that section, and every boundary that asks whether the
    reviewed source changed — allocation, candidate submission, reviewer
