@@ -413,6 +413,33 @@ func warningLines(text string) []string {
 	return warnings
 }
 
+var repairAcceptanceCommitsCmd = &cobra.Command{
+	Use:   "repair-acceptance-commits",
+	Short: "Restore acceptance evidence orphaned by an integration-branch rewrite",
+	Long: `Restore the acceptance evidence of merged planning parents whose commits were
+rewritten out of the integration branch, typically by a rebase performed after
+those parents had merged.
+
+Each orphaned commit is replaced by the commit on the integration branch whose
+diff is identical (matched by patch id). Replacements are derived internally;
+this command takes no commit arguments, because accepting one would let any
+commit be declared reviewed. A parent is repaired only when every one of its
+commits has an identical replacement; anything else is skipped with a reason.
+
+Use --dry-run to audit the mapping before writing it.`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		projectRoot, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		statePath := filepath.Join(projectRoot, paths.ProjectDirName(), paths.StateFileName)
+		integration, _ := cmd.Flags().GetString("integration")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		return commands.RepairAcceptanceCommitsCommand(projectRoot, statePath, integration, dryRun)
+	},
+}
+
 var migrateCmd = &cobra.Command{
 	Use:   "migrate [state-file]",
 	Short: "Normalize legacy state.yaml fields",
@@ -624,6 +651,9 @@ func init() {
 	rootCmd.AddCommand(providersCmd)
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(migrateCmd)
+	repairAcceptanceCommitsCmd.Flags().String("integration", "", "integration branch whose history is authoritative (default: the run's integration branch)")
+	repairAcceptanceCommitsCmd.Flags().Bool("dry-run", false, "derive and print the mapping without writing it")
+	rootCmd.AddCommand(repairAcceptanceCommitsCmd)
 	providersCmd.AddCommand(providersListCmd)
 	providersCmd.AddCommand(providersDetectCmd)
 	providersCmd.AddCommand(providersRefreshCmd)

@@ -42,9 +42,21 @@ a stale authoritative reference.
 §BRAND_BINARY_NAME§ release-claim <task-id>       # Granular: release claim only
 §BRAND_BINARY_NAME§ clear-stale-review-claims     # Clear all expired review leases
 §BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason <reason> # Repair illegal terminal dependency edges
+§BRAND_BINARY_NAME§ repair-acceptance-commits [--dry-run] # Restore evidence orphaned by an integration-branch rewrite
 §BRAND_BINARY_NAME§ delete agent <id>             # Remove agent from state
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```
+
+If code tasks refuse to claim with `acceptance.source: requires allocation by a
+direct independently approved merged planning parent`, the integration branch
+was rewritten (typically rebased) after those parents merged, so the commits
+their evidence names are no longer ancestors of it. `§BRAND_BINARY_NAME§
+repair-acceptance-commits --dry-run` shows the parents affected and, for each
+orphaned commit, the commit on the integration branch with the identical diff;
+run it without `--dry-run` to write that mapping. It derives replacements by
+content identity and takes no commit arguments, refusing any parent whose
+commits lack an identical replacement. Prevent the cause instead: once anything
+has merged, merge into the integration branch rather than rebasing it.
 
 If every mutation fails with `lease_expires without assigned_to: <task-id>`,
 that task carries half an ownership tuple written by an older binary. Global
