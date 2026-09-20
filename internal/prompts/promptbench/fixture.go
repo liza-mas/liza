@@ -219,6 +219,15 @@ func GenerateCarriers(shape Shape) []referencecontract.Carrier {
 			Span:     strings.Replace(sec.text, "generated filler", "earlier revision", 1),
 		})
 	}
+	// One carrier is the artifact the task was assigned a section of, as a
+	// coder's plan is: the compositor narrows it to that section plus what it
+	// shares with the rest of the file, and renders its peers as pointers.
+	// The assignment goes on the reference source rather than the reference
+	// target so that narrowing does not move the duplicate-reference
+	// calibration as a side effect.
+	if assigned := sections[source]; len(assigned) > 0 {
+		carriers[source].AssignedHeading = assigned[len(assigned)/2].heading
+	}
 	carriers = append(carriers, generateAncestorCarriers(shape)...)
 	return carriers
 }
@@ -265,8 +274,10 @@ func GenerateResolvedReferenceContext(shape Shape) string {
 	return `The compositor resolved and freshness-checked the strict carrier content and its
 declared direct references before launch. Treat this bounded context as inherited
 authority. Do not re-read or replace its pinned source paths with worktree content.
-A reference marked "not inlined" was declared by an ancestor carrier; read it with
-the git show command on its line only if your task needs it.
+A reference marked "not inlined" was declared by an ancestor carrier, and a
+section marked "peer of your assigned section" belongs to a sibling task of an
+artifact you were assigned one section of; read either with the git show command
+on its line only if your task needs it.
 Read outside it only for evidence owned by your stage or an unresolved dependency
 that the assigned context identifies.
 

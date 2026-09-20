@@ -59,6 +59,7 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 	// anyway, so the scalar route is the fallback for a parent that is not
 	// merged or has no reviewed range.
 	assignedIndex, assignedRank := -1, -1
+	assignedHeading := ""
 	for _, scalar := range []struct {
 		field string
 		ref   string
@@ -84,6 +85,7 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 			observation.ElideRefs = true
 			if scalar.rank > assignedRank {
 				assignedIndex, assignedRank = len(observations), scalar.rank
+				assignedHeading = paths.SplitRefFragment(scalar.ref)
 			}
 			observations = append(observations, observation)
 			continue
@@ -137,6 +139,18 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 			return "", nil, discoverErr
 		}
 		observations = append(observations, found...)
+	}
+
+	// The assigned ref's fragment narrows whichever observation of that path
+	// wins: a parent range that rediscovers the same artifact would otherwise
+	// inline the whole file and drop the section the task was pointed at.
+	if assignedIndex >= 0 && assignedHeading != "" {
+		assignedPath := observations[assignedIndex].Path
+		for index := range observations {
+			if observations[index].Path == assignedPath {
+				observations[index].AssignedHeading = assignedHeading
+			}
+		}
 	}
 
 	context, err := referencecontract.RenderCarriers(observations)

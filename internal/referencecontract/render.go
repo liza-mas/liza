@@ -24,14 +24,19 @@ const (
 // task's assigned artifacts: its declared references are rendered as one-line
 // pointers rather than spans. The zero value renders every reference in full,
 // so a caller that does not classify carriers gets the complete context.
+//
+// AssignedHeading is the section of this carrier the task was assigned, when
+// its ref declared one. It narrows the span by eliding that section's peers,
+// never the context they share. Empty renders the span whole.
 type Carrier struct {
-	Path      string
-	Span      string
-	Revision  string
-	Class     CarrierClass
-	BlobOID   string
-	Refs      []Reference
-	ElideRefs bool
+	Path            string
+	Span            string
+	Revision        string
+	Class           CarrierClass
+	BlobOID         string
+	Refs            []Reference
+	ElideRefs       bool
+	AssignedHeading string
 }
 
 // Reference is one resolved direct reference: a section of a pinned file.
@@ -55,6 +60,12 @@ type Reference struct {
 // second copy of the section. Containment is checked on the bytes, so a
 // reference pinned at an older revision of a file edited elsewhere still
 // elides; if the section is not present, the reference is emitted in full.
+//
+// A carrier naming an AssignedHeading renders that section and everything it
+// shares with the rest of the file, and one pointer line per peer section.
+// Narrowing happens before duplicate detection, so a reference whose text
+// survived only inside an elided peer is emitted in full rather than pointing
+// at a section no longer present.
 //
 // References declared by a carrier with ElideRefs set are pointers: to the
 // carrier that inlines the same reference in full when one does, otherwise
@@ -80,6 +91,13 @@ func RenderCarriers(observations []Carrier) (string, error) {
 			continue
 		}
 		winners[observation.Path] = observation
+	}
+	for path, carrier := range winners {
+		if carrier.AssignedHeading == "" {
+			continue
+		}
+		carrier.Span = elideAssignedPeers(carrier)
+		winners[path] = carrier
 	}
 	paths := make([]string, 0, len(winners))
 	for path := range winners {
@@ -143,10 +161,8 @@ func RenderCarriers(observations []Carrier) (string, error) {
 					continue
 				}
 				seenRefs[key] = true
-				// Quoted so the command survives a verbatim paste when the
-				// path contains spaces.
 				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — not inlined; read with git show %s if needed\n",
-					target, ref.Revision, strconv.Quote(ref.Revision+":"+ref.Path))
+					target, ref.Revision, shellQuote(ref.Revision+":"+ref.Path))
 				continue
 			}
 			seenRefs[key] = true
@@ -157,6 +173,37 @@ func RenderCarriers(observations []Carrier) (string, error) {
 		}
 	}
 	return strings.TrimRight(out.String(), "\n"), nil
+}
+
+// elideAssignedPeers replaces each peer of the carrier's assigned section with
+// a pointer naming where to read it. The pointer carries the carrier's own
+// revision, so the agent reads the same content the peer's owner was given.
+func elideAssignedPeers(carrier Carrier) string {
+	peers := peerSections(carrier.Span, carrier.AssignedHeading)
+	if len(peers) == 0 {
+		return carrier.Span
+	}
+	var out strings.Builder
+	cursor := 0
+	for _, peer := range peers {
+		out.WriteString(carrier.Span[cursor:peer.start])
+		fmt.Fprintf(&out, "SECTION %s @ %s — peer of your assigned section; not inlined; read with git show %s if needed\n",
+			strconv.Quote(carrier.Path+"#"+peer.heading), carrier.Revision,
+			shellQuote(carrier.Revision+":"+carrier.Path))
+		cursor = peer.end
+	}
+	out.WriteString(carrier.Span[cursor:])
+	return out.String()
+}
+
+// shellQuote renders a Git object argument the agent can paste verbatim.
+// POSIX single quotes, because a path is only checked for separators, control
+// characters and a .md extension: "$(cmd).md" and "`cmd`.md" are accepted
+// names, and inside double quotes a pasted command would run them. Single
+// quotes expand nothing, so every accepted name stays literal; an embedded
+// apostrophe closes and reopens the quoting around an escaped one.
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 // refKey identifies a reference by what it renders. Two carriers citing the

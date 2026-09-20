@@ -76,9 +76,18 @@ The normative decision is:
    freshness checks before precedence is applied. Per path, current-review
    content precedes parent content, which precedes scalar content; precedence
    selects rendered local content but never suppresses validation of another
-   observation. Conflicting same-class provenance blocks; differing eligible
-   parent blobs are defensively rejected even though HEAD adoption makes that
-   state unreachable. Declared inherited references are read at their default or
+   observation, and never widens its scope: where a strict scalar fragment
+   assigned a section of that path, the winning observation renders that
+   section and everything it shares with the rest of the file, while the
+   section's peers — same heading level, same enclosing heading — render as
+   one-line pointers to the carrier's own revision. A parent range that
+   rediscovers the assigned artifact therefore stops inlining every sibling
+   task's section, and an assignment that does not resolve to exactly one
+   eligible heading narrows nothing, because narrowing on a guess would drop
+   the design and analysis a task reads outside its own section. Conflicting
+   same-class provenance blocks; differing eligible parent blobs are
+   defensively rejected even though HEAD adoption makes that state
+   unreachable. Declared inherited references are read at their default or
    override revisions and their referenced section must be unchanged at captured
    HEAD; whole-path blob identity is the fast path, and an unrelated edit
    elsewhere in that file does not make the reference stale. A current-review

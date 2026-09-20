@@ -159,7 +159,7 @@ func TestRenderCarriersElidedReferenceIsPointerToRevision(t *testing.T) {
 	if strings.Contains(out, "GOAL-SCOPE-TEXT") {
 		t.Fatalf("elided reference span rendered:\n%s", out)
 	}
-	want := `DIRECT REFERENCE "specs/goal.md#Scope" @ pinned — not inlined; read with git show "pinned:specs/goal.md" if needed`
+	want := `DIRECT REFERENCE "specs/goal.md#Scope" @ pinned — not inlined; read with git show 'pinned:specs/goal.md' if needed`
 	if !strings.Contains(out, want) {
 		t.Fatalf("missing pointer %q in:\n%s", want, out)
 	}
@@ -209,7 +209,7 @@ func TestRenderCarriersDifferentBlobsAreDistinctReferences(t *testing.T) {
 	if strings.Contains(out, "OLD-SCOPE-TEXT") {
 		t.Fatalf("elided older revision rendered in full:\n%s", out)
 	}
-	if !strings.Contains(out, `"specs/goal.md#Scope" @ older — not inlined; read with git show "older:specs/goal.md"`) {
+	if !strings.Contains(out, `"specs/goal.md#Scope" @ older — not inlined; read with git show 'older:specs/goal.md'`) {
 		t.Fatalf("older revision should be a revision pointer:\n%s", out)
 	}
 	if strings.Count(out, "NEW-SCOPE-TEXT") != 1 {
@@ -266,7 +266,7 @@ func TestRenderCarriersAncestorElisionIsMeasured(t *testing.T) {
 	var want int
 	for _, r := range refs {
 		header := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned`) + 1
-		pointer := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned — not inlined; read with git show "pinned:specs/goal.md" if needed`) + 1
+		pointer := len(`DIRECT REFERENCE "specs/goal.md#`+r.Heading+`" @ pinned — not inlined; read with git show 'pinned:specs/goal.md' if needed`) + 1
 		want += header + len(r.Span) - pointer
 	}
 	if saved := len(before) - len(after); saved != want {
@@ -274,5 +274,154 @@ func TestRenderCarriersAncestorElisionIsMeasured(t *testing.T) {
 	}
 	if !strings.HasSuffix(after, "CARRIER \"specs/plan.md\" @ review\nplan body") {
 		t.Errorf("non-elided tail changed:\n%s", after)
+	}
+}
+
+// A plan carrier: shared analysis and design sections, then one section per
+// task. Task 2 is the assigned one; Task 1 and Task 3 are its peers.
+const renderPlanBody = `# Code Plan
+
+## Root Cause Analysis
+
+### a. Evidence
+evidence text
+
+## Design
+
+### Payload parity (Tasks 2-3)
+design text the assigned task needs
+
+## Tasks
+
+### Task 1: first
+first body
+
+### Task 2: second
+second body
+
+### Task 3: third
+third body
+
+## Out of Scope
+scope text
+`
+
+// The whole plan arrives through a merged parent's reviewed range, but the
+// task was pointed at one section of it. Its peers become pointers; the
+// analysis and design sections they share stay inlined, because a task's
+// design context lives outside its own section.
+func TestRenderCarriersElidesPeersOfAssignedSection(t *testing.T) {
+	t.Parallel()
+
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/plan.md", Span: renderPlanBody, Revision: "head", Class: CarrierParent,
+			BlobOID: "blob-plan", AssignedHeading: "Task 2: second"},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+
+	for _, kept := range []string{"second body", "evidence text", "design text the assigned task needs", "scope text"} {
+		if !strings.Contains(out, kept) {
+			t.Errorf("elision dropped %q, which is not a peer of the assigned section:\n%s", kept, out)
+		}
+	}
+	for _, elided := range []string{"first body", "third body"} {
+		if strings.Contains(out, elided) {
+			t.Errorf("peer section %q was still inlined:\n%s", elided, out)
+		}
+	}
+	pointer := `SECTION "specs/plan.md#Task 1: first" @ head — peer of your assigned section; not inlined; read with git show 'head:specs/plan.md' if needed`
+	if !strings.Contains(out, pointer) {
+		t.Errorf("elided peer lost its pointer line; the section must stay discoverable:\n%s", out)
+	}
+}
+
+// Without an assigned heading there is nothing to narrow against, so the
+// carrier renders exactly as it did before assignment was plumbed through.
+func TestRenderCarriersKeepsWholeSpanWithoutAssignedHeading(t *testing.T) {
+	t.Parallel()
+
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/plan.md", Span: renderPlanBody, Revision: "head", Class: CarrierParent, BlobOID: "blob-plan"},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if !strings.Contains(out, "first body") || !strings.Contains(out, "third body") {
+		t.Errorf("carrier was narrowed without an assigned heading:\n%s", out)
+	}
+}
+
+// Narrowing on a heading that does not resolve uniquely would drop sections
+// the task needs, so an unresolvable assignment renders the carrier whole.
+func TestRenderCarriersKeepsWholeSpanWhenAssignedHeadingMissing(t *testing.T) {
+	t.Parallel()
+
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/plan.md", Span: renderPlanBody, Revision: "head", Class: CarrierParent,
+			BlobOID: "blob-plan", AssignedHeading: "Task 9: renamed away"},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if !strings.Contains(out, "first body") || !strings.Contains(out, "third body") {
+		t.Errorf("carrier was narrowed against a heading it does not contain:\n%s", out)
+	}
+}
+
+// Duplicate detection runs on the narrowed span. A reference whose text
+// survived only inside an elided peer is no longer present in this context,
+// so it must be emitted in full rather than pointing at a missing section.
+func TestRenderCarriersEmitsReferenceLostToElidedPeer(t *testing.T) {
+	t.Parallel()
+
+	peerSpan := "### Task 3: third\nthird body\n"
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/plan.md", Span: renderPlanBody, Revision: "head", Class: CarrierParent,
+			BlobOID: "blob-plan", AssignedHeading: "Task 2: second"},
+		{Path: "specs/other.md", Span: "other body\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-other",
+			Refs: []Reference{{Path: "specs/plan.md", Heading: "Task 3: third", Revision: "head", BlobOID: "blob-plan", Span: peerSpan}}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if !strings.Contains(out, "third body") {
+		t.Errorf("reference into an elided peer was dropped instead of emitted in full:\n%s", out)
+	}
+	if strings.Contains(out, `DIRECT REFERENCE "specs/plan.md#Task 3: third" @ head — inlined in this context`) {
+		t.Errorf("reference points at a section this context no longer inlines:\n%s", out)
+	}
+}
+
+// A carrier path is checked for separators, control characters and a .md
+// extension — not for shell metacharacters. Both pointer lines name a Git
+// object the agent is told to read, so an accepted name like "$(id).md" must
+// arrive at the shell as text rather than as a command to run.
+func TestRenderCarriersQuotesGeneratedGitCommands(t *testing.T) {
+	t.Parallel()
+
+	hostile := "specs/$(id)`whoami`it's.md"
+	out, err := RenderCarriers([]Carrier{
+		{Path: hostile, Span: renderPlanBody, Revision: "head", Class: CarrierParent,
+			BlobOID: "blob-plan", AssignedHeading: "Task 2: second"},
+		{Path: "specs/other.md", Span: "other body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-other",
+			ElideRefs: true,
+			Refs:      []Reference{{Path: hostile, Heading: "Absent", Revision: "pinned", BlobOID: "blob-x", Span: "## Absent\nabsent\n"}}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+
+	for _, want := range []string{
+		`git show 'head:specs/$(id)` + "`whoami`" + `it'\''s.md' if needed`,
+		`git show 'pinned:specs/$(id)` + "`whoami`" + `it'\''s.md' if needed`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("generated command is not single-quoted; want %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, `git show "`) {
+		t.Errorf("a git show argument is double-quoted, leaving $() and backticks active:\n%s", out)
 	}
 }

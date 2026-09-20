@@ -591,7 +591,7 @@ func TestResolvedReferenceContextAncestorReferencesArePointers(t *testing.T) {
 	if strings.Contains(context, "GOAL-SCOPE-TEXT") {
 		t.Errorf("ancestor reference rendered in full:\n%s", context)
 	}
-	pointer := `DIRECT REFERENCE "specs/goal.md#Scope" @ ` + sourceRevision + ` — not inlined; read with git show "` + sourceRevision + `:specs/goal.md" if needed`
+	pointer := `DIRECT REFERENCE "specs/goal.md#Scope" @ ` + sourceRevision + ` — not inlined; read with git show '` + sourceRevision + `:specs/goal.md' if needed`
 	if count := strings.Count(context, pointer); count != 1 {
 		t.Errorf("ancestor pointer rendered %d times, want once:\n%s", count, context)
 	}
@@ -859,4 +859,70 @@ func (r *countingReferenceRepository) TreePathMode(treeish, path string) (string
 		return "100644", true, nil
 	}
 	return "", false, nil
+}
+
+// A coder's plan arrives twice: as the fragment its plan_ref names, and whole
+// through the merged planner's reviewed range. The parent observation wins the
+// path, so without the assignment the fragment is lost and every sibling
+// task's section is inlined. The assignment narrows the winner to the section
+// the task was pointed at plus the analysis and design it shares.
+func TestResolvedReferenceContextParentCarrierHonoursAssignedFragment(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+
+	plan := "# Code Plan\n\n## Design\n\n### Parity\nDESIGN-SHARED-TEXT\n\n## Tasks\n\n" +
+		"### Task 1: first\nPEER-ONE-TEXT\n\n### Task 2: second\nASSIGNED-TASK-TEXT\n\n### Task 3: third\nPEER-THREE-TEXT\n"
+	writeReferenceFixture(t, repo, "specs/plan.md", strictCarrier(sourceRevision, "AC-1", "specs/source.md", "Contract", plan))
+	parentReview := commitReferenceFixture(t, repo, "test: add planner carrier")
+
+	parent := models.Task{ID: "planner-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentReview}
+	child := models.Task{ID: "coder-1", ParentTasks: []string{"planner-1"}, PlanRef: "specs/plan.md#Task 2: second"}
+	state := referenceTestState(parent, child)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	for _, want := range []string{"ASSIGNED-TASK-TEXT", "DESIGN-SHARED-TEXT", "Inherited contract."} {
+		if !strings.Contains(context, want) {
+			t.Errorf("context lost %q, which is not a peer of the assigned section:\n%s", want, context)
+		}
+	}
+	for _, unwanted := range []string{"PEER-ONE-TEXT", "PEER-THREE-TEXT"} {
+		if strings.Contains(context, unwanted) {
+			t.Errorf("context still inlines peer task text %q:\n%s", unwanted, context)
+		}
+	}
+	if !strings.Contains(context, `SECTION "specs/plan.md#Task 1: first" @ `) {
+		t.Errorf("elided peer lost its pointer line:\n%s", context)
+	}
+}
+
+// A plan_ref without a fragment assigns the whole artifact, so nothing is
+// elided: the task was pointed at the file, not at a section of it.
+func TestResolvedReferenceContextWholeFilePlanRefElidesNothing(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+
+	plan := "# Code Plan\n\n## Tasks\n\n### Task 1: first\nPEER-ONE-TEXT\n\n### Task 2: second\nASSIGNED-TASK-TEXT\n"
+	writeReferenceFixture(t, repo, "specs/plan.md", strictCarrier(sourceRevision, "AC-1", "specs/source.md", "Contract", plan))
+	parentReview := commitReferenceFixture(t, repo, "test: add planner carrier")
+
+	parent := models.Task{ID: "planner-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentReview}
+	child := models.Task{ID: "coder-1", ParentTasks: []string{"planner-1"}, PlanRef: "specs/plan.md"}
+	state := referenceTestState(parent, child)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	if !strings.Contains(context, "PEER-ONE-TEXT") {
+		t.Errorf("whole-file plan_ref narrowed the carrier anyway:\n%s", context)
+	}
 }

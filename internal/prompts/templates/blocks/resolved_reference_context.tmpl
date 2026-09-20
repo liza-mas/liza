@@ -5,8 +5,10 @@
 The compositor resolved and freshness-checked the strict carrier content and its
 declared direct references before launch. Treat this bounded context as inherited
 authority. Do not re-read or replace its pinned source paths with worktree content.
-A reference marked "not inlined" was declared by an ancestor carrier; read it with
-the git show command on its line only if your task needs it.
+A reference marked "not inlined" was declared by an ancestor carrier, and a
+section marked "peer of your assigned section" belongs to a sibling task of an
+artifact you were assigned one section of; read either with the git show command
+on its line only if your task needs it.
 Read outside it only for evidence owned by your stage or an unresolved dependency
 that the assigned context identifies.
 

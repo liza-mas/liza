@@ -202,3 +202,63 @@ func parseATXHeading(line string) (int, string, bool) {
 	}
 	return level, text, true
 }
+
+// peerSection is one span elided from a carrier: a section at the same level
+// as the assigned section and under the same enclosing heading.
+type peerSection struct {
+	heading string
+	start   int
+	end     int
+}
+
+// peerSections returns the spans of the assigned heading's peers, in source
+// order. A peer shares the assigned heading's level and its nearest enclosing
+// heading of a higher level, so sibling task sections elide while the prose,
+// design and audit sections their plan shares with them do not.
+//
+// An assigned heading that is missing or ambiguous returns no peers: the
+// carrier then renders whole, because narrowing on a guess would drop context
+// the task needs.
+func peerSections(markdown, assignedHeading string) []peerSection {
+	scan := scanMarkdown(markdown)
+	matches := headingsMatching(scan.headings, 0, assignedHeading)
+	if len(matches) != 1 {
+		return nil
+	}
+	assigned := matches[0]
+
+	// The enclosing heading is the nearest preceding one of a higher level,
+	// identified by its offset; -1 means the heading is at top level.
+	enclosing := func(start int) int {
+		parent := -1
+		for _, heading := range scan.headings {
+			if heading.start >= start {
+				break
+			}
+			if heading.level < assigned.level {
+				parent = heading.start
+			}
+		}
+		return parent
+	}
+	assignedParent := enclosing(assigned.start)
+
+	var peers []peerSection
+	for index, heading := range scan.headings {
+		if heading.level != assigned.level || heading.start == assigned.start {
+			continue
+		}
+		if enclosing(heading.start) != assignedParent {
+			continue
+		}
+		end := len(markdown)
+		for _, following := range scan.headings[index+1:] {
+			if following.level <= heading.level {
+				end = following.start
+				break
+			}
+		}
+		peers = append(peers, peerSection{heading: heading.text, start: heading.start, end: end})
+	}
+	return peers
+}
