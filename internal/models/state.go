@@ -18,6 +18,7 @@ type State struct {
 	SpecChanges         []SpecChange                              `yaml:"spec_changes"`
 	Anomalies           []Anomaly                                 `yaml:"anomalies"`
 	QuarantinedVerdicts []QuarantinedVerdict                      `yaml:"quarantined_verdicts,omitempty"`
+	ProofReaffirmations []ProofReaffirmation                      `yaml:"proof_reaffirmations,omitempty"`
 	Sprint              Sprint                                    `yaml:"sprint"`
 	SprintHistory       []SprintSummary                           `yaml:"sprint_history,omitempty"`
 	CircuitBreaker      CircuitBreaker                            `yaml:"circuit_breaker"`

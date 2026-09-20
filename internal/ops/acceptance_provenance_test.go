@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -868,5 +869,342 @@ func TestAcceptanceProvenance_ObligationReferenceDriftWithoutProofsIsAccepted(t 
 	}
 	if src := readAcceptanceState(t, bb).FindTask(taskID).AcceptanceSource; src == nil {
 		t.Fatal("expected the allocation to survive the re-pin")
+	}
+}
+
+// proofDriftScenario is the case an approved proof exists for: the section the
+// proof rests on is extended, and the carrier is re-pinned onto the extension.
+// Acceptance must refuse, because it cannot tell that from a substitution.
+func proofDriftScenario(t *testing.T) (root, taskID, agentID string, bb *db.Blackboard) {
+	t.Helper()
+	root, taskID, _, agentID, bb = completeAcceptanceScenario(t)
+
+	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+	plan, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withProof := strings.Replace(string(plan), `"approved_proofs":[]`,
+		`"approved_proofs":[{"obligation_id":"AC-identity","reference_id":"identity","rationale":"asserted against the reviewed identity section"}]`, 1)
+	if withProof == string(plan) {
+		t.Fatal("fixture no longer carries the approved_proofs field")
+	}
+	if err := os.WriteFile(planPath, []byte(withProof), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): assert a proof against the identity reference")
+	reviewCommit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+
+	// The parent's review boundary must cover the contract that asserts the
+	// proof, or there is no approved proof to compare.
+	if err := bb.Modify(func(state *models.State) error {
+		for i := range state.Tasks {
+			if state.Tasks[i].ID == "acceptance-parent" {
+				state.Tasks[i].ReviewCommit = &reviewCommit
+				state.Tasks[i].MergeCommit = &reviewCommit
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	goalPath := filepath.Join(root, "specs", "acceptance-goal.md")
+	goal, err := os.ReadFile(goalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extended := strings.Replace(string(goal), "Reject malformed identity.", "Reject malformed identity.\nAnd reject the extended case.", 1)
+	if err := os.WriteFile(goalPath, []byte(extended), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-goal.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs: extend the section the proof rests on")
+	extendedAt := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+
+	repinned := strings.Replace(withProof,
+		`- "identity": "specs/acceptance-goal.md#Identity"`,
+		`- "identity": "specs/acceptance-goal.md#Identity" @ "`+extendedAt+`"`, 1)
+	if err := os.WriteFile(planPath, []byte(repinned), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): re-pin the proof's reference onto the extension")
+
+	wt := git.New(root).GetWorktreePath(taskID)
+	testhelpers.MustGit(t, wt, "rebase", "integration")
+	return root, taskID, agentID, bb
+}
+
+func submitProofDriftCandidate(t *testing.T, root, taskID, agentID string) error {
+	t.Helper()
+	wt := git.New(root).GetWorktreePath(taskID)
+	commit := testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
+	_, err := SubmitForReview(root, taskID, commit, agentID)
+	return err
+}
+
+// The refusal this whole mechanism exists to recover from: unlike an obligation
+// with no asserted proof, an approved proof is compared by content and fails
+// closed when the content moves.
+func TestAcceptanceProvenance_ApprovedProofDriftRefusesWithoutReaffirmation(t *testing.T) {
+	root, taskID, agentID, _ := proofDriftScenario(t)
+
+	err := submitProofDriftCandidate(t, root, taskID, agentID)
+	if err == nil {
+		t.Fatal("expected the re-pinned approved proof to refuse allocation")
+	}
+	if !strings.Contains(err.Error(), "requires allocation by a direct independently approved merged planning parent") {
+		t.Fatalf("refusal = %v, want the allocation refusal", err)
+	}
+}
+
+// An authorized re-affirmation of this exact transition restores the
+// allocation, and nothing else about the task changes.
+func TestAcceptanceProvenance_ReaffirmedProofRestoresAllocation(t *testing.T) {
+	root, taskID, agentID, bb := proofDriftScenario(t)
+	if err := submitProofDriftCandidate(t, root, taskID, agentID); err == nil {
+		t.Fatal("fixture must refuse before the re-affirmation")
+	}
+
+	observed := recordTestReaffirmation(t, root, bb, taskID, "identity")
+
+	if err := submitProofDriftCandidate(t, root, taskID, agentID); err != nil {
+		t.Fatalf("allocation after re-affirming the proof: %v", err)
+	}
+	if src := readAcceptanceState(t, bb).FindTask(taskID).AcceptanceSource; src == nil {
+		t.Fatal("expected the allocation to be adopted after the re-affirmation")
+	}
+	if observed.ReviewedSection == observed.CurrentSection {
+		t.Error("the recorded transition has equal identities, so it authorizes nothing")
+	}
+}
+
+// The property that keeps this a decision rather than a waiver: the record
+// covers one transition, so a further change to the same section refuses again.
+func TestAcceptanceProvenance_ReaffirmationDoesNotCoverALaterChange(t *testing.T) {
+	root, taskID, agentID, bb := proofDriftScenario(t)
+	recordTestReaffirmation(t, root, bb, taskID, "identity")
+	if err := submitProofDriftCandidate(t, root, taskID, agentID); err != nil {
+		t.Fatalf("fixture must allocate after the first re-affirmation: %v", err)
+	}
+
+	// The section moves again, and the carrier is re-pinned onto it again.
+	goalPath := filepath.Join(root, "specs", "acceptance-goal.md")
+	goal, err := os.ReadFile(goalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(goalPath, []byte(strings.Replace(string(goal),
+		"And reject the extended case.", "And reject the extended case.\nAnd a second, unreviewed change.", 1)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-goal.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs: change the section again")
+	movedAgain := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+
+	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+	plan, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repinned := regexp.MustCompile(`- "identity": "specs/acceptance-goal\.md#Identity" @ "[0-9a-f]{40}"`).
+		ReplaceAllString(string(plan), `- "identity": "specs/acceptance-goal.md#Identity" @ "`+movedAgain+`"`)
+	if repinned == string(plan) {
+		t.Fatal("fixture did not carry a pinned identity reference to move")
+	}
+	if err := os.WriteFile(planPath, []byte(repinned), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): re-pin onto the second change")
+
+	wt := git.New(root).GetWorktreePath(taskID)
+	testhelpers.MustGit(t, wt, "rebase", "integration")
+	if err := submitProofDriftCandidate(t, root, taskID, agentID); err == nil {
+		t.Fatal("the earlier re-affirmation covered a change nobody decided on")
+	}
+}
+
+// recordTestReaffirmation goes through the real ReaffirmProof path — authority,
+// capability and identity derivation included — so these tests exercise the
+// command an operator would run, not a hand-written state row.
+func recordTestReaffirmation(t *testing.T, root string, bb *db.Blackboard, taskID, referenceID string) *ReaffirmProofResult {
+	t.Helper()
+	const orchestratorID = "orchestrator-1"
+	agent := testhelpers.RegisteredTestAgent(models.RoleOrchestrator)
+	if err := bb.Modify(func(state *models.State) error {
+		state.Agents[orchestratorID] = agent
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	authority := models.AgentAuthority{ID: orchestratorID, Generation: agent.Generation}
+	const reason = "operator decision: the section was extended by its owner, not substituted"
+
+	// The documented flow: run once without the precondition to learn the
+	// identity, inspect that content, then authorize exactly it.
+	_, err := ReaffirmProof(root, taskID, referenceID, "", reason, authority)
+	if err == nil {
+		t.Fatal("ReaffirmProof recorded a decision without naming the inspected identity")
+	}
+	observed := regexp.MustCompile(`[0-9a-f]{40}`).FindString(err.Error())
+	if observed == "" {
+		t.Fatalf("refusal does not name the current identity to inspect: %v", err)
+	}
+	result, err := ReaffirmProof(root, taskID, referenceID, observed, reason, authority)
+	if err != nil {
+		t.Fatalf("ReaffirmProof: %v", err)
+	}
+	return result
+}
+
+// The refusals that keep this from becoming a general waiver: it decides only
+// cases where an approved proof actually drifted.
+func TestReaffirmProof_RefusesWhenThereIsNothingToDecide(t *testing.T) {
+	root, taskID, _, bb := proofDriftScenario(t)
+	const orchestratorID = "orchestrator-1"
+	agent := testhelpers.RegisteredTestAgent(models.RoleOrchestrator)
+	if err := bb.Modify(func(state *models.State) error {
+		state.Agents[orchestratorID] = agent
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	authority := models.AgentAuthority{ID: orchestratorID, Generation: agent.Generation}
+
+	for _, tc := range []struct{ name, reference, reason, want string }{
+		{"reference with no asserted proof", "replay", "because", "asserts no approved proof"},
+		// Caught by the proof-assertion check before resolution is attempted, which
+		// is the more useful error: the reference is not one this boundary compares.
+		{"unknown reference", "not-a-reference", "because", "asserts no approved proof"},
+		{"empty reason", "identity", "  ", "nonempty UTF-8 reason"},
+		{"empty reference", "", "because", "requires the reference ID"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ReaffirmProof(root, taskID, tc.reference, "", tc.reason, authority)
+			if err == nil {
+				t.Fatalf("ReaffirmProof(%q) = nil, want refusal", tc.reference)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+
+	// Re-affirming twice is idempotent: the same transition is already
+	// authorized, so state must not grow a second identical record.
+	first := recordTestReaffirmation(t, root, bb, taskID, "identity")
+	if _, err := ReaffirmProof(root, taskID, "identity", first.CurrentSection, "second", authority); err != nil {
+		t.Fatalf("repeat re-affirmation: %v", err)
+	}
+	if n := len(readAcceptanceState(t, bb).ProofReaffirmations); n != 1 {
+		t.Errorf("recorded %d re-affirmations, want 1 for one transition", n)
+	}
+}
+
+// Authority is not advisory: an unregistered caller cannot record a decision.
+func TestReaffirmProof_RequiresOrchestratorAuthority(t *testing.T) {
+	root, taskID, _, _ := proofDriftScenario(t)
+
+	_, err := ReaffirmProof(root, taskID, "identity", "", "because",
+		models.AgentAuthority{ID: "coder-1", Generation: "generation-a"})
+	if err == nil {
+		t.Fatal("ReaffirmProof accepted a caller with no registered authority")
+	}
+}
+
+// The window between inspection and invocation. If integration moves after the
+// orchestrator inspects the content, recording A->C would claim someone
+// authorized content nobody looked at.
+func TestReaffirmProof_RefusesWhenIntegrationMovedSinceInspection(t *testing.T) {
+	root, taskID, agentID, bb := proofDriftScenario(t)
+	const orchestratorID = "orchestrator-1"
+	agent := testhelpers.RegisteredTestAgent(models.RoleOrchestrator)
+	if err := bb.Modify(func(state *models.State) error {
+		state.Agents[orchestratorID] = agent
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	authority := models.AgentAuthority{ID: orchestratorID, Generation: agent.Generation}
+
+	stale := "0000000000000000000000000000000000000000"
+	_, err := ReaffirmProof(root, taskID, "identity", stale, "inspected something else", authority)
+	if err == nil {
+		t.Fatal("ReaffirmProof accepted an identity that is not what integration holds")
+	}
+	if !strings.Contains(err.Error(), "no longer current") {
+		t.Errorf("error = %q, want it to report the inspected content as stale", err)
+	}
+	if n := len(readAcceptanceState(t, bb).ProofReaffirmations); n != 0 {
+		t.Errorf("recorded %d re-affirmations on a mismatch, want none", n)
+	}
+	if err := submitProofDriftCandidate(t, root, taskID, agentID); err == nil {
+		t.Fatal("a refused re-affirmation still unblocked the allocation")
+	}
+}
+
+// Recovery must not depend on parent ordering. A child with an extra merged
+// planning parent that allocates nothing must still be re-affirmed against the
+// parent whose allocation is actually being refused.
+func TestReaffirmProof_SelectsTheParentThatAllocatesTheTask(t *testing.T) {
+	root, taskID, agentID, bb := proofDriftScenario(t)
+
+	// A decoy parent, listed first, that allocates no output for this task.
+	decoyCommit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+	if err := bb.Modify(func(state *models.State) error {
+		decoy := "decoy-parent"
+		approver := "code-plan-reviewer-9"
+		state.Tasks = append(state.Tasks, models.Task{
+			ID: decoy, Type: models.TaskTypePlanning, RolePair: "code-planning-pair",
+			Status: models.TaskStatusMerged, ApprovedBy: &approver,
+			BaseCommit: &decoyCommit, ReviewCommit: &decoyCommit, MergeCommit: &decoyCommit,
+			Created: time.Now().UTC(),
+		})
+		task := state.FindTask(taskID)
+		task.ParentTasks = append([]string{decoy}, task.EffectiveParentTasks()...)
+		task.ParentTask = nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	result := recordTestReaffirmation(t, root, bb, taskID, "identity")
+	if result.ParentTask == "decoy-parent" {
+		t.Fatal("re-affirmation was granted against a parent that allocates nothing")
+	}
+	if err := submitProofDriftCandidate(t, root, taskID, agentID); err != nil {
+		t.Fatalf("allocation after re-affirming the allocating parent: %v", err)
+	}
+}
+
+// Acceptance allocates against plan_ref, otherwise spec_ref. Before a source is
+// adopted, a task carrying its allocation on spec_ref must still be able to
+// recover.
+func TestReaffirmProof_UsesSpecRefWhenPlanRefIsAbsent(t *testing.T) {
+	root, taskID, _, bb := proofDriftScenario(t)
+
+	if err := bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		task.SpecRef, task.PlanRef = task.PlanRef, ""
+		task.AcceptanceSource = nil
+		for i := range state.Tasks {
+			if state.Tasks[i].ID != "acceptance-parent" {
+				continue
+			}
+			for j := range state.Tasks[i].Output {
+				state.Tasks[i].Output[j].SpecRef = state.Tasks[i].Output[j].PlanRef
+				state.Tasks[i].Output[j].PlanRef = ""
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if result := recordTestReaffirmation(t, root, bb, taskID, "identity"); result.CarrierPath != "specs/acceptance-plan.md" {
+		t.Errorf("carrier = %q, want the spec_ref allocation to be found", result.CarrierPath)
 	}
 }

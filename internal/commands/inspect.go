@@ -95,7 +95,7 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 
 // isKnownEntityType returns true if the query is a known entity type
 func isKnownEntityType(query string) bool {
-	knownTypes := []string{"config", "sprint", "tasks", "agents", "metrics", "anomalies", "quarantined_verdicts", "human_notes"}
+	knownTypes := []string{"config", "sprint", "tasks", "agents", "metrics", "anomalies", "quarantined_verdicts", "proof_reaffirmations", "human_notes"}
 	return slices.Contains(knownTypes, query)
 }
 
@@ -176,6 +176,8 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 		return asString(inspectAnomalies(state, inspectAnomaliesOptions{Format: opts.Format}))
 	case "quarantined_verdicts":
 		return formatOutput(state.QuarantinedVerdicts, opts.Format)
+	case "proof_reaffirmations":
+		return formatOutput(state.ProofReaffirmations, opts.Format)
 	case "human_notes":
 		if len(args) != 0 {
 			return "", fmt.Errorf("human_notes does not accept a task ID; query the list and select notes by for")

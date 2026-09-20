@@ -19,6 +19,7 @@ pipeline:
         - cancel-task
         - reconcile-merged
         - reconcile-verdict
+        - reaffirm-proof
         - unblock-task
         - sprint-checkpoint
         - analyze

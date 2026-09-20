@@ -55,10 +55,7 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 	if task.EffectiveType() != models.TaskTypeCoding && task.AcceptanceSource == nil {
 		return nil, nil
 	}
-	ref := task.PlanRef
-	if ref == "" {
-		ref = task.SpecRef
-	}
+	ref := acceptanceAllocationRef(task)
 	fail := func(reason string) (*acceptanceInput, error) {
 		return nil, acceptanceError(task.ID, "acceptance.source", reason)
 	}
@@ -133,57 +130,15 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 	var source *models.AcceptanceSource
 	for _, parentID := range task.EffectiveParentTasks() {
 		parent := state.FindTask(parentID)
-		if parent == nil || parent.EffectiveType() != models.TaskTypePlanning || parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil {
+		if !parentAllocatesTask(g, root, task, parent, path, heading, integrationSpan, integrationCommit) {
 			continue
-		}
-		author := acceptanceParentAuthor(parent)
-		if author == "" {
-			continue
-		}
-		approved := parent.ApprovedBy != nil && *parent.ApprovedBy != "" && *parent.ApprovedBy != author
-		for _, approval := range parent.Approvals {
-			approved = approved || (approval.Agent != "" && approval.Agent != author)
-		}
-		if !approved {
-			continue
-		}
-		if !validAcceptanceParentHistory(g, parent) {
-			continue
-		}
-		allocated := false
-		for _, output := range parent.Output {
-			if output.PlanRef == task.PlanRef && output.SpecRef == task.SpecRef && reflect.DeepEqual(output.Validation, task.Validation) && output.DestructiveDB == task.DestructiveDB {
-				allocated = true
-			}
-		}
-		if !allocated {
-			continue
-		}
-		ancestor, ancestorErr := g.IsAncestor(*parent.MergeCommit, integrationCommit)
-		if ancestorErr != nil || !ancestor {
-			continue
-		}
-		// The reviewer approved this carrier's allocation section. An edit to an
-		// unrelated section of the same file — a repin of another reference, a
-		// note appended elsewhere — does not unapprove it, and treating it as a
-		// change strands every child of the plan until the plan is re-reviewed.
-		// ADR-0133 section 4 already judges the reference path this way.
-		reviewedSpan, reviewedOK := acceptanceCarrierSpan(root, *parent.ReviewCommit, path, heading)
-		if !reviewedOK || reviewedSpan != integrationSpan {
-			continue
-		}
-		// Inherited shape: a carrier absent at base and one identical at base
-		// both fall through here, deliberately — only "unchanged" disqualifies.
-		baseSpan, _ := acceptanceCarrierSpan(root, *parent.BaseCommit, path, heading)
-		if baseSpan == reviewedSpan {
-			continue // Approval of unchanged content authorizes nothing.
 		}
 		// The span excludes Source References, which is where the contract's
 		// obligations and approved proofs resolve. Comparing only the span
 		// would let an edit there redirect an approved reference at content no
 		// reviewer saw, so every reference the reviewed contract depends on is
 		// compared by what it resolves to, not by its declared ID.
-		if !reviewedReferencesResolveAlike(root, *parent.ReviewCommit, integrationCommit, path, heading, contract) {
+		if !reviewedReferencesResolveAlike(state, parent.ID, root, *parent.ReviewCommit, integrationCommit, path, heading, contract) {
 			continue
 		}
 		if source != nil {
@@ -214,6 +169,72 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		source: *source, contract: contract,
 		specRef: task.SpecRef, destructiveDB: task.DestructiveDB,
 	}, nil
+}
+
+// parentAllocatesTask reports whether this parent authorizes the task's
+// allocation on every ground except the approved-proof comparison.
+//
+// That comparison is deliberately left to the caller, because the two callers
+// do different things with the same answer: acceptance refuses, and
+// re-affirmation decides. Sharing everything up to that point is what keeps a
+// recovery grant bound to the parent that actually allocates the task —
+// selecting "the first merged parent" instead would let a multi-parent child be
+// re-affirmed against a parent that never allocated it, leaving the real one
+// unauthorized and the task still refused.
+func parentAllocatesTask(g *git.Git, root string, task, parent *models.Task, path, heading, integrationSpan, integrationCommit string) bool {
+	if parent == nil || parent.EffectiveType() != models.TaskTypePlanning || parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil {
+		return false
+	}
+	author := acceptanceParentAuthor(parent)
+	if author == "" {
+		return false
+	}
+	approved := parent.ApprovedBy != nil && *parent.ApprovedBy != "" && *parent.ApprovedBy != author
+	for _, approval := range parent.Approvals {
+		approved = approved || (approval.Agent != "" && approval.Agent != author)
+	}
+	if !approved {
+		return false
+	}
+	if !validAcceptanceParentHistory(g, parent) {
+		return false
+	}
+	allocated := false
+	for _, output := range parent.Output {
+		if output.PlanRef == task.PlanRef && output.SpecRef == task.SpecRef && reflect.DeepEqual(output.Validation, task.Validation) && output.DestructiveDB == task.DestructiveDB {
+			allocated = true
+		}
+	}
+	if !allocated {
+		return false
+	}
+	ancestor, ancestorErr := g.IsAncestor(*parent.MergeCommit, integrationCommit)
+	if ancestorErr != nil || !ancestor {
+		return false
+	}
+	// The reviewer approved this carrier's allocation section. An edit to an
+	// unrelated section of the same file — a repin of another reference, a
+	// note appended elsewhere — does not unapprove it, and treating it as a
+	// change strands every child of the plan until the plan is re-reviewed.
+	// ADR-0133 section 4 already judges the reference path this way.
+	reviewedSpan, reviewedOK := acceptanceCarrierSpan(root, *parent.ReviewCommit, path, heading)
+	if !reviewedOK || reviewedSpan != integrationSpan {
+		return false
+	}
+	// Inherited shape: a carrier absent at base and one identical at base both
+	// fall through here, deliberately — only "unchanged" disqualifies.
+	baseSpan, _ := acceptanceCarrierSpan(root, *parent.BaseCommit, path, heading)
+	return baseSpan != reviewedSpan // Approval of unchanged content authorizes nothing.
+}
+
+// acceptanceAllocationRef is the reference acceptance allocates against:
+// plan_ref, otherwise spec_ref. Any other order silently changes which carrier
+// a task is judged by.
+func acceptanceAllocationRef(task *models.Task) string {
+	if task.PlanRef != "" {
+		return task.PlanRef
+	}
+	return task.SpecRef
 }
 
 // Ownership can be released after submission without invalidating its review.
@@ -273,7 +294,7 @@ func validAcceptanceParentHistory(g *git.Git, parent *models.Task) bool {
 // its obligations, and those its approved proofs cite. An unrelated reference
 // may be re-pinned freely, which is the repin workflow this check must not
 // break.
-func reviewedReferencesResolveAlike(root, reviewCommit, integrationCommit, path, heading string, contract *referencecontract.AcceptanceContract) bool {
+func reviewedReferencesResolveAlike(state *models.State, parentTask, root, reviewCommit, integrationCommit, path, heading string, contract *referencecontract.AcceptanceContract) bool {
 	if contract == nil {
 		return true
 	}
@@ -336,7 +357,20 @@ func reviewedReferencesResolveAlike(root, reviewCommit, integrationCommit, path,
 	for referenceID := range needed {
 		reviewed, reviewedFound := resolveDeclaredReference(root, reviewedRefs, referenceID)
 		current, currentFound := resolveDeclaredReference(root, integrationRefs, referenceID)
-		if !reviewedFound || !currentFound || reviewed != current {
+		if !reviewedFound || !currentFound {
+			return false
+		}
+		if reviewed == current {
+			continue
+		}
+		// The content moved. Refusing here is right — this boundary cannot
+		// tell a legitimate extension from a substitution — but an authorized
+		// re-affirmation of this exact transition is a decision that it was
+		// the former, recorded with an actor and a reason. It covers one
+		// transition only: identities are compared on both sides, so a later
+		// change to the same section refuses again.
+		if state == nil ||
+			state.FindProofReaffirmation(parentTask, path, heading, referenceID, spanObjectID(reviewed), spanObjectID(current)) == nil {
 			return false
 		}
 	}

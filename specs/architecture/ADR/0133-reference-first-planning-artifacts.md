@@ -103,7 +103,22 @@ The normative decision is:
    sibling section outside that span, every reference the reviewed contract
    asserts a proof against (those its `approved_proofs` cite) is additionally
    compared by what it *resolves to* at both revisions, so a re-pin may move a
-   reference but never substitute the content a proof claims. References
+   reference but never substitute the content a proof claims. Refusing is right
+   and recovery is separate: an authorized orchestrator may record a
+   `ProofReaffirmation` deciding that one such move was an extension rather
+   than a substitution, and the comparison then admits it. The grant is bound to
+   the content actually inspected: the caller states the identity it examined,
+   the command derives the current one independently, and a mismatch refuses
+   without recording, so a merge landing between inspection and authorization
+   cannot widen the grant. It is granted against the parent that allocates the
+   task under the same predicate acceptance applies — never merely the first
+   merged parent — and against the same reference acceptance selects, plan_ref
+   otherwise spec_ref, so recovery works before a source is adopted. The record
+   names the allocation, the reference and **both** section object ids, so it
+   authorizes exactly the transition someone looked at; a further change to that section
+   refuses again. Without it the only exits are superseding the child, which
+   discards every obligation its contract allocated rather than the one in
+   question, or re-reviewing a merged plan. References
    backing `obligations` alone are deliberately not compared here: a re-pin
    onto legitimately extended content is indistinguishable from a substitution
    at this boundary, and blocking it strands every child of a merged plan whose
