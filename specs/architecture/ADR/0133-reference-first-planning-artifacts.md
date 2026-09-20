@@ -85,6 +85,32 @@ The normative decision is:
    carrier may reference paths introduced in its own reviewed range, which
    resolve at the current `ReviewCommit`. Missing, stale, deleted, ambiguous, or
    structurally invalid strict content blocks before launch.
+   Acceptance allocation judges the same way: a merged planning parent
+   authorizes a child when the *allocation section* its `plan_ref` names is
+   identical at the parent's `ReviewCommit` and at integration, not when the
+   whole carrier file is byte-identical. An edit elsewhere in the carrier — a
+   re-pin in `Source References`, a note appended under another heading — does
+   not withdraw an approval it did not touch. Because `Source References` is a
+   sibling section outside that span, every reference the reviewed contract
+   asserts a proof against (those its `approved_proofs` cite) is additionally
+   compared by what it *resolves to* at both revisions, so a re-pin may move a
+   reference but never substitute the content a proof claims. References
+   backing `obligations` alone are deliberately not compared here: a re-pin
+   onto legitimately extended content is indistinguishable from a substitution
+   at this boundary, and blocking it strands every child of a merged plan whose
+   review boundary no command can move. That drift is only partly covered
+   elsewhere: reference freshness at prompt build compares a reference's
+   section at its pinned revision against the same path and heading at
+   integration HEAD, which catches a pin left behind while its target moved,
+   but not a reference repointed at a different target that agrees with HEAD.
+   Staleness is caught; substitution against an obligation asserting no proof
+   is not. An ambiguous or unresolvable heading refuses rather than
+   falling back to whole-file scope. The adopted identity recorded for a child
+   is the object id of that section, and every boundary that asks whether the
+   reviewed source changed — allocation, candidate submission, reviewer
+   assignment — compares the same value, so an unrelated edit cannot strand a
+   child at whichever boundary still read the file.
+
 5. Corrections are deltas naming corrected anchors, replacement decisions and
    rationale, unchanged inherited refs, and the effective superseding ref.
    Rendered retry context carries only unresolved effective findings and

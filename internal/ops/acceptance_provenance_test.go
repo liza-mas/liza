@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
@@ -529,5 +530,343 @@ func TestAcceptanceProvenance_NonExecutableProof(t *testing.T) {
 			}
 			requireAcceptanceSubmitRejected(t, root, taskID, commit, agentID, bb, field)
 		})
+	}
+}
+
+// The D8 repin loop: re-pinning a reference in the carrier's Source References
+// changes the file but not the allocation the reviewer approved. Judging the
+// whole blob stranded every child of the plan until it was re-reviewed, and
+// each repin created the next instance.
+func TestAcceptanceProvenance_UnrelatedSectionEditKeepsAllocation(t *testing.T) {
+	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
+	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+	plan, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-pin a reference. This sits in `## Source References`, entirely before
+	// `## Task 1`, so the reviewed allocation span is untouched.
+	sourceCommit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+	repinned := strings.Replace(string(plan),
+		`- "identity": "specs/acceptance-goal.md#Identity"`,
+		`- "identity": "specs/acceptance-goal.md#Identity" @ "`+sourceCommit+`"`, 1)
+	if repinned == string(plan) {
+		t.Fatal("fixture did not contain the reference to re-pin")
+	}
+	if err := os.WriteFile(planPath, []byte(repinned), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): re-pin a stale shared-contract reference")
+
+	// Submission carries the candidate onto current integration, as the real
+	// flow does; the separate candidate-vs-integration guard is not what this
+	// test exercises.
+	wt := git.New(root).GetWorktreePath(taskID)
+	testhelpers.MustGit(t, wt, "rebase", "integration")
+	commit := testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
+
+	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
+		t.Fatalf("SubmitForReview after an unrelated-section edit: %v", err)
+	}
+	state := readAcceptanceState(t, bb)
+	if src := state.FindTask(taskID).AcceptanceSource; src == nil || src.ParentTask != "acceptance-parent" {
+		t.Fatalf("AcceptanceSource = %+v, want the allocation preserved across the repin", src)
+	}
+}
+
+// The allocation section itself is still immutable after review.
+func TestAcceptanceProvenance_ReviewedSectionEditRefusesAllocation(t *testing.T) {
+	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
+	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+	plan, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(plan), `"timeout_seconds":10`, `"timeout_seconds":600`, 1)
+	if edited == string(plan) {
+		t.Fatal("fixture did not contain the contract field to edit")
+	}
+	if err := os.WriteFile(planPath, []byte(edited), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "test: change the reviewed allocation itself")
+
+	requireAcceptanceSubmitRejected(t, root, taskID, commit, agentID, bb, "acceptance.source")
+}
+
+// A carrier reference naming no section keeps whole-file semantics: there is no
+// narrower span a verdict could have covered.
+func TestAcceptanceProvenance_HeadinglessRefUsesWholeFile(t *testing.T) {
+	if _, ok := carrierSpan("# Plan\n\n## Task 1\nbody\n", ""); !ok {
+		t.Fatal("carrierSpan with no heading must succeed")
+	}
+	whole, _ := carrierSpan("# Plan\n\n## Task 1\nbody\n", "")
+	if whole != "# Plan\n\n## Task 1\nbody\n" {
+		t.Fatalf("carrierSpan = %q, want the whole file", whole)
+	}
+	if _, ok := carrierSpan("# Plan\n\n## Task 1\nbody\n", "Task 9"); ok {
+		t.Fatal("a heading that does not resolve must refuse, not match the whole file")
+	}
+	if _, ok := carrierSpan("# Plan\n\n## Dup\na\n\n## Dup\nb\n", "Dup"); ok {
+		t.Fatal("an ambiguous heading must refuse rather than allocate on a guess")
+	}
+}
+
+// A re-pin may move a reference, but not what an approved proof resolves to.
+// Source References sits outside the allocation span, so without a content
+// check an edit there could redirect an approved reference at material no
+// reviewer saw while every declared ID stayed intact.
+func TestAcceptanceProvenance_RepointedApprovedProofRefusesAllocation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		rewrite func(plan, goalHeading string) string
+	}{
+		{"reference repointed at a different heading", func(plan, _ string) string {
+			return strings.Replace(plan,
+				`- "identity": "specs/acceptance-goal.md#Identity"`,
+				`- "identity": "specs/acceptance-goal.md#Replay"`, 1)
+		}},
+		{"reference repointed at a different file", func(plan, _ string) string {
+			return strings.Replace(plan,
+				`- "identity": "specs/acceptance-goal.md#Identity"`,
+				`- "identity": "specs/substituted-goal.md#Identity"`, 1)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
+
+			// A second file the substituted reference can resolve to, so the
+			// refusal is about changed content and not an unresolvable target.
+			substituted := filepath.Join(root, "specs", "substituted-goal.md")
+			if err := os.WriteFile(substituted, []byte("# Boundary\n\n## Identity\nDifferent identity rule no reviewer saw.\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.MustGit(t, root, "add", "specs/substituted-goal.md")
+			testhelpers.MustGit(t, root, "commit", "-m", "test: add a substitutable target")
+
+			// The reviewed contract must actually cite the reference, or there
+			// is nothing for the substitution to subvert.
+			planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+			plan, err := os.ReadFile(planPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			withProof := strings.Replace(string(plan), `"approved_proofs":[]`,
+				`"approved_proofs":[{"obligation_id":"AC-identity","reference_id":"identity","rationale":"reviewed by inspection"}]`, 1)
+			if withProof == string(plan) {
+				t.Fatal("fixture did not contain approved_proofs to populate")
+			}
+			if err := os.WriteFile(planPath, []byte(withProof), 0644); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+			testhelpers.MustGit(t, root, "commit", "-m", "test: reviewed contract cites an approved proof")
+			reviewCommit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+			if err := bb.Modify(func(state *models.State) error {
+				parent := state.FindTask("acceptance-parent")
+				parent.ReviewCommit, parent.MergeCommit = &reviewCommit, &reviewCommit
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			// Now substitute the reference target at integration, leaving the
+			// allocation section and every declared ID untouched.
+			repointed := tc.rewrite(withProof, "Identity")
+			if repointed == withProof {
+				t.Fatal("fixture did not contain the reference to repoint")
+			}
+			if err := os.WriteFile(planPath, []byte(repointed), 0644); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+			testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): re-pin the identity reference")
+
+			wt := git.New(root).GetWorktreePath(taskID)
+			testhelpers.MustGit(t, wt, "rebase", "integration")
+			commit := testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
+
+			requireAcceptanceSubmitRejected(t, root, taskID, commit, agentID, bb, "acceptance.source")
+		})
+	}
+}
+
+// A child that already adopted its source must survive a re-pin too: the
+// stranding this change removes at claim time reappears at reviewer assignment
+// if the stored identity still means "the whole file".
+func TestAcceptanceProvenance_AdoptedChildSurvivesUnrelatedSectionEdit(t *testing.T) {
+	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
+
+	// Adopt the source the ordinary way.
+	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
+		t.Fatalf("initial SubmitForReview: %v", err)
+	}
+	if src := readAcceptanceState(t, bb).FindTask(taskID).AcceptanceSource; src == nil {
+		t.Fatal("fixture did not adopt an acceptance source")
+	}
+
+	// Re-pin a reference in Source References, outside the allocation span.
+	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+	plan, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceCommit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+	repinned := strings.Replace(string(plan),
+		`- "identity": "specs/acceptance-goal.md#Identity"`,
+		`- "identity": "specs/acceptance-goal.md#Identity" @ "`+sourceCommit+`"`, 1)
+	if repinned == string(plan) {
+		t.Fatal("fixture did not contain the reference to re-pin")
+	}
+	if err := os.WriteFile(planPath, []byte(repinned), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): re-pin a stale shared-contract reference")
+
+	state := readAcceptanceState(t, bb)
+	task := state.FindTask(taskID)
+	if err := validateAcceptanceForAssignment(root, state, task); err != nil {
+		t.Fatalf("adopted child stranded at reviewer assignment by an unrelated-section edit: %v", err)
+	}
+}
+
+// The ordinary reject-rebase-resubmit cycle across a re-pin: the child has
+// already adopted, then carries its work onto the edited integration. Every
+// boundary must agree on what identity means, or the child is refused for an
+// edit it did not make.
+func TestAcceptanceProvenance_AdoptedChildResubmitsAfterRebasingPastRepin(t *testing.T) {
+	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
+
+	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
+		t.Fatalf("initial SubmitForReview: %v", err)
+	}
+	if src := readAcceptanceState(t, bb).FindTask(taskID).AcceptanceSource; src == nil {
+		t.Fatal("fixture did not adopt an acceptance source")
+	}
+
+	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+	plan, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceCommit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+	repinned := strings.Replace(string(plan),
+		`- "identity": "specs/acceptance-goal.md#Identity"`,
+		`- "identity": "specs/acceptance-goal.md#Identity" @ "`+sourceCommit+`"`, 1)
+	if repinned == string(plan) {
+		t.Fatal("fixture did not contain the reference to re-pin")
+	}
+	if err := os.WriteFile(planPath, []byte(repinned), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): re-pin a stale shared-contract reference")
+
+	// Rejected, rebased onto current integration, resubmitted.
+	if err := bb.Modify(func(state *models.State) error {
+		task := state.FindTask(taskID)
+		task.Status = models.TaskStatusImplementing
+		task.AssignedTo = &agentID
+		lease := time.Now().UTC().Add(time.Hour)
+		task.LeaseExpires = &lease
+		task.ReviewingBy, task.ReviewLeaseExpires = nil, nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wt := git.New(root).GetWorktreePath(taskID)
+	testhelpers.MustGit(t, wt, "rebase", "integration")
+	commit = testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
+
+	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
+		t.Fatalf("resubmission after rebasing past the re-pin: %v", err)
+	}
+}
+
+// The identity stored in AcceptanceSource must be a real object id: the state
+// validator requires immutable lowercase object IDs there, and a value of any
+// other shape is accepted at write time but rejected by the next validation —
+// including the one inside the re-claim-after-rejection transaction.
+func TestAcceptanceProvenance_SpanIdentityIsAGitObjectID(t *testing.T) {
+	root := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, root)
+
+	carrier := "# Plan\n\n## Task 1\n\nbody of the reviewed allocation\n\n## Other\nunrelated\n"
+	identity, ok := carrierSpanIdentity(carrier, "Task 1")
+	if !ok {
+		t.Fatal("carrierSpanIdentity failed on a resolvable heading")
+	}
+	if len(identity) != 40 || strings.ToLower(identity) != identity {
+		t.Fatalf("identity = %q, want a 40-char lowercase object id the state validator accepts", identity)
+	}
+
+	// git must agree: the value is the object id of the extracted section.
+	span, _ := carrierSpan(carrier, "Task 1")
+	spanFile := filepath.Join(root, "span.txt")
+	if err := os.WriteFile(spanFile, []byte(span), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := testhelpers.MustGit(t, root, "hash-object", spanFile); got != identity {
+		t.Fatalf("carrierSpanIdentity = %s, git hash-object = %s", identity, got)
+	}
+}
+
+// The accepted gap, made explicit: when the contract asserts no approved
+// proofs, a reference backing one of its obligations may be re-pointed at
+// integration and allocation still succeeds. The stricter reading blocks every
+// child of the plan with no supported way to re-review a merged parent, so the
+// drift is left to reference freshness at prompt build. See D13.
+func TestAcceptanceProvenance_ObligationReferenceDriftWithoutProofsIsAccepted(t *testing.T) {
+	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
+
+	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
+	plan, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(plan), `"approved_proofs":[]`) {
+		t.Fatal("fixture must assert no approved proofs for this case")
+	}
+
+	// Extend the section an obligation's reference resolves to, then re-pin the
+	// reference at the revision carrying the extension — the d1bc603e shape.
+	goalPath := filepath.Join(root, "specs", "acceptance-goal.md")
+	goal, err := os.ReadFile(goalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extended := strings.Replace(string(goal), "Reject malformed identity.", "Reject malformed identity.\nAnd reject the extended case.", 1)
+	if extended == string(goal) {
+		t.Fatal("fixture did not contain the section to extend")
+	}
+	if err := os.WriteFile(goalPath, []byte(extended), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-goal.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs: extend a shared contract section")
+	extendedAt := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+
+	repinned := strings.Replace(string(plan),
+		`- "identity": "specs/acceptance-goal.md#Identity"`,
+		`- "identity": "specs/acceptance-goal.md#Identity" @ "`+extendedAt+`"`, 1)
+	if err := os.WriteFile(planPath, []byte(repinned), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/acceptance-plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "docs(plans): re-pin the extended reference")
+
+	wt := git.New(root).GetWorktreePath(taskID)
+	testhelpers.MustGit(t, wt, "rebase", "integration")
+	commit := testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
+
+	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
+		t.Fatalf("allocation after an obligation-reference re-pin: %v", err)
+	}
+	if src := readAcceptanceState(t, bb).FindTask(taskID).AcceptanceSource; src == nil {
+		t.Fatal("expected the allocation to survive the re-pin")
 	}
 }

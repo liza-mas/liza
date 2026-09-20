@@ -1111,3 +1111,40 @@ func assertErrorContains(t *testing.T, err error, want string) {
 		t.Fatalf("validateTaskInvariants() error = %q, want substring %q", err.Error(), want)
 	}
 }
+
+// acceptance_source holds object IDs at every field, including the identity of
+// the reviewed allocation span. A digest of any other shape is accepted at
+// write time and rejected here — including inside the re-claim-after-rejection
+// transaction, where global post-mutation validation then blocks the repair.
+func TestValidateTaskInvariants_AcceptanceSourceRequiresObjectIDs(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+	const objectID = "0123456789abcdef0123456789abcdef01234567"
+
+	withSource := func(blob string) models.Task {
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())
+		task.AcceptanceSource = &models.AcceptanceSource{
+			Ref:                "specs/plan.md#Task 1",
+			Commit:             objectID,
+			Blob:               blob,
+			ParentTask:         "plan-1",
+			ParentReviewCommit: objectID,
+		}
+		return task
+	}
+
+	t.Run("span object id is valid", func(t *testing.T) {
+		task := withSource(objectID)
+		if err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg); err != nil {
+			t.Fatalf("validateTaskInvariants = %v, want nil for an object-id span identity", err)
+		}
+	})
+
+	t.Run("sha256 digest is rejected", func(t *testing.T) {
+		task := withSource("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+		err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg)
+		if err == nil || !strings.Contains(err.Error(), "immutable lowercase object IDs") {
+			t.Fatalf("validateTaskInvariants = %v, want the object-id requirement to reject a 64-char digest", err)
+		}
+	})
+}

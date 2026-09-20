@@ -10,8 +10,15 @@ import (
 // AcceptanceSource records the immutable, independently reviewed allocation
 // adopted by a task. It survives retries so strict admission cannot downgrade.
 type AcceptanceSource struct {
-	Ref                string `yaml:"ref" json:"ref"`
-	Commit             string `yaml:"commit" json:"commit"`
+	Ref    string `yaml:"ref" json:"ref"`
+	Commit string `yaml:"commit" json:"commit"`
+	// Blob is the object id of the reviewed allocation *section* named by Ref's
+	// heading — what `git hash-object` returns for that extracted span — not of
+	// the carrier file. Identity is the allocation, so an edit elsewhere in the
+	// carrier leaves it unchanged and a change to the allocation does not.
+	// Records written before that distinction existed hold the carrier file's
+	// own object id; both are object ids, so the shape is stable and such a
+	// record simply re-derives on its next allocation.
 	Blob               string `yaml:"blob" json:"blob"`
 	ParentTask         string `yaml:"parent_task" json:"parent_task"`
 	ParentReviewCommit string `yaml:"parent_review_commit" json:"parent_review_commit"`

@@ -1,7 +1,9 @@
 package ops
 
 import (
+	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"reflect"
@@ -88,7 +90,7 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 	if mode != "100644" && mode != "100755" {
 		return fail("source must be a regular committed file")
 	}
-	content, blob, err := readAcceptanceBlob(root, integrationCommit, path)
+	content, _, err := readAcceptanceBlob(root, integrationCommit, path)
 	if err != nil {
 		return fail(err.Error())
 	}
@@ -96,6 +98,11 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 	if err != nil {
 		return fail(err.Error())
 	}
+	// ParseAcceptance above already resolved this heading, so neither can fail
+	// here; the values are what the parent comparison and the stored identity
+	// need.
+	integrationSpan, _ := carrierSpan(content, heading)
+	spanIdentity, _ := carrierSpanIdentity(content, heading)
 	if contract == nil {
 		if task.AcceptanceSource != nil {
 			return fail("adopted acceptance declaration was removed; downgrade is forbidden")
@@ -156,24 +163,47 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		if ancestorErr != nil || !ancestor {
 			continue
 		}
-		reviewBlob, blobErr := g.BlobOID(*parent.ReviewCommit, path)
-		if blobErr != nil || reviewBlob != blob {
+		// The reviewer approved this carrier's allocation section. An edit to an
+		// unrelated section of the same file — a repin of another reference, a
+		// note appended elsewhere — does not unapprove it, and treating it as a
+		// change strands every child of the plan until the plan is re-reviewed.
+		// ADR-0133 section 4 already judges the reference path this way.
+		reviewedSpan, reviewedOK := acceptanceCarrierSpan(root, *parent.ReviewCommit, path, heading)
+		if !reviewedOK || reviewedSpan != integrationSpan {
 			continue
 		}
-		baseBlob, _ := g.BlobOID(*parent.BaseCommit, path)
-		if baseBlob == reviewBlob {
-			continue // Approval of another file does not authorize this carrier.
+		// Inherited shape: a carrier absent at base and one identical at base
+		// both fall through here, deliberately — only "unchanged" disqualifies.
+		baseSpan, _ := acceptanceCarrierSpan(root, *parent.BaseCommit, path, heading)
+		if baseSpan == reviewedSpan {
+			continue // Approval of unchanged content authorizes nothing.
+		}
+		// The span excludes Source References, which is where the contract's
+		// obligations and approved proofs resolve. Comparing only the span
+		// would let an edit there redirect an approved reference at content no
+		// reviewer saw, so every reference the reviewed contract depends on is
+		// compared by what it resolves to, not by its declared ID.
+		if !reviewedReferencesResolveAlike(root, *parent.ReviewCommit, integrationCommit, path, heading, contract) {
+			continue
 		}
 		if source != nil {
 			return fail("multiple reviewed parents claim the same allocation")
 		}
-		source = &models.AcceptanceSource{Ref: ref, Commit: integrationCommit, Blob: blob, ParentTask: parent.ID, ParentReviewCommit: *parent.ReviewCommit}
+		source = &models.AcceptanceSource{Ref: ref, Commit: integrationCommit, Blob: spanIdentity, ParentTask: parent.ID, ParentReviewCommit: *parent.ReviewCommit}
 	}
 	if source == nil {
 		return fail("requires allocation by a direct independently approved merged planning parent")
 	}
 	// Keep the original carrier identity when unrelated integration work lands.
-	if old := task.AcceptanceSource; old != nil && old.Ref == source.Ref && old.Blob == source.Blob && old.ParentTask == source.ParentTask && old.ParentReviewCommit == source.ParentReviewCommit {
+	//
+	// Identity is the allocation itself, not the file that carries it. Reaching
+	// this point means the reviewed span and every reference the contract
+	// depends on still resolve to what was approved, so an edit elsewhere in
+	// the carrier leaves the adopted source intact. Comparing the whole-file
+	// blob here instead would re-derive on any carrier edit and strand an
+	// already-adopted child at reviewer assignment, where the stored source
+	// must still equal the derived one.
+	if old := task.AcceptanceSource; old != nil && old.Ref == source.Ref && old.ParentTask == source.ParentTask && old.ParentReviewCommit == source.ParentReviewCommit {
 		ancestor, err := g.IsAncestor(old.Commit, integrationCommit)
 		if err != nil || !ancestor {
 			return fail("adopted source commit is no longer in integration ancestry")
@@ -229,6 +259,177 @@ func validAcceptanceParentHistory(g *git.Git, parent *models.Task) bool {
 
 // readAcceptanceBlob bounds the object before reading it and never consults
 // the worktree or follows symlinks. Used for source, proof and manifest objects.
+// reviewedReferencesResolveAlike reports whether every reference the reviewed
+// contract depends on still resolves to the content the reviewer approved.
+//
+// A reference is a declared ID plus a target: a path, a heading, and an
+// optional pinned revision. The contract names obligations and approved proofs
+// by ID only, so re-pointing an ID at different content — a different path,
+// heading, or revision — substitutes what an approval covers while leaving
+// every ID intact. The allocation span cannot see this, because Source
+// References is a sibling section outside it.
+//
+// Only references the contract actually depends on are compared: those backing
+// its obligations, and those its approved proofs cite. An unrelated reference
+// may be re-pinned freely, which is the repin workflow this check must not
+// break.
+func reviewedReferencesResolveAlike(root, reviewCommit, integrationCommit, path, heading string, contract *referencecontract.AcceptanceContract) bool {
+	if contract == nil {
+		return true
+	}
+	// Common case: the carrier file is byte-identical, so nothing it declares
+	// can have moved. This keeps the reference walk off the hot path, which
+	// runs at submit, recheck and reviewer assignment.
+	g := git.New(root)
+	reviewedBlob, reviewedErr := g.BlobOID(reviewCommit, path)
+	integrationBlob, integrationErr := g.BlobOID(integrationCommit, path)
+	if reviewedErr == nil && integrationErr == nil && reviewedBlob == integrationBlob {
+		return true
+	}
+
+	// Scope: the references the contract asserts a proof against, and no more.
+	//
+	// Widening this to every reference backing the contract's obligations is
+	// the stricter reading, and it is the one that matches what approval means
+	// — but it makes a re-pin that points an obligation at legitimately
+	// extended content indistinguishable from a substitution, and blocks the
+	// whole plan's children with no supported way to re-review a merged plan.
+	// That tension is real and unresolved; see D13.
+	//
+	// What still observes obligation drift, precisely: reference_context.go
+	// compares a reference's section at its pinned revision against the same
+	// path and heading at integration HEAD, so it catches a pin left behind
+	// while its target moved. It does not catch a reference repointed at a
+	// different path or heading whose content agrees between its new pin and
+	// HEAD, because both sides of that comparison move together. Staleness is
+	// covered; substitution against an obligation with no asserted proof is
+	// not, and that is the half D13 leaves open.
+	//
+	// An approved proof stays compared by content here, so the substitution
+	// this check exists to stop — repointing an approved reference at material
+	// no reviewer saw — still fails.
+	needed := map[string]bool{}
+	for _, proof := range contract.ApprovedProofs {
+		needed[proof.ReferenceID] = true
+	}
+	if len(needed) == 0 {
+		// Deliberate, not incidental: with nothing to compare, the parent's
+		// Source References is not parsed here either. A reviewed carrier that
+		// no longer parses is caught at integration by ParseAcceptance above;
+		// this boundary stops asserting anything about the reviewed side when
+		// the contract asserts no proof against it.
+		return true
+	}
+
+	reviewedRefs, ok := carrierReferences(root, reviewCommit, path)
+	if !ok {
+		return false
+	}
+	integrationRefs, ok := carrierReferences(root, integrationCommit, path)
+	if !ok {
+		return false
+	}
+
+	for referenceID := range needed {
+		reviewed, reviewedFound := resolveDeclaredReference(root, reviewedRefs, referenceID)
+		current, currentFound := resolveDeclaredReference(root, integrationRefs, referenceID)
+		if !reviewedFound || !currentFound || reviewed != current {
+			return false
+		}
+	}
+	return true
+}
+
+// carrierReferences parses a carrier's Source References at one commit.
+func carrierReferences(root, commit, path string) (*referencecontract.Contract, bool) {
+	content, _, err := readAcceptanceBlob(root, commit, path)
+	if err != nil {
+		return nil, false
+	}
+	refs, err := referencecontract.Parse(strings.ReplaceAll(content, "\r\n", "\n"))
+	if err != nil || refs == nil {
+		return nil, false
+	}
+	return refs, true
+}
+
+// resolveDeclaredReference returns the section text a declared reference points
+// at, following its effective revision.
+func resolveDeclaredReference(root string, refs *referencecontract.Contract, referenceID string) (string, bool) {
+	for _, direct := range refs.DirectReferences {
+		if direct.ID != referenceID {
+			continue
+		}
+		content, _, err := readAcceptanceBlob(root, direct.EffectiveRevision(refs.SourceRevision), direct.Path)
+		if err != nil {
+			return "", false
+		}
+		section, err := referencecontract.ExtractSection(strings.ReplaceAll(content, "\r\n", "\n"), direct.Heading)
+		if err != nil {
+			return "", false
+		}
+		return section, true
+	}
+	return "", false
+}
+
+// carrierSpanIdentity is the identity of an allocation: the object id of the
+// section a verdict covered, not of the file that carries it.
+//
+// AcceptanceSource.Blob holds this at every boundary — allocation, candidate
+// submission, reviewer assignment — so all three agree on what "the reviewed
+// source changed" means. Holding a whole-file object id at one boundary and a
+// span at another is what lets an unrelated edit strand a child at whichever
+// boundary still reads the file.
+//
+// It is computed exactly as Git hashes a blob, so the value stays a 40-char
+// lowercase object id like every other identifier in AcceptanceSource, and
+// `git hash-object` on the extracted section reproduces it. A digest of another
+// shape would hold, but it would also make the field mean two things at once
+// and put it at odds with the state validator's object-id rule.
+func carrierSpanIdentity(content, heading string) (string, bool) {
+	span, ok := carrierSpan(content, heading)
+	if !ok {
+		return "", false
+	}
+	// sha1 here is a content address, not an integrity digest: it is what Git
+	// computes for these same bytes. The sha256 below, over canonical commands,
+	// is the integrity digest. Different jobs — do not unify them.
+	hasher := sha1.New()
+	fmt.Fprintf(hasher, "blob %d\x00", len(span))
+	hasher.Write([]byte(span))
+	return hex.EncodeToString(hasher.Sum(nil)), true
+}
+
+// carrierSpan isolates the part of a carrier a reviewer's verdict covers: the
+// section named by the reference heading, or the whole file when the reference
+// names none. Returns false when the heading cannot be resolved uniquely, so
+// an ambiguous or missing heading refuses rather than allocating on a guess.
+//
+// Line endings are normalized on both sides of every comparison, matching the
+// parser: a CRLF conversion at integration is a transport change, not a change
+// to what a reviewer approved.
+func carrierSpan(content, heading string) (string, bool) {
+	if heading == "" {
+		return content, true
+	}
+	section, err := referencecontract.ExtractSection(strings.ReplaceAll(content, "\r\n", "\n"), heading)
+	if err != nil {
+		return "", false
+	}
+	return section, true
+}
+
+// acceptanceCarrierSpan reads a carrier at one commit and isolates the same
+// section. A carrier absent at that commit yields false, never an empty match.
+func acceptanceCarrierSpan(root, commit, path, heading string) (string, bool) {
+	content, _, err := readAcceptanceBlob(root, commit, path)
+	if err != nil {
+		return "", false
+	}
+	return carrierSpan(content, heading)
+}
+
 func readAcceptanceBlob(root, commit, path string) (string, string, error) {
 	if err := referencecontract.ValidateAcceptancePath(path); err != nil {
 		return "", "", fmt.Errorf("invalid acceptance artifact path")
@@ -258,9 +459,15 @@ func prepareAcceptanceReceipt(root string, task *models.Task, input *acceptanceI
 	if input == nil {
 		return nil, nil
 	}
-	path, _, _ := strings.Cut(input.source.Ref, "#")
-	sourceBlob, err := git.New(root).BlobOID(commit, path)
-	if err != nil || sourceBlob != input.source.Blob {
+	path, heading, _ := strings.Cut(input.source.Ref, "#")
+	candidateContent, _, err := readAcceptanceBlob(root, commit, path)
+	if err != nil {
+		return nil, acceptanceError(task.ID, "acceptance.source", "candidate changes the independently reviewed source")
+	}
+	// Same identity as allocation: the candidate may carry an unrelated edit to
+	// the carrier it rebased onto, but not a change to the allocation itself.
+	candidateIdentity, ok := carrierSpanIdentity(candidateContent, heading)
+	if !ok || candidateIdentity != input.source.Blob {
 		return nil, acceptanceError(task.ID, "acceptance.source", "candidate changes the independently reviewed source")
 	}
 	content, blob, err := readAcceptanceBlob(root, commit, input.contract.Manifest)
