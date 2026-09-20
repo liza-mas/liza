@@ -38,6 +38,11 @@ var (
 	submitReviewBeforeModifyTestHook           func()
 )
 
+// submitReviewCauseLimit bounds the write-state cause carried to the agent.
+// Large enough for a validation message with its field path, small enough that
+// a wrapped chain cannot flood a prompt.
+const submitReviewCauseLimit = 512
+
 // SubmitForReview validates that commitRef resolves to the worktree HEAD before rebase,
 // rebases the task branch onto the integration branch to catch conflicts early,
 // then atomically transitions the task to READY_FOR_REVIEW.
@@ -476,8 +481,17 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 					Phase:   "write-state",
 					Message: "failed to submit task for review",
 					Details: map[string]any{
-						"operation":     integrationOperationSubmitForReview,
-						"task_id":       taskID,
+						"operation": integrationOperationSubmitForReview,
+						"task_id":   taskID,
+						// Err stays out of the agent envelope by design, but
+						// withholding it entirely leaves a doer with a refusal
+						// it cannot act on: two agents requeried, correctly
+						// refused to blind-retry a requery action, and blocked
+						// without ever naming the cause, because it was
+						// discarded here. Details is the channel meant for
+						// recovery, so the cause goes through it bounded and
+						// masked rather than raw.
+						"cause":         boundedMaskedErrorString(err, submitReviewCauseLimit),
 						"recovery_hint": "Re-read task state, resolve any concurrent state change or validation issue, then retry submit-for-review.",
 					},
 					Err: err,

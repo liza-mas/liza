@@ -1545,3 +1545,51 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+// A write-state refusal must tell the doer what to fix. Err is deliberately
+// withheld from agents, so the cause travels in Details, bounded and masked —
+// without it an agent that correctly requeries and refuses to blind-retry has
+// nothing to act on, which is what happened twice on cpm-1-cp-2-code-4.
+func TestSubmitForReview_WriteStateFailureCarriesABoundedCause(t *testing.T) {
+	inner := fmt.Errorf("modification function failed: %w", fmt.Errorf("rejected claim produced invalid state: missing required field 'version'"))
+	opErr := &OperationalError{
+		Code:    "state_write",
+		Phase:   "write-state",
+		Message: "failed to submit task for review",
+		Details: map[string]any{
+			"operation":     integrationOperationSubmitForReview,
+			"task_id":       "task-1",
+			"cause":         boundedMaskedErrorString(inner, submitReviewCauseLimit),
+			"recovery_hint": "Re-read task state, resolve any concurrent state change or validation issue, then retry submit-for-review.",
+		},
+		Err: inner,
+	}
+
+	details := opErr.SafeDetails()
+	cause, ok := details["cause"].(string)
+	if !ok || cause == "" {
+		t.Fatalf("SafeDetails carries no cause: %v", details)
+	}
+	if !strings.Contains(cause, "missing required field 'version'") {
+		t.Errorf("cause = %q, want the underlying validation message", cause)
+	}
+	if details["phase"] != "write-state" {
+		t.Errorf("phase = %v, want write-state", details["phase"])
+	}
+}
+
+// The cause is bounded, so a deeply wrapped chain cannot flood an agent prompt.
+// boundedString keeps limit bytes and appends a truncation marker, so the
+// ceiling is the limit plus that marker, not the limit alone.
+func TestSubmitForReview_CauseIsBounded(t *testing.T) {
+	const marker = "... [truncated]"
+	long := fmt.Errorf("%s", strings.Repeat("x", submitReviewCauseLimit*3))
+
+	cause := boundedMaskedErrorString(long, submitReviewCauseLimit)
+	if got, ceiling := len([]byte(cause)), submitReviewCauseLimit+len(marker); got > ceiling {
+		t.Errorf("cause is %d bytes, want at most %d", got, ceiling)
+	}
+	if !strings.HasSuffix(cause, marker) {
+		t.Errorf("a truncated cause must say so; got suffix %q", cause[max(0, len(cause)-len(marker)):])
+	}
+}
