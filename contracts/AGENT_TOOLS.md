@@ -64,7 +64,7 @@ For any MCP-backed default row in the tables below, if the tool is unavailable i
 | Symbol discovery | `scip-search symbols --index <supplied-index>` | `rg` pattern search | No SCIP index path supplied, `scip-search` unavailable, or result insufficient |
 | Symbol lookup | `scip-search symbols --index <supplied-index>` + direct reads | `rg` + direct reads | No SCIP index path supplied, `scip-search` unavailable, or result insufficient |
 | Package discovery | `scip-search packages --index <supplied-index>` | manifest reads + `rg` | No SCIP index path supplied, `scip-search` unavailable, or result insufficient |
-| File edit | apply_patch | morph-mcp edit_file | Edit is broad, context-heavy, or benefits from fast-apply semantics |
+| File edit | apply_patch | morph-mcp edit_file, then a native edit tool, then a scripted exact-match edit | Edit is broad, context-heavy, or benefits from fast-apply semantics; or the defaults are unavailable in this session |
 | Web content | WebFetch | fetch MCP | Need raw HTML, pagination, or blocked |
 | Current info / library discovery | perplexity current-info search | WebSearch | Perplexity returns nothing useful |
 | Library API docs | context7 query docs | Ref | Unknown/niche library, need tutorials |
@@ -134,6 +134,10 @@ semble find-related <file_path> <line> <target-root>
 - **Repository navigation**: supplied Stacklit/Semble/SCIP first for orientation, conceptual discovery, and symbol/reference tracing; `rg`/`git grep` first for already-known literals, filenames, commands, and config keys.
 - **Tracked or historical search**: Use `git grep` when the question is scoped to tracked files, the index, `HEAD`, or another Git revision. Use `rg` for working-tree search, including unstaged and untracked files.
 - **File edits**: apply_patch > morph-mcp edit_file when the edit is broad, context-heavy, or benefits from fast-apply semantics.
+  Neither is guaranteed: `apply_patch` may not be exposed, and an MCP edit server may fail to connect. When both are absent,
+  fall through to the session's native edit tool, then to a scripted edit. At every rung the edit must fail loudly on a missed
+  anchor. Never edit with `sed`/`awk`: their substitutions report success while changing nothing. A scripted edit asserts its
+  anchor first — read the file, `assert old in s`, then write.
 - **Web content**: WebFetch > fetch MCP when you need exact content, raw HTML, or pagination.
 - **Docs**: `context7` (API reference) > `Ref` (tutorials/niche docs) > `deepwiki` (repo architecture) > `WebFetch` (specific URL).
 
