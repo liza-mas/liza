@@ -85,8 +85,17 @@ test-fast: sync-embedded check-testhelpers
 # internal/ops each exceed it under -race on a slower filesystem — measured at
 # 10m12s and 17m55s on Windows. Go kills the whole package when that fires, so
 # the tests after the one running at the time are silently never reported.
+#
+# -p 2 caps how many test binaries run at once; the default is GOMAXPROCS, so
+# on an 8-core host up to 8 race-instrumented packages compete. Tests with
+# wall-clock tolerances then fail on load rather than on logic — measured 818ms
+# against an 800ms budget, and 2s/10s readiness waits timing out in
+# await_resubmission_test.go while the same tests pass in isolation. Those
+# tolerances are the real fragility (TECH_DEBT.md); this gate has to be
+# trustworthy before the work that depends on it can fix them. Raise this only
+# with evidence that the tolerances survive the contention.
 test-race: sync-embedded check-testhelpers
-	go test -race -timeout 30m ./...
+	go test -race -timeout 30m -p 2 ./...
 
 # Run e2e tests (full sprint sequence with mock CLI — ~40s)
 test-e2e: sync-embedded check-testhelpers

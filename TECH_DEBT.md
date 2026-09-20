@@ -116,6 +116,30 @@ architecture-aware and cover amd64 and arm64 selection in tests. If x64
 emulation fails for a supported Windows arm64 user first, add a documented
 source-build fallback or mark RTK unsupported on that architecture.
 
+## Race-gate tests carry fixed wall-clock tolerances
+
+**What:** Several `internal/ops` tests assert against absolute durations rather
+than against progress: `await_resubmission_test.go` allows 800ms for a delayed
+watcher to return within its original deadline (`:574`), 2s for a lease to
+appear on entry (`:1013`), and 10s for review ownership (`:1075`, racing an
+`AwaitResubmission` call given the same 10s). They pass in isolation and fail
+under a loaded `make test-race`, measured at 818ms against the 800ms budget.
+`make test-race` now runs with `-p 2` to keep the gate trustworthy, which
+removes the contention rather than the fragility.
+
+**Why deferred:** Four tasks were simultaneously blocked by the gate they
+needed in order to land anything, including the repair tasks routed at the
+failures themselves. Capping concurrency unblocks that without touching test
+semantics; rewriting the tolerances is a change to shared test files that the
+blocked work would have to validate through the same gate. Raising an assertion
+limit to make a red test green would be suppression, so the rewrite has to
+replace absolute durations with progress-based waits, which is real work.
+
+**Payback trigger:** When the gate next fails on a wall-clock tolerance, or
+before `-p 2` is raised for wall-time reasons, convert these assertions to poll
+until a package-level deadline instead of a fixed budget. Whoever raises `-p`
+owns the evidence that the tolerances survive the contention.
+
 ## CI does not yet enforce the split test targets
 
 **What:** Routine `make test` no longer enables the race detector or writes a
