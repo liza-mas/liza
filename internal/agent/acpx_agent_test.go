@@ -918,3 +918,58 @@ func allLLMAgentEventsHaveTask(events []LLMAgentEvent, taskID string) bool {
 	}
 	return true
 }
+
+// TestACPXAgentUsageEventSingle pins the one-usage-event-per-run contract the
+// supervisor usage sink depends on: exactly one record must be written per
+// provider turn, on the successful and on the failing prompt path alike.
+func TestACPXAgentUsageEventSingle(t *testing.T) {
+	cases := []struct {
+		name      string
+		prompt    string
+		wantErr   bool
+		wantUsage LLMAgentUsage
+	}{
+		{name: "success", prompt: "implement the requested change", wantUsage: LLMAgentUsage{InputTokens: 123, OutputTokens: 7, CachedReadTokens: 42}},
+		{name: "prompt_failure", prompt: "unrelated failure", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			binDir := t.TempDir()
+			writeFakeACPX(t, filepath.Join(binDir, "acpx"), filepath.Join(t.TempDir(), "acpx.log"))
+			t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			// The provider's output reader emits message chunks from its own
+			// goroutine, so the recorder must be synchronized.
+			var mu sync.Mutex
+			var events []LLMAgentEvent
+			sink := LLMAgentEventFunc(func(_ context.Context, event LLMAgentEvent) {
+				mu.Lock()
+				defer mu.Unlock()
+				events = append(events, event)
+			})
+			result, err := NewACPXAgent("").Run(context.Background(), LLMAgentRunRequest{
+				BackendName: "codex-acp",
+				AgentID:     "coder-1",
+				TaskID:      "task-acp",
+				Prompt:      tc.prompt,
+				ProjectRoot: t.TempDir(),
+				EventSink:   sink,
+				LaunchGate:  immediateLaunchGate,
+			})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Run() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if result.Usage != tc.wantUsage {
+				t.Fatalf("Usage = %+v, want %+v", result.Usage, tc.wantUsage)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if got := countLLMAgentEvents(events, LLMAgentEventUsage); got != 1 {
+				t.Fatalf("usage event count = %d, want exactly one per run: %#v", got, events)
+			}
+			if got := countLLMAgentEvents(events, LLMAgentEventCompleted); got != 1 {
+				t.Fatalf("completed event count = %d, want exactly one per run: %#v", got, events)
+			}
+		})
+	}
+}

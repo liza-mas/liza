@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"github.com/liza-mas/liza/internal/usage"
 )
 
 // TestAutoResumeAction tests the pure decision function for auto-resume.
@@ -1250,4 +1251,341 @@ func TestOrchestratorSpinningTracker(t *testing.T) {
 	if count != 1 {
 		t.Errorf("Track() after signature change = %d, want 1", count)
 	}
+}
+
+type interactiveUsageAgent struct {
+	t        *testing.T
+	started  time.Time
+	exitCode int
+	err      error
+	calls    int
+	sinkSet  bool
+}
+
+func (a *interactiveUsageAgent) Run(context.Context, LLMAgentRunRequest) (LLMAgentRunResult, error) {
+	a.t.Fatal("interactive supervisor called Run")
+	return LLMAgentRunResult{}, nil
+}
+
+func (a *interactiveUsageAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRequest) (int, error) {
+	a.calls++
+	a.sinkSet = req.EventSink != nil
+	// Interactive providers emit lifecycle events without task attribution or usage.
+	// Leave event identities empty to verify attribution comes from the call site.
+	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
+		Kind: LLMAgentEventStarted, Time: a.started,
+	})
+	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
+		Kind: LLMAgentEventCompleted, Time: a.started.Add(2 * time.Second),
+		Payload: map[string]any{"exit_code": a.exitCode},
+	})
+	return a.exitCode, a.err
+}
+
+func TestExecuteAgentInteractiveUsageCapture(t *testing.T) {
+	providerErr := errors.New("interactive provider failed")
+	for _, tc := range []struct {
+		name        string
+		blockAppend bool
+		exitCode    int
+		err         error
+	}{
+		{name: "successful_turns"},
+		{name: "failed_turns", exitCode: 7, err: providerErr},
+		{name: "append_failure_preserves_success", blockAppend: true},
+		{name: "append_failure_preserves_error", blockAppend: true, exitCode: 7, err: providerErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+			const taskID = "interactive-task"
+			state := testhelpers.CreateValidState()
+			state.Tasks = []models.Task{testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, time.Now().UTC())}
+			testhelpers.WriteInitialState(t, statePath, state)
+			if tc.blockAppend {
+				// A file at the store directory deterministically rejects appends.
+				if err := os.WriteFile(usage.Dir(projectRoot), []byte("not a directory"), 0o600); err != nil {
+					t.Fatalf("block usage store: %v", err)
+				}
+			}
+			started := time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC)
+			fake := &interactiveUsageAgent{t: t, exitCode: tc.exitCode, err: tc.err}
+			config := SupervisorConfig{
+				ProjectRoot: projectRoot, StatePath: statePath,
+				AgentID: "coder-interactive", Role: models.RoleCoder, CLIName: "codex",
+				Interactive: true, LLMAgent: fake,
+			}
+			for turn := 0; turn < 2; turn++ {
+				fake.started = started.Add(time.Duration(turn) * time.Minute)
+				exitCode, output, err := executeAgent(context.Background(), config, "prompt", nil, taskID, state.Config)
+				if exitCode != tc.exitCode || err != tc.err || output != "" {
+					t.Fatalf("executeAgent = (%d, %q, %v), want (%d, empty, %v)", exitCode, output, err, tc.exitCode, tc.err)
+				}
+				if fake.calls != turn+1 {
+					t.Fatalf("interactive calls = %d, want %d", fake.calls, turn+1)
+				}
+				if tc.blockAppend {
+					if !fake.sinkSet {
+						t.Fatal("append failure was not exercised: interactive request has no event sink")
+					}
+					if _, _, loadErr := usage.Load(projectRoot, time.Time{}, time.Time{}); loadErr == nil {
+						t.Fatal("blocked usage store unexpectedly loaded successfully")
+					}
+					continue
+				}
+				// Load the real store: removing EventSink from executeAgent must fail here.
+				records, stats, loadErr := usage.Load(projectRoot, time.Time{}, time.Time{})
+				if loadErr != nil || !stats.Available || stats.DuplicatesCollapsed != 0 || stats.MalformedLines != 0 {
+					t.Fatalf("usage store = %+v, error = %v; want available with no duplicate or malformed records", stats, loadErr)
+				}
+				if len(records) != turn+1 {
+					t.Fatalf("records = %d, want one per interactive turn (%d)", len(records), turn+1)
+				}
+				for i, record := range records {
+					if record.TaskID != taskID || record.Role != config.Role || record.AgentID != config.AgentID ||
+						record.SupervisorRunID != supervisorRunID() || record.SupervisorRunID == "" ||
+						record.Provider != config.CLIName || record.SessionID != taskID {
+						t.Fatalf("incorrect supervisor attribution: %+v", record)
+					}
+					if record.Provenance != usage.ProvenanceUnknown {
+						t.Fatalf("provenance = %q, want unknown, never terminal_authoritative", record.Provenance)
+					}
+					wantStart := started.Add(time.Duration(i) * time.Minute)
+					if !record.StartedAt.Equal(wantStart) || !record.EndedAt.Equal(wantStart.Add(2*time.Second)) {
+						t.Fatalf("incorrect turn interval: %+v", record)
+					}
+					if record.ExitCode != tc.exitCode {
+						t.Fatalf("record exit code = %d, want %d", record.ExitCode, tc.exitCode)
+					}
+				}
+			}
+		})
+	}
+}
+
+// newUsageSinkTestConfig builds a sink config over a throwaway project root.
+func newUsageSinkTestConfig(t *testing.T, runID string) UsageSinkConfig {
+	t.Helper()
+	return UsageSinkConfig{
+		ProjectRoot:     t.TempDir(),
+		AgentID:         "coder-1",
+		Role:            "coder",
+		Provider:        "claude",
+		SessionID:       "task-usage",
+		TaskID:          "task-usage",
+		SupervisorRunID: runID,
+	}
+}
+
+// driveUsageTurn feeds one provider turn (started, optional usage, completed)
+// through the sink exactly as cli_agent and acpx_agent emit it.
+func driveUsageTurn(sink LLMAgentEventSink, cfg UsageSinkConfig, started time.Time, reported *LLMAgentUsage, exitCode int) {
+	ctx := context.Background()
+	base := LLMAgentEvent{BackendName: cfg.Provider, AgentID: cfg.AgentID, TaskID: cfg.TaskID, SessionID: cfg.SessionID}
+	startEvent := base
+	startEvent.Kind = LLMAgentEventStarted
+	startEvent.Time = started
+	sink.RecordLLMAgentEvent(ctx, startEvent)
+	if reported != nil {
+		usageEvent := base
+		usageEvent.Kind = LLMAgentEventUsage
+		usageEvent.Time = started.Add(time.Second)
+		usageEvent.Payload = map[string]any{"usage": *reported}
+		sink.RecordLLMAgentEvent(ctx, usageEvent)
+	}
+	completed := base
+	completed.Kind = LLMAgentEventCompleted
+	completed.Time = started.Add(2 * time.Second)
+	completed.Payload = map[string]any{"exit_code": exitCode}
+	sink.RecordLLMAgentEvent(ctx, completed)
+}
+
+func loadUsageRecordsForTest(t *testing.T, projectRoot string) []usage.Record {
+	t.Helper()
+	records, stats, err := usage.Load(projectRoot, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("usage.Load: %v", err)
+	}
+	if !stats.Available {
+		t.Fatalf("usage store unavailable: %+v", stats)
+	}
+	return records
+}
+
+func TestSupervisorUsageSinkRecordsOneRecordPerRun(t *testing.T) {
+	cfg := newUsageSinkTestConfig(t, "run-fixed-0001")
+	started := time.Date(2026, 9, 18, 10, 0, 0, 0, time.UTC)
+	reported := LLMAgentUsage{InputTokens: 120, OutputTokens: 9, CachedReadTokens: 4000, CachedWriteTokens: 30}
+
+	driveUsageTurn(NewUsageEventSink(cfg), cfg, started, &reported, 0)
+
+	records := loadUsageRecordsForTest(t, cfg.ProjectRoot)
+	if len(records) != 1 {
+		t.Fatalf("records = %d, want exactly one per provider turn: %+v", len(records), records)
+	}
+	got := records[0]
+	want := usage.Record{
+		SchemaVersion:    usage.SchemaVersion,
+		RecordID:         usage.NewRecordID(cfg.AgentID, cfg.SupervisorRunID, cfg.SessionID, cfg.Provider, started),
+		TaskID:           cfg.TaskID,
+		Role:             cfg.Role,
+		AgentID:          cfg.AgentID,
+		SupervisorRunID:  cfg.SupervisorRunID,
+		SessionID:        cfg.SessionID,
+		Provider:         cfg.Provider,
+		StartedAt:        started,
+		EndedAt:          started.Add(2 * time.Second),
+		FreshInputTokens: 120,
+		CacheReadTokens:  4000,
+		CacheWriteTokens: 30,
+		OutputTokens:     9,
+		Provenance:       usage.ProvenanceTerminalAuthoritative,
+	}
+	if !got.StartedAt.Equal(want.StartedAt) || !got.EndedAt.Equal(want.EndedAt) {
+		t.Fatalf("interval = [%s, %s], want [%s, %s]", got.StartedAt, got.EndedAt, want.StartedAt, want.EndedAt)
+	}
+	got.StartedAt, got.EndedAt = want.StartedAt, want.EndedAt
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("record = %+v, want %+v", got, want)
+	}
+
+	// A second run of the same supervisor process appends a second record
+	// carrying the same run identity.
+	second := started.Add(time.Hour)
+	driveUsageTurn(NewUsageEventSink(cfg), cfg, second, &reported, 0)
+	records = loadUsageRecordsForTest(t, cfg.ProjectRoot)
+	if len(records) != 2 {
+		t.Fatalf("records after second run = %d, want 2: %+v", len(records), records)
+	}
+	for _, r := range records {
+		if r.SupervisorRunID != cfg.SupervisorRunID {
+			t.Fatalf("record %s supervisor_run_id = %q, want %q", r.RecordID, r.SupervisorRunID, cfg.SupervisorRunID)
+		}
+	}
+	if records[0].RecordID == records[1].RecordID {
+		t.Fatalf("two turns collapsed onto one record id %q", records[0].RecordID)
+	}
+}
+
+func TestSupervisorUsageSinkRunID(t *testing.T) {
+	first := supervisorRunID()
+	if first == "" {
+		t.Fatal("supervisorRunID() is empty; a record must never carry an empty identity")
+	}
+	if second := supervisorRunID(); second != first {
+		t.Fatalf("supervisorRunID() = %q then %q, want one stable value per process", first, second)
+	}
+	if a, b := newSupervisorRunID(), newSupervisorRunID(); a == b || a == "" || b == "" {
+		t.Fatalf("newSupervisorRunID() = %q and %q, want two distinct non-empty identities", a, b)
+	}
+
+	// Two sinks built in one process without an explicit id share the accessor's
+	// value; an explicit id is honoured verbatim.
+	fallback := newUsageSinkTestConfig(t, "")
+	started := time.Date(2026, 9, 18, 11, 0, 0, 0, time.UTC)
+	driveUsageTurn(NewUsageEventSink(fallback), fallback, started, &LLMAgentUsage{InputTokens: 1, OutputTokens: 1}, 0)
+	driveUsageTurn(NewUsageEventSink(fallback), fallback, started.Add(time.Minute), &LLMAgentUsage{InputTokens: 1, OutputTokens: 1}, 0)
+	records := loadUsageRecordsForTest(t, fallback.ProjectRoot)
+	if len(records) != 2 {
+		t.Fatalf("records = %d, want 2: %+v", len(records), records)
+	}
+	for _, r := range records {
+		if r.SupervisorRunID != first {
+			t.Fatalf("empty SupervisorRunID recorded %q, want the process accessor value %q", r.SupervisorRunID, first)
+		}
+	}
+
+	explicit := newUsageSinkTestConfig(t, "restarted-supervisor-0002")
+	driveUsageTurn(NewUsageEventSink(explicit), explicit, started, &LLMAgentUsage{InputTokens: 1, OutputTokens: 1}, 0)
+	records = loadUsageRecordsForTest(t, explicit.ProjectRoot)
+	if len(records) != 1 || records[0].SupervisorRunID != explicit.SupervisorRunID {
+		t.Fatalf("records = %+v, want one record carrying %q", records, explicit.SupervisorRunID)
+	}
+	// Two supervisor processes on one task therefore yield two record identities.
+	if records[0].RecordID == usage.NewRecordID(explicit.AgentID, first, explicit.SessionID, explicit.Provider, started) {
+		t.Fatal("records from two supervisor run identities share one record id")
+	}
+}
+
+func TestSupervisorUsageSinkProvenance(t *testing.T) {
+	cases := []struct {
+		name     string
+		reported *LLMAgentUsage
+		want     usage.Provenance
+	}{
+		{"authoritative", &LLMAgentUsage{InputTokens: 10, OutputTokens: 2}, usage.ProvenanceTerminalAuthoritative},
+		{"partial", &LLMAgentUsage{CachedReadTokens: 900}, usage.ProvenancePartial},
+		{"no_usage_event", nil, usage.ProvenanceUnknown},
+		{"empty_usage_object", &LLMAgentUsage{}, usage.ProvenanceUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := newUsageSinkTestConfig(t, "run-provenance")
+			started := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+			driveUsageTurn(NewUsageEventSink(cfg), cfg, started, tc.reported, 0)
+			records := loadUsageRecordsForTest(t, cfg.ProjectRoot)
+			if len(records) != 1 {
+				t.Fatalf("records = %d, want 1: %+v", len(records), records)
+			}
+			if records[0].Provenance != tc.want {
+				t.Fatalf("provenance = %q, want %q", records[0].Provenance, tc.want)
+			}
+		})
+	}
+
+	t.Run("completed_without_started", func(t *testing.T) {
+		cfg := newUsageSinkTestConfig(t, "run-launch-gate-failure")
+		sink := NewUsageEventSink(cfg)
+		at := time.Date(2026, 9, 18, 13, 0, 0, 0, time.UTC)
+		sink.RecordLLMAgentEvent(context.Background(), LLMAgentEvent{
+			Kind: LLMAgentEventCompleted, Time: at, BackendName: cfg.Provider,
+			AgentID: cfg.AgentID, TaskID: cfg.TaskID, SessionID: cfg.SessionID,
+			Message: "launch gate rejected the start",
+			Payload: map[string]any{"error": "launch gate rejected the start"},
+		})
+		records := loadUsageRecordsForTest(t, cfg.ProjectRoot)
+		if len(records) != 1 {
+			t.Fatalf("records = %d, want one record for the launch-gate failure: %+v", len(records), records)
+		}
+		got := records[0]
+		if got.Provenance != usage.ProvenanceUnknown {
+			t.Fatalf("provenance = %q, want %q", got.Provenance, usage.ProvenanceUnknown)
+		}
+		if !got.StartedAt.Equal(at) || !got.EndedAt.Equal(at) {
+			t.Fatalf("interval = [%s, %s], want the zero-length interval at %s", got.StartedAt, got.EndedAt, at)
+		}
+	})
+
+	t.Run("append_failure_leaves_run_result_unchanged", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		// A regular file where the store directory belongs makes every append fail.
+		if err := os.MkdirAll(paths.New(projectRoot).LizaDir(), 0o755); err != nil {
+			t.Fatalf("create runtime dir: %v", err)
+		}
+		if err := os.WriteFile(usage.Dir(projectRoot), []byte("not a directory"), 0o600); err != nil {
+			t.Fatalf("block usage store: %v", err)
+		}
+		binDir := t.TempDir()
+		testhelpers.WriteShellStub(t, filepath.Join(binDir, "gemini"), "#!/bin/sh\nprintf 'provider output\\n'\n")
+		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+		sink := NewUsageEventSink(UsageSinkConfig{
+			ProjectRoot: projectRoot, AgentID: "coder-1", Role: "coder",
+			Provider: "gemini", SessionID: "task-usage", TaskID: "task-usage",
+			SupervisorRunID: "run-append-failure",
+		})
+		result, err := NewCLIAgent("").Run(context.Background(), LLMAgentRunRequest{
+			BackendName: "gemini", AgentID: "coder-1", TaskID: "task-usage", SessionID: "task-usage",
+			Prompt: "prompt body", ProjectRoot: projectRoot, EventSink: sink, LaunchGate: immediateLaunchGate,
+		})
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("Run = (%d, %v), want the unchanged successful result despite the failing store", result.ExitCode, err)
+		}
+		if !strings.Contains(result.Output, "provider output") {
+			t.Fatalf("Output = %q, want the provider output unchanged", result.Output)
+		}
+		if _, stats, err := usage.Load(projectRoot, time.Time{}, time.Time{}); err == nil && stats.Records != 0 {
+			t.Fatalf("blocked store reported %d records", stats.Records)
+		}
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/usage"
 )
 
 func TestInspectMetrics(t *testing.T) {
@@ -519,5 +520,203 @@ func TestCalculateAgentMetrics(t *testing.T) {
 	// Success rate: 1/3 = 33.33%
 	if coder2.SuccessRatePercent < 33 || coder2.SuccessRatePercent > 34 {
 		t.Errorf("expected coder-2 SuccessRatePercent≈33, got %d", coder2.SuccessRatePercent)
+	}
+}
+
+// usageFixtureT0 anchors the usage fixtures; the sprint starts here and every
+// record starts after it.
+var usageFixtureT0 = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+
+func usageFixtureState() *models.State {
+	at := func(hours int) time.Time { return usageFixtureT0.Add(time.Duration(hours) * time.Hour) }
+	return &models.State{
+		Sprint: models.Sprint{
+			Timeline: models.SprintTimeline{Started: usageFixtureT0},
+			Metrics: models.SprintMetrics{
+				TasksDone: 1, TasksInProgress: 1, IterationsTotal: 3, ReviewCyclesTotal: 2,
+				ReviewVerdictApprovals: 1, ReviewVerdictCount: 1, ReviewVerdictApprovalRatePercent: 100,
+				TaskSubmittedForReviewCount: 1, TaskOutcomeApprovalRatePercent: 100,
+			},
+		},
+		Tasks: []models.Task{
+			{ID: "t1", Status: models.TaskStatusMerged, Lifecycle: &models.TaskLifecycle{Revision: 3}, History: []models.TaskHistoryEntry{
+				{Time: at(0), Event: models.TaskEventCreated},
+				{Time: at(1), Event: models.TaskEventClaimed},
+				{Time: at(6), Event: models.TaskEventMerged},
+			}},
+			{ID: "t2", Status: models.TaskStatusImplementing, Lifecycle: &models.TaskLifecycle{Revision: 1}, History: []models.TaskHistoryEntry{
+				{Time: at(0), Event: models.TaskEventCreated},
+				{Time: at(2), Event: models.TaskEventClaimed},
+			}},
+		},
+	}
+}
+
+// usageFixtureStore writes three authoritative records (two on merged t1, one
+// on active t2) and one unknown-provenance record on t2 through the real store.
+func usageFixtureStore(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	rec := func(taskID, runID string, hour, fresh, cacheRead, output int, provenance usage.Provenance) usage.Record {
+		started := usageFixtureT0.Add(time.Duration(hour) * time.Hour)
+		return usage.Record{
+			TaskID: taskID, Role: "coder", AgentID: "coder-1", SupervisorRunID: runID, SessionID: taskID, Provider: "cli",
+			StartedAt: started, EndedAt: started.Add(time.Minute),
+			FreshInputTokens: fresh, CacheReadTokens: cacheRead, OutputTokens: output, Provenance: provenance,
+		}
+	}
+	for _, r := range []usage.Record{
+		rec("t1", "run-a", 2, 100, 900, 10, usage.ProvenanceTerminalAuthoritative),
+		rec("t1", "run-b", 3, 50, 450, 5, usage.ProvenanceTerminalAuthoritative),
+		rec("t2", "run-c", 3, 20, 80, 2, usage.ProvenanceTerminalAuthoritative),
+		rec("t2", "run-d", 4, 0, 0, 0, usage.ProvenanceUnknown),
+	} {
+		if err := usage.Append(root, r); err != nil {
+			t.Fatalf("usage.Append: %v", err)
+		}
+	}
+	return root
+}
+
+func inspectMetricsInfo(t *testing.T, state *models.State, opts inspectMetricsOptions) metricsInfo {
+	t.Helper()
+	opts.Internal = true
+	result, err := inspectMetrics(state, opts)
+	if err != nil {
+		t.Fatalf("inspectMetrics: %v", err)
+	}
+	info, ok := result.(metricsInfo)
+	if !ok {
+		t.Fatalf("expected metricsInfo, got %T", result)
+	}
+	return info
+}
+
+func TestInspectMetricsUsageSummary(t *testing.T) {
+	// GIVEN a fixture store under the project root and a state whose sprint started before the records
+	state := usageFixtureState()
+	root := usageFixtureStore(t)
+
+	// WHEN sprint metrics are inspected with the project root
+	info := inspectMetricsInfo(t, state, inspectMetricsOptions{ProjectRoot: root})
+
+	// THEN the usage block is populated from the store
+	if info.Usage == nil {
+		t.Fatalf("expected usage block, got nil (warnings: %v)", info.UsageWarnings)
+	}
+	if len(info.UsageWarnings) != 0 {
+		t.Errorf("expected no usage warnings, got %v", info.UsageWarnings)
+	}
+	if !info.Usage.Window.Since.Equal(usageFixtureT0) {
+		t.Errorf("expected window since %s, got %s", usageFixtureT0, info.Usage.Window.Since)
+	}
+	want := map[usage.OutcomeClass]usage.SummaryOutcome{
+		usage.OutcomeMerged: {Outcome: usage.OutcomeMerged, Tasks: 1, FreshTokens: 150, CacheReadTokens: 1350, OutputTokens: 15},
+		usage.OutcomeActive: {Outcome: usage.OutcomeActive, Tasks: 1, FreshTokens: 20, CacheReadTokens: 80, OutputTokens: 2},
+	}
+	if len(info.Usage.Outcomes) != len(want) {
+		t.Fatalf("expected %d outcome rows, got %+v", len(want), info.Usage.Outcomes)
+	}
+	for _, row := range info.Usage.Outcomes {
+		if row != want[row.Outcome] {
+			t.Errorf("outcome %s: got %+v, want %+v", row.Outcome, row, want[row.Outcome])
+		}
+	}
+	if info.Usage.CacheReadTokensPerMergedTask == nil || *info.Usage.CacheReadTokensPerMergedTask != 1350 {
+		t.Errorf("expected cache_read_tokens_per_merged_task 1350, got %v", info.Usage.CacheReadTokensPerMergedTask)
+	}
+	if info.Usage.CacheHitPercent == nil || *info.Usage.CacheHitPercent != 89.375 {
+		t.Errorf("expected cache_hit_percent 89.375, got %v", info.Usage.CacheHitPercent)
+	}
+	wantProvenance := usage.ProvenanceCounts{TerminalAuthoritative: 3, Unknown: 1}
+	if info.Usage.Provenance == nil || *info.Usage.Provenance != wantProvenance {
+		t.Errorf("expected provenance %+v, got %+v", wantProvenance, info.Usage.Provenance)
+	}
+
+	// AND the JSON and value renderings carry the block
+	jsonOut, err := formatMetricsOutput(info, "json")
+	if err != nil {
+		t.Fatalf("formatMetricsOutput json: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+	if _, ok := decoded["usage"]; !ok {
+		t.Errorf("expected usage key in JSON output: %s", jsonOut)
+	}
+	if _, ok := decoded["usage_warnings"]; ok {
+		t.Errorf("expected no usage_warnings key in JSON output: %s", jsonOut)
+	}
+	valueOut, err := formatMetricsOutput(info, "value")
+	if err != nil {
+		t.Fatalf("formatMetricsOutput value: %v", err)
+	}
+	for _, fragment := range []string{"Usage: available", "merged: tasks 1, fresh 150, cache-read 1350, output 15", "Cache-read tokens per merged task: 1350", "Cache hit: 89.4%", "Provenance: terminal_authoritative 3, partial 0, unknown 1, conflicting 0"} {
+		if !strings.Contains(valueOut, fragment) {
+			t.Errorf("expected value output to contain %q:\n%s", fragment, valueOut)
+		}
+	}
+}
+
+func TestInspectMetricsWithoutUsageStore(t *testing.T) {
+	// GIVEN a project root with no usage store
+	state := usageFixtureState()
+	root := t.TempDir()
+
+	// WHEN sprint metrics are inspected
+	info := inspectMetricsInfo(t, state, inspectMetricsOptions{ProjectRoot: root})
+
+	// THEN the block is omitted and the warning is recorded
+	if info.Usage != nil {
+		t.Errorf("expected usage block omitted, got %+v", info.Usage)
+	}
+	if len(info.UsageWarnings) == 0 || !strings.Contains(info.UsageWarnings[0], "usage store unavailable") {
+		t.Errorf("expected usage store unavailable warning, got %v", info.UsageWarnings)
+	}
+
+	// AND every pre-existing metrics field is byte-identical to today's output
+	today, err := formatMetricsOutput(buildMetricsInfo(state.Sprint.Metrics), "json")
+	if err != nil {
+		t.Fatalf("formatMetricsOutput today: %v", err)
+	}
+	stripped := info
+	stripped.Usage, stripped.UsageWarnings = nil, nil
+	got, err := formatMetricsOutput(stripped, "json")
+	if err != nil {
+		t.Fatalf("formatMetricsOutput stripped: %v", err)
+	}
+	if got != today {
+		t.Errorf("pre-existing metrics changed:\nwant %s\ngot  %s", today, got)
+	}
+	jsonOut, err := formatMetricsOutput(info, "json")
+	if err != nil {
+		t.Fatalf("formatMetricsOutput json: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+	if _, ok := decoded["usage"]; ok {
+		t.Errorf("expected usage key omitted from JSON output: %s", jsonOut)
+	}
+	if _, ok := decoded["usage_warnings"]; !ok {
+		t.Errorf("expected usage_warnings key in JSON output: %s", jsonOut)
+	}
+
+	// AND the value rendering states unavailability with the warning, after the unchanged existing lines
+	valueOut, err := formatMetricsOutput(info, "value")
+	if err != nil {
+		t.Fatalf("formatMetricsOutput value: %v", err)
+	}
+	todayValue, err := formatMetricsOutput(buildMetricsInfo(state.Sprint.Metrics), "value")
+	if err != nil {
+		t.Fatalf("formatMetricsOutput today value: %v", err)
+	}
+	if !strings.HasPrefix(valueOut, todayValue) {
+		t.Errorf("expected value output to start with today's output:\n%s", valueOut)
+	}
+	if !strings.Contains(valueOut, "Usage: unavailable") || !strings.Contains(valueOut, "Warning: usage store unavailable") {
+		t.Errorf("expected unavailable usage block with warning:\n%s", valueOut)
 	}
 }

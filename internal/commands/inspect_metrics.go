@@ -3,14 +3,17 @@ package commands
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/render"
+	"github.com/liza-mas/liza/internal/usage"
 )
 
 // inspectMetricsOptions contains options for metrics inspection
 type inspectMetricsOptions struct {
 	Format       string // Output format: json, yaml, table, value
+	ProjectRoot  string // Project root directory; locates the usage store
 	AgentMetrics bool   // If true, show per-agent metrics instead of sprint metrics
 	Internal     bool   // Return structured data for composition
 }
@@ -29,6 +32,10 @@ type metricsInfo struct {
 	ReviewVerdictApprovalRatePercent int                             `json:"review_verdict_approval_rate_percent" yaml:"review_verdict_approval_rate_percent"`
 	TaskSubmittedForReviewCount      int                             `json:"task_submitted_for_review_count" yaml:"task_submitted_for_review_count"`
 	TaskOutcomeApprovalRatePercent   int                             `json:"task_outcome_approval_rate_percent" yaml:"task_outcome_approval_rate_percent"`
+	// Usage is the compact usage summary for the current sprint window; omitted
+	// when the store is unavailable, in which case UsageWarnings says why.
+	Usage         *usage.Summary `json:"usage,omitempty" yaml:"usage,omitempty"`
+	UsageWarnings []string       `json:"usage_warnings,omitempty" yaml:"usage_warnings,omitempty"`
 }
 
 // AgentMetricsInfo represents per-agent performance metrics
@@ -64,6 +71,7 @@ func inspectMetrics(state *models.State, opts inspectMetricsOptions) (any, error
 
 	// Get sprint metrics
 	metricsInfo := buildMetricsInfo(state.Sprint.Metrics)
+	metricsInfo.Usage, metricsInfo.UsageWarnings = usageSummary(state, opts.ProjectRoot)
 
 	// If called internally, return structured data
 	if opts.Internal {
@@ -90,6 +98,36 @@ func buildMetricsInfo(metrics models.SprintMetrics) metricsInfo {
 		TaskSubmittedForReviewCount:      metrics.TaskSubmittedForReviewCount,
 		TaskOutcomeApprovalRatePercent:   metrics.TaskOutcomeApprovalRatePercent,
 	}
+}
+
+// usageSummary reads the usage store for the current sprint window and joins it
+// to task history. An unavailable store, a read failure or a report failure
+// never fails metrics: the block is omitted and the reason is returned as
+// warnings, so unavailability is never rendered as zero.
+func usageSummary(state *models.State, projectRoot string) (*usage.Summary, []string) {
+	window := usage.Window{Since: state.Sprint.Timeline.Started}
+	if state.Sprint.Timeline.Ended != nil {
+		window.Until = *state.Sprint.Timeline.Ended
+	}
+	records, stats, err := usage.Load(projectRoot, window.Since, window.Until)
+	if err != nil {
+		return nil, []string{err.Error()}
+	}
+	report, err := usage.Build(usage.Input{
+		Records:   records,
+		LoadStats: stats,
+		State:     state,
+		Counters:  state.Sprint.Metrics.LifecycleOutcomes,
+		Window:    window,
+	})
+	if err != nil {
+		return nil, []string{err.Error()}
+	}
+	summary := usage.Summarize(report)
+	if !stats.Available {
+		return nil, summary.Warnings
+	}
+	return &summary, nil
 }
 
 // calculateAgentMetrics computes per-agent statistics from tasks
@@ -210,7 +248,43 @@ func formatMetricsValue(metrics metricsInfo) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return text + "\n" + formatLifecycleMetrics(metrics.LifecycleOutcomes), nil
+	return text + "\n" + formatLifecycleMetrics(metrics.LifecycleOutcomes) + formatUsageSummary(metrics.Usage, metrics.UsageWarnings), nil
+}
+
+// formatUsageSummary renders the usage block, or its absence with the recorded
+// warnings, as key-value lines.
+func formatUsageSummary(summary *usage.Summary, warnings []string) string {
+	var text strings.Builder
+	if summary == nil {
+		text.WriteString("Usage: unavailable\n")
+		for _, warning := range warnings {
+			fmt.Fprintf(&text, "  Warning: %s\n", warning)
+		}
+		return text.String()
+	}
+	text.WriteString("Usage: available (current sprint window)\n")
+	for _, row := range summary.Outcomes {
+		fmt.Fprintf(&text, "  %s: tasks %d, fresh %d, cache-read %d, output %d\n",
+			row.Outcome, row.Tasks, row.FreshTokens, row.CacheReadTokens, row.OutputTokens)
+	}
+	if summary.CacheReadTokensPerMergedTask != nil {
+		fmt.Fprintf(&text, "  Cache-read tokens per merged task: %.0f\n", *summary.CacheReadTokensPerMergedTask)
+	}
+	if summary.CacheHitPercent != nil {
+		fmt.Fprintf(&text, "  Cache hit: %.1f%%\n", *summary.CacheHitPercent)
+	}
+	if provenance := summary.Provenance; provenance != nil {
+		fmt.Fprintf(&text, "  Provenance: terminal_authoritative %d, partial %d, unknown %d, conflicting %d\n",
+			provenance.TerminalAuthoritative, provenance.Partial, provenance.Unknown, provenance.Conflicting)
+		if provenance.DuplicatesCollapsed+provenance.MalformedLines+provenance.ConflictingRecords > 0 {
+			fmt.Fprintf(&text, "  Store: duplicates collapsed %d, malformed lines %d, conflicting records %d\n",
+				provenance.DuplicatesCollapsed, provenance.MalformedLines, provenance.ConflictingRecords)
+		}
+	}
+	for _, warning := range summary.Warnings {
+		fmt.Fprintf(&text, "  Warning: %s\n", warning)
+	}
+	return text.String()
 }
 
 // formatAgentMetricsTable formats per-agent metrics as a table

@@ -171,7 +171,7 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 		}
 		return asString(inspectAgents(state, agentOpts))
 	case "metrics":
-		return asString(inspectMetrics(state, inspectMetricsOptions{Format: opts.Format}))
+		return asString(inspectMetrics(state, inspectMetricsOptions{Format: opts.Format, ProjectRoot: opts.ProjectRoot}))
 	case "anomalies":
 		return asString(inspectAnomalies(state, inspectAnomaliesOptions{Format: opts.Format}))
 	case "quarantined_verdicts":

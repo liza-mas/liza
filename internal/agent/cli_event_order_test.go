@@ -79,7 +79,7 @@ func TestCLIAgentRejectedLaunchDoesNotEmitStarted(t *testing.T) {
 		t.Fatalf("Run error = %v, want rejected launch", err)
 	}
 	events := sink.Events()
-	if len(events) != 1 || events[0].Kind != LLMAgentEventCompleted {
+	if len(events) != 2 || events[0].Kind != LLMAgentEventUsage || events[1].Kind != LLMAgentEventCompleted {
 		t.Fatalf("rejected launch emitted successful-start or output events: %#v", events)
 	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {

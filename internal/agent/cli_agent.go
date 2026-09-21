@@ -40,6 +40,17 @@ func NewDefaultCLIExecutor(outputsDir string) *CLIAgent {
 	return NewCLIAgent(outputsDir)
 }
 
+// emitCLIAgentUsage publishes this run's provider usage. The CLI transport
+// reports no usage object, so the empty value is emitted explicitly on every
+// exit path: the supervisor sink then pins unknown provenance instead of
+// inferring zero tokens from a missing event.
+func emitCLIAgentUsage(ctx context.Context, sink LLMAgentEventSink, base LLMAgentEvent) {
+	event := base
+	event.Kind = LLMAgentEventUsage
+	event.Payload = map[string]any{"usage": LLMAgentUsage{}}
+	emitLLMAgentEvent(ctx, sink, event)
+}
+
 func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRunResult, error) {
 	cliName := req.BackendName
 	agentID := req.AgentID
@@ -72,6 +83,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 		SessionScope:   req.SessionScope,
 	})
 	if err != nil {
+		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 			Kind:        LLMAgentEventCompleted,
 			BackendName: cliName,
@@ -122,6 +134,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 	err = req.LaunchGate.launch(ctx, cmd.Start)
 	if err != nil {
 		close(outputEventsReady)
+		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 			Kind:        LLMAgentEventCompleted,
 			BackendName: cliName,
@@ -157,6 +170,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode := exitErr.ExitCode()
+			emitCLIAgentUsage(ctx, req.EventSink, eventBase)
 			emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 				Kind:        LLMAgentEventCompleted,
 				BackendName: cliName,
@@ -169,6 +183,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 			})
 			return LLMAgentRunResult{ExitCode: exitCode, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
 		}
+		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 			Kind:        LLMAgentEventCompleted,
 			BackendName: cliName,
@@ -183,6 +198,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 		return LLMAgentRunResult{Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
 	}
 
+	emitCLIAgentUsage(ctx, req.EventSink, eventBase)
 	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 		Kind:        LLMAgentEventCompleted,
 		BackendName: cliName,
