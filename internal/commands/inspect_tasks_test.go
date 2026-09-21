@@ -959,7 +959,7 @@ func TestCalculateTimeInStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			duration := calculateTimeInStatus(tt.task)
+			duration := models.TimeInStatus(tt.task, time.Now())
 			formatted := render.FormatDuration(duration)
 			if !strings.Contains(formatted, tt.expectedContains) {
 				t.Errorf("expected duration to contain '%s', got '%s'", tt.expectedContains, formatted)

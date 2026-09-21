@@ -933,6 +933,29 @@ func TestRenderTaskPanel_ColumnTierFull(t *testing.T) {
 	assertContains(t, header, "AGE", "header should contain AGE")
 }
 
+// The TUI measured from the last history entry of any kind, so bookkeeping
+// after a status change reset the displayed duration.
+func TestRenderTaskPanel_TimeInStatusIgnoresNonTransitionEvents(t *testing.T) {
+	now := time.Now()
+	task := makeTask("task-1", models.TaskStatusImplementing, 1)
+	task.Created = now.Add(-9 * time.Hour)
+	task.History = []models.TaskHistoryEntry{
+		{Time: now.Add(-4 * time.Hour), Event: models.TaskEventClaimed},
+		{Time: now.Add(-1 * time.Minute), Event: models.TaskEventClaimReleased},
+	}
+
+	m := Model{
+		width:      170,
+		height:     40,
+		columnTier: ColumnTierFull,
+		styles:     NewStyles(170),
+		state:      &models.State{Tasks: []models.Task{task}},
+	}
+
+	out := m.renderTaskPanel(10)
+	assertContains(t, out, "4h", "TIME_IN_STATUS should measure from the claimed event")
+}
+
 func TestRenderTaskPanel_TaskIDPrefersWiderColumnWhenSpaceAllows(t *testing.T) {
 	const width = 240
 	taskID := "code-planning-1-code-plan-to-coding-task-with-descriptive-suffix"

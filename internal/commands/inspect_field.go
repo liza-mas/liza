@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
@@ -393,9 +394,7 @@ func taskComputedField(task *models.Task, field string) (any, error) {
 		duration := calculateTaskAge(task)
 		return render.FormatDuration(duration), nil
 	case "time_in_status":
-		// Find the most recent status change in history
-		duration := calculateTimeOnTask(task)
-		return render.FormatDuration(duration), nil
+		return render.FormatDuration(models.TimeInStatus(task, time.Now())), nil
 	default:
 		return nil, &errors.NotFoundError{Entity: "task", ID: task.ID, Field: field}
 	}

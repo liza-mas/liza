@@ -2,6 +2,46 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Status changes invisible to history-derived time in status
+
+**What:** `models.TimeInStatus` derives time in status from the most recent
+status-transition event in task history. Several status changes are not
+recoverable that way, so affected tasks report time since their previous
+recorded transition, which is too long:
+
+- **Conditional claim release.** `claim_released`
+  (`internal/agent/registration.go`), `doer_claim_released` and
+  `review_claim_released` (`internal/ops/release_claim.go:206`) assign a
+  released status only when the task was in the matching active status; the
+  entry records nothing separating that case from a no-op release. The same
+  `doer_claim_released` name is also written by
+  `internal/ops/await_verdict.go:841`, which clears ownership without touching
+  status — one event name, two different status effects.
+- **Attempt rollover.** `TransitionToNewAttempt` writes `new_attempt` in phase 1,
+  which explicitly preserves status, then transitions to the initial status in
+  phase 3 (`internal/ops/transition_attempt.go:232`) without writing a further
+  entry. The transition has no timestamp of its own; `new_attempt` precedes it.
+- **Silent status writes.** `internal/ops/recover_task.go:273` resets status to
+  the initial state on the preserve path and
+  `internal/ops/validation_preflight.go:398,411` releases ownership, both
+  writing no history entry at all.
+
+**Why deferred:** The correct fix is a durable `status_changed_at` on
+`models.Task`, assigned at `TransitionWith` plus the direct status writes — a
+schema field and every mutation site, to fix a display metric whose three
+surfaces had first to agree at all. Convergence was the reported defect; this
+residual is a smaller, separable correctness gap. Reclassifying `new_attempt`
+as a transition would approximate the rollover case within seconds, but it
+would make a phase-1 event stand for a phase-3 effect and still leave the
+conditional and silent cases wrong.
+
+**Payback trigger:** The first report of a stale `time_in_status` on a task
+that was released, rolled over to a new attempt, or recovered without an
+intervening recorded transition, or the first consumer that branches on the
+value rather than displaying it. Add `status_changed_at`, set it wherever
+`Task.Status` is assigned, and keep the history derivation as the fallback for
+tasks predating the field.
+
 ## Quarantined verdict retention
 
 **What:** Issue #153 retains unique quarantined judgments, generation

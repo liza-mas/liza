@@ -468,6 +468,37 @@ func TestGetComputedFieldAgentSpecific(t *testing.T) {
 	}
 }
 
+// time_in_status measures the current status, not time on task: a task that was
+// blocked without ever being claimed reported 0s while it read time-on-task.
+func TestGetComputedFieldTimeInStatusIsStatusBased(t *testing.T) {
+	now := time.Now()
+	state := &models.State{
+		Tasks: []models.Task{
+			{
+				ID:      "task-1",
+				Status:  models.TaskStatusBlocked,
+				Created: now.Add(-5 * time.Hour),
+				History: []models.TaskHistoryEntry{
+					{Time: now.Add(-3 * time.Hour), Event: models.TaskEventBlocked},
+					{Time: now.Add(-1 * time.Minute), Event: models.TaskEventClaimReleased},
+				},
+			},
+		},
+	}
+
+	got, err := getComputedField(state, "task.task-1.time_in_status")
+	if err != nil {
+		t.Fatalf("getComputedField() error = %v", err)
+	}
+	str, ok := got.(string)
+	if !ok {
+		t.Fatalf("getComputedField() type = %T, want string", got)
+	}
+	if !strings.Contains(str, "3h") {
+		t.Errorf("getComputedField() = %q, want duration since the blocked event", str)
+	}
+}
+
 func TestGetComputedFieldTaskSpecific(t *testing.T) {
 	now := time.Now()
 	state := &models.State{

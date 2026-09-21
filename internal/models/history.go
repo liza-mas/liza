@@ -89,6 +89,8 @@ const (
 	TaskEventRejectionRCAResumed       TaskEventName = "rejection_rca_resumed"
 	TaskEventReplacementCommitted      TaskEventName = "replacement_committed"
 	TaskEventAcceptanceCommitsRemapped TaskEventName = "acceptance_commits_remapped"
+	TaskEventRecoveredFresh            TaskEventName = "task_recovered_fresh"
+	TaskEventRecoveryFreshFailed       TaskEventName = "task_recovery_fresh_failed"
 )
 
 // TaskHistoryEntry represents a single event in a task's history

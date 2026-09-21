@@ -283,7 +283,7 @@ func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 	}
 
 	info.Age = render.FormatDuration(calculateTaskAge(task))
-	info.TimeInStatus = render.FormatDuration(calculateTimeInStatus(task))
+	info.TimeInStatus = render.FormatDuration(models.TimeInStatus(task, time.Now()))
 
 	if task.LeaseExpires != nil {
 		remaining := time.Until(*task.LeaseExpires)
@@ -411,20 +411,6 @@ func outputKinds(output []models.OutputEntry) []string {
 		kinds = append(kinds, entry.Kind)
 	}
 	return kinds
-}
-
-// calculateTimeInStatus calculates how long the task has been in its current status
-func calculateTimeInStatus(task *models.Task) time.Duration {
-	for i := len(task.History) - 1; i >= 0; i-- {
-		entry := task.History[i]
-		switch entry.Event {
-		case models.TaskEventClaimed, models.TaskEventSubmittedForReview, models.TaskEventRejected, models.TaskEventApproved,
-			models.TaskEventMerged, models.TaskEventBlocked, models.TaskEventUnblocked, models.TaskEventAbandoned, models.TaskEventSuperseded, models.TaskEventIntegrationFailed:
-			return time.Since(entry.Time)
-		}
-	}
-
-	return time.Since(task.Created)
 }
 
 // filterTasks applies filters to task list

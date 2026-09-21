@@ -518,16 +518,10 @@ func (m Model) renderTaskPanel(budget int) string {
 	}
 
 	timeInStatusVal := func(t models.Task) string {
-		// Use last history entry timestamp if available
-		if len(t.History) > 0 {
-			last := t.History[len(t.History)-1]
-			return render.FormatDuration(time.Since(last.Time))
-		}
-		// Fallback to task age
-		if t.Created.IsZero() {
+		if len(t.History) == 0 && t.Created.IsZero() {
 			return "—"
 		}
-		return render.FormatDuration(time.Since(t.Created))
+		return render.FormatDuration(models.TimeInStatus(&t, time.Now()))
 	}
 
 	taskIDWidth := m.taskIDColumnWidth()

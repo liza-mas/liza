@@ -590,7 +590,7 @@ func recoverTaskFreshReset(bb *db.Blackboard, gitWrapper *git.Git, taskID, reaso
 		clearAttemptState(task, outcome.Cleanup)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  "task_recovered_fresh",
+			Event:  models.TaskEventRecoveredFresh,
 			Reason: &reason,
 			Extra: map[string]any{
 				"target_status": string(outcome.TargetStatus),
@@ -658,7 +658,7 @@ func recoverTaskMarkFreshCreationFailure(state *models.State, task *models.Task,
 	}, previousBlockedQuestions...)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:   now,
-		Event:  "task_recovery_fresh_failed",
+		Event:  models.TaskEventRecoveryFreshFailed,
 		Reason: &reason,
 		Extra: map[string]any{
 			"error":            createErr.Error(),

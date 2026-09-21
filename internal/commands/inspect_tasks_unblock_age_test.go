@@ -17,7 +17,7 @@ func TestCalculateTimeInStatus_UnblockedEvent(t *testing.T) {
 		},
 	}
 
-	duration := calculateTimeInStatus(task)
+	duration := models.TimeInStatus(task, time.Now())
 	if duration < time.Minute || duration >= 3*time.Minute {
 		t.Fatalf("expected duration since recent unblock event, got %s", duration)
 	}
