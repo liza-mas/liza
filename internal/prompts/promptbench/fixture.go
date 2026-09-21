@@ -267,7 +267,14 @@ func generateAncestorCarriers(shape Shape) []referencecontract.Carrier {
 // compositor would present it: the standing preamble followed by the
 // reconciled carriers and their references.
 func GenerateResolvedReferenceContext(shape Shape) string {
-	rendered, err := referencecontract.RenderCarriers(GenerateCarriers(shape))
+	return RenderResolvedReferenceContext(GenerateCarriers(shape))
+}
+
+// RenderResolvedReferenceContext renders supplied fixture carriers with the
+// same preamble as GenerateResolvedReferenceContext, for controlled comparisons.
+// Like RenderCarriers, it sorts the supplied slice in place.
+func RenderResolvedReferenceContext(carriers []referencecontract.Carrier) string {
+	rendered, err := referencecontract.RenderCarriers(carriers)
 	if err != nil {
 		panic(fmt.Sprintf("fixture carriers do not reconcile: %v", err))
 	}

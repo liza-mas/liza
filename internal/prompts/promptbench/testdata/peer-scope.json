@@ -1,0 +1,267 @@
+{
+  "scope": "Isolated peer-elision off/on comparison on current templates, not historical totals. The same synthetic assigned-fragment payload is supplied to every task variant: absolute savings are uniform by construction; only totals and percentages vary. Orchestrator wakes omit the payload. Runtime fragment applicability per role, pointed-section rereads and token/cost savings are not measured.",
+  "fixture": "CalibratedShape and GenerateCarriers; only AssignedHeading is cleared in the control. Ancestor-reference and duplicate-reference elision remain enabled in both arms.",
+  "rows": [
+    {
+      "role": "architect",
+      "variant": "architecture-main-pair",
+      "before_bytes": 291018,
+      "after_bytes": 286242,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 277955,
+      "reference_after_bytes": 273179
+    },
+    {
+      "role": "architecture-reviewer",
+      "variant": "architecture-main-pair",
+      "before_bytes": 288157,
+      "after_bytes": 283381,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 275143,
+      "reference_after_bytes": 270367
+    },
+    {
+      "role": "architect",
+      "variant": "architecture-pair",
+      "before_bytes": 288548,
+      "after_bytes": 283772,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 277955,
+      "reference_after_bytes": 273179
+    },
+    {
+      "role": "architecture-reviewer",
+      "variant": "architecture-pair",
+      "before_bytes": 286015,
+      "after_bytes": 281239,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 275143,
+      "reference_after_bytes": 270367
+    },
+    {
+      "role": "code-planner",
+      "variant": "code-planning-main-pair",
+      "before_bytes": 287764,
+      "after_bytes": 282988,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265724,
+      "reference_after_bytes": 260948
+    },
+    {
+      "role": "code-plan-reviewer",
+      "variant": "code-planning-main-pair",
+      "before_bytes": 286402,
+      "after_bytes": 281626,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265741,
+      "reference_after_bytes": 260965
+    },
+    {
+      "role": "code-planner",
+      "variant": "code-planning-pair",
+      "before_bytes": 293608,
+      "after_bytes": 288832,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265724,
+      "reference_after_bytes": 260948
+    },
+    {
+      "role": "code-plan-reviewer",
+      "variant": "code-planning-pair",
+      "before_bytes": 289445,
+      "after_bytes": 284669,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265741,
+      "reference_after_bytes": 260965
+    },
+    {
+      "role": "coder",
+      "variant": "coding-pair",
+      "before_bytes": 289235,
+      "after_bytes": 284459,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265932,
+      "reference_after_bytes": 261156
+    },
+    {
+      "role": "code-reviewer",
+      "variant": "coding-pair",
+      "before_bytes": 289741,
+      "after_bytes": 284965,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265949,
+      "reference_after_bytes": 261173
+    },
+    {
+      "role": "epic-planner",
+      "variant": "epic-planning-main-pair",
+      "before_bytes": 291253,
+      "after_bytes": 286477,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265724,
+      "reference_after_bytes": 260948
+    },
+    {
+      "role": "epic-plan-reviewer",
+      "variant": "epic-planning-main-pair",
+      "before_bytes": 290050,
+      "after_bytes": 285274,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265741,
+      "reference_after_bytes": 260965
+    },
+    {
+      "role": "epic-planner",
+      "variant": "epic-planning-pair",
+      "before_bytes": 288783,
+      "after_bytes": 284007,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265724,
+      "reference_after_bytes": 260948
+    },
+    {
+      "role": "epic-plan-reviewer",
+      "variant": "epic-planning-pair",
+      "before_bytes": 287908,
+      "after_bytes": 283132,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265741,
+      "reference_after_bytes": 260965
+    },
+    {
+      "role": "integration-analyst",
+      "variant": "integration-pair",
+      "before_bytes": 290220,
+      "after_bytes": 285444,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265724,
+      "reference_after_bytes": 260948
+    },
+    {
+      "role": "integration-reviewer",
+      "variant": "integration-pair",
+      "before_bytes": 288807,
+      "after_bytes": 284031,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265741,
+      "reference_after_bytes": 260965
+    },
+    {
+      "role": "integration-analyst",
+      "variant": "slice-integration-pair",
+      "before_bytes": 290220,
+      "after_bytes": 285444,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265724,
+      "reference_after_bytes": 260948
+    },
+    {
+      "role": "integration-reviewer",
+      "variant": "slice-integration-pair",
+      "before_bytes": 288807,
+      "after_bytes": 284031,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265741,
+      "reference_after_bytes": 260965
+    },
+    {
+      "role": "us-writer",
+      "variant": "us-writing-pair",
+      "before_bytes": 284586,
+      "after_bytes": 279810,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265724,
+      "reference_after_bytes": 260948
+    },
+    {
+      "role": "us-reviewer",
+      "variant": "us-writing-pair",
+      "before_bytes": 287031,
+      "after_bytes": 282255,
+      "delta_bytes": -4776,
+      "reference_before_bytes": 265741,
+      "reference_after_bytes": 260965
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake INITIAL_PLANNING",
+      "before_bytes": 20377,
+      "after_bytes": 20377,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake BLOCKED_TASKS",
+      "before_bytes": 27223,
+      "after_bytes": 27223,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake HYPOTHESIS_EXHAUSTED",
+      "before_bytes": 20911,
+      "after_bytes": 20911,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake IMMEDIATE_DISCOVERY",
+      "before_bytes": 19388,
+      "after_bytes": 19388,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake PLANNING_COMPLETE",
+      "before_bytes": 18822,
+      "after_bytes": 18822,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake MANY_TO_ONE_READY",
+      "before_bytes": 18849,
+      "after_bytes": 18849,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake CODING_COMPLETE",
+      "before_bytes": 18548,
+      "after_bytes": 18548,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake SPRINT_COMPLETE",
+      "before_bytes": 18626,
+      "after_bytes": 18626,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    },
+    {
+      "role": "orchestrator",
+      "variant": "wake HUMAN_NOTE",
+      "before_bytes": 18085,
+      "after_bytes": 18085,
+      "delta_bytes": 0,
+      "reference_before_bytes": 0,
+      "reference_after_bytes": 0
+    }
+  ]
+}

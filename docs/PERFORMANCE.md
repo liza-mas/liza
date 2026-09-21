@@ -217,3 +217,74 @@ benchstat baseline.txt current.txt
 ```
 
 Acceptable variance: +/-10% run-to-run. Investigate if >20% slower.
+
+## Prompt Payload: Assigned-Section Peer Elision
+
+The assigned-section peer-elision change shipped in `a2349382`; this comparison closes its
+outstanding identical-fixture, per-role byte measurement. It uses current
+templates and the calibrated synthetic carrier set, clearing only
+`Carrier.AssignedHeading` in the control. Ancestor-reference pointers and
+duplicate-reference suppression remain enabled in both arms. The explanatory
+preamble is identical too: these are isolated feature-off/on totals, not a
+reconstruction of historical prompts.
+
+Every task variant receives the **same synthetic assigned-fragment payload**.
+The absolute saving is therefore uniform by construction; only prompt totals
+and percentages vary with role instructions. This measures template response,
+not whether real tasks for each role carry a section-fragment reference.
+Orchestrator wakes omit the carrier payload and are unchanged. The fixture's
+assigned Section 25 has three peers; it does not estimate typical production
+section counts or savings.
+
+Measured on 2026-09-21 with the default embedded pipeline and branding:
+
+| Role | Pair variant | Before (bytes) | After (bytes) | Change |
+|------|--------------|---------------:|--------------:|-------:|
+| architect | specialized | 288,548 | 283,772 | −1.66% |
+| architect | decomposition root | 291,018 | 286,242 | −1.64% |
+| architecture-reviewer | specialized | 286,015 | 281,239 | −1.67% |
+| architecture-reviewer | decomposition root | 288,157 | 283,381 | −1.66% |
+| code-planner | specialized | 293,608 | 288,832 | −1.63% |
+| code-planner | decomposition root | 287,764 | 282,988 | −1.66% |
+| code-plan-reviewer | specialized | 289,445 | 284,669 | −1.65% |
+| code-plan-reviewer | decomposition root | 286,402 | 281,626 | −1.67% |
+| coder | specialized | 289,235 | 284,459 | −1.65% |
+| code-reviewer | specialized | 289,741 | 284,965 | −1.65% |
+| epic-planner | specialized | 288,783 | 284,007 | −1.65% |
+| epic-planner | decomposition root | 291,253 | 286,477 | −1.64% |
+| epic-plan-reviewer | specialized | 287,908 | 283,132 | −1.66% |
+| epic-plan-reviewer | decomposition root | 290,050 | 285,274 | −1.65% |
+| integration-analyst | integration and slice pairs | 290,220 | 285,444 | −1.65% |
+| integration-reviewer | integration and slice pairs | 288,807 | 284,031 | −1.65% |
+| us-writer | specialized | 284,586 | 279,810 | −1.68% |
+| us-reviewer | specialized | 287,031 | 282,255 | −1.66% |
+| orchestrator | all nine wakes | 18,085–27,223 | unchanged | 0% |
+
+Each task row saves **4,776 bytes**, entirely in the resolved reference context.
+The [JSON artifact](../internal/prompts/promptbench/testdata/peer-scope.json)
+records every pair and wake separately, including zero deltas. Configured
+skills, mandatory documents, and specialized/root section lists are rendered;
+role-pair metadata is aligned locally in the comparison test. External contract
+and skill file reads are not part of these rendered-prompt totals.
+
+Reproduce from the repository root:
+
+```bash
+make sync-embedded
+go test ./internal/prompts/promptbench -run '^TestPeerScopePayload$' -count=1 -v
+```
+
+The control is derived from the treatment by clearing only `AssignedHeading`.
+The test checks preservation of assigned/shared content and declared references,
+and exact equality of all instructions outside the reference context. The original
+`TestBaseline` also remains unchanged. To update the new artifact deliberately
+after reviewing a measured change, run the same test with
+`PROMPTBENCH_UPDATE=1`; ordinary validation fails if the artifact is missing.
+
+No binding rule or production template was removed. A prior run's reported
+four copies of the same coder contract were attributed to artifact inclusion through multiple
+routes, addressed by the earlier reference reductions; it does not justify
+another contract cut. Duplicate agent-side skill reads remain a separate,
+unverified attribution question. Real per-role fragment applicability,
+`git show` reread frequency, and cache-read tokens per merged task remain
+next-run checks: this synthetic comparison cannot establish cost savings.
