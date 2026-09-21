@@ -304,6 +304,22 @@ Read [Multi-Agent Usage](support-docs/USAGE_MULTI_AGENTS.md) before running a
 multi-agent pipeline. Liza is a complex system, and the usage guide explains
 roles, checkpoints, worktrees, TUI controls, and review flow.
 
+Once the run reaches a terminal state, analyze it before starting the next one.
+From the same Pairing session, invoke the
+[liza-logs skill](skills/liza-logs/SKILL.md) to find operational friction —
+repeated review cycles, blocked or superseded tasks, tool and permission
+failures, setup problems — written to `.liza/log-analysis.md`. Then invoke the
+[context-engineering skill](skills/context-engineering/SKILL.md) to judge
+whether prompt and context design caused or amplified what the first report
+found, written to `.liza/context-engineering.md`. The two are complementary:
+the first says what went wrong, the second says whether the agents were given
+the right information to avoid it.
+
+Fixing what those reports identify is usually cheaper than absorbing the same
+friction again. Every run pays for its frictions in tokens and wall time, and
+most recur until something changes in a contract, skill, prompt template, or
+project setup.
+
 ## Common First Commands
 
 ```bash
