@@ -10,7 +10,8 @@
 |------|---------|---------------|
 | `state.yaml` | Current state | Atomic read-modify-write |
 | `log.yaml` | Activity history | Append-only |
-| `lifecycle-metrics/` | Fixed operation/outcome counters per sprint, with observation-window metadata | Locked atomic replacement per sprint |
+| `lifecycle-metrics/` | Fixed operation/outcome counters per sprint, with observation-window metadata; a non-empty subset of the known counts matrix is available with missing cells at zero, and the next recording materializes the full matrix; missing files are unavailable, while existing empty, truncated, malformed, bad-identity or unknown-key files remain unavailable and are never overwritten | Locked atomic replacement per sprint |
+| `usage/` | Durable provider-turn usage outside `state.yaml`; day-rolled `records-YYYY-MM-DD.jsonl` and numbered size-rotation parts; a missing directory means unavailable, not zero | Append-only JSONL under a leaf day lock; no retention pruning |
 | `alerts.log` | Persistent watcher alerts | Append-only |
 | `archive/` | Terminal-state tasks older than threshold | Periodic pruning |
 | `circuit_breaker_report.md` | Latest qualifying circuit-breaker response report | Rewritten by `analyze` for each qualifying response |
@@ -20,8 +21,9 @@
 
 | Section | Purpose | Write Pattern |
 |---------|---------|---------------|
-| `anomalies` | Execution observations | Append by Coders/Code Reviewers |
+| `anomalies` | Execution observations | Append by Coders/Code Reviewers; Supervisor deduplicates reviewer-claim quarantine records and updates retry evidence in place |
 | `quarantined_verdicts` | Bounded substantive verdicts from fenced registrations | Evidence-only append/deduplication; authorized append-only reconciliation |
+| `proof_reaffirmations` | Authorized approved-proof content transitions | Orchestrator-only append; identical transitions are idempotent |
 | `spec_changes` | Spec modification history | Append-only |
 | `sprint` | Current sprint state | Atomic update |
 | `circuit_breaker` | CB status and history | Atomic update |
@@ -36,6 +38,28 @@ All timestamps in state.yaml and log.yaml use **ISO 8601 format in UTC** with `Z
 - Generate with: `date -u +%Y-%m-%dT%H:%M:%SZ`
 
 ---
+
+## Provider usage records
+
+The runtime directory's `usage/` is durable telemetry, separate from task state
+and sprint counters. Records survive sprint rollover. The supervisor writes one
+record per provider turn, outside state locks; the report derives outcomes from
+task history at read time. Missing storage is unavailable, never a zero total.
+
+| JSON fields | Meaning |
+|-------------|---------|
+| `schema_version`, `record_id` | Version 1; SHA-256 identity over agent, supervisor run, session, provider and start time |
+| `task_id`, `role`, `agent_id` | Task and runtime role/agent attribution; an empty task is unattributed |
+| `supervisor_run_id`, `session_id`, `provider` | Random 128-bit hex identity per supervisor process, provider session (with caller fallback), configured provider name |
+| `started_at`, `ended_at` | UTC provider-turn interval |
+| `fresh_input_tokens`, `cache_read_tokens`, `cache_write_tokens`, `output_tokens` | Provider-reported token counts |
+| `provenance` | `terminal_authoritative`, `partial`, `unknown`, or `conflicting`; conflicts are detected when duplicate record identities disagree at load time |
+| `exit_code`, `warm_session` | Turn exit code; `warm_session` is reserved and capture currently leaves it false |
+
+Registration generations and their digests are deliberately absent;
+`supervisor_run_id` is independent of registration and confers no authority.
+Only authoritative records enter token totals; unavailable, partial, unknown and
+conflicting observations remain explicit. See [Usage Attribution](../protocols/usage-attribution.md).
 
 ## state.yaml Schema
 
@@ -240,6 +264,58 @@ tasks:
     done_when: "Public endpoints return 429 with Retry-After header when limit exceeded"
     created: 2025-01-17T16:45:00Z
 ```
+
+### Assessment and replacement history
+
+History metadata is `TaskHistoryEntry.Extra`, inlined into the YAML entry.
+
+| Event | Inline fields and retention |
+|-------|-----------------------------|
+| `orchestrator_assessment` | `assessment_fingerprint_v1`: one 64-character lowercase hex SHA-256 digest. Only the latest assessment retains it; a new assessment removes it and `dependency_descendant_wake_snapshot_v1` from earlier assessments, preserving their notes and other audit fields. Equivalent input appends nothing. |
+| `replacement_committed` (source task) | `source_task_id`, `replacement_task_id`, `source_prior_transition_id`, `source_new_transition_id`, `retargeted_consumers`, `request_id`, and `preserved_base_commit` when declared. Identifiers only, never the replacement payload. |
+| `acceptance_commits_remapped` (merged parent task) | `replaced` (old-to-new commit identifiers), `integration` (integration commit identifier), and `history_entries` (updated history-entry count). Identifiers and count only, never commit content. |
+
+Replacement replay uses the source's existing lifecycle receipts and
+`superseded_by`; it adds no task/state field. See [Blocked-Assessment Idempotency](../protocols/blocked-assessment-idempotency.md)
+and [Replacement Transactions](../protocols/replacement-transactions.md).
+
+### Rejection RCA record and history
+
+Optional task field `rejection_rca` holds a `RejectionRCARecord` for the current
+high-churn cycle. The verdict gate seeds it while entering `BLOCKED` with
+`blocked_reason` prefixed by `rejection_rca_required`. Authority is
+`RejectionRCAGateOpen()` (record present and disposition absent), not prose.
+
+| Record fields | Provenance |
+|---------------|------------|
+| `schema_version`, `threshold`, `rejection_count`, `gated_at`, `gating_commit` | Gate-seeded; callers cannot override stored provenance. RCA requests carry schema version 1, summary and contributions only. |
+| `summary`, `contributions[]` | Normalized caller content; each contribution has `rejection_index`, `categories[]`, `evidence[]` |
+| `fingerprint`, `recorded_at`, `recorded_by` | Derived when RCA is recorded; empty before recording |
+| `disposition` | Caller `recovery_path` and `rationale`, plus derived `restore_mode`, `actor`, `lifecycle_version`, `decided_at`, `iteration_exempt`; absent until resume |
+
+Cause vocabulary is `product_defect`, `capability_failure`, `lifecycle_retry`,
+`unknown`. Unrecognized causes remain verbatim and telemetry groups them under
+unknown. Recovery paths are a closed enum:
+
+| Recovery path | Restore mode |
+|---------------|--------------|
+| `implementation_correction`, `human_override` | `claimable`: either unblock form |
+| `capability_reroute`, `lifecycle_repair` | `assign`: requires `--assign-to`; resets current review cycles and records `iteration_exempt` |
+| `rescope` | `none`: unblock refused; route to supersession |
+
+Resume closes the gate but leaves the task `BLOCKED`. Only `unblock-task` restores
+it, subject to dependency/worktree/rebase checks and the mode above. Re-gating
+requires another threshold of durable rejections; it replaces the live record,
+while earlier cycles remain in history. Inline event fields are:
+
+| Event | Detail keys |
+|-------|-------------|
+| Gate-appended `blocked` | `blocked_class` = `rejection_rca_required`, `threshold`, `rejection_count`, `gated_at`, `first_rejection_at` (earliest durable rejection) |
+| `rejection_rca_recorded` | `fingerprint`, `threshold`, `rejection_count`, `gated_at`, `causes`, `contribution_count`, `recorded_by` |
+| `rejection_rca_resumed` | `fingerprint`, `recovery_path`, `restore_mode`, `actor`, `lifecycle_version`, `decided_at`, `iteration_exempt`, `gated_at` |
+
+Event times use RFC3339; `causes` is sorted and distinct, retaining unknown
+values. See [Rejection RCA Gate](../protocols/task-lifecycle.md#rejection-rca-gate).
 
 ### Sub-pipeline Fields
 
@@ -939,6 +1015,7 @@ circuit_breaker:
 config:
   max_coder_iterations: 10      # Default for all tasks
   max_review_cycles: 5          # Default for all tasks
+  high_churn_rejection_threshold: 4  # Durable rejections per RCA cycle; non-positive uses default 4
   heartbeat_interval: 60        # Seconds
   lease_duration: 1800          # Seconds (30 minutes)
   coder_poll_interval: 30       # Seconds between work availability checks
@@ -1029,6 +1106,26 @@ watermark. Later `OK` entries do not move it. If `status == TRIGGERED` or
 - Other config values (`heartbeat_interval`, `lease_duration`) are not per-task overridable
 
 ---
+
+## Proof Reaffirmations
+
+`proof_reaffirmations` is an optional top-level sequence recorded by the
+orchestrator-only `reaffirm-proof` command using current inherited agent authority.
+Acceptance still refuses approved-proof reference drift without a matching record.
+
+| Field | Contract |
+|-------|----------|
+| `parent_task`, `carrier_path`, `heading`, `reference_id`, `reviewed_section`, `current_section` | Identity tuple binding the allocating planning parent, carrier section, proof reference, and exact reviewed-to-current content transition |
+| `actor` | Registered orchestrator that authorized the transition |
+| `timestamp` | UTC time of the decision |
+| `reason` | Nonblank UTF-8 justification, at most 4096 bytes |
+
+Both section identities are derived from the reviewed carrier and integration,
+not caller-supplied. `--expected-section` is only a precondition naming the
+inspected current identity; a mismatch records nothing. The record authorizes
+exactly one content transition, not a standing waiver: a later change refuses
+again. It grants no task status change or approval. Repeating the same identity
+tuple appends nothing and preserves the original provenance.
 
 ## Quarantined Verdict Evidence
 
@@ -1237,6 +1334,8 @@ Reads do not require lock (eventual consistency acceptable for reads).
 | Execute merge | Supervisor | After Code Reviewer sets APPROVED → supervisor runs `liza wt-merge` → update state to MERGED |
 | Mark blocked | Any | Lock → set state BLOCKED + diagnosis → unlock |
 | Rescope task | Orchestrator | Lock → prune the retiring task's illegal downstream edges + set original SUPERSEDED + rewrite active consumers/create replacements + validate candidate → unlock |
+| Replace task | Orchestrator | Validate payload and declared preserved base → lock → validate source boundary, identity/ID collisions and dependency expectations → create replacement + retarget consumers + supersede source + append audit → validate full candidate and persist together → unlock; any candidate error persists nothing |
+| Record / resume rejection RCA | Orchestrator | Validate through payload-schema registry before lock → lock → merge normalized RCA or record disposition + append event → unlock; equal-fingerprint RCA resubmission is `NO_CHANGE`, and resume leaves status BLOCKED |
 | Repair superseded dependencies | Orchestrator | Lock → require SUPERSEDED + remove all illegal downstream direct edges + append audit history + validate full candidate → unlock; append activity log after commit |
 | Finalize draft | Orchestrator | Lock → change DRAFT to READY → unlock |
 | Log activity | Any | Append to log.yaml (no lock needed, append-only) |
@@ -1283,6 +1382,7 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `provider_audit_degraded` | Supervisor | Provider ran but transcript/rollout persistence is suspect |
 | `agent_degraded` | Supervisor / CLI | Agent epoch cannot provide effective role capacity |
 | `submit_verdict_failed` | CLI | Submit-verdict failed after accepting a verdict attempt; best-effort when the blackboard remains writable |
+| `reviewer_claim_circuit_open` | Supervisor | Repeated identical pre-claim reviewer failures against an unchanged task/state boundary crossed the threshold |
 
 **Required Details Fields (validated by `liza validate`):**
 
@@ -1299,6 +1399,14 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `provider_audit_degraded` | `provider`, `agent_id`, `message` | Aggregate provider audit degradation across agents |
 | `agent_degraded` | `agent_id`, `role`, `reason`, `last_error` | Preserve claim-capacity degradation evidence |
 | `submit_verdict_failed` | `verdict`, `error` | Preserve failed verdict-write cause for operator diagnosis |
+| `reviewer_claim_circuit_open` | `role`, `failure_class`, `attempts`, `first_failure`, `last_failure`, `recovery` | Bounded quarantine evidence, one durable record per failure key |
+
+The Supervisor also retains `boundary_version`, bounded masked `error`, and
+`cooldown_until` on `reviewer_claim_circuit_open`. Role, task, failure class and
+boundary identify one record. Only `attempts`, `last_failure` and
+`cooldown_until` advance in place after failed re-probes; boundary and error
+remain immutable. Registration generations are not recorded. See
+[ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md).
 
 Anomalies with malformed details will fail validation. This ensures circuit breaker pattern detection has reliable data.
 The agent should be very specific about the faced issue so this may be reproduced and investigated.
@@ -1414,4 +1522,8 @@ diagnostics exclude raw environment values, probe output and process errors.
 - [State Machines](state-machines.md) — state transitions
 - [Task Lifecycle](../protocols/task-lifecycle.md) — operational flow
 - [Lifecycle Results](../protocols/lifecycle-results.md) — request identity, receipt retention and safe actions
+- [Blocked-Assessment Idempotency](../protocols/blocked-assessment-idempotency.md) — structural fingerprint and no-change contract
+- [Payload Validation](../protocols/payload-validation.md) — shared structural preflight and mutation validation
+- [Replacement Transactions](../protocols/replacement-transactions.md) — atomic replacement and source audit
+- [Usage Attribution](../protocols/usage-attribution.md) — durable provider records and report-time outcomes
 - [Tooling](../implementation/tooling.md) — CLI commands for blackboard operations

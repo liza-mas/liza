@@ -50,7 +50,7 @@ Each task status requires specific fields to be set. Validated on every state tr
 | READY_FOR_REVIEW, CODING_PLAN_TO_REVIEW | `review_commit` | spec, code |
 | REVIEWING, REVIEWING_CODING_PLAN | `reviewing_by`, `review_lease_expires`, `review_commit` | spec, code |
 | APPROVED, CODING_PLAN_APPROVED | `review_commit` | spec, code |
-| BLOCKED | `blocked_reason`, `blocked_questions` (non-empty); optional complete `repair_request` (`operation`, `target`, non-empty `evidence`, non-empty `validation`, and either `command` for command-based non-dependency requests or `dependency_updates` for `apply-dependency-repair`) when a repair request is present | spec, code |
+| BLOCKED | `blocked_reason`, `blocked_questions` (non-empty); optional complete `repair_request` (`operation`, `target`, non-empty `evidence`, non-empty `validation`, and either `command` for command-based non-dependency requests or `dependency_updates` for `apply-dependency-repair`) when a repair request is present; rejection-gated tasks carry `rejection_rca` and a `rejection_rca_required` prefix in `blocked_reason`; `RejectionRCAGateOpen()` is authoritative, not the prose | spec, code (`validate_task.go`, `submit_verdict.go`) |
 | REJECTED, CODING_PLAN_REJECTED | `rejection_reason` | spec, code |
 | SUPERSEDED | `rescope_reason`; `superseded_by` is optional for externally completed work | spec, code |
 | MERGED | `worktree` must be nil (cleanup invariant) | spec, code |
@@ -68,7 +68,7 @@ Non-DRAFT tasks must have `done_when` and `spec_ref` (both non-empty). `spec_ref
 | IMPLEMENTING → APPROVED | Self-approval |
 | READY_FOR_REVIEW → APPROVED/REJECTED | Must go through REVIEWING |
 | REJECTED → APPROVED | Must address feedback first |
-| BLOCKED → READY | Broad transition forbidden; only `unblock-task`, after dependency/worktree/rebase validation, may restore a BLOCKED task to its role-pair initial status |
+| BLOCKED → READY | Broad transition forbidden; only `unblock-task`, after dependency/worktree/rebase validation, may restore a BLOCKED task to its role-pair initial status; an open rejection-RCA gate refuses restoration |
 | Any terminal → Any | MERGED, ABANDONED, SUPERSEDED are final |
 
 Contract-level (agent state machine): ANALYSIS → EXECUTION (skipping gate), READY → DONE, EXECUTION → DONE (skipping validation).
@@ -88,7 +88,9 @@ Agent cannot claim if already assigned to another executing task.
 
 Unassigned `unblock-task` may restore a repaired task with valid pending dependencies to its role-pair initial status. The restored task remains dependency-held and unclaimable until every direct dependency is `MERGED`; `unblock-task --assign-to` remains rejected while any dependency is unmet.
 
-**Enforced:** spec, code (`claim_task.go`)
+For a closed rejection-RCA gate, `unblock-task` enforces the disposition's restore mode: `assign` requires `--assign-to`, `claimable` permits either form, and `none` refuses restoration. Resume closes only the gate; it leaves the task `BLOCKED`. The RCA record survives successful unblock.
+
+**Enforced:** spec, code (`claim_task.go`, `unblock_task.go`, `rejection_rca.go`)
 
 ### 3.4 Dependency Direction
 
@@ -97,6 +99,8 @@ Task dependencies cannot point downstream in the configured pipeline topology. A
 Supersession paths count as dependency paths: if `depends_on: old-task` resolves through `old-task.superseded_by` to a downstream task, the dependency is invalid. Terminal status does not exempt a task from direction validation. When a task is superseded, its own illegal downstream direct edges are pruned and audited while legal historical dependencies are retained; existing corrupted `SUPERSEDED` metadata is repaired only through the orchestrator-only `repair-superseded-dependencies` transaction, which removes all illegal downstream edges and validates the full candidate state before commit. `output[].task_depends_on` is validated against every per-subtask outgoing transition target that can consume that output, and explicit writes reject terminal non-MERGED task IDs. Generated child `depends_on` is canonicalized after sibling, concrete `task_depends_on`, and inherited phase-gate dependencies are composed; crash recovery validates the same final child `depends_on` set before patching or appending child tasks. Inherited phase-gate dependencies default to every child of every upstream dependency; an output entry may narrow them to named upstream outputs through `inherit_inputs` (ADR-0137), and omitted intent retains the whole-phase barrier. A selection that cannot be resolved, or that names an output index outside the upstream's actual range, fails the transition rather than reducing the child's dependency set. Selections are direction-validated at generation with the rest of the child's final list, not at authoring, because the referenced child IDs do not yet exist. Replanning an upstream retires selections naming it to whole-phase inheritance on every producer that still generates children, including `MERGED` producers whose output is live generation input rather than retired audit data. Operational dependency surfaces are canonicalized at mutation and transition boundaries: superseded dependencies are rewritten to legal replacements, cancelled or unreplaced retired dependencies are removed, downstream replacements that are already satisfied are not encoded on children, and illegal pending replacements fail the affected mutation or transition before the dependency rewrite is written. Retired `SUPERSEDED` and `ABANDONED` task output remains historical audit data unless it can still drive crash recovery.
 
 Manual active-graph repair preserves the same boundary. `retarget-dependency` changes one direct edge on a non-terminal task. `narrow-inherited-dependencies` applies `inherit_inputs` (ADR-0138) after generation: it persists the selection on the MERGED producer, rewrites only children still in their role-pair initial status with no live lease, removes only edges that phase-gate inheritance produced, validates the full candidate state, and writes nothing when any selection cannot be resolved. A repair spanning multiple tasks or complete dependency lists must be persisted as a command-free `apply-dependency-repair` request through `mark-blocked --repair-request-file`; its unique updates carry explicit expected and desired lists. The orchestrator consumes that stored request in one locked mutation, rejects any stale expectation or invalid complete candidate, writes every canonical list and audit entry together, and clears the request only on success. No partial update is persisted, and validation plus unblocking remain explicit follow-up steps.
+
+`replace-task` creates replacement lineage, retargets consumers and supersedes the source in one transaction, validating the complete candidate against the same dependency-direction rules. It complements `repair-superseded-dependencies` and `apply-dependency-repair`; composing standalone primitives does not provide this replacement transaction's atomicity.
 
 **Protects against:** Earlier pipeline phases waiting on later phases, deadlocked planning tasks, hidden cross-phase blockers.
 
@@ -152,6 +156,12 @@ Agent registration/unregistration, heartbeat, post-exit IDLE reset, orchestrator
 | Invariant | Protects Against | Enforced |
 |-----------|------------------|----------|
 | All state modifications atomic via exclusive file lock | Race conditions, partial writes | code (`blackboard.go` `Modify()`) |
+| `assess-blocked` compares a structural fingerprint with the latest assessment inside the existing transaction; equality returns `NO_CHANGE` without history, receipt, lifecycle advance or alert | Unchanged assessment history growth | code (`assess_blocked.go`, `assess_blocked_fingerprint.go`), spec ([Blocked-Assessment Idempotency](specs/protocols/blocked-assessment-idempotency.md)) |
+| A new assessment retires `assessment_fingerprint_v1` and `dependency_descendant_wake_snapshot_v1` from earlier entries' `Extra`, preserving notes and other audit fields; this is a deliberate exception to append-only task history | Accumulating superseded comparison cursors | code (`assess_blocked.go`), spec ([Blocked-Assessment Idempotency](specs/protocols/blocked-assessment-idempotency.md#persistence-and-no-change-result)) |
+| `replace-task` validates payload, declared preserved base, source boundary, identity/ID collisions and dependency shape, then validates the complete candidate before persistence; replacement creation, consumer retargeting, source supersession and audit commit together under one state lock, or leave all unchanged | Partial replacement lineage, stale dependencies, lost preserved work | code (`replace_task.go`), spec ([Replacement Transactions](specs/protocols/replacement-transactions.md)) |
+| Replacement identity uses the source's retained lifecycle receipt: operation, actor, generation digest, request ID and expected transition, with payload digest compared separately; exact replay returns original completion with `changed=false`, different payload under the same identity returns `CONFLICT` without state change | Duplicate replacement, identity reuse for different intent | code (`replace_task.go`, `lifecycle_receipt.go`), spec ([Replacement Transactions](specs/protocols/replacement-transactions.md#request-identity-and-replay)) |
+| Preflight and each registered mutation boundary use one structural payload validator before the state lock; structurally invalid input leaves state and history byte-for-byte unchanged | Boundary validation disagreement, writes from malformed payloads | code (`internal/payloadschema/`), spec ([Payload Validation](specs/protocols/payload-validation.md#validation-boundary-normative)) |
+| `record-rejection-rca` and `resume-rejection-rca` each mutate inside one locked transaction; equal-fingerprint RCA resubmission returns `NO_CHANGE` without history append | Duplicate RCA history, partial gate disposition | code (`rejection_rca.go`), spec ([Rejection RCA Gate](specs/protocols/task-lifecycle.md#rejection-rca-gate)) |
 | Runtime setup configuration compares the current value and writes in one transaction; different existing values require explicit replacement, and identified agents are generation-fenced | Lost configuration updates, stale agent writes | code (`config.go`, `lifecycle_authority.go`), spec (`worktree-management.md`) |
 | Declarative `apply-dependency-repair` batches compare all expected lists and validate the complete candidate inside one `Modify()` callback before persistence | Partial graph repair, stale retries, invalid intermediate dependency state | code (`apply_dependency_repair.go`, `validate_task.go`) |
 | Three-phase claim: validate ownership/eligibility under lock → worktree outside lock → re-validate ownership/eligibility and commit under lock | TOCTOU races on claim | code (`claim_task.go`) |
@@ -358,8 +368,9 @@ applicable.
 |-----------|------------------|----------|
 | Coders must log anomalies at time of occurrence for: `retry_loop` (>2 iterations), `trade_off`, `spec_ambiguity`, `external_blocker`, `assumption_violated` | Hidden failures, untracked debt | spec (`roles.md`) |
 | Reviewers must log for: `retry_loop`, `scope_deviation`, `workaround`, `debt_created`, `assumption_violated`, `spec_changed`, `reviewer_loop` | Scope creep blindness, silent quality erosion | spec |
+| Supervisor logs recognized `reviewer_claim_circuit_open` once per unchanged pre-claim failure key, updating retry evidence in place on failed re-probes | Repeated reviewer claim failures, anomaly floods | code (`claim_breaker.go`, `claim_failure_anomaly.go`), spec ([Circuit Breaker](specs/protocols/circuit-breaker.md)) |
 | Anomaly type validation: only recognized types accepted | Invalid anomaly categorization | code (`validate_entity.go`) |
-| Type-specific detail requirements (e.g., `retry_loop` needs `count` + `error_pattern`) | Unactionable anomaly records | code |
+| Type-specific detail requirements (e.g., `retry_loop` needs `count` + `error_pattern`); `reviewer_claim_circuit_open` requires `role`, `failure_class`, `attempts`, `first_failure`, `last_failure`, `recovery` | Unactionable anomaly records | code (`validate_entity.go`) |
 
 ---
 
@@ -390,8 +401,8 @@ What these invariants collectively protect against:
 | Lost work | Commit SHA verification, clean sync, handoff protocol (§7, §13) |
 | Unreviewed code | Approval gates, merge authority (§6, §7) |
 | Scope creep | Hard scope boundary, discovery protocol (§8) |
-| Infinite loops | Iteration limits, hypothesis exhaustion, circuit breaker (§6, §8, §12) |
-| Race conditions | CAS merge, 3-phase claim, atomic modifications (§5) |
+| Infinite loops | Iteration limits, hypothesis exhaustion, circuit breaker (§6, §8, §12), pre-claim reviewer breaker (§14) |
+| Race conditions | CAS merge, 3-phase claim, atomic modifications, single replacement transaction (§5) |
 | Duplicate or stale integration analysis | Deterministic analysis identities, idempotent reconciliation, immutable coverage and generation evidence (§5, §7) |
 | Premature or stale integration completion | Fail-closed coverage/repair barriers, independent aggregate review, clean-current-HEAD linearization, mutation-side invalidation (§6, §7) |
 | Silent failures | Anomaly logging, blocking protocol (§14) |

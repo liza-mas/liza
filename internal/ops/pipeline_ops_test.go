@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -249,25 +250,16 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 			t.Run(path.name, func(t *testing.T) {
 				fixture := newEffectiveCompletionFixture(t, true)
 				path.prepare(t, fixture)
-				var taskID, agentID string
 
 				progressionAuthorized := make(chan struct{})
 				releaseProgression := make(chan struct{})
+				unblockProgression := sync.OnceFunc(func() { close(releaseProgression) })
 				previousHook := beforeEffectiveIntegrationProgressionMutationTestHook
 				beforeEffectiveIntegrationProgressionMutationTestHook = func() {
-					taskID, agentID = fixture.installPublicIntegrationMutation(t)
 					close(progressionAuthorized)
 					<-releaseProgression
 				}
-				defer func() { beforeEffectiveIntegrationProgressionMutationTestHook = previousHook }()
-
-				progressionDone := make(chan error, 1)
-				go func() { progressionDone <- path.invoke(fixture.projectRoot) }()
-				select {
-				case <-progressionAuthorized:
-				case <-time.After(2 * time.Second):
-					t.Fatal("timed out waiting for progression authorization")
-				}
+				t.Cleanup(func() { beforeEffectiveIntegrationProgressionMutationTestHook = previousHook })
 
 				mutationAttempted := make(chan struct{})
 				previousLinearizationHook := beforeEffectiveIntegrationCompletionLinearizationTestHook
@@ -276,35 +268,47 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 						close(mutationAttempted)
 					}
 				}
-				defer func() { beforeEffectiveIntegrationCompletionLinearizationTestHook = previousLinearizationHook }()
+				t.Cleanup(func() { beforeEffectiveIntegrationCompletionLinearizationTestHook = previousLinearizationHook })
 				receiptPersisting := make(chan struct{})
 				releaseReceipt := make(chan struct{})
+				unblockReceipt := sync.OnceFunc(func() { close(releaseReceipt) })
 				previousReceiptHook := integrationMutationReceiptPersistTestHook
 				integrationMutationReceiptPersistTestHook = func(models.IntegrationMutationReceipt) {
 					close(receiptPersisting)
 					<-releaseReceipt
 				}
-				defer func() { integrationMutationReceiptPersistTestHook = previousReceiptHook }()
-				mergeDone := make(chan error, 1)
-				go func() {
+				t.Cleanup(func() { integrationMutationReceiptPersistTestHook = previousReceiptHook })
+
+				// Cleanup runs before hook restoration and fixture deletion, even
+				// when authorization times out or an assertion calls Fatal.
+				workers := newEffectiveCompletionWorkers(t, unblockProgression, unblockReceipt)
+				progressionDone := workers.start(func() error { return path.invoke(fixture.projectRoot) })
+				select {
+				case <-progressionAuthorized:
+				case err := <-progressionDone:
+					t.Fatalf("progression returned before authorization: %v", err)
+				case <-time.After(2 * time.Second):
+					t.Fatal("timed out waiting for progression authorization")
+				}
+				// Keep testing.T and Git setup on the parent goroutine, outside
+				// the authorization timeout, but after the clean-state check.
+				taskID, agentID := fixture.installPublicIntegrationMutation(t)
+				mergeDone := workers.start(func() error {
 					_, err := MergeWorktree(fixture.projectRoot, taskID, agentID)
-					mergeDone <- err
-				}()
+					return err
+				})
 				select {
 				case <-mutationAttempted:
 				case <-time.After(2 * time.Second):
-					close(releaseProgression)
 					t.Fatal("timed out waiting for integration mutation linearization attempt")
 				}
 				select {
 				case <-receiptPersisting:
-					close(releaseProgression)
-					close(releaseReceipt)
 					t.Fatal("integration ref advanced while authorized progression was pending")
 				default:
 				}
 
-				close(releaseProgression)
+				unblockProgression()
 				select {
 				case err := <-progressionDone:
 					if err != nil {
@@ -319,7 +323,7 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 				case <-time.After(2 * time.Second):
 					t.Fatal("timed out waiting for integration ref mutation")
 				}
-				close(releaseReceipt)
+				unblockReceipt()
 				select {
 				case err := <-mergeDone:
 					if err != nil {

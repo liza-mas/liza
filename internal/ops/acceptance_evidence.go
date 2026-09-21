@@ -128,6 +128,7 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 	}
 
 	var source *models.AcceptanceSource
+	var driftedReference string
 	for _, parentID := range task.EffectiveParentTasks() {
 		parent := state.FindTask(parentID)
 		if !parentAllocatesTask(g, root, task, parent, path, heading, integrationSpan, integrationCommit) {
@@ -138,7 +139,10 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		// would let an edit there redirect an approved reference at content no
 		// reviewer saw, so every reference the reviewed contract depends on is
 		// compared by what it resolves to, not by its declared ID.
-		if !reviewedReferencesResolveAlike(state, parent.ID, root, *parent.ReviewCommit, integrationCommit, path, heading, contract) {
+		if alike, drifted := compareReviewedReferences(state, parent.ID, root, *parent.ReviewCommit, integrationCommit, path, heading, contract); !alike {
+			if drifted != "" {
+				driftedReference = drifted
+			}
 			continue
 		}
 		if source != nil {
@@ -147,6 +151,9 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		source = &models.AcceptanceSource{Ref: ref, Commit: integrationCommit, Blob: spanIdentity, ParentTask: parent.ID, ParentReviewCommit: *parent.ReviewCommit}
 	}
 	if source == nil {
+		if driftedReference != "" {
+			return fail(fmt.Sprintf("requires allocation by a direct independently approved merged planning parent; approved-proof reference %q has drifted — an authorized orchestrator may inspect the changed content and use %s to reaffirm this transition", driftedReference, brand.Command("reaffirm-proof", task.ID, driftedReference)))
+		}
 		return fail("requires allocation by a direct independently approved merged planning parent")
 	}
 	// Keep the original carrier identity when unrelated integration work lands.
@@ -295,8 +302,16 @@ func validAcceptanceParentHistory(g *git.Git, parent *models.Task) bool {
 // may be re-pinned freely, which is the repin workflow this check must not
 // break.
 func reviewedReferencesResolveAlike(state *models.State, parentTask, root, reviewCommit, integrationCommit, path, heading string, contract *referencecontract.AcceptanceContract) bool {
+	alike, _ := compareReviewedReferences(state, parentTask, root, reviewCommit, integrationCommit, path, heading, contract)
+	return alike
+}
+
+// compareReviewedReferences also identifies an unreaffirmed proof drift for
+// the refusal diagnostic, using only the existing comparison's observations.
+// Unresolvable references refuse without advertising a drift remedy.
+func compareReviewedReferences(state *models.State, parentTask, root, reviewCommit, integrationCommit, path, heading string, contract *referencecontract.AcceptanceContract) (bool, string) {
 	if contract == nil {
-		return true
+		return true, ""
 	}
 	// Common case: the carrier file is byte-identical, so nothing it declares
 	// can have moved. This keeps the reference walk off the hot path, which
@@ -305,7 +320,7 @@ func reviewedReferencesResolveAlike(state *models.State, parentTask, root, revie
 	reviewedBlob, reviewedErr := g.BlobOID(reviewCommit, path)
 	integrationBlob, integrationErr := g.BlobOID(integrationCommit, path)
 	if reviewedErr == nil && integrationErr == nil && reviewedBlob == integrationBlob {
-		return true
+		return true, ""
 	}
 
 	// Scope: the references the contract asserts a proof against, and no more.
@@ -342,23 +357,23 @@ func reviewedReferencesResolveAlike(state *models.State, parentTask, root, revie
 		// no longer parses is caught at integration by ParseAcceptance above;
 		// this boundary stops asserting anything about the reviewed side when
 		// the contract asserts no proof against it.
-		return true
+		return true, ""
 	}
 
 	reviewedRefs, ok := carrierReferences(root, reviewCommit, path)
 	if !ok {
-		return false
+		return false, ""
 	}
 	integrationRefs, ok := carrierReferences(root, integrationCommit, path)
 	if !ok {
-		return false
+		return false, ""
 	}
 
 	for referenceID := range needed {
 		reviewed, reviewedFound := resolveDeclaredReference(root, reviewedRefs, referenceID)
 		current, currentFound := resolveDeclaredReference(root, integrationRefs, referenceID)
 		if !reviewedFound || !currentFound {
-			return false
+			return false, ""
 		}
 		if reviewed == current {
 			continue
@@ -371,10 +386,10 @@ func reviewedReferencesResolveAlike(state *models.State, parentTask, root, revie
 		// change to the same section refuses again.
 		if state == nil ||
 			state.FindProofReaffirmation(parentTask, path, heading, referenceID, spanObjectID(reviewed), spanObjectID(current)) == nil {
-			return false
+			return false, referenceID
 		}
 	}
-	return true
+	return true, ""
 }
 
 // carrierReferences parses a carrier's Source References at one commit.

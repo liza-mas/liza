@@ -51,7 +51,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Cross-Script State Mutation](#cross-script-state-mutation)
   - [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors)
   - [State Validation Composition Gap](#state-validation-composition-gap)
-  - [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap)
   - [INVARIANTS.md §7 Clean Worktree Not Enforced at Submission](#invariantsmd-7-clean-worktree-not-enforced-at-submission)
   - [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time)
   - [Custom Roles Render Empty Prompt Blocks](#custom-roles-render-empty-prompt-blocks)
@@ -75,6 +74,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning)
   - [Role Addition Accelerates Contract Complexity Pressure](#role-addition-accelerates-contract-complexity-pressure)
   - [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete)
+  - [Operation Vocabulary Spans Five Registers](#operation-vocabulary-spans-five-registers)
   - [Spec Corpus Lacks Lifecycle Management](#spec-corpus-lacks-lifecycle-management)
   - [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface)
   - [No Query Layer](#no-query-layer)
@@ -106,6 +106,7 @@ Persistent record of issues identified by architectural analysis skills.
 - [Completed Fixes](#completed-fixes)
 - [Fixed (Traceability)](#fixed-traceability)
 - [Fix Details](#fix-details)
+  - [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap)
 
 ## Open Issues Summary
 
@@ -126,7 +127,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **high** | BLIND SPOT | [No Reverse Data Channel in Inter-Pair Transitions](#no-reverse-data-channel-in-inter-pair-transitions) |
 | **high** | CASCADE | [Fan-Out Amplifies Decomposition Errors Across Pipeline Stages](#fan-out-amplifies-decomposition-errors-across-pipeline-stages) |
 | **high** | TENSION | [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers) |
-| **high** | TENSION | [Status Vocabulary Partition Between Go Constants and Declarative Pipeline](#status-vocabulary-partition-between-go-constants-and-declarative-pipeline) |
+| **high** | TENSION | [Status Vocabulary Partition Between Go Constants and Declarative Pipeline](#status-vocabulary-partition-between-go-constants-and-declarative-pipeline) — mitigated, open |
 | **high** | BLIND SPOT | [Destructive-DB Break-Glass Issued and Consumed by the Same Actor Class](#destructive-db-break-glass-issued-and-consumed-by-the-same-actor-class) |
 | **medium** | BLIND SPOT | [Retrospective Findings Don't Feed Forward to Next Sprint](#retrospective-findings-dont-feed-forward-to-next-sprint) |
 | **medium** | STRESS POINT | [Manual Sprint Transitions as Scaling Bottleneck](#manual-sprint-transitions-as-scaling-bottleneck) |
@@ -141,7 +142,6 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | TRAJECTORY | [Ownership Recovery Bound to Process-Shaped Liveness Evidence](#ownership-recovery-bound-to-process-shaped-liveness-evidence) |
 | **medium** | FRAGILITY | [Cross-Script State Mutation](#cross-script-state-mutation) |
 | **medium** | FRAGILITY | [File-Based Spec References Without Version Anchors](#file-based-spec-references-without-version-anchors) |
-| **medium** | FRAGILITY | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) |
 | **medium** | FRAGILITY | [INVARIANTS.md §7 Clean Worktree Not Enforced at Submission](#invariantsmd-7-clean-worktree-not-enforced-at-submission) |
 | **medium** | FRAGILITY | [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time) |
 | **medium** | FRAGILITY | [Custom Roles Render Empty Prompt Blocks](#custom-roles-render-empty-prompt-blocks) |
@@ -152,17 +152,18 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | BLIND SPOT | [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification) |
 | **medium** | BLIND SPOT | [Initialization Completion Unverifiable](#initialization-completion-unverifiable) |
 | **medium** | BLIND SPOT | [Circuit Breaker Depends on Participant Reporting](#circuit-breaker-depends-on-participant-reporting) |
-| **medium** | BLIND SPOT | [Sprint Metrics Lossy at Sprint Boundary](#sprint-metrics-lossy-at-sprint-boundary) |
+| **medium** | BLIND SPOT | [Sprint Metrics Lossy at Sprint Boundary](#sprint-metrics-lossy-at-sprint-boundary) — mitigated, open |
 | **low** | ASSUMPTION | [Spec Maturity Dependency](#spec-maturity-dependency) |
 | **low** | ASSUMPTION | [Single-Goal Data Model Constrains Applicability](#single-goal-data-model-constrains-applicability) |
 | **low** | BLIND SPOT | [No Source Type for Pre-Implementation Spec Findings](#no-source-type-for-pre-implementation-spec-findings) |
 | **low** | BLIND SPOT | [Prompt-Build-to-Execution State Drift](#prompt-build-to-execution-state-drift) |
 | **low** | BLIND SPOT | [Index Discovery Failures Are Unobservable](#index-discovery-failures-are-unobservable) |
-| **low** | TRAJECTORY | [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning) |
+| **low** | TRAJECTORY | [Blackboard Growth Without Pruning](#blackboard-growth-without-pruning) — mitigated, open |
 | **low** | TRAJECTORY | [Role Addition Accelerates Contract Complexity Pressure](#role-addition-accelerates-contract-complexity-pressure) |
-| **low** | TRAJECTORY | [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete) |
+| **low** | TRAJECTORY | [Anomaly Detail Validation Incomplete](#anomaly-detail-validation-incomplete) — mitigated, open |
+| **low** | TRAJECTORY | [Operation Vocabulary Spans Five Registers](#operation-vocabulary-spans-five-registers) |
 | **low** | TRAJECTORY | [Spec Corpus Lacks Lifecycle Management](#spec-corpus-lacks-lifecycle-management) |
-| **low** | TRAJECTORY | [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface) |
+| **low** | TRAJECTORY | [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface) — mitigated, open |
 | **low** | TENSION | [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic) |
 | **low** | TENSION | [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime) |
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
@@ -170,7 +171,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
 | **medium** | STRUCTURAL DEBT | [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) |
 | **medium** | STRUCTURAL DEBT | [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) |
-| **medium** | STRUCTURAL DEBT | [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) |
+| **medium** | STRUCTURAL DEBT | [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) — mitigated, open |
 | **medium** | STRUCTURAL DEBT | [Duplicate Initialization Implementations](#duplicate-initialization-implementations) |
 | **medium** | STRUCTURAL DEBT | [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners) |
 | **medium** | STRUCTURAL DEBT | [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners) |
@@ -180,7 +181,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
 
-**Counts:** 17 high, 36 medium, 15 low — 68 open issues total. *(2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 35 medium, 16 low — 68 open issues total. *(2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -321,6 +322,8 @@ Design contradictions that create structural friction.
 **Implication:** Each new sub-pipeline extends the region of the state space that generically-named Go surfaces cannot see, so the declarative pipeline's reach shrinks relative to its stated scope rather than growing.
 
 **Current mitigation:** Resolver-based accessors (`InitialStatus`, `ExecutingStatus`, `SubmittedStatus`, `ReviewingStatus`, `ApprovedStatus`) exist and are used on the claim/release path; `ComputeSprintMetricsWithTerminalStates` and `AllPlannedTasksTerminalWith` accept pipeline-supplied terminal states. The partition is partially bridged, not closed.
+
+**Traceability (#161, mitigated):** [ADR-0145](ADR/0145-rejection-rca-gate.md) reuses `BLOCKED` with typed reason `rejection_rca_required` and a record/disposition predicate instead of adding another pipeline status. The existing partition remains open.
 
 **Future options:**
 - Derive the status constant set from the pipeline YAML at load time, as ADR-0045 did for roles
@@ -591,19 +594,6 @@ unversioned, and semantic changes outside a declared read set still depend on re
 
 **Direction:** Add one focused composition test when the validation entry point next changes, covering representative aggregation behavior. Keep package-wide percentage claims tied to a fresh complete profile rather than the unrelated ignored local `coverage.out`.
 
-### SetTaskOutput spec_ref Validation Gap
-
-**Skill:** software-architecture-review
-**Category:** FRAGILITY
-**Status:** Unresolved source conflict
-**Related:** [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified)
-
-**Issue:** The `set-task-output` CLI help declares `spec_ref` optional, and `ops/set_task_output.go` validates `desc`, `done_when`, and `scope` without generally requiring `spec_ref`. By contrast, `statevalidate` output validation and `ops/proceed.go:validateOutputEntry` require every output entry to have a non-empty `spec_ref`. The write boundary and its public contract therefore disagree with state and transition validation.
-
-**Implication:** The same output is accepted by `SetTaskOutput` but rejected when the state or a downstream transition is validated. Operators cannot tell whether omitting `spec_ref` is supported, and the delayed failure creates a "write now, fail later" path.
-
-**Direction:** Unresolved. Decide whether `spec_ref` is universally required or transition-specific. If required, enforce it in `SetTaskOutput` and update CLI help. If optional, relax state and transition validation for the applicable output types. Align tests and documentation with the chosen contract.
-
 ### INVARIANTS.md §7 Clean Worktree Not Enforced at Submission
 
 **Skill:** software-architecture-review
@@ -871,6 +861,8 @@ This is distinct from "Retrospective Findings Don't Feed Forward" (which covers 
 
 **Current mitigation:** Full sprint data is archived to disk. Humans can inspect archives manually. The `SprintSummary` struct was intentionally kept lightweight per ADR-0028.
 
+**Traceability (#160, mitigated):** [Usage Attribution](../protocols/usage-attribution.md#relationship-to-open-architecture-issues) stores usage outside the sprint counter file and queries it by time window, so token records survive sprint boundaries. The loss of other sprint metrics remains open.
+
 **Future options:**
 - Extend `SprintSummary` with a small set of decision-relevant metrics (e.g., `AvgReviewIterations`, `ReviewApprovalRate`, `TasksBlockedCount`)
 - Add a `MetricsSummary` sub-struct to `SprintSummary` carrying the top 4-5 planning-relevant fields
@@ -897,6 +889,8 @@ Recording a new orchestrator assessment drops the dependency-descendant wake
 snapshots from that task's earlier assessments. Wake detection reads only the
 latest assessment, so this bounds one append-only payload without a retention
 window. Assessment notes and terminal task records are still unbounded.
+
+**Traceability (#157, mitigated):** [Blocked-Assessment Idempotency](../protocols/blocked-assessment-idempotency.md#persistence-and-no-change-result) suppresses content-equivalent appends at the source with `NO_CHANGE`. Existing entries are not pruned; general retention remains open.
 
 Issue #153 adds durable quarantined verdict evidence without automatic
 eviction. Its explicit archival trigger and preservation requirements are
@@ -929,13 +923,27 @@ tracked in [Quarantined verdict retention](../../TECH_DEBT.md#quarantined-verdic
 **Skill:** code-review
 **Category:** FRAGILITY
 
-**Issue:** The model accepts 19 anomaly types. `internal/statevalidate/validate_entity.go` enforces type-specific detail fields for 9 of them; the other 10, including `reviewer_loop` and `review_exhaustion`, receive no type-specific detail validation even where specs or prompts expect structured fields.
+**Issue:** The merged model accepts 21 anomaly types. `internal/statevalidate/validate_entity.go` enforces type-specific detail fields for 11 of them; the other 10, including `reviewer_loop` and `review_exhaustion`, receive no type-specific detail validation even where specs or prompts expect structured fields.
+
+**Traceability (#156, mitigated):** [ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md) adds `reviewer_claim_circuit_open` with its six required fields, bringing the planned output's counts to 20 accepted / 10 validated. The merged tree additionally contains `obligation_content_drifted` and its detail validator (21 / 11 in total). The ten unvalidated types are unchanged; this issue remains open.
 
 **Implication:** Agents can write structurally valid but informationally empty anomalies. Circuit breaker pattern detection and retrospective analysis degrade when detail fields are missing.
 
 **Future options:**
 - Add cases for the 10 unvalidated types in `internal/statevalidate/validate_entity.go`
 - Generate validation from a single type→fields declaration (eliminate spec/code/template as three separate lists)
+
+### Operation Vocabulary Spans Five Registers
+
+**Skill:** systemic-thinking
+**Category:** TRAJECTORY
+**Status:** Open
+
+**Issue:** Operation vocabulary spans `IsLifecycleOperation`, the lifecycle metrics matrix, pipeline `allowed-operations`, and the payload-schema registry. `validate-payload` adds a fifth, implicit attribute: the state-free gated/ungated distinction. It is lifecycle-named and counted but deliberately absent from `allowed-operations`; no central register declares that classification.
+
+**Implication:** Future operations must keep the four lists and the implicit gating decision aligned. Drift can appear as unavailable metrics, an RBAC denial, or accidental gating/ungating by omission.
+
+**Traceability:** The master plan's systemic review and [Payload Validation](../protocols/payload-validation.md#fifth-operation-register-traceability) assign this finding to register reconciliation. [ADR-0142](ADR/0142-payload-preflight-validation.md) records preflight's ungated decision; it does not centralize the vocabulary.
 
 ### Spec Corpus Lacks Lifecycle Management
 
@@ -964,6 +972,8 @@ tracked in [Quarantined verdict retention](../../TECH_DEBT.md#quarantined-verdic
 **Implication:** Operational visibility requires ad hoc tooling or direct state.yaml inspection. The investment in metrics instrumentation doesn't translate to operational insight because the data is fragmented and inaccessible through standard interfaces.
 
 **Current mitigation:** Current metrics are accessible through `liza inspect metrics` and `liza status`.
+
+**Traceability (#160, mitigated):** [Usage Attribution](../protocols/usage-attribution.md#relationship-to-open-architecture-issues) adds `usage report`, one outcome-scoped query surface over provider records. A general query layer over lock timing and sprint archives remains open.
 
 **Future options:**
 - Unified query interface aggregating all metric sources
@@ -1256,6 +1266,8 @@ File sizes in issue titles retain the original assessment values to preserve exi
 
 **Direction:** Extract restart tracking and spinning policy into focused files, then simplify `RunSupervisor` around a small set of named lifecycle phases. Preserve the existing `CLIAgent` execution boundary.
 
+**Traceability (#156, mitigated):** Reviewer-claim policy lives in `internal/agent/claim_breaker.go`, with an executable `supervisor.go` file-size budget in `internal/agent/supervisor_test.go`. [ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md) records the bounded policy; broader supervisor decomposition remains open.
+
 ### Decompose watch.go (1,407 LOC)
 
 **Skill:** code-quality-assessment
@@ -1324,6 +1336,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 - **2026-04-13:** [MCP Cross-Layer Read Dependency](#mcp-cross-layer-read-dependency).
 - **2026-07-25:** [Role Pair Field as Single Point of Configuration Truth](#role-pair-field-as-single-point-of-configuration-truth), [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows), [Task Type Registry is Partial Abstraction](#task-type-registry-is-partial-abstraction), [Orchestrator Role Dissolution Without Replacement](#orchestrator-role-dissolution-without-replacement), [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop), [Implicit Orchestrator Provenance Default](#implicit-orchestrator-provenance-default), [Orchestrator State Change Verification is Non-Binding](#orchestrator-state-change-verification-is-non-binding), [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified), [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments), [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift), [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation), [Self-Reported Validation](#self-reported-validation), [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause), and [Supervisor Contention](#supervisor-contention).
 - **2026-08-20:** [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated).
+- **2026-09-20:** [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) — help alignment and regression coverage (`43dacebcfd2e61d37456f5104690999202388c95`).
 
 ---
 
@@ -1349,10 +1362,19 @@ File sizes in issue titles retain the original assessment values to preserve exi
 | [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause) | FEEDBACK | 2026-07-25 — rescoping requires root cause in role contract and audit log (`99216a33`) |
 | [Supervisor Contention](#supervisor-contention) | STRESS POINT | 2026-07-25 — supervisors are per-agent; blackboard writes lock and integration updates use CAS |
 | [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated) | FEEDBACK | 2026-08-20 — ADR-0113; `TestSlicedIntegrationLifecycle` and `TestSlicedIntegrationFinalizationRace`; merge commit `84159a1eb0593e2e4eb5288e9ed6c65ae4776a4d` |
+| [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) | FRAGILITY | 2026-09-20 — CLI help requires `spec_ref`; `TestMutationCommandWiring` pins required and optional fields (`43dacebcfd2e61d37456f5104690999202388c95`) |
 
 ---
 
 ## Fix Details
+
+### SetTaskOutput spec_ref Validation Gap
+
+**Resolution:** The write boundary and preflight require `spec_ref` on every output entry, agreeing with state and transition validation. Commit `43dacebcfd2e61d37456f5104690999202388c95` aligns the CLI help with that requirement and removes the stale-help debt from `TECH_DEBT.md`.
+
+**Evidence:** `TestMutationCommandWiring` pins `spec_ref` in the required fields and excludes it from the optional fields. [Payload Validation](../protocols/payload-validation.md#required-spec_ref-and-stale-help-debt) records payment; [ADR-0142](ADR/0142-payload-preflight-validation.md) preserves the historical decision and debt record.
+
+**Related:** [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified)
 
 ### MCP Admin Handler Authorization Gap
 

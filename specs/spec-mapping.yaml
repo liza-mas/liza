@@ -1,7 +1,14 @@
 version: 1
 repository: "git@github.com:liza-mas/liza.git"
-last_updated: "2026-02-22T17:11:25Z"
+last_updated: "2026-09-20T20:38:55Z"
 code_classification:
+  internal/agent/claim_breaker.go: {type: functional, confidence: confirmed}
+  internal/ops/claim_failure_anomaly.go: {type: functional, confidence: confirmed}
+  internal/ops/assess_blocked_fingerprint.go: {type: functional, confidence: confirmed}
+  internal/payloadschema/: {type: architectural, confidence: confirmed}
+  internal/ops/replace_task.go: {type: functional, confidence: confirmed}
+  internal/usage/: {type: functional, confidence: confirmed}
+  internal/ops/rejection_rca.go: {type: functional, confidence: confirmed}
   "cmd/liza/main.go": {type: functional, confidence: confirmed}
   "internal/commands/claim_task.go": {type: functional, confidence: confirmed}
   "internal/ops/claim_task.go": {type: functional, confidence: confirmed}
@@ -283,6 +290,48 @@ code_classification:
     type: functional
     confidence: inferred
 mappings:
+  internal/agent/claim_breaker.go:
+    spec_path: specs/protocols/circuit-breaker.md
+    spec_title: Circuit Breaker Protocol
+    status: aligned
+    last_verified: "2026-09-20"
+    confidence: inferred-pending-review
+  internal/ops/claim_failure_anomaly.go:
+    spec_path: specs/protocols/circuit-breaker.md
+    spec_title: Circuit Breaker Protocol
+    status: aligned
+    last_verified: "2026-09-20"
+    confidence: inferred-pending-review
+  internal/ops/assess_blocked_fingerprint.go:
+    spec_path: specs/protocols/blocked-assessment-idempotency.md
+    spec_title: Blocked-Assessment Idempotency
+    status: aligned
+    last_verified: "2026-09-20"
+    confidence: inferred-pending-review
+  internal/payloadschema/:
+    spec_path: specs/protocols/payload-validation.md
+    spec_title: Payload Validation
+    status: aligned
+    last_verified: "2026-09-20"
+    confidence: inferred-pending-review
+  internal/ops/replace_task.go:
+    spec_path: specs/protocols/replacement-transactions.md
+    spec_title: Replacement Transactions
+    status: aligned
+    last_verified: "2026-09-20"
+    confidence: inferred-pending-review
+  internal/usage/:
+    spec_path: specs/protocols/usage-attribution.md
+    spec_title: Usage Attribution by Terminal Outcome
+    status: aligned
+    last_verified: "2026-09-20"
+    confidence: inferred-pending-review
+  internal/ops/rejection_rca.go:
+    spec_path: specs/protocols/task-lifecycle.md
+    spec_title: Task Lifecycle Protocol
+    status: aligned
+    last_verified: "2026-09-20"
+    confidence: inferred-pending-review
   "cmd/liza/main.go":
     spec_path: "specs/functional/1 - Liza.md"
     spec_title: "Liza"
@@ -1386,6 +1435,66 @@ mappings:
     conflict_details: null
     last_verified: "2026-02-22"
 specs:
+  specs/protocols/blocked-assessment-idempotency.md:
+    title: Blocked-Assessment Idempotency
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0141"]
+    code_paths: [internal/ops/assess_blocked_fingerprint.go, internal/ops/assess_blocked.go, internal/ops/orchestrator_wake.go, internal/agent/workdetection.go, internal/payloadschema/assess_blocked.go]
+  specs/protocols/payload-validation.md:
+    title: Payload Validation
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0142"]
+    code_paths: [internal/payloadschema/, internal/commands/validate_payload.go, internal/ops/set_task_output.go, internal/ops/mark_blocked.go, internal/ops/submit_review.go, internal/ops/handoff.go]
+  specs/protocols/replacement-transactions.md:
+    title: Replacement Transactions
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0143"]
+    code_paths: [internal/ops/replace_task.go, internal/payloadschema/replace_task.go, internal/commands/replace_task.go]
+  specs/protocols/usage-attribution.md:
+    title: Usage Attribution by Terminal Outcome
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0144"]
+    code_paths: [internal/usage/, internal/agent/systemctl.go, internal/commands/usage_report.go]
+  specs/architecture/ADR/0140-reviewer-claim-circuit-breaker.md:
+    title: Reviewer-Claim Circuit Breaker
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0140"]
+    code_paths: [internal/agent/claim_breaker.go, internal/ops/claim_failure_anomaly.go, internal/statevalidate/validate_entity.go]
+  specs/architecture/ADR/0141-blocked-assessment-idempotency.md:
+    title: Blocked-Assessment Idempotency
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0141"]
+    code_paths: [internal/ops/assess_blocked_fingerprint.go, internal/ops/assess_blocked.go, internal/ops/orchestrator_wake.go]
+  specs/architecture/ADR/0142-payload-preflight-validation.md:
+    title: Shared Payload Preflight Validation
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0142"]
+    code_paths: [internal/payloadschema/, internal/commands/validate_payload.go, internal/ops/set_task_output.go]
+  specs/architecture/ADR/0143-transactional-task-replacement.md:
+    title: Transactional Task Replacement
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0143"]
+    code_paths: [internal/ops/replace_task.go, internal/ops/lifecycle_receipt.go]
+  specs/architecture/ADR/0144-usage-attribution-by-outcome.md:
+    title: Usage Attribution by Terminal Outcome
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0144"]
+    code_paths: [internal/usage/, internal/agent/systemctl.go]
+  specs/architecture/ADR/0145-rejection-rca-gate.md:
+    title: Rejection RCA Gate
+    status: active
+    last_verified: "2026-09-20"
+    linked_adrs: ["0145"]
+    code_paths: [internal/ops/rejection_rca.go, internal/ops/submit_verdict.go, internal/ops/unblock_task.go, internal/models/task.go, internal/models/config.go]
   "specs/functional/1 - Liza.md":
     title: "Liza"
     status: active

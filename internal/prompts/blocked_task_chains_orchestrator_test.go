@@ -22,7 +22,8 @@ func TestBlockedTaskChainsOrchestratorAndBlockingProtocol(t *testing.T) {
 	const noDefault = "Supersession is not the default for ambiguity"
 	const lineage = "review the logical lineage"
 	wakes := map[string][]string{
-		"BLOCKED_TASKS":        {report, noDefault, lineage, "never a backward edge", "not supersession by default", "cancel-task for removed-only scope", "name the closure evidence"},
+		"BLOCKED_TASKS": {report, noDefault, lineage, "never a backward edge", "not supersession by default", "cancel-task for removed-only scope", "name the closure evidence",
+			"approved-proof reference drift", "acme-cli reaffirm-proof --help", "orchestrator-only remedy", "one transition only", "no status change or approval"},
 		"HYPOTHESIS_EXHAUSTED": {noDefault, lineage, "after the owning specialist has confirmed"},
 		"IMMEDIATE_DISCOVERY":  {noDefault, lineage},
 		"PLANNING_COMPLETE":    {report, "planning-only run against its intended deliverable", "invent no planning-to-coding ratio"},

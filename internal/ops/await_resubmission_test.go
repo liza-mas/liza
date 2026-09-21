@@ -182,15 +182,9 @@ func TestAwaitResubmission_Resubmitted(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitResubmissionResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
-	}()
+	wait := startResubmissionWait(t, tmpDir, 10*time.Second)
 
-	testhelpers.WaitForAsyncSetup()
+	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 	// Simulate doer resubmission: transition to CODE_READY_FOR_REVIEW.
 	newBase := "newbase123"
 	newCommit := "newcommit456"
@@ -206,7 +200,7 @@ func TestAwaitResubmission_Resubmitted(t *testing.T) {
 		t.Fatalf("failed to modify state: %v", err)
 	}
 
-	<-done
+	result, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -269,15 +263,9 @@ func TestAwaitResubmission_Terminal_Blocked(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitResubmissionResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
-	}()
+	wait := startResubmissionWait(t, tmpDir, 10*time.Second)
 
-	testhelpers.WaitForAsyncSetup()
+	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
 		tk.Status = models.TaskStatusBlocked
@@ -288,7 +276,7 @@ func TestAwaitResubmission_Terminal_Blocked(t *testing.T) {
 		t.Fatalf("failed to modify state: %v", err)
 	}
 
-	<-done
+	result, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -333,15 +321,9 @@ func TestAwaitResubmission_Terminal_Superseded(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitResubmissionResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
-	}()
+	wait := startResubmissionWait(t, tmpDir, 10*time.Second)
 
-	testhelpers.WaitForAsyncSetup()
+	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
 		tk.Status = models.TaskStatusSuperseded
@@ -350,7 +332,7 @@ func TestAwaitResubmission_Terminal_Superseded(t *testing.T) {
 		t.Fatalf("failed to modify state: %v", err)
 	}
 
-	<-done
+	result, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -391,15 +373,9 @@ func TestAwaitResubmission_Terminal_Approved(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitResubmissionResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
-	}()
+	wait := startResubmissionWait(t, tmpDir, 10*time.Second)
 
-	testhelpers.WaitForAsyncSetup()
+	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 	if err := bb.Modify(func(s *models.State) error {
 		tk := s.FindTask("task-1")
 		tk.Status = models.TaskStatusApproved
@@ -410,7 +386,7 @@ func TestAwaitResubmission_Terminal_Approved(t *testing.T) {
 		t.Fatalf("failed to modify state: %v", err)
 	}
 
-	<-done
+	result, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -451,15 +427,9 @@ func TestAwaitResubmission_TaskDisappears(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitResubmissionResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
-	}()
+	wait := startResubmissionWait(t, tmpDir, 10*time.Second)
 
-	waitForReviewOwnership(t, bb, "task-1", "reviewer-1")
+	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 	// Remove the task from state entirely.
 	if err := bb.Modify(func(s *models.State) error {
 		s.Tasks = []models.Task{}
@@ -468,7 +438,7 @@ func TestAwaitResubmission_TaskDisappears(t *testing.T) {
 		t.Fatalf("failed to modify state: %v", err)
 	}
 
-	<-done
+	result, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -612,15 +582,9 @@ func TestAwaitResubmission_Aborted(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitResubmissionResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
-	}()
+	wait := startResubmissionWait(t, tmpDir, 10*time.Second)
 
-	testhelpers.WaitForAsyncSetup()
+	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 	if err := bb.Modify(func(s *models.State) error {
 		s.Config.Mode = models.SystemModeStopped
 		return nil
@@ -628,7 +592,7 @@ func TestAwaitResubmission_Aborted(t *testing.T) {
 		t.Fatalf("failed to modify state: %v", err)
 	}
 
-	<-done
+	result, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -929,14 +893,9 @@ func TestAwaitResubmission_RaceGuard(t *testing.T) {
 	}
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", 10*time.Second)
-	}()
+	wait := startResubmissionWait(t, tmpDir, 10*time.Second)
 
-	waitForReviewOwnership(t, bb, "task-1", "reviewer-1")
+	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 
 	// Another reviewer should NOT be able to claim the task.
 	// First transition to SUBMITTED so the task would normally be claimable by a reviewer.
@@ -958,7 +917,7 @@ func TestAwaitResubmission_RaceGuard(t *testing.T) {
 		t.Fatal("expected ClaimTask by reviewer-2 to fail while ReviewingBy is set")
 	}
 
-	<-done
+	_, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -998,35 +957,10 @@ func TestAwaitResubmission_ReviewLeaseExpires(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, stateFile, state)
 
 	timeout := 10 * time.Second
-	var result *AwaitResubmissionResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitResubmission(context.Background(), tmpDir, "task-1", "reviewer-1", timeout)
-	}()
-
-	testhelpers.WaitForAsyncSetup()
+	wait := startResubmissionWait(t, tmpDir, timeout)
 
 	// Verify initial lease: should be approximately now + timeout + 5min.
-	var tk *models.Task
-	deadline := time.Now().Add(2 * time.Second)
-	pollTicker := time.NewTicker(10 * time.Millisecond)
-	defer pollTicker.Stop()
-	for {
-		s, readErr := bb.Read()
-		if readErr != nil {
-			t.Fatalf("failed to read state: %v", readErr)
-		}
-		tk = s.FindTask("task-1")
-		if tk != nil && tk.ReviewLeaseExpires != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("ReviewLeaseExpires should be set on entry")
-		}
-		<-pollTicker.C
-	}
+	tk := waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 2*time.Second)
 	expectedEntryLease := now.Add(timeout + 5*time.Minute)
 	entryLeaseDiff := tk.ReviewLeaseExpires.Sub(expectedEntryLease)
 	if entryLeaseDiff < -5*time.Second || entryLeaseDiff > 5*time.Second {
@@ -1045,7 +979,7 @@ func TestAwaitResubmission_ReviewLeaseExpires(t *testing.T) {
 		t.Fatalf("failed to modify state: %v", err)
 	}
 
-	<-done
+	result, awaitErr := wait.finish()
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
@@ -1069,23 +1003,66 @@ func TestAwaitResubmission_ReviewLeaseExpires(t *testing.T) {
 	}
 }
 
-func waitForReviewOwnership(t *testing.T, bb *db.Blackboard, taskID, reviewerID string) {
+type resubmissionWait struct {
+	done   chan struct{}
+	result *AwaitResubmissionResult
+	err    error
+}
+
+// All async fixtures in this file use task-1 and reviewer-1. Register cleanup
+// before launching so Fatal/FailNow cannot let a worker outlive its fixture.
+func startResubmissionWait(t *testing.T, root string, timeout time.Duration) *resubmissionWait {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	wait := &resubmissionWait{done: make(chan struct{})}
+	t.Cleanup(func() {
+		cancel()
+		<-wait.done
+	})
+	go func() {
+		defer close(wait.done)
+		wait.result, wait.err = AwaitResubmission(ctx, root, "task-1", "reviewer-1", timeout)
+	}()
+	return wait
+}
+
+func (wait *resubmissionWait) finish() (*AwaitResubmissionResult, error) {
+	<-wait.done
+	return wait.result, wait.err
+}
+
+func waitForReviewOwnership(t *testing.T, bb *db.Blackboard, taskID, reviewerID string, wait *resubmissionWait, timeout time.Duration) *models.Task {
 	t.Helper()
 
-	deadline := time.Now().Add(10 * time.Second)
+	var done <-chan struct{}
+	if wait != nil {
+		done = wait.done
+	}
+	deadline := time.Now().Add(timeout)
 	pollTicker := time.NewTicker(10 * time.Millisecond)
 	defer pollTicker.Stop()
 	for time.Now().Before(deadline) {
-		state, err := bb.Read()
+		// Read takes the worker's exclusive file lock. Frequent readiness reads
+		// can obstruct acquisition under load. Atomic state-file replacement
+		// lets ReadCached observe committed ownership without taking that lock.
+		state, err := bb.ReadCached()
 		if err != nil {
 			t.Fatalf("failed to read state while waiting for review ownership: %v", err)
 		}
 		task := state.FindTask(taskID)
-		if task != nil && task.ReviewingBy != nil && *task.ReviewingBy == reviewerID {
-			return
+		agent := state.Agents[reviewerID]
+		if task != nil && task.ReviewingBy != nil && *task.ReviewingBy == reviewerID &&
+			task.ReviewLeaseExpires != nil && agent.Status == models.AgentStatusWaiting &&
+			agent.CurrentTask != nil && *agent.CurrentTask == taskID {
+			return task
 		}
-		<-pollTicker.C
+		select {
+		case <-done:
+			t.Fatalf("await worker exited before review ownership: result=%+v error=%v", wait.result, wait.err)
+		case <-pollTicker.C:
+		}
 	}
 
 	t.Fatalf("timed out waiting for %s to acquire review ownership of %s", reviewerID, taskID)
+	return nil
 }

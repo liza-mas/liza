@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/referencecontract"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -943,6 +944,53 @@ func submitProofDriftCandidate(t *testing.T, root, taskID, agentID string) error
 	commit := testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
 	_, err := SubmitForReview(root, taskID, commit, agentID)
 	return err
+}
+
+func TestAcceptanceProvenance_ProofDriftDiagnosticDistinguishesMissingAllocation(t *testing.T) {
+	const allocationRefusal = "requires allocation by a direct independently approved merged planning parent"
+	for _, allocates := range []bool{true, false} {
+		name := "missing allocation"
+		if allocates {
+			name = "approved-proof drift"
+		}
+		t.Run(name, func(t *testing.T) {
+			root, taskID, _, bb := proofDriftScenario(t)
+			before := readAcceptanceState(t, bb)
+			state := readAcceptanceState(t, bb)
+			if !allocates {
+				state.FindTask("acceptance-parent").Output = nil
+			}
+			integration := testhelpers.MustGit(t, root, "rev-parse", "integration")
+			path, heading, _ := strings.Cut(acceptanceAllocationRef(state.FindTask(taskID)), "#")
+			content, _, err := readAcceptanceBlob(root, integration, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			contract, err := referencecontract.ParseAcceptance(content, heading)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent := state.FindTask("acceptance-parent")
+			if reviewedReferencesResolveAlike(state, parent.ID, root, *parent.ReviewCommit, integration, path, heading, contract) {
+				t.Fatal("unreaffirmed drift must still fail the reference comparison")
+			}
+			input, err := loadAcceptanceInput(root, state, state.FindTask(taskID), integration)
+			var evidenceErr *AcceptanceEvidenceError
+			if input != nil || !errors.As(err, &evidenceErr) || evidenceErr.Field != "acceptance.source" {
+				t.Fatalf("derivation = %v, %v; want acceptance.source refusal", input, err)
+			}
+			if allocates {
+				for _, fragment := range []string{allocationRefusal, `approved-proof reference "identity"`, "drift", "orchestrator", "reaffirm-proof"} {
+					if !strings.Contains(evidenceErr.Reason, fragment) {
+						t.Errorf("drift refusal = %q, missing %q", evidenceErr.Reason, fragment)
+					}
+				}
+			} else if evidenceErr.Reason != allocationRefusal {
+				t.Errorf("missing-allocation refusal = %q, want %q", evidenceErr.Reason, allocationRefusal)
+			}
+			requireAcceptanceStateUnchanged(t, bb, before)
+		})
+	}
 }
 
 // The refusal this whole mechanism exists to recover from: unlike an obligation

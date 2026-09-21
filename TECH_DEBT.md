@@ -116,6 +116,30 @@ architecture-aware and cover amd64 and arm64 selection in tests. If x64
 emulation fails for a supported Windows arm64 user first, add a documented
 source-build fallback or mark RTK unsupported on that architecture.
 
+## Orchestrator wake prompts grew 4.9% without a concision review
+
+**What:** The GH-issues campaign added lifecycle, diagnostics and RCA guidance
+across seven outputs. Measured on the tightest variant, orchestrator wake
+HUMAN_NOTE grew from 9,918 to 10,401 rendered bytes (+4.9%) before the last
+prompt task reached it, consuming 483 of the 496 bytes the 5% per-variant
+ceiling allows. All eight over-ceiling variants were orchestrator wake prompts,
+the smallest in the pipeline at 9.9-12.6 KB against 20-28 KB elsewhere; no
+other variant exceeded +2.1%. The baseline was re-anchored at the new sizes
+rather than the growth being reviewed line by line.
+
+**Why deferred:** The alternative was blocking `cpm-1-cp-3-code-5` — which
+contributed 177 of those 660 bytes and cannot regenerate the baseline, its plan
+placing that outside any child's ownership — behind a concision repair nobody
+owned. Re-anchoring keeps the gate enabled at the same 5% and moves the
+question off the critical path; it does not answer it.
+
+**Payback trigger:** Before the next campaign adds role-neutral prompt text, or
+when any orchestrator wake variant next approaches the ceiling, review what the
+campaign added to those templates and reclaim what is not load-bearing.
+G2.2 governs the tightening and G2.3 bounds it: a small prompt paying three
+times the proportional cost of a large one is the signal that role-neutral
+placement is wrong, not that the ceiling is.
+
 ## Race-gate tests carry fixed wall-clock tolerances
 
 **What:** Several `internal/ops` tests assert against absolute durations rather
@@ -374,3 +398,205 @@ for any reason other than an intended payload change, or before the next
 multi-agent run at a scale comparable to the calibration run — whichever comes
 first. Without it, a fixture that has drifted from real prompt shape will keep
 reporting reductions that real runs do not see.
+
+## Blocked-assessment byte aggregate
+
+**What:** Issue #157 returns `suppressed_entry_bytes` for each content-equivalent
+`assess-blocked` call, but persists no byte total. The sprint outcome matrix
+counts appends and suppressed entries only; per-call byte sizes cannot be
+reconstructed from that count alone.
+
+**Why deferred:** The fixed metrics schema has no byte accumulator. Extending
+it requires compatible reads, sprint attribution and atomic counter updates;
+recording suppression in task history would defeat the no-change invariant.
+
+**Payback trigger:** Before a report or acceptance criterion requires a durable
+per-sprint total of assessment bytes avoided, extend the metrics schema and
+prove restart/concurrency correctness without adding task history or receipts.
+Preserve observation-window and unavailable-data semantics. See the
+[protocol](specs/protocols/blocked-assessment-idempotency.md#observability-and-limits)
+and [ADR-0141](specs/architecture/ADR/0141-blocked-assessment-idempotency.md).
+
+## Payload-schema path-helper allowlist
+
+**What:** Task-ID syntax and `spec_ref` / `plan_ref` worktree-prefix normalization remain outside schema validation because `internal/paths` is not directly importable.
+
+**Why deferred:** V1 obeys the reviewed direct-import boundary; neither an allowlist expansion nor a pure-helper split is owned by this change. Mutation retains the checks.
+
+**Payback trigger:** A schema needs task-ID syntax or ref normalization. Decide a pure `internal/paths` split or an explicit allowlist revision before extending schema scope.
+
+**Related:** [Allowlist-narrowing debt](specs/protocols/payload-validation.md#allowlist-narrowing-debt), [ADR-0142](specs/architecture/ADR/0142-payload-preflight-validation.md).
+
+## Usage-record retention
+
+**What:** Durable provider records in the runtime directory's `usage/` have no pruning or retention policy; day and size rotation do not bound aggregate storage.
+
+**Why deferred:** Records deliberately survive sprint rollover to preserve the token dimension of sprint history. The usage-attribution change establishes capture and reporting, leaving retention unsettled.
+
+**Payback trigger:** The usage directory growing past the documented per-file cap in aggregate, or a general pruning policy landing for task history. Either requires a retention decision for this store.
+
+**Related:** [Usage retention](specs/protocols/usage-attribution.md#retention), [ADR-0144](specs/architecture/ADR/0144-usage-attribution-by-outcome.md).
+
+## RCA assign restore conflicts with session preflight (F1)
+
+**What:** After `capability_reroute` or `lifecycle_repair` closes the rejection-RCA
+gate, a task with nonempty `validation_prerequisites` cannot recover through
+either form of `unblock-task`. Both paths require the `assign` restore mode.
+The [restore protocol](specs/protocols/task-lifecycle.md#restore-modes) remains
+subject to this unresolved limitation for prerequisite-bearing coding and
+planning tasks.
+
+**Inspected evidence:** At commit
+`d2c4a8bf3a2f18aca667ee7dbe4d1e67933ed128`,
+[internal/ops/unblock_task.go:217-218](internal/ops/unblock_task.go#L217-L218)
+rejects `--assign-to` when prerequisites are nonempty: “validation preflight
+requires the target session; unblock without --assign-to and let its supervisor
+claim the task”. Without `--assign-to`,
+[internal/ops/unblock_task.go:428-436](internal/ops/unblock_task.go#L428-L436)
+rejects the assign-only disposition: “authorizes only the assign restore: retry
+unblock-task with --assign-to”. The preflight guard at line 217 runs before the
+RCA restore-mode check invoked at line 223, so neither form restores the task.
+These source ranges were rechecked at worktree base
+`02003b38d5c10a2c429b6fd0eb5e3bd5b8b7ceb9`; the file is unchanged from the
+inspected commit and navigation has not moved. This records fresh restoration,
+not the earlier exact-replay return.
+
+**Conflicting commitments:**
+[ADR-0136](specs/architecture/ADR/0136-validation-session-prerequisites.md#decision-outcome)
+requires fresh target-session preflight; persisted readiness is audit evidence,
+never reusable assignment authority. The same inspected sources confirm this in
+[validation_readiness.go:5-6](internal/models/validation_readiness.go#L5-L6)
+and [validation_preflight.go:199-201](internal/ops/validation_preflight.go#L199-L201):
+successful checks rerun. With no supplied session, the current process must
+match the target agent and generation
+([lines 262-268](internal/ops/validation_preflight.go#L262-L268)).
+[ADR-0145](specs/architecture/ADR/0145-rejection-rca-gate.md#decision) requires
+direct assignment for these non-product recoveries to avoid an iteration
+increment; the advisory `iteration_exempt` field cannot replace that mechanism.
+An ordinary claim or stored-readiness check therefore cannot reconcile the two.
+
+**Why deferred:** The operator's correction at
+`2026-09-20T23:25:19.174573658Z` withdrew in full the
+`2026-09-20T23:13:43.445282386Z` proposal to authorize assignment from stored
+`ValidationReadiness`. The correction required this documentation-only
+replacement for `integration-slice-cpm-1-cp-6-fix-1`, now superseded; it did not
+authorize changing either ADR or weakening either prerequisite or accounting.
+The required architecture/source-owner decision exceeds the fix task's authority.
+
+**Candidate, not adopted:** The operator proposed two-phase assignment: the
+orchestrator records assignment intent and the target supervisor completes it
+after its own fresh preflight. This aims to preserve direct assignment and fresh
+session checks together, but requires new transport in `UnblockTaskOptions`,
+which currently carries no target `ValidationSession`
+([unblock_task.go:34-40](internal/ops/unblock_task.go#L34-L40)). This entry neither
+selects that design nor authorizes its implementation.
+
+**Payback trigger:** An architecture/source-owner decision must authorize the
+fresh-session assignment mechanism and reconcile the ADR commitments, including
+any required ADR amendment, before implementation resumes. The subsequent repair
+must prove supported recovery for prerequisite-bearing coding and planning tasks
+on both paths, fresh successful checks, unchanged product iteration and retained
+RCA audit, while failed or stale checks acquire no execution ownership and
+generation/worktree/lease protections remain intact.
+
+**Outstanding proof:** AC-161-6 and AC-161-8 recovery proof remains outstanding.
+Documentation and supersession do not fix the runtime defect or prove frozen
+integration coverage. The [slice finding](specs/plans/20260918-fix-gh-issues/20260921-integration-slice-cpm-1-cp-6.md#f1--non-product-recovery-strands-prerequisite-bearing-tasks)
+records the original reproduction and proof limits; no new runtime recovery test
+is claimed here. F2 (`integration-slice-cpm-1-cp-6-fix-0`, override-rationale
+validation) remains merged and unaffected.
+
+## Invocation telemetry conflicts with payload-validation boundaries (F4)
+
+**What:** Invocation-time sprint telemetry takes the exclusive state lock before
+structural validation on mutation paths. Project-local preflight computes its
+verdict first, but still reads and locks state for telemetry before rendering.
+The complete command therefore conflicts with its no-state contract; this is
+not a claim that the pure schema validator reads state.
+
+**Contested obligations:** The
+[payload-validation boundary](specs/protocols/payload-validation.md#validation-boundary-normative)
+still requires both:
+
+> Mutation validation MUST occur before `db.For(...)` acquires the state lock.
+
+> Schema validators MUST take no live state and perform no state, lock or Git operations.
+
+Its [preflight contract](specs/protocols/payload-validation.md#preflight-command)
+also retains this row:
+
+| Aspect | Contract |
+|---|---|
+| State access | None: no `state.yaml` read, state lock, history append, Git operation or lifecycle receipt. Validation works outside an initialized project. |
+
+The outer-observation allowance does not settle whether invocation telemetry
+is exempt from that row or the mutation ordering requirement. These obligations
+remain visible and contested; this entry grants no exemption.
+
+**Inspected evidence:** The following source locations were verified at worktree
+base `952c1cb45b6a6de0fede91a68a134110a88028a6`; the report's line numbers still
+match current source:
+
+| Source | Observed ordering |
+|---|---|
+| [internal/ops/lifecycle_invocation.go:32-40](internal/ops/lifecycle_invocation.go#L32-L40) | `NewLifecycleInvocation` calls `db.For(...).Read()` at line 34 to capture sprint identity before returning. |
+| [internal/db/blackboard.go:121-134](internal/db/blackboard.go#L121-L134), [internal/filelock/filelock.go:150-153](internal/filelock/filelock.go#L150-L153) | The read takes the exclusive state lock before reading the state file. |
+| [internal/ops/mark_blocked.go:64,93-95](internal/ops/mark_blocked.go#L64-L95) | Invocation construction precedes structural validation at line 95, despite the adjacent no-state-path comment. |
+| [internal/ops/submission_lifecycle.go:38](internal/ops/submission_lifecycle.go#L38), [internal/ops/submit_review.go:90-94](internal/ops/submit_review.go#L90-L94) | Submission constructs the observation before reaching the structural validator at line 93. |
+| [internal/ops/set_task_output.go:64,132-135](internal/ops/set_task_output.go#L64-L135) | The report's additional output-path observation holds: invocation construction precedes manifest validation at line 135. |
+| [internal/ops/handoff.go:50,67-69](internal/ops/handoff.go#L50-L69) | The report's additional handoff observation holds: invocation construction precedes structural validation at line 69. |
+| [cmd/liza/cmd_validate_payload.go:73-76,91-101](cmd/liza/cmd_validate_payload.go#L73-L101) | Preflight computes the verdict, then synchronously constructs an invocation for telemetry before rendering. Outside a project, the telemetry helper returns without that read. |
+
+Thus a malformed mutation can wait for the state lock before its structural
+verdict; preflight can wait after validation but before returning the result.
+This is an ordering/contract contradiction, not an allegation of state
+corruption or unauthorized writes. No new lock-held runtime probe is claimed.
+
+**Why deferred:** The operator note for `integration-global-2` at
+`2026-09-21T03:22:42.896045101Z` authorized recording F4 in this debt entry and
+the payload protocol only, not runtime repair or a master-contract amendment.
+The preserved evidence is commit `72a9b099d57f8a34bf6214abca66e1d00b3f78d5`,
+path `specs/plans/20260918-fix-gh-issues/20260921-integration-global-2.md`,
+sections “Blocking source conflict: cp-3 F4 remains unresolved” and “Separately
+retained RCA limitation”. It is preserved analysis, not an immutable verdict.
+
+**Decision owner:** The master
+[Shared Contracts source owner](specs/plans/20260918-fix-gh-issues/20260918T153055Z-cpm-1-master-plan.md#shared-contracts-owned-by-output-0),
+routed through the orchestrator, must decide the boundary and sprint-attribution
+semantics and assign authorized shared-boundary repair ownership.
+
+**Candidates, neither adopted:**
+
+1. Explicitly exempt invocation telemetry from the no-state/pre-lock rules.
+   This requires an authoritative change to the master/protocol commitments,
+   including the preflight State access None row; preserving invocation-time
+   attribution does not itself authorize that exception or its blocking read.
+2. Move telemetry after validation consistently across `mark-blocked`, submission
+   and preflight, also reconciling the output and handoff paths above. Preflight
+   already observes after validation: moving mutation calls alone leaves its
+   complete CLI state access and pre-render lock wait unresolved. The owner must
+   decide whether and how telemetry can coexist with a completely state-free
+   preflight. Moving sprint capture later can change attribution across rollover;
+   dropping capture loses promised counter observations. Neither trade-off is
+   authorized here. The existing
+   [counter contract](specs/protocols/lifecycle-results.md#coverage-and-observation-counters)
+   attributes late completion to the sprint captured by the invocation.
+
+**Payback trigger:** An authoritative boundary/sprint-attribution decision by
+that source owner, followed by authorized repair and contract reconciliation.
+Lock-held malformed-payload regression evidence must demonstrate the chosen
+response/telemetry behavior at the affected boundaries and preserve the chosen
+sprint attribution before this debt can close. A fresh source-bound global
+integration review is then required for aggregate acceptance.
+
+**Independent limitation and outstanding proof:** Carry forward the
+[cp-6 F1 debt](#rca-assign-restore-conflicts-with-session-preflight-f1) and
+[restore-mode limitation](specs/protocols/task-lifecycle.md#restore-modes):
+prerequisite-bearing `capability_reroute`/`lifecycle_repair` recovery fails with
+`--assign-to` at target-session preflight and without it at the assign-only RCA
+guard. Its operator-directed deferral and superseded
+`integration-slice-cpm-1-cp-6-fix-1` lineage remain independent; this record
+neither reopens nor replaces that task or adopts its proposed two-phase design.
+AC-161-6 and AC-161-8 recovery proof remains outstanding, as the preserved report
+also records. Documentation and supersession resolve neither runtime defect
+(F4 or cp-6 F1) and supply no immutable clean global integration acceptance.
