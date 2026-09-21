@@ -131,7 +131,7 @@ func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		data, err := os.ReadFile(bb.statePath)
+		data, err := readStateFile(bb.statePath)
 		if err != nil {
 			return err
 		}
@@ -156,7 +156,7 @@ func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
 // closed before decoding. The result is independent and may already be stale;
 // use locked revalidation for decisions that authorize mutations.
 func (bb *Blackboard) ReadSnapshot() (*models.State, error) {
-	data, err := os.ReadFile(bb.statePath)
+	data, err := readStateFile(bb.statePath)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (bb *Blackboard) ReadRaw() ([]byte, error) {
 	var data []byte
 	err := bb.fileLock.WithLockOperation("read-raw", func() error {
 		var readErr error
-		data, readErr = os.ReadFile(bb.statePath)
+		data, readErr = readStateFile(bb.statePath)
 		return readErr
 	})
 	if err != nil {
@@ -212,7 +212,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 		return cloneState(cachedState), nil
 	}
 
-	data, err := os.ReadFile(bb.statePath)
+	data, err := readStateFile(bb.statePath)
 	if err != nil {
 		bb.InvalidateCache()
 		return nil, err
@@ -383,7 +383,7 @@ func (bb *Blackboard) Write(state *models.State) error {
 // Modify performs an atomic read-modify-write operation
 func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 	err := bb.fileLock.WithLockOperation("modify", func() error {
-		data, err := os.ReadFile(bb.statePath)
+		data, err := readStateFile(bb.statePath)
 		if err != nil {
 			return fmt.Errorf("failed to read state: %w", err)
 		}

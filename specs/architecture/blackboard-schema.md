@@ -1335,7 +1335,9 @@ Snapshots may become stale immediately. Status derives runtime transition policy
 from its captured state; process/filesystem diagnostics remain separate observations.
 Snapshots do not authorize mutations: existing locked reads and locked
 read-modify-write revalidation retain their contracts. Windows publication retains
-its bounded retry for filesystem handles held during the byte read.
+its bounded retry for filesystem handles held during the byte read. State byte
+reads also retry transient Windows sharing violations within the same bounded
+budget, without acquiring the state lock; other read errors remain immediate.
 
 ---
 

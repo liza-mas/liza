@@ -1328,8 +1328,18 @@ func TestExecuteAgentInteractiveUsageCapture(t *testing.T) {
 					if !fake.sinkSet {
 						t.Fatal("append failure was not exercised: interactive request has no event sink")
 					}
-					if _, _, loadErr := usage.Load(projectRoot, time.Time{}, time.Time{}); loadErr == nil {
-						t.Fatal("blocked usage store unexpectedly loaded successfully")
+					// Assert the write failure directly: Windows can classify a
+					// directory read of a regular file as an unavailable store.
+					if appendErr := usage.Append(projectRoot, usage.Record{
+						TaskID: taskID, Role: config.Role, AgentID: config.AgentID,
+						SupervisorRunID: supervisorRunID(), Provider: config.CLIName, SessionID: taskID,
+						StartedAt: fake.started, EndedAt: fake.started.Add(2 * time.Second),
+						Provenance: usage.ProvenanceUnknown, ExitCode: tc.exitCode,
+					}); appendErr == nil {
+						t.Fatal("blocked usage store unexpectedly accepted an append")
+					}
+					if records, stats, _ := usage.Load(projectRoot, time.Time{}, time.Time{}); len(records) != 0 || stats.Records != 0 {
+						t.Fatalf("blocked usage store contains records: records=%d stats=%+v", len(records), stats)
 					}
 					continue
 				}

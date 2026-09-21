@@ -90,8 +90,15 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 				fixture.expireCurrent(t)
 				sideEffectPath := filepath.Join(t.TempDir(), "provider-started")
 				tc.prepare(t, sideEffectPath)
+				releaseProvider := func() {
+					if err := os.WriteFile(sideEffectPath+".release", nil, 0o600); err != nil {
+						t.Errorf("release provider: %v", err)
+					}
+				}
 				atStart := make(chan struct{})
 				allowStart := make(chan struct{})
+				var allowStartOnce sync.Once
+				startProvider := func() { allowStartOnce.Do(func() { close(allowStart) }) }
 				realGate := newProviderLaunchGate(fixture.config(fixture.authorityA))
 				pausedInsideLock := func(ctx context.Context, start func() error) error {
 					return realGate(ctx, func() error {
@@ -101,11 +108,36 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 					})
 				}
 
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				runDone := make(chan error, 1)
+				providerDone := make(chan struct{})
 				go func() {
-					runDone <- tc.run(context.Background(), pausedInsideLock, fixture.authorityA.Generation, sideEffectPath)
+					defer close(providerDone)
+					runDone <- tc.run(ctx, pausedInsideLock, fixture.authorityA.Generation, sideEffectPath)
 				}()
-				<-atStart
+				t.Cleanup(func() {
+					defer cancel()
+					startProvider()
+					releaseProvider()
+					select {
+					case <-providerDone:
+					case <-time.After(10 * time.Second):
+						cancel()
+						select {
+						case <-providerDone:
+						case <-time.After(10 * time.Second):
+							t.Error("provider did not finish after cleanup cancellation")
+						}
+						t.Error("provider did not finish during cleanup")
+					}
+				})
+				select {
+				case <-atStart:
+				case err := <-runDone:
+					t.Fatalf("provider failed before start boundary: %v", err)
+				case <-time.After(10 * time.Second):
+					t.Fatal("provider did not reach start boundary")
+				}
 
 				registrationDone := make(chan models.AgentAuthority, 1)
 				registrationErr := make(chan error, 1)
@@ -124,14 +156,14 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 					t.Fatalf("replacement registration failed before start: %v", err)
 				case <-time.After(100 * time.Millisecond):
 				}
-				close(allowStart)
+				startProvider()
 
 				var authorityB models.AgentAuthority
 				select {
 				case authorityB = <-registrationDone:
 				case err := <-registrationErr:
 					t.Fatalf("replacement registration failed: %v", err)
-				case <-time.After(700 * time.Millisecond):
+				case <-time.After(10 * time.Second):
 					t.Fatal("replacement waited for built-in provider completion instead of start")
 				}
 				select {
@@ -139,8 +171,14 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 					t.Fatalf("provider completed before replacement registration: %v", err)
 				default:
 				}
-				if err := <-runDone; err != nil {
-					t.Fatalf("provider run: %v", err)
+				releaseProvider()
+				select {
+				case err := <-runDone:
+					if err != nil {
+						t.Fatalf("provider run: %v", err)
+					}
+				case <-time.After(10 * time.Second):
+					t.Fatal("provider did not finish after release")
 				}
 				if _, err := os.Stat(sideEffectPath); err != nil {
 					t.Fatalf("provider did not reach start boundary: %v", err)
@@ -588,7 +626,7 @@ func writeCLIProviderStubForGenerationTest(t *testing.T, sideEffectPath string, 
 	t.Helper()
 	script := fmt.Sprintf("#!/bin/sh\nprintf started > %q\n", filepath.ToSlash(sideEffectPath))
 	if sleeping {
-		script += "sleep 1\n"
+		script += fmt.Sprintf("while [ ! -f %s ]; do sleep 0.01; done\n", testhelpers.ShellArg(filepath.ToSlash(sideEffectPath+".release")))
 	}
 	testhelpers.WriteShellStub(t, filepath.Join(filepath.Dir(sideEffectPath), "gemini"), script)
 }
@@ -598,7 +636,7 @@ func writeACPXProviderStubsForGenerationTest(t *testing.T, sideEffectPath string
 	shellSideEffectPath := filepath.ToSlash(sideEffectPath)
 	script := "#!/bin/sh\n"
 	if sleeping {
-		script += fmt.Sprintf("case \"$*\" in *\" prompt \"*) printf started > %q; sleep 1; printf '%%s\\n' '{\"result\":{}}';; esac\n", shellSideEffectPath)
+		script += fmt.Sprintf("case \"$*\" in *\" prompt \"*) printf started > %q; while [ ! -f %s ]; do sleep 0.01; done; printf '%%s\\n' '{\"result\":{}}';; esac\n", shellSideEffectPath, testhelpers.ShellArg(shellSideEffectPath+".release"))
 	} else {
 		script += fmt.Sprintf("case \"$*\" in *\" prompt \"*) printf started > %q; printf '%%s\\n' '{\"result\":{}}';; esac\n", shellSideEffectPath)
 	}
@@ -606,7 +644,7 @@ func writeACPXProviderStubsForGenerationTest(t *testing.T, sideEffectPath string
 	testhelpers.WriteShellStub(t, filepath.Join(binDir, "acpx"), script)
 	interactiveScript := fmt.Sprintf("#!/bin/sh\nprintf started > %q\n", shellSideEffectPath)
 	if sleeping {
-		interactiveScript += "sleep 1\n"
+		interactiveScript += fmt.Sprintf("while [ ! -f %s ]; do sleep 0.01; done\n", testhelpers.ShellArg(shellSideEffectPath+".release"))
 	}
 	testhelpers.WriteShellStub(t, filepath.Join(binDir, "codex"), interactiveScript)
 }
