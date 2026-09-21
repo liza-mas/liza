@@ -70,6 +70,15 @@ func validateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 			if anomaly.Details["verdict"] == nil || anomaly.Details["error"] == nil {
 				return fmt.Errorf("submit_verdict_failed anomaly at index %d missing required details (verdict, error)", i)
 			}
+		case models.AnomalyTypeReviewerClaimCircuitOpen:
+			// The breaker keys a quarantine on role, failure class and boundary
+			// version, and an operator recovers from the counters and the hint;
+			// a record missing any of them cannot be acted on.
+			missing := missingAnomalyDetails(anomaly, "role", "failure_class", "attempts", "first_failure", "last_failure", "recovery")
+			if len(missing) > 0 {
+				return fmt.Errorf("%s anomaly at index %d missing required details (%s)",
+					models.AnomalyTypeReviewerClaimCircuitOpen, i, strings.Join(missing, ", "))
+			}
 		case models.AnomalyTypeObligationContentDrifted:
 			// A reviewer re-reads the section this names, so the record must
 			// locate it and say whose obligations rest on it; without the
@@ -86,6 +95,18 @@ func validateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 		}
 	}
 	return nil
+}
+
+// missingAnomalyDetails lists the required detail fields absent from anomaly, in
+// the order given, so the error names what the writer failed to record.
+func missingAnomalyDetails(anomaly models.Anomaly, required ...string) []string {
+	var missing []string
+	for _, field := range required {
+		if anomaly.Details[field] == nil {
+			missing = append(missing, field)
+		}
+	}
+	return missing
 }
 
 // validateHandoffEvents checks that:
@@ -158,16 +179,4 @@ func isPostSubmissionStatus(status models.TaskStatus) bool {
 		return true
 	}
 	return false
-}
-
-// missingAnomalyDetails lists the required detail fields absent from anomaly, in
-// the order given, so the error names what the writer failed to record.
-func missingAnomalyDetails(anomaly models.Anomaly, required ...string) []string {
-	var missing []string
-	for _, field := range required {
-		if anomaly.Details[field] == nil {
-			missing = append(missing, field)
-		}
-	}
-	return missing
 }

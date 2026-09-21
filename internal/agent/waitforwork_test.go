@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -1396,4 +1397,79 @@ func TestWaitForWork_AbortTickerDetectsWork_TOCTOU(t *testing.T) {
 	case <-time.After(4 * time.Second):
 		t.Fatal("Timeout: abortTicker did not detect work within 4s")
 	}
+}
+
+// schedulerTestTick is the real interval the scheduler harness runs its work
+// checks at. It only paces the test: what a tick *represents* is the production
+// abortTickInterval, which schedulerClock captures before shortening it.
+const schedulerTestTick = 100 * time.Microsecond
+
+// schedulerClock is the injected clock of the reviewer scheduler harness. The
+// breaker reads real time, so simulated time is accumulated instead of moved:
+// every work-check tick charges one production tick interval, and every pacing
+// delay the supervisor asks for charges its full value. Hours of loop time
+// therefore cost the test milliseconds, and the counts stay exact rather than
+// depending on how fast the machine runs the ticker.
+type schedulerClock struct {
+	mu        sync.Mutex
+	ticks     int
+	simulated time.Duration
+	perTick   time.Duration
+	onTick    func(tick int, simulated time.Duration)
+}
+
+// tick records one work-check pass and reports the running totals to onTick,
+// which is how a harness ends the run or mutates the fixture mid-run.
+func (c *schedulerClock) tick() {
+	c.mu.Lock()
+	c.ticks++
+	tick, simulated := c.ticks, c.simulated+c.perTick
+	c.simulated = simulated
+	onTick := c.onTick
+	c.mu.Unlock()
+	if onTick != nil {
+		onTick(tick, simulated)
+	}
+}
+
+// advance charges a delay the supervisor waited out.
+func (c *schedulerClock) advance(delay time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.simulated += delay
+}
+
+func (c *schedulerClock) elapsed() (ticks int, simulated time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.ticks, c.simulated
+}
+
+// tickCountingWatcher is a silent watcher that counts scheduler ticks:
+// waitForWorkEventDriven evaluates Events() once per select pass, and when the
+// watcher never delivers — the RCA's state, where a failing claim writes
+// nothing and so wakes no watcher — the only case that can end that pass is the
+// abort tick re-running the work check.
+type tickCountingWatcher struct {
+	*silentWatcher
+	clock *schedulerClock
+}
+
+func (w *tickCountingWatcher) Events() <-chan struct{} {
+	w.clock.tick()
+	return w.silentWatcher.Events()
+}
+
+// installSchedulerTicks makes every wait-loop pass a counted, fast tick for the
+// rest of the test and returns the clock those ticks feed.
+func installSchedulerTicks(t *testing.T, onTick func(tick int, simulated time.Duration)) *schedulerClock {
+	t.Helper()
+	clock := &schedulerClock{perTick: abortTickInterval, onTick: onTick}
+	withAbortTickInterval(t, schedulerTestTick)
+	previous := newStateWatcher
+	newStateWatcher = func(*db.Blackboard) (stateWatcher, error) {
+		return &tickCountingWatcher{silentWatcher: newSilentWatcher(), clock: clock}, nil
+	}
+	t.Cleanup(func() { newStateWatcher = previous })
+	return clock
 }

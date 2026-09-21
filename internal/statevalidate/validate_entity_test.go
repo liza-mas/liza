@@ -7,6 +7,66 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// completeReviewerClaimCircuitOpenDetails returns the detail set a
+// reviewer_claim_circuit_open anomaly carries when the writer recorded it.
+func completeReviewerClaimCircuitOpenDetails() map[string]any {
+	return map[string]any{
+		"role":             "code-reviewer",
+		"failure_class":    "review_boundary_repair",
+		"boundary_version": "3f1c0d",
+		"attempts":         3,
+		"first_failure":    "2026-09-18T10:00:00Z",
+		"last_failure":     "2026-09-18T10:00:12Z",
+		"cooldown_until":   "2026-09-18T10:05:12Z",
+		"recovery":         "run update-review-commit for the task",
+		"error":            "review boundary needs repair",
+	}
+}
+
+func reviewerClaimCircuitOpenState(details map[string]any) *models.State {
+	return &models.State{
+		Anomalies: []models.Anomaly{{
+			Task:     "task-1",
+			Reporter: "code-reviewer-1",
+			Type:     models.AnomalyTypeReviewerClaimCircuitOpen,
+			Details:  details,
+		}},
+	}
+}
+
+func TestValidateAnomalyReviewerClaimCircuitOpen(t *testing.T) {
+	t.Parallel()
+
+	t.Run("complete anomaly is accepted", func(t *testing.T) {
+		t.Parallel()
+
+		state := reviewerClaimCircuitOpenState(completeReviewerClaimCircuitOpenDetails())
+		if err := validateAnomalies(state, "", true); err != nil {
+			t.Fatalf("validateAnomalies() = %v, want nil for a complete anomaly", err)
+		}
+	})
+
+	required := []string{"role", "failure_class", "attempts", "first_failure", "last_failure", "recovery"}
+	for _, field := range required {
+		t.Run("missing "+field+" is rejected", func(t *testing.T) {
+			t.Parallel()
+
+			details := completeReviewerClaimCircuitOpenDetails()
+			delete(details, field)
+			err := validateAnomalies(reviewerClaimCircuitOpenState(details), "", true)
+			if err == nil {
+				t.Fatalf("validateAnomalies() = nil, want rejection for missing %q", field)
+			}
+			if !strings.Contains(err.Error(), models.AnomalyTypeReviewerClaimCircuitOpen) {
+				t.Errorf("error = %q, want it to name the anomaly type", err)
+			}
+			if !strings.Contains(err.Error(), field) {
+				t.Errorf("error = %q, want it to name the missing detail %q", err, field)
+			}
+		})
+	}
+}
+
 // completeObligationContentDriftedDetails returns the detail set an
 // obligation_content_drifted anomaly carries when the merge recorded it.
 func completeObligationContentDriftedDetails() map[string]any {

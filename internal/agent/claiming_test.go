@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -850,5 +851,30 @@ func TestClaimDoerTask_PostWorktreeCmdFailureStopsCandidateIteration(t *testing.
 	}
 	if len(entries) != 1 {
 		t.Errorf("worktree count = %d, want 1 — candidate iteration should stop at the first failure", len(entries))
+	}
+}
+
+// TestClaimReviewerTaskForRoleLogsClaimErrorAtDebug pins the claim helper's
+// log level: the keyed site in strategy_reviewer.go owns the error-level line,
+// so a failure repeated on every loop iteration no longer floods the log
+// from here.
+func TestClaimReviewerTaskForRoleLogsClaimErrorAtDebug(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Agents["code-reviewer-1"] = testhelpers.RegisteredTestAgent(models.RoleCodeReviewer)
+	state.Tasks = nil
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	logs := captureAgentLogsAtLevel(t, slog.LevelDebug)
+	_, _, _, err := claimReviewerTaskForRole(tmpDir, "code-reviewer-1", models.RoleCodeReviewer, "", 1800, bb)
+	if err == nil {
+		t.Fatal("claimReviewerTaskForRole() error = nil, want no reviewable tasks")
+	}
+	if got := countLogLines(logs.String(), "level=DEBUG", `msg="Review claim error"`); got != 1 {
+		t.Fatalf("debug-level Review claim error lines = %d, want 1:\n%s", got, logs.String())
+	}
+	if got := countLogLines(logs.String(), "level=ERROR", `msg="Review claim error"`); got != 0 {
+		t.Fatalf("error-level Review claim error lines = %d, want 0:\n%s", got, logs.String())
 	}
 }

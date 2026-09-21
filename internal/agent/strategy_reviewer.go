@@ -43,6 +43,24 @@ type reviewerStrategy struct {
 	executionTimeout time.Duration      // from YAML; 0 = use type default
 	yamlPollSec      int                // from YAML; 0 = use type default
 	yamlMaxWaitSec   int                // from YAML; 0 = use type default
+
+	// breaker quarantines candidates whose claim keeps failing the same way.
+	// Built on first use: NewRoleStrategy and tests construct the struct
+	// directly, and the supervisor loop reads and writes it from one goroutine.
+	breaker *claimBreaker
+	// claimConfig is the config of the latest ClaimTask; the observer writes
+	// the quarantine anomaly under that claim's project and authority.
+	claimConfig SupervisorConfig
+	// seenBoundaries is the boundary version last observed per failing
+	// scope, so a failure that survived a state change is logged loudly.
+	seenBoundaries map[claimBreakerScope]string
+}
+
+func (s *reviewerStrategy) activeBreaker() *claimBreaker {
+	if s.breaker == nil {
+		s.breaker = newClaimBreaker()
+	}
+	return s.breaker
 }
 
 func (s *reviewerStrategy) effectiveMaxRetries() int {
@@ -208,6 +226,7 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 	pr := loadResolver(config.ProjectRoot)
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
+			breaker := s.activeBreaker()
 			if config.InitialTask != "" {
 				task := state.FindTask(config.InitialTask)
 				if task == nil {
@@ -219,15 +238,23 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 				if task.HasApprovalFromAgent(config.AgentID) {
 					return false, fmt.Sprintf("Initial review task %s was already approved by %s", config.InitialTask, config.AgentID)
 				}
+				if breaker.Quarantined(task, s.role, time.Now()) {
+					return false, fmt.Sprintf("Initial review task %s is quarantined after repeated claim failures", config.InitialTask)
+				}
 				return true, fmt.Sprintf("Found initial %s-reviewable task %s", s.role, config.InitialTask)
 			}
 
-			// Use agent-aware count so a reviewer that just approved a task
+			// Agent-aware count so a reviewer that just approved a task
 			// doesn't keep seeing it as "reviewable" — round-2 must go to a
-			// different reviewer (see filterAlreadyApprovedByAgent in ops).
-			count := models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr)
+			// different reviewer (see filterAlreadyApprovedByAgent in ops) —
+			// minus the candidates the breaker has quarantined, so the loop
+			// parks here instead of re-claiming a boundary it cannot repair.
+			count := breaker.ClaimableAfterQuarantine(state, s.role, config.AgentID, pr, time.Now())
 			if count > 0 {
 				return true, fmt.Sprintf("Found %d %s-reviewable task(s)", count, s.role)
+			}
+			if quarantined := models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr); quarantined > 0 {
+				return false, fmt.Sprintf("%d %s-reviewable task(s) quarantined after repeated claim failures; waiting for the cooldown or a boundary change", quarantined, s.role)
 			}
 
 			// Use richer diagnostics for code-reviewer role
@@ -240,20 +267,34 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 
 func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (string, string, error) {
 	logger := GetLogger()
+	s.claimConfig = config
 
 	session, err := prepareClaimSession(config, bb)
 	if err != nil {
 		return "", "", err
 	}
-	taskID, _, reviewCommit, err := claimReviewerTaskForRoleWithAuthority(config.ProjectRoot, config.Authority, s.role, config.InitialTask, 1800, bb, session)
+	result, err := claimReviewerTaskForRoleWithOptionalAuthority(config.ProjectRoot, config.Authority.ID, s.role, config.InitialTask, 1800, &config.Authority, bb, session)
 	if err != nil {
 		return "", "", err
 	}
+	if len(result.CandidateFailures) > 0 {
+		// These failures were classified where each candidate was removed;
+		// healthy progress must not hide them or clear another task's key.
+		decision := s.ObserveClaimFailure(&ops.ReviewClaimFailure{
+			Role: s.role, Class: ops.ReviewClaimClassCandidateFailures,
+			Candidates: result.CandidateFailures,
+		})
+		if decision.Stop {
+			return "", "", &ops.AgentAuthorityError{AgentID: config.AgentID}
+		}
+	}
+	taskID := result.TaskID
+	s.activeBreaker().ObserveSuccess(s.role, taskID)
 
 	logger.Info("Reviewer claimed task for review",
 		"agent_id", config.AgentID,
 		"task_id", taskID,
-		"review_commit", reviewCommit)
+		"review_commit", result.ReviewCommit)
 
 	// Verify the worktree exists and is prepared before launching agent.
 	_, wtErr := ensureReviewerWorktree(config.ProjectRoot, bb, taskID, config.Authority)
@@ -285,6 +326,101 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 	}
 
 	return taskID, "", nil
+}
+
+// ObserveClaimFailure feeds one failed claim to the breaker and records every
+// key it opened. The error arrives typed from ops.ClaimReviewerTask with its
+// candidates intact; only a candidate-free error is classified here.
+func (s *reviewerStrategy) ObserveClaimFailure(err error) claimBreakerDecision {
+	failure := ops.ClassifyReviewClaimError(s.role, err)
+	if failure == nil {
+		return claimBreakerDecision{}
+	}
+	breaker := s.activeBreaker()
+	decision := breaker.Observe(failure, time.Now().UTC())
+
+	if s.claimFailureNoteworthy(failure, decision) {
+		GetLogger().Error("Review claim error", "agent_id", s.claimConfig.AgentID, "role", s.role, "error", failure)
+	} else {
+		GetLogger().Debug("Review claim error", "agent_id", s.claimConfig.AgentID, "role", s.role, "error", failure)
+	}
+
+	for _, key := range decision.Opened {
+		if s.recordCircuitOpen(breaker, key, failure) {
+			decision.Stop = true
+		}
+	}
+	return decision
+}
+
+// claimFailureNoteworthy decides whether the failure earns the error-level
+// line: a key opened, or a counted candidate failed again against a moved
+// boundary. Identical repeats stay at debug so the log keeps the first
+// actionable cause instead of one line per loop iteration.
+func (s *reviewerStrategy) claimFailureNoteworthy(failure *ops.ReviewClaimFailure, decision claimBreakerDecision) bool {
+	noteworthy := len(decision.Opened) > 0
+	if s.seenBoundaries == nil {
+		s.seenBoundaries = make(map[claimBreakerScope]string)
+	}
+	for _, candidate := range failure.Candidates {
+		scope := claimBreakerScope{role: failure.Role, taskID: candidate.TaskID, class: candidate.Class}
+		if seen, ok := s.seenBoundaries[scope]; ok && seen != candidate.BoundaryVersion {
+			noteworthy = true
+		}
+		s.seenBoundaries[scope] = candidate.BoundaryVersion
+	}
+	return noteworthy
+}
+
+// recordCircuitOpen writes the durable anomaly for one opened key. It reports
+// true when the write was rejected for authority: the supervisor has lost its
+// generation and must stop rather than keep observing.
+func (s *reviewerStrategy) recordCircuitOpen(breaker *claimBreaker, key claimBreakerKey, failure *ops.ReviewClaimFailure) bool {
+	counters, ok := breaker.Counters(key)
+	if !ok {
+		return false
+	}
+	config := s.claimConfig
+	var authority *models.AgentAuthority
+	if config.Authority.ID != "" {
+		authority = &config.Authority
+	}
+	_, err := ops.RecordReviewerClaimCircuitOpen(ops.ReviewerClaimCircuitOpenInput{
+		ProjectRoot:     config.ProjectRoot,
+		AgentID:         config.AgentID,
+		Authority:       authority,
+		Role:            key.Role,
+		TaskID:          key.TaskID,
+		FailureClass:    key.Class,
+		BoundaryVersion: key.BoundaryVersion,
+		Recovery:        candidateRecovery(failure, key),
+		Err:             failure,
+		Attempts:        counters.Attempts,
+		FirstFailure:    counters.FirstFailure,
+		LastFailure:     counters.LastFailure,
+		CooldownUntil:   counters.CooldownUntil,
+	})
+	if err == nil {
+		return false
+	}
+	if ops.IsAgentAuthorityError(err) {
+		GetLogger().Error("Reviewer claim quarantine record rejected, exiting supervisor",
+			"agent_id", config.AgentID, "task_id", key.TaskID, "error", err)
+		return true
+	}
+	GetLogger().Warn("Failed to record reviewer claim quarantine",
+		"agent_id", config.AgentID, "task_id", key.TaskID, "error", err)
+	return false
+}
+
+// candidateRecovery returns the recovery hint of the candidate the key names.
+func candidateRecovery(failure *ops.ReviewClaimFailure, key claimBreakerKey) string {
+	for _, candidate := range failure.Candidates {
+		if candidate.TaskID == key.TaskID && candidate.Class == key.Class {
+			return candidate.Recovery
+		}
+	}
+	return ""
 }
 
 func (s *reviewerStrategy) PreExecution(_ *db.Blackboard, _ SupervisorConfig) error {

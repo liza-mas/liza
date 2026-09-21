@@ -40,6 +40,7 @@ type SupervisorConfig struct {
 }
 
 var waitWhilePausedForSupervisor = waitWhilePaused
+var newSupervisorDelayTimer = time.NewTimer // claim-failure pacing; overridable in tests
 
 type exit42RestartState struct {
 	RestartCount int
@@ -770,7 +771,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 	}
 	waitForSupervisorDelay := func(delay time.Duration) error {
-		timer := time.NewTimer(delay)
+		timer := newSupervisorDelayTimer(delay)
 		defer timer.Stop()
 
 		select {
@@ -897,7 +898,19 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				GetLogger().Error("Agent marked degraded, exiting supervisor", "agent_id", config.AgentID, "role", config.Role, "error", err)
 				return nil
 			}
-			if err := waitForSupervisorDelay(5 * time.Second); err != nil {
+			if ops.IsAgentAuthorityError(err) {
+				GetLogger().Info("Agent authority lost, exiting supervisor", "agent_id", config.AgentID, "role", config.Role, "error", err)
+				return nil
+			}
+			delay := 5 * time.Second
+			if observer, ok := strategy.(claimFailureObserver); ok { // breaker-owning strategies pace and stop the loop
+				decision := observer.ObserveClaimFailure(err)
+				if decision.Stop {
+					return nil
+				}
+				delay = decision.Delay
+			}
+			if err := waitForSupervisorDelay(delay); err != nil {
 				return err
 			}
 			continue

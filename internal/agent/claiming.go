@@ -237,20 +237,38 @@ func shuffledByPriorityTier(candidates []*models.Task) []*models.Task {
 }
 
 func claimReviewerTaskForRole(projectRoot, agentID, role, targetTaskID string, leaseDuration int, bb *db.Blackboard) (taskID, worktree, reviewCommit string, err error) {
-	return claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, targetTaskID, leaseDuration, nil, bb)
+	return reviewerClaimTuple(claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, targetTaskID, leaseDuration, nil, bb))
 }
 
 func claimReviewerTaskForRoleWithAuthority(projectRoot string, authority models.AgentAuthority, role, targetTaskID string, leaseDuration int, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree, reviewCommit string, err error) {
-	return claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, authority.ID, role, targetTaskID, leaseDuration, &authority, bb, sessions...)
+	return reviewerClaimTuple(claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, authority.ID, role, targetTaskID, leaseDuration, &authority, bb, sessions...))
 }
 
-func claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, targetTaskID string, leaseDuration int, authority *models.AgentAuthority, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree, reviewCommit string, err error) {
+// reviewerClaimAttemptHook observes every reviewer claim attempt before the
+// operation runs. Nil outside tests, which use it to count real attempts
+// across supervisor loop iterations.
+var reviewerClaimAttemptHook func()
+
+// reviewerClaimTuple preserves the legacy adapters' results.
+func reviewerClaimTuple(result *ops.ClaimReviewerTaskResult, err error) (taskID, worktree, reviewCommit string, claimErr error) {
+	if err != nil {
+		return "", "", "", err
+	}
+	return result.TaskID, result.Worktree, result.ReviewCommit, nil
+}
+
+// claimReviewerTaskForRoleWithOptionalAuthority keeps candidate failure evidence available to
+// the strategy while the compatibility adapters retain their tuple results.
+func claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, targetTaskID string, leaseDuration int, authority *models.AgentAuthority, bb *db.Blackboard, sessions ...*ops.ValidationSession) (*ops.ClaimReviewerTaskResult, error) {
 	logger := GetLogger()
 	var session *ops.ValidationSession
 	if len(sessions) > 0 {
 		session = sessions[0]
 	}
 
+	if reviewerClaimAttemptHook != nil {
+		reviewerClaimAttemptHook()
+	}
 	result, err := ops.ClaimReviewerTask(ops.ClaimReviewerTaskInput{
 		ProjectRoot:   projectRoot,
 		AgentID:       agentID,
@@ -261,11 +279,13 @@ func claimReviewerTaskForRoleWithOptionalAuthority(projectRoot, agentID, role, t
 		Session:       session,
 	})
 	if err != nil {
-		logger.Error("Review claim error", "error", err)
-		return "", "", "", err
+		// Debug only: the reviewer strategy owns the error-level line and emits
+		// it once per quarantined key, not once per loop iteration.
+		logger.Debug("Review claim error", "error", err)
+		return nil, err
 	}
 
-	return result.TaskID, result.Worktree, result.ReviewCommit, nil
+	return result, nil
 }
 
 // claimReviewerTask wraps claimReviewerTaskForRole for backward compatibility.

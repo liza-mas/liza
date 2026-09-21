@@ -4,12 +4,14 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -598,7 +600,7 @@ exit 7
 		t.Fatalf("first event = %#v, want claude/coder-1 started", events[0])
 	}
 
-	var sawStdout, sawStderr, sawUsage, sawCLIMessage bool
+	var sawStdout, sawStderr, sawCLIMessage bool
 	var completed *LLMAgentEvent
 	for i := range events {
 		event := events[i]
@@ -607,9 +609,6 @@ exit 7
 		}
 		if event.Kind == LLMAgentEventOutputChunk && event.Payload["stream"] == "stderr" && strings.Contains(event.Message, "stderr event") {
 			sawStderr = true
-		}
-		if event.Kind == LLMAgentEventUsage {
-			sawUsage = true
 		}
 		if event.Kind == LLMAgentEventMessage {
 			sawCLIMessage = true
@@ -621,8 +620,10 @@ exit 7
 	if !sawStdout || !sawStderr {
 		t.Fatalf("events = %#v, want stdout and stderr output chunks", events)
 	}
-	if sawUsage {
-		t.Fatalf("events = %#v, CLI stdout/stderr should not emit zero-value usage", events)
+	// The run emits exactly one explicit usage event; stdout/stderr chunks
+	// still never synthesize one of their own.
+	if usageCount := countLLMAgentEvents(events, LLMAgentEventUsage); usageCount != 1 {
+		t.Fatalf("usage event count = %d, want exactly one per run: %#v", usageCount, events)
 	}
 	if sawCLIMessage {
 		t.Fatalf("events = %#v, CLI stdout/stderr should not emit agent_message_chunk", events)
@@ -2632,6 +2633,357 @@ func TestExit42TaskProgressSignatureIgnoresClaimIteration(t *testing.T) {
 	progressed.Status = models.TaskStatusReadyForReview
 	if exit42TaskProgressSignature(&task) == exit42TaskProgressSignature(&progressed) {
 		t.Fatal("signature must change on real status progress")
+	}
+}
+
+// recordSupervisorDelays replaces the claim-failure pacing timer with one that
+// fires at once and records every delay the supervisor asked for. A non-nil
+// clock is charged each delay, so a cooldown the loop really waits out costs
+// the test nothing but still counts as elapsed simulated time.
+func recordSupervisorDelays(t *testing.T, clock *schedulerClock) func() []time.Duration {
+	t.Helper()
+	var mu sync.Mutex
+	var delays []time.Duration
+	previous := newSupervisorDelayTimer
+	newSupervisorDelayTimer = func(delay time.Duration) *time.Timer {
+		mu.Lock()
+		delays = append(delays, delay)
+		mu.Unlock()
+		if clock != nil {
+			clock.advance(delay)
+		}
+		return time.NewTimer(0)
+	}
+	t.Cleanup(func() { newSupervisorDelayTimer = previous })
+	return func() []time.Duration {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(delays)
+	}
+}
+
+// countReviewerClaims counts real ops.ClaimReviewerTask attempts, running
+// before ahead of each one when supplied.
+func countReviewerClaims(t *testing.T, before func(call int64)) *atomic.Int64 {
+	t.Helper()
+	var calls atomic.Int64
+	previous := reviewerClaimAttemptHook
+	reviewerClaimAttemptHook = func() {
+		call := calls.Add(1)
+		if before != nil {
+			before(call)
+		}
+	}
+	t.Cleanup(func() { reviewerClaimAttemptHook = previous })
+	return &calls
+}
+
+// runReviewerSupervisor runs the real supervisor loop for the fixture's
+// reviewer under a 30s cap and a no-op execution backend.
+func runReviewerSupervisor(t *testing.T, project *reviewClaimProject) error {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return runReviewerSupervisorIn(ctx, t, project, &MockLLMAgent{ExitCode: 0})
+}
+
+// runReviewerSupervisorIn runs that loop under a caller-owned context and
+// execution backend, so a harness can end it on its own signal and observe the
+// agent launch that follows a successful claim. The loop registers its own
+// agent, so the fixture's pre-registered entry is removed first.
+func runReviewerSupervisorIn(ctx context.Context, t *testing.T, project *reviewClaimProject, llm LLMAgent) error {
+	t.Helper()
+	if err := project.bb.Modify(func(state *models.State) error {
+		delete(state.Agents, project.reviewerID)
+		return nil
+	}); err != nil {
+		t.Fatalf("unregister fixture reviewer: %v", err)
+	}
+	return RunSupervisor(ctx, SupervisorConfig{
+		AgentID:          project.reviewerID,
+		Role:             models.RoleCodeReviewer,
+		ProjectRoot:      project.root,
+		StatePath:        project.statePath,
+		LogPath:          filepath.Join(project.root, paths.ProjectDirName(), "log.yaml"),
+		SpecsDir:         filepath.Join(project.root, "specs"),
+		CLIName:          "codex",
+		LLMAgent:         llm,
+		ExecutionTimeout: 5 * time.Second,
+	})
+}
+
+// TestSupervisorClaimFailureQuarantinesBrokenBoundary drives the supervisor
+// loop against the DEV-239 shape: one reviewable task whose review_commit is
+// not its worktree HEAD. The real claim fails three times, the breaker opens,
+// exactly one anomaly is recorded, the loop waits at least the cooldown, and
+// during the cooldown the reviewer work check parks the loop instead of
+// claiming again — so the supervisor exits on its max wait with no fourth
+// ClaimReviewerTask call.
+func TestSupervisorClaimFailureQuarantinesBrokenBoundary(t *testing.T) {
+	project := setupReviewClaimProject(t)
+	project.addReviewableTask(t, "task-broken", true)
+	delays := recordSupervisorDelays(t, nil)
+	claims := countReviewerClaims(t, nil)
+	logs := captureAgentLogsAtLevel(t, slog.LevelInfo)
+
+	if err := runReviewerSupervisor(t, project); err != nil {
+		t.Fatalf("RunSupervisor() error = %v", err)
+	}
+
+	if got := claims.Load(); got != claimBreakerThreshold {
+		t.Fatalf("ClaimReviewerTask calls = %d, want exactly %d (no claim during cooldown)", got, claimBreakerThreshold)
+	}
+	recorded := delays()
+	if len(recorded) != claimBreakerThreshold {
+		t.Fatalf("supervisor delays = %v, want one per failed claim", recorded)
+	}
+	for i, delay := range recorded[:claimBreakerThreshold-1] {
+		if delay != claimBackoffBase {
+			t.Fatalf("delay[%d] = %v, want the base delay %v before the breaker opens", i, delay, claimBackoffBase)
+		}
+	}
+	if last := recorded[claimBreakerThreshold-1]; last < claimQuarantineCooldown {
+		t.Fatalf("delay after the breaker opened = %v, want at least %v", last, claimQuarantineCooldown)
+	}
+
+	anomalies := project.anomaliesOfType(t, models.AnomalyTypeReviewerClaimCircuitOpen)
+	if len(anomalies) != 1 {
+		t.Fatalf("circuit-open anomalies = %d, want exactly 1", len(anomalies))
+	}
+	if anomalies[0].Task != "task-broken" || anomalies[0].Reporter != project.reviewerID {
+		t.Fatalf("anomaly = %+v, want task-broken reported by %s", anomalies[0], project.reviewerID)
+	}
+	if got := countLogLines(logs.String(), "level=ERROR", `msg="Review claim error"`); got != 1 {
+		t.Fatalf("error-level Review claim error lines = %d, want 1:\n%s", got, logs.String())
+	}
+	if !strings.Contains(logs.String(), "No work available, supervisor exiting") {
+		t.Fatalf("supervisor did not park on the quarantined work check:\n%s", logs.String())
+	}
+}
+
+// TestSupervisorClaimFailureAuthorityLossStopsSupervisor moves the agent's
+// registration generation under the running supervisor: the real claim is
+// rejected with *AgentAuthorityError and the loop returns without another
+// attempt.
+func TestSupervisorClaimFailureAuthorityLossStopsSupervisor(t *testing.T) {
+	project := setupReviewClaimProject(t)
+	project.addReviewableTask(t, "task-broken", true)
+	delays := recordSupervisorDelays(t, nil)
+	claims := countReviewerClaims(t, func(call int64) {
+		if call != 1 {
+			return
+		}
+		if err := project.bb.Modify(func(state *models.State) error {
+			agent := state.Agents[project.reviewerID]
+			agent.Generation = "successor-generation"
+			state.Agents[project.reviewerID] = agent
+			return nil
+		}); err != nil {
+			t.Errorf("move generation: %v", err)
+		}
+	})
+	logs := captureAgentLogsAtLevel(t, slog.LevelInfo)
+
+	if err := runReviewerSupervisor(t, project); err != nil {
+		t.Fatalf("RunSupervisor() error = %v, want a clean stop", err)
+	}
+	if got := claims.Load(); got != 1 {
+		t.Fatalf("ClaimReviewerTask calls = %d, want exactly 1", got)
+	}
+	if recorded := delays(); len(recorded) != 0 {
+		t.Fatalf("supervisor delays = %v, want none after authority loss", recorded)
+	}
+	if !strings.Contains(logs.String(), "authority") {
+		t.Fatalf("supervisor exit does not name the authority loss:\n%s", logs.String())
+	}
+	if anomalies := project.anomaliesOfType(t, models.AnomalyTypeReviewerClaimCircuitOpen); len(anomalies) != 0 {
+		t.Fatalf("circuit-open anomalies = %d, want none", len(anomalies))
+	}
+}
+
+// TestSupervisorClaimFailureSecondCandidateStillClaimed quarantines one task
+// through the real claim path, then adds a healthy reviewable task: the work
+// check offers it and the claim succeeds while the first stays quarantined.
+func TestSupervisorClaimFailureSecondCandidateStillClaimed(t *testing.T) {
+	project := setupReviewClaimProject(t)
+	project.addReviewableTask(t, "task-broken", true)
+	config := project.supervisorConfig(t)
+	reviewer := newReviewerStrategyForTest(t)
+	quarantineThroughRealClaims(t, reviewer, config, project.bb)
+
+	project.addReviewableTask(t, "task-healthy", false)
+	hasWork, err := reviewer.WaitForWork(context.Background(), project.bb, config, 100*time.Millisecond, 200*time.Millisecond)
+	if err != nil || !hasWork {
+		t.Fatalf("WaitForWork() = (%v, %v), want (true, nil) for the healthy task", hasWork, err)
+	}
+	taskID, claimedTaskID, err := reviewer.ClaimTask(config, project.bb)
+	if err != nil {
+		t.Fatalf("ClaimTask() error = %v", err)
+	}
+	if taskID != "task-healthy" || claimedTaskID != "" {
+		t.Fatalf("ClaimTask() = (%q, %q), want (task-healthy, empty)", taskID, claimedTaskID)
+	}
+
+	state, err := project.bb.Read()
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if broken := state.FindTask("task-broken"); broken == nil || broken.Status != models.TaskStatusReadyForReview {
+		t.Fatalf("task-broken = %+v, want it left reviewable", broken)
+	}
+	if !reviewer.activeBreaker().Quarantined(state.FindTask("task-broken"), models.RoleCodeReviewer, time.Now()) {
+		t.Fatal("task-broken is no longer quarantined after the healthy claim")
+	}
+	if anomalies := project.anomaliesOfType(t, models.AnomalyTypeReviewerClaimCircuitOpen); len(anomalies) != 1 {
+		t.Fatalf("circuit-open anomalies = %d, want the single existing record", len(anomalies))
+	}
+}
+
+// TestSupervisorFileSizeBudget is the executable form of the supervisor size
+// constraint: the breaker wiring fits in the 15-line ceiling over the 1185
+// lines at the plan's base, and every breaker constant lives elsewhere.
+func TestSupervisorFileSizeBudget(t *testing.T) {
+	content, err := os.ReadFile("supervisor.go")
+	if err != nil {
+		t.Fatalf("read supervisor.go: %v", err)
+	}
+	const maxLines = 1200
+	if lines := strings.Count(string(content), "\n"); lines > maxLines {
+		t.Fatalf("supervisor.go has %d lines, want at most %d", lines, maxLines)
+	}
+	for _, constant := range []string{
+		"claimBreakerThreshold",
+		"claimQuarantineCooldown",
+		"claimQuarantineCooldownMax",
+		"claimBackoffBase",
+		"claimBackoffMax",
+	} {
+		if strings.Contains(string(content), constant) {
+			t.Fatalf("supervisor.go references breaker constant %s; the policy belongs to claim_breaker.go", constant)
+		}
+	}
+}
+
+// Bounds of the scheduler-tick regression: the reported incident spent 133
+// claim attempts in 13.5 minutes, so an hour of loop time must stay far below
+// that, and the run must be long enough to be evidence of a steady state.
+const (
+	schedulerMinTicks  = 500
+	schedulerMinSpan   = time.Hour
+	schedulerMaxClaims = 20
+)
+
+// widenReviewerWait lifts the fixture's one-second reviewer wait so the parked
+// loop can spend a whole simulated hour of ticks before its deadline. It must
+// run before the supervisor starts: the wait budget is read once at startup.
+func widenReviewerWait(t *testing.T, project *reviewClaimProject, seconds int) {
+	t.Helper()
+	if err := project.bb.Modify(func(state *models.State) error {
+		state.Config.ReviewerMaxWait = seconds
+		return nil
+	}); err != nil {
+		t.Fatalf("widen reviewer wait: %v", err)
+	}
+}
+
+// TestReviewerClaimBreakerSchedulerBoundsRepeatedFailures is the #156
+// regression: the reviewer supervisor loop runs hundreds of scheduler ticks
+// against the DEV-239 state — one reviewable task whose review_commit is not
+// its worktree HEAD, which no loop iteration can repair and which therefore
+// never moves — and stays bounded in claim attempts, log lines and durable
+// anomalies for over an hour of simulated time.
+func TestReviewerClaimBreakerSchedulerBoundsRepeatedFailures(t *testing.T) {
+	project := setupReviewClaimProject(t)
+	project.addReviewableTask(t, "task-broken", true)
+	widenReviewerWait(t, project, 60)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	clock := installSchedulerTicks(t, func(tick int, simulated time.Duration) {
+		if tick >= schedulerMinTicks && simulated >= schedulerMinSpan {
+			cancel()
+		}
+	})
+	delays := recordSupervisorDelays(t, clock)
+	claims := countReviewerClaims(t, nil)
+	// Info is the level a supervisor really logs at, so this is the log the
+	// reported run grew 1,943 claim-error lines in.
+	logs := captureAgentLogsAtLevel(t, slog.LevelInfo)
+
+	err := runReviewerSupervisorIn(ctx, t, project, &MockLLMAgent{ExitCode: 0})
+	if !stderrors.Is(err, context.Canceled) {
+		t.Fatalf("RunSupervisor() error = %v, want the harness cancellation", err)
+	}
+
+	ticks, simulated := clock.elapsed()
+	if ticks < schedulerMinTicks || simulated < schedulerMinSpan {
+		t.Fatalf("harness ran %d ticks spanning %v, want at least %d ticks and %v", ticks, simulated, schedulerMinTicks, schedulerMinSpan)
+	}
+	claimed := claims.Load()
+	if claimed >= schedulerMaxClaims {
+		t.Fatalf("ClaimReviewerTask calls = %d over %v, want fewer than %d", claimed, simulated, schedulerMaxClaims)
+	}
+	if got := countLogLines(logs.String(), `msg="Review claim error"`); int64(got) > claimed {
+		t.Fatalf("Review claim error lines = %d, want no more than the %d claim attempts", got, claimed)
+	}
+	if got := countLogLines(logs.String(), "level=ERROR", `msg="Review claim error"`); got != 1 {
+		t.Fatalf("error-level Review claim error lines = %d, want 1", got)
+	}
+	if anomalies := project.anomaliesOfType(t, models.AnomalyTypeReviewerClaimCircuitOpen); len(anomalies) != 1 {
+		t.Fatalf("circuit-open anomalies = %d, want exactly 1", len(anomalies))
+	}
+	if recorded := delays(); len(recorded) != int(claimed) {
+		t.Fatalf("supervisor delays = %v, want one per claim attempt (%d)", recorded, claimed)
+	}
+	t.Logf("%d scheduler ticks spanning %v cost %d claim attempts", ticks, simulated, claimed)
+}
+
+// TestReviewerClaimBreakerSchedulerRepairResumesClaims repairs the boundary
+// while the loop is parked on the quarantined candidate: the repair moves the
+// task's boundary version, so the very next scheduler tick offers the task
+// again and the claim that follows succeeds.
+func TestReviewerClaimBreakerSchedulerRepairResumesClaims(t *testing.T) {
+	project := setupReviewClaimProject(t)
+	head := project.addReviewableTask(t, "task-broken", true)
+	widenReviewerWait(t, project, 60)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	const repairAtTick = 100
+	clock := installSchedulerTicks(t, func(tick int, _ time.Duration) {
+		if tick == repairAtTick {
+			project.repairReviewBoundary(t, "task-broken", head)
+		}
+	})
+	recordSupervisorDelays(t, clock) // the recorded delays are not the subject here; the instant timer is
+	claims := countReviewerClaims(t, nil)
+	logs := captureAgentLogsAtLevel(t, slog.LevelInfo)
+	// The launched agent ends the run: reaching it proves the claim the repair
+	// unblocked went through, and the loop must not keep executing afterwards.
+	launched := &MockLLMAgent{ExitCode: 0, OnExecute: func(context.Context, string, string, string, string, []string) error {
+		cancel()
+		return nil
+	}}
+
+	if err := runReviewerSupervisorIn(ctx, t, project, launched); err != nil && !stderrors.Is(err, context.Canceled) {
+		t.Fatalf("RunSupervisor() error = %v", err)
+	}
+
+	ticks, _ := clock.elapsed()
+	if ticks < repairAtTick {
+		t.Fatalf("harness ran %d ticks, want the loop parked past the repair at tick %d", ticks, repairAtTick)
+	}
+	if got := claims.Load(); got != claimBreakerThreshold+1 {
+		t.Fatalf("ClaimReviewerTask calls = %d, want %d: the quarantine holds until the repair, which permits exactly one more", got, claimBreakerThreshold+1)
+	}
+	if got := countLogLines(logs.String(), `msg="Reviewer claimed task for review"`, "task-broken"); got != 1 {
+		t.Fatalf("successful claims after the repair = %d, want 1:\n%s", got, logs.String())
+	}
+	if len(launched.Calls) != 1 || launched.Calls[0].TaskID != "task-broken" {
+		t.Fatalf("agent launches = %+v, want one review session on the repaired task", launched.Calls)
+	}
+	if anomalies := project.anomaliesOfType(t, models.AnomalyTypeReviewerClaimCircuitOpen); len(anomalies) != 1 {
+		t.Fatalf("circuit-open anomalies = %d, want the single record the quarantine wrote", len(anomalies))
 	}
 }
 

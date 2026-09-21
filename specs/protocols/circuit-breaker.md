@@ -81,9 +81,52 @@ Summary of types relevant to circuit breaker patterns:
 | `debt_created` | Code Reviewer | debt_accumulation |
 | `external_blocker` | Coder | external_service_outage (aggregated by `blocker_service`) |
 | `provider_audit_degraded` | Supervisor | provider_audit_degradation |
+| `reviewer_claim_circuit_open` | Supervisor | (supervisor-local claim quarantine, not CB) |
 | `hypothesis_exhaustion` | Planner | (triggers rescope, not CB) |
 | `review_budget_exhausted` | Planner | (logged for audit; triggers Planner intervention, not CB) |
 | `spec_gap` | Planner | spec_gap_cluster |
+
+### Reviewer Claim Quarantine
+
+A reviewer claim that keeps failing the same deterministic way against unchanged
+state is quarantined by the supervisor instead of retried every few seconds. The
+failure key is `role | task_id | failure_class | boundary_version`, where
+`boundary_version` digests the candidate's state-visible `status`,
+`review_commit`, `base_commit`, `worktree` and history length. The class is the
+branch that removed the candidate, never parsed error text: `review_boundary_repair`,
+`acceptance_evidence` and `worktree_context` are quarantined; `git_operation`,
+`integration_failed` and anything unclassified take bounded exponential backoff
+(5s doubling to a 5min cap) and are never quarantined; authority loss or agent
+degradation stops the supervisor outright.
+
+Three consecutive identical failures open a key. While it is open the candidate
+is excluded from the reviewer's work check for a 5min
+cooldown that doubles per failed re-probe up to 30min, and every other reviewable
+task stays claimable. A key clears when its `boundary_version` changes — the
+documented repair writes `review_commit` and `base_commit`, and any lifecycle
+event moves `status` or history — or when that task's claim succeeds. Claim
+selection still evaluates and removes broken candidates when other work wakes
+the reviewer. Their classified failures reach the breaker even when a later
+candidate is claimed successfully; that success clears only the claimed task's
+keys and the role's transient backoff. Failures during cooldown count in memory
+but neither extend the cooldown nor write another anomaly.
+When only quarantined work remains, cooldown expiry permits one re-probe without
+clearing the key. It re-runs the real boundary
+validation and either clears the key or re-quarantines it with a doubled
+cooldown. The out-of-state inputs that validation also reads (worktree HEAD, the
+integration merge base) are deliberately outside the key, so a repair that moves
+only those is recovered by that time-bounded re-probe. Thresholds and cooldowns
+are constants of the supervisor loop, not configuration.
+
+`reviewer_claim_circuit_open` records one anomaly per key, however many
+supervisors or restarts observe the condition. `role`, `failure_class`,
+`boundary_version`, `first_failure`, `recovery` and the bounded masked `error`
+are written once; `attempts`, `last_failure` and `cooldown_until` are updated in
+place on that same record, so retry count and duration stay observable without an
+entry per attempt. The counters live in the supervisor process: a restart
+re-attempts up to the threshold before re-quarantining, and adds no anomaly.
+Quarantine is supervisor-local — it bounds one claim loop and does not by itself
+feed the pattern detection or responses below.
 
 ---
 

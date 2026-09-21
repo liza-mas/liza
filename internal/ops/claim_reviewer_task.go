@@ -43,6 +43,9 @@ type ClaimReviewerTaskResult struct {
 	Worktree     string
 	ReviewCommit string
 	LeaseExpires time.Time
+	// CandidateFailures retains classified removals even when a later candidate
+	// is claimed successfully. Failed claims retain their existing typed errors.
+	CandidateFailures []ReviewClaimCandidateFailure
 }
 
 // ReviewerClaimPolicyResolver exposes the review-policy lookups needed to
@@ -173,6 +176,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 	var reviewBoundaryErr error
 	var acceptanceErrors []error
 	var repairNeededTaskIDs []string
+	var candidateFailures []ReviewClaimCandidateFailure
 
 	// Load pipeline config once for both IsClaimable and transition.
 	pb, err := loadPipelineBundle(input.ProjectRoot)
@@ -333,6 +337,8 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 					var evidenceErr *AcceptanceEvidenceError
 					if stderrors.As(err, &evidenceErr) {
 						acceptanceErrors = append(acceptanceErrors, evidenceErr)
+						candidateFailures = appendReviewClaimCandidateFailure(candidateFailures,
+							newReviewClaimCandidateFailure(task, ReviewClaimClassAcceptanceEvidence, false, err))
 						candidates = removeCandidate(candidates, task)
 						continue
 					}
@@ -341,12 +347,19 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 						if !slices.Contains(repairNeededTaskIDs, task.ID) {
 							repairNeededTaskIDs = append(repairNeededTaskIDs, task.ID)
 						}
+						candidateFailures = appendReviewClaimCandidateFailure(candidateFailures,
+							newReviewClaimCandidateFailure(task, ReviewClaimClassReviewBoundaryRepair, false, err))
 						candidates = removeCandidate(candidates, task)
 						continue
 					}
+					// Classified before the transition below moves the task, so
+					// the record names the boundary the failure was observed on.
+					class, transient := classifyReviewBoundaryRemoval(err)
+					failure := newReviewClaimCandidateFailure(task, class, transient, err)
 					if markErr := markReviewBoundaryIntegrationFailed(state, task, input.AgentID, pb.transitions, err); markErr != nil {
 						return markErr
 					}
+					candidateFailures = appendReviewClaimCandidateFailure(candidateFailures, failure)
 					invocation.effects = true
 					candidates = removeCandidate(candidates, task)
 					continue
@@ -458,21 +471,25 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 		return nil, err
 	}
 	if reviewBoundaryErr != nil && result.TaskID == "" {
+		// The error stays the one every caller already classifies; the envelope
+		// only adds which candidates failed, in which class, against which
+		// boundary version.
 		if len(acceptanceErrors) > 0 {
-			return nil, stderrors.Join(acceptanceErrors...)
+			return nil, newReviewClaimFailure(role, candidateFailures, stderrors.Join(acceptanceErrors...))
 		}
 		if len(repairNeededTaskIDs) > 0 {
-			return nil, &PreconditionError{
+			return nil, newReviewClaimFailure(role, candidateFailures, &PreconditionError{
 				Reason: fmt.Sprintf(
 					"review boundary needs repair for task(s): %s — run %s <task-id>",
 					strings.Join(repairNeededTaskIDs, ", "),
 					brand.Command("update-review-commit"),
 				),
-			}
+			})
 		}
-		return nil, &IntegrationFailedError{Reason: IntegrationReasonReviewBoundaryMismatch}
+		return nil, newReviewClaimFailure(role, candidateFailures, &IntegrationFailedError{Reason: IntegrationReasonReviewBoundaryMismatch})
 	}
 
+	result.CandidateFailures = candidateFailures
 	return &result, nil
 }
 

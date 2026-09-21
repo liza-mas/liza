@@ -2373,3 +2373,126 @@ func TestFilterDoerProviderDiversity(t *testing.T) {
 		}
 	})
 }
+
+func TestReviewClaimFailureNamesEveryRepairCandidate(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimReviewerTaskTestAgents(state)
+	coderID := "coder-1"
+	otherTaskID := "other-task"
+	state.Agents[coderID] = models.Agent{
+		Role:        models.RoleCoder,
+		Status:      models.AgentStatusWorking,
+		CurrentTask: &otherTaskID,
+	}
+
+	staleCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
+	taskIDs := []string{"task-1", "task-2"}
+	for _, taskID := range taskIDs {
+		worktree, headCommit := createClaimReviewWorktree(t, tmpDir, taskID)
+		if headCommit == staleCommit {
+			t.Fatalf("test setup failed: %s worktree HEAD matches the stale review commit", taskID)
+		}
+		baseCommit := testhelpers.MustGit(t, tmpDir, "merge-base", headCommit, "integration")
+		state.Tasks = append(state.Tasks, models.Task{
+			ID:           taskID,
+			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
+			Priority:     1,
+			AssignedTo:   &coderID,
+			Worktree:     &worktree,
+			BaseCommit:   &baseCommit,
+			ReviewCommit: &staleCommit,
+			Created:      now,
+		})
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimReviewerTask(ClaimReviewerTaskInput{
+		ProjectRoot:   tmpDir,
+		AgentID:       "code-reviewer-1",
+		LeaseDuration: 1800,
+	})
+	if err == nil {
+		t.Fatal("claim succeeded, want a review-boundary repair failure for every candidate")
+	}
+
+	var failure *ReviewClaimFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("errors.As(*ReviewClaimFailure) failed for %v", err)
+	}
+	if failure.Role != models.RoleCodeReviewer {
+		t.Errorf("Role = %q, want %q", failure.Role, models.RoleCodeReviewer)
+	}
+	if failure.Class != ReviewClaimClassCandidateFailures || failure.Transient {
+		t.Errorf("envelope = (%q, transient=%v), want (%q, transient=false)", failure.Class, failure.Transient, ReviewClaimClassCandidateFailures)
+	}
+
+	// Every candidate the claim removed is named, so a supervisor can key each
+	// one separately instead of re-parsing the prose error.
+	versions := make(map[string]string, len(taskIDs))
+	for _, taskID := range taskIDs {
+		var candidate *ReviewClaimCandidateFailure
+		for i := range failure.Candidates {
+			if failure.Candidates[i].TaskID == taskID {
+				candidate = &failure.Candidates[i]
+			}
+		}
+		if candidate == nil {
+			t.Fatalf("Candidates = %#v, want a record for %s", failure.Candidates, taskID)
+		}
+		if candidate.Class != ReviewClaimClassReviewBoundaryRepair || candidate.Transient {
+			t.Errorf("%s = (%q, transient=%v), want (%q, transient=false)", taskID, candidate.Class, candidate.Transient, ReviewClaimClassReviewBoundaryRepair)
+		}
+		if !strings.Contains(candidate.Recovery, "update-review-commit") {
+			t.Errorf("%s recovery = %q, want the update-review-commit hint", taskID, candidate.Recovery)
+		}
+		if candidate.BoundaryVersion == "" {
+			t.Errorf("%s has no boundary version", taskID)
+		}
+		if owner, seen := versions[candidate.BoundaryVersion]; seen {
+			t.Errorf("%s shares a boundary version with %s", taskID, owner)
+		}
+		versions[candidate.BoundaryVersion] = taskID
+	}
+	if len(failure.Candidates) != len(taskIDs) {
+		t.Errorf("Candidates = %#v, want exactly %d records", failure.Candidates, len(taskIDs))
+	}
+
+	// The wrapped error keeps its existing classification for every caller that
+	// already reads it.
+	var precondition *PreconditionError
+	if !errors.As(err, &precondition) {
+		t.Fatalf("errors.As(*PreconditionError) failed for %v", err)
+	}
+	if !strings.Contains(err.Error(), "update-review-commit") {
+		t.Errorf("Error = %q, want update-review-commit recovery hint", err.Error())
+	}
+
+	// Re-classifying the returned value preserves the candidates decided at the
+	// removal site rather than degrading to no_work.
+	reclassified := ClassifyReviewClaimError(models.RoleCodeReviewer, err)
+	if reclassified != failure {
+		t.Fatalf("ClassifyReviewClaimError returned %#v, want the existing failure", reclassified)
+	}
+	if reclassified.Class == ReviewClaimClassNoWork || len(reclassified.Candidates) != len(taskIDs) {
+		t.Errorf("re-classified = (%q, %#v), want the candidate failures preserved", reclassified.Class, reclassified.Candidates)
+	}
+
+	readState, readErr := db.New(stateFile).Read()
+	if readErr != nil {
+		t.Fatalf("read state: %v", readErr)
+	}
+	for _, taskID := range taskIDs {
+		task := readState.FindTask(taskID)
+		if task == nil || task.Status != models.TaskStatusReadyForReview || task.ReviewingBy != nil {
+			t.Errorf("task %s = %#v, want it left unclaimed in CODE_TO_REVIEW", taskID, task)
+		}
+	}
+}
