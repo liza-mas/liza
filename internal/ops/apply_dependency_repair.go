@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -149,76 +150,24 @@ func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reaso
 		}
 		consumedDigest := lifecycleDigest(consumed)
 
-		prepared := make([]preparedDependencyUpdate, 0, len(request.DependencyUpdates))
-		for _, update := range request.DependencyUpdates {
-			task := state.FindTask(update.TaskID)
-			if task == nil {
-				return &errors.NotFoundError{Entity: "dependency repair task", ID: update.TaskID}
-			}
-			if task.Status.IsTerminal() {
-				return &PreconditionError{Reason: fmt.Sprintf("cannot apply dependency repair to terminal task %s (%s)", task.ID, task.Status)}
-			}
-			if !slices.Equal(task.DependsOn, update.ExpectedDependsOn) {
-				return WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("task %s dependencies changed since the repair request was created: got %v, expected %v", task.ID, task.DependsOn, update.ExpectedDependsOn)}, models.LifecycleStateChanged, "requery", "none")
-			}
-			for _, dependencyID := range update.DesiredDependsOn {
-				if dependencyID == task.ID {
-					return &PreconditionError{Reason: fmt.Sprintf("task %s cannot depend on itself", task.ID)}
-				}
-				if state.FindTask(dependencyID) == nil {
-					return &PreconditionError{Reason: fmt.Sprintf("desired dependency %q for task %s does not exist", dependencyID, task.ID)}
-				}
-			}
-
-			canonical, _, err := canonicalizeConcreteDependencyList(state, resolver, task.ID, task.RolePair, update.DesiredDependsOn)
-			if err != nil {
-				return err
-			}
-			prepared = append(prepared, preparedDependencyUpdate{
-				task:      task,
-				requested: update,
-				canonical: append([]string{}, canonical...),
-			})
+		updates, err := applyDependencyUpdatesInState(state, resolver, source, operation, request.DependencyUpdates, agentID, reason, now, map[string]any{
+			"manual":                 true,
+			"operation":              models.RepairOperationApplyDependencyRepair,
+			"repair_source_task":     sourceTaskID,
+			"repair_evidence":        append([]string{}, request.Evidence...),
+			"repair_validation":      append([]string{}, request.Validation...),
+			"repair_request_cleared": true,
+			"repair_request_digest":  consumedDigest,
+		})
+		if err != nil {
+			return err
 		}
-
-		affectedTaskIDs := make([]string, len(prepared))
-		for i, update := range prepared {
-			affectedTaskIDs[i] = update.task.ID
-		}
-
-		updates := make([]AppliedDependencyUpdate, 0, len(prepared))
-		sourceUpdated := false
-		for _, update := range prepared {
-			update.task.DependsOn = append([]string{}, update.canonical...)
-			sourceUpdated = sourceUpdated || update.task.ID == sourceTaskID
-			note := fmt.Sprintf("applied dependency repair requested by %s", sourceTaskID)
-			update.task.History = append(update.task.History, models.TaskHistoryEntry{
-				Time:   now,
-				Event:  models.TaskEventDependenciesRewritten,
-				Agent:  &agentID,
-				Reason: &reason,
-				Note:   &note,
-				Extra: map[string]any{
-					"manual":                 true,
-					"operation":              models.RepairOperationApplyDependencyRepair,
-					"repair_source_task":     sourceTaskID,
-					"affected_task_ids":      append([]string{}, affectedTaskIDs...),
-					"expected_dependencies":  append([]string{}, update.requested.ExpectedDependsOn...),
-					"desired_dependencies":   append([]string{}, update.requested.DesiredDependsOn...),
-					"canonical_dependencies": append([]string{}, update.canonical...),
-					"repair_evidence":        append([]string{}, request.Evidence...),
-					"repair_validation":      append([]string{}, request.Validation...),
-					"repair_request_cleared": true,
-					"repair_request_digest":  consumedDigest,
-				},
-			})
-			if update.task.ID != sourceTaskID {
-				models.AdvanceLifecycle(update.task)
-			}
-			updates = append(updates, AppliedDependencyUpdate{
-				TaskID:                update.task.ID,
-				CanonicalDependencies: append([]string{}, update.canonical...),
-			})
+		sourceUpdated := slices.ContainsFunc(updates, func(update AppliedDependencyUpdate) bool {
+			return update.TaskID == sourceTaskID
+		})
+		affectedTaskIDs := make([]string, len(updates))
+		for i, update := range updates {
+			affectedTaskIDs[i] = update.TaskID
 		}
 		if !sourceUpdated {
 			note := "applied dependency repair without changing the source task dependencies"
@@ -278,4 +227,81 @@ func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reaso
 	}
 
 	return &result, nil
+}
+
+// applyDependencyUpdatesInState commits one declarative dependency-repair batch
+// into an already-locked candidate state: existence and terminal rejection,
+// expected-list equality, self-dependency rejection, canonicalization,
+// assignment and the audit entry per rewritten task. A stale expected list is
+// reported against source as STATE_CHANGED so the caller can requery. extra
+// supplies the caller's common audit keys; the per-task keys are added here.
+// Full-state validation and the lifecycle receipt stay with the caller.
+func applyDependencyUpdatesInState(state *models.State, resolver *pipeline.Resolver, source *models.Task, operation string, updates []models.DependencyUpdate, agentID, reason string, now time.Time, extra map[string]any) ([]AppliedDependencyUpdate, error) {
+	prepared := make([]preparedDependencyUpdate, 0, len(updates))
+	for _, update := range updates {
+		task := state.FindTask(update.TaskID)
+		if task == nil {
+			return nil, &errors.NotFoundError{Entity: "dependency repair task", ID: update.TaskID}
+		}
+		if task.Status.IsTerminal() {
+			return nil, &PreconditionError{Reason: fmt.Sprintf("cannot apply dependency repair to terminal task %s (%s)", task.ID, task.Status)}
+		}
+		if !slices.Equal(task.DependsOn, update.ExpectedDependsOn) {
+			return nil, WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("task %s dependencies changed since the repair request was created: got %v, expected %v", task.ID, task.DependsOn, update.ExpectedDependsOn)}, models.LifecycleStateChanged, "requery", "none")
+		}
+		for _, dependencyID := range update.DesiredDependsOn {
+			if dependencyID == task.ID {
+				return nil, &PreconditionError{Reason: fmt.Sprintf("task %s cannot depend on itself", task.ID)}
+			}
+			if state.FindTask(dependencyID) == nil {
+				return nil, &PreconditionError{Reason: fmt.Sprintf("desired dependency %q for task %s does not exist", dependencyID, task.ID)}
+			}
+		}
+
+		canonical, _, err := canonicalizeConcreteDependencyList(state, resolver, task.ID, task.RolePair, update.DesiredDependsOn)
+		if err != nil {
+			return nil, err
+		}
+		prepared = append(prepared, preparedDependencyUpdate{
+			task:      task,
+			requested: update,
+			canonical: append([]string{}, canonical...),
+		})
+	}
+
+	affectedTaskIDs := make([]string, len(prepared))
+	for i, update := range prepared {
+		affectedTaskIDs[i] = update.task.ID
+	}
+
+	applied := make([]AppliedDependencyUpdate, 0, len(prepared))
+	for _, update := range prepared {
+		update.task.DependsOn = append([]string{}, update.canonical...)
+		note := fmt.Sprintf("applied dependency repair requested by %s", source.ID)
+		entryExtra := map[string]any{
+			"affected_task_ids":      append([]string{}, affectedTaskIDs...),
+			"expected_dependencies":  append([]string{}, update.requested.ExpectedDependsOn...),
+			"desired_dependencies":   append([]string{}, update.requested.DesiredDependsOn...),
+			"canonical_dependencies": append([]string{}, update.canonical...),
+		}
+		for key, value := range extra {
+			entryExtra[key] = value
+		}
+		update.task.History = append(update.task.History, models.TaskHistoryEntry{
+			Time:   now,
+			Event:  models.TaskEventDependenciesRewritten,
+			Agent:  &agentID,
+			Reason: &reason,
+			Note:   &note,
+			Extra:  entryExtra,
+		})
+		if update.task.ID != source.ID {
+			models.AdvanceLifecycle(update.task)
+		}
+		applied = append(applied, AppliedDependencyUpdate{
+			TaskID:                update.task.ID,
+			CanonicalDependencies: append([]string{}, update.canonical...),
+		})
+	}
+	return applied, nil
 }

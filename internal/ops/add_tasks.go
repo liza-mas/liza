@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
@@ -58,44 +59,14 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 	if orchestratorID == "" {
 		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
 	}
-	if err := paths.ValidateTaskID(input.ID); err != nil {
-		return nil, fmt.Errorf("invalid task ID: %w", err)
-	}
-	if input.Description == "" {
-		return nil, &PreconditionError{Reason: "description is required"}
-	}
-	if input.SpecRef == "" {
-		return nil, &PreconditionError{Reason: "spec_ref is required"}
-	}
-	if err := statevalidate.ValidateArtifactRefScalar("spec_ref", input.SpecRef, input.ID); err != nil {
-		return nil, &PreconditionError{Reason: err.Error()}
-	}
-	if err := statevalidate.ValidateArtifactRefScalar("plan_ref", input.PlanRef, input.ID); err != nil {
-		return nil, &PreconditionError{Reason: err.Error()}
-	}
-	if input.DoneWhen == "" {
-		return nil, &PreconditionError{Reason: "done_when is required"}
-	}
-	if err := models.ValidateValidationSafety("validation", input.Validation, input.DestructiveDB); err != nil {
-		return nil, &PreconditionError{Reason: err.Error()}
-	}
-	if err := models.ValidateValidationPrerequisites(input.Validation, input.ValidationPrerequisites); err != nil {
-		return nil, &PreconditionError{Reason: err.Error()}
-	}
-	if input.Scope == "" {
-		return nil, &PreconditionError{Reason: "scope is required"}
-	}
-	if input.Priority < 1 {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("priority must be positive, got %d", input.Priority)}
-	}
 
-	var taskType models.TaskType
-	if input.Type != "" {
-		taskType = models.TaskType(input.Type)
-		if !taskType.IsValid() {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("unknown task type %q; valid types: %s",
-				input.Type, strings.Join(models.ValidTaskTypeNames(), ", "))}
-		}
+	// Structural preflight precedes pipeline reads and the state lock.
+	_, diagnostics, err := payloadschema.Validate("add-task", input)
+	if err != nil {
+		return nil, err
+	}
+	if len(diagnostics) > 0 {
+		return nil, NewLifecycleInvalidInputError("add-task", nil, diagnostics, &PreconditionError{Reason: diagnostics[0].Constraint})
 	}
 
 	// Derive the project root from the runtime state path.
@@ -105,91 +76,16 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 
-	if input.RolePair == "" {
-		return nil, &PreconditionError{
-			Reason: fmt.Sprintf("role_pair is required; available: %s",
-				strings.Join(resolver.RolePairNames(), ", ")),
-		}
+	newTask, err := buildReplacementTask(input, resolver)
+	if err != nil {
+		return nil, err
 	}
-	rp, rpErr := resolver.RolePair(input.RolePair)
-	if rpErr != nil {
-		return nil, &PreconditionError{
-			Reason: fmt.Sprintf("unknown role_pair %q; available role_pairs: %s",
-				input.RolePair, strings.Join(resolver.RolePairNames(), ", ")),
-		}
-	}
-
-	expectedTaskType := models.TaskTypeForRole(rp.Doer)
-	if input.Type == "" {
-		taskType = expectedTaskType
-		input.Type = string(taskType)
-	} else if taskType != expectedTaskType {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task type %q conflicts with role_pair %q (expected %q)",
-			input.Type, input.RolePair, expectedTaskType)}
-	}
-
-	normalizedDeps := []string{}
-	for _, dep := range input.DependsOn {
-		trimmed := strings.TrimSpace(dep)
-		if trimmed != "" {
-			normalizedDeps = append(normalizedDeps, trimmed)
-		}
-	}
-
-	now := time.Now().UTC()
-	agentID := orchestratorID
 
 	bb := db.For(statePath)
 
-	initialStatus, err := resolver.InitialStatus(input.RolePair)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve initial status for role-pair %q: %w", input.RolePair, err)
-	}
-
-	newTask := models.Task{
-		ID:                      input.ID,
-		Type:                    taskType,
-		RolePair:                input.RolePair,
-		Description:             input.Description,
-		Status:                  initialStatus,
-		Priority:                input.Priority,
-		SpecRef:                 paths.NormalizeSpecRef(input.SpecRef),
-		PlanRef:                 paths.NormalizeSpecRef(input.PlanRef),
-		DoneWhen:                input.DoneWhen,
-		Validation:              slices.Clone(input.Validation),
-		ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
-		DestructiveDB:           input.DestructiveDB,
-		RCARequired:             input.RCARequired,
-		Scope:                   input.Scope,
-		DependsOn:               normalizedDeps,
-		Created:                 now,
-		History:                 []models.TaskHistoryEntry{},
-	}
-
 	var postValidationErr error
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
-		if state.FindTask(input.ID) != nil {
-			return &PreconditionError{Reason: fmt.Sprintf("task '%s' already exists", input.ID)}
-		}
-		if err := rejectManualPipelineChildTask(state, input, resolver); err != nil {
-			return err
-		}
-		state.Tasks = append(state.Tasks, newTask)
-
-		if !slices.Contains(state.Sprint.Scope.Planned, input.ID) {
-			state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, input.ID)
-		}
-
-		// Keep the description on the task and in the activity log, not in the
-		// size-limited alignment summary.
-		alignmentEntry := models.AlignmentHistory{
-			Timestamp: now,
-			Event:     models.TaskEventPlanning,
-			Summary:   fmt.Sprintf("Added task %s", input.ID),
-		}
-		state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, alignmentEntry)
-
-		if err := statevalidate.ValidateAddedTask(state, projectRoot, input.ID, false, io.Discard); err != nil {
+		if err := insertTaskInState(state, projectRoot, newTask, input, resolver); err != nil {
 			return err
 		}
 		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
@@ -210,8 +106,8 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 
 	logger := log.New(logPath)
 	logEntry := log.Entry{
-		Timestamp: now,
-		Agent:     agentID,
+		Timestamp: newTask.Created,
+		Agent:     orchestratorID,
 		Action:    "task_added",
 		Task:      &input.ID,
 		Detail:    input.Description,
@@ -222,6 +118,145 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 	}
 
 	return result, nil
+}
+
+// validateAddTaskInput checks the creation fields that need no pipeline config.
+func validateAddTaskInput(input *AddTaskInput) error {
+	if err := paths.ValidateTaskID(input.ID); err != nil {
+		return fmt.Errorf("invalid task ID: %w", err)
+	}
+	if input.Description == "" {
+		return &PreconditionError{Reason: "description is required"}
+	}
+	if input.SpecRef == "" {
+		return &PreconditionError{Reason: "spec_ref is required"}
+	}
+	if err := statevalidate.ValidateArtifactRefScalar("spec_ref", input.SpecRef, input.ID); err != nil {
+		return &PreconditionError{Reason: err.Error()}
+	}
+	if err := statevalidate.ValidateArtifactRefScalar("plan_ref", input.PlanRef, input.ID); err != nil {
+		return &PreconditionError{Reason: err.Error()}
+	}
+	if input.DoneWhen == "" {
+		return &PreconditionError{Reason: "done_when is required"}
+	}
+	if err := models.ValidateValidationSafety("validation", input.Validation, input.DestructiveDB); err != nil {
+		return &PreconditionError{Reason: err.Error()}
+	}
+	if err := models.ValidateValidationPrerequisites(input.Validation, input.ValidationPrerequisites); err != nil {
+		return &PreconditionError{Reason: err.Error()}
+	}
+	if input.Scope == "" {
+		return &PreconditionError{Reason: "scope is required"}
+	}
+	if input.Priority < 1 {
+		return &PreconditionError{Reason: fmt.Sprintf("priority must be positive, got %d", input.Priority)}
+	}
+	if input.Type != "" && !models.TaskType(input.Type).IsValid() {
+		return &PreconditionError{Reason: fmt.Sprintf("unknown task type %q; valid types: %s",
+			input.Type, strings.Join(models.ValidTaskTypeNames(), ", "))}
+	}
+	return nil
+}
+
+// buildReplacementTask validates creation input and builds the task value that
+// insertTaskInState commits. It touches no state and acquires no lock, so a
+// composing transaction can construct its replacement before taking the state
+// lock. It normalizes input.Type when the caller left it empty.
+func buildReplacementTask(input *AddTaskInput, resolver *pipeline.Resolver) (models.Task, error) {
+	if err := validateAddTaskInput(input); err != nil {
+		return models.Task{}, err
+	}
+
+	var taskType models.TaskType
+	if input.Type != "" {
+		taskType = models.TaskType(input.Type)
+	}
+
+	if input.RolePair == "" {
+		return models.Task{}, &PreconditionError{
+			Reason: fmt.Sprintf("role_pair is required; available: %s",
+				strings.Join(resolver.RolePairNames(), ", ")),
+		}
+	}
+	rp, rpErr := resolver.RolePair(input.RolePair)
+	if rpErr != nil {
+		return models.Task{}, &PreconditionError{
+			Reason: fmt.Sprintf("unknown role_pair %q; available role_pairs: %s",
+				input.RolePair, strings.Join(resolver.RolePairNames(), ", ")),
+		}
+	}
+
+	expectedTaskType := models.TaskTypeForRole(rp.Doer)
+	if input.Type == "" {
+		taskType = expectedTaskType
+		input.Type = string(taskType)
+	} else if taskType != expectedTaskType {
+		return models.Task{}, &PreconditionError{Reason: fmt.Sprintf("task type %q conflicts with role_pair %q (expected %q)",
+			input.Type, input.RolePair, expectedTaskType)}
+	}
+
+	normalizedDeps := []string{}
+	for _, dep := range input.DependsOn {
+		trimmed := strings.TrimSpace(dep)
+		if trimmed != "" {
+			normalizedDeps = append(normalizedDeps, trimmed)
+		}
+	}
+
+	initialStatus, err := resolver.InitialStatus(input.RolePair)
+	if err != nil {
+		return models.Task{}, fmt.Errorf("failed to resolve initial status for role-pair %q: %w", input.RolePair, err)
+	}
+
+	return models.Task{
+		ID:                      input.ID,
+		Type:                    taskType,
+		RolePair:                input.RolePair,
+		Description:             input.Description,
+		Status:                  initialStatus,
+		Priority:                input.Priority,
+		SpecRef:                 paths.NormalizeSpecRef(input.SpecRef),
+		PlanRef:                 paths.NormalizeSpecRef(input.PlanRef),
+		DoneWhen:                input.DoneWhen,
+		Validation:              slices.Clone(input.Validation),
+		ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
+		DestructiveDB:           input.DestructiveDB,
+		RCARequired:             input.RCARequired,
+		Scope:                   input.Scope,
+		DependsOn:               normalizedDeps,
+		Created:                 time.Now().UTC(),
+		History:                 []models.TaskHistoryEntry{},
+	}, nil
+}
+
+// insertTaskInState commits one built task into an already-locked candidate
+// state: duplicate-ID and pipeline-child rejection, task append, sprint scope,
+// the goal alignment entry and added-task validation. It leaves full-state
+// validation to the caller, whose posture differs per operation.
+func insertTaskInState(state *models.State, projectRoot string, task models.Task, input *AddTaskInput, resolver *pipeline.Resolver) error {
+	if state.FindTask(task.ID) != nil {
+		return &PreconditionError{Reason: fmt.Sprintf("task '%s' already exists", task.ID)}
+	}
+	if err := rejectManualPipelineChildTask(state, input, resolver); err != nil {
+		return err
+	}
+	state.Tasks = append(state.Tasks, task)
+
+	if !slices.Contains(state.Sprint.Scope.Planned, task.ID) {
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+
+	// Keep the description on the task and in the activity log, not in the
+	// size-limited alignment summary.
+	alignmentEntry := models.AlignmentHistory{
+		Timestamp: task.Created,
+		Event:     models.TaskEventPlanning,
+		Summary:   fmt.Sprintf("Added task %s", task.ID),
+	}
+	state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, alignmentEntry)
+
+	return statevalidate.ValidateAddedTask(state, projectRoot, task.ID, false, io.Discard)
 }
 
 func rejectManualPipelineChildTask(state *models.State, input *AddTaskInput, resolver *pipeline.Resolver) error {

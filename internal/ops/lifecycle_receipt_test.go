@@ -50,6 +50,37 @@ func requireLifecycleError(t *testing.T, err error, outcome, action, effects str
 	}
 }
 
+func TestLifecycleIdentityReusedSentinel(t *testing.T) {
+	for _, prepared := range []bool{false, true} {
+		name := "receipt"
+		if prepared {
+			name = "preparation"
+		}
+		t.Run(name, func(t *testing.T) {
+			task := lifecycleTestTask()
+			request := lifecycleTestRequest(t, task, "submit-for-review", "identity-1", "generation-1", "original")
+			if prepared {
+				if err := PrepareLifecycleRequest(task, request, nil); err != nil {
+					t.Fatal(err)
+				}
+			} else if _, err := CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, nil); err != nil {
+				t.Fatal(err)
+			}
+			before := lifecycleTaskBytes(t, task)
+			request.PayloadDigest = lifecycleDigest([]byte("different payload"))
+			_, err := CheckLifecycleRequest(task, request, nil)
+			requireLifecycleError(t, err, models.LifecycleInvalidInput, "correct_input", "none")
+			var le *LifecycleError
+			if !errors.As(err, &le) || !errors.Is(le, ErrLifecycleIdentityReused) || le.Outcome.RequestID != request.RequestID {
+				t.Fatalf("identity error lost sentinel or request ID: %v", err)
+			}
+			if !bytes.Equal(before, lifecycleTaskBytes(t, task)) {
+				t.Fatal("identity rejection mutated lifecycle metadata")
+			}
+		})
+	}
+}
+
 func TestLifecycleInvalidCompletionDoesNotAdvertiseUncommittedBoundary(t *testing.T) {
 	t.Parallel()
 	task := lifecycleTestTask()

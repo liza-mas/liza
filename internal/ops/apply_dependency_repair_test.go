@@ -1,8 +1,10 @@
 package ops
 
 import (
+	"encoding/json"
 	"reflect"
 	"slices"
+	"sort"
 	"testing"
 	"time"
 
@@ -296,5 +298,114 @@ func assertAppliedDependencyHistory(t *testing.T, task *models.Task, initialLen 
 	}
 	if !reflect.DeepEqual(last.Extra["canonical_dependencies"], canonical) {
 		t.Fatalf("%s canonical_dependencies = %#v, want %#v", task.ID, last.Extra["canonical_dependencies"], canonical)
+	}
+}
+
+func TestInTransactionCores_ApplyDependencyUpdatesInStateMatchesCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	seeded := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	updates := []models.DependencyUpdate{
+		{TaskID: "repair-source", ExpectedDependsOn: []string{"old-source"}, DesiredDependsOn: []string{"replacement-new"}},
+		{TaskID: "consumer", ExpectedDependsOn: []string{"old-consumer"}, DesiredDependsOn: []string{}},
+	}
+	fixture := func() *models.State {
+		source := testhelpers.BuildTaskByStatus("repair-source", models.TaskStatusBlocked, seeded)
+		source.DependsOn = []string{"old-source"}
+		source.RepairRequest = dependencyRepairRequest(updates)
+		consumer := testhelpers.BuildTaskByStatus("consumer", models.TaskStatusReady, seeded)
+		consumer.DependsOn = []string{"old-consumer"}
+		state := testhelpers.CreateValidState()
+		state.Goal.SpecRef = "README.md"
+		state.Tasks = []models.Task{
+			source,
+			consumer,
+			testhelpers.BuildTaskByStatus("old-source", models.TaskStatusMerged, seeded),
+			testhelpers.BuildTaskByStatus("old-consumer", models.TaskStatusMerged, seeded),
+			testhelpers.BuildTaskByStatus("replacement-new", models.TaskStatusMerged, seeded),
+		}
+		return state
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, fixture())
+	if _, err := ApplyDependencyRepair(tmpDir, "repair-source", "Apply stored graph repair", "orchestrator-1"); err != nil {
+		t.Fatalf("ApplyDependencyRepair() error: %v", err)
+	}
+	commandState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver() error: %v", err)
+	}
+	coreState := fixture()
+	source := coreState.FindTask("repair-source")
+	request, err := normalizeRepairRequest(source.RepairRequest, "repair-source")
+	if err != nil {
+		t.Fatalf("normalizeRepairRequest() error: %v", err)
+	}
+	consumed, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal repair request: %v", err)
+	}
+	applied, err := applyDependencyUpdatesInState(coreState, resolver, source, models.RepairOperationApplyDependencyRepair,
+		request.DependencyUpdates, "orchestrator-1", "Apply stored graph repair", seeded, map[string]any{
+			"manual":                 true,
+			"operation":              models.RepairOperationApplyDependencyRepair,
+			"repair_source_task":     "repair-source",
+			"repair_evidence":        append([]string{}, request.Evidence...),
+			"repair_validation":      append([]string{}, request.Validation...),
+			"repair_request_cleared": true,
+			"repair_request_digest":  lifecycleDigest(consumed),
+		})
+	if err != nil {
+		t.Fatalf("applyDependencyUpdatesInState() error: %v", err)
+	}
+	// Clearing the consumed request is the caller's residual step, not the core's.
+	source.RepairRequest = nil
+
+	wantApplied := []AppliedDependencyUpdate{
+		{TaskID: "repair-source", CanonicalDependencies: []string{"replacement-new"}},
+		{TaskID: "consumer", CanonicalDependencies: []string{}},
+	}
+	if !reflect.DeepEqual(applied, wantApplied) {
+		t.Fatalf("applied = %#v, want %#v", applied, wantApplied)
+	}
+	// Pinned independently of the command, so a core-only regression cannot hide
+	// behind the differential comparison below.
+	if !slices.Equal(source.DependsOn, []string{"replacement-new"}) {
+		t.Fatalf("core source depends_on = %v, want [replacement-new]", source.DependsOn)
+	}
+	consumer := coreState.FindTask("consumer")
+	if !slices.Equal(consumer.DependsOn, []string{}) {
+		t.Fatalf("core consumer depends_on = %v, want empty", consumer.DependsOn)
+	}
+	audit := consumer.History[len(consumer.History)-1]
+	if audit.Event != models.TaskEventDependenciesRewritten {
+		t.Fatalf("core audit event = %q, want %q", audit.Event, models.TaskEventDependenciesRewritten)
+	}
+	auditKeys := make([]string, 0, len(audit.Extra))
+	for key := range audit.Extra {
+		auditKeys = append(auditKeys, key)
+	}
+	sort.Strings(auditKeys)
+	wantKeys := []string{
+		"affected_task_ids", "canonical_dependencies", "desired_dependencies", "expected_dependencies",
+		"manual", "operation", "repair_evidence", "repair_request_cleared", "repair_request_digest",
+		"repair_source_task", "repair_validation",
+	}
+	if !slices.Equal(auditKeys, wantKeys) {
+		t.Fatalf("core audit keys = %v, want %v", auditKeys, wantKeys)
+	}
+	if !reflect.DeepEqual(audit.Extra["affected_task_ids"], []string{"repair-source", "consumer"}) {
+		t.Fatalf("core affected_task_ids = %#v, want [repair-source consumer]", audit.Extra["affected_task_ids"])
+	}
+
+	for _, taskID := range []string{"repair-source", "consumer", "old-source", "old-consumer", "replacement-new"} {
+		assertCoreMatchesCommand(t, coreState, commandState, taskID)
 	}
 }

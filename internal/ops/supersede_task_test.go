@@ -980,3 +980,94 @@ func TestSupersedeTask_CleansUpWorktree(t *testing.T) {
 		t.Error("task branch should be preserved after supersede for successor access")
 	}
 }
+
+func TestInTransactionCores_SupersedeTaskInStateMatchesCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	seeded := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	fixture := func() *models.State {
+		target := testhelpers.BuildTaskByStatus("plan-old", models.TaskStatusBlocked, seeded)
+		target.RolePair = "code-planning-pair"
+		target.DependsOn = []string{"coding-a", "legal-plan"}
+		consumer := testhelpers.BuildTaskByStatus("active-consumer", models.TaskStatusReady, seeded)
+		consumer.DependsOn = []string{"plan-old"}
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{
+			target,
+			testhelpers.BuildTaskByStatus("coding-a", models.TaskStatusReady, seeded),
+			testhelpers.BuildTaskByStatus("legal-plan", models.TaskStatusDraftCodingPlan, seeded),
+			testhelpers.BuildTaskByStatus("replacement-plan", models.TaskStatusDraftCodingPlan, seeded),
+			consumer,
+		}
+		for i := range state.Tasks {
+			state.Tasks[i].SpecRef = state.Goal.SpecRef
+		}
+		return state
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, fixture())
+	if _, err := SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1"); err != nil {
+		t.Fatalf("SupersedeTask() error: %v", err)
+	}
+	commandState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	pb, err := loadPipelineBundle(tmpDir)
+	if err != nil {
+		t.Fatalf("loadPipelineBundle() error: %v", err)
+	}
+	coreState := fixture()
+	target := coreState.FindTask("plan-old")
+	revisionBefore := uint64(0)
+	if target.Lifecycle != nil {
+		revisionBefore = target.Lifecycle.Revision
+	}
+	removed, err := supersedeTaskInState(coreState, pb, target, []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1", nil, seeded)
+	if err != nil {
+		t.Fatalf("supersedeTaskInState() error: %v", err)
+	}
+	if !slices.Equal(removed, []string{"coding-a"}) {
+		t.Fatalf("removed dependencies = %v, want [coding-a]", removed)
+	}
+	// The core advances the lifecycle once; the caller's CompleteLifecycleRequest
+	// adds the second advance and the receipt outside this boundary.
+	if target.Lifecycle == nil || target.Lifecycle.Revision != revisionBefore+1 {
+		t.Fatalf("core lifecycle revision = %v, want %d", target.Lifecycle, revisionBefore+1)
+	}
+
+	// Pinned independently of the command, so a core-only regression cannot hide
+	// behind the differential comparison below.
+	if target.Status != models.TaskStatusSuperseded {
+		t.Fatalf("core status = %s, want SUPERSEDED", target.Status)
+	}
+	if !slices.Equal(target.SupersededBy, []string{"replacement-plan"}) {
+		t.Fatalf("core superseded_by = %v, want [replacement-plan]", target.SupersededBy)
+	}
+	if !slices.Equal(target.DependsOn, []string{"legal-plan"}) {
+		t.Fatalf("core depends_on = %v, want the legal dependency retained", target.DependsOn)
+	}
+	if target.AssignedTo != nil || target.Worktree != nil || target.LeaseExpires != nil {
+		t.Fatalf("core left ownership on the superseded task: %+v", target)
+	}
+	audit := target.History[len(target.History)-1]
+	if audit.Event != models.TaskEventSuperseded || audit.Note == nil || *audit.Note != "replaced by: replacement-plan" {
+		t.Fatalf("core audit entry = %+v, want a superseded entry naming the replacement", audit)
+	}
+	if !reflect.DeepEqual(audit.Extra["removed_dependencies"], []string{"coding-a"}) {
+		t.Fatalf("core removed_dependencies = %#v, want [coding-a]", audit.Extra["removed_dependencies"])
+	}
+	if consumer := coreState.FindTask("active-consumer"); !slices.Equal(consumer.DependsOn, []string{"replacement-plan"}) {
+		t.Fatalf("core consumer depends_on = %v, want [replacement-plan]", consumer.DependsOn)
+	}
+
+	for _, taskID := range []string{"plan-old", "active-consumer", "coding-a", "legal-plan", "replacement-plan"} {
+		assertCoreMatchesCommand(t, coreState, commandState, taskID)
+	}
+	if err := statevalidate.ValidateState(coreState, tmpDir, true, io.Discard); err != nil {
+		t.Fatalf("core candidate state validation failed: %v", err)
+	}
+}

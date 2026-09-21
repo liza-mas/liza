@@ -24,6 +24,10 @@ type LifecycleRequest = models.LifecycleIdentity
 
 var lifecycleRequestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
 
+// ErrLifecycleIdentityReused marks a retained identity with a different payload.
+// Callers may specialize its classification; the shared outcome stays INVALID_INPUT.
+var ErrLifecycleIdentityReused = errors.New("lifecycle request identity reused")
+
 // ValidateLifecycleRequestOptions performs pure validation before any effects.
 func ValidateLifecycleRequestOptions(opts LifecycleRequestOptions) error {
 	if (opts.RequestID == "") != (opts.ExpectedTransition == "") {
@@ -162,7 +166,9 @@ func CheckLifecycleRequest(task *models.Task, request LifecycleRequest, agents m
 				continue
 			}
 			if receipt.PayloadDigest != request.PayloadDigest {
-				return nil, lifecycleRequestError(task, request, models.LifecycleInvalidInput, "correct_input", "none", "request identity was already used with a different payload")
+				outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleInvalidInput, "correct_input", "none")
+				outcome.RequestID = request.RequestID
+				return nil, &LifecycleError{Outcome: outcome, Err: fmt.Errorf("request identity was already used with a different payload: %w", ErrLifecycleIdentityReused)}
 			}
 			copy := receipt
 			return &copy, nil
@@ -171,7 +177,9 @@ func CheckLifecycleRequest(task *models.Task, request LifecycleRequest, agents m
 	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil {
 		p := task.Lifecycle.Preparation
 		if request.RequestID != "" && sameLifecycleKey(p.LifecycleIdentity, request) && p.PayloadDigest != request.PayloadDigest {
-			return nil, lifecycleRequestError(task, request, models.LifecycleInvalidInput, "correct_input", "none", "prepared request identity has a different payload")
+			outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleInvalidInput, "correct_input", "none")
+			outcome.RequestID = request.RequestID
+			return nil, &LifecycleError{Outcome: outcome, Err: fmt.Errorf("prepared request identity has a different payload: %w", ErrLifecycleIdentityReused)}
 		}
 	}
 	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil && preparationStillCurrent(task, request, agents) {

@@ -626,6 +626,7 @@ the appropriate supervisor-launched agent session. See
 | `§BRAND_BINARY_NAME§ stop` / `§BRAND_BINARY_NAME§ start` | Stop/start system                                                                                                    |
 | `§BRAND_BINARY_NAME§ sprint-checkpoint` | Create a checkpoint (halt + summary)                                                                                 |
 | **Task Operations** |                                                                                                                      |
+| `§BRAND_BINARY_NAME§ replace-task --replacement-file <path> --request-id <id> --expected-transition <token> --json` | Orchestrator-only atomic replacement: create the successor, retarget consumers and supersede the source; exact retained replay returns `ALREADY_COMPLETED` with `changed=false`. |
 | `§BRAND_BINARY_NAME§ add-task` | Add a new task to the state. The new task is scoped-validated before persistence; if unrelated existing state corruption keeps full validation degraded, the command succeeds with a warning. |
 | `§BRAND_BINARY_NAME§ add-tasks --tasks-file <path>` | Add multiple tasks independently from JSON. Valid items can persist even while unrelated state remains degraded; each successful item carries a warning when the post-add full validation still fails. |
 | `§BRAND_BINARY_NAME§ claim-task <task-id> <agent-id>` | Atomically claim a task for a doer agent (creates worktree, updates state)                                           |
@@ -659,6 +660,23 @@ the appropriate supervisor-launched agent session. See
 | `§BRAND_BINARY_NAME§ update-sprint-metrics` | Recompute sprint metrics from current state                                                                          |
 | `§BRAND_BINARY_NAME§ clear-stale-review-claims` | Clear expired review leases                                                                                          |
 | `§BRAND_BINARY_NAME§ get <query>` | Query state data (tasks, agents, etc.)                                                                               |
+
+For replacement work, use `§BRAND_BINARY_NAME§ replace-task` instead of composing
+creation, dependency repair and supersession commands. Inspect the source with
+`§BRAND_BINARY_NAME§ get <source-task-id> --json`, then bind its transition token
+and a request ID to one file containing `source_task_id`, `reason`, `replacement`
+(the `add-task` object), `consumers` (explicit expected/desired dependency lists),
+and optional `preserved_base`. Preflight with
+`§BRAND_BINARY_NAME§ validate-payload replace-task --payload <path>`. Both identity
+flags are mandatory: preserve their original values and the payload across
+retries, and follow the returned `outcome` and single `safe_action`, including
+on failure. Preserved work requires both a commit and an existing healthy
+canonical successor worktree; the command validates them without constructing
+the worktree and refuses a commit-only declaration. Omit preservation for an
+ordinary claim from integration HEAD. Complete-candidate validation fails closed;
+receipt pruning and re-registration limit replay proof. See
+[Replacement Transactions](../specs/protocols/replacement-transactions.md) for
+the payload, outcomes and remaining limits.
 
 For a repair spanning multiple active tasks or complete dependency lists, write
 a JSON request with operation `apply-dependency-repair`, the blocked source task

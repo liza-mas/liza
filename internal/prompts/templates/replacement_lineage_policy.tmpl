@@ -1,5 +1,6 @@
 {{- define "replacement_lineage_policy" -}}
 REPLACEMENT LINEAGE POLICY:
+- Use replace-task for replacement work: bind creation, consumer retargeting and supersession in one transaction; retain the request ID, expected transition and payload across retries.
 - Preserve an independently reviewable replacement lineage for each independently scoped original; one original may split into several cohesive replacements.
 - Do not map several independent originals to one shared replacement or replan.
 - A shared replan is allowed only when corrections are semantically inseparable. Record an explicit reason explaining why; convenience or a shared incident is insufficient.

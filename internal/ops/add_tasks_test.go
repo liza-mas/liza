@@ -1,10 +1,13 @@
 package ops
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -12,11 +15,81 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"gopkg.in/yaml.v3"
 )
+
+func TestAddTaskSchemaParity(t *testing.T) {
+	for _, change := range []struct {
+		name  string
+		apply func(*AddTaskInput)
+	}{
+		{"required", func(p *AddTaskInput) { p.Description = ""; p.SpecRef = "" }},
+		{"enum", func(p *AddTaskInput) { p.Type = "PRIVATE_REJECTED_VALUE" }},
+		{"cardinality", func(p *AddTaskInput) { p.DestructiveDB = true; p.Validation = nil }},
+		{"reference", func(p *AddTaskInput) { p.SpecRef = "a.md\nb.md" }},
+		{"priority", func(p *AddTaskInput) { p.Priority = 0 }},
+		{"role", func(p *AddTaskInput) { p.RolePair = "" }},
+	} {
+		t.Run(change.name, func(t *testing.T) {
+			f := newReplacementFixture(t)
+			input := f.input.Replacement
+			change.apply(&input)
+			before := replacementBytes(t, f.statePath)
+			t.Cleanup(setLifecycleMutationTestHook(db.For(f.statePath), func() { t.Error("invalid payload reached mutation") }))
+			encoded, err := json.Marshal(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payload any
+			if err := json.Unmarshal(encoded, &payload); err != nil {
+				t.Fatal(err)
+			}
+			_, want, err := payloadschema.Validate("add-task", payload)
+			if err != nil || len(want) == 0 {
+				t.Fatalf("preflight: %+v %v", want, err)
+			}
+			err = taskSchemaCallWithStateLocked(t, f.statePath, func() error {
+				_, err := AddTaskWithAuthority(f.statePath, filepath.Join(f.root, "activity.log"), &input, f.authority)
+				return err
+			})
+			var lifecycle *LifecycleError
+			if !errors.As(err, &lifecycle) || lifecycle.Outcome.Outcome != models.LifecycleInvalidInput || lifecycle.Outcome.SafeAction != "correct_input" || !reflect.DeepEqual(want, lifecycle.Outcome.Diagnostics) {
+				t.Fatalf("boundary error=%v, want diagnostics=%+v", err, want)
+			}
+			if !bytes.Equal(before, replacementBytes(t, f.statePath)) {
+				t.Fatal("invalid payload changed state")
+			}
+		})
+	}
+}
+
+// Holding the real state lock proves rejection precedes reads as well as writes.
+func taskSchemaCallWithStateLocked(t *testing.T, statePath string, call func() error) error {
+	t.Helper()
+	completed := make(chan error, 1)
+	timedOut := false
+	err := filelock.New(statePath).WithLock(func() error {
+		go func() { completed <- call() }()
+		select {
+		case err := <-completed:
+			return err
+		case <-time.After(2 * time.Second):
+			timedOut = true
+			return nil
+		}
+	})
+	if timedOut {
+		<-completed // Join after releasing the lock, even on a regression.
+		t.Fatal("structural rejection waited for the state lock")
+	}
+	return err
+}
 
 func TestAddTask_Validation(t *testing.T) {
 	t.Parallel()
@@ -511,7 +584,8 @@ func TestAddTask_RolePairValidation(t *testing.T) {
 				DoneWhen: "w", Scope: "sc", Priority: 1,
 				// RolePair intentionally empty
 			},
-			errContains: []string{"role_pair is required", "code-planning-pair", "coding-pair"},
+			// Structural rejection occurs before reading pipeline configuration.
+			errContains: []string{"role_pair is required"},
 		},
 		{
 			name: "invalid role_pair for pipeline goal",
@@ -523,13 +597,13 @@ func TestAddTask_RolePairValidation(t *testing.T) {
 			errContains: []string{"unknown role_pair", "nonexistent-pair", "code-planning-pair", "coding-pair"},
 		},
 		{
-			name: "unknown task type mentions valid types",
+			name: "unknown task type returns a value-free constraint",
 			input: AddTaskInput{
 				ID: "t3", Description: "d", SpecRef: "specs/feature.md",
 				DoneWhen: "w", Scope: "sc", Priority: 1,
 				Type: "bogus",
 			},
-			errContains: []string{"unknown task type", "bogus"},
+			errContains: []string{"unknown task type", "registered task type"},
 		},
 		{
 			name: "task type must match role_pair",
@@ -1292,5 +1366,144 @@ func TestAddTaskInput_JSONUnmarshal(t *testing.T) {
 	}
 	if task.PlanRef != "specs/plans/plan-1.md" {
 		t.Errorf("PlanRef = %q", task.PlanRef)
+	}
+}
+
+// coreTaskSnapshot renders a task the way the state file stores it, with wall
+// clock values zeroed, so a command's persisted result and an in-transaction
+// core's in-memory result compare field for field. Lifecycle is cleared because
+// the receipt each command appends through CompleteLifecycleRequest is written
+// outside the extracted cores.
+func coreTaskSnapshot(t *testing.T, task models.Task) string {
+	t.Helper()
+
+	task.Created = time.Time{}
+	task.LeaseExpires = nil
+	task.ReviewLeaseExpires = nil
+	task.Lifecycle = nil
+
+	history := append([]models.TaskHistoryEntry(nil), task.History...)
+	for i := range history {
+		history[i].Time = time.Time{}
+	}
+	task.History = history
+
+	events := append([]models.HandoffEvent(nil), task.HandoffEvents...)
+	for i := range events {
+		events[i].Timestamp = time.Time{}
+	}
+	task.HandoffEvents = events
+
+	rendered, err := yaml.Marshal(task)
+	if err != nil {
+		t.Fatalf("marshal task %s: %v", task.ID, err)
+	}
+	return string(rendered)
+}
+
+// assertCoreMatchesCommand compares one task as an in-transaction core left it
+// against the same task as the command persisted it.
+func assertCoreMatchesCommand(t *testing.T, coreState, commandState *models.State, taskID string) {
+	t.Helper()
+
+	coreTask := coreState.FindTask(taskID)
+	if coreTask == nil {
+		t.Fatalf("task %s missing from the core state", taskID)
+	}
+	commandTask := commandState.FindTask(taskID)
+	if commandTask == nil {
+		t.Fatalf("task %s missing from the command state", taskID)
+	}
+	got, want := coreTaskSnapshot(t, *coreTask), coreTaskSnapshot(t, *commandTask)
+	if got != want {
+		t.Fatalf("task %s after core:\n%s\nafter command:\n%s", taskID, got, want)
+	}
+}
+
+func TestInTransactionCores_AddTaskCoresMatchCommand(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	testhelpers.CreateSpecFile(t, tmpDir, "feature-x.md", "# Feature X\n")
+
+	fixture := func() *models.State {
+		seeded := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("dep-1", models.TaskStatusMerged, seeded)}
+		return state
+	}
+	newInput := func() *AddTaskInput {
+		return &AddTaskInput{
+			ID:          "task-core",
+			Description: "Implement feature X",
+			SpecRef:     "specs/feature-x.md",
+			DoneWhen:    "Tests pass",
+			Scope:       "internal/ops",
+			Priority:    2,
+			RolePair:    "coding-pair",
+			DependsOn:   []string{" dep-1 ", ""},
+		}
+	}
+
+	testhelpers.WriteInitialState(t, stateFile, fixture())
+	if _, err := AddTask(stateFile, logFile, newInput(), "orchestrator-1"); err != nil {
+		t.Fatalf("AddTask() error: %v", err)
+	}
+	commandState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver() error: %v", err)
+	}
+	coreInput := newInput()
+	built, err := buildReplacementTask(coreInput, resolver)
+	if err != nil {
+		t.Fatalf("buildReplacementTask() error: %v", err)
+	}
+	if coreInput.Type != string(models.TaskTypeCoding) {
+		t.Fatalf("buildReplacementTask left type = %q, want the role-pair default", coreInput.Type)
+	}
+	if built.Created.IsZero() {
+		t.Fatal("buildReplacementTask left created unset")
+	}
+	// Pinned independently of the command, so a core-only regression cannot hide
+	// behind the differential comparison below.
+	if built.Priority != 2 || built.Type != models.TaskTypeCoding || built.Status != models.TaskStatus("DRAFT_CODE") {
+		t.Fatalf("built task = priority %d, type %q, status %q; want 2, %q, %q",
+			built.Priority, built.Type, built.Status, models.TaskTypeCoding, models.TaskStatus("DRAFT_CODE"))
+	}
+	if !slices.Equal(built.DependsOn, []string{"dep-1"}) {
+		t.Fatalf("built depends_on = %v, want [dep-1] with blanks dropped and whitespace trimmed", built.DependsOn)
+	}
+	if built.SpecRef != "specs/feature-x.md" {
+		t.Fatalf("built spec_ref = %q, want specs/feature-x.md", built.SpecRef)
+	}
+
+	coreState := fixture()
+	if err := insertTaskInState(coreState, tmpDir, built, coreInput, resolver); err != nil {
+		t.Fatalf("insertTaskInState() error: %v", err)
+	}
+
+	assertCoreMatchesCommand(t, coreState, commandState, "task-core")
+	if !slices.Equal(coreState.Sprint.Scope.Planned, commandState.Sprint.Scope.Planned) {
+		t.Fatalf("planned scope = %v, want %v", coreState.Sprint.Scope.Planned, commandState.Sprint.Scope.Planned)
+	}
+
+	coreAlignment := coreState.Goal.AlignmentHistory[len(coreState.Goal.AlignmentHistory)-1]
+	commandAlignment := commandState.Goal.AlignmentHistory[len(commandState.Goal.AlignmentHistory)-1]
+	if coreAlignment.Event != commandAlignment.Event || coreAlignment.Summary != commandAlignment.Summary {
+		t.Fatalf("alignment entry = %+v, want %+v", coreAlignment, commandAlignment)
+	}
+
+	// The duplicate-ID guard lives in the core, so a composing transaction
+	// cannot create a second lineage by skipping the command entry point.
+	if err := insertTaskInState(coreState, tmpDir, built, coreInput, resolver); err == nil {
+		t.Fatal("insertTaskInState() accepted a duplicate task ID")
 	}
 }

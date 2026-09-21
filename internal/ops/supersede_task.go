@@ -191,56 +191,7 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 			return WrapLifecycleError("supersede-task", currentTask, fmt.Errorf("task status changed before supersession"), models.LifecycleStateChanged, "requery", "none")
 		}
 
-		if err := validateDependencyDirection(state, pb.resolver, currentTask.ID, currentTask.RolePair, replacementIDs); err != nil {
-			return err
-		}
-		retainedDependencies, removedDependencies, err := pruneDownstreamDependencies(state, pb.resolver, currentTask)
-		if err != nil {
-			return err
-		}
-		currentTask.DependsOn = retainedDependencies
-		models.AdvanceLifecycle(currentTask)
-
-		if err := currentTask.TransitionWith(models.TaskStatusSuperseded, pb.transitions); err != nil {
-			return err
-		}
-		currentTask.SupersededBy = replacementIDs
-		currentTask.RescopeReason = &reason
-
-		releaseAgentsForTask(state, taskID)
-		currentTask.AssignedTo = nil
-		currentTask.LeaseExpires = nil
-		currentTask.ReviewingBy = nil
-		currentTask.ReviewLeaseExpires = nil
-		currentTask.Worktree = nil
-		clearAttemptState(currentTask, attemptStateRetire)
-
-		now := time.Now().UTC()
-		var note string
-		if len(replacementIDs) > 0 {
-			note = fmt.Sprintf("replaced by: %s", strings.Join(replacementIDs, ", "))
-		} else {
-			note = "superseded without replacements"
-		}
-		historyEntry := models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventSuperseded,
-			Agent:  &agentID,
-			Reason: &reason,
-			Note:   &note,
-		}
-		if salvage != nil {
-			historyEntry.Extra = salvage
-		}
-		if len(removedDependencies) > 0 {
-			if historyEntry.Extra == nil {
-				historyEntry.Extra = make(map[string]any)
-			}
-			historyEntry.Extra["removed_dependencies"] = append([]string(nil), removedDependencies...)
-		}
-		currentTask.History = append(currentTask.History, historyEntry)
-
-		if err := rewriteActiveDependents(state, pb.resolver, taskID, replacementIDs, agentID, now); err != nil {
+		if _, err := supersedeTaskInState(state, pb, currentTask, replacementIDs, reason, agentID, salvage, time.Now().UTC()); err != nil {
 			return err
 		}
 		// Legacy tasks predate pipeline-wide validation. For pipeline tasks, validate
@@ -296,6 +247,67 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 		ReplacementIDs:   replacementIDs,
 		Warnings:         warnings,
 	}, nil
+}
+
+// supersedeTaskInState retires one task inside an already-locked candidate
+// state: dependency-direction validation, downstream pruning, the SUPERSEDED
+// transition, ownership release, the audit entry and consumer rewriting. It
+// returns the dependency edges pruned as illegal downstream links, so a
+// composing transaction can record them. Full-state validation and the
+// lifecycle receipt stay with the caller.
+func supersedeTaskInState(state *models.State, pb *pipelineBundle, task *models.Task, replacementIDs []string, reason, agentID string, salvage map[string]any, now time.Time) ([]string, error) {
+	if err := validateDependencyDirection(state, pb.resolver, task.ID, task.RolePair, replacementIDs); err != nil {
+		return nil, err
+	}
+	retainedDependencies, removedDependencies, err := pruneDownstreamDependencies(state, pb.resolver, task)
+	if err != nil {
+		return nil, err
+	}
+	task.DependsOn = retainedDependencies
+	models.AdvanceLifecycle(task)
+
+	if err := task.TransitionWith(models.TaskStatusSuperseded, pb.transitions); err != nil {
+		return nil, err
+	}
+	task.SupersededBy = replacementIDs
+	task.RescopeReason = &reason
+
+	releaseAgentsForTask(state, task.ID)
+	task.AssignedTo = nil
+	task.LeaseExpires = nil
+	task.ReviewingBy = nil
+	task.ReviewLeaseExpires = nil
+	task.Worktree = nil
+	clearAttemptState(task, attemptStateRetire)
+
+	var note string
+	if len(replacementIDs) > 0 {
+		note = fmt.Sprintf("replaced by: %s", strings.Join(replacementIDs, ", "))
+	} else {
+		note = "superseded without replacements"
+	}
+	historyEntry := models.TaskHistoryEntry{
+		Time:   now,
+		Event:  models.TaskEventSuperseded,
+		Agent:  &agentID,
+		Reason: &reason,
+		Note:   &note,
+	}
+	if salvage != nil {
+		historyEntry.Extra = salvage
+	}
+	if len(removedDependencies) > 0 {
+		if historyEntry.Extra == nil {
+			historyEntry.Extra = make(map[string]any)
+		}
+		historyEntry.Extra["removed_dependencies"] = append([]string(nil), removedDependencies...)
+	}
+	task.History = append(task.History, historyEntry)
+
+	if err := rewriteActiveDependents(state, pb.resolver, task.ID, replacementIDs, agentID, now); err != nil {
+		return nil, err
+	}
+	return removedDependencies, nil
 }
 
 func collectSupersedeSalvageSnapshot(gw *git.Git, task *models.Task, originalStatus models.TaskStatus, recoverabilityCommand string) (map[string]any, error) {
