@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-09-06T12:22:31Z"
+last_updated: "2026-09-21T12:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -1575,17 +1575,229 @@ clusters:
       intent_hypothesis: "Prevent AI-authored goals from presenting unmade product or structural decisions as settled human intent."
       solution_detected: "Entry-point-specific human ownership, elicitation and challenge before drafting, persistent decision provenance, and a cold independent final readiness review."
       rationale_status: "User-confirmed intent: Liza MAS is intended to run without human-in-the-loop intervention. That requires a solid goal document; agents helping humans write goals and check readiness support that requirement. Remaining gaps are recorded in user_context."
+  - id: 146
+    title: "Authoritative Outcomes for Repeated Lifecycle Actions"
+    commit_shas: ["fa4964845","04adbc660","aab3c362a","42a88c519","1e2c0398e"]
+    date_range: "2026-09-12 to 2026-09-20"
+    first_author_date: "2026-09-12T15:20:35+02:00"
+    confidence: 0.95
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0146-authoritative-lifecycle-outcomes.md"
+    adr_path: "specs/architecture/ADR/0146-authoritative-lifecycle-outcomes.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "Live-run incident."
+      provenance: "Intent supplied directly by the user on 2026-09-21; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "No alternative-evaluation record; whether the four corrections were understood as one decision was not stated."
+    related_adrs: [112,125,130]
+    analysis:
+      intent_hypothesis: "Give a retrying or stale lifecycle caller evidence to recover from, instead of a generic failure."
+      solution_detected: "Bounded durable request receipts and transition identities, plus four corrections keeping lifecycle state repairable and its cause visible."
+      rationale_status: "User-confirmed intent: live-run incident. Remaining gaps are recorded in user_context."
+  - id: 147
+    title: "Bounded Operator Notes and the Human-Note Wake"
+    commit_shas: ["417c80f1e","cd2abc66a","1866c29fa"]
+    date_range: "2026-09-13 to 2026-09-14"
+    first_author_date: "2026-09-13T18:29:39+02:00"
+    confidence: 0.95
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0147-bounded-operator-notes.md"
+    adr_path: "specs/architecture/ADR/0147-bounded-operator-notes.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "The user hit the idle-orchestrator case directly."
+      provenance: "Intent supplied directly by the user on 2026-09-21; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "Whether an explicit wake verb was considered; no recorded justification for the trigger ranking position."
+    related_adrs: [123,150]
+    analysis:
+      intent_hypothesis: "Give the operator a supported recovery-input channel that actually reaches an idle orchestrator."
+      solution_detected: "Bounded locked note append with provenance, HUMAN_NOTE wake trigger, seen-stamping in PostExecution, and mandatory note inspection before reassessment."
+      rationale_status: "User-confirmed intent: the user hit the idle-orchestrator case. Remaining gaps are recorded in user_context."
+  - id: 148
+    title: "Cached Parsed State with Per-Call Deep Copies"
+    commit_shas: ["f5b4da415"]
+    date_range: "2026-09-14 to 2026-09-14"
+    first_author_date: "2026-09-14T12:12:32+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0148-cached-parsed-state.md"
+    adr_path: "specs/architecture/ADR/0148-cached-parsed-state.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "Not separately supplied; user confirmed no unstated tradeoffs across the batch."
+      provenance: "Commit-evidenced; measurements taken as part of the change."
+      remaining_gaps: "No record of a read-only-contract alternative; mtime granularity not discussed."
+    related_adrs: [22,151]
+    analysis:
+      intent_hypothesis: "Stop idle supervisors from starving state-lock holders by reparsing unchanged state."
+      solution_detected: "Cache normalized models.State by mtime, return a reflective deep copy per call, machine-check cloneability."
+      rationale_status: "Commit-evidenced with retained benchmarks; no separate user intent supplied."
+  - id: 149
+    title: "Per-Role Instruction Budget Measured Through the Compositor"
+    commit_shas: ["19eb7554f","70c9b9445","6cd54e720","f2cce1888","fb4a0e8a2"]
+    gap_commits: ["c80ed0f90","528d64c95"]
+    date_range: "2026-09-14 to 2026-09-21"
+    first_author_date: "2026-09-14T13:36:13+02:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0149-per-role-instruction-budget.md"
+    adr_path: "specs/architecture/ADR/0149-per-role-instruction-budget.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "The 5% ceiling came from agent proposals; overruns to +12.2% were accepted deliberately without removing a binding rule."
+      provenance: "Intent supplied directly by the user on 2026-09-21; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "No rationale for 5% specifically beyond its origin in agent proposals."
+    related_adrs: [27,139,150]
+    analysis:
+      intent_hypothesis: "Make prompt payload and instruction growth measurable per role before changing either."
+      solution_detected: "promptbench with a generated calibrated fixture and carrier rendering extracted to referencecontract; rolebudget per-variant ceiling with an opt-in gate flag."
+      rationale_status: "User-confirmed intent: ceiling from agent proposals, overruns a deliberate scoped decision. Remaining gaps are recorded in user_context."
+  - id: 150
+    title: "Shared Authoring Vocabulary: Priority, Commitments, Proof Stage"
+    commit_shas: ["933fd019c","e3bb91492","cee7f87db","38e75d3ab","20ccc2858","22d17afc2"]
+    date_range: "2026-09-18 to 2026-09-18"
+    first_author_date: "2026-09-18T09:38:21+02:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0150-shared-authoring-vocabulary.md"
+    adr_path: "specs/architecture/ADR/0150-shared-authoring-vocabulary.md"
+    source: "specs/adversarial-pairing/20260913-prevent-blocked-tasks-chains-bb.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records and chose one record rather than a three-way split."
+      intent: "Not supplied for the release timing; user answered IDK when asked why the release shipped before W5b."
+      provenance: "Mechanism commit-evidenced; release-timing rationale explicitly unconfirmed, not reconstructed."
+      remaining_gaps: "Why the release shipped before W5b's 24 candidate exercises; no alternative-evaluation record for single-owner vocabulary."
+    related_adrs: [123,133,147,149]
+    analysis:
+      intent_hypothesis: "Stop blocked-task chains caused by conflicting instructions and supersession-by-default."
+      solution_detected: "One owner for priority/commitment/proof-stage vocabulary, six skills pointing at it, and each conflicting instruction corrected in its original location; cause-based recovery replaces supersession defaults."
+      rationale_status: "Commit-evidenced mechanism; release-timing rationale remains an open gap by the user's own answer."
+  - id: 151
+    title: "Nonblocking Inspection Snapshots and Field Queries"
+    commit_shas: ["e45849438","019b4d077"]
+    date_range: "2026-09-21 to 2026-09-21"
+    first_author_date: "2026-09-21T10:47:19+02:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0151-nonblocking-inspection-queries.md"
+    adr_path: "specs/architecture/ADR/0151-nonblocking-inspection-queries.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "Lock contention with supervisor writes was observed, not anticipated."
+      provenance: "Intent supplied directly by the user on 2026-09-21; unconfirmed alternatives remain reconstructed."
+      remaining_gaps: "No record of a caching alternative; redaction policy origin not discussed."
+    related_adrs: [22,148]
+    analysis:
+      intent_hypothesis: "Keep inspection from competing with the run it inspects, and make time_in_status mean one thing."
+      solution_detected: "One uncached atomic snapshot per call with policy derived from it; models.TimeInStatus over an explicit event classification returning classified=false for unknown events."
+      rationale_status: "User-confirmed intent: contention observed. Remaining gaps are recorded in user_context."
+  - id: 152
+    title: "Source-Document Language Propagates to Generated Specs"
+    commit_shas: ["89d978aed"]
+    date_range: "2026-09-21 to 2026-09-21"
+    first_author_date: "2026-09-21T11:30:09+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0152-source-document-language.md"
+    adr_path: "specs/architecture/ADR/0152-source-document-language.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "Not separately supplied."
+      provenance: "Commit-evidenced: observed run, plus the commit's own comparison of placements."
+      remaining_gaps: "Architecture-plan exception not discussed; two consequences flagged open by the commit itself."
+    related_adrs: [150,153]
+    analysis:
+      intent_hypothesis: "Stop the natural language of generated artifacts from being an unguarded model default."
+      solution_detected: "One Constraints bullet in three spec-authoring skills, deriving language from the assigned source and propagating through the epic-to-story chain."
+      rationale_status: "Commit-evidenced; no separate user intent supplied."
+  - id: 153
+    title: "Documentation and ADR Conventions Elicited on a Blank Repository"
+    commit_shas: ["9606449a3"]
+    date_range: "2026-09-21 to 2026-09-21"
+    first_author_date: "2026-09-21T11:36:35+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0153-greenfield-documentation-conventions.md"
+    adr_path: "specs/architecture/ADR/0153-greenfield-documentation-conventions.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "Not separately supplied."
+      provenance: "Commit-evidenced: greenfield run and the inert-backstop argument."
+      remaining_gaps: "No record of a documentation-writing pipeline role as an alternative."
+    related_adrs: [132,154]
+    analysis:
+      intent_hypothesis: "Close the greenfield hole where every gate passes on an undocumented repository."
+      solution_detected: "goal-writing elicits the documentation surface and ADR convention when nothing exists on disk; the readiness gate carries a self-suppressing criterion reported as a note."
+      rationale_status: "Commit-evidenced; no separate user intent supplied."
+  - id: 154
+    title: "Decision Records in the Universal Contract"
+    commit_shas: ["a91a9fb59"]
+    date_range: "2026-09-21 to 2026-09-21"
+    first_author_date: "2026-09-21T11:49:33+02:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0154-decision-records-in-core-contract.md"
+    adr_path: "specs/architecture/ADR/0154-decision-records-in-core-contract.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "Not separately supplied."
+      provenance: "Commit-evidenced: zero-mention audit and the G1.1 constraint."
+      remaining_gaps: "No record of a configurable ADR-path field as a third option."
+    related_adrs: [4,132,153]
+    analysis:
+      intent_hypothesis: "Make decision-record practice travel to every project, not just the one with G2.4."
+      solution_detected: "CORE names the artifact class qualified by 'where the project keeps one' and adds a Doc Impact category; architecture-planning owns the write half."
+      rationale_status: "Commit-evidenced; no separate user intent supplied."
+  - id: 155
+    title: "Spec Reconciliation Tested at Review"
+    commit_shas: ["d12866d8b"]
+    date_range: "2026-09-21 to 2026-09-21"
+    first_author_date: "2026-09-21T11:59:07+02:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0155-spec-reconciliation-at-review.md"
+    adr_path: "specs/architecture/ADR/0155-spec-reconciliation-at-review.md"
+    user_context:
+      selection: "2026-09-21: user approved all ten Tier A records, declined Tier B."
+      intent: "Not separately supplied."
+      provenance: "Commit-evidenced: mis-scoped tests and the missing observer."
+      remaining_gaps: "MAS separate-doc-task gate discussion not preserved."
+    related_adrs: [123,154]
+    analysis:
+      intent_hypothesis: "Stop specs going stale while a self-declared Doc Impact of 'none' passes unexamined."
+      solution_detected: "Two falsifying questions in the Doc Impact declaration and a review-checklist item testing it, with severity left to reviewer judgment."
+      rationale_status: "Commit-evidenced; no separate user intent supplied."
 processing_cursor:
   step: "complete"
-  substep: "post_0097_selected_adrs_generated"
-  cluster_index: 132
-  selected_ids: [121, 123, 124, 125, 129, 130, 131, 132]
-  not_selected_ids: [119, 120, 122, 126, 127, 128]
-  note: "108 post-0097 commits triaged; eight approved records generated and six optional candidates not selected. User intent captured for all eight; historical alternatives remain explicitly reconstructed where unconfirmed."
-  inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0097-inventory.yml"
-  reconciled_existing_adrs: [111, 112, 113, 114, 115, 116, 117, 118]
-  numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0119 by earliest author timestamp."
-  user_confirmation: "2026-09-06: resume saved state, accept classification, preserve existing IDs, start new numbering at 0119; subsequently approve the eight recommended records and proceed; provide intent context for all eight."
+  substep: "post_0132_tier_a_adrs_generated"
+  cluster_index: 155
+  last_triaged_commit: "d12866d8b"
+  selected_ids: [146, 147, 148, 149, 150, 151, 152, 153, 154, 155]
+  not_selected_ids: []
+  note: "119 commits since 73a50ca8 triaged. Thirteen decisions (ADR-0133..0145) were already recorded in-session by the work itself and were not re-derived; six further commits amended existing records (0031, 0071, 0133, 0137, 0139). Ten Tier A candidates approved and generated. Six Tier B candidates were presented and declined by the user: AppArmor profile auto-install (0071100c1), bounded advisory index subprocesses (770c5ade9/07c2bdbfe), evidence preservation across repair and claim release (eight commits, 09-08 to 09-20), merge resumption on proven effect (a03a04664/f51580742), background-job-aware claim retention (016724045/6c7d5467b), empty-cohort analysis recovery (525f28a66). Not recommended and not generated: C#/Node test-filename admission (amends ADR-0007/0030), race-gate concurrency cap (belongs to previously declined candidate 128)."
+  covered_by_in_session_adrs: [133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
+  numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0146 by earliest author timestamp. Chronological interleaving with 0133-0145 is accepted rather than renumbering them."
+  user_confirmation: "2026-09-21: backfill since cluster 0132; generate all ten Tier A records and no Tier B; ADR-0150 as a single record rather than a three-way split; append numbering. Intent supplied for 0146, 0147, 0149, 0151; none supplied for 0148, 0152-0155; ADR-0150's release-timing rationale explicitly unknown."
+  previous_batch:
+    substep: "post_0097_selected_adrs_generated"
+    cluster_index: 132
+    selected_ids: [121, 123, 124, 125, 129, 130, 131, 132]
+    not_selected_ids: [119, 120, 122, 126, 127, 128]
+    note: "108 post-0097 commits triaged; eight approved records generated and six optional candidates not selected. User intent captured for all eight; historical alternatives remain explicitly reconstructed where unconfirmed."
+    inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0097-inventory.yml"
+    reconciled_existing_adrs: [111, 112, 113, 114, 115, 116, 117, 118]
+    numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0119 by earliest author timestamp."
+    user_confirmation: "2026-09-06: resume saved state, accept classification, preserve existing IDs, start new numbering at 0119; subsequently approve the eight recommended records and proceed; provide intent context for all eight."
 
 non_adr_findings:
   - title: "Init Preflight Requires Committed Spec and Valid Integration Branch"
