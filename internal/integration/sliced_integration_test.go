@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -533,20 +534,52 @@ func TestSlicedIntegrationFinalizationRace(t *testing.T) {
 			t.Fatalf("SubmitVerdict(clean): %v", err)
 		}
 		releaseCompletion := holdProjectLock(t, fixture.root, "integration-completion")
-		integrationWatcher, integrationOwnerPath := watchProjectLockOwner(t, fixture.root, "integration-mutation")
-		completionWatcher, completionOwnerPath := watchProjectLockOwner(t, fixture.root, "integration-completion")
+		integrationWatcher := watchProjectLockOwner(t, fixture.root, "integration-mutation")
+		completionWatcher := watchProjectLockOwner(t, fixture.root, "integration-completion")
 		stopDone := make(chan error, 1)
 		mergeDone := make(chan error, 1)
+		stopExited := make(chan struct{})
+		mergeExited := make(chan struct{})
+		var releaseState func()
+		var barrier *mergeBarrier
+		mergeStarted := false
+		t.Cleanup(func() {
+			if releaseState != nil {
+				releaseState()
+			}
+			releaseCompletion()
+			if barrier != nil {
+				if barrier.conn != nil {
+					_ = barrier.conn.Close()
+				}
+				_ = barrier.listener.Close()
+			}
+			select {
+			case <-stopExited:
+			case <-time.After(slicedIntegrationTimeout):
+				t.Error("goal-complete stop did not exit during cleanup")
+			}
+			if mergeStarted {
+				select {
+				case <-mergeExited:
+				case <-time.After(slicedIntegrationTimeout):
+					t.Error("mutation did not exit during cleanup")
+				}
+			}
+		})
 		go func() {
+			defer close(stopExited)
 			_, err := ops.StopForGoalCompletion(fixture.root, "goal complete")
 			stopDone <- err
 		}()
-		waitForLockOperation(t, integrationWatcher, integrationOwnerPath, "verify effective integration completion")
-		releaseState := holdBlackboardWriteLock(t, fixture)
+		waitForLockOperation(t, integrationWatcher, "verify effective integration completion", stopDone)
+		releaseState = holdBlackboardWriteLock(t, fixture)
 		releaseCompletion()
-		waitForLockOperationOrResult(t, completionWatcher, completionOwnerPath, "goal-complete stop", stopDone)
-		barrier := installMergeBarrier(t, fixture.root)
+		waitForLockOperation(t, completionWatcher, "goal-complete stop", stopDone)
+		barrier = installMergeBarrier(t, fixture.root)
+		mergeStarted = true
 		go func() {
+			defer close(mergeExited)
 			_, err := ops.MergeWorktree(fixture.root, taskID, reviewerID)
 			mergeDone <- err
 		}()
@@ -1393,6 +1426,7 @@ func holdExternalLock(t *testing.T, protectedPath string) func() {
 	if err != nil {
 		t.Fatalf("listen for external lock barrier: %v", err)
 	}
+	t.Cleanup(func() { _ = listener.Close() })
 	if tcp, ok := listener.(*net.TCPListener); ok {
 		if err := tcp.SetDeadline(time.Now().Add(slicedIntegrationTimeout)); err != nil {
 			t.Fatalf("set external lock barrier deadline: %v", err)
@@ -1410,40 +1444,79 @@ func holdExternalLock(t *testing.T, protectedPath string) func() {
 	if err := command.Start(); err != nil {
 		t.Fatalf("start external lock helper: %v", err)
 	}
-	connection, err := listener.Accept()
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	var connection net.Conn
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			if connection == nil {
+				// Startup failed before the helper's connection was accepted.
+				_ = command.Process.Kill()
+			} else {
+				_ = connection.SetWriteDeadline(time.Now().Add(slicedIntegrationTimeout))
+				if _, err := connection.Write([]byte{1}); err != nil {
+					t.Errorf("release external lock helper: %v", err)
+				}
+				_ = connection.Close()
+			}
+			_ = listener.Close()
+			select {
+			case err := <-done:
+				if err != nil && connection != nil {
+					t.Errorf("external lock helper: %v", err)
+				}
+			case <-time.After(slicedIntegrationTimeout):
+				_ = command.Process.Kill()
+				select {
+				case <-done:
+				case <-time.After(slicedIntegrationTimeout):
+					t.Error("external lock helper did not exit after being killed")
+				}
+				t.Error("external lock helper did not exit after release")
+			}
+		})
+	}
+	t.Cleanup(release)
+	connection, err = listener.Accept()
 	if err != nil {
 		t.Fatalf("await external lock helper: %v", err)
+	}
+	if err := connection.SetReadDeadline(time.Now().Add(slicedIntegrationTimeout)); err != nil {
+		t.Fatalf("set external lock signal deadline: %v", err)
 	}
 	buffer := []byte{0}
 	if _, err := connection.Read(buffer); err != nil {
 		t.Fatalf("read external lock signal: %v", err)
 	}
-	return func() {
-		if _, err := connection.Write([]byte{1}); err != nil {
-			t.Fatalf("release external lock helper: %v", err)
-		}
-		if err := connection.Close(); err != nil {
-			t.Fatalf("close external lock connection: %v", err)
-		}
-		if err := command.Wait(); err != nil {
-			t.Fatalf("external lock helper: %v", err)
-		}
-		_ = listener.Close()
-	}
+	return release
 }
 
-func watchProjectLockOwner(t *testing.T, root, purpose string) (*fsnotify.Watcher, string) {
+type projectLockOwnerWatcher struct {
+	watcher  *fsnotify.Watcher
+	path     string
+	previous []byte
+}
+
+func watchProjectLockOwner(t *testing.T, root, purpose string) *projectLockOwnerWatcher {
 	t.Helper()
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		t.Fatalf("create lock owner watcher: %v", err)
 	}
+	t.Cleanup(func() { _ = watcher.Close() })
 	gitDir := filepath.Join(root, ".git")
 	if err := watcher.Add(gitDir); err != nil {
 		t.Fatalf("watch Git lock directory: %v", err)
 	}
-	t.Cleanup(func() { _ = watcher.Close() })
-	return watcher, projectLockProtectedPath(root, purpose) + ".lock.owner.json"
+	ownerPath := projectLockProtectedPath(root, purpose) + ".lock.owner.json"
+	// Snapshot before starting the operation: a previous acquisition with the
+	// same operation name must never satisfy this barrier.
+	previous, err := os.ReadFile(ownerPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("snapshot lock owner: %v", err)
+	}
+	return &projectLockOwnerWatcher{watcher: watcher, path: ownerPath, previous: previous}
 }
 
 func projectLockProtectedPath(root, purpose string) string {
@@ -1451,62 +1524,63 @@ func projectLockProtectedPath(root, purpose string) string {
 	return filepath.Join(root, ".git", lockName)
 }
 
-func waitForLockOperation(t *testing.T, watcher *fsnotify.Watcher, ownerPath, operation string) {
-	t.Helper()
+func (watch *projectLockOwnerWatcher) observe(operation string) (matched, retry bool, observation string) {
 	type ownerMetadata struct {
 		Operation string `json:"operation"`
 	}
-	timer := time.NewTimer(slicedIntegrationTimeout)
-	defer timer.Stop()
-	for {
-		select {
-		case event := <-watcher.Events:
-			if event.Name != ownerPath {
-				continue
-			}
-			data, err := os.ReadFile(ownerPath)
-			if err != nil {
-				continue
-			}
-			var owner ownerMetadata
-			if json.Unmarshal(data, &owner) == nil && owner.Operation == operation {
-				return
-			}
-		case err := <-watcher.Errors:
-			t.Fatalf("watch lock owner: %v", err)
-		case <-timer.C:
-			t.Fatalf("timed out waiting for %q lock owner", operation)
-		}
+	data, err := os.ReadFile(watch.path)
+	if err != nil {
+		return false, true, err.Error()
 	}
+	if bytes.Equal(data, watch.previous) {
+		return false, false, "owner metadata still matches the pre-operation snapshot"
+	}
+	var owner ownerMetadata
+	if err := json.Unmarshal(data, &owner); err != nil {
+		return false, true, fmt.Sprintf("decode owner metadata: %v", err)
+	}
+	return owner.Operation == operation, false, fmt.Sprintf("last operation %q", owner.Operation)
 }
 
-func waitForLockOperationOrResult(t *testing.T, watcher *fsnotify.Watcher, ownerPath, operation string, result <-chan error) {
+func waitForLockOperation(t *testing.T, watch *projectLockOwnerWatcher, operation string, result <-chan error) {
 	t.Helper()
-	type ownerMetadata struct {
-		Operation string `json:"operation"`
-	}
 	timer := time.NewTimer(slicedIntegrationTimeout)
 	defer timer.Stop()
+	var retry <-chan time.Time
+	lastObservation := "no owner publication notification received"
 	for {
 		select {
-		case event := <-watcher.Events:
-			if event.Name != ownerPath {
+		case event, ok := <-watch.watcher.Events:
+			if !ok {
+				t.Fatal("lock owner watcher closed before overlap barrier")
+			}
+			if event.Name != watch.path {
 				continue
 			}
-			data, err := os.ReadFile(ownerPath)
-			if err != nil {
-				continue
-			}
-			var owner ownerMetadata
-			if json.Unmarshal(data, &owner) == nil && owner.Operation == operation {
-				return
-			}
+		case <-retry:
 		case err := <-result:
 			t.Fatalf("%s completed before overlap barrier: %v", operation, err)
-		case err := <-watcher.Errors:
+		case err := <-watch.watcher.Errors:
 			t.Fatalf("watch lock owner: %v", err)
 		case <-timer.C:
-			t.Fatalf("timed out waiting for %q lock owner", operation)
+			if matched, _, observation := watch.observe(operation); matched {
+				return
+			} else {
+				t.Fatalf("timed out waiting for fresh %q lock owner: %s (previous observation: %s)", operation, observation, lastObservation)
+			}
+		}
+		matched, retryRead, observation := watch.observe(operation)
+		if matched {
+			return
+		}
+		lastObservation = observation
+		// A publication notification can arrive before the file is readable.
+		// Retry that observation without requiring another notification. Avoid
+		// opening stale metadata before publication: on Windows its read handle
+		// can prevent the best-effort rename that publishes the next owner.
+		retry = nil
+		if retryRead {
+			retry = time.After(10 * time.Millisecond)
 		}
 	}
 }

@@ -23,37 +23,16 @@ func TestReadStateFileRetriesSharingCollision(t *testing.T) {
 	if err := os.WriteFile(path, []byte("published"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	name, err := syscall.UTF16PtrFromString(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// An exclusive handle makes the first real os.ReadFile fail with the
-	// sharing violation observed when snapshot reads collide with publication.
-	handle, err := syscall.CreateFile(name, syscall.GENERIC_READ, 0, nil,
-		syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	closeHandle := func() {
-		if handle != syscall.InvalidHandle {
-			if err := syscall.CloseHandle(handle); err != nil {
-				t.Error(err)
-			}
-			handle = syscall.InvalidHandle
-		}
-	}
-	t.Cleanup(closeHandle)
+	// Inject the error at the I/O boundary: exclusive-handle sharing semantics
+	// do not reliably make os.ReadFile fail on every Windows runner. Concurrent
+	// publication is exercised separately by TestReadSnapshotConcurrentPublication.
 	attempts := 0
 	swapReadStateAttempt(t, func(path string) ([]byte, error) {
 		attempts++
-		data, err := os.ReadFile(path)
 		if attempts == 1 {
-			if !errors.Is(err, syscall.Errno(32)) {
-				t.Errorf("first read error = %v, want sharing violation", err)
-			}
-			closeHandle()
+			return nil, &os.PathError{Op: "open", Path: path, Err: syscall.Errno(32)}
 		}
-		return data, err
+		return os.ReadFile(path)
 	})
 	data, err := readStateFile(path)
 	if err != nil || string(data) != "published" {

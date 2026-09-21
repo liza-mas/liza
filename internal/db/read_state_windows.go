@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// readStateAttempt lets tests release a conflicting handle after it has
-// actually blocked a read, without relying on scheduling or timers.
+// readStateAttempt lets tests inject sharing violations at the I/O boundary
+// without relying on platform-specific handle behavior or scheduling.
 var readStateAttempt = os.ReadFile
 
 // readStateFile tolerates a transient Windows sharing collision while a
