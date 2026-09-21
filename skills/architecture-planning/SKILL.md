@@ -81,6 +81,7 @@ Map the existing architecture before proposing changes.
 1. Explore the codebase: existing components, patterns, boundaries
 2. Identify extension points, constraints, and conventions to follow
 3. Note existing components affected by this change
+4. Read the project's decision record where it keeps one — prior decisions bind unless deliberately revisited
 
 Do not over-explore. Enough understanding for sound structural decisions, not a full architecture
 review. For deeper analysis of a specific area, use `software-architecture-review` in
@@ -154,6 +155,10 @@ Fix issues before submitting.
 - Do not invent requirements beyond the goal spec
 - Surface contradictions between parent deliverables as Open Questions
 - Respect existing architectural patterns unless there is a concrete reason to deviate (document it)
+- Where the project keeps a decision record, write to it any structural decision durable enough to
+  constrain later work — a deviation from an existing pattern, or an ADR candidate named upstream.
+  Where it keeps none, name the candidate in the plan. Rationale is already required at step 3;
+  this decides where the decision lives, not whether to justify it.
 
 # Anti-Patterns
 

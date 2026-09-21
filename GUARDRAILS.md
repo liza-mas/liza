@@ -95,7 +95,7 @@ G2.2 pushes toward cutting; this bounds it. Before removing text from a contract
 
 When planning or reviewing a change with architectural impact:
 
-1. Read `specs/architecture/ADR/README.md` for prior decisions that may constrain or inform the design.
+1. This project's decision record is `specs/architecture/ADR/` — start at its `README.md`.
 2. Read the Update Policy and Open Issues Summary in `specs/architecture/architectural-issues.md`, then read the full sections for any relevant open issues.
 
 ## Tier 3 (Preferences)

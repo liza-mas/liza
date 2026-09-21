@@ -214,7 +214,7 @@ If this cannot be stated unambiguously → BLOCKED.
 ```
 Doc Impact: [none | list of affected docs]
 ```
-Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs. "None" requires a search (`rg -l "related-feature" docs/ specs/`); if siblings are documented, the new feature needs the same treatment.
+Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs, structural decision that constrains later work → decision record, where the project keeps one. "None" requires a search (`rg -l "related-feature" docs/ specs/`); if siblings are documented, the new feature needs the same treatment.
 
 **Test Impact Declaration:** Before execution, declare:
 ```
@@ -621,7 +621,7 @@ At state transitions or after extended time in same state, verify alignment:
 
 ### Session Continuity
 
-`specs/`, `docs/`, and `lessons/` are durable memory. Each session: read current state → perform atomic task → write updated state. Identify docs needing updates before making changes.
+`specs/`, `docs/`, `lessons/`, and the project's decision record where it keeps one are durable memory. Each session: read current state → perform atomic task → write updated state. Identify docs needing updates before making changes.
 
 ---
 
