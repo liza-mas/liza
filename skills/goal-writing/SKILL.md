@@ -69,6 +69,12 @@ When a structural rationale is durable enough to constrain later work, flag it a
 
 Ask what upstream documents already exist before eliciting anything: at the lower altitudes the layers below the entry point are usually settled on disk, and inheriting them by reference beats re-deriving them. Read [references/rubrics.md](references/rubrics.md) for the chosen altitude before phase 1, and re-read it on altitude change. It carries elicitation questions only. The pass/fail criteria live in `check-§BRAND_NAME_LOWER§-input-readiness`; defer to that skill rather than restating its rubric. You never run it — see phase 4.
 
+When nothing exists on disk, the project's conventions are themselves undecided and are the
+human's: which documentation the product ships and who reads it, and whether the project keeps an
+ADR record. No pipeline role writes documentation — it reaches the repository only as a story's
+acceptance criteria — so a surface nobody names here is a surface nothing produces. Elicit it as a
+deliverable with an audience, not as a file to create.
+
 ## Phases
 
 | Phase | Name | Pairing mode | Done when |

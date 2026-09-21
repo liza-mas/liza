@@ -61,6 +61,7 @@ Check every input document for:
 | Ambiguity | Critical-path TBDs, open questions, contradictions, and low-confidence assumptions are surfaced. |
 | Priority | Each outcome and constraint carries Must/Should/Could/Won't. The Must set is coherent and independently useful at the entry point and respects every Won't; a Must that needs a Won't capability is a source conflict, not a readiness pass. Uncertainty confined to separable optional scope is a note; uncertainty on Must feasibility, shared interfaces, or mandatory constraints is a blocker. |
 | Non-functional constraints | Load, latency, availability, security, privacy, regulatory, stack, operability, and cost bounds are stated wherever they apply. |
+| Documentation | The documentation the product ships, who reads it, and whether the project keeps an ADR record are stated — wherever no existing convention on disk already settles them. |
 | Leanness | No detail takes a decision a downstream stage still had. Detail recording a decision already made elsewhere is a constraint, not excess. |
 
 Readiness runs in both directions. Too little detail makes agents guess or block; too much takes a decision from the stage better placed to make it, and attaches the author's authority to it so nobody downstream reopens it. Assess both.
