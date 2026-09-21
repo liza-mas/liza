@@ -15,28 +15,18 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// TestHandleApprovedMerges_AutoEmitsCheckpointSummary is the end-to-end wiring
-// test for bug fix #3 (auto-emit checkpoint-summary on merge). It builds a
-// minimal git repo + state with an APPROVED task ready to merge, swaps in a
-// deterministic checkpoint-summary runner that writes a sentinel file, runs
-// handleApprovedMerges, and asserts the runner was invoked with the merged
-// task ID. The default (config flag unset) must trigger emission.
-func TestHandleApprovedMerges_AutoEmitsCheckpointSummary(t *testing.T) {
+// TestHandleApprovedMerges_DoesNotEmitCheckpointSummary guards the C7 change:
+// a merge must no longer spawn the checkpoint-summary CLI. The emission moved
+// to the sprint-checkpoint boundary, so the reviewer's merge loop is never
+// held for a report — see maybeEmitCheckpointSummary in the orchestrator
+// strategy. The merge itself must still complete.
+func TestHandleApprovedMerges_DoesNotEmitCheckpointSummary(t *testing.T) {
 	tmpDir, stateFile, taskID := setupAgentMergeRepo(t)
 
-	var runnerCalled bool
-	var gotProjectRoot, gotPrompt string
-	withFakeCheckpointSummaryRunner(t, func(projectRoot, cliName, prompt string, _ models.Config) error {
-		runnerCalled = true
-		gotProjectRoot = projectRoot
-		gotPrompt = prompt
-		// Simulate the CLI's job: write the report file so any downstream
-		// post-run sanity check would be satisfied.
-		reportPath := filepath.Join(projectRoot, filepath.FromSlash(checkpointSummaryRelPath()))
-		if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(reportPath, []byte("# checkpoint summary\nfake report\n"), 0o644)
+	called := false
+	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
+		called = true
+		return nil
 	})
 
 	bb := db.New(stateFile)
@@ -49,24 +39,14 @@ func TestHandleApprovedMerges_AutoEmitsCheckpointSummary(t *testing.T) {
 		t.Fatalf("handleApprovedMerges: %v", err)
 	}
 
-	if !runnerCalled {
-		t.Fatal("expected checkpoint-summary runner to fire after merge")
+	if called {
+		t.Error("merge spawned a checkpoint-summary CLI; emission belongs to the checkpoint boundary")
 	}
-	if gotProjectRoot != tmpDir {
-		t.Errorf("projectRoot = %q, want %q", gotProjectRoot, tmpDir)
-	}
-	if !strings.Contains(gotPrompt, taskID) {
-		t.Errorf("prompt did not mention task ID %q: %q", taskID, gotPrompt)
+	if _, err := os.Stat(filepath.Join(tmpDir, filepath.FromSlash(checkpointSummaryRelPath()))); !os.IsNotExist(err) {
+		t.Errorf("merge wrote a checkpoint summary: %v", err)
 	}
 
-	// Verify the report file actually landed where the prompt asked for it.
-	reportPath := filepath.Join(tmpDir, filepath.FromSlash(checkpointSummaryRelPath()))
-	if _, err := os.Stat(reportPath); err != nil {
-		t.Errorf("expected report at %s, got: %v", reportPath, err)
-	}
-
-	// And the task is genuinely MERGED in state (sanity: we didn't just
-	// short-circuit before the merge).
+	// Sanity: the merge really ran, so the assertions above are not vacuous.
 	state, err := bb.Read()
 	if err != nil {
 		t.Fatalf("bb.Read: %v", err)
@@ -77,41 +57,6 @@ func TestHandleApprovedMerges_AutoEmitsCheckpointSummary(t *testing.T) {
 	}
 	if mergedTask.Status != models.TaskStatusMerged {
 		t.Errorf("status = %v, want MERGED", mergedTask.Status)
-	}
-}
-
-// TestHandleApprovedMerges_RespectsAutoCheckpointOptOut confirms the opt-out
-// path: a project that explicitly sets auto_checkpoint_summary: false must
-// not invoke the runner even when a merge succeeds.
-func TestHandleApprovedMerges_RespectsAutoCheckpointOptOut(t *testing.T) {
-	tmpDir, stateFile, _ := setupAgentMergeRepo(t)
-
-	// Patch the config in-place to disable auto checkpoint.
-	bb := db.New(stateFile)
-	if err := bb.Modify(func(s *models.State) error {
-		off := false
-		s.Config.AutoCheckpointSummary = &off
-		return nil
-	}); err != nil {
-		t.Fatalf("bb.Modify: %v", err)
-	}
-
-	called := false
-	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
-		called = true
-		return nil
-	})
-
-	pr, err := ops.LoadResolverForModels(tmpDir)
-	if err != nil {
-		t.Fatalf("LoadResolverForModels: %v", err)
-	}
-	if err := handleApprovedMerges(tmpDir, "code-reviewer-2", bb, pr); err != nil {
-		t.Fatalf("handleApprovedMerges: %v", err)
-	}
-
-	if called {
-		t.Fatal("runner fired despite AutoCheckpointSummary=false")
 	}
 }
 

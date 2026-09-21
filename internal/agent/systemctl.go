@@ -93,6 +93,25 @@ func autoResumeAction(state *models.State) models.SprintStatus {
 // or the current sprint checkpoint blocks this role type. Transition
 // checkpoints gate orchestrator transition execution, but doer/reviewer roles
 // may continue existing claimable/reviewable work.
+// awaitRoleGate blocks on the role-aware PAUSE/CHECKPOINT gate and reports
+// whether the supervisor must stop, with the error to return. Both of
+// RunSupervisor's gate checks share it; a heartbeat failure outranks the gate
+// error, and goal completion is an ordinary exit rather than a failure.
+func awaitRoleGate(ctx context.Context, projectRoot, roleType string, checkHeartbeat func() error) (bool, error) {
+	err := waitWhilePausedForSupervisor(ctx, projectRoot, roleType)
+	if err == nil {
+		return false, nil
+	}
+	if hbErr := checkHeartbeat(); hbErr != nil {
+		return true, hbErr
+	}
+	if errors.Is(err, errGoalComplete) {
+		GetLogger().Info("Goal complete, supervisor exiting")
+		return true, nil
+	}
+	return true, err
+}
+
 func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) error {
 	logger := GetLogger()
 	statePath := paths.New(projectRoot).StatePath()
@@ -115,6 +134,15 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 					isPaused = true
 					pauseReason = "[CIRCUIT BREAKER] Circuit breaker triggered - system halted"
 				case state.Sprint.Status == models.SprintStatusCheckpoint:
+					// Before anything moves the sprint on — including
+					// auto-resume below — give the checkpoint its report.
+					// This gate is the only place every checkpoint is
+					// observed: it polls on a timer, re-reads state each
+					// poll, and blocks every role, so a checkpoint made from
+					// the TUI, the CLI or the circuit breaker while the
+					// orchestrator is idle is seen here even though no
+					// orchestrator turn follows it.
+					maybeEmitCheckpointSummary(bb, projectRoot, roleType, state)
 					if state.Config.AutoResume {
 						logger.Info("Auto-resuming from CHECKPOINT")
 						if _, resumeErr := resumeCheckpoint(projectRoot, "auto-resume"); resumeErr != nil {

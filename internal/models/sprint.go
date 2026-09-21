@@ -234,3 +234,15 @@ func (s *State) SprintStalled() bool {
 	}
 	return hasBlocked
 }
+
+// PendingCheckpointSummary is an outstanding obligation to write the
+// checkpoint steering report for the checkpoint taken at At.
+//
+// It is durable rather than process memory so the obligation survives the
+// sprint rollover that clears Sprint.Timeline.CheckpointAt, a supervisor
+// restart, and any ordering between the supervisor that creates the
+// checkpoint and the orchestrator that reports on it.
+type PendingCheckpointSummary struct {
+	At      time.Time `yaml:"at"`
+	Trigger string    `yaml:"trigger,omitempty"`
+}

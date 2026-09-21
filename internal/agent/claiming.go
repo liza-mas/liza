@@ -483,19 +483,6 @@ func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, auth
 			}
 
 			logger.Info("Successfully merged task", "task_id", task.ID)
-
-			// Auto-emit checkpoint-summary so humans get a fresh report under
-			// the project runtime directory without manually invoking the skill.
-			// Best-effort: failures are logged inside the helper and do not
-			// fail or roll back the completed merge. Re-read state here so
-			// the config flag reflects the post-merge view, not a stale
-			// snapshot.
-			if freshState, readErr := bb.Read(); readErr == nil {
-				emitCheckpointSummary(projectRoot, task.ID, freshState.Config)
-			} else {
-				logger.Warn("Skipped auto checkpoint-summary — state re-read failed",
-					"task_id", task.ID, "error", readErr)
-			}
 		}
 	}
 

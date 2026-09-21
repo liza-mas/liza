@@ -110,6 +110,10 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 			s.Sprint.Status = models.SprintStatusCheckpoint
 			s.Sprint.Timeline.CheckpointAt = &timestamp
 			s.Sprint.CheckpointTrigger = trigger
+			// Record the steering-report obligation in the same transaction
+			// that creates the checkpoint, so it cannot be lost to whatever
+			// happens to the sprint before the orchestrator next looks.
+			s.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp, Trigger: trigger}
 			return nil
 		})
 	}

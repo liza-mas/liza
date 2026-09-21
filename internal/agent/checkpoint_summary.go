@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -51,35 +52,84 @@ const checkpointSummaryDefaultTimeout = 5 * time.Minute
 // non-fatal at the call site — the merge itself has already succeeded.
 var checkpointSummaryRunner = runCheckpointSummaryCLI
 
+// maybeEmitCheckpointSummary writes the steering report for a checkpoint whose
+// obligation is still outstanding, then clears it.
+//
+// The obligation is durable state recorded by the checkpoint producers, not a
+// reading of the current sprint. Three earlier designs were reachable only
+// some of the time: emitting after an orchestrator turn missed every
+// checkpoint that arrived while it was idle, since the pause gate blocks
+// before execution; keying on sprint status lost the report whenever another
+// role's auto-resume moved the sprint on first; and keying on
+// Sprint.Timeline.CheckpointAt lost it again when a rollover replaced the
+// sprint, timeline included. A durable obligation outlives all three, plus a
+// supervisor restart.
+//
+// Claim-then-emit: the obligation is cleared before the CLI runs, so a failing
+// or absent CLI cannot make every later poll retry it. That is the
+// best-effort contract — one attempt per checkpoint.
+//
+// Only the orchestrator emits; otherwise every supervisor role would spawn its
+// own CLI for the same checkpoint.
+func maybeEmitCheckpointSummary(bb *db.Blackboard, projectRoot, roleType string, state *models.State) {
+	if roleType != "orchestrator" || state == nil || state.PendingCheckpointSummary == nil || bb == nil {
+		return
+	}
+
+	var claimed *models.PendingCheckpointSummary
+	if err := bb.Modify(func(s *models.State) error {
+		// Re-read under the lock: another observation may have claimed it.
+		if s.PendingCheckpointSummary == nil {
+			return nil
+		}
+		claimed = s.PendingCheckpointSummary
+		s.PendingCheckpointSummary = nil
+		return nil
+	}); err != nil {
+		GetLogger().Warn("Failed to claim the checkpoint-summary obligation", "error", err)
+		return
+	}
+	if claimed == nil {
+		return
+	}
+
+	emitCheckpointSummary(projectRoot, claimed.Trigger, state.Config)
+}
+
 // emitCheckpointSummary runs the checkpoint-summary skill against the project
-// for the given just-merged task. It is best-effort: any failure is logged
-// and discarded so a transient CLI hiccup does not poison the merge path.
+// after the sprint reached a checkpoint. It is best-effort: any failure is
+// logged and discarded so a transient CLI hiccup cannot affect the checkpoint
+// that already happened.
+//
+// The caller is responsible for invoking this exactly once per checkpoint and
+// for doing so outside the state lock: the spawned CLI reads state.yaml itself
+// and may run for minutes.
 //
 // Behavior:
 //   - opt-out via Config.AutoCheckpointSummary == false
 //   - report is written under the branded project runtime directory
 //   - CLI is resolved through ResolveDefaultCLI (state.yaml > env > const)
-func emitCheckpointSummary(projectRoot string, taskID string, cfg models.Config) {
+func emitCheckpointSummary(projectRoot string, trigger string, cfg models.Config) {
 	logger := GetLogger()
 
 	if cfg.AutoCheckpointSummary != nil && !*cfg.AutoCheckpointSummary {
-		logger.Info("Auto checkpoint-summary disabled by config", "task_id", taskID)
+		logger.Info("Auto checkpoint-summary disabled by config", "trigger", trigger)
 		return
 	}
 
 	cliName := ResolveDefaultCLI(cfg.DefaultCLI)
-	prompt := buildCheckpointSummaryPrompt(taskID)
+	prompt := buildCheckpointSummaryPrompt(trigger)
 
 	if err := checkpointSummaryRunner(projectRoot, cliName, prompt, cfg); err != nil {
 		logger.Warn("Auto checkpoint-summary failed",
-			"task_id", taskID,
+			"trigger", trigger,
 			"cli", cliName,
 			"error", err)
 		return
 	}
 
 	logger.Info("Auto checkpoint-summary emitted",
-		"task_id", taskID,
+		"trigger", trigger,
 		"cli", cliName,
 		"path", checkpointSummaryRelPath())
 }
@@ -88,14 +138,21 @@ func emitCheckpointSummary(projectRoot string, taskID string, cfg models.Config)
 // It is self-contained: the CLI must read state.yaml, apply the
 // checkpoint-summary skill, and write the result. Kept short on purpose —
 // the skill instructions live in skills/checkpoint-summary/SKILL.md.
-func buildCheckpointSummaryPrompt(taskID string) string {
+//
+// The trigger is the checkpoint's own trigger and may be empty for a
+// checkpoint taken without one; the sentence stays readable either way.
+func buildCheckpointSummaryPrompt(trigger string) string {
+	occasion := "the sprint just reached a checkpoint"
+	if trigger != "" {
+		occasion = fmt.Sprintf("the sprint just reached a checkpoint (trigger: %s)", trigger)
+	}
 	return fmt.Sprintf(`Use the checkpoint-summary skill.
 
-Context: task %s just merged into the integration branch. Read %s,
+Context: %s. Read %s,
 apply the checkpoint-summary skill protocol, and write the report to
 %s (overwrite if it already exists). Do not create, edit, or delete any other
 file. Do not ask follow-up questions.
-`, taskID, checkpointSummaryStateRelPath(), checkpointSummaryRelPath())
+`, occasion, checkpointSummaryStateRelPath(), checkpointSummaryRelPath())
 }
 
 // runCheckpointSummaryCLI is the production implementation of
@@ -336,4 +393,31 @@ func filterAPIKeyEnv(env []string) []string {
 		filtered = append(filtered, kv)
 	}
 	return filtered
+}
+
+// drainPendingCheckpointSummary honours an outstanding checkpoint-summary
+// obligation as the orchestrator supervisor exits.
+//
+// Registered as a defer by RunSupervisor for the orchestrator role, so it
+// covers every exit — goal complete, STOPPED, wait timeout, ordinary return —
+// in one place rather than adding another in-loop poll.
+//
+// The in-loop observation points only run while the supervisor is running.
+// A terminal checkpoint that another role auto-resumes through COMPLETED into
+// a new sprint, stopping the goal, retires every one of them before this
+// process looks — and no later orchestrator will run to pick the obligation
+// up, so the run's last and most useful steering report would never be
+// written.
+//
+// Skipped when the context is already cancelled: a signalled shutdown should
+// not wait minutes for a report.
+func drainPendingCheckpointSummary(ctx context.Context, bb *db.Blackboard, projectRoot string) {
+	if ctx.Err() != nil || bb == nil {
+		return
+	}
+	state, err := bb.Read()
+	if err != nil {
+		return
+	}
+	maybeEmitCheckpointSummary(bb, projectRoot, "orchestrator", state)
 }

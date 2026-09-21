@@ -395,7 +395,7 @@ are loaded at runtime from the provider catalog.
 | `codex_package_version` | (none) | — | — | npm package version | Pins headless Codex agents to `@openai/codex@<version>` |
 | `post_worktree_cmd` | (none) | — | — | shell cmd | Command run after worktree creation (e.g. `npm install`) |
 | `copy_worktree_env_files` | false | — | — | boolean | Explicitly authorize copying ignored root env files into task worktrees |
-| `auto_checkpoint_summary` | true | — | — | boolean | Auto-runs checkpoint-summary after successful merges and writes `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` |
+| `auto_checkpoint_summary` | true | — | — | boolean | Auto-runs checkpoint-summary when the sprint reaches a checkpoint and writes `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` |
 | `scip_search` | (none) | — | — | language list | Durable allowlist of SCIP languages §BRAND_NAME_TITLE§ may index when `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH` is truthy |
 
 `max_global_integration_generations` has a deterministic default of `3`.
@@ -1023,15 +1023,34 @@ sprint transition and does not merge planning output.
 
 ## Checkpoint Summary
 
-After a successful merge, §BRAND_NAME_TITLE§ auto-invokes the configured default CLI with the
-`checkpoint-summary` skill and writes the latest report to
-`§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md`. The operation is best-effort: merge success does
-not depend on the report being created. Set `auto_checkpoint_summary: false` in
-`§BRAND_PROJECT_DIRNAME§/state.yaml` to disable it.
+When the sprint reaches a checkpoint, §BRAND_NAME_TITLE§ auto-invokes the configured default CLI
+with the `checkpoint-summary` skill and writes the latest report to
+`§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md`. The operation is best-effort: nothing depends on
+the report being created. Set `auto_checkpoint_summary: false` in
+`§BRAND_PROJECT_DIRNAME§/state.yaml` to disable it and produce summaries manually instead.
+
+The orchestrator emits the report once per checkpoint, whichever route created it — its own
+`checkpoint` call, the self-heal path, the circuit breaker, the TUI, or a human running the
+command. Creating a checkpoint records a durable obligation in `pending_checkpoint_summary`, which the
+orchestrator claims and then reports on. It observes that obligation from the two places it
+reliably reads fresh state: the pause gate, which covers a supervisor started or parked at a
+checkpoint and runs before auto-resume, and its own work-detection poll, which covers a
+checkpoint created while it is already waiting. Because the obligation is durable and stored
+outside the sprint, it survives another supervisor auto-resuming the checkpoint — including all
+the way through sprint completion into a new sprint — and survives a supervisor restart.
+Each obligation is claimed once, so a failing CLI is retried no further.
+
+The orchestrator also drains any outstanding obligation as its supervisor exits. This covers the
+run's last checkpoint: another role can auto-resume a terminal checkpoint through sprint
+completion and stop the goal, after which no orchestrator would run again to write the report.
+The drain is skipped when the supervisor is shutting down on a signal, so an interrupt is not
+delayed by report generation; the obligation simply stays outstanding and is honoured by the
+next orchestrator, or by running the `checkpoint-summary` skill manually.
+No state lock is held while the CLI runs, and no reviewer or human terminal waits for it.
 
 The summary emitter snapshots git status paths and filesystem metadata before
 and after the CLI run. Changes outside `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` are logged
-as an auto-summary failure and do not block the completed merge.
+as an auto-summary failure and change nothing else.
 
 ## Task Lifecycle States
 

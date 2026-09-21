@@ -71,7 +71,7 @@
 | [0067 — Master Planning Task Pattern](0067-master-planning-task-pattern.md) | Add reviewed master planning tasks before fan-out, including topology-driven per-output RCA classification for code-planning decomposition. |
 | [0068 — Optional Repository Indexing with SCIP and Stacklit](0068-optional-repository-indexing-with-scip-and-stacklit.md) | Add opt-in SCIP and Stacklit index refresh with explicit prompt paths for worktree-safe repository navigation. |
 | [0070 — Active Task Cancellation](0070-active-task-cancellation.md) | Allow invariant-checked cancellation of active tasks before approval while preserving approved-merge boundaries. |
-| [0071 — Automatic Checkpoint Summary on Merge](0071-automatic-checkpoint-summary-on-merge.md) | Auto-run checkpoint-summary after successful merges as a best-effort steering context artifact. |
+| [0071 — Automatic Checkpoint Summary on Merge](0071-automatic-checkpoint-summary-on-merge.md) | Auto-run checkpoint-summary as a best-effort steering context artifact; amended 2026-09-21 to fire once per sprint checkpoint instead of after every merge. |
 | [0072 — Declared Validation Commands](0072-declared-validation-commands.md) | Store validation commands on tasks and generated outputs so agents validate against explicit executable contracts. |
 | [0073 — Adversarial Pairing Blackboard](0073-adversarial-pairing-blackboard.md) | Add a lightweight Markdown blackboard and locked writer for separate doer/reviewer pairing sessions. |
 | [0074 — SessionStart Context Hooks](0074-sessionstart-context-hooks.md) | Use provider SessionStart hooks to emit initialization guidance and explicit repo index context before first agent action. |

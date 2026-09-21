@@ -303,6 +303,13 @@ func TestAnalyzeProviderAuditResponsesAtCommitBoundary(t *testing.T) {
 				if readState.CircuitBreaker.Status != "OK" || readState.CircuitBreaker.CurrentTrigger != nil {
 					t.Errorf("CHECKPOINT hard-triggered circuit breaker: %+v", readState.CircuitBreaker)
 				}
+				// A breaker checkpoint must be stamped like any other, or a
+				// consumer keyed on checkpoint identity cannot tell it from
+				// the previous one. The auto checkpoint-summary emitter is
+				// one such consumer and would skip it entirely.
+				if readState.Sprint.Timeline.CheckpointAt == nil {
+					t.Error("CHECKPOINT left Sprint.Timeline.CheckpointAt unset, so the checkpoint has no identity")
+				}
 				assertActiveAnalyzeResponse(t, readState, result)
 			case models.CircuitBreakerResponseHalt:
 				if readState.CircuitBreaker.Status != "TRIGGERED" || readState.CircuitBreaker.CurrentTrigger == nil {

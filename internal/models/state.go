@@ -22,8 +22,15 @@ type State struct {
 	Sprint              Sprint                                    `yaml:"sprint"`
 	SprintHistory       []SprintSummary                           `yaml:"sprint_history,omitempty"`
 	CircuitBreaker      CircuitBreaker                            `yaml:"circuit_breaker"`
-	Config              Config                                    `yaml:"config"`
-	Extra               map[string]any                            `yaml:",inline"`
+	// PendingCheckpointSummary records a checkpoint whose steering report has
+	// not been written yet. It lives here rather than on Sprint because a
+	// sprint rollover replaces Sprint wholesale — including its timeline — so
+	// a checkpoint identified only by Sprint.Timeline.CheckpointAt disappears
+	// when another role auto-resumes a terminal checkpoint into a new sprint
+	// before the orchestrator has looked.
+	PendingCheckpointSummary *PendingCheckpointSummary `yaml:"pending_checkpoint_summary,omitempty"`
+	Config                   Config                    `yaml:"config"`
+	Extra                    map[string]any            `yaml:",inline"`
 }
 
 // FindTask returns a pointer to the task with the given ID, or nil if not found.

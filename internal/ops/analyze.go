@@ -302,6 +302,15 @@ func applyCircuitBreakerResponse(state *models.State, result analysis.PatternRes
 		state.CircuitBreaker.Status = "OK"
 		state.CircuitBreaker.CurrentTrigger = nil
 		state.Sprint.Status = models.SprintStatusCheckpoint
+		// Stamp the checkpoint the way ops.SprintCheckpoint does. Without it a
+		// breaker checkpoint is indistinguishable from the previous one, and a
+		// consumer keyed on checkpoint identity — the auto checkpoint-summary
+		// emitter — cannot tell it apart. CheckpointTrigger is deliberately
+		// left alone: it may still carry a transition the orchestrator's
+		// PreWork has not executed yet, and overwriting it here would drop
+		// that pending transition.
+		state.Sprint.Timeline.CheckpointAt = &timestamp
+		state.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp}
 		state.CircuitBreaker.CurrentResponse = circuitBreakerResponse(result, timestamp, reportPath)
 	case models.CircuitBreakerResponseHalt:
 		historyResult = "TRIGGERED"

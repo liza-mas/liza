@@ -715,6 +715,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return fmt.Errorf("resolving role type for %q: %w", config.Role, err)
 	}
 
+	if roleType == "orchestrator" {
+		defer drainPendingCheckpointSummary(ctx, bb, config.ProjectRoot)
+	}
+
 	strategy, err := NewRoleStrategy(config.Role, resolver)
 	if err != nil {
 		return err
@@ -834,14 +838,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Wait while PAUSE/CHECKPOINT
-		if err := waitWhilePausedForSupervisor(supervisorCtx, config.ProjectRoot, roleType); err != nil {
-			if hbErr := checkHeartbeat(); hbErr != nil {
-				return hbErr
-			}
-			if errors.Is(err, errGoalComplete) {
-				GetLogger().Info("Goal complete, supervisor exiting")
-				return nil
-			}
+		if stop, err := awaitRoleGate(supervisorCtx, config.ProjectRoot, roleType, checkHeartbeat); stop {
 			return err
 		}
 
@@ -873,14 +870,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		// Work can become available after a pause while WaitForWork is parked.
 		// Recheck the role-aware gate before claiming; existing providers are
 		// unaffected, and transition checkpoints retain their role exceptions.
-		if err := waitWhilePausedForSupervisor(supervisorCtx, config.ProjectRoot, roleType); err != nil {
-			if hbErr := checkHeartbeat(); hbErr != nil {
-				return hbErr
-			}
-			if errors.Is(err, errGoalComplete) {
-				GetLogger().Info("Goal complete, supervisor exiting")
-				return nil
-			}
+		if stop, err := awaitRoleGate(supervisorCtx, config.ProjectRoot, roleType, checkHeartbeat); stop {
 			return err
 		}
 		if supervisorCtx.Err() != nil {

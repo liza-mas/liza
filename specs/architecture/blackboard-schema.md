@@ -1002,6 +1002,15 @@ sprint:
     task_outcome_approval_rate_percent: 80  # approvals / submitted_for_review * 100
   retrospective: null
 
+# Outstanding obligation to write the checkpoint steering report. Recorded by
+# the checkpoint producers in the same transaction that creates the checkpoint,
+# and cleared by the orchestrator when it takes the obligation. Absent when no
+# report is owed. It lives here rather than under sprint because a sprint
+# rollover replaces sprint wholesale, timeline included.
+pending_checkpoint_summary:
+  at: 2025-01-18T17:30:00Z
+  trigger: SPRINT_COMPLETE  # empty for a circuit-breaker checkpoint
+
 circuit_breaker:
   last_check: 2025-01-18T17:30:00Z
   status: OK  # OK, TRIGGERED
