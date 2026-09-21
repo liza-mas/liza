@@ -9,6 +9,7 @@ CODE PLANNER TOOLS:
   {{binaryName}} write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
 - {{binaryName}} set-task-output — Persist structured task definitions for downstream task creation
   {{binaryName}} set-task-output {{.TaskID}} --output {{.Worktree}}/specs/plans/{{.GoalSlug}}/TIMESTAMP-{{.TaskID}}-output.json --agent-id {{.AgentID}} --json
+  Preflight the same --output file first: {{binaryName}} validate-payload set-task-output --payload <output-file> --json
 {{- if .DecompositionRoot}}
   Use the same TIMESTAMP as the master artifact described in the Master Decomposition Mandate.
   Create that JSON file next to the master artifact with a file-writing tool, not a Bash heredoc (heredoc with JSON triggers a shell safety block).

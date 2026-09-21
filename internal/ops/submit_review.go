@@ -16,6 +16,7 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/stacklit"
 )
@@ -36,12 +37,41 @@ var (
 	submitReviewRefreshStacklitIndex           = stacklit.RefreshIndex
 	submitReviewRefreshFunctionalClustersIndex = functionalclusters.RefreshIndex
 	submitReviewBeforeModifyTestHook           func()
+	// submitReviewNewGit is the single Git entry point of the submission
+	// boundary, so a test can prove that a rejected payload reaches no Git work.
+	submitReviewNewGit = gitpkg.New
 )
 
+// SubmitForReviewPayload builds the canonical object of the submit-for-review
+// operation. The preflight command and this mutation boundary validate the
+// same object through the same schema, so neither can accept what the other
+// rejects for a structural reason.
 // submitReviewCauseLimit bounds the write-state cause carried to the agent.
 // Large enough for a validation message with its field path, small enough that
 // a wrapped chain cannot flood a prompt.
 const submitReviewCauseLimit = 512
+
+func SubmitForReviewPayload(commitRef string) map[string]any {
+	return map[string]any{"commit_ref": commitRef}
+}
+
+// rejectInvalidLifecyclePayload runs an operation's canonical object through
+// its registered schema and turns a structural rejection into the INVALID_INPUT
+// result the caller must correct against. It reads the payload and nothing
+// else, so a mutation boundary can call it before any state, lock or Git
+// access. A valid payload yields nil.
+func rejectInvalidLifecyclePayload(operation string, payload map[string]any) error {
+	version, diagnostics, err := payloadschema.Validate(operation, payload)
+	if err != nil {
+		return err
+	}
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	return NewLifecycleInvalidInputError(operation, nil, diagnostics,
+		fmt.Errorf("payload rejected by the %s schema, version %d: %s %s",
+			operation, version, diagnostics[0].Field, diagnostics[0].Constraint))
+}
 
 // SubmitForReview validates that commitRef resolves to the worktree HEAD before rebase,
 // rebases the task branch onto the integration branch to catch conflicts early,
@@ -58,6 +88,12 @@ func SubmitForReviewWithAuthority(projectRoot, taskID, commitRef string, authori
 }
 
 func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, invocation *submissionInvocation) (*preparedSubmission, error) {
+	// Structural validation first: a malformed payload is rejected before the
+	// boundary reads state, resolves a ref or touches the worktree.
+	if err := rejectInvalidLifecyclePayload(integrationOperationSubmitForReview, SubmitForReviewPayload(commitRef)); err != nil {
+		return nil, err
+	}
+
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
@@ -134,7 +170,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	}
 
 	// Git work holds the task lock, never the blackboard lock.
-	g := gitpkg.New(projectRoot)
+	g := submitReviewNewGit(projectRoot)
 	wtPath := g.GetWorktreePath(taskID)
 
 	if _, err := os.Stat(wtPath); os.IsNotExist(err) {

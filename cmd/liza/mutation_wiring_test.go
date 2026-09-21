@@ -683,6 +683,22 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 	})
 
+	t.Run("set-task-output help documents required and optional output fields", func(t *testing.T) {
+		help := strings.Join(strings.Fields(setTaskOutputCmd.Long), " ")
+		if !strings.Contains(help, "Each entry must have desc, done_when, scope, and spec_ref.") {
+			t.Errorf("set-task-output help must name desc, done_when, scope, and spec_ref as required: %q", help)
+		}
+		_, optional, found := strings.Cut(help, "Optional fields:")
+		if !found {
+			t.Fatal("set-task-output help must list optional fields")
+		}
+		optional, _, _ = strings.Cut(optional, ".")
+		want := "epic_ref, plan_ref, arch_ref, validation, destructive_db, rca_required, depends_on, task_depends_on, decomposition"
+		if strings.TrimSpace(optional) != want {
+			t.Errorf("optional fields = %q, want %q (spec_ref is required)", optional, want)
+		}
+	})
+
 	t.Run("set-task-output help documents decomposition root RCA classification", func(t *testing.T) {
 		for _, want := range []string{
 			"rca_required",

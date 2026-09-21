@@ -76,7 +76,7 @@ func TestAdjacentLifecycleExactRequestReplay(t *testing.T) {
 					}
 					return models.LifecycleOutcome{}, err
 				case "set-task-output":
-					r, err := SetTaskOutputWithOptions(root, &SetTaskOutputInput{TaskID: task.ID, AgentID: "coder-1", Request: opts, Output: []models.OutputEntry{{Desc: reason, DoneWhen: "tests pass", Scope: "component"}}})
+					r, err := SetTaskOutputWithOptions(root, &SetTaskOutputInput{TaskID: task.ID, AgentID: "coder-1", Request: opts, Output: []models.OutputEntry{{Desc: reason, DoneWhen: "tests pass", Scope: "component", SpecRef: "specs/component.md"}}})
 					if r != nil {
 						return r.LifecycleOutcome, err
 					}

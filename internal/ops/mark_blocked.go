@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/alerts"
-	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 )
 
 // MarkBlockedResult contains the outcome of marking a task as blocked.
@@ -87,20 +87,13 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
 		return nil, WrapLifecycleError("mark-blocked", nil, err, models.LifecycleInvalidInput, "correct_input", "none")
 	}
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
-	}
-	if reason == "" {
-		return nil, &PreconditionError{Reason: "reason is required"}
-	}
 	if agentID == "" {
 		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
-	if len(questions) == 0 {
-		return nil, &PreconditionError{Reason: "at least 1 question is required"}
-	}
-	if len(questions) > 3 {
-		return nil, &PreconditionError{Reason: "maximum 3 questions allowed per blocking protocol"}
+	// One structural verdict for the preflight and this boundary, reached
+	// before any state path is opened.
+	if err := markBlockedStructuralError(MarkBlockedPayload(taskID, reason, questions, opts)); err != nil {
+		return nil, err
 	}
 	repairRequest, err := normalizeRepairRequest(opts.RepairRequest, taskID)
 	if err != nil {
@@ -228,20 +221,52 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 	}, nil
 }
 
+// MarkBlockedPayload builds the canonical object of one blocking call. The
+// agent ID authorizing the call is absent by design: no structural rule reads
+// it, so it stays at this boundary rather than entering the payload.
+func MarkBlockedPayload(taskID, reason string, questions []string, opts MarkBlockedOptions) payloadschema.MarkBlockedPayload {
+	return payloadschema.MarkBlockedPayload{
+		TaskID:        taskID,
+		Reason:        reason,
+		Questions:     questions,
+		DependsOn:     opts.DependsOn,
+		RepairRequest: opts.RepairRequest,
+	}
+}
+
+// markBlockedStructuralError reports the schema's verdict as the failure the
+// result contract prescribes: INVALID_INPUT carrying every rejected field,
+// with the first constraint as the cause agents already read.
+func markBlockedStructuralError(payload payloadschema.MarkBlockedPayload) error {
+	_, diagnostics, err := payloadschema.Validate(payloadschema.MarkBlockedOperation, payload)
+	if err != nil {
+		return err
+	}
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	return NewLifecycleInvalidInputError("mark-blocked", nil, diagnostics, preconditionFromDiagnostics(diagnostics))
+}
+
+// preconditionFromDiagnostics restates the schema's first rejection as the
+// precondition error this package's direct callers already handle, so one
+// implementation decides the verdict wherever it is reached.
+func preconditionFromDiagnostics(diagnostics []models.FieldDiagnostic) error {
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	return &PreconditionError{Reason: diagnostics[0].Constraint}
+}
+
 func normalizeDependsOn(values []string) ([]string, error) {
+	if err := preconditionFromDiagnostics(payloadschema.ValidateMarkBlockedDependsOn(values)); err != nil {
+		return nil, err
+	}
+
 	var normalized []string
-	seen := make(map[string]bool)
 	for _, value := range values {
 		for _, part := range strings.Split(value, ",") {
-			depID := strings.TrimSpace(part)
-			if depID == "" {
-				return nil, &PreconditionError{Reason: "depends-on entries cannot be empty"}
-			}
-			if seen[depID] {
-				return nil, &PreconditionError{Reason: fmt.Sprintf("duplicate depends-on entry %q", depID)}
-			}
-			seen[depID] = true
-			normalized = append(normalized, depID)
+			normalized = append(normalized, strings.TrimSpace(part))
 		}
 	}
 	return normalized, nil
@@ -303,6 +328,9 @@ func normalizeRepairRequest(request *models.RepairRequest, blockedTaskID string)
 	if request == nil {
 		return nil, nil
 	}
+	if err := preconditionFromDiagnostics(payloadschema.ValidateMarkBlockedRepairRequest(request, blockedTaskID)); err != nil {
+		return nil, err
+	}
 
 	normalized := &models.RepairRequest{
 		Operation:  strings.TrimSpace(request.Operation),
@@ -311,61 +339,23 @@ func normalizeRepairRequest(request *models.RepairRequest, blockedTaskID string)
 		Evidence:   compactNonEmpty(request.Evidence),
 		Validation: compactNonEmpty(request.Validation),
 	}
-	if normalized.Operation == "" {
-		return nil, &PreconditionError{Reason: "repair request operation is required"}
-	}
-	if normalized.Target == "" {
-		return nil, &PreconditionError{Reason: "repair request target is required"}
-	}
 	if normalized.Operation == models.RepairOperationApplyDependencyRepair {
-		if normalized.Target != blockedTaskID {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("declarative dependency repair target must match blocked task %q", blockedTaskID)}
-		}
-		if normalized.Command != "" {
-			return nil, &PreconditionError{Reason: "declarative dependency repair must not include a command"}
-		}
 		dependencyUpdates, err := normalizeDependencyUpdates(request.DependencyUpdates)
 		if err != nil {
 			return nil, err
 		}
 		normalized.DependencyUpdates = dependencyUpdates
-	} else {
-		if normalized.Command == "" {
-			return nil, &PreconditionError{Reason: "repair request command is required"}
-		}
-		if request.DependencyUpdates != nil {
-			return nil, &PreconditionError{Reason: "command-based repair requests must not include dependency_updates"}
-		}
-	}
-	if len(normalized.Evidence) == 0 {
-		return nil, &PreconditionError{Reason: "repair request evidence is required"}
-	}
-	if len(normalized.Validation) == 0 {
-		return nil, &PreconditionError{Reason: "repair request validation is required"}
-	}
-	if !normalized.HasStructuredFailureEvidence() {
-		return nil, &PreconditionError{Reason: fmt.Sprintf(`repair requests require structured failure evidence; valid examples: "command=%s exit_code=1 stderr=command requires role type [orchestrator]", "command=provider-call exit_code=1 error=provider unavailable", or "error=provider session thread not found"`, brand.Command("add-task", "--json"))}
 	}
 	return normalized, nil
 }
 
 func normalizeDependencyUpdates(updates []models.DependencyUpdate) ([]models.DependencyUpdate, error) {
-	if len(updates) == 0 {
-		return nil, &PreconditionError{Reason: "declarative dependency repair dependency_updates is required"}
+	if err := preconditionFromDiagnostics(payloadschema.ValidateMarkBlockedDependencyUpdates(updates)); err != nil {
+		return nil, err
 	}
 
 	normalized := make([]models.DependencyUpdate, 0, len(updates))
-	seenTasks := make(map[string]bool, len(updates))
 	for i, update := range updates {
-		taskID := strings.TrimSpace(update.TaskID)
-		if taskID == "" {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("dependency_updates[%d].task_id is required", i)}
-		}
-		if seenTasks[taskID] {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("duplicate dependency update task_id %q", taskID)}
-		}
-		seenTasks[taskID] = true
-
 		expected, err := normalizeExplicitDependencyList(update.ExpectedDependsOn, "expected_depends_on", i)
 		if err != nil {
 			return nil, err
@@ -375,7 +365,7 @@ func normalizeDependencyUpdates(updates []models.DependencyUpdate) ([]models.Dep
 			return nil, err
 		}
 		normalized = append(normalized, models.DependencyUpdate{
-			TaskID:            taskID,
+			TaskID:            strings.TrimSpace(update.TaskID),
 			ExpectedDependsOn: expected,
 			DesiredDependsOn:  desired,
 		})
@@ -384,33 +374,17 @@ func normalizeDependencyUpdates(updates []models.DependencyUpdate) ([]models.Dep
 }
 
 func normalizeExplicitDependencyList(values []string, field string, updateIndex int) ([]string, error) {
-	if values == nil {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("dependency_updates[%d].%s must be an explicit list", updateIndex, field)}
+	if err := preconditionFromDiagnostics(payloadschema.ValidateMarkBlockedDependencyList(values, field, updateIndex)); err != nil {
+		return nil, err
 	}
 
 	normalized := make([]string, 0, len(values))
-	seen := make(map[string]bool, len(values))
 	for _, value := range values {
-		dependencyID := strings.TrimSpace(value)
-		if dependencyID == "" {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("dependency_updates[%d].%s entries cannot be empty", updateIndex, field)}
-		}
-		if seen[dependencyID] {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("duplicate %s entry %q in dependency_updates[%d]", field, dependencyID, updateIndex)}
-		}
-		seen[dependencyID] = true
-		normalized = append(normalized, dependencyID)
+		normalized = append(normalized, strings.TrimSpace(value))
 	}
 	return normalized, nil
 }
 
 func compactNonEmpty(values []string) []string {
-	var compacted []string
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed != "" {
-			compacted = append(compacted, trimmed)
-		}
-	}
-	return compacted
+	return payloadschema.CompactNonEmpty(values)
 }

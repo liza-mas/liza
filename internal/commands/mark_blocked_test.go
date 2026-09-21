@@ -1,10 +1,15 @@
 package commands
 
 import (
+	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -227,5 +232,36 @@ func TestMarkBlockedCommand(t *testing.T) {
 				tt.validateState(t, state)
 			}
 		})
+	}
+}
+
+func TestMarkBlockedPayloadCanonicalObject(t *testing.T) {
+	t.Parallel()
+
+	repairRequest := &models.RepairRequest{Operation: "add-task", Target: "architecture-2"}
+	got := MarkBlockedPayload("task-1", "blocked", []string{"q1"}, ops.MarkBlockedOptions{
+		DependsOn:     []string{"dep-1"},
+		RepairRequest: repairRequest,
+	})
+
+	want := payloadschema.MarkBlockedPayload{
+		TaskID:        "task-1",
+		Reason:        "blocked",
+		Questions:     []string{"q1"},
+		DependsOn:     []string{"dep-1"},
+		RepairRequest: repairRequest,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("MarkBlockedPayload() = %#v, want %#v", got, want)
+	}
+
+	// Caller identity is not payload: nothing in the canonical object names the
+	// agent that would authorize the call.
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal canonical object: %v", err)
+	}
+	if strings.Contains(string(encoded), "agent") {
+		t.Fatalf("canonical object = %s, want no agent identity", encoded)
 	}
 }

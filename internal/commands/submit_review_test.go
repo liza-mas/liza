@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -776,5 +778,52 @@ func TestSubmitForReview_DetachedHead(t *testing.T) {
 	task := &state.Tasks[0]
 	if task.Status != models.TaskStatusImplementing {
 		t.Errorf("expected task to remain IMPLEMENTING, got %s", task.Status)
+	}
+}
+
+// TestSubmitForReviewPreflightParity proves the preflight and the submission
+// boundary read one canonical object: the preflight validates exactly what
+// ops builds, so a ref the agent preflights cannot be rejected as malformed
+// by the command it is preparing, or the reverse.
+func TestSubmitForReviewPreflightParity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		commitRef string
+		wantField string
+	}{
+		{name: "full object ID", commitRef: strings.Repeat("ab", 20)},
+		{name: "abbreviated ref", commitRef: "abc123"},
+		{name: "object-ID length, not hexadecimal", commitRef: strings.Repeat("a", 39) + "z", wantField: "/commit_ref"},
+		{name: "empty ref", commitRef: "", wantField: "/commit_ref"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := ValidatePayload("submit-for-review", ops.SubmitForReviewPayload(tt.commitRef))
+			if tt.wantField == "" {
+				if err != nil {
+					t.Fatalf("ValidatePayload() error = %v, want the payload accepted", err)
+				}
+				if result.SchemaVersion != 1 {
+					t.Errorf("schema_version = %d, want 1", result.SchemaVersion)
+				}
+				return
+			}
+
+			var lifecycleErr *ops.LifecycleError
+			if !errors.As(err, &lifecycleErr) {
+				t.Fatalf("ValidatePayload() error = %v (%T), want a *ops.LifecycleError", err, err)
+			}
+			if lifecycleErr.Outcome.Outcome != models.LifecycleInvalidInput {
+				t.Errorf("outcome = %s, want INVALID_INPUT", lifecycleErr.Outcome.Outcome)
+			}
+			if len(lifecycleErr.Outcome.Diagnostics) != 1 || lifecycleErr.Outcome.Diagnostics[0].Field != tt.wantField {
+				t.Errorf("diagnostics = %+v, want one entry naming %s", lifecycleErr.Outcome.Diagnostics, tt.wantField)
+			}
+		})
 	}
 }

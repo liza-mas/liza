@@ -6,7 +6,16 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/payloadschema"
 )
+
+// MarkBlockedPayload builds the canonical object a caller preflights, from the
+// same command arguments and options the blocking command receives. It
+// delegates to the mutation boundary's own builder so the preflight and the
+// mutation cannot describe the call differently.
+func MarkBlockedPayload(taskID, reason string, questions []string, opts ops.MarkBlockedOptions) payloadschema.MarkBlockedPayload {
+	return ops.MarkBlockedPayload(taskID, reason, questions, opts)
+}
 
 // MarkBlockedCommand marks a task as BLOCKED and prints the result to stdout.
 // Delegates business logic to ops.MarkBlocked.

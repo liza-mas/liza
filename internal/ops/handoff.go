@@ -64,11 +64,10 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 	if input.TaskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
-	if input.Summary == "" {
-		return nil, &PreconditionError{Reason: "summary is required"}
-	}
-	if input.NextAction == "" {
-		return nil, &PreconditionError{Reason: "next action is required"}
+	// Structural validation first: a malformed payload is rejected before the
+	// boundary opens the blackboard or reads state.
+	if err := rejectInvalidLifecyclePayload("handoff", HandoffPayload(input)); err != nil {
+		return nil, err
 	}
 	agentID, err := lifecycleAgentID(input.AgentID, input.Authority)
 	if err != nil {
@@ -187,3 +186,25 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 }
 
 var handoffBeforeModifyTestHook func()
+
+// HandoffPayload builds the canonical object of the handoff operation. The
+// preflight command and this mutation boundary validate the same object
+// through the same schema. Optional fields are omitted when unset, exactly as
+// an agent's own preflight file omits them.
+func HandoffPayload(input *HandoffInput) map[string]any {
+	payload := map[string]any{"summary": input.Summary, "next_action": input.NextAction}
+	if input.Hypothesis != "" {
+		payload["hypothesis"] = input.Hypothesis
+	}
+	for key, entries := range map[string][]string{
+		"succeeded": input.Succeeded,
+		"failed":    input.Failed,
+		"key_files": input.KeyFiles,
+		"dead_ends": input.DeadEnds,
+	} {
+		if len(entries) > 0 {
+			payload[key] = entries
+		}
+	}
+	return payload
+}

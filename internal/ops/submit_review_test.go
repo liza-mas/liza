@@ -1,11 +1,13 @@
 package ops
 
 import (
+	"bytes"
 	stderrors "errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/stacklit"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -1544,6 +1547,94 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func replaceSubmitReviewGitForTest(t *testing.T, newGit func(projectRoot string) *git.Git) {
+	t.Helper()
+	previous := submitReviewNewGit
+	submitReviewNewGit = newGit
+	t.Cleanup(func() { submitReviewNewGit = previous })
+}
+
+// TestSubmitForReviewPreflight proves the submission boundary routes its
+// payload through the versioned schema before it reads state or touches Git.
+func TestSubmitForReviewPreflight(t *testing.T) {
+	// A ref of full object-ID length that is not hexadecimal: the one value
+	// class the schema removes from the Git boundary's input.
+	invalidCommitRef := strings.Repeat("a", 39) + "z"
+
+	t.Run("structurally invalid commit ref is rejected before state and Git", func(t *testing.T) {
+		tmpDir, taskID, _, agentID, _ := setupSuccessfulSubmitScenario(t)
+		replaceSubmitReviewGitForTest(t, func(projectRoot string) *git.Git {
+			t.Errorf("submit-for-review constructed a Git client for a structurally invalid commit ref")
+			return git.New(projectRoot)
+		})
+		before := readStateBytes(t, paths.New(tmpDir).StatePath())
+
+		_, err := SubmitForReview(tmpDir, taskID, invalidCommitRef, agentID)
+
+		var lifecycleErr *LifecycleError
+		if !stderrors.As(err, &lifecycleErr) {
+			t.Fatalf("SubmitForReview() error = %v (%T), want a *LifecycleError", err, err)
+		}
+		outcome := lifecycleErr.Outcome
+		if outcome.Outcome != models.LifecycleInvalidInput || outcome.SafeAction != "correct_input" || outcome.Effects != "none" {
+			t.Errorf("outcome = %s/%s/%s, want INVALID_INPUT/correct_input/none", outcome.Outcome, outcome.SafeAction, outcome.Effects)
+		}
+		if len(outcome.Diagnostics) != 1 {
+			t.Fatalf("diagnostics = %+v, want exactly one entry", outcome.Diagnostics)
+		}
+		diagnostic := outcome.Diagnostics[0]
+		if diagnostic.Field != "/commit_ref" || diagnostic.ValueClass != models.FieldValueClassMalformed ||
+			diagnostic.SafeAction != models.FieldDiagnosticCorrectInput || diagnostic.SchemaVersion != 1 {
+			t.Errorf("diagnostic = %+v, want /commit_ref malformed correct_input at schema version 1", diagnostic)
+		}
+		if strings.Contains(err.Error(), invalidCommitRef) {
+			t.Errorf("error text echoes the rejected value: %v", err)
+		}
+		if after := readStateBytes(t, paths.New(tmpDir).StatePath()); !bytes.Equal(before, after) {
+			t.Errorf("state file changed while rejecting a structurally invalid payload")
+		}
+	})
+
+	t.Run("a structurally valid commit ref still reaches the Git seam", func(t *testing.T) {
+		// Without this, the seam above could pass by never being on the path.
+		tmpDir, taskID, wtCommit, agentID, _ := setupSuccessfulSubmitScenario(t)
+		gitCalls := 0
+		replaceSubmitReviewGitForTest(t, func(projectRoot string) *git.Git {
+			gitCalls++
+			return git.New(projectRoot)
+		})
+
+		if _, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID); err != nil {
+			t.Fatalf("SubmitForReview() unexpected error: %v", err)
+		}
+		if gitCalls == 0 {
+			t.Error("the Git seam was never used, so the rejection test proves nothing")
+		}
+	})
+
+	t.Run("the boundary reports exactly what the schema reports", func(t *testing.T) {
+		// Parity: the preflight command is a thin caller of this same
+		// payloadschema.Validate, so equal diagnostics here mean a payload
+		// cannot pass one boundary and fail the other.
+		for _, commitRef := range []string{invalidCommitRef, strings.Repeat("0", 63) + "g"} {
+			_, want, err := payloadschema.Validate(integrationOperationSubmitForReview, SubmitForReviewPayload(commitRef))
+			if err != nil {
+				t.Fatalf("payloadschema.Validate() error = %v", err)
+			}
+
+			tmpDir, taskID, _, agentID, _ := setupSuccessfulSubmitScenario(t)
+			_, boundaryErr := SubmitForReview(tmpDir, taskID, commitRef, agentID)
+			var lifecycleErr *LifecycleError
+			if !stderrors.As(boundaryErr, &lifecycleErr) {
+				t.Fatalf("SubmitForReview(%q) error = %v, want a *LifecycleError", commitRef, boundaryErr)
+			}
+			if !reflect.DeepEqual(lifecycleErr.Outcome.Diagnostics, want) {
+				t.Errorf("boundary diagnostics = %+v, want the schema's %+v", lifecycleErr.Outcome.Diagnostics, want)
+			}
+		}
+	})
 }
 
 // A write-state refusal must tell the doer what to fix. Err is deliberately

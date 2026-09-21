@@ -243,6 +243,115 @@ func TestBuildBasePrompt(t *testing.T) {
 	}
 }
 
+func TestPayloadPreflightGuidance_AllRoles(t *testing.T) {
+	// Exercise white-label rendering as well as the installed brand.
+	for _, binary := range []string{brand.BinaryName, "acme"} {
+		t.Run(binary, func(t *testing.T) {
+			withPromptBrandValues(t, func() { brand.BinaryName = binary })
+			resolver := testPipelineResolver(t)
+			preflight := binary + " validate-payload <operation> --payload <file> --json"
+			pointer := binary + " validate-payload set-task-output --payload <output-file> --json"
+			operations := regexp.MustCompile(`validate-payload\s+(\S+)`)
+			check := func(t *testing.T, prompt, role string) {
+				t.Helper()
+				for _, once := range []string{preflight, "result.diagnostics", "diagnostics"} {
+					if count := strings.Count(prompt, once); count != 1 {
+						t.Errorf("%q occurs %d times, want exactly once", once, count)
+					}
+				}
+				for _, want := range []string{"state-free", "complex payloads", "--list: schema versions", "LIFECYCLE RESULTS fields, not prose errors"} {
+					if !strings.Contains(prompt, want) {
+						t.Errorf("missing preflight guidance %q", want)
+					}
+				}
+				wantPointers := 0
+				switch role {
+				case "architect", "code-planner", "epic-planner", "integration-analyst":
+					wantPointers = 1
+					if !strings.Contains(prompt, "Preflight the same --output file first:") {
+						t.Error("manifest preflight must reuse the mutation's output file")
+					}
+				}
+				if count := strings.Count(prompt, pointer); count != wantPointers {
+					t.Errorf("manifest preflight pointers = %d, want %d", count, wantPointers)
+				}
+				// Other operation schemas belong to sibling outputs; discover them
+				// through --list instead of advertising unsupported preflights.
+				for _, match := range operations.FindAllStringSubmatch(prompt, -1) {
+					switch match[1] {
+					case "<operation>", "set-task-output", "--list":
+					default:
+						t.Errorf("preflight names an out-of-scope operation: %q", match[1])
+					}
+				}
+				if binary == "acme" && strings.Contains(prompt, "liza validate-payload") {
+					t.Error("preflight contains the raw default brand")
+				}
+			}
+			for _, role := range resolver.AllRoleNames() {
+				t.Run(role, func(t *testing.T) {
+					base, err := BuildBasePrompt(BasePromptConfig{Role: role, AgentID: role + "-1", TaskID: "task-1", ProjectRoot: "/project"})
+					if err != nil {
+						t.Fatal(err)
+					}
+					roleType, err := resolver.RoleType(role)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if roleType == "orchestrator" {
+						for _, trigger := range WakeTriggers {
+							t.Run(trigger, func(t *testing.T) {
+								wake, err := RenderWakeInstructions(trigger, role+"-1")
+								if err != nil {
+									t.Fatal(err)
+								}
+								check(t, base+wake, role)
+							})
+						}
+						return
+					}
+					for _, pairName := range resolver.RolePairNames() {
+						pair, err := resolver.RolePair(pairName)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if pair.Doer != role && pair.Reviewer != role {
+							continue
+						}
+						t.Run(pairName, func(t *testing.T) {
+							sections, err := resolver.ContextSections(role)
+							if err != nil {
+								t.Fatal(err)
+							}
+							data := &RoleContextData{Role: role, RoleType: roleType, AgentID: role + "-1", TaskID: "task-1", Worktree: "/project/.worktrees/task-1", ProjectRoot: "/project"}
+							data.DecompositionRoot, err = resolver.IsDecompositionRoot(pairName)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if data.DecompositionRoot {
+								data.MasterOutputRefField, err = resolver.DecompositionOutputRef(pairName)
+								if err != nil {
+									t.Fatal(err)
+								}
+								if roleType == "doer" {
+									sections = append(sections, "master-decomposition-mandate")
+								} else {
+									sections = append(sections, "master-decomposition-review")
+								}
+							}
+							context, err := BuildRoleContext(role, sections, data)
+							if err != nil {
+								t.Fatal(err)
+							}
+							check(t, base+context, role)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestBuildBasePromptUsesDistinctBrandDirectories(t *testing.T) {
 	withPromptBrandValues(t, func() {
 		brand.NameTitle = "Acme"
@@ -1094,15 +1203,27 @@ func TestRenderOrchestratorDashboard_AssessedTasksAllowPlanningHandoff(t *testin
 				consumer := testhelpers.BuildTaskByStatus("consumer", kind.status, assessedAt.Add(-time.Hour))
 				consumer.FailedBy = []string{"coder-1", "coder-2"}
 				consumer.DependsOn = []string{planning.ID}
+				state.Tasks = []models.Task{planning, consumer}
+				var assessmentExtra map[string]any
+				if consumer.Status == models.TaskStatusBlocked {
+					// Capture the baseline before any later task activity.
+					assessmentExtra = map[string]any{
+						ops.AssessmentFingerprintExtraKey: ops.BuildAssessmentFingerprint(state, &consumer, ops.AssessmentFingerprintCandidate{
+							Reason: *consumer.BlockedReason, Questions: consumer.BlockedQuestions,
+						}),
+					}
+				}
 				if activity != "unassessed" {
 					consumer.History = append(consumer.History, models.TaskHistoryEntry{
 						Time: assessedAt, Event: models.TaskEventOrchestratorAssessment,
+						Extra: assessmentExtra,
 					})
 				}
 				switch activity {
 				case "assessment only":
 					consumer.History = append(consumer.History, models.TaskHistoryEntry{
 						Time: assessedAt.Add(time.Minute), Event: models.TaskEventOrchestratorAssessment,
+						Extra: assessmentExtra,
 					})
 				case "new task activity":
 					consumer.History = append(consumer.History, models.TaskHistoryEntry{

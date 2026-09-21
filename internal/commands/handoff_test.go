@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -171,7 +172,7 @@ func TestHandoffCommand(t *testing.T) {
 				AgentID:    "coder-1",
 			},
 			wantErr:       true,
-			wantErrSubstr: "summary is required",
+			wantErrSubstr: "/summary must not be empty",
 		},
 		{
 			name: "missing next action",
@@ -181,7 +182,7 @@ func TestHandoffCommand(t *testing.T) {
 				AgentID: "coder-1",
 			},
 			wantErr:       true,
-			wantErrSubstr: "next action is required",
+			wantErrSubstr: "/next_action must not be empty",
 		},
 		{
 			name: "missing agent",
@@ -304,6 +305,69 @@ func TestHandoffCommand(t *testing.T) {
 					t.Fatalf("failed to read state: %v", readErr)
 				}
 				tt.validateState(t, state)
+			}
+		})
+	}
+}
+
+// TestHandoffPreflightParity proves the preflight validates exactly the
+// canonical object the handoff boundary builds from the same input.
+func TestHandoffPreflightParity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     *ops.HandoffInput
+		wantField string
+	}{
+		{
+			name:  "required fields only",
+			input: &ops.HandoffInput{Summary: "context at 90%", NextAction: "continue from the schema"},
+		},
+		{
+			name: "every optional field supplied",
+			input: &ops.HandoffInput{
+				Summary: "s", NextAction: "n", Hypothesis: "the lock is held twice",
+				Succeeded: []string{"schema"}, Failed: []string{"parity"},
+				KeyFiles: []string{"internal/ops/handoff.go"}, DeadEnds: []string{"retry loop"},
+			},
+		},
+		{
+			name:      "missing next action",
+			input:     &ops.HandoffInput{Summary: "s"},
+			wantField: "/next_action",
+		},
+		{
+			name:      "empty entry in an optional list",
+			input:     &ops.HandoffInput{Summary: "s", NextAction: "n", DeadEnds: []string{""}},
+			wantField: "/dead_ends/0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := ValidatePayload("handoff", ops.HandoffPayload(tt.input))
+			if tt.wantField == "" {
+				if err != nil {
+					t.Fatalf("ValidatePayload() error = %v, want the payload accepted", err)
+				}
+				if result.SchemaVersion != 1 {
+					t.Errorf("schema_version = %d, want 1", result.SchemaVersion)
+				}
+				return
+			}
+
+			var lifecycleErr *ops.LifecycleError
+			if !errors.As(err, &lifecycleErr) {
+				t.Fatalf("ValidatePayload() error = %v (%T), want a *ops.LifecycleError", err, err)
+			}
+			if lifecycleErr.Outcome.Outcome != models.LifecycleInvalidInput {
+				t.Errorf("outcome = %s, want INVALID_INPUT", lifecycleErr.Outcome.Outcome)
+			}
+			if len(lifecycleErr.Outcome.Diagnostics) != 1 || lifecycleErr.Outcome.Diagnostics[0].Field != tt.wantField {
+				t.Errorf("diagnostics = %+v, want one entry naming %s", lifecycleErr.Outcome.Diagnostics, tt.wantField)
 			}
 		})
 	}

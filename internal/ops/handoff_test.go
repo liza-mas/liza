@@ -1,6 +1,9 @@
 package ops
 
 import (
+	"bytes"
+	stderrors "errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -29,12 +33,12 @@ func TestHandoff_Validation(t *testing.T) {
 		{
 			name:        "empty summary",
 			input:       &HandoffInput{TaskID: "t1", NextAction: "n", AgentID: "a"},
-			errContains: "summary is required",
+			errContains: "/summary must not be empty",
 		},
 		{
 			name:        "empty next action",
 			input:       &HandoffInput{TaskID: "t1", Summary: "s", AgentID: "a"},
-			errContains: "next action is required",
+			errContains: "/next_action must not be empty",
 		},
 		{
 			name:        "empty agent ID",
@@ -372,4 +376,115 @@ func TestHandoff_WrongAgent(t *testing.T) {
 	if !strings.Contains(err.Error(), "not assigned to agent") {
 		t.Errorf("Error = %q, want to contain 'not assigned to agent'", err.Error())
 	}
+}
+
+func setupHandoffScenario(t *testing.T) (projectRoot, stateFile string) {
+	t.Helper()
+
+	projectRoot = t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	stateFile, _ = testhelpers.SetupLizaDir(t, projectRoot)
+
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC()),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	return projectRoot, stateFile
+}
+
+func replaceHandoffBeforeModifyHookForTest(t *testing.T, hook func()) {
+	t.Helper()
+	previous := handoffBeforeModifyTestHook
+	handoffBeforeModifyTestHook = hook
+	t.Cleanup(func() { handoffBeforeModifyTestHook = previous })
+}
+
+// TestHandoffPreflight proves the handoff boundary routes its payload through
+// the versioned schema before it opens the blackboard. Handoff performs no Git
+// work at all, so the state seam below is the whole side-effect surface.
+func TestHandoffPreflight(t *testing.T) {
+	invalidInput := func(projectRoot string) *HandoffInput {
+		return &HandoffInput{
+			ProjectRoot: projectRoot,
+			TaskID:      "task-1",
+			Summary:     "Context at 90%",
+			NextAction:  "Continue from prepareSubmitForReview",
+			AgentID:     "coder-1",
+			KeyFiles:    []string{"internal/ops/handoff.go", ""},
+		}
+	}
+
+	t.Run("structurally invalid payload is rejected before state is read", func(t *testing.T) {
+		projectRoot, stateFile := setupHandoffScenario(t)
+		replaceHandoffBeforeModifyHookForTest(t, func() {
+			t.Error("handoff reached the state transaction with a structurally invalid payload")
+		})
+		before := readStateBytes(t, stateFile)
+
+		_, err := Handoff(invalidInput(projectRoot))
+
+		var lifecycleErr *LifecycleError
+		if !stderrors.As(err, &lifecycleErr) {
+			t.Fatalf("Handoff() error = %v (%T), want a *LifecycleError", err, err)
+		}
+		outcome := lifecycleErr.Outcome
+		if outcome.Outcome != models.LifecycleInvalidInput || outcome.SafeAction != "correct_input" || outcome.Effects != "none" {
+			t.Errorf("outcome = %s/%s/%s, want INVALID_INPUT/correct_input/none", outcome.Outcome, outcome.SafeAction, outcome.Effects)
+		}
+		if len(outcome.Diagnostics) != 1 {
+			t.Fatalf("diagnostics = %+v, want exactly one entry", outcome.Diagnostics)
+		}
+		diagnostic := outcome.Diagnostics[0]
+		if diagnostic.Field != "/key_files/1" || diagnostic.ValueClass != models.FieldValueClassMissing ||
+			diagnostic.SafeAction != models.FieldDiagnosticCorrectInput || diagnostic.SchemaVersion != 1 {
+			t.Errorf("diagnostic = %+v, want /key_files/1 missing correct_input at schema version 1", diagnostic)
+		}
+		if after := readStateBytes(t, stateFile); !bytes.Equal(before, after) {
+			t.Errorf("state file changed while rejecting a structurally invalid payload")
+		}
+	})
+
+	t.Run("a structurally valid payload still reaches the state seam", func(t *testing.T) {
+		// Without this, the seam above could pass by never being on the path.
+		projectRoot, _ := setupHandoffScenario(t)
+		reached := 0
+		replaceHandoffBeforeModifyHookForTest(t, func() { reached++ })
+
+		valid := invalidInput(projectRoot)
+		valid.KeyFiles = []string{"internal/ops/handoff.go"}
+		if _, err := Handoff(valid); err != nil {
+			t.Fatalf("Handoff() unexpected error: %v", err)
+		}
+		if reached == 0 {
+			t.Error("the state seam was never reached, so the rejection test proves nothing")
+		}
+	})
+
+	t.Run("the boundary reports exactly what the schema reports", func(t *testing.T) {
+		// Parity: the preflight command is a thin caller of this same
+		// payloadschema.Validate, so equal diagnostics here mean a payload
+		// cannot pass one boundary and fail the other.
+		projectRoot, _ := setupHandoffScenario(t)
+		fixtures := []*HandoffInput{
+			invalidInput(projectRoot),
+			{ProjectRoot: projectRoot, TaskID: "task-1", NextAction: "n", AgentID: "coder-1"},
+			{ProjectRoot: projectRoot, TaskID: "task-1", Summary: "s", AgentID: "coder-1", DeadEnds: []string{""}},
+		}
+		for _, input := range fixtures {
+			_, want, err := payloadschema.Validate("handoff", HandoffPayload(input))
+			if err != nil {
+				t.Fatalf("payloadschema.Validate() error = %v", err)
+			}
+
+			_, boundaryErr := Handoff(input)
+			var lifecycleErr *LifecycleError
+			if !stderrors.As(boundaryErr, &lifecycleErr) {
+				t.Fatalf("Handoff() error = %v, want a *LifecycleError", boundaryErr)
+			}
+			if !reflect.DeepEqual(lifecycleErr.Outcome.Diagnostics, want) {
+				t.Errorf("boundary diagnostics = %+v, want the schema's %+v", lifecycleErr.Outcome.Diagnostics, want)
+			}
+		}
+	})
 }

@@ -21,7 +21,7 @@ func TestSetTaskOutput_PersistenceErrorContext(t *testing.T) {
 	}
 	err := ops.SetTaskOutput(projectRoot, &ops.SetTaskOutputInput{
 		TaskID: "plan-1", AgentID: "code-planner-1",
-		Output: []models.OutputEntry{{Desc: "Implement feature", DoneWhen: "Tests pass", Scope: "src"}},
+		Output: []models.OutputEntry{{Desc: "Implement feature", DoneWhen: "Tests pass", Scope: "src", SpecRef: "specs/feature.md"}},
 	})
 	if err == nil {
 		t.Fatal("expected state read failure")

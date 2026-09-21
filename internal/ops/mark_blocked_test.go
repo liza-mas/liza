@@ -1,7 +1,9 @@
 package ops
 
 import (
+	stderrors "errors"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -210,7 +212,7 @@ func TestMarkBlockedWithOptions_DependsOnValidation(t *testing.T) {
 		wantErr string
 	}{
 		{name: "empty", deps: []string{" "}, wantErr: "depends-on entries cannot be empty"},
-		{name: "duplicate", deps: []string{"dep-1", "dep-1"}, wantErr: "duplicate depends-on entry"},
+		{name: "duplicate", deps: []string{"dep-1", "dep-1"}, wantErr: "depends-on entries must be unique"},
 		{name: "self", deps: []string{"task-1"}, wantErr: "cannot depend on itself"},
 		{name: "missing", deps: []string{"missing"}, wantErr: "non-existent task"},
 		{name: "cycle", deps: []string{"dep-1"}, wantErr: "dependency cycle"},
@@ -409,7 +411,7 @@ func TestMarkBlockedWithOptions_DeclarativeDependencyRepair(t *testing.T) {
 				})
 				return request
 			}(),
-			wantErr: `duplicate dependency update task_id "consumer-1"`,
+			wantErr: "dependency update task_id values must be unique",
 		},
 	}
 
@@ -735,4 +737,147 @@ func TestMarkBlocked_WrongAgent(t *testing.T) {
 	if !strings.Contains(err.Error(), "assigned agent") {
 		t.Errorf("Error = %q, want to contain 'assigned agent'", err.Error())
 	}
+}
+
+// TestMarkBlockedNormalizerSignatures pins the normalizers output 2's
+// assess-blocked path calls directly. Routing their predicates through the
+// payload schema must change neither their shape nor their verdicts.
+func TestMarkBlockedNormalizerSignatures(t *testing.T) {
+	t.Parallel()
+
+	// These assignments fail to compile if any signature changes.
+	var (
+		repairRequest      func(*models.RepairRequest, string) (*models.RepairRequest, error) = normalizeRepairRequest
+		dependsOn          func([]string) ([]string, error)                                   = normalizeDependsOn
+		dependencyUpdates  func([]models.DependencyUpdate) ([]models.DependencyUpdate, error) = normalizeDependencyUpdates
+		explicitDependency func([]string, string, int) ([]string, error)                      = normalizeExplicitDependencyList
+		compact            func([]string) []string                                            = compactNonEmpty
+	)
+
+	rejections := []struct {
+		name    string
+		call    func() error
+		wantErr string
+	}{
+		{
+			name:    "depends-on rejects an empty entry",
+			call:    func() error { _, err := dependsOn([]string{" "}); return err },
+			wantErr: "depends-on entries cannot be empty",
+		},
+		{
+			name:    "depends-on rejects a duplicate entry",
+			call:    func() error { _, err := dependsOn([]string{"dep-1", "dep-1"}); return err },
+			wantErr: "depends-on entries must be unique",
+		},
+		{
+			name: "repair request rejects a missing command",
+			call: func() error {
+				_, err := repairRequest(&models.RepairRequest{
+					Operation:  "add-task",
+					Target:     "architecture-2",
+					Evidence:   []string{"error=command requires role type [orchestrator]"},
+					Validation: []string{"validate --json"},
+				}, "task-1")
+				return err
+			},
+			wantErr: "repair request command is required",
+		},
+		{
+			name: "repair request rejects unstructured failure evidence",
+			call: func() error {
+				_, err := repairRequest(&models.RepairRequest{
+					Operation:  "add-task",
+					Target:     "architecture-2",
+					Command:    "add-task --id architecture-2 --json",
+					Evidence:   []string{"the add-task call failed"},
+					Validation: []string{"validate --json"},
+				}, "task-1")
+				return err
+			},
+			wantErr: "structured failure evidence",
+		},
+		{
+			name: "repair request rejects a declarative repair targeting another task",
+			call: func() error {
+				_, err := repairRequest(&models.RepairRequest{
+					Operation:         models.RepairOperationApplyDependencyRepair,
+					Target:            "task-2",
+					DependencyUpdates: []models.DependencyUpdate{{TaskID: "consumer-1", ExpectedDependsOn: []string{}, DesiredDependsOn: []string{}}},
+					Evidence:          []string{"error=dependency repair requires orchestrator authority"},
+					Validation:        []string{"validate --json"},
+				}, "task-1")
+				return err
+			},
+			wantErr: "declarative dependency repair target must match blocked task",
+		},
+		{
+			name:    "dependency updates reject an empty batch",
+			call:    func() error { _, err := dependencyUpdates(nil); return err },
+			wantErr: "declarative dependency repair dependency_updates is required",
+		},
+		{
+			name: "dependency updates reject a duplicate task",
+			call: func() error {
+				_, err := dependencyUpdates([]models.DependencyUpdate{
+					{TaskID: "consumer-1", ExpectedDependsOn: []string{}, DesiredDependsOn: []string{}},
+					{TaskID: " consumer-1 ", ExpectedDependsOn: []string{}, DesiredDependsOn: []string{}},
+				})
+				return err
+			},
+			wantErr: "dependency update task_id values must be unique",
+		},
+		{
+			name:    "explicit dependency list rejects a missing list",
+			call:    func() error { _, err := explicitDependency(nil, "expected_depends_on", 0); return err },
+			wantErr: "dependency_updates[0].expected_depends_on must be an explicit list",
+		},
+		{
+			name:    "explicit dependency list rejects an empty entry",
+			call:    func() error { _, err := explicitDependency([]string{" "}, "desired_depends_on", 1); return err },
+			wantErr: "dependency_updates[1].desired_depends_on entries cannot be empty",
+		},
+		{
+			name: "explicit dependency list rejects a duplicate entry",
+			call: func() error {
+				_, err := explicitDependency([]string{"producer-1", " producer-1 "}, "desired_depends_on", 0)
+				return err
+			},
+			wantErr: "dependency_updates[0].desired_depends_on entries must be unique",
+		},
+	}
+
+	for _, tt := range rejections {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.call()
+			var precondition *PreconditionError
+			if !stderrors.As(err, &precondition) {
+				t.Fatalf("error = %v, want a *PreconditionError", err)
+			}
+			if !strings.Contains(precondition.Reason, tt.wantErr) {
+				t.Fatalf("Reason = %q, want to contain %q", precondition.Reason, tt.wantErr)
+			}
+		})
+	}
+
+	t.Run("a nil repair request stays accepted", func(t *testing.T) {
+		t.Parallel()
+
+		normalized, err := repairRequest(nil, "task-1")
+		if err != nil || normalized != nil {
+			t.Fatalf("normalizeRepairRequest(nil) = %#v, %v; want nil, nil", normalized, err)
+		}
+	})
+
+	t.Run("compactNonEmpty trims and drops blank entries", func(t *testing.T) {
+		t.Parallel()
+
+		if got := compact([]string{" a ", " ", "b"}); !reflect.DeepEqual(got, []string{"a", "b"}) {
+			t.Fatalf("compactNonEmpty() = %#v, want [a b]", got)
+		}
+		if got := compact([]string{" "}); got != nil {
+			t.Fatalf("compactNonEmpty() = %#v, want nil", got)
+		}
+	})
 }

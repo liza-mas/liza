@@ -9,6 +9,7 @@ EPIC PLANNER TOOLS:
   {{binaryName}} write-checkpoint {{.TaskID}} --agent-id {{.AgentID}} --intent "<what>" --validation-plan "<how to verify>" --files-to-modify "<file1>" --json
 - {{binaryName}} set-task-output — Persist one entry per capability for downstream US Writer tasks
   {{binaryName}} set-task-output {{.TaskID}} --output <path.json> --agent-id {{.AgentID}} --json
+  Preflight the same --output file first: {{binaryName}} validate-payload set-task-output --payload <output-file> --json
   Create <path.json> with a file-writing tool, not a Bash heredoc (heredoc with JSON triggers a shell safety block).
   JSON file contains: [
     {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "plan_ref": "...", "validation": ["<canonical command>"], "depends_on": ["0"], "task_depends_on": ["existing-task-id"]}

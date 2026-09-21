@@ -145,6 +145,7 @@ func TestTaskLifecycleMutationGenerationFence(t *testing.T) {
 				Desc:     "follow-up",
 				DoneWhen: "follow-up is complete",
 				Scope:    "internal/ops",
+				SpecRef:  "specs/follow-up.md",
 			}},
 		}
 		interleaving := fixture.replaceAtLifecycleWrite(t, 1)

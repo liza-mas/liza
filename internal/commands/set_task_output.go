@@ -5,7 +5,15 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/payloadschema"
 )
+
+// SetTaskOutputPayload returns the canonical object a caller preflights with
+// ValidatePayload. It is the same object the mutation boundary validates, so a
+// manifest that passes the preflight cannot be rejected there for its shape.
+func SetTaskOutputPayload(output []models.OutputEntry) any {
+	return payloadschema.SetTaskOutputPayload(output)
+}
 
 // SetTaskOutputCommand sets output entries on a task.
 // Delegates business logic to ops.SetTaskOutput.

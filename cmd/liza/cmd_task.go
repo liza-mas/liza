@@ -16,6 +16,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/spf13/cobra"
 )
 
@@ -1280,7 +1281,7 @@ var setTaskOutputCmd = &cobra.Command{
 	Long: `Define output entries that will become downstream tasks after merge.
 
 Reads output entries from a JSON file. Each entry must have desc, done_when,
-and scope. Optional fields: spec_ref, epic_ref, plan_ref, arch_ref, validation,
+scope, and spec_ref. Optional fields: epic_ref, plan_ref, arch_ref, validation,
 destructive_db, rca_required, depends_on, task_depends_on, decomposition.
 
 depends_on contains sibling output indexes, e.g. "0" for output[0].
@@ -1374,6 +1375,17 @@ Example:
 				hint += "; got a JSON object — remove the wrapper and pass a bare array"
 			}
 			return &ops.PreconditionError{Reason: fmt.Sprintf("%s: %v", hint, err)}
+		}
+
+		// Preserve the file's null/[] distinction before the typed API
+		// normalizes nil slices into explicit empty manifests.
+		_, diagnostics, err := payloadschema.Validate(payloadschema.SetTaskOutputOperation, map[string]any{"output": json.RawMessage(data)})
+		if err != nil {
+			return err
+		}
+		if len(diagnostics) > 0 {
+			return ops.NewLifecycleInvalidInputError(payloadschema.SetTaskOutputOperation, nil, diagnostics,
+				&ops.PreconditionError{Reason: "output file must contain a valid task-output manifest array"})
 		}
 
 		input := &ops.SetTaskOutputInput{

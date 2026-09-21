@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
@@ -128,37 +129,16 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 	if input.AgentID == "" {
 		return &PreconditionError{Reason: "agent_id is required"}
 	}
+	// The manifest's structure is validated once, by the schema the preflight
+	// uses, before any state is read or locked. Only rules that need a task ID,
+	// live state or the pipeline resolver remain below.
+	if err := validateSetTaskOutputManifest(input.Output); err != nil {
+		return err
+	}
 	for i, entry := range input.Output {
-		if entry.Desc == "" {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].desc is required", i)}
-		}
-		if entry.DoneWhen == "" {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].done_when is required", i)}
-		}
-		if entry.Scope == "" {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].scope is required", i)}
-		}
-		if err := models.ValidateKind(entry.Kind); err != nil {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].%s", i, err.Error())}
-		}
-		if err := models.ValidateValidationSafety(fmt.Sprintf("output[%d].validation", i), entry.Validation, entry.DestructiveDB); err != nil {
-			return &PreconditionError{Reason: err.Error()}
-		}
-		if err := models.ValidateValidationPrerequisites(entry.Validation, entry.ValidationPrerequisites); err != nil {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d]: %s", i, err.Error())}
-		}
-		if err := models.ValidateDependsOn(entry.DependsOn, i, len(input.Output)); err != nil {
-			return &PreconditionError{Reason: err.Error()}
-		}
 		if err := validateTaskDependsOn(entry.TaskDependsOn, i); err != nil {
 			return &PreconditionError{Reason: err.Error()}
 		}
-		if err := models.ValidateInheritInputs(entry.InheritInputs, i); err != nil {
-			return &PreconditionError{Reason: err.Error()}
-		}
-	}
-	if err := validateOutputArtifactRefScalars(input.TaskID, input.Output); err != nil {
-		return err
 	}
 
 	// Normalize spec_ref and plan_ref on each output entry to strip worktree prefixes.
@@ -265,6 +245,8 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 	return err
 }
 
+// validateOutputArtifactRefScalars keeps the artifact-ref syntax rule available
+// to boundaries that revalidate a task's stored output.
 func validateOutputArtifactRefScalars(taskID string, output []models.OutputEntry) error {
 	for i, entry := range output {
 		for _, ref := range []struct {
@@ -282,6 +264,29 @@ func validateOutputArtifactRefScalars(taskID string, output []models.OutputEntry
 		}
 	}
 	return nil
+}
+
+// validateSetTaskOutputManifest rejects a structurally invalid manifest with
+// the diagnostics the preflight returns for the same canonical object, so the
+// two boundaries cannot disagree about a manifest's shape.
+func validateSetTaskOutputManifest(output []models.OutputEntry) error {
+	_, diagnostics, err := payloadschema.Validate(payloadschema.SetTaskOutputOperation, payloadschema.SetTaskOutputPayload(output))
+	if err != nil {
+		return err
+	}
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	// The cause is a precondition message naming only field paths, so a
+	// text-mode caller still learns what to correct; the values stay out, as
+	// in the diagnostics themselves.
+	fields := make([]string, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		fields = append(fields, diagnostic.Field)
+	}
+	return NewLifecycleInvalidInputError("set-task-output", nil, diagnostics, &PreconditionError{
+		Reason: fmt.Sprintf("task output manifest rejected by the %s schema at %s", payloadschema.SetTaskOutputOperation, strings.Join(fields, ", ")),
+	})
 }
 
 func validateDecompositionRootOutput(state *models.State, resolver decompositionRootResolver, rolePair string, output []models.OutputEntry) error {
@@ -305,26 +310,14 @@ func validateDecompositionRootOutput(state *models.State, resolver decomposition
 		return err
 	}
 
-	ownedFiles := map[string]int{}
-	interfacesOwned := map[string]int{}
+	// A present block's shape is the schema's; only its requiredness and the
+	// references it makes into live state are decided here.
 	for i, entry := range output {
 		if strings.TrimSpace(requiredRef.value(entry)) == "" {
 			return &PreconditionError{Reason: fmt.Sprintf("output[%d].%s is required for decomposition-root role-pair %q", i, requiredRef.field, rolePair)}
 		}
 		if entry.Decomposition == nil {
 			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition is required for decomposition-root role-pair %q", i, rolePair)}
-		}
-		if err := validateOwnershipDeclaration(i, entry.Decomposition); err != nil {
-			return err
-		}
-		if err := rejectDuplicateOwnership("owned_files", i, entry.Decomposition.OwnedFiles, ownedFiles); err != nil {
-			return err
-		}
-		if err := rejectDuplicateOwnership("interfaces_owned", i, entry.Decomposition.InterfacesOwned, interfacesOwned); err != nil {
-			return err
-		}
-		if err := validateReadOnlyDependsOn(i, len(output), entry.DependsOn, entry.Decomposition.ReadOnlyDependsOn); err != nil {
-			return err
 		}
 		if err := validateReadOnlyTaskDependsOn(state, i, entry.TaskDependsOn, entry.Decomposition.ReadOnlyTaskDependsOn); err != nil {
 			return err
@@ -415,76 +408,6 @@ func requiredDecompositionRootOutputRef(refField string) (decompositionRootOutpu
 	default:
 		return decompositionRootOutputRef{}, &PreconditionError{Reason: fmt.Sprintf("decomposition-root output ref %q is unsupported", refField)}
 	}
-}
-
-func validateOwnershipDeclaration(entryIndex int, manifest *models.DecompositionManifest) error {
-	ownershipFields := [][]string{
-		manifest.OwnedFiles,
-		manifest.OwnedModules,
-		manifest.InterfacesOwned,
-	}
-	hasOwnership := false
-	for _, values := range ownershipFields {
-		for _, value := range values {
-			trimmed := strings.TrimSpace(value)
-			if trimmed == "" {
-				continue
-			}
-			if isCatchAllOwnership(trimmed) {
-				return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition contains catch-all ownership declaration %q", entryIndex, value)}
-			}
-			hasOwnership = true
-		}
-	}
-	if !hasOwnership {
-		return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition must declare ownership in owned_files, owned_modules, or interfaces_owned", entryIndex)}
-	}
-	return nil
-}
-
-func isCatchAllOwnership(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "*", "everything", "everything else", "all", "all files", "all remaining", "remaining":
-		return true
-	default:
-		return false
-	}
-}
-
-func rejectDuplicateOwnership(field string, entryIndex int, values []string, seen map[string]int) error {
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if previousIndex, ok := seen[trimmed]; ok && previousIndex != entryIndex {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.%s duplicates output[%d] ownership %q", entryIndex, field, previousIndex, trimmed)}
-		}
-		if _, ok := seen[trimmed]; !ok {
-			seen[trimmed] = entryIndex
-		}
-	}
-	return nil
-}
-
-func validateReadOnlyDependsOn(entryIndex, outputCount int, dependsOn []string, readOnlyDependsOn []int) error {
-	schedulerDeps := map[string]struct{}{}
-	for _, dep := range dependsOn {
-		schedulerDeps[dep] = struct{}{}
-	}
-	for _, dep := range readOnlyDependsOn {
-		if dep < 0 || dep >= outputCount {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_depends_on reference %d out of range [0, %d)", entryIndex, dep, outputCount)}
-		}
-		if dep == entryIndex {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_depends_on references itself", entryIndex)}
-		}
-		depRef := strconv.Itoa(dep)
-		if _, ok := schedulerDeps[depRef]; !ok {
-			return &PreconditionError{Reason: fmt.Sprintf("output[%d].decomposition.read_only_depends_on reference %d must also appear in depends_on", entryIndex, dep)}
-		}
-	}
-	return nil
 }
 
 func validateReadOnlyTaskDependsOn(state *models.State, entryIndex int, taskDependsOn []string, readOnlyTaskDependsOn []string) error {
