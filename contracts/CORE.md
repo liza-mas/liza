@@ -214,7 +214,7 @@ If this cannot be stated unambiguously → BLOCKED.
 ```
 Doc Impact: [none | list of affected docs]
 ```
-Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs, structural decision that constrains later work → decision record, where the project keeps one. "None" requires a search (`rg -l "related-feature" docs/ specs/`); if siblings are documented, the new feature needs the same treatment.
+Categories: API/interface → usage docs, behavior → specs, new capability → README/feature docs, config/env → setup docs, structural decision that constrains later work → decision record, where the project keeps one. "None" requires a search (`rg -l "related-feature" docs/ specs/`) answering two questions: does a documented sibling imply this feature needs the same treatment, and does any existing document describe behavior this change alters? A yes to either makes "none" false.
 
 **Test Impact Declaration:** Before execution, declare:
 ```

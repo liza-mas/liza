@@ -63,6 +63,7 @@ checks that get skipped:
 - [ ] Migrations reversible, and online-safe on large tables
 - [ ] Not relying on implicit or undocumented configuration
 - [ ] Operational surface documented — env vars, README/CHANGELOG, deployment steps
+- [ ] Declared `Doc Impact` tested against the diff — a spec describing behavior this change alters is updated, or `none` is defensible
 - [ ] Observability intact — logs actionable, metrics updated if behavior changed
 - [ ] Rollback path exists, code and data
 - [ ] Tests validate intent, not implementation; would fail on regression
