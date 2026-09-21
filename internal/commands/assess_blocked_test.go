@@ -2,6 +2,8 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -12,6 +14,69 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+func TestPrintAssessBlockedResult(t *testing.T) {
+	root := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, root)
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("target", models.TaskStatusBlocked, time.Now().UTC())}
+	bb := testhelpers.WriteInitialState(t, stateFile, state)
+	captureAssessBlockedStdout(t, func() error { return AssessBlockedCommand(root, "target", "await provider", "orchestrator-1") })
+	before, err := os.ReadFile(stateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := ops.AssessBlocked(root, "target", "await provider", "orchestrator-1")
+	if err != nil || result.Outcome != models.LifecycleNoChange {
+		t.Fatalf("repeat: %+v %v", result, err)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatal(err)
+	}
+	avoided, ok := fields["suppressed_entry_bytes"].(float64)
+	if !ok || avoided <= 0 || fields["changed"] != false {
+		t.Fatalf("JSON suppression evidence: %s", encoded)
+	}
+	got := captureAssessBlockedStdout(t, func() error { return printAssessBlockedResult(result, nil) })
+	var expected bytes.Buffer
+	WriteLifecycleOutcome(&expected, result.LifecycleOutcome)
+	fmt.Fprintf(&expected, "suppressed_entry_bytes: %.0f\n", avoided)
+	if got != expected.String() {
+		t.Fatalf("text=%q, want=%q", got, expected.String())
+	}
+	got = captureAssessBlockedStdout(t, func() error { return AssessBlockedCommand(root, "target", "await provider", "orchestrator-1") })
+	if !strings.Contains(got, "outcome: NO_CHANGE\n") || !strings.Contains(got, "suppressed_entry_bytes: ") || strings.Contains(got, "await provider") {
+		t.Fatalf("command output: %q", got)
+	}
+	after, err := os.ReadFile(stateFile)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("duplicate changed state: %v", err)
+	}
+	stored, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, outcome := range []string{models.LifecycleAlreadyCompleted, models.LifecycleAlreadyTransitioned, models.LifecycleStaleCaller, models.LifecycleStateChanged, models.LifecycleRetryable, models.LifecycleInvalidInput, models.LifecycleForbidden, models.LifecycleConflict} {
+		t.Run(outcome, func(t *testing.T) {
+			result := &ops.AssessBlockedResult{TaskID: "target", LifecycleOutcome: ops.NewLifecycleOutcome("assess-blocked", stored.FindTask("target"), outcome, "stop", "none")}
+			var expected bytes.Buffer
+			WriteLifecycleOutcome(&expected, result.LifecycleOutcome)
+			got := captureAssessBlockedStdout(t, func() error { return printAssessBlockedResult(result, nil) })
+			if got != expected.String() {
+				t.Fatalf("changed existing output: %q, want=%q", got, expected.String())
+			}
+			encoded, err := json.Marshal(result)
+			if err != nil || bytes.Contains(encoded, []byte("suppressed_entry_bytes")) {
+				t.Fatalf("unexpected suppression field: %s %v", encoded, err)
+			}
+		})
+	}
+}
 
 func TestAssessBlockedCommand_ReconcilesCanonicalMetadata(t *testing.T) {
 	tests := []struct {
@@ -170,7 +235,7 @@ func TestAssessBlockedCommand(t *testing.T) {
 			taskID:     "",
 			agentID:    "orchestrator-1",
 			wantErr:    true,
-			wantErrMsg: "task ID is required",
+			wantErrMsg: "/task_id must not be empty",
 		},
 		{
 			name:       "Error - Empty agent ID",

@@ -112,6 +112,7 @@ func TestOrchestratorHumanNote_ConsumedByAssessmentIsNotRedelivered(t *testing.T
 				})
 				state.Tasks = []models.Task{task}
 				state.Sprint.Scope.Planned = []string{"task-1"}
+				recordWakeFingerprint(state, &state.Tasks[0], &state.Tasks[0].History[len(state.Tasks[0].History)-1])
 				state.HumanNotes = []models.HumanNote{{Timestamp: now.Add(-time.Minute), For: target, Message: "retarget the blocker"}}
 			})
 
@@ -126,6 +127,7 @@ func TestOrchestratorHumanNote_ConsumedByAssessmentIsNotRedelivered(t *testing.T
 				task.History = append(task.History, models.TaskHistoryEntry{
 					Time: now, Event: models.TaskEventOrchestratorAssessment, Agent: &orchestrator,
 				})
+				recordWakeFingerprint(state, task, &task.History[len(task.History)-1])
 				return nil
 			}); err != nil {
 				t.Fatalf("record assessment: %v", err)

@@ -2,10 +2,13 @@ package ops
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"sort"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/db"
@@ -13,13 +16,20 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
-// DependencyDescendantWakeSnapshotExtraKey identifies the versioned blocked
-// assessment cursor consumed by orchestrator wake detection.
+// DependencyDescendantWakeSnapshotExtraKey identifies the retired assessment
+// cursor, removed from earlier entries when a new fingerprint is recorded.
 const DependencyDescendantWakeSnapshotExtraKey = "dependency_descendant_wake_snapshot_v1"
+
+// Like receipt replay, content equivalence aborts serialization without
+// changing the task, its lifecycle boundary, or its retained receipts.
+var errAssessmentNoChange = stderrors.New("blocked assessment unchanged")
+
+func isAssessmentNoChange(err error) bool { return stderrors.Is(err, errAssessmentNoChange) }
 
 // DependencyDescendantWakeSnapshotEntry fingerprints one descendant beneath a
 // canonical dependency root. LifecycleVersion excludes assessment-only events.
@@ -52,7 +62,7 @@ func BuildDependencyDescendantWakeSnapshot(state *models.State, task *models.Tas
 	return snapshot
 }
 
-// dropSupersededWakeSnapshots removes dependency-descendant wake snapshots from
+// dropSupersededWakeSnapshots removes wake snapshots and fingerprints from
 // a task's existing orchestrator_assessment entries. Wake detection reads only
 // the most recent assessment (isTaskActionableSinceAssessment), so once a newer
 // assessment is recorded the earlier cursors are dead payload that every state
@@ -63,10 +73,8 @@ func dropSupersededWakeSnapshots(task *models.Task) {
 		if entry.Event != models.TaskEventOrchestratorAssessment {
 			continue
 		}
-		if _, ok := entry.Extra[DependencyDescendantWakeSnapshotExtraKey]; !ok {
-			continue
-		}
 		delete(entry.Extra, DependencyDescendantWakeSnapshotExtraKey)
+		delete(entry.Extra, AssessmentFingerprintExtraKey)
 		if len(entry.Extra) == 0 {
 			entry.Extra = nil
 		}
@@ -97,43 +105,6 @@ func NormalizeDependencyDescendantWakeSnapshot(value any) ([]DependencyDescendan
 		}
 	}
 	return snapshot, true
-}
-
-// DependencyDescendantWakeSnapshotChanged compares a persisted baseline with
-// the current canonical descendant state. Malformed persisted values fail open
-// so the next assessment can replace them with a valid cursor.
-func DependencyDescendantWakeSnapshotChanged(state *models.State, task *models.Task, recorded any) bool {
-	baseline, ok := NormalizeDependencyDescendantWakeSnapshot(recorded)
-	if !ok {
-		return true
-	}
-	current := BuildDependencyDescendantWakeSnapshot(state, task)
-	if len(baseline) != len(current) {
-		return true
-	}
-	for i := range current {
-		if baseline[i] != current[i] {
-			return true
-		}
-	}
-	return false
-}
-
-// DependencyDescendantChangedAfter reports legacy timestamp evidence for a
-// relevant descendant creation or non-assessment lifecycle event.
-func DependencyDescendantChangedAfter(state *models.State, task *models.Task, after time.Time) bool {
-	for _, descendant := range dependencyDescendantTasks(state, task) {
-		if descendant.Created.After(after) {
-			return true
-		}
-		for i := range descendant.History {
-			entry := descendant.History[i]
-			if entry.Event != models.TaskEventOrchestratorAssessment && entry.Time.After(after) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func dependencyDescendantTasks(state *models.State, task *models.Task) []*models.Task {
@@ -191,11 +162,12 @@ func dependencyDescendantTasks(state *models.State, task *models.Task) []*models
 // AssessBlockedResult contains the outcome of recording an orchestrator assessment.
 type AssessBlockedResult struct {
 	models.LifecycleOutcome
-	TaskID        string                `json:"task_id"`
-	Reason        string                `json:"reason,omitempty"`
-	Questions     []string              `json:"questions,omitempty"`
-	RepairRequest *models.RepairRequest `json:"repair_request,omitempty"`
-	Warnings      []string              `json:"warnings,omitempty"`
+	TaskID               string                `json:"task_id"`
+	Reason               string                `json:"reason,omitempty"`
+	Questions            []string              `json:"questions,omitempty"`
+	RepairRequest        *models.RepairRequest `json:"repair_request,omitempty"`
+	Warnings             []string              `json:"warnings,omitempty"`
+	SuppressedEntryBytes int                   `json:"suppressed_entry_bytes,omitempty"`
 }
 
 func (r *AssessBlockedResult) GetWarnings() []string {
@@ -217,7 +189,7 @@ type AssessBlockedOptions struct {
 }
 
 // AssessBlocked records that the orchestrator has assessed a BLOCKED task.
-// Appends an orchestrator_assessment history entry without changing task status.
+// Appends an orchestrator_assessment only when its material inputs have changed.
 // This prevents the wake-detection loop where the orchestrator repeatedly wakes
 // for blocked tasks it has already triaged.
 func AssessBlocked(projectRoot, taskID, note, agentID string) (*AssessBlockedResult, error) {
@@ -239,7 +211,7 @@ func AssessBlockedWithAuthority(projectRoot, taskID, note string, authority mode
 }
 
 func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID string, opts AssessBlockedOptions, authority *models.AgentAuthority) (returned *AssessBlockedResult, retErr error) {
-	invocation := NewLifecycleInvocation(projectRoot)
+	var invocation *LifecycleInvocation
 	const operation = "assess-blocked"
 	var observed *models.Task
 	effects := "none"
@@ -251,13 +223,12 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			outcome = returned.LifecycleOutcome
 			warnings = &returned.Warnings
 		}
-		invocation.FinishResult(operation, outcome, &retErr, warnings)
+		if invocation != nil {
+			invocation.FinishResult(operation, outcome, &retErr, warnings)
+		}
 	}()
 	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
 		return nil, err
-	}
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if agentID == "" {
 		return nil, &PreconditionError{Reason: "agent ID is required"}
@@ -267,6 +238,22 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 	// also gates via resolveOrchestratorID.
 	if err := identity.ValidateRole(agentID, roles.Orchestrator); err != nil {
 		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
+	}
+
+	payload := payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest)
+	if err := rejectInvalidLifecyclePayload(operation, payload); err != nil {
+		return nil, err
+	}
+	// Sprint capture reads under the state lock too. Invalid payloads must
+	// return before telemetry initializes, not just before the mutation.
+	// Trade-off: earlier request-option, missing-agent, role and payload
+	// rejections do not increment lifecycle counters. Restore their telemetry
+	// when sprint identity can be captured without acquiring the state lock.
+	invocation = NewLifecycleInvocation(projectRoot)
+	// Legacy defense-in-depth guard; the schema above already rejects an empty
+	// task ID through both exported entry points.
+	if taskID == "" {
+		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 
 	reconcile := opts.Reason != "" || len(opts.Questions) > 0 || opts.RepairRequest != nil
@@ -324,26 +311,53 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			return WrapLifecycleError(operation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
 
+		candidate := AssessmentFingerprintCandidate{
+			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note,
+		}
+		if task.BlockedReason != nil {
+			candidate.Reason = *task.BlockedReason
+		}
+		if reconcile {
+			candidate.Reason = opts.Reason
+			candidate.Questions = opts.Questions
+			candidate.RepairRequest = repairRequest
+		}
+		fingerprint := BuildAssessmentFingerprint(state, task, candidate)
 		entry := models.TaskHistoryEntry{
 			Time:  now,
 			Event: models.TaskEventOrchestratorAssessment,
 			Agent: &agentID,
 			Extra: map[string]any{
-				DependencyDescendantWakeSnapshotExtraKey: BuildDependencyDescendantWakeSnapshot(state, task),
+				AssessmentFingerprintExtraKey: fingerprint,
 			},
 		}
 		if note != "" {
 			entry.Note = &note
 		}
 		if reconcile {
+			entry.Reason = &opts.Reason
+			entry.Extra["blocked_questions"] = append([]string(nil), opts.Questions...)
+			entry.Extra["repair_request"] = repairRequest
+		}
+		if previous := lastOrchestratorAssessment(task); previous != nil {
+			if recorded, valid := IsAssessmentFingerprint(previous.Extra[AssessmentFingerprintExtraKey]); valid && recorded == fingerprint {
+				encoded, err := yaml.Marshal(entry)
+				if err != nil {
+					return fmt.Errorf("encode suppressed assessment: %w", err)
+				}
+				result.LifecycleOutcome = NewLifecycleNoChangeOutcome(operation, task)
+				result.RequestID = request.RequestID
+				result.SuppressedEntryBytes = len(encoded)
+				return errAssessmentNoChange
+			}
+		}
+
+		if reconcile {
 			reason := opts.Reason
 			questions := append([]string(nil), opts.Questions...)
 			task.BlockedReason = &reason
 			task.BlockedQuestions = questions
 			task.RepairRequest = repairRequest
-			entry.Reason = &reason
-			entry.Extra["blocked_questions"] = append([]string(nil), questions...)
-			entry.Extra["repair_request"] = repairRequest
 		}
 
 		dropSupersededWakeSnapshots(task)
@@ -362,7 +376,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		}
 		return err
 	})
-	if isLifecycleReplay(err) {
+	if isLifecycleReplay(err) || isAssessmentNoChange(err) {
 		return &result, nil
 	}
 

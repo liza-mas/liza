@@ -1,0 +1,136 @@
+# Blocked-Assessment Idempotency
+
+`assess-blocked` records an `orchestrator_assessment` only when its effective
+content differs from the latest assessment of that `BLOCKED` task. Comparison
+and append occur inside the same exclusive state transaction, so concurrent
+equivalent calls and process restarts cannot restart an unchanged append loop.
+Authorization, generation fencing and lifecycle request checks still apply.
+
+## Material identity
+
+`BuildAssessmentFingerprint` in
+[assess_blocked_fingerprint.go](../../internal/ops/assess_blocked_fingerprint.go)
+hashes a canonical JSON object with exactly six material inputs:
+
+| Input | Canonical value |
+|---|---|
+| `self` | Task status and count of history entries other than `orchestrator_assessment`. Assessment-only activity and `Lifecycle.Revision` are excluded. |
+| `dependencies` | Unique task IDs on every direct dependency's resolved replacement path, sorted by ID. Each record carries ID, creation time, status and non-assessment history count. Missing tasks retain their ID with zero-valued remaining fields. |
+| `descendants` | Sorted, deduplicated transitive descendants beneath resolver-selected, non-superseded dependency roots, following effective parent links. Each record carries ID, creation time, status and non-assessment history count (`lifecycle_version`); roots themselves are excluded. |
+| `blocker` | Reason, ordered questions and structured repair request that the assessment would establish. History-only mode uses current task metadata; reconciliation uses the validated candidate metadata. |
+| `disposition` | The candidate assessment note, including any stated recovery action, normalized as text. There is no separate disposition enum. |
+| `human` | Count of durable human notes addressed to this task or `all`. A newly appended note intentionally permits reassessment even if its text repeats an earlier instruction. Notes addressed only to dependencies do not count. |
+
+Fingerprint text normalization applies Unicode NFC, trims leading/trailing
+whitespace and collapses each whitespace run to one space. It applies to reason,
+questions, disposition, repair operation/target/command/evidence/validation and
+dependency-update IDs/lists. JSON map keys are ordered deterministically;
+typed records have fixed field order. Question, evidence, validation and repair
+update/list order is preserved: these sequences are not sorted or deduplicated.
+Nil and empty question lists both become `[]`; a nil repair request becomes the
+zero repair record, with empty optional fields omitted by its JSON tags.
+
+Reconciliation first uses the existing repair validator/normalizer: trim scalar
+fields and dependency IDs, compact blank evidence/validation entries, and retain
+explicit dependency lists. Fingerprint normalization determines comparison
+identity; it does not rewrite all stored prose. Equivalent whitespace, Unicode
+composition or map order cannot create a new identity. Arbitrary paraphrases or
+duplicated sentences within a note are not semantically interpreted or removed.
+
+The digest depends only on durable state and the candidate, not wall time,
+process memory, actor identity or receipt revision. Non-assessment history counts
+are structural lifecycle versions; creation times distinguish dependency task
+incarnations. Explicit human supersession is represented by appended notes, not
+by editing old notes in place.
+
+## Persistence and no-change result
+
+The key `assessment_fingerprint_v1` is stored in `TaskHistoryEntry.Extra`,
+inlined into the history entry in YAML; its value is a 64-character lowercase
+hexadecimal SHA-256 digest of the canonical JSON. Only
+the latest `orchestrator_assessment` retains it. On a new append, the writer
+removes both this key and the retired
+`dependency_descendant_wake_snapshot_v1` key from earlier assessment entries,
+preserving their notes and other audit fields. It neither stores the full
+fingerprint input nor introduces a separate task-state field.
+
+After eligibility and request checks, the writer compares the candidate digest
+with the latest assessment's valid digest before changing canonical blocker
+metadata, pruning old cursor fields, appending history or completing a lifecycle
+request. Equality returns successful JSON (`ok=true`) with:
+
+| Field | Value |
+|---|---|
+| `outcome` | `NO_CHANGE` |
+| `safe_action` | `stop` |
+| `effects` | `none` |
+| `changed` | `false` |
+
+No history, receipt or alert is appended; task state, lifecycle boundary and
+the serialized blackboard remain unchanged. The no-change sentinel aborts
+serialization. Separate best-effort outcome telemetry may still advance after
+operation locks are released, under the
+[lifecycle counter contract](lifecycle-results.md#coverage-and-observation-counters).
+Content equality is distinct from an exact retained request replay, which is
+checked first and can return `ALREADY_COMPLETED` under the
+[lifecycle result contract](lifecycle-results.md#result-contract).
+
+With no latest assessment, or a missing/malformed fingerprint (including an
+incorrect type, length or hexadecimal case), comparison fails open once: the
+next otherwise valid assessment appends and establishes the canonical baseline.
+An equivalent later call then returns `NO_CHANGE`. No migration rewrites legacy
+notes or invents their missing baseline. A changed material input permits one
+new assessment; history-only calls preserve blocker metadata, while reconciliation
+atomically replaces reason/questions/repair request and validates the candidate
+state. A nil repair request in reconciliation clears the old request.
+
+## Read/write relationship
+
+[orchestrator_wake.go](../../internal/ops/orchestrator_wake.go) and the blocked
+work detector use the same fingerprint builder and latest-entry validity check.
+The reader supplies current canonical blocker metadata and the note from the
+assessment that carries the digest. Missing/invalid baselines are actionable;
+otherwise a differing digest is actionable.
+
+The writer's material-change predicate is a **superset** of the reader's wake
+predicate: every durable change that wakes a blocked task is visible to the
+writer, while the writer additionally accepts a newly supplied blocker payload
+or disposition that no read could predict. After an assessment is committed,
+its own history entry and receipt revision do not provoke another wake. There
+is one comparison baseline, not independently advancing read and write cursors.
+This contract applies to `BLOCKED`; hypothesis-exhaustion wake behavior remains
+separate.
+
+The registered `assess-blocked` v1 payload schema validates structural input
+before state acquisition. Preflight and mutation share that validator; role,
+generation, task status and state-dependent eligibility still belong to mutation.
+See [payload validation](payload-validation.md) for the preflight boundary.
+
+## Observability and limits
+
+The approved [issue #157 digest](../plans/20260918-fix-gh-issues/20260918T153055Z-cpm-1-issue-digest.md#issue-157-deduplicate-blocked-task-assessments-by-lifecycle-version-and-blocker-fingerprint)
+reports 29 assessments on one blocked task, with run state reaching 1.12 MB and
+820 history entries. These are historical motivation, not measurements of this
+implementation or a claim that all those entries were duplicates.
+
+| Figure | Evidence and meaning |
+|---|---|
+| Assessments appended | `assess-blocked` / `COMPLETED` outcome count in the sprint observation window; durable assessment history records actual appends. |
+| Duplicates suppressed | `assess-blocked` / `NO_CHANGE` outcome count. Receipt replays are counted separately as `ALREADY_COMPLETED`. |
+| History entries avoided | One per observed `NO_CHANGE`, so the same count supplies this figure without another state field. |
+| Bytes avoided per call | `suppressed_entry_bytes`: byte length of YAML serialization of the would-be history entry, including the candidate note and metadata. It is an entry-size estimate, not the full state-file delta. |
+
+The byte figure is returned without logging the repeated full note. **There is
+no durable byte aggregate.** The fixed operation/outcome counter matrix stores
+counts only; summing retained per-call results is external analysis, not a
+built-in sprint total. Availability and `observed_since` delimit coverage;
+counter failures/process death can lose observations and never authorize an
+operation retry. Early invalid input or authorization rejection, before sprint
+capture, is not counted by this command. The
+[byte-aggregate debt](../../TECH_DEBT.md#blocked-assessment-byte-aggregate)
+records the extension trigger.
+
+The implementation sources above establish the documented identity and
+transaction behavior; [lifecycle_metrics.go](../../internal/ops/lifecycle_metrics.go)
+establishes the count-only telemetry shape. Design rationale and rejected
+alternatives are in [ADR-0141](../architecture/ADR/0141-blocked-assessment-idempotency.md).

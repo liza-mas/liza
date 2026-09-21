@@ -30,6 +30,14 @@ func setupHumanNoteTest(t *testing.T) (string, *db.Blackboard) {
 		state.Tasks = append(state.Tasks, task)
 	}
 	state.HumanNotes = []models.HumanNote{{Timestamp: now.Add(-time.Hour), For: "all", Message: "Prior input"}}
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		lastOrchestratorAssessment(task).Extra = map[string]any{
+			AssessmentFingerprintExtraKey: BuildAssessmentFingerprint(state, task, AssessmentFingerprintCandidate{
+				Reason: *task.BlockedReason, Questions: task.BlockedQuestions,
+			}),
+		}
+	}
 	testhelpers.WriteInitialState(t, statePath, state)
 	return root, db.For(statePath)
 }

@@ -7,10 +7,8 @@ import (
 )
 
 // CountActionableBlockedTasks counts BLOCKED tasks that the orchestrator should
-// wake up for. A blocked task is actionable if it has never been assessed, or if
-// new activity has occurred since the last assessment on the task itself or via
-// human notes. Dependency activity is actionable only when it changes dependency
-// satisfaction.
+// wake up for. A blocked task is actionable when its current assessment
+// fingerprint differs from the recorded one, or no valid baseline exists.
 func CountActionableBlockedTasks(state *models.State) int {
 	count := 0
 	for i := range state.Tasks {
@@ -22,7 +20,8 @@ func CountActionableBlockedTasks(state *models.State) int {
 }
 
 // isTaskActionableSinceAssessment determines whether a task should trigger an
-// orchestrator wake. Returns true if:
+// orchestrator wake. BLOCKED tasks compare the writer's content fingerprint.
+// For other tasks, returns true if:
 //   - No orchestrator_assessment history entry exists (never triaged)
 //   - The task itself has a non-assessment history entry after the last assessment
 //   - Any dependency became satisfied after the last assessment
@@ -37,6 +36,25 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 		return true
 	}
 
+	if task.Status == models.TaskStatusBlocked {
+		recorded, valid := IsAssessmentFingerprint(lastAssessment.Extra[AssessmentFingerprintExtraKey])
+		if !valid {
+			return true
+		}
+		candidate := AssessmentFingerprintCandidate{
+			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest,
+		}
+		if task.BlockedReason != nil {
+			candidate.Reason = *task.BlockedReason
+		}
+		// Disposition belongs to the same assessment that carries the digest;
+		// the blocker triple belongs to the task's current canonical state.
+		if lastAssessment.Note != nil {
+			candidate.Note = *lastAssessment.Note
+		}
+		return BuildAssessmentFingerprint(state, task, candidate) != recorded
+	}
+
 	// Check own history for non-assessment activity after last assessment.
 	for i := range task.History {
 		if task.History[i].Event != models.TaskEventOrchestratorAssessment &&
@@ -48,19 +66,6 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 	// Check whether dependency satisfaction changed after the last assessment.
 	for _, depID := range task.DependsOn {
 		if dependencySatisfactionChangedAfterAssessment(state, state.ResolveDependency(depID), lastAssessment.Time) {
-			return true
-		}
-	}
-
-	// Only BLOCKED tasks use dependency-descendant cursors. Hypothesis exhaustion
-	// shares this predicate but retains its existing direct-dependency behavior.
-	if task.Status == models.TaskStatusBlocked {
-		recorded, hasSnapshot := lastAssessment.Extra[DependencyDescendantWakeSnapshotExtraKey]
-		if hasSnapshot {
-			if DependencyDescendantWakeSnapshotChanged(state, task, recorded) {
-				return true
-			}
-		} else if DependencyDescendantChangedAfter(state, task, lastAssessment.Time) {
 			return true
 		}
 	}

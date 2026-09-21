@@ -34,6 +34,9 @@ func printAssessBlockedResult(result *ops.AssessBlockedResult, err error) error 
 	}
 
 	if printLifecycleResult(result.LifecycleOutcome) {
+		if result.SuppressedEntryBytes > 0 {
+			fmt.Printf("suppressed_entry_bytes: %d\n", result.SuppressedEntryBytes)
+		}
 		return nil
 	}
 

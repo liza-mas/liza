@@ -160,11 +160,15 @@ func TestLifecycleMetadataExpiredAssessmentDoesNotRepeat(t *testing.T) {
 	root, stateFile, original := metadataLifecycleFixture(t, "assess-blocked")
 	for i := 0; i <= models.LifecycleReceiptsPerOperation; i++ {
 		request := original
+		note := "inspected repair"
 		if i > 0 {
+			// Content-equivalent assessments create no receipt. Keep each
+			// iteration material so the original receipt is actually evicted.
+			note = fmt.Sprintf("inspected repair %d", i)
 			state := readStateForTest(t, stateFile)
 			request = LifecycleRequestOptions{RequestID: fmt.Sprintf("assessment-%d", i), ExpectedTransition: models.TaskTransitionID(state.FindTask("target"))}
 		}
-		if _, err := invokeMetadataLifecycle(root, "assess-blocked", "inspected repair", request); err != nil {
+		if _, err := invokeMetadataLifecycle(root, "assess-blocked", note, request); err != nil {
 			t.Fatal(err)
 		}
 	}

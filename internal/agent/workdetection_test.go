@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -281,6 +282,52 @@ func TestOrchestratorWakeTriggerSpecs(t *testing.T) {
 	}
 }
 
+func recordWakeFingerprint(state *models.State, task *models.Task, entry *models.TaskHistoryEntry) {
+	candidate := ops.AssessmentFingerprintCandidate{Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest}
+	if task.BlockedReason != nil {
+		candidate.Reason = *task.BlockedReason
+	}
+	if entry.Note != nil {
+		candidate.Note = *entry.Note
+	}
+	entry.Extra = map[string]any{ops.AssessmentFingerprintExtraKey: ops.BuildAssessmentFingerprint(state, task, candidate)}
+}
+
+func TestDetectOrchestratorWakeTriggers_AssessedFingerprint(t *testing.T) {
+	for _, reconcile := range []bool{false, true} {
+		name := "note"
+		if reconcile {
+			name = "reconcile"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, root)
+			testhelpers.CreateSpecFile(t, root, "vision.md", "# Vision\n")
+			state := testhelpers.CreateValidState()
+			task := testhelpers.BuildTaskByStatus("target", models.TaskStatusBlocked, time.Now().UTC())
+			task.AssignedTo, task.Worktree = nil, nil
+			task.SpecRef = "specs/vision.md"
+			state.Tasks = []models.Task{task}
+			testhelpers.WriteInitialState(t, stateFile, state)
+			opts := ops.AssessBlockedOptions{}
+			if reconcile {
+				opts = ops.AssessBlockedOptions{Reason: "provider unavailable", Questions: []string{"Who repairs it?"}}
+			}
+			result, err := ops.AssessBlockedWithOptions(root, "target", "await provider recovery", "orchestrator-1", opts)
+			if err != nil || result.Outcome != models.LifecycleCompleted {
+				t.Fatalf("assessment: %+v %v", result, err)
+			}
+			stored, err := db.New(stateFile).Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if wake := DetectOrchestratorWakeTriggers(stored, nil, nil, nil); wake.Trigger == WakeTriggerBlocked {
+				t.Fatalf("unchanged assessment wakes: %+v", wake)
+			}
+		})
+	}
+}
+
 func TestDetectOrchestratorWakeTriggers_BlockedDependencyDescendantSnapshot(t *testing.T) {
 	baseTime := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	assessmentTime := baseTime.Add(time.Hour)
@@ -310,9 +357,7 @@ func TestDetectOrchestratorWakeTriggers_BlockedDependencyDescendantSnapshot(t *t
 			Agent: &orchestrator,
 		}
 		if withBaseline {
-			entry.Extra = map[string]any{
-				ops.DependencyDescendantWakeSnapshotExtraKey: ops.BuildDependencyDescendantWakeSnapshot(state, blocked),
-			}
+			recordWakeFingerprint(state, blocked, &entry)
 		}
 		blocked.History = append(blocked.History, entry)
 	}
@@ -418,7 +463,7 @@ func TestDetectOrchestratorWakeTriggers_BlockedDependencyDescendantSnapshot(t *t
 
 	t.Run("descendant beneath unrelated root does not wake", func(t *testing.T) {
 		state := newState()
-		recordAssessment(state, assessmentTime, false)
+		recordAssessment(state, assessmentTime, true)
 		unrelated := testhelpers.BuildTaskByStatus("unrelated-plan", models.TaskStatusMerged, baseTime)
 		state.Tasks = append(state.Tasks, unrelated)
 		addChild(state, "unrelated-coding", "unrelated-plan", laterTime)
@@ -434,12 +479,12 @@ func TestDetectOrchestratorWakeTriggers_BlockedDependencyDescendantSnapshot(t *t
 		assertWake(t, state, WakeTriggerNone)
 	})
 
-	t.Run("legacy historical descendant does not wake", func(t *testing.T) {
+	t.Run("legacy historical descendant fails open for baseline", func(t *testing.T) {
 		state := newState()
 		addChild(state, "provider-coding", "provider-plan", baseTime)
 		recordAssessment(state, assessmentTime, false)
 
-		assertWake(t, state, WakeTriggerNone)
+		assertWake(t, state, WakeTriggerBlocked)
 	})
 
 	t.Run("refreshed repeated assessment baseline suppresses prior change", func(t *testing.T) {
@@ -496,6 +541,12 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 					Agent: &agent,
 				})
 				state.Tasks = []models.Task{task}
+				for i := range state.Tasks {
+					current := &state.Tasks[i]
+					if current.Status == models.TaskStatusBlocked && len(current.History) > 0 && current.History[len(current.History)-1].Event == models.TaskEventOrchestratorAssessment {
+						recordWakeFingerprint(state, current, &current.History[len(current.History)-1])
+					}
+				}
 				return state
 			}(),
 			wantTrigger: WakeTriggerNone,
@@ -610,7 +661,7 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   1,
 		},
 		{
-			name: "blocked assessed dependency submitted after assessment - no wake",
+			name: "blocked assessed dependency submitted after assessment - wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -623,6 +674,8 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				})
 				dep := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReadyForReview, now)
 				coder := "coder-1"
+				state.Tasks = []models.Task{task, dep}
+				recordWakeFingerprint(state, &task, &task.History[len(task.History)-1])
 				dep.History = append(dep.History, models.TaskHistoryEntry{
 					Time:  now.Add(-5 * time.Minute),
 					Event: models.TaskEventSubmittedForReview,
@@ -631,11 +684,11 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state.Tasks = []models.Task{task, dep}
 				return state
 			}(),
-			wantTrigger: WakeTriggerNone,
-			wantCount:   0,
+			wantTrigger: WakeTriggerBlocked,
+			wantCount:   1,
 		},
 		{
-			name: "blocked assessed dependency approved after assessment - no wake",
+			name: "blocked assessed dependency approved after assessment - wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -648,6 +701,8 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				})
 				dep := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusApproved, now)
 				reviewer := "code-reviewer-1"
+				state.Tasks = []models.Task{task, dep}
+				recordWakeFingerprint(state, &task, &task.History[len(task.History)-1])
 				dep.History = append(dep.History, models.TaskHistoryEntry{
 					Time:  now.Add(-5 * time.Minute),
 					Event: models.TaskEventApproved,
@@ -656,11 +711,11 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state.Tasks = []models.Task{task, dep}
 				return state
 			}(),
-			wantTrigger: WakeTriggerNone,
-			wantCount:   0,
+			wantTrigger: WakeTriggerBlocked,
+			wantCount:   1,
 		},
 		{
-			name: "blocked assessed dependency claimed after assessment - no wake",
+			name: "blocked assessed dependency claimed after assessment - wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -673,6 +728,8 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				})
 				dep := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusImplementing, now)
 				coder := "coder-1"
+				state.Tasks = []models.Task{task, dep}
+				recordWakeFingerprint(state, &task, &task.History[len(task.History)-1])
 				dep.History = append(dep.History, models.TaskHistoryEntry{
 					Time:  now.Add(-5 * time.Minute),
 					Event: models.TaskEventClaimed,
@@ -681,11 +738,11 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state.Tasks = []models.Task{task, dep}
 				return state
 			}(),
-			wantTrigger: WakeTriggerNone,
-			wantCount:   0,
+			wantTrigger: WakeTriggerBlocked,
+			wantCount:   1,
 		},
 		{
-			name: "blocked assessed dependency blocked after assessment - no wake",
+			name: "blocked assessed dependency blocked after assessment - wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -698,6 +755,8 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				})
 				dep := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusBlocked, now)
 				coder := "coder-1"
+				state.Tasks = []models.Task{task, dep}
+				recordWakeFingerprint(state, &task, &task.History[len(task.History)-1])
 				dep.History = append(dep.History,
 					models.TaskHistoryEntry{
 						Time:  now.Add(-5 * time.Minute),
@@ -713,8 +772,8 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state.Tasks = []models.Task{task, dep}
 				return state
 			}(),
-			wantTrigger: WakeTriggerNone,
-			wantCount:   0,
+			wantTrigger: WakeTriggerBlocked,
+			wantCount:   2,
 		},
 		{
 			name: "blocked assessed dependency has only old activity - no wake",
@@ -736,6 +795,12 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 					Agent: &coder,
 				})
 				state.Tasks = []models.Task{task, dep}
+				for i := range state.Tasks {
+					current := &state.Tasks[i]
+					if current.Status == models.TaskStatusBlocked && len(current.History) > 0 && current.History[len(current.History)-1].Event == models.TaskEventOrchestratorAssessment {
+						recordWakeFingerprint(state, current, &current.History[len(current.History)-1])
+					}
+				}
 				return state
 			}(),
 			wantTrigger: WakeTriggerNone,
@@ -760,6 +825,12 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 					Agent: &agent,
 				})
 				state.Tasks = []models.Task{task, dep}
+				for i := range state.Tasks {
+					current := &state.Tasks[i]
+					if current.Status == models.TaskStatusBlocked && len(current.History) > 0 && current.History[len(current.History)-1].Event == models.TaskEventOrchestratorAssessment {
+						recordWakeFingerprint(state, current, &current.History[len(current.History)-1])
+					}
+				}
 				return state
 			}(),
 			wantTrigger: WakeTriggerNone,
@@ -828,6 +899,7 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				// task-2: never assessed → actionable
 				task2 := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusBlocked, now)
 				state.Tasks = []models.Task{task1, task2}
+				recordWakeFingerprint(state, &state.Tasks[0], &state.Tasks[0].History[len(state.Tasks[0].History)-1])
 				return state
 			}(),
 			wantTrigger: WakeTriggerBlocked,

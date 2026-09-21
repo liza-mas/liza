@@ -913,7 +913,7 @@ func TestJSON_AssessBlocked_ReconcilesCanonicalMetadata(t *testing.T) {
 					}
 					return []string{"--reason", "current blocker", "--question", "What remains blocked?", "--repair-request-file", path}
 				},
-				wantParts: []string{"repair request operation is required"},
+				wantParts: []string{"/repair_request/command exactly one of command or dependency_updates is required"},
 			},
 			{
 				name: "mixed file and fields",
