@@ -492,10 +492,13 @@ Query Types:
     sprint.status                  - Direct field access
     sprint.metrics.tasks_done      - Nested field access
     sprint.elapsed                 - Computed field (time since started)
+    tasks.<task-id>.history         - Task history
+    <task-id>.rejection_reason      - Task rejection text (null when absent)
 
   Entity queries:
     tasks                          - List all tasks
     tasks <task-id>                - Show specific task
+    tasks.<task-id>                - Same task using dotted syntax
     agents                         - List all agents
     agents <agent-id>              - Show specific agent
     metrics                        - Show sprint metrics
@@ -520,6 +523,8 @@ Examples:
   %[2]s tasks --active --summary --json
   %[2]s tasks task-1 --output-summary --json
   %[2]s tasks task-1 --format json
+  %[2]s tasks --field id,rejection_reason,rejection_rca --json
+  %[2]s tasks.task-1.history --json
   %[2]s task-1                  # Shorthand for tasks task-1
   %[2]s fix-auth-bug            # Shorthand for tasks fix-auth-bug (any task ID)
   %[2]s coder-1                 # Shorthand for agents coder-1
@@ -528,7 +533,14 @@ Examples:
   %[2]s agents --format yaml
   %[2]s metrics
   %[2]s human_notes --json
-  %[2]s anomalies`, brand.NameTitle, brand.Command("get"), brand.BinaryName),
+  %[2]s anomalies
+
+Inspection reads a complete published snapshot without acquiring the state lock.
+Repeat --field or separate fields with commas to project task fields; projections
+support JSON, YAML and value formats, but not table/summary/output-summary.
+Reserved state/computed queries take precedence. Within task queries, exact IDs
+precede the longest matching ID prefix. Use tasks <literal-id> for dotted IDs.
+Unknown fields, array/map traversal and surplus positional arguments are errors.`, brand.NameTitle, brand.Command("get"), brand.BinaryName),
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -547,6 +559,12 @@ Examples:
 		active, _ := cmd.Flags().GetBool("active")
 		zombies, _ := cmd.Flags().GetBool("zombies")
 		outputSummary, _ := cmd.Flags().GetBool("output-summary")
+		fields, _ := cmd.Flags().GetStringArray("field")
+		if cmd.Flags().Changed("field") && len(fields) == 0 {
+			// pflag decodes --field= as an empty slice; retain the explicit
+			// empty request so inspection validation can reject it.
+			fields = []string{""}
+		}
 
 		projectRoot, err := requireProjectRoot()
 		if err != nil {
@@ -560,6 +578,7 @@ Examples:
 				ProjectRoot:   projectRoot,
 				Summary:       summary,
 				OutputSummary: outputSummary,
+				Fields:        fields,
 				Active:        active,
 				Zombies:       zombies,
 				WarnWriter:    &warnBuf,
@@ -578,6 +597,7 @@ Examples:
 			ProjectRoot:   projectRoot,
 			Summary:       summary,
 			OutputSummary: outputSummary,
+			Fields:        fields,
 			Active:        active,
 			Zombies:       zombies,
 			WarnWriter:    cmd.ErrOrStderr(),
@@ -590,6 +610,25 @@ Examples:
 
 		cmd.Println(result)
 		return nil
+	},
+}
+
+var getTasksCmd = &cobra.Command{
+	Use:   "get-tasks [task-id]",
+	Short: "Query tasks with optional field projection",
+	Long: fmt.Sprintf(`Query tasks using the same snapshot and formatting as %s.
+
+Examples:
+  %s --field id,rejection_reason,rejection_rca --json
+  %s task-1 --field history --format yaml
+
+Repeat --field or separate fields with commas. Only requested keys are returned;
+absent optional values are null. See %s --help for query details.`,
+		brand.Command("get", "tasks"), brand.Command("get-tasks"),
+		brand.Command("get-tasks"), brand.Command("get")),
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return getCmd.RunE(cmd, append([]string{"tasks"}, args...))
 	},
 }
 
@@ -640,7 +679,7 @@ Examples:
 		if isJSON(cmd) {
 			statePath := paths.New(projectRoot).StatePath()
 			bb := db.For(statePath)
-			state, err := bb.Read()
+			state, err := bb.ReadSnapshot()
 			if err != nil {
 				return err // deferred guard handles JSON
 			}
@@ -682,6 +721,7 @@ func init() {
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(sprintCheckpointCmd)
 	rootCmd.AddCommand(getCmd)
+	rootCmd.AddCommand(getTasksCmd)
 	rootCmd.AddCommand(statusCmd)
 
 	proceedCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -696,6 +736,7 @@ func init() {
 	}
 	replanCmd.ValidArgsFunction = completeTaskIDArgs(1)
 	getCmd.ValidArgsFunction = completeGetQueries
+	getTasksCmd.ValidArgsFunction = completeTaskIDArgs(1)
 
 	addChangedByFlag(pauseCmd)
 	addChangedByFlag(stopCmd)
@@ -708,16 +749,19 @@ func init() {
 	addJSONFlag(updateSprintMetricsCmd)
 	addJSONFlag(clearStaleReviewClaimsCmd)
 	addJSONFlag(sprintCheckpointCmd)
-	addJSONFlag(getCmd)
 	addJSONFlag(statusCmd)
 
-	// Get command flags
-	getCmd.Flags().String("format", "", "output format: json, yaml, table, value (default varies by query type)")
-	getCmd.Flags().Bool("summary", false, "return compact task summaries")
-	getCmd.Flags().Bool("output-summary", false, "return compact task output summaries")
-	getCmd.Flags().Bool("active", false, "return only non-terminal tasks")
+	// Both task entry points share execution and projection semantics.
+	for _, cmd := range []*cobra.Command{getCmd, getTasksCmd} {
+		addJSONFlag(cmd)
+		cmd.Flags().String("format", "", "output format: json, yaml, table, value (default varies by query type)")
+		cmd.Flags().Bool("summary", false, "return compact task summaries")
+		cmd.Flags().Bool("output-summary", false, "return compact task output summaries")
+		cmd.Flags().Bool("active", false, "return only non-terminal tasks")
+		cmd.Flags().StringArray("field", nil, "project task fields (repeat or comma-separate; e.g. id,rejection_reason,rejection_rca)")
+		registerCompletion(cmd, "format", completeValues("json", "yaml", "table", "value"))
+	}
 	getCmd.Flags().Bool("zombies", false, fmt.Sprintf("return live %s agent processes for this goal that are missing from state", brand.BinaryName))
-	registerCompletion(getCmd, "format", completeValues("json", "yaml", "table", "value"))
 
 	// Status command flags
 	statusCmd.Flags().String("format", "", "output format: json, yaml, or dashboard (default)")

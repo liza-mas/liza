@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/render"
 )
@@ -174,7 +175,7 @@ type circuitBreakerStatus struct {
 func StatusCommand(opts StatusOptions) (string, error) {
 	statePath := paths.New(opts.ProjectRoot).StatePath()
 	bb := db.For(statePath)
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return "", fmt.Errorf("failed to read state: %w", err)
 	}
@@ -234,13 +235,22 @@ func BuildStatusData(state *models.State, detailed bool, projectRoot string, pr 
 	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.LegacyCoderClaimable, data.Tasks.LegacyCodeReviewerReviewable, pr)
 	data.PhaseHandoff = buildPhaseHandoffStatus(state, projectRoot)
 
-	for i := range state.Tasks {
-		avail := ops.AvailableManualTransitions(&state.Tasks[i], projectRoot)
-		if len(avail) > 0 {
-			data.PendingTransitions = append(data.PendingTransitions, pendingTransition{
-				TaskID:      state.Tasks[i].ID,
-				Transitions: avail,
-			})
+	// Resolve policy from this snapshot once. The mutation-side helper reloads
+	// locked state, which would turn status into one lock acquisition per task.
+	if cfg, err := pipeline.LoadFrozen(projectRoot); err == nil {
+		var options []pipeline.ResolverOption
+		if state.Config.NoFollowUp {
+			options = append(options, pipeline.WithNoFollowUp())
+		}
+		resolver := pipeline.NewResolver(cfg, options...)
+		for i := range state.Tasks {
+			task := &state.Tasks[i]
+			avail := resolver.AvailableManualTransitions(task.Status, task.TransitionsExecuted)
+			if len(avail) > 0 {
+				data.PendingTransitions = append(data.PendingTransitions, pendingTransition{
+					TaskID: task.ID, Transitions: avail,
+				})
+			}
 		}
 	}
 

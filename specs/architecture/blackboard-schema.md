@@ -1324,7 +1324,18 @@ flock -x .liza/state.yaml.lock -c 'operation'
 
 Lock hold time must be minimal (read, modify, write, release).
 
-Reads do not require lock (eventual consistency acceptable for reads).
+Operator inspection (`status`, `get`, `get-tasks`) reads one complete published
+state through `Blackboard.ReadSnapshot`, without acquiring the state lock or
+consulting an mtime cache. Writers publish closed temporary files by atomic
+rename; inspection sees either publication, never a partially written state.
+The file is closed before YAML decoding. Missing files and malformed YAML remain
+errors. In-place external writes are outside this guarantee.
+
+Snapshots may become stale immediately. Status derives runtime transition policy
+from its captured state; process/filesystem diagnostics remain separate observations.
+Snapshots do not authorize mutations: existing locked reads and locked
+read-modify-write revalidation retain their contracts. Windows publication retains
+its bounded retry for filesystem handles held during the byte read.
 
 ---
 

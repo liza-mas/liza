@@ -17,13 +17,14 @@ import (
 
 // InspectOptions contains options for the inspect command
 type InspectOptions struct {
-	Format        string // Output format: json, yaml, table, value
-	ProjectRoot   string // Project root directory
-	Internal      bool   // If true, return structured data for composition (not formatted string)
-	Summary       bool   // If true, return compact entity summaries
-	OutputSummary bool   // If true, return compact task output entries
-	Active        bool   // If true, return only non-terminal tasks
-	Zombies       bool   // If true, return live agent processes missing from state
+	Format        string   // Output format: json, yaml, table, value
+	ProjectRoot   string   // Project root directory
+	Internal      bool     // If true, return structured data for composition (not formatted string)
+	Summary       bool     // If true, return compact entity summaries
+	OutputSummary bool     // If true, return compact task output entries
+	Active        bool     // If true, return only non-terminal tasks
+	Zombies       bool     // If true, return live agent processes missing from state
+	Fields        []string // Requested task fields, repeated or comma-separated
 	WarnWriter    io.Writer
 }
 
@@ -35,6 +36,24 @@ func (opts *InspectOptions) Validate() error {
 	}
 	if opts.Summary && opts.OutputSummary {
 		return &errors.ValidationError{Message: "--summary and --output-summary are mutually exclusive"}
+	}
+	if len(opts.Fields) > 0 {
+		if opts.Summary || opts.OutputSummary || opts.Zombies || opts.Format == "table" {
+			return &errors.ValidationError{Message: "--field cannot be combined with --summary, --output-summary, --zombies, or table format"}
+		}
+		var fields []string
+		for _, group := range opts.Fields {
+			for _, field := range strings.Split(group, ",") {
+				field = strings.TrimSpace(field)
+				if field == "" {
+					return &errors.ValidationError{Message: "--field requires a non-empty task field"}
+				}
+				if !slices.Contains(fields, field) {
+					fields = append(fields, field)
+				}
+			}
+		}
+		opts.Fields = fields
 	}
 	return nil
 }
@@ -53,7 +72,7 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 	// Read state
 	statePath := paths.New(opts.ProjectRoot).StatePath()
 	blackboard := db.For(statePath)
-	state, err := blackboard.Read()
+	state, err := blackboard.ReadSnapshot()
 	if err != nil {
 		return "", fmt.Errorf("failed to read state: %w", err)
 	}
@@ -61,18 +80,38 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 	// Parse the query
 	query := args[0]
 
-	// Determine if this is a field query or entity query
-	// Field queries contain dots (e.g., "config.mode", "sprint.status")
-	// Entity queries are single words (e.g., "tasks", "agents", "summary")
-	if strings.Contains(query, ".") {
-		// Field query - direct or computed
-		return handleFieldQuery(state, query, opts)
-	}
-
 	// Check if query is a known entity type
 	if isKnownEntityType(query) {
 		// Entity query
 		return handleEntityQuery(state, query, args[1:], opts)
+	}
+	if len(args) != 1 {
+		return "", &errors.ValidationError{Message: "a field or ID query accepts exactly one argument; use tasks <task-id> for a literal task ID"}
+	}
+	if root, _, dotted := strings.Cut(query, "."); dotted {
+		// Reserved state/computed paths retain precedence over task IDs.
+		if query == "tasks.completion_rate" || query == "tasks.avg_iteration_count" {
+			return handleFieldQuery(state, query, opts)
+		}
+		if root == "task" {
+			path := strings.TrimPrefix(query, "task.")
+			if dot := strings.LastIndex(path, "."); dot > 0 {
+				field := path[dot+1:]
+				if slices.Contains([]string{"age", "time_in_status", "transition_id"}, field) {
+					if task := state.FindTask(path[:dot]); task != nil {
+						return handleTaskFieldQuery(task, field, opts)
+					}
+				}
+			}
+		}
+		if root == "tasks" || root == "task" {
+			return handleTaskQuery(state, strings.TrimPrefix(query, root+"."), opts)
+		}
+		_, stateFieldErr := getField(state, root)
+		if stateFieldErr == nil || isKnownEntityType(root) || root == "agent" || root == "version" {
+			return handleFieldQuery(state, query, opts)
+		}
+		return handleTaskQuery(state, query, opts)
 	}
 
 	// Load role names from pipeline config for agent ID pattern detection
@@ -112,6 +151,9 @@ func isAgentIDPattern(query string, roleNames []string) bool {
 
 // handleFieldQuery handles queries for specific fields (direct or computed)
 func handleFieldQuery(state *models.State, fieldPath string, opts InspectOptions) (string, error) {
+	if opts.Summary || opts.OutputSummary || opts.Active || opts.Zombies || len(opts.Fields) > 0 {
+		return "", &errors.ValidationError{Message: "field queries do not support --field, --summary, --output-summary, --active, or --zombies"}
+	}
 	// Try direct field access first
 	value, err := getField(state, fieldPath)
 	if err == nil {
@@ -132,8 +174,11 @@ func handleFieldQuery(state *models.State, fieldPath string, opts InspectOptions
 
 // handleEntityQuery handles queries for entities (tasks, agents, etc.)
 func handleEntityQuery(state *models.State, entity string, args []string, opts InspectOptions) (string, error) {
-	if entity != "tasks" && (opts.Summary || opts.OutputSummary || opts.Active) {
-		return "", fmt.Errorf("--summary, --output-summary, and --active are only supported for tasks")
+	if len(args) > 1 || len(args) > 0 && entity != "tasks" && entity != "agents" {
+		return "", &errors.ValidationError{Message: "only tasks and agents accept one optional ID; surplus arguments are not supported"}
+	}
+	if entity != "tasks" && (opts.Summary || opts.OutputSummary || opts.Active || len(opts.Fields) > 0) {
+		return "", fmt.Errorf("--field, --summary, --output-summary, and --active are only supported for tasks")
 	}
 	if entity != "agents" && opts.Zombies {
 		return "", fmt.Errorf("--zombies is only supported for agents")
@@ -151,6 +196,7 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 			OutputSummary: opts.OutputSummary,
 			Active:        opts.Active,
 			ProjectRoot:   opts.ProjectRoot,
+			Fields:        opts.Fields,
 		}
 		if len(args) > 0 {
 			return asString(inspectTask(state, args[0], taskOpts))
@@ -179,9 +225,6 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 	case "proof_reaffirmations":
 		return formatOutput(state.ProofReaffirmations, opts.Format)
 	case "human_notes":
-		if len(args) != 0 {
-			return "", fmt.Errorf("human_notes does not accept a task ID; query the list and select notes by for")
-		}
 		return formatOutput(humanNotesForInspect(state.HumanNotes), opts.Format)
 	default:
 		return "", &errors.NotFoundError{Entity: entity}

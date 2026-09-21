@@ -26,6 +26,7 @@ func TestConfigGetDelegatedFlagContract(t *testing.T) {
 	// config get delegates to get's RunE. Review this contract whenever
 	// get gains a flag or changes a type/default: omitted booleans rely
 	// on false, while config's field-only query explicitly uses value format.
+	// The task-only field flag is absent on config get, yielding no projection.
 	snapshot := func(flags *pflag.FlagSet) map[string][2]string {
 		result := make(map[string][2]string)
 		flags.VisitAll(func(flag *pflag.Flag) {
@@ -37,6 +38,7 @@ func TestConfigGetDelegatedFlagContract(t *testing.T) {
 	}
 	wantGet := map[string][2]string{
 		"format":         {"string", ""},
+		"field":          {"stringArray", "[]"},
 		"json":           {"bool", "false"},
 		"summary":        {"bool", "false"},
 		"active":         {"bool", "false"},

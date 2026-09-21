@@ -13,15 +13,16 @@ import (
 
 // inspectTasksOptions contains options for task inspection
 type inspectTasksOptions struct {
-	Format           string // Output format: json, yaml, table, value
-	StatusFilter     string // Filter by status
-	AssignedToFilter string // Filter by assignee
-	BlockedFilter    bool   // Show only blocked tasks
-	Internal         bool   // Return structured data for composition
-	Summary          bool   // Return compact task summaries
-	OutputSummary    bool   // Return compact output entry summaries
-	Active           bool   // Show only non-terminal tasks
-	ProjectRoot      string // Project root, used for filesystem-aware diagnostics
+	Format           string   // Output format: json, yaml, table, value
+	StatusFilter     string   // Filter by status
+	AssignedToFilter string   // Filter by assignee
+	BlockedFilter    bool     // Show only blocked tasks
+	Internal         bool     // Return structured data for composition
+	Summary          bool     // Return compact task summaries
+	OutputSummary    bool     // Return compact output entry summaries
+	Active           bool     // Show only non-terminal tasks
+	Fields           []string // Requested task fields
+	ProjectRoot      string   // Project root, used for filesystem-aware diagnostics
 	PipelineResolver models.PipelineResolver
 }
 
@@ -56,10 +57,7 @@ type taskInfo struct {
 	MergeCommit       *string                   `json:"merge_commit,omitempty" yaml:"merge_commit,omitempty"`
 	PRURL             *string                   `json:"pr_url,omitempty" yaml:"pr_url,omitempty"`
 	RejectionReason   *string                   `json:"rejection_reason,omitempty" yaml:"rejection_reason,omitempty"`
-	// RejectionRCA carries the gate record, including its disposition. A doer
-	// resumed after a gated rejection has no other durable read path to it:
-	// analyze reports only aggregate gate telemetry, and no per-task field
-	// query exposes it.
+	// RejectionRCA carries the gate record, including its disposition.
 	RejectionRCA       *models.RejectionRCARecord    `json:"rejection_rca,omitempty" yaml:"rejection_rca,omitempty"`
 	IntegrationFailure map[string]any                `json:"integration_failure,omitempty" yaml:"integration_failure,omitempty"`
 	Output             []models.OutputEntry          `json:"output,omitempty" yaml:"output,omitempty"`
@@ -121,14 +119,28 @@ type outputEntrySummaryInfo struct {
 
 // inspectTasks lists all tasks or filters by criteria
 func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
-	if opts.Active && opts.PipelineResolver == nil && opts.ProjectRoot != "" {
-		cfg, err := pipeline.LoadFrozen(opts.ProjectRoot)
-		if err != nil {
-			return nil, fmt.Errorf("load pipeline for active task filtering: %w", err)
-		}
-		opts.PipelineResolver = pipeline.NewResolver(cfg)
+	filtered, err := filterInspectionTasks(state.Tasks, opts)
+	if err != nil {
+		return nil, err
 	}
-	filtered := filterTasks(state.Tasks, opts)
+	if len(opts.Fields) > 0 {
+		// Validate the schema even when filters (or an empty run) yield no tasks.
+		if _, err := projectTaskFields(&models.Task{}, opts.Fields); err != nil {
+			return nil, err
+		}
+		projection := make([]map[string]any, 0, len(filtered))
+		for i := range filtered {
+			fields, err := projectTaskFields(&filtered[i], opts.Fields)
+			if err != nil {
+				return nil, err
+			}
+			projection = append(projection, fields)
+		}
+		if opts.Internal {
+			return projection, nil
+		}
+		return formatOutput(projection, opts.Format)
+	}
 
 	if opts.OutputSummary {
 		summaries := make([]taskOutputSummaryInfo, len(filtered))
@@ -169,6 +181,24 @@ func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (
 	if foundTask == nil {
 		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
+	if len(opts.Fields) > 0 {
+		projection, err := projectTaskFields(foundTask, opts.Fields)
+		if err != nil {
+			return nil, err
+		}
+		filtered, err := filterInspectionTasks([]models.Task{*foundTask}, opts)
+		if err != nil {
+			return nil, err
+		}
+		var result any
+		if len(filtered) > 0 {
+			result = projection
+		}
+		if opts.Internal {
+			return result, nil
+		}
+		return formatOutput(result, opts.Format)
+	}
 
 	if opts.Summary {
 		info := buildTaskSummaryInfo(foundTask)
@@ -191,6 +221,29 @@ func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (
 		return info, nil
 	}
 	return formatTaskOutput(info, opts.Format)
+}
+
+func filterInspectionTasks(tasks []models.Task, opts inspectTasksOptions) ([]models.Task, error) {
+	if opts.Active && opts.PipelineResolver == nil && opts.ProjectRoot != "" {
+		cfg, err := pipeline.LoadFrozen(opts.ProjectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("load pipeline for active task filtering: %w", err)
+		}
+		opts.PipelineResolver = pipeline.NewResolver(cfg)
+	}
+	return filterTasks(tasks, opts), nil
+}
+
+func projectTaskFields(task *models.Task, fields []string) (map[string]any, error) {
+	projection := make(map[string]any, len(fields))
+	for _, field := range fields {
+		value, err := taskInspectionField(task, field)
+		if err != nil {
+			return nil, err
+		}
+		projection[field] = value
+	}
+	return projection, nil
 }
 
 // buildTaskInfo converts a Task to taskInfo with computed fields

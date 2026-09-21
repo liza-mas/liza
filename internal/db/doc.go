@@ -1,6 +1,13 @@
 // Package db implements the atomic YAML database layer with file locking.
 // It provides safe concurrent access to state.yaml using flock-based mutual exclusion.
 //
+// Operator inspection uses [Blackboard.ReadSnapshot]: an uncached, lock-free
+// read of one atomically published file, decoded after the file is closed.
+// A snapshot may be stale immediately; it does not authorize later mutations.
+// [Blackboard.Read] retains its locking contract, and [Blackboard.Modify]
+// revalidates and publishes within an exclusive lock. In-place external writes
+// do not provide the atomic publication required by snapshot readers.
+//
 // # Instance Management
 //
 // Production code should use [For] to obtain a process-level singleton

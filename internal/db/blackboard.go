@@ -126,7 +126,7 @@ func (bb *Blackboard) Read() (*models.State, error) {
 // ReadContext returns the current state under an exclusive file lock,
 // aborting lock acquisition when ctx is canceled.
 func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
-	var state models.State
+	var state *models.State
 	err := bb.fileLock.WithLockOperationContext(ctx, "read", func() error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -139,17 +139,35 @@ func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
 			return err
 		}
 
-		if err := yaml.Unmarshal(data, &state); err != nil {
-			return &errors.StateSchemaError{Operation: "state read", Err: err}
-		}
-
-		return nil
+		state, err = decodeState(data, "state read")
+		return err
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
+	return state, nil
+}
+
+// ReadSnapshot reads one complete published state without acquiring the state
+// lock or consulting the cache. Writers publish by atomic rename, so readers
+// observe either publication, never a partially written state. The file is
+// closed before decoding. The result is independent and may already be stale;
+// use locked revalidation for decisions that authorize mutations.
+func (bb *Blackboard) ReadSnapshot() (*models.State, error) {
+	data, err := os.ReadFile(bb.statePath)
+	if err != nil {
+		return nil, err
+	}
+	return decodeState(data, "state snapshot")
+}
+
+func decodeState(data []byte, operation string) (*models.State, error) {
+	var state models.State
+	if err := yaml.Unmarshal(data, &state); err != nil {
+		return nil, &errors.StateSchemaError{Operation: operation, Err: err}
+	}
 	normalizeAgentRoles(&state)
 	normalizeTaskAttempts(&state)
 	return &state, nil
@@ -200,20 +218,17 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 		return nil, err
 	}
 
-	var state models.State
-	if err := yaml.Unmarshal(data, &state); err != nil {
-		return nil, &errors.StateSchemaError{Operation: "state read cached", Err: err}
+	state, err := decodeState(data, "state read cached")
+	if err != nil {
+		return nil, err
 	}
 
-	normalizeAgentRoles(&state)
-	normalizeTaskAttempts(&state)
-
 	bb.cacheMu.Lock()
-	bb.cachedState = &state
+	bb.cachedState = state
 	bb.cachedMtime = currentMtime
 	bb.cacheMu.Unlock()
 
-	return cloneState(&state), nil
+	return cloneState(state), nil
 }
 
 // InvalidateCache forces the next ReadCached call to reload from disk.
@@ -373,19 +388,16 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 			return fmt.Errorf("failed to read state: %w", err)
 		}
 
-		var state models.State
-		if err := yaml.Unmarshal(data, &state); err != nil {
-			return &errors.StateSchemaError{Operation: "state modify", Err: err}
+		state, err := decodeState(data, "state modify")
+		if err != nil {
+			return err
 		}
 
-		normalizeAgentRoles(&state)
-		normalizeTaskAttempts(&state)
-
-		if err := fn(&state); err != nil {
+		if err := fn(state); err != nil {
 			return fmt.Errorf("modification function failed: %w", err)
 		}
 
-		data, err = marshalStateForWrite(&state)
+		data, err = marshalStateForWrite(state)
 		if err != nil {
 			return err
 		}

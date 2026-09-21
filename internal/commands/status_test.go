@@ -1134,8 +1134,7 @@ func TestBuildStatusData_NoFollowUpHidesPipelineTransitions(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	// Pending transitions are populated via ops.AvailableManualTransitions,
-	// which applies the runtime no_follow_up policy from state.yaml. The
+	// Pending transitions apply the runtime no_follow_up policy from the snapshot. The
 	// PipelineResolver passed here is used for lifecycle/status rendering only.
 	pr, _ := ops.LoadResolverForModels(projectRoot)
 	data := BuildStatusData(state, false, projectRoot, pr, nil)

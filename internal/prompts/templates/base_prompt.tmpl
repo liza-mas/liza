@@ -54,11 +54,14 @@ BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
 
 QUERY TOOLS (all roles):
 - {{binaryName}} validate-payload <operation> --payload <file> --json: state-free preflight for complex payloads; --list: schema versions. Use LIFECYCLE RESULTS fields, not prose errors.
-- From a task worktree or any directory inside it, invoke {{brandTitle}} state commands as `{{binaryName}} -C {{.ProjectRoot}} ...`. If `-C` is unavailable, run the command with {{.ProjectRoot}} as the tool working directory. `-C` selects {{brandTitle}}'s project root; unrelated relative file arguments still resolve against the process working directory. Use the task worktree for file, git, build, and test operations.
-- Query targeted state: {{binaryName}} get <id> --json, {{binaryName}} get agents --json, {{binaryName}} get metrics --json
-- Prefer task IDs rendered in this prompt's relevant task graph digest. Use `{{binaryName}} get tasks --active --summary --json` only for an orchestrator-level refresh when the prompt dashboard is stale.
-- For downstream task references without full parent context, use `{{binaryName}} get <id> --output-summary --json`.
-- Avoid `{{binaryName}} get tasks --json` unless targeted task reads and active summaries are insufficient; state why before using it.
+- From a task worktree or any directory inside it, invoke {{brandTitle}} state commands as `{{binaryName}} -C {{.ProjectRoot}} ...`. If `-C` is unavailable, use {{.ProjectRoot}} as the tool working directory. `-C` selects the project root; relative file arguments still resolve against the process working directory. Use the task worktree for file, git, build, and test operations.
+- {{binaryName}} get <query> --json: task ID, agents, metrics, tasks.<id>.history or tasks.<id>.rejection_rca (rejection_reason for text).
+- Prefer supplied task IDs. Only orchestrators may refresh a stale dashboard with `{{binaryName}} get tasks --active --summary --json`.
+{{- if eq .Role "orchestrator"}}
+- Or select fields: `{{binaryName}} get-tasks --active --field id,status,rejection_reason --json`.
+{{- end}}
+- For downstream references lacking full parent context: `{{binaryName}} get <id> --output-summary --json`.
+- Read all tasks (`{{binaryName}} get tasks --json`) only if targeted reads and active summaries are insufficient; state why.
 - {{binaryName}} status --json — Dashboard overview
 - {{binaryName}} validate --json — Validate state consistency (--skip-spec-check)
 

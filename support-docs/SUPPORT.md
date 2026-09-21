@@ -9,6 +9,9 @@ This file is written to `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` during `§BRAND_B
 §BRAND_BINARY_NAME§ status                        # Dashboard: goal, sprint, agents, task summary
 §BRAND_BINARY_NAME§ get tasks                     # All tasks with current state
 §BRAND_BINARY_NAME§ get tasks --format table      # Tabular view
+§BRAND_BINARY_NAME§ get tasks.task-1.history --json # Task history
+§BRAND_BINARY_NAME§ get task-1.rejection_reason --json # Rejection text, or null
+§BRAND_BINARY_NAME§ get-tasks --field id,rejection_reason,rejection_rca --json # Selected task fields
 §BRAND_BINARY_NAME§ get agents                    # Registered agents and lease status
 §BRAND_BINARY_NAME§ get agents --zombies          # Live §BRAND_BINARY_NAME§ agent supervisors missing from state
 §BRAND_BINARY_NAME§ clear-agent-degraded <id>     # Clear role-capacity health after manual recovery
@@ -16,6 +19,32 @@ This file is written to `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` during `§BRAND_B
 §BRAND_BINARY_NAME§ validate --skip-process-checks # Offline/archive validation only
 §BRAND_BINARY_NAME§ analyze                       # Circuit breaker pattern detection
 ```
+
+`status`, `get` and `get-tasks` inspect a complete published snapshot without
+acquiring the state lock. They can return the previous publication while a writer
+is working; later mutations still revalidate current state under lock. Process
+and filesystem diagnostics are separate observations. Do not edit state in place
+while agents are running.
+
+`get-tasks [task-id]` is equivalent to `get tasks [task-id]`. Both accept repeated
+or comma-separated `--field` values: lists return one object per task containing
+only the requested keys; selecting one task returns one object. Optional values
+are explicit nulls. `rejection_reason` is free text; `rejection_rca` is the structured
+RCA record. `--active` filters before projection (a filtered single task returns
+null). Projections support JSON, YAML and value output, and cannot combine with
+`--summary`, `--output-summary`, `--zombies` or `--format table`.
+
+`get tasks.<id>` selects a whole task; `get tasks.<id>.<field>` and `get <id>.<field>`
+select fields, including nested struct fields and `history`. Reserved state and
+computed queries retain precedence. Task routes prefer an exact ID, then the
+longest matching ID prefix; the existing singular `task.<id>.<computed>` form
+retains its computed-field meaning. Use `get tasks <literal-id>` to disambiguate
+IDs containing dots or reserved names. Unknown fields, array/map traversal and
+surplus positional arguments now fail explicitly instead of ignoring input.
+Task field queries and projections use YAML field names in nested values for
+every format (for example, history has `time`, `event` and `reason`).
+`--json` returns the result envelope;
+`--format json` returns raw JSON.
 
 `§BRAND_BINARY_NAME§ analyze --json` reports the selected `response`
 (`WARNING`, `CHECKPOINT`, or `HALT`), provider-evidence `classification`

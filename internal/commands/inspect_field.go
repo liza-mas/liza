@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/render"
+	"gopkg.in/yaml.v3"
 )
 
 // GetField accesses direct state fields using dot notation
@@ -19,7 +20,7 @@ func getField(state *models.State, fieldPath string) (any, error) {
 	}
 
 	parts := strings.Split(fieldPath, ".")
-	if len(parts) == 0 || parts[0] == "" {
+	if slices.Contains(parts, "") {
 		return nil, &errors.NotFoundError{Entity: "field", Field: fieldPath}
 	}
 
@@ -32,6 +33,12 @@ func getField(state *models.State, fieldPath string) (any, error) {
 }
 
 func resolveFieldByYAMLPath(current reflect.Value, parts []string, entityPath string) (any, error) {
+	// Optional objects still have a schema: validate the remaining path against
+	// their zero value, but report a valid absent descendant as null.
+	if current.IsValid() && current.Kind() == reflect.Pointer && current.IsNil() {
+		_, err := resolveFieldByYAMLPath(reflect.Zero(current.Type().Elem()), parts, entityPath)
+		return nil, err
+	}
 	current = derefReflectValue(current)
 	if !current.IsValid() {
 		if entityPath == "" {
@@ -165,6 +172,64 @@ func derefReflectValue(value reflect.Value) reflect.Value {
 	return value
 }
 
+// handleTaskQuery resolves a literal ID before trying the longest existing ID
+// prefix. IDs themselves may contain dots; the space form always selects a
+// literal ID, including one that collides with a reserved state query.
+func handleTaskQuery(state *models.State, query string, opts InspectOptions) (string, error) {
+	if task := state.FindTask(query); task != nil {
+		return handleEntityQuery(state, "tasks", []string{query}, opts)
+	}
+	var selected *models.Task
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if strings.HasPrefix(query, task.ID+".") && (selected == nil || len(task.ID) > len(selected.ID)) {
+			selected = task
+		}
+	}
+	if selected == nil {
+		return "", &errors.NotFoundError{Entity: "task", ID: query}
+	}
+	return handleTaskFieldQuery(selected, strings.TrimPrefix(query, selected.ID+"."), opts)
+}
+
+func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) (string, error) {
+	if opts.Summary || opts.OutputSummary || opts.Active || opts.Zombies || len(opts.Fields) > 0 {
+		return "", &errors.ValidationError{Message: "field queries do not support --field, --summary, --output-summary, --active, or --zombies"}
+	}
+	value, err := taskInspectionField(task, field)
+	if err != nil {
+		return "", err
+	}
+	return formatOutput(value, opts.Format)
+}
+
+// taskInspectionField is shared by dotted queries and projections. Sanitize
+// before traversal so intermediate lifecycle objects cannot bypass redaction.
+func taskInspectionField(task *models.Task, field string) (any, error) {
+	parts := strings.Split(field, ".")
+	if slices.Contains(parts, "") || slices.Contains(parts, "generation_digest") {
+		return nil, &errors.NotFoundError{Entity: "task", ID: task.ID, Field: field}
+	}
+	switch field {
+	case "transition_id", "age", "time_in_status":
+		return taskComputedField(task, field)
+	}
+	safeTask := redactTaskLifecycleForInspection(*task)
+	value, err := resolveFieldByYAMLPath(reflect.ValueOf(safeTask), parts, "task."+task.ID)
+	if err != nil || value == nil {
+		return value, err
+	}
+	// This new query surface uses YAML field names throughout, including
+	// nested values in JSON. Preserve inline fields and omission rules too.
+	data, err := yaml.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var result any
+	err = yaml.Unmarshal(data, &result)
+	return result, err
+}
+
 // getComputedField calculates derived data from state
 // Supports computed fields like agents.active_count, sprint.elapsed, etc.
 func getComputedField(state *models.State, fieldPath string) (any, error) {
@@ -174,6 +239,10 @@ func getComputedField(state *models.State, fieldPath string) (any, error) {
 	}
 
 	entity := parts[0]
+	if slices.Contains(parts, "") || ((entity == "agent" || entity == "task") && len(parts) != 3) ||
+		(entity != "agent" && entity != "task" && len(parts) != 2) {
+		return nil, &errors.NotFoundError{Entity: entity, Field: fieldPath}
+	}
 
 	switch entity {
 	case "agents":
@@ -313,7 +382,10 @@ func getTaskComputedField(state *models.State, taskID, field string) (any, error
 	if task == nil {
 		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
+	return taskComputedField(task, field)
+}
 
+func taskComputedField(task *models.Task, field string) (any, error) {
 	switch field {
 	case "transition_id":
 		return models.TaskTransitionID(task), nil
@@ -325,6 +397,6 @@ func getTaskComputedField(state *models.State, taskID, field string) (any, error
 		duration := calculateTimeOnTask(task)
 		return render.FormatDuration(duration), nil
 	default:
-		return nil, &errors.NotFoundError{Entity: "task", ID: taskID, Field: field}
+		return nil, &errors.NotFoundError{Entity: "task", ID: task.ID, Field: field}
 	}
 }
