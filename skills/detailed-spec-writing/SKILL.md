@@ -76,6 +76,8 @@ Fix issues before submitting.
 
 # Constraints
 
+- Write in the language of the assigned source material; identifiers (IDs, file paths, code
+  symbols, command names) stay verbatim, and one document does not switch language
 - Do not write code — spec only
 - Do not modify existing specs unless task explicitly scopes an update
 - Do not invent requirements beyond source material and task scope

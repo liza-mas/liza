@@ -185,6 +185,8 @@ If self-review reveals issues, fix before submitting.
 
 # Constraints
 
+- **DO** write in the language of the assigned source material. Identifiers — IDs, file paths,
+  code symbols, command names — stay verbatim. One language per document, no mid-document switch.
 - **DO** write Part 1 for the intent owner (plain language, verification surface) and Part 2 for
   the Coder (precise, technical, implementation-ready).
 - **DO** check existing stories in the same domain for consistency — contradictions between story documents are costly to discover at implementation time.
