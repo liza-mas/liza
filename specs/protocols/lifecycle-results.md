@@ -26,6 +26,8 @@ The fields are flat within `result`:
 | `completed_transition_id` | Original completion identity when replaying a retained receipt |
 | `request_id` | Explicit request identity, when supplied |
 | `effects` | `none`, `committed` or `unknown`; uncertainty never means safe replay |
+| `changed` | `true` on `COMPLETED`, `false` on `NO_CHANGE` and `ALREADY_COMPLETED`; omitted on every other outcome |
+| `diagnostics` | Bounded field-level rejection list, on `INVALID_INPUT` and `CONFLICT` only |
 
 Unavailable task state is reported as unknown, without fabricated status or
 owner. A returned status is a snapshot, not a guarantee that another process
@@ -42,11 +44,21 @@ digests appear in responses, prompts, error text or logs.
 | `RETRYABLE` | `retry` | Known transient contention before any operation effect |
 | `INVALID_INPUT` | `correct_input` | Invalid, oversized or conflicting payload; preserve field-level diagnostics |
 | `FORBIDDEN` | `stop` | Operation or role authorization denied |
+| `NO_CHANGE` | `stop` | Request valid and authorized, but the effective result already equals durable state; no history or receipt is appended |
+| `CONFLICT` | `stop` | Identity or idempotency key reused with a materially different payload; `diagnostics` names the conflicting field or identity |
 
 The two possibilities shown for `ALREADY_COMPLETED` are server branches.
 Every individual response carries one value, never a list or caller decision.
 Replay returns compact completion evidence with fresh status and routing, not
 an old instruction to continue after ownership has changed.
+
+Each diagnostic entry carries `schema_version`, `field` (a JSON-pointer-like
+path into the operation's canonical payload), `constraint`, `value_class` (a
+class such as `missing` or `out_of_range`, never the rejected value) and its own
+`safe_action`, either `correct_input` or `requery`. At most 32 entries are
+returned and every string is clipped to 256 bytes, so diagnostics stay bounded.
+`changed` and `diagnostics` are JSON-only; text output keeps exposing the
+outcome and safe action.
 
 ## Caller workflow
 
@@ -261,6 +273,18 @@ a counter key. Record one final outcome at the outer invocation boundary after
 operation locks are released; nested helpers do not count twice. The counter
 lock is a leaf: hold no other lock and acquire no additional lock within it.
 
+The matrix also carries `validate-payload`, `replace-task`,
+`record-rejection-rca` and `resume-rejection-rca`. `validate-payload` is
+recorded but not role-gated: it is a state-free preflight that reads no state,
+takes no lock and appends no history, so its rows separate preflight rejections
+from state conflicts without granting any role a new operation.
+
+A counter file written before the matrix grew stays available. When its counts
+are a non-empty subset of the known operations and outcomes, recorded cells are
+read as written and absent ones as zero, and the next recording materializes the
+full matrix. An operation or outcome key outside the matrix leaves the file
+unavailable and unwritten, like the empty and malformed files below.
+
 Attribute a late completion to the sprint captured by its invocation. Current
 sprint metrics read only that sprint's counter identity; recheck the identity
 in the metrics write transaction and requery on a sprint race. The projection
@@ -275,6 +299,28 @@ observation. Unknown sprint identity also makes telemetry unavailable.
 These limitations never turn a committed mutation into a failure or a retry.
 The diagnostic files are retained per sprint; no general pruning policy is
 introduced here.
+
+## Payload schema registry
+
+Structural payload validation is registered once per operation and shared by
+every boundary that accepts that payload. A schema declares its operation, a
+stable version bumped only on an incompatible payload change, and a validator
+returning one diagnostic per rejected field. Registration happens at startup, so
+a duplicate or malformed schema is a programming error rather than a runtime
+result; lookup, validation and listing are safe for concurrent callers.
+
+Validating takes an operation and its payload and returns the schema version
+plus the bounded, normalized diagnostics above; no diagnostics means the payload
+is structurally valid, and an unregistered operation is reported as an unknown
+operation, not as a rejection. Listing returns every registered operation and
+version, sorted by operation, so clients can discover the accepted contract.
+
+A payload is the operation's canonical JSON object: the file content for a
+file-driven command, an object whose keys mirror the flag names for a
+flag-driven one. Preflight and the mutation boundary validate that same object
+before the state lock, so a payload cannot pass one and fail the other for
+structural reasons. Validation is structural only — no state read, no lock, no
+Git — and each command owner registers its own schemas.
 
 ## Related documents
 

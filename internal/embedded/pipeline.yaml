@@ -27,6 +27,9 @@ pipeline:
         - clear-stale-review-claims
         - update-sprint-metrics
         - set-discovery-disposition
+        - replace-task
+        - record-rejection-rca
+        - resume-rejection-rca
       context-sections:
         - orchestrator-dashboard
         - wake-instructions

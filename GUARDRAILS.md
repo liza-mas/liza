@@ -73,6 +73,7 @@ Operational lessons from project experience. Read when a trigger matches.
 | When reading Go test files (`*_test.go`) | [large-test-file-reads.md](lessons/agents/large-test-file-reads.md) |
 | Piping or redirecting stdin through an RTK-wrapped tool | [rtk-proxy-for-stdin-tools.md](lessons/agents/rtk-proxy-for-stdin-tools.md) |
 | Before backgrounding any validation, or when a long RTK-wrapped foreground validation returns a session ID but no incremental output | [rtk-buffered-long-validation.md](lessons/agents/rtk-buffered-long-validation.md) |
+| When a full test run fails only in `cmd/liza` with an RBAC denial naming your own agent ID | [agent-env-leaks-into-cli-tests.md](lessons/agents/agent-env-leaks-into-cli-tests.md) |
 
 ### G2.2: Contract and prompt conciseness
 

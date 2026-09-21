@@ -26,11 +26,13 @@ var lifecycleMetricOperations = [...]string{
 	"wt-merge", "recover-task", "retarget-dependency", "narrow-inherited-dependencies", "apply-dependency-repair",
 	"repair-superseded-dependencies", "cancel-task", "supersede-task", "unblock-task",
 	"set-task-output", "handoff", "recover-agent", "transition-attempt",
+	"validate-payload", "replace-task", "record-rejection-rca", "resume-rejection-rca",
 }
 
 var lifecycleMetricOutcomes = [...]string{
 	"COMPLETED", "ALREADY_COMPLETED", "ALREADY_TRANSITIONED", "STALE_CALLER",
 	"STATE_CHANGED", "RETRYABLE", "INVALID_INPUT", "FORBIDDEN",
+	"NO_CHANGE", "CONFLICT",
 }
 
 // LifecycleSprintIdentity is captured from the invocation's authoritative state.
@@ -163,17 +165,32 @@ func readLifecycleCounterFile(filename string, sprint LifecycleSprintIdentity) (
 	if counters.Version != 1 || !counters.Sprint.matches(sprint) || counters.ObservedSince.IsZero() || counters.LastUpdated.IsZero() {
 		return counters, errors.New("invalid counter file identity or observation window")
 	}
-	if len(counters.Counts) != len(lifecycleMetricOperations) {
+	// A file written before the matrix grew is a subset of the known matrix:
+	// its cells are read as-is and the absent ones materialize at zero on the
+	// next recording. Anything outside the matrix stays unavailable, so a
+	// damaged or foreign file is never silently adopted.
+	if len(counters.Counts) == 0 {
 		return counters, errors.New("invalid operation counter matrix")
+	}
+	for operation, row := range counters.Counts {
+		if !slices.Contains(lifecycleMetricOperations[:], operation) {
+			return counters, errors.New("invalid operation counter matrix")
+		}
+		for outcome := range row {
+			if !slices.Contains(lifecycleMetricOutcomes[:], outcome) {
+				return counters, errors.New("invalid outcome counter matrix")
+			}
+		}
 	}
 	for _, operation := range lifecycleMetricOperations {
 		row := counters.Counts[operation]
-		if len(row) != len(lifecycleMetricOutcomes) {
-			return counters, errors.New("invalid outcome counter matrix")
+		if row == nil {
+			row = make(map[string]uint64, len(lifecycleMetricOutcomes))
+			counters.Counts[operation] = row
 		}
 		for _, outcome := range lifecycleMetricOutcomes {
 			if _, exists := row[outcome]; !exists {
-				return counters, errors.New("invalid outcome counter matrix")
+				row[outcome] = 0
 			}
 		}
 	}

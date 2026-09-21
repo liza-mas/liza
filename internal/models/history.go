@@ -85,6 +85,9 @@ const (
 	TaskEventReviewCommitUpdated       TaskEventName = "review_commit_updated"
 	TaskEventDependenciesRewritten     TaskEventName = "dependencies_rewritten"
 	TaskEventDependencyRepairApplied   TaskEventName = "dependency_repair_applied"
+	TaskEventRejectionRCARecorded      TaskEventName = "rejection_rca_recorded"
+	TaskEventRejectionRCAResumed       TaskEventName = "rejection_rca_resumed"
+	TaskEventReplacementCommitted      TaskEventName = "replacement_committed"
 	TaskEventAcceptanceCommitsRemapped TaskEventName = "acceptance_commits_remapped"
 )
 
@@ -192,6 +195,11 @@ type SpecChange struct {
 	Extra       map[string]any `yaml:",inline"`
 }
 
+// AnomalyTypeReviewerClaimCircuitOpen records a reviewer-claim circuit breaker
+// opening after repeated identical pre-claim failures. Detail validation is
+// owned by statevalidate.
+const AnomalyTypeReviewerClaimCircuitOpen = "reviewer_claim_circuit_open"
+
 // AnomalyTypeObligationContentDrifted records that the content an approved
 // plan's obligation rests on is no longer what the reviewer saw. It is a
 // reviewable event, never a block: refusing here would strand every child of a
@@ -217,7 +225,7 @@ func (a *Anomaly) IsValidType() bool {
 		"spec_changed", "hypothesis_exhaustion", "spec_gap", "review_budget_exhausted",
 		"review_exhaustion", "reviewer_loop", "stale_verdict", "system_ambiguity",
 		"provider_audit_degraded", "agent_degraded", "submit_verdict_failed",
-		AnomalyTypeObligationContentDrifted,
+		AnomalyTypeReviewerClaimCircuitOpen, AnomalyTypeObligationContentDrifted,
 	}
 	return slices.Contains(validTypes, a.Type)
 }

@@ -47,6 +47,10 @@ func TestTaskEventNameConstants(t *testing.T) {
 		{"OrchestratorAssessment", TaskEventOrchestratorAssessment, "orchestrator_assessment"},
 		{"Replanned", TaskEventReplanned, "replanned"},
 		{"TransitionCycleBlocked", TaskEventTransitionCycleBlocked, "transition_cycle_blocked"},
+		// Constants added by output 0 (shared lifecycle vocabulary)
+		{"RejectionRCARecorded", TaskEventRejectionRCARecorded, "rejection_rca_recorded"},
+		{"RejectionRCAResumed", TaskEventRejectionRCAResumed, "rejection_rca_resumed"},
+		{"ReplacementCommitted", TaskEventReplacementCommitted, "replacement_committed"},
 		{"AcceptanceCommitsRemapped", TaskEventAcceptanceCommitsRemapped, "acceptance_commits_remapped"},
 	}
 	for _, tt := range tests {
@@ -55,6 +59,36 @@ func TestTaskEventNameConstants(t *testing.T) {
 				t.Errorf("TaskEvent%s = %q, want %q", tt.name, tt.constant, tt.want)
 			}
 		})
+	}
+}
+
+func TestAnomalyIsValidTypeVocabulary(t *testing.T) {
+	// GIVEN the pre-existing anomaly vocabulary plus the reviewer-claim
+	// circuit-breaker type owned by output 0
+	if AnomalyTypeReviewerClaimCircuitOpen != "reviewer_claim_circuit_open" {
+		t.Fatalf("AnomalyTypeReviewerClaimCircuitOpen = %q, want %q", AnomalyTypeReviewerClaimCircuitOpen, "reviewer_claim_circuit_open")
+	}
+	valid := []string{
+		"retry_loop", "trade_off", "spec_ambiguity", "external_blocker",
+		"assumption_violated", "scope_deviation", "workaround", "debt_created",
+		"spec_changed", "hypothesis_exhaustion", "spec_gap", "review_budget_exhausted",
+		"review_exhaustion", "reviewer_loop", "stale_verdict", "system_ambiguity",
+		"provider_audit_degraded", "agent_degraded", "submit_verdict_failed",
+		AnomalyTypeReviewerClaimCircuitOpen,
+	}
+	// WHEN / THEN every listed type is valid
+	for _, typ := range valid {
+		a := Anomaly{Type: typ}
+		if !a.IsValidType() {
+			t.Errorf("Anomaly type %q should be valid", typ)
+		}
+	}
+	// AND near-miss and empty names are rejected
+	for _, typ := range []string{"reviewer_claim_open", ""} {
+		a := Anomaly{Type: typ}
+		if a.IsValidType() {
+			t.Errorf("Anomaly type %q should not be valid", typ)
+		}
 	}
 }
 

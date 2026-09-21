@@ -81,6 +81,16 @@ func (e *LifecycleError) SafeDetails() map[string]any {
 			details[key] = value
 		}
 	}
+	// The outcome owns these keys: a cause may not assert change or supply
+	// its own diagnostics, and an absent value is omitted rather than false.
+	delete(details, "changed")
+	delete(details, "diagnostics")
+	if o.Changed != nil {
+		details["changed"] = *o.Changed
+	}
+	if len(o.Diagnostics) > 0 {
+		details["diagnostics"] = o.Diagnostics
+	}
 	return details
 }
 
@@ -112,6 +122,7 @@ func WrapLifecycleError(operation string, task *models.Task, err error, outcome,
 // nil when state cannot be read or authorization forbids exposing ownership.
 func NewLifecycleOutcome(operation string, task *models.Task, outcome, safeAction, effects string) models.LifecycleOutcome {
 	o := models.LifecycleOutcome{Operation: operation, Outcome: outcome, SafeAction: safeAction, Effects: effects, TaskStatus: "UNKNOWN"}
+	o.Changed = models.LifecycleChanged(outcome)
 	if task == nil {
 		return o
 	}
@@ -140,4 +151,28 @@ func LifecycleReplayOutcome(task *models.Task, receipt *models.LifecycleReceipt,
 	o.CompletedTransitionID = receipt.TransitionID
 	o.RequestID = receipt.RequestID
 	return o
+}
+
+// NewLifecycleNoChangeOutcome reports a valid, authorized request whose
+// effective result already equals durable state: nothing was appended.
+func NewLifecycleNoChangeOutcome(operation string, task *models.Task) models.LifecycleOutcome {
+	return NewLifecycleOutcome(operation, task, models.LifecycleNoChange, "stop", "none")
+}
+
+// NewLifecycleInvalidInputError rejects a payload before any effect, naming
+// the offending fields without echoing their values.
+func NewLifecycleInvalidInputError(operation string, task *models.Task, diagnostics []models.FieldDiagnostic, err error) *LifecycleError {
+	return newDiagnosticLifecycleError(operation, task, models.LifecycleInvalidInput, "correct_input", diagnostics, err)
+}
+
+// NewLifecycleConflictError reports an identity or idempotency key reused
+// with a materially different payload; diagnostics name the conflict.
+func NewLifecycleConflictError(operation string, task *models.Task, diagnostics []models.FieldDiagnostic, err error) *LifecycleError {
+	return newDiagnosticLifecycleError(operation, task, models.LifecycleConflict, "stop", diagnostics, err)
+}
+
+func newDiagnosticLifecycleError(operation string, task *models.Task, outcome, safeAction string, diagnostics []models.FieldDiagnostic, err error) *LifecycleError {
+	o := NewLifecycleOutcome(operation, task, outcome, safeAction, "none")
+	o.Diagnostics = models.NormalizeFieldDiagnostics(diagnostics)
+	return &LifecycleError{Outcome: o, Err: err}
 }

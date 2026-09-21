@@ -1,10 +1,12 @@
 package ops
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +14,17 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/testhelpers"
+)
+
+// The names this extension adds to the metrics matrix. Kept separate from the
+// pre-existing rows so a register regression is visible as a count mismatch.
+var (
+	lifecycleMetricsAddedOperations = []string{
+		"validate-payload", "replace-task", "record-rejection-rca", "resume-rejection-rca",
+	}
+	lifecycleMetricsAddedOutcomes = []string{models.LifecycleNoChange, models.LifecycleConflict}
 )
 
 func lifecycleMetricsSprint() LifecycleSprintIdentity {
@@ -274,5 +286,249 @@ func TestLifecycleInvocationTelemetryFailurePreservesOutcome(t *testing.T) {
 	var typed *LifecycleError
 	if !errors.As(operationErr, &typed) || typed.Outcome.Outcome != models.LifecycleForbidden || typed.Outcome.SafeAction != "stop" {
 		t.Fatalf("telemetry changed failed outcome: %v", operationErr)
+	}
+}
+
+// lifecycleLegacyCounters reproduces a counter file written before the matrix
+// grew: the operation rows and outcome columns added later are absent.
+func lifecycleLegacyCounters(t *testing.T, sprint LifecycleSprintIdentity) lifecycleCounterFile {
+	t.Helper()
+	counters := newLifecycleCounters(sprint, time.Now().UTC())
+	for _, operation := range lifecycleMetricsAddedOperations {
+		delete(counters.Counts, operation)
+	}
+	for _, row := range counters.Counts {
+		for _, outcome := range lifecycleMetricsAddedOutcomes {
+			delete(row, outcome)
+		}
+	}
+	if len(counters.Counts) == 0 {
+		t.Fatal("legacy fixture removed every operation row")
+	}
+	return counters
+}
+
+func writeLifecycleCounters(t *testing.T, root string, sprint LifecycleSprintIdentity, counters lifecycleCounterFile) (string, []byte) {
+	t.Helper()
+	if err := os.MkdirAll(paths.New(root).LifecycleMetricsDir(), 0700); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(counters)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filename := lifecycleMetricsPath(root, sprint)
+	if err := os.WriteFile(filename, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return filename, data
+}
+
+func readLifecycleCountersFixture(t *testing.T, filename string) lifecycleCounterFile {
+	t.Helper()
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var counters lifecycleCounterFile
+	if err := json.Unmarshal(data, &counters); err != nil {
+		t.Fatal(err)
+	}
+	return counters
+}
+
+func TestLifecycleMetricsToleratesMatrixGrowth(t *testing.T) {
+	t.Parallel()
+	sprint := lifecycleMetricsSprint()
+
+	t.Run("subset matrix reads available and is materialized on the next record", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		legacy := lifecycleLegacyCounters(t, sprint)
+		legacy.Counts["claim-task"]["COMPLETED"] = 4
+		filename, _ := writeLifecycleCounters(t, root, sprint, legacy)
+
+		got := ReadLifecycleOutcomes(root, sprint)
+		if !got.Available || got.Warning != "" {
+			t.Fatalf("pre-extension counters unavailable: %+v", got)
+		}
+		if got.Counts["claim-task"]["COMPLETED"] != 4 {
+			t.Fatalf("existing count lost: %+v", got.Counts["claim-task"])
+		}
+		for _, operation := range lifecycleMetricOperations {
+			for _, outcome := range lifecycleMetricOutcomes {
+				count, exists := got.Counts[operation][outcome]
+				if !exists {
+					t.Fatalf("cell %s/%s missing from projection", operation, outcome)
+				}
+				var want uint64
+				if operation == "claim-task" && outcome == "COMPLETED" {
+					want = 4
+				}
+				if count != want {
+					t.Fatalf("cell %s/%s=%d, want %d", operation, outcome, count, want)
+				}
+			}
+		}
+
+		if err := RecordLifecycleOutcome(root, sprint, "replace-task", models.LifecycleConflict); err != nil {
+			t.Fatalf("recording against a pre-extension file: %v", err)
+		}
+		rewritten := readLifecycleCountersFixture(t, filename)
+		if len(rewritten.Counts) != len(lifecycleMetricOperations) {
+			t.Fatalf("rewrite kept %d operation rows, want %d", len(rewritten.Counts), len(lifecycleMetricOperations))
+		}
+		for _, operation := range lifecycleMetricOperations {
+			if len(rewritten.Counts[operation]) != len(lifecycleMetricOutcomes) {
+				t.Fatalf("row %s has %d cells, want %d", operation, len(rewritten.Counts[operation]), len(lifecycleMetricOutcomes))
+			}
+		}
+		if rewritten.Counts["claim-task"]["COMPLETED"] != 4 || rewritten.Counts["replace-task"][models.LifecycleConflict] != 1 {
+			t.Fatalf("materialized matrix lost a count: %+v", rewritten.Counts)
+		}
+	})
+
+	t.Run("row missing one known outcome is tolerated", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		partial := newLifecycleCounters(sprint, time.Now().UTC())
+		partial.Counts["claim-task"]["COMPLETED"] = 7
+		delete(partial.Counts["claim-task"], "FORBIDDEN")
+		filename, _ := writeLifecycleCounters(t, root, sprint, partial)
+
+		got := ReadLifecycleOutcomes(root, sprint)
+		if !got.Available || got.Counts["claim-task"]["COMPLETED"] != 7 || got.Counts["claim-task"]["FORBIDDEN"] != 0 {
+			t.Fatalf("partial row not tolerated: %+v", got)
+		}
+		if err := RecordLifecycleOutcome(root, sprint, "claim-task", "FORBIDDEN"); err != nil {
+			t.Fatal(err)
+		}
+		rewritten := readLifecycleCountersFixture(t, filename)
+		if rewritten.Counts["claim-task"]["FORBIDDEN"] != 1 || rewritten.Counts["claim-task"]["COMPLETED"] != 7 {
+			t.Fatalf("materialized cell wrong: %+v", rewritten.Counts["claim-task"])
+		}
+	})
+
+	t.Run("out-of-matrix content stays unavailable and unmodified", func(t *testing.T) {
+		t.Parallel()
+		unknownOperation := newLifecycleCounters(sprint, time.Now().UTC())
+		unknownOperation.Counts["task-arbitrary"] = map[string]uint64{"COMPLETED": 1}
+		unknownOutcome := newLifecycleCounters(sprint, time.Now().UTC())
+		unknownOutcome.Counts["claim-task"]["ARBITRARY"] = 1
+		emptyCounts := newLifecycleCounters(sprint, time.Now().UTC())
+		emptyCounts.Counts = map[string]map[string]uint64{}
+		for name, counters := range map[string]lifecycleCounterFile{
+			"unknown-operation": unknownOperation,
+			"unknown-outcome":   unknownOutcome,
+			"empty-counts":      emptyCounts,
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				root := t.TempDir()
+				filename, before := writeLifecycleCounters(t, root, sprint, counters)
+				got := ReadLifecycleOutcomes(root, sprint)
+				if got.Available || got.Counts != nil || got.Warning == "" {
+					t.Fatalf("out-of-matrix store presented as counters: %+v", got)
+				}
+				if err := RecordLifecycleOutcome(root, sprint, "claim-task", "COMPLETED"); err == nil {
+					t.Fatal("out-of-matrix store unexpectedly accepted recording")
+				}
+				after, err := os.ReadFile(filename)
+				if err != nil || !bytes.Equal(after, before) {
+					t.Fatalf("out-of-matrix store overwritten: %v", err)
+				}
+			})
+		}
+	})
+}
+
+func TestLifecycleMetricsRegistersAgree(t *testing.T) {
+	t.Parallel()
+	for _, operation := range lifecycleMetricOperations {
+		if !models.IsLifecycleOperation(operation) {
+			t.Errorf("metric operation %q is not a registered lifecycle operation", operation)
+		}
+	}
+	for _, outcome := range lifecycleMetricOutcomes {
+		if !models.IsLifecycleOutcome(outcome) {
+			t.Errorf("metric outcome %q is not a registered lifecycle outcome", outcome)
+		}
+	}
+	// The registers grow; nothing that existed before may silently leave them.
+	preExistingOperations := []string{
+		"submit-for-review", "submit-verdict", "mark-blocked", "assess-blocked",
+		"assess-hypothesis-exhausted", "claim-task", "claim-reviewer-task", "release-claim",
+		"wt-merge", "recover-task", "retarget-dependency", "narrow-inherited-dependencies",
+		"apply-dependency-repair", "repair-superseded-dependencies", "cancel-task",
+		"supersede-task", "unblock-task", "set-task-output", "handoff", "recover-agent",
+		"transition-attempt",
+	}
+	preExistingOutcomes := []string{
+		models.LifecycleCompleted, models.LifecycleAlreadyCompleted, models.LifecycleAlreadyTransitioned,
+		models.LifecycleStaleCaller, models.LifecycleStateChanged, models.LifecycleRetryable,
+		models.LifecycleInvalidInput, models.LifecycleForbidden,
+	}
+	for _, operation := range slices.Concat(preExistingOperations, lifecycleMetricsAddedOperations) {
+		if !slices.Contains(lifecycleMetricOperations[:], operation) {
+			t.Errorf("operation %q missing from the metrics matrix", operation)
+		}
+		if !models.IsLifecycleOperation(operation) {
+			t.Errorf("operation %q missing from IsLifecycleOperation", operation)
+		}
+	}
+	for _, outcome := range slices.Concat(preExistingOutcomes, lifecycleMetricsAddedOutcomes) {
+		if !slices.Contains(lifecycleMetricOutcomes[:], outcome) {
+			t.Errorf("outcome %q missing from the metrics matrix", outcome)
+		}
+	}
+	if want := len(preExistingOperations) + len(lifecycleMetricsAddedOperations); len(lifecycleMetricOperations) != want {
+		t.Errorf("metrics matrix has %d operations, want %d", len(lifecycleMetricOperations), want)
+	}
+	if want := len(preExistingOutcomes) + len(lifecycleMetricsAddedOutcomes); len(lifecycleMetricOutcomes) != want {
+		t.Errorf("metrics matrix has %d outcomes, want %d", len(lifecycleMetricOutcomes), want)
+	}
+
+	reference, err := pipeline.LoadEmbeddedReference()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orchestrator, ok := reference.Pipeline.Roles["orchestrator"]
+	if !ok {
+		t.Fatal("embedded reference has no orchestrator role")
+	}
+	for _, gated := range []string{"replace-task", "record-rejection-rca", "resume-rejection-rca", "reaffirm-proof"} {
+		if !slices.Contains(orchestrator.AllowedOperations, gated) {
+			t.Errorf("orchestrator allowed-operations missing %q", gated)
+		}
+	}
+	// validate-payload is state-free: recorded for counters, never RBAC-gated.
+	for role, definition := range reference.Pipeline.Roles {
+		if slices.Contains(definition.AllowedOperations, "validate-payload") {
+			t.Errorf("role %q gates the state-free validate-payload operation", role)
+		}
+	}
+
+	root, sprint := t.TempDir(), lifecycleMetricsSprint()
+	pairs := [][2]string{
+		{"validate-payload", models.LifecycleInvalidInput},
+		{"validate-payload", models.LifecycleCompleted},
+		{"assess-blocked", models.LifecycleNoChange},
+		{"replace-task", models.LifecycleConflict},
+		{"record-rejection-rca", models.LifecycleNoChange},
+		{"resume-rejection-rca", models.LifecycleCompleted},
+	}
+	for _, pair := range pairs {
+		if err := RecordLifecycleOutcome(root, sprint, pair[0], pair[1]); err != nil {
+			t.Fatalf("recording %s/%s: %v", pair[0], pair[1], err)
+		}
+	}
+	counts := ReadLifecycleOutcomes(root, sprint)
+	if !counts.Available {
+		t.Fatalf("new rows unavailable: %+v", counts)
+	}
+	for _, pair := range pairs {
+		if got := counts.Counts[pair[0]][pair[1]]; got != 1 {
+			t.Errorf("%s/%s count=%d, want 1", pair[0], pair[1], got)
+		}
 	}
 }
