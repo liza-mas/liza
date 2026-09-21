@@ -373,6 +373,7 @@ are loaded at runtime from the provider catalog.
 |-----------|---------|-----|-----|------|---------|
 | `max_coder_iterations` | 10 | 1 | 100 | count | Max iterations per coder per task |
 | `max_review_cycles` | 5 | 1 | 20 | count | Max review rejection cycles |
+| `high_churn_rejection_threshold` | 4 | 1 | 100 | count | Durable rejections per RCA gate cycle, across all reviewed task types |
 | `max_global_integration_generations` | 3 | 1 | — | count | Max aggregate integration scans before exhaustion |
 | `heartbeat_interval` | 60 | 1 | 300 | seconds | Heartbeat frequency |
 | `lease_duration` | 1800 | 300 | 7200 | seconds | Task lease duration |
@@ -871,6 +872,19 @@ config:
   max_review_cycles: 3      # Fewer rejection cycles
   heartbeat_interval: 30    # Faster crash detection
 ```
+
+### Rejection RCA Gate (`high_churn_rejection_threshold`)
+
+Set `config.high_churn_rejection_threshold` to the number of durable rejections
+that requires a classified RCA and recovery disposition before a task can resume.
+Unset or non-positive values use **4**. Lower it to investigate churn earlier;
+raise it when more review cycles are expected, considering `max_review_cycles`
+separately: existing budget escalation takes precedence if both fire on the same
+verdict. The count spans attempts, and after a gate closes a further threshold's
+worth of rejections is required to re-gate. Review budgets and planning-churn
+detection remain active. Recovery uses `record-rejection-rca`, then
+`resume-rejection-rca`, then the authorized `unblock-task` form; raising the
+threshold does not clear an already-open gate.
 
 ### Auto-Resume (`auto_resume`)
 

@@ -220,6 +220,9 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 		if task.Status != models.TaskStatusBlocked {
 			return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
+		if err := checkUnblockRejectionRCAGate(task, opts.AssignTo); err != nil {
+			return err
+		}
 		if task.RolePair == "" {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
 		}
@@ -393,6 +396,52 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 	}
 
 	return &result, nil
+}
+
+// checkUnblockRejectionRCAGate refuses a task whose rejection-RCA gate is still
+// open and, once a disposition has closed it, allows only the restore form that
+// disposition authorizes. unblock-task is the only operation that may restore a
+// BLOCKED task, so this is where the gate's promise — no further normal claim or
+// resubmission until a classified RCA and an authorized disposition exist — is
+// kept. A task that never gated carries no record and is untouched.
+func checkUnblockRejectionRCAGate(task *models.Task, assignTo string) error {
+	record := task.RejectionRCA
+	if record == nil {
+		return nil
+	}
+	if task.RejectionRCAGateOpen() {
+		// A fingerprint is written only together with the caller fields, so it
+		// is what distinguishes a seeded record from a recorded one.
+		missing := "resume-rejection-rca"
+		if record.Fingerprint == "" {
+			missing = "record-rejection-rca"
+		}
+		// Closing the gate is a state change the caller must make through two
+		// other operations, so requery — no payload correction can clear it.
+		return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf(
+			"task %s has an open rejection-RCA gate: run %s next, then unblock-task (record-rejection-rca records the classified RCA, resume-rejection-rca records the authorized disposition)",
+			task.ID, missing)}, models.LifecycleStateChanged, "requery", "none")
+	}
+	switch mode := record.Disposition.RestoreMode; mode {
+	case models.RestoreModeClaimable:
+		return nil
+	case models.RestoreModeAssign:
+		if assignTo == "" {
+			// The assign restore is the non-incrementing one, which is how a
+			// capability or lifecycle cause avoids consuming a product
+			// iteration. The missing flag is a payload defect, so correct it.
+			return &PreconditionError{Reason: fmt.Sprintf(
+				"task %s recovery path %s authorizes only the %s restore: retry unblock-task with --assign-to",
+				task.ID, record.Disposition.RecoveryPath, mode)}
+		}
+		return nil
+	default:
+		// rescope routes to supersession; no form of unblock-task will ever
+		// restore this task, so stop rather than invite a retry.
+		return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf(
+			"task %s recovery path %s authorizes restore mode %q: it is not restored by unblock-task",
+			task.ID, record.Disposition.RecoveryPath, mode)}, models.LifecycleStateChanged, "stop", "none")
+	}
 }
 
 func validateUnblockDirectDependencies(state *models.State, resolver *pipeline.Resolver, task *models.Task) error {

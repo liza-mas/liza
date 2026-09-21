@@ -791,3 +791,234 @@ func assertAnalyzeResponseHistory(t *testing.T, state *models.State, result *Ana
 		t.Errorf("history response = {%q %q %q}, want result {%q %q %q}", history.Response, history.Classification, history.Explanation, result.Response, result.Classification, result.Explanation)
 	}
 }
+
+// rcaGateEntry is the TaskEventBlocked entry the verdict gate appends, carrying
+// the detail keys telemetry reads. Timestamps round-trip through YAML as
+// RFC3339 strings, exactly as the gate writes them.
+func rcaGateEntry(gatedAt, firstRejectionAt time.Time) models.TaskHistoryEntry {
+	return models.TaskHistoryEntry{
+		Time:  gatedAt,
+		Event: models.TaskEventBlocked,
+		Extra: map[string]any{
+			"blocked_class":      models.BlockedReasonRejectionRCARequired,
+			"threshold":          4,
+			"rejection_count":    4,
+			"gated_at":           gatedAt.Format(time.RFC3339),
+			"first_rejection_at": firstRejectionAt.Format(time.RFC3339),
+		},
+	}
+}
+
+func rcaRecordedEntry(at, gatedAt time.Time, causes ...string) models.TaskHistoryEntry {
+	return models.TaskHistoryEntry{
+		Time:  at,
+		Event: models.TaskEventRejectionRCARecorded,
+		Extra: map[string]any{
+			"fingerprint":        "fp",
+			"threshold":          4,
+			"rejection_count":    4,
+			"gated_at":           gatedAt.Format(time.RFC3339),
+			"causes":             causes,
+			"contribution_count": len(causes),
+			"recorded_by":        "orchestrator-1",
+		},
+	}
+}
+
+func rcaResumedEntry(at, gatedAt time.Time, recoveryPath string) models.TaskHistoryEntry {
+	return models.TaskHistoryEntry{
+		Time:  at,
+		Event: models.TaskEventRejectionRCAResumed,
+		Extra: map[string]any{
+			"fingerprint":       "fp",
+			"recovery_path":     recoveryPath,
+			"restore_mode":      models.RejectionRCARestoreMode(recoveryPath),
+			"actor":             "orchestrator-1",
+			"lifecycle_version": 3,
+			"decided_at":        at.Format(time.RFC3339),
+			"iteration_exempt":  false,
+			"gated_at":          gatedAt.Format(time.RFC3339),
+		},
+	}
+}
+
+func rcaRecord(gatedAt time.Time, closed bool) *models.RejectionRCARecord {
+	record := &models.RejectionRCARecord{
+		SchemaVersion:  models.RejectionRCASchemaVersion,
+		Threshold:      4,
+		RejectionCount: 4,
+		GatedAt:        gatedAt,
+	}
+	if closed {
+		record.Disposition = &models.RejectionRCADisposition{
+			RecoveryPath: models.RecoveryImplementationCorrection,
+			RestoreMode:  models.RestoreModeClaimable,
+			Actor:        "orchestrator-1",
+			DecidedAt:    gatedAt.Add(time.Minute),
+		}
+	}
+	return record
+}
+
+func gatedTask(id string, status models.TaskStatus, now time.Time, record *models.RejectionRCARecord, history ...models.TaskHistoryEntry) models.Task {
+	task := testhelpers.BuildTaskByStatus(id, status, now)
+	if status == models.TaskStatusBlocked {
+		reason := models.BlockedReasonRejectionRCARequired + ": 4 durable rejections reached threshold 4"
+		task.BlockedReason = &reason
+	}
+	task.ReviewCyclesTotal = 4
+	task.RejectionRCA = record
+	task.History = history
+	return task
+}
+
+func TestAnalyzeRejectionRCATelemetry(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC().Truncate(time.Second)
+	t0 := now.Add(-24 * time.Hour)
+
+	// GIVEN one open gate (30m to gate), one resumed-and-merged task (45m),
+	// one resumed-and-re-gated task whose first cycle (60m, capability
+	// cause, capability_reroute) exists only in history while its live record
+	// is the seeded second cycle (180m), one gated task with an unrecognized
+	// cause (90m), one resumed task still executing (120m), and two ungated
+	// tasks that must not count. The open gate's RCA was corrected once: the
+	// superseded recorded entry of the same cycle (same gated_at) must not count.
+	state := testhelpers.CreateValidState()
+	openGate := gatedTask("gate-open", models.TaskStatusBlocked, now, rcaRecord(t0.Add(40*time.Minute), false),
+		rcaGateEntry(t0.Add(40*time.Minute), t0.Add(10*time.Minute)),
+		rcaRecordedEntry(t0.Add(45*time.Minute), t0.Add(40*time.Minute), models.RejectionCauseLifecycleRetry, "superseded_label"),
+		rcaRecordedEntry(t0.Add(50*time.Minute), t0.Add(40*time.Minute), models.RejectionCauseCapabilityFailure, models.RejectionCauseProductDefect),
+	)
+	merged := gatedTask("resumed-merged", models.TaskStatusMerged, now, rcaRecord(t0.Add(2*time.Hour), true),
+		rcaGateEntry(t0.Add(2*time.Hour), t0.Add(75*time.Minute)),
+		rcaRecordedEntry(t0.Add(130*time.Minute), t0.Add(2*time.Hour), models.RejectionCauseLifecycleRetry, models.RejectionCauseUnknown),
+		rcaResumedEntry(t0.Add(140*time.Minute), t0.Add(2*time.Hour), models.RecoveryLifecycleRepair),
+		models.TaskHistoryEntry{Time: t0.Add(3 * time.Hour), Event: models.TaskEventMerged},
+	)
+	regated := gatedTask("resumed-regated", models.TaskStatusBlocked, now, rcaRecord(t0.Add(8*time.Hour), false),
+		rcaGateEntry(t0.Add(4*time.Hour), t0.Add(3*time.Hour)),
+		rcaRecordedEntry(t0.Add(250*time.Minute), t0.Add(4*time.Hour), models.RejectionCauseCapabilityFailure),
+		rcaResumedEntry(t0.Add(260*time.Minute), t0.Add(4*time.Hour), models.RecoveryCapabilityReroute),
+		rcaGateEntry(t0.Add(8*time.Hour), t0.Add(5*time.Hour)),
+	)
+	unrecognized := gatedTask("unrecognized-cause", models.TaskStatusBlocked, now, rcaRecord(t0.Add(10*time.Hour), false),
+		rcaGateEntry(t0.Add(10*time.Hour), t0.Add(510*time.Minute)),
+		rcaRecordedEntry(t0.Add(11*time.Hour), t0.Add(10*time.Hour), "flaky_infra"),
+	)
+	stillOpen := gatedTask("resumed-still-open", models.TaskStatusImplementing, now, rcaRecord(t0.Add(14*time.Hour), true),
+		rcaGateEntry(t0.Add(14*time.Hour), t0.Add(12*time.Hour)),
+		rcaRecordedEntry(t0.Add(15*time.Hour), t0.Add(14*time.Hour), models.RejectionCauseProductDefect),
+		rcaResumedEntry(t0.Add(16*time.Hour), t0.Add(14*time.Hour), models.RecoveryImplementationCorrection),
+	)
+	ungated := testhelpers.BuildTaskByStatus("rejected-ungated", models.TaskStatusImplementing, now)
+	ungated.History = []models.TaskHistoryEntry{
+		{Time: t0, Event: models.TaskEventRejected},
+		{Time: t0.Add(time.Hour), Event: models.TaskEventReviewVerdictRejected},
+	}
+	ordinaryBlocked := testhelpers.BuildTaskByStatus("blocked-ordinary", models.TaskStatusBlocked, now)
+	ordinaryBlocked.History = []models.TaskHistoryEntry{{Time: t0, Event: models.TaskEventBlocked, Extra: map[string]any{"blocked_class": "dependency"}}}
+	state.Tasks = []models.Task{openGate, merged, regated, unrecognized, stillOpen, ungated, ordinaryBlocked}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// WHEN
+	result, err := Analyze(tmpDir)
+	if err != nil {
+		t.Fatalf("Analyze() error: %v", err)
+	}
+
+	// THEN every cumulative dimension comes from history and only the
+	// currently-gated count from the live record.
+	want := &RejectionRCATelemetry{
+		TasksGated:     5,
+		GateCycles:     6,
+		CurrentlyGated: 3,
+		Causes: map[string]int{
+			models.RejectionCauseProductDefect:     2,
+			models.RejectionCauseCapabilityFailure: 2,
+			models.RejectionCauseLifecycleRetry:    1,
+			models.RejectionCauseUnknown:           2,
+		},
+		UnrecognizedCauses:  1,
+		MedianSecondsToGate: int64((75 * time.Minute).Seconds()),
+		MaxSecondsToGate:    int64((180 * time.Minute).Seconds()),
+		RecoveryPaths: map[string]int{
+			models.RecoveryLifecycleRepair:          1,
+			models.RecoveryCapabilityReroute:        1,
+			models.RecoveryImplementationCorrection: 1,
+		},
+		ResumedThenTerminal: 1,
+		ResumedThenRegated:  1,
+		ResumedStillOpen:    1,
+	}
+	if !reflect.DeepEqual(result.RejectionRCA, want) {
+		t.Fatalf("RejectionRCA telemetry:\n got %#v\nwant %#v", result.RejectionRCA, want)
+	}
+	if result.Triggered || result.Pattern != "" {
+		t.Fatalf("telemetry must not trigger a pattern: %#v", result)
+	}
+}
+
+func TestAnalyzeRejectionRCATelemetryAbsent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		anomalies  []models.Anomaly
+		wantStatus string
+		wantMode   models.SystemMode
+	}{
+		{name: "OK", wantStatus: "OK", wantMode: models.SystemModeRunning},
+		{
+			name: "triggered",
+			anomalies: []models.Anomaly{
+				retryLoopAnomaly(time.Now(), "coder-1"),
+				retryLoopAnomaly(time.Now(), "coder-1"),
+				retryLoopAnomaly(time.Now(), "coder-1"),
+			},
+			wantStatus: "TRIGGERED",
+			wantMode:   models.SystemModeCircuitBreakerTripped,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			now := time.Now().UTC()
+
+			// GIVEN rejections and an ordinary block, but no gate entry and no live record.
+			state := testhelpers.CreateValidState()
+			rejected := testhelpers.BuildTaskByStatus("rejected", models.TaskStatusImplementing, now)
+			rejected.History = []models.TaskHistoryEntry{{Time: now, Event: models.TaskEventRejected}}
+			blocked := testhelpers.BuildTaskByStatus("blocked", models.TaskStatusBlocked, now)
+			blocked.History = []models.TaskHistoryEntry{{Time: now, Event: models.TaskEventBlocked}}
+			state.Tasks = []models.Task{rejected, blocked}
+			state.Anomalies = tt.anomalies
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			result, err := Analyze(tmpDir)
+			if err != nil {
+				t.Fatalf("Analyze() error: %v", err)
+			}
+
+			// THEN the block is present but empty and the breaker behaves as before.
+			if !reflect.DeepEqual(result.RejectionRCA, &RejectionRCATelemetry{}) {
+				t.Fatalf("RejectionRCA = %#v, want empty block", result.RejectionRCA)
+			}
+			readState, err := db.New(stateFile).Read()
+			if err != nil {
+				t.Fatalf("Read() error: %v", err)
+			}
+			if readState.CircuitBreaker.Status != tt.wantStatus || readState.Config.Mode != tt.wantMode {
+				t.Fatalf("circuit breaker status/mode = %q/%q, want %q/%q", readState.CircuitBreaker.Status, readState.Config.Mode, tt.wantStatus, tt.wantMode)
+			}
+			if result.Triggered != (tt.wantStatus == "TRIGGERED") {
+				t.Fatalf("Triggered = %v for %s", result.Triggered, tt.name)
+			}
+		})
+	}
+}

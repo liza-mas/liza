@@ -60,3 +60,56 @@ func TestGlobalIntegrationGenerationLimitDefaults(t *testing.T) {
 		t.Fatalf("CreateValidState limit = %d, want 3", got)
 	}
 }
+
+func TestEffectiveHighChurnRejectionThreshold(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want int
+	}{
+		{name: "absent", data: "{}\n", want: models.DefaultHighChurnRejectionThreshold},
+		{name: "zero", data: "high_churn_rejection_threshold: 0\n", want: models.DefaultHighChurnRejectionThreshold},
+		{name: "negative", data: "high_churn_rejection_threshold: -3\n", want: models.DefaultHighChurnRejectionThreshold},
+		{name: "configured", data: "high_churn_rejection_threshold: 6\n", want: 6},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config models.Config
+			if err := yaml.Unmarshal([]byte(tt.data), &config); err != nil {
+				t.Fatalf("unmarshal config: %v", err)
+			}
+			if got := models.EffectiveHighChurnRejectionThreshold(config); got != tt.want {
+				t.Fatalf("EffectiveHighChurnRejectionThreshold() = %d, want %d", got, tt.want)
+			}
+
+			encoded, err := yaml.Marshal(config)
+			if err != nil {
+				t.Fatalf("marshal config: %v", err)
+			}
+			var persisted map[string]any
+			if err := yaml.Unmarshal(encoded, &persisted); err != nil {
+				t.Fatalf("unmarshal persisted config: %v", err)
+			}
+			key, present := persisted["high_churn_rejection_threshold"]
+			if config.HighChurnRejectionThreshold == 0 && present {
+				t.Fatalf("persisted high_churn_rejection_threshold = %v, want the key omitted when unset", key)
+			}
+			if config.HighChurnRejectionThreshold != 0 && key != config.HighChurnRejectionThreshold {
+				t.Fatalf("persisted high_churn_rejection_threshold = %v, want %d", key, config.HighChurnRejectionThreshold)
+			}
+
+			var roundTripped models.Config
+			if err := yaml.Unmarshal(encoded, &roundTripped); err != nil {
+				t.Fatalf("unmarshal round-tripped config: %v", err)
+			}
+			if got := models.EffectiveHighChurnRejectionThreshold(roundTripped); got != tt.want {
+				t.Fatalf("round-tripped EffectiveHighChurnRejectionThreshold() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+
+	if models.DefaultHighChurnRejectionThreshold != 4 {
+		t.Fatalf("DefaultHighChurnRejectionThreshold = %d, want 4", models.DefaultHighChurnRejectionThreshold)
+	}
+}

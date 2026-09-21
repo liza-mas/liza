@@ -303,3 +303,77 @@ func TestWriteAnalyzeResultProjectsTypedResponse(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || contains(s[1:], substr)))
 }
+
+func TestWriteAnalyzeResultRejectionRCA(t *testing.T) {
+	telemetry := &ops.RejectionRCATelemetry{
+		TasksGated:          3,
+		GateCycles:          4,
+		CurrentlyGated:      2,
+		Causes:              map[string]int{"capability_failure": 2, "product_defect": 1, "unknown": 2},
+		UnrecognizedCauses:  1,
+		MedianSecondsToGate: 4500,
+		MaxSecondsToGate:    10800,
+		RecoveryPaths:       map[string]int{"lifecycle_repair": 1, "capability_reroute": 1},
+		ResumedThenTerminal: 1,
+		ResumedThenRegated:  1,
+		ResumedStillOpen:    0,
+	}
+	wantBlock := []string{
+		"Rejection RCA gate:",
+		"Tasks gated: 3 (4 cycles), currently gated: 2",
+		"Causes: capability_failure=2 product_defect=1 unknown=2 (unrecognized folded into unknown: 1)",
+		"Time to gate: median 1h15m0s, max 3h0m0s",
+		"Recovery paths: capability_reroute=1 lifecycle_repair=1",
+		"Convergence after resume: terminal=1 re-gated=1 still open=0",
+	}
+	tests := []struct {
+		name    string
+		result  *ops.AnalyzeResult
+		want    []string
+		notWant []string
+	}{
+		{
+			name:   "OK breaker renders the block after the status line",
+			result: &ops.AnalyzeResult{RejectionRCA: telemetry},
+			want:   append([]string{"Circuit breaker: OK — no patterns detected"}, wantBlock...),
+		},
+		{
+			name: "triggered breaker renders the block after the report path",
+			result: &ops.AnalyzeResult{
+				Triggered:    true,
+				Pattern:      "retry_cluster",
+				Severity:     "HIGH",
+				Response:     models.CircuitBreakerResponseHalt,
+				ReportPath:   "/tmp/report.md",
+				RejectionRCA: telemetry,
+			},
+			want: append([]string{"CIRCUIT BREAKER TRIGGERED — HALT", "Report written to: /tmp/report.md"}, wantBlock...),
+		},
+		{
+			name:    "empty block",
+			result:  &ops.AnalyzeResult{RejectionRCA: &ops.RejectionRCATelemetry{}},
+			want:    []string{"Rejection RCA gate: no gated tasks"},
+			notWant: []string{"Causes:", "Time to gate:"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			writeAnalyzeResult(&output, tt.result)
+			got := output.String()
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("output missing %q\n%s", want, got)
+				}
+			}
+			for _, notWant := range append(tt.notWant, "token", "Token") {
+				if strings.Contains(got, notWant) {
+					t.Errorf("output unexpectedly contains %q\n%s", notWant, got)
+				}
+			}
+			if idx := strings.Index(got, "Rejection RCA gate:"); idx >= 0 && strings.Contains(got[idx:], "Circuit breaker") {
+				t.Errorf("block must render after the existing output\n%s", got)
+			}
+		})
+	}
+}

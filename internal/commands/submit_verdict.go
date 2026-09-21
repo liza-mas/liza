@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
@@ -49,6 +50,11 @@ func printVerdictResult(r *ops.VerdictResult) {
 			fmt.Println("  escalated_to: BLOCKED")
 			if r.BlockedReason != "" {
 				fmt.Printf("  blocked_reason: %s\n", r.BlockedReason)
+			}
+			if r.RejectionRCAGated {
+				fmt.Println("  rejection_rca_gate: open")
+				fmt.Printf("  clear_with: %s\n", brand.Command("record-rejection-rca", r.TaskID, "--rca-file", "<file>"))
+				fmt.Printf("  then: %s\n", brand.Command("resume-rejection-rca", r.TaskID, "--disposition-file", "<file>"))
 			}
 		}
 	}

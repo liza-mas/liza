@@ -19,6 +19,7 @@ import (
 	activitylog "github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -63,8 +64,11 @@ func TestSubmitVerdict_Validation(t *testing.T) {
 	}
 }
 
-func TestSubmitVerdict_VerdictNormalization(t *testing.T) {
-	// Lowercase "approved" should be accepted and normalized
+// TestSubmitVerdict_LowercaseVerdictRejected pins the boundary that replaced
+// case normalization: the canonical object is validated as the caller sent it,
+// so a lowercase verdict is the structural rejection validate-payload already
+// reports rather than a value the mutation boundary silently upcases.
+func TestSubmitVerdict_LowercaseVerdictRejected(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -79,12 +83,15 @@ func TestSubmitVerdict_VerdictNormalization(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SubmitVerdict(tmpDir, "task-1", "approved", "", "code-reviewer-1", "")
-	if err != nil {
-		t.Fatalf("SubmitVerdict() error: %v", err)
+	_, err := SubmitVerdict(tmpDir, "task-1", "approved", "", "code-reviewer-1", "")
+	requireVerdictDiagnostic(t, err, "/verdict", "must be APPROVED or REJECTED", models.FieldValueClassUnknownEnum)
+
+	readState, readErr := db.New(stateFile).Read()
+	if readErr != nil {
+		t.Fatalf("Read() error = %v", readErr)
 	}
-	if result.Verdict != "APPROVED" {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, "APPROVED")
+	if status := taskStatus(readState.FindTask("task-1")); status != models.TaskStatusReviewing {
+		t.Errorf("Status = %v, want REVIEWING", status)
 	}
 }
 
@@ -2852,4 +2859,770 @@ func taskStatus(task *models.Task) models.TaskStatus {
 		return ""
 	}
 	return task.Status
+}
+
+// verdictPayloadReviewCommit is the immutable boundary the authenticated
+// payload fixtures review, so only the field under test is ever malformed.
+var verdictPayloadReviewCommit = strings.Repeat("ab", 20)
+
+// setupVerdictPayloadFixture builds a REVIEWING task and a registered reviewer
+// whose authority holds, so every rejection below is structural rather than an
+// authority or boundary refusal.
+func setupVerdictPayloadFixture(t *testing.T) (projectRoot, stateFile string, authority models.AgentAuthority) {
+	t.Helper()
+	projectRoot = t.TempDir()
+	stateFile, _ = testhelpers.SetupLizaDir(t, projectRoot)
+	authority = models.AgentAuthority{ID: "code-reviewer-1", Generation: testhelpers.TestAgentGeneration}
+
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())
+	task.ReviewCommit = &verdictPayloadReviewCommit
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{task}
+	state.Agents[authority.ID] = models.Agent{
+		Role:       models.RoleCodeReviewer,
+		Status:     models.AgentStatusReviewing,
+		Generation: authority.Generation,
+		CurrentTask: func() *string {
+			id := task.ID
+			return &id
+		}(),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	return projectRoot, stateFile, authority
+}
+
+// requireVerdictDiagnostic asserts err is the INVALID_INPUT lifecycle result
+// carrying exactly the named field diagnostic, and that no diagnostic echoes a
+// rejected value.
+func requireVerdictDiagnostic(t *testing.T, err error, field, constraint, valueClass string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("SubmitVerdict() error = nil, want INVALID_INPUT")
+	}
+	var lifecycleErr *LifecycleError
+	if !stderrors.As(err, &lifecycleErr) {
+		t.Fatalf("error %v is not a *LifecycleError", err)
+	}
+	outcome := lifecycleErr.Outcome
+	if outcome.Outcome != models.LifecycleInvalidInput {
+		t.Fatalf("outcome = %q, want %q", outcome.Outcome, models.LifecycleInvalidInput)
+	}
+	if outcome.SafeAction != "correct_input" {
+		t.Errorf("safe_action = %q, want correct_input", outcome.SafeAction)
+	}
+	if outcome.Effects != "none" {
+		t.Errorf("effects = %q, want none", outcome.Effects)
+	}
+	if len(outcome.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v, want exactly one entry", outcome.Diagnostics)
+	}
+	got := outcome.Diagnostics[0]
+	want := models.FieldDiagnostic{
+		SchemaVersion: 1, Field: field, Constraint: constraint,
+		ValueClass: valueClass, SafeAction: models.FieldDiagnosticCorrectInput,
+	}
+	if got != want {
+		t.Fatalf("diagnostic = %#v, want %#v", got, want)
+	}
+}
+
+func TestSubmitVerdictInvalidPayloadDiagnostics(t *testing.T) {
+	// The observed run's failure: a verdict reason one byte past the durable
+	// state-text limit. It reaches the schema as /reason, not as prose.
+	oversizedReason := strings.Repeat("r", statehygiene.MaxStateTextBytes+1)
+
+	tests := []struct {
+		name         string
+		verdict      string
+		reason       string
+		reviewCommit string
+		field        string
+		constraint   string
+		valueClass   string
+	}{
+		{
+			name: "oversized rejection reason", verdict: "REJECTED", reason: oversizedReason,
+			reviewCommit: verdictPayloadReviewCommit,
+			field:        "/reason", constraint: fmt.Sprintf("must be at most %d bytes", statehygiene.MaxStateTextBytes),
+			valueClass: models.FieldValueClassOversized,
+		},
+		{
+			name: "lowercase verdict", verdict: "approved", reviewCommit: verdictPayloadReviewCommit,
+			field: "/verdict", constraint: "must be APPROVED or REJECTED",
+			valueClass: models.FieldValueClassUnknownEnum,
+		},
+		{
+			name: "non-hex review commit", verdict: "APPROVED", reviewCommit: strings.Repeat("a", 39) + "z",
+			field: "/review_commit", constraint: "must be the full immutable commit SHA reviewed",
+			valueClass: models.FieldValueClassMalformed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot, stateFile, authority := setupVerdictPayloadFixture(t)
+			before, err := os.ReadFile(stateFile)
+			if err != nil {
+				t.Fatalf("ReadFile(%s) error = %v", stateFile, err)
+			}
+
+			_, err = SubmitVerdictWithAuthority(projectRoot, "task-1", tt.verdict, tt.reason, authority, "", tt.reviewCommit)
+			requireVerdictDiagnostic(t, err, tt.field, tt.constraint, tt.valueClass)
+
+			after, readErr := os.ReadFile(stateFile)
+			if readErr != nil {
+				t.Fatalf("ReadFile(%s) error = %v", stateFile, readErr)
+			}
+			if !bytes.Equal(before, after) {
+				t.Fatal("state file changed; a structural rejection must happen before the state lock")
+			}
+		})
+	}
+}
+
+func TestSubmitVerdictPreflightParity(t *testing.T) {
+	// Both boundaries must accept or reject the very same canonical object,
+	// so a caller cannot pass validate-payload and fail submit-verdict, or
+	// the reverse, for a structural reason (AC-158-3).
+	fixtures := []struct {
+		name    string
+		verdict string
+		reason  string
+	}{
+		{name: "valid fixture", verdict: "REJECTED", reason: "the boundary case is unhandled"},
+		{name: "invalid fixture", verdict: "rejected", reason: "the boundary case is unhandled"},
+	}
+
+	for _, fixture := range fixtures {
+		t.Run(fixture.name, func(t *testing.T) {
+			projectRoot, _, authority := setupVerdictPayloadFixture(t)
+			payload := payloadschema.SubmitVerdictPayload(
+				"task-1", fixture.verdict, fixture.reason, authority.ID, "standard", verdictPayloadReviewCommit)
+
+			version, preflight, err := payloadschema.Validate(payloadschema.SubmitVerdictOperation, payload)
+			if err != nil {
+				t.Fatalf("payloadschema.Validate() error = %v", err)
+			}
+			if version != 1 {
+				t.Errorf("schema version = %d, want 1", version)
+			}
+
+			_, mutationErr := SubmitVerdictWithAuthority(
+				projectRoot, "task-1", fixture.verdict, fixture.reason, authority, "standard", verdictPayloadReviewCommit)
+
+			var lifecycleErr *LifecycleError
+			var mutation []models.FieldDiagnostic
+			if stderrors.As(mutationErr, &lifecycleErr) && lifecycleErr.Outcome.Outcome == models.LifecycleInvalidInput {
+				mutation = lifecycleErr.Outcome.Diagnostics
+			}
+			if !reflect.DeepEqual(preflight, mutation) {
+				t.Fatalf("structural verdict diverged:\npreflight: %#v\nmutation:  %#v", preflight, mutation)
+			}
+			if len(preflight) == 0 && mutationErr != nil {
+				t.Fatalf("valid payload rejected by the mutation boundary: %v", mutationErr)
+			}
+		})
+	}
+}
+
+func TestSubmitVerdictValidPayloadUnchanged(t *testing.T) {
+	tests := []struct {
+		name       string
+		verdict    string
+		reason     string
+		wantStatus models.TaskStatus
+		wantEvent  string
+	}{
+		{
+			name: "approved", verdict: "APPROVED",
+			wantStatus: models.TaskStatusApproved, wantEvent: models.TaskEventApproved,
+		},
+		{
+			name: "rejected", verdict: "REJECTED", reason: "Missing error handling",
+			wantStatus: models.TaskStatusRejected, wantEvent: models.TaskEventRejected,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectRoot, stateFile, _ := setupVerdictPayloadFixture(t)
+
+			result, err := SubmitVerdict(projectRoot, "task-1", tt.verdict, tt.reason, "code-reviewer-1", "")
+			if err != nil {
+				t.Fatalf("SubmitVerdict() error = %v", err)
+			}
+			if result.Verdict != tt.verdict {
+				t.Errorf("Verdict = %q, want %q", result.Verdict, tt.verdict)
+			}
+			if result.Reason != tt.reason {
+				t.Errorf("Reason = %q, want %q", result.Reason, tt.reason)
+			}
+			if result.Outcome != models.LifecycleCompleted || result.SafeAction != "continue" {
+				t.Errorf("outcome = %q/%q, want COMPLETED/continue", result.Outcome, result.SafeAction)
+			}
+			if result.EscalatedToBlocked {
+				t.Error("EscalatedToBlocked = true, want false: this task carries no gate")
+			}
+
+			readState, err := db.New(stateFile).Read()
+			if err != nil {
+				t.Fatalf("Read() error = %v", err)
+			}
+			task := readState.FindTask("task-1")
+			if task == nil {
+				t.Fatal("task-1 not found")
+			}
+			if task.Status != tt.wantStatus {
+				t.Errorf("Status = %v, want %v", task.Status, tt.wantStatus)
+			}
+			if len(task.History) != 1 {
+				t.Fatalf("history = %#v, want exactly one entry", task.History)
+			}
+			if task.History[0].Event != tt.wantEvent {
+				t.Errorf("history event = %q, want %q", task.History[0].Event, tt.wantEvent)
+			}
+		})
+	}
+}
+
+// gateVerdictRole names the doer/reviewer pair of one reviewed task type so the
+// churn gate is exercised on a coding task and a planning task alike.
+type gateVerdictRole struct {
+	name         string
+	taskType     models.TaskType
+	rolePair     string
+	reviewing    models.TaskStatus
+	rejected     models.TaskStatus
+	doer         string
+	doerRole     string
+	reviewer     string
+	reviewerRole string
+}
+
+var gateVerdictRoles = []gateVerdictRole{
+	{
+		name: "coding task", taskType: models.TaskTypeCoding, rolePair: "coding-pair",
+		reviewing: models.TaskStatusReviewing, rejected: models.TaskStatusRejected,
+		doer: "coder-1", doerRole: models.RoleCoder, reviewer: "code-reviewer-1", reviewerRole: models.RoleCodeReviewer,
+	},
+	{
+		name: "planning task", taskType: models.TaskTypePlanning, rolePair: "code-planning-pair",
+		reviewing: models.TaskStatusReviewingCodingPlan, rejected: models.TaskStatusCodingPlanRejected,
+		doer: "code-planner-1", doerRole: models.RoleCodePlanner, reviewer: "code-plan-reviewer-1", reviewerRole: models.RoleCodePlanReviewer,
+	},
+}
+
+const gateVerdictTaskID = "task-1"
+
+// gateVerdictState builds one project whose task is under review after
+// priorRejections durable rejections, the earliest one an hour apart from the
+// next so first_rejection_at is distinguishable. The mutate hook may adjust
+// the state (config threshold, counters, a prior RCA cycle) before it is
+// written.
+func gateVerdictState(t *testing.T, role gateVerdictRole, priorRejections int, now time.Time, mutate func(*models.State, *models.Task)) (string, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	task := models.Task{
+		ID: gateVerdictTaskID, Type: role.taskType, RolePair: role.rolePair, Description: "Gated task",
+		Status: role.reviewing, Priority: 1, Created: now, SpecRef: "README.md", DoneWhen: "Task is complete", Scope: "Test scope",
+		AssignedTo: testhelpers.StringPtr(role.doer), LeaseExpires: testhelpers.TimePtr(now.Add(30 * time.Minute)),
+		BaseCommit: testhelpers.StringPtr("abc1234"), Worktree: testhelpers.StringPtr(".worktrees/" + gateVerdictTaskID),
+		ReviewCommit: testhelpers.StringPtr("review123"), ReviewingBy: testhelpers.StringPtr(role.reviewer),
+		ReviewLeaseExpires:  testhelpers.TimePtr(now.Add(30 * time.Minute)),
+		HandoffEvents:       []models.HandoffEvent{{Timestamp: now, Agent: role.doer, Trigger: models.HandoffTriggerSubmission}},
+		ReviewCyclesCurrent: priorRejections, ReviewCyclesTotal: priorRejections,
+	}
+	for i := 0; i < priorRejections; i++ {
+		reason := fmt.Sprintf("rejection %d", i+1)
+		task.History = append(task.History, models.TaskHistoryEntry{
+			Time: now.Add(-time.Duration(priorRejections-i) * time.Hour), Event: models.TaskEventRejected,
+			Agent: testhelpers.StringPtr(role.reviewer), Reason: &reason,
+		})
+	}
+	if mutate != nil {
+		mutate(state, &task)
+	}
+	state.Tasks = []models.Task{task}
+	taskRef := gateVerdictTaskID
+	state.Agents[role.doer] = models.Agent{Role: role.doerRole, Status: models.AgentStatusWaiting, CurrentTask: &taskRef}
+	state.Agents[role.reviewer] = models.Agent{Role: role.reviewerRole, Status: models.AgentStatusReviewing, CurrentTask: &taskRef}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	return tmpDir, stateFile
+}
+
+// requeueForReview puts a rejected task back under review by the same
+// reviewer, as a resubmission and reviewer claim would, so a sequence of
+// verdicts can be driven against one durable rejection history.
+func requeueForReview(t *testing.T, bb *db.Blackboard, role gateVerdictRole) {
+	t.Helper()
+	if err := bb.Modify(func(state *models.State) error {
+		task := state.FindTask(gateVerdictTaskID)
+		if task == nil {
+			return fmt.Errorf("task %s not found", gateVerdictTaskID)
+		}
+		now := time.Now().UTC()
+		task.Status = role.reviewing
+		task.ReviewCommit = testhelpers.StringPtr("review123")
+		task.ReviewingBy = testhelpers.StringPtr(role.reviewer)
+		task.ReviewLeaseExpires = testhelpers.TimePtr(now.Add(30 * time.Minute))
+		taskRef := gateVerdictTaskID
+		state.Agents[role.reviewer] = models.Agent{Role: role.reviewerRole, Status: models.AgentStatusReviewing, CurrentTask: &taskRef}
+		return nil
+	}); err != nil {
+		t.Fatalf("requeue for review: %v", err)
+	}
+}
+
+func readGateVerdictTask(t *testing.T, stateFile string) (*models.State, *models.Task) {
+	t.Helper()
+	state, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	task := state.FindTask(gateVerdictTaskID)
+	if task == nil {
+		t.Fatalf("task %s not found", gateVerdictTaskID)
+	}
+	return state, task
+}
+
+// assertGatedTask checks the whole gate escalation: BLOCKED with the typed
+// reason, a seeded record for the current cycle, the released doer and
+// reviewer, and a TaskEventBlocked entry carrying every declared detail key.
+func assertGatedTask(t *testing.T, state *models.State, task *models.Task, role gateVerdictRole, threshold, rejectionCount int, firstRejectionAt time.Time) {
+	t.Helper()
+	if task.Status != models.TaskStatusBlocked {
+		t.Fatalf("Status = %s, want BLOCKED", task.Status)
+	}
+	if task.BlockedReason == nil || !strings.HasPrefix(*task.BlockedReason, models.BlockedReasonRejectionRCARequired) {
+		t.Fatalf("BlockedReason = %v, want prefix %q", task.BlockedReason, models.BlockedReasonRejectionRCARequired)
+	}
+	if len(task.BlockedQuestions) == 0 {
+		t.Fatal("BlockedQuestions empty, want the gate's questions")
+	}
+	if !task.RejectionRCAGateOpen() {
+		t.Fatal("RejectionRCAGateOpen() = false, want an open gate")
+	}
+	record := task.RejectionRCA
+	if record.SchemaVersion != models.RejectionRCASchemaVersion || record.Threshold != threshold || record.RejectionCount != rejectionCount {
+		t.Fatalf("seeded record = %+v, want schema %d threshold %d rejection_count %d", record, models.RejectionRCASchemaVersion, threshold, rejectionCount)
+	}
+	if record.GatedAt.IsZero() || record.GatingCommit != "review123" {
+		t.Fatalf("seeded record gated_at/gating_commit = %v/%q, want set/review123", record.GatedAt, record.GatingCommit)
+	}
+	if record.Fingerprint != "" || record.Summary != "" || len(record.Contributions) != 0 || record.RecordedAt != nil || record.RecordedBy != "" {
+		t.Fatalf("seeded record carries caller fields: %+v", record)
+	}
+	if task.ReviewCyclesTotal != rejectionCount || task.DurableRejectionCount() != rejectionCount {
+		t.Fatalf("durable count = %d/%d, want %d", task.ReviewCyclesTotal, task.DurableRejectionCount(), rejectionCount)
+	}
+	if task.AssignedTo != nil || task.LeaseExpires != nil || task.ReviewingBy != nil || task.ReviewLeaseExpires != nil {
+		t.Fatalf("assignment/lease not cleared: assigned_to=%v lease=%v reviewing_by=%v review_lease=%v", task.AssignedTo, task.LeaseExpires, task.ReviewingBy, task.ReviewLeaseExpires)
+	}
+	assertReleasedAgent(t, state, role.doer)
+	assertReleasedAgent(t, state, role.reviewer)
+
+	last := task.History[len(task.History)-1]
+	if last.Event != models.TaskEventBlocked {
+		t.Fatalf("last history event = %s, want %s", last.Event, models.TaskEventBlocked)
+	}
+	if last.Agent == nil || *last.Agent != role.reviewer || last.Reason == nil || *last.Reason != *task.BlockedReason {
+		t.Fatalf("blocked entry agent/reason = %v/%v, want %s/%q", last.Agent, last.Reason, role.reviewer, *task.BlockedReason)
+	}
+	want := map[string]string{
+		"blocked_class":      models.BlockedReasonRejectionRCARequired,
+		"threshold":          fmt.Sprint(threshold),
+		"rejection_count":    fmt.Sprint(rejectionCount),
+		"gated_at":           record.GatedAt.Format(time.RFC3339),
+		"first_rejection_at": firstRejectionAt.Format(time.RFC3339),
+	}
+	for key, value := range want {
+		got, ok := last.Extra[key]
+		if !ok || fmt.Sprint(got) != value {
+			t.Errorf("blocked entry extra[%q] = %v (present=%v), want %q", key, got, ok, value)
+		}
+	}
+	if len(last.Extra) != len(want) {
+		t.Errorf("blocked entry extra keys = %v, want exactly %d declared keys", last.Extra, len(want))
+	}
+}
+
+func TestSubmitVerdictRejectionRCAGate(t *testing.T) {
+	for _, role := range gateVerdictRoles {
+		t.Run(role.name+" gates on the threshold-crossing rejection", func(t *testing.T) {
+			now := time.Now().UTC().Truncate(time.Second)
+			tmpDir, stateFile := gateVerdictState(t, role, 3, now, nil)
+
+			result, err := SubmitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", "fourth rejection", role.reviewer, "")
+			if err != nil {
+				t.Fatalf("SubmitVerdict() error: %v", err)
+			}
+			state, task := readGateVerdictTask(t, stateFile)
+			assertGatedTask(t, state, task, role, models.DefaultHighChurnRejectionThreshold, 4, now.Add(-3*time.Hour))
+			if !result.EscalatedToBlocked || !result.RejectionRCAGated || result.BlockedReason != *task.BlockedReason {
+				t.Fatalf("result = %+v, want escalated_to_blocked with the task's blocked_reason and rejection_rca_gated", result)
+			}
+			if result.Outcome != models.LifecycleCompleted || result.SafeAction != "continue" {
+				t.Fatalf("outcome = %s/%s, want COMPLETED/continue", result.Outcome, result.SafeAction)
+			}
+			if task.RejectionReason == nil || *task.RejectionReason != "fourth rejection" {
+				t.Fatalf("RejectionReason = %v, want the gating rejection's reason", task.RejectionReason)
+			}
+			rejected := historyEntries(task, models.TaskEventRejected)
+			if len(rejected) != 4 || rejected[3].Commit == nil || *rejected[3].Commit != "review123" {
+				t.Fatalf("rejected entries = %d, want 4 with the gating review commit on the last", len(rejected))
+			}
+		})
+
+		t.Run(role.name+" prior rejection does not gate", func(t *testing.T) {
+			now := time.Now().UTC()
+			tmpDir, stateFile := gateVerdictState(t, role, 2, now, nil)
+
+			result, err := SubmitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", "third rejection", role.reviewer, "")
+			if err != nil {
+				t.Fatalf("SubmitVerdict() error: %v", err)
+			}
+			if result.EscalatedToBlocked || result.RejectionRCAGated || result.BlockedReason != "" {
+				t.Fatalf("result = %+v, want a plain rejection", result)
+			}
+			_, task := readGateVerdictTask(t, stateFile)
+			if task.Status != role.rejected || task.RejectionRCA != nil || task.ReviewCyclesTotal != 3 {
+				t.Fatalf("status/record/total = %s/%v/%d, want %s/nil/3", task.Status, task.RejectionRCA, task.ReviewCyclesTotal, role.rejected)
+			}
+			if entries := historyEntries(task, models.TaskEventBlocked); len(entries) != 0 {
+				t.Fatalf("blocked entries = %d, want none", len(entries))
+			}
+		})
+	}
+
+	role := gateVerdictRoles[0]
+	t.Run("configured threshold of 6 gates at 6", func(t *testing.T) {
+		configure := func(state *models.State, task *models.Task) {
+			state.Config.HighChurnRejectionThreshold = 6
+			task.ReviewCyclesCurrent = 1 // a later attempt: the review budget is not the path that fires
+		}
+		now := time.Now().UTC().Truncate(time.Second)
+		tmpDir, stateFile := gateVerdictState(t, role, 3, now, configure)
+		result, err := SubmitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", "fourth rejection", role.reviewer, "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		_, task := readGateVerdictTask(t, stateFile)
+		if result.EscalatedToBlocked || task.RejectionRCA != nil || task.Status != role.rejected {
+			t.Fatalf("fourth rejection under threshold 6 gated: result=%+v status=%s record=%v", result, task.Status, task.RejectionRCA)
+		}
+
+		tmpDir, stateFile = gateVerdictState(t, role, 5, now, configure)
+		result, err = SubmitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", "sixth rejection", role.reviewer, "")
+		if err != nil {
+			t.Fatalf("SubmitVerdict() error: %v", err)
+		}
+		state, task := readGateVerdictTask(t, stateFile)
+		assertGatedTask(t, state, task, role, 6, 6, now.Add(-5*time.Hour))
+		if !result.EscalatedToBlocked || !result.RejectionRCAGated {
+			t.Fatalf("result = %+v, want the gate escalation", result)
+		}
+	})
+
+	t.Run("already-gated task is not re-seeded", func(t *testing.T) {
+		now := time.Now().UTC().Truncate(time.Second)
+		tmpDir, stateFile := gateVerdictState(t, role, 3, now, nil)
+		bb := db.New(stateFile)
+
+		// The gate fires from another session between this verdict's
+		// pre-lock validation and its locked callback.
+		gatedAt := now.Add(-time.Minute)
+		seeded := &models.RejectionRCARecord{SchemaVersion: models.RejectionRCASchemaVersion, Threshold: 4, RejectionCount: 4, GatedAt: gatedAt, GatingCommit: "other-session"}
+		previousHooks := testSubmitVerdictHooks
+		testSubmitVerdictHooks = &submitVerdictTestHooks{beforeModify: func() {
+			if err := bb.Modify(func(state *models.State) error {
+				task := state.FindTask(gateVerdictTaskID)
+				task.Status = models.TaskStatusBlocked
+				task.BlockedReason = testhelpers.StringPtr(models.BlockedReasonRejectionRCARequired + ": gated by another session")
+				task.BlockedQuestions = []string{"Which cause dominated?"}
+				task.ReviewCyclesTotal = 4
+				task.RejectionRCA = seeded
+				task.AssignedTo, task.LeaseExpires, task.ReviewingBy, task.ReviewLeaseExpires = nil, nil, nil, nil
+				task.History = append(task.History, models.TaskHistoryEntry{Time: gatedAt, Event: models.TaskEventBlocked, Agent: testhelpers.StringPtr(role.reviewer), Reason: task.BlockedReason})
+				return nil
+			}); err != nil {
+				t.Fatalf("gate from another session: %v", err)
+			}
+		}}
+		t.Cleanup(func() { testSubmitVerdictHooks = previousHooks })
+
+		_, err := SubmitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", "late rejection", role.reviewer, "")
+		var lifecycleErr *LifecycleError
+		if !stderrors.As(err, &lifecycleErr) || lifecycleErr.Outcome.Outcome != models.LifecycleAlreadyTransitioned || lifecycleErr.Outcome.SafeAction != "stop" {
+			t.Fatalf("verdict against a gated task = %v, want ALREADY_TRANSITIONED/stop", err)
+		}
+		if !strings.Contains(err.Error(), models.BlockedReasonRejectionRCARequired) {
+			t.Fatalf("error %q does not name the gate", err)
+		}
+		_, task := readGateVerdictTask(t, stateFile)
+		record := task.RejectionRCA
+		if record == nil || !record.GatedAt.Equal(seeded.GatedAt) || record.RejectionCount != seeded.RejectionCount || record.GatingCommit != seeded.GatingCommit || record.Disposition != nil {
+			t.Fatalf("record re-seeded: %+v, want %+v", record, seeded)
+		}
+		if task.ReviewCyclesTotal != 4 || len(historyEntries(task, models.TaskEventBlocked)) != 1 || len(historyEntries(task, models.TaskEventRejected)) != 3 {
+			t.Fatalf("gated task mutated: total=%d blocked=%d rejected=%d", task.ReviewCyclesTotal, len(historyEntries(task, models.TaskEventBlocked)), len(historyEntries(task, models.TaskEventRejected)))
+		}
+	})
+}
+
+// resumedRejectionRCACycle installs a completed first gate cycle on the task:
+// a recorded and resumed record with its three history entries, at threshold 4
+// after four durable rejections, so the next verdicts exercise the re-fire rule.
+func resumedRejectionRCACycle(gatedAt time.Time) func(*models.State, *models.Task) {
+	return func(state *models.State, task *models.Task) {
+		actor := "orchestrator-1"
+		request := models.RejectionRCARequest{SchemaVersion: models.RejectionRCASchemaVersion, Summary: "first cycle",
+			Contributions: []models.RejectionRCAContribution{{RejectionIndex: 1, Categories: []string{models.RejectionCauseProductDefect}}}}
+		recordedAt := gatedAt.Add(time.Minute)
+		decidedAt := gatedAt.Add(2 * time.Minute)
+		task.RejectionRCA = &models.RejectionRCARecord{
+			SchemaVersion: models.RejectionRCASchemaVersion, Threshold: 4, RejectionCount: 4, GatedAt: gatedAt, GatingCommit: "cycle-one",
+			Fingerprint: models.RejectionRCAFingerprint(request), RecordedAt: &recordedAt, RecordedBy: actor,
+			Summary: request.Summary, Contributions: request.Contributions,
+			Disposition: &models.RejectionRCADisposition{RecoveryPath: models.RecoveryImplementationCorrection, RestoreMode: models.RestoreModeClaimable, Actor: actor, DecidedAt: decidedAt},
+		}
+		task.ReviewCyclesCurrent = 0
+		blockedReason := models.BlockedReasonRejectionRCARequired + ": first cycle"
+		task.History = append(task.History,
+			models.TaskHistoryEntry{Time: gatedAt, Event: models.TaskEventBlocked, Agent: testhelpers.StringPtr("code-reviewer-1"), Reason: &blockedReason,
+				Extra: map[string]any{"blocked_class": models.BlockedReasonRejectionRCARequired, "threshold": 4, "rejection_count": 4, "gated_at": gatedAt.Format(time.RFC3339), "first_rejection_at": gatedAt.Add(-4 * time.Hour).Format(time.RFC3339)}},
+			models.TaskHistoryEntry{Time: recordedAt, Event: models.TaskEventRejectionRCARecorded, Agent: &actor, Extra: map[string]any{"fingerprint": task.RejectionRCA.Fingerprint, "gated_at": gatedAt.Format(time.RFC3339)}},
+			models.TaskHistoryEntry{Time: decidedAt, Event: models.TaskEventRejectionRCAResumed, Agent: &actor, Extra: map[string]any{"recovery_path": models.RecoveryImplementationCorrection, "gated_at": gatedAt.Format(time.RFC3339)}},
+		)
+	}
+}
+
+func TestSubmitVerdictGateReFire(t *testing.T) {
+	role := gateVerdictRoles[0]
+	now := time.Now().UTC().Truncate(time.Second)
+	firstGatedAt := now.Add(-30 * time.Minute)
+	tmpDir, stateFile := gateVerdictState(t, role, 4, now, resumedRejectionRCACycle(firstGatedAt))
+	bb := db.New(stateFile)
+	_, before := readGateVerdictTask(t, stateFile)
+	firstCycle := before.RejectionRCA
+
+	reject := func(n int) *VerdictResult {
+		t.Helper()
+		result, err := SubmitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", fmt.Sprintf("rejection %d", n), role.reviewer, "")
+		if err != nil {
+			t.Fatalf("rejection %d: SubmitVerdict() error: %v", n, err)
+		}
+		return result
+	}
+
+	// Rejections 5, 6 and 7: below RejectionCount + threshold, so the closed
+	// gate does not re-fire and the first cycle's record is untouched.
+	for n := 5; n <= 7; n++ {
+		result := reject(n)
+		_, task := readGateVerdictTask(t, stateFile)
+		if result.EscalatedToBlocked || task.Status != role.rejected || task.ReviewCyclesTotal != n {
+			t.Fatalf("rejection %d re-gated: result=%+v status=%s total=%d", n, result, task.Status, task.ReviewCyclesTotal)
+		}
+		if !reflect.DeepEqual(task.RejectionRCA, firstCycle) {
+			t.Fatalf("rejection %d changed the closed-gate record: %+v", n, task.RejectionRCA)
+		}
+		requeueForReview(t, bb, role)
+	}
+
+	// Rejection 8 = RejectionCount 4 + threshold 4: the gate re-fires and the
+	// record is re-seeded for the new cycle.
+	result := reject(8)
+	state, task := readGateVerdictTask(t, stateFile)
+	assertGatedTask(t, state, task, role, 4, 8, now.Add(-4*time.Hour))
+	if !result.EscalatedToBlocked || !result.RejectionRCAGated {
+		t.Fatalf("result = %+v, want the gate escalation", result)
+	}
+	if !task.RejectionRCA.GatedAt.After(firstGatedAt) || task.RejectionRCA.GatingCommit != "review123" {
+		t.Fatalf("re-seeded record keeps the first cycle's timing: %+v", task.RejectionRCA)
+	}
+
+	// The first cycle survives in history: its blocked, recorded and resumed
+	// entries remain, and the new cycle adds exactly one blocked entry.
+	blocked := historyEntries(task, models.TaskEventBlocked)
+	if len(blocked) != 2 || fmt.Sprint(blocked[0].Extra["gated_at"]) != firstGatedAt.Format(time.RFC3339) {
+		t.Fatalf("blocked entries = %+v, want the first cycle's entry followed by the new one", blocked)
+	}
+	if recorded := historyEntries(task, models.TaskEventRejectionRCARecorded); len(recorded) != 1 || fmt.Sprint(recorded[0].Extra["fingerprint"]) != firstCycle.Fingerprint {
+		t.Fatalf("rejection_rca_recorded entries = %+v, want the first cycle's", recorded)
+	}
+	if resumed := historyEntries(task, models.TaskEventRejectionRCAResumed); len(resumed) != 1 || fmt.Sprint(resumed[0].Extra["recovery_path"]) != models.RecoveryImplementationCorrection {
+		t.Fatalf("rejection_rca_resumed entries = %+v, want the first cycle's", resumed)
+	}
+	if len(historyEntries(task, models.TaskEventRejected)) != 8 {
+		t.Fatalf("rejected entries = %d, want 8", len(historyEntries(task, models.TaskEventRejected)))
+	}
+}
+
+func TestSubmitVerdictGateDefersToExistingLimits(t *testing.T) {
+	role := gateVerdictRoles[0]
+	tests := []struct {
+		name          string
+		configure     func(*models.State, *models.Task)
+		wantReason    string
+		wantQuestions []string
+		wantBlocked   bool
+	}{
+		{
+			name: "review budget escalation blocks with its own reason",
+			configure: func(state *models.State, task *models.Task) {
+				task.Attempt = 2
+				task.ReviewCyclesCurrent = 4
+			},
+			wantReason:    reviewBudgetExhaustedReason(5, 5),
+			wantQuestions: defaultReviewBudgetExhaustedQuestions(),
+			wantBlocked:   true,
+		},
+		{
+			name: "iteration escalation blocks with its own reason",
+			configure: func(state *models.State, task *models.Task) {
+				task.Attempt = 2
+				task.ReviewCyclesCurrent = 1
+				task.Iteration = 2
+				task.MaxIterations = 2
+			},
+			wantReason:    iterationLimitBlockedReason(2, 2),
+			wantQuestions: defaultIterationLimitBlockedQuestions(),
+			wantBlocked:   true,
+		},
+		{
+			name: "review budget escalation on the first attempt keeps the new-attempt action",
+			configure: func(state *models.State, task *models.Task) {
+				task.Attempt = 1
+				task.ReviewCyclesCurrent = 4
+			},
+			wantReason:  reviewBudgetExhaustedReason(5, 5),
+			wantBlocked: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Now().UTC()
+			// Three prior rejections: the fourth crosses the default gate
+			// threshold on the same verdict that exhausts the existing limit.
+			tmpDir, stateFile := gateVerdictState(t, role, 3, now, tt.configure)
+
+			result, err := SubmitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", "fourth rejection", role.reviewer, "")
+			if err != nil {
+				t.Fatalf("SubmitVerdict() error: %v", err)
+			}
+			_, task := readGateVerdictTask(t, stateFile)
+			if task.RejectionRCA != nil || result.RejectionRCAGated {
+				t.Fatalf("limit escalation seeded a record: task=%+v result=%+v", task.RejectionRCA, result)
+			}
+			if !task.RejectionRCAGateDue(models.DefaultHighChurnRejectionThreshold) {
+				t.Fatal("fixture does not cross the gate threshold; the deferral is not exercised")
+			}
+			if tt.wantBlocked {
+				if !result.EscalatedToBlocked || result.BlockedReason != tt.wantReason || task.Status != models.TaskStatusBlocked {
+					t.Fatalf("result=%+v status=%s, want BLOCKED with reason %q", result, task.Status, tt.wantReason)
+				}
+				if task.BlockedReason == nil || *task.BlockedReason != tt.wantReason || !reflect.DeepEqual(task.BlockedQuestions, tt.wantQuestions) {
+					t.Fatalf("blocked_reason/questions = %v/%v, want %q/%v", task.BlockedReason, task.BlockedQuestions, tt.wantReason, tt.wantQuestions)
+				}
+				blocked := historyEntries(task, models.TaskEventBlocked)
+				if len(blocked) != 1 || blocked[0].Extra != nil || blocked[0].Reason == nil || *blocked[0].Reason != tt.wantReason {
+					t.Fatalf("blocked entries = %+v, want one plain entry with the limit reason", blocked)
+				}
+				return
+			}
+			if result.EscalatedToBlocked || !result.NewAttemptTriggered || result.pendingAttemptReason != tt.wantReason || task.Status == models.TaskStatusBlocked || task.Attempt != 2 {
+				t.Fatalf("result=%+v status=%s attempt=%d, want the new-attempt action with reason %q", result, task.Status, task.Attempt, tt.wantReason)
+			}
+			if len(historyEntries(task, models.TaskEventBlocked)) != 0 {
+				t.Fatal("new-attempt escalation appended a blocked entry")
+			}
+		})
+	}
+}
+
+func TestSubmitVerdictConcurrentGate(t *testing.T) {
+	role := gateVerdictRoles[0]
+	now := time.Now().UTC().Truncate(time.Second)
+	tmpDir, stateFile := gateVerdictState(t, role, 3, now, nil)
+
+	// The public entry serializes sessions on the per-task review lock before
+	// any state is read; both sessions call the transaction directly so the
+	// race is settled by the locked read-modify-write alone.
+	//
+	// Barrier "bothAtMutationBoundary": each reviewer session announces it has
+	// passed pre-lock validation and is about to enter modifyLifecycleState;
+	// neither is released until both have arrived, so both callbacks run
+	// against a task that both sessions observed as under review.
+	arrived := make(chan struct{}, 2)
+	release := make(chan struct{})
+	previousHooks := testSubmitVerdictHooks
+	testSubmitVerdictHooks = &submitVerdictTestHooks{beforeModify: func() {
+		arrived <- struct{}{}
+		<-release
+	}}
+	t.Cleanup(func() { testSubmitVerdictHooks = previousHooks })
+
+	type verdictCall struct {
+		result *VerdictResult
+		err    error
+	}
+	done := make(chan verdictCall, 2)
+	for i := 0; i < 2; i++ {
+		go func(session int) {
+			reason := fmt.Sprintf("session %d rejection", session)
+			result, err := submitVerdict(tmpDir, gateVerdictTaskID, "REJECTED", reason, role.reviewer, nil, "", "", reason, false, LifecycleRequestOptions{})
+			done <- verdictCall{result: result, err: err}
+		}(i)
+	}
+	for i := 0; i < 2; i++ {
+		select {
+		case <-arrived:
+		case <-time.After(30 * time.Second):
+			t.Fatal("both sessions did not reach the mutation boundary")
+		}
+	}
+	close(release)
+
+	var winners []*VerdictResult
+	var losers []error
+	for i := 0; i < 2; i++ {
+		select {
+		case call := <-done:
+			if call.err != nil {
+				losers = append(losers, call.err)
+			} else {
+				winners = append(winners, call.result)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("a session did not return")
+		}
+	}
+	if len(winners) != 1 || len(losers) != 1 {
+		t.Fatalf("winners=%d losers=%d, want exactly one of each: %v", len(winners), len(losers), losers)
+	}
+	if !winners[0].EscalatedToBlocked || !winners[0].RejectionRCAGated {
+		t.Fatalf("winner = %+v, want the gate escalation", winners[0])
+	}
+	// Observation: the loser's outcome is produced inside the callback by the
+	// gate it observed there — the pre-lock fast-fail reports a different
+	// reason — so both sessions entered the mutation callback.
+	var lifecycleErr *LifecycleError
+	if !stderrors.As(losers[0], &lifecycleErr) || lifecycleErr.Outcome.Outcome != models.LifecycleAlreadyTransitioned || lifecycleErr.Outcome.SafeAction != "stop" {
+		t.Fatalf("loser = %v, want ALREADY_TRANSITIONED/stop", losers[0])
+	}
+	if !strings.Contains(losers[0].Error(), models.BlockedReasonRejectionRCARequired) {
+		t.Fatalf("loser error %q does not name the gate observed in the callback", losers[0])
+	}
+
+	state, task := readGateVerdictTask(t, stateFile)
+	assertGatedTask(t, state, task, role, models.DefaultHighChurnRejectionThreshold, 4, now.Add(-3*time.Hour))
+	if len(historyEntries(task, models.TaskEventBlocked)) != 1 || len(historyEntries(task, models.TaskEventRejected)) != 4 {
+		t.Fatalf("blocked=%d rejected=%d, want exactly one blocked event and four rejections", len(historyEntries(task, models.TaskEventBlocked)), len(historyEntries(task, models.TaskEventRejected)))
+	}
+	if len(state.Anomalies) != 0 {
+		t.Fatalf("loser recorded anomalies: %+v", state.Anomalies)
+	}
 }

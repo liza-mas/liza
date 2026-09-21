@@ -5,6 +5,8 @@ Tasks are BLOCKED. Analyze and resolve immediately:
 
 1. Read blocked tasks from blackboard — understand blocked_reason, blocked_questions, and repair_request if present
 2. Determine if blocker is:
+   - approved-proof reference drift → read {{binaryName}} reaffirm-proof --help; orchestrator-only remedy, one transition only, no status change or approval.
+   - Rejection RCA gate (`rejection_rca` without disposition) → run {{binaryName}} record-rejection-rca <task-id> --rca-file <file> --agent-id {{.AgentID}} --json, then {{binaryName}} resume-rejection-rca <task-id> --disposition-file <file> --agent-id {{.AgentID}} --json. Use unblock-task below per recorded restore_mode: assign requires --assign-to; claimable permits either form; none requires supersession, never unblock.
    - Structured repair_request present → verify the target state still needs repair, then complete the shared semantic gate below before applying a valid orchestrator-only operation
    - Missing dependency → create prerequisite task (run {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json NOW)
    - Runtime/environment failure or stale ownership → diagnose the host/session; narrow supported recovery, work preserved

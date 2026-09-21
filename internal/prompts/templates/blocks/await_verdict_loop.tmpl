@@ -6,7 +6,7 @@
     There is no call limit and no argument to carry over: {{brandTitle}} tracks the remaining budget from your
     submission time, and `timeout_seconds` is reported for visibility only.
   - `TIMEOUT`: stop waiting and exit normally; the overall budget is exhausted.
-  - REJECTED: read rejection reason, fix, resubmit
+  - REJECTED: if escalated to BLOCKED (including the rejection-RCA gate), stop; otherwise read rejection reason, fix, resubmit
   - APPROVED, TERMINAL, or ALREADY_TRANSITIONED with safe_action=stop: exit normally
   - NEW_ATTEMPT or ABORTED: exit normally
   - Budget error: exit normally

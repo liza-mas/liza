@@ -1112,6 +1112,548 @@ func assertErrorContains(t *testing.T, err error, want string) {
 	}
 }
 
+func validRejectionRCARequest() models.RejectionRCARequest {
+	return models.RejectionRCARequest{
+		SchemaVersion: models.RejectionRCASchemaVersion,
+		Summary:       "two product defects and one capability failure",
+		Contributions: []models.RejectionRCAContribution{
+			{
+				RejectionIndex: 1,
+				Categories:     []string{models.RejectionCauseProductDefect},
+				Evidence:       []string{"review-1: identity scalar mismatch"},
+			},
+			{
+				RejectionIndex: 2,
+				Categories:     []string{models.RejectionCauseCapabilityFailure},
+				Evidence:       []string{"review-2: no real Postgres available"},
+			},
+		},
+	}
+}
+
+// assertSingleDiagnostic checks the declared field path, constraint substring
+// and value class, and that no diagnostic echoes the rejected value.
+func assertSingleDiagnostic(t *testing.T, diagnostics []models.FieldDiagnostic, field, constraint, valueClass, rejectedValue string) {
+	t.Helper()
+	if len(diagnostics) != 1 {
+		t.Fatalf("diagnostics = %+v, want exactly one entry", diagnostics)
+	}
+	got := diagnostics[0]
+	if got.Field != field {
+		t.Fatalf("diagnostic field = %q, want %q", got.Field, field)
+	}
+	if !strings.Contains(got.Constraint, constraint) {
+		t.Fatalf("diagnostic constraint = %q, want substring %q", got.Constraint, constraint)
+	}
+	if got.ValueClass != valueClass {
+		t.Fatalf("diagnostic value_class = %q, want %q", got.ValueClass, valueClass)
+	}
+	if got.SafeAction != models.FieldDiagnosticCorrectInput {
+		t.Fatalf("diagnostic safe_action = %q, want %q", got.SafeAction, models.FieldDiagnosticCorrectInput)
+	}
+	if rejectedValue == "" {
+		return
+	}
+	joined := got.Field + "\x00" + got.Constraint + "\x00" + got.ValueClass
+	if strings.Contains(joined, rejectedValue) {
+		t.Fatalf("diagnostic %+v echoes the rejected value", got)
+	}
+}
+
+func TestValidateRejectionRCARequestDiagnostics(t *testing.T) {
+	oversizedSummary := strings.Repeat("s", 4097)
+	oversizedEvidence := strings.Repeat("e", 257)
+	oversizedCategory := strings.Repeat("c", 65)
+
+	cases := []struct {
+		name          string
+		mutate        func(*models.RejectionRCARequest)
+		field         string
+		constraint    string
+		valueClass    string
+		rejectedValue string
+	}{
+		{
+			name:       "zero schema version",
+			mutate:     func(r *models.RejectionRCARequest) { r.SchemaVersion = 0 },
+			field:      "/schema_version",
+			constraint: "must be 1",
+			valueClass: models.FieldValueClassOutOfRange,
+		},
+		{
+			name:       "unsupported schema version",
+			mutate:     func(r *models.RejectionRCARequest) { r.SchemaVersion = 2 },
+			field:      "/schema_version",
+			constraint: "must be 1",
+			valueClass: models.FieldValueClassOutOfRange,
+		},
+		{
+			name:       "empty summary",
+			mutate:     func(r *models.RejectionRCARequest) { r.Summary = "   " },
+			field:      "/summary",
+			constraint: "required",
+			valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name:          "oversized summary",
+			mutate:        func(r *models.RejectionRCARequest) { r.Summary = oversizedSummary },
+			field:         "/summary",
+			constraint:    "4096",
+			valueClass:    models.FieldValueClassOversized,
+			rejectedValue: oversizedSummary,
+		},
+		{
+			name:       "no contributions",
+			mutate:     func(r *models.RejectionRCARequest) { r.Contributions = nil },
+			field:      "/contributions",
+			constraint: "required",
+			valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name: "too many contributions",
+			mutate: func(r *models.RejectionRCARequest) {
+				r.Contributions = nil
+				for i := 1; i <= 33; i++ {
+					r.Contributions = append(r.Contributions, models.RejectionRCAContribution{
+						RejectionIndex: i,
+						Categories:     []string{models.RejectionCauseProductDefect},
+					})
+				}
+			},
+			field:      "/contributions",
+			constraint: "32",
+			valueClass: models.FieldValueClassOutOfRange,
+		},
+		{
+			name:       "zero rejection index",
+			mutate:     func(r *models.RejectionRCARequest) { r.Contributions[0].RejectionIndex = 0 },
+			field:      "/contributions/0/rejection_index",
+			constraint: "at least 1",
+			valueClass: models.FieldValueClassOutOfRange,
+		},
+		{
+			name:       "duplicate rejection index",
+			mutate:     func(r *models.RejectionRCARequest) { r.Contributions[1].RejectionIndex = 1 },
+			field:      "/contributions/1/rejection_index",
+			constraint: "unique",
+			valueClass: models.FieldValueClassConflict,
+		},
+		{
+			name:       "empty categories",
+			mutate:     func(r *models.RejectionRCARequest) { r.Contributions[0].Categories = nil },
+			field:      "/contributions/0/categories",
+			constraint: "required",
+			valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name: "too many categories",
+			mutate: func(r *models.RejectionRCARequest) {
+				r.Contributions[0].Categories = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
+			},
+			field:      "/contributions/0/categories",
+			constraint: "8",
+			valueClass: models.FieldValueClassOutOfRange,
+		},
+		{
+			name:       "blank category entry",
+			mutate:     func(r *models.RejectionRCARequest) { r.Contributions[0].Categories = []string{"  "} },
+			field:      "/contributions/0/categories/0",
+			constraint: "required",
+			valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name:          "oversized category entry",
+			mutate:        func(r *models.RejectionRCARequest) { r.Contributions[0].Categories = []string{oversizedCategory} },
+			field:         "/contributions/0/categories/0",
+			constraint:    "64",
+			valueClass:    models.FieldValueClassOversized,
+			rejectedValue: oversizedCategory,
+		},
+		{
+			name: "too many evidence entries",
+			mutate: func(r *models.RejectionRCARequest) {
+				r.Contributions[0].Evidence = []string{"one", "two", "three", "four", "five"}
+			},
+			field:      "/contributions/0/evidence",
+			constraint: "4",
+			valueClass: models.FieldValueClassOutOfRange,
+		},
+		{
+			name:          "oversized evidence entry",
+			mutate:        func(r *models.RejectionRCARequest) { r.Contributions[0].Evidence = []string{oversizedEvidence} },
+			field:         "/contributions/0/evidence/0",
+			constraint:    "256",
+			valueClass:    models.FieldValueClassOversized,
+			rejectedValue: oversizedEvidence,
+		},
+		{
+			name:       "blank evidence entry",
+			mutate:     func(r *models.RejectionRCARequest) { r.Contributions[1].Evidence = []string{"\t"} },
+			field:      "/contributions/1/evidence/0",
+			constraint: "required",
+			valueClass: models.FieldValueClassMissing,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := validRejectionRCARequest()
+			tc.mutate(&request)
+			assertSingleDiagnostic(t, ValidateRejectionRCARequest(request), tc.field, tc.constraint, tc.valueClass, tc.rejectedValue)
+		})
+	}
+
+	t.Run("valid request", func(t *testing.T) {
+		if diagnostics := ValidateRejectionRCARequest(validRejectionRCARequest()); diagnostics != nil {
+			t.Fatalf("ValidateRejectionRCARequest() = %+v, want nil", diagnostics)
+		}
+	})
+
+	t.Run("unrecognized cause is structurally valid", func(t *testing.T) {
+		request := validRejectionRCARequest()
+		request.Contributions[0].Categories = []string{"toolchain_drift"}
+		if diagnostics := ValidateRejectionRCARequest(request); diagnostics != nil {
+			t.Fatalf("ValidateRejectionRCARequest() = %+v, want nil for an extensible cause", diagnostics)
+		}
+	})
+}
+
+func TestValidateRejectionRCADispositionRequestDiagnostics(t *testing.T) {
+	oversizedRationale := strings.Repeat("r", 4097)
+	valid := func() models.RejectionRCADispositionRequest {
+		return models.RejectionRCADispositionRequest{
+			SchemaVersion: models.RejectionRCASchemaVersion,
+			RecoveryPath:  models.RecoveryCapabilityReroute,
+			Rationale:     "reroute validation to a session with Postgres",
+		}
+	}
+
+	cases := []struct {
+		name          string
+		mutate        func(*models.RejectionRCADispositionRequest)
+		field         string
+		constraint    string
+		valueClass    string
+		rejectedValue string
+	}{
+		{
+			name: "human override empty rationale",
+			mutate: func(r *models.RejectionRCADispositionRequest) {
+				r.RecoveryPath = models.RecoveryHumanOverride
+				r.Rationale = ""
+			},
+			field: "/rationale", constraint: "required", valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name: "human override whitespace rationale",
+			mutate: func(r *models.RejectionRCADispositionRequest) {
+				r.RecoveryPath = models.RecoveryHumanOverride
+				r.Rationale = " \t\n\u2003"
+			},
+			field: "/rationale", constraint: "required", valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name:       "wrong schema version",
+			mutate:     func(r *models.RejectionRCADispositionRequest) { r.SchemaVersion = 2 },
+			field:      "/schema_version",
+			constraint: "must be 1",
+			valueClass: models.FieldValueClassOutOfRange,
+		},
+		{
+			name:       "missing recovery path",
+			mutate:     func(r *models.RejectionRCADispositionRequest) { r.RecoveryPath = " " },
+			field:      "/recovery_path",
+			constraint: "required",
+			valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name:          "unknown recovery path",
+			mutate:        func(r *models.RejectionRCADispositionRequest) { r.RecoveryPath = "teleport" },
+			field:         "/recovery_path",
+			constraint:    "recovery path",
+			valueClass:    models.FieldValueClassUnknownEnum,
+			rejectedValue: "teleport",
+		},
+		{
+			name:          "oversized rationale",
+			mutate:        func(r *models.RejectionRCADispositionRequest) { r.Rationale = oversizedRationale },
+			field:         "/rationale",
+			constraint:    "4096",
+			valueClass:    models.FieldValueClassOversized,
+			rejectedValue: oversizedRationale,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := valid()
+			tc.mutate(&request)
+			assertSingleDiagnostic(t, ValidateRejectionRCADispositionRequest(request), tc.field, tc.constraint, tc.valueClass, tc.rejectedValue)
+		})
+	}
+
+	t.Run("every recovery path is accepted", func(t *testing.T) {
+		for _, path := range []string{
+			models.RecoveryImplementationCorrection,
+			models.RecoveryCapabilityReroute,
+			models.RecoveryLifecycleRepair,
+			models.RecoveryRescope,
+			models.RecoveryHumanOverride,
+		} {
+			request := valid()
+			request.RecoveryPath = path
+			if diagnostics := ValidateRejectionRCADispositionRequest(request); diagnostics != nil {
+				t.Fatalf("ValidateRejectionRCADispositionRequest(%q) = %+v, want nil", path, diagnostics)
+			}
+		}
+	})
+}
+
+func TestValidateVerdictPayloadShapeDiagnostics(t *testing.T) {
+	const reviewCommit = "0123456789abcdef0123456789abcdef01234567"
+	oversizedReason := strings.Repeat("x", 4097)
+
+	cases := []struct {
+		name                                                string
+		taskID, verdict, reason, agentID, impact, reviewSHA string
+		field, constraint, valueClass, rejectedValue        string
+	}{
+		{
+			name: "missing task id", verdict: "APPROVED", agentID: "code-reviewer-1", reviewSHA: reviewCommit,
+			field: "/task_id", constraint: "required", valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name: "missing agent id", taskID: "task-1", verdict: "APPROVED", reviewSHA: reviewCommit,
+			field: "/agent_id", constraint: "required", valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name: "lowercase verdict", taskID: "task-1", verdict: "approved", agentID: "code-reviewer-1", reviewSHA: reviewCommit,
+			field: "/verdict", constraint: "APPROVED", valueClass: models.FieldValueClassUnknownEnum, rejectedValue: "approved",
+		},
+		{
+			name: "rejected without reason", taskID: "task-1", verdict: "REJECTED", agentID: "code-reviewer-1", reviewSHA: reviewCommit,
+			field: "/reason", constraint: "required", valueClass: models.FieldValueClassMissing,
+		},
+		{
+			name: "oversized reason", taskID: "task-1", verdict: "REJECTED", reason: oversizedReason, agentID: "code-reviewer-1", reviewSHA: reviewCommit,
+			field: "/reason", constraint: "4096", valueClass: models.FieldValueClassOversized, rejectedValue: oversizedReason,
+		},
+		{
+			name: "unknown impact", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", impact: "cosmetic", reviewSHA: reviewCommit,
+			field: "/impact", constraint: "standard", valueClass: models.FieldValueClassUnknownEnum, rejectedValue: "cosmetic",
+		},
+		{
+			name: "non-hex review commit", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", reviewSHA: "not-a-commit",
+			field: "/review_commit", constraint: "full", valueClass: models.FieldValueClassMalformed, rejectedValue: "not-a-commit",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			diagnostics := ValidateVerdictPayloadShape(tc.taskID, tc.verdict, tc.reason, tc.agentID, tc.impact, tc.reviewSHA)
+			assertSingleDiagnostic(t, diagnostics, tc.field, tc.constraint, tc.valueClass, tc.rejectedValue)
+		})
+	}
+
+	t.Run("valid payloads", func(t *testing.T) {
+		valid := []struct {
+			name                                                string
+			taskID, verdict, reason, agentID, impact, reviewSHA string
+		}{
+			{name: "approved", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", reviewSHA: reviewCommit},
+			{name: "rejected with reason", taskID: "task-1", verdict: "REJECTED", reason: "identity mismatch", agentID: "code-reviewer-1", impact: "significant", reviewSHA: reviewCommit},
+			{name: "legacy unauthenticated call without review commit", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1"},
+		}
+		for _, tc := range valid {
+			t.Run(tc.name, func(t *testing.T) {
+				if diagnostics := ValidateVerdictPayloadShape(tc.taskID, tc.verdict, tc.reason, tc.agentID, tc.impact, tc.reviewSHA); diagnostics != nil {
+					t.Fatalf("ValidateVerdictPayloadShape() = %+v, want nil", diagnostics)
+				}
+			})
+		}
+	})
+}
+
+func TestValidateTaskRejectionRCAState(t *testing.T) {
+	cfg := loadTestConfig(t)
+	resolver := pipeline.NewResolver(cfg)
+	now := time.Now().UTC()
+	gatedAt := now.Add(-time.Hour)
+
+	seededRecord := func() *models.RejectionRCARecord {
+		return &models.RejectionRCARecord{
+			SchemaVersion:  models.RejectionRCASchemaVersion,
+			Threshold:      4,
+			RejectionCount: 4,
+			GatedAt:        gatedAt,
+			GatingCommit:   "0123456789abcdef0123456789abcdef01234567",
+		}
+	}
+	recordedRecord := func() *models.RejectionRCARecord {
+		record := seededRecord()
+		request := validRejectionRCARequest()
+		normalized := models.NormalizeRejectionRCARequest(request)
+		record.Fingerprint = models.RejectionRCAFingerprint(request)
+		record.RecordedAt = &now
+		record.RecordedBy = "orchestrator-1"
+		record.Summary = normalized.Summary
+		record.Contributions = normalized.Contributions
+		return record
+	}
+	resumedRecord := func() *models.RejectionRCARecord {
+		record := recordedRecord()
+		record.Disposition = &models.RejectionRCADisposition{
+			RecoveryPath:     models.RecoveryCapabilityReroute,
+			RestoreMode:      models.RestoreModeAssign,
+			Actor:            "orchestrator-1",
+			LifecycleVersion: 3,
+			DecidedAt:        now,
+			Rationale:        "reroute validation",
+			IterationExempt:  true,
+		}
+		return record
+	}
+	gatedTask := func(mutate func(*models.Task)) func() models.Task {
+		return func() models.Task {
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+			task.BlockedReason = testhelpers.StringPtr(models.BlockedReasonRejectionRCARequired + ": 4 durable rejections require a classified RCA")
+			task.RejectionRCA = seededRecord()
+			mutate(&task)
+			return task
+		}
+	}
+
+	invalid := []struct {
+		name    string
+		task    func() models.Task
+		wantErr string
+	}{
+		{
+			name: "gate-open blocked task without the typed reason prefix",
+			task: gatedTask(func(task *models.Task) {
+				task.BlockedReason = testhelpers.StringPtr("waiting on a clarification")
+			}),
+			wantErr: "BLOCKED task with an open rejection_rca gate requires a blocked_reason starting with rejection_rca_required: task-1",
+		},
+		{
+			name: "threshold below one",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA.Threshold = 0
+			}),
+			wantErr: "task task-1 rejection_rca threshold must be at least 1",
+		},
+		{
+			name: "rejection count below threshold",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA.RejectionCount = 3
+			}),
+			wantErr: "task task-1 rejection_rca rejection_count must be at least its threshold",
+		},
+		{
+			name: "missing gated_at",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA.GatedAt = time.Time{}
+			}),
+			wantErr: "task task-1 rejection_rca requires gated_at",
+		},
+		{
+			name: "recorded record whose projected request is invalid",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA = recordedRecord()
+				task.RejectionRCA.Contributions[0].Categories = nil
+			}),
+			wantErr: "task task-1 rejection_rca /contributions/0/categories",
+		},
+		{
+			name: "recorded record without a recorder",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA = recordedRecord()
+				task.RejectionRCA.RecordedBy = ""
+			}),
+			wantErr: "task task-1 rejection_rca requires recorded_by",
+		},
+		{
+			name: "disposition with an unknown recovery path",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA = resumedRecord()
+				task.RejectionRCA.Disposition.RecoveryPath = "teleport"
+			}),
+			wantErr: "task task-1 rejection_rca disposition has an unknown recovery_path",
+		},
+		{
+			name: "disposition whose restore mode contradicts its recovery path",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA = resumedRecord()
+				task.RejectionRCA.Disposition.RestoreMode = models.RestoreModeNone
+			}),
+			wantErr: "task task-1 rejection_rca disposition restore_mode does not match its recovery_path",
+		},
+		{
+			name: "disposition without an actor",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA = resumedRecord()
+				task.RejectionRCA.Disposition.Actor = " "
+			}),
+			wantErr: "task task-1 rejection_rca disposition requires actor",
+		},
+		{
+			name: "disposition without a recorded rca",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA = seededRecord()
+				task.RejectionRCA.Disposition = resumedRecord().Disposition
+			}),
+			wantErr: "task task-1 rejection_rca disposition requires a recorded RCA",
+		},
+	}
+
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			assertErrorContains(t, err, tc.wantErr)
+		})
+	}
+
+	valid := []struct {
+		name string
+		task func() models.Task
+	}{
+		{name: "gated task awaiting its RCA", task: gatedTask(func(*models.Task) {})},
+		{
+			name: "gated task with a recorded RCA",
+			task: gatedTask(func(task *models.Task) { task.RejectionRCA = recordedRecord() }),
+		},
+		{
+			name: "resumed task retaining its record",
+			task: gatedTask(func(task *models.Task) {
+				task.RejectionRCA = resumedRecord()
+				task.BlockedReason = testhelpers.StringPtr("resumed after capability reroute")
+			}),
+		},
+		{
+			name: "merged task retaining its record",
+			task: func() models.Task {
+				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, now)
+				task.RejectionRCA = resumedRecord()
+				return task
+			},
+		},
+		{
+			name: "task without a record",
+			task: func() models.Task {
+				return testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
+			},
+		},
+	}
+
+	for _, tc := range valid {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg); err != nil {
+				t.Fatalf("validateTaskInvariants() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
 // acceptance_source holds object IDs at every field, including the identity of
 // the reviewed allocation span. A digest of any other shape is accepted at
 // write time and rejected here — including inside the re-claim-after-rejection

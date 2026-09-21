@@ -3,7 +3,11 @@ package commands
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
@@ -22,6 +26,11 @@ func AnalyzeCommand(projectRoot string) error {
 }
 
 func writeAnalyzeResult(w io.Writer, result *ops.AnalyzeResult) {
+	writeCircuitBreakerResult(w, result)
+	writeRejectionRCATelemetry(w, result.RejectionRCA)
+}
+
+func writeCircuitBreakerResult(w io.Writer, result *ops.AnalyzeResult) {
 	if result.Pattern == "" {
 		fmt.Fprintln(w, "Circuit breaker: OK — no patterns detected")
 		return
@@ -52,4 +61,32 @@ func writeAnalyzeResult(w io.Writer, result *ops.AnalyzeResult) {
 	if result.ReportPath != "" {
 		fmt.Fprintf(w, "\nReport written to: %s\n", result.ReportPath)
 	}
+}
+
+// writeRejectionRCATelemetry renders the gate block after the circuit-breaker
+// output. Token consumption belongs to the usage report and is not a column here.
+func writeRejectionRCATelemetry(w io.Writer, telemetry *ops.RejectionRCATelemetry) {
+	if telemetry.IsEmpty() {
+		fmt.Fprintln(w, "\nRejection RCA gate: no gated tasks")
+		return
+	}
+	fmt.Fprintln(w, "\nRejection RCA gate:")
+	fmt.Fprintf(w, "Tasks gated: %d (%d cycles), currently gated: %d\n", telemetry.TasksGated, telemetry.GateCycles, telemetry.CurrentlyGated)
+	fmt.Fprintf(w, "Causes: %s (unrecognized folded into unknown: %d)\n", formatCounts(telemetry.Causes), telemetry.UnrecognizedCauses)
+	fmt.Fprintf(w, "Time to gate: median %s, max %s\n",
+		time.Duration(telemetry.MedianSecondsToGate)*time.Second, time.Duration(telemetry.MaxSecondsToGate)*time.Second)
+	fmt.Fprintf(w, "Recovery paths: %s\n", formatCounts(telemetry.RecoveryPaths))
+	fmt.Fprintf(w, "Convergence after resume: terminal=%d re-gated=%d still open=%d\n",
+		telemetry.ResumedThenTerminal, telemetry.ResumedThenRegated, telemetry.ResumedStillOpen)
+}
+
+func formatCounts(counts map[string]int) string {
+	if len(counts) == 0 {
+		return "none"
+	}
+	var parts []string
+	for _, key := range slices.Sorted(maps.Keys(counts)) {
+		parts = append(parts, fmt.Sprintf("%s=%d", key, counts[key]))
+	}
+	return strings.Join(parts, " ")
 }

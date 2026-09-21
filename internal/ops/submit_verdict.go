@@ -18,6 +18,7 @@ import (
 	activitylog "github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/secretmask"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
@@ -39,6 +40,7 @@ type VerdictResult struct {
 	Reason              string `json:"reason"` // non-empty for rejections
 	EscalatedToBlocked  bool   `json:"escalated_to_blocked"`
 	BlockedReason       string `json:"blocked_reason"`
+	RejectionRCAGated   bool   `json:"rejection_rca_gated,omitempty"` // escalation is the churn gate, not a limit
 	NewAttemptTriggered bool   `json:"new_attempt_triggered"`
 }
 
@@ -141,14 +143,10 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 	if err := ValidateLifecycleRequestOptions(opts); err != nil {
 		return nil, &PreconditionError{Reason: err.Error()}
 	}
-	verdict, reviewCommit = strings.ToUpper(verdict), strings.ToLower(reviewCommit)
-	if authority == nil {
-		if err := validateVerdictInput(taskID, verdict, reason, agentID, impact); err != nil {
-			return nil, err
-		}
-	} else if err := validateAuthenticatedVerdict(taskID, verdict, reason, impact, reviewCommit, *authority); err != nil {
+	if err := validateVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit, authority); err != nil {
 		return nil, err
 	}
+	verdict, reviewCommit = strings.ToUpper(verdict), strings.ToLower(reviewCommit)
 	if _, err := identity.ExtractRole(agentID); err != nil {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid agent ID: %v", err)}
 	}
@@ -223,6 +221,44 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 		return nil
 	})
 	return result, retErr
+}
+
+// validateVerdictPayload rejects a structurally invalid verdict before any
+// state is read or locked, through the same schema validate-payload uses, so
+// the two boundaries cannot disagree. The canonical object carries the values
+// exactly as the caller supplied them: normalizing first would let the
+// mutation boundary accept an object preflight rejects.
+//
+// The operation's own precondition checks still run, and their message stays
+// the cause of the lifecycle error, so a caller reading prose sees no change
+// while a caller reading result.diagnostics now gets the field-level detail.
+func validateVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit string, authority *models.AgentAuthority) error {
+	version, diagnostics, err := payloadschema.Validate(payloadschema.SubmitVerdictOperation,
+		payloadschema.SubmitVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit))
+	if err != nil {
+		return err
+	}
+
+	preconditionErr := verdictPreconditionError(
+		taskID, strings.ToUpper(verdict), reason, agentID, impact, strings.ToLower(reviewCommit), authority)
+	if len(diagnostics) == 0 {
+		return preconditionErr
+	}
+	if preconditionErr == nil {
+		preconditionErr = &PreconditionError{Reason: fmt.Sprintf(
+			"payload rejected by the %s schema, version %d: %s %s",
+			payloadschema.SubmitVerdictOperation, version, diagnostics[0].Field, diagnostics[0].Constraint)}
+	}
+	return NewLifecycleInvalidInputError("submit-verdict", nil, diagnostics, preconditionErr)
+}
+
+// verdictPreconditionError runs the operation's own checks on the normalized
+// values, dispatching on whether the call carries an explicit review boundary.
+func verdictPreconditionError(taskID, verdict, reason, agentID, impact, reviewCommit string, authority *models.AgentAuthority) error {
+	if authority == nil {
+		return validateVerdictInput(taskID, verdict, reason, agentID, impact)
+	}
+	return validateAuthenticatedVerdict(taskID, verdict, reason, impact, reviewCommit, *authority)
 }
 
 func validateVerdictInput(taskID, verdict, reason, agentID, impact string) error {
@@ -390,6 +426,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 	now := time.Now().UTC()
 	escalatedToBlocked := false
 	blockedReasonOut := ""
+	rejectionRCAGated := false
 	newAttemptNeeded := false
 	newAttemptReason := ""
 	var lifecycleOutcome models.LifecycleOutcome
@@ -422,6 +459,9 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		receipt, checkErr := CheckLifecycleRequest(task, request, state.Agents)
 		if checkErr != nil {
 			recordFailure = false
+			if gateErr := rejectionRCAGateObservedError(task); gateErr != nil {
+				return gateErr
+			}
 			return checkErr
 		}
 		if receipt != nil {
@@ -528,6 +568,10 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 			task.ReviewCyclesCurrent++
 			task.ReviewCyclesTotal++
 
+			gatingCommit := ""
+			if task.ReviewCommit != nil {
+				gatingCommit = *task.ReviewCommit
+			}
 			task.History = append(task.History, models.TaskHistoryEntry{
 				Time:   now,
 				Event:  models.TaskEventRejected,
@@ -551,43 +595,39 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 				iterationLimit,
 				task.EffectiveAttempt(),
 			)
-			if shouldEscalate {
-				switch escalation.action {
-				case LimitActionBlocked:
-					if err := transitionTask(models.TaskStatusBlocked); err != nil {
-						return err
-					}
-
-					blockedReason := escalation.reason
-					task.BlockedReason = &blockedReason
-					task.BlockedQuestions = escalation.questions
-					task.LeaseExpires = nil
-					escalatedToBlocked = true
-					blockedReasonOut = blockedReason
-
-					if task.AssignedTo != nil {
-						assignedCoder := *task.AssignedTo
-						if assignedCoder != agentID {
-							if a, ok := state.Agents[assignedCoder]; ok {
-								if a.CurrentTask != nil && *a.CurrentTask == taskID {
-									state.ReleaseAgent(assignedCoder)
-								}
-							}
-						}
-					}
-					task.AssignedTo = nil
-
-					task.History = append(task.History, models.TaskHistoryEntry{
-						Time:   now,
-						Event:  models.TaskEventBlocked,
-						Agent:  &agentID,
-						Reason: &blockedReason,
-					})
-				case LimitActionNewAttempt:
-					// Capture for post-Modify call — cannot nest bb.Modify
-					newAttemptNeeded = true
-					newAttemptReason = escalation.reason
+			threshold := models.EffectiveHighChurnRejectionThreshold(state.Config)
+			switch {
+			case shouldEscalate && escalation.action == LimitActionBlocked:
+				if err := blockRejectedTask(state, task, transitionTask, agentID, now, escalation.reason, escalation.questions, nil); err != nil {
+					return err
 				}
+				escalatedToBlocked = true
+				blockedReasonOut = escalation.reason
+			case shouldEscalate && escalation.action == LimitActionNewAttempt:
+				// Capture for post-Modify call — cannot nest bb.Modify
+				newAttemptNeeded = true
+				newAttemptReason = escalation.reason
+			case task.RejectionRCAGateDue(threshold):
+				// The existing limits keep precedence; the gate fires only on a
+				// verdict they let through. Concurrent resubmission is settled by
+				// this transaction: a second verdict re-reads the task here and
+				// observes the gate already open.
+				firstRejectionAt := firstDurableRejectionAt(task)
+				seedRejectionRCAGate(task, threshold, now, gatingCommit)
+				record := task.RejectionRCA
+				blockedReason := rejectionRCAGateReason(record.RejectionCount, threshold)
+				if err := blockRejectedTask(state, task, transitionTask, agentID, now, blockedReason, rejectionRCAGateQuestions(), map[string]any{
+					"blocked_class":      models.BlockedReasonRejectionRCARequired,
+					"threshold":          record.Threshold,
+					"rejection_count":    record.RejectionCount,
+					"gated_at":           record.GatedAt.Format(time.RFC3339),
+					"first_rejection_at": firstRejectionAt.Format(time.RFC3339),
+				}); err != nil {
+					return err
+				}
+				escalatedToBlocked = true
+				blockedReasonOut = blockedReason
+				rejectionRCAGated = true
 			}
 		}
 
@@ -635,8 +675,98 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		Reason:               reason,
 		EscalatedToBlocked:   escalatedToBlocked,
 		BlockedReason:        blockedReasonOut,
+		RejectionRCAGated:    rejectionRCAGated,
 		NewAttemptTriggered:  !escalatedToBlocked && newAttemptNeeded,
 	}, nil
+}
+
+// blockRejectedTask escalates a just-rejected task to BLOCKED: it records the
+// reason and questions, clears the doer's lease and assignment, releases the
+// doer if it still holds the task, and appends the blocked event with the
+// caller's detail keys. Both the limit path and the churn gate use it so the
+// two escalations cannot drift in what they clear.
+func blockRejectedTask(state *models.State, task *models.Task, transition func(models.TaskStatus) error, agentID string, now time.Time, reason string, questions []string, extra map[string]any) error {
+	if err := transition(models.TaskStatusBlocked); err != nil {
+		return err
+	}
+	task.BlockedReason = &reason
+	task.BlockedQuestions = questions
+	task.LeaseExpires = nil
+
+	if task.AssignedTo != nil {
+		assignedDoer := *task.AssignedTo
+		if assignedDoer != agentID {
+			if a, ok := state.Agents[assignedDoer]; ok {
+				if a.CurrentTask != nil && *a.CurrentTask == task.ID {
+					state.ReleaseAgent(assignedDoer)
+				}
+			}
+		}
+	}
+	task.AssignedTo = nil
+
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:   now,
+		Event:  models.TaskEventBlocked,
+		Agent:  &agentID,
+		Reason: &reason,
+		Extra:  extra,
+	})
+	return nil
+}
+
+// seedRejectionRCAGate opens a new RCA cycle on the task. Any earlier cycle's
+// caller fields and disposition are dropped: the live record always describes
+// the current cycle, and the previous one survives in history.
+func seedRejectionRCAGate(task *models.Task, threshold int, now time.Time, gatingCommit string) {
+	task.RejectionRCA = &models.RejectionRCARecord{
+		SchemaVersion:  models.RejectionRCASchemaVersion,
+		Threshold:      threshold,
+		RejectionCount: task.DurableRejectionCount(),
+		GatedAt:        now,
+		GatingCommit:   gatingCommit,
+	}
+}
+
+// firstDurableRejectionAt is the time of the earliest rejection event
+// DurableRejectionCount would count; the gating rejection is already in
+// history, so there is always one.
+func firstDurableRejectionAt(task *models.Task) time.Time {
+	var first time.Time
+	for _, entry := range task.History {
+		if entry.Time.IsZero() || (entry.Event != models.TaskEventRejected && entry.Event != models.TaskEventReviewVerdictRejected) {
+			continue
+		}
+		if first.IsZero() || entry.Time.Before(first) {
+			first = entry.Time
+		}
+	}
+	return first
+}
+
+func rejectionRCAGateReason(rejectionCount, threshold int) string {
+	return fmt.Sprintf("%s: %d durable rejections reached the high-churn threshold %d; a classified RCA and a recovery disposition are required before this task is restored",
+		models.BlockedReasonRejectionRCARequired, rejectionCount, threshold)
+}
+
+func rejectionRCAGateQuestions() []string {
+	return []string{
+		"Which cause dominated the rejections: product_defect, capability_failure, lifecycle_retry or unknown?",
+		"Which recovery path should resume the task: implementation_correction, capability_reroute, lifecycle_repair, rescope or human_override?",
+	}
+}
+
+// rejectionRCAGateObservedError is the verdict outcome for a caller that
+// reaches the locked callback after a concurrent rejection already gated the
+// task: the task moved past this operation into a gated BLOCKED, so the
+// caller stops rather than requeries.
+func rejectionRCAGateObservedError(task *models.Task) error {
+	if !task.RejectionRCAGateOpen() || task.Status != models.TaskStatusBlocked {
+		return nil
+	}
+	return WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: fmt.Sprintf(
+		"task %s is already gated (%s) by a concurrent rejection; no further verdict applies until the RCA is recorded and resumed",
+		task.ID, models.BlockedReasonRejectionRCARequired)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 }
 
 func validateIntegrationAnalysisRolePair(task *models.Task) error {

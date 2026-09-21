@@ -91,6 +91,10 @@ const (
 	DefaultCrashRestartThreshold           = 5
 	DefaultSpinningRestartThreshold        = 10
 	DefaultAgentProgressTimeoutSec         = 1800 // 30 minutes
+	// DefaultHighChurnRejectionThreshold is the durable rejection count at
+	// which a reviewed task is gated on a classified RCA. It sits below
+	// DefaultMaxReviewCycles so the gate fires before the review budget.
+	DefaultHighChurnRejectionThreshold = 4
 )
 
 var EnvEnableCopyWorktreeEnvFiles = brand.EnvName("ENABLE_COPY_ENV_FILES")
@@ -121,15 +125,27 @@ func NormalizeGlobalIntegrationGenerationLimit(limit int) int {
 	return limit
 }
 
+// EffectiveHighChurnRejectionThreshold returns the configured positive
+// threshold, or the default when the field is unset or non-positive.
+func EffectiveHighChurnRejectionThreshold(config Config) int {
+	if config.HighChurnRejectionThreshold <= 0 {
+		return DefaultHighChurnRejectionThreshold
+	}
+	return config.HighChurnRejectionThreshold
+}
+
 // Config holds system configuration parameters
 type Config struct {
 	MaxCoderIterations              int `yaml:"max_coder_iterations"`
 	MaxReviewCycles                 int `yaml:"max_review_cycles"`
 	MaxGlobalIntegrationGenerations int `yaml:"max_global_integration_generations"`
-	HeartbeatInterval               int `yaml:"heartbeat_interval"`
-	LeaseDuration                   int `yaml:"lease_duration"`
-	CoderPollInterval               int `yaml:"coder_poll_interval"`
-	DoerMaxWait                     int `yaml:"doer_max_wait"`
+	// HighChurnRejectionThreshold is the per-project durable rejection count
+	// that gates a task on a classified RCA. Non-positive means the default.
+	HighChurnRejectionThreshold int `yaml:"high_churn_rejection_threshold,omitempty"`
+	HeartbeatInterval           int `yaml:"heartbeat_interval"`
+	LeaseDuration               int `yaml:"lease_duration"`
+	CoderPollInterval           int `yaml:"coder_poll_interval"`
+	DoerMaxWait                 int `yaml:"doer_max_wait"`
 	// DeprecatedCoderMaxWait preserves read compatibility for state files that
 	// still use coder_max_wait. New state files should write doer_max_wait.
 	DeprecatedCoderMaxWait   int `yaml:"coder_max_wait,omitempty" inspect:"-"`

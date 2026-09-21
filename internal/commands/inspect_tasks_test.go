@@ -1419,3 +1419,60 @@ func TestInspectTasks_IncludesLatestPRURL(t *testing.T) {
 		t.Errorf("PRURL = %v, want PR URL", infos[0].PRURL)
 	}
 }
+
+// A doer resumed after a gated rejection reads its disposition from
+// get <task-id> --json. No other durable per-task path carries it: analyze
+// reports only aggregate gate telemetry, and no field query exposes it. An
+// approved plan can therefore direct doers at this projection.
+func TestBuildTaskInfo_IncludesRejectionRCADisposition(t *testing.T) {
+	decided := time.Now().UTC()
+	task := models.Task{
+		ID:          "task-gated",
+		Description: "Rejected past the RCA threshold",
+		Status:      models.TaskStatusRejected,
+		Priority:    1,
+		RejectionRCA: &models.RejectionRCARecord{
+			SchemaVersion:  1,
+			Threshold:      3,
+			RejectionCount: 4,
+			GatedAt:        decided.Add(-time.Hour),
+			Summary:        "Repeated rejections trace to an ambiguous acceptance criterion",
+			Disposition: &models.RejectionRCADisposition{
+				RecoveryPath: "rescope",
+				RestoreMode:  "resume",
+				Actor:        "orchestrator-1",
+				DecidedAt:    decided,
+				Rationale:    "Criterion clarified by the source owner",
+			},
+		},
+		Created: time.Now().UTC(),
+	}
+
+	info := buildTaskInfo(&task, "")
+
+	if info.RejectionRCA == nil {
+		t.Fatal("RejectionRCA is nil; the gate record has no durable read path without it")
+	}
+	if info.RejectionRCA.Disposition == nil {
+		t.Fatal("Disposition is nil; the recorded decision is what a resumed doer needs")
+	}
+	if got := info.RejectionRCA.Disposition.RecoveryPath; got != "rescope" {
+		t.Errorf("Disposition.RecoveryPath = %q, want rescope", got)
+	}
+	if got := info.RejectionRCA.Disposition.RestoreMode; got != "resume" {
+		t.Errorf("Disposition.RestoreMode = %q, want resume", got)
+	}
+	if info.RejectionRCA.RejectionCount != 4 {
+		t.Errorf("RejectionCount = %d, want the gate's count", info.RejectionRCA.RejectionCount)
+	}
+}
+
+// A task that was never gated must not grow an empty key: the field is
+// omitempty so the common projection stays the size it was.
+func TestBuildTaskInfo_OmitsAbsentRejectionRCA(t *testing.T) {
+	task := models.Task{ID: "task-plain", Status: models.TaskStatusReady, Created: time.Now().UTC()}
+
+	if info := buildTaskInfo(&task, ""); info.RejectionRCA != nil {
+		t.Errorf("RejectionRCA = %+v, want nil for a task that was never gated", info.RejectionRCA)
+	}
+}

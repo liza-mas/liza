@@ -114,6 +114,7 @@ terminal task.
 | Coder | 10 per attempt | Enough for complex tasks, bounded |
 | Code Reviewer | 1 per review | Review should be decisive |
 | Review cycles | 5 per attempt | Coder-Code Reviewer loop cap |
+| Rejection RCA gate | 4 durable rejections per gate cycle | `high_churn_rejection_threshold`; classified RCA and disposition required before restore |
 
 ### Early Warning Thresholds
 
@@ -123,6 +124,7 @@ terminal task.
 |--------|---------|-------|-----------|
 | Coder iterations | 8 | 10 | Always |
 | Review cycles | 3 | 5 | Always |
+| Rejection RCA gate | — | 4 (configurable) | Every reviewed task type; cycle-relative threshold, not a separate TUI warning |
 | Attempt | — | 2 | Warning at attempt 2 start |
 
 ### Attempt Transitions
@@ -216,7 +218,145 @@ When Coder and Code Reviewer reach `max_review_cycles` (default: 5) without appr
 3. **Planner must log** `review_budget_exhausted` anomaly with assessment
 4. **Work is NOT discarded** unless Planner explicitly chooses ABANDONED after assessment
 
-**Key invariant:** The Coder-Code Reviewer loop runs to completion (5 cycles) before any intervention. No premature escalation.
+**Key invariant:** Review-budget escalation waits for its own cap. The independent
+rejection-RCA gate below may intervene earlier; it does not disable that backstop.
+
+### Rejection RCA Gate
+
+Every reviewed task type, including implementation and planning tasks, is gated
+at `config.high_churn_rejection_threshold` durable rejections (default **4**;
+unset or non-positive values use the default). `DurableRejectionCount()` uses
+`review_cycles_total`, falling back when zero to history entries named `rejected`
+or `review_verdict_rejected`. The count survives attempt transitions.
+
+The REJECTED verdict transaction evaluates the gate after ordinary iteration and
+review-budget escalation, and only if neither already escalated. At the threshold
+it atomically transitions the task to `BLOCKED`, clears assignment and lease,
+releases the doer, and seeds `task.rejection_rca`. The typed reason token
+`rejection_rca_required` prefixes `blocked_reason` and is the blocked event's
+`blocked_class`. Consumers use `RejectionRCAGateOpen()` (record present and no
+disposition), not prose matching. `BLOCKED` prevents normal claim and submission;
+`unblock-task` refuses an open gate.
+
+A closed gate does not fire again on the next rejection: the next cycle is due
+when the durable count reaches the previous record's `rejection_count` plus the
+configured threshold. With no record the baseline is zero; an open gate is never
+re-seeded. A new cycle replaces the live record, clearing the prior caller fields
+and disposition; immutable history retains every earlier cycle.
+
+#### RCA and disposition requests
+
+The orchestrator records the classified RCA with
+`record-rejection-rca <task-id> --rca-file <file> --agent-id <orchestrator-id> --json`.
+The JSON file is exactly `RejectionRCARequest`:
+
+```json
+{
+  "schema_version": 1,
+  "summary": "Required validation could not run in the assigned session.",
+  "contributions": [
+    {
+      "rejection_index": 1,
+      "categories": ["capability_failure"],
+      "evidence": ["Review history entry 1: required validation tool unavailable."]
+    }
+  ]
+}
+```
+
+Contributions classify rejection causes as one or more of `product_defect`,
+`capability_failure`, `lifecycle_retry` or `unknown`. Mixed causes use multiple
+categories; unrecognized categories remain verbatim and visible, with telemetry
+grouping them under unknown while distinguishing them from explicit `unknown`.
+The summary is non-empty and bounded to 4096 bytes; there are at most 32
+contributions with unique positive rejection indices, 1–8 categories per
+contribution (64 bytes each), and at most four evidence entries (256 bytes each).
+An index above the task's durable rejection count fails a state precondition,
+not structural validation.
+
+The stored `RejectionRCARecord` separates provenance: the gate seeds
+`schema_version`, `threshold`, `rejection_count`, `gated_at` and `gating_commit`;
+recording writes normalized `summary` and `contributions`, then derives
+`fingerprint`, `recorded_at` and `recorded_by`. Seeded values remain unchanged.
+Requests cannot supply record-only fields. Identity covers only the normalized
+request, so whitespace/category-order-equivalent resubmissions return `NO_CHANGE`
+without another history entry; materially changed RCA content replaces the caller
+fields and appends `rejection_rca_recorded`.
+
+Next, the orchestrator calls
+`resume-rejection-rca <task-id> --disposition-file <file> --agent-id <orchestrator-id> --json`
+with exactly `RejectionRCADispositionRequest`:
+
+```json
+{
+  "schema_version": 1,
+  "recovery_path": "capability_reroute",
+  "rationale": "Reroute validation to a session with the required tool."
+}
+```
+
+The recovery path is a closed enum from the table below. Rationale is bounded to
+4096 bytes and required for `human_override`. A recorded RCA is required before
+resume. The stored disposition contains `recovery_path` and `rationale` plus
+derived `restore_mode`, `actor` (authenticated agent), `lifecycle_version`
+(task lifecycle revision), `decided_at` (transaction time) and `iteration_exempt`.
+Resume closes the gate but leaves the task `BLOCKED`.
+
+#### Restore modes
+
+Only `unblock-task` restores a `BLOCKED` task, preserving dependency, worktree and
+`--rebase-on` validation. It enforces the recorded disposition:
+
+| Recovery path | Restore mode | Authorized restoration |
+|---------------|--------------|------------------------|
+| `implementation_correction` | `claimable` | Either unblock form; unassigned restore returns to the role-pair initial status and a later claim increments iteration |
+| `capability_reroute` | `assign` | Requires `--assign-to`; reroute validation without forcing a code change |
+| `lifecycle_repair` | `assign` | Requires `--assign-to`; repair ownership without consuming a product iteration |
+| `rescope` | `none` | Unblock refused; route to supersession |
+| `human_override` | `claimable` | Either unblock form, with a recorded rationale |
+
+For capability and lifecycle paths, resume sets `iteration_exempt` and resets
+`review_cycles_current` to zero; it leaves `iteration` and the durable total
+unchanged. Direct assignment is the mechanism that avoids the next claim's
+iteration increment; the exemption field alone does not bypass accounting.
+The RCA record survives successful unblock. Dependency-held unassigned restores
+remain unclaimable until dependencies finish; assignment still requires satisfied
+dependencies.
+
+**Known limitation (F1):** With nonempty `validation_prerequisites`, the
+assign-only `capability_reroute` and `lifecycle_repair` dispositions refuse both
+unblock forms. The target-session preflight guard rejects `--assign-to` before
+the RCA restore-mode check, which rejects its absence. ADR-0136's fresh preflight
+and audit-only readiness requirements conflict here with ADR-0145's direct,
+non-incrementing assignment commitment. See the
+[F1 debt record](../../TECH_DEBT.md#rca-assign-restore-conflicts-with-session-preflight-f1)
+for inspected commits/lines, the withdrawn stored-readiness proposal and the
+operator's unadopted two-phase assignment candidate. An architecture/source-owner
+decision is required before repair; AC-161-6/AC-161-8 recovery proof remains
+outstanding. Documentation and supersession establish neither a runtime fix nor
+frozen integration coverage. F2 remains merged and unaffected.
+
+#### Durable event details and backstops
+
+The inline `TaskHistoryEntry.Extra` keys form the telemetry contract:
+
+| Event | Detail keys |
+|-------|-------------|
+| `blocked` from the gate | `blocked_class` = `rejection_rca_required`, `threshold`, `rejection_count`, `gated_at`, `first_rejection_at` (earliest durable rejection) |
+| `rejection_rca_recorded` | `fingerprint`, `threshold`, `rejection_count`, `gated_at`, `causes` (sorted distinct categories, retaining unknown values), `contribution_count`, `recorded_by` |
+| `rejection_rca_resumed` | `fingerprint`, `recovery_path`, `restore_mode`, `actor`, `lifecycle_version`, `decided_at`, `iteration_exempt`, `gated_at` (cycle being closed) |
+
+Event timestamps use RFC3339. Cumulative gate counts, causes, escalation timing,
+dispositions and convergence come from history; only the currently open gate is
+read from the live record. Re-gating therefore cannot erase earlier audit evidence.
+Token attribution is reported separately by usage reporting.
+
+Existing review-budget limits and `planning_review_churn` detection remain active
+backstops. The default gate at four rejections precedes the default budget cap of
+five; after recovery, budget escalation still applies at its own cap (with only
+the capability/lifecycle current-cycle reset described above). Lifecycle outcomes,
+replay and safe actions follow [Lifecycle Results](lifecycle-results.md#result-contract).
+See [ADR-0145](../architecture/ADR/0145-rejection-rca-gate.md) for the decision.
 
 ### Integration-Fix Protocol
 

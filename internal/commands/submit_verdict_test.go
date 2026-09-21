@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -335,5 +337,44 @@ func TestSubmitVerdictCommand(t *testing.T) {
 				tt.validateState(t, state)
 			}
 		})
+	}
+}
+
+func TestPrintVerdictResultGated(t *testing.T) {
+	blockedReason := models.BlockedReasonRejectionRCARequired + ": 4 durable rejections reached the high-churn threshold 4"
+	gated := &ops.VerdictResult{
+		LifecycleOutcome:   models.LifecycleOutcome{Operation: "submit-verdict", TaskID: "t1", Outcome: models.LifecycleCompleted, SafeAction: "continue"},
+		TaskID:             "t1",
+		Verdict:            "REJECTED",
+		AgentID:            "code-reviewer-1",
+		Reason:             "fourth rejection",
+		EscalatedToBlocked: true,
+		RejectionRCAGated:  true,
+		BlockedReason:      blockedReason,
+	}
+	output := captureStdout(t, func() { printVerdictResult(gated) })
+
+	for _, want := range []string{
+		"REJECTED: t1",
+		"  escalated_to: BLOCKED",
+		"  blocked_reason: " + blockedReason,
+		"  rejection_rca_gate: open",
+		brand.Command("record-rejection-rca", "t1", "--rca-file", "<file>"),
+		brand.Command("resume-rejection-rca", "t1", "--disposition-file", "<file>"),
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("gated verdict output missing %q:\n%s", want, output)
+		}
+	}
+
+	limit := *gated
+	limit.RejectionRCAGated = false
+	limit.BlockedReason = "review budget exhausted: max review cycles reached (5/5)"
+	output = captureStdout(t, func() { printVerdictResult(&limit) })
+	if strings.Contains(output, "rejection_rca_gate") || strings.Contains(output, "record-rejection-rca") || strings.Contains(output, "resume-rejection-rca") {
+		t.Errorf("limit escalation output names the gate:\n%s", output)
+	}
+	if !strings.Contains(output, "  escalated_to: BLOCKED\n  blocked_reason: "+limit.BlockedReason) {
+		t.Errorf("limit escalation output changed:\n%s", output)
 	}
 }
