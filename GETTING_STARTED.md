@@ -277,6 +277,18 @@ Pairing needs only `liza setup` and a bare `liza init`. `liza init --spec`,
 Use [Pairing Usage](support-docs/USAGE_PAIRING.md) for the first task cycle,
 collaboration modes, approval gates, steering tools, and safety model.
 
+**Plan work in Pairing.** You can break an objective into an implementation
+plan without starting Multi-Agent or Adversarial Pairing mode. For example:
+
+> Help me break this objective into ordered steps, with dependencies, open
+> questions, and a success criterion for each step. Don't implement yet.
+
+Use the [goal-writing skill](skills/goal-writing/SKILL.md) when you need to
+clarify the objective and produce an input specification. To stress-test an
+existing plan, ask to switch to
+[Challenger](support-docs/USAGE_PAIRING.md#challenger). These are distinct from
+planning the implementation steps, which you can request directly in Pairing.
+
 **Adversarial Pairing** adds reviewer agents to Pairing mode without launching
 the full autonomous system. Use it for higher-stakes work that benefits from a
 doer/reviewer blackboard loop. See
@@ -287,15 +299,64 @@ goal document you write; no example spec is installed. `specs/vision.md` below
 is only an example path. To write it step by step, ask a Pairing session to use
 the [goal-writing skill](skills/goal-writing/SKILL.md). It only activates when
 named. See also [How to Produce a Goal](support-docs/how-to-produce-a-goal.md).
-Commit the document first: `liza init --spec` rejects untracked or uncommitted
-specs.
+
+### Before Your First Multi-Agent Run
+
+- **Commit the spec and `.pre-commit-config.yaml`.** Init requires both;
+  the pre-commit configuration must also exist on the configured integration
+  branch if that branch already exists. Commit other files agents need, too:
+  task worktrees are created from the integration branch, so they do not inherit
+  uncommitted changes in your working directory.
+- **Configure worktree setup when needed.** Fresh worktrees do not contain your
+  installed dependencies or generated build artifacts. Pass
+  `--post-worktree-cmd "<your setup command>"` to init; for example, `npm ci`
+  for an npm project with a lockfile. Automatic detection covers supported Node
+  layouts, so check the suggested command. Empty repositories can start without
+  one and configure it after scaffolding. See
+  [Worktree Setup](support-docs/CONFIGURATION.md#worktree-setup-post_worktree_cmd).
+- **Fill in `GUARDRAILS.md`.** Project activation creates an empty template.
+  Add and commit project constraints before launching agents, such as required
+  validation commands, compatibility requirements, and architectural boundaries.
+- **Allow the tools your project needs.** Agents run non-interactively and
+  cannot answer permission prompts. Check the selected provider's permissions;
+  for Claude, add any missing build/test tools to `.claude/settings.json`.
+  Naming a tool in `AGENT_TOOLS.md` does not grant permission to execute it.
+
+Choose an entry point that matches your input: `general-objective` starts with
+epics and user stories, `functional-spec` starts with architecture, and
+`technical-spec` starts with code planning. Pass `--entry-point <name>` to init,
+or omit it to let the orchestrator classify the document. See
+[Pipeline & Entry Points](support-docs/USAGE_MULTI_AGENTS.md#pipeline--entry-points).
+
+After preparing the files above, initialize the run:
 
 ```bash
-git add specs/vision.md && git commit -m "docs: add project goal"
+git add specs/vision.md .pre-commit-config.yaml GUARDRAILS.md
+git commit -m "docs: prepare first multi-agent run"
 liza init "Project goal" --spec specs/vision.md
 ```
 
-Then open the multi-agent console:
+Before opening the multi-agent console, choose the provider defaults. Agents
+fall back to `claude` when no CLI is configured; provider activation alone does
+not select the runtime default. For example, to use OpenCode for all roles,
+set these variables in the shell that will launch the TUI and agents:
+
+```bash
+export LIZA_DEFAULT_DOER_CLI=opencode
+export LIZA_DEFAULT_REVIEWER_CLI=opencode
+```
+
+`LIZA_DEFAULT_DOER_CLI` applies to doers and the orchestrator;
+`LIZA_DEFAULT_REVIEWER_CLI` applies to reviewers. You can choose different
+providers for the two groups. An explicit `--cli`, a selected profile's CLI,
+or the corresponding role-specific default in project state takes precedence
+over these environment variables. See
+[CLI selection](support-docs/USAGE_MULTI_AGENTS.md) for details.
+
+Set the exports before starting the TUI or agent processes: changing them in
+another shell does not update an already-running process's environment.
+
+Then open the multi-agent console from that shell:
 
 ```bash
 liza tui
@@ -312,12 +373,62 @@ project and invoke the [operator skill](skills/liza-operator/SKILL.md). Keep
 that session running to supervise progress, intervene on concerns, and record
 operational issues.
 
+You can ask the operator anything at any point: "Why is this task blocked?",
+"What should I review here?", "I closed a terminal; what now?", or "Help me
+change direction." It is your ongoing conversation partner throughout the run.
+You do not need to know the right command or wait for a checkpoint to ask.
+
+### What to Expect While It Runs
+
+The TUI automatically spawns missing agents as work becomes claimable; keep it
+running after starting the orchestrator. Use `liza status` to inspect progress.
+
+**At your first CHECKPOINT.** A checkpoint requests human review; it does not
+necessarily indicate a failure. Read the checkpoint reason and referenced
+planning artifacts. In your Pairing session, invoke
+[checkpoint-summary](skills/checkpoint-summary/SKILL.md) for a digest of agent
+decisions, open points, and risks. For a planning checkpoint, check:
+
+- Does the proposed work match your goal and exclusions?
+- Are requirements missing or assumptions still unresolved?
+- Are the proposed steps, dependencies, and acceptance criteria sensible?
+
+If satisfied, press `r` in the TUI or run `liza resume`. If changes are needed,
+ask your operator session to help amend the plan and replan before continuing;
+see [Replanning at Checkpoint](support-docs/USAGE_MULTI_AGENTS.md#replanning-at-checkpoint).
+Completing a sprint and advancing to the next can require two resume actions;
+see [Running Multiple Sprints](support-docs/USAGE_MULTI_AGENTS.md#running-multiple-sprints).
+
+Press `p` or run `liza pause` to pause work while keeping agents alive, then
+resume when ready. Keep manual checkpoints for your first run. Once comfortable
+with the review flow, `y` toggles auto-resume; an explicit pause is never
+auto-resumed.
+
+**If you close a terminal.** From the project directory, reopen the dashboard
+with `liza tui`. This shows the run's current state; it does not restore the
+closed terminal's conversation. Check the orchestrator's status and whether its
+process is still running before starting another. If it exited, relaunch it
+with `liza agent orchestrator` or press `s` in the TUI and select `orchestrator`.
+If it remains alive, avoid launching a duplicate.
+
+When logging is enabled, saved agent output is under `.liza/agent-outputs/`:
+CLI-backed agents write stdout to `.txt` files and stderr to `.err` files.
+Logging is disabled with `--no-log` or `-i`. See
+[Analyzing Agent Logs](support-docs/USAGE_MULTI_AGENTS.md#analyzing-agent-logs)
+to inspect what happened before the terminal closed.
+
+Approved task work merges into the configured integration branch (`integration`
+by default). Inspect it with `git log integration --oneline`, substituting your
+branch name if different. Publishing commits and opening remote pull requests
+are operator-owned steps.
+
 Read [Multi-Agent Usage](support-docs/USAGE_MULTI_AGENTS.md) before running a
 multi-agent pipeline. Liza is a complex system, and the usage guide explains
 roles, checkpoints, worktrees, TUI controls, and review flow.
 
-Once the run reaches a terminal state, analyze it before starting the next one.
-From the same Pairing session, invoke the
+Analyze logs after the first sprint, or earlier if progress stalls or agents
+repeatedly fail. Repeat the analysis when the run finishes before starting the
+next one. From the same Pairing session, invoke the
 [liza-logs skill](skills/liza-logs/SKILL.md) to find operational friction —
 repeated review cycles, blocked or superseded tasks, tool and permission
 failures, setup problems — written to `.liza/log-analysis.md`. Then invoke the
@@ -345,7 +456,7 @@ liza init --cursor
 liza init --opencode
 ```
 
-Multi-Agent, after committing your goal document:
+Multi-Agent, after completing the first-run checklist above:
 
 ```bash
 liza init "Project goal" --spec specs/vision.md
