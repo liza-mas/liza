@@ -271,6 +271,9 @@ session in the initialized project and greet the agent. The session should selec
 Pairing mode automatically, read the contract files, and show the hello
 protocol.
 
+Pairing needs only `liza setup` and a bare `liza init`. `liza init --spec`,
+`liza tui` and `liza status` belong to Multi-Agent mode.
+
 Use [Pairing Usage](support-docs/USAGE_PAIRING.md) for the first task cycle,
 collaboration modes, approval gates, steering tools, and safety model.
 
@@ -279,18 +282,27 @@ the full autonomous system. Use it for higher-stakes work that benefits from a
 doer/reviewer blackboard loop. See
 [Adversarial Pairing](support-docs/ADVERSARIAL_PAIRING.md).
 
-**Multi-Agent mode** runs an autonomous spec-to-code pipeline. Initialize it
-with a goal/spec:
+**Multi-Agent mode** runs an autonomous spec-to-code pipeline. It starts from a
+goal document you write; no example spec is installed. `specs/vision.md` below
+is only an example path. To write it step by step, ask a Pairing session to use
+the [goal-writing skill](skills/goal-writing/SKILL.md). It only activates when
+named. See also [How to Produce a Goal](support-docs/how-to-produce-a-goal.md).
+Commit the document first: `liza init --spec` rejects untracked or uncommitted
+specs.
 
 ```bash
+git add specs/vision.md && git commit -m "docs: add project goal"
 liza init "Project goal" --spec specs/vision.md
 ```
 
-Then run:
+Then open the multi-agent console:
 
 ```bash
 liza tui
 ```
+
+`liza tui` reads the project state that `liza init --spec` creates. Without it,
+the TUI fails with `failed to initialize TUI: no such file or directory`.
 
 After the TUI opens, press `s` and spawn `orchestrator` first. The orchestrator
 is the only role that is not auto-spawned.
@@ -322,6 +334,8 @@ project setup.
 
 ## Common First Commands
 
+Pairing:
+
 ```bash
 liza setup --claude --codex
 liza setup --opencode
@@ -329,6 +343,11 @@ liza setup --agent-tools ~/my-agent-tools.md
 liza init --claude --codex --yes
 liza init --cursor
 liza init --opencode
+```
+
+Multi-Agent, after committing your goal document:
+
+```bash
 liza init "Project goal" --spec specs/vision.md
 liza tui
 liza validate
