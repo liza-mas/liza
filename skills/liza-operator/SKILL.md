@@ -51,6 +51,8 @@ Conflict between "keep moving" and an operating constraint → the constraint wi
    `§BRAND_BINARY_NAME§ validate`. Use bounded projections and sequential state reads; blank or truncated
    output is tool uncertainty, not an empty run. Diff against last round.
 2. **Health** — investigate every concern immediately. At minimum, detect:
+   - a parked system: `sprint.status: CHECKPOINT` or a non-RUNNING mode holds every blocked role, and
+     `§BRAND_BINARY_NAME§ status` prints the remedy. Rule it out before diagnosing any single agent;
    - BLOCKED tasks the orchestrator has attempted but cannot unblock;
    - claimable/reviewable work that remains unclaimed after a bounded recheck, including missing or
      ineligible role capacity;
@@ -307,7 +309,10 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
 - **Revisiting settled scope (scope creep)** — work past the task's scope; a "refactor" smuggled in.
 - **Looping (thrash)** — `executing ⇄ rejected` loops, same fix twice, leases expiring
   without progress, replacement chains whose successor re-blocks before the old failure point.
-- **Silent task (stall)** — lease held, no `log.yaml` activity → likely crashed; recover.
+- **Silent task (stall)** — lease held, no `log.yaml` activity, task still executing, system not parked →
+  likely crashed; recover. A submitted task means the doer finished: its artifacts are in the task's
+  `worktree` (`.worktrees/<task>`) at `review_commit`, not the main checkout. Minutes of provider silence
+  are generation; `agent_progress_timeout` already blocks truly stalled providers.
 - **Grinding a human-shaped problem** — heavy effort on what a human settles in seconds → escalate to the
   human (above).
 
