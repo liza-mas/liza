@@ -166,6 +166,23 @@ To find the actual state names for a role-pair, check `role-pairs.<name>.states`
 
 Supervisors automatically block a still-owned executing task when the child provider process makes no observable progress for `config.agent_progress_timeout` seconds. Observable progress is task state movement, worktree HEAD/status movement including untracked files, or provider stdout/stderr output. This prevents a stale `WORKING` agent from holding a task indefinitely when its provider process stalls. The watchdog cancels the provider and waits for it to exit before cleaning the worktree.
 
+### Reading an AWAITING HUMAN alert
+
+`🚨 AWAITING HUMAN: …` means the run needs a human to act: the sprint is at
+`CHECKPOINT` or the system mode is `PAUSED`. Run the command the alert names
+(usually `§BRAND_BINARY_NAME§ resume`, after reading
+`§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` when there is one). It is
+written once per episode.
+
+- `PAUSED`, or a `CHECKPOINT` without a transition trigger: every role is
+  parked, and agents stay registered, so the run looks staffed while nothing
+  advances. `STALLED` stays silent meanwhile.
+- A transition checkpoint (`PLANNING_COMPLETE`, `MANY_TO_ONE_READY`): doer and
+  reviewer work continues, but downstream tasks are not created until resume.
+  `STALLED` still fires.
+- With `auto_resume`, a checkpoint alerts only if it has not auto-resumed
+  within 6 minutes.
+
 ### Reading a STALLED alert
 
 `⚠️ STALLED: no task progress for N minutes` names which of two situations it

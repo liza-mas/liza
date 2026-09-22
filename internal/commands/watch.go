@@ -475,6 +475,7 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 		func() []Alert { return checkExpiredLeases(state) },
 		func() []Alert { return checkRegisteredAgentsWithoutLiveProcess(state) },
 		func() []Alert { return checkRunningTasksWithoutLiveProcess(state, pr) },
+		func() []Alert { return checkAwaitingHuman(state) },
 		func() []Alert { return checkBlockedTasks(state, config.StateCache) },
 		func() []Alert { return checkOrphanedRejected(state, config.StateCache) },
 		func() []Alert { return checkReviewLoops(state) },
@@ -583,7 +584,7 @@ func reconcileStuckAlerts(alerts []Alert, cache map[string]time.Time) []Alert {
 
 func isStuckAlertCategory(category string) bool {
 	switch category {
-	case "BLOCKED", "HYPOTHESIS EXHAUSTION", "INTEGRATION FAILED", "INVALID STATE", "DEAD AGENT PROCESS", "REGISTERED AGENT PROCESS":
+	case "AWAITING HUMAN", "BLOCKED", "HYPOTHESIS EXHAUSTION", "INTEGRATION FAILED", "INVALID STATE", "DEAD AGENT PROCESS", "REGISTERED AGENT PROCESS":
 		return true
 	case "INVALID AGENT OWNERSHIP":
 		return true
@@ -964,6 +965,55 @@ func isReviewerActiveStatus(task *models.Task, pr models.PipelineResolver) bool 
 	return err == nil && task.Status == reviewing2
 }
 
+// awaitingHumanNotice names the remedy when the run is parked until a human
+// acts, or returns "" when it is not. Agents keep their registrations while
+// parked, so without this the run reads as staffed but idle.
+//
+// Under auto_resume a checkpoint needs no human unless it outlives
+// autoResumeCheckpointGrace: supervisors resume it once the orchestrator's
+// checkpoint summary (bounded at 5 minutes) is emitted.
+func awaitingHumanNotice(state *models.State) string {
+	if state.Config.Mode == models.SystemModePaused {
+		return fmt.Sprintf("system mode is PAUSED; run %q", brand.Command("resume"))
+	}
+	if state.Config.AutoResume && state.Sprint.Status == models.SprintStatusCheckpoint {
+		at := state.Sprint.Timeline.CheckpointAt
+		if at != nil && time.Since(*at) < autoResumeCheckpointGrace {
+			return ""
+		}
+	}
+	return checkpointNotice(state.Sprint)
+}
+
+// autoResumeCheckpointGrace covers the checkpoint-summary timeout plus a
+// supervisor poll; a checkpoint older than this failed to auto-resume.
+const autoResumeCheckpointGrace = 6 * time.Minute
+
+// runParked reports whether a pause gate holds every role. A transition
+// checkpoint holds only the orchestrator; doers and reviewers keep working.
+func runParked(state *models.State) bool {
+	if state.Config.Mode == models.SystemModePaused {
+		return true
+	}
+	return state.Sprint.Status == models.SprintStatusCheckpoint &&
+		!models.IsTransitionCheckpointTrigger(state.Sprint.CheckpointTrigger)
+}
+
+// checkAwaitingHuman is emitted every check while active; reconcileStuckAlerts
+// writes it once per episode and the TUI clears it on resume.
+func checkAwaitingHuman(state *models.State) []Alert {
+	notice := awaitingHumanNotice(state)
+	if notice == "" {
+		return nil
+	}
+	return []Alert{{
+		Timestamp: time.Now().UTC(),
+		Level:     AlertLevelCritical,
+		Category:  "AWAITING HUMAN",
+		Message:   notice,
+	}}
+}
+
 func checkBlockedTasks(state *models.State, cache map[string]time.Time) []Alert {
 	var alerts []Alert
 	now := time.Now().UTC()
@@ -1249,7 +1299,8 @@ func checkStalled(state *models.State, cache map[string]time.Time, pr models.Pip
 		}
 	}
 
-	if !hasActive {
+	// A parked run makes no progress by design; AWAITING HUMAN names the remedy.
+	if !hasActive || runParked(state) {
 		delete(cache, "stalled:alert")
 		return alerts
 	}

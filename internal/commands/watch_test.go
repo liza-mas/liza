@@ -984,6 +984,40 @@ func TestCheckStalled(t *testing.T) {
 			},
 			wantAlerts: 0,
 		},
+		{
+			name: "stale_history_at_transition_checkpoint",
+			state: &models.State{
+				Sprint: models.Sprint{
+					Status:            models.SprintStatusCheckpoint,
+					CheckpointTrigger: models.CheckpointTriggerPlanningComplete,
+				},
+				Tasks: []models.Task{{
+					ID:     "t1",
+					Status: models.TaskStatusImplementing,
+					History: []models.TaskHistoryEntry{{
+						Time:  now.Add(-31 * time.Minute),
+						Event: "claimed",
+					}},
+				}},
+			},
+			wantAlerts: 1,
+			wantMsg:    "no task progress",
+		},
+		{
+			name: "stale_history_while_checkpointed",
+			state: &models.State{
+				Sprint: models.Sprint{Status: models.SprintStatusCheckpoint},
+				Tasks: []models.Task{{
+					ID:     "t1",
+					Status: models.TaskStatusImplementing,
+					History: []models.TaskHistoryEntry{{
+						Time:  now.Add(-31 * time.Minute),
+						Event: "claimed",
+					}},
+				}},
+			},
+			wantAlerts: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -3939,4 +3973,97 @@ func stallDiagnosisResolver() models.PipelineResolver {
 				"DRAFT_CODE", "IMPLEMENTING_CODE", "CODE_TO_REVIEW", "REVIEWING_CODE", "CODE_APPROVED", "CODE_REJECTED"),
 		},
 	}})
+}
+
+func TestCheckAwaitingHuman(t *testing.T) {
+	tests := []struct {
+		name    string
+		state   *models.State
+		wantMsg string
+	}{
+		{
+			name:  "running_in_progress",
+			state: &models.State{Sprint: models.Sprint{Status: models.SprintStatusInProgress}},
+		},
+		{
+			name:    "sprint_checkpoint",
+			state:   &models.State{Sprint: models.Sprint{Status: models.SprintStatusCheckpoint}},
+			wantMsg: "CHECKPOINT: agents paused",
+		},
+		{
+			name: "system_paused",
+			state: &models.State{
+				Config: models.Config{Mode: models.SystemModePaused},
+				Sprint: models.Sprint{Status: models.SprintStatusInProgress},
+			},
+			wantMsg: "system mode is PAUSED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			alerts := checkAwaitingHuman(tt.state)
+			if tt.wantMsg == "" {
+				if len(alerts) != 0 {
+					t.Fatalf("alerts = %v, want none", alerts)
+				}
+				return
+			}
+			if len(alerts) != 1 {
+				t.Fatalf("len(alerts) = %d, want 1", len(alerts))
+			}
+			a := alerts[0]
+			if a.Category != "AWAITING HUMAN" || a.Level != AlertLevelCritical {
+				t.Errorf("alert = %s %s, want critical AWAITING HUMAN", a.Level, a.Category)
+			}
+			if !strings.Contains(a.Message, tt.wantMsg) || !strings.Contains(a.Message, brand.Command("resume")) {
+				t.Errorf("message = %q, want %q and the resume command", a.Message, tt.wantMsg)
+			}
+		})
+	}
+}
+
+func TestCheckAwaitingHuman_AutoResumeGrace(t *testing.T) {
+	at := func(ago time.Duration) *time.Time {
+		v := time.Now().UTC().Add(-ago)
+		return &v
+	}
+	checkpointed := func(ago time.Duration, mode models.SystemMode) *models.State {
+		return &models.State{
+			Config: models.Config{AutoResume: true, Mode: mode},
+			Sprint: models.Sprint{
+				Status:   models.SprintStatusCheckpoint,
+				Timeline: models.SprintTimeline{CheckpointAt: at(ago)},
+			},
+		}
+	}
+
+	if got := checkAwaitingHuman(checkpointed(time.Minute, models.SystemModeRunning)); len(got) != 0 {
+		t.Errorf("auto-resuming checkpoint within grace alerted: %v", got)
+	}
+	if got := checkAwaitingHuman(checkpointed(autoResumeCheckpointGrace+time.Minute, models.SystemModeRunning)); len(got) != 1 {
+		t.Errorf("checkpoint that outlived auto-resume grace emitted %d alerts, want 1", len(got))
+	}
+	if got := checkAwaitingHuman(checkpointed(time.Minute, models.SystemModePaused)); len(got) != 1 {
+		t.Errorf("PAUSED mode under auto_resume emitted %d alerts, want 1", len(got))
+	}
+}
+
+func TestCheckAwaitingHuman_WrittenOncePerEpisode(t *testing.T) {
+	state := &models.State{Sprint: models.Sprint{Status: models.SprintStatusCheckpoint}}
+	cache := make(map[string]time.Time)
+
+	if got := reconcileStuckAlerts(checkAwaitingHuman(state), cache); len(got) != 1 {
+		t.Fatalf("first tick emitted %d alerts, want 1", len(got))
+	}
+	if got := reconcileStuckAlerts(checkAwaitingHuman(state), cache); len(got) != 0 {
+		t.Fatalf("second tick emitted %d alerts, want 0 (deduped)", len(got))
+	}
+
+	state.Sprint.Status = models.SprintStatusInProgress
+	reconcileStuckAlerts(checkAwaitingHuman(state), cache)
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	if got := reconcileStuckAlerts(checkAwaitingHuman(state), cache); len(got) != 1 {
+		t.Fatalf("new checkpoint emitted %d alerts, want 1", len(got))
+	}
 }
