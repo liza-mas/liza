@@ -150,6 +150,7 @@ type ActivationAssets struct {
 	MistralPromptConfig bool `yaml:"mistral_prompt_config,omitempty"`
 	BashPolicyClaude    bool `yaml:"bash_policy_claude,omitempty"`
 	BashPolicyCodex     bool `yaml:"bash_policy_codex,omitempty"`
+	PiExtension         bool `yaml:"pi_extension,omitempty"`
 }
 
 type Runtime struct {

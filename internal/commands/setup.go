@@ -148,6 +148,14 @@ func SetupCommand(params SetupParams) error {
 		}
 	}
 
+	// Deploy the pi init-gate extension when the pi provider is selected so
+	// the pi provider's run_args always reference an existing file.
+	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.PiExtension }) {
+		if err := embedded.WritePiInitGate(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write pi init gate: %v\n", err)
+		}
+	}
+
 	printSetupSummary(params.TargetDir, written, skipFiles, autoReplaced, setupProviderIDs)
 	return nil
 }

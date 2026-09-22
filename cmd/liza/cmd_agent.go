@@ -180,6 +180,12 @@ Example:
 			fmt.Fprintf(supervisorLogs.stderr, "  Run '%s' to create one.\n", contractInitCommandForMissingContract(cliName, contractKey))
 		}
 
+		// Self-heal provider assets that spawns reference by path (the pi
+		// init-gate extension): pi refuses to start when a -e path is missing.
+		if err := commands.EnsureProviderSpawnAssets(cliName); err != nil {
+			fmt.Fprintf(supervisorLogs.stderr, "Warning: failed to ensure %s spawn assets: %v\n", cliName, err)
+		}
+
 		specsLookup := brand.LookupEnv(os.Getenv, "SPECS")
 		if specsLookup.Warning != "" {
 			fmt.Fprintf(supervisorLogs.stderr, "Warning: %s\n", specsLookup.Warning)

@@ -111,6 +111,7 @@ func InitPairingCommand(params InitPairingParams) error {
 	hasMistral := false
 	hasBashPolicyClaude := false
 	hasBashPolicyCodex := false
+	hasPi := false
 	for _, provider := range selectedProviders {
 		if provider.Setup.Contract.RepoFile != "" {
 			repoRootAgents = append(repoRootAgents, provider)
@@ -136,6 +137,9 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 		if assets.BashPolicyCodex {
 			hasBashPolicyCodex = true
+		}
+		if assets.PiExtension {
+			hasPi = true
 		}
 	}
 
@@ -234,6 +238,12 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 	}
 
+	if hasPi {
+		if err := embedded.WritePiInitGate(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write pi init gate: %v\n", err)
+		}
+	}
+
 	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
 	if projectRoot != "" {
 		if err := embedded.CleanStaleMCPEntry(projectRoot); err != nil {
@@ -313,6 +323,11 @@ func isLizaSymlink(path, contractTarget string) bool {
 func CheckContractConfigured(projectRoot, cliName string) string {
 	catalog := loadProviderCatalog("")
 	provider, ok := catalog.Resolve(cliName)
+	if !ok {
+		// Backfill embedded built-ins so freshly added providers warn and
+		// resolve correctly even while the fetched catalog predates them.
+		provider, ok = providers.EmbeddedCatalog().Resolve(cliName)
+	}
 	if !ok {
 		return ""
 	}
@@ -1051,6 +1066,12 @@ func InitCommandWithConfig(params InitParams) error {
 	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.OpenCodeExecTool }) {
 		if err := embedded.WriteOpenCodeExecTool(lizaPaths.ProjectRoot()); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
+		}
+	}
+
+	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.PiExtension }) {
+		if err := embedded.WritePiInitGate(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write pi init gate: %v\n", err)
 		}
 	}
 
