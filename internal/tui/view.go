@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/models"
@@ -203,9 +204,8 @@ func (m Model) renderAgentPanel(budget int) string {
 	}
 
 	statusVal := func(_ string, a models.Agent) string {
-		dot := StatusDot(string(a.Status))
-		color := StatusColor(string(a.Status))
-		return lipgloss.NewStyle().Foreground(color).Render(dot + " " + string(a.Status))
+		text, color := m.agentStatusText(a)
+		return lipgloss.NewStyle().Foreground(color).Render(text)
 	}
 
 	healthVal := func(id string, a models.Agent) string {
@@ -300,7 +300,7 @@ func (m Model) renderAgentPanel(budget int) string {
 			val := c.value(id, agent)
 			if c.header == "STATUS" {
 				// STATUS value is ANSI-styled; pad by visual width of raw text
-				rawText := StatusDot(string(agent.Status)) + " " + string(agent.Status)
+				rawText, _ := m.agentStatusText(agent)
 				rawWidth := runewidth.StringWidth(rawText)
 				padding := max(c.width-rawWidth, 0)
 				parts = append(parts, val+strings.Repeat(" ", padding))
@@ -317,6 +317,32 @@ func (m Model) renderAgentPanel(budget int) string {
 		content += "\n" + healthDetails
 	}
 	return m.styles.AgentPanel.MaxHeight(budget).Render(content)
+}
+
+// agentStatusText is the STATUS cell for an agent. A registered agent parked
+// by a pause gate keeps its IDLE/WAITING status in state, which reads as "no
+// work"; show the gate instead so the row says a human must act. An agent
+// mid-turn stays as-is: the gate applies only between turns.
+func (m Model) agentStatusText(a models.Agent) (string, lipgloss.Color) {
+	if label := m.agentPauseLabel(a); label != "" {
+		return "⏸ " + label, ColorHandoff
+	}
+	return StatusDot(string(a.Status)) + " " + string(a.Status), StatusColor(string(a.Status))
+}
+
+func (m Model) agentPauseLabel(a models.Agent) string {
+	if m.state == nil || (a.Status != models.AgentStatusIdle && a.Status != models.AgentStatusWaiting) {
+		return ""
+	}
+	reason := agent.RolePauseReason(m.state, m.roleTypes[a.Role])
+	end := strings.Index(reason, "]")
+	if !strings.HasPrefix(reason, "[") || end < 0 {
+		return ""
+	}
+	if label := reason[1:end]; label != "CIRCUIT BREAKER" {
+		return label
+	}
+	return "BREAKER" // fits the STATUS column
 }
 
 func (m Model) agentIdentityColumnWidths() (idWidth, roleWidth int) {

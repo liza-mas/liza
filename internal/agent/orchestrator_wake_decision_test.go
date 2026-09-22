@@ -87,7 +87,7 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 			previousGate := waitWhilePausedForSupervisor
 			waitWhilePausedForSupervisor = func(ctx context.Context, root, role string) error {
 				s := mustReadState(t, bb)
-				if rolePauseReason(s, role) != "" {
+				if RolePauseReason(s, role) != "" {
 					if s.Agents["orchestrator-1"].Status != models.AgentStatusIdle {
 						t.Error("cancelled launch did not restore idle runtime status")
 					}

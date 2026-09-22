@@ -209,7 +209,7 @@ func (s *orchestratorStrategy) RevalidateWake(ctx context.Context, bb *db.Blackb
 		return *projection
 	})
 	stopped, _ := isSystemStopped(state)
-	if ctx.Err() != nil || stopped || rolePauseReason(state, "orchestrator") != "" ||
+	if ctx.Err() != nil || stopped || RolePauseReason(state, "orchestrator") != "" ||
 		CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) || CheckQuotaSignal(config.ProjectRoot, config.CLIName) || !result.ShouldWake() {
 		GetLogger().Info("Skipping orchestrator launch after revalidation", "selected_trigger", selected.Trigger, "fresh_trigger", fresh.Trigger)
 		return false, nil

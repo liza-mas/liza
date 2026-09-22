@@ -310,6 +310,54 @@ func TestRenderAgentPanel_EmptyState(t *testing.T) {
 	}
 }
 
+func TestRenderAgentPanel_ParkedAgentsShowPauseGate(t *testing.T) {
+	task := "t1"
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		roleTypes:  map[string]string{"us-reviewer": "reviewer", "us-writer": "doer"},
+		state: &models.State{
+			Sprint: models.Sprint{Status: models.SprintStatusCheckpoint},
+			Agents: map[string]models.Agent{
+				"us-reviewer-1": {Role: "us-reviewer", Status: models.AgentStatusIdle},
+				"us-writer-1":   {Role: "us-writer", Status: models.AgentStatusWorking, CurrentTask: &task},
+			},
+		},
+	}
+
+	out := m.renderAgentPanel(20)
+	if !strings.Contains(out, "⏸ CHECKPOINT") {
+		t.Errorf("parked IDLE agent should show the pause gate, got: %q", out)
+	}
+	if strings.Contains(out, "IDLE") {
+		t.Errorf("parked agent should not read as IDLE, got: %q", out)
+	}
+	if !strings.Contains(out, "WORKING") {
+		t.Errorf("agent mid-turn should keep WORKING, got: %q", out)
+	}
+}
+
+func TestRenderAgentPanel_UnparkedAgentKeepsStatus(t *testing.T) {
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		roleTypes:  map[string]string{"us-reviewer": "reviewer"},
+		state: &models.State{
+			Sprint: models.Sprint{Status: models.SprintStatusInProgress},
+			Agents: map[string]models.Agent{"us-reviewer-1": {Role: "us-reviewer", Status: models.AgentStatusIdle}},
+		},
+	}
+
+	out := m.renderAgentPanel(20)
+	if !strings.Contains(out, "IDLE") || strings.Contains(out, "⏸") {
+		t.Errorf("agent outside a pause gate should keep IDLE, got: %q", out)
+	}
+}
+
 func TestRenderAgentPanel_NilState(t *testing.T) {
 	m := Model{
 		width:      100,

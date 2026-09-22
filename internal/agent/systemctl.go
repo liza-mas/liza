@@ -126,7 +126,7 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 		if bb := db.For(statePath); bb != nil {
 			state, err := bb.Read()
 			if err == nil {
-				pauseReason = rolePauseReason(state, roleType)
+				pauseReason = RolePauseReason(state, roleType)
 				isPaused = pauseReason != ""
 				switch {
 				case state.Config.Mode == models.SystemModePaused || state.Config.Mode == models.SystemModeCircuitBreakerTripped:
@@ -180,9 +180,9 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 	}
 }
 
-// rolePauseReason is the non-blocking half of waitWhilePaused. Launch
+// RolePauseReason is the non-blocking half of waitWhilePaused. Launch
 // revalidation uses the same predicate without running resume side effects.
-func rolePauseReason(state *models.State, roleType string) string {
+func RolePauseReason(state *models.State, roleType string) string {
 	switch {
 	case state.Config.Mode == models.SystemModePaused:
 		return "[PAUSED] System mode is PAUSED"
