@@ -241,6 +241,52 @@ func TestRenderHeader_ShowsSprintStatus(t *testing.T) {
 	}
 }
 
+func awaitingHumanTestModel(status models.SprintStatus) Model {
+	m := newTestModel()
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.styles = NewStyles(120)
+	m.state = &models.State{
+		Goal:   models.Goal{Description: "goal"},
+		Sprint: models.Sprint{ID: "s1", Status: status},
+		Config: models.Config{Mode: models.SystemModeRunning},
+	}
+	return m
+}
+
+func TestView_CheckpointShowsPersistentRemedy(t *testing.T) {
+	m := awaitingHumanTestModel(models.SprintStatusCheckpoint)
+
+	got := m.View()
+	if !strings.Contains(got, "CHECKPOINT: agents paused") || !strings.Contains(got, brand.Command("resume")) {
+		t.Errorf("View() should show the checkpoint remedy, got: %q", got)
+	}
+	// The notice must take its line from the panels, not grow the view.
+	baseline := awaitingHumanTestModel(models.SprintStatusInProgress).View()
+	if h, want := lipgloss.Height(got), lipgloss.Height(baseline); h != want {
+		t.Errorf("View() height = %d, want %d (same as without the notice)", h, want)
+	}
+}
+
+func TestView_InProgressShowsNoAwaitingHumanNotice(t *testing.T) {
+	m := awaitingHumanTestModel(models.SprintStatusInProgress)
+
+	if got := m.View(); strings.Contains(got, "agents paused") {
+		t.Errorf("View() should not show a checkpoint notice while in progress, got: %q", got)
+	}
+}
+
+func TestView_AwaitingHumanBannerNotDuplicated(t *testing.T) {
+	m := awaitingHumanTestModel(models.SprintStatusCheckpoint)
+	m.alertBanner = &ActivityEntry{Level: "🚨", Action: "AWAITING HUMAN", Detail: "CHECKPOINT: agents paused"}
+	m.alertExpiry = time.Now().Add(time.Minute)
+
+	if got := m.View(); strings.Contains(got, "AWAITING HUMAN") {
+		t.Errorf("transient AWAITING HUMAN banner should yield to the persistent notice, got: %q", got)
+	}
+}
+
 // --- Agent Panel Tests ---
 
 // helper to create a string pointer

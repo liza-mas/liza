@@ -965,14 +965,14 @@ func isReviewerActiveStatus(task *models.Task, pr models.PipelineResolver) bool 
 	return err == nil && task.Status == reviewing2
 }
 
-// awaitingHumanNotice names the remedy when the run is parked until a human
+// AwaitingHumanNotice names the remedy when the run is parked until a human
 // acts, or returns "" when it is not. Agents keep their registrations while
 // parked, so without this the run reads as staffed but idle.
 //
 // Under auto_resume a checkpoint needs no human unless it outlives
 // autoResumeCheckpointGrace: supervisors resume it once the orchestrator's
 // checkpoint summary (bounded at 5 minutes) is emitted.
-func awaitingHumanNotice(state *models.State) string {
+func AwaitingHumanNotice(state *models.State) string {
 	if state.Config.Mode == models.SystemModePaused {
 		return fmt.Sprintf("system mode is PAUSED; run %q", brand.Command("resume"))
 	}
@@ -1002,7 +1002,7 @@ func runParked(state *models.State) bool {
 // checkAwaitingHuman is emitted every check while active; reconcileStuckAlerts
 // writes it once per episode and the TUI clears it on resume.
 func checkAwaitingHuman(state *models.State) []Alert {
-	notice := awaitingHumanNotice(state)
+	notice := AwaitingHumanNotice(state)
 	if notice == "" {
 		return nil
 	}

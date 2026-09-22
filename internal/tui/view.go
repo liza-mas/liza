@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/render"
@@ -28,10 +29,17 @@ func (m Model) View() string {
 
 	header := m.renderHeader()
 	footer := m.renderFooter()
-	alertBanner := m.renderAlertBanner()
+	awaitingHuman := m.renderAwaitingHumanNotice()
+	alertBanner := ""
+	if awaitingHuman == "" || m.alertBanner == nil || m.alertBanner.Action != "AWAITING HUMAN" {
+		alertBanner = m.renderAlertBanner()
+	}
 
-	// Fixed-height elements: header (1), footer (1), alert banner (0 or 1)
+	// Fixed-height elements: header (1), footer (1), notice and alert banner (0 or 1 each)
 	fixedHeight := 2 // header + footer
+	if awaitingHuman != "" {
+		fixedHeight++
+	}
 	if alertBanner != "" {
 		fixedHeight++
 	}
@@ -107,6 +115,9 @@ func (m Model) View() string {
 
 	// Compose vertical stack
 	sections := []string{header}
+	if awaitingHuman != "" {
+		sections = append(sections, awaitingHuman)
+	}
 	if alertBanner != "" {
 		sections = append(sections, alertBanner)
 	}
@@ -744,6 +755,21 @@ func (m Model) colorLevel(level string) string {
 	default:
 		return level
 	}
+}
+
+// renderAwaitingHumanNotice renders a persistent line while the run is parked
+// until a human acts. Unlike the alert banner it is derived from state, so it
+// neither expires nor clears on keypress; the header's status word alone reads
+// as healthy next to "system: RUNNING".
+func (m Model) renderAwaitingHumanNotice() string {
+	if m.state == nil {
+		return ""
+	}
+	notice := commands.AwaitingHumanNotice(m.state)
+	if notice == "" {
+		return ""
+	}
+	return m.styles.AlertBanner.Render(truncateVisual("🚨 "+notice, max(m.width-2, 0)))
 }
 
 // renderAlertBanner renders the critical alert banner.
