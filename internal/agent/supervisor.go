@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -273,45 +272,6 @@ func successfulTurnTaskProgressSignature(task *models.Task) string {
 		return fmt.Sprintf("%s|%t|%d", task.Status, task.HandoffPending, len(task.Output))
 	}
 	return string(payload)
-}
-
-// orchestratorProgressSignature returns a string capturing the state dimensions
-// the orchestrator is expected to change. Includes sprint metadata, task-status
-// distribution, and discovery count so that legitimate progress like resolving
-// blocked tasks, superseding exhausted tasks, or triaging discoveries is
-// recognized as a signature change and resets the spinning counter.
-func orchestratorProgressSignature(state *models.State) string {
-	// Task-status distribution: count tasks per status so any status
-	// transition (block→ready, ready→superseded, etc.) changes the signature.
-	statusCounts := make(map[models.TaskStatus]int)
-	for i := range state.Tasks {
-		statusCounts[state.Tasks[i].Status]++
-	}
-	// Sort keys for deterministic output.
-	keys := make([]string, 0, len(statusCounts))
-	for k := range statusCounts {
-		keys = append(keys, string(k))
-	}
-	sort.Strings(keys)
-	var dist strings.Builder
-	for _, k := range keys {
-		if dist.Len() > 0 {
-			dist.WriteByte(',')
-		}
-		fmt.Fprintf(&dist, "%s=%d", k, statusCounts[models.TaskStatus(k)])
-	}
-
-	// Unconverted immediate discovery count — changes when orchestrator triages.
-	immediateDisc := 0
-	for _, d := range state.Discovered {
-		if d.Urgency == "immediate" && d.ConvertedToTask == nil {
-			immediateDisc++
-		}
-	}
-
-	return fmt.Sprintf("sprint:%s:%d:planned:%d:dist:%s:disc:%d",
-		state.Sprint.Status, state.Sprint.Number,
-		len(state.Sprint.Scope.Planned), dist.String(), immediateDisc)
 }
 
 // isReviewingStatus checks if a task is in a reviewing state.
