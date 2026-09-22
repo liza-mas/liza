@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
 )
 
@@ -426,7 +426,7 @@ func launchTemplateVars(req LaunchPlanRequest, toolName string) map[string]strin
 // extension. Falls back to the bare global dirname when the home directory
 // cannot be resolved, so template rendering never fails.
 func brandGlobalDir() string {
-	home, err := os.UserHomeDir()
+	home, err := paths.UserHomeDir()
 	if err != nil || home == "" {
 		return brand.RuntimeValues().GlobalDirName
 	}

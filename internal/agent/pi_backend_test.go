@@ -11,6 +11,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 // expectedPiGatePath mirrors the {{globalDir}} template resolution in
@@ -18,7 +19,7 @@ import (
 // resolver produces.
 func expectedPiGatePath(t *testing.T) string {
 	t.Helper()
-	home, err := os.UserHomeDir()
+	home, err := paths.UserHomeDir()
 	if err != nil || home == "" {
 		t.Fatalf("resolve home dir: %v", err)
 	}

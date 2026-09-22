@@ -138,7 +138,7 @@ func PiInitGateContent() []byte {
 // provider's run_args can reference it for every workspace, and so pi never
 // fails to load a missing project-local extension file.
 func PiInitGatePath() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := paths.UserHomeDir()
 	if err != nil || home == "" {
 		return "", fmt.Errorf("resolve home directory for pi init gate: %w", err)
 	}
