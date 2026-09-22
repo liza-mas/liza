@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
@@ -125,6 +126,16 @@ func emitCheckpointSummary(projectRoot string, trigger string, cfg models.Config
 			"trigger", trigger,
 			"cli", cliName,
 			"error", err)
+		// One attempt per checkpoint: without an alert the human waiting at the
+		// checkpoint never learns the report they were meant to read is missing.
+		if alertErr := alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
+			Timestamp: time.Now().UTC(),
+			Level:     alerts.AlertLevelWarning,
+			Category:  "CHECKPOINT SUMMARY FAILED",
+			Message:   fmt.Sprintf("%s not written (cli %s): %v; run the checkpoint-summary skill manually", checkpointSummaryRelPath(), cliName, err),
+		}); alertErr != nil {
+			logger.Warn("Failed to alert on checkpoint-summary failure", "error", alertErr)
+		}
 		return
 	}
 
@@ -160,9 +171,9 @@ file. Do not ask follow-up questions.
 // stdin, captures combined output for the logger, and lets the CLI write
 // the markdown report itself (the skill knows where to put it).
 //
-// The runner reuses the same per-CLI argv builders as normal agent runs where
-// practical, but keeps output discarded because this is a best-effort side
-// effect rather than a supervised agent session.
+// The runner resolves argv from the provider catalog like normal agent runs,
+// but keeps output discarded because this is a best-effort side effect rather
+// than a supervised agent session.
 func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Config) error {
 	beforeStatus, err := gitStatusSnapshot(projectRoot)
 	if err != nil {
@@ -231,48 +242,51 @@ func checkpointSummaryCLICommand(
 	cfg models.Config,
 	env []string,
 ) (*exec.Cmd, bool, error) {
-	actualCLI := cliName
-	if cliName == "mistral" {
-		actualCLI = "vibe"
-	}
-
-	args, useStdin, err := checkpointSummaryCLIArgs(actualCLI, prompt, env)
+	plan, err := checkpointSummaryLaunchPlan(projectRoot, cliName, prompt, cfg, env)
 	if err != nil {
 		return nil, false, err
 	}
-
-	switch actualCLI {
-	case "codex":
+	if plan.RequiresCodexWrapper {
 		codexConfig := resolveCodexLaunchConfig(cfg, env)
-		cmd, err := codexCommandContext(ctx, codexConfig.PackageVersion, args)
+		cmd, err := codexCommandContext(ctx, codexConfig.PackageVersion, plan.Args)
 		if err != nil {
 			return nil, false, err
 		}
-		return cmd, useStdin, nil
-	default:
-		return exec.CommandContext(ctx, actualCLI, args...), useStdin, nil
+		return cmd, plan.UsesStdin, nil
 	}
+	return exec.CommandContext(ctx, plan.Executable, plan.Args...), plan.UsesStdin, nil
 }
 
-// checkpointSummaryCLIArgs returns the argv tail and whether stdin should be
-// piped for each supported CLI. It mirrors the normal supervisor's per-CLI
-// argv builders so checkpoint summaries honor the same launch semantics.
-func checkpointSummaryCLIArgs(cliName, prompt string, env []string) ([]string, bool, error) {
-	switch cliName {
-	case "claude":
-		disableSubagents := brandedEnvListGateValue(env, "DISABLE_CLAUDE_SUBAGENTS") == "1"
-		return buildClaudeArgs(prompt, true, "", disableSubagents), true, nil
-	case "codex":
-		return buildCodexArgs(prompt, true, ""), true, nil
-	case "gemini":
-		return []string{"-p"}, true, nil
-	case "vibe", "mistral":
-		return []string{"-p", prompt}, false, nil
-	case "kimi":
-		return []string{"-p"}, true, nil
-	default:
-		return nil, false, fmt.Errorf("unsupported CLI for checkpoint-summary: %q", cliName)
+// checkpointSummaryLaunchPlan resolves the one-shot argv from the provider
+// catalog, the same source normal agent runs use, so every configured CLI can
+// emit a summary. An ACP tool runs through its CLI counterpart: a summary is a
+// single prompt and needs no ACP session.
+func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models.Config, env []string) (LaunchPlan, error) {
+	if cliName == "vibe" {
+		cliName = "mistral"
 	}
+	registry := AgentToolRegistry(cfg)
+	if tool, ok := registry[cliName]; ok && tool.Backend == ToolBackendACPX {
+		counterpart := acpxAgentNameFromTool(cliName)
+		if cliTool, ok := registry[counterpart]; !ok || cliTool.Backend == ToolBackendACPX {
+			return LaunchPlan{}, fmt.Errorf("checkpoint-summary: ACP tool %q has no CLI counterpart", cliName)
+		}
+		cliName = counterpart
+	}
+	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:         cliName,
+		Prompt:           prompt,
+		ProjectRoot:      projectRoot,
+		RuntimeConfig:    cfg,
+		DisableSubagents: brandedEnvListGateValue(env, "DISABLE_CLAUDE_SUBAGENTS") == "1",
+	})
+	if err != nil {
+		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: %w", err)
+	}
+	if plan.UsesPromptFile {
+		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: prompt-file transport of %q is not supported", cliName)
+	}
+	return plan, nil
 }
 
 type checkpointStatusEntry struct {

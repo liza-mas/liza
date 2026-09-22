@@ -1099,7 +1099,12 @@ checkpoint and runs before auto-resume, and its own work-detection poll, which c
 checkpoint created while it is already waiting. Because the obligation is durable and stored
 outside the sprint, it survives another supervisor auto-resuming the checkpoint — including all
 the way through sprint completion into a new sprint — and survives a supervisor restart.
-Each obligation is claimed once, so a failing CLI is retried no further.
+Each obligation is claimed once, so a failing CLI is retried no further; the failure is written
+to `§BRAND_PROJECT_DIRNAME§/alerts.log` as `CHECKPOINT SUMMARY FAILED`. Any catalog CLI can emit
+the report, launched with its catalog run arguments; an ACP tool (`<cli>-acp`) runs through its CLI
+counterpart. The summary does not load the tool's catalog `env_files` (such as `claude.env`); it
+inherits the supervisor environment minus `ANTHROPIC_API_KEY`, so settings that exist only in an env file do
+not reach it.
 
 The orchestrator also drains any outstanding obligation as its supervisor exits. This covers the
 run's last checkpoint: another role can auto-resume a terminal checkpoint through sprint

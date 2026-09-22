@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -172,7 +174,7 @@ func TestEmitCheckpointSummary_HonoursConfiguredCLI(t *testing.T) {
 	}
 }
 
-func TestCheckpointSummaryCLIArgs_Supported(t *testing.T) {
+func TestCheckpointSummaryLaunchPlan_Supported(t *testing.T) {
 	cases := []struct {
 		cli      string
 		stdin    bool
@@ -181,37 +183,76 @@ func TestCheckpointSummaryCLIArgs_Supported(t *testing.T) {
 		{cli: "claude", stdin: true, argHints: []string{"-p"}},
 		{cli: "codex", stdin: true, argHints: []string{"exec"}},
 		{cli: "gemini", stdin: true, argHints: []string{"-p"}},
-		{cli: "vibe", stdin: false, argHints: []string{"-p"}},
+		{cli: "vibe", stdin: false, argHints: []string{"-p", "prompt"}},
 		{cli: "kimi", stdin: true, argHints: []string{"-p"}},
+		{cli: "opencode", stdin: false, argHints: []string{"run", "prompt", "--dangerously-skip-permissions"}},
 	}
 
 	for _, c := range cases {
-		args, useStdin, err := checkpointSummaryCLIArgs(c.cli, "prompt", nil)
+		plan, err := checkpointSummaryLaunchPlan(t.TempDir(), c.cli, "prompt", models.Config{}, nil)
 		if err != nil {
 			t.Errorf("%s: unexpected error: %v", c.cli, err)
 			continue
 		}
-		if useStdin != c.stdin {
-			t.Errorf("%s: useStdin = %v, want %v", c.cli, useStdin, c.stdin)
+		if plan.UsesStdin != c.stdin {
+			t.Errorf("%s: UsesStdin = %v, want %v", c.cli, plan.UsesStdin, c.stdin)
 		}
 		for _, hint := range c.argHints {
-			found := false
-			for _, a := range args {
-				if a == hint {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("%s: args %v missing hint %q", c.cli, args, hint)
+			if !slices.Contains(plan.Args, hint) {
+				t.Errorf("%s: args %v missing hint %q", c.cli, plan.Args, hint)
 			}
 		}
 	}
 }
 
-func TestCheckpointSummaryCLIArgs_Unsupported(t *testing.T) {
-	if _, _, err := checkpointSummaryCLIArgs("not-a-cli", "x", nil); err == nil {
-		t.Fatal("expected error for unsupported CLI")
+func TestCheckpointSummaryLaunchPlan_ACPToolUsesCLICounterpart(t *testing.T) {
+	plan, err := checkpointSummaryLaunchPlan(t.TempDir(), "opencode-acp", "prompt", models.Config{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if plan.Backend != ToolBackendCLI || plan.Executable != "opencode" {
+		t.Errorf("plan = backend %q executable %q, want cli/opencode", plan.Backend, plan.Executable)
+	}
+	if plan.UsesStdin {
+		t.Error("opencode takes the prompt as an argument, not stdin")
+	}
+}
+
+func TestCheckpointSummaryLaunchPlan_Unsupported(t *testing.T) {
+	if _, err := checkpointSummaryLaunchPlan(t.TempDir(), "not-a-cli", "x", models.Config{}, nil); err == nil {
+		t.Fatal("expected error for unknown CLI")
+	}
+}
+
+func TestCheckpointSummaryLaunchPlan_RejectsPromptFileTransport(t *testing.T) {
+	cfg := models.Config{AgentTools: map[string]models.AgentToolConfig{
+		"filetool": {Backend: ToolBackendCLI, Executable: "filetool", PromptTransport: PromptTransportFile},
+	}}
+	if _, err := checkpointSummaryLaunchPlan(t.TempDir(), "filetool", "x", cfg, nil); err == nil {
+		t.Fatal("expected error for prompt-file transport")
+	}
+}
+
+func TestEmitCheckpointSummary_FailureWritesAlert(t *testing.T) {
+	tmp := t.TempDir()
+	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
+		return errors.New("boom")
+	})
+
+	if err := os.MkdirAll(filepath.Join(tmp, paths.ProjectDirName()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	emitCheckpointSummary(tmp, "SPRINT_COMPLETE", models.Config{DefaultCLI: "opencode"})
+
+	data, err := os.ReadFile(paths.New(tmp).AlertsLogPath())
+	if err != nil {
+		t.Fatalf("expected alerts log: %v", err)
+	}
+	got := string(data)
+	for _, want := range []string{"CHECKPOINT SUMMARY FAILED", "opencode", "boom"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("alert %q missing %q", got, want)
+		}
 	}
 }
 
