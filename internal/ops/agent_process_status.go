@@ -25,8 +25,8 @@ func AgentProcessStatus(agentID string, agent models.Agent) procscan.AgentProces
 }
 
 // AgentOwnershipState is the lease-first decision used at registration and
-// registered-agent watcher boundaries. It intentionally does not replace the
-// raw process classification used by task and reviewer recovery.
+// registered-agent watcher boundaries. Review cleanup separately checks its
+// task/agent tuple before preserving ownership under a fresh registration lease.
 type AgentOwnershipState string
 
 const (

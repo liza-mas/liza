@@ -19,6 +19,16 @@ const (
 	reviewerCapacityExpiredLease    reviewerCapacityInvalidReason = "expired_lease"
 )
 
+// HasValidClaimRegistration applies the same role, provider and process checks
+// as claim admission. It does not imply task-specific eligibility.
+func HasValidClaimRegistration(state *models.State, agentID, expectedRole string) bool {
+	if state == nil {
+		return false
+	}
+	_, err := requireRegisteredClaimAgent(state, agentID, expectedRole)
+	return err == nil
+}
+
 func requireRegisteredClaimAgent(state *models.State, agentID, expectedRole string) (models.Agent, error) {
 	agent, exists := state.Agents[agentID]
 	if !exists {

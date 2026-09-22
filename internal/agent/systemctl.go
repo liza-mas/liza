@@ -231,6 +231,9 @@ func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validatio
 			if err := ops.RequireAgentAuthority(state, config.Authority); err != nil {
 				return err
 			}
+			if _, err := newReviewExecution(state, config, taskID); err != nil {
+				return err
+			}
 			// A legacy task can acquire prerequisites after preparation. Such a
 			// change needs a fresh observation before any provider process starts.
 			if task := state.FindTask(taskID); task != nil && len(task.ValidationPrerequisites) > 0 && validation == nil {
@@ -308,6 +311,11 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	// Create timeout context for CLI execution
 	execCtx, cancelExec := context.WithTimeout(ctx, config.ExecutionTimeout)
 	defer cancelExec()
+	stopReviewWatchdog, err := startReviewExecutionWatchdog(execCtx, config, taskID, models.NormalizeHeartbeatInterval(runtimeConfig.HeartbeatInterval), cancelExec)
+	if err != nil {
+		return 0, "", err
+	}
+	defer stopReviewWatchdog()
 	progressCh := make(chan struct{}, 1)
 	markProgress := func() {
 		select {
@@ -350,6 +358,11 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 		SessionScope: validation.SessionScope(),
 	})
 	watchdogResult := stopWatchdog()
+	if stopReviewWatchdog() || errors.Is(err, errReviewOwnershipLost) {
+		// Cancellation can surface as an exit code, WaitDelay or a pipe error.
+		// Preserve the coordination outcome before provider-failure handling.
+		return 0, result.Output, errReviewOwnershipLost
+	}
 	if watchdogResult.Blocked {
 		if blockErr := blockTaskFromSupervisor(db.For(config.StatePath), config.ProjectRoot, taskID, config.Authority, watchdogResult.Reason); blockErr != nil {
 			logger.Warn("Failed to block task from execution watchdog", "error", blockErr, "task_id", taskID)

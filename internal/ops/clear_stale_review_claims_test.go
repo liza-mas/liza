@@ -3,13 +3,117 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+func TestClearStaleReviewClaims_LeaseFirstOwnership(t *testing.T) {
+	for _, passive := range []bool{false, true} {
+		mode := "active"
+		if passive {
+			mode = "passive"
+		}
+		for _, tt := range []struct {
+			name        string
+			raw         procscan.AgentProcessState
+			mutate      func(*models.Task, *models.Agent)
+			wantCleared int
+		}{
+			{name: "fresh dead PID", raw: procscan.AgentProcessDead},
+			{name: "fresh mismatched PID", raw: procscan.AgentProcessMismatched},
+			{name: "expired review lease", raw: procscan.AgentProcessDead, wantCleared: 1,
+				mutate: func(task *models.Task, _ *models.Agent) {
+					task.ReviewLeaseExpires = testhelpers.TimePtr(time.Now().Add(-time.Minute))
+				}},
+			{name: "expired registration lease", raw: procscan.AgentProcessDead, wantCleared: 1,
+				mutate: func(_ *models.Task, agent *models.Agent) {
+					agent.LeaseExpires = testhelpers.TimePtr(time.Now().Add(-time.Minute))
+				}},
+			{name: "missing heartbeat", raw: procscan.AgentProcessDead, wantCleared: 1,
+				mutate: func(_ *models.Task, agent *models.Agent) { agent.Heartbeat = time.Time{} }},
+			{name: "wrong reviewer role", raw: procscan.AgentProcessMismatched, wantCleared: 1,
+				mutate: func(_ *models.Task, agent *models.Agent) { agent.Role = models.RoleCoder }},
+			{name: "idle reviewer", raw: procscan.AgentProcessMismatched, wantCleared: 1,
+				mutate: func(_ *models.Task, agent *models.Agent) { agent.Status = models.AgentStatusIdle }},
+			{name: "different current task", raw: procscan.AgentProcessMismatched, wantCleared: 1,
+				mutate: func(_ *models.Task, agent *models.Agent) { agent.CurrentTask = testhelpers.StringPtr("other-task") }},
+		} {
+			t.Run(mode+"/"+tt.name, func(t *testing.T) {
+				root := t.TempDir()
+				testhelpers.SetupTestGitRepo(t, root)
+				stateFile, _ := testhelpers.SetupLizaDir(t, root)
+				setupLogFile(t, root)
+				procRoot := t.TempDir()
+				t.Cleanup(SetAgentProcessProcRootForTest(procRoot))
+				now := time.Now().UTC()
+				reviewer := "code-reviewer-1"
+				status, agentStatus := models.TaskStatusReviewing, models.AgentStatusReviewing
+				if passive {
+					status, agentStatus = models.TaskStatusRejected, models.AgentStatusWaiting
+				}
+				task := testhelpers.BuildTaskByStatus("lease-first-review", status, now)
+				task.ReviewingBy = &reviewer
+				task.ReviewLeaseExpires = testhelpers.TimePtr(now.Add(30 * time.Minute))
+				agent := testhelpers.RegisteredTestAgent(models.RoleCodeReviewer)
+				agent.PID = 987654321
+				agent.Heartbeat = now
+				agent.LeaseExpires = testhelpers.TimePtr(now.Add(30 * time.Minute))
+				agent.Status = agentStatus
+				agent.CurrentTask = testhelpers.StringPtr(task.ID)
+				if tt.mutate != nil {
+					tt.mutate(&task, &agent)
+				}
+				if tt.raw == procscan.AgentProcessMismatched {
+					writeAgentProcessCmdline(t, procRoot, agent.PID, []string{"unrelated-process"})
+				}
+				if got := AgentProcessStatus(reviewer, agent).State; got != tt.raw {
+					t.Fatalf("process fixture = %q, want %q", got, tt.raw)
+				}
+				state := testhelpers.CreateValidState()
+				state.Tasks = []models.Task{task}
+				state.Agents = map[string]models.Agent{reviewer: agent}
+				testhelpers.WriteInitialState(t, stateFile, state)
+				before := readStateForTest(t, stateFile)
+				cleared, err := ClearStaleReviewClaims(root)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cleared != tt.wantCleared {
+					t.Fatalf("cleared = %d, want %d", cleared, tt.wantCleared)
+				}
+				after := readStateForTest(t, stateFile)
+				gotTask := after.FindTask(task.ID)
+				gotAgent := after.Agents[reviewer]
+				if tt.wantCleared == 0 {
+					if !reflect.DeepEqual(gotTask, before.FindTask(task.ID)) || !reflect.DeepEqual(gotAgent, before.Agents[reviewer]) {
+						t.Fatal("lease-first preservation changed task or reviewer state")
+					}
+					return
+				}
+				wantStatus := models.TaskStatusReadyForReview
+				if passive {
+					wantStatus = status
+				}
+				if gotTask.Status != wantStatus || gotTask.ReviewingBy != nil || gotTask.ReviewLeaseExpires != nil {
+					t.Fatalf("stale ownership not cleared correctly: %+v", gotTask)
+				}
+				if *agent.CurrentTask == task.ID {
+					if gotAgent.CurrentTask != nil || gotAgent.Status != models.AgentStatusIdle {
+						t.Fatalf("stale reviewer not released: %+v", gotAgent)
+					}
+				} else if !reflect.DeepEqual(gotAgent, before.Agents[reviewer]) {
+					t.Fatal("cleanup changed reviewer assigned to another task")
+				}
+			})
+		}
+	}
+}
 
 func TestClearStaleReviewClaims_NoStale(t *testing.T) {
 	tmpDir := t.TempDir()

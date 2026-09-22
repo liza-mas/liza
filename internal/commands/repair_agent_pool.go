@@ -294,6 +294,9 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 			hasClaimEligibleReviewer := false
 			hasValidationFailure := false
 			for _, agentID := range registeredAgentsByRole[reviewerRuntime] {
+				if !ops.HasValidClaimRegistration(state, agentID, reviewerRuntime) {
+					continue
+				}
 				if models.ValidationTaskKnownFailed(state, task, agentID, now) {
 					hasValidationFailure = true
 					continue

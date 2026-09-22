@@ -57,3 +57,35 @@ The repair path is intentionally conservative. Recovering doer agents can destro
 
 ---
 *Reconstructed from commits 5a7495a1..86ad55e0, GitHub issue #73, and liza-run-issues.md (2026-05-18 to 2026-05-19)*
+
+## 2026-09-22 Amendment: Lease-First Review Ownership
+
+The user explicitly approved lease-first review ownership on 2026-09-22,
+accepting up to the current default 30-minute lease duration for automatic
+review recovery after a supervisor crash. This extends
+[ADR-0130](0130-generation-fenced-agent-authority.md)'s lease-first registration
+authority to review-claim retention; registration occupancy is unchanged.
+
+Cleanup still requires the exact reviewer role, matching `current_task`, a
+usable PID, appropriate `REVIEWING`/`WAITING` status, and a current review lease.
+For that coherent tuple, a nonzero heartbeat and unexpired registration lease
+preserve ownership despite namespace-relative dead/mismatched PID evidence.
+The registration lease bounds freshness; the nonzero heartbeat establishes
+that the registration has initialized heartbeat evidence.
+Missing/expired review leases or inconsistent owner metadata remain stale.
+Without current registration lease/heartbeat evidence, cleanup retains the
+existing live-matching/live-unknown process fallback. A registration lease's
+expiry alone therefore does not universally establish stale review ownership.
+
+Headless reviewer execution separately checks current registration authority
+and review ownership at launch and at the normalized heartbeat interval
+(default 60 seconds). Proven loss cancels the provider turn; transient observer
+read failures retry. This turn's own new verdict permits final response and
+`WAITING`, while active re-review resets the older verdict allowance. Provider
+cancellation terminates the owned local process group/tree and bounds local
+output-pipe waiting, without promising termination of detached or remote
+processes. See the [supervision contract](../supervision-model.md#generation-fenced-recovery-contract)
+for cancellation and observation limits.
+
+This amendment preserves the original requirement that heartbeat alone cannot
+repair corrupt ownership. It adds no schema fields or dependencies.

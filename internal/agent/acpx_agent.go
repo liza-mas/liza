@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 // ACPXAgent implements LLMAgent through the headless acpx ACP client.
@@ -302,6 +303,7 @@ func (a *ACPXAgent) runACPX(ctx context.Context, plan LaunchPlan, args []string,
 	if err != nil {
 		return "", err
 	}
+	subprocess.ConfigureCancellation(cmd)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
@@ -328,6 +330,7 @@ func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest,
 	if err != nil {
 		return nil, err
 	}
+	subprocess.ConfigureCancellation(cmd)
 	cmd.Stdin = strings.NewReader(req.Prompt)
 
 	stdout, err := cmd.StdoutPipe()
@@ -368,6 +371,32 @@ func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest,
 func (a *ACPXAgent) waitACPXPrompt(ctx context.Context, req LLMAgentRunRequest, process *acpxPromptProcess) (acpxOutput, LLMAgentUsage, string, error) {
 	defer closeAgentOutputLogs(process.stdoutLog, process.stderrLog, req.AgentID)
 	progress := executionProgressCallback(ctx)
+
+	// These readers drain before cmd.Wait, so WaitDelay alone cannot release
+	// them when a descendant escapes the owned group and retains a pipe.
+	// Cancellation allows the same grace period, then closes only our readers.
+	stopClosing := make(chan struct{})
+	closingDone := make(chan struct{})
+	go func() {
+		defer close(closingDone)
+		select {
+		case <-stopClosing:
+			return
+		case <-ctx.Done():
+		}
+		timer := time.NewTimer(process.cmd.WaitDelay)
+		defer timer.Stop()
+		select {
+		case <-stopClosing:
+		case <-timer.C:
+			_ = process.stdout.Close()
+			_ = process.stderr.Close()
+		}
+	}()
+	defer func() {
+		close(stopClosing)
+		<-closingDone
+	}()
 
 	var stderrRaw strings.Builder
 	var output acpxOutput

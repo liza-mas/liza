@@ -2,6 +2,8 @@ package commands
 
 import (
 	"errors"
+	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -166,6 +168,78 @@ func repairReviewerAgent(role, provider string) models.Agent {
 	agent := testhelpers.RegisteredTestAgent(role)
 	agent.Provider = provider
 	return agent
+}
+
+func TestRepairAgentPoolStoppedReviewerValidationFailure(t *testing.T) {
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Run and reap a real child so the dead registration cannot accidentally
+	// depend on an arbitrary PID being unused on the host.
+	child := exec.Command(binary, "-test.run=^$")
+	if err := child.Run(); err != nil {
+		t.Fatal(err)
+	}
+	deadPID := child.Process.Pid
+	for _, tt := range []struct {
+		name        string
+		pid         int
+		failed      bool
+		wantMissing int
+	}{
+		{"stopped without validation failure", deadPID, false, 1},
+		{"stopped with current validation failure", deadPID, true, 1},
+		{"live with current validation failure", os.Getpid(), true, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			task := testhelpers.BuildTaskByStatus("review-work", models.TaskStatusReadyForReview, now)
+			task.ReviewCommit = testhelpers.StringPtr("review-head")
+			task.Validation = []string{"canonical check"}
+			task.ValidationPrerequisites = []models.ValidationPrerequisite{{Command: "canonical check", Env: []string{"REQUIRED"}}}
+			state.Tasks = []models.Task{task}
+			agentID := "code-reviewer-1"
+			agent := repairReviewerAgent(models.RoleCodeReviewer, "anthropic")
+			agent.PID = tt.pid
+			agent.Status = models.AgentStatusIdle
+			agent.Generation = "current-registration"
+			agent.Heartbeat = now
+			agent.LeaseExpires = testhelpers.TimePtr(now.Add(30 * time.Minute))
+			state.Agents = map[string]models.Agent{agentID: agent}
+			if tt.pid == deadPID {
+				if status := ops.AgentProcessStatus(agentID, agent).DisplayStatus(); status != "stopped" {
+					t.Fatalf("reaped child process status = %q, want stopped", status)
+				}
+			} else if !ops.IsProcessAlive(agent.PID) {
+				t.Fatal("live control PID is not alive")
+			}
+			if tt.failed {
+				state.ValidationReadiness = map[string]map[string]models.ValidationReadiness{agentID: {task.ID: {
+					TaskID: task.ID, Generation: agent.Generation, ReviewCommit: *task.ReviewCommit,
+					Digest:    models.ValidationPrerequisiteDigest(task.Validation, task.ValidationPrerequisites),
+					CheckedAt: now, Result: "failed", Code: "missing_env",
+				}}}
+			}
+			if got := models.ValidationTaskKnownFailed(state, &state.Tasks[0], agentID, now); got != tt.failed {
+				t.Fatalf("validation failure fixture = %v, want %v", got, tt.failed)
+			}
+			root := writeRepairAgentPoolState(t, state)
+			var calls []spawnedAgentCall
+			withFakeRepairSpawner(t, &calls, nil)
+			result, err := RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: root, CLI: "claude"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Missing) != tt.wantMissing || len(calls) != tt.wantMissing {
+				t.Fatalf("missing = %+v, spawns = %+v, want %d reviewer replacement", result.Missing, calls, tt.wantMissing)
+			}
+			if tt.wantMissing != 0 && (result.Missing[0].Role != models.RoleCodeReviewer || !slices.Equal(result.Missing[0].TaskIDs, []string{task.ID}) || calls[0].role != models.RoleCodeReviewer) {
+				t.Fatalf("replacement must target the stopped reviewer's work: missing=%+v spawns=%+v", result.Missing, calls)
+			}
+		})
+	}
 }
 
 func TestParseAutoRepairAgentPoolEnv(t *testing.T) {

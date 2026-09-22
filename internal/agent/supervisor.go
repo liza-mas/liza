@@ -1021,6 +1021,28 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Execute agent
 		exitCode, currentOutput, err := executeAgent(supervisorCtx, config, prompt, nil, effectiveTask, stateBefore.Config)
+		if errors.Is(err, errReviewOwnershipLost) {
+			GetLogger().Info("Review ownership lost, checking for more work", "agent_id", config.AgentID, "task_id", effectiveTask)
+			if resetErr := resetAgentAfterExit(bb, config.Authority, config.ProjectRoot); resetErr != nil {
+				if ops.IsAgentAuthorityError(resetErr) {
+					return nil
+				}
+				return fmt.Errorf("reset after review ownership loss: %w", resetErr)
+			}
+			// An externally interrupted review is neither a crash nor a
+			// successful turn without progress. Never charge either loop budget.
+			spinTracker.reset(effectiveTask)
+			crashTracker.reset(effectiveTask)
+			exit42Tracker.reset(taskID)
+			runtimeFailureTracker.reset(effectiveTask)
+			config.InitialTask = ""
+			// Pace repeated claim/launch disagreement without charging crash
+			// budgets or blocking work that another reviewer may own.
+			if err := waitForSupervisorDelay(pollInterval); err != nil {
+				return err
+			}
+			continue
+		}
 		if err != nil {
 			if hbErr := checkHeartbeat(); hbErr != nil {
 				return hbErr

@@ -18,6 +18,15 @@ var DefaultCommandTimeout = 90 * time.Second
 // child process still holds stdout/stderr pipes open.
 var DefaultWaitDelay = 5 * time.Second
 
+// ConfigureCancellation gives an unstarted exec.CommandContext command owned
+// process-tree cancellation and bounded output draining. Use only for headless
+// commands: Unix process groups would change interactive terminal ownership.
+// Callers that read StdoutPipe/StderrPipe themselves must also bound those reads.
+func ConfigureCancellation(cmd *exec.Cmd) {
+	configProcessGroupKill(cmd)
+	cmd.WaitDelay = DefaultWaitDelay
+}
+
 // TimeoutError reports a killed subprocess after exceeding its deadline.
 type TimeoutError struct {
 	Name    string
@@ -52,8 +61,7 @@ func CombinedOutputWithTimeout(timeout time.Duration, name string, args []string
 
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
-	configProcessGroupKill(cmd)
-	cmd.WaitDelay = DefaultWaitDelay
+	ConfigureCancellation(cmd)
 
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {

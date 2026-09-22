@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 type codexLaunchConfig struct {
@@ -455,6 +456,7 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 	}
 
 	cmd.Dir = req.ProjectRoot
+	subprocess.ConfigureCancellation(cmd)
 	if plan.UsesStdin {
 		cmd.Stdin = strings.NewReader(req.Prompt)
 	}

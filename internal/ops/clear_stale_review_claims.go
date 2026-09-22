@@ -147,26 +147,33 @@ func staleReviewClaimReason(state *models.State, task *models.Task, now time.Tim
 	if agent.PID <= 0 {
 		return "reviewer agent has no usable pid"
 	}
-	if status := AgentProcessStatus(reviewerID, agent); !status.IsLiveOrUnknown() {
-		return fmt.Sprintf("reviewer process is %s (%s)", status.State, status.Detail)
+	expectedRole, err := pb.pr.ReviewerRole(task.RolePair)
+	if err != nil {
+		return fmt.Sprintf("reviewer role resolution failed: %v", err)
 	}
-	if activeReview {
-		if agent.Status != models.AgentStatusReviewing {
-			return fmt.Sprintf("reviewer agent status is %s, want REVIEWING", agent.Status)
+	if agent.Role != expectedRole {
+		return fmt.Sprintf("reviewer agent role is %s, want %s", agent.Role, expectedRole)
+	}
+	wantStatus := models.AgentStatusReviewing
+	if !activeReview {
+		if !isPassiveReviewOwnershipStatus(task, pb) {
+			return fmt.Sprintf("task status %s is not passive review ownership", task.Status)
 		}
-		if agent.CurrentTask == nil || *agent.CurrentTask != task.ID {
-			return "reviewer agent current_task does not match task"
-		}
-		return ""
+		wantStatus = models.AgentStatusWaiting
 	}
-	if !isPassiveReviewOwnershipStatus(task, pb) {
-		return fmt.Sprintf("task status %s is not passive review ownership", task.Status)
-	}
-	if agent.Status != models.AgentStatusWaiting {
-		return fmt.Sprintf("reviewer agent status is %s, want WAITING", agent.Status)
+	if agent.Status != wantStatus {
+		return fmt.Sprintf("reviewer agent status is %s, want %s", agent.Status, wantStatus)
 	}
 	if agent.CurrentTask == nil || *agent.CurrentTask != task.ID {
 		return "reviewer agent current_task does not match task"
+	}
+	// A coherent claim with fresh registration evidence remains owned even
+	// when the observer's PID namespace cannot identify its supervisor.
+	if agent.LeaseExpires != nil && agent.LeaseExpires.After(now) && !agent.Heartbeat.IsZero() {
+		return ""
+	}
+	if status := AgentProcessStatus(reviewerID, agent); !status.IsLiveOrUnknown() {
+		return fmt.Sprintf("reviewer process is %s (%s)", status.State, status.Detail)
 	}
 	return ""
 }
