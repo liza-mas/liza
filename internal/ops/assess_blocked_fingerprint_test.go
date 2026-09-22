@@ -105,18 +105,27 @@ func TestAssessmentFingerprint(t *testing.T) {
 			},
 			"disposition":       func(_ *models.State, c *AssessmentFingerprintCandidate) { c.Note = "repair now" },
 			"dependency status": func(s *models.State, _ *AssessmentFingerprintCandidate) { s.Tasks[2].Status = models.TaskStatusMerged },
-			"dependency history": func(s *models.State, _ *AssessmentFingerprintCandidate) {
-				s.Tasks[2].History = append(s.Tasks[2].History, models.TaskHistoryEntry{Event: "claimed"})
+			"direct membership with same resolved nodes": func(s *models.State, _ *AssessmentFingerprintCandidate) {
+				s.Tasks[0].DependsOn = []string{"old"}
 			},
 			"dependency created": func(s *models.State, _ *AssessmentFingerprintCandidate) {
 				s.Tasks[2].Created = s.Tasks[2].Created.Add(time.Second)
 			},
 			"replacement ancestor": func(s *models.State, _ *AssessmentFingerprintCandidate) {
-				s.Tasks[1].History = append(s.Tasks[1].History, models.TaskHistoryEntry{Event: "superseded"})
+				s.Tasks[1].SupersededBy = []string{"child-a"}
+			},
+			"replacement cycle": func(s *models.State, _ *AssessmentFingerprintCandidate) {
+				s.Tasks[1].SupersededBy = []string{"old"}
+			},
+			"missing dependency": func(s *models.State, _ *AssessmentFingerprintCandidate) {
+				s.Tasks[0].DependsOn = append(s.Tasks[0].DependsOn, "missing")
 			},
 			"descendant status": func(s *models.State, _ *AssessmentFingerprintCandidate) { s.Tasks[3].Status = models.TaskStatusMerged },
-			"descendant history": func(s *models.State, _ *AssessmentFingerprintCandidate) {
-				s.Tasks[3].History = append(s.Tasks[3].History, models.TaskHistoryEntry{Event: "claimed"})
+			"descendant dependency edge": func(s *models.State, _ *AssessmentFingerprintCandidate) {
+				s.Tasks[3].DependsOn = []string{"child-a"}
+			},
+			"descendant parent edge preserving reachability": func(s *models.State, _ *AssessmentFingerprintCandidate) {
+				s.Tasks[3].ParentTasks = []string{"child-a"}
 			},
 			"descendant created": func(s *models.State, _ *AssessmentFingerprintCandidate) {
 				s.Tasks[3].Created = s.Tasks[3].Created.Add(time.Second)
@@ -146,9 +155,14 @@ func TestAssessmentFingerprint(t *testing.T) {
 		for i := range state.Tasks {
 			state.Tasks[i].History = append(state.Tasks[i].History, models.TaskHistoryEntry{Event: models.TaskEventOrchestratorAssessment})
 			state.Tasks[i].Lifecycle = &models.TaskLifecycle{Revision: 1}
+			if i > 0 {
+				state.Tasks[i].History = append(state.Tasks[i].History, models.TaskHistoryEntry{Event: "claimed"})
+			}
 		}
 		state.HumanNotes = append(state.HumanNotes, models.HumanNote{For: "unrelated"})
 		state.Tasks[0].DependsOn = []string{"provider", "old", "provider"}
+		state.Tasks[1].SupersededBy = []string{"provider", "provider"}
+		state.Tasks[3].ParentTasks = []string{"provider", "provider"}
 		state.Tasks[3], state.Tasks[4] = state.Tasks[4], state.Tasks[3]
 		if got := BuildAssessmentFingerprint(state, &state.Tasks[0], candidate); got != want {
 			t.Fatal("assessment-only events, ordering or unrelated notes changed digest")

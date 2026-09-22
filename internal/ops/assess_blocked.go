@@ -74,6 +74,7 @@ func dropSupersededWakeSnapshots(task *models.Task) {
 			continue
 		}
 		delete(entry.Extra, DependencyDescendantWakeSnapshotExtraKey)
+		delete(entry.Extra, legacyAssessmentFingerprintExtraKey)
 		delete(entry.Extra, AssessmentFingerprintExtraKey)
 		if len(entry.Extra) == 0 {
 			entry.Extra = nil

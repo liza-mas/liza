@@ -13,7 +13,9 @@ import (
 )
 
 // AssessmentFingerprintExtraKey identifies the content identity on an assessment.
-const AssessmentFingerprintExtraKey = "assessment_fingerprint_v1"
+const AssessmentFingerprintExtraKey = "assessment_fingerprint_v2"
+
+const legacyAssessmentFingerprintExtraKey = "assessment_fingerprint_v1"
 
 // AssessmentFingerprintCandidate is the blocker payload and disposition an
 // assessment would establish. Callers supply current blocker values for a
@@ -28,8 +30,11 @@ type AssessmentFingerprintCandidate struct {
 type assessmentDependency struct {
 	TaskID                    string    `json:"task_id"`
 	Created                   time.Time `json:"created"`
-	Status                    string    `json:"status"`
-	NonAssessmentHistoryCount int       `json:"non_assessment_history_count"`
+	Outcome                   string    `json:"outcome"`
+	ParentTasks               []string  `json:"parent_tasks,omitempty"`
+	DependsOn                 []string  `json:"depends_on,omitempty"`
+	SupersededBy              []string  `json:"superseded_by,omitempty"`
+	NonAssessmentHistoryCount int       `json:"non_assessment_history_count,omitempty"`
 }
 
 // BuildAssessmentFingerprint returns a lowercase SHA-256 digest of the six
@@ -48,6 +53,7 @@ func BuildAssessmentFingerprint(state *models.State, task *models.Task, candidat
 		"self": map[string]any{
 			"status":                       task.Status,
 			"non_assessment_history_count": assessmentHistoryCount(task),
+			"depends_on":                   uniqueSortedStrings(task.DependsOn),
 		},
 		"blocker": map[string]any{
 			"reason":         normalizeAssessmentText(candidate.Reason),
@@ -55,8 +61,8 @@ func BuildAssessmentFingerprint(state *models.State, task *models.Task, candidat
 			"repair_request": normalizeAssessmentRepair(candidate.RepairRequest),
 		},
 		"disposition":  normalizeAssessmentText(candidate.Note),
-		"dependencies": assessmentDependencies(state, task),
-		"descendants":  BuildDependencyDescendantWakeSnapshot(state, task),
+		"dependencies": assessmentDependencies(state, task.DependsOn),
+		"descendants":  assessmentDescendants(state, task),
 		"human":        humanCount,
 	}
 	data, err := json.Marshal(material)
@@ -94,27 +100,64 @@ func assessmentHistoryCount(task *models.Task) int {
 	return count
 }
 
-func assessmentDependencies(state *models.State, task *models.Task) []assessmentDependency {
+func assessmentDependencies(state *models.State, ids []string) []assessmentDependency {
 	resolver := models.NewDependencyResolver(state)
 	seen := make(map[string]bool)
 	dependencies := make([]assessmentDependency, 0)
-	for _, id := range task.DependsOn {
+	for _, id := range ids {
 		for _, pathID := range resolver.Resolve(id).Path {
 			if seen[pathID] {
 				continue
 			}
 			seen[pathID] = true
-			entry := assessmentDependency{TaskID: pathID}
+			entry := assessmentDependency{TaskID: pathID, Outcome: "missing"}
 			if dependency := state.FindTask(pathID); dependency != nil {
 				entry.Created = dependency.Created
-				entry.Status = string(dependency.Status)
-				entry.NonAssessmentHistoryCount = assessmentHistoryCount(dependency)
+				entry.Outcome = assessmentDependencyOutcome(dependency)
+				entry.ParentTasks = uniqueSortedStrings(dependency.EffectiveParentTasks())
+				entry.DependsOn = uniqueSortedStrings(dependency.DependsOn)
+				entry.SupersededBy = uniqueSortedStrings(dependency.SupersededBy)
+				if entry.Outcome == "unknown" {
+					// An absent status has no pending-work interpretation.
+					entry.NonAssessmentHistoryCount = assessmentHistoryCount(dependency)
+				}
 			}
 			dependencies = append(dependencies, entry)
 		}
 	}
 	sort.Slice(dependencies, func(i, j int) bool { return dependencies[i].TaskID < dependencies[j].TaskID })
 	return dependencies
+}
+
+func assessmentDescendants(state *models.State, task *models.Task) []assessmentDependency {
+	descendants := dependencyDescendantTasks(state, task)
+	ids := make([]string, 0, len(descendants))
+	for _, descendant := range descendants {
+		ids = append(ids, descendant.ID)
+	}
+	return assessmentDependencies(state, ids)
+}
+
+// Intermediate lifecycle steps do not change a blocked consumer's options.
+// Topology is recorded separately, including every reachable replacement.
+func assessmentDependencyOutcome(task *models.Task) string {
+	switch task.Status {
+	case models.TaskStatusMerged:
+		return "satisfied"
+	case models.TaskStatusBlocked, models.TaskStatusAbandoned, models.TaskStatusIntegrationFailed:
+		return "failed_or_blocked"
+	case models.TaskStatusSuperseded:
+		if len(task.SupersededBy) == 0 {
+			return "failed_or_blocked"
+		}
+		return "replaced"
+	case "":
+		return "unknown"
+	default:
+		// Intermediate statuses belong to the configured pipeline, not a
+		// closed Go enum. Only engine-owned outcomes end pending work.
+		return "pending"
+	}
 }
 
 func normalizeAssessmentText(value string) string {

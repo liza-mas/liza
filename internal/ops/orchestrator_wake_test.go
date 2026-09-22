@@ -56,7 +56,7 @@ func TestActionableBlockedAssessment(t *testing.T) {
 }
 
 func TestActionableBlockedMaterialChanges(t *testing.T) {
-	for _, kind := range []string{"own history", "dependency satisfied", "descendant", "human task", "human all", "unsatisfied dependency"} {
+	for _, kind := range []string{"own history", "dependency satisfied", "descendant", "human task", "human all", "provider recovered to pending"} {
 		t.Run(kind, func(t *testing.T) {
 			root, stateFile := assessmentIdempotencyFixture(t)
 			if _, err := AssessBlocked(root, "target", "await provider", "orchestrator-1"); err != nil {
@@ -73,9 +73,10 @@ func TestActionableBlockedMaterialChanges(t *testing.T) {
 					provider := state.FindTask("provider")
 					provider.Status = models.TaskStatusMerged
 					provider.History = append(provider.History, models.TaskHistoryEntry{Time: at, Event: models.TaskEventMerged})
-				case "unsatisfied dependency":
+				case "provider recovered to pending":
 					provider := state.FindTask("provider")
-					provider.History = append(provider.History, models.TaskHistoryEntry{Time: at, Event: models.TaskEventBlocked})
+					*provider = testhelpers.BuildTaskByStatus("provider", models.TaskStatusReady, provider.Created)
+					provider.SpecRef = state.Goal.SpecRef
 				case "descendant":
 					child := testhelpers.BuildTaskByStatus("child", models.TaskStatusReady, task.Created)
 					child.ParentTasks = []string{"provider"}
@@ -116,7 +117,12 @@ func TestActionableBlockedLegacyBaseline(t *testing.T) {
 		if err := db.For(stateFile).Modify(func(state *models.State) error {
 			task := state.FindTask("target")
 			note := "legacy note"
-			extra := map[string]any{DependencyDescendantWakeSnapshotExtraKey: BuildDependencyDescendantWakeSnapshot(state, task)}
+			extra := map[string]any{
+				DependencyDescendantWakeSnapshotExtraKey: BuildDependencyDescendantWakeSnapshot(state, task),
+				"assessment_fingerprint_v1": BuildAssessmentFingerprint(state, task, AssessmentFingerprintCandidate{
+					Reason: *task.BlockedReason, Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note,
+				}),
+			}
 			if fingerprint != nil {
 				extra[AssessmentFingerprintExtraKey] = fingerprint
 			}
@@ -141,6 +147,9 @@ func TestActionableBlockedLegacyBaseline(t *testing.T) {
 		for _, entry := range task.History {
 			if _, exists := entry.Extra[DependencyDescendantWakeSnapshotExtraKey]; exists {
 				t.Fatal("retired cursor remains after baseline append")
+			}
+			if _, exists := entry.Extra["assessment_fingerprint_v1"]; exists {
+				t.Fatal("v1 digest remains after v2 baseline append")
 			}
 		}
 		if _, valid := IsAssessmentFingerprint(lastOrchestratorAssessment(task).Extra[AssessmentFingerprintExtraKey]); !valid {

@@ -108,7 +108,7 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // 7. Many-to-one transition ready
 // 8. Sprint complete (all planned tasks terminal)
 func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
-	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, nil)
+	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, nil, WakeTriggerNone)
 }
 
 // DetectOrchestratorWakeTriggersForProject evaluates terminal integration
@@ -117,7 +117,7 @@ func DetectOrchestratorWakeTriggersForProject(projectRoot string, state *models.
 	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
 		decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
 		return prompts.ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
-	})
+	}, WakeTriggerNone)
 }
 
 // DetectOrchestratorWakeTriggersWithIntegrationProjection exposes the pure
@@ -126,11 +126,30 @@ func DetectOrchestratorWakeTriggersForProject(projectRoot string, state *models.
 func DetectOrchestratorWakeTriggersWithIntegrationProjection(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, projection prompts.EffectiveIntegrationCompletion) OrchestratorWakeResult {
 	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
 		return projection
-	})
+	}, WakeTriggerNone)
 }
 
-func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, integrationProjection func() prompts.EffectiveIntegrationCompletion) OrchestratorWakeResult {
+// revalidateOrchestratorWake retains a selected invocation only while its own
+// predicate still holds. Ordinary priority applies again on the next wait.
+// The caller owns launch gates; this function only projects work from state.
+func revalidateOrchestratorWake(state *models.State, selected OrchestratorWakeResult, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, integrationProjection func() prompts.EffectiveIntegrationCompletion) (result, fresh OrchestratorWakeResult) {
+	fresh = detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, integrationProjection, WakeTriggerNone)
+	if selected.Trigger == fresh.Trigger || selected.Trigger == "" || !selected.ShouldWake() {
+		return fresh, fresh
+	}
+	retained := detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, integrationProjection, selected.Trigger)
+	if retained.ShouldWake() {
+		return retained, fresh
+	}
+	return fresh, fresh
+}
+
+// only selects a single predicate for revalidation; NONE uses normal priority.
+func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, integrationProjection func() prompts.EffectiveIntegrationCompletion, only OrchestratorWakeTrigger) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
+		if only != WakeTriggerNone && only != triggerSpec.Trigger {
+			continue
+		}
 		if count := triggerSpec.Count(state); count > 0 {
 			return OrchestratorWakeResult{
 				Trigger: triggerSpec.Trigger,
@@ -145,13 +164,13 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 	// but ready design work no longer waits for the entire sprint to finish.
 	if state.Sprint.Status != models.SprintStatusCheckpoint &&
 		state.Sprint.Status != models.SprintStatusCompleted {
-		if n := countMergedPlanningTasksWithOutput(state, planningPairs); n > 0 {
+		if n := countMergedPlanningTasksWithOutput(state, planningPairs); n > 0 && (only == WakeTriggerNone || only == WakeTriggerPlanningComplete) {
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerPlanningComplete,
 				Count:   n,
 			}
 		}
-		if n := countReadyManyToOneCohorts(state, m2oTransitions); n > 0 {
+		if n := countReadyManyToOneCohorts(state, m2oTransitions); n > 0 && (only == WakeTriggerNone || only == WakeTriggerManyToOneReady) {
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerManyToOneReady,
 				Count:   n,
@@ -164,21 +183,31 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 	// Guard: suppress when sprint is already CHECKPOINT or COMPLETED to prevent
 	// the re-wake loop (supervisor sets COMPLETED → state change fires detection
 	// → orchestrator wakes → calls sprint_checkpoint → rejected).
-	if state.AllPlannedTasksTerminalWith(pipelineTerminals) {
+	if (only == WakeTriggerNone || only == WakeTriggerCodingComplete || only == WakeTriggerSprintComplete) && state.AllPlannedTasksTerminalWith(pipelineTerminals) {
 		if state.Sprint.Status == models.SprintStatusCheckpoint ||
 			state.Sprint.Status == models.SprintStatusCompleted {
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		if integrationProjection != nil && (state.Goal.BaseCommit != nil || state.Goal.Integration != nil) {
-			return projectIntegrationWakeResult(integrationProjection(), len(state.Sprint.Scope.Planned))
+			result := projectIntegrationWakeResult(integrationProjection(), len(state.Sprint.Scope.Planned))
+			if only == WakeTriggerNone || only == result.Trigger {
+				return result
+			}
+			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		// Detect coding completion: all tasks terminal, coding happened (base_commit set),
 		// but no integration task exists yet.
 		if state.Goal.BaseCommit != nil && !hasIntegrationTask(state) {
+			if only == WakeTriggerSprintComplete {
+				return OrchestratorWakeResult{Trigger: WakeTriggerNone}
+			}
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerCodingComplete,
 				Count:   1,
 			}
+		}
+		if only == WakeTriggerCodingComplete {
+			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		return OrchestratorWakeResult{
 			Trigger: WakeTriggerSprintComplete,

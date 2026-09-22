@@ -916,6 +916,15 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		if err != nil {
 			return fmt.Errorf("failed to read state for prompt: %w", err)
 		}
+		if orchestrator, ok := strategy.(*orchestratorStrategy); ok {
+			launch, err := orchestrator.RevalidateWake(supervisorCtx, bb, stateBefore, config)
+			if err != nil {
+				return err
+			}
+			if !launch {
+				continue
+			}
+		}
 
 		// Spinning detection: track re-executions for the same task.
 		effectiveTask := claimedTaskID

@@ -14,9 +14,9 @@ hashes a canonical JSON object with exactly six material inputs:
 
 | Input | Canonical value |
 |---|---|
-| `self` | Task status and count of history entries other than `orchestrator_assessment`. Assessment-only activity and `Lifecycle.Revision` are excluded. |
-| `dependencies` | Unique task IDs on every direct dependency's resolved replacement path, sorted by ID. Each record carries ID, creation time, status and non-assessment history count. Missing tasks retain their ID with zero-valued remaining fields. |
-| `descendants` | Sorted, deduplicated transitive descendants beneath resolver-selected, non-superseded dependency roots, following effective parent links. Each record carries ID, creation time, status and non-assessment history count (`lifecycle_version`); roots themselves are excluded. |
+| `self` | Task status, count of history entries other than `orchestrator_assessment`, and the sorted set of direct `depends_on` IDs. Assessment-only activity and `Lifecycle.Revision` are excluded. |
+| `dependencies` | Unique task IDs on every direct dependency's resolved replacement path, sorted by ID. Each record carries ID, creation time, outcome class, and sorted sets of effective parent, dependency and supersession edges. Missing tasks retain their ID and the `missing` class. |
+| `descendants` | Transitive descendants beneath resolver-selected, non-superseded dependency roots, following effective parent links, plus their resolved replacements. The same sorted, deduplicated record projection is used as for dependencies. Roots themselves are excluded from the parent traversal. |
 | `blocker` | Reason, ordered questions and structured repair request that the assessment would establish. History-only mode uses current task metadata; reconciliation uses the validated candidate metadata. |
 | `disposition` | The candidate assessment note, including any stated recovery action, normalized as text. There is no separate disposition enum. |
 | `human` | Count of durable human notes addressed to this task or `all`. A newly appended note intentionally permits reassessment even if its text repeats an earlier instruction. Notes addressed only to dependencies do not count. |
@@ -38,19 +38,34 @@ composition or map order cannot create a new identity. Arbitrary paraphrases or
 duplicated sentences within a note are not semantically interpreted or removed.
 
 The digest depends only on durable state and the candidate, not wall time,
-process memory, actor identity or receipt revision. Non-assessment history counts
-are structural lifecycle versions; creation times distinguish dependency task
-incarnations. Explicit human supersession is represented by appended notes, not
-by editing old notes in place.
+process memory, actor identity or receipt revision. The consumer's own
+non-assessment history count remains a structural lifecycle version; creation
+times distinguish dependency task incarnations. Explicit human supersession is
+represented by appended notes, not by editing old notes in place.
+
+Dependency and descendant outcome classes are shared: `MERGED` is satisfied;
+`BLOCKED`, `ABANDONED`, `INTEGRATION_FAILED`, and unreplaced `SUPERSEDED` are
+failed/blocked; missing IDs are missing. Every other nonempty status is pending:
+intermediate states belong to the configured pipeline, including architecture,
+custom role pairs, rejection, rework and approval before merge. Their
+claims, submissions, review claims and other history-only progress do not change
+the fingerprint. Both pending-to-failed and failed-to-pending transitions are
+material. A superseded node with replacements retains its replacement edges,
+and every reachable replacement has its own outcome record, including missing
+or cyclic paths. An empty status remains unknown and retains non-assessment
+history sensitivity. The fingerprint stays pure over state without loading a
+pipeline and does not validate whether nonempty statuses belong to that pipeline.
+This projection does not alter dependency satisfaction or grant permission to
+execute dependent work.
 
 ## Persistence and no-change result
 
-The key `assessment_fingerprint_v1` is stored in `TaskHistoryEntry.Extra`,
+The key `assessment_fingerprint_v2` is stored in `TaskHistoryEntry.Extra`,
 inlined into the history entry in YAML; its value is a 64-character lowercase
 hexadecimal SHA-256 digest of the canonical JSON. Only
 the latest `orchestrator_assessment` retains it. On a new append, the writer
-removes both this key and the retired
-`dependency_descendant_wake_snapshot_v1` key from earlier assessment entries,
+removes this key and the retired `assessment_fingerprint_v1` and
+`dependency_descendant_wake_snapshot_v1` keys from earlier assessment entries,
 preserving their notes and other audit fields. It neither stores the full
 fingerprint input nor introduces a separate task-state field.
 
@@ -79,8 +94,10 @@ With no latest assessment, or a missing/malformed fingerprint (including an
 incorrect type, length or hexadecimal case), comparison fails open once: the
 next otherwise valid assessment appends and establishes the canonical baseline.
 An equivalent later call then returns `NO_CHANGE`. No migration rewrites legacy
-notes or invents their missing baseline. A changed material input permits one
-new assessment; history-only calls preserve blocker metadata, while reconciliation
+notes or invents their missing baseline. Upgrade from v1 intentionally makes
+each currently blocked, already-assessed task actionable once, costing one
+`BLOCKED_TASKS` turn per affected run to establish v2 baselines. A changed material
+input permits one new assessment; history-only calls preserve blocker metadata, while reconciliation
 atomically replaces reason/questions/repair request and validates the candidate
 state. A nil repair request in reconciliation clears the old request.
 

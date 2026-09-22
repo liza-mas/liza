@@ -212,6 +212,22 @@ func shellQuote(value string) string {
 // RenderOrchestratorDashboard pre-renders the orchestrator dashboard and wake instruction
 // strings for use as RoleContextData.DashboardOutput and RoleContextData.WakeInstruction.
 func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID string) (dashboard, wakeInstruction string, err error) {
+	return renderOrchestratorDashboard(state, projectRoot, agentID, nil)
+}
+
+// OrchestratorWakeDecision carries the supervisor's revalidated invocation.
+// Both the dashboard and instructions must describe this same decision.
+type OrchestratorWakeDecision struct {
+	Trigger     string
+	Integration EffectiveIntegrationCompletion
+}
+
+// RenderOrchestratorDashboardForWake renders an already selected invocation.
+func RenderOrchestratorDashboardForWake(state *models.State, projectRoot, agentID string, wake OrchestratorWakeDecision) (dashboard, wakeInstruction string, err error) {
+	return renderOrchestratorDashboard(state, projectRoot, agentID, &wake)
+}
+
+func renderOrchestratorDashboard(state *models.State, projectRoot, agentID string, selected *OrchestratorWakeDecision) (dashboard, wakeInstruction string, err error) {
 	totalTasks := len(state.Tasks)
 	merged := countTasksByStatus(state.Tasks, models.TaskStatusMerged)
 	blocked := countTasksByStatus(state.Tasks, models.TaskStatusBlocked)
@@ -255,15 +271,20 @@ func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	}
 
 	unseenNotes := ops.UnseenHumanNotes(state)
-	wakeTrigger := determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, len(unseenNotes), sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
+	var wakeTrigger string
 	var integrationProjection EffectiveIntegrationCompletion
-	if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
-		decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
-		integrationProjection = ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
-		wakeTrigger = integrationProjection.WakeTrigger
-	}
-	if !wakeOpen && wakeTrigger == "UNKNOWN" {
-		wakeTrigger = "NONE"
+	if selected != nil {
+		wakeTrigger, integrationProjection = selected.Trigger, selected.Integration
+	} else {
+		wakeTrigger = determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, len(unseenNotes), sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
+		if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
+			decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
+			integrationProjection = ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
+			wakeTrigger = integrationProjection.WakeTrigger
+		}
+		if !wakeOpen && wakeTrigger == "UNKNOWN" {
+			wakeTrigger = "NONE"
+		}
 	}
 
 	wakeData, wakeErr := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, projectRoot)

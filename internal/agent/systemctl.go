@@ -126,13 +126,11 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 		if bb := db.For(statePath); bb != nil {
 			state, err := bb.Read()
 			if err == nil {
+				pauseReason = rolePauseReason(state, roleType)
+				isPaused = pauseReason != ""
 				switch {
-				case state.Config.Mode == models.SystemModePaused:
-					isPaused = true
-					pauseReason = "[PAUSED] System mode is PAUSED"
-				case state.Config.Mode == models.SystemModeCircuitBreakerTripped:
-					isPaused = true
-					pauseReason = "[CIRCUIT BREAKER] Circuit breaker triggered - system halted"
+				case state.Config.Mode == models.SystemModePaused || state.Config.Mode == models.SystemModeCircuitBreakerTripped:
+					// System pause takes precedence over automatic sprint resume.
 				case state.Sprint.Status == models.SprintStatusCheckpoint:
 					// Before anything moves the sprint on — including
 					// auto-resume below — give the checkpoint its report.
@@ -151,10 +149,6 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 							continue // state changed, re-read immediately
 						}
 					}
-					if wait, reason := checkpointBlocksRole(state, roleType); wait {
-						isPaused = true
-						pauseReason = reason
-					}
 				case state.Sprint.Status == models.SprintStatusCompleted && state.Config.AutoResume:
 					logger.Info("Auto-resuming from COMPLETED")
 					result, resumeErr := resumeCompletedSprint(projectRoot, "auto-resume")
@@ -169,8 +163,6 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 						}
 						continue // state changed, re-read immediately
 					}
-					isPaused = true
-					pauseReason = "[COMPLETED] Sprint completed, auto-resume pending"
 				}
 			}
 		}
@@ -185,6 +177,24 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 		case <-ticker.C:
 			logger.Info("System paused, waiting for resume", "pause_reason", pauseReason)
 		}
+	}
+}
+
+// rolePauseReason is the non-blocking half of waitWhilePaused. Launch
+// revalidation uses the same predicate without running resume side effects.
+func rolePauseReason(state *models.State, roleType string) string {
+	switch {
+	case state.Config.Mode == models.SystemModePaused:
+		return "[PAUSED] System mode is PAUSED"
+	case state.Config.Mode == models.SystemModeCircuitBreakerTripped:
+		return "[CIRCUIT BREAKER] Circuit breaker triggered - system halted"
+	case state.Sprint.Status == models.SprintStatusCheckpoint:
+		_, reason := checkpointBlocksRole(state, roleType)
+		return reason
+	case state.Sprint.Status == models.SprintStatusCompleted && state.Config.AutoResume:
+		return "[COMPLETED] Sprint completed, awaiting resume"
+	default:
+		return ""
 	}
 }
 
@@ -558,6 +568,12 @@ func eventTime(event LLMAgentEvent) time.Time {
 
 // verifyOrchestratorStateChanges checks if orchestrator made expected state changes after completion
 func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) error {
+	projectRoot := filepath.Dir(filepath.Dir(bb.GetStatePath()))
+	result := DetectOrchestratorWakeTriggersForProject(projectRoot, stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
+	return verifyOrchestratorWakeChanges(bb, stateBefore, result)
+}
+
+func verifyOrchestratorWakeChanges(bb *db.Blackboard, stateBefore *models.State, result OrchestratorWakeResult) error {
 	logger := GetLogger()
 	projectRoot := filepath.Dir(filepath.Dir(bb.GetStatePath()))
 	// Read state after agent execution
@@ -565,9 +581,6 @@ func verifyOrchestratorStateChanges(bb *db.Blackboard, stateBefore *models.State
 	if err != nil {
 		return fmt.Errorf("failed to read state after agent execution: %w", err)
 	}
-
-	// Detect the wake trigger that caused this orchestrator run
-	result := DetectOrchestratorWakeTriggersForProject(projectRoot, stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
 
 	// Verify expected changes based on trigger
 	switch result.Trigger {

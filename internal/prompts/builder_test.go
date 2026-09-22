@@ -1182,6 +1182,34 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 	}
 }
 
+func TestRenderOrchestratorDashboardSelectedWake(t *testing.T) {
+	withPromptBrandValues(t, func() {
+		brand.BinaryName, brand.NameTitle = "acme", "Acme"
+		brand.ProjectDirName, brand.GlobalDirName = ".acme", ".acme"
+	})
+	root := setupPipelineConfig(t)
+	state := testhelpers.CreateValidState()
+	plan := testhelpers.BuildTaskByStatus("plan", models.TaskStatusMerged, time.Now().UTC())
+	plan.RolePair = "code-planning-pair"
+	plan.Output = []models.OutputEntry{{Desc: "implement", DoneWhen: "tests pass", Scope: "pkg/x"}}
+	state.Tasks = []models.Task{plan, testhelpers.BuildTaskByStatus("blocked", models.TaskStatusBlocked, plan.Created)}
+	state.Sprint.Scope.Planned = []string{"plan", "blocked"}
+	dashboard, instruction, err := RenderOrchestratorDashboardForWake(state, root, "orchestrator-1", OrchestratorWakeDecision{Trigger: "PLANNING_COMPLETE"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(dashboard, "WAKE TRIGGER: PLANNING_COMPLETE") || !strings.Contains(instruction, "Create checkpoint for human review: acme sprint-checkpoint") || strings.Contains(instruction, "Do NOT call") {
+		t.Fatalf("selected planning decision not rendered consistently: %s\n%s", dashboard, instruction)
+	}
+	if strings.Contains(dashboard+instruction, "liza") || strings.Contains(dashboard+instruction, "Liza") {
+		t.Fatal("selected wake leaked default brand")
+	}
+	dashboard, _, err = RenderOrchestratorDashboard(state, root, "orchestrator-1")
+	if err != nil || !strings.Contains(dashboard, "WAKE TRIGGER: BLOCKED_TASKS") {
+		t.Fatalf("snapshot-only rendering must retain ordinary priority: %s (%v)", dashboard, err)
+	}
+}
+
 func TestRenderOrchestratorDashboard_AssessedTasksAllowPlanningHandoff(t *testing.T) {
 	assessedAt := time.Date(2026, time.September, 13, 13, 0, 0, 0, time.UTC)
 	projectRoot := setupPipelineConfig(t)

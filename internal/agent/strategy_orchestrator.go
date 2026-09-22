@@ -11,16 +11,18 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/stacklit"
 )
 
 // orchestratorStrategy handles the orchestrator role.
 type orchestratorStrategy struct {
-	resolver         *pipeline.Resolver // pipeline resolver for context sections
-	executionTimeout time.Duration      // from YAML; 0 = use type default
-	yamlPollSec      int                // from YAML; 0 = use type default
-	yamlMaxWaitSec   int                // from YAML; 0 = use type default
+	wake             *OrchestratorWakeResult // selection for this invocation only
+	resolver         *pipeline.Resolver      // pipeline resolver for context sections
+	executionTimeout time.Duration           // from YAML; 0 = use type default
+	yamlPollSec      int                     // from YAML; 0 = use type default
+	yamlMaxWaitSec   int                     // from YAML; 0 = use type default
 }
 
 var (
@@ -89,6 +91,7 @@ func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, con
 }
 
 func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, config SupervisorConfig, pollInterval, maxWait time.Duration) (bool, error) {
+	s.wake = nil
 	detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
 	var pipelineTerminals []models.TaskStatus
 	var planningPairs map[string]bool
@@ -109,6 +112,7 @@ func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboar
 
 			result := orchestratorWaitForWorkDetector(config.ProjectRoot, state, pipelineTerminals, planningPairs, m2oTransitions)
 			if result.ShouldWake() {
+				s.wake = &result
 				return true, fmt.Sprintf("Orchestrator wake trigger: %s (count: %d)", result.Trigger, result.Count)
 			}
 			if result.Trigger != WakeTriggerNone {
@@ -133,10 +137,48 @@ func (s *orchestratorStrategy) PreExecution(bb *db.Blackboard, config Supervisor
 }
 
 func (s *orchestratorStrategy) BuildPrompt(state *models.State, config SupervisorConfig, _ string) (string, error) {
-	return buildOrchestratorPromptContext(state, config, s.resolver)
+	return buildOrchestratorPromptForWake(state, config, s.resolver, s.wake)
+}
+
+// RevalidateWake runs after indexing and before any turn/spin accounting. Gate
+// effects remain owned by the supervisor loop; cancellation just returns there.
+func (s *orchestratorStrategy) RevalidateWake(ctx context.Context, bb *db.Blackboard, state *models.State, config SupervisorConfig) (launch bool, err error) {
+	defer func() {
+		if !launch {
+			err = errors.Join(err, resetAgentAfterExit(bb, config.Authority, config.ProjectRoot))
+		}
+	}()
+	selected := OrchestratorWakeResult{Trigger: WakeTriggerNone}
+	if s.wake != nil {
+		selected = *s.wake
+	}
+	s.wake = nil
+	det, err := ops.LoadDetectionContext(config.ProjectRoot)
+	if err != nil {
+		GetLogger().Warn("Failed to load detection context", "error", err)
+		det = &ops.PipelineDetectionContext{}
+	}
+	var projection *prompts.EffectiveIntegrationCompletion
+	result, fresh := revalidateOrchestratorWake(state, selected, det.SprintTerminals, det.PlanningPairs, det.ManyToOneTransitions, func() prompts.EffectiveIntegrationCompletion {
+		if projection == nil {
+			decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, config.ProjectRoot)
+			value := prompts.ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
+			projection = &value
+		}
+		return *projection
+	})
+	stopped, _ := isSystemStopped(state)
+	if ctx.Err() != nil || stopped || rolePauseReason(state, "orchestrator") != "" ||
+		CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) || CheckQuotaSignal(config.ProjectRoot, config.CLIName) || !result.ShouldWake() {
+		GetLogger().Info("Skipping orchestrator launch after revalidation", "selected_trigger", selected.Trigger, "fresh_trigger", fresh.Trigger)
+		return false, nil
+	}
+	s.wake = &result
+	return true, nil
 }
 
 func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config SupervisorConfig, _, _ string, stateBefore *models.State) error {
+	defer func() { s.wake = nil }()
 	detCtx, detErr := ops.LoadDetectionContext(config.ProjectRoot)
 	var pipelineTerminals []models.TaskStatus
 	var planningPairs map[string]bool
@@ -148,16 +190,22 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 		planningPairs = detCtx.PlanningPairs
 		m2oTransitions = detCtx.ManyToOneTransitions
 	}
+	var result OrchestratorWakeResult
+	if s.wake != nil {
+		result = *s.wake
+	} else {
+		// Snapshot-only callers have no live invocation to retain.
+		result = DetectOrchestratorWakeTriggersForProject(config.ProjectRoot, stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
+	}
 
-	// A HUMAN_NOTE turn rendered every pre-turn note (the prompt builder ranks
-	// triggers identically). Any other turn consumed only the notes whose
+	// A HUMAN_NOTE turn rendered every pre-turn note. Any other turn consumed only the notes whose
 	// target it assessed: the blocked-task instructions read human_notes before
 	// recording an assessment, so re-rendering those as fresh requests would
 	// execute them twice. Only notes that existed when the prompt was built
 	// qualify. A turn that exits non-zero never reaches here and the notes
 	// wake the orchestrator again.
 	if ops.CountUnseenHumanNotes(stateBefore) > 0 {
-		trigger := DetectOrchestratorWakeTriggers(stateBefore, pipelineTerminals, planningPairs, m2oTransitions).Trigger
+		trigger := result.Trigger
 		rendered := len(stateBefore.HumanNotes)
 		if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
 			consumed := func(*models.HumanNote) bool { return true }
@@ -176,7 +224,7 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 		}
 	}
 
-	if err := verifyOrchestratorStateChanges(bb, stateBefore, pipelineTerminals, planningPairs, m2oTransitions); err != nil {
+	if err := verifyOrchestratorWakeChanges(bb, stateBefore, result); err != nil {
 		GetLogger().Warn("Orchestrator state verification failed",
 			"error", err,
 			"hint", "Agent may not have executed required commands - attempting self-heal")
@@ -185,10 +233,9 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 		// expected state change directly instead of relying on the LLM.
 		// This breaks the re-wake loop where the orchestrator keeps
 		// executing without calling sprint_checkpoint.
-		trigger := DetectOrchestratorWakeTriggersForProject(config.ProjectRoot, stateBefore, pipelineTerminals, planningPairs, m2oTransitions)
-		if healed := selfHealCheckpoint(config.ProjectRoot, trigger.Trigger); healed {
+		if healed := selfHealCheckpoint(config.ProjectRoot, result.Trigger); healed {
 			GetLogger().Info("Self-healed: checkpoint created after agent failed to do so",
-				"trigger", trigger.Trigger)
+				"trigger", result.Trigger)
 		}
 	}
 

@@ -388,7 +388,7 @@ func TestDetectOrchestratorWakeTriggers_BlockedDependencyDescendantSnapshot(t *t
 		assertWake(t, state, WakeTriggerNone)
 	})
 
-	t.Run("existing descendant non-assessment lifecycle change wakes", func(t *testing.T) {
+	t.Run("existing descendant pending progress does not wake", func(t *testing.T) {
 		state := newState()
 		addChild(state, "provider-coding", "provider-plan", baseTime)
 		recordAssessment(state, assessmentTime, true)
@@ -398,7 +398,7 @@ func TestDetectOrchestratorWakeTriggers_BlockedDependencyDescendantSnapshot(t *t
 			Time: laterTime, Event: models.TaskEventClaimed, Agent: &coder,
 		})
 
-		assertWake(t, state, WakeTriggerBlocked)
+		assertWake(t, state, WakeTriggerNone)
 	})
 
 	t.Run("existing descendant assessment-only change does not wake", func(t *testing.T) {
@@ -661,7 +661,7 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 			wantCount:   1,
 		},
 		{
-			name: "blocked assessed dependency submitted after assessment - wake",
+			name: "blocked assessed dependency submitted after assessment - no wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -684,11 +684,11 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state.Tasks = []models.Task{task, dep}
 				return state
 			}(),
-			wantTrigger: WakeTriggerBlocked,
-			wantCount:   1,
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
 		},
 		{
-			name: "blocked assessed dependency approved after assessment - wake",
+			name: "blocked assessed dependency approved after assessment - no wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -711,11 +711,11 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state.Tasks = []models.Task{task, dep}
 				return state
 			}(),
-			wantTrigger: WakeTriggerBlocked,
-			wantCount:   1,
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
 		},
 		{
-			name: "blocked assessed dependency claimed after assessment - wake",
+			name: "blocked assessed dependency claimed after assessment - no wake",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -738,11 +738,11 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				state.Tasks = []models.Task{task, dep}
 				return state
 			}(),
-			wantTrigger: WakeTriggerBlocked,
-			wantCount:   1,
+			wantTrigger: WakeTriggerNone,
+			wantCount:   0,
 		},
 		{
-			name: "blocked assessed dependency blocked after assessment - wake",
+			name: "already-blocked provider history only wakes its missing baseline",
 			state: func() *models.State {
 				state := testhelpers.CreateValidState()
 				task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
@@ -773,7 +773,7 @@ func TestDetectOrchestratorWakeTriggers(t *testing.T) {
 				return state
 			}(),
 			wantTrigger: WakeTriggerBlocked,
-			wantCount:   2,
+			wantCount:   1,
 		},
 		{
 			name: "blocked assessed dependency has only old activity - no wake",

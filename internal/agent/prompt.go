@@ -99,7 +99,11 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 // Unlike task-based roles, the orchestrator has no task to look up. Dashboard and wake
 // instruction content is pre-rendered and passed through block templates.
 func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) (string, error) {
-	data, err := buildOrchestratorRoleContextData(state, config, resolver)
+	return buildOrchestratorPromptForWake(state, config, resolver, nil)
+}
+
+func buildOrchestratorPromptForWake(state *models.State, config SupervisorConfig, resolver *pipeline.Resolver, wake *OrchestratorWakeResult) (string, error) {
+	data, err := buildOrchestratorRoleContextDataForWake(state, config, resolver, wake)
 	if err != nil {
 		return "", err
 	}
@@ -136,7 +140,19 @@ func buildOrchestratorPromptContext(state *models.State, config SupervisorConfig
 }
 
 func buildOrchestratorRoleContextData(state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) (*prompts.RoleContextData, error) {
-	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
+	return buildOrchestratorRoleContextDataForWake(state, config, resolver, nil)
+}
+
+func buildOrchestratorRoleContextDataForWake(state *models.State, config SupervisorConfig, resolver *pipeline.Resolver, wake *OrchestratorWakeResult) (*prompts.RoleContextData, error) {
+	var dashboard, wakeInstruction string
+	var err error
+	if wake == nil {
+		dashboard, wakeInstruction, err = prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
+	} else {
+		dashboard, wakeInstruction, err = prompts.RenderOrchestratorDashboardForWake(state, config.ProjectRoot, config.AgentID, prompts.OrchestratorWakeDecision{
+			Trigger: string(wake.Trigger), Integration: wake.Integration,
+		})
+	}
 	if err != nil {
 		return nil, err
 	}

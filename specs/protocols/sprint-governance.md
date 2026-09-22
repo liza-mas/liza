@@ -198,6 +198,22 @@ When planning tasks (epic-planner, code-planner) are merged, the orchestrator ch
 - After transitions consumed → `countMergedPlanningTasksWithOutput` returns 0 → idempotent
 - Cycle-blocked planning tasks are excluded from orchestrator wake detection and planning-complete rendering, but remain visible for carry-forward, replan, and checkpoint auto-trigger
 
+The supervisor retains the wake selected before index refresh for that invocation.
+After refresh it revalidates the selected trigger's predicate against fresh state;
+if the work disappeared, ordinary priority selects any remaining work. No work
+means no provider launch. The prompt, human-note consumption, verification and
+checkpoint self-heal all use the same revalidated decision. Thus a new blocker
+during indexing cannot replace a still-eligible planning handoff's instructions.
+The next wait starts with ordinary priority, including after a failed transition.
+
+Before launching, the supervisor also rechecks its shared pause/checkpoint and
+stop predicates, cancellation, provider availability and quota signals. A cancelled launch
+clears the selection and restores idle runtime status before returning to the
+existing gates; it is not counted as a provider turn or spin. Revalidation never
+resumes a checkpoint or creates downstream tasks. Existing manual and automatic
+resume policy remains in charge. An INFO skip log names the selected and fresh
+triggers for diagnosing changes during indexing.
+
 **Replan with multi-phase:** When replanning a task that is part of a phase chain, `liza replan`
 requires explicit task ID (auto-detect may find multiple candidates). The new task inherits
 `depends_on` (cloned). Non-terminal downstream tasks' `depends_on` are retargeted from old→new

@@ -2,7 +2,7 @@
 
 ## Status
 
-ACCEPTED — records the implemented issue #157 decisions.
+ACCEPTED — records issue #157, amended for outcome-based provider identity.
 
 ## Context
 
@@ -17,19 +17,41 @@ decisions below explain why that identity differs from general request replay.
 
 ## Decisions and alternatives
 
-**Use non-assessment history counts as lifecycle versions, with current status
-and dependency creation identity.** Reject `Lifecycle.Revision` for assessment
-identity. [CompleteLifecycleRequest](../../../internal/ops/lifecycle_receipt.go)
+**Use the consumer's non-assessment history count as its lifecycle version,
+with current status and provider creation identity.** Reject `Lifecycle.Revision`
+for assessment identity. [CompleteLifecycleRequest](../../../internal/ops/lifecycle_receipt.go)
 advances that revision when an assessment succeeds. Hashing it would therefore
 invalidate the digest just recorded and make the next identical call look new.
-Excluding assessment events preserves sensitivity to other lifecycle activity
-without this feedback loop. The count is reconstructible after restart.
+Excluding assessment events preserves sensitivity to the consumer's other
+lifecycle activity without this feedback loop. The count is reconstructible after
+restart.
 
 The alternative is the existing `Lifecycle.Revision` cursor, convenient because
 it is already durable but unsuitable because it includes assessment completion.
 Changing the general revision's semantics instead would alter lifecycle fencing
 and receipt behavior beyond this invariant. It remains authoritative for request
 boundaries; the fingerprint is a separate content identity, not a substitute.
+
+**Classify provider outcomes instead of hashing routine provider progress.**
+The September operator run showed repeated blocked-consumer wakes after provider
+claims, submissions and review steps. Raw provider status/history did not answer
+whether the consumer had new options. Direct dependencies and descendants now
+share pending, satisfied, failed/blocked and missing classes. Replaced nodes
+retain supersession edges and each reachable replacement's outcome; task IDs,
+creation times and parent/dependency edges preserve structural changes. Both
+failure and recovery remain material. The engine owns `MERGED`, `BLOCKED`,
+`ABANDONED`, `INTEGRATION_FAILED` and `SUPERSEDED`; every other nonempty status is
+pending. Intermediate states belong to the configured pipeline, not a closed Go
+enum. Empty statuses remain unknown with history sensitivity. Exhaustive coverage
+of Go status declarations forces review when a new engine outcome is added;
+architecture and synthetic custom-pipeline sequences guard the open state space.
+
+Ignoring all provider changes would miss merge/failure and new replacement work;
+using raw status/history for only descendants would preserve the wasted wakes.
+The shared projection avoids both, without changing dependency satisfaction.
+Loading the pipeline to enumerate pending states would couple this pure identity
+to configuration access. Instead, the explicit engine-outcome boundary supports
+any role pair. This fingerprint does not validate pipeline status membership.
 
 **Use one shared material-change predicate for writes and blocked-task wakes.**
 Both call `BuildAssessmentFingerprint`; the reader uses the latest assessment's
@@ -47,10 +69,12 @@ invalid legacy digests fail open once rather than guessing an old identity.
 
 ## Consequences
 
-Only the latest assessment retains `assessment_fingerprint_v1`; a new append
-removes obsolete digest/snapshot extras from older assessments while preserving
-their audit prose. No new top-level state field or unbounded cursor history is
-needed. Structural normalization ignores whitespace, Unicode composition and
+Only the latest assessment retains `assessment_fingerprint_v2`; a new append
+removes obsolete digest/snapshot extras, including retired v1 digests, from older
+assessments while preserving their audit prose. Existing blocked assessments
+rebaseline once after upgrade: one `BLOCKED_TASKS` turn per affected run. No
+new top-level state field or unbounded cursor history is needed. Structural
+normalization ignores whitespace, Unicode composition and
 map order, but deliberately preserves ordered-list changes and does not infer
 whether different prose has the same meaning.
 
