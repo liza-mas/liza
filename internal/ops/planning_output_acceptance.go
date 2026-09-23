@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -8,8 +9,57 @@ import (
 
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/referencecontract"
 )
+
+// validateOutputRefFragments resolves each output ref fragment the way child
+// prompts will (ADR-0133). A fragment into a strict carrier present at the
+// submitted commit must select exactly one eligible heading; rejecting it here
+// keeps an unresolvable anchor, typically a slug, from blocking every child
+// after merge.
+func validateOutputRefFragments(root string, task *models.Task, commit string) error {
+	g := git.New(root)
+	for i, output := range task.Output {
+		for _, ref := range []struct {
+			field string
+			value string
+		}{
+			{field: "spec_ref", value: output.SpecRef},
+			{field: "epic_ref", value: output.EpicRef},
+			{field: "plan_ref", value: output.PlanRef},
+			{field: "arch_ref", value: output.ArchRef},
+		} {
+			fragment := paths.SplitRefFragment(ref.value)
+			if fragment == "" {
+				continue
+			}
+			fail := func(reason string) error {
+				return &PreconditionError{Reason: fmt.Sprintf("task %s: output[%d].%s %q: %s", task.ID, i, ref.field, ref.value, reason)}
+			}
+			path := paths.SplitRefFile(ref.value)
+			_, present, err := g.TreePathMode(commit, path)
+			if err != nil {
+				return fail("cannot inspect the submitted commit")
+			}
+			if !present {
+				continue // Child prompts treat refs absent from the tree as legacy hints.
+			}
+			content, err := g.ReadBlob(commit, path)
+			if err != nil {
+				return fail(err.Error())
+			}
+			if err := referencecontract.ResolveScalarFragment(content, fragment); err != nil {
+				var headingErr *referencecontract.HeadingMatchError
+				if errors.As(err, &headingErr) {
+					return fail(err.Error() + "; the fragment must be the exact heading text, not a slug")
+				}
+				return fail(err.Error())
+			}
+		}
+	}
+	return nil
+}
 
 // validatePlanningOutputAcceptance checks future coding declarations in the
 // planner's committed candidate, without adopting parent authority or requiring

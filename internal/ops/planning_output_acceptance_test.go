@@ -199,3 +199,111 @@ func TestSubmitForReview_PlanningOutputChangedBeforeCommit(t *testing.T) {
 		t.Fatal("output-change refusal stranded its submission preparation")
 	}
 }
+
+const outputRefFragmentSection = "\n## Capability Two\n\nSecond capability.\n"
+
+func TestSubmitForReview_OutputRefFragments(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		legacy    bool
+		epicRef   string
+		wantError string
+	}{
+		{name: "slug into strict carrier", epicRef: "specs/plans/child.md#capability-two", wantError: `eligible ATX heading "capability-two" is missing; the fragment must be the exact heading text, not a slug`},
+		{name: "exact heading into strict carrier", epicRef: "specs/plans/child.md#Capability Two"},
+		{name: "whole strict carrier", epicRef: "specs/plans/child.md"},
+		{name: "slug into legacy file", legacy: true, epicRef: "specs/plans/child.md#task-one"},
+		{name: "file absent from candidate", epicRef: "specs/epics/missing.md#capability-two"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN a planner output whose epic_ref points into the committed candidate
+			root, taskID, commit, agentID, bb := setupPlanningAcceptanceSubmission(t, outputRefFragmentSection, tc.legacy)
+			if err := bb.Modify(func(state *models.State) error {
+				state.FindTask(taskID).Output[0].EpicRef = tc.epicRef
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			before, err := bb.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// WHEN the planner submits
+			result, err := SubmitForReview(root, taskID, commit, agentID)
+
+			// THEN only an unresolvable strict fragment is refused, before any state change or rebase
+			after, readErr := bb.Read()
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if tc.wantError == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result == nil || after.FindTask(taskID).Status != models.TaskStatusCodingPlanToReview {
+					t.Fatal("output with resolvable refs was not submitted")
+				}
+				return
+			}
+			testhelpers.RequireErrorContains(t, err, tc.wantError)
+			testhelpers.RequireErrorContains(t, err, "output[0].epic_ref")
+			if result != nil || !reflect.DeepEqual(before, after) {
+				t.Fatal("unresolvable fragment changed submission state")
+			}
+			if head := testhelpers.MustGit(t, git.New(root).GetWorktreePath(taskID), "rev-parse", "HEAD"); head != commit {
+				t.Fatal("unresolvable fragment rebased the worktree")
+			}
+		})
+	}
+}
+
+func TestSubmitForReview_OutputRefFragmentAfterRebase(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		change    string
+		wantError string
+	}{
+		{name: "heading removed", change: "## Capability 2", wantError: `eligible ATX heading "Capability Two" is missing`},
+		{name: "heading duplicated", change: "## Capability Two\n\nDuplicate.\n\n## Capability Two", wantError: `eligible ATX heading "Capability Two" is ambiguous: 2 matches`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN integration adopts the candidate, then changes the referenced heading
+			root, taskID, commit, agentID, bb := setupPlanningAcceptanceSubmission(t, outputRefFragmentSection, false)
+			if err := bb.Modify(func(state *models.State) error {
+				state.FindTask(taskID).Output[0].EpicRef = "specs/plans/child.md#Capability Two"
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.MustGit(t, root, "cherry-pick", commit)
+			path := filepath.Join(root, "specs/plans/child.md")
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			changed := strings.Replace(string(content), "## Capability Two", tc.change, 1)
+			if err := os.WriteFile(path, []byte(changed), 0644); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.MustGit(t, root, "add", "specs/plans/child.md")
+			testhelpers.MustGit(t, root, "commit", "-m", "Change heading on integration")
+
+			// WHEN the planner submits its candidate, whose fragment resolved before rebase
+			result, err := SubmitForReview(root, taskID, commit, agentID)
+
+			// THEN the rebased boundary is checked too and nothing is published
+			testhelpers.RequireErrorContains(t, err, tc.wantError)
+			state, err := bb.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result != nil || state.FindTask(taskID).Status != models.TaskStatusCodePlanning || state.FindTask(taskID).ReviewCommit != nil {
+				t.Fatal("post-rebase unresolvable fragment was submitted")
+			}
+			if head := testhelpers.MustGit(t, git.New(root).GetWorktreePath(taskID), "rev-parse", "HEAD"); head == commit {
+				t.Fatal("test did not exercise a changed post-rebase candidate")
+			}
+		})
+	}
+}

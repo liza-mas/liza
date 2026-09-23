@@ -41,6 +41,21 @@ func ExtractSection(markdown, exactHeading string) (string, error) {
 	return markdown[match.start:end], nil
 }
 
+// ResolveScalarFragment applies ADR-0133 scalar selection to one artifact: in a
+// strict carrier a non-empty fragment must select exactly one eligible heading,
+// while marker-free files keep fragments as display-only hints.
+func ResolveScalarFragment(markdown, fragment string) error {
+	contract, err := Parse(markdown)
+	if err != nil {
+		return err
+	}
+	if contract == nil || fragment == "" {
+		return nil
+	}
+	_, err = ExtractSection(markdown, fragment)
+	return err
+}
+
 type markdownScan struct {
 	lines    []sourceLine
 	headings []atxHeading

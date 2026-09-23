@@ -239,6 +239,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	if err := validatePlanningOutputAcceptance(projectRoot, task, preRebaseCommit); err != nil {
 		return nil, err
 	}
+	if err := validateOutputRefFragments(projectRoot, task, preRebaseCommit); err != nil {
+		return nil, err
+	}
 
 	// TDD enforcement: code tasks must include test files (doer roles only).
 	roleType, _ := resolver.RoleType(runtimeRole)
@@ -380,6 +383,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		}
 	}
 	if err := validatePlanningOutputAcceptance(projectRoot, task, postRebaseCommit); err != nil {
+		return nil, err
+	}
+	if err := validateOutputRefFragments(projectRoot, task, postRebaseCommit); err != nil {
 		return nil, err
 	}
 	// Validate against the boundary that will be written below; the state copy

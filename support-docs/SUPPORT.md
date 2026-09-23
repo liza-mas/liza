@@ -319,6 +319,13 @@ reconcile dependencies and supersede the malformed child. Editing historical
 output does not repair an existing child; do not weaken the parser or erase the
 declaration to make a claim pass.
 
+Submission also resolves every `output[]` ref fragment (`spec_ref`, `epic_ref`,
+`plan_ref`, `arch_ref`) into a committed strict carrier, at both boundaries. A
+fragment must be the exact eligible heading text, such as
+`#Capability CAP-001 - Task Creation`, never a slug such as
+`#capability-cap-001---task-creation`; children would otherwise block when their
+prompt context is built. Fix the fragment or the heading, then resubmit.
+
 If a strict coding claim reports `acceptance.source: requires allocation by a
 direct independently approved merged planning parent`, inspect the direct
 parent's merged review, output allocation and author evidence. Ownership release
