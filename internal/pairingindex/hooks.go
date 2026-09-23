@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"testing"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/gitenv"
@@ -318,7 +319,7 @@ fi
 		stacklitName := shellWord(stacklitPlan.Name)
 		stagedIndex := `"$staging_dir/` + stacklitArtifactName + `"`
 		stagedInsights := `"$staging_dir/` + stacklitInsightsArtifactName + `"`
-		stacklitGenerateCommand := shellCommandWithOutputFlag(stacklitPlan.Name, append(stacklitPlan.Args, "--parse-workers", "3"), "-o", stagedIndex)
+		stacklitGenerateCommand := shellCommandWithOutputFlag(stacklitPlan.Name, append(stacklitPlan.Args, "--parse-workers", "3"), "-o", stagedIndex) + closeLockFD
 		publishIndex := "mv -f " + stagedIndex + " " + stacklitArtifactName
 		// init-insights and ai-summary read their -o file before updating it,
 		// so the staged copy starts from the published insights. Starting from
@@ -332,7 +333,7 @@ else
 	code=0
 	stacklit_refresh=1
 	if [ -f stacklit.json ]; then
-		%s diff -i stacklit.json >/dev/null || code=$?
+		%s diff -i stacklit.json >/dev/null%s || code=$?
 		case "$code" in
 			0) [ "$run_ai" = "1" ] || stacklit_refresh=0 ;;
 			1) ;;
@@ -348,12 +349,12 @@ else
 		%s
 		%s
 		%s
-		%s init-insights -i stacklit.json -o %s
+		%s init-insights -i stacklit.json -o %s%s
 		%s
 		if [ "$run_ai" = "1" ]; then
 			echo "Adding AI summary..."
 			%s
-			%s ai-summary -o %s
+			%s ai-summary -o %s%s
 			%s
 		fi
 		insights_after=""
@@ -367,10 +368,10 @@ else
 		echo "Wrote stacklit.json"
 	fi
 fi
-`, stacklitName, scriptName(), stacklitPlan.Name, stacklitName,
+`, stacklitName, scriptName(), stacklitPlan.Name, stacklitName, closeLockFD,
 			stacklitGenerateCommand, publishIndex,
-			seedInsights, stacklitName, stagedInsights, publishInsights,
-			seedInsights, stacklitName, stagedInsights, publishInsights,
+			seedInsights, stacklitName, stagedInsights, closeLockFD, publishInsights,
+			seedInsights, stacklitName, stagedInsights, closeLockFD, publishInsights,
 			stacklitGenerateCommand, publishIndex))
 	}
 	if opts.EnableFunctionalClusters && opts.EnableStacklit && len(opts.ScipPlans) > 0 {
@@ -485,13 +486,13 @@ fi
 	fmt.Fprintf(&commands, "\t\t\t%s=0\n", indexedVar)
 	for i, indexPlan := range plan.IndexPlans {
 		outputExpr := fmt.Sprintf("\"$%s/%s-%d.scip\"", tmpVar, plan.Language, i)
-		fmt.Fprintf(&commands, "\t\t\tif %s; then\n", shellCommandWithOutput(indexPlan, outputExpr))
+		fmt.Fprintf(&commands, "\t\t\tif %s%s; then\n", shellCommandWithOutput(indexPlan, outputExpr), closeLockFD)
 		fmt.Fprintf(&commands, "\t\t\t\tset -- \"$@\" --root %s --index %s\n", shellWord(indexPlan.Root), outputExpr)
 		fmt.Fprintf(&commands, "\t\t\t\t%s=$((%s + 1))\n", indexedVar, indexedVar)
 		fmt.Fprintf(&commands, "\t\t\telse\n\t\t\t\techo \"%s: failed to index %s SCIP root %s; skipping it\" >&2\n\t\t\tfi\n", scriptName(), plan.Language, shellWord(indexPlan.Root))
 	}
 	fmt.Fprintf(&commands, "\t\t\tif [ \"$%s\" -gt 0 ]; then\n", indexedVar)
-	fmt.Fprintf(&commands, "\t\t\t\t\"$@\" --out %s\n", stagedOutput)
+	fmt.Fprintf(&commands, "\t\t\t\t\"$@\" --out %s%s\n", stagedOutput, closeLockFD)
 	fmt.Fprintf(&commands, "\t\t\t\tmv -f %s %s\n", stagedOutput, shellWord(plan.OutputPath))
 	fmt.Fprintf(&commands, "\t\t\telif [ -f %s ]; then\n", shellQuote(plan.OutputPath))
 	fmt.Fprintf(&commands, "\t\t\t\techo \"%s: no %s SCIP roots indexed; retaining existing index\" >&2\n", scriptName(), plan.Language)
@@ -555,18 +556,18 @@ fi
 	}
 
 	var commands strings.Builder
-	fmt.Fprintf(&commands, "\tstacklit export-architecture -i %s -o \"$%s/%s\"\n", shellQuote(stacklitArtifactName), tmpVar, stacklitArchitectureArtifactName)
+	fmt.Fprintf(&commands, "\tstacklit export-architecture -i %s -o \"$%s/%s\"%s\n", shellQuote(stacklitArtifactName), tmpVar, stacklitArchitectureArtifactName, closeLockFD)
 	graphPathExprs := make([]string, 0, len(plans))
 	for _, plan := range plans {
 		graphPathExpr := fmt.Sprintf("\"$%s/%s-scip-graph.json\"", tmpVar, shellIdentifier(plan.Language))
 		graphPathExprs = append(graphPathExprs, graphPathExpr)
-		fmt.Fprintf(&commands, "\tscip-search graph-export --index %s -o %s\n", shellQuote(plan.OutputPath), graphPathExpr)
+		fmt.Fprintf(&commands, "\tscip-search graph-export --index %s -o %s%s\n", shellQuote(plan.OutputPath), graphPathExpr, closeLockFD)
 	}
 	commands.WriteString("\tfunctional-clusters build")
 	for _, graphPathExpr := range graphPathExprs {
 		fmt.Fprintf(&commands, " --scip-graph %s", graphPathExpr)
 	}
-	fmt.Fprintf(&commands, " --stacklit-architecture \"$%s/%s\" -o %s\n", tmpVar, stacklitArchitectureArtifactName, stagedOutput)
+	fmt.Fprintf(&commands, " --stacklit-architecture \"$%s/%s\" -o %s%s\n", tmpVar, stacklitArchitectureArtifactName, stagedOutput, closeLockFD)
 	fmt.Fprintf(&commands, "\tmv -f %s %s\n", stagedOutput, shellQuote(functionalClustersArtifactName))
 
 	return fmt.Sprintf(`cd %s
@@ -939,7 +940,7 @@ func managedLifecycleHookExists(hookPath string) (bool, error) {
 }
 
 func installManagedHookDispatcher(dispatcherPath string) (HookAction, error) {
-	want := managedHookDispatcherContent()
+	want := managedHookDispatcherContent(indexBinary())
 	name := hookDispatcherName()
 	current, err := os.ReadFile(dispatcherPath)
 	if os.IsNotExist(err) {
@@ -1064,7 +1065,11 @@ exit 0
 		`, ManagedHookMarker, hook, hookDispatcherName(), hookNameEnvVar, shellQuote(hook))
 }
 
-func managedHookDispatcherContent() string {
+// managedHookDispatcherContent routes every lifecycle hook through the
+// coordinator (RunRefresh), which serializes refreshes with merge-triggered
+// ones. When indexBinary no longer exists it falls back to the binary on PATH;
+// with neither it skips the refresh rather than run the script unserialized.
+func managedHookDispatcherContent(indexBinary string) string {
 	return fmt.Sprintf(`#!/bin/sh
 %s
 set -eu
@@ -1093,8 +1098,63 @@ if [ ! -x "$script" ]; then
 fi
 
 cd "$repo_root"
-"$script"
-`, ManagedHookMarker, hookNameEnvVar, hookNameEnvVar, scriptName())
+%s%s
+if [ -n "$index_binary" ] && [ ! -x "$index_binary" ]; then
+	index_binary="$(command -v %s 2>/dev/null || true)"
+fi
+if [ -z "$index_binary" ]; then
+	echo "%s: %s not found; skipping index refresh" >&2
+	exit 0
+fi
+exec "$index_binary" %s --trigger "$hook_name"
+`, ManagedHookMarker, hookNameEnvVar, hookNameEnvVar, scriptName(),
+		indexBinaryAssignment, shellQuote(indexBinary),
+		shellWord(brand.RuntimeValues().BinaryName),
+		hookDispatcherName(), brand.RuntimeValues().BinaryName,
+		RefreshCommandName)
+}
+
+// indexBinaryAssignment starts the dispatcher line that bakes in the
+// coordinator executable. CheckActivation reads the path back from it.
+const indexBinaryAssignment = "index_binary="
+
+// bakedIndexBinary returns the coordinator path baked into dispatcher content.
+func bakedIndexBinary(content string) (string, bool) {
+	for _, line := range strings.Split(content, "\n") {
+		if value, ok := strings.CutPrefix(line, indexBinaryAssignment); ok {
+			return shellUnquote(value), true
+		}
+	}
+	return "", false
+}
+
+// shellUnquote reverses shellQuote.
+func shellUnquote(value string) string {
+	value = strings.TrimSuffix(strings.TrimPrefix(value, "'"), "'")
+	return strings.ReplaceAll(value, `'"'"'`, "'")
+}
+
+// indexBinary resolves the coordinator executable the dispatcher runs. It is
+// empty inside test binaries, whose executable would run the test suite if a
+// hook invoked it; tests that need a coordinator install one with
+// SetIndexBinaryForTest.
+var indexBinary = func() string {
+	if testing.Testing() {
+		return ""
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return executable
+}
+
+// SetIndexBinaryForTest makes installs bake path in as the coordinator and
+// returns a function restoring the default.
+func SetIndexBinaryForTest(path string) (restore func()) {
+	previous := indexBinary
+	indexBinary = func() string { return path }
+	return func() { indexBinary = previous }
 }
 
 func looksLikeLegacyHookDispatcher(content string) bool {

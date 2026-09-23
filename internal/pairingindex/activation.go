@@ -163,7 +163,7 @@ func CheckActivation(opts InstallActivationOptions) (ActivationStatus, error) {
 	if err != nil {
 		return "", err
 	}
-	if string(script) != want || string(dispatcher) != managedHookDispatcherContent() {
+	if string(script) != want || !dispatcherCurrent(string(dispatcher)) {
 		return ActivationDrifted, nil
 	}
 	executable, err := managedFilesExecutable(hooksDir, hooks)
@@ -174,6 +174,23 @@ func CheckActivation(opts InstallActivationOptions) (ActivationStatus, error) {
 		return ActivationDrifted, nil
 	}
 	return ActivationCurrent, nil
+}
+
+// dispatcherCurrent accepts any baked coordinator path that still exists as an
+// executable, rather than only the running binary's. A supervisor started from
+// another path than init's, a go run build or a versioned install directory,
+// would otherwise see drift and rewrite the hooks on every start.
+func dispatcherCurrent(content string) bool {
+	baked, ok := bakedIndexBinary(content)
+	if !ok || content != managedHookDispatcherContent(baked) {
+		return false
+	}
+	if baked == "" {
+		// Nothing baked is only current when there is still nothing to bake.
+		return indexBinary() == ""
+	}
+	info, err := os.Stat(baked)
+	return err == nil && !info.IsDir() && (runtime.GOOS == "windows" || info.Mode().Perm()&0o111 != 0)
 }
 
 // managedFilesExecutable reports whether the script, the dispatcher and the

@@ -194,6 +194,8 @@ func TestInstallLifecycleHooksRefreshPreservesUnrelatedStagingFile(t *testing.T)
 
 func TestManagedHookDispatcherInvokesLocalIndexScriptWithoutLifecycleArguments(t *testing.T) {
 	repo := initGitRepo(t)
+	coordinatorLog := filepath.Join(t.TempDir(), "coordinator.log")
+	useFakeCoordinator(t)
 	result, err := InstallLifecycleHooks(InstallHooksOptions{
 		RepoRoot: repo,
 		Hooks:    []string{"post-rewrite"},
@@ -210,12 +212,16 @@ func TestManagedHookDispatcherInvokesLocalIndexScriptWithoutLifecycleArguments(t
 
 	cmd := scriptCommand(t, filepath.Join(result.HooksDir, "post-rewrite"), "rebase", "amend")
 	cmd.Dir = repo
-	cmd.Env = append(os.Environ(), "LIZA_TEST_HOOK_LOG="+logPath)
+	cmd.Env = append(os.Environ(), "LIZA_TEST_HOOK_LOG="+logPath, "LIZA_TEST_COORDINATOR_LOG="+coordinatorLog)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("post-rewrite hook failed: %v\n%s", err, output)
 	}
 
+	// The hook goes through the coordinator, naming itself as the trigger.
+	if got := readFile(t, coordinatorLog); got != RefreshCommandName+" --trigger post-rewrite\n" {
+		t.Fatalf("coordinator args = %q, want %s --trigger post-rewrite", got, RefreshCommandName)
+	}
 	args := readFile(t, logPath)
 	if args != "args:\n" {
 		t.Fatalf("liza-index.sh args = %q, want no lifecycle arguments", args)
@@ -261,7 +267,7 @@ func TestManagedHookWrapperPassesHookNameToDispatcherForPostCheckoutFileCheckout
 	}
 
 	dispatcherPath := filepath.Join(hooksDir, hookDispatcherName())
-	if err := os.WriteFile(dispatcherPath, []byte(managedHookDispatcherContent()), 0755); err != nil {
+	if err := os.WriteFile(dispatcherPath, []byte(managedHookDispatcherContent(useFakeCoordinator(t))), 0755); err != nil {
 		t.Fatalf("write dispatcher fixture: %v", err)
 	}
 
@@ -940,6 +946,7 @@ func TestInstalledIndexScriptFailedFunctionalClustersBuildKeepsPublishedArtifact
 
 func TestManagedLifecycleHookInvokesInstalledIndexScriptWithoutAI(t *testing.T) {
 	repo := initGitRepo(t)
+	useFakeCoordinator(t)
 	hookResult, err := InstallLifecycleHooks(InstallHooksOptions{
 		RepoRoot: repo,
 		Hooks:    []string{"post-commit"},
@@ -1181,6 +1188,23 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 	if err := os.WriteFile(path, []byte(content), mode); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
 	}
+}
+
+// useFakeCoordinator installs, as the coordinator the dispatcher bakes in, a
+// script that runs the index script directly and records its arguments in
+// $LIZA_TEST_COORDINATOR_LOG. Hook-wiring tests use it; RunRefresh itself is
+// tested in refresh_test.go.
+func useFakeCoordinator(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "fake-coordinator")
+	script := `#!/bin/sh
+printf '%s\n' "$*" >> "${LIZA_TEST_COORDINATOR_LOG:-/dev/null}"
+exec "$(git rev-parse --git-path hooks/` + scriptName() + `)"
+`
+	path = testhelpers.WriteShellStub(t, path, script)
+	t.Cleanup(SetIndexBinaryForTest(path))
+	return path
 }
 
 const noAIStacklitCalls = "generate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"

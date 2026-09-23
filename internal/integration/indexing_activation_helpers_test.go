@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/functionalclusters"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/scipsearch"
@@ -24,8 +25,14 @@ import (
 func newIndexingActivationProject(t *testing.T) string {
 	t.Helper()
 
+	// Hooks installed here run a real coordinator: the built CLI, not the
+	// test binary, which installs bake in nothing to avoid re-running tests.
+	// Build it before setupTestProject moves HOME, or the build fills a
+	// read-only module cache inside the test's temp dir.
+	coordinator := buildDependencyRepairCLI(t)
 	projectDir, cleanup := setupTestProject(t)
 	t.Cleanup(cleanup)
+	t.Cleanup(pairingindex.SetIndexBinaryForTest(coordinator))
 	return projectDir
 }
 
