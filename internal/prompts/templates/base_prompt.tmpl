@@ -125,7 +125,7 @@ FIRST ACTIONS:
 {{- if .ScipSearchIndexes }}
 
 === SCIP-SEARCH INDEXES ===
-Generated SCIP indexes were refreshed before this prompt was built and reflect the current target tree at prompt construction time; they will not reflect subsequent agent edits.
+Generated SCIP indexes are available for this target. They are repository snapshots that may lag behind current edits or failed refresh attempts, and they will not reflect subsequent agent edits; use them for orientation, then verify against source files before editing.
 
 {{- range .ScipSearchIndexes }}
 

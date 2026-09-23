@@ -18,8 +18,10 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// Drive the real supervisor, including its post-index read, prompt and
-// post-execution self-heal. Indexing is a controlled concurrent-state boundary.
+// Drive the real supervisor, including its post-pre-execution state read,
+// prompt and post-execution self-heal. The pre-execution hook is a controlled
+// concurrent-state boundary: it makes each condition appear after wake
+// selection, which the pre-loop gates would otherwise intercept.
 func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 	for _, scenario := range []string{"new blocker", "human note", "completed human note", "aborted human note", "consumed output", "paused", "manual checkpoint", "tripped", "stopped", "completed", "quota", "provider unavailable"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -51,10 +53,14 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 
 			t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 			t.Setenv(stacklit.EnvEnableStacklit, "false")
-			refreshes := 0
-			defer replaceOrchestratorScipRefreshForTest(t, func(_ scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
-				refreshes++
-				err := bb.Modify(func(s *models.State) error {
+			// Apply the condition after wake selection. Seeding it in the
+			// initial state instead is intercepted by the pre-loop quota,
+			// pause and checkpoint gates, which return or park before the
+			// supervisor ever selects a wake.
+			hookRuns := 0
+			defer replaceOrchestratorPreExecutionHookForTest(t, func() error {
+				hookRuns++
+				return bb.Modify(func(s *models.State) error {
 					switch scenario {
 					case "new blocker", "human note":
 						*s.FindTask("provider") = testhelpers.BuildTaskByStatus("provider", models.TaskStatusBlocked, plan.Created)
@@ -79,7 +85,6 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 					}
 					return nil
 				})
-				return scipsearch.RefreshResult{}, err
 			})()
 
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -110,8 +115,8 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 			if err != nil && !errors.Is(err, context.Canceled) {
 				t.Fatal(err)
 			}
-			if refreshes != 1 {
-				t.Fatalf("index refreshes = %d, want 1", refreshes)
+			if hookRuns != 1 {
+				t.Fatalf("pre-execution hook runs = %d, want 1", hookRuns)
 			}
 			calls := mock.GetCalls()
 			if scenario != "new blocker" && wantTrigger != WakeTriggerHumanNote {
@@ -124,7 +129,7 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 				t.Fatalf("provider calls = %d, want 1", len(calls))
 			}
 			if !strings.Contains(calls[0].Prompt, "WAKE TRIGGER: "+string(wantTrigger)) {
-				t.Error("indexing replaced the selected wake in the actual provider prompt")
+				t.Error("revalidation replaced the selected wake in the actual provider prompt")
 			}
 			after := mustReadState(t, bb)
 			if wantTrigger == WakeTriggerHumanNote {

@@ -589,7 +589,13 @@ func TestBuildBasePromptScipSearchRendersSuppliedIndexes(t *testing.T) {
 	}
 
 	assertContains("=== SCIP-SEARCH INDEXES ===")
-	assertContains("Generated SCIP indexes were refreshed before this prompt was built and reflect the current target tree at prompt construction time; they will not reflect subsequent agent edits.")
+	assertContains("Generated SCIP indexes are available for this target. They are repository snapshots that may lag behind current edits or failed refresh attempts, and they will not reflect subsequent agent edits; use them for orientation, then verify against source files before editing.")
+	// Index discovery checks existence only, and project-root indexes are
+	// refreshed by git hooks rather than before each prompt, so the prompt
+	// must not promise that an index matches the tree at construction time.
+	if strings.Contains(prompt, "refreshed before this prompt was built") {
+		t.Fatal("BuildBasePrompt() claims SCIP indexes are fresh; discovery does not verify freshness")
+	}
 	assertContains("Use `~/" + paths.GlobalDirName() + "/AGENT_TOOLS.md` for `scip-search` command syntax, routing rules, and freshness caveats.")
 
 	for _, command := range []string{

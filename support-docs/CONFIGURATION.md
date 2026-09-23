@@ -550,9 +550,14 @@ MAS runtime behavior:
 At runtime, §BRAND_NAME_TITLE§ runs `stacklit generate-json -o stacklit.json` at controlled
 lifecycle points when `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is truthy:
 
-- Orchestrator refreshes `<project_root>/stacklit.json`.
 - Task worktree creation, reviewer worktree recovery, and submit-for-review
   refresh `<worktree>/stacklit.json`.
+
+`<project_root>/stacklit.json` is not refreshed by any agent. It is owned by the
+lifecycle git hooks installed at init (`post-commit`, `post-checkout`,
+`post-merge`, `post-rewrite`), so it tracks committed state and does not reflect
+uncommitted changes. Worktrees set their own `core.hooksPath` and therefore do
+not inherit those hooks, which is why task worktrees are indexed explicitly.
 
 Task-local `stacklit.json` is generated for prompt context only. §BRAND_NAME_TITLE§ requires
 `stacklit.json` to be either tracked or ignored before task-local generation.
@@ -763,7 +768,8 @@ Generated task indexes live under the task worktree:
 <worktree>/§BRAND_PROJECT_DIRNAME§/scip/
 ```
 
-Project-root orchestrator indexes live under:
+Project-root indexes, refreshed by the lifecycle git hooks rather than by any
+agent, live under:
 
 ```text
 <project_root>/§BRAND_PROJECT_DIRNAME§/scip/

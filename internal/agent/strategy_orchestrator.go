@@ -9,13 +9,10 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/functionalclusters"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
-	"github.com/liza-mas/liza/internal/scipsearch"
-	"github.com/liza-mas/liza/internal/stacklit"
 )
 
 // orchestratorStrategy handles the orchestrator role.
@@ -28,10 +25,14 @@ type orchestratorStrategy struct {
 }
 
 var (
-	orchestratorScipRefresh               = scipsearch.RefreshIndexes
-	orchestratorStacklitRefresh           = stacklit.RefreshIndex
-	orchestratorFunctionalClustersRefresh = functionalclusters.RefreshIndex
-	orchestratorWaitForWorkDetector       = DetectOrchestratorWakeTriggersForProject
+	orchestratorWaitForWorkDetector = DetectOrchestratorWakeTriggersForProject
+	// orchestratorPreExecutionHook runs at the end of PreExecution, inside the
+	// window the supervisor re-reads state in before RevalidateWake. Production
+	// leaves it nil. It exists because the pre-loop gates (quota, pause and
+	// checkpoint at supervisor.go:795-800) run before wake selection, so a
+	// condition seeded up front never reaches RevalidateWake: appearing inside
+	// this window is the only way to exercise cancellation after selection.
+	orchestratorPreExecutionHook func() error
 )
 
 const defaultOrchestratorTimeout = 4 * time.Hour
@@ -171,9 +172,9 @@ func (s *orchestratorStrategy) PreExecution(bb *db.Blackboard, config Supervisor
 	if err := setAgentToOrchestratingStatus(bb, config.Authority); err != nil {
 		return err
 	}
-	refreshOrchestratorProjectRootScipIndexes(bb, config)
-	refreshOrchestratorProjectRootStacklitIndex(config)
-	refreshOrchestratorProjectRootFunctionalClustersIndex(bb, config)
+	if orchestratorPreExecutionHook != nil {
+		return orchestratorPreExecutionHook()
+	}
 	return nil
 }
 
@@ -181,7 +182,8 @@ func (s *orchestratorStrategy) BuildPrompt(state *models.State, config Superviso
 	return buildOrchestratorPromptForWake(state, config, s.resolver, s.wake)
 }
 
-// RevalidateWake runs after indexing and before any turn/spin accounting. Gate
+// RevalidateWake runs after pre-execution and the state re-read, before the
+// prompt build and any turn/spin accounting. Gate
 // effects remain owned by the supervisor loop; cancellation just returns there.
 func (s *orchestratorStrategy) RevalidateWake(ctx context.Context, bb *db.Blackboard, state *models.State, config SupervisorConfig) (launch bool, err error) {
 	defer func() {
@@ -311,81 +313,4 @@ func selfHealCheckpoint(projectRoot string, trigger OrchestratorWakeTrigger) boo
 		return false
 	}
 	return true
-}
-
-func refreshOrchestratorProjectRootScipIndexes(bb *db.Blackboard, config SupervisorConfig) {
-	logger := GetLogger()
-	state, err := bb.Read()
-	if err != nil {
-		logger.Warn("Failed to read state for orchestrator SCIP refresh", "error", err)
-		return
-	}
-
-	configuredLanguages := state.Config.ScipSearch
-	if !scipsearch.RuntimeEnabled(configuredLanguages) {
-		return
-	}
-
-	result, err := orchestratorScipRefresh(scipsearch.RefreshOptions{
-		TargetRoot:          config.ProjectRoot,
-		TargetKind:          scipsearch.TargetKindProjectRoot,
-		ConfiguredLanguages: configuredLanguages,
-	})
-	if err != nil {
-		logger.Warn("Orchestrator SCIP refresh failed", "error", err)
-		return
-	}
-	for _, failure := range result.Failures {
-		logger.Warn("Orchestrator SCIP indexer failed",
-			"language", failure.Language,
-			"diagnostic", failure.Diagnostic)
-	}
-}
-
-func refreshOrchestratorProjectRootStacklitIndex(config SupervisorConfig) {
-	if !stacklit.RuntimeEnabled() {
-		return
-	}
-
-	logger := GetLogger()
-	result, err := orchestratorStacklitRefresh(stacklit.RefreshOptions{
-		TargetRoot: config.ProjectRoot,
-		TargetKind: stacklit.TargetKindProjectRoot,
-	})
-	if err != nil {
-		logger.Warn("Orchestrator Stacklit refresh failed", "error", err)
-		return
-	}
-	for _, failure := range result.Failures {
-		logger.Warn("Orchestrator Stacklit indexer failed",
-			"diagnostic", failure.Diagnostic)
-	}
-}
-
-func refreshOrchestratorProjectRootFunctionalClustersIndex(bb *db.Blackboard, config SupervisorConfig) {
-	logger := GetLogger()
-	state, err := bb.Read()
-	if err != nil {
-		logger.Warn("Failed to read state for orchestrator Functional Clusters refresh", "error", err)
-		return
-	}
-
-	configuredLanguages := state.Config.ScipSearch
-	if !functionalclusters.RefreshEnabled(configuredLanguages) {
-		return
-	}
-
-	result, err := orchestratorFunctionalClustersRefresh(functionalclusters.RefreshOptions{
-		TargetRoot:          config.ProjectRoot,
-		TargetKind:          functionalclusters.TargetKindProjectRoot,
-		ConfiguredLanguages: configuredLanguages,
-	})
-	if err != nil {
-		logger.Warn("Orchestrator Functional Clusters refresh failed", "error", err)
-		return
-	}
-	for _, failure := range result.Failures {
-		logger.Warn("Orchestrator Functional Clusters build failed",
-			"diagnostic", failure.Diagnostic)
-	}
 }
