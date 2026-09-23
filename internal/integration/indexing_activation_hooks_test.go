@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func TestIndexingActivationGeneratedArtifactsStayOutOfGitStatusWhenUntracked(t *testing.T) {
@@ -132,8 +133,8 @@ func TestIndexingActivationNonDefaultHooksPathUsesEffectiveHookDirectory(t *test
 
 	logPath := filepath.Join(t.TempDir(), "custom-hooks-stacklit.log")
 	runIndexingActivationGit(t, projectDir, logPath, "commit", "--allow-empty", "-m", "Trigger effective hooks path")
-	want := "generate-json -o stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o stacklit-insights.json\ngenerate-json -o stacklit.json --parse-workers 3\n"
-	if got := readIndexingActivationFile(t, logPath); got != want {
+	want := "generate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"
+	if got := testhelpers.NormalizeIndexStagingPaths(readIndexingActivationFile(t, logPath)); got != want {
 		t.Fatalf("custom hooksPath Stacklit calls = %q, want effective hook path to run Liza indexing hook", got)
 	}
 }

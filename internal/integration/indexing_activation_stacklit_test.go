@@ -43,8 +43,10 @@ func TestIndexingActivationStacklitPairingInitInstallsLifecycleRefreshWithoutGlo
 	assertIndexingActivationContainsAll(t, script,
 		pairingindex.ManagedIndexScriptMarker,
 		"stacklit diff -i stacklit.json",
-		"stacklit generate-json -o stacklit.json --parse-workers 3",
-		"stacklit init-insights -i stacklit.json -o stacklit-insights.json",
+		`stacklit generate-json -o "$staging_dir/stacklit.json" --parse-workers 3`,
+		`mv -f "$staging_dir/stacklit.json" stacklit.json`,
+		`stacklit init-insights -i stacklit.json -o "$staging_dir/stacklit-insights.json"`,
+		`mv -f "$staging_dir/stacklit-insights.json" stacklit-insights.json`,
 		"stacklit ai-summary",
 	)
 	for _, hook := range pairingindex.DefaultLifecycleHooks() {
@@ -62,8 +64,8 @@ func TestIndexingActivationStacklitPairingInitInstallsLifecycleRefreshWithoutGlo
 	autoLogPath := filepath.Join(t.TempDir(), "stacklit-auto.log")
 	runIndexingActivationGit(t, projectDir, autoLogPath, "commit", "--allow-empty", "-m", "Trigger Stacklit lifecycle")
 
-	wantAutoCalls := "generate-json -o stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o stacklit-insights.json\ngenerate-json -o stacklit.json --parse-workers 3\n"
-	if got := readIndexingActivationFile(t, autoLogPath); got != wantAutoCalls {
+	wantAutoCalls := "generate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"
+	if got := testhelpers.NormalizeIndexStagingPaths(readIndexingActivationFile(t, autoLogPath)); got != wantAutoCalls {
 		t.Fatalf("automatic Stacklit calls = %q, want lifecycle refresh without AI-summary", got)
 	}
 	if got := readIndexingActivationFile(t, filepath.Join(projectDir, "stacklit.json")); got != "generated index\n" {
@@ -77,8 +79,8 @@ func TestIndexingActivationStacklitPairingInitInstallsLifecycleRefreshWithoutGlo
 	runIndexingActivationCommand(t, projectDir, manualLogPath,
 		testhelpers.ResolveBashForScripts(t), filepath.ToSlash(scriptPath), "ai")
 
-	wantManualCalls := "diff -i stacklit.json\ngenerate-json -o stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o stacklit-insights.json\nai-summary\ngenerate-json -o stacklit.json --parse-workers 3\n"
-	if got := readIndexingActivationFile(t, manualLogPath); got != wantManualCalls {
+	wantManualCalls := "diff -i stacklit.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\nai-summary -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"
+	if got := testhelpers.NormalizeIndexStagingPaths(readIndexingActivationFile(t, manualLogPath)); got != wantManualCalls {
 		t.Fatalf("manual Stacklit calls = %q, want %q", got, wantManualCalls)
 	}
 	if got := readIndexingActivationFile(t, filepath.Join(projectDir, "stacklit.json")); got != "generated index\n" {
@@ -93,16 +95,25 @@ func writeIndexingActivationFakeStacklit(t *testing.T) string {
 	path := filepath.Join(dir, "stacklit")
 	script := `#!/bin/sh
 printf '%s\n' "$*" >> "$LIZA_TEST_STACKLIT_LOG"
-if [ "$1" = "diff" ]; then
+command="$1"
+output=""
+while [ "$#" -gt 0 ]; do
+	if [ "$1" = "-o" ]; then
+		shift
+		output="$1"
+	fi
+	shift
+done
+if [ "$command" = "diff" ]; then
 	exit "${LIZA_TEST_STACKLIT_DIFF_EXIT:-1}"
 fi
-if [ "$1" = "generate-json" ]; then
-	printf '%s\n' "generated index" > "$PWD/stacklit.json"
+if [ "$command" = "generate-json" ]; then
+	printf '%s\n' "generated index" > "${output:-stacklit.json}"
 fi
-if [ "$1" = "init-insights" ]; then
-	printf '%s\n' "$LIZA_TEST_STACKLIT_LOG" > "$PWD/stacklit-insights.json"
+if [ "$command" = "init-insights" ]; then
+	printf '%s\n' "$LIZA_TEST_STACKLIT_LOG" > "${output:-stacklit-insights.json}"
 fi
-if [ "$1" = "ai-summary" ] && [ ! -f "$PWD/stacklit.json" ]; then
+if [ "$command" = "ai-summary" ] && [ ! -f "$PWD/stacklit.json" ]; then
 	echo "stacklit generate-json must run before ai-summary" >&2
 	exit 7
 fi

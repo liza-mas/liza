@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -76,6 +77,20 @@ func ShellArg(value string) string {
 		return value
 	}
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+// indexStagingRunDir repeats pairingindex's staging directory suffix rather
+// than calling pairingindex.stagingDirName: pairingindex's own tests import
+// testhelpers, so importing pairingindex here would be an import cycle.
+var indexStagingRunDir = regexp.MustCompile(`\S*-index-staging/run\.[^/\s]+`)
+
+// NormalizeIndexStagingPaths replaces the per-run staging directory the
+// generated index script writes into with $STAGING.
+//
+// Each run stages its artifacts in a fresh mktemp directory, so a log of the
+// tool calls it made only compares stably once that directory is masked.
+func NormalizeIndexStagingPaths(log string) string {
+	return indexStagingRunDir.ReplaceAllString(log, "$$STAGING")
 }
 
 var stubRelay struct {

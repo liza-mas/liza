@@ -423,9 +423,9 @@ func TestInitDispatch_PairingScipSearchPlanFlagWritesOverrideCommands(t *testing
 		"--root services/design-diagnosis/cli --index ",
 		"--root apps/web/src --index ",
 		"--root apps/api --index ",
-		"--out " + testhelpers.ShellArg(filepath.Join(projectRoot, "go.scip")),
-		"--out " + testhelpers.ShellArg(filepath.Join(projectRoot, "typescript.scip")),
-		"--out " + testhelpers.ShellArg(filepath.Join(projectRoot, "python.scip")),
+		`mv -f "$staging_dir/go.scip" ` + testhelpers.ShellArg(filepath.Join(projectRoot, "go.scip")),
+		`mv -f "$staging_dir/typescript.scip" ` + testhelpers.ShellArg(filepath.Join(projectRoot, "typescript.scip")),
+		`mv -f "$staging_dir/python.scip" ` + testhelpers.ShellArg(filepath.Join(projectRoot, "python.scip")),
 	} {
 		if !strings.Contains(string(script), want) {
 			t.Fatalf("%s-index.sh missing override command %q:\n%s", brand.BinaryName, want, string(script))

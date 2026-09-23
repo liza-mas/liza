@@ -3996,9 +3996,9 @@ func TestInitPairingCommand_ScipSearchPlanOverridesAmbiguousRoots(t *testing.T) 
 		"--root services/design-diagnosis/cli --index ",
 		"--root apps/web/src --index ",
 		"--root apps/api --index ",
-		"--out " + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip")),
-		"--out " + testhelpers.ShellArg(filepath.Join(gitDir, "typescript.scip")),
-		"--out " + testhelpers.ShellArg(filepath.Join(gitDir, "python.scip")),
+		`mv -f "$staging_dir/go.scip" ` + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip")),
+		`mv -f "$staging_dir/typescript.scip" ` + testhelpers.ShellArg(filepath.Join(gitDir, "typescript.scip")),
+		`mv -f "$staging_dir/python.scip" ` + testhelpers.ShellArg(filepath.Join(gitDir, "python.scip")),
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("liza-index.sh missing override command %q:\n%s", want, script)
@@ -4068,7 +4068,7 @@ func TestInitPairingCommand_ScipSearchMultiRootInstallsAggregateHooks(t *testing
 		t.Fatalf("InitPairingCommand() error = %v", err)
 	}
 	script := readFileForTest(t, filepath.Join(gitDir, ".git", "hooks", brand.BinaryName+"-index.sh"))
-	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", "--out " + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip"))} {
+	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", `mv -f "$staging_dir/go.scip" ` + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip"))} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("liza-index.sh = %q, want %q", script, want)
 		}
@@ -4101,7 +4101,7 @@ func TestInitPairingCommand_AmbientScipSearchAggregatesMultiRoot(t *testing.T) {
 		t.Fatalf("stderr = %q, want no multi-root warning", stderr)
 	}
 	script := readFileForTest(t, filepath.Join(gitDir, ".git", "hooks", brand.BinaryName+"-index.sh"))
-	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", "--out " + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip"))} {
+	for _, want := range []string{"--root service-a --index ", "--root service-b --index ", `mv -f "$staging_dir/go.scip" ` + testhelpers.ShellArg(filepath.Join(gitDir, "go.scip"))} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("liza-index.sh = %q, want %q", script, want)
 		}

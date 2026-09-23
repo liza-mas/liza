@@ -316,16 +316,16 @@ func TestRenderIndexScriptUsesLegacyStacklitRefreshWithoutAutomaticAISummary(t *
 	if !strings.Contains(script, "stacklit diff -i stacklit.json") {
 		t.Fatalf("script missing Stacklit diff short-circuit:\n%s", script)
 	}
-	if !strings.Contains(script, "stacklit generate-json -o stacklit.json --parse-workers 3") {
+	if !strings.Contains(script, `stacklit generate-json -o "$staging_dir/stacklit.json" --parse-workers 3`) {
 		t.Fatalf("script missing no-AI Stacklit generation command:\n%s", script)
 	}
-	if !strings.Contains(script, "stacklit init-insights -i stacklit.json -o stacklit-insights.json") {
+	if !strings.Contains(script, `stacklit init-insights -i stacklit.json -o "$staging_dir/stacklit-insights.json"`) {
 		t.Fatalf("script missing Stacklit insights initialization command:\n%s", script)
 	}
 	if !strings.Contains(script, "stacklit ai-summary") {
 		t.Fatalf("script missing manual AI-summary command:\n%s", script)
 	}
-	if strings.Contains(script, "stacklit generate-json -o stacklit.json --ai") {
+	if strings.Contains(script, "--ai") {
 		t.Fatalf("automatic Stacklit generation command includes AI flag:\n%s", script)
 	}
 }
@@ -454,13 +454,13 @@ func TestInstalledIndexScriptRefreshesStacklitJSONWithoutAIByDefault(t *testing.
 		t.Fatalf("liza-index.sh failed: %v\n%s", err, output)
 	}
 
-	want := "generate-json -o stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o stacklit-insights.json\ngenerate-json -o stacklit.json --parse-workers 3\n"
-	if got := readFile(t, logPath); got != want {
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, logPath)); got != noAIStacklitCalls {
 		t.Fatalf("stacklit calls = %q, want no-AI generate-json only", got)
 	}
 	if got := readFile(t, filepath.Join(repo, "stacklit.json")); got != "generated index\n" {
 		t.Fatalf("stacklit.json = %q, want generated index", got)
 	}
+	assertStagingCleanedUp(t, repo)
 	if got := runGitOutput(t, repo, "status", "--porcelain"); got != "" {
 		t.Fatalf("git status --porcelain = %q, want clean generated Stacklit artifact", got)
 	}
@@ -557,10 +557,58 @@ func TestInstalledIndexScriptManualAIArgumentRunsAISummary(t *testing.T) {
 		t.Fatalf("liza-index.sh ai failed: %v\n%s", err, output)
 	}
 
-	want := "generate-json -o stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o stacklit-insights.json\nai-summary\ngenerate-json -o stacklit.json --parse-workers 3\n"
-	if got := readFile(t, logPath); got != want {
+	want := "generate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\nai-summary -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, logPath)); got != want {
 		t.Fatalf("stacklit calls = %q, want %q", got, want)
 	}
+	if got := readFile(t, filepath.Join(repo, "stacklit-insights.json")); got != "generated insights\nai summary\n" {
+		t.Fatalf("stacklit-insights.json = %q, want init-insights then AI summary content", got)
+	}
+}
+
+func TestInstalledIndexScriptPreservesCuratedInsights(t *testing.T) {
+	repo := initGitRepo(t)
+	writeFile(t, filepath.Join(repo, "stacklit-insights.json"), "curated entry\n", 0644)
+	commitPath(t, repo, "stacklit-insights.json", "Add curated insights")
+	result, err := InstallIndexScript(InstallIndexScriptOptions{RepoRoot: repo})
+	if err != nil {
+		t.Fatalf("InstallIndexScript() error = %v", err)
+	}
+
+	runInstalledIndexScript(t, result.Path)
+
+	// init-insights updates the file named by -o in place, so the staged copy
+	// must start from the published one or a successful run drops curation.
+	if got := readFile(t, filepath.Join(repo, "stacklit-insights.json")); got != "curated entry\ngenerated insights\n" {
+		t.Fatalf("stacklit-insights.json = %q, want curated entry preserved", got)
+	}
+}
+
+func TestInstalledIndexScriptFailedStacklitGenerationKeepsPublishedIndex(t *testing.T) {
+	repo := initGitRepo(t)
+	writeFile(t, filepath.Join(repo, "stacklit.json"), "tracked index\n", 0644)
+	commitPath(t, repo, "stacklit.json", "Add tracked Stacklit index")
+	result, err := InstallIndexScript(InstallIndexScriptOptions{RepoRoot: repo})
+	if err != nil {
+		t.Fatalf("InstallIndexScript() error = %v", err)
+	}
+	logPath := filepath.Join(t.TempDir(), "stacklit.log")
+	pathDir := writeFakeStacklit(t)
+
+	cmd := scriptCommand(t, result.Path)
+	cmd.Env = append(os.Environ(),
+		"PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"LIZA_TEST_STACKLIT_LOG="+logPath,
+		"LIZA_TEST_STACKLIT_GENERATE_FAIL=1",
+	)
+	if output, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("liza-index.sh succeeded despite failing generator:\n%s", output)
+	}
+
+	if got := readFile(t, filepath.Join(repo, "stacklit.json")); got != "tracked index\n" {
+		t.Fatalf("stacklit.json = %q, want previous index kept after failed generation", got)
+	}
+	assertStagingCleanedUp(t, repo)
 }
 
 func TestInstalledIndexScriptSkipsStacklitRefreshWhenDiffReportsNoChanges(t *testing.T) {
@@ -610,12 +658,15 @@ func TestInstalledIndexScriptSkipsFreshScipIndexAndRefreshesWhenSourceIsNewer(t 
 	pathDir := writeFakeScipGo(t)
 
 	runIndexScriptWithPath(t, result.Path, pathDir, "LIZA_TEST_SCIP_LOG="+logPath)
-	if got := readFile(t, logPath); !containsAll(got,
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, logPath)); !containsAll(got,
 		"scip-go index --module-root "+repo+" --output ",
 		"scip-search aggregate-index --project-root "+repo+" --root . --index ",
-		" --out "+outputPath,
+		" --out $STAGING/go.scip",
 	) {
 		t.Fatalf("first SCIP calls = %q", got)
+	}
+	if got := readFile(t, outputPath); got != "aggregated scip index\n" {
+		t.Fatalf("go.scip = %q, want published aggregate", got)
 	}
 
 	writeFile(t, logPath, "", 0644)
@@ -629,13 +680,49 @@ func TestInstalledIndexScriptSkipsFreshScipIndexAndRefreshesWhenSourceIsNewer(t 
 		t.Fatalf("Chtimes(source) error = %v", err)
 	}
 	runIndexScriptWithPath(t, result.Path, pathDir, "LIZA_TEST_SCIP_LOG="+logPath)
-	if got := readFile(t, logPath); !containsAll(got,
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, logPath)); !containsAll(got,
 		"scip-go index --module-root "+repo+" --output ",
 		"scip-search aggregate-index --project-root "+repo+" --root . --index ",
-		" --out "+outputPath,
+		" --out $STAGING/go.scip",
 	) {
 		t.Fatalf("stale SCIP calls = %q, want refresh", got)
 	}
+	assertStagingCleanedUp(t, repo)
+}
+
+func TestInstalledIndexScriptFailedScipAggregateKeepsPublishedIndex(t *testing.T) {
+	repo := initGitRepo(t)
+	writeFile(t, filepath.Join(repo, "main.go"), "package main\n", 0644)
+	outputPath := filepath.Join(repo, "go.scip")
+	result, err := InstallIndexScript(InstallIndexScriptOptions{
+		RepoRoot:        repo,
+		DisableStacklit: true,
+		ScipPlans:       []scipsearch.LanguageAggregatePlan{goAggregatePlan(repo, outputPath)},
+	})
+	if err != nil {
+		t.Fatalf("InstallIndexScript() error = %v", err)
+	}
+	writeFile(t, outputPath, "previous scip index\n", 0644)
+	past := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(outputPath, past, past); err != nil {
+		t.Fatalf("Chtimes(go.scip) error = %v", err)
+	}
+	pathDir := writeFakeScipGo(t)
+
+	cmd := scriptCommand(t, result.Path)
+	cmd.Env = append(os.Environ(),
+		"PATH="+pathDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"LIZA_TEST_SCIP_LOG="+filepath.Join(t.TempDir(), "scip.log"),
+		"LIZA_TEST_SCIP_AGGREGATE_FAIL=1",
+	)
+	if output, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("liza-index.sh succeeded despite failing aggregate:\n%s", output)
+	}
+
+	if got := readFile(t, outputPath); got != "previous scip index\n" {
+		t.Fatalf("go.scip = %q, want previous index kept after failed aggregate", got)
+	}
+	assertStagingCleanedUp(t, repo)
 }
 
 func TestInstalledIndexScriptUsesScipCommandRootForFreshness(t *testing.T) {
@@ -679,11 +766,11 @@ func TestInstalledIndexScriptUsesScipCommandRootForFreshness(t *testing.T) {
 		t.Fatalf("Chtimes(webSource) error = %v", err)
 	}
 	runIndexScriptWithPath(t, result.Path, pathDir, "LIZA_TEST_SCIP_LOG="+logPath)
-	if got := readFile(t, logPath); !containsAll(got,
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, logPath)); !containsAll(got,
 		"scip-typescript index --cwd "+webSrc+" --output ",
 		" "+filepath.Join(repo, "apps", "web"),
 		"scip-search aggregate-index --project-root "+repo+" --root apps/web/src --index ",
-		" --out "+outputPath,
+		" --out $STAGING/typescript.scip",
 	) {
 		t.Fatalf("stale TypeScript source calls = %q, want refresh", got)
 	}
@@ -775,8 +862,8 @@ func TestInstalledIndexScriptRefreshesFunctionalClustersJSON(t *testing.T) {
 		t.Fatalf("liza-index.sh failed: %v\n%s", err, output)
 	}
 
-	if got := readFile(t, stacklitLogPath); !containsAll(got,
-		"generate-json -o stacklit.json --parse-workers 3",
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, stacklitLogPath)); !containsAll(got,
+		"generate-json -o $STAGING/stacklit.json --parse-workers 3",
 		"export-architecture -i stacklit.json -o ",
 		"stacklit-architecture.json",
 	) {
@@ -790,12 +877,12 @@ func TestInstalledIndexScriptRefreshesFunctionalClustersJSON(t *testing.T) {
 	) {
 		t.Fatalf("scip calls = %q, want index plus graph export", got)
 	}
-	if got := readFile(t, functionalClustersLogPath); !containsAll(got,
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, functionalClustersLogPath)); !containsAll(got,
 		"functional-clusters build --scip-graph ",
 		"go-scip-graph.json",
 		" --stacklit-architecture ",
 		"stacklit-architecture.json",
-		" -o functional-clusters.json",
+		" -o $STAGING/functional-clusters.json",
 	) {
 		t.Fatalf("functional-clusters calls = %q, want build from exports", got)
 	}
@@ -808,6 +895,47 @@ func TestInstalledIndexScriptRefreshesFunctionalClustersJSON(t *testing.T) {
 	if got := runGitOutput(t, repo, "check-ignore", "functional-clusters.json"); got != "functional-clusters.json" {
 		t.Fatalf("git check-ignore functional-clusters.json = %q, want private exclude", got)
 	}
+}
+
+func TestInstalledIndexScriptFailedFunctionalClustersBuildKeepsPublishedArtifact(t *testing.T) {
+	repo := initGitRepo(t)
+	writeFile(t, filepath.Join(repo, "main.go"), "package main\n", 0644)
+	commitPath(t, repo, "main.go", "Add Go source")
+	writeFile(t, filepath.Join(repo, "functional-clusters.json"), "previous functional clusters\n", 0644)
+	commitPath(t, repo, "functional-clusters.json", "Add tracked functional clusters")
+	past := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(filepath.Join(repo, "functional-clusters.json"), past, past); err != nil {
+		t.Fatalf("Chtimes(functional-clusters.json) error = %v", err)
+	}
+	outputPath := filepath.Join(repo, "go.scip")
+	result, err := InstallIndexScript(InstallIndexScriptOptions{
+		RepoRoot:                 repo,
+		EnableFunctionalClusters: true,
+		ScipPlans:                []scipsearch.LanguageAggregatePlan{goAggregatePlan(repo, outputPath)},
+	})
+	if err != nil {
+		t.Fatalf("InstallIndexScript() error = %v", err)
+	}
+	stacklitDir := writeFakeStacklit(t)
+	scipDir := writeFakeScipGo(t)
+	functionalClustersDir := writeFakeFunctionalClusters(t)
+
+	cmd := scriptCommand(t, result.Path)
+	cmd.Env = append(os.Environ(),
+		"PATH="+stacklitDir+string(os.PathListSeparator)+scipDir+string(os.PathListSeparator)+functionalClustersDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"LIZA_TEST_STACKLIT_LOG="+filepath.Join(t.TempDir(), "stacklit.log"),
+		"LIZA_TEST_SCIP_LOG="+filepath.Join(t.TempDir(), "scip.log"),
+		"LIZA_TEST_FUNCTIONAL_CLUSTERS_LOG="+filepath.Join(t.TempDir(), "functional-clusters.log"),
+		"LIZA_TEST_FUNCTIONAL_CLUSTERS_FAIL=1",
+	)
+	if output, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("liza-index.sh succeeded despite failing functional-clusters build:\n%s", output)
+	}
+
+	if got := readFile(t, filepath.Join(repo, "functional-clusters.json")); got != "previous functional clusters\n" {
+		t.Fatalf("functional-clusters.json = %q, want previous artifact kept after failed build", got)
+	}
+	assertStagingCleanedUp(t, repo)
 }
 
 func TestManagedLifecycleHookInvokesInstalledIndexScriptWithoutAI(t *testing.T) {
@@ -836,8 +964,7 @@ func TestManagedLifecycleHookInvokesInstalledIndexScriptWithoutAI(t *testing.T) 
 		t.Fatalf("post-commit hook failed: %v\n%s", err, output)
 	}
 
-	want := "generate-json -o stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o stacklit-insights.json\ngenerate-json -o stacklit.json --parse-workers 3\n"
-	if got := readFile(t, logPath); got != want {
+	if got := testhelpers.NormalizeIndexStagingPaths(readFile(t, logPath)); got != noAIStacklitCalls {
 		t.Fatalf("lifecycle stacklit calls = %q, want no-AI generate-json only", got)
 	}
 }
@@ -1056,6 +1183,22 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 	}
 }
 
+const noAIStacklitCalls = "generate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"
+
+// assertStagingCleanedUp checks that the run removed its staging directory,
+// whether it published or failed.
+func assertStagingCleanedUp(t *testing.T, repo string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(filepath.Join(repo, ".git", stagingDirName()))
+	if err != nil {
+		t.Fatalf("read staging root: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("staging root holds %d leftover entries, want none", len(entries))
+	}
+}
+
 func runIndexScriptWithPath(t *testing.T, scriptPath, pathDir string, extraEnv ...string) {
 	t.Helper()
 
@@ -1089,34 +1232,45 @@ func writeFakeStacklit(t *testing.T) string {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "stacklit")
+	// Like the real tool, generate-json, init-insights and ai-summary honour -o,
+	// and the insights commands update the -o file rather than replace it.
 	script := `#!/bin/sh
 	printf '%s\n' "$*" >> "$LIZA_TEST_STACKLIT_LOG"
-	if [ "$1" = "diff" ]; then
+	command="$1"
+	output=""
+	while [ "$#" -gt 0 ]; do
+		if [ "$1" = "-o" ]; then
+			shift
+			output="$1"
+		fi
+		shift
+	done
+	if [ "$command" = "diff" ]; then
 		exit "${LIZA_TEST_STACKLIT_DIFF_EXIT:-1}"
 	fi
-	if [ "$1" = "generate-json" ]; then
-		printf '%s\n' "generated index" > "$PWD/stacklit.json"
+	if [ "$command" = "generate-json" ]; then
+		if [ -n "${LIZA_TEST_STACKLIT_GENERATE_FAIL:-}" ]; then
+			printf '%s\n' "partial index" > "${output:-stacklit.json}"
+			exit 3
+		fi
+		printf '%s\n' "generated index" > "${output:-stacklit.json}"
 	fi
-	if [ "$1" = "init-insights" ]; then
-		printf '%s\n' "generated insights" > "$PWD/stacklit-insights.json"
-	fi
-	if [ "$1" = "export-architecture" ]; then
-		output=""
-		while [ "$#" -gt 0 ]; do
-			if [ "$1" = "-o" ]; then
-				shift
-				output="$1"
-			fi
-			shift
-		done
-		if [ -n "$output" ]; then
-			printf '%s\n' "generated architecture" > "$output"
+	if [ "$command" = "init-insights" ]; then
+		output="${output:-stacklit-insights.json}"
+		if ! grep -qx "generated insights" "$output" 2>/dev/null; then
+			printf '%s\n' "generated insights" >> "$output"
 		fi
 	fi
-	if [ "$1" = "ai-summary" ] && [ ! -f "$PWD/stacklit.json" ]; then
-		echo "stacklit generate-json must run before ai-summary" >&2
-		exit 7
-fi
+	if [ "$command" = "export-architecture" ] && [ -n "$output" ]; then
+		printf '%s\n' "generated architecture" > "$output"
+	fi
+	if [ "$command" = "ai-summary" ]; then
+		if [ ! -f "$PWD/stacklit.json" ]; then
+			echo "stacklit generate-json must run before ai-summary" >&2
+			exit 7
+		fi
+		printf '%s\n' "ai summary" >> "${output:-stacklit-insights.json}"
+	fi
 	`
 	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
 		t.Fatalf("write fake stacklit: %v", err)
@@ -1203,6 +1357,9 @@ done
 if [ -n "$output" ]; then
 	if [ "$command" = "graph-export" ]; then
 		printf '%s\n' "generated scip graph" > "$output"
+	elif [ -n "${LIZA_TEST_SCIP_AGGREGATE_FAIL:-}" ]; then
+		printf '%s\n' "partial scip index" > "$output"
+		exit 4
 	else
 		printf '%s\n' "aggregated scip index" > "$output"
 	fi
@@ -1230,6 +1387,10 @@ while [ "$#" -gt 0 ]; do
 	shift
 done
 if [ "$command" = "build" ] && [ -n "$output" ]; then
+	if [ -n "${LIZA_TEST_FUNCTIONAL_CLUSTERS_FAIL:-}" ]; then
+		printf '%s\n' "partial functional clusters" > "$output"
+		exit 5
+	fi
 	printf '%s\n' "generated functional clusters" > "$output"
 fi
 `

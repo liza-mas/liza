@@ -499,6 +499,15 @@ stay fresh after normal local history changes. The wrappers skip task worktrees
 and file-only checkout events. This Git hook plumbing is separate from
 standalone `bash-policy` provider hooks.
 
+The script generates every artifact in a per-run directory under
+`<git-common-dir>/§BRAND_BINARY_NAME§-index-staging/` and publishes it with a rename once its
+generator succeeds, so readers never see a partially written index and a failed
+generator leaves the previous artifact in place. `stacklit-insights.json` is
+copied into staging before `init-insights` or `ai-summary` updates it, so
+curated entries survive a refresh. When the Git directory sits on a different
+filesystem from the checkout, the rename becomes a copy and publication is no
+longer atomic.
+
 ### Stacklit (`§BRAND_ENV_PREFIX§_ENABLE_STACKLIT`)
 
 `stacklit-cli` is an optional external repository-navigation tool. It is strict

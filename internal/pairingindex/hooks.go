@@ -48,6 +48,16 @@ func hookDispatcherName() string {
 	return brand.RuntimeValues().BinaryName + "-index-hook.sh"
 }
 
+// stagingDirName names the directory, under the Git common directory, that
+// holds one private subdirectory per index-script run. Every artifact is
+// generated there and published with a rename, so a reader never sees a
+// partially written index and a failed generator leaves the previous one in
+// place. Staging under .git keeps in-progress files out of the checkout and out
+// of git status.
+func stagingDirName() string {
+	return brand.RuntimeValues().BinaryName + "-index-staging"
+}
+
 // DefaultLifecycleHooks returns the Git lifecycle hooks used for pairing index refresh.
 func DefaultLifecycleHooks() []string {
 	return append([]string(nil), defaultLifecycleHooks...)
@@ -305,11 +315,21 @@ if [ "${1:-}" = "ai" ]; then
 	shift
 fi
 `)
+	body.WriteString(renderStagingSetup())
 	for _, plan := range opts.ScipPlans {
 		body.WriteString(renderScipCommand(plan))
 	}
 	if opts.EnableStacklit {
-		stacklitGenerateCommand := shellCommand(stacklitPlan.Name, append(stacklitPlan.Args, "--parse-workers", "3"))
+		stacklitName := shellWord(stacklitPlan.Name)
+		stagedIndex := `"$staging_dir/` + stacklitArtifactName + `"`
+		stagedInsights := `"$staging_dir/` + stacklitInsightsArtifactName + `"`
+		stacklitGenerateCommand := shellCommandWithOutputFlag(stacklitPlan.Name, append(stacklitPlan.Args, "--parse-workers", "3"), "-o", stagedIndex)
+		publishIndex := "mv -f " + stagedIndex + " " + stacklitArtifactName
+		// init-insights and ai-summary read their -o file before updating it,
+		// so the staged copy starts from the published insights. Starting from
+		// an empty file would drop curated entries a normal run preserves.
+		seedInsights := "if [ -f " + stacklitInsightsArtifactName + " ]; then cp " + stacklitInsightsArtifactName + " " + stagedInsights + "; fi"
+		publishInsights := "mv -f " + stagedInsights + " " + stacklitInsightsArtifactName
 		body.WriteString(fmt.Sprintf(`if ! command -v %s >/dev/null 2>&1; then
 	echo "%s: %s not found; skipping Stacklit refresh" >&2
 else
@@ -331,10 +351,15 @@ else
 			insights_before="$(cksum stacklit-insights.json | awk '{print $1 ":" $2}')"
 		fi
 		%s
-		%s init-insights -i stacklit.json -o stacklit-insights.json
+		%s
+		%s
+		%s init-insights -i stacklit.json -o %s
+		%s
 		if [ "$run_ai" = "1" ]; then
 			echo "Adding AI summary..."
-			%s ai-summary
+			%s
+			%s ai-summary -o %s
+			%s
 		fi
 		insights_after=""
 		if [ -f stacklit-insights.json ]; then
@@ -342,11 +367,16 @@ else
 		fi
 		if [ "$insights_before" != "$insights_after" ]; then
 			%s
+			%s
 		fi
 		echo "Wrote stacklit.json"
 	fi
 fi
-`, shellWord(stacklitPlan.Name), scriptName(), stacklitPlan.Name, shellWord(stacklitPlan.Name), stacklitGenerateCommand, shellWord(stacklitPlan.Name), shellWord(stacklitPlan.Name), stacklitGenerateCommand))
+`, stacklitName, scriptName(), stacklitPlan.Name, stacklitName,
+			stacklitGenerateCommand, publishIndex,
+			seedInsights, stacklitName, stagedInsights, publishInsights,
+			seedInsights, stacklitName, stagedInsights, publishInsights,
+			stacklitGenerateCommand, publishIndex))
 	}
 	if opts.EnableFunctionalClusters && opts.EnableStacklit && len(opts.ScipPlans) > 0 {
 		body.WriteString(renderFunctionalClustersCommand(stacklitPlan.Dir, opts.ScipPlans))
@@ -396,12 +426,24 @@ func InstallIndexScript(opts InstallIndexScriptOptions) (InstallIndexScriptResul
 	return InstallIndexScriptResult{Path: scriptPath, Action: action}, nil
 }
 
+// renderStagingSetup creates this run's private staging directory and removes
+// it on exit. A signal exits the script so the EXIT trap still cleans up.
+func renderStagingSetup() string {
+	return fmt.Sprintf(`staging_root="$(cd "$repo_root" && cd "$(git rev-parse --git-common-dir)" && pwd -P)/%s"
+mkdir -p "$staging_root"
+staging_dir="$(mktemp -d "$staging_root/run.XXXXXX")"
+cleanup_staging() { rm -rf "$staging_dir"; }
+trap cleanup_staging EXIT
+trap 'exit 1' HUP INT TERM
+`, stagingDirName())
+}
+
 func renderScipCommand(plan scipsearch.LanguageAggregatePlan) string {
 	needsVar := "needs_" + shellIdentifier(plan.Language) + "_scip"
 	missingVar := "missing_" + shellIdentifier(plan.Language) + "_scip"
 	tmpVar := "tmp_" + shellIdentifier(plan.Language) + "_scip"
-	cleanupFunc := "cleanup_" + shellIdentifier(plan.Language) + "_scip"
 	aggregateFunc := "aggregate_" + shellIdentifier(plan.Language) + "_scip"
+	stagedOutput := `"$staging_dir/` + shellIdentifier(plan.Language) + `.scip"`
 	indexedVar := "indexed_" + shellIdentifier(plan.Language) + "_roots"
 
 	var freshness strings.Builder
@@ -454,7 +496,8 @@ fi
 		fmt.Fprintf(&commands, "\t\t\telse\n\t\t\t\techo \"%s: failed to index %s SCIP root %s; skipping it\" >&2\n\t\t\tfi\n", scriptName(), plan.Language, shellWord(indexPlan.Root))
 	}
 	fmt.Fprintf(&commands, "\t\t\tif [ \"$%s\" -gt 0 ]; then\n", indexedVar)
-	fmt.Fprintf(&commands, "\t\t\t\t\"$@\" --out %s\n", shellWord(plan.OutputPath))
+	fmt.Fprintf(&commands, "\t\t\t\t\"$@\" --out %s\n", stagedOutput)
+	fmt.Fprintf(&commands, "\t\t\t\tmv -f %s %s\n", stagedOutput, shellWord(plan.OutputPath))
 	fmt.Fprintf(&commands, "\t\t\telif [ -f %s ]; then\n", shellQuote(plan.OutputPath))
 	fmt.Fprintf(&commands, "\t\t\t\techo \"%s: no %s SCIP roots indexed; retaining existing index\" >&2\n", scriptName(), plan.Language)
 	fmt.Fprintf(&commands, "\t\t\telse\n\t\t\t\techo \"%s: no %s SCIP roots indexed; no index produced\" >&2\n\t\t\tfi\n", scriptName(), plan.Language)
@@ -462,21 +505,18 @@ fi
 	fmt.Fprintf(&commands, "\t\t%s\n", aggregateFunc)
 
 	return fmt.Sprintf(`%s%sif [ "$%s" -eq 1 ] && [ "$%s" -eq 0 ]; then
-	%s="$(mktemp -d "${TMPDIR:-/tmp}/%s-scip-%s.XXXXXX")"
-	%s() { rm -rf "$%s"; }
-	trap %s EXIT HUP INT TERM
+	%s="$staging_dir/%s-scip"
+	mkdir "$%s"
 	cd %s
-%s	%s
-	trap - EXIT HUP INT TERM
-fi
-`, freshness.String(), commandChecks.String(), needsVar, missingVar, tmpVar, brand.RuntimeValues().BinaryName, shellIdentifier(plan.Language), cleanupFunc, tmpVar, cleanupFunc, shellQuote(plan.ProjectRoot), commands.String(), cleanupFunc)
+%sfi
+`, freshness.String(), commandChecks.String(), needsVar, missingVar, tmpVar, shellIdentifier(plan.Language), tmpVar, shellQuote(plan.ProjectRoot), commands.String())
 }
 
 func renderFunctionalClustersCommand(repoRoot string, plans []scipsearch.LanguageAggregatePlan) string {
 	needsVar := "needs_functional_clusters"
 	missingVar := "missing_functional_clusters"
 	tmpVar := "tmp_functional_clusters"
-	cleanupFunc := "cleanup_functional_clusters"
+	stagedOutput := `"$staging_dir/` + functionalClustersArtifactName + `"`
 
 	var freshness strings.Builder
 	fmt.Fprintf(&freshness, `%s=0
@@ -531,19 +571,17 @@ fi
 	for _, graphPathExpr := range graphPathExprs {
 		fmt.Fprintf(&commands, " --scip-graph %s", graphPathExpr)
 	}
-	fmt.Fprintf(&commands, " --stacklit-architecture \"$%s/%s\" -o %s\n", tmpVar, stacklitArchitectureArtifactName, shellQuote(functionalClustersArtifactName))
+	fmt.Fprintf(&commands, " --stacklit-architecture \"$%s/%s\" -o %s\n", tmpVar, stacklitArchitectureArtifactName, stagedOutput)
+	fmt.Fprintf(&commands, "\tmv -f %s %s\n", stagedOutput, shellQuote(functionalClustersArtifactName))
 
 	return fmt.Sprintf(`cd %s
 %s%sif [ "$%s" -eq 1 ] && [ "$%s" -eq 0 ]; then
-	%s="$(mktemp -d "${TMPDIR:-/tmp}/%s-functional-clusters.XXXXXX")"
-	%s() { rm -rf "$%s"; }
-	trap %s EXIT HUP INT TERM
+	%s="$staging_dir/functional-clusters"
+	mkdir "$%s"
 	echo "Functional Clusters Indexing..."
 %s	echo "Wrote %s"
-	trap - EXIT HUP INT TERM
-	%s
 fi
-`, shellQuote(repoRoot), freshness.String(), prerequisites.String(), needsVar, missingVar, tmpVar, brand.RuntimeValues().BinaryName, cleanupFunc, tmpVar, cleanupFunc, commands.String(), functionalClustersArtifactName, cleanupFunc)
+`, shellQuote(repoRoot), freshness.String(), prerequisites.String(), needsVar, missingVar, tmpVar, tmpVar, commands.String(), functionalClustersArtifactName)
 }
 
 func scipFindSourceExpression(language string) string {
@@ -632,10 +670,16 @@ func shellIdentifier(value string) string {
 	return b.String()
 }
 
-func shellCommand(name string, args []string) string {
+// shellCommandWithOutputFlag renders a command whose value after outputFlag is
+// replaced by outputExpr, an already-quoted shell expression.
+func shellCommandWithOutputFlag(name string, args []string, outputFlag, outputExpr string) string {
 	parts := []string{shellWord(name)}
-	for _, arg := range args {
-		parts = append(parts, shellWord(arg))
+	for i := 0; i < len(args); i++ {
+		parts = append(parts, shellWord(args[i]))
+		if args[i] == outputFlag && i+1 < len(args) {
+			parts = append(parts, outputExpr)
+			i++
+		}
 	}
 	return strings.Join(parts, " ")
 }
