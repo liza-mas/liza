@@ -7606,3 +7606,104 @@ func TestProceedManyToOne_SupersededMember(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteAvailableTransitionsReport_CohortClassification(t *testing.T) {
+	t.Parallel()
+	const live, abandoned = models.TaskStatus("WRITING_US"), models.TaskStatusAbandoned
+	for _, tc := range []struct {
+		name         string
+		statuses     []models.TaskStatus // for epic-plan-1-us-0..2; us-2 is the MERGED trigger
+		noParent     bool
+		wantFailures []string
+	}{
+		{name: "live member is a normal wait", statuses: []models.TaskStatus{live, models.TaskStatusMerged, models.TaskStatusMerged}},
+		{name: "abandoned member sorted after a live one", statuses: []models.TaskStatus{live, abandoned, models.TaskStatusMerged},
+			wantFailures: []string{`task epic-plan-1-us-2 transition us-to-coding: many-to-one cohort cannot complete: member "epic-plan-1-us-1" is ABANDONED`}},
+		{name: "abandoned member sorted before a live one", statuses: []models.TaskStatus{abandoned, live, models.TaskStatusMerged},
+			wantFailures: []string{`task epic-plan-1-us-2 transition us-to-coding: many-to-one cohort cannot complete: member "epic-plan-1-us-0" is ABANDONED`}},
+		{name: "story without cohort lineage", statuses: []models.TaskStatus{models.TaskStatusMerged}, noParent: true,
+			wantFailures: []string{`task epic-plan-1-us-0 transition us-to-coding: many-to-one cohort detection failed: trigger task "epic-plan-1-us-0" has no parent_task`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// GIVEN a story cohort in the given member states
+			tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+			state := testhelpers.CreateValidState()
+			state.PipelineVersion = 2
+			for i, task := range makeManyToOneCohort("epic-plan-1", "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", len(tc.statuses)) {
+				task.Status = tc.statuses[i]
+				if tc.noParent {
+					task.ParentTasks = nil
+				}
+				state.Tasks = append(state.Tasks, task)
+				state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+			}
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			// WHEN due transitions execute
+			report, err := ExecuteAvailableTransitionsReport(tmpDir, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// THEN nothing fires, and only a cohort that can never complete is reported
+			if len(report.Results) != 0 {
+				t.Fatalf("results = %+v, want none", report.Results)
+			}
+			got := make([]string, 0, len(report.Failures))
+			for _, failure := range report.Failures {
+				got = append(got, failure.String())
+			}
+			if len(got) != len(tc.wantFailures) {
+				t.Fatalf("failures = %q, want %q", got, tc.wantFailures)
+			}
+			for i, want := range tc.wantFailures {
+				if !strings.HasPrefix(got[i], want) {
+					t.Fatalf("failures[%d] = %q, want prefix %q", i, got[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteAvailableTransitionsReport_CycleSkipsAreReported(t *testing.T) {
+	t.Parallel()
+	// GIVEN merged plans in a dependency cycle and one plan downstream of it
+	tmpDir, stateFile := setupPipelineProceedTest(t)
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.PipelineVersion = 2
+	for _, plan := range []struct{ id, dep string }{{"plan-a", "plan-b"}, {"plan-b", "plan-a"}, {"plan-c", "plan-a"}} {
+		task := testhelpers.BuildTaskByStatus(plan.id, models.TaskStatusMerged, now)
+		task.RolePair = "code-planning-pair"
+		task.Output = []models.OutputEntry{{Desc: plan.id, DoneWhen: plan.id, Scope: plan.id, SpecRef: "s.md"}}
+		task.DependsOn = []string{plan.dep}
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// WHEN due transitions execute
+	report, err := ExecuteAvailableTransitionsReport(tmpDir, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// THEN every skipped plan is reported with its cause
+	got := map[string]string{}
+	for _, failure := range report.Failures {
+		got[failure.SourceTaskID] = failure.Error
+	}
+	for id, want := range map[string]string{
+		"plan-a": "blocked by dependency cycle among [plan-a plan-b]",
+		"plan-b": "blocked by dependency cycle among [plan-a plan-b]",
+		"plan-c": "blocked by an upstream dependency cycle",
+	} {
+		if got[id] != want {
+			t.Fatalf("failure for %s = %q, want %q (all: %v)", id, got[id], want, got)
+		}
+	}
+	if len(report.Results) != 0 {
+		t.Fatalf("results = %+v, want none", report.Results)
+	}
+}

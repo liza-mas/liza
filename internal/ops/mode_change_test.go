@@ -1536,3 +1536,39 @@ func TestResume_NothingToResume(t *testing.T) {
 		t.Errorf("Expected PreconditionError, got %T", err)
 	}
 }
+
+func TestResume_CompletedSprintReportsStuckFanIn(t *testing.T) {
+	// GIVEN a completed sprint whose replaced story lost its cohort lineage
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModeRunning
+	state.PipelineVersion = 2
+	state.Sprint.Status = models.SprintStatusCompleted
+	for _, task := range supersededCohort("epic-plan-1", false) {
+		task.SpecRef = "README.md"
+		state.Tasks = append(state.Tasks, task)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// WHEN the human resumes
+	result, err := Resume(tmpDir, "human")
+	if err != nil {
+		t.Fatalf("Resume() error: %v", err)
+	}
+
+	// THEN the sprint still advances, but the stuck fan-in is reported, not silent
+	if result.SprintAdvanced == nil || result.TransitionsExecuted != 0 {
+		t.Fatalf("SprintAdvanced = %+v, TransitionsExecuted = %d; want an advance with no transitions", result.SprintAdvanced, result.TransitionsExecuted)
+	}
+	for _, want := range []string{
+		`task epic-plan-1-us-1 transition us-to-coding: many-to-one cohort detection failed: many-to-one cohort member "epic-plan-1-us-0" was superseded by "epic-plan-1-us-0-fix", which does not carry cohort lineage`,
+		`task epic-plan-1-us-0-fix transition us-to-coding: many-to-one cohort detection failed: trigger task "epic-plan-1-us-0-fix" has no parent_task`,
+	} {
+		if !strings.Contains(result.TransitionError, want) {
+			t.Fatalf("TransitionError = %q, want %q", result.TransitionError, want)
+		}
+	}
+}

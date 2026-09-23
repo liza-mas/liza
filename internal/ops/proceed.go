@@ -22,6 +22,10 @@ import (
 // condition in ExecuteAvailableTransitions, not a configuration error.
 var errTransitionAlreadyExecuted = errors.New("transition already executed")
 
+// errManyToOneCohortIncomplete is returned while a many-to-one cohort still has
+// live members short of the required status: a normal wait, not a failure.
+var errManyToOneCohortIncomplete = errors.New("many-to-one cohort incomplete")
+
 // perSubtaskChildID returns the deterministic child task ID for a per-subtask transition.
 func perSubtaskChildID(parentID, transitionName string, index int) string {
 	return fmt.Sprintf("%s-%s-%d", parentID, transitionName, index)
@@ -366,12 +370,23 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 		return fmt.Errorf("many-to-one cohort detection failed: %w", err)
 	}
 
-	// Validate all cohort members are ready
+	// Validate all cohort members are ready. A member that can never merge is a
+	// failure wherever it sorts; only live members make this a normal wait.
+	var pending *models.Task
 	for _, member := range cohort {
-		if member.Status != tDef.requiredStatus && member.Status != models.TaskStatusMerged {
-			return fmt.Errorf("many-to-one cohort incomplete: member %q is at %s (need %s or MERGED)",
-				member.ID, member.Status, tDef.requiredStatus)
+		if member.Status == tDef.requiredStatus || member.Status == models.TaskStatusMerged {
+			continue
 		}
+		if member.Status.IsTerminal() {
+			return fmt.Errorf("many-to-one cohort cannot complete: member %q is %s", member.ID, member.Status)
+		}
+		if pending == nil {
+			pending = member
+		}
+	}
+	if pending != nil {
+		return fmt.Errorf("%w: member %q is at %s (need %s or MERGED)",
+			errManyToOneCohortIncomplete, pending.ID, pending.Status, tDef.requiredStatus)
 	}
 
 	childID := manyToOneChildID(sharedParentID, tDef.taskSlug)
@@ -1077,10 +1092,49 @@ func extraToStringSlice(v any) []string {
 // Cycle detection: true cycle members get a transition_cycle_blocked history event
 // and are skipped from execution. Tasks downstream of those cycles are skipped
 // until the upstream cycle is resolved.
+//
+// It returns only the executed transitions and logs the rest; callers that must
+// surface skipped transitions use ExecuteAvailableTransitionsReport.
 func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]ProceedResult, error) {
+	report, err := ExecuteAvailableTransitionsReport(projectRoot, triggerFilter)
+	if err != nil {
+		return nil, err
+	}
+	for _, failure := range report.Failures {
+		log.Printf("WARNING: ExecuteAvailableTransitions: %s", failure)
+	}
+	return report.Results, nil
+}
+
+// TransitionFailure names a transition that was due but did not execute.
+type TransitionFailure struct {
+	SourceTaskID string
+	Transition   string // empty when no transition could be resolved for the task
+	Error        string
+}
+
+func (f TransitionFailure) String() string {
+	if f.Transition == "" {
+		return fmt.Sprintf("task %s: %s", f.SourceTaskID, f.Error)
+	}
+	return fmt.Sprintf("task %s transition %s: %s", f.SourceTaskID, f.Transition, f.Error)
+}
+
+// TransitionReport is the outcome of one ExecuteAvailableTransitionsReport pass.
+// Failures exclude normal waits: already-executed transitions and many-to-one
+// cohorts whose live members have not reached the required status.
+type TransitionReport struct {
+	Results  []ProceedResult
+	Failures []TransitionFailure
+}
+
+// ExecuteAvailableTransitionsReport runs ExecuteAvailableTransitions' passes and
+// also reports every due transition that did not execute, so a stuck pipeline
+// is visible instead of only logged.
+func ExecuteAvailableTransitionsReport(projectRoot string, triggerFilter string) (TransitionReport, error) {
 	resolver, _, err := loadResolverWithRuntimePolicy(projectRoot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+		return TransitionReport{}, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 
 	statePath := paths.New(projectRoot).StatePath()
@@ -1101,6 +1155,10 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 
 	now := time.Now().UTC()
 	var results []ProceedResult
+	var failures []TransitionFailure
+	fail := func(taskID, transition string, err error) {
+		failures = append(failures, TransitionFailure{SourceTaskID: taskID, Transition: transition, Error: err.Error()})
+	}
 
 	err = blackboard.Modify(func(s *models.State) error {
 		var pending []pendingTx
@@ -1130,7 +1188,7 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 
 			approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
 			if err != nil {
-				log.Printf("WARNING: ExecuteAvailableTransitions: task %s has unknown role-pair %q: %v", task.ID, task.RolePair, err)
+				fail(task.ID, "", fmt.Errorf("unknown role-pair %q: %w", task.RolePair, err))
 				continue
 			}
 
@@ -1147,7 +1205,7 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 			for _, transitionName := range available {
 				tDef, err := buildTransitionDefFromPipeline(resolver, transitionName)
 				if err != nil {
-					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", task.ID, transitionName, err)
+					fail(task.ID, transitionName, err)
 					continue
 				}
 				tDef.requiredStatus = models.TaskStatusMerged
@@ -1180,6 +1238,7 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 				}
 				tDef, err := buildTransitionDefFromPipeline(resolver, transName)
 				if err != nil {
+					fail(task.ID, transName, fmt.Errorf("crash recovery: %w", err))
 					continue
 				}
 				tDef.requiredStatus = models.TaskStatusMerged
@@ -1226,12 +1285,12 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 						},
 					})
 				}
-				log.Printf("ERROR: ExecuteAvailableTransitions: cycle-blocked task %s transition %s (cycle: %v)", p.taskID, p.name, cycleMemberIDs)
+				fail(p.taskID, p.name, fmt.Errorf("blocked by dependency cycle among %v", cycleMemberIDs))
 			}
 		}
 
 		for _, p := range downstreamBlocked {
-			log.Printf("WARN: ExecuteAvailableTransitions: task %s transition %s blocked by upstream cycle, skipping", p.taskID, p.name)
+			fail(p.taskID, p.name, errors.New("blocked by an upstream dependency cycle"))
 		}
 
 		// Phase 3: Execute in sorted order
@@ -1240,13 +1299,13 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 			var inheritedDeps inheritedDepSet
 			if task != nil {
 				if err := canonicalizeTaskDependsOnForTransition(s, resolver, task); err != nil {
-					log.Printf("WARNING: ExecuteAvailableTransitions: task %s dependency canonicalization: %v", p.taskID, err)
+					fail(p.taskID, p.name, fmt.Errorf("dependency canonicalization: %w", err))
 					continue
 				}
 				var depErr error
 				inheritedDeps, depErr = computeInheritedDeps(s, task, p.name, resolver)
 				if depErr != nil {
-					log.Printf("WARNING: ExecuteAvailableTransitions: task %s inherited deps: %v", p.taskID, depErr)
+					fail(p.taskID, p.name, fmt.Errorf("inherited deps: %w", depErr))
 					continue
 				}
 			}
@@ -1257,8 +1316,8 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 			}
 
 			if err := proceedInner(s, p.taskID, p.name, p.tDef, inheritedDeps, resolver, now, &result); err != nil {
-				if !errors.Is(err, errTransitionAlreadyExecuted) {
-					log.Printf("WARNING: ExecuteAvailableTransitions: task %s transition %q: %v", p.taskID, p.name, err)
+				if !errors.Is(err, errTransitionAlreadyExecuted) && !errors.Is(err, errManyToOneCohortIncomplete) {
+					fail(p.taskID, p.name, err)
 				}
 				continue
 			}
@@ -1290,10 +1349,10 @@ func ExecuteAvailableTransitions(projectRoot string, triggerFilter string) ([]Pr
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("execute available transitions failed: %w", err)
+		return TransitionReport{}, fmt.Errorf("execute available transitions failed: %w", err)
 	}
 
-	return results, nil
+	return TransitionReport{Results: results, Failures: failures}, nil
 }
 
 // buildTransitionDefFromPipeline resolves a transition definition from pipeline config.

@@ -782,6 +782,27 @@ occurred, the CLI does not claim evidence was saved. Preserve the original
 reason and reviewed SHA for an explicit retry. See the
 [reconciliation procedure](SUPPORT.md#quarantined-verdicts-and-conflicting-approval).
 
+### Resume reports "Transition error" or the new sprint has no work
+
+`§BRAND_BINARY_NAME§ resume` runs every due pipeline transition. Each one that
+could not create its children is listed as
+`task <id> transition <name>: <cause>`; orchestrator and reviewer supervisors
+log the same failures as `Pipeline transition failed` / `Auto transition failed`.
+Reported causes are an unknown role pair or transition, dependency canonicalization
+or inheritance errors, dependency cycles (including tasks downstream of one),
+and transition errors such as a merged planning task without `output[]` or a
+many-to-one cohort that cannot complete. Normal waits are not reported: a
+transition that already ran, or a cohort whose remaining members are still in
+progress.
+
+While a failure remains, goal completion is not detected, so an otherwise empty
+sprint does not stop the system. Fix the named cause; every later transition
+pass rescans merged tasks and retries it. For a many-to-one cohort, a member reported as ABANDONED will never
+merge. A superseded member whose successor "does not carry cohort lineage" was
+replaced by a build that dropped parent lineage. Route the consolidated work
+through the orchestrator (for example, add the downstream task that references
+the merged members) rather than editing state.
+
 ### Agent crashed with IMPLEMENTING task (usage limit, OOM, etc.)
 
 When a coder agent crashes (usage limit, OOM, SIGKILL) while a task is IMPLEMENTING:

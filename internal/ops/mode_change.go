@@ -565,13 +565,18 @@ func resume(projectRoot, changedBy string, origin resumeOrigin) (*ResumeResult, 
 	var transitionsExecuted int
 	var transitionError string
 	if runTransitionsAfterResume {
-		if results, err := ExecuteAvailableTransitions(projectRoot, ""); err != nil {
+		if report, err := ExecuteAvailableTransitionsReport(projectRoot, ""); err != nil {
 			transitionError = err.Error()
 		} else {
-			transitionsExecuted = len(results)
-			if err := clearTransitionCheckpointTrigger(projectRoot); err != nil {
-				transitionError = err.Error()
+			transitionsExecuted = len(report.Results)
+			failures := make([]string, 0, len(report.Failures)+1)
+			for _, failure := range report.Failures {
+				failures = append(failures, failure.String())
 			}
+			if err := clearTransitionCheckpointTrigger(projectRoot); err != nil {
+				failures = append(failures, err.Error())
+			}
+			transitionError = strings.Join(failures, "; ")
 		}
 	}
 

@@ -562,17 +562,23 @@ func approvedMergeOwner(task *models.Task, state *models.State, pr models.Pipeli
 // and adds them to the current sprint's scope.
 // Called from orchestrator PreWork after checkpoint acknowledgment.
 func handleAvailableTransitions(projectRoot string) error {
-	results, err := ops.ExecuteAvailableTransitions(projectRoot, "")
+	report, err := ops.ExecuteAvailableTransitionsReport(projectRoot, "")
 	if err != nil {
 		return err
 	}
 
 	logger := GetLogger()
-	for _, r := range results {
+	for _, r := range report.Results {
 		logger.Info("Pipeline transition executed",
 			"source_task", r.SourceTaskID,
 			"transition", r.TransitionName,
 			"children_created", len(r.ChildTaskIDs))
+	}
+	for _, f := range report.Failures {
+		logger.Warn("Pipeline transition failed",
+			"source_task", f.SourceTaskID,
+			"transition", f.Transition,
+			"error", f.Error)
 	}
 
 	return nil
@@ -583,17 +589,23 @@ func handleAvailableTransitions(projectRoot string) error {
 // after merges, so children are created in the same PreWork cycle.
 // Manual transitions remain gated by the orchestrator checkpoint flow.
 func handleAutoTransitions(projectRoot string) error {
-	results, err := ops.ExecuteAvailableTransitions(projectRoot, "auto")
+	report, err := ops.ExecuteAvailableTransitionsReport(projectRoot, "auto")
 	if err != nil {
 		return err
 	}
 
 	logger := GetLogger()
-	for _, r := range results {
+	for _, r := range report.Results {
 		logger.Info("Auto transition executed",
 			"source_task", r.SourceTaskID,
 			"transition", r.TransitionName,
 			"children_created", len(r.ChildTaskIDs))
+	}
+	for _, f := range report.Failures {
+		logger.Warn("Auto transition failed",
+			"source_task", f.SourceTaskID,
+			"transition", f.Transition,
+			"error", f.Error)
 	}
 
 	return nil
