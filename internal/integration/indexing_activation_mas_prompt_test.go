@@ -22,7 +22,7 @@ func TestIndexingActivationMASPromptsRenderEnabledMetadataFromRoleTargetRoots(t 
 	enableOptionalIndexingForTest(t)
 
 	pairingStacklitIndex := filepath.Join(projectRoot, "stacklit.json")
-	pairingScipIndex := filepath.Join(projectRoot, paths.ProjectDirName(), "scip", "go.scip")
+	pairingScipIndex := filepath.Join(projectRoot, "go.scip")
 	writeIndexingActivationFile(t, pairingStacklitIndex, `{"project":{"name":"pairing-root"}}`)
 	writeIndexingActivationFile(t, pairingScipIndex, "pairing root go index")
 	writeIndexingActivationFile(t, filepath.Join(projectRoot, ".sembleignore"), semble.DefaultIgnorePayload())
@@ -81,7 +81,7 @@ func TestIndexingActivationMASPromptsRenderEnabledMetadataFromRoleTargetRoots(t 
 
 			prompt := buildIndexingActivationMASPrompt(t, projectRoot, tt.role, tt.agentID, tt.taskID, tt.worktreeRel)
 			stacklitIndex := filepath.Join(tt.targetRoot, "stacklit.json")
-			scipIndex := filepath.Join(tt.targetRoot, paths.ProjectDirName(), "scip", "go.scip")
+			scipIndex, otherLayoutScipIndex := masScipIndexPaths(tt.targetRoot, tt.worktreeRel)
 			functionalClustersArtifact := filepath.Join(tt.targetRoot, "functional-clusters.json")
 
 			assertIndexingActivationContainsAll(t, prompt,
@@ -98,7 +98,7 @@ func TestIndexingActivationMASPromptsRenderEnabledMetadataFromRoleTargetRoots(t 
 				shellQuoteForIndexingActivationTest(tt.targetRoot),
 				"Use `~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md` for Semble command syntax, content modes, routing rules, and proof requirements.",
 			)
-			assertIndexingActivationContainsNone(t, prompt, tt.forbiddenPaths...)
+			assertIndexingActivationContainsNone(t, prompt, append(tt.forbiddenPaths, otherLayoutScipIndex)...)
 		})
 	}
 }
@@ -110,6 +110,7 @@ func TestIndexingActivationMASPromptsOmitDisabledSectionsDespiteStaleArtifacts(t
 			projectRoot := t.TempDir()
 			targetRoot := indexingActivationMASTargetRoot(projectRoot, tt.worktreeRel)
 			prepareOptionalIndexTargetRoot(t, targetRoot)
+			scipIndex, otherLayoutScipIndex := masScipIndexPaths(targetRoot, tt.worktreeRel)
 
 			prompt := buildIndexingActivationMASPrompt(t, projectRoot, tt.role, tt.agentID, tt.taskID, tt.worktreeRel)
 
@@ -119,7 +120,8 @@ func TestIndexingActivationMASPromptsOmitDisabledSectionsDespiteStaleArtifacts(t
 				"=== FUNCTIONAL CLUSTERS ===",
 				"=== SEMBLE SEARCH ===",
 				filepath.Join(targetRoot, "stacklit.json"),
-				filepath.Join(targetRoot, paths.ProjectDirName(), "scip", "go.scip"),
+				scipIndex,
+				otherLayoutScipIndex,
 				filepath.Join(targetRoot, "functional-clusters.json"),
 			)...)
 		})
@@ -227,9 +229,24 @@ func prepareOptionalIndexTargetRoot(t *testing.T, targetRoot string) {
 	testhelpers.MustGit(t, targetRoot, "add", "go.mod")
 	testhelpers.MustGit(t, targetRoot, "commit", "-m", "Add go module")
 	writeIndexingActivationFile(t, filepath.Join(targetRoot, "stacklit.json"), `{"project":{"name":"target"}}`)
+	// Both SCIP layouts, so each role proves it lists only its own.
 	writeIndexingActivationFile(t, filepath.Join(targetRoot, paths.ProjectDirName(), "scip", "go.scip"), "target go index")
+	writeIndexingActivationFile(t, filepath.Join(targetRoot, "go.scip"), "target root go index")
 	writeIndexingActivationFile(t, filepath.Join(targetRoot, "functional-clusters.json"), "{}\n")
 	writeIndexingActivationFile(t, filepath.Join(targetRoot, ".sembleignore"), semble.DefaultIgnorePayload())
+}
+
+// masScipIndexPaths returns the SCIP index a MAS prompt lists for a target
+// root, and the other layout's path, which it must not list. Task worktrees
+// keep runtime-refreshed indexes under the runtime directory; the lifecycle
+// hooks publish repo-root indexes, which the orchestrator reads, at the root.
+func masScipIndexPaths(targetRoot, worktreeRel string) (listed, otherLayout string) {
+	worktreeLayout := filepath.Join(targetRoot, paths.ProjectDirName(), "scip", "go.scip")
+	rootLayout := filepath.Join(targetRoot, "go.scip")
+	if worktreeRel == "" {
+		return rootLayout, worktreeLayout
+	}
+	return worktreeLayout, rootLayout
 }
 
 func buildIndexingActivationMASPrompt(t *testing.T, projectRoot, role, agentID, taskID, worktreeRel string) string {

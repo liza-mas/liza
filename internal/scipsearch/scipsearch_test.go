@@ -1469,6 +1469,54 @@ func TestRuntimeAvailableIndexesReturnsOnlyExistingAbsolutePaths(t *testing.T) {
 	}
 }
 
+func TestAvailableProjectRootIndexesListsConfiguredRootLayoutFiles(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	root := t.TempDir()
+	for name, content := range map[string]string{
+		"go.scip":     "hook-published go index",
+		"python.scip": "hook-published python index, python not configured",
+		"ruby.scip":   "configured but unsupported language",
+		filepath.Join(paths.ProjectDirName(), "scip", "typescript.scip"): "runtime layout, not the root",
+	} {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Configured and supported, but a directory rather than an index file.
+	if err := os.Mkdir(filepath.Join(root, "typescript.scip"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	indexes, err := AvailableProjectRootIndexes(RuntimePlanOptions{
+		TargetRoot:          root,
+		ConfiguredLanguages: []string{"typescript", "go", "ruby"},
+	})
+	if err != nil {
+		t.Fatalf("AvailableProjectRootIndexes() error = %v", err)
+	}
+	want := []IndexRef{{Language: "go", Path: filepath.Join(root, "go.scip")}}
+	if !reflect.DeepEqual(indexes, want) {
+		t.Fatalf("AvailableProjectRootIndexes() = %#v, want %#v", indexes, want)
+	}
+}
+
+func TestAvailableProjectRootIndexesRespectsTheEnvGate(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "false")
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.scip"), []byte("go"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	indexes, err := AvailableProjectRootIndexes(RuntimePlanOptions{TargetRoot: root, ConfiguredLanguages: []string{"go"}})
+	if err != nil || indexes != nil {
+		t.Fatalf("AvailableProjectRootIndexes() = %#v, %v, want nothing with the gate off", indexes, err)
+	}
+}
+
 func TestRefreshTaskWorktreeScipUsesSharedExclude(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	repo := newGitRepoWithWorktrees(t, "task-one")

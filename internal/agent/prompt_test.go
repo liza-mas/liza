@@ -302,8 +302,11 @@ func TestBuildOrchestratorRoleContextDataScipIndexesUseProjectRoot(t *testing.T)
 	testhelpers.MustGit(t, tmpDir, "add", "go.mod", "web.ts", "tool.py")
 	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add language fixtures")
 
-	projectGoIndex := filepath.Join(tmpDir, paths.ProjectDirName(), "scip", "go.scip")
+	projectGoIndex := filepath.Join(tmpDir, "go.scip")
 	writePromptTestFile(t, projectGoIndex, "go index")
+	// Left by the removed orchestrator refresh; the hooks never write there.
+	orphanedPythonIndex := filepath.Join(tmpDir, paths.ProjectDirName(), "scip", "python.scip")
+	writePromptTestFile(t, orphanedPythonIndex, "orphaned python index")
 	taskTypescriptIndex := filepath.Join(tmpDir, ".worktrees", "task-1", paths.ProjectDirName(), "scip", "typescript.scip")
 	writePromptTestFile(t, taskTypescriptIndex, "task typescript index")
 
@@ -1438,7 +1441,7 @@ func TestBuildOrchestratorPromptContextScipIndexesRenderFromProjectRoot(t *testi
 	testhelpers.MustGit(t, tmpDir, "add", "go.mod")
 	testhelpers.MustGit(t, tmpDir, "commit", "-m", "Add go module")
 
-	projectGoIndex := filepath.Join(tmpDir, paths.ProjectDirName(), "scip", "go.scip")
+	projectGoIndex := filepath.Join(tmpDir, "go.scip")
 	writePromptTestFile(t, projectGoIndex, "go index")
 
 	state := &models.State{
@@ -1569,7 +1572,7 @@ func TestBuildOrchestratorPromptContextStacklitAvailableIndexErrorOmitsStacklitA
 	writePromptTestFile(t, filepath.Join(projectRoot, "go.mod"), "module example.com/project\n")
 	testhelpers.MustGit(t, projectRoot, "add", "go.mod")
 	testhelpers.MustGit(t, projectRoot, "commit", "-m", "Add go module")
-	projectGoIndex := filepath.Join(projectRoot, paths.ProjectDirName(), "scip", "go.scip")
+	projectGoIndex := filepath.Join(projectRoot, "go.scip")
 	writePromptTestFile(t, projectGoIndex, "go index")
 	restore := replaceStacklitAvailableIndexesForTest(t, func(opts stacklit.RuntimePlanOptions) ([]stacklit.IndexRef, error) {
 		if opts.TargetRoot != projectRoot {

@@ -25,6 +25,7 @@ import (
 var (
 	buildSemblePromptMetadata          = semble.BuildPromptMetadata
 	scipAvailableIndexes               = scipsearch.AvailableIndexes
+	scipAvailableProjectRootIndexes    = scipsearch.AvailableProjectRootIndexes
 	stacklitAvailableIndexes           = stacklit.AvailableIndexes
 	functionalClustersAvailableIndexes = functionalclusters.AvailableIndexes
 )
@@ -157,7 +158,9 @@ func buildOrchestratorRoleContextDataForWake(state *models.State, config Supervi
 		return nil, err
 	}
 
-	availableIndexes := availablePromptScipIndexRefs(state, config.ProjectRoot)
+	// The lifecycle hooks publish repo-root SCIP indexes at the root, not
+	// under the runtime directory where worktree refreshes write theirs.
+	availableIndexes := availablePromptScipIndexRefs(state, config.ProjectRoot, scipAvailableProjectRootIndexes)
 	availableStacklitIndexes := availablePromptStacklitIndexRefs(config.ProjectRoot)
 	availableFunctionalClusters := availablePromptFunctionalClusterIndexRefs(config.ProjectRoot)
 
@@ -258,11 +261,11 @@ func toBasePromptFunctionalClusterIndexes(indexes []prompts.FunctionalClusterInd
 	return refs
 }
 
-func availablePromptScipIndexRefs(state *models.State, targetRoot string) []prompts.ScipIndexRef {
+func availablePromptScipIndexRefs(state *models.State, targetRoot string, available func(scipsearch.RuntimePlanOptions) ([]scipsearch.IndexRef, error)) []prompts.ScipIndexRef {
 	if targetRoot == "" || !scipsearch.RuntimeEnabled(state.Config.ScipSearch) {
 		return nil
 	}
-	availableIndexes, err := scipAvailableIndexes(scipsearch.RuntimePlanOptions{
+	availableIndexes, err := available(scipsearch.RuntimePlanOptions{
 		TargetRoot:          targetRoot,
 		ConfiguredLanguages: state.Config.ScipSearch,
 	})
@@ -371,7 +374,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		IntegrationBranch: state.Config.IntegrationBranch,
 	}
 
-	data.ScipIndexes = availablePromptScipIndexRefs(state, data.Worktree)
+	data.ScipIndexes = availablePromptScipIndexRefs(state, data.Worktree, scipAvailableIndexes)
 	data.StacklitIndexes = availablePromptStacklitIndexRefs(data.Worktree)
 	data.FunctionalClusters = availablePromptFunctionalClusterIndexRefs(data.Worktree)
 

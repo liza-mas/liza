@@ -363,19 +363,53 @@ func AvailableIndexes(opts RuntimePlanOptions) ([]IndexRef, error) {
 
 	indexes := make([]IndexRef, 0, len(plans))
 	for _, plan := range plans {
-		info, err := os.Stat(plan.OutputPath)
-		if os.IsNotExist(err) {
-			continue
+		if indexes, err = appendExistingIndex(indexes, plan.Language, plan.OutputPath); err != nil {
+			return nil, err
 		}
-		if err != nil {
-			return nil, fmt.Errorf("inspect scip-search index %q: %w", plan.OutputPath, err)
-		}
-		if info.IsDir() {
-			continue
-		}
-		indexes = append(indexes, IndexRef{Language: plan.Language, Path: plan.OutputPath})
 	}
 	return indexes, nil
+}
+
+// AvailableProjectRootIndexes returns the existing repo-root indexes that the
+// index lifecycle hooks publish at <root>/<language>.scip, for the configured
+// languages. The hooks' install-time plan already decided which languages have
+// an index, so nothing is planned here; a missing file is omitted.
+func AvailableProjectRootIndexes(opts RuntimePlanOptions) ([]IndexRef, error) {
+	if !RuntimeEnabled(opts.ConfiguredLanguages) {
+		return nil, nil
+	}
+	projectRoot, err := filepath.Abs(opts.TargetRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve scip-search project root: %w", err)
+	}
+	var indexes []IndexRef
+	for _, language := range filterRuntimeLanguages(opts.ConfiguredLanguages, supportedLanguages) {
+		if indexes, err = appendExistingIndex(indexes, language, projectRootIndexPath(projectRoot, language)); err != nil {
+			return nil, err
+		}
+	}
+	return indexes, nil
+}
+
+// appendExistingIndex appends the index at path when it is an existing file.
+func appendExistingIndex(indexes []IndexRef, language, path string) ([]IndexRef, error) {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return indexes, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect scip-search index %q: %w", path, err)
+	}
+	if info.IsDir() {
+		return indexes, nil
+	}
+	return append(indexes, IndexRef{Language: language, Path: path}), nil
+}
+
+// projectRootIndexPath is where the index lifecycle hooks publish a
+// language's repo-root index.
+func projectRootIndexPath(projectRoot, language string) string {
+	return filepath.Join(projectRoot, language+".scip")
 }
 
 // PlanPairingCommands returns concrete repo-root SCIP aggregate plans for
@@ -773,7 +807,7 @@ func pairingPlanSkip(language string, candidates []string) PairingPlanSkip {
 }
 
 func pairingCommandPlan(projectRoot, language string, files []string) (LanguageAggregatePlan, []string, bool) {
-	outputPath := filepath.Join(projectRoot, language+".scip")
+	outputPath := projectRootIndexPath(projectRoot, language)
 	plan := LanguageAggregatePlan{
 		Language:    language,
 		OutputPath:  outputPath,
@@ -812,7 +846,7 @@ func pairingCommandOverridePlan(projectRoot string, overrides []PairingCommandOv
 		return LanguageAggregatePlan{}, fmt.Errorf("empty scip-search pairing overrides")
 	}
 	language := overrides[0].Language
-	outputPath := filepath.Join(projectRoot, language+".scip")
+	outputPath := projectRootIndexPath(projectRoot, language)
 	plan := LanguageAggregatePlan{
 		Language:    language,
 		ProjectRoot: projectRoot,
