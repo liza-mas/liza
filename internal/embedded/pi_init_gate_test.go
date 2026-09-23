@@ -22,7 +22,7 @@ func TestWritePiInitGateCreatesManagedExtension(t *testing.T) {
 		t.Fatalf("WritePiInitGate() error = %v", err)
 	}
 
-	gatePath := filepath.Join(fakeHome, ".liza", "extensions", "init-gate.ts")
+	gatePath := filepath.Join(fakeHome, brand.RuntimeValues().GlobalDirName, "extensions", "init-gate.ts")
 	content, err := os.ReadFile(gatePath)
 	if err != nil {
 		t.Fatalf("pi init gate not written: %v", err)
@@ -74,7 +74,7 @@ func TestWritePiInitGateDoesNotClobberForeignFile(t *testing.T) {
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
 
-	gateDir := filepath.Join(fakeHome, ".liza", "extensions")
+	gateDir := filepath.Join(fakeHome, brand.RuntimeValues().GlobalDirName, "extensions")
 	if err := os.MkdirAll(gateDir, 0755); err != nil {
 		t.Fatal(err)
 	}

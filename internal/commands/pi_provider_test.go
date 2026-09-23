@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 func TestEnsureProviderSpawnAssetsRepairsPiGate(t *testing.T) {
@@ -17,7 +19,7 @@ func TestEnsureProviderSpawnAssetsRepairsPiGate(t *testing.T) {
 	}
 
 	// A deleted gate self-heals on the spawn path.
-	gatePath := filepath.Join(fakeHome, ".liza", "extensions", "init-gate.ts")
+	gatePath := filepath.Join(fakeHome, paths.GlobalDirName(), "extensions", "init-gate.ts")
 	if err := os.Remove(gatePath); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("remove gate: %v", err)
 	}
@@ -69,13 +71,13 @@ func TestInitPairingCommand_PiProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("global pi AGENTS.md not a symlink: %v", err)
 	}
-	if want := filepath.Join(fakeHome, ".liza", "CORE.md"); target != want {
+	if want := filepath.Join(fakeHome, paths.GlobalDirName(), "CORE.md"); target != want {
 		t.Fatalf("pi AGENTS.md = %q, want %q", target, want)
 	}
 
 	// The pi init-gate extension is deployed globally so the pi provider's
 	// run_args reference an existing file in every workspace.
-	gatePath := filepath.Join(fakeHome, ".liza", "extensions", "init-gate.ts")
+	gatePath := filepath.Join(fakeHome, paths.GlobalDirName(), "extensions", "init-gate.ts")
 	gate, err := os.ReadFile(gatePath)
 	if err != nil {
 		t.Fatalf("pi init gate not written: %v", err)
