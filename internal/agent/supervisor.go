@@ -694,6 +694,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		return err
 	}
 	config.Authority = authority
+	// Registration enforces orchestrator singularity, so only the registered
+	// orchestrator repairs hooks; a rejected duplicate launch never gets here.
+	if roleType == "orchestrator" {
+		ensureProjectRootIndexActivation(bb, config.ProjectRoot)
+	}
 	defer func() {
 		if err := unregisterAgent(bb, authority, config.ProjectRoot); err != nil {
 			GetLogger().Warn("Failed to unregister agent", "error", err, "agent_id", authority.ID)

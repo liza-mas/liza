@@ -163,33 +163,15 @@ func InitPairingCommand(params InitPairingParams) error {
 	}
 
 	if projectRoot != "" && (stacklitEnabled || scipEnabled) {
-		var scipPlans []scipsearch.LanguageAggregatePlan
-		if scipEnabled {
-			overrides, err := scipsearch.ParsePairingCommandOverrides(projectRoot, params.ScipSearchPlans)
-			if err != nil {
-				return fmt.Errorf("scip-search pairing plan failed: %w", err)
-			}
-			planResult, err := scipsearch.PlanPairingCommands(scipsearch.PairingPlanOptions{
-				ProjectRoot:       projectRoot,
-				ExplicitLanguages: params.ScipSearch,
-				CommandOverrides:  overrides,
-				SkipUnresolved:    len(params.ScipSearch) == 0,
-			})
-			if err != nil {
-				return fmt.Errorf("scip-search pairing plan failed: %w", err)
-			}
-			writePairingScipSkipDiagnostics(planResult.Skips)
-			scipPlans = planResult.Plans
-		}
-		if stacklitEnabled || len(scipPlans) > 0 {
-			if _, err := pairingindex.InstallActivation(pairingindex.InstallActivationOptions{
-				RepoRoot:                 projectRoot,
-				EnableStacklit:           stacklitEnabled,
-				EnableFunctionalClusters: functionalClustersEnabled && stacklitEnabled,
-				ScipPlans:                scipPlans,
-			}); err != nil {
-				return fmt.Errorf("pairing index activation failed: %w", err)
-			}
+		if err := activateProjectRootIndexing(pairingindex.ActivationPlanOptions{
+			RepoRoot:                 projectRoot,
+			EnableStacklit:           stacklitEnabled,
+			EnableScip:               scipEnabled,
+			EnableFunctionalClusters: functionalClustersEnabled,
+			ScipLanguages:            params.ScipSearch,
+			ScipPlanOverrides:        params.ScipSearchPlans,
+		}); err != nil {
+			return err
 		}
 	}
 
@@ -259,6 +241,26 @@ func InitPairingCommand(params InitPairingParams) error {
 
 func pairingScipEnabled() bool {
 	return scipsearch.ParseEnvGate(envgate.Value(scipsearch.EnvEnableScipSearch))
+}
+
+// activateProjectRootIndexing installs the lifecycle hooks and index script
+// that keep repo-root indexes fresh, for both Pairing and MAS init.
+func activateProjectRootIndexing(opts pairingindex.ActivationPlanOptions) error {
+	plan, err := pairingindex.PlanActivation(opts)
+	if err != nil {
+		return err
+	}
+	writePairingScipSkipDiagnostics(plan.Skips)
+	for _, language := range plan.Unindexable {
+		fmt.Fprintf(os.Stderr, "Warning: scip-search %s is configured but has no indexable source root yet; the orchestrator adds it to the index hooks on start once its sources exist.\n", language)
+	}
+	if !plan.Active() {
+		return nil
+	}
+	if _, err := pairingindex.InstallActivation(plan.Install); err != nil {
+		return fmt.Errorf("index activation failed: %w", err)
+	}
+	return nil
 }
 
 func writePairingScipSkipDiagnostics(skips []scipsearch.PairingPlanSkip) {
@@ -1125,6 +1127,14 @@ func InitCommandWithConfig(params InitParams) error {
 			installCmd := detectInstallCmdInDir(dirPath)
 			fmt.Fprintf(os.Stderr, "⚠️  %s/package.json found but %s/node_modules/ is missing. Run %q in %s/ before starting agents.\n", dir, dir, installCmd, dir)
 		}
+	}
+
+	// No agent refreshes project-root indexes: the lifecycle hooks do. Install
+	// them after the last prompt, so a cancelled init leaves Git hooks alone,
+	// and before writing state, so an unmanaged hook collision fails init
+	// rather than leaving a project whose indexes silently never refresh.
+	if err := activateProjectRootIndexing(pairingindex.MASActivationOptions(root, scipSearchConfig.Languages)); err != nil {
+		return err
 	}
 
 	// Generate IDs and timestamps

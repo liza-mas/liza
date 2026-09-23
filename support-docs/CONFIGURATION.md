@@ -563,10 +563,17 @@ lifecycle points when `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is truthy:
   refresh `<worktree>/stacklit.json`.
 
 `<project_root>/stacklit.json` is not refreshed by any agent. It is owned by the
-lifecycle git hooks installed at init (`post-commit`, `post-checkout`,
+same lifecycle git hooks as in Pairing mode (`post-commit`, `post-checkout`,
 `post-merge`, `post-rewrite`), so it tracks committed state and does not reflect
-uncommitted changes. Worktrees set their own `core.hooksPath` and therefore do
-not inherit those hooks, which is why task worktrees are indexed explicitly.
+uncommitted changes. MAS init installs them when any
+`§BRAND_ENV_PREFIX§_ENABLE_*` index gate is truthy, and fails on an unmanaged hook
+collision rather than leaving indexes that never refresh. On start, the
+orchestrator supervisor reinstalls the hooks when they are missing or no longer
+match the current gates, `scip_search` config and repository layout. This
+covers projects initialized before MAS init installed them; a failure there is
+written to the alerts log and does not stop the supervisor. Worktrees set their
+own `core.hooksPath` and therefore do not inherit those hooks, which is why task
+worktrees are indexed explicitly.
 
 Task-local `stacklit.json` is generated for prompt context only. §BRAND_NAME_TITLE§ requires
 `stacklit.json` to be either tracked or ignored before task-local generation.

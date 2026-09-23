@@ -32,9 +32,7 @@ import (
 // setupGlobalLiza delegates to testhelpers.SetupGlobalLiza.
 func setupGlobalLiza(t *testing.T) string {
 	fakeHome := testhelpers.SetupGlobalLiza(t)
-	unsetEnvForTest(t, stacklit.EnvEnableStacklit)
-	unsetEnvForTest(t, scipsearch.EnvEnableScipSearch)
-	unsetEnvForTest(t, functionalclusters.EnvEnableFunctionalClusters)
+	t.Cleanup(testhelpers.DisableIndexEnvGates())
 	unsetEnvForTest(t, semble.EnvEnableSemble)
 	unsetEnvForTest(t, bashpolicycli.EnvEnableBashPolicy)
 	unsetEnvForTest(t, "CLAUDE_CONFIG_DIR")
@@ -2770,7 +2768,7 @@ func TestInitCommandWithConfig_AutodetectsAndPersistsValidatedScipSearchLanguage
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)
 	setupGlobalLiza(t)
-	t.Setenv("LIZA_ENABLE_SCIP_SEARCH", " TRUE ")
+	t.Setenv(scipsearch.EnvEnableScipSearch, " TRUE ")
 
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -2848,6 +2846,99 @@ func TestInitCommandWithConfig_AutodetectsAndPersistsValidatedScipSearchLanguage
 	}
 	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %v, want %v", calls, wantCalls)
+	}
+}
+
+// testhelpers repeats the index gate suffixes because it cannot import the
+// packages that define them; this keeps the two lists in step.
+func TestIndexEnvGateNamesMatchPackageGates(t *testing.T) {
+	want := []string{stacklit.EnvEnableStacklit, scipsearch.EnvEnableScipSearch, functionalclusters.EnvEnableFunctionalClusters}
+	if got := testhelpers.IndexEnvGateNames(); !slices.Equal(got, want) {
+		t.Fatalf("testhelpers.IndexEnvGateNames() = %v, want %v", got, want)
+	}
+}
+
+// chdirToInitRepoForTest creates a git repo with a committed spec, makes it the
+// working directory for the test and returns it.
+func chdirToInitRepoForTest(t *testing.T) string {
+	t.Helper()
+	tmpDir := setupGitRepo(t)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	setupGlobalLiza(t)
+	t.Chdir(tmpDir)
+	testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	return tmpDir
+}
+
+func TestInitCommandWithConfig_InstallsIndexHooksWhenStacklitEnabled(t *testing.T) {
+	tmpDir := chdirToInitRepoForTest(t)
+	t.Setenv(stacklit.EnvEnableStacklit, "true")
+
+	if err := InitCommandWithConfig(InitParams{
+		Description: "Goal with Stacklit hooks",
+		SpecRef:     "specs/vision.md",
+	}); err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	status, err := pairingindex.CheckActivation(pairingindex.InstallActivationOptions{
+		RepoRoot:       tmpDir,
+		EnableStacklit: true,
+	})
+	if err != nil {
+		t.Fatalf("CheckActivation() error = %v", err)
+	}
+	if status != pairingindex.ActivationCurrent {
+		t.Fatalf("activation status = %q, want %q after MAS init", status, pairingindex.ActivationCurrent)
+	}
+}
+
+func TestInitCommandWithConfig_FailsOnUnmanagedIndexHookCollision(t *testing.T) {
+	tmpDir := chdirToInitRepoForTest(t)
+	t.Setenv(stacklit.EnvEnableStacklit, "true")
+	userHook := filepath.Join(tmpDir, ".git", "hooks", "post-commit")
+	if err := os.WriteFile(userHook, []byte("#!/bin/sh\necho user hook\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := InitCommandWithConfig(InitParams{
+		Description: "Goal with a colliding hook",
+		SpecRef:     "specs/vision.md",
+	})
+	if err == nil || !strings.Contains(err.Error(), "index activation failed") {
+		t.Fatalf("InitCommandWithConfig() error = %v, want activation collision failure", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(tmpDir, paths.ProjectDirName(), "state.yaml")); !os.IsNotExist(statErr) {
+		t.Fatalf("state.yaml stat error = %v, want no state after failed activation", statErr)
+	}
+	if got, readErr := os.ReadFile(userHook); readErr != nil || string(got) != "#!/bin/sh\necho user hook\n" {
+		t.Fatalf("user hook = %q (err %v), want it untouched", got, readErr)
+	}
+}
+
+func TestInitCommandWithConfig_WarnsForConfiguredScipLanguageWithoutRoot(t *testing.T) {
+	tmpDir := chdirToInitRepoForTest(t)
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+	restore := scipsearch.SetCommandRunnerForTest(func(string, ...string) (string, error) {
+		return "ok\n", nil
+	})
+	defer restore()
+
+	stderr, err := captureStderrForTest(func() error {
+		return InitCommandWithConfig(InitParams{
+			Description: "Greenfield goal with a configured language",
+			SpecRef:     "specs/vision.md",
+			ScipSearch:  []string{"go"},
+		})
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+	if !strings.Contains(stderr, "scip-search go is configured but has no indexable source root yet") {
+		t.Fatalf("stderr = %q, want greenfield language warning", stderr)
+	}
+	if _, statErr := os.Stat(filepath.Join(tmpDir, ".git", "hooks", brand.BinaryName+"-index.sh")); !os.IsNotExist(statErr) {
+		t.Fatalf("index script stat error = %v, want no hooks when nothing is indexable", statErr)
 	}
 }
 

@@ -28,7 +28,12 @@ var dependencyRepairCLIBuild struct {
 	err     error
 }
 
+// TestMain switches the index env gates off for the whole integration package,
+// since developer shells set them and CI does not: with them on, MAS init and
+// orchestrator starts here would install index hooks in their temp
+// repositories. Tests that exercise indexing opt in with t.Setenv.
 func TestMain(m *testing.M) {
+	testhelpers.DisableIndexEnvGates()
 	code := m.Run()
 	if dependencyRepairCLIBuild.tempDir != "" {
 		if err := os.RemoveAll(dependencyRepairCLIBuild.tempDir); err != nil {

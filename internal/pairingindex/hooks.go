@@ -174,20 +174,15 @@ func InstallActivation(opts InstallActivationOptions) (InstallActivationResult, 
 	if err := ensureScipArtifactCleanliness(opts.RepoRoot, opts.ScipPlans); err != nil {
 		return result, err
 	}
-	enableFunctionalClusters := opts.EnableFunctionalClusters && opts.EnableStacklit && len(opts.ScipPlans) > 0
-	if enableFunctionalClusters {
+	renderOpts := opts.renderOptions()
+	if renderOpts.EnableFunctionalClusters {
 		if err := ensureFunctionalClustersArtifactCleanliness(opts.RepoRoot); err != nil {
 			return result, err
 		}
 	}
 
 	scriptPath := filepath.Join(hooksDir, scriptName())
-	content, err := renderIndexScript(renderIndexScriptOptions{
-		RepoRoot:                 opts.RepoRoot,
-		EnableStacklit:           opts.EnableStacklit,
-		EnableFunctionalClusters: enableFunctionalClusters,
-		ScipPlans:                opts.ScipPlans,
-	})
+	content, err := renderIndexScript(renderOpts)
 	if err != nil {
 		return result, err
 	}
@@ -842,11 +837,35 @@ func ensureHooksDir(hooksDir string) error {
 	return nil
 }
 
+// replaceExecutable writes content to a temporary file beside path and renames
+// it into place. sh reads a script as it runs it, so rewriting the script, the
+// dispatcher or a hook wrapper in place under a running hook would make that
+// hook continue at its old byte offset in the new content. A rename leaves the
+// running shell on the old inode.
+func replaceExecutable(path, content string) error {
+	staged, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	stagedPath := staged.Name()
+	_, writeErr := staged.WriteString(content)
+	closeErr := staged.Close()
+	if err := errors.Join(writeErr, closeErr, os.Chmod(stagedPath, 0755)); err != nil {
+		_ = os.Remove(stagedPath)
+		return err
+	}
+	if err := os.Rename(stagedPath, path); err != nil {
+		_ = os.Remove(stagedPath)
+		return err
+	}
+	return nil
+}
+
 func installManagedIndexScript(scriptPath, want string) (HookAction, error) {
 	name := scriptName()
 	current, err := os.ReadFile(scriptPath)
 	if os.IsNotExist(err) {
-		if err := os.WriteFile(scriptPath, []byte(want), 0755); err != nil {
+		if err := replaceExecutable(scriptPath, want); err != nil {
 			return "", fmt.Errorf("install %s: %w", name, err)
 		}
 		return HookActionInstalled, nil
@@ -866,11 +885,8 @@ func installManagedIndexScript(scriptPath, want string) (HookAction, error) {
 		}
 		return HookActionVerified, nil
 	}
-	if err := os.WriteFile(scriptPath, []byte(want), 0755); err != nil {
+	if err := replaceExecutable(scriptPath, want); err != nil {
 		return "", fmt.Errorf("update %s: %w", name, err)
-	}
-	if err := os.Chmod(scriptPath, 0755); err != nil {
-		return "", fmt.Errorf("chmod %s: %w", name, err)
 	}
 	return HookActionUpdated, nil
 }
@@ -927,7 +943,7 @@ func installManagedHookDispatcher(dispatcherPath string) (HookAction, error) {
 	name := hookDispatcherName()
 	current, err := os.ReadFile(dispatcherPath)
 	if os.IsNotExist(err) {
-		if err := os.WriteFile(dispatcherPath, []byte(want), 0755); err != nil {
+		if err := replaceExecutable(dispatcherPath, want); err != nil {
 			return "", fmt.Errorf("install %s: %w", name, err)
 		}
 		return HookActionInstalled, nil
@@ -944,11 +960,8 @@ func installManagedHookDispatcher(dispatcherPath string) (HookAction, error) {
 	if !strings.Contains(string(current), ManagedHookMarker) && !looksLikeLegacyHookDispatcher(string(current)) {
 		return "", fmt.Errorf("%s at %s already exists and is not managed by %s", name, dispatcherPath, brand.NameTitle)
 	}
-	if err := os.WriteFile(dispatcherPath, []byte(want), 0755); err != nil {
+	if err := replaceExecutable(dispatcherPath, want); err != nil {
 		return "", fmt.Errorf("update %s: %w", name, err)
-	}
-	if err := os.Chmod(dispatcherPath, 0755); err != nil {
-		return "", fmt.Errorf("chmod %s: %w", name, err)
 	}
 	return HookActionUpdated, nil
 }
@@ -1018,7 +1031,7 @@ func installManagedHookWrapper(hookPath, hook string) (HookAction, error) {
 	want := managedHookContent(hook)
 	current, err := os.ReadFile(hookPath)
 	if os.IsNotExist(err) {
-		if err := os.WriteFile(hookPath, []byte(want), 0755); err != nil {
+		if err := replaceExecutable(hookPath, want); err != nil {
 			return "", fmt.Errorf("install %s hook wrapper: %w", hook, err)
 		}
 		return HookActionInstalled, nil
@@ -1032,11 +1045,8 @@ func installManagedHookWrapper(hookPath, hook string) (HookAction, error) {
 		}
 		return HookActionVerified, nil
 	}
-	if err := os.WriteFile(hookPath, []byte(want), 0755); err != nil {
+	if err := replaceExecutable(hookPath, want); err != nil {
 		return "", fmt.Errorf("update %s hook wrapper: %w", hook, err)
-	}
-	if err := os.Chmod(hookPath, 0755); err != nil {
-		return "", fmt.Errorf("chmod %s hook wrapper: %w", hook, err)
 	}
 	return HookActionUpdated, nil
 }

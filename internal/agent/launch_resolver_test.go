@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // TestMain pins the provider catalog to the embedded copy for this package.
@@ -25,9 +26,15 @@ import (
 // the published one: TestRepositoryCatalogAddsRemoteProviders in
 // internal/providers fails if their launch args diverge. Cache and refresh
 // behavior is owned and tested by internal/providers.
+//
+// It also switches the index env gates off, since developer shells set them and
+// CI does not: with them on, every orchestrator supervisor started here would
+// install index hooks and plan languages in its temp repository. Tests that
+// exercise index activation opt in with t.Setenv.
 func TestMain(m *testing.M) {
 	runtimeCatalog = providers.EmbeddedCatalog()
 	runtimeCatalogOnce.Do(func() {})
+	testhelpers.DisableIndexEnvGates()
 	os.Exit(m.Run())
 }
 
