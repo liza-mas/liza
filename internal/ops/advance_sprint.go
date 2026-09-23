@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -376,16 +375,12 @@ func IsManyToOneReady(task *models.Task, state *models.State, m2oTransitions []M
 		}
 
 		// Check if ALL siblings in the cohort are MERGED with unfired transition
+		siblings, err := manyToOneCohortMembers(state, sharedParentID, task.RolePair)
+		if err != nil {
+			continue // Not ready; executing the transition reports the lineage gap.
+		}
 		allReady := true
-		for i := range state.Tasks {
-			sibling := &state.Tasks[i]
-			if sibling.RolePair != task.RolePair {
-				continue
-			}
-			siblingParents := sibling.EffectiveParentTasks()
-			if !slices.Contains(siblingParents, sharedParentID) {
-				continue
-			}
+		for _, sibling := range siblings {
 			if sibling.Status != models.TaskStatusMerged {
 				allReady = false
 				break

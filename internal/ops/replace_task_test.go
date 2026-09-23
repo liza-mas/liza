@@ -937,3 +937,50 @@ func TestReplaceTask_PostCommitCleanup(t *testing.T) {
 		t.Fatal("source branch not preserved")
 	}
 }
+
+func TestReplaceTask_SamePairReplacementKeepsParentLineage(t *testing.T) {
+	parentID := "planning-parent"
+	for _, tc := range []struct {
+		name            string
+		lineage         func(source *models.Task)
+		replacementPair string
+		wantParent      *string
+		wantParents     []string
+	}{
+		{name: "singular parent", lineage: func(source *models.Task) { source.ParentTask = &parentID }, replacementPair: "coding-pair", wantParent: &parentID},
+		{name: "plural parents", lineage: func(source *models.Task) { source.ParentTasks = []string{parentID, "other-parent"} }, replacementPair: "coding-pair", wantParents: []string{parentID, "other-parent"}},
+		{name: "cross-pair replacement", lineage: func(source *models.Task) { source.ParentTasks = []string{parentID} }, replacementPair: "code-planning-pair"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN a source task that belongs to a parent's allocation
+			f := newReplacementFixture(t)
+			if err := db.New(f.statePath).Modify(func(s *models.State) error {
+				for _, id := range []string{parentID, "other-parent"} {
+					s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus(id, models.TaskStatusMerged, time.Now().UTC()))
+				}
+				source := s.FindTask("source")
+				source.RolePair = "coding-pair"
+				tc.lineage(source)
+				f.opts.ExpectedTransition = models.TaskTransitionID(source)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			f.input.Replacement.RolePair = tc.replacementPair
+
+			// WHEN it is replaced
+			if _, err := f.run(); err != nil {
+				t.Fatal(err)
+			}
+
+			// THEN only a same-pair replacement continues the parent lineage
+			replacement := replacementState(t, f).FindTask("replacement")
+			if !reflect.DeepEqual(replacement.ParentTask, tc.wantParent) || !slices.Equal(replacement.ParentTasks, tc.wantParents) {
+				t.Fatalf("replacement lineage = %v / %v, want %v / %v", replacement.ParentTask, replacement.ParentTasks, tc.wantParent, tc.wantParents)
+			}
+			if replacement.EpicRef != "" {
+				t.Fatalf("replacement inherited epic_ref %q", replacement.EpicRef)
+			}
+		})
+	}
+}

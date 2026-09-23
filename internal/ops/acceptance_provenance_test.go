@@ -1256,3 +1256,74 @@ func TestReaffirmProof_UsesSpecRefWhenPlanRefIsAbsent(t *testing.T) {
 		t.Errorf("carrier = %q, want the spec_ref allocation to be found", result.CarrierPath)
 	}
 }
+
+func TestAcceptanceProvenance_SamePairReplacementKeepsAllocation(t *testing.T) {
+	for _, lineage := range []string{"singular parent", "plural parents"} {
+		for _, allocation := range []string{"unchanged", "mismatched"} {
+			t.Run(lineage+"/"+allocation+" allocation", func(t *testing.T) {
+				// GIVEN a blocked coding child allocated by a reviewed planning parent
+				root, taskID, _, _, bb := setupAcceptanceScenario(t)
+				reason := "reviewed correction"
+				var source models.Task
+				if err := bb.Modify(func(state *models.State) error {
+					task := state.FindTask(taskID)
+					task.Status, task.BlockedReason = models.TaskStatusBlocked, &reason
+					task.AssignedTo, task.LeaseExpires = nil, nil
+					if lineage == "plural parents" {
+						task.ParentTasks, task.ParentTask = []string{*task.ParentTask}, nil
+					}
+					if allocation == "mismatched" {
+						state.FindTask("acceptance-parent").Output[0].Validation = []string{"sh unrelated_test.sh"}
+					}
+					state.Agents["orchestrator-1"] = testhelpers.RegisteredTestAgent("orchestrator")
+					// replace-task validates the whole committed state; the scenario
+					// only builds what submission needs, so graft its envelope.
+					valid := testhelpers.CreateValidState()
+					state.Version, state.Goal, state.CircuitBreaker = valid.Version, valid.Goal, valid.CircuitBreaker
+					state.Goal.SpecRef = task.SpecRef
+					state.Sprint.GoalRef = valid.Goal.ID
+					state.Sprint.Status = models.SprintStatusInProgress
+					parent := state.FindTask("acceptance-parent")
+					parent.Description, parent.DoneWhen, parent.Scope, parent.SpecRef, parent.Priority = "Plan the boundary", "Plan approved", "boundary", task.SpecRef, 1
+					parent.Output[0].Desc, parent.Output[0].DoneWhen, parent.Output[0].Scope = "Boundary", "Boundary proven", "boundary"
+					parent.HandoffEvents = []models.HandoffEvent{
+						{Timestamp: parent.Created, Agent: *parent.AssignedTo, Trigger: models.HandoffTriggerSubmission},
+						{Timestamp: parent.Created, Agent: *parent.AssignedTo, Trigger: models.HandoffTriggerCompletion},
+					}
+					source = *task
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+
+				// WHEN the orchestrator replaces it within the same role pair
+				replacementID := taskID + "-r1"
+				_, err := ReplaceTaskWithAuthorityAndOptions(root, ReplaceTaskInput{
+					SourceTaskID: taskID, Reason: reason, Consumers: []models.DependencyUpdate{},
+					Replacement: AddTaskInput{ID: replacementID, RolePair: source.RolePair, Description: "Complete the boundary",
+						SpecRef: source.SpecRef, PlanRef: source.PlanRef, Validation: source.Validation,
+						DoneWhen: "Boundary proven", Scope: "boundary", Priority: 1},
+				}, models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration},
+					LifecycleRequestOptions{RequestID: "replace-acceptance", ExpectedTransition: models.TaskTransitionID(&source)})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				// THEN the replacement is adoptable exactly when the reviewed allocation still matches
+				state := readAcceptanceState(t, bb)
+				replacement := state.FindTask(replacementID)
+				input, err := loadAcceptanceInput(root, state, replacement, testhelpers.MustGit(t, root, "rev-parse", "integration"))
+				if allocation == "unchanged" {
+					if err != nil || input == nil || input.source.ParentTask != "acceptance-parent" {
+						t.Fatalf("replacement lost reviewed allocation: input=%+v err=%v", input, err)
+					}
+					return
+				}
+				var evidenceErr *AcceptanceEvidenceError
+				if !errors.As(err, &evidenceErr) || evidenceErr.Field != "acceptance.source" {
+					t.Fatalf("mismatched allocation adopted through inherited lineage: input=%+v err=%v", input, err)
+				}
+			})
+		}
+	}
+}

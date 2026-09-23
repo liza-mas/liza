@@ -45,7 +45,16 @@ func ValidateAddedTask(state *models.State, projectRoot, taskID string, skipSpec
 	}
 
 	task := state.Tasks[taskIndex]
-	taskState := scopedTaskState(state, task)
+	// The scoped copy omits every other task, so parent existence is checked
+	// against the full state instead of requiring the parents to be in scope.
+	for _, parentID := range task.EffectiveParentTasks() {
+		if state.FindTask(parentID) == nil {
+			return fmt.Errorf("task %s has parent_task referencing non-existent task '%s'", task.ID, parentID)
+		}
+	}
+	scoped := task
+	scoped.ParentTask, scoped.ParentTasks = nil, nil
+	taskState := scopedTaskState(state, scoped)
 	if err := validateTaskStates(taskState, projectRoot, skipSpecFileCheck, resolver); err != nil {
 		return err
 	}

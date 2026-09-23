@@ -241,18 +241,10 @@ func findManyToOneCohort(s *models.State, triggerTask *models.Task) ([]*models.T
 		return nil, "", fmt.Errorf("trigger task %q has no parent_task — cannot determine many-to-one cohort", triggerTask.ID)
 	}
 
-	var cohort []*models.Task
-	for i := range s.Tasks {
-		task := &s.Tasks[i]
-		if task.RolePair != triggerTask.RolePair {
-			continue
-		}
-		taskParents := task.EffectiveParentTasks()
-		if slices.Contains(taskParents, sharedParentID) {
-			cohort = append(cohort, task)
-		}
+	cohort, err := manyToOneCohortMembers(s, sharedParentID, triggerTask.RolePair)
+	if err != nil {
+		return nil, "", err
 	}
-
 	if len(cohort) == 0 {
 		return nil, "", fmt.Errorf("no cohort members found for trigger task %q", triggerTask.ID)
 	}
@@ -263,6 +255,38 @@ func findManyToOneCohort(s *models.State, triggerTask *models.Task) ([]*models.T
 	})
 
 	return cohort, sharedParentID, nil
+}
+
+// manyToOneCohortMembers returns the tasks of rolePair whose parents include
+// parentID, with each SUPERSEDED member represented by its successors. Every
+// successor must itself carry the cohort lineage; otherwise the superseded
+// work would silently drop out of the fan-in, so the cohort is rejected.
+func manyToOneCohortMembers(s *models.State, parentID, rolePair string) ([]*models.Task, error) {
+	var members, superseded []*models.Task
+	lineage := make(map[string]bool)
+	for i := range s.Tasks {
+		task := &s.Tasks[i]
+		if task.RolePair != rolePair || !slices.Contains(task.EffectiveParentTasks(), parentID) {
+			continue
+		}
+		lineage[task.ID] = true
+		if task.Status == models.TaskStatusSuperseded {
+			superseded = append(superseded, task)
+			continue
+		}
+		members = append(members, task)
+	}
+	for _, task := range superseded {
+		if len(task.SupersededBy) == 0 {
+			return nil, fmt.Errorf("many-to-one cohort member %q is SUPERSEDED without a successor", task.ID)
+		}
+		for _, successor := range task.SupersededBy {
+			if !lineage[successor] {
+				return nil, fmt.Errorf("many-to-one cohort member %q was superseded by %q, which does not carry cohort lineage (parent %s, role_pair %s)", task.ID, successor, parentID, rolePair)
+			}
+		}
+	}
+	return members, nil
 }
 
 // buildManyToOneChild creates a single child task from N parent cohort members.
@@ -280,7 +304,15 @@ func buildManyToOneChild(childID string, cohort []*models.Task, sharedParentID s
 	}
 
 	specRef := cohort[0].SpecRef
-	epicRef := paths.SplitRefFile(cohort[0].EpicRef) // doc-only: strip section anchor at many-to-one boundary
+	// Doc-only: strip the section anchor at the many-to-one boundary. Members
+	// share the epic document, but a replacement may not carry epic_ref.
+	var epicRef string
+	for _, member := range cohort {
+		if member.EpicRef != "" {
+			epicRef = paths.SplitRefFile(member.EpicRef)
+			break
+		}
+	}
 
 	// Fan-in keeps the defect classification if any member carries it: a cohort
 	// mixing defect and feature parents still consolidates work whose root cause

@@ -43,6 +43,16 @@ are required. Optional fields are `type`, `plan_ref`, `validation`,
 `validation_prerequisites`, `destructive_db`, `rca_required` and `depends`.
 Pipeline-dependent constraints still apply at mutation.
 
+A replacement whose `role_pair` equals the source's continues the same
+allocation and inherits the source's `parent_task`/`parent_tasks`. Fan-in
+cohorts and parent-scoped checks therefore still see the work; acceptance
+adoption still requires an exact match with the parent's reviewed allocation.
+`epic_ref` is not inherited, because the payload cannot restate it and
+replacement is how a broken one is dropped. A many-to-one cohort represents
+each SUPERSEDED member by its successors, and those successors must carry the
+cohort lineage. When a successor lacks it, the fan-in is refused and names the
+member, rather than firing without that work.
+
 `source_task_id` and `replacement.id` must differ. Each consumer has a unique
 existing `task_id`, distinct from both source and replacement, and explicit
 `expected_depends_on` and `desired_depends_on` arrays of unique nonempty IDs.

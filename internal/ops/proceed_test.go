@@ -7528,3 +7528,81 @@ func TestProceed_PerSubtask_KindDedup_RejectsUnknownKind(t *testing.T) {
 		t.Fatalf("Proceed() error = %v, want unknown kind", err)
 	}
 }
+
+// supersededCohort returns a two-story cohort whose first story was replaced,
+// as orchestrator repair leaves it: the original SUPERSEDED, its replacement
+// MERGED without epic_ref, and parent lineage only when replacementLineage.
+func supersededCohort(parentID string, replacementLineage bool) []models.Task {
+	cohort := makeManyToOneCohort(parentID, "us-writing-pair", models.TaskStatusMerged, "specs/goal.md", 2)
+	replacement := cohort[0]
+	replacement.ID = cohort[0].ID + "-fix"
+	replacement.ParentTasks = nil
+	if replacementLineage {
+		replacement.ParentTasks = []string{parentID}
+	}
+	cohort[0].Status = models.TaskStatusSuperseded
+	cohort[0].SupersededBy = []string{replacement.ID}
+	cohort[0].EpicRef = "specs/goal.md#Capability One"
+	cohort[1].EpicRef = "specs/goal.md#Capability Two"
+	return append(cohort, replacement)
+}
+
+func TestProceedManyToOne_SupersededMember(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name               string
+		replacementLineage bool
+		wantError          string
+	}{
+		{name: "replacement carries lineage", replacementLineage: true},
+		{name: "replacement lost lineage", wantError: `many-to-one cohort member "epic-plan-1-us-0" was superseded by "epic-plan-1-us-0-fix", which does not carry cohort lineage`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// GIVEN a completed story cohort in which one story was replaced
+			tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+			state := testhelpers.CreateValidState()
+			state.PipelineVersion = 2
+			state.Sprint.Status = models.SprintStatusCompleted
+			for _, task := range supersededCohort("epic-plan-1", tc.replacementLineage) {
+				state.Tasks = append(state.Tasks, task)
+				state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+			}
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			// WHEN the fan-in fires from the untouched story
+			_, err := Proceed(tmpDir, "epic-plan-1-us-1", "us-to-coding")
+
+			// THEN the replacement stands in for the original, or the lineage gap is named
+			if tc.wantError != "" {
+				testhelpers.RequireErrorContains(t, err, tc.wantError)
+				return
+			}
+			if err != nil {
+				t.Fatalf("Proceed() error: %v", err)
+			}
+			readState, err := db.New(stateFile).Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			child := readState.FindTask("epic-plan-1-us-to-coding")
+			if child == nil {
+				t.Fatal("fan-in child not created")
+			}
+			if want := []string{"epic-plan-1-us-0-fix", "epic-plan-1-us-1"}; !slices.Equal(child.ParentTasks, want) {
+				t.Fatalf("child ParentTasks = %v, want %v", child.ParentTasks, want)
+			}
+			if child.EpicRef != "specs/goal.md" {
+				t.Fatalf("child EpicRef = %q, want the shared epic document", child.EpicRef)
+			}
+			if readState.FindTask("epic-plan-1-us-0").TransitionsExecuted["us-to-coding"] {
+				t.Fatal("superseded original was marked as consumed by the fan-in")
+			}
+			for _, id := range child.ParentTasks {
+				if !readState.FindTask(id).TransitionsExecuted["us-to-coding"] {
+					t.Fatalf("cohort member %s not marked as consumed", id)
+				}
+			}
+		})
+	}
+}

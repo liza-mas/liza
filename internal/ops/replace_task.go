@@ -170,6 +170,14 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 			if err != nil {
 				return err
 			}
+			// A same-pair replacement continues the source's allocation: keep its
+			// parent lineage so fan-in cohorts and parent-scoped checks still see
+			// the work. epic_ref is not inherited; the payload cannot restate it,
+			// and replacement is how a broken one is dropped.
+			if replacement.RolePair == source.RolePair {
+				replacement.ParentTask = cloneStringPtr(source.ParentTask)
+				replacement.ParentTasks = slices.Clone(source.ParentTasks)
+			}
 			if base != nil {
 				replacement.BaseCommit = &base.BaseCommit
 				replacement.Worktree = &base.Worktree

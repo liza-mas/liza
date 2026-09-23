@@ -937,6 +937,33 @@ func TestIsManyToOneReady(t *testing.T) {
 	})
 }
 
+func TestIsManyToOneReady_SupersededMember(t *testing.T) {
+	t.Parallel()
+	m2oTransitions := []ManyToOneTransitionInfo{{Name: "us-to-coding", SourceRolePair: "us-writing-pair"}}
+	for _, tc := range []struct {
+		name               string
+		replacementLineage bool
+		wantReady          bool
+	}{
+		{name: "replacement carries lineage", replacementLineage: true, wantReady: true},
+		{name: "replacement lost lineage", wantReady: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN a merged story whose sibling was replaced
+			state := testhelpers.CreateValidState()
+			state.Tasks = supersededCohort("epic-plan-1", tc.replacementLineage)
+
+			// WHEN readiness is evaluated from the untouched story
+			ready := IsManyToOneReady(state.FindTask("epic-plan-1-us-1"), state, m2oTransitions)
+
+			// THEN the superseded original no longer holds the cohort, but a lineage gap does
+			if ready != tc.wantReady {
+				t.Fatalf("IsManyToOneReady() = %v, want %v", ready, tc.wantReady)
+			}
+		})
+	}
+}
+
 func TestCollectMergedManyToOneWithUnfiredTransition(t *testing.T) {
 	t.Parallel()
 
