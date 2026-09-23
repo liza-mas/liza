@@ -263,17 +263,18 @@ func findManyToOneCohort(s *models.State, triggerTask *models.Task) ([]*models.T
 
 // manyToOneCohortMembers returns the tasks of rolePair whose parents include
 // parentID, with each SUPERSEDED member represented by its successors. Every
-// successor must itself carry the cohort lineage; otherwise the superseded
-// work would silently drop out of the fan-in, so the cohort is rejected.
+// supersession chain must stay within the cohort lineage and end at members
+// that are not superseded; otherwise the superseded work would silently drop
+// out of the fan-in, so the cohort is rejected.
 func manyToOneCohortMembers(s *models.State, parentID, rolePair string) ([]*models.Task, error) {
 	var members, superseded []*models.Task
-	lineage := make(map[string]bool)
+	lineage := make(map[string]*models.Task)
 	for i := range s.Tasks {
 		task := &s.Tasks[i]
 		if task.RolePair != rolePair || !slices.Contains(task.EffectiveParentTasks(), parentID) {
 			continue
 		}
-		lineage[task.ID] = true
+		lineage[task.ID] = task
 		if task.Status == models.TaskStatusSuperseded {
 			superseded = append(superseded, task)
 			continue
@@ -281,16 +282,37 @@ func manyToOneCohortMembers(s *models.State, parentID, rolePair string) ([]*mode
 		members = append(members, task)
 	}
 	for _, task := range superseded {
-		if len(task.SupersededBy) == 0 {
-			return nil, fmt.Errorf("many-to-one cohort member %q is SUPERSEDED without a successor", task.ID)
-		}
-		for _, successor := range task.SupersededBy {
-			if !lineage[successor] {
-				return nil, fmt.Errorf("many-to-one cohort member %q was superseded by %q, which does not carry cohort lineage (parent %s, role_pair %s)", task.ID, successor, parentID, rolePair)
-			}
+		if err := checkSupersessionChain(task, task.ID, lineage, map[string]bool{}, parentID, rolePair); err != nil {
+			return nil, err
 		}
 	}
 	return members, nil
+}
+
+// checkSupersessionChain walks task's successors depth-first and requires every
+// path to reach a live cohort member without revisiting a task on the path.
+func checkSupersessionChain(task *models.Task, origin string, lineage map[string]*models.Task, path map[string]bool, parentID, rolePair string) error {
+	if task.Status != models.TaskStatusSuperseded {
+		return nil
+	}
+	if path[task.ID] {
+		return fmt.Errorf("many-to-one cohort supersession chain from %q cycles back to %q", origin, task.ID)
+	}
+	if len(task.SupersededBy) == 0 {
+		return fmt.Errorf("many-to-one cohort member %q is SUPERSEDED without a successor", task.ID)
+	}
+	path[task.ID] = true
+	defer delete(path, task.ID)
+	for _, successorID := range task.SupersededBy {
+		successor := lineage[successorID]
+		if successor == nil {
+			return fmt.Errorf("many-to-one cohort member %q was superseded by %q, which does not carry cohort lineage (parent %s, role_pair %s)", task.ID, successorID, parentID, rolePair)
+		}
+		if err := checkSupersessionChain(successor, origin, lineage, path, parentID, rolePair); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // buildManyToOneChild creates a single child task from N parent cohort members.

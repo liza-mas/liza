@@ -7707,3 +7707,75 @@ func TestExecuteAvailableTransitionsReport_CycleSkipsAreReported(t *testing.T) {
 		t.Fatalf("results = %+v, want none", report.Results)
 	}
 }
+
+func TestProceedManyToOne_SupersessionChains(t *testing.T) {
+	t.Parallel()
+	const merged, superseded = models.TaskStatusMerged, models.TaskStatusSuperseded
+	type member struct {
+		suffix       string
+		status       models.TaskStatus
+		supersededBy []string
+	}
+	for _, tc := range []struct {
+		name        string
+		members     []member
+		wantParents []string
+		wantError   string
+	}{
+		{name: "two-task cycle", members: []member{
+			{suffix: "a", status: superseded, supersededBy: []string{"b"}},
+			{suffix: "b", status: superseded, supersededBy: []string{"a"}},
+			{suffix: "c", status: merged},
+		}, wantError: `many-to-one cohort supersession chain from "epic-plan-1-a" cycles back to "epic-plan-1-a"`},
+		{name: "self cycle", members: []member{
+			{suffix: "a", status: superseded, supersededBy: []string{"a"}},
+			{suffix: "c", status: merged},
+		}, wantError: `many-to-one cohort supersession chain from "epic-plan-1-a" cycles back to "epic-plan-1-a"`},
+		{name: "chain ending at a live member", members: []member{
+			{suffix: "a", status: superseded, supersededBy: []string{"b"}},
+			{suffix: "b", status: superseded, supersededBy: []string{"b2"}},
+			{suffix: "b2", status: merged},
+			{suffix: "c", status: merged},
+		}, wantParents: []string{"epic-plan-1-b2", "epic-plan-1-c"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// GIVEN a story cohort with a merged member beside a supersession chain
+			tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
+			state := testhelpers.CreateValidState()
+			state.PipelineVersion = 2
+			state.Sprint.Status = models.SprintStatusCompleted
+			template := makeManyToOneCohort("epic-plan-1", "us-writing-pair", merged, "specs/goal.md", 1)[0]
+			for _, m := range tc.members {
+				task := template
+				task.ID = "epic-plan-1-" + m.suffix
+				task.Status = m.status
+				for _, successor := range m.supersededBy {
+					task.SupersededBy = append(task.SupersededBy, "epic-plan-1-"+successor)
+				}
+				state.Tasks = append(state.Tasks, task)
+				state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+			}
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			// WHEN the fan-in fires from the merged member
+			_, err := Proceed(tmpDir, "epic-plan-1-c", "us-to-coding")
+
+			// THEN a cycle cannot drop the chain's work, and a valid chain resolves to its live end
+			if tc.wantError != "" {
+				testhelpers.RequireErrorContains(t, err, tc.wantError)
+				return
+			}
+			if err != nil {
+				t.Fatalf("Proceed() error: %v", err)
+			}
+			readState, err := db.New(stateFile).Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if child := readState.FindTask("epic-plan-1-us-to-coding"); child == nil || !slices.Equal(child.ParentTasks, tc.wantParents) {
+				t.Fatalf("fan-in child = %+v, want ParentTasks %v", child, tc.wantParents)
+			}
+		})
+	}
+}

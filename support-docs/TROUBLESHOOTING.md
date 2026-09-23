@@ -797,11 +797,14 @@ progress.
 
 While a failure remains, goal completion is not detected, so an otherwise empty
 sprint does not stop the system. Fix the named cause; every later transition
-pass rescans merged tasks and retries it. For a many-to-one cohort, a member reported as ABANDONED will never
-merge. A superseded member whose successor "does not carry cohort lineage" was
-replaced by a build that dropped parent lineage. Route the consolidated work
-through the orchestrator (for example, add the downstream task that references
-the merged members) rather than editing state.
+pass rescans merged tasks and retries it. For a many-to-one cohort, a member
+reported as ABANDONED will never merge. A superseded member whose successor
+"does not carry cohort lineage" was replaced by a build that dropped parent
+lineage. Route the consolidated work through the orchestrator (for example, add
+the downstream task that references the merged members) rather than editing
+state. That workaround does not repair the original cohort: its transition is
+still unexecuted, so the failure keeps being reported and automatic goal
+completion stays blocked. Stop the run explicitly once the goal is met.
 
 ### Agent crashed with IMPLEMENTING task (usage limit, OOM, etc.)
 

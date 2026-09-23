@@ -49,9 +49,10 @@ cohorts and parent-scoped checks therefore still see the work; acceptance
 adoption still requires an exact match with the parent's reviewed allocation.
 `epic_ref` is not inherited, because the payload cannot restate it and
 replacement is how a broken one is dropped. A many-to-one cohort represents
-each SUPERSEDED member by its successors, and those successors must carry the
-cohort lineage. When a successor lacks it, the fan-in is refused and names the
-member, rather than firing without that work.
+each SUPERSEDED member by its successors. Every supersession chain must stay
+within the cohort lineage and end at members that are not superseded. When a
+successor lacks the lineage or a chain cycles back on itself, the fan-in is
+refused and names the member, rather than firing without that work.
 
 `source_task_id` and `replacement.id` must differ. Each consumer has a unique
 existing `task_id`, distinct from both source and replacement, and explicit
