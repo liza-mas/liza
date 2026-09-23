@@ -1284,6 +1284,7 @@ func TestRuntimeCommandPlanningPythonNoMarkerFallsBackToTargetRootForTrackedPyth
 func TestRuntimeRefreshCreatesParentAndRunsExactCommandPlans(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	target := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, target)
 	var calls []RuntimeCommandPlan
 
 	result, err := RefreshIndexes(RefreshOptions{
@@ -1371,6 +1372,7 @@ func TestRuntimeCommandPlanTimesOutHungIndexer(t *testing.T) {
 func TestRuntimeRefreshReportsBoundedFailureWithoutSuppressingSuccesses(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	target := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, target)
 	longOutput := strings.Repeat("x", maxFailureDiagnosticBytes+100)
 	staleGoPath := filepath.Join(target, paths.ProjectDirName(), "scip", "go.scip")
 	if err := os.MkdirAll(filepath.Dir(staleGoPath), 0o755); err != nil {
@@ -1531,7 +1533,6 @@ func TestRefreshTaskWorktreeScipUsesSharedExclude(t *testing.T) {
 
 	result, err := RefreshIndexes(RefreshOptions{
 		TargetRoot:          worktree,
-		TargetKind:          TargetKindTaskWorktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			assertIgnoreEntryInstalled(t, privateExclude)
@@ -1579,7 +1580,6 @@ func TestRefreshTaskWorktreeScipHidesGeneratedIndexes(t *testing.T) {
 
 	result, err := RefreshIndexes(RefreshOptions{
 		TargetRoot:          worktree,
-		TargetKind:          TargetKindTaskWorktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			if plan.Name == "scip-search" && !strings.HasPrefix(plan.OutputPath, filepath.Join(worktree, paths.ProjectDirName(), "scip")+string(os.PathSeparator)) {
@@ -1613,7 +1613,6 @@ func TestRefreshTaskWorktreeScipHidesGeneratedIndexesWithBrandedProjectDir(t *te
 
 	result, err := RefreshIndexes(RefreshOptions{
 		TargetRoot:          worktree,
-		TargetKind:          TargetKindTaskWorktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			if plan.Name == "scip-search" && !strings.HasPrefix(plan.OutputPath, brandedScipDir+string(os.PathSeparator)) {
@@ -1651,7 +1650,6 @@ func TestRefreshTaskWorktreeScipRepeatedRefreshIdempotent(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		result, err := RefreshIndexes(RefreshOptions{
 			TargetRoot:          worktree,
-			TargetKind:          TargetKindTaskWorktree,
 			ConfiguredLanguages: []string{"go"},
 			Runner: func(plan RuntimeCommandPlan) (string, error) {
 				runnerCalls++
@@ -1706,7 +1704,6 @@ func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 			defer wg.Done()
 			result, err := RefreshIndexes(RefreshOptions{
 				TargetRoot:          worktree,
-				TargetKind:          TargetKindTaskWorktree,
 				ConfiguredLanguages: []string{"go"},
 				Runner: func(plan RuntimeCommandPlan) (string, error) {
 					if !filepath.IsAbs(plan.OutputPath) {
@@ -1781,7 +1778,6 @@ func TestRefreshTaskWorktreeScipReportsConflictingCoreExcludesFile(t *testing.T)
 
 	_, err := RefreshIndexes(RefreshOptions{
 		TargetRoot:          worktree,
-		TargetKind:          TargetKindTaskWorktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(RuntimeCommandPlan) (string, error) {
 			t.Fatal("runner must not execute when core.excludesFile conflicts")

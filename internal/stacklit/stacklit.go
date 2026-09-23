@@ -19,14 +19,6 @@ var EnvEnableStacklit = brand.EnvName("ENABLE_STACKLIT")
 
 const maxFailureDiagnosticBytes = 1024
 
-// TargetKind identifies the lifecycle target being refreshed.
-type TargetKind string
-
-const (
-	TargetKindProjectRoot  TargetKind = "project-root"
-	TargetKindTaskWorktree TargetKind = "task-worktree"
-)
-
 // RuntimeCommandPlan describes the fixed Stacklit generation command.
 type RuntimeCommandPlan struct {
 	Name       string
@@ -41,7 +33,6 @@ type RuntimeRunner func(RuntimeCommandPlan) (string, error)
 // RefreshOptions configures one best-effort runtime Stacklit refresh.
 type RefreshOptions struct {
 	TargetRoot string
-	TargetKind TargetKind
 	Runner     RuntimeRunner
 }
 
@@ -104,11 +95,12 @@ func RuntimeEnabled() bool {
 	return parseEnvGate(envgate.Value(EnvEnableStacklit))
 }
 
-// RefreshIndex generates stacklit.json for one target root. For task worktrees,
-// it first isolates the generated file from task diffs: tracked stacklit.json is
-// marked skip-worktree for that linked worktree, while ignored stacklit.json is
-// generated as an ignored prompt-local file. Task-local generation requires one
-// of those git states so generated snapshots cannot dirty task diffs.
+// RefreshIndex generates stacklit.json for one task worktree; the index
+// lifecycle hooks own the repo-root index. It first isolates the generated file
+// from task diffs: tracked stacklit.json is marked skip-worktree for that linked
+// worktree, while ignored stacklit.json is generated as an ignored prompt-local
+// file. Generation requires one of those git states so generated snapshots
+// cannot dirty task diffs.
 func RefreshIndex(opts RefreshOptions) (RefreshResult, error) {
 	if !RuntimeEnabled() {
 		return RefreshResult{}, nil
@@ -119,13 +111,11 @@ func RefreshIndex(opts RefreshOptions) (RefreshResult, error) {
 		return RefreshResult{}, err
 	}
 
-	if opts.TargetKind == TargetKindTaskWorktree {
-		if err := prepareTaskWorktreeStacklitFile(plan.Dir); err != nil {
-			return RefreshResult{}, err
-		}
-		if err := removeTaskWorktreeIndex(plan.OutputPath); err != nil {
-			return RefreshResult{}, err
-		}
+	if err := prepareTaskWorktreeStacklitFile(plan.Dir); err != nil {
+		return RefreshResult{}, err
+	}
+	if err := removeTaskWorktreeIndex(plan.OutputPath); err != nil {
+		return RefreshResult{}, err
 	}
 
 	runner := opts.Runner
@@ -135,9 +125,7 @@ func RefreshIndex(opts RefreshOptions) (RefreshResult, error) {
 
 	output, err := runner(plan)
 	if err != nil {
-		if opts.TargetKind == TargetKindTaskWorktree {
-			_ = removeTaskWorktreeIndex(plan.OutputPath)
-		}
+		_ = removeTaskWorktreeIndex(plan.OutputPath)
 		return RefreshResult{
 			Failures: []RefreshFailure{{Diagnostic: boundedFailureDiagnostic(err, output)}},
 		}, nil

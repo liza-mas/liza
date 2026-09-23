@@ -134,7 +134,6 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 
 	refreshResult, refreshErr := reviewerWorktreeRefreshIndexes(scipsearch.RefreshOptions{
 		TargetRoot:          wtPath,
-		TargetKind:          scipsearch.TargetKindTaskWorktree,
 		ConfiguredLanguages: state.Config.ScipSearch,
 	})
 	if refreshErr != nil {
@@ -150,7 +149,6 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	}
 	stacklitResult, stacklitErr := reviewerWorktreeRefreshStacklitIndex(stacklit.RefreshOptions{
 		TargetRoot: wtPath,
-		TargetKind: stacklit.TargetKindTaskWorktree,
 	})
 	if stacklitErr != nil {
 		logger.Warn("stacklit refresh failed after worktree recovery", "task_id", taskID, "error", stacklitErr)
@@ -164,7 +162,6 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	}
 	functionalClustersResult, functionalClustersErr := reviewerWorktreeRefreshFunctionalClustersIndex(functionalclusters.RefreshOptions{
 		TargetRoot:          wtPath,
-		TargetKind:          functionalclusters.TargetKindTaskWorktree,
 		ConfiguredLanguages: state.Config.ScipSearch,
 	})
 	if functionalClustersErr != nil {

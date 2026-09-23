@@ -32,14 +32,6 @@ const outputArtifactName = "functional-clusters.json"
 const stacklitArchitectureArtifactName = "stacklit-architecture.json"
 const maxFailureDiagnosticBytes = 1024
 
-// TargetKind identifies the lifecycle target being refreshed.
-type TargetKind string
-
-const (
-	TargetKindProjectRoot  TargetKind = "project-root"
-	TargetKindTaskWorktree TargetKind = "task-worktree"
-)
-
 // RuntimeCommandPlan describes one fixed Functional Clusters prerequisite or
 // build command.
 type RuntimeCommandPlan struct {
@@ -55,7 +47,6 @@ type RuntimeRunner func(RuntimeCommandPlan) (string, error)
 // RefreshOptions configures one best-effort runtime Functional Clusters refresh.
 type RefreshOptions struct {
 	TargetRoot          string
-	TargetKind          TargetKind
 	ConfiguredLanguages []string
 	Runner              RuntimeRunner
 }
@@ -119,8 +110,9 @@ func RefreshEnabled(configuredLanguages []string) bool {
 		scipsearch.RuntimeEnabled(configuredLanguages)
 }
 
-// RefreshIndex builds functional-clusters.json for one target root. It runs the
-// export sequence in a deterministic order:
+// RefreshIndex builds functional-clusters.json for one task worktree; the index
+// lifecycle hooks own the repo-root artifact. It runs the export sequence in a
+// deterministic order:
 //  1. stacklit export-architecture
 //  2. scip-search graph-export for each available SCIP index
 //  3. functional-clusters build
@@ -150,13 +142,11 @@ func RefreshIndex(opts RefreshOptions) (RefreshResult, error) {
 		return RefreshResult{}, nil
 	}
 
-	if opts.TargetKind == TargetKindTaskWorktree {
-		if err := prepareTaskWorktreeFunctionalClustersFile(targetRoot); err != nil {
-			return RefreshResult{}, err
-		}
-		if err := removeArtifact(outputPath); err != nil {
-			return RefreshResult{}, err
-		}
+	if err := prepareTaskWorktreeFunctionalClustersFile(targetRoot); err != nil {
+		return RefreshResult{}, err
+	}
+	if err := removeArtifact(outputPath); err != nil {
+		return RefreshResult{}, err
 	}
 
 	runner := opts.Runner
@@ -166,17 +156,13 @@ func RefreshIndex(opts RefreshOptions) (RefreshResult, error) {
 
 	output, err := runBuild(targetRoot, outputPath, stacklitIndexes[0], scipIndexes, runner)
 	if err != nil {
-		if opts.TargetKind == TargetKindTaskWorktree {
-			_ = removeArtifact(outputPath)
-		}
+		_ = removeArtifact(outputPath)
 		return RefreshResult{
 			Failures: []RefreshFailure{{Diagnostic: boundedFailureDiagnostic(err, output)}},
 		}, nil
 	}
 	if _, err := os.Stat(outputPath); err != nil {
-		if opts.TargetKind == TargetKindTaskWorktree {
-			_ = removeArtifact(outputPath)
-		}
+		_ = removeArtifact(outputPath)
 		return RefreshResult{
 			Failures: []RefreshFailure{{Diagnostic: boundedFailureDiagnostic(fmt.Errorf("functional-clusters did not write %s: %w", outputPath, err), output)}},
 		}, nil

@@ -13,8 +13,6 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
-	"github.com/liza-mas/liza/internal/scipsearch"
-	"github.com/liza-mas/liza/internal/stacklit"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -29,7 +27,6 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 			testhelpers.SetupTestGitRepo(t, root)
 			statePath, _ := testhelpers.SetupLizaDir(t, root)
 			state := testhelpers.CreateValidState()
-			state.Config.ScipSearch = []string{"go"}
 			state.Config.OrchestratorPollInterval, state.Config.OrchestratorMaxWait = 1, 1
 			plan := testhelpers.BuildTaskByStatus("plan", models.TaskStatusMerged, time.Now().UTC())
 			plan.RolePair = "code-planning-pair"
@@ -51,8 +48,6 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 				t.Fatalf("fixture wake = %s, want %s", got.Trigger, wantTrigger)
 			}
 
-			t.Setenv(scipsearch.EnvEnableScipSearch, "true")
-			t.Setenv(stacklit.EnvEnableStacklit, "false")
 			// Apply the condition after wake selection. Seeding it in the
 			// initial state instead is intercepted by the pre-loop quota,
 			// pause and checkpoint gates, which return or park before the

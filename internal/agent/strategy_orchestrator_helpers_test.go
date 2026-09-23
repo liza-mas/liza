@@ -14,7 +14,6 @@ func newOrchestratorScipTestBlackboard(t *testing.T, projectRoot string, mutate 
 
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
 	state := testhelpers.CreateValidState()
-	state.Config.ScipSearch = []string{"go"}
 	state.Agents["orchestrator-1"] = models.Agent{
 		Role:       "orchestrator",
 		Status:     models.AgentStatusIdle,

@@ -553,7 +553,6 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 func refreshSubmitReviewScipIndexes(worktreePath string, configuredLanguages []string) []string {
 	result, err := submitReviewRefreshIndexes(scipsearch.RefreshOptions{
 		TargetRoot:          worktreePath,
-		TargetKind:          scipsearch.TargetKindTaskWorktree,
 		ConfiguredLanguages: configuredLanguages,
 	})
 	warnings := scipRefreshWarnings(result)
@@ -566,7 +565,6 @@ func refreshSubmitReviewScipIndexes(worktreePath string, configuredLanguages []s
 func refreshSubmitReviewStacklitIndex(worktreePath string) []string {
 	result, err := submitReviewRefreshStacklitIndex(stacklit.RefreshOptions{
 		TargetRoot: worktreePath,
-		TargetKind: stacklit.TargetKindTaskWorktree,
 	})
 	warnings := stacklitRefreshWarnings(result)
 	if err != nil {
@@ -578,7 +576,6 @@ func refreshSubmitReviewStacklitIndex(worktreePath string) []string {
 func refreshSubmitReviewFunctionalClustersIndex(worktreePath string, configuredLanguages []string) []string {
 	result, err := submitReviewRefreshFunctionalClustersIndex(functionalclusters.RefreshOptions{
 		TargetRoot:          worktreePath,
-		TargetKind:          functionalclusters.TargetKindTaskWorktree,
 		ConfiguredLanguages: configuredLanguages,
 	})
 	warnings := functionalClustersRefreshWarnings(result)

@@ -83,7 +83,6 @@ func TestRefreshIndexBuildsFunctionalClustersAfterExports(t *testing.T) {
 	var calls []string
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot:          projectRoot,
-		TargetKind:          TargetKindProjectRoot,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			calls = append(calls, plan.Name+" "+plan.Args[0])
@@ -151,7 +150,6 @@ func TestRefreshIndexTaskWorktreeGeneratedArtifactIsPromptLocalAndClean(t *testi
 
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot:          worktreeRoot,
-		TargetKind:          TargetKindTaskWorktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			if err := os.WriteFile(plan.OutputPath, []byte(plan.Name+"\n"), 0o644); err != nil {
@@ -209,7 +207,6 @@ func TestRefreshIndexDisabledNoop(t *testing.T) {
 	called := false
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot:          t.TempDir(),
-		TargetKind:          TargetKindProjectRoot,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(RuntimeCommandPlan) (string, error) {
 			called = true

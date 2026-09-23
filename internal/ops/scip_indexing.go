@@ -15,7 +15,6 @@ var (
 func refreshTaskWorktreeScipIndexes(worktreeDir string, configuredLanguages []string) []string {
 	result, err := scipsearch.RefreshIndexes(scipsearch.RefreshOptions{
 		TargetRoot:          worktreeDir,
-		TargetKind:          scipsearch.TargetKindTaskWorktree,
 		ConfiguredLanguages: configuredLanguages,
 		Runner:              currentScipRuntimeRunner(),
 	})

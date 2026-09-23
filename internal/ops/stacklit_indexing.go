@@ -15,7 +15,6 @@ var (
 func refreshTaskWorktreeStacklitIndex(worktreeDir string) []string {
 	result, err := stacklit.RefreshIndex(stacklit.RefreshOptions{
 		TargetRoot: worktreeDir,
-		TargetKind: stacklit.TargetKindTaskWorktree,
 		Runner:     currentStacklitRuntimeRunner(),
 	})
 	warnings := stacklitRefreshWarnings(result)

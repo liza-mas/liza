@@ -126,18 +126,9 @@ type RuntimeCommandPlan struct {
 // RuntimeRunner executes one runtime indexer command plan.
 type RuntimeRunner func(RuntimeCommandPlan) (string, error)
 
-// TargetKind identifies the lifecycle target being refreshed.
-type TargetKind string
-
-const (
-	TargetKindProjectRoot  TargetKind = "project-root"
-	TargetKindTaskWorktree TargetKind = "task-worktree"
-)
-
 // RefreshOptions configures one best-effort runtime index refresh.
 type RefreshOptions struct {
 	TargetRoot          string
-	TargetKind          TargetKind
 	ConfiguredLanguages []string
 	GitFiles            GitFilesFunc
 	Runner              RuntimeRunner
@@ -260,8 +251,9 @@ func PlanRuntimeCommands(opts RuntimePlanOptions) ([]LanguageAggregatePlan, erro
 	return buildRuntimeCommandPlans(targetRoot, filterRuntimeLanguages(opts.ConfiguredLanguages, detectLanguages(files)), files), nil
 }
 
-// RefreshIndexes executes selected runtime indexer command plans and reports
-// per-language results. Indexer failures are isolated to their language.
+// RefreshIndexes executes selected runtime indexer command plans for one task
+// worktree and reports per-language results; the index lifecycle hooks own the
+// repo-root indexes. Indexer failures are isolated to their language.
 func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
 	plans, err := PlanRuntimeCommands(RuntimePlanOptions{
 		TargetRoot:          opts.TargetRoot,
@@ -275,10 +267,8 @@ func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
 		return RefreshResult{}, nil
 	}
 
-	if opts.TargetKind == TargetKindTaskWorktree {
-		if err := ensureTaskWorktreeScipExclude(plans[0].ProjectRoot); err != nil {
-			return RefreshResult{}, err
-		}
+	if err := ensureTaskWorktreeScipExclude(plans[0].ProjectRoot); err != nil {
+		return RefreshResult{}, err
 	}
 
 	if err := os.MkdirAll(filepath.Dir(plans[0].OutputPath), 0o755); err != nil {

@@ -15,7 +15,6 @@ var (
 func refreshTaskWorktreeFunctionalClustersIndex(worktreeDir string, configuredLanguages []string) []string {
 	result, err := functionalclusters.RefreshIndex(functionalclusters.RefreshOptions{
 		TargetRoot:          worktreeDir,
-		TargetKind:          functionalclusters.TargetKindTaskWorktree,
 		ConfiguredLanguages: configuredLanguages,
 		Runner:              currentFunctionalClustersRuntimeRunner(),
 	})

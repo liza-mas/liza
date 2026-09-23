@@ -28,8 +28,9 @@ var (
 	orchestratorWaitForWorkDetector = DetectOrchestratorWakeTriggersForProject
 	// orchestratorPreExecutionHook runs at the end of PreExecution, inside the
 	// window the supervisor re-reads state in before RevalidateWake. Production
-	// leaves it nil. It exists because the pre-loop gates (quota, pause and
-	// checkpoint at supervisor.go:795-800) run before wake selection, so a
+	// leaves it nil. It exists because the pre-loop gates (handleQuotaSignal,
+	// handleProviderUnavailableSignal and awaitRoleGate for pause and
+	// checkpoint) run before wake selection, so a
 	// condition seeded up front never reaches RevalidateWake: appearing inside
 	// this window is the only way to exercise cancellation after selection.
 	orchestratorPreExecutionHook func() error

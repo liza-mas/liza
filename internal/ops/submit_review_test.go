@@ -770,9 +770,6 @@ func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransiti
 		if opts.TargetRoot != wtPath {
 			t.Errorf("TargetRoot = %q, want %q", opts.TargetRoot, wtPath)
 		}
-		if opts.TargetKind != scipsearch.TargetKindTaskWorktree {
-			t.Errorf("TargetKind = %q, want task worktree", opts.TargetKind)
-		}
 		state, err := bb.Read()
 		if err != nil {
 			t.Fatalf("bb.Read() during refresh: %v", err)

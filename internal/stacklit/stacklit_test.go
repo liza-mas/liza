@@ -46,7 +46,6 @@ func TestRefreshIndexTaskWorktreeTrackedStacklitJSONIsPromptLocalAndClean(t *tes
 
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot: worktreeRoot,
-		TargetKind: TargetKindTaskWorktree,
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			assertStacklitPlan(t, plan, worktreeRoot)
 			if err := os.WriteFile(plan.OutputPath, []byte("task-local index\n"), 0o644); err != nil {
@@ -91,7 +90,6 @@ func TestRefreshIndexTaskWorktreeIgnoredStacklitJSONIsPromptLocalAndClean(t *tes
 
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot: worktreeRoot,
-		TargetKind: TargetKindTaskWorktree,
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
 			assertStacklitPlan(t, plan, worktreeRoot)
 			if err := os.WriteFile(plan.OutputPath, []byte("task-local index\n"), 0o644); err != nil {
@@ -136,7 +134,6 @@ func TestRefreshIndexTaskWorktreeFailureRemovesPromptLocalIndex(t *testing.T) {
 
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot: worktreeRoot,
-		TargetKind: TargetKindTaskWorktree,
 		Runner: func(RuntimeCommandPlan) (string, error) {
 			return "stacklit stderr", errors.New("stacklit failed")
 		},
@@ -198,7 +195,6 @@ func TestRefreshIndexTaskWorktreeRejectsUntrackedUnignoredStacklitJSON(t *testin
 	called := false
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot: worktreeRoot,
-		TargetKind: TargetKindTaskWorktree,
 		Runner: func(RuntimeCommandPlan) (string, error) {
 			called = true
 			return "", nil
@@ -226,7 +222,6 @@ func TestRefreshIndexDisabledNoop(t *testing.T) {
 	called := false
 	result, err := RefreshIndex(RefreshOptions{
 		TargetRoot: t.TempDir(),
-		TargetKind: TargetKindProjectRoot,
 		Runner: func(RuntimeCommandPlan) (string, error) {
 			called = true
 			return "", nil
