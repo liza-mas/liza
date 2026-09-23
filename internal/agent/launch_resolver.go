@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
@@ -411,7 +410,12 @@ func launchTemplateVars(req LaunchPlanRequest, toolName string) map[string]strin
 		"taskID":      req.TaskID,
 		"sessionID":   req.SessionID,
 		"outputsDir":  req.OutputsDir,
-		"globalDir":   brandGlobalDir(),
+	}
+	// globalDir is left undefined when the home directory cannot be resolved,
+	// so a run_arg referencing it fails rendering with an explicit error
+	// instead of degrading to a relative path that does not exist.
+	if dir, err := paths.GlobalLizaDir(); err == nil && filepath.IsAbs(dir) {
+		vars["globalDir"] = dir
 	}
 	for key, value := range req.ProfileVars {
 		if key = strings.TrimSpace(key); key != "" {
@@ -419,18 +423,6 @@ func launchTemplateVars(req LaunchPlanRequest, toolName string) map[string]strin
 		}
 	}
 	return vars
-}
-
-// brandGlobalDir resolves the branded global directory (e.g. ~/.liza) for
-// catalog run_args that reference global assets, such as the pi init-gate
-// extension. Falls back to the bare global dirname when the home directory
-// cannot be resolved, so template rendering never fails.
-func brandGlobalDir() string {
-	home, err := paths.UserHomeDir()
-	if err != nil || home == "" {
-		return brand.RuntimeValues().GlobalDirName
-	}
-	return filepath.Join(home, brand.RuntimeValues().GlobalDirName)
 }
 
 func renderArgs(args []string, vars map[string]string) ([]string, error) {
@@ -458,6 +450,9 @@ func renderArg(arg string, vars map[string]string) (string, error) {
 	})
 	if len(missing) > 0 {
 		sort.Strings(missing)
+		if slices.Contains(missing, "globalDir") {
+			return "", fmt.Errorf("unknown template variable(s): %s (globalDir requires a resolvable home directory)", strings.Join(missing, ", "))
+		}
 		return "", fmt.Errorf("unknown template variable(s): %s", strings.Join(missing, ", "))
 	}
 	return rendered, nil

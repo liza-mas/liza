@@ -11,6 +11,11 @@ each.
 Pi is provider-agnostic: one CLI fronts z.ai, OpenRouter, Ollama, DeepSeek and
 ~200 other providers (see `pi --list-models`).
 
+The `pi` provider ships in the binary's embedded provider catalog only; it is
+not published to the remote `provider-catalog.yaml` yet, because its
+`pi_extension` activation asset is unknown to already-released binaries,
+which reject the whole fetched catalog on unknown fields.
+
 Activate it for a workspace:
 
 ```bash
@@ -24,7 +29,7 @@ What activation does:
   `~/.pi/agent/AGENTS.md → ~/.liza/CORE.md` symlink carries the behavioral
   contract into every pi session, in any workspace.
 - Enforcement: `liza init --pi` / `liza setup --pi` installs the **pi
-  init-gate extension** at `~/.liza/extensions/liza-init-gate.ts`. The pi
+  init-gate extension** at `~/.liza/extensions/init-gate.ts`. The pi
   provider's `run_args` load it with `pi -p -e <gate>`. It blocks mutating
   tools (`bash`, `edit`, `write`, unknown custom tools) until `AGENT_TOOLS.md`,
   `MULTI_AGENT_MODE.md` (or `PAIRING_MODE.md`) and the project's

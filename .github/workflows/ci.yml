@@ -23,6 +23,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Executes the pi init-gate extension (TypeScript) in its tests; node
+      # 24 strips types natively.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: '3.12'
@@ -75,6 +81,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      # Executes the pi init-gate extension (TypeScript) in its tests; node
+      # 24 strips types natively.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
 
       # The Makefile targets are not reused here. Linux and macOS already cover
       # the Python pre-commit hooks, while this job answers the narrower native

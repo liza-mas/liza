@@ -18,6 +18,7 @@
 | Document | Purpose |
 |----------|---------|
 | [Configuration](../support-docs/CONFIGURATION.md) | System config, tuning parameters, environment variables |
+| [Provider Models](provider-models.md) | Model selection for pi, Devin and Codex backends; pi init-gate enforcement |
 | [Performance](PERFORMANCE.md) | Lock metrics, state caching, file system watching, tuning |
 | [Testing](TESTING.md) | Running tests, coverage targets, test utilities |
 | [Troubleshooting](../support-docs/TROUBLESHOOTING.md) | Common issues and solutions |

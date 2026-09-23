@@ -297,8 +297,8 @@ providers:
       provider_key: pi
       executable: pi
       prompt_transport: stdin
-      run_args: [-p, -e, "{{globalDir}}/extensions/liza-init-gate.ts"]
-      logged_run_args: [-p, --mode, json, -e, "{{globalDir}}/extensions/liza-init-gate.ts"]
+      run_args: [-p, -e, "{{globalDir}}/extensions/init-gate.ts"]
+      logged_run_args: [-p, --mode, json, -e, "{{globalDir}}/extensions/init-gate.ts"]
       env_files: [pi.env]
       contract_key: pi
 `

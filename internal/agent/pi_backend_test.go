@@ -23,7 +23,38 @@ func expectedPiGatePath(t *testing.T) string {
 	if err != nil || home == "" {
 		t.Fatalf("resolve home dir: %v", err)
 	}
-	return filepath.Join(home, brand.RuntimeValues().GlobalDirName, "extensions", "liza-init-gate.ts")
+	return filepath.Join(home, brand.RuntimeValues().GlobalDirName, "extensions", "init-gate.ts")
+}
+
+// TestPiLaunchPlanFailsWhenHomeUnresolvable guards against rendering
+// {{globalDir}} as a relative path: pi refuses to start on a missing -e
+// file, so an explicit resolution error is the more useful failure.
+func TestPiLaunchPlanFailsWhenHomeUnresolvable(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	if home, err := paths.UserHomeDir(); err == nil && filepath.IsAbs(home) {
+		t.Skipf("home still resolves to %q on this platform", home)
+	}
+
+	_, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "pi",
+		Prompt:        "do it",
+		ProjectRoot:   t.TempDir(),
+		RuntimeConfig: models.Config{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "globalDir requires a resolvable home directory") {
+		t.Fatalf("ResolveLaunchPlan() error = %v, want explicit globalDir resolution error", err)
+	}
+
+	// Providers that do not reference globalDir are unaffected.
+	if _, err := ResolveLaunchPlan(LaunchPlanRequest{
+		ToolName:      "claude",
+		Prompt:        "do it",
+		ProjectRoot:   t.TempDir(),
+		RuntimeConfig: models.Config{},
+	}); err != nil && strings.Contains(err.Error(), "globalDir") {
+		t.Fatalf("claude launch plan must not depend on globalDir: %v", err)
+	}
 }
 
 func TestPiLaunchPlanReferencesGlobalInitGate(t *testing.T) {

@@ -1188,6 +1188,7 @@ Headless watch automatically runs the repair-agent-pool behavior when a task is 
 | `qwen-acp` | Qwen through ACPX from the remote provider catalog. Requires `acpx` on `PATH`, reuses Qwen's `QWEN.md` contract setup, and uses catalog-defined ACPX session and prompt argv. |
 | `devin` | Devin CLI from the remote provider catalog. Use `§BRAND_BINARY_NAME§ setup --provider devin` for global skills and `§BRAND_BINARY_NAME§ init --provider devin` to link §BRAND_NAME_TITLE§'s contract at the catalog-defined repo path. |
 | `devin-acp` | Devin through ACPX from the remote provider catalog. Requires both `acpx` and `devin` on `PATH`; ACPX is invoked with `--agent "devin acp"` because Devin's ACP server is the `devin acp` command, not a standalone executable. Reuses Devin's catalog-defined contract setup. |
+| `pi` | Pi (`pi-coding-agent`) CLI, built into the embedded provider catalog (not yet in the remote catalog). Use `§BRAND_BINARY_NAME§ setup --pi` for global skills and `§BRAND_BINARY_NAME§ init --pi` for global contract activation (`~/.pi/agent/AGENTS.md`); both install the pi init-gate extension at `~/§BRAND_GLOBAL_DIRNAME§/extensions/init-gate.ts`, which spawns load with `pi -p -e` and which blocks mutating tools until the init docs are read. Spawns re-deploy a missing gate. Provider keys go in a repo-root `pi.env`; pin a model with an `agent_tools.pi.run_args` override. |
 
 ### Validation execution prerequisites
 

@@ -55,7 +55,7 @@ var bashPolicyContent []byte
 //go:embed "opencode-tools/exec.ts"
 var opencodeExecToolContent []byte
 
-//go:embed "pi-extensions/liza-init-gate.ts"
+//go:embed "pi-extensions/init-gate.ts"
 var piInitGateContent []byte
 
 //go:embed "hooks/enforce-init.sh"
@@ -142,7 +142,7 @@ func PiInitGatePath() (string, error) {
 	if err != nil || home == "" {
 		return "", fmt.Errorf("resolve home directory for pi init gate: %w", err)
 	}
-	return filepath.Join(home, brand.RuntimeValues().GlobalDirName, "extensions", "liza-init-gate.ts"), nil
+	return filepath.Join(home, brand.RuntimeValues().GlobalDirName, "extensions", "init-gate.ts"), nil
 }
 
 // WritePiInitGate writes the pi init-gate extension into the branded global

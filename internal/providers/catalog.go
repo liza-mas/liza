@@ -778,3 +778,24 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
+
+// WithEmbeddedBuiltins returns cat plus every embedded built-in provider it
+// does not already define. Listing and detection use it so a provider that
+// ships embedded-only (because released binaries could not parse its catalog
+// fields) stays visible when a fetched catalog predates it. Providers present
+// in cat always win; an embedded provider whose id, synthesized -acp id or
+// alias would collide with cat is skipped individually.
+func WithEmbeddedBuiltins(cat Catalog) Catalog {
+	merged := cat
+	for _, p := range EmbeddedCatalog().Providers {
+		if _, ok := merged.Resolve(p.ID); ok {
+			continue
+		}
+		candidate := Catalog{Version: merged.Version, Providers: append(append([]Provider(nil), merged.Providers...), p)}
+		if err := candidate.Validate(); err != nil {
+			continue
+		}
+		merged = candidate
+	}
+	return merged
+}
