@@ -1438,9 +1438,9 @@ specs:
   specs/protocols/blocked-assessment-idempotency.md:
     title: Blocked-Assessment Idempotency
     status: active
-    last_verified: "2026-09-20"
-    linked_adrs: ["0141"]
-    code_paths: [internal/ops/assess_blocked_fingerprint.go, internal/ops/assess_blocked.go, internal/ops/orchestrator_wake.go, internal/agent/workdetection.go, internal/payloadschema/assess_blocked.go]
+    last_verified: "2026-09-23"
+    linked_adrs: ["0141", "0157"]
+    code_paths: [internal/ops/assess_blocked_fingerprint.go, internal/ops/assess_blocked.go, internal/ops/assess_blocked_awaited.go, internal/ops/orchestrator_wake.go, internal/agent/workdetection.go, internal/payloadschema/assess_blocked.go]
   specs/protocols/payload-validation.md:
     title: Payload Validation
     status: active

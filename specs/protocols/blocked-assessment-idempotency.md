@@ -10,7 +10,8 @@ Authorization, generation fencing and lifecycle request checks still apply.
 
 `BuildAssessmentFingerprint` in
 [assess_blocked_fingerprint.go](../../internal/ops/assess_blocked_fingerprint.go)
-hashes a canonical JSON object with exactly six material inputs:
+hashes a canonical JSON object with exactly six material inputs; a declared
+[awaited set](#awaited-set) takes the place of `descendants`:
 
 | Input | Canonical value |
 |---|---|
@@ -43,7 +44,7 @@ non-assessment history count remains a structural lifecycle version; creation
 times distinguish dependency task incarnations. Explicit human supersession is
 represented by appended notes, not by editing old notes in place.
 
-Dependency and descendant outcome classes are shared: `MERGED` is satisfied;
+Dependency, descendant and awaited outcome classes are shared: `MERGED` is satisfied;
 `BLOCKED`, `ABANDONED`, `INTEGRATION_FAILED`, and unreplaced `SUPERSEDED` are
 failed/blocked; missing IDs are missing. Every other nonempty status is pending:
 intermediate states belong to the configured pipeline, including architecture,
@@ -58,6 +59,35 @@ pipeline and does not validate whether nonempty statuses belong to that pipeline
 This projection does not alter dependency satisfaction or grant permission to
 execute dependent work.
 
+## Awaited set
+
+`assess-blocked --awaits <id>[,<id>]` declares the existing unfinished tasks a
+hold waits for, typically later-stage work the dependency-direction rule forbids
+as an edge. IDs are trimmed and kept as a sorted set; repeats merge. A non-empty
+set replaces `descendants` with `awaited`: the sorted IDs plus the dependency
+record projection over each ID's resolved replacement path. The other inputs
+are unchanged, so direct dependency outcomes and human notes still wake the
+task, while unrelated generated work settling does not. Without a set the
+material is byte-identical to earlier versions, so recorded digests stay valid.
+
+The writer validates the set after replay and status checks and before the
+no-change comparison, so an otherwise unchanged assessment is rejected once its
+wait is stale. It rejects a self-wait, unknown IDs, IDs with no pending task on
+their replacement path (listing each with its status), and a wait that leads
+back to the task. That search follows effective dependencies through
+supersession, stops at `MERGED`, `ABANDONED` and `SUPERSEDED` tasks, and
+follows the awaited sets only of tasks currently `BLOCKED`; the rejection names
+the cycle.
+
+The guard is best-effort: later graph edits can close a cycle. The reader
+ignores a set that is malformed (not a non-empty normalized string list) or now
+leads back to the task; the digest then differs and the task wakes, without a
+stated reason. Repeating the same `--awaits` names the cycle or the settled
+task. A task unblocked and re-blocked before reassessment keeps its previous
+set until its next assessment; its own status change wakes it, but the guard
+follows the stale set meanwhile and can reject another task's valid wait
+([ADR-0157](../architecture/ADR/0157-blocked-assessment-wait-for-set.md)).
+
 ## Persistence and no-change result
 
 The key `assessment_fingerprint_v2` is stored in `TaskHistoryEntry.Extra`,
@@ -67,7 +97,11 @@ the latest `orchestrator_assessment` retains it. On a new append, the writer
 removes this key and the retired `assessment_fingerprint_v1` and
 `dependency_descendant_wake_snapshot_v1` keys from earlier assessment entries,
 preserving their notes and other audit fields. It neither stores the full
-fingerprint input nor introduces a separate task-state field.
+fingerprint input nor introduces a separate task-state field. A declared
+awaited set is stored beside the digest as `awaited_tasks` and pruned the same
+way; an assessment without `--awaits` stores none, which clears the set. The
+set is part of lifecycle request identity, omitted when empty so earlier
+identities are unchanged.
 
 After eligibility and request checks, the writer compares the candidate digest
 with the latest assessment's valid digest before changing canonical blocker
@@ -105,21 +139,26 @@ state. A nil repair request in reconciliation clears the old request.
 
 [orchestrator_wake.go](../../internal/ops/orchestrator_wake.go) and the blocked
 work detector use the same fingerprint builder and latest-entry validity check.
-The reader supplies current canonical blocker metadata and the note from the
-assessment that carries the digest. Missing/invalid baselines are actionable;
-otherwise a differing digest is actionable.
+The reader supplies current canonical blocker metadata and the note and valid
+awaited set from the assessment that carries the digest. Missing/invalid
+baselines are actionable; otherwise a differing digest is actionable.
 
 The writer's material-change predicate is a **superset** of the reader's wake
 predicate: every durable change that wakes a blocked task is visible to the
 writer, while the writer additionally accepts a newly supplied blocker payload
 or disposition that no read could predict. After an assessment is committed,
-its own history entry and receipt revision do not provoke another wake. There
-is one comparison baseline, not independently advancing read and write cursors.
+its own history entry and receipt revision do not provoke another wake. The
+superset concerns fingerprint comparison, not eligibility: awaited-set
+validation rejects a candidate that keeps a set whose work has settled or that
+now leads back to the task, so the next assessment must declare a changed set
+or none. There is one comparison baseline, not independently advancing read and
+write cursors.
 This contract applies to `BLOCKED`; hypothesis-exhaustion wake behavior remains
 separate.
 
-The registered `assess-blocked` v1 payload schema validates structural input
-before state acquisition. Preflight and mutation share that validator; role,
+The registered `assess-blocked` v1 payload schema validates structural input,
+including `awaited_tasks` as a list of non-blank strings, before state
+acquisition. Preflight and mutation share that validator; role,
 generation, task status and state-dependent eligibility still belong to mutation.
 See [payload validation](payload-validation.md) for the preflight boundary.
 
@@ -150,4 +189,5 @@ records the extension trigger.
 The implementation sources above establish the documented identity and
 transaction behavior; [lifecycle_metrics.go](../../internal/ops/lifecycle_metrics.go)
 establishes the count-only telemetry shape. Design rationale and rejected
-alternatives are in [ADR-0141](../architecture/ADR/0141-blocked-assessment-idempotency.md).
+alternatives are in [ADR-0141](../architecture/ADR/0141-blocked-assessment-idempotency.md)
+and, for the awaited set, [ADR-0157](../architecture/ADR/0157-blocked-assessment-wait-for-set.md).

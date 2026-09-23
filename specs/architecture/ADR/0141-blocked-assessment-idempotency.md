@@ -3,6 +3,7 @@
 ## Status
 
 ACCEPTED — records issue #157, amended for outcome-based provider identity.
+Amended by ADR-0157: a declared awaited set replaces the `descendants` input.
 
 ## Context
 

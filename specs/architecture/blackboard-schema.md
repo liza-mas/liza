@@ -271,7 +271,7 @@ History metadata is `TaskHistoryEntry.Extra`, inlined into the YAML entry.
 
 | Event | Inline fields and retention |
 |-------|-----------------------------|
-| `orchestrator_assessment` | `assessment_fingerprint_v1`: one 64-character lowercase hex SHA-256 digest. Only the latest assessment retains it; a new assessment removes it and `dependency_descendant_wake_snapshot_v1` from earlier assessments, preserving their notes and other audit fields. Equivalent input appends nothing. |
+| `orchestrator_assessment` | `assessment_fingerprint_v2`: one 64-character lowercase hex SHA-256 digest; `awaited_tasks`: sorted task IDs the hold waits for, present only when declared with `--awaits`. Only the latest assessment retains them; a new assessment removes both, plus the retired `assessment_fingerprint_v1` and `dependency_descendant_wake_snapshot_v1`, from earlier assessments, preserving their notes and other audit fields. Equivalent input appends nothing. |
 | `replacement_committed` (source task) | `source_task_id`, `replacement_task_id`, `source_prior_transition_id`, `source_new_transition_id`, `retargeted_consumers`, `request_id`, and `preserved_base_commit` when declared. Identifiers only, never the replacement payload. |
 | `acceptance_commits_remapped` (merged parent task) | `replaced` (old-to-new commit identifiers), `integration` (integration commit identifier), and `history_entries` (updated history-entry count). Identifiers and count only, never commit content. |
 

@@ -635,7 +635,7 @@ the appropriate supervisor-launched agent session. See
 | `§BRAND_BINARY_NAME§ get quarantined_verdicts --json` | Read fenced review evidence and its reconciliation audit |
 | `§BRAND_BINARY_NAME§ reconcile-verdict <task-id> <finding-id> <disposition> --reason "<reason>" --agent-id <orchestrator-id>` | Current-generation orchestrator records accepted, refuted, superseded, or escalated judgment; conflicts hold approval/merge until resolved |
 | `§BRAND_BINARY_NAME§ mark-blocked <task-id>` | Mark a task as BLOCKED with reason/questions; optional `--depends-on` records blocking task IDs for scheduling and orchestrator re-wake. Use `--repair-request-file <path>` for a complete declarative dependency repair; individual `--repair-*` flags remain for command-based non-dependency repairs. |
-| `§BRAND_BINARY_NAME§ assess-blocked <task-id>` | Reconcile a BLOCKED task's canonical reason, questions, and optional repair request after partial repair, or use `--note` alone for a history-only assessment that raises an `UNRESOLVED BLOCKED` alert |
+| `§BRAND_BINARY_NAME§ assess-blocked <task-id>` | Reconcile a BLOCKED task's canonical reason, questions, and optional repair request after partial repair, or use `--note` alone for a history-only assessment that raises an `UNRESOLVED BLOCKED` alert. `--awaits <id>[,<id>]` names existing unfinished tasks the hold waits for; their outcomes replace generated-descendant wakes |
 | `§BRAND_BINARY_NAME§ retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason "..."` | Orchestrator-only repair for one direct edge on a non-terminal task. Replaces the old edge with one or more existing task IDs, canonicalizes dependencies, validates the full candidate state, and leaves task status unchanged. |
 | `§BRAND_BINARY_NAME§ apply-dependency-repair <blocked-task-id> --reason "..."` | Orchestrator-only consumer for one stored declarative dependency repair. Atomically compares every expected list, commits every canonical desired list and audit entry, and clears the request only on complete success; the source remains BLOCKED. |
 | `§BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason <reason>` | Orchestrator-only repair for one SUPERSEDED task. Atomically removes all illegal downstream direct dependencies, retains legal edges and terminal/replacement metadata, audits removed and retained IDs, and validates the full candidate state. |
@@ -727,6 +727,12 @@ The note-only form,
 `§BRAND_BINARY_NAME§ assess-blocked <task-id> --note "<assessment>"`, remains
 history-only compatibility for a blocker whose canonical metadata is already
 current. It does not replace reason, questions, or the repair request.
+When the hold waits on existing unfinished tasks that the dependency direction
+forbids as edges, add `--awaits <id>[,<id>]` to either form: their outcomes
+replace generated-descendant wakes, while direct dependency, blocker, human-note
+and the task's own changes still wake it. The
+command rejects a self-wait, unknown or settled IDs, and a wait that would
+deadlock; an assessment without `--awaits` clears the set.
 After a full repair, use `§BRAND_BINARY_NAME§ unblock-task <task-id> --reason "..."`
 instead; that guarded transition clears canonical blocker metadata. It returns
 the task to its role-pair initial status, but claimability still depends on direct dependencies:
