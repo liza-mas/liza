@@ -284,6 +284,7 @@ var providersListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		cat = providercatalog.WithEmbeddedBuiltins(cat)
 		for _, p := range cat.AllProvidersSorted() {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%t\n", p.ID, p.DisplayName, p.Backend, p.Disabled)
 		}
@@ -299,6 +300,7 @@ var providersDetectCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		cat = providercatalog.WithEmbeddedBuiltins(cat)
 		for _, result := range providercatalog.Detect(cat, nil) {
 			status := "missing"
 			if result.Installed {
@@ -471,7 +473,7 @@ Reports whether any changes were made.`,
 }
 
 // agentFlagNames is the canonical list of supported agent flag names.
-var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini", "mistral"}
+var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini", "mistral", "pi"}
 
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
@@ -542,12 +544,14 @@ func defaultDetectedSetupProviderIDs() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load provider catalog: %w", err)
 	}
+	cat = providercatalog.WithEmbeddedBuiltins(cat)
 	results := providercatalog.Detect(cat, nil)
 	return detectedProviderIDs(setupDetectableProviders(cat, results)), nil
 }
 
 func promptDetectedProviders(in io.Reader, out io.Writer) ([]string, error) {
 	cat, _ := providercatalog.Load(cmdContext(), providercatalog.LoadOptions{})
+	cat = providercatalog.WithEmbeddedBuiltins(cat)
 	results := providercatalog.Detect(cat, nil)
 	installed := setupDetectableProviders(cat, results)
 	if len(installed) == 0 {
@@ -669,6 +673,7 @@ func init() {
 	setupCmd.Flags().Bool("opencode", false, "create skill symlinks in ~/.config/opencode/")
 	setupCmd.Flags().Bool("gemini", false, "create skill symlinks in ~/.gemini/")
 	setupCmd.Flags().Bool("mistral", false, "create skill symlinks in ~/.vibe/")
+	setupCmd.Flags().Bool("pi", false, "create skill symlinks in ~/.pi/agent/ and install the pi init-gate extension")
 
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
@@ -692,6 +697,7 @@ func init() {
 	initCmd.Flags().Bool("opencode", false, fmt.Sprintf("activate the global OpenCode contract from ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("gemini", false, fmt.Sprintf("activate the global Gemini contract from ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("mistral", false, fmt.Sprintf("set up ~/.vibe/ for %s contract", brand.NameTitle))
+	initCmd.Flags().Bool("pi", false, fmt.Sprintf("activate the global Pi contract from ~/%s/CORE.md and install the pi init-gate extension", brand.GlobalDirName))
 	registerCompletion(initCmd, "entry-point", completeValues("general-objective", "functional-spec", "technical-spec", "detailed-spec"))
 	registerCompletion(initCmd, "default-cli", completeCLINames)
 	registerCompletion(initCmd, "default-doer-cli", completeCLINames)

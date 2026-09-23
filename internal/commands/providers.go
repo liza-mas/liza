@@ -4,12 +4,31 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/providers"
 )
 
 func loadProviderCatalog(homeDir string) providers.Catalog {
 	cat, _ := providers.Load(context.Background(), providers.LoadOptions{HomeDir: homeDir})
 	return cat
+}
+
+// EnsureProviderSpawnAssets re-deploys provider assets that spawns depend on
+// but that live outside the repository — today, the pi init-gate extension,
+// which the pi provider's run_args reference by absolute path and which pi
+// refuses to start without. Call it on the spawn path so a deleted gate
+// (or a workspace whose init predates the asset) self-heals instead of
+// failing the launch. Idempotent; respects the managed-header policy.
+func EnsureProviderSpawnAssets(cliName string) error {
+	cat := loadProviderCatalog("")
+	provider, ok := cat.Resolve(cliName)
+	if !ok {
+		provider, ok = providers.EmbeddedCatalog().Resolve(cliName)
+	}
+	if !ok || !provider.Setup.ActivationAssets.PiExtension {
+		return nil
+	}
+	return embedded.WritePiInitGate()
 }
 
 func resolveCatalogProviders(cat providers.Catalog, ids []string) ([]providers.Provider, error) {

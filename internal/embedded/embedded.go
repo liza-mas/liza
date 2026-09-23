@@ -55,6 +55,9 @@ var bashPolicyContent []byte
 //go:embed "opencode-tools/exec.ts"
 var opencodeExecToolContent []byte
 
+//go:embed "pi-extensions/init-gate.ts"
+var piInitGateContent []byte
+
 //go:embed "hooks/enforce-init.sh"
 var enforceInitHookContent []byte
 
@@ -101,6 +104,8 @@ const supportDocEmbeddedPath = "support-docs/SUPPORT.md"
 
 const openCodeExecToolManagedHeaderTemplate = "// __BRAND_NAME_UPPER__ MANAGED FILE: OpenCode exec compatibility tool. Safe for __BRAND_NAME_TITLE__ to overwrite."
 
+const piInitGateManagedHeaderTemplate = "// __BRAND_NAME_UPPER__ MANAGED FILE: pi init gate. Safe for __BRAND_NAME_TITLE__ to overwrite."
+
 // ConfirmOptions controls yes/no approval prompts in embedded file writers.
 type ConfirmOptions struct {
 	AutoConfirm bool
@@ -115,6 +120,54 @@ func OpenCodeExecToolManagedHeader() string {
 // OpenCodeExecToolContent returns the embedded OpenCode exec compatibility tool.
 func OpenCodeExecToolContent() []byte {
 	return renderEmbeddedAsset(opencodeExecToolContent)
+}
+
+// PiInitGateManagedHeader identifies the branded global pi init-gate extension
+// as owned by the current brand.
+func PiInitGateManagedHeader() string {
+	return string(renderEmbeddedAsset([]byte(piInitGateManagedHeaderTemplate)))
+}
+
+// PiInitGateContent returns the embedded pi init-gate extension.
+func PiInitGateContent() []byte {
+	return renderEmbeddedAsset(piInitGateContent)
+}
+
+// PiInitGatePath returns the branded global path of the pi init-gate
+// extension. It lives in the global directory (not per-project) so the pi
+// provider's run_args can reference it for every workspace, and so pi never
+// fails to load a missing project-local extension file.
+func PiInitGatePath() (string, error) {
+	home, err := paths.UserHomeDir()
+	if err != nil || home == "" {
+		return "", fmt.Errorf("resolve home directory for pi init gate: %w", err)
+	}
+	return filepath.Join(home, brand.RuntimeValues().GlobalDirName, "extensions", "init-gate.ts"), nil
+}
+
+// WritePiInitGate writes the pi init-gate extension into the branded global
+// extensions directory. Existing files are overwritten only when they carry
+// the managed header, mirroring the OpenCode exec tool policy.
+func WritePiInitGate() error {
+	gatePath, err := PiInitGatePath()
+	if err != nil {
+		return err
+	}
+	if existing, err := os.ReadFile(gatePath); err == nil {
+		if !bytes.HasPrefix(existing, []byte(PiInitGateManagedHeader())) {
+			return nil
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read pi init gate: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(gatePath), 0755); err != nil {
+		return fmt.Errorf("failed to create pi extensions directory: %w", err)
+	}
+	if err := os.WriteFile(gatePath, PiInitGateContent(), 0644); err != nil {
+		return fmt.Errorf("failed to write pi init gate: %w", err)
+	}
+	return nil
 }
 
 // PipelineConfigContent returns the raw embedded pipeline.yaml content.

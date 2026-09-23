@@ -30,6 +30,25 @@ func TestProvidersListCommandUsesCatalog(t *testing.T) {
 	if !strings.Contains(out.String(), "qwen-acp\tQwen ACP\tacpx\tfalse") {
 		t.Fatalf("providers list output missing synthesized qwen-acp:\n%s", out.String())
 	}
+	// Embedded-only providers are backfilled when the fetched catalog lacks them.
+	if !strings.Contains(out.String(), "pi\tPi\tcli\tfalse") {
+		t.Fatalf("providers list output missing embedded-only pi:\n%s", out.String())
+	}
+}
+
+func TestProvidersDetectCommandBackfillsEmbeddedOnlyProviders(t *testing.T) {
+	useCommandTestProviderCatalog(t)
+	resetRootCmdForTest(t)
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs([]string{"providers", "detect"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("providers detect error: %v", err)
+	}
+	if !strings.Contains(out.String(), "pi\tPi\t") {
+		t.Fatalf("providers detect output missing embedded-only pi:\n%s", out.String())
+	}
 }
 
 func TestProvidersRefreshCommandWritesCache(t *testing.T) {

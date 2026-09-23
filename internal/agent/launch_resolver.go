@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
 )
 
@@ -409,6 +411,12 @@ func launchTemplateVars(req LaunchPlanRequest, toolName string) map[string]strin
 		"sessionID":   req.SessionID,
 		"outputsDir":  req.OutputsDir,
 	}
+	// globalDir is left undefined when the home directory cannot be resolved,
+	// so a run_arg referencing it fails rendering with an explicit error
+	// instead of degrading to a relative path that does not exist.
+	if dir, err := paths.GlobalLizaDir(); err == nil && filepath.IsAbs(dir) {
+		vars["globalDir"] = dir
+	}
 	for key, value := range req.ProfileVars {
 		if key = strings.TrimSpace(key); key != "" {
 			vars["profile."+key] = value
@@ -442,6 +450,9 @@ func renderArg(arg string, vars map[string]string) (string, error) {
 	})
 	if len(missing) > 0 {
 		sort.Strings(missing)
+		if slices.Contains(missing, "globalDir") {
+			return "", fmt.Errorf("unknown template variable(s): %s (globalDir requires a resolvable home directory)", strings.Join(missing, ", "))
+		}
 		return "", fmt.Errorf("unknown template variable(s): %s", strings.Join(missing, ", "))
 	}
 	return rendered, nil

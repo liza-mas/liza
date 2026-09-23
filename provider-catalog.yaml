@@ -56,6 +56,7 @@ providers:
       prompt_transport: stdin
       run_args: [exec, "-"]
       logged_run_args: [exec, --json, "-"]
+      env_files: [codex.env]
       contract_key: codex
     acp_runtime:
       provider_key: codex

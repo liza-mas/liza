@@ -581,4 +581,27 @@ providers:
       run_args: [--permission-mode, dangerous, -p, "{{prompt}}"]
       logged_run_args: [--permission-mode, dangerous, -p, "{{prompt}}"]
       contract_key: devin
+  - id: pi
+    display_name: Pi
+    backend: cli
+    detection:
+      binaries: [pi]
+      version_args: [--version]
+    setup:
+      config_dir: .pi/agent
+      skills_dir: skills
+      contract:
+        repo_file: AGENTS.md
+        global_fallback: .pi/agent/AGENTS.md
+        prefer_global: true
+      activation_assets:
+        pi_extension: true
+    runtime:
+      provider_key: pi
+      executable: pi
+      prompt_transport: stdin
+      run_args: [-p, -e, "{{globalDir}}/extensions/init-gate.ts"]
+      logged_run_args: [-p, --mode, json, -e, "{{globalDir}}/extensions/init-gate.ts"]
+      env_files: [pi.env]
+      contract_key: pi
 `
