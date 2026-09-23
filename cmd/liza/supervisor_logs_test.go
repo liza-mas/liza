@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/agent"
-	"github.com/liza-mas/liza/internal/process"
+	"github.com/liza-mas/liza/internal/subprocess"
 	"github.com/spf13/cobra"
 )
 
@@ -156,7 +156,7 @@ func TestSupervisorLogSpawnerHelper(t *testing.T) {
 
 	child := exec.Command(os.Args[0], "-test.run=^TestSupervisorLogChildHelper$")
 	child.Env = os.Environ()
-	process.SetDetachedProcessGroup(child)
+	subprocess.SetDetachedProcessGroup(child)
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
 		t.Fatalf("open devnull: %v", err)

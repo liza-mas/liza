@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 var agentSpawnGuard = struct {
@@ -64,7 +65,7 @@ func buildSpawnCommand(projectRoot, role, cli string, extraArgs ...string) (*exe
 
 	cmd := exec.Command(brand.BinaryName, args...)
 	cmd.Dir = projectRoot
-	SetDetachedProcessGroup(cmd)
+	subprocess.SetDetachedProcessGroup(cmd)
 
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
