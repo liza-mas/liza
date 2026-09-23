@@ -52,6 +52,15 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 		if lastAssessment.Note != nil {
 			candidate.Note = *lastAssessment.Note
 		}
+		// A wait that now leads back to this task would suppress its wakes
+		// forever. Dropping the set changes the digest, so the task wakes; the
+		// wake does not say why, but recording the same set again is rejected
+		// with the cycle. A malformed set also wakes the task.
+		if awaited, ok := awaitedTasksFrom(lastAssessment); ok {
+			if _, deadlocked := awaitLeadsBackTo(state, task.ID, awaited); !deadlocked {
+				candidate.Awaited = awaited
+			}
+		}
 		return BuildAssessmentFingerprint(state, task, candidate) != recorded
 	}
 

@@ -719,6 +719,43 @@ func declarativeRepairRequestFor(taskID string) models.RepairRequest {
 	}
 }
 
+func TestJSON_AssessBlocked_Awaits(t *testing.T) {
+	resetFlagIfPresent(assessBlockedCmd, "awaits")
+	t.Cleanup(func() { resetFlagIfPresent(assessBlockedCmd, "awaits") })
+	projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
+		now := time.Now().UTC()
+		waiter := testhelpers.BuildTaskByStatus("task-waiter", models.TaskStatusBlocked, now)
+		waiter.AssignedTo = nil
+		waiter.Worktree = nil
+		state.Tasks = []models.Task{
+			waiter,
+			testhelpers.BuildTaskByStatus("gen-1", models.TaskStatusReady, now),
+			testhelpers.BuildTaskByStatus("gen-2", models.TaskStatusReady, now),
+		}
+		state.Agents["orchestrator-1"] = testhelpers.RegisteredTestAgent("orchestrator")
+	})
+	testhelpers.CreateSpecFile(t, projectRoot, "vision.md", "# Vision\n")
+
+	stdout, err := executeRootCommandCapture(t, projectRoot,
+		"assess-blocked", "task-waiter",
+		"--agent-id", "orchestrator-1",
+		"--note", "waits on the generated UI",
+		"--awaits", "gen-2,gen-1",
+		"--json",
+	)
+	if err != nil {
+		t.Fatalf("assess-blocked --awaits failed: %v\n%s", err, stdout)
+	}
+	result := parseEnvelope(t, stdout)["result"].(map[string]any)
+	if !reflect.DeepEqual(result["awaited_tasks"], []any{"gen-1", "gen-2"}) {
+		t.Fatalf("awaited_tasks = %#v, want sorted [gen-1 gen-2]", result["awaited_tasks"])
+	}
+	history := readState(t, statePath).FindTask("task-waiter").History
+	if got := history[len(history)-1].Extra[ops.AwaitedTasksExtraKey]; !reflect.DeepEqual(got, []any{"gen-1", "gen-2"}) {
+		t.Fatalf("stored awaited_tasks = %#v, want [gen-1 gen-2]", got)
+	}
+}
+
 func TestJSON_AssessBlocked_ReconcilesCanonicalMetadata(t *testing.T) {
 	resetFlagIfPresent(assessBlockedCmd, "question")
 	t.Cleanup(func() { resetFlagIfPresent(assessBlockedCmd, "question") })

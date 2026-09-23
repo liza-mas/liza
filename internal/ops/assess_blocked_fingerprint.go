@@ -25,6 +25,10 @@ type AssessmentFingerprintCandidate struct {
 	Questions     []string
 	RepairRequest *models.RepairRequest
 	Note          string
+	// Awaited is the normalized awaited set. When non-empty it replaces the
+	// descendants input, so only these tasks' outcomes, not every generated
+	// task under the dependencies, make the assessment stale.
+	Awaited []string
 }
 
 type assessmentDependency struct {
@@ -38,7 +42,8 @@ type assessmentDependency struct {
 }
 
 // BuildAssessmentFingerprint returns a lowercase SHA-256 digest of the six
-// material assessment inputs in valid durable state. It does not mutate its
+// material assessment inputs in valid durable state; an awaited set replaces
+// the descendants input. It does not mutate its
 // inputs. Assessment-only history and lifecycle revisions are deliberately
 // excluded so recording an assessment cannot invalidate its own fingerprint.
 func BuildAssessmentFingerprint(state *models.State, task *models.Task, candidate AssessmentFingerprintCandidate) string {
@@ -64,6 +69,15 @@ func BuildAssessmentFingerprint(state *models.State, task *models.Task, candidat
 		"dependencies": assessmentDependencies(state, task.DependsOn),
 		"descendants":  assessmentDescendants(state, task),
 		"human":        humanCount,
+	}
+	// Without an awaited set the material stays exactly as before, so digests
+	// recorded by earlier versions remain comparable.
+	if len(candidate.Awaited) > 0 {
+		delete(material, "descendants")
+		material["awaited"] = map[string]any{
+			"tasks":   candidate.Awaited,
+			"records": assessmentDependencies(state, candidate.Awaited),
+		}
 	}
 	data, err := json.Marshal(material)
 	if err != nil {

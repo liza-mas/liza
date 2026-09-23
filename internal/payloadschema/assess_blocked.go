@@ -19,15 +19,21 @@ func init() {
 
 // AssessBlockedPayload constructs the flag-keyed canonical JSON object shared
 // by preflight and the mutation boundary. Empty reason/questions and a nil
-// repair preserve history-only mode. JSON encoding orders map keys stably.
-func AssessBlockedPayload(taskID, note, reason string, questions []string, repair *models.RepairRequest) map[string]any {
-	return map[string]any{
+// repair preserve history-only mode; awaited tasks are independent of mode and
+// omitted when empty, so payloads without them are unchanged. JSON encoding
+// orders map keys stably.
+func AssessBlockedPayload(taskID, note, reason string, questions []string, repair *models.RepairRequest, awaited []string) map[string]any {
+	payload := map[string]any{
 		"task_id":        taskID,
 		"note":           note,
 		"reason":         reason,
 		"questions":      questions,
 		"repair_request": repair,
 	}
+	if len(awaited) > 0 {
+		payload["awaited_tasks"] = awaited
+	}
+	return payload
 }
 
 func validateAssessBlocked(payload any) []models.FieldDiagnostic {
@@ -56,8 +62,17 @@ func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 	if object["questions"] != nil && !listOK {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/questions", "must be a list of strings", models.FieldValueClassWrongType))
 	}
+	awaited, awaitedOK := scalarPayloadEntries(object["awaited_tasks"])
+	if object["awaited_tasks"] != nil && !awaitedOK {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/awaited_tasks", "must be a list of strings", models.FieldValueClassWrongType))
+	}
 	if len(diagnostics) > 0 {
 		return diagnostics
+	}
+	for i, entry := range awaited {
+		if id, ok := entry.(string); !ok || strings.TrimSpace(id) == "" {
+			diagnostics = append(diagnostics, scalarPayloadDiagnostic(fmt.Sprintf("/awaited_tasks/%d", i), "must be a non-blank task ID", models.FieldValueClassMissing))
+		}
 	}
 	for _, field := range []string{"note", "reason"} {
 		value, _ := object[field].(string)

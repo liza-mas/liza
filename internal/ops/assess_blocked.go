@@ -76,6 +76,7 @@ func dropSupersededWakeSnapshots(task *models.Task) {
 		delete(entry.Extra, DependencyDescendantWakeSnapshotExtraKey)
 		delete(entry.Extra, legacyAssessmentFingerprintExtraKey)
 		delete(entry.Extra, AssessmentFingerprintExtraKey)
+		delete(entry.Extra, AwaitedTasksExtraKey)
 		if len(entry.Extra) == 0 {
 			entry.Extra = nil
 		}
@@ -167,6 +168,7 @@ type AssessBlockedResult struct {
 	Reason               string                `json:"reason,omitempty"`
 	Questions            []string              `json:"questions,omitempty"`
 	RepairRequest        *models.RepairRequest `json:"repair_request,omitempty"`
+	AwaitedTasks         []string              `json:"awaited_tasks,omitempty"`
 	Warnings             []string              `json:"warnings,omitempty"`
 	SuppressedEntryBytes int                   `json:"suppressed_entry_bytes,omitempty"`
 }
@@ -179,14 +181,17 @@ func (r *AssessBlockedResult) GetWarnings() []string {
 }
 
 // AssessBlockedOptions contains canonical blocker metadata for a structured
-// reassessment. Supplying any field enables reconciliation mode, which requires
-// both Reason and one to three Questions. A nil RepairRequest clears any prior
-// request from the canonical blocker state.
+// reassessment. Supplying Reason, Questions or RepairRequest enables
+// reconciliation mode, which requires both Reason and one to three Questions.
+// A nil RepairRequest clears any prior request from the canonical blocker
+// state. AwaitedTasks works in either mode; an assessment without it clears
+// the previous awaited set.
 type AssessBlockedOptions struct {
 	Request       LifecycleRequestOptions
 	Reason        string
 	Questions     []string
 	RepairRequest *models.RepairRequest
+	AwaitedTasks  []string
 }
 
 // AssessBlocked records that the orchestrator has assessed a BLOCKED task.
@@ -241,7 +246,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
 	}
 
-	payload := payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest)
+	payload := payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest, opts.AwaitedTasks)
 	if err := rejectInvalidLifecyclePayload(operation, payload); err != nil {
 		return nil, err
 	}
@@ -275,13 +280,17 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			return nil, err
 		}
 	}
+	awaited, err := normalizeAwaitedTasks(opts.AwaitedTasks)
+	if err != nil {
+		return nil, err
+	}
 
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	now := time.Now().UTC()
 	result := AssessBlockedResult{TaskID: taskID}
 
-	err := lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
+	err = lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
 		defer func() {
 			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
 		}()
@@ -295,7 +304,10 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			Note, Reason  string
 			Questions     []string
 			RepairRequest *models.RepairRequest
-		}{note, opts.Reason, opts.Questions, repairRequest})
+			// Omitted when empty so requests without an awaited set keep
+			// their pre-existing identity.
+			AwaitedTasks []string `json:",omitempty"`
+		}{note, opts.Reason, opts.Questions, repairRequest, awaited})
 		if err != nil {
 			return err
 		}
@@ -311,9 +323,16 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		if task.Status != models.TaskStatusBlocked {
 			return WrapLifecycleError(operation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
+		// Before the no-change comparison: an unchanged assessment must not be
+		// accepted once an awaited task has settled or the wait would deadlock.
+		if len(awaited) > 0 {
+			if err := validateAwaitedTasks(state, task, awaited); err != nil {
+				return err
+			}
+		}
 
 		candidate := AssessmentFingerprintCandidate{
-			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note,
+			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note, Awaited: awaited,
 		}
 		if task.BlockedReason != nil {
 			candidate.Reason = *task.BlockedReason
@@ -334,6 +353,9 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		}
 		if note != "" {
 			entry.Note = &note
+		}
+		if len(awaited) > 0 {
+			entry.Extra[AwaitedTasksExtraKey] = append([]string(nil), awaited...)
 		}
 		if reconcile {
 			entry.Reason = &opts.Reason
@@ -371,6 +393,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			result.Questions = append([]string(nil), opts.Questions...)
 			result.RepairRequest = repairRequest
 		}
+		result.AwaitedTasks = append([]string(nil), awaited...)
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			effects = "unknown"

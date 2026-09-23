@@ -61,7 +61,7 @@ func TestAssessBlockedSchemaParity(t *testing.T) {
 		t.Run(tt.id, func(t *testing.T) {
 			root, stateFile := assessmentIdempotencyFixture(t)
 			before := metadataArtifactSnapshot(t, root)
-			payload := payloadschema.AssessBlockedPayload(tt.taskID, tt.note, tt.opts.Reason, tt.opts.Questions, tt.opts.RepairRequest)
+			payload := payloadschema.AssessBlockedPayload(tt.taskID, tt.note, tt.opts.Reason, tt.opts.Questions, tt.opts.RepairRequest, tt.opts.AwaitedTasks)
 			version, diagnostics, err := payloadschema.Validate("assess-blocked", payload)
 			if err != nil || version != 1 {
 				t.Fatalf("preflight version=%d error=%v", version, err)
@@ -97,7 +97,7 @@ func TestAssessBlockedSchemaParity(t *testing.T) {
 		})
 	}
 	t.Run("unregistered operation fails loudly", func(t *testing.T) {
-		err := rejectInvalidLifecyclePayload("unregistered-assess-blocked", payloadschema.AssessBlockedPayload("target", "", "", nil, nil))
+		err := rejectInvalidLifecyclePayload("unregistered-assess-blocked", payloadschema.AssessBlockedPayload("target", "", "", nil, nil, nil))
 		if !stderrors.Is(err, payloadschema.ErrUnknownOperation) {
 			t.Fatalf("unknown operation error=%v", err)
 		}
@@ -127,7 +127,7 @@ func TestAssessBlockedRejectsBeforeLock(t *testing.T) {
 			if !stderrors.As(err, &lifecycle) || lifecycle.Outcome.Outcome != models.LifecycleInvalidInput || lifecycle.Outcome.SafeAction != "correct_input" || lifecycle.Outcome.Effects != "none" {
 				t.Fatalf("invalid-input error=%v", err)
 			}
-			_, diagnostics, schemaErr := payloadschema.Validate("assess-blocked", payloadschema.AssessBlockedPayload("target", note, "", nil, nil))
+			_, diagnostics, schemaErr := payloadschema.Validate("assess-blocked", payloadschema.AssessBlockedPayload("target", note, "", nil, nil, nil))
 			if schemaErr != nil || len(diagnostics) != 1 || diagnostics[0].Field != "/note" || !reflect.DeepEqual(lifecycle.Outcome.Diagnostics, diagnostics) {
 				t.Fatalf("mutation diagnostics=%+v, preflight=%+v error=%v", lifecycle.Outcome.Diagnostics, diagnostics, schemaErr)
 			}
