@@ -322,6 +322,7 @@ func TestAnalyzeProviderAuditResponsesAtCommitBoundary(t *testing.T) {
 }
 
 func TestAnalyzePreservesActiveProviderResponseUntilResume(t *testing.T) {
+	t.Parallel()
 	observedAt := time.Date(2026, 8, 24, 9, 0, 0, 0, time.UTC)
 	registeredAt := observedAt.Add(-time.Hour)
 

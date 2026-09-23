@@ -28,6 +28,7 @@ import (
 )
 
 func TestClaimTask_Validation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		taskID      string
@@ -108,6 +109,7 @@ func TestClaimGenerationFence(t *testing.T) {
 }
 
 func TestClaimTask_ReadyTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -181,6 +183,7 @@ func TestClaimTask_ReadyTask(t *testing.T) {
 }
 
 func TestClaimTask_MissingRegisteredAgentDoesNotCreateGhost(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -214,6 +217,7 @@ func TestClaimTask_MissingRegisteredAgentDoesNotCreateGhost(t *testing.T) {
 }
 
 func TestClaimTask_CorruptRegisteredAgentRejected(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		mutate      func(*models.Agent)
@@ -273,6 +277,7 @@ func TestClaimTask_CorruptRegisteredAgentRejected(t *testing.T) {
 }
 
 func TestClaimTask_TaskNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -291,6 +296,7 @@ func TestClaimTask_TaskNotFound(t *testing.T) {
 }
 
 func TestClaimTask_WrongStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -313,6 +319,7 @@ func TestClaimTask_WrongStatus(t *testing.T) {
 }
 
 func TestClaimTask_AgentBusy(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -341,6 +348,7 @@ func TestClaimTask_AgentBusy(t *testing.T) {
 }
 
 func TestClaimTask_UnmetDependencies(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -364,6 +372,7 @@ func TestClaimTask_UnmetDependencies(t *testing.T) {
 }
 
 func TestClaimTask_RejectsStaleSupersededDependencyEvenWithMergedReplacement(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -389,6 +398,7 @@ func TestClaimTask_RejectsStaleSupersededDependencyEvenWithMergedReplacement(t *
 }
 
 func TestClaimTask_MetDependencies(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -412,6 +422,7 @@ func TestClaimTask_MetDependencies(t *testing.T) {
 }
 
 func TestUnmetDependencies(t *testing.T) {
+	t.Parallel()
 	now := time.Now().UTC()
 
 	tests := []struct {
@@ -486,6 +497,7 @@ func TestUnmetDependencies(t *testing.T) {
 }
 
 func TestClaimTask_IntegrationFailed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -527,6 +539,7 @@ func TestClaimTask_IntegrationFailed(t *testing.T) {
 // task's ownership lease has expired and both worktree dir and branch are
 // present, reassignment preserves the worktree.
 func TestClaimTask_RejectedWorktreePresent_Preserved(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -598,6 +611,7 @@ func TestClaimTask_RejectedWorktreePresent_Preserved(t *testing.T) {
 
 func TestClaimRejectedTask(t *testing.T) {
 	t.Run("reattaches valid branch when directory is absent", func(t *testing.T) {
+		t.Parallel()
 		fixture := newRejectedHandoffFixture(t, true)
 		gitWrapper := git.New(fixture.projectRoot)
 		if err := gitWrapper.RemoveWorktreeDir(fixture.taskID); err != nil {
@@ -611,6 +625,7 @@ func TestClaimRejectedTask(t *testing.T) {
 	})
 
 	t.Run("creates from integration only when no reusable artifact exists", func(t *testing.T) {
+		t.Parallel()
 		fixture := newRejectedHandoffFixture(t, false)
 		integrationSHA := strings.TrimSpace(testhelpers.MustGit(t, fixture.projectRoot, "rev-parse", "integration"))
 
@@ -623,6 +638,7 @@ func TestClaimRejectedTask(t *testing.T) {
 	})
 
 	t.Run("fails closed without deleting unclassifiable corruption", func(t *testing.T) {
+		t.Parallel()
 		fixture := newRejectedHandoffFixture(t, false)
 		worktreeDir := filepath.Join(fixture.projectRoot, fixture.worktreeRel)
 		if err := os.MkdirAll(worktreeDir, 0o755); err != nil {
@@ -642,6 +658,7 @@ func TestClaimRejectedTask(t *testing.T) {
 	})
 
 	t.Run("fails closed on noncanonical preserved worktree metadata", func(t *testing.T) {
+		t.Parallel()
 		fixture := newRejectedHandoffFixture(t, true)
 		noncanonicalRel := filepath.Join(paths.WorktreesDirName, "recovery-task-1")
 		noncanonicalDir := filepath.Join(fixture.projectRoot, noncanonicalRel)
@@ -787,6 +804,7 @@ func TestClaimTask_RejectedReclaimAfterLegacyStallMigration(t *testing.T) {
 // TestClaimTask_RejectedWorktreeMissing_Recreated verifies that when a REJECTED
 // task's worktree directory is absent, ClaimTask recreates it from integration.
 func TestClaimTask_RejectedWorktreeMissing_Recreated(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -832,6 +850,7 @@ func TestClaimTask_RejectedWorktreeMissing_Recreated(t *testing.T) {
 // TestClaimTask_RejectedWorktreeDirExistsBranchMissing_FailsClosed verifies that
 // an unclassifiable rejected-task directory is preserved for manual recovery.
 func TestClaimTask_RejectedWorktreeDirExistsBranchMissing_FailsClosed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -893,6 +912,7 @@ func TestClaimTask_RejectedWorktreeDirExistsBranchMissing_FailsClosed(t *testing
 // is NOT reset when a different coder claims after ownership expiry within the
 // same attempt. The attempt, not the agent, is the resource boundary.
 func TestClaimTask_RejectedMutateTask_NoCounterReset(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -940,6 +960,7 @@ func TestClaimTask_RejectedMutateTask_NoCounterReset(t *testing.T) {
 }
 
 func TestClaimTask_RejectedActiveLeaseBlocksDifferentCoder(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -986,6 +1007,7 @@ func TestClaimTask_RejectedActiveLeaseBlocksDifferentCoder(t *testing.T) {
 }
 
 func TestClaimTask_RejectedActiveLeaseAllowsSameCoder(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1017,6 +1039,7 @@ func TestClaimTask_RejectedActiveLeaseAllowsSameCoder(t *testing.T) {
 }
 
 func TestClaimTask_RejectedAssignedWithoutLeaseFailsClosed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1106,6 +1129,7 @@ func TestClaimTask_RejectedOwnershipRaceRecheckedInPhase3(t *testing.T) {
 }
 
 func TestClaimTask_RejectedAtIterationLimitTransitionsToBlocked(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1162,6 +1186,7 @@ func TestClaimTask_RejectedAtIterationLimitTransitionsToBlocked(t *testing.T) {
 }
 
 func TestClaimTask_ReadyWithStaleBranchAndWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1227,6 +1252,7 @@ func TestClaimTask_ReadyWithStaleBranchAndWorktree(t *testing.T) {
 }
 
 func TestClaimTask_ReadyWithPrunableWorktreeRegistration_RecreatesCleanWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1286,6 +1312,7 @@ func TestClaimTask_ReadyWithPrunableWorktreeRegistration_RecreatesCleanWorktree(
 }
 
 func TestHandleReadyClaimWorktree_ConcurrentWinnerDoesNotDeleteWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1333,6 +1360,7 @@ func TestHandleReadyClaimWorktree_ConcurrentWinnerDoesNotDeleteWorktree(t *testi
 }
 
 func TestHandleReadyClaimWorktree_CleanupAbortedWhenTaskClaimedConcurrently(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1381,11 +1409,12 @@ func TestHandleReadyClaimWorktree_CleanupAbortedWhenTaskClaimedConcurrently(t *t
 }
 
 func TestClaimTask_PostWorktreeCmdRunsOnFreshClaim(t *testing.T) {
+	t.Parallel()
 	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -1417,12 +1446,13 @@ func TestClaimTask_PostWorktreeCmdRunsOnFreshClaim(t *testing.T) {
 }
 
 func TestClaimTask_CopyWorktreeEnvFilesOnFreshClaim(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	commitEnvIgnoreForWorktreeTest(t, tmpDir)
 	writeRootFileForWorktreeTest(t, tmpDir, ".env", "ROOT_ENV=1\n")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -1451,6 +1481,7 @@ func TestClaimTask_CopyWorktreeEnvFilesOnFreshClaim(t *testing.T) {
 // fail closed rather than hand it to a coder session (ADR-0031 amendment
 // 2026-08-23; superseded the earlier warn-and-continue contract).
 func TestClaimTask_PostWorktreeCmdFailureFailsClaimClosed(t *testing.T) {
+	t.Parallel()
 	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
@@ -1503,6 +1534,7 @@ func TestClaimTask_PostWorktreeCmdFailureFailsClaimClosed(t *testing.T) {
 // The failing worktree is preserved so the setup command can be reproduced
 // against it; a later fresh claim treats it as a stale resource.
 func TestClaimTask_PostWorktreeCmdFailurePreservesWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1529,11 +1561,12 @@ func TestClaimTask_PostWorktreeCmdFailurePreservesWorktree(t *testing.T) {
 }
 
 func TestClaimTask_PostWorktreeCmdRunsOnSameCoderReclaim(t *testing.T) {
+	t.Parallel()
 	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -1572,6 +1605,7 @@ func TestClaimTask_PostWorktreeCmdRunsOnSameCoderReclaim(t *testing.T) {
 // Reclaim paths reuse an existing worktree, so a setup failure there means the
 // worktree missed bootstrap or regressed — the reclaim must not proceed.
 func TestClaimTask_PostWorktreeCmdFailureFailsReclaimClosed(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name        string
 		status      models.TaskStatus
@@ -1587,7 +1621,7 @@ func TestClaimTask_PostWorktreeCmdFailureFailsReclaimClosed(t *testing.T) {
 			tmpDir := t.TempDir()
 			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			t.Setenv(stacklit.EnvEnableStacklit, "false")
+			requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 			now := time.Now().UTC()
 			state := testhelpers.CreateValidState()
@@ -1631,6 +1665,7 @@ func TestClaimTask_PostWorktreeCmdFailureFailsReclaimClosed(t *testing.T) {
 // preservedInitialClaimStrategy.shouldRunPostWorktreeCmd returns true, so the
 // preserved-branch continuation path must fail closed like every other claim.
 func TestClaimTask_PostWorktreeCmdFailureFailsPreservedInitialClaimClosed(t *testing.T) {
+	t.Parallel()
 	fixture := newPreservedInitialClaimFixture(t)
 
 	bb := db.For(fixture.stateFile)
@@ -1660,10 +1695,11 @@ func TestClaimTask_PostWorktreeCmdFailureFailsPreservedInitialClaimClosed(t *tes
 // Fixing the command must make the same claim succeed — fail-closed is a gate,
 // not a permanent rejection of the task.
 func TestClaimTask_SucceedsAfterPostWorktreeCmdFixed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -1715,10 +1751,11 @@ func mustFindTaskStatus(t *testing.T, bb *db.Blackboard, taskID string) models.T
 }
 
 func TestClaimTaskPreparesSembleIgnoreForFreshClaim(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
@@ -1742,10 +1779,11 @@ func TestClaimTaskPreparesSembleIgnoreForFreshClaim(t *testing.T) {
 }
 
 func TestClaimTaskPreparesSembleIgnoreForRejectedReclaim(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
@@ -1999,6 +2037,7 @@ func TestClaimTask_FunctionalClustersFailedBuildWarningReturned(t *testing.T) {
 }
 
 func TestClaimTaskSembleIgnorePreparationWarningsAreBounded(t *testing.T) {
+	t.Parallel()
 	requirePosixShell(t)
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
@@ -2009,7 +2048,7 @@ func TestClaimTaskSembleIgnorePreparationWarningsAreBounded(t *testing.T) {
 	testhelpers.MustGit(t, tmpDir, "commit", "-m", "track incomplete semble ignore")
 	testhelpers.MustGit(t, tmpDir, "branch", "-f", "integration", "HEAD")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
@@ -2136,10 +2175,11 @@ func TestClaimTask_ScipConcurrentClaimsUseIsolatedIndexes(t *testing.T) {
 }
 
 func TestClaimTaskSembleIgnorePreparationConcurrentCallsCleanStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
@@ -2191,6 +2231,7 @@ func TestClaimTaskSembleIgnorePreparationConcurrentCallsCleanStatus(t *testing.T
 // that when a REJECTED task hits iteration limit and transitions to BLOCKED,
 // it does NOT reset a coder who has already claimed a different task.
 func TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -2247,6 +2288,7 @@ func TestClaimTask_IterationLimitDoesNotReleaseCoder_WhenCoderMovedOn(t *testing
 }
 
 func TestClaimTask_IterationCapAttempt1_TriggersNewAttempt(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -2303,6 +2345,7 @@ func TestClaimTask_IterationCapAttempt1_TriggersNewAttempt(t *testing.T) {
 }
 
 func TestClaimTask_IterationCapAttempt2_TriggersBlocked(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -2347,6 +2390,7 @@ func TestClaimTask_IterationCapAttempt2_TriggersBlocked(t *testing.T) {
 }
 
 func TestClaimTask_ReviewCapAttempt2_TriggersBlocked(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -2410,6 +2454,7 @@ func TestClaimTask_ReviewCapAttempt2_TriggersBlocked(t *testing.T) {
 }
 
 func TestClaimTask_SentinelAssignedTo_Rejected(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -2437,6 +2482,7 @@ func TestClaimTask_SentinelAssignedTo_Rejected(t *testing.T) {
 }
 
 func TestClaimTask_PreservedInitialRebasesOntoCapturedIntegrationCommit(t *testing.T) {
+	t.Parallel()
 	fixture := newPreservedInitialClaimFixture(t)
 	targetSHA := advancePreservedClaimIntegration(t, fixture.projectRoot, "dependency.txt", "merged dependency\n", "Merge dependency")
 
@@ -2483,6 +2529,7 @@ func TestClaimTask_PreservedInitialRebasesOntoCapturedIntegrationCommit(t *testi
 }
 
 func TestClaimTask_PreservedInitialDependencyGatePrecedesFilesystemWork(t *testing.T) {
+	t.Parallel()
 	fixture := newPreservedInitialClaimFixture(t)
 	state := readClaimStateForTest(t, fixture.stateFile)
 	pending := testhelpers.BuildTaskByStatus("dependency-1", models.TaskStatusReady, time.Now().UTC())
@@ -2599,6 +2646,7 @@ func TestClaimTask_PreservedInitialIntegrationMoveAfterEqualityWaitsForAssignmen
 // Uncommitted work is adopted at claim (see claim_task_adopt_wip_test.go), so
 // the recovery state now needs dirt adoption must refuse: Git mid-operation.
 func TestClaimTask_PreservedInitialDirtyWorktreeBecomesRecoveryState(t *testing.T) {
+	t.Parallel()
 	fixture := newPreservedInitialClaimFixture(t)
 	advancePreservedClaimIntegration(t, fixture.projectRoot, "dependency.txt", "merged dependency\n", "Merge dependency")
 	if err := os.WriteFile(filepath.Join(fixture.worktreeDir, "task.txt"), []byte("dirty task work\n"), 0o644); err != nil {
@@ -2646,6 +2694,7 @@ func TestClaimTask_PreservedInitialAdoptedWorkRebasesOntoIntegration(t *testing.
 }
 
 func TestClaimTask_PreservedInitialNonConflictRebaseFailureBecomesRecoveryState(t *testing.T) {
+	t.Parallel()
 	fixture := newPreservedInitialClaimFixture(t)
 	advancePreservedClaimIntegration(t, fixture.projectRoot, "dependency.txt", "merged dependency\n", "Merge dependency")
 	hookPath := filepath.Join(fixture.projectRoot, ".git", "hooks", "pre-rebase")
@@ -2662,6 +2711,7 @@ func TestClaimTask_PreservedInitialNonConflictRebaseFailureBecomesRecoveryState(
 }
 
 func TestClaimTask_PreservedInitialGenericRebaseFailureWithInProgressStateAborts(t *testing.T) {
+	t.Parallel()
 	fixture := newPreservedInitialClaimFixtureWithBaseFile(t, "conflict.txt", "base\n")
 	writeAndCommit(t, fixture.worktreeDir, "conflict.txt", "task\n", fixture.commitMessage)
 	fixture.preservedHead = testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD")
@@ -2690,6 +2740,7 @@ func TestClaimTask_PreservedInitialGenericRebaseFailureWithInProgressStateAborts
 }
 
 func TestClaimTask_PreservedInitialRebaseConflictBecomesRecoveryState(t *testing.T) {
+	t.Parallel()
 	fixture := newPreservedInitialClaimFixtureWithBaseFile(t, "conflict.txt", "base\n")
 	writeAndCommit(t, fixture.worktreeDir, "conflict.txt", "task\n", fixture.commitMessage)
 	fixture.preservedHead = testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD")

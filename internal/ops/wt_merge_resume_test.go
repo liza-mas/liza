@@ -272,6 +272,7 @@ func TestInterruptedMergeResumeRevalidatesIntegration(t *testing.T) {
 // whose recorded commit does not carry the approved review commit. Without that
 // check a rolled-back merge would re-publish itself automatically.
 func TestRolledBackMergeDoesNotResume(t *testing.T) {
+	t.Parallel()
 	const taskID = "resume-rolled-back"
 	const agentID = "code-reviewer-1"
 	projectRoot, stateFile := setupMergeTestRepo(t, taskID, agentID)

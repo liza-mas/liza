@@ -14,6 +14,7 @@ import (
 )
 
 func TestAwaitResubmission_ReadinessDoesNotContendWithWriter(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, root)
 	state := testhelpers.CreateValidState()
@@ -54,6 +55,7 @@ func TestAwaitResubmission_ReadinessDoesNotContendWithWriter(t *testing.T) {
 }
 
 func TestAwaitResubmission_WorkerFailureCleanup(t *testing.T) {
+	t.Parallel()
 	const caseEnv = "AWAIT_RESUBMISSION_FAILURE_CASE"
 	const cleaned = "worker joined and ownership released before fixture cleanup"
 	failureCase := os.Getenv(caseEnv)

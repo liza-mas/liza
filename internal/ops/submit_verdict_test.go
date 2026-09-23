@@ -26,6 +26,7 @@ import (
 )
 
 func TestSubmitVerdict_Validation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		taskID      string
@@ -69,6 +70,7 @@ func TestSubmitVerdict_Validation(t *testing.T) {
 // so a lowercase verdict is the structural rejection validate-payload already
 // reports rather than a value the mutation boundary silently upcases.
 func TestSubmitVerdict_LowercaseVerdictRejected(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -96,6 +98,7 @@ func TestSubmitVerdict_LowercaseVerdictRejected(t *testing.T) {
 }
 
 func TestSubmitVerdict_Approved(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -162,6 +165,7 @@ func TestSubmitVerdict_Approved(t *testing.T) {
 }
 
 func TestSubmitVerdict_ApprovedClearsStaleIntegrationFailure(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -209,6 +213,7 @@ func TestSubmitVerdict_ApprovedClearsStaleIntegrationFailure(t *testing.T) {
 }
 
 func TestSubmitVerdict_Rejected(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -307,6 +312,7 @@ func TestSubmitVerdict_Rejected(t *testing.T) {
 }
 
 func TestSubmitVerdict_RejectionReasonByteLimit(t *testing.T) {
+	t.Parallel()
 	setup := func(t *testing.T) (string, string) {
 		t.Helper()
 		projectRoot := t.TempDir()
@@ -380,6 +386,7 @@ func TestSubmitVerdict_RejectionReasonByteLimit(t *testing.T) {
 }
 
 func TestSubmitVerdict_RejectionThenResubmissionUsesFreshReviewMetadata(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -450,6 +457,7 @@ func TestSubmitVerdict_RejectionThenResubmissionUsesFreshReviewMetadata(t *testi
 }
 
 func TestSubmitVerdict_TaskNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -466,6 +474,7 @@ func TestSubmitVerdict_TaskNotFound(t *testing.T) {
 }
 
 func TestSubmitVerdict_WrongStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -559,6 +568,7 @@ func TestSubmitVerdict_RequeriesWhenTaskLeavesReviewBeforeModify(t *testing.T) {
 }
 
 func TestRecordStaleVerdictAnomaly_SkipsReviewingTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -605,6 +615,7 @@ func TestRecordStaleVerdictAnomaly_SkipsReviewingTask(t *testing.T) {
 }
 
 func TestSubmitVerdict_AgentReleased(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -642,6 +653,7 @@ func TestSubmitVerdict_AgentReleased(t *testing.T) {
 }
 
 func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		rejectionReason    string
@@ -774,6 +786,7 @@ func TestSubmitVerdict_RejectedLimitEscalationTransitionsToBlocked(t *testing.T)
 }
 
 func TestSubmitVerdict_MissingReviewCommit(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -798,6 +811,7 @@ func TestSubmitVerdict_MissingReviewCommit(t *testing.T) {
 }
 
 func TestSubmitVerdict_ReviewCommitMismatch(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Setup git repo + liza dir
@@ -901,6 +915,7 @@ func TestSubmitVerdict_StatErrorNotSilenced(t *testing.T) {
 }
 
 func TestSubmitVerdictApprovals(t *testing.T) {
+	t.Parallel()
 	t.Run("approved builds approval and sets derived approved_by", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1051,6 +1066,7 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 }
 
 func TestSubmitVerdict_ApprovedFromReviewing2(t *testing.T) {
+	t.Parallel()
 	// Verifies that a verdict can be submitted from REVIEWING_CODE_2 state
 	// (second review in quorum flow). The task should transition to APPROVED.
 	tmpDir := t.TempDir()
@@ -1130,6 +1146,7 @@ func TestSubmitVerdict_ApprovedFromReviewing2(t *testing.T) {
 }
 
 func TestSubmitVerdict_RejectedFromReviewing2(t *testing.T) {
+	t.Parallel()
 	// Verifies that a rejection can be submitted from REVIEWING_CODE_2 state.
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1190,6 +1207,7 @@ func TestSubmitVerdict_RejectedFromReviewing2(t *testing.T) {
 }
 
 func TestResolveEffectiveImpact(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		history []models.TaskHistoryEntry
@@ -1261,6 +1279,7 @@ func TestResolveEffectiveImpact(t *testing.T) {
 }
 
 func TestQuorumEvaluation(t *testing.T) {
+	t.Parallel()
 	setupQuorumEnv := func(t *testing.T, task models.Task, agents map[string]models.Agent, pipelineYAML string) (string, string) {
 		t.Helper()
 		tmpDir := t.TempDir()
@@ -1520,6 +1539,7 @@ func TestQuorumEvaluation(t *testing.T) {
 }
 
 func TestSubmitVerdict_CleanScanRouting(t *testing.T) {
+	t.Parallel()
 	// Pipeline with integration-pair declaring a clean state
 	cleanPipeline := `pipeline:
   roles:
@@ -1735,6 +1755,7 @@ func assertReleasedAgent(t *testing.T, state *models.State, agentID string) {
 }
 
 func TestSubmitVerdict_RejectedRefreshesLease(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1790,6 +1811,7 @@ func TestSubmitVerdict_RejectedRefreshesLease(t *testing.T) {
 }
 
 func TestSubmitVerdict_EscalationClearsLease(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1845,6 +1867,7 @@ func TestSubmitVerdict_EscalationClearsLease(t *testing.T) {
 }
 
 func TestSubmitVerdict_RejectionAtReviewCap_Attempt1_TriggersNewAttempt(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -2099,6 +2122,7 @@ func TestRecordSubmitVerdictFailure_LogsAnomalyRecordingFailure(t *testing.T) {
 }
 
 func TestSubmitVerdict_RejectionAtReviewCap_Attempt2_TriggersBlocked(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -2160,6 +2184,7 @@ func TestSubmitVerdict_RejectionAtReviewCap_Attempt2_TriggersBlocked(t *testing.
 }
 
 func TestValidateIntegrationAnalysisRolePair(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		taskID   string
@@ -3401,6 +3426,7 @@ func resumedRejectionRCACycle(gatedAt time.Time) func(*models.State, *models.Tas
 }
 
 func TestSubmitVerdictGateReFire(t *testing.T) {
+	t.Parallel()
 	role := gateVerdictRoles[0]
 	now := time.Now().UTC().Truncate(time.Second)
 	firstGatedAt := now.Add(-30 * time.Minute)
@@ -3462,6 +3488,7 @@ func TestSubmitVerdictGateReFire(t *testing.T) {
 }
 
 func TestSubmitVerdictGateDefersToExistingLimits(t *testing.T) {
+	t.Parallel()
 	role := gateVerdictRoles[0]
 	tests := []struct {
 		name          string

@@ -55,6 +55,7 @@ func setupTransitionTest(t *testing.T) (string, string) {
 }
 
 func TestTransitionToNewAttempt_Success(t *testing.T) {
+	t.Parallel()
 	tmpDir, statePath := setupTransitionTest(t)
 
 	result, err := TransitionToNewAttempt(tmpDir, "task-1", "review cycle limit reached")
@@ -163,6 +164,7 @@ func TestTransitionToNewAttempt_Success(t *testing.T) {
 }
 
 func TestTransitionToNewAttempt_Attempt2Rejected(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -182,6 +184,7 @@ func TestTransitionToNewAttempt_Attempt2Rejected(t *testing.T) {
 }
 
 func TestTransitionToNewAttempt_Attempt0DefaultsTo1(t *testing.T) {
+	t.Parallel()
 	tmpDir, statePath := setupTransitionTest(t)
 
 	// Override: set Attempt=0 (legacy/unset).
@@ -211,6 +214,7 @@ func TestTransitionToNewAttempt_Attempt0DefaultsTo1(t *testing.T) {
 }
 
 func TestTransitionToNewAttempt_WorktreeDeletionFailure(t *testing.T) {
+	t.Parallel()
 	tmpDir, statePath := setupTransitionTest(t)
 
 	// Create a real worktree so Phase 2 has something to delete.
@@ -297,6 +301,7 @@ func TestTransitionToNewAttempt_SentinelReplacedByPhase3(t *testing.T) {
 }
 
 func TestTransitionToNewAttempt_ReviewCyclesTotalPreserved(t *testing.T) {
+	t.Parallel()
 	tmpDir, statePath := setupTransitionTest(t)
 
 	_, err := TransitionToNewAttempt(tmpDir, "task-1", "cap reached")
@@ -315,6 +320,7 @@ func TestTransitionToNewAttempt_ReviewCyclesTotalPreserved(t *testing.T) {
 }
 
 func TestTransitionToNewAttempt_AgentRelease(t *testing.T) {
+	t.Parallel()
 	tmpDir, statePath := setupTransitionTest(t)
 
 	_, err := TransitionToNewAttempt(tmpDir, "task-1", "cap reached")
@@ -454,6 +460,7 @@ func TestTransitionToNewAttempt_RejectionReasonOnlyClearedInPhase3(t *testing.T)
 }
 
 func TestTransitionToNewAttempt_PreservesRejectionFeedbackInHistoryNote(t *testing.T) {
+	t.Parallel()
 	tmpDir, statePath := setupTransitionTest(t)
 
 	_, err := TransitionToNewAttempt(tmpDir, "task-1", "review cycle limit reached")
@@ -499,6 +506,7 @@ func TestTransitionToNewAttempt_PreservesRejectionFeedbackInHistoryNote(t *testi
 }
 
 func TestTransitionToNewAttempt_ReviewerReleased(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)

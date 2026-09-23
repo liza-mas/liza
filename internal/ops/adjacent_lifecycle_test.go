@@ -14,6 +14,7 @@ import (
 )
 
 func TestAdjacentLifecycleExactRequestReplay(t *testing.T) {
+	t.Parallel()
 	for _, operation := range []string{"cancel-task", "supersede-task", "unblock-task", "handoff", "set-task-output", "recover-agent"} {
 		t.Run(operation, func(t *testing.T) {
 			root := t.TempDir()
@@ -131,6 +132,7 @@ func TestAdjacentLifecycleExactRequestReplay(t *testing.T) {
 }
 
 func TestRecoverAgentExplicitRequestNeedsTaskBoundary(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, root)
 	stateFile, _ := testhelpers.SetupLizaDir(t, root)

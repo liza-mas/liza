@@ -14,6 +14,7 @@ import (
 )
 
 func TestSubmitForReview_TDDEnforcement_CSharp(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		testFile string

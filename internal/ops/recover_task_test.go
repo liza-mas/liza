@@ -61,6 +61,7 @@ func setupEmptyState(t *testing.T) (string, string) {
 }
 
 func TestRecoverTask_Validation(t *testing.T) {
+	t.Parallel()
 	_, err := RecoverTask("/nonexistent", "", false, "reason")
 	if err == nil {
 		t.Fatal("Expected error for empty task ID")
@@ -71,6 +72,7 @@ func TestRecoverTask_Validation(t *testing.T) {
 }
 
 func TestRecoverTask_InvalidTaskID(t *testing.T) {
+	t.Parallel()
 	_, err := RecoverTask("/nonexistent", "../escape", false, "reason")
 	if err == nil {
 		t.Fatal("Expected error for invalid task ID")
@@ -81,6 +83,7 @@ func TestRecoverTask_InvalidTaskID(t *testing.T) {
 }
 
 func TestRecoverTask_NotInState_NoForce(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupEmptyState(t)
 
 	_, err := RecoverTask(tmpDir, "task-1", false, "reason")
@@ -93,6 +96,7 @@ func TestRecoverTask_NotInState_NoForce(t *testing.T) {
 }
 
 func TestRecoverTask_NotInState_Force_CleansGitArtifacts(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupEmptyState(t)
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 
@@ -119,6 +123,7 @@ func TestRecoverTask_NotInState_Force_CleansGitArtifacts(t *testing.T) {
 }
 
 func TestRecoverTask_NotInState_Force_NothingToClean(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupEmptyState(t)
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 
@@ -133,6 +138,7 @@ func TestRecoverTask_NotInState_Force_NothingToClean(t *testing.T) {
 }
 
 func TestRecoverTask_ImplementingTask_WithAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupImplementingTask(t, 999999)
 
 	result, err := RecoverTask(tmpDir, "task-1", false, "crashed")
@@ -190,6 +196,7 @@ func TestRecoverTask_ImplementingTask_WithAgent(t *testing.T) {
 }
 
 func TestRecoverTask_ReviewingTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -272,6 +279,7 @@ func TestRecoverTask_ReviewingTask(t *testing.T) {
 }
 
 func TestRecoverTask_MissingPipelineConfigPreservesReviewerAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Manually create the project runtime directory WITHOUT pipeline config so resolver loading fails.
@@ -336,6 +344,7 @@ func TestRecoverTask_MissingPipelineConfigPreservesReviewerAgent(t *testing.T) {
 }
 
 func TestRecoverTask_DualClaim_ReviewerPIDAlive_NoForce(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -406,6 +415,7 @@ func TestRecoverTask_DualClaim_ReviewerPIDAlive_NoForce(t *testing.T) {
 }
 
 func TestRecoverTask_PIDAlive_NoForce(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupImplementingTask(t, os.Getpid())
 
 	_, err := RecoverTask(tmpDir, "task-1", false, "reason")
@@ -418,6 +428,7 @@ func TestRecoverTask_PIDAlive_NoForce(t *testing.T) {
 }
 
 func TestRecoverTask_PIDAlive_WithForce(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupImplementingTask(t, os.Getpid())
 
 	result, err := RecoverTask(tmpDir, "task-1", true, "forced recovery")
@@ -430,6 +441,7 @@ func TestRecoverTask_PIDAlive_WithForce(t *testing.T) {
 }
 
 func TestRecoverTask_NoAgent_TaskOnly(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -470,6 +482,7 @@ func TestRecoverTask_NoAgent_TaskOnly(t *testing.T) {
 }
 
 func TestRecoverTask_Idempotent(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupImplementingTask(t, 999999)
 
 	result1, err := RecoverTask(tmpDir, "task-1", false, "first")
@@ -494,6 +507,7 @@ func TestRecoverTask_Idempotent(t *testing.T) {
 }
 
 func TestRecoverTask_DefaultReason(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -529,6 +543,7 @@ func TestRecoverTask_DefaultReason(t *testing.T) {
 }
 
 func TestRecoverTask_MissingReviewCommitCorruption(t *testing.T) {
+	t.Parallel()
 	// Task is CODE_READY_FOR_REVIEW but ReviewCommit is nil (corrupted state).
 	// recover-task should detect this and reset to initial status.
 	tmpDir := t.TempDir()
@@ -608,6 +623,7 @@ func TestRecoverTask_MissingReviewCommitCorruption(t *testing.T) {
 }
 
 func TestRecoverTask_ReviewingTask_ReattachesMissingWorktreeFromBranch(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -681,6 +697,7 @@ func TestRecoverTask_ReviewingTask_ReattachesMissingWorktreeFromBranch(t *testin
 }
 
 func TestRecoverTask_ReviewingTask_BothWorktreeAndBranchMissingFailsClosed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -724,6 +741,7 @@ func TestRecoverTask_ReviewingTask_BothWorktreeAndBranchMissingFailsClosed(t *te
 }
 
 func TestRecoverTask_ImplementingTask_BothWorktreeAndBranchMissingReleasesToInitial(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -775,6 +793,7 @@ func TestRecoverTask_ImplementingTask_BothWorktreeAndBranchMissingReleasesToInit
 }
 
 func TestRecoverTaskFresh_ReviewingTaskResetsInitialAndClearsReviewMetadata(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -845,6 +864,7 @@ func TestRecoverTaskFresh_ReviewingTaskResetsInitialAndClearsReviewMetadata(t *t
 }
 
 func TestRecoverTaskFresh_LiveClaimRequiresForce(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupImplementingTask(t, os.Getpid())
 
 	_, err := RecoverTaskWithOptions(tmpDir, "task-1", "discard active work", RecoverTaskOptions{Fresh: true})
@@ -1152,6 +1172,7 @@ func TestRecoverTaskFresh_CleanupFailureLeavesStateAndArtifactsUnchanged(t *test
 }
 
 func TestRecoverTask_ReviewingTask_DirtyWorktreeFailsClosed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1207,6 +1228,7 @@ func TestRecoverTask_ReviewingTask_DirtyWorktreeFailsClosed(t *testing.T) {
 }
 
 func TestRecoverTask_BlockedTaskPreservesBlockedStateAndWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1280,6 +1302,7 @@ func TestRecoverTask_BlockedTaskPreservesBlockedStateAndWorktree(t *testing.T) {
 }
 
 func TestRecoverTaskFresh_BlockedTaskPreservesBlockedStateAndReason(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1358,6 +1381,7 @@ func TestRecoverTaskFresh_BlockedTaskPreservesBlockedStateAndReason(t *testing.T
 }
 
 func TestRecoverTask_IntegrationFailed_BothWorktreeAndBranchMissingFailsClosed(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

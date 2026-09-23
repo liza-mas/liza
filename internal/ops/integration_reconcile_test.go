@@ -18,6 +18,7 @@ import (
 
 func TestReconcileIntegrationAnalyses(t *testing.T) {
 	t.Run("settlement atomically freezes cohort attestations tasks and planned membership", func(t *testing.T) {
+		t.Parallel()
 		fixture := newReconcileFixture(t, false)
 		before := fixture.readState(t)
 
@@ -88,6 +89,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 	})
 
 	t.Run("task-order permutation and concurrent callers converge", func(t *testing.T) {
+		t.Parallel()
 		ordered := newReconcileFixtureAt(t, false, "2001-02-03T04:05:06Z")
 		permuted := newReconcileFixtureAt(t, true, "2001-02-03T04:05:07Z")
 		orderedTimestamp := testhelpers.MustGit(t, ordered.projectRoot, "show", "-s", "--format=%at", ordered.head)
@@ -354,6 +356,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 	})
 
 	t.Run("pending decomposition root creates no global analysis", func(t *testing.T) {
+		t.Parallel()
 		fixture := newReconcileFixture(t, false)
 		masterPlan := testhelpers.BuildTaskByStatus("master-plan", models.TaskStatusApproved, time.Now().UTC())
 		masterPlan.Type = models.TaskTypePlanning
@@ -390,6 +393,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 	})
 
 	t.Run("global waits for repair replacement lineage then creates bounded next generation", func(t *testing.T) {
+		t.Parallel()
 		fixture := newReconcileFixture(t, false)
 		if _, err := ReconcileIntegrationAnalyses(fixture.projectRoot); err != nil {
 			t.Fatalf("slice reconciliation error = %v", err)
@@ -438,6 +442,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 	})
 
 	t.Run("blocked analysis and generation exhaustion project explicit closure", func(t *testing.T) {
+		t.Parallel()
 		blocked := newReconcileFixture(t, false)
 		if _, err := ReconcileIntegrationAnalyses(blocked.projectRoot); err != nil {
 			t.Fatalf("prepare blocked slice error = %v", err)
@@ -508,6 +513,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 }
 
 func TestIntegrationHEADResolutionIsConsistentAcrossLifecycle(t *testing.T) {
+	t.Parallel()
 	fixture := newReconcileFixture(t, false)
 	testhelpers.MustGit(t, fixture.projectRoot, "tag", "integration", fixture.base)
 	tagCommit := mustCommit(t, gitpkg.New(fixture.projectRoot), "refs/tags/integration")

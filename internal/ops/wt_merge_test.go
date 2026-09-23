@@ -26,6 +26,7 @@ import (
 )
 
 func TestAppendUniqueAgentID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		failedBy []string
@@ -89,6 +90,7 @@ func TestAppendUniqueAgentID(t *testing.T) {
 }
 
 func TestIntegrationFailedError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		err          IntegrationFailedError
@@ -157,6 +159,7 @@ func TestIntegrationFailedError(t *testing.T) {
 }
 
 func TestIntegrationFailedError_ImplementsError(t *testing.T) {
+	t.Parallel()
 	// Verify IntegrationFailedError satisfies error interface and errors.As works
 	var err error = &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
 
@@ -668,6 +671,7 @@ func assertMutationReceipt(t *testing.T, receipt models.IntegrationMutationRecei
 }
 
 func TestPerformCASMergePreUpdateHookSkipsAlreadyMerged(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	expectedCommit := testhelpers.MustGit(t, tmpDir, "rev-parse", "integration")
@@ -689,6 +693,7 @@ func TestPerformCASMergePreUpdateHookSkipsAlreadyMerged(t *testing.T) {
 }
 
 func TestPerformCASMergePreUpdateHookFastForwardCandidate(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
@@ -731,6 +736,7 @@ func TestPerformCASMergePreUpdateHookFastForwardCandidate(t *testing.T) {
 }
 
 func TestPerformCASMergePreUpdateHookTrueMergeCandidate(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
@@ -782,6 +788,7 @@ func TestPerformCASMergePreUpdateHookTrueMergeCandidate(t *testing.T) {
 }
 
 func TestPerformCASMergePreUpdateHookFailureUnchangedHeadReturnsHookError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
@@ -809,6 +816,7 @@ func TestPerformCASMergePreUpdateHookFailureUnchangedHeadReturnsHookError(t *tes
 }
 
 func TestPerformCASMergePreUpdateHookFailureChangedHeadRetries(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
@@ -931,6 +939,7 @@ func TestPerformCASMergePreUpdateHookCASConflictRerunsHook(t *testing.T) {
 }
 
 func TestPerformCASMergePreUpdateHookFailureUnreadableHeadReturnsCompositeError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
@@ -967,6 +976,7 @@ func TestPerformCASMergePreUpdateHookFailureUnreadableHeadReturnsCompositeError(
 }
 
 func TestMergeWorktree_Validation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		taskID      string
@@ -996,6 +1006,7 @@ func TestMergeWorktree_Validation(t *testing.T) {
 }
 
 func TestMergeWorktree_TaskNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1013,6 +1024,7 @@ func TestMergeWorktree_TaskNotFound(t *testing.T) {
 }
 
 func TestMergeWorktree_Success(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-ok"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -1259,6 +1271,7 @@ func TestApprovedMergeTakeoverInterruptionConvergence(t *testing.T) {
 }
 
 func TestMergeWorktree_AutoSetsPostWorktreeCmd(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-node-bootstrap"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -1312,6 +1325,7 @@ func TestMergeWorktree_ConfigSetWinsBeforeFinalTransaction(t *testing.T) {
 }
 
 func TestMergeWorktree_DetectionWinsBeforeConfigSet(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-before-config"
 	root, stateFile := setupMergeTestRepo(t, taskID, "coder-1")
 	advanceApprovedTaskWithFiles(t, root, stateFile, taskID, map[string]string{
@@ -1332,6 +1346,7 @@ func TestMergeWorktree_DetectionWinsBeforeConfigSet(t *testing.T) {
 }
 
 func TestMergeWorktree_LeavesPostWorktreeCmdUnsetWhenAmbiguous(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-node-ambiguous"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -1365,6 +1380,7 @@ func TestMergeWorktree_LeavesPostWorktreeCmdUnsetWhenAmbiguous(t *testing.T) {
 }
 
 func TestMergeWorktree_PreservesExistingPostWorktreeCmd(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-node-preserve"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -1399,6 +1415,7 @@ func TestMergeWorktree_PreservesExistingPostWorktreeCmd(t *testing.T) {
 }
 
 func TestMergeWorktree_SyncsRenamedFiles(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-rename"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -1446,6 +1463,7 @@ func TestMergeWorktree_SyncsRenamedFiles(t *testing.T) {
 }
 
 func TestMergeWorktree_SyncsDeletedFiles(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-delete"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -1482,6 +1500,7 @@ func TestMergeWorktree_SyncsDeletedFiles(t *testing.T) {
 }
 
 func TestMergeWorktree_RejectsFastForwardDeletingReferencedArtifactBeforeRefUpdate(t *testing.T) {
+	t.Parallel()
 	scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
 		taskID:      "merge-delete-arch-ref",
 		artifactRef: "specs/arch-plan/readme/architecture.md",
@@ -1521,6 +1540,7 @@ func TestMergeWorktree_RejectsFastForwardDeletingReferencedArtifactBeforeRefUpda
 }
 
 func TestMergeWorktree_RejectsTrueMergeProtectedArtifactDeletionBeforeRefUpdate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		field      string
@@ -1566,6 +1586,7 @@ func TestMergeWorktree_RejectsTrueMergeProtectedArtifactDeletionBeforeRefUpdate(
 }
 
 func TestMergeWorktree_RejectsGoalSpecRefDeletionAndRenameBeforeRefUpdate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		mutateTask func(t *testing.T, wtDir, artifactRef string)
@@ -1608,6 +1629,7 @@ func TestMergeWorktree_RejectsGoalSpecRefDeletionAndRenameBeforeRefUpdate(t *tes
 }
 
 func TestMergeWorktree_RejectsNonRegularArtifactReplacementBeforeRefUpdate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		mutateTask func(t *testing.T, wtDir, artifactRef string)
@@ -1679,6 +1701,7 @@ func TestMergeWorktree_RejectsNonRegularArtifactReplacementBeforeRefUpdate(t *te
 }
 
 func TestMergeWorktree_RejectsInvalidArtifactRefBeforeRefUpdate(t *testing.T) {
+	t.Parallel()
 	invalidRef := "#empty"
 	scenario := setupArtifactGuardMergeScenario(t, artifactGuardMergeOptions{
 		taskID:      "invalid-artifact-ref",
@@ -1705,6 +1728,7 @@ func TestMergeWorktree_RejectsInvalidArtifactRefBeforeRefUpdate(t *testing.T) {
 }
 
 func TestArtifactGuardHookConfirmsFreshStateBeforeRejecting(t *testing.T) {
+	t.Parallel()
 	firstState := testhelpers.CreateValidState()
 	firstState.Goal.SpecRef = "README.md"
 	firstState.Tasks = []models.Task{protectedRefTask("stale-owner", "arch_ref", "specs/stale.md")}
@@ -1749,6 +1773,7 @@ func TestArtifactGuardHookConfirmsFreshStateBeforeRejecting(t *testing.T) {
 }
 
 func TestArtifactGuardHookFailsClosedWhenConfirmationStateReadFails(t *testing.T) {
+	t.Parallel()
 	firstState := testhelpers.CreateValidState()
 	firstState.Goal.SpecRef = "README.md"
 	firstState.Tasks = []models.Task{protectedRefTask("owner", "arch_ref", "specs/missing.md")}
@@ -1783,6 +1808,7 @@ func TestArtifactGuardHookFailsClosedWhenConfirmationStateReadFails(t *testing.T
 }
 
 func TestArtifactGuardHookReturnsFreshestValidationDiagnostics(t *testing.T) {
+	t.Parallel()
 	firstState := testhelpers.CreateValidState()
 	firstState.Goal.SpecRef = "README.md"
 	firstState.Tasks = []models.Task{protectedRefTask("stale-owner", "arch_ref", "specs/stale.md")}
@@ -2150,6 +2176,11 @@ func (l *recordingCandidateLookup) TreePathMode(treeish, path string) (string, b
 }
 
 func TestMergeWorktree_RollbackSyncsRenamedFiles(t *testing.T) {
+	// Serial: MergeWorktree fires the post-merge index refresh through the
+	// package-level startIndexRefresh hook, which recordIndexRefreshes
+	// overrides. Run concurrently with any other MergeWorktree test, a
+	// foreign launch lands in the recorder and breaks the "want none"
+	// assertion below.
 	taskID := "merge-rename-rollback"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -2216,6 +2247,7 @@ func TestMergeWorktree_RollbackSyncsRenamedFiles(t *testing.T) {
 }
 
 func TestMergeWorktree_CodingPlanApproved(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-plan-ok"
 	agentID := "code-plan-reviewer-1"
 	tmpDir := t.TempDir()
@@ -2318,6 +2350,7 @@ func TestMergeWorktree_CodingPlanApproved(t *testing.T) {
 }
 
 func TestMergeWorktree_PipelineCodingPairApproved(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-pipeline-ok"
 	agentID := "code-reviewer-1"
 
@@ -2419,6 +2452,8 @@ func TestMergeWorktree_PipelineCodingPairApproved(t *testing.T) {
 }
 
 func TestMergeWorktree_MergeConflict(t *testing.T) {
+	// Serial: same shared startIndexRefresh/recordIndexRefreshes hazard as
+	// TestMergeWorktree_RollbackSyncsRenamedFiles.
 	taskID := "merge-conflict"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -2494,6 +2529,7 @@ func TestMergeWorktree_MergeConflict(t *testing.T) {
 }
 
 func TestMergeWorktree_MergeConflict_SecondFailureBlocksTask(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-conflict-second-failure"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -2556,6 +2592,7 @@ func TestMergeWorktree_MergeConflict_SecondFailureBlocksTask(t *testing.T) {
 }
 
 func TestMergeWorktree_IntegrationTestFailure(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-testfail"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -2865,6 +2902,7 @@ func TestMergeWorktree_CASRetryDeterministic(t *testing.T) {
 }
 
 func TestMergeWorktree_SuccessWithPassingTests(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-testpass"
 	agentID := "coder-1"
 	tmpDir, _ := setupMergeTestRepo(t, taskID, agentID)
@@ -2896,6 +2934,7 @@ func TestMergeWorktree_SuccessWithPassingTests(t *testing.T) {
 }
 
 func TestMergeWorktree_HEADMismatch(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-mismatch"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -3010,6 +3049,7 @@ func TestMergeWorktree_NoTestScriptWarning(t *testing.T) {
 }
 
 func TestMergeWorktree_TestsRanInHistory(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-testshistory"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -3107,6 +3147,8 @@ func TestMergeWorktree_NonNotExistStatErrorNotMisclassified(t *testing.T) {
 	}
 }
 
+// captureLogOutput redirects the process-wide standard logger; callers must
+// stay serial so no parallel test logs into (or races on) the capture buffer.
 func captureLogOutput(t *testing.T, fn func()) string {
 	t.Helper()
 
@@ -3138,6 +3180,7 @@ func captureLogOutput(t *testing.T, fn func()) string {
 // 4. Reviewer approves → task is APPROVED with Worktree=nil but valid review_commit
 // 5. MergeWorktree should succeed by skipping HEAD verification
 func TestMergeWorktree_MissingWorktreeWithReviewCommit(t *testing.T) {
+	t.Parallel()
 	taskID := "missing-wt"
 	agentID := "reviewer-1"
 
@@ -3183,6 +3226,7 @@ func TestMergeWorktree_MissingWorktreeWithReviewCommit(t *testing.T) {
 }
 
 func TestMergeWorktree_MissingWorktreeNoReviewCommit(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -3206,6 +3250,7 @@ func TestMergeWorktree_MissingWorktreeNoReviewCommit(t *testing.T) {
 }
 
 func TestMergeWorktree_CleansWorkingTreeWhenNotOnIntegration(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-clean-wt"
 	agentID := "coder-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -3262,6 +3307,7 @@ func TestMergeWorktree_CleansWorkingTreeWhenNotOnIntegration(t *testing.T) {
 // This is the race: submit task-1 → claim task-2 → merge task-1. The stale
 // AssignedTo on task-1 still points to the coder, but CurrentTask has moved on.
 func TestMergeWorktree_DoesNotReleaseCoder_WhenCoderMovedOn(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-guard"
 	coderID := "coder-1"
 	reviewerID := "code-reviewer-1"
@@ -3310,6 +3356,7 @@ func TestMergeWorktree_DoesNotReleaseCoder_WhenCoderMovedOn(t *testing.T) {
 }
 
 func TestMergeWorktree_WritesHandoffEvent(t *testing.T) {
+	t.Parallel()
 	taskID := "merge-handoff"
 	agentID := "code-reviewer-1"
 	tmpDir, stateFile := setupMergeTestRepo(t, taskID, agentID)
@@ -3387,6 +3434,7 @@ func advanceApprovedTaskWithFiles(t *testing.T, projectRoot, stateFile, taskID s
 }
 
 func TestMarkIntegrationFailed_RefreshesLease(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	coderID := "coder-1"

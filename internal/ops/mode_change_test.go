@@ -16,6 +16,7 @@ import (
 // --- Start ---
 
 func TestStart_FromStopped(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -53,6 +54,7 @@ func TestStart_FromStopped(t *testing.T) {
 }
 
 func TestStart_AlreadyRunning(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -70,6 +72,7 @@ func TestStart_AlreadyRunning(t *testing.T) {
 }
 
 func TestStart_FromPaused(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -87,6 +90,7 @@ func TestStart_FromPaused(t *testing.T) {
 }
 
 func TestCircuitBreakerHaltSurvivesStopStart(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -213,6 +217,7 @@ func TestCircuitBreakerHaltSurvivesStopStart(t *testing.T) {
 }
 
 func TestLegacyCircuitBreakerHaltSurvivesStopStart(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -328,6 +333,7 @@ func TestLegacyCircuitBreakerHaltSurvivesStopStart(t *testing.T) {
 // --- Stop ---
 
 func TestStop_FromRunning(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -358,6 +364,7 @@ func TestStop_FromRunning(t *testing.T) {
 }
 
 func TestStop_AlreadyStopped(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -689,6 +696,7 @@ func installNextCleanGoalClosure(t *testing.T, fixture *effectiveCompletionFixtu
 // --- Pause ---
 
 func TestPause_FromRunning(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -719,6 +727,7 @@ func TestPause_FromRunning(t *testing.T) {
 }
 
 func TestPause_AlreadyPaused(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -740,6 +749,7 @@ func TestPause_AlreadyPaused(t *testing.T) {
 }
 
 func TestPause_FromStopped(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -759,6 +769,7 @@ func TestPause_FromStopped(t *testing.T) {
 // --- Resume ---
 
 func TestResumeAcknowledgesCircuitBreakerResponse(t *testing.T) {
+	t.Parallel()
 	observedAt := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	registeredAt := observedAt.Add(-time.Hour)
 
@@ -835,6 +846,7 @@ func TestResumeAcknowledgesCircuitBreakerResponse(t *testing.T) {
 }
 
 func TestResume_FromPaused(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -862,6 +874,7 @@ func TestResume_FromPaused(t *testing.T) {
 }
 
 func TestResume_FromCircuitBreaker(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -898,6 +911,7 @@ func TestResume_FromCircuitBreaker(t *testing.T) {
 }
 
 func TestResume_FromCheckpoint(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -926,6 +940,7 @@ func TestResume_FromCheckpoint(t *testing.T) {
 }
 
 func TestResume_PlanningCheckpointExecutesTransitionsMidSprint(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
@@ -1027,6 +1042,7 @@ func TestResume_PlanningCheckpointExecutesTransitionsMidSprint(t *testing.T) {
 }
 
 func TestResume_ManyToOneCheckpointExecutesTransitionsMidSprint(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
@@ -1100,6 +1116,7 @@ func TestResume_ManyToOneCheckpointExecutesTransitionsMidSprint(t *testing.T) {
 }
 
 func TestResume_ManyToOneCheckpointExecutesTransitionsWhenAllPlannedTerminal(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
@@ -1165,6 +1182,7 @@ func TestResume_ManyToOneCheckpointExecutesTransitionsWhenAllPlannedTerminal(t *
 }
 
 func TestResume_PausedAndCheckpoint(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1196,6 +1214,7 @@ func TestResume_PausedAndCheckpoint(t *testing.T) {
 }
 
 func TestResume_CheckpointAllTerminal_MarksCompleted(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1247,6 +1266,7 @@ func TestResume_CheckpointAllTerminal_MarksCompleted(t *testing.T) {
 }
 
 func TestResume_FromCompleted_AdvancesSprint(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1327,6 +1347,7 @@ func TestResume_FromCompleted_AdvancesSprint(t *testing.T) {
 }
 
 func TestResume_FromCompleted_AllTerminal_EmptyCarriedTasks(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1369,6 +1390,7 @@ func TestResume_FromCompleted_AllTerminal_EmptyCarriedTasks(t *testing.T) {
 }
 
 func TestResume_NoFollowUpSkipsPipelineTransitionsAfterSprintAdvance(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPhase2PipelineProceedTest(t)
 
 	state := testhelpers.CreateValidState()
@@ -1436,6 +1458,7 @@ func TestResume_NoFollowUpSkipsPipelineTransitionsAfterSprintAdvance(t *testing.
 }
 
 func TestResume_FromStopped(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1457,6 +1480,7 @@ func TestResume_FromStopped(t *testing.T) {
 }
 
 func TestResume_StoppedWithCheckpoint_RejectsBeforeSprintMutation(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1488,6 +1512,7 @@ func TestResume_StoppedWithCheckpoint_RejectsBeforeSprintMutation(t *testing.T) 
 }
 
 func TestResume_StoppedWithCompleted_RejectsBeforeSprintMutation(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1519,6 +1544,7 @@ func TestResume_StoppedWithCompleted_RejectsBeforeSprintMutation(t *testing.T) {
 }
 
 func TestResume_NothingToResume(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 

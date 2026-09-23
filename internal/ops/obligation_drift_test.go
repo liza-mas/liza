@@ -119,6 +119,7 @@ func driftState(reviewCommit string, refs ...string) *models.State {
 // event is keyed on the section that moved, so both carriers and both
 // obligations arrive on a single record.
 func TestObligationDriftRecordsOnePerChangedSection(t *testing.T) {
+	t.Parallel()
 	fixture := setupDriftFixture(t, driftModeRepin)
 	state := driftState(fixture.reviewCommit, "specs/plan-a.md#Task 1", "specs/plan-b.md#Task 1")
 
@@ -147,6 +148,7 @@ func TestObligationDriftRecordsOnePerChangedSection(t *testing.T) {
 // A reference repointed at a different heading is the substitution the
 // approval never covered, and outranks a re-pin reported for the same section.
 func TestObligationDriftDistinguishesRetargetFromRepin(t *testing.T) {
+	t.Parallel()
 	fixture := setupDriftFixture(t, driftModeRetargetAway)
 	state := driftState(fixture.reviewCommit, "specs/plan-a.md#Task 1", "specs/plan-b.md#Task 1")
 
@@ -171,6 +173,7 @@ func TestObligationDriftDistinguishesRetargetFromRepin(t *testing.T) {
 // A carrier whose references still resolve to the approved content is not an
 // event. Reporting it would bury the ones that are.
 func TestObligationDriftIgnoresUnchangedReferences(t *testing.T) {
+	t.Parallel()
 	fixture := setupDriftFixture(t, driftModeRepin)
 	state := driftState(fixture.reviewCommit, "specs/plan-a.md#Task 1")
 
@@ -182,6 +185,7 @@ func TestObligationDriftIgnoresUnchangedReferences(t *testing.T) {
 // The record is a reviewable event, never a gate: it must not touch the tasks
 // whose obligations drifted, and re-running must not pile up duplicates.
 func TestRecordObligationContentDriftReportsWithoutBlocking(t *testing.T) {
+	t.Parallel()
 	fixture := setupDriftFixture(t, driftModeRepin)
 	stateFile := filepath.Join(fixture.root, "state.yaml")
 	bb := testhelpers.WriteInitialState(t, stateFile,
@@ -341,6 +345,7 @@ func TestObligationDriftSkipsStaleUnderAPlanWithOnlyTerminalChildren(t *testing.
 // Recording must satisfy the state validator, or the first merge that finds
 // drift leaves a state no command can read back.
 func TestRecordedObligationDriftAnomalyValidates(t *testing.T) {
+	t.Parallel()
 	fixture := setupDriftFixture(t, driftModeRepin)
 	stateFile := filepath.Join(fixture.root, "state.yaml")
 	bb := testhelpers.WriteInitialState(t, stateFile,
@@ -370,6 +375,7 @@ func TestRecordedObligationDriftAnomalyValidates(t *testing.T) {
 // such reference at integration and would skip it in silence; following the
 // obligation finds it.
 func TestObligationDriftCatchesRenamedAndRetargetedReference(t *testing.T) {
+	t.Parallel()
 	fixture := setupDriftFixture(t, driftModeRenameAway)
 	state := driftState(fixture.reviewCommit, "specs/plan-b.md#Task 1")
 
@@ -430,6 +436,7 @@ func byHeading(drifts []obligationDrift) map[string]obligationDrift {
 // content alone reports nothing — while the obligation has quietly stopped
 // resting on the section that was redirected away.
 func TestObligationDriftCatchesRetargetOntoAnUnchangedSibling(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, root)
 	writeDriftFile(t, root, "specs/source.md", "# Source\n\n## Counters\nCount observations.\n\n## Other\nUnrelated.\n")
@@ -472,6 +479,7 @@ func TestObligationDriftCatchesRetargetOntoAnUnchangedSibling(t *testing.T) {
 // stored record must carry the stronger claim, or a reviewer reads a
 // substitution as a routine move.
 func TestRecordObligationContentDriftUpgradesRepinToRetarget(t *testing.T) {
+	t.Parallel()
 	fixture := setupDriftFixture(t, driftModeRetargetOnto)
 	stateFile := filepath.Join(fixture.root, "state.yaml")
 	bb := testhelpers.WriteInitialState(t, stateFile, driftState(fixture.reviewCommit, "specs/plan-a.md#Task 1"))

@@ -43,6 +43,7 @@ func setupHumanNoteTest(t *testing.T) (string, *db.Blackboard) {
 }
 
 func TestAddHumanNoteWakesOnlyTargetsAndPreservesState(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"target", "all"} {
 		t.Run(target, func(t *testing.T) {
 			root, bb := setupHumanNoteTest(t)
@@ -98,6 +99,7 @@ func TestAddHumanNoteWakesOnlyTargetsAndPreservesState(t *testing.T) {
 }
 
 func TestAddHumanNoteInvalidInputLeavesStateUnchanged(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, target, note, want string }{
 		{"empty target", " ", "note", "target is required"},
 		{"missing target", "missing", "note", "not found"},
@@ -132,6 +134,7 @@ func TestAddHumanNoteInvalidInputLeavesStateUnchanged(t *testing.T) {
 }
 
 func TestAddHumanNoteConcurrentAppendPreservesNotes(t *testing.T) {
+	t.Parallel()
 	root, bb := setupHumanNoteTest(t)
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -154,6 +157,7 @@ func TestAddHumanNoteConcurrentAppendPreservesNotes(t *testing.T) {
 }
 
 func TestAddHumanNoteLogFailureRemainsCommitted(t *testing.T) {
+	t.Parallel()
 	root, bb := setupHumanNoteTest(t)
 	if err := os.Mkdir(paths.New(root).LogPath(), 0755); err != nil {
 		t.Fatal(err)

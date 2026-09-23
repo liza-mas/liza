@@ -23,6 +23,8 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+// withOpsBrandProjectDir mutates the process-wide brand; callers must not use
+// t.Parallel, and no parallel test may run while it is in effect.
 func withOpsBrandProjectDir(t *testing.T, projectDir string) {
 	t.Helper()
 	oldProjectDir := brand.ProjectDirName
@@ -33,6 +35,7 @@ func withOpsBrandProjectDir(t *testing.T, projectDir string) {
 }
 
 func TestCreateWorktree_Validation(t *testing.T) {
+	t.Parallel()
 	_, err := CreateWorktree("/nonexistent", "", false)
 	if err == nil {
 		t.Fatal("Expected error for empty task ID")
@@ -43,6 +46,7 @@ func TestCreateWorktree_Validation(t *testing.T) {
 }
 
 func TestCreateWorktree_TaskNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -59,6 +63,7 @@ func TestCreateWorktree_TaskNotFound(t *testing.T) {
 }
 
 func TestCreateWorktree_WrongStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -79,6 +84,7 @@ func TestCreateWorktree_WrongStatus(t *testing.T) {
 }
 
 func TestCreateWorktree_CodePlanningStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -100,6 +106,7 @@ func TestCreateWorktree_CodePlanningStatus(t *testing.T) {
 }
 
 func TestCreateWorktree_AlreadyExists(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -128,6 +135,7 @@ func TestCreateWorktree_AlreadyExists(t *testing.T) {
 }
 
 func TestCreateWorktree_CopyWorktreeEnvFilesBeforePostWorktreeCmd(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	commitEnvIgnoreForWorktreeTest(t, tmpDir)
@@ -136,7 +144,7 @@ func TestCreateWorktree_CopyWorktreeEnvFilesBeforePostWorktreeCmd(t *testing.T) 
 	writeRootFileForWorktreeTest(t, tmpDir, "app.env", "APP_ENV=1\n")
 	writeRootFileForWorktreeTest(t, tmpDir, ".envrc", "export ROOT_ENV=1\n")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	postCmd := "test -f .env && test -f .env.local && test -f app.env && test -f .envrc && touch ../post-worktree-saw-env"
 	state := testhelpers.CreateValidState()
@@ -164,12 +172,13 @@ func TestCreateWorktree_CopyWorktreeEnvFilesBeforePostWorktreeCmd(t *testing.T) 
 }
 
 func TestCreateWorktree_DoesNotCopyWorktreeEnvFilesByDefault(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	commitEnvIgnoreForWorktreeTest(t, tmpDir)
 	writeRootFileForWorktreeTest(t, tmpDir, ".env", "ROOT_ENV=1\n")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
@@ -187,12 +196,13 @@ func TestCreateWorktree_DoesNotCopyWorktreeEnvFilesByDefault(t *testing.T) {
 }
 
 func TestCreateWorktree_CopyWorktreeEnvFilesExistingWorktreeDoesNotOverwrite(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	commitEnvIgnoreForWorktreeTest(t, tmpDir)
 	writeRootFileForWorktreeTest(t, tmpDir, ".env", "SOURCE_ENV=1\n")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	state.Config.CopyWorktreeEnvFiles = true
@@ -228,6 +238,7 @@ func TestCreateWorktree_CopyWorktreeEnvFilesExistingWorktreeDoesNotOverwrite(t *
 }
 
 func TestProvisionWorktreeEnvFilesCandidateFilteringAndWarnings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	commitEnvIgnoreForWorktreeTest(t, tmpDir)
@@ -257,6 +268,7 @@ func TestProvisionWorktreeEnvFilesCandidateFilteringAndWarnings(t *testing.T) {
 }
 
 func TestProvisionWorktreeEnvFilesRejectsUnsafeSources(t *testing.T) {
+	t.Parallel()
 	// The unsafe source under test is a symlink, which Windows only lets an
 	// elevated or Developer Mode session create.
 	testhelpers.RequireSymlinkCapability(t)
@@ -283,6 +295,7 @@ func TestProvisionWorktreeEnvFilesRejectsUnsafeSources(t *testing.T) {
 }
 
 func TestProvisionWorktreeEnvFilesWarnsForUnignoredSource(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	writeRootFileForWorktreeTest(t, tmpDir, ".env", "ROOT_ENV=1\n")
@@ -302,6 +315,7 @@ func TestProvisionWorktreeEnvFilesWarnsForUnignoredSource(t *testing.T) {
 }
 
 func TestProvisionWorktreeEnvFilesWarnsForTrackedSource(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	writeRootFileForWorktreeTest(t, tmpDir, ".env", "TRACKED_ENV=1\n")
@@ -323,6 +337,7 @@ func TestProvisionWorktreeEnvFilesWarnsForTrackedSource(t *testing.T) {
 }
 
 func TestProvisionWorktreeEnvFilesPrivateExcludeConflictWarningOnly(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	commitEnvIgnoreForWorktreeTest(t, tmpDir)
@@ -344,11 +359,12 @@ func TestProvisionWorktreeEnvFilesPrivateExcludeConflictWarningOnly(t *testing.T
 }
 
 func TestCreateWorktreePreparesSembleIgnoreForFreshWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
@@ -367,11 +383,12 @@ func TestCreateWorktreePreparesSembleIgnoreForFreshWorktree(t *testing.T) {
 }
 
 func TestCreateWorktreePreparesSembleIgnoreForExistingWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
@@ -709,6 +726,7 @@ func TestCreateWorktree_ScipConcurrentCreatesUseIsolatedIndexes(t *testing.T) {
 }
 
 func TestCreateWorktree_ExistingWorktreeWithUnresolvableHEADFails(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -753,6 +771,7 @@ func TestCreateWorktree_ExistingWorktreeWithUnresolvableHEADFails(t *testing.T) 
 // pieces (extension on main, hooks file, per-worktree config) git would silently
 // fall back to the main repo's hooks and the guard would never fire.
 func TestCreateWorktree_InstallsPreCommitHook(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -829,6 +848,7 @@ func TestCreateWorktree_InstallsBrandedHookDirectory(t *testing.T) {
 // pre-hook-era worktree picks up the hook on the next wt-create without
 // requiring fresh=true.
 func TestCreateWorktree_InstallsHookOnExisting(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -876,6 +896,7 @@ func TestCreateWorktree_InstallsHookOnExisting(t *testing.T) {
 // then confirm git commit rejects. A second pass with the stub returning 0
 // confirms the hook path is otherwise permissive.
 func TestCreateWorktree_HookFiresAndRejects(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -938,6 +959,7 @@ func TestCreateWorktree_HookFiresAndRejects(t *testing.T) {
 // hook wrapper â€” otherwise a crashing or upgraded-out-of-sync binary would
 // deadlock every commit in a worktree.
 func TestHookShellFailSafeOnUnknownExitCode(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1094,6 +1116,7 @@ func writePreCommitConfig(t *testing.T, worktreeDir string) {
 // criteria 1 and 4: when both the Liza guard and a project pre-commit config
 // are in play, the hook chains through and project pre-commit fires.
 func TestHook_ChainsToProjectPreCommit_WhenConfigPresent(t *testing.T) {
+	t.Parallel()
 	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
 	writePreCommitConfig(t, worktreeDir)
 
@@ -1113,6 +1136,7 @@ func TestHook_ChainsToProjectPreCommit_WhenConfigPresent(t *testing.T) {
 // .pre-commit-config.yaml in the worktree, the hook does not invoke
 // pre-commit at all.
 func TestHook_NoChainWhenConfigAbsent(t *testing.T) {
+	t.Parallel()
 	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
 
 	marker := filepath.Join(t.TempDir(), "invoked")
@@ -1131,6 +1155,7 @@ func TestHook_NoChainWhenConfigAbsent(t *testing.T) {
 // when a config is present but pre-commit is not installed, the hook fails
 // loudly rather than silently skipping.
 func TestHook_FailLoudOnMissingPreCommitBinary(t *testing.T) {
+	t.Parallel()
 	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
 	writePreCommitConfig(t, worktreeDir)
 
@@ -1149,6 +1174,7 @@ func TestHook_FailLoudOnMissingPreCommitBinary(t *testing.T) {
 // short-circuits before project pre-commit runs â€” the guard is authoritative
 // for task-state policy regardless of config presence.
 func TestHook_GuardRejectShortCircuitsChain(t *testing.T) {
+	t.Parallel()
 	worktreeDir := setupChainTestWorktree(t, 1) // guard rejects
 	writePreCommitConfig(t, worktreeDir)
 
@@ -1167,6 +1193,7 @@ func TestHook_GuardRejectShortCircuitsChain(t *testing.T) {
 // TestHook_ProjectPreCommitFailureBlocksCommit proves project pre-commit's
 // real exit code propagates: a non-zero pre-commit exit blocks the commit.
 func TestHook_ProjectPreCommitFailureBlocksCommit(t *testing.T) {
+	t.Parallel()
 	worktreeDir := setupChainTestWorktree(t, 0) // guard allows
 	writePreCommitConfig(t, worktreeDir)
 
@@ -1188,6 +1215,7 @@ func TestHook_ProjectPreCommitFailureBlocksCommit(t *testing.T) {
 // fail-safe asymmetry. This complements TestHookShellFailSafeOnUnknownExitCode
 // which covers the no-config flavor of the same property.
 func TestHook_FailSafeOnUnknownGuardExitFallsThroughToChain(t *testing.T) {
+	t.Parallel()
 	worktreeDir := setupChainTestWorktree(t, 127) // guard exits 127
 	writePreCommitConfig(t, worktreeDir)
 
@@ -1377,6 +1405,7 @@ func assertWorktreeFileMissing(t *testing.T, worktreeDir, rel string) {
 // CreateWorktree must not report a worktree as ready when its configured setup
 // command failed — on both the fresh and the already-existing path.
 func TestCreateWorktree_PostWorktreeCmdFailureFailsClosed(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name       string
 		preCreate  bool
@@ -1389,7 +1418,7 @@ func TestCreateWorktree_PostWorktreeCmdFailureFailsClosed(t *testing.T) {
 			tmpDir := t.TempDir()
 			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-			t.Setenv(stacklit.EnvEnableStacklit, "false")
+			requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
 			now := time.Now().UTC()
 			state := testhelpers.CreateValidState()

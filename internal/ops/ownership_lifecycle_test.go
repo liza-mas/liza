@@ -49,6 +49,7 @@ func ownershipStateBytes(t *testing.T, statePath string) []byte {
 }
 
 func TestOwnershipKnownSetupFailureRequiresFreshBoundary(t *testing.T) {
+	t.Parallel()
 	root, statePath, bb, authority := setupOwnershipLifecycleClaim(t)
 	if err := bb.Modify(func(state *models.State) error {
 		command := "exit 1"
@@ -98,6 +99,7 @@ func TestOwnershipKnownSetupFailureRequiresFreshBoundary(t *testing.T) {
 }
 
 func TestOwnershipFailureObservesCommittedState(t *testing.T) {
+	t.Parallel()
 	for _, replaced := range []bool{false, true} {
 		name := "discarded-mutation"
 		if replaced {
@@ -147,6 +149,7 @@ func TestOwnershipFailureObservesCommittedState(t *testing.T) {
 }
 
 func TestOwnershipLifecycleClaimReplayAfterReleaseAndReclaim(t *testing.T) {
+	t.Parallel()
 	root, statePath, bb, authority := setupOwnershipLifecycleClaim(t)
 	claimOpts := ownershipRequestOptions(t, bb, "claim-first")
 	first, err := ClaimTaskWithRequest(root, "task-1", authority.ID, &authority, claimOpts)
@@ -251,6 +254,7 @@ func TestOwnershipLifecycleClaimRestartsAfterGenerationReplacement(t *testing.T)
 }
 
 func TestOwnershipLifecycleConcurrentClaimHasOneCompletion(t *testing.T) {
+	t.Parallel()
 	root, _, bb, authority := setupOwnershipLifecycleClaim(t)
 	opts := ownershipRequestOptions(t, bb, "concurrent-claim")
 	start := make(chan struct{})
@@ -299,6 +303,7 @@ func TestOwnershipLifecycleConcurrentClaimHasOneCompletion(t *testing.T) {
 }
 
 func TestOwnershipLifecycleRecoveryRetiresPreparationAndReplays(t *testing.T) {
+	t.Parallel()
 	root, statePath := setupImplementingTask(t, 999999)
 	testhelpers.SetupTestGitRepo(t, root)
 	bb := db.For(statePath)
@@ -344,6 +349,7 @@ func TestOwnershipLifecycleRecoveryRetiresPreparationAndReplays(t *testing.T) {
 }
 
 func TestOwnershipLifecycleAttemptRolloverInvalidatesPreparation(t *testing.T) {
+	t.Parallel()
 	root, statePath := setupTransitionTest(t)
 	bb := db.For(statePath)
 	var abandoned LifecycleRequest
@@ -372,6 +378,7 @@ func TestOwnershipLifecycleAttemptRolloverInvalidatesPreparation(t *testing.T) {
 }
 
 func TestOwnershipLifecycleVerdictRolloverChecksCompletedBoundary(t *testing.T) {
+	t.Parallel()
 	for _, interveningClaim := range []bool{false, true} {
 		name := "lease renewal preserves completed boundary"
 		if interveningClaim {

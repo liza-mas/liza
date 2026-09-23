@@ -81,7 +81,12 @@ func TestFileLockConcurrent(t *testing.T) {
 	dir := t.TempDir()
 	protectedPath := filepath.Join(dir, "data.yaml")
 
-	fl := New(protectedPath)
+	// This test proves that every contender is admitted, not that ten of them
+	// queue within the production DefaultLockTimeout. Each hold writes owner
+	// metadata through four file operations, and on the loaded Windows CI
+	// runner seven of ten contenders exhausted 10s that way (DEV-783). The
+	// generous timeout is a hang guard: WithLock returns once it is admitted.
+	fl := New(protectedPath).WithTimeout(2 * time.Minute)
 
 	// Write initial data
 	if err := os.WriteFile(protectedPath, []byte("0"), 0644); err != nil {

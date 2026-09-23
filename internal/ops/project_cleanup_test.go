@@ -16,6 +16,7 @@ import (
 )
 
 func TestProjectCleanupPlanAndExecuteRemovesOwnedTargets(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	lp := paths.New(projectRoot)
@@ -60,6 +61,7 @@ func TestProjectCleanupPlanAndExecuteRemovesOwnedTargets(t *testing.T) {
 }
 
 func TestPlanProjectCleanupRejectsUnownedRegisteredWorktree(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	worktreePath := filepath.Join(projectRoot, paths.WorktreesDirName, "not owned")
@@ -82,6 +84,7 @@ func TestPlanProjectCleanupRejectsUnownedRegisteredWorktree(t *testing.T) {
 }
 
 func TestPlanProjectCleanupResolvesRegisteredWorktreeSymlinks(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 	projectRoot := filepath.Join(baseDir, "project")
 	if err := os.Mkdir(projectRoot, 0755); err != nil {
@@ -135,6 +138,7 @@ func TestPlanProjectCleanupResolvesRegisteredWorktreeSymlinks(t *testing.T) {
 }
 
 func TestPlanProjectCleanupKeepsMissingRegisteredWorktree(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	gitClient := gitops.New(projectRoot)
@@ -162,6 +166,7 @@ func TestPlanProjectCleanupKeepsMissingRegisteredWorktree(t *testing.T) {
 }
 
 func TestPlanProjectCleanupRejectsNonDirectoryTarget(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	runtimePath := paths.New(projectRoot).LizaDir()
@@ -219,6 +224,7 @@ func TestExecuteProjectCleanupRefusesLiveAgent(t *testing.T) {
 }
 
 func TestExecuteProjectCleanupRejectsTargetDrift(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	lp := paths.New(projectRoot)

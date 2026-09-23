@@ -79,6 +79,7 @@ func (f quarantineFixture) capture(t *testing.T, verdict, reason, commit string)
 }
 
 func TestQuarantinedVerdictDeduplicatesAndSurvivesConcurrentRestart(t *testing.T) {
+	t.Parallel()
 	f := newQuarantineFixture(t)
 	first := f.capture(t, "REJECTED", "  missing optimistic concurrency  ", f.commit)
 	before := readStateBytes(t, f.statePath)
@@ -121,6 +122,7 @@ func TestQuarantinedVerdictDeduplicatesAndSurvivesConcurrentRestart(t *testing.T
 }
 
 func TestQuarantinedVerdictRestartReader(t *testing.T) {
+	t.Parallel()
 	statePath := os.Getenv("QUARANTINE_RESTART_STATE")
 	if statePath == "" {
 		return
@@ -135,6 +137,7 @@ func TestQuarantinedVerdictRestartReader(t *testing.T) {
 }
 
 func TestQuarantinedVerdictSeparateProcessSubmission(t *testing.T) {
+	t.Parallel()
 	if root := os.Getenv("QUARANTINE_SUBMIT_ROOT"); root != "" {
 		_, err := SubmitVerdictWithAuthority(root, "task-quarantine", "REJECTED", "cross-process blocker", models.AgentAuthority{ID: "code-reviewer-1", Generation: "stale-review-fixture"}, "", strings.Repeat("a", 40))
 		if !IsAgentAuthorityError(err) {
@@ -167,6 +170,7 @@ func TestQuarantinedVerdictSeparateProcessSubmission(t *testing.T) {
 }
 
 func TestQuarantinedVerdictPersistenceFailureNeverClaimsSaved(t *testing.T) {
+	t.Parallel()
 	f := newQuarantineFixture(t)
 	before := readStateBytes(t, f.statePath)
 	// Preserve existing lock metadata writes while denying atomic state creation.
@@ -192,6 +196,7 @@ func TestQuarantinedVerdictPersistenceFailureNeverClaimsSaved(t *testing.T) {
 }
 
 func TestQuarantinedVerdictAdministrativeFailuresDoNotCreateEvidence(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, verdict, reason, commit, generation, task string }{
 		{name: "missing authority", verdict: "REJECTED", reason: "blocker", commit: strings.Repeat("a", 40)},
 		{name: "missing commit", verdict: "REJECTED", reason: "blocker", generation: "stale"},
@@ -221,6 +226,7 @@ func TestQuarantinedVerdictAdministrativeFailuresDoNotCreateEvidence(t *testing.
 }
 
 func TestQuarantinedVerdictMasksAllKnownGenerations(t *testing.T) {
+	t.Parallel()
 	f := newQuarantineFixture(t)
 	reason := "缺少 version: " + f.stale.Generation + "; current=" + f.current.Generation + "; operator=" + f.orchestrator.Generation
 	finding := f.capture(t, "REJECTED", reason, f.commit)
@@ -239,6 +245,7 @@ func TestQuarantinedVerdictMasksAllKnownGenerations(t *testing.T) {
 }
 
 func TestQuarantinedVerdictApprovalBarrierAndLineage(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, verdict                            string
 		hops                                     int
@@ -306,6 +313,7 @@ func TestQuarantinedVerdictApprovalBarrierAndLineage(t *testing.T) {
 }
 
 func TestQuarantinedVerdictRejectionDoesNotConsumeStaleApproval(t *testing.T) {
+	t.Parallel()
 	f := newQuarantineFixture(t)
 	finding := f.capture(t, "APPROVED", "", f.commit)
 	if _, err := SubmitVerdictWithAuthority(f.root, f.taskID, "REJECTED", "current reviewer confirms defect", f.current, "", f.commit); err != nil {
@@ -329,6 +337,7 @@ func TestQuarantinedVerdictRejectionDoesNotConsumeStaleApproval(t *testing.T) {
 }
 
 func TestQuarantinedVerdictReconciliationAuditAndAuthority(t *testing.T) {
+	t.Parallel()
 	for _, disposition := range []string{"accepted", "refuted", "superseded", "escalated"} {
 		t.Run(disposition, func(t *testing.T) {
 			f := newQuarantineFixture(t)
@@ -380,6 +389,7 @@ func TestQuarantinedVerdictReconciliationAuditAndAuthority(t *testing.T) {
 }
 
 func TestQuarantinedVerdictMergeOrderingAndAlreadyAncestor(t *testing.T) {
+	t.Parallel()
 	for _, order := range []string{"evidence first", "already ancestor", "merge first"} {
 		t.Run(order, func(t *testing.T) {
 			root, statePath := setupMergeTestRepo(t, "quarantine-merge", "coder-1")

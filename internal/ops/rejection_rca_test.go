@@ -661,7 +661,7 @@ type gateLoopFixture struct {
 
 func newGateLoopFixture(t *testing.T, role gateVerdictRole, mutate func(*models.Task)) *gateLoopFixture {
 	t.Helper()
-	disableLifecycleTestIndexes(t)
+	requireLifecycleTestIndexesDisabled(t)
 	root := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, root)
 	testhelpers.SetupPipelineConfig(t, root)
@@ -931,6 +931,7 @@ func (f *gateLoopFixture) approve() {
 // disposition, the authorized restore (or supersession for rescope) and a
 // subsequent successful submission and approval.
 func TestRejectionRCAGateEndToEnd(t *testing.T) {
+	t.Parallel()
 	coding, planning := gateVerdictRoles[0], gateVerdictRoles[1]
 	threshold := models.DefaultHighChurnRejectionThreshold
 
@@ -951,6 +952,7 @@ func TestRejectionRCAGateEndToEnd(t *testing.T) {
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
+			t.Parallel()
 			fixture := newGateLoopFixture(t, row.role, nil)
 			fixture.rejectUntilGated()
 			fixture.recordFromFile(mixedCauseRequest())
@@ -986,6 +988,7 @@ func TestRejectionRCAGateEndToEnd(t *testing.T) {
 	}
 
 	t.Run("coding task rescope ends at supersession", func(t *testing.T) {
+		t.Parallel()
 		fixture := newGateLoopFixture(t, coding, nil)
 		fixture.rejectUntilGated()
 		fixture.recordFromFile(mixedCauseRequest())
@@ -1028,6 +1031,7 @@ func TestRejectionRCAGateEndToEnd(t *testing.T) {
 // ALREADY_TRANSITIONED/stop — and state.yaml is byte-identical afterwards, so
 // neither wrote a receipt, a history entry or an ownership change.
 func TestRejectionRCAGateConcurrentResubmission(t *testing.T) {
+	t.Parallel()
 	fixture := newGateLoopFixture(t, gateVerdictRoles[0], nil)
 	fixture.rejectUntilGated()
 	// The doer "fixes" and resubmits a fresh commit rather than replaying the
@@ -1073,7 +1077,9 @@ func TestRejectionRCAGateConcurrentResubmission(t *testing.T) {
 // the existing limits: after a resume the review budget still escalates at
 // its own cap, and planning_review_churn still fires for a planning task.
 func TestRejectionRCAGateBackstopsRemainActive(t *testing.T) {
+	t.Parallel()
 	t.Run("review budget escalates at its cap after a resume", func(t *testing.T) {
+		t.Parallel()
 		// Attempt 2 makes the budget cap a BLOCKED escalation rather than a
 		// new attempt, so the reason is observable on the task.
 		fixture := newGateLoopFixture(t, gateVerdictRoles[0], func(task *models.Task) { task.Attempt = 2 })
@@ -1105,6 +1111,7 @@ func TestRejectionRCAGateBackstopsRemainActive(t *testing.T) {
 	})
 
 	t.Run("planning_review_churn still triggers for a resumed planning task", func(t *testing.T) {
+		t.Parallel()
 		fixture := newGateLoopFixture(t, gateVerdictRoles[1], nil)
 		fixture.rejectUntilGated()
 		fixture.recordFromFile(mixedCauseRequest())

@@ -220,6 +220,7 @@ func TestReleaseClaim_CoderClaim_ClearsWorktreeFields(t *testing.T) {
 }
 
 func TestReleaseRejectedClaim(t *testing.T) {
+	t.Parallel()
 	fixture := newRejectedHandoffFixture(t, true)
 
 	result, err := ReleaseClaim(fixture.projectRoot, fixture.taskID, "doer", true, "handoff", "human")
@@ -249,6 +250,7 @@ func TestReleaseRejectedClaim(t *testing.T) {
 }
 
 func TestRejectedTaskHandoff(t *testing.T) {
+	t.Parallel()
 	fixture := newRejectedHandoffFixture(t, true)
 	bb := db.For(fixture.stateFile)
 	if err := bb.Modify(func(state *models.State) error {

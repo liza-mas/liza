@@ -38,6 +38,7 @@ type lifecycleMutationInterleaving struct {
 }
 
 func TestTaskLifecycleMutationGenerationFence(t *testing.T) {
+	t.Parallel()
 	t.Run("claim-task", func(t *testing.T) {
 		fixture := newLifecycleGenerationFixture(t, "coder-1", "coder", true, []models.Task{
 			testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
@@ -166,6 +167,7 @@ func TestTaskLifecycleMutationGenerationFence(t *testing.T) {
 }
 
 func TestOrchestratorLifecycleMutationGenerationFence(t *testing.T) {
+	t.Parallel()
 	validAdd := func() AddTaskInput {
 		return AddTaskInput{
 			ID:          "task-1",

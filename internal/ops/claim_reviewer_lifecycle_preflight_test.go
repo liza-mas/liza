@@ -16,6 +16,7 @@ import (
 )
 
 func TestReviewerClaimLifecyclePreflightRepairAndReplay(t *testing.T) {
+	t.Parallel()
 	shell := testhelpers.ResolveBashForScripts(t)
 	f := newAssignmentPreflightFixture(t, models.TaskStatusReadyForReview)
 	authority := models.AgentAuthority{ID: "code-reviewer-1", Generation: lifecycleGenerationA}
@@ -100,6 +101,7 @@ func TestReviewerClaimLifecyclePreflightRepairAndReplay(t *testing.T) {
 }
 
 func TestReviewerClaimLifecyclePreflightRejectsGenerationTurnover(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusReadyForReview)
 	authority := models.AgentAuthority{ID: "code-reviewer-1", Generation: lifecycleGenerationA}
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})

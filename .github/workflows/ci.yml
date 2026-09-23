@@ -2,6 +2,11 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      windows_dev_drive:
+        description: "Run the Windows test shards on a Dev Drive (ReFS VHDX) for an A/B timing comparison"
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -48,6 +53,13 @@ jobs:
       - name: Build
         run: make build
 
+      # Vet the Windows build here rather than on the 2-vCPU Windows runner.
+      # Cross-compiled packages use CGO_ENABLED=0, matching the Windows job,
+      # which has no C toolchain in use.
+      - name: Vet for Windows
+        if: matrix.os == 'ubuntu-latest'
+        run: GOOS=windows go vet ./...
+
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v4
@@ -57,12 +69,39 @@ jobs:
           # Requires CODECOV_TOKEN secret — configure in repo settings
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  test-windows:
-    name: Test (windows)
+  # Windows tests run as a matrix of shards; the "Test (windows)" job below
+  # aggregates them. scripts/ci/testshard partitions the work from
+  # scripts/ci/testshard/windows-weights.json (estimated Windows seconds):
+  #   ops  - internal/ops top-level tests (~870s serial) as 4 weighted
+  #          contiguous name ranges of ~217s each;
+  #   rest - every other package (~1190s, run 2 at a time) as 3 LPT bins of
+  #          ~450s each, bounded by agent/integration/commands at 210-260s.
+  # With setup + compilation (~2-4 min) each shard targets <10 minutes.
+  # Update the shard counts here only; `total` must match the entries listed.
+  test-windows-shard:
+    name: Test (windows, ${{ matrix.shard }})
     runs-on: windows-latest
-    # The ops package has a pending stdio-handle issue tracked in TECH_DEBT.md;
-    # bound the job while leaving headroom for the 30-minute package timeout.
-    timeout-minutes: 90
+    # go test -timeout is 30m; the pending ops stdio-handle issue
+    # (TECH_DEBT.md) can outlive it, so the test step is bounded at 35m and
+    # the job leaves headroom for setup, artifact upload, and cache save.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { shard: ops-1, group: ops, index: 1, total: 4 }
+          - { shard: ops-2, group: ops, index: 2, total: 4 }
+          - { shard: ops-3, group: ops, index: 3, total: 4 }
+          - { shard: ops-4, group: ops, index: 4, total: 4 }
+          - { shard: rest-1, group: rest, index: 1, total: 3 }
+          - { shard: rest-2, group: rest, index: 2, total: 3 }
+          - { shard: rest-3, group: rest, index: 3, total: 3, build: true }
+    env:
+      SHARD: ${{ matrix.shard }}
+      SHARD_GROUP: ${{ matrix.group }}
+      SHARD_INDEX: ${{ matrix.index }}
+      SHARD_TOTAL: ${{ matrix.total }}
+      DEV_DRIVE_ENABLED: ${{ inputs.windows_dev_drive == true }}
     defaults:
       run:
         # Git Bash. The hooks liza deploys are POSIX shell, and the tests that
@@ -76,11 +115,73 @@ jobs:
         # shebang. Pin it before anything is written to disk.
         run: git config --global core.autocrlf false
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      # Opt-in A/B (workflow_dispatch only): mount a Dev Drive at the same
+      # folder the Go caches use, so both arms restore the same cache entry.
+      - name: Set up Dev Drive
+        if: inputs.windows_dev_drive
+        uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
+        with:
+          drive-size: 12GB
+          drive-format: ReFS
+          mount-path: ${{ runner.temp }}\gowork
+          trusted-dev-drive: true
+
+      - name: Configure Go directories
+        run: |
+          mkdir -p "$RUNNER_TEMP/gowork/go-build" "$RUNNER_TEMP/gowork/gomod" "$RUNNER_TEMP/gowork/tmp" "$RUNNER_TEMP/shard"
+          win() { cygpath -w "$RUNNER_TEMP/$1"; }
+          {
+            printf 'GOCACHE=%s\n' "$(win gowork/go-build)"
+            printf 'GOMODCACHE=%s\n' "$(win gowork/gomod)"
+            printf 'SHARD_DIR=%s\n' "$(win shard)"
+            printf 'TESTSHARD=%s\n' "$(win testshard.exe)"
+            if [ "$DEV_DRIVE_ENABLED" = true ]; then
+              printf 'GOTMPDIR=%s\n' "$(win gowork/tmp)"
+              printf 'TEMP=%s\n' "$(win gowork/tmp)"
+              printf 'TMP=%s\n' "$(win gowork/tmp)"
+            fi
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          # Replaced by the per-shard cache below: setup-go keys on go.sum
+          # only, so its entry was never refreshed and went stale.
+          cache: false
+
+      - name: Restore Go caches
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}\gowork\go-build
+            ${{ runner.temp }}\gowork\gomod
+          key: go-windows-${{ matrix.shard }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-windows-${{ matrix.shard }}-${{ hashFiles('go.sum') }}-
+            go-windows-${{ matrix.shard }}-
+
+      - name: Report runner resources
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          "NUMBER_OF_PROCESSORS=$env:NUMBER_OF_PROCESSORS GOMAXPROCS=$env:GOMAXPROCS (unset means NumCPU)"
+          foreach ($name in 'TEMP', 'TMP', 'GOTMPDIR', 'GOCACHE', 'GOMODCACHE', 'GITHUB_WORKSPACE') {
+            $path = [Environment]::GetEnvironmentVariable($name)
+            if (-not $path) { "$name=(unset)"; continue }
+            $vol = Get-Volume -FilePath $path -ErrorAction SilentlyContinue
+            if ($vol) {
+              "{0}={1} -> {2} ({3:N1} GB free of {4:N1} GB)" -f $name, $path, $vol.FileSystemType, ($vol.SizeRemaining / 1GB), ($vol.Size / 1GB)
+            } else {
+              "$name=$path -> (volume not resolved)"
+            }
+          }
+          fsutil devdrv query $env:GOCACHE
+          $global:LASTEXITCODE = 0
 
       # Executes the pi init-gate extension (TypeScript) in its tests; node
       # 24 strips types natively.
@@ -89,16 +190,98 @@ jobs:
           node-version: '24'
 
       # The Makefile targets are not reused here. Linux and macOS already cover
-      # the Python pre-commit hooks, while this job answers the narrower native
-      # Windows questions: does it build, does it vet, do the tests pass.
+      # the Python pre-commit hooks and vet (including GOOS=windows vet in the
+      # ubuntu Test job), while this job answers the narrower native Windows
+      # questions: does it build and do the tests pass.
       - name: Sync embedded artifacts
         run: go run ./internal/brandrender/cmd/sync-embedded --repo-root .
 
-      - name: Vet
-        run: go vet ./...
+      - name: Plan shard
+        run: |
+          go build -o "$TESTSHARD" ./scripts/ci/testshard
+          nproc
+          "$TESTSHARD" sysinfo
+          if [ "$SHARD_GROUP" = ops ]; then
+            go test -list . ./internal/ops > "$SHARD_DIR/list.txt"
+          else
+            go list ./... > "$SHARD_DIR/list.txt"
+          fi
+          # Fails unless the full partition assigns every listed test or
+          # package to exactly one shard and this shard's -run pattern selects
+          # exactly its own names.
+          "$TESTSHARD" plan -group "$SHARD_GROUP" -shards "$SHARD_TOTAL" -index "$SHARD_INDEX" \
+            -weights scripts/ci/testshard/windows-weights.json -list "$SHARD_DIR/list.txt" -out "$SHARD_DIR"
 
       - name: Test
-        run: go test -timeout 30m ./...
+        timeout-minutes: 35
+        run: |
+          mapfile -t args < "$SHARD_DIR/args.txt"
+          # -count=1: a restored GOCACHE must never replay cached results.
+          go test -json -count=1 -timeout 30m "${args[@]}" | tee "$SHARD_DIR/test.json" | "$TESTSHARD" fmt
+
+      - name: Summarize timings
+        if: always()
+        run: |
+          if [ -s "$SHARD_DIR/test.json" ]; then
+            "$TESTSHARD" summary -title "Windows $SHARD" "$SHARD_DIR/test.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-test-${{ matrix.shard }}
+          path: ${{ runner.temp }}\shard
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Build
+        if: matrix.build
         run: go build -o liza.exe ./cmd/liza
+
+      - name: Save Go caches
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}\gowork\go-build
+            ${{ runner.temp }}\gowork\gomod
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+  test-windows:
+    name: Test (windows)
+    if: always()
+    needs: test-windows-shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download shard results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: windows-test-*
+          path: ${{ runner.temp }}/shards
+
+      # Proves from the shards' go test -json streams that every listed ops
+      # test and every package ran exactly once, in its assigned shard.
+      - name: Reconcile coverage
+        run: go run ./scripts/ci/testshard reconcile -dir "$RUNNER_TEMP/shards"
+
+      - name: Summarize timings
+        if: always()
+        run: go run ./scripts/ci/testshard summary -title "Windows tests (all shards)" "$RUNNER_TEMP/shards" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require every shard to pass
+        env:
+          SHARDS_RESULT: ${{ needs.test-windows-shard.result }}
+        run: |
+          echo "Windows shards: $SHARDS_RESULT"
+          test "$SHARDS_RESULT" = success

@@ -74,6 +74,7 @@ func requireClaimAcceptanceError(t *testing.T, err error, taskID string) {
 }
 
 func TestAcceptanceLifecycleClaimAdoptsSourceAndReclaimCannotDowngrade(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	resetForClaim := func(state *models.State) error {
 		task := state.FindTask(taskID)
@@ -116,6 +117,7 @@ func TestAcceptanceLifecycleClaimAdoptsSourceAndReclaimCannotDowngrade(t *testin
 }
 
 func TestAcceptanceLifecycleSubmissionReceipt(t *testing.T) {
+	t.Parallel()
 	for _, advanceIntegration := range []bool{false, true} {
 		name := "current integration"
 		if advanceIntegration {
@@ -161,6 +163,7 @@ func TestAcceptanceLifecycleSubmissionReceipt(t *testing.T) {
 }
 
 func TestAcceptanceLifecycleReviewerRefusesInvalidReceipt(t *testing.T) {
+	t.Parallel()
 	for _, missing := range []bool{true, false} {
 		name := "stale"
 		if missing {
@@ -195,6 +198,7 @@ func TestAcceptanceLifecycleReviewerRefusesInvalidReceipt(t *testing.T) {
 }
 
 func TestAcceptanceLifecycleSameHEADRepair(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
 		t.Fatal(err)
@@ -259,6 +263,7 @@ func TestAcceptanceLifecycleFailedSameHEADRepairIsAtomic(t *testing.T) {
 }
 
 func TestAcceptanceLifecycleReturningReviewerRefusalIsAtomic(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
 		t.Fatal(err)
@@ -348,6 +353,7 @@ func TestAcceptanceLifecycleWaitingReviewerRefusalRestoresOwnership(t *testing.T
 }
 
 func TestAcceptanceLifecycleCleanupPreservesAdoption(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
 		t.Fatal(err)
@@ -363,6 +369,7 @@ func TestAcceptanceLifecycleCleanupPreservesAdoption(t *testing.T) {
 }
 
 func TestAcceptanceLifecycleReviewerCandidateSelection(t *testing.T) {
+	t.Parallel()
 	for _, allInvalid := range []bool{false, true} {
 		name := "healthy candidate survives invalid higher priority"
 		if allInvalid {

@@ -11,6 +11,7 @@ import (
 )
 
 func TestAcceptanceSubmissionPreservesIndentedOutput(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	wt := git.New(root).GetWorktreePath(taskID)
 	const output = "  Determining projects to restore...\nTest run for assembly\nPassed!\n"

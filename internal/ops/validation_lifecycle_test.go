@@ -10,6 +10,7 @@ import (
 )
 
 func TestValidationPreflightPreservesPreparationUntilContractChanges(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	var request LifecycleRequest
 	if err := f.bb.Modify(func(state *models.State) error {
@@ -64,6 +65,7 @@ func TestValidationPreflightPreservesPreparationUntilContractChanges(t *testing.
 }
 
 func TestReleaseValidationOwnershipRetiresOnlyReleasedTaskPreparation(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"doer", "reviewer", "unowned task"} {
 		t.Run(scenario, func(t *testing.T) {
 			status, releasedStatus := models.TaskStatusImplementing, models.TaskStatusReady

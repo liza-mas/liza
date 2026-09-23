@@ -42,11 +42,17 @@ func EnsurePrivateExclude(worktreeRoot string, entries ...string) error {
 	}
 	excludePath := filepath.Join(gitDir, "info", "exclude")
 
-	if err := ensureWorktreeExcludeConfig(root, excludePath); err != nil {
+	alreadyConfigured, err := ensureWorktreeExcludeConfig(root, excludePath)
+	if err != nil {
 		return err
 	}
 	if err := appendMissingEntries(excludePath, normalizedEntries); err != nil {
 		return err
+	}
+	// The worktree value was just read as exactly this path; rewriting it would
+	// be a no-op that still takes the config lock and spawns git.
+	if alreadyConfigured {
+		return nil
 	}
 	if err := setWorktreeExcludeConfig(root, excludePath); err != nil {
 		return err
@@ -94,28 +100,31 @@ func resolveWorktree(worktreeRoot string) (string, string, error) {
 	return root, filepath.Clean(gitDir), nil
 }
 
-func ensureWorktreeExcludeConfig(worktreeRoot, excludePath string) error {
+// ensureWorktreeExcludeConfig verifies no conflicting exclude file is
+// configured and reports whether the worktree value already equals
+// excludePath exactly, in which case the caller need not write it again.
+func ensureWorktreeExcludeConfig(worktreeRoot, excludePath string) (bool, error) {
 	if err := ensureNoEffectiveExcludeConflict(worktreeRoot, excludePath); err != nil {
-		return err
+		return false, err
 	}
 
 	output, err := gitConfigWrite(worktreeRoot, "config", "extensions.worktreeConfig", "true")
 	if err != nil {
-		return fmt.Errorf("enable worktree config for private exclude: %w%s", err, outputSuffix(string(output)))
+		return false, fmt.Errorf("enable worktree config for private exclude: %w%s", err, outputSuffix(string(output)))
 	}
 
 	output, err = gitenv.Output(worktreeRoot, "config", "--worktree", "--get", "core.excludesFile")
 	if err == nil {
 		current := strings.TrimSpace(string(output))
 		if current != "" && filepath.Clean(current) != filepath.Clean(excludePath) {
-			return fmt.Errorf("worktree core.excludesFile already configured as %s, want %s", quotePath(current), quotePath(excludePath))
+			return false, fmt.Errorf("worktree core.excludesFile already configured as %s, want %s", quotePath(current), quotePath(excludePath))
 		}
-		return nil
+		return current == excludePath, nil
 	}
 	if !gitConfigUnset(err) {
-		return fmt.Errorf("inspect worktree core.excludesFile: %w", err)
+		return false, fmt.Errorf("inspect worktree core.excludesFile: %w", err)
 	}
-	return nil
+	return false, nil
 }
 
 func ensureNoEffectiveExcludeConflict(worktreeRoot, excludePath string) error {

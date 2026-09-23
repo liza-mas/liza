@@ -80,6 +80,7 @@ func setupAcceptanceScenario(t *testing.T) (string, string, string, string, *db.
 
 // A passing suite is insufficient when a reviewed obligation has no proof map.
 func TestAcceptanceEvidence_GreenIncompleteSubmission(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := setupAcceptanceScenario(t)
 	wt := git.New(root).GetWorktreePath(taskID)
 

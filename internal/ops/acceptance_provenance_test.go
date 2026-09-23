@@ -66,6 +66,7 @@ func requireAcceptancePreparationRetired(t *testing.T, bb *db.Blackboard, before
 }
 
 func TestAcceptanceProvenance_PlanningScopePreservesPriorAdoption(t *testing.T) {
+	t.Parallel()
 	for _, adopted := range []bool{false, true} {
 		name := "planning task without adoption"
 		if adopted {
@@ -110,6 +111,7 @@ func TestAcceptanceProvenance_PlanningScopePreservesPriorAdoption(t *testing.T) 
 }
 
 func TestAcceptanceProvenance_RequiresIndependentPlanningAllocation(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		mutate func(parent, child *models.Task)
@@ -161,6 +163,7 @@ func TestAcceptanceProvenance_RequiresIndependentPlanningAllocation(t *testing.T
 }
 
 func TestAcceptanceProvenance_ParentSubmissionSurvivesOwnershipRelease(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		mutate func(*models.Task)
@@ -239,6 +242,7 @@ func TestAcceptanceProvenance_ParentSubmissionSurvivesOwnershipRelease(t *testin
 }
 
 func TestAcceptanceProvenance_RejectsDisconnectedParentBase(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 	parent := readAcceptanceState(t, bb).FindTask("acceptance-parent")
 	// Reuse the actual base tree, including pinned requirements, but create an
@@ -255,6 +259,7 @@ func TestAcceptanceProvenance_RejectsDisconnectedParentBase(t *testing.T) {
 }
 
 func TestAcceptanceProvenance_CarrierMustRemainReviewed(t *testing.T) {
+	t.Parallel()
 	for _, location := range []string{"candidate", "integration", "adopted marker removed"} {
 		t.Run(location, func(t *testing.T) {
 			root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
@@ -297,6 +302,7 @@ func TestAcceptanceProvenance_CarrierMustRemainReviewed(t *testing.T) {
 }
 
 func TestAcceptanceProvenance_ArtifactsMustBeRegularCommittedFiles(t *testing.T) {
+	t.Parallel()
 	for _, artifact := range []string{"manifest", "assertion file"} {
 		for _, change := range []string{"missing", "symlink"} {
 			t.Run(artifact+" "+change, func(t *testing.T) {
@@ -325,6 +331,7 @@ func TestAcceptanceProvenance_ArtifactsMustBeRegularCommittedFiles(t *testing.T)
 }
 
 func TestAcceptanceProvenance_RejectsDirtyCandidate(t *testing.T) {
+	t.Parallel()
 	for _, dirty := range []string{"untracked", "unstaged", "staged"} {
 		t.Run(dirty, func(t *testing.T) {
 			root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
@@ -345,6 +352,7 @@ func TestAcceptanceProvenance_RejectsDirtyCandidate(t *testing.T) {
 }
 
 func TestAcceptanceProvenance_ExecutionCannotChangeCandidate(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, script, field string }{
 		{"failed command", "printf 'assertion failed\\n'\nexit 7\n", "acceptance.execution"},
 		{"creates untracked file", "printf 'generated\\n' > unexpected.txt\n", "acceptance.worktree"},
@@ -475,6 +483,7 @@ func TestAcceptanceProvenance_ConcurrentGenerationChange(t *testing.T) {
 }
 
 func TestAcceptanceProvenance_NonExecutableProof(t *testing.T) {
+	t.Parallel()
 	for _, proof := range []string{"approved", "unapproved", "missing pinned heading"} {
 		t.Run(proof, func(t *testing.T) {
 			root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
@@ -540,6 +549,7 @@ func TestAcceptanceProvenance_NonExecutableProof(t *testing.T) {
 // whole blob stranded every child of the plan until it was re-reviewed, and
 // each repin created the next instance.
 func TestAcceptanceProvenance_UnrelatedSectionEditKeepsAllocation(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
 	plan, err := os.ReadFile(planPath)
@@ -580,6 +590,7 @@ func TestAcceptanceProvenance_UnrelatedSectionEditKeepsAllocation(t *testing.T) 
 
 // The allocation section itself is still immutable after review.
 func TestAcceptanceProvenance_ReviewedSectionEditRefusesAllocation(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
 	plan, err := os.ReadFile(planPath)
@@ -602,6 +613,7 @@ func TestAcceptanceProvenance_ReviewedSectionEditRefusesAllocation(t *testing.T)
 // A carrier reference naming no section keeps whole-file semantics: there is no
 // narrower span a verdict could have covered.
 func TestAcceptanceProvenance_HeadinglessRefUsesWholeFile(t *testing.T) {
+	t.Parallel()
 	if _, ok := carrierSpan("# Plan\n\n## Task 1\nbody\n", ""); !ok {
 		t.Fatal("carrierSpan with no heading must succeed")
 	}
@@ -622,6 +634,7 @@ func TestAcceptanceProvenance_HeadinglessRefUsesWholeFile(t *testing.T) {
 // check an edit there could redirect an approved reference at material no
 // reviewer saw while every declared ID stayed intact.
 func TestAcceptanceProvenance_RepointedApprovedProofRefusesAllocation(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		rewrite func(plan, goalHeading string) string
@@ -700,6 +713,7 @@ func TestAcceptanceProvenance_RepointedApprovedProofRefusesAllocation(t *testing
 // stranding this change removes at claim time reappears at reviewer assignment
 // if the stored identity still means "the whole file".
 func TestAcceptanceProvenance_AdoptedChildSurvivesUnrelatedSectionEdit(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 
 	// Adopt the source the ordinary way.
@@ -741,6 +755,7 @@ func TestAcceptanceProvenance_AdoptedChildSurvivesUnrelatedSectionEdit(t *testin
 // boundary must agree on what identity means, or the child is refused for an
 // edit it did not make.
 func TestAcceptanceProvenance_AdoptedChildResubmitsAfterRebasingPastRepin(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 
 	if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
@@ -794,6 +809,7 @@ func TestAcceptanceProvenance_AdoptedChildResubmitsAfterRebasingPastRepin(t *tes
 // other shape is accepted at write time but rejected by the next validation —
 // including the one inside the re-claim-after-rejection transaction.
 func TestAcceptanceProvenance_SpanIdentityIsAGitObjectID(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, root)
 
@@ -823,6 +839,7 @@ func TestAcceptanceProvenance_SpanIdentityIsAGitObjectID(t *testing.T) {
 // child of the plan with no supported way to re-review a merged parent, so the
 // drift is left to reference freshness at prompt build. See D13.
 func TestAcceptanceProvenance_ObligationReferenceDriftWithoutProofsIsAccepted(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 
 	planPath := filepath.Join(root, "specs", "acceptance-plan.md")
@@ -947,6 +964,7 @@ func submitProofDriftCandidate(t *testing.T, root, taskID, agentID string) error
 }
 
 func TestAcceptanceProvenance_ProofDriftDiagnosticDistinguishesMissingAllocation(t *testing.T) {
+	t.Parallel()
 	const allocationRefusal = "requires allocation by a direct independently approved merged planning parent"
 	for _, allocates := range []bool{true, false} {
 		name := "missing allocation"
@@ -997,6 +1015,7 @@ func TestAcceptanceProvenance_ProofDriftDiagnosticDistinguishesMissingAllocation
 // with no asserted proof, an approved proof is compared by content and fails
 // closed when the content moves.
 func TestAcceptanceProvenance_ApprovedProofDriftRefusesWithoutReaffirmation(t *testing.T) {
+	t.Parallel()
 	root, taskID, agentID, _ := proofDriftScenario(t)
 
 	err := submitProofDriftCandidate(t, root, taskID, agentID)
@@ -1011,6 +1030,7 @@ func TestAcceptanceProvenance_ApprovedProofDriftRefusesWithoutReaffirmation(t *t
 // An authorized re-affirmation of this exact transition restores the
 // allocation, and nothing else about the task changes.
 func TestAcceptanceProvenance_ReaffirmedProofRestoresAllocation(t *testing.T) {
+	t.Parallel()
 	root, taskID, agentID, bb := proofDriftScenario(t)
 	if err := submitProofDriftCandidate(t, root, taskID, agentID); err == nil {
 		t.Fatal("fixture must refuse before the re-affirmation")
@@ -1032,6 +1052,7 @@ func TestAcceptanceProvenance_ReaffirmedProofRestoresAllocation(t *testing.T) {
 // The property that keeps this a decision rather than a waiver: the record
 // covers one transition, so a further change to the same section refuses again.
 func TestAcceptanceProvenance_ReaffirmationDoesNotCoverALaterChange(t *testing.T) {
+	t.Parallel()
 	root, taskID, agentID, bb := proofDriftScenario(t)
 	recordTestReaffirmation(t, root, bb, taskID, "identity")
 	if err := submitProofDriftCandidate(t, root, taskID, agentID); err != nil {
@@ -1111,6 +1132,7 @@ func recordTestReaffirmation(t *testing.T, root string, bb *db.Blackboard, taskI
 // The refusals that keep this from becoming a general waiver: it decides only
 // cases where an approved proof actually drifted.
 func TestReaffirmProof_RefusesWhenThereIsNothingToDecide(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, bb := proofDriftScenario(t)
 	const orchestratorID = "orchestrator-1"
 	agent := testhelpers.RegisteredTestAgent(models.RoleOrchestrator)
@@ -1154,6 +1176,7 @@ func TestReaffirmProof_RefusesWhenThereIsNothingToDecide(t *testing.T) {
 
 // Authority is not advisory: an unregistered caller cannot record a decision.
 func TestReaffirmProof_RequiresOrchestratorAuthority(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, _ := proofDriftScenario(t)
 
 	_, err := ReaffirmProof(root, taskID, "identity", "", "because",
@@ -1167,6 +1190,7 @@ func TestReaffirmProof_RequiresOrchestratorAuthority(t *testing.T) {
 // orchestrator inspects the content, recording A->C would claim someone
 // authorized content nobody looked at.
 func TestReaffirmProof_RefusesWhenIntegrationMovedSinceInspection(t *testing.T) {
+	t.Parallel()
 	root, taskID, agentID, bb := proofDriftScenario(t)
 	const orchestratorID = "orchestrator-1"
 	agent := testhelpers.RegisteredTestAgent(models.RoleOrchestrator)
@@ -1198,6 +1222,7 @@ func TestReaffirmProof_RefusesWhenIntegrationMovedSinceInspection(t *testing.T) 
 // planning parent that allocates nothing must still be re-affirmed against the
 // parent whose allocation is actually being refused.
 func TestReaffirmProof_SelectsTheParentThatAllocatesTheTask(t *testing.T) {
+	t.Parallel()
 	root, taskID, agentID, bb := proofDriftScenario(t)
 
 	// A decoy parent, listed first, that allocates no output for this task.
@@ -1232,6 +1257,7 @@ func TestReaffirmProof_SelectsTheParentThatAllocatesTheTask(t *testing.T) {
 // adopted, a task carrying its allocation on spec_ref must still be able to
 // recover.
 func TestReaffirmProof_UsesSpecRefWhenPlanRefIsAbsent(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, bb := proofDriftScenario(t)
 
 	if err := bb.Modify(func(state *models.State) error {

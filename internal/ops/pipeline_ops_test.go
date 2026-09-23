@@ -22,8 +22,10 @@ import (
 
 func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 	t.Run("stale clean evidence rejects every completion-capable path before progression mutation", func(t *testing.T) {
+		t.Parallel()
 		for _, path := range effectiveCompletionPaths() {
 			t.Run(path.name, func(t *testing.T) {
+				t.Parallel()
 				fixture := newEffectiveCompletionFixture(t, false)
 				path.prepare(t, fixture)
 
@@ -35,8 +37,10 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 	})
 
 	t.Run("pending replacement generation rejects every completion-capable path", func(t *testing.T) {
+		t.Parallel()
 		for _, path := range effectiveCompletionPaths() {
 			t.Run(path.name, func(t *testing.T) {
+				t.Parallel()
 				fixture := newEffectiveCompletionFixture(t, true)
 				fixture.installPendingReplacement(t)
 				path.prepare(t, fixture)
@@ -49,8 +53,10 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 	})
 
 	t.Run("current clean evidence permits every completion-capable path", func(t *testing.T) {
+		t.Parallel()
 		for _, path := range effectiveCompletionPaths() {
 			t.Run(path.name, func(t *testing.T) {
+				t.Parallel()
 				fixture := newEffectiveCompletionFixture(t, true)
 				path.prepare(t, fixture)
 
@@ -63,6 +69,7 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 	})
 
 	t.Run("settled empty cohort cannot bypass global closure", func(t *testing.T) {
+		t.Parallel()
 		fixture := newEffectiveCompletionFixture(t, true)
 		fixture.mutateState(t, func(state *models.State) {
 			state.Goal.Integration = &models.IntegrationLifecycle{
@@ -79,7 +86,9 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 	})
 
 	t.Run("nil cohort preserves pre-integration handoffs but rejects explicit completion", func(t *testing.T) {
+		t.Parallel()
 		t.Run("explicit sprint complete checkpoint rejects", func(t *testing.T) {
+			t.Parallel()
 			fixture := newPreIntegrationCompletionFixture(t)
 			_, err := SprintCheckpoint(fixture.projectRoot, models.CheckpointTriggerSprintComplete)
 			requireEffectiveCompletionPrecondition(t, err)
@@ -89,6 +98,7 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 		})
 
 		t.Run("ordinary checkpoint resume can complete the phase", func(t *testing.T) {
+			t.Parallel()
 			fixture := newPreIntegrationCompletionFixture(t)
 			fixture.mutateState(t, func(state *models.State) { state.Sprint.Status = models.SprintStatusCheckpoint })
 			if _, err := Resume(fixture.projectRoot, "tester"); err != nil {
@@ -100,6 +110,7 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 		})
 
 		t.Run("completed sprint resume carries unconsumed planning output", func(t *testing.T) {
+			t.Parallel()
 			fixture := newPreIntegrationCompletionFixture(t)
 			fixture.mutateState(t, func(state *models.State) { state.Sprint.Status = models.SprintStatusCompleted })
 			if _, err := Resume(fixture.projectRoot, "tester"); err != nil {
@@ -111,6 +122,7 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 		})
 
 		t.Run("direct advance carries unconsumed planning output", func(t *testing.T) {
+			t.Parallel()
 			fixture := newPreIntegrationCompletionFixture(t)
 			fixture.mutateState(t, func(state *models.State) { state.Sprint.Status = models.SprintStatusCheckpoint })
 			if _, err := AdvanceSprint(fixture.projectRoot); err != nil {
@@ -122,6 +134,7 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 		})
 
 		t.Run("manual proceed creates downstream work", func(t *testing.T) {
+			t.Parallel()
 			fixture := newPreIntegrationCompletionFixture(t)
 			fixture.mutateState(t, func(state *models.State) { state.Sprint.Status = models.SprintStatusCompleted })
 			if _, err := Proceed(fixture.projectRoot, fixture.planID, "code-plan-to-coding"); err != nil {
@@ -133,6 +146,7 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 		})
 
 		t.Run("transition checkpoint resumes without finality", func(t *testing.T) {
+			t.Parallel()
 			fixture := newPreIntegrationCompletionFixture(t)
 			fixture.mutateState(t, func(state *models.State) {
 				state.Sprint.Status = models.SprintStatusCheckpoint
@@ -148,8 +162,10 @@ func TestEffectiveIntegrationCompletionGate(t *testing.T) {
 	})
 
 	t.Run("public integration mutation immediately invalidates resume and advance", func(t *testing.T) {
+		t.Parallel()
 		for _, path := range []effectiveCompletionPath{effectiveCompletionPaths()[1], effectiveCompletionPaths()[3]} {
 			t.Run(path.name, func(t *testing.T) {
+				t.Parallel()
 				fixture := newEffectiveCompletionFixture(t, true)
 				taskID, agentID := fixture.installPublicIntegrationMutation(t)
 				path.prepare(t, fixture)
@@ -708,6 +724,7 @@ func setupPipelineTest(t *testing.T) (string, string) {
 }
 
 func TestLoadDetectionContext_PipelineGoal(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 	ctx, err := LoadDetectionContext(tmpDir)
 	if err != nil {
@@ -722,6 +739,7 @@ func TestLoadDetectionContext_PipelineGoal(t *testing.T) {
 }
 
 func TestLoadDetectionContext_NoPipeline(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.SetupLizaDir(t, tmpDir)
@@ -733,6 +751,7 @@ func TestLoadDetectionContext_NoPipeline(t *testing.T) {
 }
 
 func TestLoadPhaseHandoffDetectionContext_NoPipelineUsesLegacyPlanning(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.SetupLizaDir(t, tmpDir)
@@ -753,6 +772,7 @@ func TestLoadPhaseHandoffDetectionContext_NoPipelineUsesLegacyPlanning(t *testin
 }
 
 func TestLoadPhaseHandoffDetectionContext_MalformedPipelineFailsClosed(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 	pipelinePath := filepath.Join(tmpDir, paths.ProjectDirName(), "pipeline.yaml")
 	if err := os.WriteFile(pipelinePath, []byte("pipeline: [not-valid"), 0644); err != nil {
@@ -769,6 +789,7 @@ func TestLoadPhaseHandoffDetectionContext_MalformedPipelineFailsClosed(t *testin
 }
 
 func TestLoadResolver_PipelineGoal(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 
 	resolver, _, err := loadResolver(tmpDir)
@@ -781,6 +802,7 @@ func TestLoadResolver_PipelineGoal(t *testing.T) {
 }
 
 func TestBuildPipelineTransitions_BlockedCanReturnToExecutingStatuses(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 
 	resolver, _, err := loadResolver(tmpDir)
@@ -801,6 +823,7 @@ func TestBuildPipelineTransitions_BlockedCanReturnToExecutingStatuses(t *testing
 }
 
 func TestBuildPipelineTransitions_AllowsOperatorCancelBeforeApproval(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 
 	resolver, _, err := loadResolver(tmpDir)
@@ -826,6 +849,7 @@ func TestBuildPipelineTransitions_AllowsOperatorCancelBeforeApproval(t *testing.
 }
 
 func TestBuildPipelineTransitions_DoesNotCancelApprovedState(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 
 	resolver, _, err := loadResolver(tmpDir)
@@ -849,6 +873,7 @@ func testContainsStatus(values []models.TaskStatus, want models.TaskStatus) bool
 }
 
 func TestTransitionSourcePairs_PipelineGoal(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 
 	pairs, err := TransitionSourcePairs(tmpDir)
@@ -866,6 +891,7 @@ func TestTransitionSourcePairs_PipelineGoal(t *testing.T) {
 }
 
 func TestIsPlanningPair(t *testing.T) {
+	t.Parallel()
 	pairs := map[string]bool{"code-planning-pair": true, "epic-planning-pair": true}
 
 	// With explicit pairs map
@@ -889,6 +915,7 @@ func TestIsPlanningPair(t *testing.T) {
 }
 
 func TestTransitionSourcePairs_NoPipeline(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.SetupLizaDir(t, tmpDir)
@@ -901,6 +928,7 @@ func TestTransitionSourcePairs_NoPipeline(t *testing.T) {
 }
 
 func TestLoadResolver_NoPipeline(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	testhelpers.SetupLizaDir(t, tmpDir)
@@ -915,6 +943,7 @@ func TestLoadResolver_NoPipeline(t *testing.T) {
 // --- ClaimTask pipeline tests ---
 
 func TestClaimTask_PipelineCodingPair(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	now := time.Now().UTC()
@@ -962,6 +991,7 @@ func TestClaimTask_PipelineCodingPair(t *testing.T) {
 }
 
 func TestClaimTask_PipelineCodePlanningPair(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	now := time.Now().UTC()
@@ -1003,6 +1033,7 @@ func TestClaimTask_PipelineCodePlanningPair(t *testing.T) {
 }
 
 func TestClaimTask_NoPipelineReturnsError(t *testing.T) {
+	t.Parallel()
 	// No pipeline.yaml → should fail now that pipeline is mandatory
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
@@ -1024,6 +1055,7 @@ func TestClaimTask_NoPipelineReturnsError(t *testing.T) {
 }
 
 func TestClaimTask_PipelineRejectedReclaim(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	now := time.Now().UTC()
@@ -1073,6 +1105,7 @@ func TestClaimTask_PipelineRejectedReclaim(t *testing.T) {
 }
 
 func TestClaimTask_PipelineRejectedIterationLimit(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	now := time.Now().UTC()
@@ -1131,6 +1164,7 @@ func TestClaimTask_PipelineRejectedIterationLimit(t *testing.T) {
 // --- AddTask pipeline tests ---
 
 func TestInitialTaskStatus_PipelineGoal(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 
 	resolver, _, err := loadResolver(tmpDir)
@@ -1158,6 +1192,7 @@ func TestInitialTaskStatus_PipelineGoal(t *testing.T) {
 }
 
 func TestInitialTaskStatus_UnknownRolePair(t *testing.T) {
+	t.Parallel()
 	tmpDir, _ := setupPipelineTest(t)
 
 	resolver, _, err := loadResolver(tmpDir)
@@ -1174,6 +1209,7 @@ func TestInitialTaskStatus_UnknownRolePair(t *testing.T) {
 // --- SubmitForReview pipeline tests ---
 
 func TestSubmitForReview_PipelineCodingPairTransition(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	// Create a real git worktree so SubmitForReview can complete the full flow
@@ -1259,6 +1295,7 @@ func TestSubmitForReview_PipelineCodingPairTransition(t *testing.T) {
 // --- SubmitVerdict pipeline tests ---
 
 func TestSubmitVerdict_PipelineApproved(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	now := time.Now().UTC()
@@ -1315,6 +1352,7 @@ func TestSubmitVerdict_PipelineApproved(t *testing.T) {
 }
 
 func TestSubmitVerdict_PipelineCodingPairApproved(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	now := time.Now().UTC()
@@ -1373,6 +1411,7 @@ func TestSubmitVerdict_PipelineCodingPairApproved(t *testing.T) {
 // --- ResumeHandoff pipeline tests ---
 
 func TestResumeHandoff_PipelineExecutingState(t *testing.T) {
+	t.Parallel()
 	tmpDir, stateFile := setupPipelineTest(t)
 
 	now := time.Now().UTC()

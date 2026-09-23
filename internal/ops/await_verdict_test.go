@@ -15,6 +15,7 @@ import (
 )
 
 func TestAwaitVerdict_EmptyTaskID(t *testing.T) {
+	t.Parallel()
 	_, err := AwaitVerdict(context.Background(), "/nonexistent", "", "coder-1", 30*time.Second)
 	testhelpers.RequireErrorContains(t, err, "task ID is required")
 
@@ -25,6 +26,7 @@ func TestAwaitVerdict_EmptyTaskID(t *testing.T) {
 }
 
 func TestAwaitVerdict_EmptyAgentID(t *testing.T) {
+	t.Parallel()
 	_, err := AwaitVerdict(context.Background(), "/nonexistent", "task-1", "", 30*time.Second)
 	testhelpers.RequireErrorContains(t, err, "agent ID is required")
 
@@ -35,6 +37,7 @@ func TestAwaitVerdict_EmptyAgentID(t *testing.T) {
 }
 
 func TestAwaitVerdict_TaskNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -51,6 +54,7 @@ func TestAwaitVerdict_TaskNotFound(t *testing.T) {
 }
 
 func TestAwaitVerdict_WrongStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -76,6 +80,7 @@ func TestAwaitVerdict_WrongStatus(t *testing.T) {
 }
 
 func TestAwaitVerdict_WrongAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -106,6 +111,7 @@ func TestAwaitVerdict_WrongAgent(t *testing.T) {
 }
 
 func TestAwaitVerdict_OwnershipAcquired(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -137,6 +143,7 @@ func TestAwaitVerdict_OwnershipAcquired(t *testing.T) {
 }
 
 func TestAwaitVerdict_ReviewingStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -164,6 +171,7 @@ func TestAwaitVerdict_ReviewingStatus(t *testing.T) {
 }
 
 func TestAwaitVerdict_BudgetExhausted_IterationLimit(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -200,6 +208,7 @@ func TestAwaitVerdict_BudgetExhausted_IterationLimit(t *testing.T) {
 }
 
 func TestAwaitVerdict_BudgetExhausted_ReviewCycleLimit(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -236,6 +245,7 @@ func TestAwaitVerdict_BudgetExhausted_ReviewCycleLimit(t *testing.T) {
 }
 
 func TestAwaitVerdict_BudgetWithinLimits(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -272,6 +282,7 @@ func TestAwaitVerdict_BudgetWithinLimits(t *testing.T) {
 }
 
 func TestAwaitVerdict_Approved(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -343,6 +354,7 @@ func TestAwaitVerdict_Approved(t *testing.T) {
 }
 
 func TestAwaitVerdict_Rejected_SameAttempt(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -517,6 +529,7 @@ func TestAwaitVerdict_Rejected_ObservedByTickWhenWatcherSilent(t *testing.T) {
 }
 
 func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -588,6 +601,7 @@ func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
 }
 
 func TestAwaitVerdict_Terminal(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -657,6 +671,7 @@ func TestAwaitVerdict_Terminal(t *testing.T) {
 }
 
 func TestAwaitVerdict_Timeout(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -776,6 +791,7 @@ func TestAwaitVerdict_DelayedWatcherErrorUsesOriginalDeadline(t *testing.T) {
 }
 
 func TestAwaitVerdict_Aborted(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -830,6 +846,7 @@ func TestAwaitVerdict_Aborted(t *testing.T) {
 }
 
 func TestAwaitVerdict_AlreadyBlocked(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -878,6 +895,7 @@ func TestAwaitVerdict_AlreadyBlocked(t *testing.T) {
 }
 
 func TestAwaitVerdict_AlreadyTerminal(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -915,6 +933,7 @@ func TestAwaitVerdict_AlreadyTerminal(t *testing.T) {
 }
 
 func TestAwaitVerdict_AlreadyApproved(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -958,6 +977,7 @@ func TestAwaitVerdict_AlreadyApproved(t *testing.T) {
 }
 
 func TestAwaitVerdict_AlreadyMergedWithApprovalHistoryStopsWorktreeCommands(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1007,6 +1027,7 @@ func TestAwaitVerdict_AlreadyMergedWithApprovalHistoryStopsWorktreeCommands(t *t
 }
 
 func TestAwaitVerdict_AlreadyBlocked_NonexistentAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1032,6 +1053,7 @@ func TestAwaitVerdict_AlreadyBlocked_NonexistentAgent(t *testing.T) {
 }
 
 func TestAwaitVerdict_AlreadyBlocked_WrongSubmitter(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1061,6 +1083,7 @@ func TestAwaitVerdict_AlreadyBlocked_WrongSubmitter(t *testing.T) {
 }
 
 func TestAwaitVerdict_PartiallyApproved(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1132,6 +1155,7 @@ func TestAwaitVerdict_PartiallyApproved(t *testing.T) {
 }
 
 func TestAwaitVerdict_RaceGuard(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1221,6 +1245,7 @@ func TestAwaitVerdict_RaceGuard(t *testing.T) {
 }
 
 func TestAwaitVerdict_RejectedAlreadyReassigned_ReturnsVerdict(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1295,6 +1320,7 @@ func TestAwaitVerdict_RejectedAlreadyReassigned_ReturnsVerdict(t *testing.T) {
 }
 
 func TestAwaitVerdict_RejectedBeforeLaterSubmission_ReturnsCallerVerdict(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1369,6 +1395,7 @@ func TestAwaitVerdict_RejectedBeforeLaterSubmission_ReturnsCallerVerdict(t *test
 }
 
 func TestAwaitVerdict_RejectedAfterReviewCommitUpdate_ReturnsUpdatedVerdict(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1442,6 +1469,7 @@ func TestAwaitVerdict_RejectedAfterReviewCommitUpdate_ReturnsUpdatedVerdict(t *t
 }
 
 func TestHandleVerdictResult_NonAwaitableStatusRecoversVerdict(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -1550,6 +1578,7 @@ func (*delayedErrorWatcher) Close() error { return nil }
 // command must degrade the agent there too — otherwise this path retries the
 // failing worktree without a bound (ADR-0117).
 func TestAwaitVerdict_RejectedAutoReclaim_PostWorktreeCmdFailureDegradesAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

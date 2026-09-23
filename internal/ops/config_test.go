@@ -18,6 +18,7 @@ import (
 )
 
 func TestSetPostWorktreeCmd(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	initial := testhelpers.CreateValidState()
@@ -64,6 +65,7 @@ func TestSetPostWorktreeCmd(t *testing.T) {
 }
 
 func TestSetPostWorktreeCmdRejectsMalformedInput(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
@@ -78,6 +80,7 @@ func TestSetPostWorktreeCmdRejectsMalformedInput(t *testing.T) {
 }
 
 func TestSetPostWorktreeCmdDoesNotExecute(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
@@ -90,6 +93,7 @@ func TestSetPostWorktreeCmdDoesNotExecute(t *testing.T) {
 }
 
 func TestSetPostWorktreeCmdAuthorityCheckedInsideTransaction(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	state := testhelpers.CreateValidState()
@@ -120,6 +124,7 @@ func TestSetPostWorktreeCmdAuthorityCheckedInsideTransaction(t *testing.T) {
 }
 
 func TestSetPostWorktreeCmdConcurrentWriters(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
@@ -204,6 +209,7 @@ func TestSetPostWorktreeCmdAudit(t *testing.T) {
 }
 
 func TestSetPostWorktreeCmdAfterScaffoldPreparesNextClaim(t *testing.T) {
+	t.Parallel()
 	const scaffold = "config-scaffold"
 	root, statePath := setupMergeTestRepo(t, scaffold, "coder-1")
 	advanceApprovedTaskWithFiles(t, root, statePath, scaffold, map[string]string{

@@ -215,23 +215,15 @@ func GetProjectRootFromDir(dir string) (string, error) {
 		return "", fmt.Errorf("failed to resolve git command dir: %w", err)
 	}
 
-	// Get the toplevel directory
-	toplevelOut, err := gitenv.Output(absGitDir, "rev-parse", "--show-toplevel")
+	toplevel, gitCommonDir, err := gitToplevelAndCommonDir(absGitDir)
 	if err != nil {
-		return "", fmt.Errorf("not a git repository or git command failed: %w", err)
+		return "", err
 	}
-	toplevel := strings.TrimSpace(string(toplevelOut))
 	canonicalToplevel, err := filepath.EvalSymlinks(toplevel)
 	if err != nil {
 		return "", fmt.Errorf("failed to eval toplevel symlinks: %w", err)
 	}
 
-	// Get the common git directory
-	commonDirOut, err := gitenv.Output(absGitDir, "rev-parse", "--git-common-dir")
-	if err != nil {
-		return "", fmt.Errorf("failed to get git common dir: %w", err)
-	}
-	gitCommonDir := strings.TrimSpace(string(commonDirOut))
 	if !filepath.IsAbs(gitCommonDir) {
 		gitCommonDir = filepath.Join(absGitDir, gitCommonDir)
 	}
@@ -258,6 +250,30 @@ func GetProjectRootFromDir(dir string) (string, error) {
 
 	// Regular repo - return toplevel
 	return canonicalToplevel, nil
+}
+
+// gitToplevelAndCommonDir asks git for the work-tree toplevel and the common
+// git directory in one process; rev-parse prints one line per query, in order.
+// A path containing a line break makes that output ambiguous, so any answer
+// that is not exactly two lines falls back to one query per process.
+func gitToplevelAndCommonDir(dir string) (string, string, error) {
+	out, err := gitenv.Output(dir, "rev-parse", "--show-toplevel", "--git-common-dir")
+	if err != nil {
+		return "", "", fmt.Errorf("not a git repository or git command failed: %w", err)
+	}
+	if lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n"); len(lines) == 2 {
+		return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1]), nil
+	}
+
+	toplevelOut, err := gitenv.Output(dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", "", fmt.Errorf("not a git repository or git command failed: %w", err)
+	}
+	commonDirOut, err := gitenv.Output(dir, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get git common dir: %w", err)
+	}
+	return strings.TrimSpace(string(toplevelOut)), strings.TrimSpace(string(commonDirOut)), nil
 }
 
 // IsLizaTaskWorktree reports whether cwd is exactly one task worktree directory

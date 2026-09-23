@@ -15,6 +15,7 @@ import (
 )
 
 func TestResumeOwnedTask_Validation(t *testing.T) {
+	t.Parallel()
 	_, err := ResumeOwnedTask(ResumeOwnedTaskInput{
 		ProjectRoot: "/tmp",
 		AgentID:     "",
@@ -28,6 +29,7 @@ func TestResumeOwnedTask_Validation(t *testing.T) {
 }
 
 func TestResumeOwnedTask_SuccessRepairsRestartedAgentCurrentTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -88,6 +90,7 @@ func TestResumeOwnedTask_SuccessRepairsRestartedAgentCurrentTask(t *testing.T) {
 }
 
 func TestResumeOwnedTask_CodePlannerWithoutCurrentTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -128,6 +131,7 @@ func TestResumeOwnedTask_CodePlannerWithoutCurrentTask(t *testing.T) {
 }
 
 func TestResumeOwnedTask_BlocksMissingWorktreeMetadata(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -156,6 +160,7 @@ func TestResumeOwnedTask_BlocksMissingWorktreeMetadata(t *testing.T) {
 }
 
 func TestResumeOwnedTask_BlocksMissingWorktreeOnDisk(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -183,6 +188,7 @@ func TestResumeOwnedTask_BlocksMissingWorktreeOnDisk(t *testing.T) {
 }
 
 func TestResumeOwnedTask_BlocksOrphanedWorktreeWithoutGitLink(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -273,6 +279,7 @@ func TestResumeOwnedTask_DoesNotBlockOrResumeIfOwnershipChangesDuringValidation(
 }
 
 func TestResumeOwnedTask_PredicateGuardsRoleAndCurrentTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupPipelineConfig(t, tmpDir)
 	pr, err := LoadResolverForModels(tmpDir)

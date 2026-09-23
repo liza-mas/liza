@@ -10,6 +10,7 @@ import (
 )
 
 func TestReviewerClaimLifecycleLegacyCommitReplay(t *testing.T) {
+	t.Parallel()
 	for _, storedCommit := range []string{"abc123", "review123"} {
 		t.Run(storedCommit, func(t *testing.T) {
 			root := t.TempDir()

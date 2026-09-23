@@ -48,6 +48,7 @@ func TestRenewLeaseKeepsLeaseAndAssignmentTogether(t *testing.T) {
 // kill did exactly that in a live run. The rejection must not leave the task
 // carrying a lease nobody holds.
 func TestSubmitVerdictRejectionOnReleasedTaskLeavesNoDanglingLease(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 

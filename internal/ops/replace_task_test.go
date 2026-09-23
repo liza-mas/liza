@@ -23,6 +23,7 @@ import (
 )
 
 func TestReplaceTaskSchemaParity(t *testing.T) {
+	t.Parallel()
 	for _, change := range []struct {
 		name  string
 		apply func(*ReplaceTaskInput)
@@ -138,6 +139,7 @@ func assertReplacementCommitted(t *testing.T, s *models.State) {
 }
 
 func TestReplaceTask_CommitsAtomically(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	var calls atomic.Int32
 	t.Cleanup(setLifecycleMutationTestHook(db.For(f.statePath), func() { calls.Add(1) }))
@@ -158,6 +160,7 @@ func TestReplaceTask_CommitsAtomically(t *testing.T) {
 }
 
 func TestReplaceTask_NoIntermediateLineage(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	before := replacementBytes(t, f.statePath)
 	var observed bool
@@ -182,6 +185,7 @@ func TestReplaceTask_NoIntermediateLineage(t *testing.T) {
 }
 
 func TestSliceCP4_AuditIncludesImplicitConsumers(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"empty", "partial", "overlapping", "reverse explicit"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -269,6 +273,7 @@ func TestSliceCP4_AuditIncludesImplicitConsumers(t *testing.T) {
 }
 
 func TestSliceCP4_ImplicitConsumersRollback(t *testing.T) {
+	t.Parallel()
 	for _, partial := range []bool{false, true} {
 		t.Run(fmt.Sprintf("partial=%t", partial), func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -298,6 +303,7 @@ func TestSliceCP4_ImplicitConsumersRollback(t *testing.T) {
 }
 
 func TestSliceCP4_ReplayRequiresMatchingConsumerAudit(t *testing.T) {
+	t.Parallel()
 	for _, missingField := range []string{"source_new_transition_id", "retargeted_consumers"} {
 		t.Run(missingField, func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -326,6 +332,7 @@ func TestSliceCP4_ReplayRequiresMatchingConsumerAudit(t *testing.T) {
 }
 
 func TestReplaceTask_RollsBackInjectedFailure(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	before := replacementBytes(t, f.statePath)
 	injected := errors.New("injected failure after creation and retargeting")
@@ -346,6 +353,7 @@ func TestReplaceTask_RollsBackInjectedFailure(t *testing.T) {
 }
 
 func TestReplaceTask_RejectsInvalidDependencyShape(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, outcome string
 		change        func(*replacementFixture)
@@ -389,6 +397,7 @@ func replacementGit(t *testing.T, root string, args ...string) string {
 }
 
 func TestReplaceTask_PreservedBaseDeclared(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"healthy", "omitted", "base-only", "unresolvable", "missing", "unhealthy", "wrong-branch", "noncanonical", "not-ancestor"} {
 		t.Run(name, func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -450,6 +459,7 @@ func TestReplaceTask_PreservedBaseDeclared(t *testing.T) {
 }
 
 func TestReplaceTask_ConcurrentIdenticalAttempts(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	entered, release := make(chan struct{}), make(chan struct{})
 	contending := make(chan struct{})
@@ -514,6 +524,7 @@ func TestReplaceTask_ConcurrentIdenticalAttempts(t *testing.T) {
 }
 
 func TestReplaceTask_IdenticalRetry(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	first, err := f.run()
 	if err != nil {
@@ -543,6 +554,7 @@ func TestReplaceTask_IdenticalRetry(t *testing.T) {
 }
 
 func TestSliceCP4_ReplayAfterPreservedWorktreeCleanup(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	base := replacementGit(t, f.root, "rev-parse", "HEAD")
 	wt := filepath.Join(paths.WorktreesDirName, "replacement")
@@ -578,6 +590,7 @@ func TestSliceCP4_ReplayAfterPreservedWorktreeCleanup(t *testing.T) {
 }
 
 func TestReplaceTask_CleanedPreservedBaseReplayGuards(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"payload conflict", "stale caller", "generation changes before lock", "lineage mismatch", "expired receipt"} {
 		t.Run(name, func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -635,6 +648,7 @@ func TestReplaceTask_CleanedPreservedBaseReplayGuards(t *testing.T) {
 }
 
 func TestReplaceTask_ReplayLineageMismatch(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	if _, err := f.run(); err != nil {
 		t.Fatal(err)
@@ -667,6 +681,7 @@ func requireReplacementConflict(t *testing.T, err error, field string) {
 }
 
 func TestReplaceTask_ConflictingRetry(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"replacement.id", "request_id"} {
 		t.Run(field, func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -696,6 +711,7 @@ func TestReplaceTask_ConflictingRetry(t *testing.T) {
 }
 
 func TestReplaceTask_BatchIDCollision(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	input := &AddTasksInput{Tasks: []AddTaskInput{f.input.Replacement, f.input.Replacement}, OrchestratorID: f.authority.ID}
 	batch, err := AddTasks(f.statePath, paths.New(f.root).LogPath(), input)
@@ -714,6 +730,7 @@ func TestReplaceTask_BatchIDCollision(t *testing.T) {
 }
 
 func TestReplaceTask_ConcurrentConflictingAttempts(t *testing.T) {
+	t.Parallel()
 	for _, reversed := range []bool{false, true} {
 		name := "original-first"
 		if reversed {
@@ -785,6 +802,7 @@ func TestReplaceTask_ConcurrentConflictingAttempts(t *testing.T) {
 }
 
 func TestReplaceTask_RequiresRequestIdentity(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"request_id", "expected_transition", "both"} {
 		t.Run(field, func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -816,6 +834,7 @@ func TestReplaceTask_RequiresRequestIdentity(t *testing.T) {
 }
 
 func TestReplaceTask_AuditRecord(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	r, err := f.run()
 	if err != nil {
@@ -850,6 +869,7 @@ func TestReplaceTask_AuditRecord(t *testing.T) {
 }
 
 func TestReplaceTask_Counters(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	s := replacementState(t, f)
 	if _, err := f.run(); err != nil {
@@ -867,6 +887,7 @@ func TestReplaceTask_Counters(t *testing.T) {
 }
 
 func TestReplaceTask_Authority(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	before := replacementBytes(t, f.statePath)
 	f.authority.Generation = "retired-generation"
@@ -881,6 +902,7 @@ func TestReplaceTask_Authority(t *testing.T) {
 }
 
 func TestReplaceTask_SourceEligibility(t *testing.T) {
+	t.Parallel()
 	for _, status := range []models.TaskStatus{models.TaskStatusReady, models.TaskStatusRejected, models.TaskStatusBlocked, models.TaskStatusIntegrationFailed, models.TaskStatusImplementing, models.TaskStatusMerged, models.TaskStatusSuperseded} {
 		t.Run(string(status), func(t *testing.T) {
 			f := newReplacementFixture(t)
@@ -910,6 +932,7 @@ func TestReplaceTask_SourceEligibility(t *testing.T) {
 }
 
 func TestReplaceTask_PostCommitCleanup(t *testing.T) {
+	t.Parallel()
 	f := newReplacementFixture(t)
 	base := replacementGit(t, f.root, "rev-parse", "HEAD")
 	wt := filepath.Join(paths.WorktreesDirName, "source")

@@ -7,12 +7,10 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/git"
-	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/referencecontract"
 )
@@ -110,7 +108,7 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		return content("adopted source path is invalid")
 	}
 	g := git.New(root)
-	mode, present, err := g.TreePathMode(integrationCommit, path)
+	entry, present, err := g.TreeEntryAt(integrationCommit, path)
 	if err != nil {
 		return fail("cannot inspect integration source")
 	}
@@ -120,10 +118,10 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		}
 		return content("adopted source is missing from integration")
 	}
-	if mode != "100644" && mode != "100755" {
+	if entry.Mode != "100644" && entry.Mode != "100755" {
 		return content("source must be a regular committed file")
 	}
-	carrier, _, err := readAcceptanceBlob(root, integrationCommit, path)
+	carrier, _, err := readAcceptanceEntry(g, path, entry, present, nil)
 	if err != nil {
 		return fail(err.Error())
 	}
@@ -309,9 +307,13 @@ func acceptanceParentAuthor(parent *models.Task) string {
 // Parent metadata must identify the actual immutable reviewed history, not a
 // movable ref or an unrelated commit that happens to contain the same blob.
 func validAcceptanceParentHistory(g *git.Git, parent *models.Task) bool {
-	for _, commit := range []string{*parent.BaseCommit, *parent.ReviewCommit, *parent.MergeCommit} {
-		resolved, err := g.ResolveCommit(commit)
-		if err != nil || resolved != commit {
+	commits := []string{*parent.BaseCommit, *parent.ReviewCommit, *parent.MergeCommit}
+	resolved, err := g.ResolveCommits(commits)
+	if err != nil {
+		return false
+	}
+	for i, commit := range commits {
+		if resolved[i].Err != nil || resolved[i].OID != commit {
 			return false
 		}
 	}
@@ -359,9 +361,7 @@ func compareReviewedReferences(state *models.State, parentTask, root, reviewComm
 	// can have moved. This keeps the reference walk off the hot path, which
 	// runs at submit, recheck and reviewer assignment.
 	g := git.New(root)
-	reviewedBlob, reviewedErr := g.BlobOID(reviewCommit, path)
-	integrationBlob, integrationErr := g.BlobOID(integrationCommit, path)
-	if reviewedErr == nil && integrationErr == nil && reviewedBlob == integrationBlob {
+	if sameBlobAt(g, reviewCommit, integrationCommit, path) {
 		return true, ""
 	}
 
@@ -560,34 +560,50 @@ func acceptanceCarrierSpan(root, commit, path, heading string) (string, bool) {
 	return carrierSpan(content, heading)
 }
 
+// sameBlobAt reports whether path resolves to the same blob at both commits.
+// Any lookup failure answers false, so callers fall through to their full
+// comparison exactly as when either side cannot be resolved. Both sides are
+// resolved by one git process.
+func sameBlobAt(g *git.Git, commitA, commitB, path string) bool {
+	oids, err := g.BlobOIDs([]git.BlobPath{{Revision: commitA, Path: path}, {Revision: commitB, Path: path}})
+	if err != nil {
+		return false
+	}
+	return oids[0].Err == nil && oids[1].Err == nil && oids[0].OID == oids[1].OID
+}
+
 func readAcceptanceBlob(root, commit, path string) (string, string, error) {
 	if err := referencecontract.ValidateAcceptancePath(path); err != nil {
 		return "", "", fmt.Errorf("invalid acceptance artifact path")
 	}
 	g := git.New(root)
-	mode, present, err := g.TreePathMode(commit, path)
+	// One ls-tree reports mode, type, object ID and size together; the blob
+	// itself is read only after the size bound holds.
+	entry, present, err := g.TreeEntryAt(commit, path)
+	return readAcceptanceEntry(g, path, entry, present, err)
+}
+
+// readAcceptanceEntry applies readAcceptanceBlob's bounds to a tree entry the
+// caller already looked up, so a caller that inspected the entry itself does
+// not pay a second ls-tree for the same path.
+func readAcceptanceEntry(g *git.Git, path string, entry git.TreeEntry, present bool, err error) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("cannot inspect acceptance artifact: %s: %w", path, err)
 	}
-	if !present || (mode != "100644" && mode != "100755") {
+	if !present || (entry.Mode != "100644" && entry.Mode != "100755") {
 		return "", "", fmt.Errorf("acceptance artifact must be a present regular committed file: %s", path)
 	}
-	blob, err := g.BlobOID(commit, path)
-	if err != nil {
-		return "", "", fmt.Errorf("cannot resolve acceptance artifact: %s: %w", path, err)
+	if entry.Type != "blob" || entry.OID == "" {
+		return "", "", fmt.Errorf("cannot resolve acceptance artifact: %s", path)
 	}
-	sizeOutput, err := gitenv.CombinedOutput(root, "cat-file", "-s", blob)
-	if err != nil {
-		return "", "", fmt.Errorf("acceptance artifact cannot be sized: %s: %w\nOutput: %s", path, err, sizeOutput)
+	blob := entry.OID
+	if entry.Size < 0 {
+		return "", "", fmt.Errorf("acceptance artifact cannot be sized: %s", path)
 	}
-	size, parseErr := strconv.Atoi(strings.TrimSpace(string(sizeOutput)))
-	if parseErr != nil {
-		return "", "", fmt.Errorf("acceptance artifact cannot be sized: %s: %w", path, parseErr)
-	}
-	if size > 256*1024 {
+	if entry.Size > 256*1024 {
 		return "", "", fmt.Errorf("acceptance artifact exceeds 256 KiB: %s", path)
 	}
-	content, err := g.ReadBlob(commit, path)
+	content, err := g.ReadBlobObject(blob)
 	if err != nil {
 		return "", "", fmt.Errorf("cannot read acceptance artifact: %s: %w", path, err)
 	}

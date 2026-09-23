@@ -60,6 +60,7 @@ func setupPlanningAcceptanceSubmission(t *testing.T, suffix string, legacy bool)
 }
 
 func TestSubmitForReview_PlanningOutputAcceptance(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name        string
 		suffix      string
@@ -137,6 +138,7 @@ func TestSubmitForReview_PlanningOutputAcceptance(t *testing.T) {
 }
 
 func TestSubmitForReview_PlanningOutputAcceptanceAfterRebase(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := setupPlanningAcceptanceSubmission(t, "", false)
 	// Integration incorporates the valid declaration, then changes it while the
 	// planner's committed candidate still contains the valid original section.

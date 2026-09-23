@@ -13,6 +13,7 @@ import (
 )
 
 func TestAgentAuthorityMutationFence(t *testing.T) {
+	t.Parallel()
 	const (
 		agentID     = "coder-1"
 		generationA = "generation-a"

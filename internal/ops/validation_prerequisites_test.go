@@ -15,6 +15,7 @@ import (
 )
 
 func TestAddTaskValidationPrerequisitesPersistAndReject(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, root)
 	stateFile, _ := testhelpers.SetupLizaDir(t, root)
@@ -53,6 +54,7 @@ func TestAddTaskValidationPrerequisitesPersistAndReject(t *testing.T) {
 }
 
 func TestOutputValidationPrerequisitesPersistAndCreateChild(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, root)
 	now := time.Now().UTC()

@@ -146,17 +146,20 @@ reproduction.
 
 **What:** A process started by an `internal/ops` test can retain an inherited
 stdout or stderr handle after the parent is terminated, preventing `go test`
-from observing EOF and returning. The Windows CI package timeout is 30 minutes
-and the enclosing job is bounded at 90 minutes so this fails visibly instead of
-occupying a runner indefinitely.
+from observing EOF and returning. The Windows CI package timeout is 30 minutes;
+each Windows test shard bounds its test step at 35 minutes and its job at 45
+so this fails visibly instead of occupying a runner indefinitely. Every shard
+uploads its `go test -json` stream as the `windows-test-<shard>` artifact, and
+its log prints the still-running top-level tests every minute.
 
 **Why deferred:** Isolating the retaining descendant and changing its Windows
 process/pipe ownership requires a native handle-level reproduction. The current
 Windows-support change establishes a bounded CI signal but does not yet provide
 the evidence needed to change process lifetime behavior safely.
 
-**Payback trigger:** On the next Windows CI timeout, retain the `go test -json`
-event stream and process tree, identify the descendant holding the pipe, and add
+**Payback trigger:** On the next Windows CI timeout, use the retained
+`go test -json` artifact and heartbeat to name the stalled test, capture the
+process tree, identify the descendant holding the pipe, and add
 a focused regression that proves the command returns after cancellation. Remove
 the job-level workaround once five consecutive Windows CI runs complete without
 the package timeout or retained-handle stall.
@@ -899,3 +902,23 @@ adopts again (staging is idempotent), or a human commits.
 
 **Payback trigger:** A claim blocked with "adopting it failed" or "still dirty
 after adopting".
+## File-lock admission waits can exceed the production timeout on loaded Windows hosts
+
+**What:** `filelock.DefaultLockTimeout` (10s) bounds how long `WithLock` waits
+for admission. Under synthetic ten-way contention on the 2-vCPU Windows CI
+runner, seven of ten contenders exhausted that window while each hold wrote
+owner metadata through four file operations (DEV-783). The concurrency test
+was decoupled from the production default — it now uses a 2-minute hang guard —
+but the production value itself is unvalidated for queued contenders on a
+loaded Windows host.
+
+**Why deferred:** The only evidence is one CI observation under synthetic
+contention; no Windows user has reported a lock timeout. Changing the default
+or making it platform-aware affects every caller on every platform, so it
+waits for a real-world signal rather than tuning to a CI runner.
+
+**Payback trigger:** A lock-timeout report from a Windows user, or repeated
+Windows CI observations of admission waits approaching `DefaultLockTimeout`.
+At that point raise the default, make it configurable, or reduce per-hold
+metadata writes; remove this entry once the default is validated under load
+on Windows.

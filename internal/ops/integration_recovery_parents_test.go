@@ -9,6 +9,7 @@ import (
 )
 
 func TestGlobalAnalysisParentsAfterPrematureRecovery(t *testing.T) {
+	t.Parallel()
 	state := &models.State{}
 	state.Goal.Integration = &models.IntegrationLifecycle{
 		PrematureRecovery: &models.IntegrationPrematureRecovery{AnalysisTaskID: "integration-global-1"},

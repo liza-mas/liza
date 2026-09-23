@@ -61,9 +61,10 @@ func TestIntegrationMutationLockCrossProcess(t *testing.T) {
 	}
 }
 
+// TestIntegrationMutationLinearization stays serial: its subtests swap the
+// package-level integration mutation hooks, which any concurrently running
+// merge in this package would observe.
 func TestIntegrationMutationLinearization(t *testing.T) {
-	t.Parallel()
-
 	t.Run("public merge appends validated receipt without rewriting evidence", testIntegrationMutationReceiptPersistence)
 	t.Run("validator rejection prevents receipt and task persistence", testIntegrationMutationValidatorRejection)
 	t.Run("receipt persistence starts after mutation lock release", testIntegrationMutationReceiptAfterLockRelease)

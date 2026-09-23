@@ -120,7 +120,19 @@ func OutputWithTimeout(timeout time.Duration, dir string, args ...string) ([]byt
 	return outputContext(context.Background(), timeout, dir, args...)
 }
 
+// OutputWithStdin runs git with the package default timeout, feeds stdin to
+// the subprocess, and returns stdout only. It serves one-shot batch queries
+// (for example `git cat-file --batch-check`) that answer many questions in a
+// single short-lived process instead of one process per question.
+func OutputWithStdin(dir, stdin string, args ...string) ([]byte, error) {
+	return outputStdinContext(context.Background(), DefaultCommandTimeout, dir, stdin, args...)
+}
+
 func outputContext(parent context.Context, timeout time.Duration, dir string, args ...string) ([]byte, error) {
+	return outputStdinContext(parent, timeout, dir, "", args...)
+}
+
+func outputStdinContext(parent context.Context, timeout time.Duration, dir, stdin string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
@@ -128,6 +140,9 @@ func outputContext(parent context.Context, timeout time.Duration, dir string, ar
 	cmd.Dir = dir
 	cmd.Env = Env()
 	cmd.WaitDelay = DefaultCommandWaitDelay
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 
 	output, err := cmd.Output()
 	if err != nil && parent.Err() != nil {

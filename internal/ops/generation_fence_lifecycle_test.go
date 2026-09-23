@@ -25,6 +25,7 @@ const (
 )
 
 func TestResumeGenerationFence(t *testing.T) {
+	t.Parallel()
 	t.Run("handoff", func(t *testing.T) {
 		const (
 			taskID  = "task-handoff-resume-fence"
@@ -136,6 +137,7 @@ func TestResumeGenerationFence(t *testing.T) {
 }
 
 func TestReviewerClaimGenerationFence(t *testing.T) {
+	t.Parallel()
 	const (
 		taskID  = "task-reviewer-claim-fence"
 		agentID = "code-reviewer-1"

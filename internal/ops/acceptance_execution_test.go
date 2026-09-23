@@ -13,6 +13,7 @@ import (
 )
 
 func TestAcceptanceExecutionSuccess(t *testing.T) {
+	t.Parallel()
 	requirePosixShell(t)
 	dir := t.TempDir()
 	commands := []string{"printf first > order; printf stdout; printf stderr >&2", "cat order; printf second >> order"}
@@ -38,6 +39,7 @@ func TestAcceptanceExecutionSuccess(t *testing.T) {
 }
 
 func TestAcceptanceExecutionFailureStopsBatch(t *testing.T) {
+	t.Parallel()
 	requirePosixShell(t)
 	dir := t.TempDir()
 	results, err := executeAcceptanceCommands("task-failure", dir, []string{"touch first-completed", "printf diagnostic >&2; exit 7", "touch should-not-exist"}, 5)
@@ -122,6 +124,9 @@ func TestAcceptanceExecutionOneBatchTimeout(t *testing.T) {
 }
 
 func TestAcceptanceExecutionTimeoutKillsChildren(t *testing.T) {
+	// Serial: the survivor check below depends on a fixed wall-clock window.
+	// Parallel siblings could starve this test on a small CPU budget and let a
+	// surviving child write after the check, passing when it should fail.
 	requirePosixShell(t)
 	dir := t.TempDir()
 	results, err := executeAcceptanceCommands("task-child", dir, []string{"(sleep 2; printf survived > survivor) & wait"}, 1)
@@ -140,6 +145,7 @@ func TestAcceptanceExecutionTimeoutKillsChildren(t *testing.T) {
 }
 
 func TestAcceptanceExecutionOutputLimitIsAggregate(t *testing.T) {
+	t.Parallel()
 	requirePosixShell(t)
 	results, err := executeAcceptanceCommands("task-noisy", t.TempDir(), []string{"head -c 600000 /dev/zero", "head -c 600000 /dev/zero"}, 5)
 	if err == nil || !strings.Contains(err.Error(), "exceeds 1 MiB") {

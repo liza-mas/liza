@@ -26,6 +26,12 @@ and the same home-directory resolver as production. POSIX permission bits are
 not Windows ACLs; tests requiring privacy must check access control rather than
 equating a writable attribute with a private file.
 
+The CI job shards the suite into a `test-windows-shard` matrix planned by
+`scripts/ci/testshard`, and the aggregate job's `reconcile` step proves every
+test ran exactly once in its assigned shard. Refresh
+`scripts/ci/testshard/windows-weights.json` from downloaded shard artifacts
+with `go run ./scripts/ci/testshard weights -base <file> <artifact-dirs>`.
+
 ### Coverage
 
 ```bash

@@ -14,6 +14,7 @@ import (
 )
 
 func TestClaimValidationLifecycleRetryAndReplay(t *testing.T) {
+	t.Parallel()
 	shell := testhelpers.ResolveBashForScripts(t)
 	f := newAssignmentPreflightFixture(t, models.TaskStatusReady)
 	setupMarker := filepath.Join(t.TempDir(), "setup")

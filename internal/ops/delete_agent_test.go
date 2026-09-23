@@ -14,6 +14,7 @@ import (
 )
 
 func TestDeleteAgent_Validation(t *testing.T) {
+	t.Parallel()
 	_, err := DeleteAgent("/nonexistent", "", false, false, "reason")
 	if err == nil {
 		t.Fatal("Expected error for empty agent ID")
@@ -24,6 +25,7 @@ func TestDeleteAgent_Validation(t *testing.T) {
 }
 
 func TestDeleteAgent_NotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -40,6 +42,7 @@ func TestDeleteAgent_NotFound(t *testing.T) {
 }
 
 func TestDeleteAgent_IdleAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -82,6 +85,7 @@ func TestDeleteAgent_IdleAgent(t *testing.T) {
 }
 
 func TestDeleteAgent_ActiveLease_NoForce(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -105,6 +109,7 @@ func TestDeleteAgent_ActiveLease_NoForce(t *testing.T) {
 }
 
 func TestDeleteAgent_ActiveLease_Force(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -128,6 +133,7 @@ func TestDeleteAgent_ActiveLease_Force(t *testing.T) {
 }
 
 func TestDeleteAgent_BusyWithTask_NoForce(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -150,6 +156,7 @@ func TestDeleteAgent_BusyWithTask_NoForce(t *testing.T) {
 }
 
 func TestDeleteAgent_AllowRunningPID_BypassesPIDOnly(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -177,6 +184,7 @@ func TestDeleteAgent_AllowRunningPID_BypassesPIDOnly(t *testing.T) {
 }
 
 func TestDeleteAgent_AllowRunningPID_BypassesPIDWithNoLease(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -208,6 +216,7 @@ func TestDeleteAgent_AllowRunningPID_BypassesPIDWithNoLease(t *testing.T) {
 }
 
 func TestIsAgentProcessRunning_NotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -224,6 +233,7 @@ func TestIsAgentProcessRunning_NotFound(t *testing.T) {
 }
 
 func TestDeleteAgent_BusyWithTask_Force(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -246,6 +256,7 @@ func TestDeleteAgent_BusyWithTask_Force(t *testing.T) {
 }
 
 func TestMatchLizaAgentCmdline(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		cmdline  string
@@ -485,6 +496,7 @@ func TestTerminateAgent_SucceedsWhenSupervisorUnregistersDuringShutdown(t *testi
 }
 
 func TestDeleteAgent_ReturnsPID(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 

@@ -155,6 +155,7 @@ func TestClearStaleReviewClaims_NoStale(t *testing.T) {
 }
 
 func TestClearStaleReviewClaims_ExpiredLease(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -204,6 +205,7 @@ func TestClearStaleReviewClaims_ExpiredLease(t *testing.T) {
 }
 
 func TestClearStaleReviewClaims_MissingLease(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -235,6 +237,7 @@ func TestClearStaleReviewClaims_MissingLease(t *testing.T) {
 }
 
 func TestClearStaleReviewClaims_SkipsNonReviewing(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -260,6 +263,7 @@ func TestClearStaleReviewClaims_SkipsNonReviewing(t *testing.T) {
 }
 
 func TestClearStaleReviewClaims_MultipleStale(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -299,6 +303,7 @@ func TestClearStaleReviewClaims_MultipleStale(t *testing.T) {
 }
 
 func TestClearStaleReviewingTwo(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -425,6 +430,7 @@ func TestClearStaleReviewingTwo(t *testing.T) {
 }
 
 func TestClearStaleReviewClaims_OrphanedOnRejected(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -472,6 +478,7 @@ func TestClearStaleReviewClaims_OrphanedOnRejected(t *testing.T) {
 }
 
 func TestClearStaleReviewClaims_OrphanedOnSubmitted(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -519,6 +526,7 @@ func TestClearStaleReviewClaims_OrphanedOnSubmitted(t *testing.T) {
 }
 
 func TestClearStaleReviewClaims_FutureLeaseMissingReviewerAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

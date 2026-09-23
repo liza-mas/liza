@@ -83,6 +83,7 @@ func requireAssignmentPreflightError(t *testing.T, err error) {
 }
 
 func TestClaimTaskValidationPreflightBeforeAssignment(t *testing.T) {
+	t.Parallel()
 	for _, status := range []models.TaskStatus{models.TaskStatusReady, models.TaskStatusRejected, models.TaskStatusIntegrationFailed} {
 		t.Run(string(status), func(t *testing.T) {
 			f := newAssignmentPreflightFixture(t, status)
@@ -110,6 +111,7 @@ func TestClaimTaskValidationPreflightBeforeAssignment(t *testing.T) {
 }
 
 func TestResumeValidationPreflightPreservesWorkAndReleasesOwnership(t *testing.T) {
+	t.Parallel()
 	for _, handoff := range []bool{false, true} {
 		t.Run(map[bool]string{false: "owned", true: "handoff"}[handoff], func(t *testing.T) {
 			f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
@@ -204,6 +206,7 @@ func TestReviewerValidationPreflightBeforeAssignmentAndReclaim(t *testing.T) {
 }
 
 func TestValidationPreflightRejectsStaleStateAndNeverReusesSuccess(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	p, err := PrepareValidationPreflight(f.root, "task-1", f.authority.ID, "", f.session(true))
 	if err != nil {
@@ -221,6 +224,7 @@ func TestValidationPreflightRejectsStaleStateAndNeverReusesSuccess(t *testing.T)
 }
 
 func TestValidationPreflightLaunchRejectsPendingHandoff(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	p, err := PrepareValidationPreflight(f.root, "task-1", f.authority.ID, "", f.session(true))
 	if err != nil {
@@ -241,6 +245,7 @@ func TestValidationPreflightLaunchRejectsPendingHandoff(t *testing.T) {
 }
 
 func TestValidationPreflightOperatorAssignmentRejectedWithoutMutation(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusBlocked)
 	before := f.state(t).FindTask("task-1")
 	_, err := UnblockTask(f.root, "task-1", "coder-1", "repaired", "orchestrator-1")
@@ -253,6 +258,7 @@ func TestValidationPreflightOperatorAssignmentRejectedWithoutMutation(t *testing
 }
 
 func TestValidationPreflightCooldownTracksActualContext(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	_, err := PrepareValidationPreflight(f.root, "task-1", f.authority.ID, "", f.session(false))
 	requireAssignmentPreflightError(t, err)
@@ -282,6 +288,7 @@ func TestValidationPreflightCooldownTracksActualContext(t *testing.T) {
 }
 
 func TestReviewerValidationPreflightCooldownDoesNotStarveOtherWork(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusReadyForReview)
 	authority := models.AgentAuthority{ID: "code-reviewer-1", Generation: lifecycleGenerationA}
 	input := ClaimReviewerTaskInput{ProjectRoot: f.root, AgentID: authority.ID, Authority: &authority, Session: f.session(false)}
@@ -303,6 +310,7 @@ func TestReviewerValidationPreflightCooldownDoesNotStarveOtherWork(t *testing.T)
 }
 
 func TestReviewerValidationPreflightPreservesEarlierBoundaryFailure(t *testing.T) {
+	t.Parallel()
 	for _, ready := range []bool{false, true} {
 		t.Run(map[bool]string{false: "preflight fails", true: "preflight succeeds"}[ready], func(t *testing.T) {
 			f := newAssignmentPreflightFixture(t, models.TaskStatusReadyForReview)
@@ -368,6 +376,7 @@ func TestReviewerValidationPreflightPreservesEarlierBoundaryFailure(t *testing.T
 }
 
 func TestValidationPreflightDiscardsGenerationChangedDuringProbe(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
@@ -444,6 +453,7 @@ func TestValidationPreflightDiscardsGenerationChangedDuringProbe(t *testing.T) {
 }
 
 func TestValidationPreflightProbeHandshake(t *testing.T) {
+	t.Parallel()
 	address := os.Getenv("OPS_PREFLIGHT_HANDSHAKE")
 	if address == "" {
 		return
@@ -462,6 +472,7 @@ func TestValidationPreflightProbeHandshake(t *testing.T) {
 }
 
 func TestResumeValidationPreflightSetupFailureStillDegrades(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	if err := f.bb.Modify(func(s *models.State) error { cmd := "exit 7"; s.Config.PostWorktreeCmd = &cmd; return nil }); err != nil {
 		t.Fatal(err)
@@ -480,6 +491,7 @@ func TestResumeValidationPreflightSetupFailureStillDegrades(t *testing.T) {
 }
 
 func TestValidationPreflightForcedRepairClearsCooldown(t *testing.T) {
+	t.Parallel()
 	shell := testhelpers.ResolveBashForScripts(t)
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	marker := filepath.Join(t.TempDir(), "repaired")
@@ -505,6 +517,7 @@ func TestValidationPreflightForcedRepairClearsCooldown(t *testing.T) {
 }
 
 func TestValidationPreflightArtifactPolicyExplainsUnsupportedVersion(t *testing.T) {
+	t.Parallel()
 	f := newAssignmentPreflightFixture(t, models.TaskStatusImplementing)
 	if err := f.bb.Modify(func(s *models.State) error {
 		tool := s.Config.AgentTools["fixture"]

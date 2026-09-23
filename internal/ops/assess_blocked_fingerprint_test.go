@@ -32,6 +32,7 @@ func assessmentFingerprintFixture() (*models.State, AssessmentFingerprintCandida
 }
 
 func TestAssessmentFingerprint(t *testing.T) {
+	t.Parallel()
 	t.Run("identical inputs and purity", func(t *testing.T) {
 		state, candidate := assessmentFingerprintFixture()
 		before, err := yaml.Marshal([]any{state, candidate})

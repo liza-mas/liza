@@ -51,6 +51,7 @@ func requireLifecycleError(t *testing.T, err error, outcome, action, effects str
 }
 
 func TestLifecycleIdentityReusedSentinel(t *testing.T) {
+	t.Parallel()
 	for _, prepared := range []bool{false, true} {
 		name := "receipt"
 		if prepared {

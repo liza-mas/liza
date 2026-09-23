@@ -41,6 +41,7 @@ func TestNewPostWorktreeSetupError_MasksAndBoundsCommand(t *testing.T) {
 // matches none of them, so any masking-based defense would fail here. The
 // guarantee comes from never capturing child output at all.
 func TestRunPostWorktreeCmd_DoesNotCaptureChildOutput(t *testing.T) {
+	t.Parallel()
 	worktree := t.TempDir()
 	const secret = "postgres://user:hunter2@db.internal/app"
 	envPath := filepath.Join(worktree, ".env")

@@ -1032,9 +1032,17 @@ func writeExecutable(t *testing.T, path, content string) string {
 	return testhelpers.WriteShellStub(t, path, content)
 }
 
+// fakeTerminalHangGuard bounds waitForFileContent. It is a hang guard, not a
+// latency budget: the wait returns as soon as the predicate holds. The fake
+// terminals chain several shell processes, and on Windows the pane is a Git
+// Bash login shell; on the loaded 2-vCPU CI runner that chain had not written
+// its first split line after 8s, where macOS finishes the whole test in 2.3s
+// (DEV-783).
+const fakeTerminalHangGuard = 60 * time.Second
+
 func waitForFileContent(t *testing.T, path string, predicate func(string) bool) string {
 	t.Helper()
-	deadline := time.Now().Add(8 * time.Second)
+	deadline := time.Now().Add(fakeTerminalHangGuard)
 	var last string
 	for time.Now().Before(deadline) {
 		data, _ := os.ReadFile(path)

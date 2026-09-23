@@ -17,6 +17,7 @@ import (
 )
 
 func TestRetargetDependency_ReplacesEdgeAndClearsMatchingRepairRequest(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -84,6 +85,7 @@ func TestRetargetDependency_ReplacesEdgeAndClearsMatchingRepairRequest(t *testin
 }
 
 func TestRetargetDependency_ClearsRepairRequestAfterEquivalentCanonicalRepair(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -168,6 +170,7 @@ func TestRetargetDependency_ClearsRepairRequestAfterEquivalentCanonicalRepair(t 
 }
 
 func TestRetargetDependency_CanonicalizesSupersededReplacement(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -207,6 +210,7 @@ func TestRetargetDependency_CanonicalizesSupersededReplacement(t *testing.T) {
 }
 
 func TestRetargetDependency_RejectsCanonicalizationToEmptyDependencies(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -239,6 +243,7 @@ func TestRetargetDependency_RejectsCanonicalizationToEmptyDependencies(t *testin
 }
 
 func TestRetargetDependency_DoesNotClearRepairRequestForDifferentTargetOrEdge(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		target  string
@@ -310,6 +315,7 @@ func TestRetargetDependency_DoesNotClearRepairRequestForDifferentTargetOrEdge(t 
 }
 
 func TestRetargetDependency_DoesNotClearRepairRequestWhenStaleEdgeRemains(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -365,6 +371,7 @@ func TestRetargetDependency_DoesNotClearRepairRequestWhenStaleEdgeRemains(t *tes
 }
 
 func TestRetargetDependency_RejectsTerminalDependentTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -386,6 +393,7 @@ func TestRetargetDependency_RejectsTerminalDependentTask(t *testing.T) {
 }
 
 func TestRetargetDependency_RejectsMissingOldEdge(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -407,6 +415,7 @@ func TestRetargetDependency_RejectsMissingOldEdge(t *testing.T) {
 }
 
 func TestRetargetDependency_RequiresAtLeastOneNewDependency(t *testing.T) {
+	t.Parallel()
 	_, err := RetargetDependency("/nonexistent", "task-1", "old-dep", nil, "Should fail", "orchestrator-1")
 	testhelpers.RequireErrorContains(t, err, "at least one new dependency is required")
 }

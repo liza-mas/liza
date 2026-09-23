@@ -33,6 +33,7 @@ func replaceSubmitReviewScipRefreshForTest(refresh func(scipsearch.RefreshOption
 }
 
 func TestSubmitForReview_Validation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		taskID      string
@@ -63,6 +64,7 @@ func TestSubmitForReview_Validation(t *testing.T) {
 }
 
 func TestSubmitForReview_TaskNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -79,6 +81,7 @@ func TestSubmitForReview_TaskNotFound(t *testing.T) {
 }
 
 func TestSubmitForReview_WrongStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -94,6 +97,7 @@ func TestSubmitForReview_WrongStatus(t *testing.T) {
 }
 
 func TestSubmitForReview_WrongAgent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -109,6 +113,7 @@ func TestSubmitForReview_WrongAgent(t *testing.T) {
 }
 
 func TestSubmitForReview_NoWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -124,6 +129,7 @@ func TestSubmitForReview_NoWorktree(t *testing.T) {
 }
 
 func TestSubmitForReview_TDDWaiverBypassesTestRequirement(t *testing.T) {
+	t.Parallel()
 	// Unit test: verify that GetTDDWaiver check in SubmitForReview
 	// allows submission without test files when waiver is declared.
 	// This tests the waiver logic at the data level since the full
@@ -165,6 +171,7 @@ func TestSubmitForReview_TDDWaiverBypassesTestRequirement(t *testing.T) {
 }
 
 func TestSubmitForReview_NoCheckpoint(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -267,6 +274,7 @@ func setupRebaseConflictScenario(t *testing.T) (string, string, string, string, 
 }
 
 func TestSubmitForReview_RebaseConflict_TransitionsToIntegrationFailed(t *testing.T) {
+	t.Parallel()
 	tmpDir, taskID, wtCommit, agentID, bb := setupRebaseConflictScenario(t)
 
 	_, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID)
@@ -338,6 +346,7 @@ func TestSubmitForReview_RebaseConflict_TransitionsToIntegrationFailed(t *testin
 }
 
 func TestSubmitForReview_RebaseConflict_SecondFailureBlocksTask(t *testing.T) {
+	t.Parallel()
 	tmpDir, taskID, wtCommit, agentID, bb := setupRebaseConflictScenario(t)
 
 	err := bb.Modify(func(state *models.State) error {
@@ -375,6 +384,7 @@ func TestSubmitForReview_RebaseConflict_SecondFailureBlocksTask(t *testing.T) {
 }
 
 func TestSubmitForReview_RebaseConflict_RecordsSubmissionHandoffForIntegrationFailed(t *testing.T) {
+	t.Parallel()
 	tmpDir, taskID, wtCommit, agentID, bb := setupRebaseConflictScenario(t)
 
 	_, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID)
@@ -510,6 +520,7 @@ func setupSuccessfulSubmitScenario(t *testing.T) (string, string, string, string
 }
 
 func TestSubmitForReview_WritesHandoffEvent(t *testing.T) {
+	t.Parallel()
 	tmpDir, taskID, wtCommit, agentID, bb := setupSuccessfulSubmitScenario(t)
 
 	result, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID)
@@ -562,6 +573,7 @@ func TestSubmitForReview_WritesHandoffEvent(t *testing.T) {
 }
 
 func TestSubmitForReview_RebaseRewriteUsesPostRebaseHead(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -939,6 +951,7 @@ func installGitShimFailingFetch(t *testing.T) {
 }
 
 func TestSubmitForReview_TDDEnforcement_AcceptsNestedPythonTestFile(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1014,6 +1027,7 @@ func TestSubmitForReview_TDDEnforcement_AcceptsNestedPythonTestFile(t *testing.T
 }
 
 func TestSubmitForReview_ResolvesHeadInWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir, taskID, _, agentID, bb := setupSuccessfulSubmitScenario(t)
 
 	result, err := SubmitForReview(tmpDir, taskID, "HEAD", agentID)
@@ -1041,6 +1055,7 @@ func TestSubmitForReview_ResolvesHeadInWorktree(t *testing.T) {
 }
 
 func TestSubmitForReview_RejectsStaleMalformedOutputArtifactRef(t *testing.T) {
+	t.Parallel()
 	tmpDir, taskID, wtCommit, agentID, bb := setupSuccessfulSubmitScenario(t)
 	g := git.New(tmpDir)
 	wtHeadBefore, err := g.GetWorktreeHEAD(taskID)
@@ -1109,6 +1124,7 @@ func TestSubmitForReview_RejectsStaleMalformedOutputArtifactRef(t *testing.T) {
 // applies to any doer role (not just the literal "coder" role) by using a custom
 // pipeline config with a custom doer role name.
 func TestSubmitForReview_TDDEnforcement_CustomDoerRole(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1218,6 +1234,7 @@ func TestSubmitForReview_TDDEnforcement_CustomDoerRole(t *testing.T) {
 }
 
 func TestSubmitForReview_TDDFailure_IncludesDiagnosticDetails(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1319,6 +1336,7 @@ func TestSubmitForReview_TDDFailure_IncludesDiagnosticDetails(t *testing.T) {
 }
 
 func TestSubmitForReview_TDDEnforcement_UsesRolePairOverStaleCodingType(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1409,6 +1427,7 @@ func TestSubmitForReview_TDDEnforcement_UsesRolePairOverStaleCodingType(t *testi
 }
 
 func TestSubmitForReview_NonConflictRebaseDetailsIncludeRecoveryContext(t *testing.T) {
+	t.Parallel()
 	err := &git.RebaseError{
 		Command: []string{"git", "rebase", "abc123"},
 		Output:  "fatal: It seems that there is already a rebase-merge directory.",
@@ -1449,6 +1468,7 @@ func TestSubmitForReview_NonConflictRebaseDetailsIncludeRecoveryContext(t *testi
 // - Rebase is a no-op (no new commits on the task branch)
 // - Task transitions to INTEGRATION_ANALYSIS_TO_REVIEW
 func TestSubmitForReview_ZeroDiffIntegration(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -1639,6 +1659,7 @@ func TestSubmitForReviewPreflight(t *testing.T) {
 // without it an agent that correctly requeries and refuses to blind-retry has
 // nothing to act on, which is what happened twice on cpm-1-cp-2-code-4.
 func TestSubmitForReview_WriteStateFailureCarriesABoundedCause(t *testing.T) {
+	t.Parallel()
 	inner := fmt.Errorf("modification function failed: %w", fmt.Errorf("rejected claim produced invalid state: missing required field 'version'"))
 	opErr := &OperationalError{
 		Code:    "state_write",
@@ -1670,6 +1691,7 @@ func TestSubmitForReview_WriteStateFailureCarriesABoundedCause(t *testing.T) {
 // boundedString keeps limit bytes and appends a truncation marker, so the
 // ceiling is the limit plus that marker, not the limit alone.
 func TestSubmitForReview_CauseIsBounded(t *testing.T) {
+	t.Parallel()
 	const marker = "... [truncated]"
 	long := fmt.Errorf("%s", strings.Repeat("x", submitReviewCauseLimit*3))
 

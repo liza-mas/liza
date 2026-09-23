@@ -25,6 +25,7 @@ import (
 )
 
 func TestAddTaskSchemaParity(t *testing.T) {
+	t.Parallel()
 	for _, change := range []struct {
 		name  string
 		apply func(*AddTaskInput)

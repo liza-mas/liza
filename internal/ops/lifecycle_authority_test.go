@@ -13,6 +13,7 @@ import (
 )
 
 func TestLifecycleAuthorityDoesNotDiscloseGenerations(t *testing.T) {
+	t.Parallel()
 	const losing = "test-losing-generation-155"
 	const current = "test-current-generation-155"
 	state := &models.State{Agents: map[string]models.Agent{

@@ -80,6 +80,7 @@ func TestLifecycleVerdictConcurrentReplay(t *testing.T) {
 }
 
 func TestLifecycleMergeReplayAfterCleanup(t *testing.T) {
+	t.Parallel()
 	root, statePath := setupMergeTestRepo(t, "merge-replay", "coder-1")
 	bb := db.New(statePath)
 	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: "merge-generation"}
@@ -116,6 +117,7 @@ func TestLifecycleMergeReplayAfterCleanup(t *testing.T) {
 }
 
 func TestLifecycleMergeFailureReportsCommittedBoundary(t *testing.T) {
+	t.Parallel()
 	root, statePath := setupMergeTestRepo(t, "merge-boundary", "coder-1")
 	bb := db.New(statePath)
 	mismatch := testhelpers.MustGit(t, root, "rev-parse", "integration")
@@ -142,6 +144,7 @@ func TestLifecycleMergeFailureReportsCommittedBoundary(t *testing.T) {
 }
 
 func TestLifecycleBlockedReplayAndConflictingPayload(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	state := testhelpers.CreateValidState()
@@ -178,6 +181,7 @@ func TestLifecycleBlockedReplayAndConflictingPayload(t *testing.T) {
 }
 
 func TestLifecycleBlockedRetiresOnlyAuthorizedPreparation(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
 	state := testhelpers.CreateValidState()

@@ -18,6 +18,7 @@ import (
 )
 
 func TestQuarantinedVerdictPreservesFencedFinding(t *testing.T) {
+	t.Parallel()
 	taskID := "task-quarantine"
 	const reviewerID = "code-reviewer-1"
 	const reason = "api.go:42: non-create mutation omits expected_version; forward both concurrency values"
@@ -80,6 +81,7 @@ func TestQuarantinedVerdictPreservesFencedFinding(t *testing.T) {
 }
 
 func TestQuarantinedVerdictFailedIntegrationIsNotReportedAsMerged(t *testing.T) {
+	t.Parallel()
 	f := newQuarantineFixture(t)
 	f.mutate(t, func(state *models.State) {
 		task := state.FindTask(f.taskID)
@@ -105,6 +107,7 @@ func TestQuarantinedVerdictFailedIntegrationIsNotReportedAsMerged(t *testing.T) 
 }
 
 func TestQuarantinedVerdictAuthorityDiagnosticsDoNotExposeGenerations(t *testing.T) {
+	t.Parallel()
 	const oldGeneration = "quarantine-old-registration-fixture"
 	const currentGeneration = "quarantine-current-registration-fixture"
 	state := &models.State{Agents: map[string]models.Agent{

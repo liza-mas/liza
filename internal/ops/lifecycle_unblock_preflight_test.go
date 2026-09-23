@@ -10,6 +10,7 @@ import (
 )
 
 func TestLifecycleUnblockPreservesTargetSessionPreflight(t *testing.T) {
+	t.Parallel()
 	root, statePath, bb, _ := setupOwnershipLifecycleClaim(t)
 	testhelpers.SetupPipelineConfig(t, root)
 	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: "unblock-current"}

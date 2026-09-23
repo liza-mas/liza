@@ -14,6 +14,7 @@ import (
 )
 
 func TestAssessmentPendingProgressDoesNotWake(t *testing.T) {
+	t.Parallel()
 	for _, id := range []string{"provider", "child-a"} {
 		t.Run(id, func(t *testing.T) {
 			state, candidate := assessmentFingerprintFixture()
@@ -45,6 +46,7 @@ func TestAssessmentPendingProgressDoesNotWake(t *testing.T) {
 }
 
 func TestAssessBlockedPendingProgressNoChange(t *testing.T) {
+	t.Parallel()
 	root, stateFile := assessmentIdempotencyFixture(t)
 	bb := db.For(stateFile)
 	setProvider := func(status models.TaskStatus) {
@@ -73,6 +75,7 @@ func TestAssessBlockedPendingProgressNoChange(t *testing.T) {
 }
 
 func TestAssessmentArchitectureProgressDoesNotWakeOrAppend(t *testing.T) {
+	t.Parallel()
 	// These are the architecture-pair states in internal/embedded/pipeline.yaml.
 	// The code status supplies fixture fields for the equivalent lifecycle step.
 	steps := []struct {
@@ -150,6 +153,7 @@ func TestAssessmentArchitectureProgressDoesNotWakeOrAppend(t *testing.T) {
 }
 
 func TestAssessmentDependencyOutcomeCoversDeclaredStatuses(t *testing.T) {
+	t.Parallel()
 	want := map[models.TaskStatus]string{
 		models.TaskStatusDraft: "pending", models.TaskStatusReady: "pending",
 		models.TaskStatusImplementing: "pending", models.TaskStatusReadyForReview: "pending",
@@ -208,6 +212,7 @@ func TestAssessmentDependencyOutcomeCoversDeclaredStatuses(t *testing.T) {
 }
 
 func TestAssessmentProviderFailureAndRecovery(t *testing.T) {
+	t.Parallel()
 	for _, id := range []string{"provider", "child-a"} {
 		for _, failed := range []models.TaskStatus{models.TaskStatusBlocked, models.TaskStatusAbandoned, models.TaskStatusIntegrationFailed, models.TaskStatusSuperseded} {
 			t.Run(id+"/"+string(failed), func(t *testing.T) {
@@ -242,6 +247,7 @@ func TestAssessmentProviderFailureAndRecovery(t *testing.T) {
 }
 
 func TestAssessmentDescendantReplacementOutcome(t *testing.T) {
+	t.Parallel()
 	state, candidate := assessmentFingerprintFixture()
 	child := state.FindTask("child-a")
 	child.Status, child.SupersededBy = models.TaskStatusSuperseded, []string{"replacement"}
@@ -259,6 +265,7 @@ func TestAssessmentDescendantReplacementOutcome(t *testing.T) {
 }
 
 func TestAssessmentCustomPipelineProgressIsPending(t *testing.T) {
+	t.Parallel()
 	for _, id := range []string{"provider", "child-a"} {
 		t.Run(id, func(t *testing.T) {
 			state, candidate := assessmentFingerprintFixture()
@@ -277,6 +284,7 @@ func TestAssessmentCustomPipelineProgressIsPending(t *testing.T) {
 }
 
 func TestAssessmentEmptyProviderStatusRemainsMaterial(t *testing.T) {
+	t.Parallel()
 	for _, id := range []string{"provider", "child-a"} {
 		t.Run(id, func(t *testing.T) {
 			state, candidate := assessmentFingerprintFixture()

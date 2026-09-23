@@ -13,6 +13,7 @@ import (
 )
 
 func TestSetTaskOutputPersistence_ConcurrentUnrelatedWriters(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
 	state := testhelpers.CreateValidState()
@@ -75,6 +76,7 @@ func TestSetTaskOutputPersistence_ConcurrentUnrelatedWriters(t *testing.T) {
 }
 
 func TestSetTaskOutputPersistence_IntegrationRepairPreservesPlanningOutput(t *testing.T) {
+	t.Parallel()
 	projectRoot, taskID, reviewCommit, _, bb := setupRebaseConflictScenario(t)
 	agentID := "code-planner-1"
 	if err := bb.Modify(func(state *models.State) error {

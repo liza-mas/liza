@@ -15,7 +15,8 @@ import (
 )
 
 func TestLifecycleSubmissionAbandonedPreparationReleaseReclaim(t *testing.T) {
-	disableLifecycleTestIndexes(t)
+	t.Parallel()
+	requireLifecycleTestIndexesDisabled(t)
 	root, taskID, originalSHA, originalAgent, bb := setupSuccessfulSubmitScenario(t)
 	originalAuthority := models.AgentAuthority{ID: originalAgent, Generation: "original-registration"}
 	replacementAuthority := models.AgentAuthority{ID: "coder-2", Generation: "replacement-registration"}

@@ -18,6 +18,7 @@ import (
 )
 
 func TestSupersedeTask_Validation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		taskID         string
@@ -48,6 +49,7 @@ func TestSupersedeTask_Validation(t *testing.T) {
 }
 
 func TestSupersedeTask_FromBlocked(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -142,6 +144,7 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 }
 
 func TestSupersedeTask_RewritesActiveDependentDependencies(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -189,6 +192,7 @@ func TestSupersedeTask_RewritesActiveDependentDependencies(t *testing.T) {
 }
 
 func TestSupersedeTask_PrunesOwnDownstreamDependencies(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -245,6 +249,7 @@ func TestSupersedeTask_PrunesOwnDownstreamDependencies(t *testing.T) {
 }
 
 func TestSupersedeTask_PrunesSupersessionPathDownstreamDependency(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -309,6 +314,7 @@ func TestSupersedeTask_PrunesSupersessionPathDownstreamDependency(t *testing.T) 
 }
 
 func TestSupersedeTask_SupersessionPathInvalidCandidateLeavesStateUnchanged(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -351,6 +357,7 @@ func TestSupersedeTask_SupersessionPathInvalidCandidateLeavesStateUnchanged(t *t
 }
 
 func TestSupersedeTask_InvalidCandidateLeavesStateUnchanged(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -391,6 +398,7 @@ func TestSupersedeTask_InvalidCandidateLeavesStateUnchanged(t *testing.T) {
 }
 
 func TestSupersedeTask_RewritesOperationalOutputTaskDependsOn(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -433,6 +441,7 @@ func TestSupersedeTask_RewritesOperationalOutputTaskDependsOn(t *testing.T) {
 }
 
 func TestSupersedeTask_InvalidOutputReplacementLeavesStateUnchanged(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -478,6 +487,7 @@ func TestSupersedeTask_InvalidOutputReplacementLeavesStateUnchanged(t *testing.T
 }
 
 func TestSupersedeTask_NoReplacements(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -550,6 +560,7 @@ func TestSupersedeTask_NoReplacements(t *testing.T) {
 }
 
 func TestSupersedeTask_NoReplacementsRequiresRecoverabilityCommand(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -565,6 +576,7 @@ func TestSupersedeTask_NoReplacementsRequiresRecoverabilityCommand(t *testing.T)
 }
 
 func TestSupersedeTask_RejectsRecoverabilityCommandWithReplacements(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -618,6 +630,7 @@ func TestSupersedeTask_MasksRecoverabilityCommandBeforeHistory(t *testing.T) {
 }
 
 func TestSupersedeTask_RejectsDownstreamReplacement(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -636,6 +649,7 @@ func TestSupersedeTask_RejectsDownstreamReplacement(t *testing.T) {
 }
 
 func TestSupersedeTask_NoReplacements_DeletesBranch(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -728,6 +742,7 @@ func TestSupersedeTask_NoReplacements_DeletesBranch(t *testing.T) {
 }
 
 func TestSupersedeTask_FromRejected(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -748,6 +763,7 @@ func TestSupersedeTask_FromRejected(t *testing.T) {
 }
 
 func TestSupersedeTask_FromIntegrationFailedMissingWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -788,6 +804,7 @@ func TestSupersedeTask_FromIntegrationFailedMissingWorktree(t *testing.T) {
 }
 
 func TestSupersedeTask_FromReady(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -805,6 +822,7 @@ func TestSupersedeTask_FromReady(t *testing.T) {
 }
 
 func TestSupersedeTask_FromPipelineDraftState(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -837,6 +855,7 @@ func TestSupersedeTask_FromPipelineDraftState(t *testing.T) {
 }
 
 func TestSupersedeTask_LegacyTaskNoRolePair(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -869,6 +888,7 @@ func TestSupersedeTask_LegacyTaskNoRolePair(t *testing.T) {
 }
 
 func TestSupersedeTask_WrongStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -884,6 +904,7 @@ func TestSupersedeTask_WrongStatus(t *testing.T) {
 }
 
 func TestSupersedeTask_TaskNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -900,6 +921,7 @@ func TestSupersedeTask_TaskNotFound(t *testing.T) {
 }
 
 func TestSupersedeTask_EmptyAgentIDReturnsError(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -919,6 +941,7 @@ func TestSupersedeTask_EmptyAgentIDReturnsError(t *testing.T) {
 }
 
 func TestSupersedeTask_CleansUpWorktree(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -982,6 +1005,7 @@ func TestSupersedeTask_CleansUpWorktree(t *testing.T) {
 }
 
 func TestInTransactionCores_SupersedeTaskInStateMatchesCommand(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")

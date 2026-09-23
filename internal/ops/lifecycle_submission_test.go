@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/functionalclusters"
 	"github.com/liza-mas/liza/internal/git"
@@ -21,15 +22,25 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-func disableLifecycleTestIndexes(t *testing.T) {
+// requireLifecycleTestIndexesDisabled checks that the index feature gates are
+// off. TestMain clears their ambient values and only serial tests enable them,
+// so lifecycle tests can rely on the default without t.Setenv and stay
+// eligible for t.Parallel.
+func requireLifecycleTestIndexesDisabled(t *testing.T) {
 	t.Helper()
-	t.Setenv(scipsearch.EnvEnableScipSearch, "false")
-	t.Setenv(stacklit.EnvEnableStacklit, "false")
-	t.Setenv(functionalclusters.EnvEnableFunctionalClusters, "false")
+	if scipsearch.ParseEnvGate(envgate.Value(scipsearch.EnvEnableScipSearch)) {
+		t.Fatalf("%s is enabled; lifecycle tests require it off", scipsearch.EnvEnableScipSearch)
+	}
+	if stacklit.RuntimeEnabled() {
+		t.Fatalf("%s is enabled; lifecycle tests require it off", stacklit.EnvEnableStacklit)
+	}
+	if functionalclusters.RuntimeEnabled() {
+		t.Fatalf("%s is enabled; lifecycle tests require it off", functionalclusters.EnvEnableFunctionalClusters)
+	}
 }
 
 func TestLifecycleSubmissionIndexingDoesNotHoldTaskLock(t *testing.T) {
-	disableLifecycleTestIndexes(t)
+	requireLifecycleTestIndexesDisabled(t)
 	root, taskID, inputSHA, agentID, bb := setupSuccessfulSubmitScenario(t)
 	authority := models.AgentAuthority{ID: agentID, Generation: "concurrent-submission-session"}
 	if err := bb.Modify(func(state *models.State) error {
@@ -105,7 +116,7 @@ func TestLifecycleSubmissionIndexingDoesNotHoldTaskLock(t *testing.T) {
 }
 
 func TestLifecycleSubmissionGenerationTurnoverDuringIndexing(t *testing.T) {
-	disableLifecycleTestIndexes(t)
+	requireLifecycleTestIndexesDisabled(t)
 	root, taskID, inputSHA, actor, bb := setupSuccessfulSubmitScenario(t)
 	old := models.AgentAuthority{ID: actor, Generation: "submission-before-restart"}
 	current := models.AgentAuthority{ID: actor, Generation: "submission-after-restart"}
@@ -196,7 +207,8 @@ func TestLifecycleSubmissionGenerationTurnoverDuringIndexing(t *testing.T) {
 }
 
 func TestLifecycleSubmissionReplayAfterWorktreeRemoval(t *testing.T) {
-	disableLifecycleTestIndexes(t)
+	t.Parallel()
+	requireLifecycleTestIndexesDisabled(t)
 	root, taskID, inputSHA, agentID, bb := setupSuccessfulSubmitScenario(t)
 	if _, err := SubmitForReview(root, taskID, inputSHA, agentID); err != nil {
 		t.Fatal(err)
@@ -235,7 +247,8 @@ func TestLifecycleSubmissionReplayAfterWorktreeRemoval(t *testing.T) {
 }
 
 func TestLifecycleSubmissionReplayUsesOriginalRebaseInput(t *testing.T) {
-	disableLifecycleTestIndexes(t)
+	t.Parallel()
+	requireLifecycleTestIndexesDisabled(t)
 	root, taskID, inputSHA, agentID, bb := setupSuccessfulSubmitScenario(t)
 	if err := os.WriteFile(filepath.Join(root, "integration-only.txt"), []byte("advance integration\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -269,7 +282,8 @@ func TestLifecycleSubmissionReplayUsesOriginalRebaseInput(t *testing.T) {
 }
 
 func TestLifecycleSubmissionExactSHARetry(t *testing.T) {
-	disableLifecycleTestIndexes(t)
+	t.Parallel()
+	requireLifecycleTestIndexesDisabled(t)
 	root, taskID, inputSHA, agentID, bb := setupSuccessfulSubmitScenario(t)
 	first, err := SubmitForReview(root, taskID, inputSHA, agentID)
 	if err != nil {
@@ -324,6 +338,7 @@ func TestLifecycleSubmissionExactSHARetry(t *testing.T) {
 }
 
 func TestLifecycleSubmissionLateHEADStops(t *testing.T) {
+	t.Parallel()
 	for _, status := range []models.TaskStatus{
 		models.TaskStatusReadyForReview,
 		models.TaskStatusMerged,
@@ -331,7 +346,7 @@ func TestLifecycleSubmissionLateHEADStops(t *testing.T) {
 		models.TaskStatusSuperseded,
 	} {
 		t.Run(string(status), func(t *testing.T) {
-			disableLifecycleTestIndexes(t)
+			requireLifecycleTestIndexesDisabled(t)
 			root, taskID, inputSHA, agentID, bb := setupSuccessfulSubmitScenario(t)
 			if _, err := SubmitForReview(root, taskID, inputSHA, agentID); err != nil {
 				t.Fatalf("first submission: %v", err)

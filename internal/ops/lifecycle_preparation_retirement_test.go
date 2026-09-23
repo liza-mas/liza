@@ -14,6 +14,7 @@ import (
 )
 
 func TestRetireFailedLifecyclePreparation(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{
 		"own marker", "replacement request", "moved task boundary",
 		"missing current marker", "missing observed marker", "stale authority",

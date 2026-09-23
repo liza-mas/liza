@@ -10,6 +10,7 @@ import (
 )
 
 func TestActionableBlockedAssessment(t *testing.T) {
+	t.Parallel()
 	for _, reconcile := range []bool{false, true} {
 		name := "note"
 		if reconcile {
@@ -56,6 +57,7 @@ func TestActionableBlockedAssessment(t *testing.T) {
 }
 
 func TestActionableBlockedMaterialChanges(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"own history", "dependency satisfied", "descendant", "human task", "human all", "provider recovered to pending"} {
 		t.Run(kind, func(t *testing.T) {
 			root, stateFile := assessmentIdempotencyFixture(t)
@@ -112,6 +114,7 @@ func TestActionableBlockedMaterialChanges(t *testing.T) {
 }
 
 func TestActionableBlockedLegacyBaseline(t *testing.T) {
+	t.Parallel()
 	for _, fingerprint := range []any{nil, "malformed", 42} {
 		root, stateFile := assessmentIdempotencyFixture(t)
 		if err := db.For(stateFile).Modify(func(state *models.State) error {
@@ -163,6 +166,7 @@ func TestActionableBlockedLegacyBaseline(t *testing.T) {
 }
 
 func TestActionableBlockedMarkBlocked(t *testing.T) {
+	t.Parallel()
 	root, stateFile := assessmentIdempotencyFixture(t)
 	if _, err := AssessBlocked(root, "target", "await provider", "orchestrator-1"); err != nil {
 		t.Fatal(err)
@@ -188,6 +192,7 @@ func TestActionableBlockedMarkBlocked(t *testing.T) {
 }
 
 func TestActionableBlockedHypothesisPredicateUnchanged(t *testing.T) {
+	t.Parallel()
 	state := testhelpers.CreateValidState()
 	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	task := testhelpers.BuildTaskByStatus("target", models.TaskStatusReady, at)

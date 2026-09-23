@@ -14,6 +14,7 @@ import (
 )
 
 func TestDeleteTaskQuarantinedVerdictsPreservesUnrelatedLifecycle(t *testing.T) {
+	t.Parallel()
 	for _, status := range []models.TaskStatus{models.TaskStatusRejected, models.TaskStatusBlocked, models.TaskStatusMerged} {
 		t.Run(string(status), func(t *testing.T) {
 			const remainingID = "remaining-review"
@@ -99,6 +100,7 @@ func TestDeleteTaskQuarantinedVerdictsPreservesUnrelatedLifecycle(t *testing.T) 
 }
 
 func TestDeleteTaskQuarantinedVerdictsRejectedDeletionPreservesEvidence(t *testing.T) {
+	t.Parallel()
 	for _, status := range []models.TaskStatus{models.TaskStatusReviewing, models.TaskStatusMerged} {
 		t.Run(string(status), func(t *testing.T) {
 			f := newQuarantineFixture(t)

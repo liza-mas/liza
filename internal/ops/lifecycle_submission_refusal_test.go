@@ -14,7 +14,8 @@ import (
 )
 
 func TestLifecycleSubmissionRefusalAllowsSameSessionCorrection(t *testing.T) {
-	disableLifecycleTestIndexes(t)
+	t.Parallel()
+	requireLifecycleTestIndexesDisabled(t)
 	root, taskID, _, actor, bb := completeAcceptanceScenario(t)
 	authority := models.AgentAuthority{ID: actor, Generation: "same-submission-session"}
 	if err := bb.Modify(func(state *models.State) error {

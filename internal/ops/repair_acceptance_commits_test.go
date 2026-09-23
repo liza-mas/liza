@@ -83,6 +83,7 @@ func mergedPlanningParent(id string, base, review, merge string, now time.Time) 
 }
 
 func TestRepairAcceptanceCommits_RemapsOrphanedParentByContentIdentity(t *testing.T) {
+	t.Parallel()
 	fx := buildRebasedPlanFixture(t)
 	statePath, _ := testhelpers.SetupLizaDir(t, fx.root)
 	testhelpers.SetupPipelineConfig(t, fx.root)
@@ -130,6 +131,7 @@ func TestRepairAcceptanceCommits_RemapsOrphanedParentByContentIdentity(t *testin
 }
 
 func TestRepairAcceptanceCommits_ReachableParentIsUntouched(t *testing.T) {
+	t.Parallel()
 	fx := buildRebasedPlanFixture(t)
 	statePath, _ := testhelpers.SetupLizaDir(t, fx.root)
 	testhelpers.SetupPipelineConfig(t, fx.root)
@@ -152,6 +154,7 @@ func TestRepairAcceptanceCommits_ReachableParentIsUntouched(t *testing.T) {
 }
 
 func TestRepairAcceptanceCommits_RefusesWhenNoIdenticalReplacementExists(t *testing.T) {
+	t.Parallel()
 	fx := buildRebasedPlanFixture(t)
 	statePath, _ := testhelpers.SetupLizaDir(t, fx.root)
 	testhelpers.SetupPipelineConfig(t, fx.root)
@@ -192,6 +195,7 @@ func TestRepairAcceptanceCommits_RefusesWhenNoIdenticalReplacementExists(t *test
 }
 
 func TestRepairAcceptanceCommits_DroppedMergeCommitResolvesToReviewedReplacement(t *testing.T) {
+	t.Parallel()
 	fx := buildRebasedPlanFixture(t)
 	statePath, _ := testhelpers.SetupLizaDir(t, fx.root)
 	testhelpers.SetupPipelineConfig(t, fx.root)
@@ -227,6 +231,7 @@ func TestRepairAcceptanceCommits_DroppedMergeCommitResolvesToReviewedReplacement
 }
 
 func TestPlanAcceptanceCommitRepair_WritesNothing(t *testing.T) {
+	t.Parallel()
 	fx := buildRebasedPlanFixture(t)
 	statePath, _ := testhelpers.SetupLizaDir(t, fx.root)
 	testhelpers.SetupPipelineConfig(t, fx.root)
@@ -256,6 +261,7 @@ func TestPlanAcceptanceCommitRepair_WritesNothing(t *testing.T) {
 // rewrite is refused before the repair and allocated after it. This drives the
 // real submission path rather than asserting which SHAs landed in fields.
 func TestRepairAcceptanceCommits_ChildAllocatesAfterRepair(t *testing.T) {
+	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
 	git := func(args ...string) string { return testhelpers.MustGit(t, root, args...) }
 

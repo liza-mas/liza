@@ -302,6 +302,7 @@ func assertAppliedDependencyHistory(t *testing.T, task *models.Task, initialLen 
 }
 
 func TestInTransactionCores_ApplyDependencyUpdatesInStateMatchesCommand(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

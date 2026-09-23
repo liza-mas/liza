@@ -9,6 +9,7 @@ import (
 )
 
 func TestIntegrationWaitsForUpstreamPlanning(t *testing.T) {
+	t.Parallel()
 	fixture := newReconcileFixture(t, false)
 	for _, tc := range []struct {
 		name       string
@@ -53,6 +54,7 @@ func TestIntegrationWaitsForUpstreamPlanning(t *testing.T) {
 }
 
 func TestUnsettledPreIntegrationPlanningTasks(t *testing.T) {
+	t.Parallel()
 	fixture := newReconcileFixture(t, false)
 	cfg, err := pipeline.LoadFrozen(fixture.projectRoot)
 	if err != nil {
@@ -155,6 +157,7 @@ func TestUnsettledPreIntegrationPlanningTasks(t *testing.T) {
 }
 
 func TestRecoveredIntegrationWaitsBeforeGenerationTwo(t *testing.T) {
+	t.Parallel()
 	fixture := newReconcileFixture(t, false)
 	state := fixture.readState(t)
 	planner := progressTask("epic", "epic-planning-pair", models.TaskStatusMerged)

@@ -15,6 +15,7 @@ import (
 )
 
 func TestPrepareSembleWorktreeIgnoreWritesDefaultGeneratedPayload(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 
 	warnings := PrepareSembleWorktreeIgnore(fixture.worktree)
@@ -26,6 +27,7 @@ func TestPrepareSembleWorktreeIgnoreWritesDefaultGeneratedPayload(t *testing.T) 
 }
 
 func TestPrepareSembleWorktreeIgnoreAppendsMissingGeneratedPatterns(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 	writePrepareSembleIgnoreLines(t, fixture.worktree, semble.DefaultIgnorePatterns()[:3])
 
@@ -38,6 +40,7 @@ func TestPrepareSembleWorktreeIgnoreAppendsMissingGeneratedPatterns(t *testing.T
 }
 
 func TestPrepareSembleWorktreeIgnoreUsesSharedPrivateExcludeWithScip(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 	if err := worktreeexclude.EnsurePrivateExclude(fixture.worktree, paths.ProjectDirName()+"/scip/"); err != nil {
 		t.Fatalf("EnsurePrivateExclude(%s/scip/) error = %v", paths.ProjectDirName(), err)
@@ -56,6 +59,7 @@ func TestPrepareSembleWorktreeIgnoreUsesSharedPrivateExcludeWithScip(t *testing.
 }
 
 func TestPrepareSembleWorktreeIgnoreRepeatedCallsIdempotent(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 
 	for i := 0; i < 3; i++ {
@@ -69,6 +73,7 @@ func TestPrepareSembleWorktreeIgnoreRepeatedCallsIdempotent(t *testing.T) {
 }
 
 func TestPrepareSembleWorktreeIgnoreConcurrentCallsIdempotent(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 	const workers = 16
 	warnings := make(chan []string, workers)
@@ -93,6 +98,7 @@ func TestPrepareSembleWorktreeIgnoreConcurrentCallsIdempotent(t *testing.T) {
 }
 
 func TestPrepareSembleWorktreeIgnoreLeavesTrackedCompleteFileVisible(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 	writePrepareSembleIgnorePayload(t, fixture.worktree, semble.GeneratedWorktreeIgnorePayload())
 	runGitInDir(t, fixture.worktree, "add", ".sembleignore")
@@ -110,6 +116,7 @@ func TestPrepareSembleWorktreeIgnoreLeavesTrackedCompleteFileVisible(t *testing.
 }
 
 func TestPrepareSembleWorktreeIgnoreReportsTrackedIncompleteWithoutMutation(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 	before := "operator-owned marker\n" + paths.ProjectDirName() + "/\n"
 	writePrepareSembleIgnorePayload(t, fixture.worktree, before)
@@ -169,6 +176,7 @@ func TestPrepareSembleWorktreeIgnoreWarningPreventsPromptMetadata(t *testing.T) 
 }
 
 func TestPrepareSembleWorktreeIgnoreConflictingPrivateExcludeDoesNotWriteGeneratedFile(t *testing.T) {
+	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 	conflictingExclude := filepath.Join(t.TempDir(), "operator-exclude")
 	runGitInDir(t, fixture.worktree, "config", "core.excludesFile", conflictingExclude)

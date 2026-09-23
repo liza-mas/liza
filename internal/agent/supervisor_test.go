@@ -894,6 +894,14 @@ fi
 	}
 }
 
+// supervisorRunHangGuard bounds a RunSupervisor call that is expected to end
+// on its own, by blocking a task or finding no more work. It is a hang guard,
+// not a latency budget: RunSupervisor returns as soon as the loop ends. Each
+// turn claims through a real git worktree and session preflight, which cost
+// about a second on Linux and macOS and over ten on the loaded 2-vCPU Windows
+// CI runner, where 10s guards expired mid-turn (DEV-783).
+const supervisorRunHangGuard = 60 * time.Second
+
 func TestSupervisor_Exit0ProviderAuditDegradedContinuesPostExecution(t *testing.T) {
 	t.Run("real provider diagnostic", func(t *testing.T) {
 		testSupervisorAuditPostExecution(t, `ERROR codex_core::session: failed to record rollout items: thread missing not found`, 1)
@@ -940,7 +948,7 @@ func testSupervisorAuditPostExecution(t *testing.T, auditOutput string, wantAnom
 		})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), supervisorRunHangGuard)
 	defer cancel()
 
 	err := RunSupervisor(ctx, SupervisorConfig{
@@ -1537,7 +1545,7 @@ func TestRunSupervisor_CodexCommandRuntimeFailureBlocksWithoutGenericSpin(t *tes
 	codexOutput := `{"type":"item.completed","item":{"type":"command_execution","command":"liza submit-verdict task-codex-runtime-failure APPROVED --json","aggregated_output":"{\"ok\":false,\"result\":null,\"error\":{\"code\":\"internal\",\"message\":\"internal error\"}}\n","exit_code":1}}`
 	mock := &MockCLIExecutor{ExitCode: 0, Output: codexOutput}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), supervisorRunHangGuard)
 	defer cancel()
 
 	err := RunSupervisor(ctx, SupervisorConfig{
@@ -1670,9 +1678,11 @@ func TestRunSupervisor_NonzeroAgentErrorBlocksBeforeAutoRepairCanRespawn(t *test
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
 	mock := &MockLLMAgent{ExitCode: 1, ExitError: stderrors.New("acpx prompt: exit status 1")}
-	// Ceiling, not a target: the crash path sleeps a fixed 5s restart delay
-	// (supervisor.go) between the two runs, leaving 10s within noise on Windows.
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// The first crash earns the production 5s restart pause before the second
+	// run. Record it instead of sleeping through it: that pause alone used half
+	// of the former 10s guard and left the Windows runner too little (DEV-783).
+	delays := recordSupervisorDelays(t, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), supervisorRunHangGuard)
 	defer cancel()
 
 	err := RunSupervisor(ctx, SupervisorConfig{
@@ -1691,6 +1701,9 @@ func TestRunSupervisor_NonzeroAgentErrorBlocksBeforeAutoRepairCanRespawn(t *test
 	}
 	if calls := mock.GetCalls(); len(calls) != 2 {
 		t.Fatalf("Run calls = %d, want 2 before crash-loop block", len(calls))
+	}
+	if got := delays(); !slices.Contains(got, 5*time.Second) {
+		t.Fatalf("supervisor delays = %v, want the 5s crash-restart pause before the respawn", got)
 	}
 
 	updated, err := bb.Read()
