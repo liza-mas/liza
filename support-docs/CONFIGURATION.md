@@ -508,6 +508,27 @@ curated entries survive a refresh. When the Git directory sits on a different
 filesystem from the checkout, the rename becomes a copy and publication is no
 longer atomic.
 
+Hooks do not run the script themselves. The managed dispatcher runs the hidden
+`§BRAND_BINARY_NAME§ index-refresh` coordinator, which serializes every refresh of the repo
+root. A trigger records a request marker in the Git common directory, then
+tries the refresh lock there without waiting. If another refresh holds the lock,
+the trigger returns at once, and the running refresh picks the request up when
+it finishes. Each run writes its output to
+`<git-common-dir>/§BRAND_BINARY_NAME§-index-refresh.log`, overwritten per run, and a hook
+also echoes it to the terminal that ran the Git command. The dispatcher runs the
+§BRAND_BINARY_NAME§ binary that installed it and falls back to `§BRAND_BINARY_NAME§` on `PATH` when that
+binary is missing or no longer executable; with neither, it skips the refresh
+with a warning. If the
+coordinator dies mid-run, its script keeps the lock until it ends, and a request
+made meanwhile waits for the next trigger. On Windows the script does not
+inherit the lock, so a script left running by a dead coordinator can overlap the
+next refresh.
+
+Running `§BRAND_BINARY_NAME§-index.sh` directly, for example with its `ai` argument, bypasses
+the coordinator. A coordinated refresh clears the staging directory before it
+starts and can remove a manual run's work in progress, so run the script by hand
+only when no commit, checkout or merge is in flight.
+
 ### Stacklit (`§BRAND_ENV_PREFIX§_ENABLE_STACKLIT`)
 
 `stacklit-cli` is an optional external repository-navigation tool. It is strict
@@ -565,7 +586,10 @@ lifecycle points when `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is truthy:
 `<project_root>/stacklit.json` is not refreshed by any agent. It is owned by the
 same lifecycle git hooks as in Pairing mode (`post-commit`, `post-checkout`,
 `post-merge`, `post-rewrite`), so it tracks committed state and does not reflect
-uncommitted changes. MAS init installs them when any
+uncommitted changes. `wt-merge` advances the integration branch without firing
+those hooks, so a successful merge also starts a detached coordinator run
+without waiting for it; a failure to start one is reported as a merge warning.
+MAS init installs the hooks when any
 `§BRAND_ENV_PREFIX§_ENABLE_*` index gate is truthy, and fails on an unmanaged hook
 collision rather than leaving indexes that never refresh. On start, the
 orchestrator supervisor reinstalls the hooks when they are missing or no longer
@@ -784,12 +808,21 @@ Generated task indexes live under the task worktree:
 <worktree>/§BRAND_PROJECT_DIRNAME§/scip/
 ```
 
-Project-root indexes, refreshed by the lifecycle git hooks rather than by any
-agent, live under:
+Project-root indexes are the ones the lifecycle git hooks write, as in Pairing
+mode, and no agent refreshes them. The orchestrator prompt lists each configured
+language whose index exists at:
 
 ```text
-<project_root>/§BRAND_PROJECT_DIRNAME§/scip/
+<project_root>/<language>.scip
 ```
+
+A language the hooks stop indexing while it is still in `config.scip_search`,
+for example because it no longer has an indexable root, keeps its last
+`<language>.scip`, and the orchestrator prompt keeps listing it. Delete the file
+to stop that. Projects that ran earlier versions may also have
+`<project_root>/§BRAND_PROJECT_DIRNAME§/scip/*.scip` files, written by the orchestrator refresh
+those versions ran. Nothing reads or refreshes them any more, and they can be
+deleted.
 
 Indexes are snapshots generated at controlled lifecycle points. They reflect the
 source tree when §BRAND_NAME_TITLE§ created or refreshed them, not later edits made by an

@@ -40,6 +40,7 @@ Any non destructive tool by default.
 
 All modes: use source-of-truth tools for verification.
 MAS worktree rule: Do not use workspace-level or IDE/LSP-backed tools in §BRAND_NAME_TITLE§ multi-agent worktrees, even if the user has configured them for personal use. Use filesystem-truth tools tied to the current worktree instead: `stacklit` with explicit `-i` paths supplied by §BRAND_NAME_TITLE§, `scip-search` with explicit `--index` paths supplied by §BRAND_NAME_TITLE§, `functional-clusters` with explicit `--clusters` artifacts supplied by §BRAND_NAME_TITLE§, `rg`, `rg --files`, `find`, `ast-grep`, direct reads, native manifests, `git`, language-native commands, `morph-mcp`, and `apply_patch`.
+MAS index freshness: repo-root index paths in an orchestrator prompt are owned by the same lifecycle git hooks as in Pairing mode and are also refreshed after each merge; task and reviewer worktree indexes are refreshed at lifecycle points such as worktree creation and review submission. No agent refreshes them, and none reflect edits made after their last refresh.
 Pairing mode: user-personal workspace tools may exist, but they do not replace source-of-truth verification. When the SessionStart session context hook emits explicit repo-root Stacklit or SCIP index paths for an indexed Pairing repo, treat those paths as §BRAND_NAME_TITLE§-supplied for that session; they are owned by the lifecycle git hooks §BRAND_NAME_TITLE§ installs at init, so they are refreshed after commits and do not reflect uncommitted changes. No agent refreshes them.
 
 ## Tool Routing

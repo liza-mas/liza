@@ -2,7 +2,10 @@
 
 ## Status
 
-ACCEPTED
+ACCEPTED — project-root refresh for orchestrator context superseded by
+[ADR-0156](0156-repo-root-index-ownership-by-lifecycle-hooks.md): lifecycle Git
+hooks and a post-merge trigger now own repo-root indexes, at
+`<root>/<language>.scip`. Task worktree refresh is unchanged.
 
 ## Context
 
