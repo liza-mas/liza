@@ -19,6 +19,7 @@ import (
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/projectdetect"
 	"github.com/liza-mas/liza/internal/secretmask"
@@ -725,6 +726,10 @@ func handlePreUpdateHookFailure(gw *git.Git, integrationRef, preMergeHEAD string
 	return false, hookErr
 }
 
+// startIndexRefresh launches the post-merge repo-root index refresh. Tests
+// replace it to observe launches without starting a coordinator.
+var startIndexRefresh = pairingindex.StartRefresh
+
 // MergeWorktree merges an approved task into the integration branch.
 // This is the final step in the task lifecycle, integrating completed work.
 // Returns IntegrationFailedError if merge conflicts or integration tests fail.
@@ -1250,6 +1255,12 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 			warnings = append(warnings, fmt.Sprintf(
 				"obligation content drifted since approval: %s — recorded for review", section))
 		}
+	}
+
+	// Refresh repo-root indexes for the merged content — non-fatal. wt-merge
+	// moves the integration branch with update-ref, which fires no Git hook.
+	if err := startIndexRefresh(projectRoot, "merge"); err != nil {
+		warnings = append(warnings, fmt.Sprintf("failed to start repo-root index refresh: %v", err))
 	}
 
 	return &MergeResult{

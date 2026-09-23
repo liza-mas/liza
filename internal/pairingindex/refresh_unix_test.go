@@ -146,3 +146,93 @@ done
 		t.Fatalf("tools saw the lock descriptor:\n%s", data)
 	}
 }
+
+// The merge trigger runs the coordinator in its own session, from the
+// repository root, with the index-refresh command and the merge trigger, and
+// returns without waiting for it: a merge must never block on indexing.
+func TestStartRefreshLaunchesADetachedCoordinator(t *testing.T) {
+	repo, _ := installRefreshFixture(t, "")
+	fifoDir := t.TempDir()
+	marker := filepath.Join(fifoDir, "coordinator.out")
+	release := filepath.Join(fifoDir, "release")
+	for _, fifo := range []string{marker, release} {
+		if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+			t.Fatalf("mkfifo %s: %v", fifo, err)
+		}
+	}
+	coordinator := filepath.Join(t.TempDir(), "coordinator")
+	writeFile(t, coordinator, `#!/bin/sh
+printf '%s\n%s\n%s %s\n' "$*" "$(pwd -P)" "$$" "$(ps -o pgid= -p $$ | tr -d ' ')" > "$LIZA_TEST_MARKER"
+read _ < "$LIZA_TEST_RELEASE"
+`, 0o755)
+	t.Setenv("LIZA_TEST_MARKER", marker)
+	t.Setenv("LIZA_TEST_RELEASE", release)
+	t.Cleanup(SetIndexBinaryForTest(coordinator))
+	// Opening a FIFO blocks until its other end opens. Opening one end
+	// without blocking releases a reader or writer still waiting on the
+	// other, so a failed test leaves neither this process nor the detached
+	// coordinator stuck.
+	unblock := func(fifo string, flag int) {
+		if f, err := os.OpenFile(fifo, flag|syscall.O_NONBLOCK, 0); err == nil {
+			_ = f.Close()
+		}
+	}
+	t.Cleanup(func() { unblock(release, os.O_WRONLY) })
+
+	output := make(chan []byte, 1)
+	go func() {
+		data, _ := os.ReadFile(marker)
+		output <- data
+	}()
+	returned := make(chan error, 1)
+	go func() { returned <- StartRefresh(repo, "merge") }()
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatalf("StartRefresh() error = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		unblock(marker, os.O_WRONLY)
+		t.Fatal("StartRefresh() waited for the coordinator to finish")
+	}
+	var data []byte
+	select {
+	case data = <-output:
+	case <-time.After(10 * time.Second):
+		unblock(marker, os.O_WRONLY)
+		t.Fatal("coordinator never ran")
+	}
+	// The coordinator has written its output and goes on to open the release
+	// FIFO, so this blocking open returns and lets it exit.
+	released := make(chan struct{})
+	go func() {
+		if f, err := os.OpenFile(release, os.O_WRONLY, 0); err == nil {
+			_ = f.Close()
+		}
+		close(released)
+	}()
+	select {
+	case <-released:
+	case <-time.After(10 * time.Second):
+		unblock(release, os.O_RDONLY)
+		t.Fatal("coordinator never waited for release")
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("coordinator output = %q, want 3 lines", data)
+	}
+	if want := RefreshCommandName + " --trigger merge"; lines[0] != want {
+		t.Fatalf("coordinator args = %q, want %q", lines[0], want)
+	}
+	wantDir, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines[1] != wantDir {
+		t.Fatalf("coordinator dir = %q, want %q", lines[1], wantDir)
+	}
+	pid, pgid, _ := strings.Cut(lines[2], " ")
+	if pid != pgid {
+		t.Fatalf("coordinator pid %s runs in process group %s, want its own", pid, pgid)
+	}
+}

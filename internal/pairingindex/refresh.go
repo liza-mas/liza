@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/gitbash"
 	"github.com/liza-mas/liza/internal/gitenv"
+	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 // RefreshCommandName is the hidden CLI subcommand the dispatcher and the
@@ -56,17 +57,9 @@ var afterRefreshRelease func()
 // the marker after releasing, so the request is never lost. A crashed owner
 // leaves the marker in place, and the next trigger consumes it.
 func RunRefresh(opts RefreshOptions) error {
-	repoRoot, err := filepath.Abs(opts.RepoRoot)
-	if err != nil {
-		return fmt.Errorf("resolve repository root: %w", err)
-	}
-	hooksDir, err := ResolveEffectiveHooksDir(repoRoot)
-	if err != nil {
+	repoRoot, scriptPath, installed, err := installedIndexScript(opts.RepoRoot)
+	if err != nil || !installed {
 		return err
-	}
-	scriptPath := filepath.Join(hooksDir, scriptName())
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		return nil
 	}
 	commonDir, err := gitCommonDir(repoRoot)
 	if err != nil {
@@ -105,6 +98,51 @@ func RunRefresh(opts RefreshOptions) error {
 			return runErr
 		}
 	}
+}
+
+// StartRefresh launches a detached coordinator run and returns without
+// waiting for it. The MAS merge calls it because wt-merge moves the
+// integration branch with update-ref, which fires no Git hook. It does nothing
+// when the index script is not installed.
+func StartRefresh(repoRoot, trigger string) error {
+	repoRoot, _, installed, err := installedIndexScript(repoRoot)
+	if err != nil || !installed {
+		return err
+	}
+	binary := indexBinary()
+	if binary == "" {
+		return errors.New("locate the index refresh coordinator executable")
+	}
+	// Nil standard streams read from and write to the null device; the
+	// coordinator writes its own log.
+	cmd := exec.Command(binary, RefreshCommandName, "--trigger", trigger)
+	cmd.Dir = repoRoot
+	subprocess.SetDetachedProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start index refresh: %w", err)
+	}
+	// A long-lived supervisor must reap the coordinator; a CLI that exits
+	// first leaves it to be adopted by init.
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// installedIndexScript resolves the repository root and the index script
+// path, and reports whether the script is installed.
+func installedIndexScript(repoRoot string) (absRoot, scriptPath string, installed bool, err error) {
+	absRoot, err = filepath.Abs(repoRoot)
+	if err != nil {
+		return "", "", false, fmt.Errorf("resolve repository root: %w", err)
+	}
+	hooksDir, err := ResolveEffectiveHooksDir(absRoot)
+	if err != nil {
+		return "", "", false, err
+	}
+	scriptPath = filepath.Join(hooksDir, scriptName())
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return absRoot, scriptPath, false, nil
+	}
+	return absRoot, scriptPath, true, nil
 }
 
 type refreshPaths struct {

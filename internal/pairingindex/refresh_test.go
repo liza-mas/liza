@@ -164,3 +164,23 @@ func TestRunRefreshDoesNothingWithoutAnInstalledScript(t *testing.T) {
 		t.Fatalf("request marker stat error = %v, want no request without a script", err)
 	}
 }
+
+// A missing coordinator would make the launch fail, so a nil error proves
+// StartRefresh launched nothing.
+func TestStartRefreshDoesNothingWithoutAnInstalledScript(t *testing.T) {
+	repo := initGitRepo(t)
+	t.Cleanup(SetIndexBinaryForTest(filepath.Join(t.TempDir(), "missing-coordinator")))
+
+	if err := StartRefresh(repo, "merge"); err != nil {
+		t.Fatalf("StartRefresh() error = %v", err)
+	}
+}
+
+func TestStartRefreshReportsAMissingCoordinator(t *testing.T) {
+	repo, _ := installRefreshFixture(t, "")
+	t.Cleanup(SetIndexBinaryForTest(""))
+
+	if err := StartRefresh(repo, "merge"); err == nil {
+		t.Fatal("StartRefresh() error = nil, want the missing coordinator reported")
+	}
+}

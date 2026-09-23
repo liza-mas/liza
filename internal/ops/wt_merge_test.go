@@ -2183,10 +2183,14 @@ func TestMergeWorktree_RollbackSyncsRenamedFiles(t *testing.T) {
 		t.Fatalf("Failed to write test script: %v", err)
 	}
 
+	launches := recordIndexRefreshes(t, nil)
 	_, err := MergeWorktree(tmpDir, taskID, agentID)
 	var intErr *IntegrationFailedError
 	if !errors.As(err, &intErr) {
 		t.Fatalf("Expected *IntegrationFailedError, got %T: %v", err, err)
+	}
+	if len(*launches) != 0 {
+		t.Errorf("index refresh launches after rollback = %+v, want none", *launches)
 	}
 
 	// After rollback: old path must be restored (absent in toCommit=preMerge means
@@ -2441,6 +2445,7 @@ func TestMergeWorktree_MergeConflict(t *testing.T) {
 	}
 
 	// Attempt merge — should fail with IntegrationFailedError
+	launches := recordIndexRefreshes(t, nil)
 	_, err := MergeWorktree(tmpDir, taskID, agentID)
 	if err == nil {
 		t.Fatal("Expected error for merge conflict, got nil")
@@ -2456,6 +2461,9 @@ func TestMergeWorktree_MergeConflict(t *testing.T) {
 	}
 	if intErr.RollbackError != nil {
 		t.Errorf("RollbackError should be nil for merge conflicts, got %v", intErr.RollbackError)
+	}
+	if len(*launches) != 0 {
+		t.Errorf("index refresh launches after a conflict = %+v, want none", *launches)
 	}
 
 	// Verify state updated to INTEGRATION_FAILED
