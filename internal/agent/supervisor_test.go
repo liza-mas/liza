@@ -1670,7 +1670,9 @@ func TestRunSupervisor_NonzeroAgentErrorBlocksBeforeAutoRepairCanRespawn(t *test
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 
 	mock := &MockLLMAgent{ExitCode: 1, ExitError: stderrors.New("acpx prompt: exit status 1")}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Ceiling, not a target: the crash path sleeps a fixed 5s restart delay
+	// (supervisor.go) between the two runs, leaving 10s within noise on Windows.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	err := RunSupervisor(ctx, SupervisorConfig{
