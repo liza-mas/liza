@@ -1458,3 +1458,81 @@ func TestSetWarnWriter(t *testing.T) {
 		t.Fatal("SetWarnWriter did not restore warnWriter to os.Stderr")
 	}
 }
+
+func TestValidateCommandWithOptions_WarnsUnresolvedRefFragments(t *testing.T) {
+	// GIVEN a strict carrier on integration and refs into it from live and pending work
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	testhelpers.MustGit(t, tmpDir, "checkout", "-q", "integration")
+	revision := testhelpers.MustGit(t, tmpDir, "rev-parse", "HEAD")
+	carrier := "# Epic\n\n## Source References\n\nSource revision: \"" + revision + "\"\n\n### Direct References\n\n- \"source\": \"README.md#Test\"\n\n### Obligation Coverage\n\n- \"AC-one\" -> \"source\"\n\n## Capability One\n\nFirst capability.\n"
+	if err := os.MkdirAll(filepath.Join(tmpDir, "specs/epics"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "specs/epics/ep-1.md"), []byte(carrier), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, tmpDir, "add", "specs/epics/ep-1.md")
+	testhelpers.MustGit(t, tmpDir, "commit", "-q", "-m", "Add epic")
+
+	const slug = "specs/epics/ep-1.md#capability-one"
+	const exact = "specs/epics/ep-1.md#Capability One"
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Goal.SpecRef = "README.md"
+	live := func(id, epicRef string) models.Task {
+		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusReady, now)
+		task.SpecRef = "README.md"
+		task.EpicRef = epicRef
+		return task
+	}
+	merged := func(id, epicRef string, transitionsExecuted map[string]bool) models.Task {
+		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusMerged, now)
+		task.SpecRef = "README.md"
+		task.Output = []models.OutputEntry{{Desc: "Story", DoneWhen: "Done", Scope: "Scope", SpecRef: "README.md", EpicRef: epicRef}}
+		task.TransitionsExecuted = transitionsExecuted
+		return task
+	}
+	state.Tasks = []models.Task{
+		live("live-slug", slug),
+		live("live-exact", exact),
+		merged("pending-slug", slug, nil),
+		merged("consumed-slug", slug, map[string]bool{"epic-to-us": true}),
+	}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	// WHEN the operator validates
+	var warnings bytes.Buffer
+	err := ValidateCommandWithOptions(statePath, ValidateOptions{SkipProcessChecks: true, WarnWriter: &warnings})
+
+	// THEN validation passes and warns only for refs prompt context would fail on
+	if err != nil {
+		t.Fatalf("ValidateCommandWithOptions() error = %v, want nil", err)
+	}
+	got := warnings.String()
+	for _, want := range []string{
+		`task live-slug epic_ref "` + slug + `" does not resolve at integration HEAD: eligible ATX heading "capability-one" is missing`,
+		`task pending-slug output[0].epic_ref "` + slug + `" does not resolve`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("warnings = %q, want %q", got, want)
+		}
+	}
+	for _, unwanted := range []string{"live-exact", "consumed-slug"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("warnings = %q, must not mention %s", got, unwanted)
+		}
+	}
+
+	// WHEN offline validation skips file checks
+	warnings.Reset()
+	if err := ValidateCommandWithOptions(statePath, ValidateOptions{SkipSpecFileCheck: true, SkipProcessChecks: true, WarnWriter: &warnings}); err != nil {
+		t.Fatal(err)
+	}
+	// THEN fragments are not resolved either
+	if strings.Contains(warnings.String(), "does not resolve") {
+		t.Fatalf("offline validation resolved fragments: %q", warnings.String())
+	}
+}

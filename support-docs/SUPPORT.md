@@ -325,6 +325,9 @@ fragment must be the exact eligible heading text, such as
 `#Capability CAP-001 - Task Creation`, never a slug such as
 `#capability-cap-001---task-creation`; children would otherwise block when their
 prompt context is built. Fix the fragment or the heading, then resubmit.
+`§BRAND_BINARY_NAME§ validate` warns about fragments that already fail to resolve at
+integration HEAD, such as those in state created before this check or those left
+behind by a later heading edit.
 
 If a strict coding claim reports `acceptance.source: requires allocation by a
 direct independently approved merged planning parent`, inspect the direct

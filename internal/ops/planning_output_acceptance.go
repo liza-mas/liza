@@ -30,35 +30,40 @@ func validateOutputRefFragments(root string, task *models.Task, commit string) e
 			{field: "plan_ref", value: output.PlanRef},
 			{field: "arch_ref", value: output.ArchRef},
 		} {
-			fragment := paths.SplitRefFragment(ref.value)
-			if fragment == "" {
-				continue
-			}
-			fail := func(reason string) error {
-				return &PreconditionError{Reason: fmt.Sprintf("task %s: output[%d].%s %q: %s", task.ID, i, ref.field, ref.value, reason)}
-			}
-			path := paths.SplitRefFile(ref.value)
-			_, present, err := g.TreePathMode(commit, path)
-			if err != nil {
-				return fail("cannot inspect the submitted commit")
-			}
-			if !present {
-				continue // Child prompts treat refs absent from the tree as legacy hints.
-			}
-			content, err := g.ReadBlob(commit, path)
-			if err != nil {
-				return fail(err.Error())
-			}
-			if err := referencecontract.ResolveScalarFragment(content, fragment); err != nil {
+			if err := ResolveRefFragmentAt(g, commit, ref.value); err != nil {
+				reason := err.Error()
 				var headingErr *referencecontract.HeadingMatchError
 				if errors.As(err, &headingErr) {
-					return fail(err.Error() + "; the fragment must be the exact heading text, not a slug")
+					reason += "; the fragment must be the exact heading text, not a slug"
 				}
-				return fail(err.Error())
+				return &PreconditionError{Reason: fmt.Sprintf("task %s: output[%d].%s %q: %s", task.ID, i, ref.field, ref.value, reason)}
 			}
 		}
 	}
 	return nil
+}
+
+// ResolveRefFragmentAt resolves ref's fragment at commit the way prompt context
+// does. Refs without a fragment, and refs whose file is absent at commit, keep
+// the legacy route and resolve trivially.
+func ResolveRefFragmentAt(g *git.Git, commit, ref string) error {
+	fragment := paths.SplitRefFragment(ref)
+	if fragment == "" {
+		return nil
+	}
+	path := paths.SplitRefFile(ref)
+	_, present, err := g.TreePathMode(commit, path)
+	if err != nil {
+		return fmt.Errorf("cannot inspect %s: %w", path, err)
+	}
+	if !present {
+		return nil
+	}
+	content, err := g.ReadBlob(commit, path)
+	if err != nil {
+		return err
+	}
+	return referencecontract.ResolveScalarFragment(content, fragment)
 }
 
 // validatePlanningOutputAcceptance checks future coding declarations in the

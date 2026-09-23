@@ -11,8 +11,10 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
@@ -87,12 +89,62 @@ func ValidateCommandWithOptions(statePath string, opts ValidateOptions) error {
 	if err := statevalidate.ValidateState(state, projectRoot, opts.SkipSpecFileCheck, warnings); err != nil {
 		return &lizaerrors.ValidationError{Message: err.Error(), Err: err}
 	}
+	if !opts.SkipSpecFileCheck {
+		warnUnresolvedRefFragments(state, projectRoot, warnings)
+	}
 	if !opts.SkipProcessChecks {
 		if err := validateNoZombieAgents(state, projectRoot, warnings, opts.RecentlySpawnedAgentPIDs); err != nil {
 			return &lizaerrors.ValidationError{Message: err.Error(), Err: err}
 		}
 	}
 	return nil
+}
+
+// warnUnresolvedRefFragments reports ref fragments that prompt context would
+// fail to resolve at integration HEAD: scalar refs of tasks still to be worked,
+// and output refs of merged tasks whose children are not yet created. This is
+// diagnostic only; submission rejects new unresolvable fragments, while a later
+// heading edit or pre-existing state can still leave one behind.
+func warnUnresolvedRefFragments(state *models.State, projectRoot string, warnings io.Writer) {
+	type located struct{ location, ref string }
+	var refs []located
+	add := func(location string, values ...string) {
+		for i, field := range []string{"spec_ref", "epic_ref", "plan_ref", "arch_ref"} {
+			if paths.SplitRefFragment(values[i]) != "" {
+				refs = append(refs, located{location: location + field, ref: values[i]})
+			}
+		}
+	}
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if !task.Status.IsTerminal() {
+			add("task "+task.ID+" ", task.SpecRef, task.EpicRef, task.PlanRef, task.ArchRef)
+		}
+		// Limitation: outputs count as consumed once any transition ran. A custom
+		// pipeline with several outgoing transitions from one role pair can hide
+		// a pending branch here; resolve pending transitions per task through the
+		// pipeline resolver when such a pipeline or a missed warning appears.
+		if task.Status != models.TaskStatusMerged || len(task.TransitionsExecuted) > 0 {
+			continue
+		}
+		for j, output := range task.Output {
+			add(fmt.Sprintf("task %s output[%d].", task.ID, j), output.SpecRef, output.EpicRef, output.PlanRef, output.ArchRef)
+		}
+	}
+	if len(refs) == 0 || state.Config.IntegrationBranch == "" {
+		return
+	}
+	g := git.New(projectRoot)
+	head, err := g.ResolveCommit(state.Config.IntegrationBranch)
+	if err != nil {
+		fmt.Fprintf(warnings, "WARNING: ref fragment check skipped: cannot resolve integration branch %q: %v\n", state.Config.IntegrationBranch, err)
+		return
+	}
+	for _, r := range refs {
+		if err := ops.ResolveRefFragmentAt(g, head, r.ref); err != nil {
+			fmt.Fprintf(warnings, "WARNING: %s %q does not resolve at integration HEAD: %v; prompt context for that work will fail to build\n", r.location, r.ref, err)
+		}
+	}
 }
 
 func validateNoZombieAgents(state *models.State, projectRoot string, warnings io.Writer, recentlySpawnedPIDs []int) error {
