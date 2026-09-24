@@ -19,10 +19,10 @@ func init() {
 
 // AssessBlockedPayload constructs the flag-keyed canonical JSON object shared
 // by preflight and the mutation boundary. Empty reason/questions and a nil
-// repair preserve history-only mode; awaited tasks are independent of mode and
-// omitted when empty, so payloads without them are unchanged. JSON encoding
-// orders map keys stably.
-func AssessBlockedPayload(taskID, note, reason string, questions []string, repair *models.RepairRequest, awaited []string) map[string]any {
+// repair preserve history-only mode; awaited tasks and the clear flag are
+// independent of mode and omitted when empty or false, so payloads without
+// them are unchanged. JSON encoding orders map keys stably.
+func AssessBlockedPayload(taskID, note, reason string, questions []string, repair *models.RepairRequest, awaited []string, clearAwaits bool) map[string]any {
 	payload := map[string]any{
 		"task_id":        taskID,
 		"note":           note,
@@ -32,6 +32,9 @@ func AssessBlockedPayload(taskID, note, reason string, questions []string, repai
 	}
 	if len(awaited) > 0 {
 		payload["awaited_tasks"] = awaited
+	}
+	if clearAwaits {
+		payload["clear_awaits"] = true
 	}
 	return payload
 }
@@ -66,6 +69,10 @@ func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 	if object["awaited_tasks"] != nil && !awaitedOK {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/awaited_tasks", "must be a list of strings", models.FieldValueClassWrongType))
 	}
+	clearAwaits, clearOK := object["clear_awaits"].(bool)
+	if object["clear_awaits"] != nil && !clearOK {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/clear_awaits", "must be a boolean", models.FieldValueClassWrongType))
+	}
 	if len(diagnostics) > 0 {
 		return diagnostics
 	}
@@ -73,6 +80,9 @@ func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 		if id, ok := entry.(string); !ok || strings.TrimSpace(id) == "" {
 			diagnostics = append(diagnostics, scalarPayloadDiagnostic(fmt.Sprintf("/awaited_tasks/%d", i), "must be a non-blank task ID", models.FieldValueClassMissing))
 		}
+	}
+	if clearAwaits && len(awaited) > 0 {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/clear_awaits", "cannot be combined with awaited_tasks", models.FieldValueClassConflict))
 	}
 	for _, field := range []string{"note", "reason"} {
 		value, _ := object[field].(string)

@@ -67,7 +67,7 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    - If you CANNOT resolve it (genuine spec ambiguity, external dependency) and canonical blocker metadata is already current: run note-only {{binaryName}} assess-blocked to record your assessment
      Run: {{binaryName}} assess-blocked <task-id> --note "<why it cannot be resolved now>" --agent-id {{.AgentID}} --json
      This history-only form prevents re-waking without replacing canonical blocker fields. The task will trigger again only when new information arrives (dependency changes, human notes).
-     If the hold waits on specific unfinished tasks, add --awaits <id>[,<id>]: their outcomes replace generated-descendant wakes, and an assessment without --awaits clears the set. If an awaiting task wakes with no dependency change or human note, repeat the same --awaits: a rejection names the cycle or settled task.
+     If the hold waits on specific unfinished tasks, add --awaits <id>[,<id>] naming all of them: it wakes once all merge or one fails. Later assessments keep the set minus merged tasks; --clear-awaits drops it, e.g. to wake on a plan's generated children. If an awaiting task wakes with no dependency change or human note, repeat the same --awaits: a rejection names the cycle, settled or failed task.
 6. Execute all state-modifying commands in this session. Do NOT defer.
 
 {{template "delivery_report" .}}

@@ -720,8 +720,10 @@ func declarativeRepairRequestFor(taskID string) models.RepairRequest {
 }
 
 func TestJSON_AssessBlocked_Awaits(t *testing.T) {
-	resetFlagIfPresent(assessBlockedCmd, "awaits")
-	t.Cleanup(func() { resetFlagIfPresent(assessBlockedCmd, "awaits") })
+	for _, flag := range []string{"awaits", "clear-awaits", "note"} {
+		resetFlagIfPresent(assessBlockedCmd, flag)
+		t.Cleanup(func() { resetFlagIfPresent(assessBlockedCmd, flag) })
+	}
 	projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 		now := time.Now().UTC()
 		waiter := testhelpers.BuildTaskByStatus("task-waiter", models.TaskStatusBlocked, now)
@@ -753,6 +755,36 @@ func TestJSON_AssessBlocked_Awaits(t *testing.T) {
 	history := readState(t, statePath).FindTask("task-waiter").History
 	if got := history[len(history)-1].Extra[ops.AwaitedTasksExtraKey]; !reflect.DeepEqual(got, []any{"gen-1", "gen-2"}) {
 		t.Fatalf("stored awaited_tasks = %#v, want [gen-1 gen-2]", got)
+	}
+
+	// A re-check without --awaits carries the set and says so.
+	resetFlagIfPresent(assessBlockedCmd, "awaits")
+	stdout, err = executeRootCommandCapture(t, projectRoot,
+		"assess-blocked", "task-waiter", "--agent-id", "orchestrator-1", "--note", "re-checked", "--json")
+	if err != nil {
+		t.Fatalf("assess-blocked without --awaits failed: %v\n%s", err, stdout)
+	}
+	result = parseEnvelope(t, stdout)["result"].(map[string]any)
+	if !reflect.DeepEqual(result["awaited_tasks"], []any{"gen-1", "gen-2"}) || result["awaited_carried"] != true {
+		t.Fatalf("re-check result = %#v, want the set carried", result)
+	}
+
+	// Clearing and naming a set conflict before any state is read.
+	stdout, err = executeRootCommandCapture(t, projectRoot,
+		"assess-blocked", "task-waiter", "--agent-id", "orchestrator-1", "--awaits", "gen-1", "--clear-awaits", "--json")
+	if err == nil || !strings.Contains(stdout, "--clear-awaits cannot be combined with --awaits") {
+		t.Fatalf("--awaits with --clear-awaits = %v\n%s; want a validation error", err, stdout)
+	}
+
+	resetFlagIfPresent(assessBlockedCmd, "awaits")
+	stdout, err = executeRootCommandCapture(t, projectRoot,
+		"assess-blocked", "task-waiter", "--agent-id", "orchestrator-1", "--note", "no named wait", "--clear-awaits", "--json")
+	if err != nil {
+		t.Fatalf("assess-blocked --clear-awaits failed: %v\n%s", err, stdout)
+	}
+	history = readState(t, statePath).FindTask("task-waiter").History
+	if got, ok := history[len(history)-1].Extra[ops.AwaitedTasksExtraKey]; ok {
+		t.Fatalf("stored awaited_tasks after --clear-awaits = %#v", got)
 	}
 }
 

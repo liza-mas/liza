@@ -44,7 +44,7 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 		if !valid {
 			return true
 		}
-		candidate := currentBlockerCandidate(state, task, lastAssessment)
+		candidate := currentBlockerCandidate(state, task)
 		// Disposition belongs to the same assessment that carries the digest;
 		// the blocker triple belongs to the task's current canonical state.
 		if lastAssessment.Note != nil {
@@ -84,8 +84,9 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 }
 
 // currentBlockerCandidate is a BLOCKED task's current blocker triple plus the
-// awaited set of its latest assessment, without the assessment's own note.
-func currentBlockerCandidate(state *models.State, task *models.Task, lastAssessment *models.TaskHistoryEntry) AssessmentFingerprintCandidate {
+// awaited set of its latest assessment while that assessment belongs to the
+// current BLOCKED episode, without the assessment's own note.
+func currentBlockerCandidate(state *models.State, task *models.Task) AssessmentFingerprintCandidate {
 	candidate := AssessmentFingerprintCandidate{
 		Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest,
 	}
@@ -95,8 +96,10 @@ func currentBlockerCandidate(state *models.State, task *models.Task, lastAssessm
 	// A wait that now leads back to this task would suppress its wakes
 	// forever. Dropping the set changes the digest, so the task wakes; the
 	// wake does not say why, but recording the same set again is rejected
-	// with the cycle. A malformed set also wakes the task.
-	if awaited, ok := awaitedTasksFrom(lastAssessment); ok {
+	// with the cycle. A malformed set also wakes the task. A set from an
+	// earlier episode is ignored; the status change that ended that episode
+	// already changed the digest.
+	if awaited, ok := currentEpisodeAwaitedTasks(task); ok {
 		if _, deadlocked := awaitLeadsBackTo(state, task.ID, awaited); !deadlocked {
 			candidate.Awaited = awaited
 		}
@@ -122,7 +125,7 @@ func BlockedTasksAwaitPlanningOutput(state *models.State, planningPairs map[stri
 			continue
 		}
 		waitsOn := task.DependsOn
-		if awaited, ok := awaitedTasksFrom(lastOrchestratorAssessment(task)); ok {
+		if awaited, ok := currentEpisodeAwaitedTasks(task); ok {
 			waitsOn = append(slices.Clone(waitsOn), awaited...)
 		}
 		// Both lists follow supersession to the replacement that will merge.
@@ -169,7 +172,7 @@ func BlockedMaterialIdentity(state *models.State) string {
 		if task.Status != models.TaskStatusBlocked {
 			continue
 		}
-		candidate := currentBlockerCandidate(state, task, lastOrchestratorAssessment(task))
+		candidate := currentBlockerCandidate(state, task)
 		lines = append(lines, task.ID+"="+BuildAssessmentFingerprint(state, task, candidate))
 	}
 	sort.Strings(lines)

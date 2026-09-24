@@ -631,10 +631,12 @@ command-free declarative `apply-dependency-repair` replacement, including
 
 `liza assess-blocked <task-id> --note "<assessment>"` remains note-only,
 history-only compatibility when the canonical metadata is already current.
-Either form accepts `--awaits <id>[,<id>]` to name existing unfinished tasks the
-hold waits for: their outcomes then replace generated-descendant wakes, while
-direct dependency, blocker, human-note and the task's own changes still wake it.
-An assessment without `--awaits` clears the set. See
+Either form accepts `--awaits <id>[,<id>]` to name all the existing unfinished
+tasks the hold waits for: it then wakes once they have all merged or one fails,
+instead of on generated descendants or the covered dependencies' partial
+progress, while other dependency, blocker, human-note and the task's own changes
+still wake it. An assessment without `--awaits` keeps the set minus merged tasks
+within the same blocked episode; `--clear-awaits` drops it. See
 [Blocked-Assessment Idempotency](../protocols/blocked-assessment-idempotency.md#awaited-set).
 After a full repair, use
 `liza unblock-task <task-id> --reason "<verified resolution>"`; this guarded

@@ -169,6 +169,7 @@ type AssessBlockedResult struct {
 	Questions            []string              `json:"questions,omitempty"`
 	RepairRequest        *models.RepairRequest `json:"repair_request,omitempty"`
 	AwaitedTasks         []string              `json:"awaited_tasks,omitempty"`
+	AwaitedCarried       bool                  `json:"awaited_carried,omitempty"`
 	Warnings             []string              `json:"warnings,omitempty"`
 	SuppressedEntryBytes int                   `json:"suppressed_entry_bytes,omitempty"`
 }
@@ -184,14 +185,16 @@ func (r *AssessBlockedResult) GetWarnings() []string {
 // reassessment. Supplying Reason, Questions or RepairRequest enables
 // reconciliation mode, which requires both Reason and one to three Questions.
 // A nil RepairRequest clears any prior request from the canonical blocker
-// state. AwaitedTasks works in either mode; an assessment without it clears
-// the previous awaited set.
+// state. AwaitedTasks works in either mode and replaces the awaited set. An
+// assessment without it keeps the current episode's set, minus satisfied
+// members, unless ClearAwaited drops it; the two are mutually exclusive.
 type AssessBlockedOptions struct {
 	Request       LifecycleRequestOptions
 	Reason        string
 	Questions     []string
 	RepairRequest *models.RepairRequest
 	AwaitedTasks  []string
+	ClearAwaited  bool
 }
 
 // AssessBlocked records that the orchestrator has assessed a BLOCKED task.
@@ -246,7 +249,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
 	}
 
-	payload := payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest, opts.AwaitedTasks)
+	payload := payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest, opts.AwaitedTasks, opts.ClearAwaited)
 	if err := rejectInvalidLifecyclePayload(operation, payload); err != nil {
 		return nil, err
 	}
@@ -304,10 +307,12 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			Note, Reason  string
 			Questions     []string
 			RepairRequest *models.RepairRequest
-			// Omitted when empty so requests without an awaited set keep
-			// their pre-existing identity.
+			// Explicit inputs only, omitted when empty so earlier requests
+			// keep their identity. A carried set is derived from state and
+			// never part of identity.
 			AwaitedTasks []string `json:",omitempty"`
-		}{note, opts.Reason, opts.Questions, repairRequest, awaited})
+			ClearAwaited bool     `json:",omitempty"`
+		}{note, opts.Reason, opts.Questions, repairRequest, awaited, opts.ClearAwaited})
 		if err != nil {
 			return err
 		}
@@ -323,16 +328,30 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		if task.Status != models.TaskStatusBlocked {
 			return WrapLifecycleError(operation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
+		// Without --awaits the current episode's set carries forward, minus
+		// satisfied members, so a re-check does not silently widen the wake
+		// signal back to every generated descendant.
+		effective, carried := awaited, false
+		if len(effective) == 0 && !opts.ClearAwaited {
+			effective = carriedAwaitedTasks(state, task)
+			carried = len(effective) > 0
+		}
 		// Before the no-change comparison: an unchanged assessment must not be
-		// accepted once an awaited task has settled or the wait would deadlock.
-		if len(awaited) > 0 {
-			if err := validateAwaitedTasks(state, task, awaited); err != nil {
+		// accepted once an awaited task has settled or failed, or the wait
+		// would deadlock.
+		if len(effective) > 0 {
+			if err := validateAwaitedTasks(state, task, effective); err != nil {
+				if carried {
+					return rejectCarriedAwaitedTasks(state, effective, err)
+				}
 				return err
 			}
 		}
+		result.AwaitedTasks = append([]string(nil), effective...)
+		result.AwaitedCarried = carried
 
 		candidate := AssessmentFingerprintCandidate{
-			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note, Awaited: awaited,
+			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note, Awaited: effective,
 		}
 		if task.BlockedReason != nil {
 			candidate.Reason = *task.BlockedReason
@@ -354,8 +373,8 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		if note != "" {
 			entry.Note = &note
 		}
-		if len(awaited) > 0 {
-			entry.Extra[AwaitedTasksExtraKey] = append([]string(nil), awaited...)
+		if len(effective) > 0 {
+			entry.Extra[AwaitedTasksExtraKey] = append([]string(nil), effective...)
 		}
 		if reconcile {
 			entry.Reason = &opts.Reason
@@ -393,7 +412,6 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			result.Questions = append([]string(nil), opts.Questions...)
 			result.RepairRequest = repairRequest
 		}
-		result.AwaitedTasks = append([]string(nil), awaited...)
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			effects = "unknown"

@@ -885,10 +885,12 @@ already been triaged continue to trigger new orchestrator sessions.
 After assessing, the task remains BLOCKED but won't trigger further wakes
 unless new activity occurs (dependency changes, human notes, etc.).
 
-With --awaits, the task waits for the named existing, unfinished tasks
-instead: their outcomes replace every generated task under its dependencies
-as the wake signal. Use it when the block waits on work a dependency edge
-cannot express. An assessment without --awaits clears the previous set.
+With --awaits, the task waits for all of the named existing, unfinished
+tasks: it wakes once they have all merged, or as soon as one fails, instead of
+on every generated task under its dependencies or each named task settling.
+Use it when the block waits on work a dependency edge cannot express. An
+assessment without --awaits keeps the current set, minus merged tasks;
+--clear-awaits drops it.
 
 Requirements:
   - Agent ID must be provided (via --agent-id flag)
@@ -953,13 +955,17 @@ func assessBlockedOptionsFromFlags(cmd *cobra.Command) (ops.AssessBlockedOptions
 	reason, _ := cmd.Flags().GetString("reason")
 	questions, _ := cmd.Flags().GetStringArray("question")
 	awaited, _ := cmd.Flags().GetStringSlice("awaits")
+	clearAwaits, _ := cmd.Flags().GetBool("clear-awaits")
+	if clearAwaits && len(awaited) > 0 {
+		return ops.AssessBlockedOptions{}, cliValidationError("--clear-awaits cannot be combined with --awaits")
+	}
 	repairRequest, err := repairRequestFromFlags(cmd)
 	if err != nil {
 		return ops.AssessBlockedOptions{}, err
 	}
 	reconcile := cmd.Flags().Changed("reason") || cmd.Flags().Changed("question") || repairRequest != nil
 	if !reconcile {
-		return ops.AssessBlockedOptions{AwaitedTasks: awaited}, nil
+		return ops.AssessBlockedOptions{AwaitedTasks: awaited, ClearAwaited: clearAwaits}, nil
 	}
 	if strings.TrimSpace(reason) == "" {
 		return ops.AssessBlockedOptions{}, cliValidationError("--reason is required for canonical metadata reconciliation")
@@ -975,7 +981,7 @@ func assessBlockedOptionsFromFlags(cmd *cobra.Command) (ops.AssessBlockedOptions
 			return ops.AssessBlockedOptions{}, cliValidationError("--question values must not be empty")
 		}
 	}
-	return ops.AssessBlockedOptions{Reason: reason, Questions: questions, RepairRequest: repairRequest, AwaitedTasks: awaited}, nil
+	return ops.AssessBlockedOptions{Reason: reason, Questions: questions, RepairRequest: repairRequest, AwaitedTasks: awaited, ClearAwaited: clearAwaits}, nil
 }
 
 var assessHypothesisExhaustedCmd = &cobra.Command{
@@ -1669,7 +1675,8 @@ func init() {
 	assessBlockedCmd.Flags().StringArray("repair-evidence", nil, "evidence gathered before requesting orchestrator repair")
 	assessBlockedCmd.Flags().StringArray("repair-validation", nil, "validation already run or required after orchestrator repair")
 	assessBlockedCmd.Flags().String("repair-request-file", "", "path to a complete JSON repair request; mutually exclusive with --repair-* fields")
-	assessBlockedCmd.Flags().StringSlice("awaits", nil, "existing unfinished task IDs the block waits for (comma-separated or repeated); only their outcomes re-wake the task")
+	assessBlockedCmd.Flags().StringSlice("awaits", nil, "existing unfinished task IDs the block waits for, all of them (comma-separated or repeated); wakes when all merge or one fails")
+	assessBlockedCmd.Flags().Bool("clear-awaits", false, "drop the awaited set instead of carrying it forward; not with --awaits")
 	registerCompletion(assessBlockedCmd, "agent-id", completeAgentIDs)
 
 	// Assess-hypothesis-exhausted command flags

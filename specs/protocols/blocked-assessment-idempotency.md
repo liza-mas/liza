@@ -11,7 +11,8 @@ Authorization, generation fencing and lifecycle request checks still apply.
 `BuildAssessmentFingerprint` in
 [assess_blocked_fingerprint.go](../../internal/ops/assess_blocked_fingerprint.go)
 hashes a canonical JSON object with exactly six material inputs; a declared
-[awaited set](#awaited-set) takes the place of `descendants`:
+[awaited set](#awaited-set) takes the place of `descendants` and filters
+`dependencies`:
 
 | Input | Canonical value |
 |---|---|
@@ -62,31 +63,51 @@ execute dependent work.
 ## Awaited set
 
 `assess-blocked --awaits <id>[,<id>]` declares the existing unfinished tasks a
-hold waits for, typically later-stage work the dependency-direction rule forbids
-as an edge. IDs are trimmed and kept as a sorted set; repeats merge. A non-empty
-set replaces `descendants` with `awaited`: the sorted IDs plus the dependency
-record projection over each ID's resolved replacement path. The other inputs
-are unchanged, so direct dependency outcomes and human notes still wake the
-task, while unrelated generated work settling does not. Without a set the
-material is byte-identical to earlier versions, so recorded digests stay valid.
+hold waits for, all of them, typically later-stage work the dependency-direction
+rule forbids as an edge. IDs are trimmed and kept as a sorted set; repeats
+merge.
 
-The writer validates the set after replay and status checks and before the
-no-change comparison, so an otherwise unchanged assessment is rejected once its
-wait is stale. It rejects a self-wait, unknown IDs, IDs with no pending task on
-their replacement path (listing each with its status), and a wait that leads
-back to the task. That search follows effective dependencies through
-supersession, stops at `MERGED`, `ABANDONED` and `SUPERSEDED` tasks, and
-follows the awaited sets only of tasks currently `BLOCKED`; the rejection names
-the cycle.
+Each member is classified over its resolved replacement path: **failed** if any
+task on it is failed/blocked, missing or of unknown status, or the path cycles;
+otherwise **satisfied** when dependency resolution satisfies it (a split needs
+every replacement merged); otherwise **pending**. A non-empty set replaces
+`descendants` with `awaited`: the sorted IDs and the set's state, `pending`
+until every member is satisfied, then `satisfied`, or `failed` as soon as one
+member fails, which also adds the outcome records of every member path so each
+distinct failure is its own digest. The set also removes from `dependencies`
+the records of tasks on its members' paths, so an awaited dependency's partial
+progress is not material; uncovered records, including a sibling replacement of
+a split dependency, remain. The hold therefore wakes once when the set completes
+or once a member fails, plus human-note, self and uncovered-dependency changes.
+Without a set the material is byte-identical to earlier versions, so recorded
+digests stay valid.
+
+A set belongs to one `BLOCKED` episode: it applies while no status-transition
+event (per the status-age classification; unclassified events count) follows
+its assessment in history order, so an unblock and re-block at the same instant
+still end it. The wake reader, carry-forward, deadlock search and planning-output
+detection all apply this rule. An assessment without `--awaits` carries the
+episode's set forward minus satisfied members, reported as `awaited_tasks` with
+`awaited_carried: true`; `--clear-awaits` drops it and conflicts with
+`--awaits`.
+
+The writer validates the explicit or carried set after replay and status checks
+and before the no-change comparison, so an otherwise unchanged assessment is
+rejected once its wait is stale. It rejects a self-wait, unknown IDs, IDs with
+no pending task on their replacement path (listing each with its status), IDs
+whose path has failed work (the all-of wait cannot complete until it is
+reassessed), and a wait that leads back to the task. That search follows
+effective dependencies through supersession, stops at `MERGED`, `ABANDONED` and
+`SUPERSEDED` tasks, and follows the current-episode awaited sets only of tasks
+currently `BLOCKED`; the rejection names the cycle. A carried set's rejection
+adds the remedy: `--awaits` with the still-pending members, or `--clear-awaits`.
 
 The guard is best-effort: later graph edits can close a cycle. The reader
 ignores a set that is malformed (not a non-empty normalized string list) or now
 leads back to the task; the digest then differs and the task wakes, without a
-stated reason. Repeating the same `--awaits` names the cycle or the settled
-task. A task unblocked and re-blocked before reassessment keeps its previous
-set until its next assessment; its own status change wakes it, but the guard
-follows the stale set meanwhile and can reject another task's valid wait
-([ADR-0157](../architecture/ADR/0157-blocked-assessment-wait-for-set.md)).
+stated reason. Repeating the same `--awaits` names the cycle or the settled or
+failed task ([ADR-0157](../architecture/ADR/0157-blocked-assessment-wait-for-set.md),
+[ADR-0158](../architecture/ADR/0158-awaited-set-all-of-and-carry-forward.md)).
 
 ## Persistence and no-change result
 
@@ -99,9 +120,10 @@ removes this key and the retired `assessment_fingerprint_v1` and
 preserving their notes and other audit fields. It neither stores the full
 fingerprint input nor introduces a separate task-state field. A declared
 awaited set is stored beside the digest as `awaited_tasks` and pruned the same
-way; an assessment without `--awaits` stores none, which clears the set. The
-set is part of lifecycle request identity, omitted when empty so earlier
-identities are unchanged.
+way; each assessment stores its effective set, explicit or carried, and
+`--clear-awaits` stores none. Only the explicit `--awaits` IDs and the clear
+flag are part of lifecycle request identity, each omitted when empty so earlier
+identities are unchanged; a carried set is derived from state and never is.
 
 After eligibility and request checks, the writer compares the candidate digest
 with the latest assessment's valid digest before changing canonical blocker
@@ -139,8 +161,9 @@ state. A nil repair request in reconciliation clears the old request.
 
 [orchestrator_wake.go](../../internal/ops/orchestrator_wake.go) and the blocked
 work detector use the same fingerprint builder and latest-entry validity check.
-The reader supplies current canonical blocker metadata and the note and valid
-awaited set from the assessment that carries the digest. Missing/invalid
+The reader supplies current canonical blocker metadata, the note from the
+assessment that carries the digest, and that assessment's valid awaited set
+while it belongs to the current episode. Missing/invalid
 baselines are actionable; otherwise a differing digest is actionable.
 
 The writer's material-change predicate is a **superset** of the reader's wake
@@ -149,9 +172,9 @@ writer, while the writer additionally accepts a newly supplied blocker payload
 or disposition that no read could predict. After an assessment is committed,
 its own history entry and receipt revision do not provoke another wake. The
 superset concerns fingerprint comparison, not eligibility: awaited-set
-validation rejects a candidate that keeps a set whose work has settled or that
-now leads back to the task, so the next assessment must declare a changed set
-or none. There is one comparison baseline, not independently advancing read and
+validation rejects a candidate, explicit or carried, that keeps a set whose
+work has settled or failed or that now leads back to the task, so the next
+assessment must declare a changed set or clear it. There is one comparison baseline, not independently advancing read and
 write cursors.
 This contract applies to `BLOCKED`; hypothesis-exhaustion wake behavior remains
 separate.

@@ -3,7 +3,9 @@
 ## Status
 
 ACCEPTED — implemented 2026-09-23. Amends ADR-0141: when an assessment declares
-an awaited set, that set replaces the `descendants` fingerprint input.
+an awaited set, that set replaces the `descendants` fingerprint input. Amended by
+ADR-0158: the set is one all-of wait that covers its members' dependency
+records and carries forward within a BLOCKED episode.
 
 ## Context and Problem Statement
 

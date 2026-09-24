@@ -96,7 +96,7 @@ func TestAssessBlockedSchemaConstructor(t *testing.T) {
 		t.Fatal("schema not discoverable")
 	}
 	repair := &models.RepairRequest{Operation: "recover-task", Target: "task-1", Command: "recover-task task-1", Evidence: []string{"error=unavailable"}, Validation: []string{"validate"}}
-	payload := AssessBlockedPayload("task-1", "note", "reason", []string{"q1", "q2"}, repair, nil)
+	payload := AssessBlockedPayload("task-1", "note", "reason", []string{"q1", "q2"}, repair, nil, false)
 	want := map[string]any{"task_id": "task-1", "note": "note", "reason": "reason", "questions": []string{"q1", "q2"}, "repair_request": repair}
 	if !reflect.DeepEqual(payload, want) {
 		t.Fatalf("payload=%+v, want %+v", payload, want)
@@ -105,7 +105,7 @@ func TestAssessBlockedSchemaConstructor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := json.Marshal(AssessBlockedPayload("task-1", "note", "reason", []string{"q1", "q2"}, repair, nil))
+	second, err := json.Marshal(AssessBlockedPayload("task-1", "note", "reason", []string{"q1", "q2"}, repair, nil, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,13 +116,13 @@ func TestAssessBlockedSchemaConstructor(t *testing.T) {
 	if !reflect.DeepEqual(payload, want) {
 		t.Fatal("validation changed the caller's payload")
 	}
-	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "note", "", nil, nil, nil), nil)
-	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "", "", []string{}, nil, nil), nil)
+	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "note", "", nil, nil, nil, false), nil)
+	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "", "", []string{}, nil, nil, false), nil)
 }
 
 func TestAssessBlockedSchemaAwaitedTasks(t *testing.T) {
 	t.Parallel()
-	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "note", "", nil, nil, []string{"gen-1", "gen-2"}), nil)
+	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "note", "", nil, nil, []string{"gen-1", "gen-2"}, false), nil)
 	for _, tt := range []struct {
 		name    string
 		awaited any
@@ -134,11 +134,38 @@ func TestAssessBlockedSchemaAwaitedTasks(t *testing.T) {
 		{"non-string entry", []any{42}, "/awaited_tasks/0", models.FieldValueClassMissing},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			payload := AssessBlockedPayload("task-1", "note", "", nil, nil, nil)
+			payload := AssessBlockedPayload("task-1", "note", "", nil, nil, nil, false)
 			payload["awaited_tasks"] = tt.awaited
 			_, diagnostics, err := Validate("assess-blocked", payload)
 			if err != nil || len(diagnostics) != 1 || diagnostics[0].Field != tt.field || diagnostics[0].ValueClass != tt.class {
 				t.Fatalf("diagnostics = %+v, %v; want one %s at %s", diagnostics, err, tt.class, tt.field)
+			}
+		})
+	}
+}
+
+func TestAssessBlockedSchemaClearAwaits(t *testing.T) {
+	t.Parallel()
+	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "note", "", nil, nil, nil, true), nil)
+	if _, present := AssessBlockedPayload("task-1", "note", "", nil, nil, nil, false)["clear_awaits"]; present {
+		t.Fatal("a false clear flag changed the payload shape")
+	}
+	for _, tt := range []struct {
+		name    string
+		payload map[string]any
+		class   string
+	}{
+		{"not a boolean", func() map[string]any {
+			payload := AssessBlockedPayload("task-1", "note", "", nil, nil, nil, false)
+			payload["clear_awaits"] = "yes"
+			return payload
+		}(), models.FieldValueClassWrongType},
+		{"with awaited tasks", AssessBlockedPayload("task-1", "note", "", nil, nil, []string{"gen-1"}, true), models.FieldValueClassConflict},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, diagnostics, err := Validate("assess-blocked", tt.payload)
+			if err != nil || len(diagnostics) != 1 || diagnostics[0].Field != "/clear_awaits" || diagnostics[0].ValueClass != tt.class {
+				t.Fatalf("diagnostics = %+v, %v; want one %s at /clear_awaits", diagnostics, err, tt.class)
 			}
 		})
 	}
@@ -152,9 +179,9 @@ func TestAssessBlockedSchemaDependencyRepair(t *testing.T) {
 		Evidence: []string{"error=dependency unavailable"}, Validation: []string{"validate"},
 		DependencyUpdates: []models.DependencyUpdate{{TaskID: "task-1", ExpectedDependsOn: []string{}, DesiredDependsOn: []string{privateID}}},
 	}
-	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "", "blocked", []string{"Repair?"}, repair, nil), nil)
+	assertAssessBlockedDiagnostics(t, AssessBlockedPayload("task-1", "", "blocked", []string{"Repair?"}, repair, nil, false), nil)
 	repair.DependencyUpdates[0].DesiredDependsOn = []string{privateID, privateID}
-	payload := AssessBlockedPayload("task-1", "", "blocked", []string{"Repair?"}, repair, nil)
+	payload := AssessBlockedPayload("task-1", "", "blocked", []string{"Repair?"}, repair, nil, false)
 	assertAssessBlockedDiagnostics(t, payload, []models.FieldDiagnostic{correctInput(
 		"/repair_request/dependency_updates/0/desired_depends_on/1",
 		"dependency updates require unique non-blank task IDs and explicit lists of unique non-blank dependency IDs",
@@ -177,7 +204,7 @@ func TestAssessBlockedSchemaTextBounds(t *testing.T) {
 	for _, field := range []string{"note", "reason", "question"} {
 		t.Run(field, func(t *testing.T) {
 			for _, size := range []int{4096, 4097} {
-				payload := AssessBlockedPayload("task-1", "", "reason", []string{"question"}, nil, nil)
+				payload := AssessBlockedPayload("task-1", "", "reason", []string{"question"}, nil, nil, false)
 				path := "/" + field
 				text := strings.Repeat("x", size)
 				if field == "question" {
