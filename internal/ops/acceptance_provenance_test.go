@@ -1327,3 +1327,26 @@ func TestAcceptanceProvenance_SamePairReplacementKeepsAllocation(t *testing.T) {
 		}
 	}
 }
+
+// A transient git failure must stay diagnosable: the wrapper keeps git's cause
+// instead of replacing it with a fixed message.
+func TestReadAcceptanceBlob_PreservesGitCause(t *testing.T) {
+	root := t.TempDir()
+	testhelpers.MustGit(t, root, "init", "-q")
+	if err := os.MkdirAll(filepath.Join(root, "specs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "specs", "feature.md"), []byte("# Feature\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/feature.md")
+	testhelpers.MustGit(t, root, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "test: carrier")
+
+	_, _, err := readAcceptanceBlob(root, "0123456789abcdef0123456789abcdef01234567", "specs/feature.md")
+	if err == nil {
+		t.Fatal("expected an error for a commit absent from the repository")
+	}
+	if errors.Unwrap(err) == nil {
+		t.Fatalf("git cause dropped: %v", err)
+	}
+}

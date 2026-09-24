@@ -523,21 +523,30 @@ func readAcceptanceBlob(root, commit, path string) (string, string, error) {
 	}
 	g := git.New(root)
 	mode, present, err := g.TreePathMode(commit, path)
-	if err != nil || !present || (mode != "100644" && mode != "100755") {
+	if err != nil {
+		return "", "", fmt.Errorf("cannot inspect acceptance artifact: %s: %w", path, err)
+	}
+	if !present || (mode != "100644" && mode != "100755") {
 		return "", "", fmt.Errorf("acceptance artifact must be a present regular committed file: %s", path)
 	}
 	blob, err := g.BlobOID(commit, path)
 	if err != nil {
-		return "", "", fmt.Errorf("cannot resolve acceptance artifact: %s", path)
+		return "", "", fmt.Errorf("cannot resolve acceptance artifact: %s: %w", path, err)
 	}
 	sizeOutput, err := gitenv.CombinedOutput(root, "cat-file", "-s", blob)
+	if err != nil {
+		return "", "", fmt.Errorf("acceptance artifact cannot be sized: %s: %w\nOutput: %s", path, err, sizeOutput)
+	}
 	size, parseErr := strconv.Atoi(strings.TrimSpace(string(sizeOutput)))
-	if err != nil || parseErr != nil || size > 256*1024 {
-		return "", "", fmt.Errorf("acceptance artifact exceeds 256 KiB or cannot be sized: %s", path)
+	if parseErr != nil {
+		return "", "", fmt.Errorf("acceptance artifact cannot be sized: %s: %w", path, parseErr)
+	}
+	if size > 256*1024 {
+		return "", "", fmt.Errorf("acceptance artifact exceeds 256 KiB: %s", path)
 	}
 	content, err := g.ReadBlob(commit, path)
 	if err != nil {
-		return "", "", fmt.Errorf("cannot read acceptance artifact: %s", path)
+		return "", "", fmt.Errorf("cannot read acceptance artifact: %s: %w", path, err)
 	}
 	return content, blob, nil
 }
