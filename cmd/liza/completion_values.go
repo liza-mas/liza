@@ -143,7 +143,7 @@ func completionState(cmd *cobra.Command) (*models.State, bool) {
 	if !ok {
 		return nil, false
 	}
-	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+	state, err := db.For(paths.New(projectRoot).StatePath()).ReadSnapshot()
 	if err != nil {
 		return nil, false
 	}

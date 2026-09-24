@@ -80,7 +80,7 @@ func ValidateCommandWithOptions(statePath string, opts ValidateOptions) error {
 		}
 	}
 
-	state, err := db.For(statePath).Read()
+	state, err := db.For(statePath).ReadSnapshot()
 	if err != nil {
 		schemaErr := &lizaerrors.StateSchemaError{Operation: "validate", Err: err}
 		return &lizaerrors.ValidationError{Message: schemaErr.Error(), Err: schemaErr}

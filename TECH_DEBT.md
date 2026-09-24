@@ -669,3 +669,29 @@ per-entity validation under the lock, and archiving terminal tasks.
 
 - any supervisor exit whose final error is `lock error (timeout)`;
 - D69 Steps 2–3 land and such exits still recur.
+
+## `no_follow_up` runtime policy read outside the mutation lock
+
+**What:** `loadResolverWithRuntimePolicy` (`internal/ops/pipeline_ops.go`) reads
+`Config.NoFollowUp` in its own locked read, which `resolverOptionsFromState`
+releases before the resolver is used.
+
+- `Proceed` rejects a disabled pipeline transition with that resolver
+  (`resolveTransitionDefFrom`).
+- `ExecuteAvailableTransitionsReport` selects child-creating transitions with it
+  inside `Modify`.
+
+Neither rechecks `NoFollowUp` in the locked `Modify` callback, so a concurrent
+policy change can be missed. On any read error, including a lock timeout,
+`resolverOptionsFromState` returns no options. The permissive resolver is then
+used silently, so `no_follow_up` is ignored for that call.
+
+**Why deferred:** D69 Step 2 converts only observation-only reads to lock-free
+snapshots. This read feeds a mutation without being checked again under the lock,
+so it stays locked. Fixing it means revalidating the runtime policy inside the
+mutation and failing closed on a read error. That is a separate policy change.
+
+**Payback trigger:** Either of these:
+
+- a `no_follow_up` run executes a pipeline transition;
+- the next change to how `proceed` loads its resolver.

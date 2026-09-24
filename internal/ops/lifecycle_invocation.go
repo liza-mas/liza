@@ -31,7 +31,7 @@ type LifecycleInvocation struct {
 // disables this observation without changing the domain operation's behavior.
 func NewLifecycleInvocation(projectRoot string) *LifecycleInvocation {
 	invocation := &LifecycleInvocation{projectRoot: projectRoot}
-	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+	state, err := db.For(paths.New(projectRoot).StatePath()).ReadSnapshot()
 	if err != nil {
 		invocation.warning = errors.New("lifecycle metrics unavailable: could not capture sprint identity")
 		return invocation

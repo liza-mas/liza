@@ -20,9 +20,12 @@ This file is written to `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` during `§BRAND_B
 §BRAND_BINARY_NAME§ analyze                       # Circuit breaker pattern detection
 ```
 
-`status`, `get` and `get-tasks` inspect a complete published snapshot without
-acquiring the state lock. They can return the previous publication while a writer
-is working; later mutations still revalidate current state under lock. Process
+`status`, `get`, `get-tasks`, `validate`, `usage-report`, `watch` and the TUI
+read state from a complete published snapshot without acquiring the state lock.
+A snapshot can already be stale while it is being decoded or used, because
+writers keep publishing. Later mutations still revalidate current state under
+lock. Auto-repair and `validate --repair` still take the lock for their own
+reads and repairs. Process
 and filesystem diagnostics are separate observations. Do not edit state in place
 while agents are running.
 

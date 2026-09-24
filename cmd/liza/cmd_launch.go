@@ -487,7 +487,7 @@ func launchAvailableCLIs(projectRoot string) []string {
 	if projectRoot == "" {
 		return agent.ValidCLIs()
 	}
-	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+	state, err := db.For(paths.New(projectRoot).StatePath()).ReadSnapshot()
 	if err != nil {
 		return agent.ValidCLIs()
 	}

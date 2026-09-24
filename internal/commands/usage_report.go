@@ -103,7 +103,7 @@ func UsageReportCommand(opts UsageReportOptions) (any, error) {
 		return nil, err
 	}
 
-	state, err := db.For(paths.New(opts.ProjectRoot).StatePath()).Read()
+	state, err := db.For(paths.New(opts.ProjectRoot).StatePath()).ReadSnapshot()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}

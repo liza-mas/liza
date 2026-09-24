@@ -132,7 +132,7 @@ func runChecks(ctx context.Context, config WatchConfig) error {
 	}
 
 	bb := db.For(statePath)
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
 	}

@@ -1324,9 +1324,16 @@ flock -x .liza/state.yaml.lock -c 'operation'
 
 Lock hold time must be minimal (read, modify, write, release).
 
-Operator inspection (`status`, `get`, `get-tasks`) reads one complete published
-state through `Blackboard.ReadSnapshot`, without acquiring the state lock or
-consulting an mtime cache. Writers publish closed temporary files by atomic
+Operator inspection (`status`, `get`, `get-tasks`) and observation-only reads
+(TUI, `watch`, `validate`, `usage-report`, shell completion, launch `--cli`
+validation, lifecycle metrics sprint capture) read one complete published state
+through `Blackboard.ReadSnapshot`, without acquiring the state lock or consulting
+an mtime cache. A read qualifies only when the state it returns is displayed,
+observed, or used as launch-input validation, and any consequent state mutation or
+authority decision re-reads under the lock or is guarded by locked registration.
+The read itself is lock-free, but the command around it may still take locks. For
+example, `watch` and TUI auto-repair take `RepairAgentPool`'s locked read, and
+`validate --repair` repairs under lock. Writers publish closed temporary files by atomic
 rename; inspection sees either publication, never a partially written state.
 The file is closed before YAML decoding. Missing files and malformed YAML remain
 errors. In-place external writes are outside this guarantee.

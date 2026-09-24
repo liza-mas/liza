@@ -46,11 +46,12 @@ func watchStateCmd(watcher StateWatcher) tea.Cmd {
 	}
 }
 
-// readStateCmd reads state.yaml via Blackboard.Read() and returns a StateMsg.
+// readStateCmd reads one published state.yaml snapshot without taking the
+// state lock and returns a StateMsg.
 // Returns errMsg on read failure.
 func readStateCmd(bb *db.Blackboard) tea.Cmd {
 	return func() tea.Msg {
-		state, err := bb.Read()
+		state, err := bb.ReadSnapshot()
 		if err != nil {
 			return errMsg{err}
 		}
