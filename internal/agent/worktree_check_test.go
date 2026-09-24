@@ -38,7 +38,7 @@ func testWorktreeAuthority(t *testing.T, bb *db.Blackboard, agentID string) mode
 
 func isolateGitGlobalConfig(t *testing.T) {
 	t.Helper()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	testhelpers.IsolateGlobalGitConfig(t)
 }
 
 func TestEnsureReviewerWorktree_Exists(t *testing.T) {

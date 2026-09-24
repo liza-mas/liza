@@ -348,7 +348,7 @@ func TestSubmitForReviewCLI_CommitRefHandling(t *testing.T) {
 }
 
 func TestSubmitForReviewCLI_JSONIncludesScipWarnings(t *testing.T) {
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	testhelpers.IsolateGlobalGitConfig(t)
 	t.Setenv("LIZA_ENABLE_SCIP_SEARCH", "true")
 	t.Setenv("LIZA_ENABLE_STACKLIT", "false")
 	projectRoot, statePath, taskID, agentID := setupSubmitForReviewCLIProject(t)

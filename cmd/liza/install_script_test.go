@@ -264,6 +264,136 @@ Write-Output $expectedError
 	}
 }
 
+func TestPowerShellInstallerManagesUserPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell installer behavior is exercised by Windows CI")
+	}
+	powerShell, err := exec.LookPath("powershell")
+	if err != nil {
+		t.Skipf("Windows PowerShell is unavailable: %v", err)
+	}
+
+	repoRoot := findRepoRootForInstallScript(t)
+	installerPath := filepath.Join(repoRoot, "install.ps1")
+	harnessPath := filepath.Join(t.TempDir(), "test-path-management.ps1")
+	harness := `param([string]$InstallerPath)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $InstallerPath,
+    [ref]$tokens,
+    [ref]$parseErrors
+)
+if ($parseErrors -and $parseErrors.Count -ne 0) {
+    throw "Could not parse installer: $($parseErrors[0].Message)"
+}
+$functionAst = $ast.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Update-InstallDirOnPath'
+}, $true)
+if (-not $functionAst) {
+    throw 'Update-InstallDirOnPath was not found in the installer.'
+}
+Invoke-Expression $functionAst.Extent.Text
+
+$default = Join-Path $env:LOCALAPPDATA 'Programs\example-tool'
+$target = 'C:\tools\example-tool'
+$expander = {
+    param([string]$entry)
+    [Environment]::ExpandEnvironmentVariables($entry)
+}
+
+function Assert-Path([string]$name, [string]$actual, [string]$expected) {
+    if ($actual -ne $expected) {
+        throw "$name failed: got '$actual', want '$expected'"
+    }
+}
+
+# absent -> appended once
+Assert-Path 'add' (Update-InstallDirOnPath -InstallDir $target -UserPath 'C:\Windows;C:\bin' -DefaultDir $default -Expander $expander) 'C:\Windows;C:\bin;C:\tools\example-tool'
+
+# present -> unchanged (idempotent)
+Assert-Path 'idempotent' (Update-InstallDirOnPath -InstallDir $target -UserPath "C:\Windows;$target;C:\bin" -DefaultDir $default -Expander $expander) "C:\Windows;$target;C:\bin"
+
+# duplicated -> collapsed to one
+Assert-Path 'dedupe' (Update-InstallDirOnPath -InstallDir $target -UserPath "$target;C:\Windows;$target\" -DefaultDir $default -Expander $expander) "$target;C:\Windows"
+
+# stale default entry -> removed when install dir moved
+Assert-Path 'stale-default' (Update-InstallDirOnPath -InstallDir $target -UserPath "C:\Windows;$default;C:\bin" -DefaultDir $default -Expander $expander) "C:\Windows;C:\bin;$target"
+
+# default IS the install dir -> kept, not treated as stale
+Assert-Path 'default-is-target' (Update-InstallDirOnPath -InstallDir $default -UserPath "C:\Windows;$default" -DefaultDir $default -Expander $expander) "C:\Windows;$default"
+
+# empty user PATH -> just the install dir
+Assert-Path 'empty' (Update-InstallDirOnPath -InstallDir $target -UserPath '' -DefaultDir $default -Expander $expander) $target
+
+# unexpanded %VAR% entries survive the merge verbatim, keeping REG_EXPAND_SZ
+Assert-Path 'expand-sz-preserved' (Update-InstallDirOnPath -InstallDir $target -UserPath "C:\Windows;%USERPROFILE%\AppData\Local\Microsoft\WindowsApps" -DefaultDir $default -Expander $expander) "C:\Windows;%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;$target"
+
+# an unexpanded %LOCALAPPDATA% entry that resolves to the default dir is
+# recognized after expansion and treated like an expanded stale entry
+Assert-Path 'expand-locapappdata-recognized' (Update-InstallDirOnPath -InstallDir $target -UserPath "C:\Windows;%LOCALAPPDATA%\Programs\example-tool;C:\bin" -DefaultDir $default -Expander $expander) "C:\Windows;C:\bin;$target"
+
+Write-Output 'path-cases-ok'
+`
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write PowerShell test harness: %v", err)
+	}
+
+	cmd := exec.Command(
+		powerShell,
+		"-NoLogo",
+		"-NoProfile",
+		"-NonInteractive",
+		"-ExecutionPolicy", "Bypass",
+		"-File", harnessPath,
+		"-InstallerPath", installerPath,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("exercise Update-InstallDirOnPath: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "path-cases-ok") {
+		t.Fatalf("PowerShell output missing success marker:\n%s", out)
+	}
+}
+
+// TestPowerShellInstallerPreservesRegExpandSzUserPath is the macOS/Linux
+// counterpart to the Windows-CI harness above: pwsh is unavailable here, so it
+// statically checks that the installer keeps a REG_EXPAND_SZ user PATH intact —
+// the marker strings below, not the behavior, are what this test asserts. The
+// raw registry read (DoNotExpandEnvironmentNames) and the ExpandString write are
+// what stop a stock user PATH — which holds entries like
+// %USERPROFILE%\AppData\Local\Microsoft\WindowsApps — from being flattened to
+// expanded values. The injected expander keeps Update-InstallDirOnPath pure
+// while comparing entries by expansion, and the raw $trimmed form is what is
+// emitted, so an unexpanded %VARIABLE% entry survives the merge verbatim.
+func TestPowerShellInstallerPreservesRegExpandSzUserPath(t *testing.T) {
+	repoRoot := findRepoRootForInstallScript(t)
+	script, err := os.ReadFile(filepath.Join(repoRoot, "install.ps1"))
+	if err != nil {
+		t.Fatalf("read install.ps1: %v", err)
+	}
+	text := string(script)
+
+	for _, marker := range []string{
+		"[System.Func[string,string]]$Expander",
+		"$Expander.Invoke(",
+		"$kept += $trimmed",
+		"[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames",
+		"[Microsoft.Win32.RegistryValueKind]::ExpandString",
+	} {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("install.ps1 missing %q (REG_EXPAND_SZ preservation)", marker)
+		}
+	}
+}
+
 func runInstallScriptHelp(t *testing.T, env ...string) (string, error) {
 	t.Helper()
 	return runInstallScript(t, []string{"--help"}, env...)

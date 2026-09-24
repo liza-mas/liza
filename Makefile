@@ -1,5 +1,56 @@
 .PHONY: build test test-fast test-race test-e2e clean install lint check-testhelpers check-embedded release package build-all tidy run coverage help
 
+# Windows shell selection. This must come before the first $(shell ...) below:
+# every $(shell) and recipe runs under whatever SHELL is in effect when make
+# reaches it, and from PowerShell or cmd that is cmd.exe — printf, tr, date and
+# mkdir -p all fail there, silently producing an empty VERSION and a "The
+# system cannot accept the date entered" BUILD_DATE.
+#
+# When make already found a POSIX sh on PATH (launched from Git Bash, or with
+# Git\usr\bin prepended by the caller) $(SHELL) holds that sh's full path and is
+# left alone. When it found none, $(SHELL) is the bare default "sh.exe" and we
+# point it at Git for Windows' bash.
+#
+# A bare "bash" resolves by PATH, and C:\Windows\System32\bash.exe — the WSL
+# launcher — is on the machine PATH ahead of any user-level Git for Windows
+# entry; reordering it needs elevation the managed machines this targets do
+# not grant. The runtime resolver probes the standard per-user and machine-wide
+# Git for Windows locations before PATH, so make must cover the same locations.
+# wildcard needs spaces escaped while probing, but returns the original path;
+# keeping each result in its own variable avoids splitting it with firstword.
+#
+# GNU make (4.4.1 verified) cannot run a SHELL whose path holds a space, escaped
+# or quoted: $(shell) falls back to CreateProcess and fails with "pipe: Invalid
+# argument". C:\Program Files\Git\bin\bash.exe therefore goes through its 8.3
+# short name (C:\PROGRA~1\...). Still in cmd mode at that point, $(shell) runs
+# through a batch file, hence the doubled %% in the for-variable.
+ifeq ($(OS),Windows_NT)
+ifeq ($(SHELL),sh.exe)
+empty :=
+space := $(empty) $(empty)
+escape_spaces = $(subst $(space),\$(space),$(1))
+LOCAL_GIT_BASH := $(if $(LOCALAPPDATA),$(wildcard $(call escape_spaces,$(subst \,/,$(LOCALAPPDATA))/Programs/Git/bin/bash.exe)))
+# ProgramW6432 comes first: make imports the environment case-insensitively and
+# ProgramFiles(x86) clobbers ProgramFiles, which then reads as empty or as the
+# x86 directory. ProgramW6432 always names the native Program Files.
+PROGRAM_W6432_GIT_BASH := $(if $(ProgramW6432),$(wildcard $(call escape_spaces,$(subst \,/,$(ProgramW6432))/Git/bin/bash.exe)))
+PROGRAM_FILES_GIT_BASH := $(if $(ProgramFiles),$(wildcard $(call escape_spaces,$(subst \,/,$(ProgramFiles))/Git/bin/bash.exe)))
+PROGRAM_FILES_X86_GIT_BASH := $(if ${ProgramFiles(x86)},$(wildcard $(call escape_spaces,$(subst \,/,${ProgramFiles(x86)})/Git/bin/bash.exe)))
+GIT_BASH := $(or $(LOCAL_GIT_BASH),$(PROGRAM_W6432_GIT_BASH),$(PROGRAM_FILES_GIT_BASH),$(PROGRAM_FILES_X86_GIT_BASH))
+ifeq ($(GIT_BASH),)
+$(error Git for Windows bash.exe not found under %LOCALAPPDATA%\Programs\Git or %ProgramW6432%\Git; install Git for Windows or run make from Git Bash)
+endif
+ifneq ($(findstring $(space),$(GIT_BASH)),)
+GIT_BASH := $(subst \,/,$(shell for %%I in ("$(subst /,\,$(GIT_BASH))") do @echo %%~sI))
+endif
+ifneq ($(findstring $(space),$(GIT_BASH)),)
+$(error Git bash path "$(GIT_BASH)" contains a space and has no 8.3 short name; run make from Git Bash instead)
+endif
+SHELL := $(GIT_BASH)
+.SHELLFLAGS := -c
+endif
+endif
+
 # Brand variables
 BRAND_NAME_LOWER?=liza
 BRAND_NAME_UPPER?=$(shell printf '%s' '$(BRAND_NAME_LOWER)' | tr '[:lower:]-' '[:upper:]_')
@@ -19,12 +70,18 @@ BINARY_NAME?=$(BRAND_BINARY_NAME)
 
 # Windows will not resolve an extensionless file through PATHEXT, so a binary
 # built as "liza" installs fine and is then found by nothing: not the shell, not
-# exec.LookPath, not `liza toolchain doctor`. $(OS) is the reliable discriminant
-# here — it is set by Windows itself and survives Git Bash, unlike uname.
-ifeq ($(OS),Windows_NT)
-BINARY_EXT := .exe
+# exec.LookPath, not `liza toolchain doctor`. The suffix follows the platform the
+# binary is built FOR (GOOS, as `go build` sees it), not the host running make:
+# a Windows host building for linux must not produce "liza.exe", and a linux
+# host building for windows must. A BINARY_NAME that already ends in .exe is
+# kept as is. Callers that pin an exact artifact filename pass BINARY_EXT=.
+ifeq ($(origin GOOS),undefined)
+GOOS := $(shell go env GOOS)
 endif
-BINARY_FILE := $(BINARY_NAME)$(BINARY_EXT)
+ifeq ($(GOOS),windows)
+BINARY_EXT ?= .exe
+endif
+BINARY_FILE := $(BINARY_NAME)$(if $(filter %.exe,$(BINARY_NAME)),,$(BINARY_EXT))
 
 # Build variables
 # Derived from git rather than pinned, because a pinned default goes stale and
@@ -131,33 +188,6 @@ clean:
 ifeq ($(OS),Windows_NT)
 WINDOWS_HOME := $(if $(HOME),$(HOME),$(USERPROFILE))
 INSTALL_DIR ?= $(subst \,/,$(WINDOWS_HOME))/.local/bin
-# Make runs a recipe line straight through CreateProcess when it holds no shell
-# metacharacter, so "mkdir -p <dir>" looks for mkdir.exe and fails: the POSIX
-# utilities ship in Git\usr\bin, which is not on PATH and must not be added
-# there — it would shadow find, grep and sort with MSYS builds. Naming the shell
-# covers the lines that do reach a shell; the install recipe quotes its paths,
-# which both defeats that shortcut and survives a profile containing a space.
-#
-# A bare "bash" resolves by PATH, and C:\Windows\System32\bash.exe — the WSL
-# launcher — is on the machine PATH ahead of any user-level Git for Windows
-# entry; reordering it needs elevation the managed machines this targets do
-# not grant. The runtime resolver probes the standard per-user and machine-wide
-# Git for Windows locations before PATH, so make must cover the same locations.
-# wildcard needs spaces escaped while probing, but returns the original path;
-# keeping each result in its own variable avoids splitting it with firstword.
-empty :=
-space := $(empty) $(empty)
-escape_spaces = $(subst $(space),\$(space),$(1))
-LOCAL_GIT_BASH := $(if $(LOCALAPPDATA),$(wildcard $(call escape_spaces,$(subst \,/,$(LOCALAPPDATA))/Programs/Git/bin/bash.exe)))
-PROGRAM_FILES_GIT_BASH := $(if $(ProgramFiles),$(wildcard $(call escape_spaces,$(subst \,/,$(ProgramFiles))/Git/bin/bash.exe)))
-PROGRAM_FILES_X86_GIT_BASH := $(if ${ProgramFiles(x86)},$(wildcard $(call escape_spaces,$(subst \,/,${ProgramFiles(x86)})/Git/bin/bash.exe)))
-GIT_BASH := $(if $(LOCAL_GIT_BASH),$(LOCAL_GIT_BASH),$(if $(PROGRAM_FILES_GIT_BASH),$(PROGRAM_FILES_GIT_BASH),$(PROGRAM_FILES_X86_GIT_BASH)))
-ifneq ($(GIT_BASH),)
-SHELL := $(call escape_spaces,$(GIT_BASH))
-else
-SHELL := bash
-endif
-.SHELLFLAGS := -c
 # The install directory belongs to the user, and Windows sudo is absent or
 # disabled on managed machines; escalating here only turns a working install
 # into an error.

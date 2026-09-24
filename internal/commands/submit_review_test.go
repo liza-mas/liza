@@ -309,7 +309,7 @@ func TestSubmitForReview_RebaseSuccess(t *testing.T) {
 }
 
 func TestSubmitForReviewCommand_PrintsScipWarnings(t *testing.T) {
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	testhelpers.IsolateGlobalGitConfig(t)
 	t.Setenv("LIZA_ENABLE_SCIP_SEARCH", "true")
 
 	tmpDir := t.TempDir()

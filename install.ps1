@@ -70,6 +70,46 @@ function Get-ReleaseArchitecture {
     }
 }
 
+# Kept pure (no registry, environment, or session reads/writes) so Windows CI
+# can exercise the merge rules without mutating the runner. The caller injects
+# the expander so the function can decide whether an unexpanded %VARIABLE%
+# entry resolves to the install dir without freezing it to its current value.
+#
+# Entries are compared after expansion (so %LOCALAPPDATA%\Programs\<binary>
+# still matches an expanded $InstallDir) but emitted verbatim in the output, so
+# an existing REG_EXPAND_SZ user PATH keeps its raw %VARIABLE% entries.
+function Update-InstallDirOnPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallDir,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$UserPath,
+        [Parameter(Mandatory = $true)][string]$DefaultDir,
+        [Parameter(Mandatory = $true)][System.Func[string,string]]$Expander
+    )
+
+    if (-not $UserPath) { return $InstallDir }
+
+    $targetNorm = $Expander.Invoke($InstallDir).Trim().TrimEnd('\', '/')
+    $defaultNorm = $Expander.Invoke($DefaultDir).Trim().TrimEnd('\', '/')
+
+    $kept = @()
+    $seenTarget = $false
+    foreach ($entry in ($UserPath -split ';')) {
+        $trimmed = $entry.Trim()
+        if ($trimmed -eq '') { continue }
+        $norm = $Expander.Invoke($trimmed).TrimEnd('\', '/')
+        if ($norm -eq $targetNorm) {
+            if ($seenTarget) { continue }
+            $seenTarget = $true
+        }
+        elseif ($norm -eq $defaultNorm) {
+            continue
+        }
+        $kept += $trimmed
+    }
+    if (-not $seenTarget) { $kept += $InstallDir }
+    return ($kept -join ';')
+}
+
 if (-not $Version) { $Version = Get-LatestVersion }
 $versionBare = $Version -replace '^v', ''
 $arch = Get-ReleaseArchitecture
@@ -145,14 +185,58 @@ finally {
 Write-Host ""
 Write-Host "Installed $target"
 
-$userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-if (($userPath -split ';') -notcontains $InstallDir) {
-    Write-Host ""
-    $addToPath = "[System.Environment]::SetEnvironmentVariable('PATH', " +
-        "[System.Environment]::GetEnvironmentVariable('PATH','User') + ';' + '$InstallDir', 'User')"
-    Write-Host "$InstallDir is not on your PATH. To add it for your user:"
-    Write-Host "  $addToPath"
-    Write-Host "Open a new terminal afterwards for the change to take effect."
+$defaultInstallDir = Join-Path $env:LOCALAPPDATA "Programs\$BinaryName"
+
+# Read and write the user PATH through the registry so its raw, unexpanded
+# entries survive. [System.Environment]::GetEnvironmentVariable returns every
+# %VAR% already expanded, and SetEnvironmentVariable writes the result back as
+# REG_SZ - flattening a stock REG_EXPAND_SZ user PATH and freezing entries like
+# %JAVA_HOME%\bin to their current value. Reading with DoNotExpandEnvironmentNames
+# and writing with RegistryValueKind.ExpandString keep the REG_EXPAND_SZ
+# contract intact, so a later variable change is still followed.
+$environmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+if (-not $environmentKey) {
+    throw 'Could not open HKCU\Environment to update the user PATH.'
+}
+try {
+    $rawUserPath = $environmentKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $userPath = if ($rawUserPath) { [string]$rawUserPath } else { '' }
+    $newPath = Update-InstallDirOnPath -InstallDir $InstallDir -UserPath $userPath -DefaultDir $defaultInstallDir -Expander { param($entry) [Environment]::ExpandEnvironmentVariables($entry) }
+    if ($newPath -ne $userPath) {
+        $environmentKey.SetValue('Path', $newPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+
+        # [Environment]::SetEnvironmentVariable(..., 'User') broadcast
+        # WM_SETTINGCHANGE as a side effect; a direct registry write does not.
+        # Broadcast it so running Explorer instances reload their environment
+        # block and terminals started afterwards inherit the change without a
+        # sign-out. (HWND_BROADCAST, WM_SETTINGCHANGE, SMTO_ABORTIFHUNG.)
+        Add-Type -Namespace PInvoke -Name User32 -MemberDefinition @'
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+'@
+        $broadcastResult = [UIntPtr]::Zero
+        [PInvoke.User32]::SendMessageTimeout([IntPtr]0xFFFF, 0x1A, [UIntPtr]::Zero, 'Environment', 0x0002, 5000, [ref]$broadcastResult) | Out-Null
+
+        Write-Host ""
+        Write-Host "Updated your user PATH so it lists $InstallDir exactly once."
+        Write-Host "Open a new terminal for other sessions to pick up the change."
+    }
+}
+finally {
+    $environmentKey.Close()
+}
+
+# Make the binary resolvable in this session too, so `irm ... | iex` users can
+# run it without opening a new terminal.
+$sessionHasDir = $false
+foreach ($entry in ($env:PATH -split ';')) {
+    if ($entry.Trim().TrimEnd('\', '/') -eq $InstallDir.Trim().TrimEnd('\', '/')) {
+        $sessionHasDir = $true
+        break
+    }
+}
+if (-not $sessionHasDir) {
+    $env:PATH = "$env:PATH;$InstallDir"
 }
 
 Write-Host ""

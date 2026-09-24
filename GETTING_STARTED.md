@@ -6,11 +6,18 @@ contract files, activating a project, and choosing Pairing or Multi-Agent mode.
 ## Requirements
 
 - Linux, macOS, or Windows (experimental).
-- On Windows (experimental): Git for Windows, with its `bash.exe` on PATH ahead of the WSL
-  launcher in `system32`. The installed hooks are POSIX shell scripts and run
-  through bash; the WSL launcher cannot reach `C:/...` paths, so it is not a substitute.
-  Symlink creation also needs either Developer Mode or an elevated shell, see
+- On Windows (experimental): **native Windows 11 ARM64 or x64 only**. WSL1 and
+  WSL2 are not supported — install and run on the Windows side, not inside a
+  WSL distribution. Git for Windows is required, with its `bash.exe` on PATH
+  ahead of the WSL launcher in `system32`. The installed hooks are POSIX shell
+  scripts and run through Git Bash; the WSL launcher cannot reach `C:/...`
+  paths, so it is not a substitute. Symlink creation also needs either
+  Developer Mode or an elevated shell, see
   [Troubleshooting](support-docs/TROUBLESHOOTING.md#symlink-creation-fails-on-windows).
+- On Windows, interactive paths require a real terminal — conhost, Windows
+  Terminal, or an interactive PowerShell session. The TUI and guided CLI
+  selection cannot run with redirected stdin; use a terminal window, not a
+  piped or non-interactive shell.
 - Git 2.38+ for worktree support.
 - A supported coding agent CLI: Claude Code, Codex, OpenCode, Kimi, Mistral,
   or Gemini.
@@ -33,6 +40,10 @@ On Windows, from PowerShell:
 ```powershell
 irm https://raw.githubusercontent.com/liza-mas/liza/main/install.ps1 | iex
 ```
+
+The installer adds its install directory to your user PATH exactly once,
+keeping existing `%VARIABLE%` entries unexpanded, and to the current session,
+so the binary resolves right away and in new terminals. Rerunning it is safe.
 
 Install options:
 

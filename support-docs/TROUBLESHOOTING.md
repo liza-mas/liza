@@ -583,6 +583,22 @@ Remove-Item -LiteralPath CLAUDE.md -Force
 These files are listed in `.gitignore`, so removing one costs nothing in the
 repository.
 
+### Running inside WSL is not supported
+
+**Symptom:** installing or starting from a WSL1 or WSL2 shell — paths under
+`/mnt/c/...`, or `bash` resolving to a Linux distribution instead of Git Bash.
+
+**Cause:** §BRAND_NAME_TITLE§ on Windows is a **native** runtime. The user
+PATH, hook activation, and the installed symlinks all live on the Windows
+side; a WSL session does not share the PATH, so an install done inside WSL
+does not carry over.
+
+**Fix:** install on the Windows host instead — the PowerShell installer, or
+`make install` from a local clone in Git Bash with Go and GNU make (see
+[Getting Started](../GETTING_STARTED.md)) — then run §BRAND_BINARY_NAME§ from
+a native Windows shell. WSL1 and WSL2 are not supported; there is no supported
+WSL path.
+
 ### Hooks do nothing, or bash reports "No such file or directory" on Windows
 
 **Error:**

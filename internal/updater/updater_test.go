@@ -2058,3 +2058,95 @@ func buildZipArchive(t *testing.T, entries map[string][]byte) []byte {
 	}
 	return buf.Bytes()
 }
+
+func TestRenameOverBinaryReplacesTarget(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "example-tool")
+	staged := filepath.Join(dir, "staged")
+	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("new"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := renameOverBinary(staged, target); err != nil {
+		t.Fatalf("renameOverBinary: %v", err)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "new" {
+		t.Fatalf("target content = %q, want %q", content, "new")
+	}
+	if _, err := os.Stat(target + ".old"); !os.IsNotExist(err) {
+		t.Fatalf("leftover %s.old: %v", target, err)
+	}
+}
+
+// TestRenameOverBinaryDisplacesUnmovableTarget exercises the Windows branch
+// that a running .exe forces: the first rename cannot replace the target, so
+// the target is displaced to .old before the staged binary moves in. A
+// directory standing at the target path fails the first rename the same way a
+// locked executable does.
+func TestRenameOverBinaryDisplacesUnmovableTarget(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("displace path only runs on Windows")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "example-tool.exe")
+	staged := filepath.Join(dir, "staged")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "sentinel"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("new"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := renameOverBinary(staged, target); err != nil {
+		t.Fatalf("renameOverBinary: %v", err)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "new" {
+		t.Fatalf("target content = %q, want %q", content, "new")
+	}
+	// The displaced target keeps its contents under .old; removal is
+	// best-effort, so the non-empty directory is expected to remain.
+	if _, err := os.Stat(filepath.Join(target+".old", "sentinel")); err != nil {
+		t.Fatalf("displaced target missing sentinel at .old: %v", err)
+	}
+}
+
+// TestRenameOverBinaryRestoresAfterFailedReplace exercises the Windows
+// rollback: once the old binary is displaced, a failed replace must put it
+// back rather than leave nothing installed. A missing staged path fails both
+// rename attempts deterministically.
+func TestRenameOverBinaryRestoresAfterFailedReplace(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("displace path only runs on Windows")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "example-tool.exe")
+	staged := filepath.Join(dir, "does-not-exist")
+	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := renameOverBinary(staged, target); err == nil {
+		t.Fatal("renameOverBinary error = nil, want failure")
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("target not restored: %v", err)
+	}
+	if string(content) != "old" {
+		t.Fatalf("target content = %q, want restored %q", content, "old")
+	}
+}
