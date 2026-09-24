@@ -1745,6 +1745,9 @@ func WriteCodexHooks(projectRoot string) error {
 // tool to .opencode/tools/exec.ts. Existing user-owned files are preserved; only
 // Liza-managed copies are overwritten.
 func WriteOpenCodeExecTool(projectRoot string) error {
+	if err := WriteOpenCodeResultPlugin(projectRoot); err != nil {
+		return err
+	}
 	toolPath := filepath.Join(projectRoot, ".opencode", "tools", "exec.ts")
 	existing, err := os.ReadFile(toolPath)
 	if err == nil {

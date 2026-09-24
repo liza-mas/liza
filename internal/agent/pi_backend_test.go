@@ -119,14 +119,20 @@ func TestDevinLaunchPlanSupportsModelOverride(t *testing.T) {
 }
 
 // writeRecordingStub installs a stub CLI that records its argv and stdin, plus
-// the value of the given environment variable, then exits 0.
-func writeRecordingStub(t *testing.T, binDir, name, envName string) (argsFile, stdinFile, envFile string) {
+// the value of the given environment variable, then exits 0. When versionReply
+// is non-empty, a --version invocation answers with it instead of recording,
+// for backends whose launch path probes the CLI version first (see
+// prepareCodexToolResultLaunch).
+func writeRecordingStub(t *testing.T, binDir, name, envName, versionReply string) (argsFile, stdinFile, envFile string) {
 	t.Helper()
 	argsFile = filepath.Join(t.TempDir(), name+"-args.txt")
 	stdinFile = filepath.Join(t.TempDir(), name+"-stdin.txt")
 	envFile = filepath.Join(t.TempDir(), name+"-env.txt")
-	script := "#!/bin/sh\n" +
-		"printf '%s\\n' \"$*\" > " + shQuote(argsFile) + "\n" +
+	script := "#!/bin/sh\n"
+	if versionReply != "" {
+		script += "if [ \"$1\" = \"--version\" ]; then echo " + shQuote(versionReply) + "; exit 0; fi\n"
+	}
+	script += "printf '%s\\n' \"$*\" > " + shQuote(argsFile) + "\n" +
 		"cat > " + shQuote(stdinFile) + "\n" +
 		"printf '%s' \"$" + envName + "\" > " + shQuote(envFile) + "\n" +
 		"echo 'stub done'\n"
@@ -147,7 +153,7 @@ func TestCLIAgentRunsPiInSubprocess(t *testing.T) {
 
 	projectRoot := t.TempDir()
 	binDir := t.TempDir()
-	argsFile, stdinFile, _ := writeRecordingStub(t, binDir, "pi", "PI_RECORDED_ENV")
+	argsFile, stdinFile, _ := writeRecordingStub(t, binDir, "pi", "PI_RECORDED_ENV", "")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	executor := NewCLIAgent("")
@@ -190,7 +196,7 @@ func TestCLIAgentRunsDevinWithSWE2MaxModelInSubprocess(t *testing.T) {
 
 	projectRoot := t.TempDir()
 	binDir := t.TempDir()
-	argsFile, _, _ := writeRecordingStub(t, binDir, "devin", "DEVIN_RECORDED_ENV")
+	argsFile, _, _ := writeRecordingStub(t, binDir, "devin", "DEVIN_RECORDED_ENV", "")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	config := models.Config{
@@ -234,7 +240,7 @@ func TestCLIAgentLoadsCodexEnvFileForAPIKey(t *testing.T) {
 
 	projectRoot := t.TempDir()
 	binDir := t.TempDir()
-	argsFile, stdinFile, envFile := writeRecordingStub(t, binDir, "codex", "ZAI_API_KEY")
+	argsFile, stdinFile, envFile := writeRecordingStub(t, binDir, "codex", "ZAI_API_KEY", "codex-cli 0.154.0")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ZAI_API_KEY", "")
 
@@ -269,8 +275,17 @@ func TestCLIAgentLoadsCodexEnvFileForAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read args file: %v", err)
 	}
-	if strings.TrimSpace(string(gotArgs)) != "exec -" {
-		t.Fatalf("codex argv = %q, want %q", string(gotArgs), "exec -")
+	recorded := strings.TrimSpace(string(gotArgs))
+	// The codex launch now goes through the managed tool-result boundary
+	// (prepareCodexToolResultLaunch), so the recorded argv is the wrapper's
+	// persistent hook flags followed by the CLI invocation itself. The wrapper
+	// embeds the engine executable path and project root, which vary per test
+	// run, so assert the stable parts: the boundary flags and the `exec -` tail.
+	if !strings.Contains(recorded, "features.hooks=true") {
+		t.Fatalf("codex argv = %q, missing managed tool-result boundary flag", recorded)
+	}
+	if !strings.HasSuffix(recorded, "exec -") {
+		t.Fatalf("codex argv = %q, want it to end with the CLI invocation %q", recorded, "exec -")
 	}
 
 	gotStdin, err := os.ReadFile(stdinFile)

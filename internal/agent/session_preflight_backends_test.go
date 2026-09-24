@@ -227,9 +227,15 @@ func backendPreflightFixture(t *testing.T, backend preflightBackendCase, declare
 
 func writeBackendPreflightStubs(t *testing.T, bin, marker, label string) {
 	t.Helper()
-	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s|%%s|%%s\\n' %q \"$BACKEND_PREFLIGHT_VALUE\" \"$*\" >> %q\n", label, filepath.ToSlash(marker))
+	markerWrite := fmt.Sprintf("printf '%%s|%%s|%%s\\n' %q \"$BACKEND_PREFLIGHT_VALUE\" \"$*\" >> %q\n", label, filepath.ToSlash(marker))
 	for _, executable := range []string{"gemini", "codex", "acpx"} {
-		body := script
+		body := "#!/bin/sh\n"
+		if executable == "codex" {
+			// The managed tool-result boundary probes codex --version and the
+			// app-server hook discovery RPC before any provider turn runs.
+			body += fakeCodexHookDiscovery
+		}
+		body += markerWrite
 		if executable == "acpx" {
 			body += "case \"$*\" in *\" prompt \"*) printf '%s\\n' '{\"result\":{}}';; esac\n"
 		}

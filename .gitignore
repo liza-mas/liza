@@ -43,6 +43,8 @@ internal/embedded/*
 !internal/embedded/codex-hooks.json
 !internal/embedded/opencode-tools/
 !internal/embedded/opencode-tools/exec.ts
+!internal/embedded/opencode-plugins/
+!internal/embedded/opencode-plugins/tool-result-budget.ts
 !internal/embedded/pi-extensions/
 !internal/embedded/pi-extensions/init-gate.ts
 !internal/embedded/git-hooks/

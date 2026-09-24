@@ -2902,17 +2902,21 @@ func TestOpenCodeExecToolInstructionsMentionExecAndAntiLoop(t *testing.T) {
 func TestOpenCodeExecToolBoundsAccumulatedOutput(t *testing.T) {
 	content := string(OpenCodeExecToolContent())
 	for _, want := range []string{
-		"function appendLimited",
-		"OUTPUT_LIMIT_BYTES - usedBytes",
-		"Buffer.isBuffer(chunk)",
-		"stdoutTruncated += truncated",
-		"stderrTruncated += truncated",
-		"truncated ${truncated} bytes",
-		"formatOutput(\"stdout\", stdout, stdoutTruncated)",
-		"formatOutput(\"stderr\", stderr, stderrTruncated)",
+		"async function budgetOutput",
+		"FILTER_OUTPUT_LIMIT_BYTES",
+		"const stdout: Buffer[]",
+		"CAPTURE_LIMIT_BYTES = 1_048_576",
+		"capture(stdout, chunk)",
+		"capture(stderr, chunk)",
+		"truncated: dropped > 0 || timedOut || detached",
+		"EXIT_GRACE_MS",
+		"filter.stdin?.end(JSON.stringify(payload))",
+		"tool-result",
+		"--json-input",
+		"raw output withheld",
 	} {
 		if !strings.Contains(content, want) {
-			t.Fatalf("exec tool output bounding missing %q:\n%s", want, content)
+			t.Fatalf("exec tool result boundary missing %q:\n%s", want, content)
 		}
 	}
 }

@@ -6,12 +6,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/sessionvalidation"
 	"github.com/liza-mas/liza/internal/subprocess"
 )
 
@@ -238,6 +240,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	if err != nil {
 		return 0, err
 	}
+	cmdEnv = agentTaskEnv(cmdEnv, req.TaskID)
 	cmd, err := snapshotCommand(ctx, plan.Executable, projectRoot, cmdEnv, plan.Args...)
 	if err != nil {
 		return 0, err
@@ -434,6 +437,7 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 		cleanup()
 		return nil, nil, err
 	}
+	cmdEnv = agentTaskEnv(cmdEnv, req.TaskID)
 	if d.masker != nil {
 		d.masker.AddEntries(cmdEnv)
 	}
@@ -441,14 +445,57 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 	var cmd *exec.Cmd
 	if plan.RequiresCodexWrapper {
 		codexConfig := resolveCodexLaunchConfig(req.RuntimeConfig, cmdEnv)
-		cmd, err = codexCommandContext(ctx, codexConfig.PackageVersion, plan.Args)
+		base, err := codexCommandContext(ctx, codexConfig.PackageVersion, nil)
 		if err != nil {
 			cleanup()
 			return nil, nil, err
 		}
-		cmd, err = snapshotCommand(ctx, cmd.Args[0], req.ProjectRoot, cmdEnv, cmd.Args[1:]...)
+		engine, err := os.Executable()
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		native, err := sessionvalidation.LookPath(base.Args[0], req.ProjectRoot, cmdEnv)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		launch, err := prepareCodexToolResultLaunch(req.ProjectRoot, engine, native, base.Args[1:]...)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		cmd, err = snapshotCommand(ctx, launch.Wrapper, req.ProjectRoot, cmdEnv, plan.Args...)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
 	} else {
-		cmd, err = snapshotCommand(ctx, plan.Executable, req.ProjectRoot, cmdEnv, plan.Args...)
+		args := append([]string(nil), plan.Args...)
+		executable := plan.Executable
+		if plan.ProviderKey == "claude" || plan.ToolName == "claude" {
+			if lookupDir, absErr := filepath.Abs(req.ProjectRoot); absErr == nil {
+				if resolved, lookErr := sessionvalidation.LookPath(plan.Executable, lookupDir, cmdEnv); lookErr == nil {
+					executable = resolved
+				}
+			}
+			if err := validateClaudeToolResultBoundary(ctx, executable, req.ProjectRoot, args); err != nil {
+				cleanup()
+				return nil, nil, err
+			}
+			engine, err := os.Executable()
+			if err != nil {
+				cleanup()
+				return nil, nil, err
+			}
+			settings, err := ClaudeToolResultSettings(engine, req.ProjectRoot)
+			if err != nil {
+				cleanup()
+				return nil, nil, err
+			}
+			args = append([]string{"--settings", settings}, args...)
+		}
+		cmd, err = snapshotCommand(ctx, executable, req.ProjectRoot, cmdEnv, args...)
 	}
 	if err != nil {
 		cleanup()
@@ -588,6 +635,24 @@ func agentProcessEnv(base []string, agentID, generation string) []string {
 	}
 	if brandedGenerationName != legacyGenerationName {
 		out = append(out, legacyGenerationName+"="+generation)
+	}
+	return out
+}
+
+// agentTaskEnv binds subprocess telemetry to this request, never inherited state.
+// An empty task explicitly clears both aliases rather than inventing an identity.
+func agentTaskEnv(base []string, taskID string) []string {
+	name := brand.EnvName("TASK_ID")
+	legacyName := brand.LegacyEnvName("TASK_ID")
+	out := make([]string, 0, len(base)+2)
+	for _, entry := range base {
+		if !strings.HasPrefix(entry, name+"=") && !strings.HasPrefix(entry, legacyName+"=") {
+			out = append(out, entry)
+		}
+	}
+	out = append(out, name+"="+taskID)
+	if name != legacyName {
+		out = append(out, legacyName+"="+taskID)
 	}
 	return out
 }

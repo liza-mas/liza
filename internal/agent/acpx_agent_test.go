@@ -351,21 +351,26 @@ func TestACPXAgentRunUsesConfiguredDevinACPServerCommand(t *testing.T) {
 		}},
 	}
 
-	result, err := NewACPXAgent("").Run(context.Background(), req)
+	agent := NewACPXAgent("")
+	result, err := agent.Run(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
-	if result.SessionID != "liza-devin-coder-1" {
-		t.Fatalf("SessionID = %q, want liza-devin-coder-1", result.SessionID)
+	if result.SessionID != "liza-devin-coder-1-tool-results-v1" {
+		t.Fatalf("SessionID = %q, want liza-devin-coder-1-tool-results-v1", result.SessionID)
 	}
 
 	log := readTextForTest(t, logPath)
 	for _, want := range []string{
-		"ARGS:--cwd " + req.ProjectRoot + " --agent devin acp sessions ensure --name liza-devin-coder-1",
-		"ARGS:--cwd " + req.ProjectRoot + " --format json --approve-all --agent devin acp prompt -s liza-devin-coder-1 --file -",
+		"-- devin acp sessions ensure --name liza-devin-coder-1-tool-results-v1",
+		"tool-result --root ",
+		"DEVIN_PERMISSION_MODE=bypass",
+		"acp-proxy --task-id ",
+		"-- devin acp prompt -s liza-devin-coder-1-tool-results-v1 --file -",
+		"--format json --approve-all --agent ",
 		"STDIN:implement the requested change",
 	} {
 		if !strings.Contains(log, want) {
@@ -375,6 +380,21 @@ func TestACPXAgentRunUsesConfiguredDevinACPServerCommand(t *testing.T) {
 	if strings.Contains(log, " devin sessions ") || strings.Contains(log, " devin prompt ") {
 		t.Fatalf("fake acpx log used positional devin instead of raw devin acp command:\n%s", log)
 	}
+	// A second turn must reuse the same filtered session, not resurrect an old
+	// unfiltered ACP child or continually recreate a fresh proxy session.
+	t.Setenv("FAKE_ACPX_SESSION_EXISTS", "1")
+	second, err := agent.Run(context.Background(), req)
+	if err != nil || second.SessionID != result.SessionID {
+		t.Fatalf("warm filtered session changed: %+v, %v", second, err)
+	}
+	warmLog := readTextForTest(t, logPath)
+	if strings.Count(warmLog, "-- devin acp sessions ensure --name liza-devin-coder-1-tool-results-v1") != 2 {
+		t.Fatalf("warm run changed idempotent session ensure: %s", warmLog)
+	}
+	if strings.Count(warmLog, "-- devin acp prompt -s liza-devin-coder-1-tool-results-v1 --file -") != 2 {
+		t.Fatalf("warm run lost stable proxy: %s", warmLog)
+	}
+
 }
 
 func TestACPXAgentMasksReturnedOutputAndEvents(t *testing.T) {

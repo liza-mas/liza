@@ -325,6 +325,7 @@ func TestProviderLaunchFenceFailureSemantics(t *testing.T) {
 		binDir := t.TempDir()
 		acpxPath := filepath.Join(binDir, "acpx")
 		testhelpers.WriteShellStub(t, acpxPath, "#!/bin/sh\nexit 7\n")
+		testhelpers.WriteShellStub(t, filepath.Join(binDir, "codex"), "#!/bin/sh\n"+fakeCodexHookDiscovery+"exit 99\n")
 		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 		_, setupErr := NewACPXAgent("").Run(context.Background(), LLMAgentRunRequest{BackendName: "codex-acp", AgentID: fixture.agentID, Generation: fixture.authorityA.Generation, ProjectRoot: fixture.projectRoot, Prompt: "prompt", EventSink: sink, LaunchGate: gate})
 		if setupErr == nil || hasLLMAgentEvent(sink.Events(), LLMAgentEventStarted) {
@@ -642,7 +643,7 @@ func writeACPXProviderStubsForGenerationTest(t *testing.T, sideEffectPath string
 	}
 	binDir := filepath.Dir(sideEffectPath)
 	testhelpers.WriteShellStub(t, filepath.Join(binDir, "acpx"), script)
-	interactiveScript := fmt.Sprintf("#!/bin/sh\nprintf started > %q\n", shellSideEffectPath)
+	interactiveScript := "#!/bin/sh\n" + fakeCodexHookDiscovery + fmt.Sprintf("printf started > %q\n", shellSideEffectPath)
 	if sleeping {
 		interactiveScript += fmt.Sprintf("while [ ! -f %s ]; do sleep 0.01; done\n", testhelpers.ShellArg(shellSideEffectPath+".release"))
 	}
@@ -675,6 +676,7 @@ func runGenerationEnvProcessForTest(t *testing.T, ctx context.Context, backend s
 		return err
 	}
 	acpxScript := script + "case \"$*\" in *\" prompt \"*) printf '%s\\n' '{\"result\":{}}';; esac\n"
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "codex"), "#!/bin/sh\n"+fakeCodexHookDiscovery+"exit 99\n")
 	testhelpers.WriteShellStub(t, filepath.Join(binDir, "acpx"), acpxScript)
 	_, err := NewACPXAgent("").Run(ctx, LLMAgentRunRequest{BackendName: "codex-acp", AgentID: "coder-1", Generation: generation, ProjectRoot: binDir, Prompt: "prompt", LaunchGate: gate})
 	return err

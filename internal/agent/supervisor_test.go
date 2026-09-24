@@ -492,7 +492,7 @@ func TestDefaultCLIExecutorStreamsMaskedOutputFiles(t *testing.T) {
 printf 'stdout-before sk-test-secret-value stdout-after\n'
 printf 'stderr-before sk-test-secret-value stderr-after\n' >&2
 `
-	if err := os.WriteFile(fakeClaude, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(fakeClaude, []byte(strings.Replace(script, "\n", "\nif [ \"${1:-}\" = \"--version\" ]; then echo \"2.1.267 (Claude Code)\"; exit 0; fi\n", 1)), 0755); err != nil {
 		t.Fatalf("write fake claude: %v", err)
 	}
 
@@ -568,7 +568,7 @@ printf 'stdout event\n'
 printf 'stderr event\n' >&2
 exit 7
 `
-	if err := os.WriteFile(fakeClaude, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(fakeClaude, []byte(strings.Replace(script, "\n", "\nif [ \"${1:-}\" = \"--version\" ]; then echo \"2.1.267 (Claude Code)\"; exit 0; fi\n", 1)), 0755); err != nil {
 		t.Fatalf("write fake claude: %v", err)
 	}
 
@@ -747,7 +747,7 @@ for arg in "$@"; do
   printf 'arg:%s\n' "$arg"
 done
 `
-	if err := os.WriteFile(fakeClaude, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(fakeClaude, []byte(strings.Replace(script, "\n", "\nif [ \"${1:-}\" = \"--version\" ]; then echo \"2.1.267 (Claude Code)\"; exit 0; fi\n", 1)), 0755); err != nil {
 		t.Fatalf("write fake claude: %v", err)
 	}
 
@@ -782,7 +782,7 @@ func TestDefaultCLIExecutorExportsResolvedAgentIDLast(t *testing.T) {
 	script := `#!/bin/sh
 printf 'agent-id:%s\n' "$LIZA_AGENT_ID"
 `
-	if err := os.WriteFile(fakeClaude, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(fakeClaude, []byte(strings.Replace(script, "\n", "\nif [ \"${1:-}\" = \"--version\" ]; then echo \"2.1.267 (Claude Code)\"; exit 0; fi\n", 1)), 0755); err != nil {
 		t.Fatalf("write fake claude: %v", err)
 	}
 	claudeEnv := []byte("LIZA_AGENT_ID=from-claude-env\n")

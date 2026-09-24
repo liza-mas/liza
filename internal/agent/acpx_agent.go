@@ -51,6 +51,14 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 	if err != nil {
 		return LLMAgentRunResult{ExitCode: 1}, err
 	}
+	engine, err := os.Executable()
+	if err != nil {
+		return LLMAgentRunResult{ExitCode: 1}, fmt.Errorf("resolve tool-result engine executable")
+	}
+	plan, err = prepareDevinToolResultPlan(req, plan, engine)
+	if err != nil {
+		return LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
+	}
 	if a.masker != nil {
 		a.masker.AddEntries(plan.Environment)
 	}
@@ -189,6 +197,7 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 	if err != nil {
 		return 0, err
 	}
+	env = agentTaskEnv(env, req.TaskID)
 	cmd, err := snapshotCommand(ctx, executable, req.ProjectRoot, env)
 	if err != nil {
 		return 0, err

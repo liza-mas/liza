@@ -360,6 +360,10 @@ func main() {
 		return
 	}
 	if err := rootCmd.Execute(); err != nil {
+		var toolExit *toolResultExit
+		if errors.As(err, &toolExit) {
+			os.Exit(toolExit.code)
+		}
 		if !errors.Is(err, jsonout.ErrAlreadyWritten) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}

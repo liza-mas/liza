@@ -3,12 +3,32 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/sessionvalidation"
 )
+
+func TestAgentTaskEnvReplacesInheritedIdentity(t *testing.T) {
+	name, legacy := brand.EnvName("TASK_ID"), brand.LegacyEnvName("TASK_ID")
+	base := []string{"KEEP=unchanged", name + "=stale", legacy + "=older", name + "=duplicate"}
+	before := append([]string(nil), base...)
+	for _, taskID := range []string{"task-778", ""} {
+		got := agentTaskEnv(base, taskID)
+		want := []string{"KEEP=unchanged", name + "=" + taskID}
+		if name != legacy {
+			want = append(want, legacy+"="+taskID)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("task %q: got %v, want %v", taskID, got, want)
+		}
+		if !reflect.DeepEqual(base, before) {
+			t.Fatal("input environment mutated")
+		}
+	}
+}
 
 func TestResolveOptionalEnvFile(t *testing.T) {
 	loadEnvFile := func(path string) []string {

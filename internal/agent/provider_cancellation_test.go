@@ -94,7 +94,14 @@ func providerCancellationHarness(t *testing.T) {
 	// exec replaces the shell, so it adds no untracked process to the fixture.
 	script := "#!/bin/sh\nexport PROVIDER_CANCEL_ROLE=wrapper\nexec " + shellQuoteForTest(executable) + " -test.run=^TestProviderCancellationHelperProcess$ -- \"$@\"\n"
 	for _, name := range []string{"gemini", "acpx", "codex"} {
-		testhelpers.WriteShellStub(t, filepath.Join(root, name), script)
+		body := script
+		if name == "codex" {
+			// The managed tool-result boundary probes `codex --version` and
+			// `app-server` hook discovery before the provider runs; answer
+			// them in shell or the run is rejected before the fixture starts.
+			body = "#!/bin/sh\n" + fakeCodexHookDiscovery + strings.TrimPrefix(script, "#!/bin/sh\n")
+		}
+		testhelpers.WriteShellStub(t, filepath.Join(root, name), body)
 	}
 	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("PROVIDER_CANCEL_ROOT", root)
