@@ -337,6 +337,46 @@ func TestSpawnAgent_QuotaSignalBlocksSpawnAndAlerts(t *testing.T) {
 	}
 }
 
+func TestSpawnAgent_ExpiredQuotaSignalNoLongerBlocksSpawn(t *testing.T) {
+	// GIVEN a quota signal whose recorded expiry has passed, and a
+	// provider-unavailable signal that stops the spawn at the next gate
+	projectRoot := t.TempDir()
+	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().UTC().Add(-time.Hour)
+	expired := "provider: codex\n" +
+		"detected: " + past.Add(-time.Hour).Format(time.RFC3339) + "\n" +
+		"message: You've hit your usage limit\n" +
+		"resets_at: " + past.Format(time.RFC3339) + "\n" +
+		"expires: " + past.Format(time.RFC3339) + "\n"
+	if err := os.WriteFile(agent.QuotaSignalPath(projectRoot, "codex"), []byte(expired), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
+		t.Fatal(err)
+	}
+
+	// WHEN auto-repair spawns a coder
+	cmd, err := SpawnAgent(projectRoot, "coder", "codex")
+
+	// THEN the quota gate is passed and the provider-unavailable gate refuses
+	if cmd != nil {
+		t.Fatalf("SpawnAgent command = %#v, want nil", cmd)
+	}
+	if err == nil || !strings.Contains(err.Error(), "provider unavailable for codex") {
+		t.Fatalf("SpawnAgent error = %v, want the provider-unavailable refusal after the quota gate", err)
+	}
+	data, readErr := os.ReadFile(filepath.Join(lizaDir, "alerts.log"))
+	if readErr != nil {
+		t.Fatalf("failed to read alerts log: %v", readErr)
+	}
+	if strings.Contains(string(data), "PROVIDER QUOTA SPAWN BLOCKED") {
+		t.Fatalf("expired quota signal still blocked the spawn:\n%s", data)
+	}
+}
+
 func TestSpawnAgent_ProviderUnavailableSignalBlocksSpawnAndAlerts(t *testing.T) {
 	projectRoot := t.TempDir()
 	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())

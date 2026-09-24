@@ -36,12 +36,17 @@ var quotaPatterns = []quotaPattern{
 // QuotaExhaustion holds details about a detected quota event.
 type QuotaExhaustion struct {
 	Provider string
-	Message  string // the matching line from output
+	Message  string    // the matching line from output
+	ResetsAt time.Time // the provider's announced reset; zero when none was announced
 }
 
 // DetectQuotaExhaustion scans agent output for quota-exhaustion patterns.
 // Returns non-nil if a known pattern is found.
 func DetectQuotaExhaustion(output, cliName string) *QuotaExhaustion {
+	return detectQuotaExhaustionAt(output, cliName, time.Now())
+}
+
+func detectQuotaExhaustionAt(output, cliName string, now time.Time) *QuotaExhaustion {
 	provider := canonicalQuotaProvider(cliName)
 	for _, line := range providerDiagnosticLines(output) {
 		for _, p := range quotaPatterns {
@@ -52,6 +57,7 @@ func DetectQuotaExhaustion(output, cliName string) *QuotaExhaustion {
 				return &QuotaExhaustion{
 					Provider: p.Provider,
 					Message:  line,
+					ResetsAt: quotaResetTime(output, line, p.Provider, now),
 				}
 			}
 		}
@@ -77,22 +83,34 @@ func ProviderFromSignalFile(path string) string {
 }
 
 // WriteQuotaSignal creates a signal file that tells all supervisors using
-// this provider to terminate gracefully.
+// this provider to terminate gracefully. No reset is recorded, so the signal
+// lifts after the bounded fallback.
 func WriteQuotaSignal(projectRoot, provider, message string) error {
-	provider = canonicalQuotaProvider(provider)
-	signalPath := QuotaSignalPath(projectRoot, provider)
-	content := fmt.Sprintf("provider: %s\ndetected: %s\nmessage: %s\n",
-		provider,
-		time.Now().UTC().Format(time.RFC3339),
-		message,
-	)
-	return os.WriteFile(signalPath, []byte(content), 0644)
+	return writeQuotaSignal(projectRoot, provider, message, time.Time{}, time.Now().UTC())
 }
 
-// CheckQuotaSignal returns true if a quota signal file exists for the provider.
+func writeQuotaSignal(projectRoot, provider, message string, resetsAt, detected time.Time) error {
+	provider = canonicalQuotaProvider(provider)
+	announced := "unknown"
+	if !resetsAt.IsZero() {
+		announced = resetsAt.UTC().Format(time.RFC3339)
+	}
+	content := fmt.Sprintf("provider: %s\ndetected: %s\nmessage: %s\nresets_at: %s\nexpires: %s\n",
+		provider,
+		detected.Format(time.RFC3339),
+		message,
+		announced,
+		quotaSignalExpiry(resetsAt, detected).UTC().Format(time.RFC3339),
+	)
+	return os.WriteFile(QuotaSignalPath(projectRoot, provider), []byte(content), 0644)
+}
+
+// CheckQuotaSignal returns true while a quota signal for the provider exists
+// and has not reached its expiry.
 func CheckQuotaSignal(projectRoot, provider string) bool {
-	_, err := os.Stat(QuotaSignalPath(projectRoot, provider))
-	return err == nil
+	now := time.Now()
+	expires, ok := readQuotaSignalExpiry(QuotaSignalPath(projectRoot, provider), now)
+	return ok && now.Before(expires)
 }
 
 // LogAlert appends an alert line to alerts.log.
@@ -110,20 +128,31 @@ func LogAlert(projectRoot, level, category, message string) error {
 
 // LogQuotaAlert appends a quota-exhaustion alert to alerts.log.
 func LogQuotaAlert(projectRoot string, qe *QuotaExhaustion) error {
-	return LogAlert(projectRoot, "🚨", "PROVIDER QUOTA EXHAUSTED", qe.Provider+": "+qe.Message)
+	return logQuotaAlert(projectRoot, qe, time.Now().UTC())
+}
+
+func logQuotaAlert(projectRoot string, qe *QuotaExhaustion, detected time.Time) error {
+	until := quotaSignalExpiry(qe.ResetsAt, detected).UTC().Format(time.RFC3339)
+	return LogAlert(projectRoot, "🚨", "PROVIDER QUOTA EXHAUSTED", qe.Provider+": "+qe.Message+" (spawns blocked until "+until+")")
 }
 
 // RaiseQuotaExhaustion records both human-visible and process-visible quota state.
 func RaiseQuotaExhaustion(projectRoot string, qe *QuotaExhaustion) error {
+	detected := time.Now().UTC()
 	return errors.Join(
-		LogQuotaAlert(projectRoot, qe),
-		WriteQuotaSignal(projectRoot, qe.Provider, qe.Message),
+		logQuotaAlert(projectRoot, qe, detected),
+		writeQuotaSignal(projectRoot, qe.Provider, qe.Message, qe.ResetsAt, detected),
 	)
 }
 
-// LogQuotaSpawnBlockedAlert appends an alert when a stale quota signal blocks spawn.
+// LogQuotaSpawnBlockedAlert appends an alert when an unexpired quota signal blocks spawn.
 func LogQuotaSpawnBlockedAlert(projectRoot, provider, role string) error {
-	message := fmt.Sprintf("%s: refused to spawn %s while quota signal is set; delete the flag file or run %s then %s before spawning again", provider, role, brand.Command("pause"), brand.Command("resume"))
+	now := time.Now()
+	until := "its expiry"
+	if expires, ok := readQuotaSignalExpiry(QuotaSignalPath(projectRoot, provider), now); ok {
+		until = expires.UTC().Format(time.RFC3339)
+	}
+	message := fmt.Sprintf("%s: refused to spawn %s while quota signal is set until %s; it lifts automatically then, or delete the flag file or run %s then %s to lift it earlier", provider, role, until, brand.Command("pause"), brand.Command("resume"))
 	return LogAlert(projectRoot, "🚨", "PROVIDER QUOTA SPAWN BLOCKED", message)
 }
 

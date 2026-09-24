@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
@@ -380,5 +381,156 @@ func TestLatestOutputContent_NoFiles(t *testing.T) {
 	content := latestOutputContent(dir, "agent-1", ".txt")
 	if content != "" {
 		t.Errorf("latestOutputContent = %q, want empty", content)
+	}
+}
+
+// writeRawQuotaSignal writes a signal file as another binary or an earlier
+// detection would have left it, so tests control its recorded times.
+func writeRawQuotaSignal(t *testing.T, projectRoot, provider, content string) {
+	t.Helper()
+	makeQuotaProjectDir(t, projectRoot)
+	if err := os.WriteFile(QuotaSignalPath(projectRoot, provider), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func makeQuotaProjectDir(t *testing.T, projectRoot string) {
+	t.Helper()
+	if err := os.MkdirAll(paths.New(projectRoot).LizaDir(), 0755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readQuotaSignal(t *testing.T, projectRoot, provider string) string {
+	t.Helper()
+	data, err := os.ReadFile(QuotaSignalPath(projectRoot, provider))
+	if err != nil {
+		t.Fatalf("read quota signal: %v", err)
+	}
+	return string(data)
+}
+
+func TestRaiseQuotaExhaustion_RecordsClaudeAnnouncedReset(t *testing.T) {
+	// GIVEN a Claude turn rejected by its session limit, whose stream carries the
+	// exact reset (2100-01-01T00:00:00Z) and a zone-qualified text form.
+	projectRoot := t.TempDir()
+	makeQuotaProjectDir(t, projectRoot)
+	output := `{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":4102444800,"rateLimitType":"five_hour"}}
+{"type":"result","subtype":"success","is_error":true,"result":"You've hit your session limit · resets 4am (Europe/Paris)"}`
+
+	// WHEN the supervisor detects and raises it
+	qe := DetectQuotaExhaustion(output, "claude")
+	if qe == nil {
+		t.Fatal("expected quota exhaustion detected, got nil")
+	}
+	if err := RaiseQuotaExhaustion(projectRoot, qe); err != nil {
+		t.Fatalf("RaiseQuotaExhaustion failed: %v", err)
+	}
+
+	// THEN the signal keeps the announced reset
+	if got := readQuotaSignal(t, projectRoot, "claude"); !strings.Contains(got, "resets_at: 2100-01-01T00:00:00Z\n") {
+		t.Fatalf("quota signal does not record the announced reset:\n%s", got)
+	}
+}
+
+func TestRaiseQuotaExhaustion_RecordsCodexAnnouncedReset(t *testing.T) {
+	// GIVEN a Codex usage-limit error, whose reset is printed in host-local time
+	projectRoot := t.TempDir()
+	makeQuotaProjectDir(t, projectRoot)
+	output := `{"type":"error","message":"You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 29th, 2099 2:57 AM."}`
+
+	// WHEN the supervisor detects and raises it
+	qe := DetectQuotaExhaustion(output, "codex")
+	if qe == nil {
+		t.Fatal("expected quota exhaustion detected, got nil")
+	}
+	if err := RaiseQuotaExhaustion(projectRoot, qe); err != nil {
+		t.Fatalf("RaiseQuotaExhaustion failed: %v", err)
+	}
+
+	// THEN the signal keeps the announced reset, converted to UTC
+	want := "resets_at: " + time.Date(2099, time.September, 29, 2, 57, 0, 0, time.Local).UTC().Format(time.RFC3339) + "\n"
+	if got := readQuotaSignal(t, projectRoot, "codex"); !strings.Contains(got, want) {
+		t.Fatalf("quota signal does not record the announced reset %q:\n%s", want, got)
+	}
+}
+
+func TestCheckQuotaSignal_LiftsAtRecordedExpiry(t *testing.T) {
+	now := time.Now().UTC()
+	signal := func(expires time.Time) string {
+		return "provider: claude\n" +
+			"detected: " + now.Add(-2*time.Hour).Format(time.RFC3339) + "\n" +
+			"message: You've hit your session limit · resets 4am (Europe/Paris)\n" +
+			"resets_at: " + expires.Add(-time.Minute).Format(time.RFC3339) + "\n" +
+			"expires: " + expires.Format(time.RFC3339) + "\n"
+	}
+
+	t.Run("past expiry no longer blocks", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		writeRawQuotaSignal(t, projectRoot, "claude", signal(now.Add(-time.Minute)))
+		if CheckQuotaSignal(projectRoot, "claude") {
+			t.Fatal("CheckQuotaSignal = true after the recorded expiry, want false")
+		}
+	})
+
+	t.Run("future expiry still blocks", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		writeRawQuotaSignal(t, projectRoot, "claude", signal(now.Add(time.Hour)))
+		if !CheckQuotaSignal(projectRoot, "claude") {
+			t.Fatal("CheckQuotaSignal = false before the recorded expiry, want true")
+		}
+	})
+}
+
+func TestCheckQuotaSignal_LegacySignalUsesBoundedFallback(t *testing.T) {
+	// A signal written before expiries were recorded has only detected:.
+	signal := func(detected time.Time) string {
+		return "provider: codex\n" +
+			"detected: " + detected.UTC().Format(time.RFC3339) + "\n" +
+			"message: You've hit your usage limit\n"
+	}
+
+	t.Run("old legacy signal no longer blocks", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		writeRawQuotaSignal(t, projectRoot, "codex", signal(time.Now().Add(-2*time.Hour)))
+		if CheckQuotaSignal(projectRoot, "codex") {
+			t.Fatal("CheckQuotaSignal = true for a 2h-old legacy signal, want false")
+		}
+	})
+
+	t.Run("fresh legacy signal still blocks", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		writeRawQuotaSignal(t, projectRoot, "codex", signal(time.Now().Add(-time.Minute)))
+		if !CheckQuotaSignal(projectRoot, "codex") {
+			t.Fatal("CheckQuotaSignal = false for a 1min-old legacy signal, want true")
+		}
+	})
+}
+
+func TestQuotaSignal_FreshDetectionRearmsExpiredSignal(t *testing.T) {
+	// GIVEN an expired signal: the block has lifted and a probe turn may run
+	projectRoot := t.TempDir()
+	past := time.Now().UTC().Add(-time.Hour)
+	writeRawQuotaSignal(t, projectRoot, "codex", "provider: codex\n"+
+		"detected: "+past.Add(-time.Hour).Format(time.RFC3339)+"\n"+
+		"message: You've hit your usage limit\n"+
+		"resets_at: "+past.Format(time.RFC3339)+"\n"+
+		"expires: "+past.Format(time.RFC3339)+"\n")
+	if CheckQuotaSignal(projectRoot, "codex") {
+		t.Fatal("CheckQuotaSignal = true for an expired signal, want false")
+	}
+
+	// WHEN the probe turn hits the limit again
+	qe := DetectQuotaExhaustion(`{"type":"error","message":"You've hit your usage limit."}`, "codex")
+	if qe == nil {
+		t.Fatal("expected quota exhaustion detected, got nil")
+	}
+	if err := RaiseQuotaExhaustion(projectRoot, qe); err != nil {
+		t.Fatalf("RaiseQuotaExhaustion failed: %v", err)
+	}
+
+	// THEN the shared predicate blocks again
+	if !CheckQuotaSignal(projectRoot, "codex") {
+		t.Fatal("CheckQuotaSignal = false after a fresh detection, want true")
 	}
 }

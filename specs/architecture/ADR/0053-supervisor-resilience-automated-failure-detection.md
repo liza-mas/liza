@@ -32,6 +32,8 @@ Chose **Option 1**: three independent detection layers, each addressing a distin
 - All supervisors on the same provider check for the signal file at loop top — immediate termination
 - `liza resume` clears all quota signal files, allowing restart after quota resets
 
+**Amended 2026-09-24: the quota signal is time-bounded.** A resume-only clear worked while supervisors were only restarted by a human. Once pool auto-repair respawned agents unattended, a signal that never expired left the provider's roles unstaffed past the provider's announced reset, until an operator intervened (operator defect D67). Detection now records the announced reset: Claude's structured `rate_limit_event.resetsAt` first, then provider reset text. The signal file stores `resets_at` and `expires`. The shared check treats a signal as set only until `expires`: the reset plus one minute, at least five minutes after detection, or detection plus 30 minutes when no reset is announced. After a lift, the first provider turn is the probe. A still-exhausted provider re-raises the signal with its new reset. Resume and file deletion remain the early manual clear. A dedicated provider probe was not added, because a readiness check that consumes no quota is still unsolved.
+
 **Layer 2 — Crash-Restart Tracker:**
 - In-memory counter per task tracking consecutive non-zero, non-42 exits
 - Maintains a task state signature (JSON snapshot); resets counter when state changes (progress detected)
