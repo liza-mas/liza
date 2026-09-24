@@ -11,8 +11,9 @@ import (
 
 // The protected CAS and index-sync window is normally sub-second. Thirty
 // seconds absorbs a queue of concurrent merges while bounding cold-cache or
-// unusually large checkouts; a timeout remains a retryable merge error.
-const integrationMutationLockTimeout = 30 * time.Second
+// unusually large checkouts; a timeout remains a retryable merge error. A
+// variable only so tests can observe a timeout without waiting it out.
+var integrationMutationLockTimeout = 30 * time.Second
 
 func withIntegrationMutationLock(projectRoot, operation string, fn func() error) error {
 	return withIntegrationMutationLockTimeout(projectRoot, operation, integrationMutationLockTimeout, fn)

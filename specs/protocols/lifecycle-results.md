@@ -41,7 +41,7 @@ digests appear in responses, prompts, error text or logs.
 | `ALREADY_TRANSITIONED` | `stop` | Task moved past this operation; no assertion that this request succeeded |
 | `STALE_CALLER` | `stop` | Generation or ownership no longer authorizes the caller |
 | `STATE_CHANGED` | `requery` | Preconditions changed or this request's effects/outcome are uncertain |
-| `RETRYABLE` | `retry` | Known transient contention before any operation effect |
+| `RETRYABLE` | `retry`, or `requery` once the failure retired its own preparation (see merge) | Known transient contention before any operation effect |
 | `INVALID_INPUT` | `correct_input` | Invalid, oversized or conflicting payload; preserve field-level diagnostics |
 | `FORBIDDEN` | `stop` | Operation or role authorization denied |
 | `NO_CHANGE` | `stop` | Request valid and authorized, but the effective result already equals durable state; no history or receipt is appended |
@@ -250,6 +250,14 @@ A later attempt then retires the preparation and finishes the merge once. The
 CAS merge re-verifies ancestry and performs no second ref write, and the task's
 merge commit is taken from the receipt so an intervening merge is not
 misattributed.
+A merge that provably published nothing also retires its own preparation:
+its forward integration lock timed out before the callback ran, or the
+candidate artifact guard, which runs before `update-ref` and reads state
+without the state lock, could not read state. Neither is a verdict on the
+candidate, so the task stays approved rather than `INTEGRATION_FAILED`.
+Retirement advances the boundary, so the result is `RETRYABLE` for lock
+contention and `STATE_CHANGED` for any other read failure, both with
+`requery` and `effects=none`.
 Administrative `recover-task --force` with missing/unreadable state keeps its
 capability while explicitly reporting that durable receipt evidence is
 unavailable.

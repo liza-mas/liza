@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pairingindex"
@@ -534,15 +535,28 @@ func integrationRetentionDetail(rewound bool, rollbackErr error, mergeCommit str
 	return fmt.Sprintf("integration branch retains %s: it was not rolled back", shortSHA(mergeCommit))
 }
 
+// artifactGuardReadState is how the candidate artifact guard reads state. The
+// read takes no state lock: a saturated lock must not turn an approved merge
+// into a failure (D78). A locked read would add no guarantee here, because its
+// lock is released before update-ref either way; the post-update backstop takes
+// a fresh locked read for its validation and conditionally rolls back. Tests
+// replace it to observe or fail the guard's reads.
+var artifactGuardReadState = (*db.Blackboard).ReadSnapshot
+
 func buildArtifactGuardHook(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, taskID string) func(candidateTreeish string) error {
+	readState := func() (*models.State, error) { return artifactGuardReadState(bb) }
 	return func(candidateTreeish string) error {
-		if err := validateCandidateArtifactRefsWithFreshState(bb.Read, projectRoot, gitWrapper, candidateTreeish, taskID); err != nil {
-			return &candidateArtifactGuardError{err: err}
+		err := validateCandidateArtifactRefsWithFreshState(readState, projectRoot, gitWrapper, candidateTreeish, taskID)
+		var unavailable *candidateArtifactGuardUnavailableError
+		if err == nil || errors.As(err, &unavailable) {
+			return err
 		}
-		return nil
+		return &candidateArtifactGuardError{err: err}
 	}
 }
 
+// candidateArtifactGuardError is a confirmed verdict: the candidate tree lacks
+// an artifact that state references.
 type candidateArtifactGuardError struct {
 	err error
 }
@@ -555,6 +569,21 @@ func (e *candidateArtifactGuardError) Unwrap() error {
 	return e.err
 }
 
+// candidateArtifactGuardUnavailableError means the guard could not read the
+// state it needed to reach a verdict. It says nothing about the candidate, and
+// the guard runs before update-ref, so the merge published nothing.
+type candidateArtifactGuardUnavailableError struct {
+	err error
+}
+
+func (e *candidateArtifactGuardUnavailableError) Error() string {
+	return e.err.Error()
+}
+
+func (e *candidateArtifactGuardUnavailableError) Unwrap() error {
+	return e.err
+}
+
 func validateCandidateArtifactRefsWithFreshState(
 	readState func() (*models.State, error),
 	projectRoot string,
@@ -564,7 +593,7 @@ func validateCandidateArtifactRefsWithFreshState(
 ) error {
 	state, err := readState()
 	if err != nil {
-		return fmt.Errorf("candidate artifact guard failed to read state: %w", err)
+		return &candidateArtifactGuardUnavailableError{err: fmt.Errorf("candidate artifact guard failed to read state: %w", err)}
 	}
 
 	firstErr := statevalidate.ValidateCandidateMergeArtifactRefs(candidateTreeish, state, projectRoot, taskID, lookup)
@@ -574,8 +603,9 @@ func validateCandidateArtifactRefsWithFreshState(
 
 	confirmationState, confirmationReadErr := readState()
 	if confirmationReadErr != nil {
+		// An unconfirmed finding may come from stale state, so it is not a verdict.
 		freshnessErr := fmt.Errorf("failed to re-read state for candidate artifact guard freshness: %w", confirmationReadErr)
-		return fmt.Errorf("candidate artifact guard failed and state freshness could not be verified: %w", errors.Join(firstErr, freshnessErr))
+		return &candidateArtifactGuardUnavailableError{err: fmt.Errorf("candidate artifact guard failed and state freshness could not be verified: %w", errors.Join(firstErr, freshnessErr))}
 	}
 
 	if confirmationErr := statevalidate.ValidateCandidateMergeArtifactRefs(candidateTreeish, confirmationState, projectRoot, taskID, lookup); confirmationErr != nil {
@@ -926,13 +956,15 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	effects = "unknown"
 	casStarted := false
 	forwardRolledBack := false
+	forwardUnpublished := false
 	defer func() {
 		// Once CAS starts, a returned error can leave the ref or main checkout
 		// partially updated. Preserve that fence for inspected recovery unless
-		// this invocation rewound the ref it moved: otherwise its own
-		// same-generation retries requery until a restart (D77). Retirement
-		// usually follows a state-lock timeout, so it waits the patient budget.
-		if retErr != nil && (!casStarted || forwardRolledBack) {
+		// this invocation rewound the ref it moved, or provably moved nothing:
+		// otherwise its own same-generation retries requery until a restart
+		// (D77). Retirement usually follows a state-lock timeout, so it waits
+		// the patient budget.
+		if retErr != nil && (!casStarted || forwardRolledBack || forwardUnpublished) {
 			retErr = retireFailedLifecyclePreparation(bb.Patient(), taskID, authority, &preparation, retErr, effects)
 		}
 	}()
@@ -980,6 +1012,22 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		return mutationErr
 	})
 	if err != nil {
+		// Two failures prove nothing was published: the forward lock timed out
+		// before its callback ran, or the guard, which runs before update-ref,
+		// could not read state. Neither says anything about the candidate, so
+		// the task stays approved (D78). Retiring the preparation advances the
+		// boundary, hence requery; only lock contention is RETRYABLE.
+		var unavailable *candidateArtifactGuardUnavailableError
+		lockTimeout := filelock.IsLockErrorType(err, filelock.LockErrorTimeout)
+		if errors.As(err, &unavailable) || (!casStarted && lockTimeout) {
+			forwardUnpublished = true
+			effects = "none"
+			result := models.LifecycleStateChanged
+			if lockTimeout {
+				result = models.LifecycleRetryable
+			}
+			return nil, &LifecycleError{Outcome: NewLifecycleOutcome(integrationOperationWTMerge, nil, result, "requery", effects), Err: err}
+		}
 		var artifactErr *candidateArtifactGuardError
 		if errors.As(err, &artifactErr) {
 			diagnostic := integrationFailureDiagnosticWithDetail(IntegrationReasonStateInvalid, err.Error(), "", "", nil)
