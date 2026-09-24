@@ -2,9 +2,12 @@
 {{- if ne .ResolvedReferenceContext ""}}
 
 === RESOLVED REFERENCE CONTEXT ===
-The compositor resolved and freshness-checked the strict carrier content and its
-declared direct references before launch. Treat this bounded context as inherited
-authority. Do not re-read or replace its pinned source paths with worktree content.
+The compositor resolved the strict carrier content and its declared direct
+references at integration HEAD before launch. Treat this bounded context as
+inherited authority. Do not re-read or replace its pinned source paths with worktree content.
+A reference marked "section changed since its pinned revision" or "no longer
+resolves" drifted after its carrier was approved: that approval did not cover the
+text shown, so if the difference bears on your task, raise it rather than rely on it silently.
 A reference marked "not inlined" was declared by an ancestor carrier, and a
 section marked "peer of your assigned section" belongs to a sibling task of an
 artifact you were assigned one section of; read either with the git show command

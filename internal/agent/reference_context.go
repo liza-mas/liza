@@ -49,6 +49,8 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 		return head, nil
 	}
 
+	proofs := allocationProofPolicy(repo, task)
+
 	var observations []referencecontract.Carrier
 	var legacyReferences []prompts.LegacyArtifactReference
 	// The most specific strict scalar carrier is the task's assigned artifact
@@ -77,7 +79,7 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 		if err != nil {
 			return "", nil, err
 		}
-		observation, strict, loadErr := loadScalarCarrier(repo, head, scalar.ref)
+		observation, strict, loadErr := loadScalarCarrier(repo, head, scalar.ref, proofs)
 		if loadErr != nil {
 			return "", nil, loadErr
 		}
@@ -119,7 +121,7 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 		if err != nil {
 			return "", nil, err
 		}
-		found, discoverErr := loadDiffCarriers(repo, config.ProjectRoot, base, review, head, referencecontract.CarrierParent, true)
+		found, discoverErr := loadDiffCarriers(repo, config.ProjectRoot, base, review, head, referencecontract.CarrierParent, true, proofs)
 		if discoverErr != nil {
 			return "", nil, fmt.Errorf("direct parent %q: %w", parentID, discoverErr)
 		}
@@ -134,7 +136,7 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 		if err != nil {
 			return "", nil, err
 		}
-		found, discoverErr := loadDiffCarriers(repo, config.ProjectRoot, *task.BaseCommit, *task.ReviewCommit, head, referencecontract.CarrierReview, false)
+		found, discoverErr := loadDiffCarriers(repo, config.ProjectRoot, *task.BaseCommit, *task.ReviewCommit, head, referencecontract.CarrierReview, false, proofs)
 		if discoverErr != nil {
 			return "", nil, discoverErr
 		}
@@ -170,7 +172,55 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 	return context, filteredLegacy, nil
 }
 
-func loadScalarCarrier(repo referenceContextRepository, head, ref string) (referencecontract.Carrier, bool, error) {
+// proofPolicy answers, for a merged carrier observed at path with the given
+// contents, which declared reference IDs still refuse section drift under
+// their pin.
+type proofPolicy func(path string, contents ...string) func(referenceID string) bool
+
+func refuseEveryDrift(string) bool { return true }
+
+func refuseNoDrift(string) bool { return false }
+
+// allocationProofPolicy keeps drift refusing only for the approved proofs of
+// the task's own allocation — the one class acceptance gates by content
+// (ADR-0133). Everything else a merged carrier pins is disclosed instead,
+// because its pin cannot move without a new merge and refusing strands every
+// child of the plan (D76).
+//
+// Proof IDs are unioned over every version of the allocation the task could
+// be judged by — the observed content, the parent's reviewed content, and the
+// adopted source — so a later edit that drops a proof never relaxes it. A
+// declaration that cannot be read or parsed refuses every drift: it cannot say
+// which references it meant to prove.
+func allocationProofPolicy(repo referenceContextRepository, task *models.Task) proofPolicy {
+	allocation := ops.AcceptanceAllocationRef(task)
+	allocationPath, heading := paths.SplitRefFile(allocation), paths.SplitRefFragment(allocation)
+	return func(path string, contents ...string) func(string) bool {
+		if allocationPath == "" || path != allocationPath {
+			return refuseNoDrift
+		}
+		if source := task.AcceptanceSource; source != nil && source.ParentReviewCommit != "" && paths.SplitRefFile(source.Ref) == allocationPath {
+			adopted, err := repo.ReadBlob(source.ParentReviewCommit, allocationPath)
+			if err != nil {
+				return refuseEveryDrift
+			}
+			contents = append(contents, adopted)
+		}
+		proofs := map[string]bool{}
+		for _, content := range contents {
+			ids, err := referencecontract.ApprovedProofReferenceIDs(content, heading)
+			if err != nil {
+				return refuseEveryDrift
+			}
+			for id := range ids {
+				proofs[id] = true
+			}
+		}
+		return func(referenceID string) bool { return proofs[referenceID] }
+	}
+}
+
+func loadScalarCarrier(repo referenceContextRepository, head, ref string, proofs proofPolicy) (referencecontract.Carrier, bool, error) {
 	path := paths.SplitRefFile(ref)
 	fragment := paths.SplitRefFragment(ref)
 	_, present, err := repo.TreePathMode(head, path)
@@ -205,14 +255,14 @@ func loadScalarCarrier(repo referenceContextRepository, head, ref string) (refer
 	if err != nil {
 		return referencecontract.Carrier{}, false, err
 	}
-	refs, err := resolveDeclaredReferences(repo, head, "", "", contract)
+	refs, err := resolveDeclaredReferences(repo, head, "", "", contract, proofs(path, content))
 	if err != nil {
 		return referencecontract.Carrier{}, false, fmt.Errorf("scalar carrier %q: %w", path, err)
 	}
 	return referencecontract.Carrier{Path: path, Span: span, Revision: head, Class: referencecontract.CarrierScalar, BlobOID: oid, Refs: refs}, true, nil
 }
 
-func loadDiffCarriers(repo referenceContextRepository, root, base, review, head string, class referencecontract.CarrierClass, requireFresh bool) ([]referencecontract.Carrier, error) {
+func loadDiffCarriers(repo referenceContextRepository, root, base, review, head string, class referencecontract.CarrierClass, requireFresh bool, proofs proofPolicy) ([]referencecontract.Carrier, error) {
 	changed, err := repo.DiffFiles(root, base, review)
 	if err != nil {
 		return nil, fmt.Errorf("enumerate reviewed range %s..%s: %w", base, review, err)
@@ -246,7 +296,11 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 			return nil, oidErr
 		}
 		revision := review
+		// A current-review carrier is unmerged: its author can still re-pin, so
+		// every drift under it refuses. A merged parent's pins cannot move.
+		refuses := refuseEveryDrift
 		if requireFresh {
+			reviewedContent := content
 			// A merged parent's carrier can be edited by later merges. The
 			// integrated version is the current agreed content, so adopt it
 			// rather than refusing to build context; only deletion blocks.
@@ -275,6 +329,7 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 				}
 				content, contract, oid, revision = headContent, headContract, headOID, head
 			}
+			refuses = proofs(path, reviewedContent, content)
 		}
 		// Current-review carriers may declare references to paths their own
 		// reviewed range introduced; those resolve at the review commit.
@@ -282,7 +337,7 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 		if !requireFresh {
 			localBase, localReview = base, review
 		}
-		refs, resolveErr := resolveDeclaredReferences(repo, head, localBase, localReview, contract)
+		refs, resolveErr := resolveDeclaredReferences(repo, head, localBase, localReview, contract, refuses)
 		if resolveErr != nil {
 			return nil, fmt.Errorf("reviewed carrier %q: %w", path, resolveErr)
 		}
@@ -292,12 +347,17 @@ func loadDiffCarriers(repo referenceContextRepository, root, base, review, head 
 }
 
 // resolveDeclaredReferences pins each direct reference at its declared revision
-// and requires the referenced section to be unchanged at integration HEAD
-// (blob identity is the fast path). When localBase/localReview
-// are non-empty, a path absent at both HEAD and localBase was introduced in
-// the reviewed range and matches at localReview instead; a path present at
-// localBase but absent at HEAD was deleted and still blocks.
-func resolveDeclaredReferences(repo referenceContextRepository, head, localBase, localReview string, contract *referencecontract.Contract) ([]referencecontract.Reference, error) {
+// and compares the referenced section with integration HEAD (blob identity is
+// the fast path; an unrelated edit elsewhere in the file is not drift). When
+// localBase/localReview are non-empty, a path absent at both HEAD and
+// localBase was introduced in the reviewed range and matches at localReview
+// instead; a path present at localBase but absent at HEAD was deleted.
+//
+// Drift refuses when refuses(referenceID) holds. Otherwise the reference is
+// kept with its drift disclosed (ADR-0133): the current section when it still
+// resolves, the pinned one with the reason when it does not. A pin that cannot
+// be read refuses regardless — there is nothing to disclose.
+func resolveDeclaredReferences(repo referenceContextRepository, head, localBase, localReview string, contract *referencecontract.Contract, refuses func(referenceID string) bool) ([]referencecontract.Reference, error) {
 	refs := make([]referencecontract.Reference, 0, len(contract.DirectReferences))
 	for _, ref := range contract.DirectReferences {
 		revision, err := repo.ResolveCommit(ref.EffectiveRevision(contract.SourceRevision))
@@ -311,6 +371,17 @@ func resolveDeclaredReferences(repo referenceContextRepository, head, localBase,
 		pinnedOID, err := repo.BlobOID(revision, ref.Path)
 		if err != nil {
 			return nil, err
+		}
+		pinned := referencecontract.Reference{Path: ref.Path, Heading: ref.Heading, Revision: revision, BlobOID: pinnedOID}
+		// unresolvable keeps the pinned text when the section cannot be read
+		// at the fresh revision, or refuses with err.
+		unresolvable := func(reason string, err error) error {
+			if refuses(ref.ID) {
+				return err
+			}
+			pinned.PinnedRevision, pinned.Unresolved = revision, reason
+			refs = append(refs, pinned)
+			return nil
 		}
 		_, presentAtHead, err := repo.TreePathMode(head, ref.Path)
 		if err != nil {
@@ -327,31 +398,44 @@ func resolveDeclaredReferences(repo referenceContextRepository, head, localBase,
 			}
 			freshRevision, where = localReview, "review commit"
 		}
+		pinned.Span, err = referencecontract.ExtractSection(content, ref.Heading)
+		if err != nil {
+			return nil, err
+		}
+		if !presentAtHead && localReview == "" {
+			if err := unresolvable("path deleted", fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		freshOID, err := repo.BlobOID(freshRevision, ref.Path)
 		if err != nil {
 			return nil, err
 		}
-		span, err := referencecontract.ExtractSection(content, ref.Heading)
-		if err != nil {
-			return nil, err
-		}
 		if pinnedOID != freshOID {
-			// Staleness is a property of the referenced section, not of the
-			// whole file: an unrelated edit elsewhere in the file leaves the
-			// inherited obligation intact.
 			freshContent, readErr := repo.ReadBlob(freshRevision, ref.Path)
 			if readErr != nil {
 				return nil, readErr
 			}
 			freshSpan, spanErr := referencecontract.ExtractSection(freshContent, ref.Heading)
 			if spanErr != nil {
-				return nil, fmt.Errorf("direct reference %q is stale at %s: %w", ref.ID, where, spanErr)
+				if err := unresolvable(spanErr.Error(), fmt.Errorf("direct reference %q is stale at %s: %w", ref.ID, where, spanErr)); err != nil {
+					return nil, err
+				}
+				continue
 			}
-			if freshSpan != span {
-				return nil, fmt.Errorf("direct reference %q is stale at %s", ref.ID, where)
+			if freshSpan != pinned.Span {
+				if refuses(ref.ID) {
+					return nil, fmt.Errorf("direct reference %q is stale at %s", ref.ID, where)
+				}
+				refs = append(refs, referencecontract.Reference{
+					Path: ref.Path, Heading: ref.Heading, Revision: freshRevision, BlobOID: freshOID,
+					Span: freshSpan, PinnedRevision: revision,
+				})
+				continue
 			}
 		}
-		refs = append(refs, referencecontract.Reference{Path: ref.Path, Heading: ref.Heading, Revision: revision, BlobOID: pinnedOID, Span: span})
+		refs = append(refs, pinned)
 	}
 	return refs, nil
 }

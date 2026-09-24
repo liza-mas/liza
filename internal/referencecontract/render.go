@@ -42,12 +42,19 @@ type Carrier struct {
 // Reference is one resolved direct reference: a section of a pinned file.
 // BlobOID records the blob the section was read from; it is provenance for
 // callers and test fixtures, not an identity used by rendering.
+//
+// PinnedRevision is set only for a reference whose section drifted under a
+// pin that cannot move (ADR-0133): Revision then names where Span was read
+// from — integration HEAD, or the pin itself when Unresolved gives why the
+// section no longer resolves at HEAD.
 type Reference struct {
-	Path     string
-	Heading  string
-	Revision string
-	BlobOID  string
-	Span     string
+	Path           string
+	Heading        string
+	Revision       string
+	BlobOID        string
+	Span           string
+	PinnedRevision string
+	Unresolved     string
 }
 
 // RenderCarriers reconciles observations of the same path and renders the
@@ -72,6 +79,11 @@ type Reference struct {
 // to the pinned revision, which the agent can read with git show. A pointer
 // never consumes the once-only slot of a full emission, so a reference shared
 // by an elided and a full carrier is still rendered in full exactly once.
+//
+// A drifted reference (PinnedRevision set) appends its disclosure to whichever
+// line renders it. When its text is already emitted for another carrier, it
+// still gets one pointer line carrying the disclosure; an undrifted duplicate
+// of an emitted drifted reference adds nothing.
 func RenderCarriers(observations []Carrier) (string, error) {
 	if len(observations) == 0 {
 		return "", nil
@@ -133,6 +145,11 @@ func RenderCarriers(observations []Carrier) (string, error) {
 	var out strings.Builder
 	seenRefs := make(map[string]bool)
 	seenPointers := make(map[string]bool)
+	// The text slot is keyed on content, but a drifted reference owes its
+	// disclosure even when another carrier pinned the same text at a current
+	// revision; seenNotes tracks those disclosures separately so neither
+	// emission swallows the other.
+	seenNotes := make(map[string]bool)
 	for _, path := range paths {
 		carrier := winners[path]
 		fmt.Fprintf(&out, "CARRIER %s @ %s\n%s", strconv.Quote(path), carrier.Revision, carrier.Span)
@@ -141,38 +158,79 @@ func RenderCarriers(observations []Carrier) (string, error) {
 		}
 		for _, ref := range carrier.Refs {
 			key := refKey(ref)
+			note := driftNote(ref)
+			noteKey := key + "\x00" + ref.PinnedRevision
+			target := strconv.Quote(ref.Path + "#" + ref.Heading)
 			if seenRefs[key] {
+				if note != "" && !seenNotes[noteKey] {
+					seenNotes[noteKey] = true
+					var where string
+					switch emitter, emitted := emittedBy[key]; {
+					case containedIn(ref):
+						where = withNote("inlined in this context as CARRIER "+strconv.Quote(ref.Path), note)
+					case emitted:
+						where = note + "; same text inlined in this context under CARRIER " + strconv.Quote(emitter)
+					default:
+						where = withNote("not inlined; read with git show "+shellQuote(ref.Revision+":"+ref.Path)+" if needed", note)
+					}
+					fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision, where)
+				}
 				continue
 			}
-			target := strconv.Quote(ref.Path + "#" + ref.Heading)
 			if containedIn(ref) {
-				seenRefs[key] = true
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined in this context as CARRIER %s\n",
-					target, ref.Revision, strconv.Quote(ref.Path))
+				seenRefs[key], seenNotes[noteKey] = true, true
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision,
+					withNote("inlined in this context as CARRIER "+strconv.Quote(ref.Path), note))
 				continue
 			}
 			if carrier.ElideRefs {
 				if emitter, ok := emittedBy[key]; ok {
-					if !seenPointers[key] {
-						seenPointers[key] = true
-						fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — inlined in this context under CARRIER %s\n",
-							target, ref.Revision, strconv.Quote(emitter))
+					if !seenPointers[noteKey] {
+						seenPointers[noteKey], seenNotes[noteKey] = true, true
+						fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision,
+							withNote("inlined in this context under CARRIER "+strconv.Quote(emitter), note))
 					}
 					continue
 				}
-				seenRefs[key] = true
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — not inlined; read with git show %s if needed\n",
-					target, ref.Revision, shellQuote(ref.Revision+":"+ref.Path))
+				seenRefs[key], seenNotes[noteKey] = true, true
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision,
+					withNote("not inlined; read with git show "+shellQuote(ref.Revision+":"+ref.Path)+" if needed", note))
 				continue
 			}
-			seenRefs[key] = true
-			fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s\n%s", target, ref.Revision, ref.Span)
+			seenRefs[key], seenNotes[noteKey] = true, true
+			if note != "" {
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n%s", target, ref.Revision, note, ref.Span)
+			} else {
+				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s\n%s", target, ref.Revision, ref.Span)
+			}
 			if !strings.HasSuffix(ref.Span, "\n") {
 				out.WriteByte('\n')
 			}
 		}
 	}
 	return strings.TrimRight(out.String(), "\n"), nil
+}
+
+// driftNote discloses a reference whose section drifted under its pin, or ""
+// when it did not. A resolvable section shows the current text and names the
+// command that compares it with the pinned one; an unresolvable section shows
+// the pinned text and says why nothing current could be read.
+func driftNote(ref Reference) string {
+	if ref.PinnedRevision == "" {
+		return ""
+	}
+	if ref.Unresolved != "" {
+		return fmt.Sprintf("section no longer resolves at integration HEAD (%s); pinned text shown", ref.Unresolved)
+	}
+	return fmt.Sprintf("section changed since its pinned revision %s; current text shown; compare: git diff %s %s -- %s",
+		ref.PinnedRevision, shellQuote(ref.PinnedRevision), shellQuote(ref.Revision), shellQuote(ref.Path))
+}
+
+func withNote(pointer, note string) string {
+	if note == "" {
+		return pointer
+	}
+	return pointer + "; " + note
 }
 
 // elideAssignedPeers replaces each peer of the carrier's assigned section with

@@ -1,6 +1,6 @@
 {{- define "artifact-ref-fallback" -}}
 {{- if ne .ResolvedReferenceContext ""}}
-Strict carriers and declared direct references are already pinned and freshness-checked in
+Strict carriers and declared direct references are already resolved, with any drift marked, in
 RESOLVED REFERENCE CONTEXT. Use those spans; do not re-read them from the worktree or branch.
 Any marker-free task refs retain their explicit legacy routes in that same context.
 {{- else}}

@@ -207,6 +207,15 @@ const AnomalyTypeReviewerClaimCircuitOpen = "reviewer_claim_circuit_open"
 // reviewable event, never a block: refusing here would strand every child of a
 // merged plan whose review boundary no command can move (ADR-0133 clause 4).
 // Detail validation is owned by statevalidate.
+//
+// reviewed_section and current_section mean different things per change:
+//   - repinned, retargeted: the section at the authorizing review commit
+//     (what the reviewer saw), and the section at the merge commit.
+//   - dropped: the reviewed section, and "" — nothing rests on it now.
+//   - stale: the section at the carrier's current pin, which a post-review
+//     re-pin may have made unreviewed, and the section at the merge commit,
+//     or "" when it no longer resolves. It does not assert a reviewer saw
+//     reviewed_section.
 const AnomalyTypeObligationContentDrifted = "obligation_content_drifted"
 
 // Anomaly represents an execution anomaly that may trigger circuit breaker

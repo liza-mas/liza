@@ -102,6 +102,22 @@ func ParseAcceptance(markdown, heading string) (*AcceptanceContract, error) {
 	return contract, nil
 }
 
+// ApprovedProofReferenceIDs returns the reference IDs an allocation's
+// approved_proofs cite, or nil when the section declares no acceptance
+// contract. An invalid declaration is an error: the caller cannot tell which
+// references it meant to prove.
+func ApprovedProofReferenceIDs(markdown, heading string) (map[string]bool, error) {
+	contract, err := ParseAcceptance(markdown, heading)
+	if err != nil || contract == nil {
+		return nil, err
+	}
+	ids := make(map[string]bool, len(contract.ApprovedProofs))
+	for _, proof := range contract.ApprovedProofs {
+		ids[proof.ReferenceID] = true
+	}
+	return ids, nil
+}
+
 // acceptanceJSONFence uses the same line/fence primitives as scanMarkdown.
 // The section body must consist solely of one explicitly JSON-labelled fence.
 func acceptanceJSONFence(section string) (string, error) {

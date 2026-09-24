@@ -222,6 +222,122 @@ func TestRecordObligationContentDriftReportsWithoutBlocking(t *testing.T) {
 	}
 }
 
+// setupUnchangedPinFixture pins plan-a at the reviewed source revision, then
+// edits the pinned section at integration without touching the carrier: the
+// D76 shape, which no carrier comparison can see.
+func setupUnchangedPinFixture(t *testing.T) driftFixture {
+	t.Helper()
+	root := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, root)
+	writeDriftFile(t, root, "specs/source.md", "# Source\n\n## Counters\nCount observations.\n\n## Other\nUnrelated.\n")
+	testhelpers.MustGit(t, root, "add", "--all")
+	testhelpers.MustGit(t, root, "commit", "-m", "test: record source")
+	pinned := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+	writeDriftFile(t, root, "specs/plan-a.md", driftCarrier(pinned, "specs/source.md#Counters", "AC-1"))
+	testhelpers.MustGit(t, root, "add", "--all")
+	testhelpers.MustGit(t, root, "commit", "-m", "test: reviewed carrier")
+	reviewCommit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+	writeDriftFile(t, root, "specs/source.md",
+		"# Source\n\n## Counters\nCount observations.\n\n| recorder | attestation |\n|---|---|\n\n## Other\nUnrelated.\n")
+	testhelpers.MustGit(t, root, "add", "--all")
+	testhelpers.MustGit(t, root, "commit", "-m", "test: append a table inside the pinned section")
+	return driftFixture{root: root, reviewCommit: reviewCommit, integration: testhelpers.MustGit(t, root, "rev-parse", "HEAD")}
+}
+
+// A merge that edits a pinned section while the carrier stays put is the
+// drift prompt build now discloses instead of refusing; the merge must leave a
+// reviewable record of it, once.
+func TestObligationDriftRecordsSectionEditedUnderAnUnchangedPin(t *testing.T) {
+	fixture := setupUnchangedPinFixture(t)
+	state := driftState(fixture.reviewCommit, "specs/plan-a.md#Task 1")
+
+	drifts := detectObligationDrift(state, fixture.root, fixture.integration)
+	if len(drifts) != 1 {
+		t.Fatalf("detected %d drifts, want 1 for the section edited under an unchanged pin: %+v", len(drifts), drifts)
+	}
+	drift := drifts[0]
+	if drift.key.path != "specs/source.md" || drift.key.heading != "Counters" || drift.change != "stale" {
+		t.Errorf("drift = %s#%s (%s), want specs/source.md#Counters (stale)", drift.key.path, drift.key.heading, drift.change)
+	}
+	if got := sortedKeys(drift.carriers); !reflect.DeepEqual(got, []string{"specs/plan-a.md"}) {
+		t.Errorf("carriers = %v, want [specs/plan-a.md]", got)
+	}
+	if got := sortedKeys(drift.obligations); !reflect.DeepEqual(got, []string{"AC-1"}) {
+		t.Errorf("obligations = %v, want [AC-1]", got)
+	}
+	if drift.reviewed == drift.key.current || drift.key.current == "" {
+		t.Errorf("reviewed %q / current %q: want two distinct section identities", drift.reviewed, drift.key.current)
+	}
+
+	stateFile := filepath.Join(fixture.root, "state.yaml")
+	bb := testhelpers.WriteInitialState(t, stateFile, state)
+	recorded, err := RecordObligationContentDrift(bb, fixture.root, fixture.integration, "coder-1")
+	if err != nil || len(recorded) != 1 {
+		t.Fatalf("first record = %v, %v; want one event", recorded, err)
+	}
+	written, err := os.Stat(stateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every later merge re-observes the same pin and section. It must widen,
+	// not repeat, or each merge re-announces a drift already on record.
+	writeDriftFile(t, fixture.root, "README.md", "unrelated\n")
+	testhelpers.MustGit(t, fixture.root, "add", "README.md")
+	testhelpers.MustGit(t, fixture.root, "commit", "-m", "test: unrelated merge")
+	later := testhelpers.MustGit(t, fixture.root, "rev-parse", "HEAD")
+	recorded, err = RecordObligationContentDrift(bb, fixture.root, later, "coder-2")
+	if err != nil || len(recorded) != 0 {
+		t.Fatalf("re-observed record = %v, %v; want no new event", recorded, err)
+	}
+	// Nothing to widen means no lock-held rewrite of the whole state.
+	if rewritten, err := os.Stat(stateFile); err != nil || !rewritten.ModTime().Equal(written.ModTime()) {
+		t.Errorf("state rewritten on a re-observed drift (stat err %v)", err)
+	}
+	after, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Anomalies) != 1 {
+		t.Fatalf("anomalies = %d, want 1 deduplicated record", len(after.Anomalies))
+	}
+}
+
+// A pinned file deleted at the merge is stale with nothing current to read:
+// the record carries the pinned section and an empty current section.
+func TestObligationDriftRecordsStaleWithEmptySectionWhenPinnedFileIsDeleted(t *testing.T) {
+	fixture := setupUnchangedPinFixture(t)
+	testhelpers.MustGit(t, fixture.root, "rm", "-q", "specs/source.md")
+	testhelpers.MustGit(t, fixture.root, "commit", "-m", "test: delete the pinned file")
+	deleted := testhelpers.MustGit(t, fixture.root, "rev-parse", "HEAD")
+
+	drifts := detectObligationDrift(driftState(fixture.reviewCommit, "specs/plan-a.md#Task 1"), fixture.root, deleted)
+	if len(drifts) != 1 {
+		t.Fatalf("detected %d drifts, want 1 for the deleted pinned file: %+v", len(drifts), drifts)
+	}
+	if drift := drifts[0]; drift.change != "stale" || drift.key.current != "" || drift.reviewed == "" {
+		t.Errorf("drift = %+v, want stale with an empty current section and the pinned one reviewed", drift)
+	}
+}
+
+// A plan whose children have all finished can no longer strand anything, so
+// editing a section it pins is not an event: without this bound every docs
+// merge would grow state with records about finished work.
+func TestObligationDriftSkipsStaleUnderAPlanWithOnlyTerminalChildren(t *testing.T) {
+	fixture := setupUnchangedPinFixture(t)
+	state := driftState(fixture.reviewCommit, "specs/plan-a.md#Task 1", "specs/plan-a.md#Task 1")
+	for i := range state.Tasks {
+		state.Tasks[i].Status = models.TaskStatusMerged
+	}
+	if drifts := detectObligationDrift(state, fixture.root, fixture.integration); len(drifts) != 0 {
+		t.Fatalf("detected %d drifts under a plan with only terminal children: %+v", len(drifts), drifts)
+	}
+
+	state.Tasks[1].Status = models.TaskStatusReady
+	if drifts := detectObligationDrift(state, fixture.root, fixture.integration); len(drifts) != 1 {
+		t.Fatalf("detected %d drifts with one live child, want 1: %+v", len(drifts), drifts)
+	}
+}
+
 // Recording must satisfy the state validator, or the first merge that finds
 // drift leaves a state no command can read back.
 func TestRecordedObligationDriftAnomalyValidates(t *testing.T) {

@@ -425,3 +425,122 @@ func TestRenderCarriersQuotesGeneratedGitCommands(t *testing.T) {
 		t.Errorf("a git show argument is double-quoted, leaving $() and backticks active:\n%s", out)
 	}
 }
+
+// A reference with no drift renders exactly as before drift disclosure
+// existed: the note is additive and never touches an undrifted emission.
+func TestRenderCarriersUndriftedOutputIsUnchanged(t *testing.T) {
+	t.Parallel()
+
+	out, err := RenderCarriers([]Carrier{
+		{Path: "specs/b.md", Span: "b body\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-b",
+			Refs: []Reference{{Path: "specs/src.md", Heading: "Contract", Revision: "pinned", BlobOID: "blob-s", Span: renderSection}}},
+		{Path: "specs/c.md", Span: "c body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-c", ElideRefs: true,
+			Refs: []Reference{{Path: "specs/goal.md", Heading: "Scope", Revision: "pinned", BlobOID: "blob-g", Span: "## Scope\nscope\n"}}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	want := "CARRIER \"specs/b.md\" @ head\nb body\n" +
+		"DIRECT REFERENCE \"specs/src.md#Contract\" @ pinned\n## Contract\ncontract text\n" +
+		"CARRIER \"specs/c.md\" @ head\nc body\n" +
+		"DIRECT REFERENCE \"specs/goal.md#Scope\" @ pinned — not inlined; read with git show 'pinned:specs/goal.md' if needed"
+	if out != want {
+		t.Fatalf("undrifted render changed:\n got: %q\nwant: %q", out, want)
+	}
+}
+
+// A drifted reference carries its disclosure in every form it renders: in
+// full, as an elided pointer, and as a pointer to an inlined carrier; and an
+// unresolvable section says the pinned text is shown.
+func TestRenderCarriersDisclosesDriftedReference(t *testing.T) {
+	t.Parallel()
+
+	drifted := Reference{Path: "specs/src.md", Heading: "Contract", Revision: "head", BlobOID: "blob-new",
+		Span: "## Contract\nextended contract text\n", PinnedRevision: "pinned"}
+	note := "section changed since its pinned revision pinned; current text shown; compare: git diff 'pinned' 'head' -- 'specs/src.md'"
+
+	full, err := RenderCarriers([]Carrier{
+		{Path: "specs/b.md", Span: "b body\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-b", Refs: []Reference{drifted}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if want := "DIRECT REFERENCE \"specs/src.md#Contract\" @ head — " + note + "\n## Contract\nextended contract text"; !strings.Contains(full, want) {
+		t.Errorf("full form lacks the drift disclosure; want %q in:\n%s", want, full)
+	}
+
+	elided, err := RenderCarriers([]Carrier{
+		{Path: "specs/c.md", Span: "c body\n", Revision: "head", Class: CarrierScalar, BlobOID: "blob-c", ElideRefs: true, Refs: []Reference{drifted}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if !strings.Contains(elided, "not inlined; read with git show 'head:specs/src.md' if needed; "+note) {
+		t.Errorf("elided pointer lacks the drift disclosure:\n%s", elided)
+	}
+
+	inlined, err := RenderCarriers([]Carrier{
+		{Path: "specs/src.md", Span: "# Src\n\n## Contract\nextended contract text\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-new"},
+		{Path: "specs/b.md", Span: "b body\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-b", Refs: []Reference{drifted}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if !strings.Contains(inlined, "inlined in this context as CARRIER \"specs/src.md\"; "+note) {
+		t.Errorf("inlined-carrier pointer lacks the drift disclosure:\n%s", inlined)
+	}
+
+	unresolved := Reference{Path: "specs/src.md", Heading: "Contract", Revision: "pinned", BlobOID: "blob-old",
+		Span: "## Contract\ncontract text\n", PinnedRevision: "pinned", Unresolved: "heading not found"}
+	gone, err := RenderCarriers([]Carrier{
+		{Path: "specs/b.md", Span: "b body\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-b", Refs: []Reference{unresolved}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCarriers: %v", err)
+	}
+	if want := "DIRECT REFERENCE \"specs/src.md#Contract\" @ pinned — section no longer resolves at integration HEAD (heading not found); pinned text shown\n## Contract\ncontract text"; !strings.Contains(gone, want) {
+		t.Errorf("unresolvable form lacks its disclosure; want %q in:\n%s", want, gone)
+	}
+}
+
+// Two carriers cite one section: one pin is current, the other was left
+// behind and now resolves to the same text. The text renders once whichever
+// sorts first, and the drift note renders exactly once — never swallowed by
+// the current-pin emission, never duplicated onto it.
+func TestRenderCarriersKeepsDriftNoteWhenSameSectionIsCurrentElsewhere(t *testing.T) {
+	t.Parallel()
+
+	current := Reference{Path: "specs/src.md", Heading: "Contract", Revision: "head", BlobOID: "blob-new", Span: "## Contract\nSHARED-TEXT\n"}
+	drifted := current
+	drifted.PinnedRevision = "pinned"
+	for _, order := range []struct {
+		name           string
+		first, second  Reference
+		pointerEmitter string
+	}{
+		{name: "current pin sorts first", first: current, second: drifted, pointerEmitter: "specs/a.md"},
+		{name: "drifted pin sorts first", first: drifted, second: current},
+	} {
+		out, err := RenderCarriers([]Carrier{
+			{Path: "specs/a.md", Span: "a body\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-a", Refs: []Reference{order.first}},
+			{Path: "specs/b.md", Span: "b body\n", Revision: "head", Class: CarrierParent, BlobOID: "blob-b", Refs: []Reference{order.second}},
+		})
+		if err != nil {
+			t.Fatalf("%s: RenderCarriers: %v", order.name, err)
+		}
+		if count := strings.Count(out, "SHARED-TEXT"); count != 1 {
+			t.Errorf("%s: section text rendered %d times, want once:\n%s", order.name, count, out)
+		}
+		if count := strings.Count(out, "section changed since its pinned revision pinned"); count != 1 {
+			t.Errorf("%s: drift note rendered %d times, want once:\n%s", order.name, count, out)
+		}
+		if order.pointerEmitter != "" {
+			want := "; same text inlined in this context under CARRIER \"" + order.pointerEmitter + "\""
+			if !strings.Contains(out, want) {
+				t.Errorf("%s: drifted duplicate should point at the emitter; want %q in:\n%s", order.name, want, out)
+			}
+		} else if count := strings.Count(out, "DIRECT REFERENCE \"specs/src.md#Contract\""); count != 1 {
+			t.Errorf("%s: %d reference lines for the shared section, want exactly the drifted emission:\n%s", order.name, count, out)
+		}
+	}
+}

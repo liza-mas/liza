@@ -1,13 +1,13 @@
 {
-  "total_bytes": 274482,
+  "total_bytes": 274990,
   "carrier_block": {
     "name": "RESOLVED REFERENCE CONTEXT",
-    "bytes": 260058
+    "bytes": 260562
   },
   "sections": [
     {
       "name": "RESOLVED REFERENCE CONTEXT",
-      "bytes": 260058
+      "bytes": 260562
     },
     {
       "name": "ORCHESTRATOR CONTEXT",
@@ -19,7 +19,7 @@
     },
     {
       "name": "COLLECTIVE PLAN SCOPING",
-      "bytes": 1851
+      "bytes": 1855
     }
   ],
   "depends_on_sites": [
@@ -57,8 +57,8 @@
     }
   ],
   "depends_on_total_bytes": 5812,
-  "depends_on_share_of_total": 0.021174430381591506,
-  "carrier_share_of_total": 0.9474501060178809,
+  "depends_on_share_of_total": 0.021135314011418598,
+  "carrier_share_of_total": 0.9475326375504564,
   "duplicate_references": {
     "duplicated_blocks": 0,
     "duplicated_bytes": 0,
@@ -93,5 +93,5 @@
   ],
   "carrier_headings": 140,
   "carrier_sections": 140,
-  "mean_carrier_section_bytes": 1857
+  "mean_carrier_section_bytes": 1861
 }

@@ -39,9 +39,11 @@ Ancestor carriers are still inlined in full. Their references render as one
 line each: a pointer to the carrier that inlines the same reference in full
 when one does, otherwise a pointer to the pinned revision with the `git show`
 command that reads it. A reference shared by an ancestor and an assigned
-carrier is rendered in full exactly once. Validation is unchanged: every
-declared reference is still resolved, freshness-checked, and span-extracted
-before launch, so a stale or missing ancestor reference still blocks.
+carrier is rendered in full exactly once. Validation is unchanged by
+elision: every declared reference is still resolved, compared with
+integration HEAD, and span-extracted before launch, so a missing ancestor
+reference still blocks, and a drifted one is disclosed on its pointer line
+or refused under ADR-0133's drift rule exactly as an inlined one would be.
 
 `referencecontract.Carrier.ElideRefs` carries the classification. Its zero
 value renders every reference in full, so a caller that does not classify

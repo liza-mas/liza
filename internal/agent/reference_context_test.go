@@ -59,13 +59,30 @@ func TestBuildPromptReferenceFirstPlanningPilot(t *testing.T) {
 		t.Error("prompt included an undeclared sibling heading span")
 	}
 
+	// A merged carrier's pin cannot move, so a section edited under it reaches
+	// the prompt disclosed rather than blocking the task (D76).
 	writeReferenceFixture(t, repo, "specs/requirements.md", "# Requirements\n\n## Règle `X` — débit\nREQ-1 changed without an owner correction.\n")
 	commitReferenceFixture(t, repo, "test: make inherited source stale")
+	prompt, err = buildPromptWithContext(state, SupervisorConfig{
+		AgentID: "epic-planner-1", Role: models.RoleEpicPlanner, ProjectRoot: repo, SpecsDir: "specs",
+	}, "epic-1", testResolver(t))
+	if err != nil {
+		t.Fatalf("buildPromptWithContext with drifted source: %v", err)
+	}
+	assertDriftDisclosed(t, prompt, sourceRevision, "REQ-1 changed without an owner correction.")
+	if !strings.Contains(prompt, "drifted after its carrier was approved") {
+		t.Error("prompt shows a drift line without telling the agent what it means")
+	}
+
+	// Strict content that no longer parses still blocks launch, through the
+	// context-build error class the supervisor routes on.
+	writeReferenceFixture(t, repo, "specs/goal.md", strings.Replace(carrier, "Source revision:", "Revision:", 1))
+	commitReferenceFixture(t, repo, "test: corrupt the strict carrier")
 	_, err = buildPromptWithContext(state, SupervisorConfig{
 		AgentID: "epic-planner-1", Role: models.RoleEpicPlanner, ProjectRoot: repo, SpecsDir: "specs",
 	}, "epic-1", testResolver(t))
-	if err == nil || !errors.Is(err, precommit.ErrContextBuild) || !strings.Contains(err.Error(), "stale") {
-		t.Fatalf("stale strict reference error = %v, want context-build stale error", err)
+	if err == nil || !errors.Is(err, precommit.ErrContextBuild) || !strings.Contains(err.Error(), "parse scalar carrier") {
+		t.Fatalf("malformed strict carrier error = %v, want context-build parse error", err)
 	}
 }
 
@@ -408,22 +425,279 @@ func TestResolvedReferenceContextDirectReferenceSurvivesUnrelatedEditAtHead(t *t
 	}
 }
 
-func TestResolvedReferenceContextDirectReferenceStillBlocksWhenItsSectionChanges(t *testing.T) {
+// A merged carrier's pin cannot move without a new merge, so a section edited
+// under it is disclosed rather than refused (D76): the agent reads the current
+// text and learns where the pinned text lives.
+func TestResolvedReferenceContextScalarCarrierDriftIsDisclosed(t *testing.T) {
 	repo := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, repo)
 	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
 	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
 	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Carrier\n\nLocal decision.\n"))
 	commitReferenceFixture(t, repo, "test: add scalar carrier")
-	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nContract rewritten without an owner correction.\n")
-	commitReferenceFixture(t, repo, "test: change the referenced section")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\nExtended after the carrier pinned it.\n")
+	commitReferenceFixture(t, repo, "test: extend the referenced section")
 
 	task := models.Task{ID: "task-1", SpecRef: "specs/carrier.md"}
 	state := referenceTestState(task)
+	context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	assertDriftDisclosed(t, context, sourceRevision, "Extended after the carrier pinned it.")
+}
+
+// The D76 shape: a merged plan pins an obligation-only section, a later docs
+// merge extends it, and every child — coder and reviewer alike — must still
+// build its prompt.
+func TestResolvedReferenceContextMergedParentDriftIsDisclosed(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	writeReferenceFixture(t, repo, "specs/parent.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Parent\n\nParent decision.\n"))
+	parentReview := commitReferenceFixture(t, repo, "test: add parent carrier")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n\n| recorder | attestation |\n|---|---|\n")
+	commitReferenceFixture(t, repo, "test: append a table inside the pinned section")
+	childBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	testhelpers.MustGit(t, repo, "checkout", "-b", "child")
+	writeReferenceFixture(t, repo, "main.go", "package main\n")
+	childReview := commitReferenceFixture(t, repo, "test: child code change")
+	testhelpers.MustGit(t, repo, "checkout", "main")
+
+	parentMerge := parentReview
+	parent := models.Task{ID: "parent-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentMerge}
+	child := models.Task{ID: "child-1", ParentTasks: []string{"parent-1"}, PlanRef: "specs/parent.md", BaseCommit: &childBase, ReviewCommit: &childReview}
+	state := referenceTestState(parent, child)
+	for _, role := range []string{"doer", "reviewer"} {
+		context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, role)
+		if err != nil {
+			t.Fatalf("%s: buildResolvedReferenceContext: %v", role, err)
+		}
+		assertDriftDisclosed(t, context, sourceRevision, "| recorder | attestation |")
+	}
+}
+
+// Renaming the pinned heading is the same pin-left-behind strand with no
+// current section to show, so the pinned text is rendered with a note.
+func TestResolvedReferenceContextMergedParentRenamedHeadingShowsPinnedText(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	writeReferenceFixture(t, repo, "specs/parent.md", strictCarrier(sourceRevision, "CONTRACT", "specs/source.md", "Contract", "# Parent\n\nParent decision.\n"))
+	parentReview := commitReferenceFixture(t, repo, "test: add parent carrier")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract terms\nInherited contract.\n")
+	commitReferenceFixture(t, repo, "test: rename the pinned heading")
+
+	parentMerge := parentReview
+	parent := models.Task{ID: "parent-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentMerge}
+	child := models.Task{ID: "child-1", ParentTasks: []string{"parent-1"}}
+	state := referenceTestState(parent, child)
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	if !strings.Contains(context, "## Contract\nInherited contract.") {
+		t.Fatalf("context omitted the pinned text of the unresolvable section:\n%s", context)
+	}
+	if !strings.Contains(context, "section no longer resolves at integration HEAD") {
+		t.Fatalf("context did not disclose that the section no longer resolves:\n%s", context)
+	}
+}
+
+// Deleting the pinned file is the same pin-left-behind strand as renaming its
+// heading: a non-proof reference shows its pinned text with the reason, while
+// the task's own approved proof still refuses.
+func TestResolvedReferenceContextDeletedPathShowsPinnedTextUnlessProof(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		withProof bool
+	}{
+		{name: "obligation only"},
+		{name: "approved proof", withProof: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, repo)
+			writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+			sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+			plan := proofAllocationCarrier(sourceRevision, tc.withProof)
+			requireAllocationProof(t, plan, tc.withProof)
+			writeReferenceFixture(t, repo, "specs/plan.md", plan)
+			commitReferenceFixture(t, repo, "test: add plan")
+			testhelpers.MustGit(t, repo, "rm", "-q", "specs/source.md")
+			commitReferenceFixture(t, repo, "test: delete the pinned file")
+
+			task := models.Task{ID: "task-1", PlanRef: "specs/plan.md#Task 1"}
+			state := referenceTestState(task)
+			context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+			if tc.withProof {
+				if err == nil || !strings.Contains(err.Error(), "direct reference \"source\" was deleted at integration HEAD") {
+					t.Fatalf("deleted proof error = %v, want deleted-at-HEAD refusal", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("buildResolvedReferenceContext: %v", err)
+			}
+			if !strings.Contains(context, "## Contract\nInherited contract.") {
+				t.Fatalf("context omitted the pinned text of the deleted file:\n%s", context)
+			}
+			if !strings.Contains(context, "section no longer resolves at integration HEAD (path deleted); pinned text shown") {
+				t.Fatalf("context did not disclose the deleted path:\n%s", context)
+			}
+		})
+	}
+}
+
+// An approved proof is content-gated: drift under the task's own allocation
+// proof still refuses, and recovery is a re-pin merge plus reaffirm-proof.
+func TestResolvedReferenceContextApprovedProofDriftStillRefuses(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	plan := proofAllocationCarrier(sourceRevision, true)
+	requireAllocationProof(t, plan, true)
+	writeReferenceFixture(t, repo, "specs/plan.md", plan)
+	commitReferenceFixture(t, repo, "test: add plan with an approved proof")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract, amended.\n")
+	commitReferenceFixture(t, repo, "test: change the proven section")
+
+	task := models.Task{ID: "task-1", PlanRef: "specs/plan.md#Task 1"}
+	state := referenceTestState(task)
+	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err == nil || !strings.Contains(err.Error(), "direct reference \"source\" is stale at integration HEAD") {
+		t.Fatalf("approved proof drift error = %v, want stale-at-HEAD refusal", err)
+	}
+}
+
+// The control for the proof guards: the same valid allocation with the proof
+// removed admits the same drift, so their refusal comes from the proof and
+// not from the fixture.
+func TestResolvedReferenceContextAllocationWithoutProofDisclosesDrift(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	plan := proofAllocationCarrier(sourceRevision, false)
+	requireAllocationProof(t, plan, false)
+	writeReferenceFixture(t, repo, "specs/plan.md", plan)
+	commitReferenceFixture(t, repo, "test: add plan without an approved proof")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract, amended.\n")
+	commitReferenceFixture(t, repo, "test: change the referenced section")
+
+	task := models.Task{ID: "task-1", PlanRef: "specs/plan.md#Task 1"}
+	state := referenceTestState(task)
+	context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	assertDriftDisclosed(t, context, sourceRevision, "Inherited contract, amended.")
+}
+
+// A declaration that does not parse cannot say which references are proofs,
+// so it must not widen admission.
+func TestResolvedReferenceContextMalformedAllocationKeepsRefusingDrift(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	malformed := strings.Replace(proofAllocationCarrier(sourceRevision, false), `"validation":["project-test"]`, `"validation":[]`, 1)
+	if _, parseErr := referencecontract.ParseAcceptance(malformed, "Task 1"); parseErr == nil {
+		t.Fatal("fixture must be a declaration ParseAcceptance rejects")
+	}
+	writeReferenceFixture(t, repo, "specs/plan.md", malformed)
+	commitReferenceFixture(t, repo, "test: add plan with a malformed acceptance contract")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract, amended.\n")
+	commitReferenceFixture(t, repo, "test: change the referenced section")
+
+	task := models.Task{ID: "task-1", PlanRef: "specs/plan.md#Task 1"}
+	state := referenceTestState(task)
 	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
 	if err == nil || !strings.Contains(err.Error(), "stale at integration HEAD") {
-		t.Fatalf("changed referenced section error = %v, want stale-at-HEAD error", err)
+		t.Fatalf("malformed allocation drift error = %v, want stale-at-HEAD refusal", err)
 	}
+}
+
+// Removing a proof from the allocation at HEAD must not relax the scalar route
+// while the adopted source still lists it.
+func TestResolvedReferenceContextScalarProofSetIncludesAdoptedSource(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract.\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add source")
+	withProof, withoutProof := proofAllocationCarrier(sourceRevision, true), proofAllocationCarrier(sourceRevision, false)
+	requireAllocationProof(t, withProof, true)
+	requireAllocationProof(t, withoutProof, false)
+	writeReferenceFixture(t, repo, "specs/plan.md", withProof)
+	adopted := commitReferenceFixture(t, repo, "test: add plan with an approved proof")
+	writeReferenceFixture(t, repo, "specs/plan.md", withoutProof)
+	commitReferenceFixture(t, repo, "test: drop the proof at HEAD")
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nInherited contract, amended.\n")
+	commitReferenceFixture(t, repo, "test: change the proven section")
+
+	task := models.Task{
+		ID: "task-1", PlanRef: "specs/plan.md#Task 1",
+		AcceptanceSource: &models.AcceptanceSource{Ref: "specs/plan.md#Task 1", ParentTask: "planner", ParentReviewCommit: adopted},
+	}
+	state := referenceTestState(task)
+	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err == nil || !strings.Contains(err.Error(), "stale at integration HEAD") {
+		t.Fatalf("proof dropped at HEAD error = %v, want stale-at-HEAD refusal", err)
+	}
+}
+
+func assertDriftDisclosed(t *testing.T, context, pinnedRevision, currentText string) {
+	t.Helper()
+	if !strings.Contains(context, currentText) {
+		t.Fatalf("context omitted the current section text %q:\n%s", currentText, context)
+	}
+	if !strings.Contains(context, "section changed since its pinned revision "+pinnedRevision) {
+		t.Fatalf("context did not disclose drift from pinned revision %s:\n%s", pinnedRevision, context)
+	}
+	if !strings.Contains(context, "git diff '"+pinnedRevision+"'") {
+		t.Fatalf("context did not give a diff command from the pinned revision:\n%s", context)
+	}
+}
+
+// requireAllocationProof pins a proof fixture to what it claims to be: a
+// declaration that parses, and that does or does not cite "source" as an
+// approved proof. Without it a fixture that fails to parse would refuse drift
+// through the malformed-declaration path and satisfy a proof guard vacuously.
+func requireAllocationProof(t *testing.T, carrier string, wantProof bool) {
+	t.Helper()
+	requireAcceptanceProof(t, carrier, "Task 1", wantProof)
+}
+
+func requireAcceptanceProof(t *testing.T, carrier, heading string, wantProof bool) {
+	t.Helper()
+	contract, err := referencecontract.ParseAcceptance(carrier, heading)
+	if err != nil || contract == nil {
+		t.Fatalf("fixture allocation %q = %#v, %v; want a parsed declaration", heading, contract, err)
+	}
+	cited := false
+	for _, proof := range contract.ApprovedProofs {
+		cited = cited || proof.ReferenceID == "source"
+	}
+	if cited != wantProof {
+		t.Fatalf("fixture allocation %q cites \"source\" as a proof = %v, want %v", heading, cited, wantProof)
+	}
+}
+
+// proofAllocationCarrier is a plan whose "Task 1" allocation backs AC-1 with
+// the "source" reference, optionally as an approved proof.
+func proofAllocationCarrier(sourceRevision string, withProof bool) string {
+	proofs := ""
+	if withProof {
+		proofs = `,"approved_proofs":[{"obligation_id":"AC-1","reference_id":"source","rationale":"reviewed by inspection"}]`
+	}
+	local := "# Plan\n\n## Task 1\nDo the work.\n\n### Acceptance Contract\n\n```json\n" +
+		`{"version":1,"manifest":"acceptance/task.json","obligations":["AC-1"],"validation":["project-test"]` + proofs + "}\n```\n"
+	return strictCarrier(sourceRevision, "AC-1", "specs/source.md", "Contract", local)
 }
 
 func TestResolvedReferenceContextParentCarrierAdoptsIntegrationHeadContent(t *testing.T) {
@@ -702,7 +976,15 @@ func TestResolvedReferenceContextValidatesLosingParentBeforeReviewPrecedence(t *
 	base := commitReferenceFixture(t, repo, "test: add base carrier")
 
 	testhelpers.MustGit(t, repo, "checkout", "-b", "parent-review")
-	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "SHARED", "specs/source.md", "Shared", "# Carrier\n\nstale parent\n"))
+	// The losing parent asserts an approved proof against the reference, the
+	// one class whose drift under a merged carrier still refuses.
+	parentProof := "# Carrier\n\nstale parent\n\n## Acceptance Contract\n\n```json\n" +
+		`{"version":1,"manifest":"acceptance/task.json","obligations":["SHARED"],"validation":["project-test"],` +
+		`"approved_proofs":[{"obligation_id":"SHARED","reference_id":"source","rationale":"reviewed by inspection"}]}` + "\n```\n"
+	parentCarrier := strictCarrier(sourceRevision, "SHARED", "specs/source.md", "Shared", parentProof)
+	// The task's allocation is its whole spec_ref file, so the empty heading.
+	requireAcceptanceProof(t, parentCarrier, "", true)
+	writeReferenceFixture(t, repo, "specs/carrier.md", parentCarrier)
 	parentReview := commitReferenceFixture(t, repo, "test: parent candidate")
 	testhelpers.MustGit(t, repo, "checkout", "main")
 	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "SHARED", "specs/source.md", "Shared", "# Carrier\n\ncurrent scalar\n"))
@@ -713,7 +995,9 @@ func TestResolvedReferenceContextValidatesLosingParentBeforeReviewPrecedence(t *
 	commitReferenceFixture(t, repo, "test: change the referenced section")
 	currentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
 	testhelpers.MustGit(t, repo, "checkout", "-b", "current-review")
-	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(sourceRevision, "SHARED", "specs/source.md", "Shared", "# Carrier\n\nwinning review\n"))
+	// The winning review pins the current source, so any refusal can only
+	// come from validating the losing parent observation.
+	writeReferenceFixture(t, repo, "specs/carrier.md", strictCarrier(currentBase, "SHARED", "specs/source.md", "Shared", "# Carrier\n\nwinning review\n"))
 	currentReview := commitReferenceFixture(t, repo, "test: current review candidate")
 	testhelpers.MustGit(t, repo, "checkout", "main")
 

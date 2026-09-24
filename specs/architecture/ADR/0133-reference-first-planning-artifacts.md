@@ -88,12 +88,22 @@ The normative decision is:
    same-class provenance blocks; differing eligible parent blobs are
    defensively rejected even though HEAD adoption makes that state
    unreachable. Declared inherited references are read at their default or
-   override revisions and their referenced section must be unchanged at captured
+   override revisions and their referenced section is compared with captured
    HEAD; whole-path blob identity is the fast path, and an unrelated edit
-   elsewhere in that file does not make the reference stale. A current-review
+   elsewhere in that file is not drift. A current-review
    carrier may reference paths introduced in its own reviewed range, which
-   resolve at the current `ReviewCommit`. Missing, stale, deleted, ambiguous, or
-   structurally invalid strict content blocks before launch.
+   resolve at the current `ReviewCommit`. Drift blocks before launch where a pin
+   can still move or content is gated: every reference of the current-review
+   carrier, whose author can re-pin, and every reference the task's own
+   allocation cites in `approved_proofs` (unioned over the observed, reviewed
+   and adopted versions of that allocation; a declaration that does not parse
+   blocks every drift). Any other reference of a scalar or merged-parent
+   carrier cannot be re-pinned without a new merge, so its drift is disclosed
+   instead: the prompt carries the current section with its pinned revision
+   and a `git diff` to compare, or — when the heading or path no longer
+   resolves at HEAD — the pinned section with that reason. Missing,
+   unreadable, ambiguous, or structurally invalid strict content still blocks
+   before launch.
    Acceptance allocation judges the same way: a merged planning parent
    authorizes a child when the *allocation section* its `plan_ref` names is
    identical at the parent's `ReviewCommit` and at integration, not when the
@@ -118,21 +128,26 @@ The normative decision is:
    authorizes exactly the transition someone looked at; a further change to that section
    refuses again. Without it the only exits are superseding the child, which
    discards every obligation its contract allocated rather than the one in
-   question, or re-reviewing a merged plan. References
+   question, or re-reviewing a merged plan. A proof pin left behind while its
+   section moved is refused at prompt build, not here, and recovers the same
+   way: any merge that re-pins the carrier, after which acceptance refuses the
+   moved proof and `reaffirm-proof` admits it. References
    backing `obligations` alone are deliberately not compared here: a re-pin
    onto legitimately extended content is indistinguishable from a substitution
    at this boundary, and blocking it strands every child of a merged plan whose
-   review boundary no command can move. That drift is only partly covered
-   elsewhere: reference freshness at prompt build compares a reference's
-   section at its pinned revision against the same path and heading at
-   integration HEAD, which catches a pin left behind while its target moved,
-   but not a reference repointed at a different target that agrees with HEAD.
-   Staleness is caught; substitution against an obligation asserting no proof
-   is not — so it is reported instead. A merge is the only way that content can
-   move, whether it edits a referenced section or a carrier's pins, so each
-   merge compares what every obligation-backing reference resolved to at the
-   review commit that authorized a child against what it resolves to at the
-   merge commit, and records one `obligation_content_drifted` anomaly per
+   review boundary no command can move. Prompt build therefore discloses their
+   drift rather than refusing it (above): it sees a pin left behind while its
+   target moved, but not a reference repointed at a different target that
+   agrees with HEAD. Neither is refused for an obligation asserting no proof,
+   so both are reported instead. A merge is the only way that content can
+   move, whether it edits a referenced section or a carrier's pins. For the
+   latter, each merge compares what every obligation-backing reference resolved
+   to at the review commit that authorized a child against what it resolves to
+   at the merge commit. For the former, whose pin did not move, it compares
+   each such reference's section at its current pin against the same path and
+   heading at the merge commit, recorded as `stale` and only for carriers with
+   a non-terminal child, since a plan whose children all finished can strand
+   nothing. Either way it records one `obligation_content_drifted` anomaly per
    changed section: keyed on the section, not the carrier, so one re-pin across
    seven plans is one reviewable event naming all seven rather than seven
    events. Comparison is per (section location, section content) pair through
@@ -143,7 +158,11 @@ The normative decision is:
    heading alone, since a re-pin moves the revision by definition, and a
    section the obligation rested on and no longer does is recorded as `dropped`
    with an empty current section — suppressed only where the same location also
-   gained content, which is one re-pin rather than a loss and a gain. The record never refuses
+   gained content, which is one re-pin rather than a loss and a gain. For
+   `stale`, `reviewed_section` is the section at the carrier's current pin —
+   which a post-review re-pin may have made unreviewed, so it does not assert
+   that a reviewer saw it — and `current_section` is empty when the section no
+   longer resolves. The record never refuses
    anything — it is written after the merge commits, and acceptance keeps
    comparing approved proofs exactly as before. An ambiguous or unresolvable heading refuses rather than
    falling back to whole-file scope. The adopted identity recorded for a child

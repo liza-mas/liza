@@ -244,6 +244,12 @@ func acceptanceAllocationRef(task *models.Task) string {
 	return task.SpecRef
 }
 
+// AcceptanceAllocationRef exposes the same selection to prompt construction,
+// which must judge approved proofs against the allocation acceptance uses.
+func AcceptanceAllocationRef(task *models.Task) string {
+	return acceptanceAllocationRef(task)
+}
+
 // Ownership can be released after submission without invalidating its review.
 // Only submissions of this exact reviewed commit can recover the author; stale
 // submissions, claim history and conflicting identities cannot establish it.
@@ -337,12 +343,13 @@ func compareReviewedReferences(state *models.State, parentTask, root, reviewComm
 	//
 	// What still observes obligation drift, precisely: reference_context.go
 	// compares a reference's section at its pinned revision against the same
-	// path and heading at integration HEAD, so it catches a pin left behind
-	// while its target moved. It does not catch a reference repointed at a
-	// different path or heading whose content agrees between its new pin and
-	// HEAD, because both sides of that comparison move together. Staleness is
-	// covered; substitution against an obligation with no asserted proof is
-	// not caught here; the merge-time drift record surfaces it instead.
+	// path and heading at integration HEAD, so it sees a pin left behind while
+	// its target moved — and, under a merged carrier, discloses it in the
+	// prompt rather than refusing, except for the task's own approved proofs.
+	// The merge-time record reports the same case as "stale". Neither catches
+	// a reference repointed at a different target whose content agrees between
+	// its new pin and HEAD, because both sides move together; the merge-time
+	// record's repin/retarget walk surfaces that substitution instead.
 	//
 	// An approved proof stays compared by content here, so the substitution
 	// this check exists to stop — repointing an approved reference at material

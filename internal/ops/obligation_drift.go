@@ -2,7 +2,9 @@ package ops
 
 import (
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -21,8 +23,10 @@ import (
 // a merged plan whose review boundary no command can move.
 //
 // So this reports instead of refusing. Drift enters only through a merge —
-// either one that edits a referenced section, or one that moves a carrier's
-// pins — which is why detection runs there and nowhere hotter.
+// either one that edits a referenced section under a pin that stays put
+// (stale), or one that moves a carrier's pins (repinned, retargeted, dropped)
+// — which is why detection runs there and nowhere hotter. Prompt construction
+// discloses the same drift to the agent but writes nothing.
 
 // obligationDriftKey identifies one changed section. Two carriers whose
 // obligations rest on the same section share a key, so one repin that touches
@@ -50,7 +54,59 @@ const (
 	// obligationDriftDropped names a section the obligation rested on and no
 	// longer does. Its current_section is empty: there is nothing to read.
 	obligationDriftDropped = "dropped"
+	// obligationDriftStale names a section edited under a pin that did not
+	// move. Its reviewed_section is the text at the carrier's current pin,
+	// which a post-review re-pin may have made unreviewed; its current_section
+	// is empty when the section no longer resolves at the merge commit.
+	obligationDriftStale = "stale"
 )
+
+// driftRecorder is the accumulator detectObligationDrift feeds.
+type driftRecorder func(key obligationDriftKey, change, reviewedSection, carrier, obligation string, referenceIDs []string)
+
+// detectStaleUnderPins compares every obligation-backing reference of the
+// carrier at integrationCommit with the same path and heading at that commit,
+// and records each section whose text moved away from its pin. Blob identity
+// is the fast path, as at prompt build: an edit elsewhere in the file is not
+// drift.
+func detectStaleUnderPins(cache blobCache, blobOID func(revision, path string) (string, bool), root, integrationCommit, carrier string, record driftRecorder) {
+	current, ok := carrierReferences(root, integrationCommit, carrier)
+	if !ok {
+		return
+	}
+	backing := obligationBackedReferences(current)
+	for _, obligation := range sortedObligations(backing) {
+		for _, referenceID := range backing[obligation] {
+			target, found := referenceTarget(current, referenceID)
+			if !found {
+				continue
+			}
+			pin := target.EffectiveRevision(current.SourceRevision)
+			pinnedBlob, pinnedOK := blobOID(pin, target.Path)
+			integrationBlob, integrationOK := blobOID(integrationCommit, target.Path)
+			if pinnedOK && integrationOK && pinnedBlob == integrationBlob {
+				continue
+			}
+			pinned, resolved := resolveDeclaredReferenceCached(cache, root, current, referenceID)
+			if !resolved {
+				// An unreadable pin is refused at prompt build; there is no
+				// reviewed text to report against.
+				continue
+			}
+			section := ""
+			if content, readable := cache.read(root, integrationCommit, target.Path); readable {
+				if span, err := referencecontract.ExtractSection(strings.ReplaceAll(content, "\r\n", "\n"), target.Heading); err == nil {
+					section = spanObjectID(span)
+				}
+			}
+			if section == spanObjectID(pinned) {
+				continue
+			}
+			record(obligationDriftKey{target.Path, target.Heading, section},
+				obligationDriftStale, spanObjectID(pinned), carrier, obligation, []string{referenceID})
+		}
+	}
+}
 
 // backingEntry is one section an obligation rests on: where it lives and what
 // it says. Keying on the pair is what stops one reference's unchanged content
@@ -110,7 +166,10 @@ func RecordObligationContentDrift(bb *db.Blackboard, projectRoot, integrationCom
 		return nil, err
 	}
 	drifts := detectObligationDrift(state, projectRoot, integrationCommit)
-	if len(drifts) == 0 {
+	if len(drifts) == 0 || allDriftRecorded(state.Anomalies, drifts) {
+		// A stale section persists across every merge until its carrier is
+		// re-pinned. Re-observing it must not cost a lock-held rewrite of the
+		// whole state each time; Modify below re-checks under the lock anyway.
 		return nil, nil
 	}
 
@@ -169,7 +228,7 @@ func detectObligationDrift(state *models.State, projectRoot, integrationCommit s
 	// resolves far fewer distinct blobs than it has references.
 	cache := blobCache{}
 
-	record := func(key obligationDriftKey, change, reviewedSection, carrier, obligation string, referenceIDs []string) {
+	var record driftRecorder = func(key obligationDriftKey, change, reviewedSection, carrier, obligation string, referenceIDs []string) {
 		drift, seen := byKey[key]
 		if !seen {
 			drift = &obligationDrift{
@@ -194,14 +253,38 @@ func detectObligationDrift(state *models.State, projectRoot, integrationCommit s
 	}
 
 	g := git.New(projectRoot)
+	oids := map[string]string{}
+	blobOID := func(revision, path string) (string, bool) {
+		key := revision + "\x00" + path
+		if oid, ok := oids[key]; ok {
+			return oid, true
+		}
+		oid, err := g.BlobOID(revision, path)
+		if err != nil {
+			return "", false
+		}
+		oids[key] = oid
+		return oid, true
+	}
+	staleChecked := map[string]bool{}
 	for _, group := range acceptanceCarrierGroups(state) {
+		// A section edited under a pin that did not move: the carrier is
+		// unchanged, so the walk below cannot see it, and prompt construction
+		// only discloses it. Bounded to carriers with live children — a plan
+		// whose children all finished can no longer strand anything — and
+		// checked once per carrier, since it reads only the integration side.
+		if group.live && !staleChecked[group.path] {
+			staleChecked[group.path] = true
+			detectStaleUnderPins(cache, blobOID, projectRoot, integrationCommit, group.path, record)
+		}
+
 		// An unchanged carrier declares the same references at the same pinned
-		// revisions, so nothing it rests on can have moved. Most merges touch
+		// revisions, so no pin it rests on can have moved. Most merges touch
 		// no carrier at all, and this keeps their cost at one blob read per
 		// carrier instead of two git reads per declared reference.
-		reviewedBlob, reviewedBlobErr := g.BlobOID(group.reviewCommit, group.path)
-		integrationBlob, integrationBlobErr := g.BlobOID(integrationCommit, group.path)
-		if reviewedBlobErr == nil && integrationBlobErr == nil && reviewedBlob == integrationBlob {
+		reviewedBlob, reviewedOK := blobOID(group.reviewCommit, group.path)
+		integrationBlob, integrationOK := blobOID(integrationCommit, group.path)
+		if reviewedOK && integrationOK && reviewedBlob == integrationBlob {
 			continue
 		}
 
@@ -282,31 +365,32 @@ func detectObligationDrift(state *models.State, projectRoot, integrationCommit s
 }
 
 // acceptanceCarrierGroup is one carrier at one authorizing review commit.
+// live reports whether any child it authorizes is still non-terminal.
 type acceptanceCarrierGroup struct {
 	path         string
 	reviewCommit string
+	live         bool
 }
 
 // acceptanceCarrierGroups lists the distinct (carrier, review commit) pairs
-// that authorize live work. Children sharing an allocation share a group, so
-// the walk costs one comparison per carrier rather than one per child.
+// that authorize work. Children sharing an allocation share a group, so the
+// walk costs one comparison per carrier rather than one per child.
 func acceptanceCarrierGroups(state *models.State) []acceptanceCarrierGroup {
-	seen := map[acceptanceCarrierGroup]bool{}
+	index := map[[2]string]int{}
 	var groups []acceptanceCarrierGroup
 	for i := range state.Tasks {
-		source := state.Tasks[i].AcceptanceSource
+		task := &state.Tasks[i]
+		source := task.AcceptanceSource
 		if source == nil || source.ParentReviewCommit == "" || source.Ref == "" {
 			continue
 		}
-		group := acceptanceCarrierGroup{
-			path:         paths.SplitRefFile(source.Ref),
-			reviewCommit: source.ParentReviewCommit,
-		}
-		if seen[group] {
+		key := [2]string{paths.SplitRefFile(source.Ref), source.ParentReviewCommit}
+		if at, seen := index[key]; seen {
+			groups[at].live = groups[at].live || !task.Status.IsTerminal()
 			continue
 		}
-		seen[group] = true
-		groups = append(groups, group)
+		index[key] = len(groups)
+		groups = append(groups, acceptanceCarrierGroup{path: key[0], reviewCommit: key[1], live: !task.Status.IsTerminal()})
 	}
 	sort.Slice(groups, func(i, j int) bool {
 		if groups[i].path != groups[j].path {
@@ -384,6 +468,48 @@ func findObligationDrift(anomalies []models.Anomaly, key obligationDriftKey) *mo
 			anomaly.Details["current_section"] == key.current {
 			return anomaly
 		}
+	}
+	return nil
+}
+
+// allDriftRecorded reports whether every drift already has a record that the
+// widening in RecordObligationContentDrift would leave unchanged.
+func allDriftRecorded(anomalies []models.Anomaly, drifts []obligationDrift) bool {
+	for _, drift := range drifts {
+		existing := findObligationDrift(anomalies, drift.key)
+		if existing == nil {
+			return false
+		}
+		if drift.change == obligationDriftRetargeted && existing.Details["change"] != obligationDriftRetargeted {
+			return false
+		}
+		for field, want := range map[string]map[string]bool{
+			"carriers": drift.carriers, "obligations": drift.obligations, "reference_ids": drift.referenceIDs,
+		} {
+			if !slices.Equal(detailStrings(existing.Details[field]), sortedKeys(want)) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// detailStrings reads a recorded string list, which is []string when written
+// in this process and []any once it has round-tripped through YAML.
+func detailStrings(value any) []string {
+	switch list := value.(type) {
+	case []string:
+		return list
+	case []any:
+		out := make([]string, 0, len(list))
+		for _, item := range list {
+			text, ok := item.(string)
+			if !ok {
+				return nil
+			}
+			out = append(out, text)
+		}
+		return out
 	}
 	return nil
 }
