@@ -560,9 +560,10 @@ func approvedMergeOwner(task *models.Task, state *models.State, pr models.Pipeli
 
 // handleAvailableTransitions creates child tasks from pipeline transitions
 // and adds them to the current sprint's scope.
-// Called from orchestrator PreWork after checkpoint acknowledgment.
+// Called from orchestrator PreWork after checkpoint acknowledgment, which may
+// be automatic, so a reviewed plan hand-off needs the orchestrator's pass.
 func handleAvailableTransitions(projectRoot string) error {
-	report, err := ops.ExecuteAvailableTransitionsReport(projectRoot, "")
+	report, err := ops.ExecuteTransitionsReportWith(projectRoot, "", ops.AdmitReviewed)
 	if err != nil {
 		return err
 	}
@@ -589,7 +590,7 @@ func handleAvailableTransitions(projectRoot string) error {
 // after merges, so children are created in the same PreWork cycle.
 // Manual transitions remain gated by the orchestrator checkpoint flow.
 func handleAutoTransitions(projectRoot string) error {
-	report, err := ops.ExecuteAvailableTransitionsReport(projectRoot, "auto")
+	report, err := ops.ExecuteTransitionsReportWith(projectRoot, "auto", ops.AdmitReviewed)
 	if err != nil {
 		return err
 	}

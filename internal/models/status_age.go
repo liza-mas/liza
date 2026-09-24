@@ -58,6 +58,7 @@ var nonStatusTransitionEvents = map[TaskEventName]struct{}{
 	TaskEventRejectionRCAResumed:       {},
 	TaskEventReplacementCommitted:      {},
 	TaskEventAcceptanceCommitsRemapped: {},
+	TaskEventPlanCheck:                 {},
 }
 
 // IsStatusTransitionEvent classifies a task-history event name. An event in

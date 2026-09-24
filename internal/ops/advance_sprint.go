@@ -297,15 +297,12 @@ func HasCycleBlockedDependency(task *models.Task, state *models.State) bool {
 	return false
 }
 
-// IsPlanningCompleteEligible returns true if a task has unconsumed planning output
-// AND is not cycle-blocked directly or transitively via an upstream dependency.
-// Used by wake detection and prompt rendering to exclude cycle-blocked tasks from
-// PLANNING_COMPLETE triggering.
-// IsUnconsumedPlanningOutput remains unchanged for carry-forward, replan, and checkpoint.
+// IsPlanningCompleteEligible is PlanHandoffDomain.PlanningCompleteEligible for
+// callers that know only the planning pairs: a source counts while its output
+// is unconsumed. Wake detection and prompt rendering use the pipeline's domain.
+// IsUnconsumedPlanningOutput remains unchanged for carry-forward and replan.
 func IsPlanningCompleteEligible(task *models.Task, planningPairs map[string]bool, state *models.State) bool {
-	return IsUnconsumedPlanningOutput(task, planningPairs) &&
-		!IsTransitionCycleBlocked(task) &&
-		!HasCycleBlockedDependency(task, state)
+	return PlanningPairsOnly(planningPairs).PlanningCompleteEligible(state, task)
 }
 
 // collectMergedPlanningWithUnconsumedOutput returns IDs of planned tasks with

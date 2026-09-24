@@ -214,7 +214,7 @@ func TestRevalidateOrchestratorWake_SelectedBlockedIsRetained(t *testing.T) {
 	state := planningPreferenceState(mergedPlanner("provider-plan"), blockedConsumer("consumer", "provider-plan"))
 	selected := OrchestratorWakeResult{Trigger: WakeTriggerBlocked, Count: 1}
 
-	result, _ := revalidateOrchestratorWake(state, selected, nil, nil, nil, nil)
+	result, _ := revalidateOrchestratorWake(state, selected, nil, nil, ops.PlanningPairsOnly(nil), nil, nil)
 
 	if result.Trigger != WakeTriggerBlocked {
 		t.Fatalf("revalidated wake = %s, want the selected BLOCKED_TASKS while its predicate holds", result.Trigger)

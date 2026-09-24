@@ -118,7 +118,7 @@ func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, con
 		return false, nil
 	}
 
-	planningReady := countMergedPlanningTasksWithOutput(state, detCtx.PlanningPairs) > 0
+	planningReady := countMergedPlanningTasksWithOutput(state, detCtx.PlanHandoff) > 0
 	m2oReady := countReadyManyToOneCohorts(state, detCtx.ManyToOneTransitions) > 0
 	var planningAttemptedAt *time.Time
 	if planningReady || m2oReady {
@@ -218,7 +218,7 @@ func (s *orchestratorStrategy) RevalidateWake(ctx context.Context, bb *db.Blackb
 		det = &ops.PipelineDetectionContext{}
 	}
 	var projection *prompts.EffectiveIntegrationCompletion
-	result, fresh := revalidateOrchestratorWake(state, selected, det.SprintTerminals, det.PlanningPairs, det.ManyToOneTransitions, func() prompts.EffectiveIntegrationCompletion {
+	result, fresh := revalidateOrchestratorWake(state, selected, det.SprintTerminals, det.PlanningPairs, det.PlanHandoff, det.ManyToOneTransitions, func() prompts.EffectiveIntegrationCompletion {
 		if projection == nil {
 			decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, config.ProjectRoot)
 			value := prompts.ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)

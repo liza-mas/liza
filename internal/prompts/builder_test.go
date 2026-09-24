@@ -1075,8 +1075,8 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"WAKE TRIGGER: PLANNING_COMPLETE",
 				"- Total tasks: 2",
 				"- Merged: 2",
-				"Planning sprint tasks have been merged with output[] entries",
-				"Pipeline transitions will execute automatically after checkpoint and human resume",
+				"Planning tasks have been merged with output[]. You own their hand-off",
+				"automatic paths create children only from plans you pass",
 				brand.BinaryName + " sprint-checkpoint",
 			},
 		},
@@ -1099,9 +1099,9 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"WAKE TRIGGER: PLANNING_COMPLETE",
 				"- Total tasks: 2",
 				"- Merged: 1",
-				"Planning sprint tasks have been merged with output[] entries",
-				"No manual task creation is needed.",
-				"Pipeline transitions will execute automatically after checkpoint and human resume",
+				"Planning tasks have been merged with output[]. You own their hand-off",
+				"PLANS TO REVIEW:",
+				"Create tasks or edit plan files — replan routes corrections to the planner.",
 			},
 			wantNotContain: []string{
 				"WAKE TRIGGER: UNKNOWN",
@@ -1129,8 +1129,8 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 			wantNotContain: []string{
 				"WAKE TRIGGER: PLANNING_COMPLETE",
 				"WAKE TRIGGER: SPRINT_COMPLETE",
-				"Planning sprint tasks have been merged with output[] entries",
-				"Pipeline transitions will execute automatically after checkpoint and human resume",
+				"Planning tasks have been merged with output[]. You own their hand-off",
+				"automatic paths create children only from plans you pass",
 			},
 		},
 		{
@@ -1198,7 +1198,7 @@ func TestRenderOrchestratorDashboardSelectedWake(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(dashboard, "WAKE TRIGGER: PLANNING_COMPLETE") || !strings.Contains(instruction, "Create checkpoint for human review: acme sprint-checkpoint") || strings.Contains(instruction, "Do NOT call") {
+	if !strings.Contains(dashboard, "WAKE TRIGGER: PLANNING_COMPLETE") || !strings.Contains(instruction, "If any plan is passed or ready: acme sprint-checkpoint") || !strings.Contains(instruction, "- plan:") || strings.Contains(instruction, "Do NOT call") {
 		t.Fatalf("selected planning decision not rendered consistently: %s\n%s", dashboard, instruction)
 	}
 	if strings.Contains(dashboard+instruction, "liza") || strings.Contains(dashboard+instruction, "Liza") {
@@ -1273,7 +1273,7 @@ func TestRenderOrchestratorDashboard_AssessedTasksAllowPlanningHandoff(t *testin
 				}
 				if activity == "assessed" || activity == "assessment only" {
 					wantTrigger = "PLANNING_COMPLETE"
-					if !strings.Contains(instruction, "Create checkpoint for human review") ||
+					if !strings.Contains(instruction, "If any plan is passed or ready: "+brand.BinaryName+" sprint-checkpoint") ||
 						strings.Contains(instruction, "Do NOT call "+brand.BinaryName+" sprint-checkpoint") {
 						t.Errorf("assessed unchanged task must permit planning handoff; instruction: %s", instruction)
 					}
@@ -1792,8 +1792,8 @@ func TestRenderOrchestratorDashboard_AutonomyForAllWakeTriggers(t *testing.T) {
 			}(),
 			wantTrigger: "PLANNING_COMPLETE",
 			wantContains: []string{
-				"Planning sprint tasks have been merged with output[] entries",
-				"Pipeline transitions will execute automatically after checkpoint and human resume",
+				"Planning tasks have been merged with output[]. You own their hand-off",
+				"automatic paths create children only from plans you pass",
 				"FULL autonomy to run CLI commands immediately",
 				brand.BinaryName + " sprint-checkpoint",
 			},

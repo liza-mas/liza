@@ -185,9 +185,16 @@ When planning tasks (epic-planner, code-planner) are merged, the orchestrator ch
 
 **Two-wake model:**
 
-1. **Wake 1:** Orchestrator detects merged planning tasks with unconsumed `output[]` or a ready many-to-one cohort → creates checkpoint with `trigger: PLANNING_COMPLETE` or `MANY_TO_ONE_READY` → downstream transition creation waits for resume; doer/reviewer roles may continue existing work (or auto-resume advances immediately)
+1. **Wake 1:** Orchestrator detects merged planning tasks with unconsumed `output[]` or a ready many-to-one cohort. For `PLANNING_COMPLETE` it first reviews and dispositions each plan in the reviewed hand-off domain (below), then creates the checkpoint with `trigger: PLANNING_COMPLETE` or `MANY_TO_ONE_READY` if anything is admissible → downstream transition creation waits for resume; doer/reviewer roles may continue existing work (or auto-resume advances immediately)
 2. **Human reviews** planning output or fan-in readiness in the sprint summary → runs `liza resume` (skipped when auto-resume is enabled)
-3. **Wake 2 (PreWork):** Orchestrator's PreWork checks for a transition checkpoint with `status == IN_PROGRESS` and ready transitions → executes `ExecuteAvailableTransitions` → child tasks created → doers can claim
+3. **Wake 2 (PreWork):** Orchestrator's PreWork checks for a transition checkpoint with `status == IN_PROGRESS` and ready transitions → executes the available transitions under reviewed admission → child tasks created → doers can claim
+
+**Plan hand-off disposition ([ADR-0159](../architecture/ADR/0159-orchestrator-plan-handoff-disposition.md)):**
+- Domain: `manual` transitions with `per-subtask` or `one-to-one` cardinality out of a planning pair whose task has `output[]`. Auto-only, many-to-one and empty-output sources are outside it and behave as before. A gated transition stays pending, and needs its disposition, even after an auto transition from the same plan has run.
+- The orchestrator records `plan_check`: `plan-check <id> --pass`, or `--hold <ask>` for a human action not yet done; a defect goes to `replan <id> --reason`, which also works at `IN_PROGRESS` before children exist. Only an operator `plan-check <id> --clear` releases a hold; pass and replan refuse a held plan.
+- Automatic creation (auto-resume, orchestrator and reviewer PreWork) expands an in-domain plan only when it is `passed` and every in-domain planning dependency has transitioned or is itself admissibly passed. An operator resume or `proceed` expands undispositioned plans too, but never a held one.
+- Wake classes: undispositioned plans render for review; passed ones render checkpoint-only until they transition (crash recovery without re-review); a passed plan whose upstream was replanned or held renders for reconciliation; held plans do not wake and raise `AWAITING HUMAN`, and keep the sprint open: no sprint- or coding-complete wake while one is held.
+- The `PLANNING_COMPLETE` verifier requires every wake-time plan dispositioned and admissible plans checkpointed during the turn; its self-heal checkpoint cannot expand an undispositioned plan.
 
 **Gate correctness:**
 - Fresh sprint (trigger empty) → gate does not fire
@@ -214,6 +221,8 @@ existing gates; it is not counted as a provider turn or spin. Revalidation never
 resumes a checkpoint or creates downstream tasks. Existing manual and automatic
 resume policy remains in charge. An INFO skip log names the selected and fresh
 triggers for diagnosing changes during indexing.
+
+**Replan timing and reason:** `liza replan` works at `CHECKPOINT` (it then resumes the sprint) or `IN_PROGRESS` (sprint status and trigger untouched), as long as the task has no children. `--reason` is appended to the replacement's description for its planner and plan reviewer.
 
 **Replan with multi-phase:** When replanning a task that is part of a phase chain, `liza replan`
 requires explicit task ID (auto-detect may find multiple candidates). The new task inherits

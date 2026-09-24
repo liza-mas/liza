@@ -519,6 +519,9 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	if task.TransitionsExecuted[transitionName] {
 		return recoverCrashedTransition(s, task, taskID, transitionName, tDef, inheritedDeps, resolver, now, result)
 	}
+	if task.PlanCheckVerdictOf() == models.PlanCheckHeld {
+		return fmt.Errorf("task %q is held for human action (%s); an operator must run plan-check %s --clear first", taskID, task.PlanCheck.Ask, taskID)
+	}
 
 	outputEntries := task.Output
 	outputChanged := false
@@ -1150,14 +1153,47 @@ type TransitionReport struct {
 	Failures []TransitionFailure
 }
 
-// ExecuteAvailableTransitionsReport runs ExecuteAvailableTransitions' passes and
-// also reports every due transition that did not execute, so a stuck pipeline
-// is visible instead of only logged.
+// admitsHandoff decides a gated transition under the state lock that also
+// creates its children, so a plan merged or re-dispositioned since any review
+// is judged on current state.
+func admitsHandoff(domain PlanHandoffDomain, s *models.State, task *models.Task, admission TransitionAdmission) bool {
+	class, _ := domain.Classify(s, task)
+	if admission == AdmitReviewed {
+		return class == PlanHandoffPassed
+	}
+	return class != PlanHandoffHeld
+}
+
+// TransitionAdmission selects who authorizes the reviewed plan hand-off
+// (PlanHandoffDomain) during a transition pass.
+type TransitionAdmission int
+
+const (
+	// AdmitOperator: a human resumed or proceeded, which authorizes every
+	// hand-off except a plan held for a human action.
+	AdmitOperator TransitionAdmission = iota
+	// AdmitReviewed: an automatic path (auto-resume, supervisor PreWork). A
+	// reviewed hand-off runs only when its plan is classified passed.
+	AdmitReviewed
+)
+
+// ExecuteAvailableTransitionsReport runs ExecuteAvailableTransitions' passes
+// under operator admission and also reports every due transition that did not
+// execute, so a stuck pipeline is visible instead of only logged.
 func ExecuteAvailableTransitionsReport(projectRoot string, triggerFilter string) (TransitionReport, error) {
+	return ExecuteTransitionsReportWith(projectRoot, triggerFilter, AdmitOperator)
+}
+
+// ExecuteTransitionsReportWith is ExecuteAvailableTransitionsReport with an
+// explicit admission. Plans the admission does not authorize are skipped as a
+// normal wait, not reported as failures: they stay eligible for their own
+// orchestrator review or human action.
+func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admission TransitionAdmission) (TransitionReport, error) {
 	resolver, _, err := loadResolverWithRuntimePolicy(projectRoot)
 	if err != nil {
 		return TransitionReport{}, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
+	handoff := NewPlanHandoffDomain(resolver)
 
 	statePath := paths.New(projectRoot).StatePath()
 	blackboard := db.For(statePath)
@@ -1225,6 +1261,9 @@ func ExecuteAvailableTransitionsReport(projectRoot string, triggerFilter string)
 				available = append(available, resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)...)
 			}
 			for _, transitionName := range available {
+				if handoff.GatesTransition(task, transitionName) && !admitsHandoff(handoff, s, task, admission) {
+					continue
+				}
 				tDef, err := buildTransitionDefFromPipeline(resolver, transitionName)
 				if err != nil {
 					fail(task.ID, transitionName, err)

@@ -110,7 +110,8 @@ in the activity log.
 §BRAND_BINARY_NAME§ resume                        # Resume or advance sprint (see Sprint Lifecycle)
 §BRAND_BINARY_NAME§ stop                          # Abort system
 §BRAND_BINARY_NAME§ sprint-checkpoint             # Force checkpoint (halt + summary)
-§BRAND_BINARY_NAME§ replan [task-id]              # Invalidate planner output, create new planning task
+§BRAND_BINARY_NAME§ replan [task-id] [--reason <text>] # Invalidate planner output, create new planning task
+§BRAND_BINARY_NAME§ plan-check <task-id> --clear  # Release a plan held for a human action (operator only)
 §BRAND_BINARY_NAME§ proceed <task-id> <transition> # Create child tasks for next role-pair
 ```
 
@@ -185,6 +186,9 @@ written once per episode.
   `STALLED` still fires.
 - With `auto_resume`, a checkpoint alerts only if it has not auto-resumed
   within 6 minutes.
+- A plan the orchestrator held for a human action (`plan_check.verdict: held`)
+  raises its own alert naming the ask. Nothing expands that plan until you do
+  the ask and run `§BRAND_BINARY_NAME§ plan-check <task-id> --clear`.
 
 ### Reading a STALLED alert
 
@@ -243,6 +247,7 @@ unless system mode is `PAUSED` or `CIRCUIT_BREAKER_TRIPPED`. The human decides:
 |--------|---------|------|
 | Accept & resume | `§BRAND_BINARY_NAME§ resume` | Satisfied with planner output or fan-in readiness, continue |
 | Amend & replan | Edit plan, commit, `§BRAND_BINARY_NAME§ replan` | Want to change planner output |
+| Release a held plan | Do the ask, then `§BRAND_BINARY_NAME§ plan-check <task-id> --clear` | The orchestrator held a plan for a human action |
 | Pipeline transition | `§BRAND_BINARY_NAME§ proceed <task-id> <transition>` | Create child tasks from output or a ready cohort (auto-done by `§BRAND_BINARY_NAME§ resume` in batch) |
 | Pause for manual work | (no command) | Make manual changes first |
 | Abort | `§BRAND_BINARY_NAME§ stop` | Stop entirely |
@@ -265,7 +270,7 @@ git add -A && git commit -m "amend plan"
 §BRAND_BINARY_NAME§ replan <task-id>                  # or specify task ID explicitly
 ```
 
-Replan invalidates the old task's output (preserved for audit, marked superseded), creates a new planning task with the same role-pair and spec, and returns the sprint to IN_PROGRESS. Multiple replans increment: `<task-id>-replan-1`, `<task-id>-replan-2`, etc.
+Replan invalidates the old task's output (preserved for audit, marked superseded) and creates a new planning task with the same role-pair and spec; at CHECKPOINT it returns the sprint to IN_PROGRESS, at IN_PROGRESS it leaves the sprint alone. It needs a plan without children and without a human hold. `--reason` is appended to the new task's description. Multiple replans increment: `<task-id>-replan-1`, `<task-id>-replan-2`, etc.
 
 ### Auto-Resume
 
@@ -275,6 +280,8 @@ By default, checkpoints require manual `§BRAND_BINARY_NAME§ resume`. Auto-resu
 - At runtime: TUI `y` key toggles on/off
 
 When enabled, agents auto-call `§BRAND_BINARY_NAME§ resume` on CHECKPOINT or COMPLETED. Use `§BRAND_BINARY_NAME§ pause` for a hard stop (never auto-resumed).
+
+An automatic resume expands a merged plan's reviewed hand-off (manual `per-subtask`/`one-to-one` transitions) only when the orchestrator passed it with `plan-check`; a manual resume expands it regardless, except a held plan. See [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md) for the rules.
 
 ## Agent Review Cycles
 

@@ -169,6 +169,8 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 - Auditable task definitions
 - Earlier detection of framing errors (before coder burns cycles)
 
+**Plan hand-off (`PLANNING_COMPLETE`):** the orchestrator owns each merged plan's hand-off to its children, since an auto-resumed checkpoint gets no human review after its own ([ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md)). It checks the `output[]` of each plan in that hand-off's domain (manual per-subtask or one-to-one transitions from a plan with `output[]`) against the plan file and repository — declared validation commands run their checks (hook file filters match the listed paths), coding children own admitted test paths, `plan_ref` anchors name one heading, prerequisites have producers — and dispositions each: `replan --reason` for a defect the planner can fix, `plan-check --hold <ask>` for a human action not yet done, otherwise `plan-check --pass`. A plan whose upstream was replanned or held is replanned or held too. It checkpoints when some plan passed or a plan outside that domain is ready; automatic paths expand in-domain plans only once passed, and out-of-domain ones as before.
+
 **Field Formats:**
 
 | Field | Format | Example |

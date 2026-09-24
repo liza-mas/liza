@@ -247,7 +247,7 @@ func TestReplan_WrongSprintStatus(t *testing.T) {
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
-	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Status = models.SprintStatusCompleted
 
 	planningTask := buildMergedPlanningTask("code-planning-1", now)
 	state.Tasks = []models.Task{planningTask}
@@ -256,7 +256,116 @@ func TestReplan_WrongSprintStatus(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	_, err := Replan(tmpDir, &ReplanInput{TaskID: "code-planning-1", ChangedBy: "human"})
-	testhelpers.RequireErrorContains(t, err, "sprint must be at CHECKPOINT")
+	testhelpers.RequireErrorContains(t, err, "sprint must be at CHECKPOINT or IN_PROGRESS")
+}
+
+// D73: the orchestrator replans a defective plan during its PLANNING_COMPLETE
+// turn, when auto-resume may already have closed the checkpoint. Replan at
+// IN_PROGRESS must leave the sprint and a pending transition trigger alone so
+// the sprint's other plans still transition.
+func TestReplan_InProgressPreservesSprintStatusAndTrigger(t *testing.T) {
+	t.Parallel()
+
+	tmpDir, stateFile := setupReplanTest(t)
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
+	state.Tasks = []models.Task{buildMergedPlanningTask("code-planning-1", time.Now().UTC())}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "code-planning-1", ChangedBy: "orchestrator-1"})
+	if err != nil {
+		t.Fatalf("Replan at IN_PROGRESS: %v", err)
+	}
+	if result.Resumed {
+		t.Error("Resumed = true at IN_PROGRESS, want false")
+	}
+	after, err := db.For(stateFile).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Sprint.Status != models.SprintStatusInProgress || after.Sprint.CheckpointTrigger != models.CheckpointTriggerPlanningComplete {
+		t.Errorf("sprint = %s trigger %q, want IN_PROGRESS with PLANNING_COMPLETE trigger kept", after.Sprint.Status, after.Sprint.CheckpointTrigger)
+	}
+	if original := after.FindTask("code-planning-1"); !original.TransitionsExecuted["replanned"] {
+		t.Error("original not marked replanned")
+	}
+}
+
+func TestReplan_CheckpointStillResumes(t *testing.T) {
+	t.Parallel()
+
+	tmpDir, stateFile := setupReplanTest(t)
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusCheckpoint
+	state.Sprint.CheckpointTrigger = models.CheckpointTriggerPlanningComplete
+	state.Tasks = []models.Task{buildMergedPlanningTask("code-planning-1", time.Now().UTC())}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "code-planning-1", ChangedBy: "human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, _ := db.For(stateFile).Read()
+	if !result.Resumed || after.Sprint.Status != models.SprintStatusInProgress || after.Sprint.CheckpointTrigger != "" {
+		t.Errorf("resumed=%v status=%s trigger=%q, want resumed IN_PROGRESS with trigger cleared", result.Resumed, after.Sprint.Status, after.Sprint.CheckpointTrigger)
+	}
+}
+
+func TestReplan_ReasonReachesReplacementPlanner(t *testing.T) {
+	t.Parallel()
+
+	tmpDir, stateFile := setupReplanTest(t)
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	original := buildMergedPlanningTask("code-planning-1", time.Now().UTC())
+	original.Description = "Plan feature X"
+	state.Tasks = []models.Task{original}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	reason := "hook scope: ruff matches ^apps/api/ only → validate apps/api paths"
+	result, err := Replan(tmpDir, &ReplanInput{TaskID: "code-planning-1", ChangedBy: "orchestrator-1", Reason: reason})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, _ := db.For(stateFile).Read()
+	replacement := after.FindTask(result.NewTaskID)
+	want := "Plan feature X\n\nReplan reason (from orchestrator-1): " + reason
+	if replacement.Description != want {
+		t.Errorf("replacement description = %q, want %q", replacement.Description, want)
+	}
+	history := after.FindTask("code-planning-1").History
+	if note := history[len(history)-1].Note; note == nil || !strings.HasSuffix(*note, ": "+reason) {
+		t.Errorf("replanned history note = %v, want the reason appended", note)
+	}
+	summary := after.Goal.AlignmentHistory[len(after.Goal.AlignmentHistory)-1].Summary
+	if !strings.HasSuffix(summary, ": "+reason) {
+		t.Errorf("alignment summary = %q, want the reason appended", summary)
+	}
+}
+
+// A replan would mint an unheld identity for a plan a human must act on first.
+func TestReplan_RefusesHeldPlan(t *testing.T) {
+	t.Parallel()
+
+	tmpDir, stateFile := setupReplanTest(t)
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	held := buildMergedPlanningTask("code-planning-1", time.Now().UTC())
+	held.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckHeld, Ask: "provision smoke credentials", By: "orchestrator-1", At: time.Now().UTC()}
+	state.Tasks = []models.Task{held}
+	state.Sprint.Scope.Planned = []string{"code-planning-1"}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := Replan(tmpDir, &ReplanInput{TaskID: "code-planning-1", ChangedBy: "human"})
+	testhelpers.RequireErrorContains(t, err, "held for human action")
+	after, _ := db.For(stateFile).Read()
+	if len(after.Tasks) != 1 {
+		t.Errorf("tasks = %d after refused replan, want 1", len(after.Tasks))
+	}
 }
 
 func TestReplan_TaskNotMerged(t *testing.T) {

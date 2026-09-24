@@ -33,7 +33,7 @@ func TestRenderOrchestratorDashboard_BlockedOnPlannerRendersPlanningComplete(t *
 	if !strings.Contains(dashboard, "WAKE TRIGGER: PLANNING_COMPLETE\n") {
 		t.Errorf("expected PLANNING_COMPLETE for a blocker waiting on planning output; dashboard: %s", dashboard)
 	}
-	if !strings.Contains(instruction, "Create checkpoint for human review") {
+	if !strings.Contains(instruction, "If any plan is passed or ready:") || !strings.Contains(instruction, "sprint-checkpoint --json") {
 		t.Errorf("instructions must permit the checkpoint that materializes the children; got: %s", instruction)
 	}
 }

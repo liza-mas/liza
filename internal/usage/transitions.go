@@ -61,6 +61,7 @@ var notUsefulEvents = map[string]struct{}{
 	models.TaskEventAcceptanceCommitsRemapped: {},
 	models.TaskEventRecoveredFresh:            {},
 	models.TaskEventRecoveryFreshFailed:       {},
+	models.TaskEventPlanCheck:                 {},
 }
 
 // IsUsefulEvent classifies a task-history event name. An event in neither

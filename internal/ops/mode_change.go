@@ -565,7 +565,13 @@ func resume(projectRoot, changedBy string, origin resumeOrigin) (*ResumeResult, 
 	var transitionsExecuted int
 	var transitionError string
 	if runTransitionsAfterResume {
-		if report, err := ExecuteAvailableTransitionsReport(projectRoot, ""); err != nil {
+		// An automatic resume carries no human review, so the reviewed plan
+		// hand-off needs the orchestrator's pass; an operator resume is that review.
+		admission := AdmitOperator
+		if origin == resumeOriginAutomatic {
+			admission = AdmitReviewed
+		}
+		if report, err := ExecuteTransitionsReportWith(projectRoot, "", admission); err != nil {
 			transitionError = err.Error()
 		} else {
 			transitionsExecuted = len(report.Results)

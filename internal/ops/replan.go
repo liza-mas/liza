@@ -18,6 +18,9 @@ import (
 type ReplanInput struct {
 	TaskID    string // optional — auto-detect if empty
 	ChangedBy string // required — actor metadata for history/logs
+	// Reason is optional. When set it is appended to the replacement's
+	// description, so the planner and plan reviewer see what must change.
+	Reason string
 }
 
 // ReplanResult contains the outcome of a replan operation.
@@ -26,12 +29,17 @@ type ReplanResult struct {
 	NewTaskID      string
 	RolePair       string
 	SpecRef        string
-	Warnings       []string
+	// Resumed reports that the sprint left CHECKPOINT for IN_PROGRESS.
+	Resumed  bool
+	Warnings []string
 }
 
 // Replan invalidates a merged planning task's output and creates a new planning
-// task so the planner agent re-reads the amended plan. The sprint is set back to
-// IN_PROGRESS so agents resume.
+// task so the planner agent re-reads the amended plan. At CHECKPOINT the sprint
+// is set back to IN_PROGRESS so agents resume. At IN_PROGRESS (the orchestrator's
+// PLANNING_COMPLETE turn, or after an automatic resume) status and checkpoint
+// trigger are left alone, so the sprint's other plans still transition. What
+// makes replan safe is that no child exists yet, checked under the lock.
 func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 	if input.ChangedBy == "" {
 		return nil, &PreconditionError{Reason: "changed_by is required"}
@@ -62,9 +70,10 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		}
 
 		// Validate sprint status
-		if state.Sprint.Status != models.SprintStatusCheckpoint {
+		atCheckpoint := state.Sprint.Status == models.SprintStatusCheckpoint
+		if !atCheckpoint && state.Sprint.Status != models.SprintStatusInProgress {
 			return &PreconditionError{Reason: fmt.Sprintf(
-				"sprint must be at CHECKPOINT, got %s", state.Sprint.Status)}
+				"sprint must be at CHECKPOINT or IN_PROGRESS, got %s", state.Sprint.Status)}
 		}
 
 		// Validate task state
@@ -83,6 +92,13 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		if !IsPlanningPair(task.RolePair, planningPairs) {
 			return &PreconditionError{Reason: fmt.Sprintf(
 				"task %s role_pair %q is not a planning pair", task.ID, task.RolePair)}
+		}
+		// A human hold is released only by an operator clear; a replacement
+		// would otherwise mint an unheld identity for the same plan.
+		if task.PlanCheckVerdictOf() == models.PlanCheckHeld {
+			return &PreconditionError{Reason: fmt.Sprintf(
+				"task %s is held for human action (%s); an operator must run plan-check %s --clear before replanning",
+				task.ID, task.PlanCheck.Ask, task.ID)}
 		}
 
 		// Compute new task ID: <original-id>-replan-N
@@ -115,7 +131,11 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		}
 
 		now := time.Now().UTC()
+		reason := strings.TrimSpace(input.Reason)
 		note := fmt.Sprintf("replaced by %s", newTaskID)
+		if reason != "" {
+			note += ": " + reason
+		}
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:  now,
 			Event: models.TaskEventReplanned,
@@ -128,7 +148,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			ID:          newTaskID,
 			Type:        task.Type,
 			RolePair:    task.RolePair,
-			Description: task.Description,
+			Description: replanDescription(task.Description, input.ChangedBy, reason),
 			Status:      initialStatus,
 			Priority:    task.Priority,
 			ParentTask:  task.ParentTask,
@@ -241,16 +261,18 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		// Add to sprint scope
 		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, newTaskID)
 
-		// Resume sprint
-		state.Sprint.Status = models.SprintStatusInProgress
-		state.Sprint.CheckpointTrigger = ""
+		if atCheckpoint {
+			// Resume sprint
+			state.Sprint.Status = models.SprintStatusInProgress
+			state.Sprint.CheckpointTrigger = ""
+		}
 
 		// Alignment history
 		state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, models.AlignmentHistory{
 			Timestamp: now,
 			Event:     "replan",
-			Summary: fmt.Sprintf("Replanned task %s → %s (role_pair: %s, spec: %s)",
-				task.ID, newTaskID, task.RolePair, task.SpecRef),
+			Summary: fmt.Sprintf("Replanned task %s → %s (role_pair: %s, spec: %s)%s",
+				task.ID, newTaskID, task.RolePair, task.SpecRef, replanReasonSuffix(reason)),
 		})
 
 		result = ReplanResult{
@@ -258,6 +280,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			NewTaskID:      newTaskID,
 			RolePair:       task.RolePair,
 			SpecRef:        task.SpecRef,
+			Resumed:        atCheckpoint,
 			Warnings:       warnings,
 		}
 
@@ -322,6 +345,22 @@ func resolveReplanTarget(state *models.State, taskID string, planningPairs map[s
 		return nil, &PreconditionError{Reason: fmt.Sprintf(
 			"multiple planning tasks found — specify task ID: %s", strings.Join(ids, ", "))}
 	}
+}
+
+// replanDescription carries the replan reason to the replacement's planner and
+// reviewer, who see the task description but not the original's history.
+func replanDescription(description, changedBy, reason string) string {
+	if reason == "" {
+		return description
+	}
+	return fmt.Sprintf("%s\n\nReplan reason (from %s): %s", description, changedBy, reason)
+}
+
+func replanReasonSuffix(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return ": " + reason
 }
 
 // dedupeStrings returns a new slice with duplicates removed, preserving order.

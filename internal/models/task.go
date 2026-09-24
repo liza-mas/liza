@@ -527,6 +527,7 @@ type Task struct {
 	ParentTask              *string                  `yaml:"parent_task,omitempty"`
 	ParentTasks             []string                 `yaml:"parent_tasks,omitempty"`
 	TransitionsExecuted     map[string]bool          `yaml:"transitions_executed,omitempty"`
+	PlanCheck               *PlanCheck               `yaml:"plan_check,omitempty" json:"plan_check,omitempty"`
 	Exit42RestartCount      int                      `yaml:"exit42_restart_count,omitempty"`
 	ReviewCyclesCurrent     int                      `yaml:"review_cycles_current,omitempty"`
 	ReviewCyclesTotal       int                      `yaml:"review_cycles_total,omitempty"`

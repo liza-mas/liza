@@ -1,24 +1,55 @@
 {{- define "wake_planning_complete" -}}
-Planning sprint tasks have been merged with output[] entries.
-
-Pipeline transitions will execute automatically after checkpoint and human resume.
-No manual task creation is needed.
+Planning tasks have been merged with output[]. You own their hand-off: automatic paths create children only from plans you pass, and an auto-resumed checkpoint gets no human review after yours.
 
 You have FULL autonomy to run CLI commands immediately; do not wait for permission.
 
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
+{{- if .ToReview}}
 
+PLANS TO REVIEW:
+{{- range .ToReview}}
+- {{.TaskID}}:{{range .PlanRefs}} {{.}}{{end}}{{if .Blocker}} (a pass is refused while {{.Blocker}}){{end}}
+{{- end}}
+
+REVIEW each plan's output[] entries against its plan file and the repository (read-only commands are fine):
+a. Each validation command runs its declared check: for a hook-runner command (e.g. `pre-commit run --files <paths>`), the paths match each intended hook's file filters in the project's hook config, so it does not report Skipped.
+b. Each behavior-changing coding child owns a test path matching a submission test-file pattern ({{testFilePatterns}}).
+c. Each plan_ref anchor names exactly one ATX heading in its plan file.
+d. Each validation_prerequisites entry and operator-provisioned input the plan names has a producer (a task, a committed generator, or an explicit human step); a human-produced input is present now.
+
+DISPOSITION each plan:
+- Defect its planner can fix: {{binaryName}} replan <task-id> --reason "<check>: <evidence> → <required correction>" --changed-by {{.AgentID}}
+- Needs a human action not yet done: {{binaryName}} plan-check <task-id> --hold "<exact human action>" --agent-id {{.AgentID}} --json
+- Otherwise: {{binaryName}} plan-check <task-id> --pass --agent-id {{.AgentID}} --json
+A plan whose upstream you replan or hold must be replanned (the reason names the upstream) or held too: act on every replan warning and pass refusal.
+{{- end}}
+{{- if .Reconcile}}
+
+PLANS TO RECONCILE (passed, then an upstream changed) — replan each (the reason names the upstream) or hold it for the upstream's human action:
+{{- range .Reconcile}}
+- {{.TaskID}}: {{.Blocker}}
+{{- end}}
+{{- end}}
+{{- if .Ready}}
+
+READY — already passed or outside your review; do not re-review, checkpoint only:
+{{- range .Ready}}
+- {{.TaskID}}
+{{- end}}
+{{- end}}
+
+THEN:
 1. Run: {{binaryName}} update-sprint-metrics --json
-
-2. Create checkpoint for human review: {{binaryName}} sprint-checkpoint --json
-   The checkpoint gates downstream task creation and generates a sprint summary.
+2. If any plan is passed or ready: {{binaryName}} sprint-checkpoint --json
+   The checkpoint gates downstream task creation and generates a sprint summary. If every plan was replanned or held, do not checkpoint.
 
 SUCCESS CRITERIA:
-- Sprint checkpointed for human review.
+- Every listed plan is passed, held or replanned; passed and ready plans are checkpointed.
 
 {{template "delivery_report" .}}
 
 ❌ INCORRECT (DO NOT DO THIS):
-1. Create tasks manually — the supervisor handles pipeline transitions after resume.
-2. Exit without checkpointing.
+1. Create tasks or edit plan files — replan routes corrections to the planner.
+2. Pass a plan whose checks you did not run, or a held plan; clearing a hold is operator-only.
+3. Exit with a listed plan undecided.
 {{- end -}}

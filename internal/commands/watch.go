@@ -1025,18 +1025,34 @@ func runParked(state *models.State) bool {
 }
 
 // checkAwaitingHuman is emitted every check while active; reconcileStuckAlerts
-// writes it once per episode and the TUI clears it on resume.
+// writes it once per episode and the TUI clears it on resume. A plan the
+// orchestrator held for a human action raises its own alert, keyed by task and
+// ask, because nothing expands it until an operator clears the hold.
 func checkAwaitingHuman(state *models.State) []Alert {
-	notice := AwaitingHumanNotice(state)
-	if notice == "" {
-		return nil
+	var alerts []Alert
+	now := time.Now().UTC()
+	if notice := AwaitingHumanNotice(state); notice != "" {
+		alerts = append(alerts, Alert{
+			Timestamp: now,
+			Level:     AlertLevelCritical,
+			Category:  "AWAITING HUMAN",
+			Message:   notice,
+		})
 	}
-	return []Alert{{
-		Timestamp: time.Now().UTC(),
-		Level:     AlertLevelCritical,
-		Category:  "AWAITING HUMAN",
-		Message:   notice,
-	}}
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.Status != models.TaskStatusMerged || task.PlanCheckVerdictOf() != models.PlanCheckHeld {
+			continue
+		}
+		alerts = append(alerts, Alert{
+			Timestamp: now,
+			Level:     AlertLevelCritical,
+			Category:  "AWAITING HUMAN",
+			Message: fmt.Sprintf("plan %s held before its children exist: %s; after doing it, run %q",
+				task.ID, task.PlanCheck.Ask, brand.Command("plan-check", task.ID, "--clear")),
+		})
+	}
+	return alerts
 }
 
 func checkBlockedTasks(state *models.State, cache map[string]time.Time) []Alert {

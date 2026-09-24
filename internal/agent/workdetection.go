@@ -109,13 +109,18 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 //  7. Many-to-one transition ready
 //  8. Sprint complete (all planned tasks terminal)
 func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
-	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, nil, WakeTriggerNone)
+	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, ops.PlanningPairsOnly(planningPairs), m2oTransitions, nil, WakeTriggerNone)
 }
 
 // DetectOrchestratorWakeTriggersForProject evaluates terminal integration
 // state through the authoritative progress decision and prompt projection.
+// It also applies the project's reviewed plan hand-off domain.
 func DetectOrchestratorWakeTriggersForProject(projectRoot string, state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
-	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
+	handoff, err := ops.LoadPlanHandoffDomain(projectRoot)
+	if err != nil {
+		handoff = ops.PlanningPairsOnly(planningPairs)
+	}
+	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, handoff, m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
 		decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
 		return prompts.ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
 	}, WakeTriggerNone)
@@ -125,7 +130,7 @@ func DetectOrchestratorWakeTriggersForProject(projectRoot string, state *models.
 // adapter used by tests and read-only consumers that already hold an
 // authoritative projection.
 func DetectOrchestratorWakeTriggersWithIntegrationProjection(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, projection prompts.EffectiveIntegrationCompletion) OrchestratorWakeResult {
-	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
+	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, ops.PlanningPairsOnly(planningPairs), m2oTransitions, func() prompts.EffectiveIntegrationCompletion {
 		return projection
 	}, WakeTriggerNone)
 }
@@ -133,12 +138,12 @@ func DetectOrchestratorWakeTriggersWithIntegrationProjection(state *models.State
 // revalidateOrchestratorWake retains a selected invocation only while its own
 // predicate still holds. Ordinary priority applies again on the next wait.
 // The caller owns launch gates; this function only projects work from state.
-func revalidateOrchestratorWake(state *models.State, selected OrchestratorWakeResult, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, integrationProjection func() prompts.EffectiveIntegrationCompletion) (result, fresh OrchestratorWakeResult) {
-	fresh = detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, integrationProjection, WakeTriggerNone)
+func revalidateOrchestratorWake(state *models.State, selected OrchestratorWakeResult, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, handoff ops.PlanHandoffDomain, m2oTransitions []ops.ManyToOneTransitionInfo, integrationProjection func() prompts.EffectiveIntegrationCompletion) (result, fresh OrchestratorWakeResult) {
+	fresh = detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, handoff, m2oTransitions, integrationProjection, WakeTriggerNone)
 	if selected.Trigger == fresh.Trigger || selected.Trigger == "" || !selected.ShouldWake() {
 		return fresh, fresh
 	}
-	retained := detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, integrationProjection, selected.Trigger)
+	retained := detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, handoff, m2oTransitions, integrationProjection, selected.Trigger)
 	if retained.ShouldWake() {
 		return retained, fresh
 	}
@@ -146,7 +151,7 @@ func revalidateOrchestratorWake(state *models.State, selected OrchestratorWakeRe
 }
 
 // only selects a single predicate for revalidation; NONE uses normal priority.
-func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo, integrationProjection func() prompts.EffectiveIntegrationCompletion, only OrchestratorWakeTrigger) OrchestratorWakeResult {
+func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, handoff ops.PlanHandoffDomain, m2oTransitions []ops.ManyToOneTransitionInfo, integrationProjection func() prompts.EffectiveIntegrationCompletion, only OrchestratorWakeTrigger) OrchestratorWakeResult {
 	for _, triggerSpec := range orchestratorWakeTriggerSpecs {
 		if only != WakeTriggerNone && only != triggerSpec.Trigger {
 			continue
@@ -157,7 +162,7 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 				ops.BlockedTasksAwaitPlanningOutput(state, planningPairs) {
 				return OrchestratorWakeResult{
 					Trigger: WakeTriggerPlanningComplete,
-					Count:   countMergedPlanningTasksWithOutput(state, planningPairs),
+					Count:   countMergedPlanningTasksWithOutput(state, handoff),
 				}
 			}
 			return OrchestratorWakeResult{
@@ -173,7 +178,7 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 	// but ready design work no longer waits for the entire sprint to finish.
 	if state.Sprint.Status != models.SprintStatusCheckpoint &&
 		state.Sprint.Status != models.SprintStatusCompleted {
-		if n := countMergedPlanningTasksWithOutput(state, planningPairs); n > 0 && (only == WakeTriggerNone || only == WakeTriggerPlanningComplete) {
+		if n := countMergedPlanningTasksWithOutput(state, handoff); n > 0 && (only == WakeTriggerNone || only == WakeTriggerPlanningComplete) {
 			return OrchestratorWakeResult{
 				Trigger: WakeTriggerPlanningComplete,
 				Count:   n,
@@ -193,8 +198,11 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 	// the re-wake loop (supervisor sets COMPLETED → state change fires detection
 	// → orchestrator wakes → calls sprint_checkpoint → rejected).
 	if (only == WakeTriggerNone || only == WakeTriggerCodingComplete || only == WakeTriggerSprintComplete) && state.AllPlannedTasksTerminalWith(pipelineTerminals) {
+		// A held plan is merged, hence terminal, but its children do not exist
+		// yet: the sprint waits for the human action, not for the orchestrator.
 		if state.Sprint.Status == models.SprintStatusCheckpoint ||
-			state.Sprint.Status == models.SprintStatusCompleted {
+			state.Sprint.Status == models.SprintStatusCompleted ||
+			ops.HasHeldPlan(state) {
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		if integrationProjection != nil && (state.Goal.BaseCommit != nil || state.Goal.Integration != nil) {
@@ -284,14 +292,14 @@ func countReadyManyToOneCohorts(state *models.State, m2oTransitions []ops.ManyTo
 	return ops.CountReadyManyToOneCohorts(state, m2oTransitions)
 }
 
-// countMergedPlanningTasksWithOutput counts planned tasks with unconsumed
-// planning output, indicating tasks ready to be expanded into coding tasks.
-// Uses the shared predicate ops.IsPlanningCompleteEligible.
-func countMergedPlanningTasksWithOutput(state *models.State, planningPairs map[string]bool) int {
+// countMergedPlanningTasksWithOutput counts planned tasks with a pending
+// planning hand-off, indicating tasks ready to be expanded into child tasks.
+// Uses the shared predicate ops.PlanHandoffDomain.PlanningCompleteEligible.
+func countMergedPlanningTasksWithOutput(state *models.State, handoff ops.PlanHandoffDomain) int {
 	count := 0
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if ops.IsPlanningCompleteEligible(task, planningPairs, state) {
+		if handoff.PlanningCompleteEligible(state, task) {
 			count++
 		}
 	}

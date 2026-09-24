@@ -353,6 +353,11 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
   parent_tasks: []                 # Multi-parent linkage (many-to-one transitions). Back-references from child to parent tasks
   transitions_executed:            # Tracks which transitions have been applied
     code-plan-to-coding: true
+  plan_check:                      # Orchestrator hand-off disposition of a merged plan (ADR-0159)
+    verdict: held                  # passed | held
+    ask: "Provision smoke credentials in the agent env files"  # held only: the human action awaited
+    by: orchestrator-1
+    at: 2026-09-24T09:30:00Z
 ```
 
 Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role-pair schema supports `role-pairs.<name>.decomposition-root: true` for master planning pairs, with required `decomposition-output-ref` (`spec_ref`, `epic_ref`, `plan_ref`, or `arch_ref`) naming the framework ref each master output must provide. That marker is read-only runtime metadata: it selects master prompt sections, output validation, and INITIAL_PLANNING's specialized-to-master mapping. Existing frozen workspaces are not rewritten when the embedded topology changes; known legacy master role-pairs missing `decomposition-output-ref` are backfilled in memory at load time, while new role-pairs or transitions require manually updating `.liza/pipeline.yaml` or starting a fresh workspace.
@@ -365,6 +370,7 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task (deprecated: use `parent_tasks`) |
 | `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
+| `plan_check` | `*PlanCheck` | Orchestrator (`plan-check --pass/--hold`) / operator (`plan-check --clear`) | Disposition of a merged planning task whose manual `per-subtask`/`one-to-one` hand-off has not run. `passed` admits automatic expansion; `held` (with `ask`) blocks every expansion path until an operator clears it. Only on MERGED planning-pair tasks. See [ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md) |
 
 `set-task-output --json` returns a write receipt with `task_id`, `output_count`,
 and `state_path`. The same transaction appends a `task_output_set` history event

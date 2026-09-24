@@ -256,11 +256,18 @@ func renderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	sprintComplete := state.AllPlannedTasksTerminalWith(sprintTerminals)
 	wakeOpen := state.Sprint.Status != models.SprintStatusCheckpoint &&
 		state.Sprint.Status != models.SprintStatusCompleted
-	sprintCompleteForWake := sprintComplete && wakeOpen
+	// Same rule as wake detection: a held plan keeps the sprint open.
+	sprintCompleteForWake := sprintComplete && wakeOpen && !ops.HasHeldPlan(state)
 
 	var planningTasks []planningTaskData
 	if wakeOpen {
-		planningTasks = collectMergedPlanningTasks(state, planningPairs)
+		// Without a pipeline nothing is gated here; the transition executor
+		// loads its own domain and still gates.
+		domain := ops.PlanningPairsOnly(planningPairs)
+		if detErr == nil {
+			domain = detCtx.PlanHandoff
+		}
+		planningTasks = collectMergedPlanningTasks(state, domain)
 	}
 
 	codingComplete := state.Goal.BaseCommit != nil && !hasIntegrationTaskInSprint(state)

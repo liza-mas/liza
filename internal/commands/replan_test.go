@@ -34,7 +34,7 @@ func TestReplanCommand_HappyPath(t *testing.T) {
 
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	err := ReplanCommand(tmpDir, "code-planning-1", "human")
+	err := ReplanCommand(tmpDir, "code-planning-1", "human", "")
 	if err != nil {
 		t.Fatalf("ReplanCommand() error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestReplanCommand_AutoDetect(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// No task ID — auto-detect
-	err := ReplanCommand(tmpDir, "", "human")
+	err := ReplanCommand(tmpDir, "", "human", "")
 	if err != nil {
 		t.Fatalf("ReplanCommand() error: %v", err)
 	}
@@ -97,13 +97,15 @@ func TestReplanCommand_AutoDetect(t *testing.T) {
 	}
 }
 
+// Replan is allowed at CHECKPOINT and IN_PROGRESS (D73: the orchestrator
+// replans before auto-resume can close a checkpoint); COMPLETED stays refused.
 func TestReplanCommand_ErrorWrongStatus(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
-	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Status = models.SprintStatusCompleted
 
 	planningTask := testhelpers.BuildTaskByStatus("code-planning-1", models.TaskStatusMerged, now)
 	planningTask.RolePair = "code-planning-pair"
@@ -115,9 +117,9 @@ func TestReplanCommand_ErrorWrongStatus(t *testing.T) {
 
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	err := ReplanCommand(tmpDir, "code-planning-1", "human")
+	err := ReplanCommand(tmpDir, "code-planning-1", "human", "")
 	if err == nil {
 		t.Fatal("Expected error for wrong sprint status")
 	}
-	testhelpers.AssertErrorContains(t, err, "CHECKPOINT")
+	testhelpers.AssertErrorContains(t, err, "CHECKPOINT or IN_PROGRESS")
 }

@@ -60,7 +60,7 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 					case "new blocker", "human note":
 						*s.FindTask("provider") = testhelpers.BuildTaskByStatus("provider", models.TaskStatusBlocked, plan.Created)
 					case "consumed output":
-						s.FindTask("plan").TransitionsExecuted = map[string]bool{"coding-plan-to-code": true}
+						s.FindTask("plan").TransitionsExecuted = map[string]bool{"code-plan-to-coding": true}
 					case "paused":
 						s.Config.Mode = models.SystemModePaused
 					case "manual checkpoint":
@@ -170,12 +170,12 @@ func TestRevalidateOrchestratorWakeRefreshesOrReplacesDecision(t *testing.T) {
 	state.Sprint.Scope.Planned = []string{"plan", "blocked"}
 	pairs := map[string]bool{"code-planning-pair": true}
 	selected := OrchestratorWakeResult{Trigger: WakeTriggerPlanningComplete, Count: 99}
-	result, fresh := revalidateOrchestratorWake(state, selected, nil, pairs, nil, nil)
+	result, fresh := revalidateOrchestratorWake(state, selected, nil, pairs, ops.PlanningPairsOnly(pairs), nil, nil)
 	if result.Trigger != WakeTriggerPlanningComplete || result.Count != 1 || fresh.Trigger != WakeTriggerBlocked {
 		t.Fatalf("retained decision must refresh count: result=%+v fresh=%+v", result, fresh)
 	}
 	state.Tasks[0].Output = nil
-	result, _ = revalidateOrchestratorWake(state, selected, nil, pairs, nil, nil)
+	result, _ = revalidateOrchestratorWake(state, selected, nil, pairs, ops.PlanningPairsOnly(pairs), nil, nil)
 	if result.Trigger != WakeTriggerBlocked {
 		t.Fatalf("vanished selection must yield to available work: %+v", result)
 	}
@@ -184,7 +184,7 @@ func TestRevalidateOrchestratorWakeRefreshesOrReplacesDecision(t *testing.T) {
 	state.Goal.BaseCommit = testhelpers.StringPtr("base")
 	selected = OrchestratorWakeResult{Trigger: WakeTriggerCodingComplete, Count: 1}
 	projection := prompts.EffectiveIntegrationCompletion{WakeTrigger: "INTEGRATION_WAITING", Status: "waiting"}
-	result, _ = revalidateOrchestratorWake(state, selected, nil, pairs, nil, func() prompts.EffectiveIntegrationCompletion { return projection })
+	result, _ = revalidateOrchestratorWake(state, selected, nil, pairs, ops.PlanningPairsOnly(pairs), nil, func() prompts.EffectiveIntegrationCompletion { return projection })
 	if result.ShouldWake() || !reflect.DeepEqual(result.Integration, projection) {
 		t.Fatalf("integration advancement must cancel obsolete coding-complete wake: %+v", result)
 	}

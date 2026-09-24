@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -13,8 +14,11 @@ import (
 
 // planningTaskData holds a merged planning task's output for the PLANNING_COMPLETE template.
 type planningTaskData struct {
-	TaskID string
-	Output []models.OutputEntry
+	TaskID   string
+	Output   []models.OutputEntry
+	Class    ops.PlanHandoffClass
+	Blocker  string
+	PlanRefs []string // distinct plan files named by output[].plan_ref
 }
 
 // wakeEntryPointData describes an available entry-point for the orchestrator template.
@@ -194,28 +198,62 @@ func integrationOutcomeInstructions(projection EffectiveIntegrationCompletion) s
 	return b.String()
 }
 
-// wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template
+// wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template.
+// Plans are split by hand-off class so a decided plan is never re-reviewed.
 type wakePlanningCompleteData struct {
-	AgentID       string
-	PlanningTasks []planningTaskData
+	AgentID   string
+	ToReview  []planningTaskData // needs_review
+	Reconcile []planningTaskData // needs_reconciliation
+	Ready     []planningTaskData // passed, or outside the reviewed hand-off
+}
+
+func buildWakePlanningCompleteData(agentID string, planningTasks []planningTaskData) wakePlanningCompleteData {
+	data := wakePlanningCompleteData{AgentID: agentID}
+	for _, task := range planningTasks {
+		switch task.Class {
+		case ops.PlanHandoffNeedsReview:
+			data.ToReview = append(data.ToReview, task)
+		case ops.PlanHandoffNeedsReconciliation:
+			data.Reconcile = append(data.Reconcile, task)
+		case ops.PlanHandoffPassed, ops.PlanHandoffOutOfDomain:
+			data.Ready = append(data.Ready, task)
+		}
+	}
+	return data
 }
 
 // collectMergedPlanningTasks returns merged planning tasks with output for PLANNING_COMPLETE detection.
 // Only transition-source role-pairs qualify — coding tasks with output are ignored.
-// Uses the same IsPlanningPair predicate as workdetection to avoid classification drift.
-func collectMergedPlanningTasks(state *models.State, planningPairs map[string]bool) []planningTaskData {
+// Uses the same IsPlanningPair predicate as workdetection to avoid classification drift,
+// and the shared hand-off classifier for what each plan still needs.
+func collectMergedPlanningTasks(state *models.State, domain ops.PlanHandoffDomain) []planningTaskData {
 	var result []planningTaskData
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if !ops.IsPlanningCompleteEligible(task, planningPairs, state) {
+		if !domain.PlanningCompleteEligible(state, task) {
 			continue
 		}
+		class, blocker := domain.Classify(state, task)
 		result = append(result, planningTaskData{
-			TaskID: task.ID,
-			Output: task.Output,
+			TaskID:   task.ID,
+			Output:   task.Output,
+			Class:    class,
+			Blocker:  blocker,
+			PlanRefs: distinctPlanFiles(task.Output),
 		})
 	}
 	return result
+}
+
+func distinctPlanFiles(entries []models.OutputEntry) []string {
+	var files []string
+	for _, entry := range entries {
+		file, _, _ := strings.Cut(entry.PlanRef, "#")
+		if file != "" && !slices.Contains(files, file) {
+			files = append(files, file)
+		}
+	}
+	return files
 }
 
 // wakeHumanNoteData feeds the HUMAN_NOTE wake template.
@@ -427,10 +465,7 @@ func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeT
 	case "IMMEDIATE_DISCOVERY":
 		return executeTemplate("wake_immediate_discovery", agentData)
 	case "PLANNING_COMPLETE":
-		return executeTemplate("wake_planning_complete", wakePlanningCompleteData{
-			AgentID:       agentID,
-			PlanningTasks: planningTasks,
-		})
+		return executeTemplate("wake_planning_complete", buildWakePlanningCompleteData(agentID, planningTasks))
 	case "MANY_TO_ONE_READY":
 		return executeTemplate("wake_many_to_one_ready", agentData)
 	case "CODING_COMPLETE":

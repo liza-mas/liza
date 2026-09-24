@@ -183,6 +183,7 @@ func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {
 		"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file",
 		"profile", "include", "exclude", "tool", "install-dir", "dry-run", "yes", "global-dir", "agent-tools", "write-shell-profile", "agents", "project",
 		"project-root", "check-update", "update-channel", "replace",
+		"pass", "hold", "clear",
 	} {
 		resetFlagIfPresent(cmd, name)
 	}

@@ -294,6 +294,9 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		if err := validateAcceptanceState(&task); err != nil {
 			return err
 		}
+		if err := validatePlanCheck(&task, resolver); err != nil {
+			return err
+		}
 
 		// Attempt must be 0 (unset/legacy), 1, or 2
 		if task.Attempt < 0 || task.Attempt > 2 {
@@ -318,6 +321,34 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		}
 	}
 
+	return nil
+}
+
+// validatePlanCheck checks the persisted shape of an orchestrator plan
+// disposition. Admission rules (domain, dependencies, sticky holds) live in ops.
+func validatePlanCheck(task *models.Task, resolver *pipeline.Resolver) error {
+	check := task.PlanCheck
+	if check == nil {
+		return nil
+	}
+	switch check.Verdict {
+	case models.PlanCheckPassed:
+	case models.PlanCheckHeld:
+		if strings.TrimSpace(check.Ask) == "" {
+			return fmt.Errorf("task %s plan_check held requires ask", task.ID)
+		}
+	default:
+		return fmt.Errorf("task %s plan_check has invalid verdict %q", task.ID, check.Verdict)
+	}
+	if check.By == "" || check.At.IsZero() {
+		return fmt.Errorf("task %s plan_check requires by and at", task.ID)
+	}
+	if task.Status != models.TaskStatusMerged {
+		return fmt.Errorf("task %s plan_check requires MERGED status, got %s", task.ID, task.Status)
+	}
+	if resolver != nil && !resolver.TransitionSourcePairs()[task.RolePair] {
+		return fmt.Errorf("task %s plan_check on non-planning role_pair %q", task.ID, task.RolePair)
+	}
 	return nil
 }
 

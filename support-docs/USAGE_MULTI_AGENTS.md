@@ -537,6 +537,7 @@ artifact yourself and surfaces unflagged decisions agents baked in without marki
 |--------|---------|------------------------------------------------------------------------------------------------------|
 | Accept & resume | `§BRAND_BINARY_NAME§ resume` | Satisfied with planner output or fan-in readiness, continue the sprint, start next sprint            |
 | Amend & replan | Edit plan file, commit, then `§BRAND_BINARY_NAME§ replan` | Want to change a planner's output before proceeding                                                  |
+| Release a held plan | Do the ask, then `§BRAND_BINARY_NAME§ plan-check <task-id> --clear` | The orchestrator held a plan for a human action (`AWAITING HUMAN` alert); the plan returns to its review |
 | Pipeline transition | `§BRAND_BINARY_NAME§ proceed <task-id> <transition>` | Create child tasks for the next role-pair from output or a ready cohort. Automatically done in batch by `§BRAND_BINARY_NAME§ resume` |
 | Pause for manual work | (no command) | Want to make manual changes before continuing                                                        |
 | Abort | `§BRAND_BINARY_NAME§ stop` | Want to stop entirely                                                                                |
@@ -556,7 +557,17 @@ When a transition checkpoint fires, the human reviews the proposed downstream wo
 1. **Accept the transition** — run `§BRAND_BINARY_NAME§ resume` to continue
 2. **Amend the plan** — edit the plan markdown file, commit, then run `§BRAND_BINARY_NAME§ replan`
 
-`§BRAND_BINARY_NAME§ replan` invalidates the old planning task's output and creates a new planning task with the same role-pair and spec. The sprint returns to IN_PROGRESS and the planner agent picks up the new task, re-reads the amended plan, and regenerates `output[]`.
+`§BRAND_BINARY_NAME§ replan` invalidates the old planning task's output and creates a new planning task with the same role-pair and spec. At CHECKPOINT the sprint returns to IN_PROGRESS; at IN_PROGRESS it stays as is. The planner agent picks up the new task, re-reads the amended plan, and regenerates `output[]`. `--reason "<text>"` is appended to the new task's description so the planner and plan reviewer see what must change. A plan held for a human action cannot be replanned until its hold is cleared.
+
+#### Orchestrator Plan Hand-off
+
+Under auto-resume nobody reviews a `PLANNING_COMPLETE` checkpoint, so the orchestrator reviews each merged plan before its children exist. For a plan whose manual `per-subtask` or `one-to-one` transition creates children, it checks the plan against the repository (declared validation commands actually run their checks, coding children own admitted test paths, `plan_ref` anchors name one heading, prerequisites have producers) and records a disposition:
+
+- `replan <task-id> --reason "..."` — a defect the planner can fix
+- `plan-check <task-id> --hold "<ask>"` — a human action is needed first; an `AWAITING HUMAN` alert names it
+- `plan-check <task-id> --pass` — ready
+
+Automatic paths (auto-resume, supervisor transition passes) create children only from passed plans. When you resume a checkpoint yourself, undispositioned plans are expanded too — your resume is the review — but a held plan never is, and the sprint does not complete while one is held. After doing the held plan's ask, run `§BRAND_BINARY_NAME§ plan-check <task-id> --clear`; the orchestrator then reviews it again. Many-to-one cohorts and automatic transitions need no disposition.
 
 ```bash
 # Typical replan workflow
@@ -622,7 +633,8 @@ the appropriate supervisor-launched agent session. See
 | `§BRAND_BINARY_NAME§ mark-agent-degraded <agent-id>` / `§BRAND_BINARY_NAME§ clear-agent-degraded <agent-id>` | Record or clear role-capacity health for an agent epoch                                                            |
 | **System Control** |                                                                                                                      |
 | `§BRAND_BINARY_NAME§ pause` / `§BRAND_BINARY_NAME§ resume` | Pause/resume system (resume also advances CHECKPOINT → COMPLETED → new sprint)                                       |
-| `§BRAND_BINARY_NAME§ replan [task-id]` | Amend a planner's output at CHECKPOINT (invalidate old task, create new planning task)                               |
+| `§BRAND_BINARY_NAME§ replan [task-id] [--reason <text>]` | Amend a planner's output before its children exist (invalidate old task, create new planning task)                  |
+| `§BRAND_BINARY_NAME§ plan-check <task-id> --clear` | Release a plan the orchestrator held for a human action (operator only; `--pass`/`--hold` are the orchestrator's)    |
 | `§BRAND_BINARY_NAME§ stop` / `§BRAND_BINARY_NAME§ start` | Stop/start system                                                                                                    |
 | `§BRAND_BINARY_NAME§ sprint-checkpoint` | Create a checkpoint (halt + summary)                                                                                 |
 | **Task Operations** |                                                                                                                      |

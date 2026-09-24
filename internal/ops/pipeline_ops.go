@@ -355,6 +355,7 @@ type PipelineDetectionContext struct {
 	PlanningPairs            map[string]bool
 	PlanningApprovedStatuses map[string]models.TaskStatus
 	ManyToOneTransitions     []ManyToOneTransitionInfo
+	PlanHandoff              PlanHandoffDomain
 }
 
 // LoadDetectionContext loads pipeline config once and returns both sprint-terminal
@@ -393,6 +394,7 @@ func LoadDetectionContext(projectRoot string) (*PipelineDetectionContext, error)
 		PlanningPairs:            planningPairs,
 		PlanningApprovedStatuses: planningApprovedStatuses,
 		ManyToOneTransitions:     m2oInfos,
+		PlanHandoff:              NewPlanHandoffDomain(resolver),
 	}, nil
 }
 

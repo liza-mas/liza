@@ -362,21 +362,28 @@ missing children.`,
 var replanCmd = &cobra.Command{
 	Use:   "replan [task-id]",
 	Short: "Re-invoke planner after amending a plan file",
-	Long: `Re-invoke a planner agent after amending a plan file at CHECKPOINT.
+	Long: `Re-invoke a planner agent after amending a plan file, or to correct a
+merged plan before its children exist.
 
 This command invalidates the old planning task's output and creates a new
-planning task with the same role_pair and spec_ref. The sprint is set back
-to IN_PROGRESS so the planner agent picks up the new task.
+planning task with the same role_pair and spec_ref, which a planner agent
+picks up.
 
 If task-id is omitted, the command auto-detects the single planning task
 with unconsumed output in the current sprint. If multiple planning tasks
 match, specify the task ID explicitly.
 
+At CHECKPOINT the sprint is set back to IN_PROGRESS. At IN_PROGRESS (for
+example the orchestrator's plan review, or after an automatic resume) the
+sprint status is left alone. --reason is appended to the new task's
+description so the planner and plan reviewer see what must change.
+
 Preconditions:
-  - Sprint must be at CHECKPOINT
+  - Sprint must be at CHECKPOINT or IN_PROGRESS
   - Target task must be MERGED with output[]
   - No child tasks already created (TransitionsExecuted must be empty)
   - Task must belong to a planning role-pair
+  - Task must not be held for human action (clear the hold first)
 
 Example workflow:
   1. Planner produces output → sprint checkpoints at PLANNING_COMPLETE
@@ -396,7 +403,8 @@ Example workflow:
 			return err
 		}
 
-		return commands.ReplanCommand(projectRoot, taskID, changedBy)
+		reason, _ := cmd.Flags().GetString("reason")
+		return commands.ReplanCommand(projectRoot, taskID, changedBy, reason)
 	},
 }
 
@@ -742,6 +750,7 @@ func init() {
 	addChangedByFlag(stopCmd)
 	addChangedByFlag(startCmd)
 	addChangedByFlag(replanCmd)
+	replanCmd.Flags().String("reason", "", "why the plan must change; appended to the new planning task's description")
 	addChangedByFlag(resumeCmd)
 
 	// JSON output flags

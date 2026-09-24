@@ -221,8 +221,8 @@
     {
       "role": "orchestrator",
       "variant": "wake PLANNING_COMPLETE",
-      "before_bytes": 18830,
-      "after_bytes": 18830,
+      "before_bytes": 19047,
+      "after_bytes": 19047,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
