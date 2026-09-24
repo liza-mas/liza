@@ -170,16 +170,24 @@ func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
 	return state, nil
 }
 
-// patientReadLockTimeout bounds the lock wait of ReadContextPatient.
+// patientReadLockTimeout bounds the lock wait of Patient instances, including
+// ReadContextPatient.
 var patientReadLockTimeout = 60 * time.Second
 
-// ReadContextPatient is ReadContext with a longer lock wait, for supervisor
-// reads whose ordinary timeout would exit the supervisor while writers merely
-// saturate the lock. It keeps polling for the whole wait, remains an exclusive
-// read, and aborts when ctx is canceled. Once the wait elapses it returns the
-// ordinary lock-timeout error. These reads are absent from lock metrics.
+// Patient returns an independent instance whose lock acquisition keeps polling
+// for the patient wait instead of the ordinary timeout. It is for supervisor
+// reads and writes that would otherwise fail while writers merely saturate the
+// lock. The wait bounds acquisition only, not the work done under the lock.
+// Once it elapses, operations return the ordinary lock-timeout error. Patient
+// operations are absent from lock metrics.
+func (bb *Blackboard) Patient() *Blackboard {
+	return bb.WithLockTimeout(patientReadLockTimeout)
+}
+
+// ReadContextPatient is ReadContext with the Patient lock wait. It remains an
+// exclusive read and aborts when ctx is canceled.
 func (bb *Blackboard) ReadContextPatient(ctx context.Context) (*models.State, error) {
-	return bb.WithLockTimeout(patientReadLockTimeout).ReadContext(ctx)
+	return bb.Patient().ReadContext(ctx)
 }
 
 // ReadSnapshot reads one complete published state without acquiring the state

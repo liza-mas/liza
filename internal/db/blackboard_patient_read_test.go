@@ -1,8 +1,10 @@
 package db_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -69,5 +71,39 @@ func TestReadContextPatientReturnsLockTimeoutOnceWaitElapses(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed < 300*time.Millisecond {
 		t.Fatalf("patient read gave up after %v, before its 300ms wait", elapsed)
+	}
+}
+
+// Not parallel: it shortens the package-wide patient wait.
+func TestPatientModifyReturnsLockTimeoutOnceWaitElapses(t *testing.T) {
+	t.Cleanup(db.SetPatientReadLockTimeoutForTest(300 * time.Millisecond))
+	bb, path := newPatientReadFixture(t)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.HoldFileLock(t, path)
+
+	start := time.Now()
+	called := false
+	err = bb.Patient().Modify(func(*models.State) error {
+		called = true
+		return nil
+	})
+	if !filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
+		t.Fatalf("patient modify after its wait elapsed: err=%v, want lock timeout", err)
+	}
+	if elapsed := time.Since(start); elapsed < 300*time.Millisecond {
+		t.Fatalf("patient modify gave up after %v, before its 300ms wait", elapsed)
+	}
+	if called {
+		t.Fatal("patient modify ran its callback without the lock")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("patient modify changed state after a lock timeout")
 	}
 }

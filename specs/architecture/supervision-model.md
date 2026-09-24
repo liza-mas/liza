@@ -40,7 +40,7 @@ This continues the principle from [ADR-0006](ADR/0006-supervisor-assigns-work.md
 | Action | When | Why Supervisor-Only |
 |--------|------|---------------------|
 | Agent registration | Startup | Identity + collision detection before agent exists |
-| Agent unregistration | Exit (deferred) | Cleanup must happen even on crash |
+| Agent unregistration | Exit (deferred) | Cleanup must happen even on crash. Claim release and row removal wait up to the patient lock-acquisition budget (60s), because the exit is often a lock timeout; an exit that skips the deferral (SIGKILL, OOM) or a longer lock queue leaves the claim until lease expiry |
 | Heartbeat | Background goroutine | Agent can't maintain its own liveness signal |
 | Post-exit reset to IDLE | After CLI exits | Agent is gone — can't update own status |
 | Orchestrator status setup | Before orchestrator launch | Sets WORKING atomically before agent sees blackboard |

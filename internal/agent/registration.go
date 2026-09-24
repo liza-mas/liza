@@ -212,7 +212,10 @@ func AutoAssignAgentID(bb *db.Blackboard, role string, maxRetries int, tryFn fun
 
 // unregisterAgent releases any task claim held by the agent, then removes
 // the agent from state. Both operations happen in a single atomic modify
-// so that an interrupt between them cannot leave a stuck task.
+// so that an interrupt between them cannot leave a stuck task. The modify
+// uses the patient lock wait: a supervisor usually exits because an ordinary
+// wait timed out, and failing here too would strand its claim until the
+// lease expires.
 func unregisterAgent(bb *db.Blackboard, authority models.AgentAuthority, projectRoot string) error {
 	now := time.Now().UTC()
 	agentID := authority.ID
@@ -220,7 +223,7 @@ func unregisterAgent(bb *db.Blackboard, authority models.AgentAuthority, project
 	// Load pipeline config outside the lock to avoid disk I/O under bb.Modify
 	pipelineTransitions, resolver := loadPipelineForRelease(projectRoot)
 
-	err := ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
+	err := ops.ModifyWithAgentAuthority(bb.Patient(), authority, func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
 		if !exists {
 			return nil
