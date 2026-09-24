@@ -59,8 +59,8 @@
     {
       "role": "code-planner",
       "variant": "code-planning-pair",
-      "before_bytes": 293527,
-      "after_bytes": 288751,
+      "before_bytes": 294058,
+      "after_bytes": 289282,
       "delta_bytes": -4776,
       "reference_before_bytes": 265724,
       "reference_after_bytes": 260948
@@ -68,8 +68,8 @@
     {
       "role": "code-plan-reviewer",
       "variant": "code-planning-pair",
-      "before_bytes": 289364,
-      "after_bytes": 284588,
+      "before_bytes": 290278,
+      "after_bytes": 285502,
       "delta_bytes": -4776,
       "reference_before_bytes": 265741,
       "reference_after_bytes": 260965
@@ -77,8 +77,8 @@
     {
       "role": "coder",
       "variant": "coding-pair",
-      "before_bytes": 289154,
-      "after_bytes": 284378,
+      "before_bytes": 289445,
+      "after_bytes": 284669,
       "delta_bytes": -4776,
       "reference_before_bytes": 265932,
       "reference_after_bytes": 261156

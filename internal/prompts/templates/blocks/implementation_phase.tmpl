@@ -34,7 +34,7 @@ Read the epic at {{.EpicRef}} for requirement context and user stories at specs/
    Tests must be discoverable via standard runners (e.g. pytest, go test) — not just runnable when explicitly named.
 4. Dependency bootstrap exception: if validation/build/test commands fail because declared project dependencies are not installed in this worktree, you may run only an existing project-scoped bootstrap command to restore them. First query `{{binaryName}} get config.post_worktree_cmd --json`; if configured, run that command from {{.Worktree}}. If absent, use only the repo's existing lockfile-preserving install workflow. This is pre-authorized for validation only: do not edit dependency manifests or lockfiles, install global/system tooling, or add/upgrade/remove dependencies unless the task scope explicitly requires it. If bootstrap needs those changes, mark BLOCKED with the failing command and stderr.
 5. TDD waiver: For non-behavioral doc-only, config-only, spec-only, or cosmetic changes (no code behavior change), set tdd_not_required in the checkpoint with justification. If writing a later checkpoint before submission, repeat the waiver if it still applies.
-6. Without that waiver, coding tasks are rejected when the submission diff contains no recognized test file.
+6. Without that waiver, coding tasks are rejected when the submission diff contains no recognized test file ({{testFilePatterns}}).
 7. Mechanical test updates: For structural refactoring (file split/move), updating test
    file-path references or imports to reflect the new file layout is in-scope and does
    not trigger the TDD requirement in item 3. The test's invariant (what it validates)
@@ -148,6 +148,9 @@ planning against a hypothesis.
       do not copy it into the orchestration envelope merely for textual identity.
       Verify every validation[] command is semantically and referentially consistent with the plan,
       satisfiable for the task scope, and agent-executable under the validation command-shape rule.
+      A hook-runner command's paths must match each intended hook's effective file filters unless that
+      hook always runs (e.g. `always_run: true`), and a
+      behavior-changing child's tests must match a submission test-file pattern ({{testFilePatterns}}).
       Verify depends_on indices match the dependency order described in the plan.
    f. Shared-file audit: for each file appearing in more than one task's scope,
       verify a depends_on chain exists between those tasks. Missing dependency on

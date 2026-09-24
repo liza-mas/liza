@@ -30,6 +30,13 @@ var testFileMatcherPatterns = []string{
 	"tests/*.rs",
 }
 
+// TestFileMatcherPatterns returns a copy of the display patterns for the TDD
+// admission gate, as reported in diagnostics and rendered into prompts. They
+// describe isTestFile; they are not root-relative globs.
+func TestFileMatcherPatterns() []string {
+	return append([]string(nil), testFileMatcherPatterns...)
+}
+
 // TestFileDiagnostics records the exact range and matcher results used by the
 // TDD gate. It is safe to expose in JSON errors.
 type TestFileDiagnostics struct {
@@ -141,7 +148,7 @@ func AnalyzeTestFiles(g *git.Git, taskID, baseCommit, headRef string) (*TestFile
 		HeadRef:                headRef,
 		ChangedFilesConsidered: files,
 		TestFilesMatched:       matched,
-		MatcherPatterns:        append([]string(nil), testFileMatcherPatterns...),
+		MatcherPatterns:        TestFileMatcherPatterns(),
 	}, nil
 }
 

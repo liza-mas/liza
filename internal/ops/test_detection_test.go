@@ -103,6 +103,10 @@ func TestIsTestFile(t *testing.T) {
 		{"Rust nested tests/ dir", "crate/tests/foo.rs", true},
 		{"Rust non-test", "foo.rs", false},
 
+		// D68 incident: a pytest module without a recognized name is not admitted.
+		{"Python module without test naming", "tests/validation/dev239_decision_load.py", false},
+		{"Python incident module renamed", "tests/validation/test_dev239_decision_load.py", true},
+
 		// Edge cases
 		{"Empty string", "", false},
 		{"No extension", "test_file", false},
@@ -116,6 +120,57 @@ func TestIsTestFile(t *testing.T) {
 				t.Errorf("isTestFile(%q) = %v, want %v", tt.file, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestTestFileMatcherPatterns_SamplesAdmitted pins every displayed pattern to
+// a nested sample isTestFile accepts. It catches a displayed pattern the
+// matcher does not honor; a matcher branch missing from the list is not
+// detectable here.
+func TestTestFileMatcherPatterns_SamplesAdmitted(t *testing.T) {
+	t.Parallel()
+
+	samples := map[string]string{
+		"*_test.go":                           "pkg/foo_test.go",
+		"*_test.py":                           "pkg/foo_test.py",
+		"test_*.py":                           "tests/validation/test_foo.py",
+		"*.test.{js,ts,jsx,tsx,mjs,cjs}":      "src/foo.test.tsx",
+		"*.spec.{js,ts,jsx,tsx,mjs,cjs}":      "src/foo.spec.mjs",
+		"__tests__/*.{js,ts,jsx,tsx,mjs,cjs}": "src/__tests__/nested/foo.ts",
+		"test_*.sh":                           "scripts/test_foo.sh",
+		"*_test.sh":                           "scripts/foo_test.sh",
+		"*_test.rb":                           "lib/foo_test.rb",
+		"*_spec.rb":                           "spec/foo_spec.rb",
+		"*Test.java":                          "src/FooTest.java",
+		"Test*.java":                          "src/TestFoo.java",
+		"*Tests.java":                         "src/FooTests.java",
+		"*Test.kt":                            "src/FooTest.kt",
+		"Test*.kt":                            "src/TestFoo.kt",
+		"*Tests.kt":                           "src/FooTests.kt",
+		"*Test.cs":                            "tests/FooTest.cs",
+		"*Tests.cs":                           "tests/FooTests.cs",
+		"*_test.rs":                           "src/foo_test.rs",
+		"tests/*.rs":                          "crate/tests/nested/check.rs",
+	}
+
+	patterns := TestFileMatcherPatterns()
+	if len(patterns) != len(samples) {
+		t.Fatalf("patterns = %v, want one sample per pattern (%d samples)", patterns, len(samples))
+	}
+	for _, p := range patterns {
+		sample, ok := samples[p]
+		if !ok {
+			t.Errorf("pattern %q has no admitted sample", p)
+			continue
+		}
+		if !isTestFile(sample) {
+			t.Errorf("pattern %q: isTestFile(%q) = false, want true", p, sample)
+		}
+	}
+
+	patterns[0] = "mutated"
+	if got := TestFileMatcherPatterns()[0]; got == "mutated" {
+		t.Error("TestFileMatcherPatterns returned shared backing storage")
 	}
 }
 

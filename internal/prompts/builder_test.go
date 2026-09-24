@@ -2404,6 +2404,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 	now := time.Now().UTC()
 	projectRoot := setupPipelineConfig(t)
 	resolver := testPipelineResolver(t)
+	// Complete TDD admission list, as submit-for-review reports it.
+	testFilePatterns := strings.Join(ops.TestFileMatcherPatterns(), ", ")
 
 	makeDoerTask := func(id string) *models.Task {
 		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusImplementing, now)
@@ -2469,6 +2471,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"CODER STATE TRANSITIONS:",
 			"IMPLEMENTING_CODE",
 			"CODER TOOLS:",
+			"contains no recognized test file (" + testFilePatterns + ")",
 			brand.BinaryName + " submit-for-review",
 			brand.BinaryName + " handoff",
 			brand.BinaryName + " mark-blocked",
@@ -2666,6 +2669,8 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"Update only planning artifacts required by DONE WHEN",
 			"validation (optional canonical commands",
 			"Verify every validation[] command is semantically and referentially consistent with the plan",
+			"A hook-runner command's paths must match each intended hook's effective file filters unless that\n      hook always runs (e.g. `always_run: true`)",
+			"tests must match a submission test-file pattern (" + testFilePatterns + ")",
 			"Automatic child dependency inheritance applies only when an upstream dependency executed the same transition name",
 			"For ordering across different transition names, set output[].task_depends_on to existing concrete task IDs",
 			"If the required concrete dependency task does not exist, mark the planning task BLOCKED",
@@ -2723,6 +2728,11 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"any committed task-output JSON appears under " + paths.ProjectDirName() + "/agent-outputs/",
 			"validation satisfiable",
 			"durable plan/task text",
+			"match its paths against each intended hook's effective filters",
+			"unless it always runs (e.g. `always_run: true`), a hook matching none reports Skipped; an executing hook must still prove its check ran",
+			"| Test-file admission |",
+			"submission test-file patterns (" + testFilePatterns + ";",
+			"submit-for-review refuses its diff",
 			"Plan claims sibling child-task ordering without output[].depends_on sibling indexes",
 			"claims child ordering inherited across planning-task dependencies when the dependency did not execute the same transition name",
 			"output[].task_depends_on does not name existing concrete task IDs",

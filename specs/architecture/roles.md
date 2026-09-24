@@ -175,7 +175,7 @@ Tasks missing any gate remain DRAFT until completed. This enables:
 |-------|--------|---------|
 | `spec_ref` | Path to spec file relative to project root, optionally with `#anchor` | `specs/api.md#pagination` |
 | `done_when` | Falsifiable statement describing observable outcome. Must be something that could be proven wrong. | `"GET /users returns 200 with JSON array containing user objects"` |
-| `validation` | Optional ordered list of single-line canonical validation commands. Commands must be satisfiable for task scope, prove the intended check ran, not only exit 0, and be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. | `["make test", "pre-commit run --files docs/USAGE.md"]` |
+| `validation` | Optional ordered list of single-line canonical validation commands. Commands must be satisfiable for task scope, prove the intended check ran, not only exit 0 (a hook-runner command's paths must match each intended hook's effective file filters unless that hook always runs, e.g. `always_run: true`), and be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. | `["make test", "pre-commit run --files docs/USAGE.md"]` |
 
 **`spec_ref` Validation:**
 - Required: Field must be present (enforced by `liza validate`)
