@@ -393,7 +393,7 @@ Avoid running multiple `§BRAND_BINARY_NAME§ tui --headless` processes for the 
 
 **Cause:** The goal is in progress and the system is running, but for 60 seconds no agent whose pipeline role has type `orchestrator` has held effective ownership (a fresh lease with a heartbeat). This typically follows an orchestrator supervisor that exited and unregistered, for example after a provider-quota termination or a state-lock timeout. Until an orchestrator returns, nothing plans, assesses blocked tasks, or handles checkpoints, and the run stalls.
 
-**Fix:** Start an orchestrator with `§BRAND_BINARY_NAME§ agent orchestrator`, using the role name from the alert if your pipeline renames it. Automatic pool repair only re-staffs doer and reviewer roles with claimable work; it does not restart the orchestrator.
+**Fix:** When `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL` leaves auto-repair enabled (the default), the same watcher starts an orchestrator on this tick and retries every 60 seconds; the alert's last clause says which setting applies. A spawn refused while a provider quota or outage block is active raises `AUTO REPAIR FAILED` and is retried after the block lifts; after 3 started orchestrators fail to register, auto-repair stops and says so. Otherwise, or if none returns, start one with `§BRAND_BINARY_NAME§ agent orchestrator`, using the role name from the alert if your pipeline renames it.
 
 Each running watcher writes this alert once per absence episode; restarting a watcher during an ongoing absence can write it again. If the orchestrator's process died but its lease is still fresh, this alert stays silent until the lease expires, because registration refuses a replacement until then; `REGISTERED AGENT PROCESS` reports that case.
 

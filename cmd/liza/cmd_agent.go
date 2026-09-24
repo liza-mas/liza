@@ -437,6 +437,8 @@ By default, detects roles with immediately claimable tasks but no live usable
 agent capacity, then spawns one agent process per missing role. For reviewer work,
 capacity requires a live usable agent that can pass the existing claim filters for
 the task, including prior-approval and configured provider-diversity eligibility.
+While the goal is IN_PROGRESS and the system is RUNNING, a missing orchestrator
+(no orchestrator-type agent holding a fresh lease) is repaired the same way.
 The --missing flag is kept as an explicit spelling of the default behavior.
 
 Use --cli to choose the backend for newly spawned agents. When omitted, the CLI

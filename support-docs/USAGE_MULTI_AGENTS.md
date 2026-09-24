@@ -172,8 +172,9 @@ Operational reference content (blackboard fields, anomaly types, etc.) is inline
 
 **2. Start Agents**
 
-Start by spawning an orchestrator—the only role that auto-repair does not
-spawn. Press `s` in the TUI and select `orchestrator`, run
+Start by spawning an orchestrator. Auto-repair also starts one once a
+running goal has had none for 60 seconds, but starting it yourself avoids
+the wait. Press `s` in the TUI and select `orchestrator`, run
 `§BRAND_BINARY_NAME§ agent orchestrator` in another terminal, or use one of
 the launcher presets below.
 
@@ -236,7 +237,7 @@ before spawning agents. Init installs §BRAND_NAME_TITLE§'s managed
 for shell and file operations instead of relying on stricter built-in tool
 schemas.
 
-The interactive TUI and headless watch automatically repair claimable work that is stuck because no live usable agent is registered for the required role. For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. Successful auto-repair spawns are written to `log.yaml` as informational events and do not raise alerts; failed spawns raise `AUTO REPAIR FAILED`. Agents marked degraded for the current process epoch do not count as usable role capacity, and their health remains visible after unregister as degraded capacity context. Disable auto-repair with `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0` (or `false`/`no`). To repair manually, run `§BRAND_BINARY_NAME§ repair-agent-pool`. Add `--cli <name>` to choose the backend for newly spawned agents, or `--dry-run` to print the exact spawn commands without launching them.
+The interactive TUI and headless watch automatically repair claimable work that is stuck because no live usable agent is registered for the required role. For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. While the goal is IN_PROGRESS and the system is RUNNING, auto-repair also restores a missing orchestrator (none holding a fresh lease for 60 seconds), whether it crashed, hit a provider quota, or exited idle. Successful auto-repair spawns are written to `log.yaml` as informational events and do not raise alerts; failed spawns raise `AUTO REPAIR FAILED`. Agents marked degraded for the current process epoch do not count as usable role capacity, and their health remains visible after unregister as degraded capacity context. Disable auto-repair with `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0` (or `false`/`no`). To repair manually, run `§BRAND_BINARY_NAME§ repair-agent-pool`. Add `--cli <name>` to choose the backend for newly spawned agents, or `--dry-run` to print the exact spawn commands without launching them.
 
 Avoid running multiple headless watchers for the same project. Auto-repair backoff is per watcher process. §BRAND_NAME_TITLE§'s agent registration and `max-instances` guards prevent invalid ownership, but two watchers can briefly observe the same missing-role gap before a newly spawned agent registers.
 
@@ -627,7 +628,7 @@ the appropriate supervisor-launched agent session. See
 | **Agents & Monitoring** |                                                                                                                      |
 | `§BRAND_BINARY_NAME§ agent <role> [--agent-id <id>]` | Agent supervisor (start, restart, backoff loop; ID auto-assigned if omitted)                                         |
 | `§BRAND_BINARY_NAME§ launch wezterm mas --preset <name>` | Launch `§BRAND_BINARY_NAME§ tui` plus a MAS role preset in one WezTerm window                                                     |
-| `§BRAND_BINARY_NAME§ repair-agent-pool [--cli <name>] [--dry-run]` | Spawn one agent for each claimable-work role that has no live usable agent                                         |
+| `§BRAND_BINARY_NAME§ repair-agent-pool [--cli <name>] [--dry-run]` | Spawn one agent for each claimable-work role that has no live usable agent, and a missing orchestrator             |
 | `§BRAND_BINARY_NAME§ tui` | Live TUI: spawn agents, monitor state, manage system                                                                 |
 | `§BRAND_BINARY_NAME§ status` | Show system and task status at a glance                                                                              |
 | `§BRAND_BINARY_NAME§ mark-agent-degraded <agent-id>` / `§BRAND_BINARY_NAME§ clear-agent-degraded <agent-id>` | Record or clear role-capacity health for an agent epoch                                                            |

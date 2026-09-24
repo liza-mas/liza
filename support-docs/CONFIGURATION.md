@@ -1230,7 +1230,7 @@ Preview the resolved command without launching a provider:
 §BRAND_BINARY_NAME§ agent coder --explain-launch
 ```
 
-Headless watch automatically runs the repair-agent-pool behavior when a task is immediately claimable but has no live usable agent capacity for the required role. For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. This is enabled by default. Set `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0`, `false`, or `no` to disable it. Unset or empty values enable it; other invalid non-empty values also leave it enabled and emit a warning.
+Headless watch automatically runs the repair-agent-pool behavior when a task is immediately claimable but has no live usable agent capacity for the required role. For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. It also starts an orchestrator when the goal is IN_PROGRESS, the system is RUNNING, and no orchestrator has held a fresh lease for 60 seconds. This is enabled by default. Set `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0`, `false`, or `no` to disable it. Unset or empty values enable it; other invalid non-empty values also leave it enabled and emit a warning.
 
 | CLI | Notes |
 |-----|-------|

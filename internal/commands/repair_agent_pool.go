@@ -31,6 +31,8 @@ type MissingRoleWork struct {
 	TaskIDs   []string `json:"task_ids"`
 	TaskCount int      `json:"task_count"`
 	CLI       string   `json:"cli,omitempty"`
+	// Reason explains demand that does not come from claimable tasks.
+	Reason string `json:"reason,omitempty"`
 }
 
 type SpawnedAgent struct {
@@ -140,7 +142,9 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 		return nil, fmt.Errorf("invalid CLI: %s (must be %s)", opts.CLI, strings.Join(availableCLIs, ", "))
 	}
 
-	missing := filterMissingRoleWork(FindMissingRolesWithClaimableWork(state, pr), opts.Roles)
+	missing := FindMissingRolesWithClaimableWork(state, pr)
+	missing = append(missing, findMissingOrchestrator(state, pr, time.Now().UTC())...)
+	missing = filterMissingRoleWork(missing, opts.Roles)
 	result := &RepairAgentPoolResult{
 		CLI:        opts.CLI,
 		DryRun:     opts.DryRun,
@@ -334,6 +338,33 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 	return missing
 }
 
+// findMissingOrchestrator reports a running goal with no orchestrator holding
+// effective ownership. It applies no grace: auto-repair gates it with
+// orchestratorRepairDue, and a manual repair is deliberate. It re-evaluates
+// the state RepairAgentPool just read, which narrows the window in which a
+// watcher's older snapshot could start a second orchestrator; registration's
+// singleton check remains the cross-process guarantee.
+func findMissingOrchestrator(state *models.State, pr models.PipelineResolver, now time.Time) []MissingRoleWork {
+	if state == nil || pr == nil {
+		return nil
+	}
+	presence := evaluateOrchestratorPresence(state, pr, now)
+	if !presence.Required || presence.Present {
+		return nil
+	}
+	return []MissingRoleWork{orchestratorRoleWork(presence)}
+}
+
+// orchestratorRoleWork names the first orchestrator-type role; singleton
+// ownership is by type, so one spawn restores the capacity.
+func orchestratorRoleWork(presence orchestratorPresence) MissingRoleWork {
+	return MissingRoleWork{
+		Role:    presence.Roles[0],
+		TaskIDs: []string{},
+		Reason:  "no live orchestrator while goal is IN_PROGRESS",
+	}
+}
+
 func findValidationAgentCapacity(state *models.State, pr models.PipelineResolver, roles []string) []ValidationAgentCapacity {
 	var result []ValidationAgentCapacity
 	now := time.Now().UTC()
@@ -458,8 +489,16 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 		return
 	}
 
-	fmt.Println("Missing roles with claimable work:")
+	printedHeading := false
 	for _, roleWork := range result.Missing {
+		if roleWork.Reason != "" {
+			fmt.Printf("Missing orchestrator: %s (%s)\n", roleWork.Role, roleWork.Reason)
+			continue
+		}
+		if !printedHeading {
+			fmt.Println("Missing roles with claimable work:")
+			printedHeading = true
+		}
 		fmt.Printf("  %s: %d task(s) (%s)\n", roleWork.Role, roleWork.TaskCount, strings.Join(roleWork.TaskIDs, ", "))
 	}
 

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -51,14 +52,32 @@ func withFakeRepairSpawnerByRole(t *testing.T, calls *[]spawnedAgentCall, errFor
 	})
 }
 
+// writeRepairAgentPoolState writes state with an orchestrator holding a fresh
+// lease unless the fixture declares one. These fixtures model claimable-work
+// repair in a running pool; a running goal without an orchestrator is its own
+// repair demand, covered by the findMissingOrchestrator tests.
 func writeRepairAgentPoolState(t *testing.T, state *models.State) string {
 	t.Helper()
 
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
-	testhelpers.WriteInitialState(t, statePath, state)
+	written := *state
+	written.Agents = withLiveOrchestrator(state.Agents, time.Now().UTC())
+	testhelpers.WriteInitialState(t, statePath, &written)
 	return tmpDir
+}
+
+func withLiveOrchestrator(agents map[string]models.Agent, now time.Time) map[string]models.Agent {
+	for _, agent := range agents {
+		if agent.Role == models.RoleOrchestrator {
+			return agents
+		}
+	}
+	withOrchestrator := make(map[string]models.Agent, len(agents)+1)
+	maps.Copy(withOrchestrator, agents)
+	withOrchestrator["orchestrator-1"] = occupiedAgent(models.RoleOrchestrator, now, 987654321)
+	return withOrchestrator
 }
 
 type repairReviewerPolicyResolver struct {
