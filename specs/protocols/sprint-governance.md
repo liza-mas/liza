@@ -194,7 +194,8 @@ When planning tasks (epic-planner, code-planner) are merged, the orchestrator ch
 - Manual checkpoint (trigger empty) → gate does not fire
 - Sprint-complete checkpoint (trigger `SPRINT_COMPLETE`) → gate does not fire
 - Planning checkpoint not yet resumed (status `CHECKPOINT`) → gate does not fire; doer/reviewer role loops may still process existing work
-- Planning checkpoint resumed (trigger + `IN_PROGRESS`) → gate fires → transitions execute
+- Planning checkpoint resumed (trigger + `IN_PROGRESS`) → gate fires → `sprint.timeline.transitions_attempted_at` is stamped, then transitions execute
+- An actionable BLOCKED task whose dependency or awaited task is a planner with unconsumed output wakes Wake 1 (`PLANNING_COMPLETE`) instead of `BLOCKED_TASKS`, which may not checkpoint. The preference holds only while that planner merged after `transitions_attempted_at`: once a pass fails to consume it, blocked triage regains its normal priority. Checkpoints that attempt no transition do not count.
 - After transitions consumed → `countMergedPlanningTasksWithOutput` returns 0 → idempotent
 - Cycle-blocked planning tasks are excluded from orchestrator wake detection and planning-complete rendering, but remain visible for carry-forward, replan, and checkpoint auto-trigger
 

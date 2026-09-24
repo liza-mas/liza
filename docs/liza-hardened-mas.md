@@ -460,7 +460,9 @@ The orchestrator primarily waits on fsnotify change events, with polling fallbac
 when the watcher fails or errors. It wakes on specific conditions, in priority order:
 
 1. **INITIAL_PLANNING**: no tasks exist yet
-2. **BLOCKED_TASKS**: actionable blocked tasks awaiting escalation
+2. **BLOCKED_TASKS**: actionable blocked tasks awaiting escalation. When one of them waits on a
+   planner's untransitioned output, PLANNING_COMPLETE takes this rank instead (at most one
+   transition attempt per planner per sprint), since a BLOCKED_TASKS turn cannot checkpoint
 3. **HYPOTHESIS_EXHAUSTED**: 2+ coders failed the same task
 4. **IMMEDIATE_DISCOVERY**: new discoveries not yet converted to tasks
 5. **HUMAN_NOTE**: operator notes no completed turn has rendered or consumed
@@ -470,6 +472,8 @@ when the watcher fails or errors. It wakes on specific conditions, in priority o
 7. **SPRINT_COMPLETE**: all planned tasks terminal (no unconsumed planning output remains)
 
 Re-wake loop prevention: if sprint is already CHECKPOINT or COMPLETED, SPRINT_COMPLETE is suppressed.
+Two consecutive BLOCKED_TASKS turns that leave the blocker state unchanged raise one
+`BLOCKED_TASKS UNRESOLVED` alert.
 
 ### Crash Recovery
 

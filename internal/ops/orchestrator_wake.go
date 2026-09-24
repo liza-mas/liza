@@ -1,6 +1,9 @@
 package ops
 
 import (
+	"slices"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -41,25 +44,11 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 		if !valid {
 			return true
 		}
-		candidate := AssessmentFingerprintCandidate{
-			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest,
-		}
-		if task.BlockedReason != nil {
-			candidate.Reason = *task.BlockedReason
-		}
+		candidate := currentBlockerCandidate(state, task, lastAssessment)
 		// Disposition belongs to the same assessment that carries the digest;
 		// the blocker triple belongs to the task's current canonical state.
 		if lastAssessment.Note != nil {
 			candidate.Note = *lastAssessment.Note
-		}
-		// A wait that now leads back to this task would suppress its wakes
-		// forever. Dropping the set changes the digest, so the task wakes; the
-		// wake does not say why, but recording the same set again is rejected
-		// with the cycle. A malformed set also wakes the task.
-		if awaited, ok := awaitedTasksFrom(lastAssessment); ok {
-			if _, deadlocked := awaitLeadsBackTo(state, task.ID, awaited); !deadlocked {
-				candidate.Awaited = awaited
-			}
 		}
 		return BuildAssessmentFingerprint(state, task, candidate) != recorded
 	}
@@ -92,6 +81,99 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 	}
 
 	return false
+}
+
+// currentBlockerCandidate is a BLOCKED task's current blocker triple plus the
+// awaited set of its latest assessment, without the assessment's own note.
+func currentBlockerCandidate(state *models.State, task *models.Task, lastAssessment *models.TaskHistoryEntry) AssessmentFingerprintCandidate {
+	candidate := AssessmentFingerprintCandidate{
+		Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest,
+	}
+	if task.BlockedReason != nil {
+		candidate.Reason = *task.BlockedReason
+	}
+	// A wait that now leads back to this task would suppress its wakes
+	// forever. Dropping the set changes the digest, so the task wakes; the
+	// wake does not say why, but recording the same set again is rejected
+	// with the cycle. A malformed set also wakes the task.
+	if awaited, ok := awaitedTasksFrom(lastAssessment); ok {
+		if _, deadlocked := awaitLeadsBackTo(state, task.ID, awaited); !deadlocked {
+			candidate.Awaited = awaited
+		}
+	}
+	return candidate
+}
+
+// BlockedTasksAwaitPlanningOutput reports whether an actionable BLOCKED task
+// waits on planning output that only a PLANNING_COMPLETE checkpoint can
+// materialize: a dependency or awaited task (either followed through
+// supersession) that is a planned, PLANNING_COMPLETE-eligible planner merged after the last
+// transition attempt. A BLOCKED_TASKS turn cannot checkpoint, so such a wake
+// is wasted. The attempt bound keeps a planner whose transition already failed
+// from outranking blocked triage again in this sprint.
+func BlockedTasksAwaitPlanningOutput(state *models.State, planningPairs map[string]bool) bool {
+	if state.Sprint.Status == models.SprintStatusCheckpoint || state.Sprint.Status == models.SprintStatusCompleted {
+		return false
+	}
+	resolver := models.NewDependencyResolver(state)
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.Status != models.TaskStatusBlocked || !isTaskActionableSinceAssessment(task, state) {
+			continue
+		}
+		waitsOn := task.DependsOn
+		if awaited, ok := awaitedTasksFrom(lastOrchestratorAssessment(task)); ok {
+			waitsOn = append(slices.Clone(waitsOn), awaited...)
+		}
+		// Both lists follow supersession to the replacement that will merge.
+		for _, id := range waitsOn {
+			for _, candidate := range append([]string{id}, resolver.Resolve(id).Path...) {
+				if awaitsPlanningTransition(state, candidate, planningPairs) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func awaitsPlanningTransition(state *models.State, plannerID string, planningPairs map[string]bool) bool {
+	if !slices.Contains(state.Sprint.Scope.Planned, plannerID) {
+		return false
+	}
+	planner := state.FindTask(plannerID)
+	if !IsPlanningCompleteEligible(planner, planningPairs, state) {
+		return false
+	}
+	attempted := state.Sprint.Timeline.TransitionsAttemptedAt
+	if attempted == nil {
+		return true
+	}
+	for i := len(planner.History) - 1; i >= 0; i-- {
+		if planner.History[i].Event == models.TaskEventMerged {
+			return planner.History[i].Time.After(*attempted)
+		}
+	}
+	return false
+}
+
+// BlockedMaterialIdentity identifies the blocker state of every BLOCKED task:
+// its current blocker triple, awaited set, dependency and descendant outcomes,
+// structure and targeted human notes, through the assessment fingerprint. The
+// orchestrator's own assessment note is excluded, so a turn that only
+// rephrases a hold leaves the identity unchanged.
+func BlockedMaterialIdentity(state *models.State) string {
+	var lines []string
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.Status != models.TaskStatusBlocked {
+			continue
+		}
+		candidate := currentBlockerCandidate(state, task, lastOrchestratorAssessment(task))
+		lines = append(lines, task.ID+"="+BuildAssessmentFingerprint(state, task, candidate))
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
 }
 
 // lastOrchestratorAssessment returns the task's most recent

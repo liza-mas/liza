@@ -1266,6 +1266,11 @@ func TestRenderOrchestratorDashboard_AssessedTasksAllowPlanningHandoff(t *testin
 					t.Fatal(err)
 				}
 				wantTrigger := kind.trigger
+				// An actionable blocker waiting on the merged planner prefers the
+				// handoff it waits for (D45); exhausted tasks keep their rank.
+				if kind.status == models.TaskStatusBlocked {
+					wantTrigger = "PLANNING_COMPLETE"
+				}
 				if activity == "assessed" || activity == "assessment only" {
 					wantTrigger = "PLANNING_COMPLETE"
 					if !strings.Contains(instruction, "Create checkpoint for human review") ||

@@ -276,7 +276,12 @@ func renderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	if selected != nil {
 		wakeTrigger, integrationProjection = selected.Trigger, selected.Integration
 	} else {
-		wakeTrigger = determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, len(unseenNotes), sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
+		if len(planningTasks) > 0 && ops.BlockedTasksAwaitPlanningOutput(state, planningPairs) {
+			// Same exception as the live selector: it takes BLOCKED_TASKS' rank.
+			wakeTrigger = "PLANNING_COMPLETE"
+		} else {
+			wakeTrigger = determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, len(unseenNotes), sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
+		}
 		if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
 			decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
 			integrationProjection = ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)

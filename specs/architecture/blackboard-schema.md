@@ -1034,6 +1034,7 @@ sprint:
     started: 2025-01-17T09:00:00Z
     deadline: 2025-01-19T18:00:00Z
     checkpoint_at: null
+    transitions_attempted_at: null  # Start of the last planning-transition pass after a resumed transition checkpoint; bounds the blocked-wake planning preference
     ended: null
   status: IN_PROGRESS  # Sprint status: IN_PROGRESS, CHECKPOINT, COMPLETED, ABORTED (differs from goal status)
   checkpoint_trigger: ""  # Why last checkpoint was created: PLANNING_COMPLETE, MANY_TO_ONE_READY, SPRINT_COMPLETE, or empty (manual/other)

@@ -22,6 +22,11 @@ type orchestratorStrategy struct {
 	executionTimeout time.Duration           // from YAML; 0 = use type default
 	yamlPollSec      int                     // from YAML; 0 = use type default
 	yamlMaxWaitSec   int                     // from YAML; 0 = use type default
+
+	// Blocker material left by the last unresolved BLOCKED_TASKS turn, and the
+	// one already alerted; process memory, so a restart forgets them.
+	unresolvedBlocked string
+	alertedBlocked    string
 }
 
 var (
@@ -115,7 +120,14 @@ func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, con
 
 	planningReady := countMergedPlanningTasksWithOutput(state, detCtx.PlanningPairs) > 0
 	m2oReady := countReadyManyToOneCohorts(state, detCtx.ManyToOneTransitions) > 0
+	var planningAttemptedAt *time.Time
 	if planningReady || m2oReady {
+		// Stamped before the pass starts: a planner merged during it was not
+		// attempted, so it must stay eligible for the blocked-wake preference.
+		if planningReady {
+			now := time.Now().UTC()
+			planningAttemptedAt = &now
+		}
 		if err := handleAvailableTransitions(config.ProjectRoot); err != nil {
 			logger.Warn("Transition handler error", "error", err)
 		}
@@ -125,6 +137,9 @@ func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, con
 	// re-checkpoint. Transition errors are logged; retry is manual.
 	if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(s *models.State) error {
 		s.Sprint.CheckpointTrigger = ""
+		if planningAttemptedAt != nil {
+			s.Sprint.Timeline.TransitionsAttemptedAt = planningAttemptedAt
+		}
 		return nil
 	}); err != nil {
 		return false, fmt.Errorf("clear checkpoint trigger: %w", err)
@@ -283,7 +298,52 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 		}
 	}
 
+	if result.Trigger == WakeTriggerBlocked {
+		s.observeBlockedTurn(bb, config.ProjectRoot, stateBefore)
+	}
+
 	return nil
+}
+
+// observeBlockedTurn alerts once when consecutive BLOCKED_TASKS turns leave the
+// blocker material exactly as before: the wake carried no new blocker input, so
+// the orchestrator is looping. A hold whose inputs changed has a new identity.
+func (s *orchestratorStrategy) observeBlockedTurn(bb *db.Blackboard, projectRoot string, stateBefore *models.State) {
+	stateAfter, err := bb.ReadCached()
+	if err != nil {
+		GetLogger().Warn("Failed to read state for blocked-turn tracking", "error", err)
+		return
+	}
+	blocked := blockedTaskIDs(stateAfter)
+	identity := ""
+	if len(blocked) >= len(blockedTaskIDs(stateBefore)) {
+		identity = ops.BlockedMaterialIdentity(stateAfter)
+	}
+	if identity == "" {
+		s.unresolvedBlocked, s.alertedBlocked = "", ""
+		return
+	}
+	if identity == s.unresolvedBlocked && identity != s.alertedBlocked {
+		message := fmt.Sprintf("consecutive BLOCKED_TASKS turns ended with unchanged blocker state for %s; the wake carried no new blocker input — blocks may require human intervention",
+			strings.Join(blocked, ", "))
+		if err := LogAlert(projectRoot, "⚠️", "BLOCKED_TASKS UNRESOLVED", message); err != nil {
+			GetLogger().Warn("Failed to write blocked-turn alert", "error", err)
+		} else {
+			s.alertedBlocked = identity
+		}
+	}
+	s.unresolvedBlocked = identity
+}
+
+func blockedTaskIDs(state *models.State) []string {
+	var ids []string
+	for i := range state.Tasks {
+		if state.Tasks[i].Status == models.TaskStatusBlocked {
+			ids = append(ids, state.Tasks[i].ID)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // selfHealCheckpoint calls sprint_checkpoint directly when the orchestrator

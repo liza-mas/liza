@@ -1023,3 +1023,65 @@ func TestAllRolesHaveStrategy(t *testing.T) {
 		})
 	}
 }
+
+// resumedPlanningPreWork runs orchestrator PreWork on a resumed sprint with one
+// merged planner whose output is unconsumed, and returns the state afterwards.
+func resumedPlanningPreWork(t *testing.T, trigger string, output []models.OutputEntry) (*models.State, time.Time) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: "test-generation"}
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.CheckpointTrigger = trigger
+	state.Agents[authority.ID] = models.Agent{Role: "orchestrator", Generation: authority.Generation}
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
+	task.RolePair = "code-planning-pair"
+	task.Output = output
+	state.Sprint.Scope.Planned = []string{"task-1"}
+	state.Tasks = []models.Task{task}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	bb := db.New(statePath)
+	s, err := NewRoleStrategy("orchestrator", testResolver(t))
+	if err != nil {
+		t.Fatalf("NewRoleStrategy() error = %v", err)
+	}
+	started := time.Now().UTC()
+	if _, err := s.PreWork(context.Background(), bb, SupervisorConfig{AgentID: authority.ID, Authority: authority, ProjectRoot: tmpDir}); err != nil {
+		t.Fatalf("PreWork() error = %v", err)
+	}
+	after, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return after, started
+}
+
+// The fixture's transition does not execute (asserted below), so this is the
+// failed-attempt path: the attempt is still recorded,
+// which later hands the unconsumed output back to blocked triage.
+func TestOrchestratorPreWork_RecordsFailedPlanningAttempt(t *testing.T) {
+	after, started := resumedPlanningPreWork(t, "PLANNING_COMPLETE", []models.OutputEntry{{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"}})
+
+	if executed := after.FindTask("task-1").TransitionsExecuted; len(executed) != 0 {
+		t.Fatalf("precondition: fixture transition must not execute, got %v", executed)
+	}
+	attempted := after.Sprint.Timeline.TransitionsAttemptedAt
+	if attempted == nil || attempted.Before(started) {
+		t.Fatalf("transitions_attempted_at = %v, want a stamp taken during this PreWork (started %v)", attempted, started)
+	}
+	if after.Sprint.CheckpointTrigger != "" {
+		t.Fatalf("checkpoint trigger = %q, want cleared in the same write", after.Sprint.CheckpointTrigger)
+	}
+}
+
+func TestOrchestratorPreWork_NonTransitionResumeLeavesAttemptUnset(t *testing.T) {
+	for _, trigger := range []string{"", models.CheckpointTriggerSprintComplete} {
+		after, _ := resumedPlanningPreWork(t, trigger, []models.OutputEntry{{Desc: "implement X", DoneWhen: "tests pass", Scope: "pkg/x"}})
+		if got := after.Sprint.Timeline.TransitionsAttemptedAt; got != nil {
+			t.Fatalf("trigger %q: transitions_attempted_at = %v, want unset (nothing was attempted)", trigger, got)
+		}
+	}
+}

@@ -99,14 +99,15 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 //
 // Returns the highest-priority trigger and count of items for that trigger.
 // Priority order:
-// 1. No tasks (initial planning)
-// 2. Blocked tasks
-// 3. Hypothesis exhausted (2+ failed_by)
-// 4. Immediate discoveries (not yet converted to tasks)
-// 5. Operator notes not yet rendered in a completed turn
-// 6. Planning complete (merged planning tasks have output[])
-// 7. Many-to-one transition ready
-// 8. Sprint complete (all planned tasks terminal)
+//  1. No tasks (initial planning)
+//  2. Blocked tasks — or planning complete instead, when an actionable blocked
+//     task waits on a planner's untransitioned output (ops.BlockedTasksAwaitPlanningOutput)
+//  3. Hypothesis exhausted (2+ failed_by)
+//  4. Immediate discoveries (not yet converted to tasks)
+//  5. Operator notes not yet rendered in a completed turn
+//  6. Planning complete (merged planning tasks have output[])
+//  7. Many-to-one transition ready
+//  8. Sprint complete (all planned tasks terminal)
 func DetectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []models.TaskStatus, planningPairs map[string]bool, m2oTransitions []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
 	return detectOrchestratorWakeTriggers(state, pipelineTerminals, planningPairs, m2oTransitions, nil, WakeTriggerNone)
 }
@@ -151,6 +152,14 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 			continue
 		}
 		if count := triggerSpec.Count(state); count > 0 {
+			// Revalidation (only set) keeps the selected predicate instead.
+			if triggerSpec.Trigger == WakeTriggerBlocked && only == WakeTriggerNone &&
+				ops.BlockedTasksAwaitPlanningOutput(state, planningPairs) {
+				return OrchestratorWakeResult{
+					Trigger: WakeTriggerPlanningComplete,
+					Count:   countMergedPlanningTasksWithOutput(state, planningPairs),
+				}
+			}
 			return OrchestratorWakeResult{
 				Trigger: triggerSpec.Trigger,
 				Count:   count,

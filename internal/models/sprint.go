@@ -72,11 +72,15 @@ type SprintScope struct {
 
 // SprintTimeline defines sprint timing
 type SprintTimeline struct {
-	Started      time.Time      `yaml:"started"`
-	Deadline     time.Time      `yaml:"deadline"`
-	CheckpointAt *time.Time     `yaml:"checkpoint_at,omitempty"`
-	Ended        *time.Time     `yaml:"ended,omitempty"`
-	Extra        map[string]any `yaml:",inline"`
+	Started      time.Time  `yaml:"started"`
+	Deadline     time.Time  `yaml:"deadline"`
+	CheckpointAt *time.Time `yaml:"checkpoint_at,omitempty"`
+	// TransitionsAttemptedAt is when the orchestrator last started executing
+	// planning transitions after a resumed transition checkpoint. Unlike
+	// CheckpointAt, a checkpoint that attempts nothing leaves it unchanged.
+	TransitionsAttemptedAt *time.Time     `yaml:"transitions_attempted_at,omitempty"`
+	Ended                  *time.Time     `yaml:"ended,omitempty"`
+	Extra                  map[string]any `yaml:",inline"`
 }
 
 // SprintMetrics tracks sprint progress and quality
