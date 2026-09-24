@@ -239,7 +239,10 @@ lock. A Git/YAML crash gap does not establish exactly-once shell execution or
 permit inferring an earlier merge result from live integration HEAD.
 If integration may already have advanced but merge completion is uncertain,
 retain the preparation: a returned error alone cannot make that merge safe to
-repeat. Certainty comes from the durable mutation receipt, not from the error
+repeat. The exception is an invocation whose own compare-and-swap rollback
+rewound the ref it moved (for example after its mutation receipt failed to
+persist). Its merge is known-failed, so it retires its own preparation with the
+patient state-lock wait before returning. Certainty comes from the durable mutation receipt, not from the error
 and not from live HEAD: when a receipt attributes an integration-ref commit to
 this task, that commit carries the approved review commit, and it is still an
 ancestor of the integration ref, the effect is proven rather than uncertain.

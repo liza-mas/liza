@@ -304,3 +304,193 @@ func TestRolledBackMergeDoesNotResume(t *testing.T) {
 		t.Fatalf("rolled-back merge presented as proven: %+v", proven)
 	}
 }
+
+// TestReceiptLockTimeoutRetiresRolledBackMergePreparation is the D77 case: the
+// state lock times out while the merge records its mutation receipt, and the
+// merge rewinds the integration ref it moved. The invocation knows its ref
+// effect is undone, so it must resolve its own preparation; otherwise every
+// same-generation retry requeries until a restart. The retirement write follows
+// a lock timeout, so it must wait for the patient budget rather than fail the
+// same way. Not parallel: it shortens the ordinary state-lock timeout.
+func TestReceiptLockTimeoutRetiresRolledBackMergePreparation(t *testing.T) {
+	const taskID = "receipt-lock-timeout"
+	const agentID = "code-reviewer-1"
+	const ordinaryLockTimeout = 200 * time.Millisecond
+	projectRoot, stateFile := setupMergeTestRepo(t, taskID, agentID)
+	authority := mergeTestAuthority(t, stateFile, agentID, "same-generation")
+	t.Cleanup(db.SetDefaultLockTimeoutForTest(ordinaryLockTimeout))
+	db.ResetInstance(stateFile) // Recreate the shared instance with the short timeout.
+
+	reviewCommit := *readStateForTest(t, stateFile).FindTask(taskID).ReviewCommit
+	before := testhelpers.MustGit(t, projectRoot, "rev-parse", "refs/heads/integration")
+
+	// Saturate the state lock for the receipt write only. The first lifecycle
+	// write after it is the failure retirement; release the hold only once that
+	// write has waited past the ordinary timeout.
+	var release func()
+	modifiesAfterHold := 0
+	previousReceiptHook := integrationMutationReceiptPersistTestHook
+	previousModifyHook := lifecycleBeforeModifyTestHook
+	t.Cleanup(func() {
+		integrationMutationReceiptPersistTestHook = previousReceiptHook
+		lifecycleBeforeModifyTestHook = previousModifyHook
+	})
+	integrationMutationReceiptPersistTestHook = func(models.IntegrationMutationReceipt) {
+		integrationMutationReceiptPersistTestHook = nil
+		release = testhelpers.HoldFileLock(t, stateFile)
+	}
+	lifecycleBeforeModifyTestHook = func() {
+		if release == nil {
+			return
+		}
+		if modifiesAfterHold++; modifiesAfterHold == 2 {
+			time.AfterFunc(3*ordinaryLockTimeout, release)
+		}
+	}
+
+	_, err := MergeWorktreeWithAuthority(projectRoot, taskID, authority)
+	lifecycleBeforeModifyTestHook = previousModifyHook
+	if release == nil {
+		t.Fatal("receipt persistence hook never ran; the merge did not reach the receipt write")
+	}
+	release() // Unmodified code never retires, so release before inspecting state.
+	if err == nil || !strings.Contains(err.Error(), "failed to persist integration mutation receipt") {
+		t.Fatalf("first merge error = %v, want a receipt persistence failure", err)
+	}
+	if got := testhelpers.MustGit(t, projectRoot, "rev-parse", "refs/heads/integration"); got != before {
+		t.Fatalf("integration HEAD after the failed receipt write = %s, want rolled back to %s", got, before)
+	}
+
+	failed := readStateForTest(t, stateFile).FindTask(taskID)
+	if failed.Status != models.TaskStatusApproved {
+		t.Fatalf("status after the rolled-back merge = %s, want APPROVED", failed.Status)
+	}
+	for _, entry := range failed.History {
+		if entry.Event == models.TaskEventMerged {
+			t.Fatal("rolled-back merge recorded a merged history event")
+		}
+	}
+	if failed.Lifecycle != nil {
+		for _, receipt := range failed.Lifecycle.Receipts {
+			if receipt.Operation == integrationOperationWTMerge {
+				t.Fatalf("rolled-back merge recorded a completion receipt: %+v", receipt)
+			}
+		}
+		if p := failed.Lifecycle.Preparation; p != nil {
+			t.Errorf("rolled-back merge retained its preparation (operation %s, actor %s)", p.Operation, p.Actor)
+		}
+	}
+
+	result, err := MergeWorktreeWithAuthority(projectRoot, taskID, authority)
+	if err != nil {
+		t.Fatalf("same-generation retry after a rolled-back merge = %v, want convergence", err)
+	}
+	if result == nil || result.MergeCommit != reviewCommit {
+		t.Fatalf("merge result = %+v, want merge_commit %s", result, reviewCommit)
+	}
+	merged := readStateForTest(t, stateFile).FindTask(taskID)
+	if merged.Status != models.TaskStatusMerged {
+		t.Fatalf("status after retry = %s, want MERGED", merged.Status)
+	}
+	mergedEvents := 0
+	for _, entry := range merged.History {
+		if entry.Event == models.TaskEventMerged {
+			mergedEvents++
+		}
+	}
+	if mergedEvents != 1 {
+		t.Fatalf("merged history events = %d, want exactly 1", mergedEvents)
+	}
+}
+
+// TestReceiptLockTimeoutKeepsFenceUnlessRollbackRewound covers the two false
+// branches of the D77 retirement predicate: when the receipt write fails and
+// the merge cannot vouch that it rewound the ref it moved, the preparation
+// fence must hold and a same-generation retry must requery. Not parallel: it
+// shortens the ordinary state-lock timeout.
+func TestReceiptLockTimeoutKeepsFenceUnlessRollbackRewound(t *testing.T) {
+	cases := []struct {
+		name string
+		// interfere runs just before the receipt write, after CAS moved the ref.
+		interfere func(t *testing.T, projectRoot string)
+	}{
+		{
+			// Another merge lands on top, so the rollback CAS refuses to rewind.
+			name: "rollback skipped because another merge advanced the ref",
+			interfere: func(t *testing.T, projectRoot string) {
+				head := testhelpers.MustGit(t, projectRoot, "rev-parse", "refs/heads/integration")
+				other := testhelpers.MustGit(t, projectRoot, "commit-tree", head+"^{tree}", "-p", head, "-m", "another task merged meanwhile")
+				testhelpers.MustGit(t, projectRoot, "update-ref", "refs/heads/integration", other, head)
+			},
+		},
+		{
+			// A held ref lock makes the rollback's update-ref fail outright.
+			name: "rollback returns an error",
+			interfere: func(t *testing.T, projectRoot string) {
+				refLock := filepath.Join(projectRoot, ".git", "refs", "heads", "integration.lock")
+				if err := os.WriteFile(refLock, nil, 0644); err != nil {
+					t.Fatalf("hold integration ref lock: %v", err)
+				}
+				t.Cleanup(func() { _ = os.Remove(refLock) })
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			const taskID = "receipt-lock-timeout-fence"
+			const agentID = "code-reviewer-1"
+			projectRoot, stateFile := setupMergeTestRepo(t, taskID, agentID)
+			authority := mergeTestAuthority(t, stateFile, agentID, "same-generation")
+			t.Cleanup(db.SetDefaultLockTimeoutForTest(200 * time.Millisecond))
+			db.ResetInstance(stateFile) // Recreate the shared instance with the short timeout.
+
+			// Release the hold as soon as any lifecycle write follows the failed
+			// receipt write, so a wrongful retirement would succeed and be caught
+			// rather than time out and leave the fence standing by accident.
+			var release func()
+			modifiesAfterHold := 0
+			previousReceiptHook := integrationMutationReceiptPersistTestHook
+			previousModifyHook := lifecycleBeforeModifyTestHook
+			t.Cleanup(func() {
+				integrationMutationReceiptPersistTestHook = previousReceiptHook
+				lifecycleBeforeModifyTestHook = previousModifyHook
+			})
+			integrationMutationReceiptPersistTestHook = func(models.IntegrationMutationReceipt) {
+				integrationMutationReceiptPersistTestHook = nil
+				tc.interfere(t, projectRoot)
+				release = testhelpers.HoldFileLock(t, stateFile)
+			}
+			lifecycleBeforeModifyTestHook = func() {
+				if release == nil {
+					return
+				}
+				if modifiesAfterHold++; modifiesAfterHold == 2 {
+					release()
+				}
+			}
+
+			_, err := MergeWorktreeWithAuthority(projectRoot, taskID, authority)
+			lifecycleBeforeModifyTestHook = previousModifyHook
+			if release == nil {
+				t.Fatal("receipt persistence hook never ran; the merge did not reach the receipt write")
+			}
+			release()
+			if err == nil || !strings.Contains(err.Error(), "failed to persist integration mutation receipt") {
+				t.Fatalf("first merge error = %v, want a receipt persistence failure", err)
+			}
+
+			failed := readStateForTest(t, stateFile).FindTask(taskID)
+			if failed.Status != models.TaskStatusApproved {
+				t.Fatalf("status after the failed merge = %s, want APPROVED", failed.Status)
+			}
+			if failed.Lifecycle == nil || failed.Lifecycle.Preparation == nil {
+				t.Fatal("preparation retired although the merge could not vouch that it rewound the ref")
+			}
+			_, err = MergeWorktreeWithAuthority(projectRoot, taskID, authority)
+			var pending *LifecycleError
+			if !errors.As(err, &pending) || pending.Outcome.Outcome != models.LifecycleStateChanged || pending.Outcome.SafeAction != "requery" {
+				t.Fatalf("same-generation retry behind the kept fence = %v, want requery", err)
+			}
+		})
+	}
+}

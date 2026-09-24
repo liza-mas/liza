@@ -925,11 +925,15 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	}
 	effects = "unknown"
 	casStarted := false
+	forwardRolledBack := false
 	defer func() {
 		// Once CAS starts, a returned error can leave the ref or main checkout
-		// partially updated. Preserve that fence for inspected recovery.
-		if retErr != nil && !casStarted {
-			retErr = retireFailedLifecyclePreparation(bb, taskID, authority, &preparation, retErr, effects)
+		// partially updated. Preserve that fence for inspected recovery unless
+		// this invocation rewound the ref it moved: otherwise its own
+		// same-generation retries requery until a restart (D77). Retirement
+		// usually follows a state-lock timeout, so it waits the patient budget.
+		if retErr != nil && (!casStarted || forwardRolledBack) {
+			retErr = retireFailedLifecyclePreparation(bb.Patient(), taskID, authority, &preparation, retErr, effects)
 		}
 	}()
 
@@ -970,6 +974,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 			if rollbackErr == nil && rollbackMutation == nil {
 				rollbackErr = fmt.Errorf("failed to roll back integration ref after receipt persistence failure: ref changed from %s", shortSHA(outcome.mergeCommit))
 			}
+			forwardRolledBack = rollbackErr == nil && rollbackMutation != nil
 			return errors.Join(mutationErr, receiptErr, rollbackErr)
 		}
 		return mutationErr
