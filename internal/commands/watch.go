@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/bits"
 	"os"
 	"slices"
@@ -34,6 +35,9 @@ const (
 	StaleSentinelThreshold       = 2 * time.Minute
 	AutoRepairAgentPoolBackoff   = 60 * time.Second
 	AutoRepairAgentPoolMaxStarts = 3
+	// OrchestratorMissingGracePeriod absorbs launch ordering and supervisor
+	// restarts before an absent orchestrator is announced.
+	OrchestratorMissingGracePeriod = 60 * time.Second
 )
 
 // watchNow is the clock for time-escalated checks; tests replace it.
@@ -45,6 +49,8 @@ const autoRepairAgentPoolCachePrefix = "auto-repair-agent-pool:"
 const autoRepairAgentPoolStartCountPrefix = "auto-repair-agent-pool-start-count:"
 const autoRepairAgentPoolSuppressedPrefix = "auto-repair-agent-pool-suppressed:"
 const autoRepairAgentPoolEnvWarningKey = "auto-repair-agent-pool-env-warning"
+const orchestratorMissingSinceKey = "orchestrator-missing:since"
+const orchestratorMissingAlertedKey = "orchestrator-missing:alerted"
 
 type AlertLevel = alerts.AlertLevel
 
@@ -496,6 +502,7 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 		func() []Alert { return checkStaleDrafts(state) },
 		func() []Alert { return checkImmediateDiscoveries(state) },
 		func() []Alert { return checkMissingRoles(state, pr, config.StateCache) },
+		func() []Alert { return checkMissingOrchestrator(state, pr, config.StateCache, time.Now().UTC()) },
 	}
 	for _, check := range checks {
 		alerts = append(alerts, check()...)
@@ -1617,6 +1624,83 @@ func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache ma
 	}
 
 	return alerts
+}
+
+// checkMissingOrchestrator raises one alert per episode in which a running
+// goal has no orchestrator holding effective ownership. Role-pair demand never
+// names the orchestrator and an exited supervisor deletes its own row, so no
+// other check can see this absence. Presence is lease-first, as at
+// registration: a fresh lease whose process looks dead still counts, because a
+// replacement would be refused until the lease expires. The episode lives in
+// the watcher's cache, so the once-per-episode guarantee is per observer.
+func checkMissingOrchestrator(state *models.State, pr models.PipelineResolver, cache map[string]time.Time, now time.Time) []Alert {
+	if pr == nil {
+		// An unloadable pipeline cannot tell whether an orchestrator is
+		// required; that is not a resolution, so the episode is kept.
+		return nil
+	}
+
+	var roles []string
+	for _, role := range pr.AllRoleNames() {
+		if roleType, err := pr.RoleType(role); err == nil && roleType == "orchestrator" {
+			roles = append(roles, role)
+		}
+	}
+	mode := state.Config.Mode
+	if mode == "" {
+		mode = models.SystemModeRunning
+	}
+	if len(roles) == 0 || mode != models.SystemModeRunning || state.Goal.Status != models.GoalStatusInProgress {
+		endOrchestratorMissingEpisode(cache)
+		return nil
+	}
+
+	var staleRows []string
+	for _, agentID := range slices.Sorted(maps.Keys(state.Agents)) {
+		agent := state.Agents[agentID]
+		if !slices.Contains(roles, agent.Role) {
+			continue
+		}
+		observation := ops.AgentProcessOwnership(agentID, agent, now)
+		if observation.Occupied() {
+			endOrchestratorMissingEpisode(cache)
+			return nil
+		}
+		staleRows = append(staleRows, fmt.Sprintf("%s %s", agentID, observation.Effective))
+	}
+
+	since, seen := cache[orchestratorMissingSinceKey]
+	if !seen {
+		cache[orchestratorMissingSinceKey] = now
+		return nil
+	}
+	if now.Sub(since) < OrchestratorMissingGracePeriod {
+		return nil
+	}
+	if _, alerted := cache[orchestratorMissingAlertedKey]; alerted {
+		return nil
+	}
+	cache[orchestratorMissingAlertedKey] = now
+
+	msg := fmt.Sprintf("no live %s agent while goal is IN_PROGRESS (absent since %s",
+		strings.Join(roles, "/"), since.UTC().Format(time.RFC3339))
+	if len(staleRows) > 0 {
+		msg += "; last row: " + strings.Join(staleRows, ", ")
+	}
+	msg += fmt.Sprintf("); planning, blocked-task assessment and checkpoints are not being handled, and auto-repair does not restart it — start one with `%s`",
+		brand.Command("agent", roles[0]))
+
+	return []Alert{{
+		Timestamp: now,
+		Level:     AlertLevelCritical,
+		Category:  "ORCHESTRATOR MISSING",
+		Message:   msg,
+	}}
+}
+
+func endOrchestratorMissingEpisode(cache map[string]time.Time) {
+	delete(cache, orchestratorMissingSinceKey)
+	delete(cache, orchestratorMissingAlertedKey)
 }
 
 // WriteAlert appends an alert to the alerts log file.

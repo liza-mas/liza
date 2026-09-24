@@ -387,6 +387,16 @@ Either way: claim the task, fix in worktree, resubmit for review. The resolution
 
 Avoid running multiple `§BRAND_BINARY_NAME§ tui --headless` processes for the same project. Auto-repair backoff is per watcher process. Registration and `max-instances` checks are the final safety net, but duplicate watchers can briefly race before a newly spawned agent registers.
 
+### ORCHESTRATOR MISSING alert
+
+**Error:** `🚨 ORCHESTRATOR MISSING: no live orchestrator agent while goal is IN_PROGRESS (absent since …)`
+
+**Cause:** The goal is in progress and the system is running, but for 60 seconds no agent whose pipeline role has type `orchestrator` has held effective ownership (a fresh lease with a heartbeat). This typically follows an orchestrator supervisor that exited and unregistered, for example after a provider-quota termination or a state-lock timeout. Until an orchestrator returns, nothing plans, assesses blocked tasks, or handles checkpoints, and the run stalls.
+
+**Fix:** Start an orchestrator with `§BRAND_BINARY_NAME§ agent orchestrator`, using the role name from the alert if your pipeline renames it. Automatic pool repair only re-staffs doer and reviewer roles with claimable work; it does not restart the orchestrator.
+
+Each running watcher writes this alert once per absence episode; restarting a watcher during an ongoing absence can write it again. If the orchestrator's process died but its lease is still fresh, this alert stays silent until the lease expires, because registration refuses a replacement until then; `REGISTERED AGENT PROCESS` reports that case.
+
 ---
 
 ## Initialization Issues

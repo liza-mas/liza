@@ -704,6 +704,7 @@ Agents must read `human_notes` relevant to their task before starting/resuming w
 | Running task without live process | Executing or reviewing task owner PID is missing or stopped | `🚨 DEAD AGENT PROCESS: {task} — status {status} has {owner_kind} {agent} but no live process (pid {pid})` |
 | Invalid active owner row | Executing or reviewing task owner row has the wrong role, status, or current_task; or an active agent row points at a task that does not point back | `🚨 INVALID AGENT OWNERSHIP: {task} — status {status} has {owner_kind} {agent} with invalid agent row: {reason}` |
 | Live supervisor missing from state | `liza validate` or `liza get agents --zombies` finds a current-goal `liza agent` PID absent from `state.yaml` | `zombie liza agent process detected: pid {pid} role {role}` |
+| Orchestrator missing | Goal IN_PROGRESS, mode RUNNING, and no orchestrator-type agent holding effective ownership (fresh lease with a heartbeat) for 60s; once per absence episode per running watcher | `🚨 ORCHESTRATOR MISSING: no live {role} agent while goal is IN_PROGRESS (absent since {time}[; last row: {agent} {ownership}]) … start one with {agent <role> command}` |
 | Task blocked | Any | `⚠️ BLOCKED: {task} — {reason}` |
 | Orphaned rejected | Role pair's rejected status, assignee not WORKING, verdict older than 2 min (a missing verdict time grants no grace) | `🚨 ORPHANED REJECTED: {task} — assigned to {agent} but agent is {status} (no rework 2m+ after verdict)` |
 | Same task reassigned | 2nd coder | `⚠️ REASSIGNED: {task} — hypothesis exhaustion risk` |
