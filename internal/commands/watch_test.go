@@ -265,87 +265,57 @@ func TestRunChecksWithState_BlockedAlertDedupesAndRealertsAfterClear(t *testing.
 
 func TestCheckOrphanedRejected(t *testing.T) {
 	now := time.Now().UTC()
+	rejectedAt := func(verdictAt time.Time) models.Task {
+		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+		task.History = []models.TaskHistoryEntry{{Time: verdictAt, Event: models.TaskEventRejected}}
+		return task
+	}
 
 	tests := []struct {
 		name       string
-		tasks      []models.Task
+		task       models.Task
 		agents     map[string]models.Agent
-		cache      map[string]time.Time
 		wantAlerts int
 	}{
 		{
-			name: "orphaned rejected - agent missing",
-			tasks: []models.Task{
-				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-					return task
-				}(),
-			},
-			agents: map[string]models.Agent{},
-			cache: map[string]time.Time{
-				// Already past grace period
-				"orphaned:task-1": now.Add(-1 * time.Minute),
-			},
+			name:       "orphaned rejected - agent missing",
+			task:       rejectedAt(now.Add(-time.Hour)),
+			agents:     map[string]models.Agent{},
 			wantAlerts: 1,
 		},
 		{
-			name: "orphaned rejected - agent idle",
-			tasks: []models.Task{
-				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-					return task
-				}(),
-			},
-			agents: map[string]models.Agent{
-				"coder-1": {
-					Status: models.AgentStatusIdle,
-				},
-			},
-			cache: map[string]time.Time{
-				"orphaned:task-1": now.Add(-1 * time.Minute),
-			},
+			name:       "orphaned rejected - agent idle",
+			task:       rejectedAt(now.Add(-time.Hour)),
+			agents:     map[string]models.Agent{"coder-1": {Status: models.AgentStatusIdle}},
 			wantAlerts: 1,
 		},
 		{
-			name: "not orphaned - agent working",
-			tasks: []models.Task{
-				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-					return task
-				}(),
-			},
-			agents: map[string]models.Agent{
-				"coder-1": {
-					Status: models.AgentStatusWorking,
-				},
-			},
-			cache:      make(map[string]time.Time),
+			name:       "not orphaned - agent working",
+			task:       rejectedAt(now.Add(-time.Hour)),
+			agents:     map[string]models.Agent{"coder-1": {Status: models.AgentStatusWorking}},
 			wantAlerts: 0,
 		},
 		{
-			name: "within grace period",
-			tasks: []models.Task{
-				func() models.Task {
-					task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-					return task
-				}(),
-			},
-			agents: map[string]models.Agent{},
-			cache: map[string]time.Time{
-				// Just added to cache (within grace period)
-				"orphaned:task-1": now.Add(-5 * time.Second),
-			},
+			name:       "within verdict handoff grace",
+			task:       rejectedAt(now.Add(-5 * time.Second)),
+			agents:     map[string]models.Agent{},
 			wantAlerts: 0,
+		},
+		{
+			name:       "no verdict history grants no grace",
+			task:       testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now),
+			agents:     map[string]models.Agent{},
+			wantAlerts: 1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := &models.State{
-				Tasks:  tt.tasks,
+				Tasks:  []models.Task{tt.task},
 				Agents: tt.agents,
 			}
-			alerts := checkOrphanedRejected(state, tt.cache)
+			alerts := checkOrphanedRejected(state, nil)
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
@@ -354,58 +324,33 @@ func TestCheckOrphanedRejected(t *testing.T) {
 	}
 
 	t.Run("sentinel assigned_to not orphaned", func(t *testing.T) {
-		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-		sentinel := "$transitioning"
-		task.AssignedTo = &sentinel
-
-		cache := map[string]time.Time{
-			"orphaned:task-1": now.Add(-1 * time.Minute),
-		}
+		task := rejectedAt(now.Add(-time.Hour))
+		task.AssignedTo = testhelpers.StringPtr("$transitioning")
 		state := &models.State{
 			Tasks:  []models.Task{task},
 			Agents: map[string]models.Agent{},
 		}
-		alerts := checkOrphanedRejected(state, cache)
 
-		if len(alerts) != 0 {
+		if alerts := checkOrphanedRejected(state, nil); len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0", len(alerts))
-		}
-		if _, exists := cache["orphaned:task-1"]; exists {
-			t.Error("cache entry 'orphaned:task-1' should have been cleared by sentinel exemption")
 		}
 	})
 
-	t.Run("sentinel clears stale cache then real orphan gets grace period", func(t *testing.T) {
-		// First call: task with sentinel AssignedTo and pre-existing cache entry.
-		task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-		sentinel := "$transitioning"
-		task.AssignedTo = &sentinel
-
-		cache := map[string]time.Time{
-			"orphaned:task-1": now.Add(-1 * time.Minute),
-		}
-		state := &models.State{
-			Tasks:  []models.Task{task},
-			Agents: map[string]models.Agent{},
-		}
-		alerts := checkOrphanedRejected(state, cache)
-		if len(alerts) != 0 {
-			t.Fatalf("first call: len(alerts) = %d, want 0", len(alerts))
+	t.Run("identity is the rejection episode, not the agent status", func(t *testing.T) {
+		identityWith := func(status models.AgentStatus) string {
+			state := &models.State{
+				Tasks:  []models.Task{rejectedAt(now.Add(-time.Hour))},
+				Agents: map[string]models.Agent{"coder-1": {Status: status}},
+			}
+			alerts := checkOrphanedRejected(state, nil)
+			if len(alerts) != 1 {
+				t.Fatalf("len(alerts) = %d, want 1", len(alerts))
+			}
+			return alerts[0].Identity
 		}
 
-		// Second call: sentinel cleared, real agent assigned but missing from state.
-		task2 := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
-		// BuildTaskByStatus sets AssignedTo to "coder-1" for REJECTED status.
-		state2 := &models.State{
-			Tasks:  []models.Task{task2},
-			Agents: map[string]models.Agent{}, // coder-1 not registered
-		}
-		alerts2 := checkOrphanedRejected(state2, cache)
-		if len(alerts2) != 0 {
-			t.Errorf("second call: len(alerts) = %d, want 0 (grace period should restart)", len(alerts2))
-		}
-		if _, exists := cache["orphaned:task-1"]; !exists {
-			t.Error("cache should contain fresh 'orphaned:task-1' entry after grace period restart")
+		if waiting, idle := identityWith(models.AgentStatusWaiting), identityWith(models.AgentStatusIdle); waiting != idle {
+			t.Errorf("identity changed with agent status: %q vs %q", waiting, idle)
 		}
 	})
 }
@@ -1022,8 +967,7 @@ func TestCheckStalled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := make(map[string]time.Time)
-			alerts := checkStalled(tt.state, cache, nil)
+			alerts := checkStalled(tt.state, nil)
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
@@ -1037,41 +981,58 @@ func TestCheckStalled(t *testing.T) {
 	}
 }
 
-func TestCheckStalledThrottling(t *testing.T) {
-	now := time.Now().UTC()
-
+// checkStalled reports on every check while stalled; the gate turns that into
+// one line per escalation step (see TestAlertEmission_StalledEscalates...).
+// The identity must therefore be stable within a step and change across steps.
+func TestCheckStalledIdentityNamesEpisodeAndStep(t *testing.T) {
+	t0 := time.Now().UTC()
+	originalNow := watchNow
+	t.Cleanup(func() { watchNow = originalNow })
+	progress := t0.Add(-31 * time.Minute)
 	state := &models.State{
 		Tasks: []models.Task{{
-			ID:     "t1",
-			Status: models.TaskStatusImplementing,
-			History: []models.TaskHistoryEntry{{
-				Time:  now.Add(-31 * time.Minute),
-				Event: "claimed",
-			}},
+			ID:      "t1",
+			Status:  models.TaskStatusImplementing,
+			History: []models.TaskHistoryEntry{{Time: progress, Event: "claimed"}},
+		}},
+	}
+	identityAt := func(at time.Time) string {
+		watchNow = func() time.Time { return at }
+		alerts := checkStalled(state, nil)
+		if len(alerts) != 1 {
+			t.Fatalf("checkStalled at %s: len(alerts) = %d, want 1 while stalled", at, len(alerts))
+		}
+		return alerts[0].Identity
+	}
+
+	first := identityAt(t0)
+	if again := identityAt(t0.Add(20 * time.Minute)); again != first {
+		t.Fatalf("identity within the 30m step changed: %q -> %q", first, again)
+	}
+	if next := identityAt(t0.Add(30 * time.Minute)); next == first {
+		t.Fatalf("identity at the 60m step = %q, want a new identity", next)
+	}
+	state.Tasks[0].History = append(state.Tasks[0].History, models.TaskHistoryEntry{Time: t0.Add(-time.Hour), Event: "noise"})
+	if older := identityAt(t0); older != first {
+		t.Fatalf("an older history entry changed the identity: %q -> %q", first, older)
+	}
+}
+
+func TestCheckStalledStepHandlesCenturiesOldProgress(t *testing.T) {
+	state := &models.State{
+		Tasks: []models.Task{{
+			ID:      "t1",
+			Status:  models.TaskStatusImplementing,
+			History: []models.TaskHistoryEntry{{Time: time.Date(1726, 1, 1, 0, 0, 0, 0, time.UTC), Event: "claimed"}},
 		}},
 	}
 
-	cache := make(map[string]time.Time)
-
-	// First call - should generate alert
-	alerts := checkStalled(state, cache, nil)
+	alerts := checkStalled(state, nil)
 	if len(alerts) != 1 {
-		t.Errorf("First call: len(alerts) = %d, want 1", len(alerts))
+		t.Fatalf("len(alerts) = %d, want 1", len(alerts))
 	}
-
-	// Second call immediately after - should be throttled
-	alerts = checkStalled(state, cache, nil)
-	if len(alerts) != 0 {
-		t.Errorf("Second call (throttled): len(alerts) = %d, want 0", len(alerts))
-	}
-
-	// Simulate 5 minutes passing by updating cache to 5+ minutes ago
-	cache["stalled:alert"] = now.Add(-6 * time.Minute)
-
-	// Third call after 5 minutes - should generate alert again
-	alerts = checkStalled(state, cache, nil)
-	if len(alerts) != 1 {
-		t.Errorf("Third call (after 5 min): len(alerts) = %d, want 1", len(alerts))
+	if !strings.Contains(alerts[0].Identity, "|step ") {
+		t.Fatalf("identity = %q, want an escalation step", alerts[0].Identity)
 	}
 }
 
@@ -1083,7 +1044,7 @@ func TestCheckStalledUsesOperationalTerminalStates(t *testing.T) {
 		ID: "clean", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_CLEAN",
 		History: []models.TaskHistoryEntry{{Time: old, Event: "approved"}},
 	}}}
-	if alerts := checkStalled(clean, make(map[string]time.Time), resolver); len(alerts) != 0 {
+	if alerts := checkStalled(clean, resolver); len(alerts) != 0 {
 		t.Fatalf("clean integration analysis produced stalled alerts: %#v", alerts)
 	}
 
@@ -1091,7 +1052,7 @@ func TestCheckStalledUsesOperationalTerminalStates(t *testing.T) {
 		ID: "approved", RolePair: "integration-pair", Status: "INTEGRATION_ANALYSIS_APPROVED",
 		History: []models.TaskHistoryEntry{{Time: old, Event: "approved"}},
 	}}}
-	if alerts := checkStalled(approved, make(map[string]time.Time), resolver); len(alerts) != 1 {
+	if alerts := checkStalled(approved, resolver); len(alerts) != 1 {
 		t.Fatalf("approved transition source produced %d stalled alerts, want 1", len(alerts))
 	}
 }
@@ -3945,7 +3906,7 @@ func TestCheckStalled_DiagnosesRefusedVersusUnstaffed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			alerts := checkStalled(tt.state, map[string]time.Time{}, resolver)
+			alerts := checkStalled(tt.state, resolver)
 			if len(alerts) != 1 {
 				t.Fatalf("alerts = %d, want 1", len(alerts))
 			}

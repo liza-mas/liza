@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"os"
 	"slices"
 	"strings"
@@ -30,13 +31,16 @@ const (
 	CheckpointAbandonedThreshold = 8 * time.Hour
 	PauseStaleThreshold          = 30 * time.Minute
 	PauseForgottenThreshold      = 2 * time.Hour
-	OrphanedGracePeriod          = 30 * time.Second
 	StaleSentinelThreshold       = 2 * time.Minute
 	AutoRepairAgentPoolBackoff   = 60 * time.Second
 	AutoRepairAgentPoolMaxStarts = 3
 )
 
+// watchNow is the clock for time-escalated checks; tests replace it.
+var watchNow = time.Now
+
 const stuckAlertCachePrefix = "stuck-alert:"
+const invalidStateCategory = "INVALID STATE"
 const autoRepairAgentPoolCachePrefix = "auto-repair-agent-pool:"
 const autoRepairAgentPoolStartCountPrefix = "auto-repair-agent-pool-start-count:"
 const autoRepairAgentPoolSuppressedPrefix = "auto-repair-agent-pool-suppressed:"
@@ -144,12 +148,16 @@ func runChecks(ctx context.Context, config WatchConfig) error {
 	repairOutcome := RunAutoRepairAgentPool(ctx, state, config)
 	config.RecentlySpawnedAgentPIDs = spawnedAgentPIDs(repairOutcome.Spawned)
 	snapshot := RunChecksWithStateSnapshot(state, config)
-	alerts := FilterAlertsAfterAutoRepair(snapshot.Alerts, repairOutcome)
-	alerts = append(alerts, repairOutcome.Alerts...)
+	emitted := FilterAlertsAfterAutoRepair(snapshot.Alerts, repairOutcome)
+	emitted = append(emitted, repairOutcome.Alerts...)
 
-	for _, a := range alerts {
+	for _, a := range emitted {
 		if err := WriteAlert(config.AlertsLog, a); err != nil {
-			return fmt.Errorf("failed to write alert: %w", err)
+			var ledgerErr *alerts.LedgerUnavailableError
+			if !errors.As(err, &ledgerErr) {
+				return fmt.Errorf("failed to write alert: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "WARNING: %v\n", err)
 		}
 		fmt.Fprintln(os.Stderr, a.String())
 	}
@@ -477,14 +485,14 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 		func() []Alert { return checkRunningTasksWithoutLiveProcess(state, pr) },
 		func() []Alert { return checkAwaitingHuman(state) },
 		func() []Alert { return checkBlockedTasks(state, config.StateCache) },
-		func() []Alert { return checkOrphanedRejected(state, config.StateCache) },
+		func() []Alert { return checkOrphanedRejected(state, pr) },
 		func() []Alert { return checkReviewLoops(state) },
 		func() []Alert { return checkIntegrationFailures(state, config.ProjectRoot) },
 		func() []Alert { return checkHypothesisExhaustion(state) },
 		func() []Alert { return checkReassigned(state, config.StateCache) },
 		func() []Alert { return checkApproachingLimits(state) },
 		func() []Alert { return checkStaleSentinels(state, config.StateCache) },
-		func() []Alert { return checkStalled(state, config.StateCache, pr) },
+		func() []Alert { return checkStalled(state, pr) },
 		func() []Alert { return checkStaleDrafts(state) },
 		func() []Alert { return checkImmediateDiscoveries(state) },
 		func() []Alert { return checkMissingRoles(state, pr, config.StateCache) },
@@ -505,7 +513,7 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 		alerts = append(alerts, Alert{
 			Timestamp: time.Now().UTC(),
 			Level:     AlertLevelCritical,
-			Category:  "INVALID STATE",
+			Category:  invalidStateCategory,
 			Message:   err.Error(),
 		})
 	}
@@ -536,7 +544,7 @@ func AlertKey(alert Alert) string {
 func isFreshnessTrackedAlertCategory(category string) bool {
 	// Only track categories that are recomputed and emitted on every check while
 	// active, or are deduped after building a full active set. Categories with
-	// internal throttle caches, such as STALLED or STALE SENTINEL, need their
+	// internal throttle caches, such as MISSING ROLE or STALE SENTINEL, need their
 	// checks to expose active identities before the TUI can safely resolve them.
 	if isStuckAlertCategory(category) {
 		return true
@@ -549,6 +557,16 @@ func isFreshnessTrackedAlertCategory(category string) bool {
 	}
 }
 
+// reconcileStuckAlerts emits each condition once while it stays active: an
+// alert whose gate identity was active on the previous check is suppressed, and
+// an identity absent from a check retires, so a condition that resolves and
+// recurs alerts again.
+//
+// INVALID STATE is the exception: validation reports only its first error, so
+// an error missing from a failing validation may merely be masked. Its
+// identities retire only on a clean validation (no INVALID STATE alert).
+// Limitation: an error that resolves and recurs while another error persists
+// throughout is not re-announced until a clean validation intervenes.
 func reconcileStuckAlerts(alerts []Alert, cache map[string]time.Time) []Alert {
 	if cache == nil {
 		return alerts
@@ -557,13 +575,12 @@ func reconcileStuckAlerts(alerts []Alert, cache map[string]time.Time) []Alert {
 	now := time.Now().UTC()
 	activeKeys := make(map[string]bool)
 	deduped := make([]Alert, 0, len(alerts))
+	validationClean := true
 
 	for _, alert := range alerts {
-		if !isStuckAlertCategory(alert.Category) {
-			deduped = append(deduped, alert)
-			continue
+		if alert.Category == invalidStateCategory {
+			validationClean = false
 		}
-
 		key := stuckAlertCacheKey(alert)
 		activeKeys[key] = true
 		if _, seen := cache[key]; seen {
@@ -573,10 +590,15 @@ func reconcileStuckAlerts(alerts []Alert, cache map[string]time.Time) []Alert {
 		deduped = append(deduped, alert)
 	}
 
+	invalidStatePrefix := stuckAlertCachePrefix + invalidStateCategory + ":"
 	for key := range cache {
-		if strings.HasPrefix(key, stuckAlertCachePrefix) && !activeKeys[key] {
-			delete(cache, key)
+		if !strings.HasPrefix(key, stuckAlertCachePrefix) || activeKeys[key] {
+			continue
 		}
+		if !validationClean && strings.HasPrefix(key, invalidStatePrefix) {
+			continue
+		}
+		delete(cache, key)
 	}
 
 	return deduped
@@ -584,7 +606,7 @@ func reconcileStuckAlerts(alerts []Alert, cache map[string]time.Time) []Alert {
 
 func isStuckAlertCategory(category string) bool {
 	switch category {
-	case "AWAITING HUMAN", "BLOCKED", "HYPOTHESIS EXHAUSTION", "INTEGRATION FAILED", "INVALID STATE", "DEAD AGENT PROCESS", "REGISTERED AGENT PROCESS":
+	case "AWAITING HUMAN", "BLOCKED", "HYPOTHESIS EXHAUSTION", "INTEGRATION FAILED", invalidStateCategory, "DEAD AGENT PROCESS", "REGISTERED AGENT PROCESS":
 		return true
 	case "INVALID AGENT OWNERSHIP":
 		return true
@@ -594,7 +616,7 @@ func isStuckAlertCategory(category string) bool {
 }
 
 func stuckAlertCacheKey(alert Alert) string {
-	return stuckAlertCachePrefix + AlertKey(alert)
+	return stuckAlertCachePrefix + alerts.GateKey(alert)
 }
 
 func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Time) []Alert {
@@ -698,6 +720,9 @@ func checkExpiredLeases(state *models.State) []Alert {
 				Level:     AlertLevelWarning,
 				Category:  "LEASE EXPIRED",
 				Message:   fmt.Sprintf("%s on %s", agentID, *agent.CurrentTask),
+				// A different lease expiring is a new condition even when no
+				// renewal was observed in between.
+				Identity: fmt.Sprintf("%s on %s|%s", agentID, *agent.CurrentTask, agent.LeaseExpires.UTC().Format(time.RFC3339Nano)),
 			})
 		}
 	}
@@ -1015,7 +1040,7 @@ func checkAwaitingHuman(state *models.State) []Alert {
 }
 
 func checkBlockedTasks(state *models.State, cache map[string]time.Time) []Alert {
-	var alerts []Alert
+	var blocked []Alert
 	now := time.Now().UTC()
 
 	// BLOCKED alerts are emitted every check so RunChecksWithStateSnapshot can
@@ -1036,35 +1061,43 @@ func checkBlockedTasks(state *models.State, cache map[string]time.Time) []Alert 
 		if task.BlockedReason != nil {
 			reason = *task.BlockedReason
 		}
-		alerts = append(alerts, Alert{
+		message := fmt.Sprintf("%s — %s", task.ID, reason)
+		alert := Alert{
 			Timestamp: now,
 			Level:     AlertLevelWarning,
 			Category:  "BLOCKED",
-			Message:   fmt.Sprintf("%s — %s", task.ID, reason),
-		})
+			Message:   message,
+		}
+		// The blocked history entry names the episode: a new one alerts even
+		// when no unblocked check was observed, and its key lets MarkBlocked
+		// and every watcher log one line per episode between them.
+		if episodeStart := models.LatestHistoryTime(&task, models.TaskEventBlocked); !episodeStart.IsZero() {
+			alert.Identity = message + "|" + episodeStart.UTC().Format(time.RFC3339Nano)
+			alert.OnceKey = alerts.BlockedEpisodeKey(task.ID, episodeStart, message)
+		}
+		blocked = append(blocked, alert)
 	}
 
-	return alerts
+	return blocked
 }
 
-func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []Alert {
+// checkOrphanedRejected reports a rejected task whose assigned doer is not
+// reworking it once the verdict handoff grace has passed. The grace runs from
+// the verdict, not from first sighting; a missing verdict time grants none.
+// The identity is the rejection episode, so the doer row flipping between
+// WAITING and IDLE does not re-alert.
+func checkOrphanedRejected(state *models.State, pr models.PipelineResolver) []Alert {
 	var alerts []Alert
 	now := time.Now().UTC()
 
-	for _, task := range state.Tasks {
-		if task.Status != models.TaskStatusRejected {
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if !isRejectedStatus(task, pr) {
 			continue
 		}
-		if task.AssignedTo == nil {
-			continue
-		}
-
-		// Sentinel AssignedTo (e.g. "$transitioning") is a transition in
-		// progress, not an orphaned assignment. Clear any stale cache entry
-		// from before the transition to prevent false-positive alerts when
-		// the task becomes genuinely orphaned later.
-		if strings.HasPrefix(*task.AssignedTo, "$") {
-			delete(cache, "orphaned:"+task.ID)
+		// A sentinel assignee (e.g. "$transitioning") is a transition in
+		// progress, not an orphaned assignment.
+		if task.AssignedTo == nil || strings.HasPrefix(*task.AssignedTo, "$") {
 			continue
 		}
 
@@ -1074,31 +1107,32 @@ func checkOrphanedRejected(state *models.State, cache map[string]time.Time) []Al
 		if exists {
 			agentStatus = string(agent.Status)
 		}
-
-		if agentStatus == "WORKING" {
-			delete(cache, "orphaned:"+task.ID)
+		if agentStatus == string(models.AgentStatusWorking) || models.InVerdictHandoff(task, now) {
 			continue
 		}
 
-		cacheKey := "orphaned:" + task.ID
-		firstSeen, seen := cache[cacheKey]
-		if !seen {
-			cache[cacheKey] = now
-			continue
-		}
-		if now.Sub(firstSeen) > OrphanedGracePeriod {
-			alerts = append(alerts, Alert{
-				Timestamp: now,
-				Level:     AlertLevelCritical,
-				Category:  "ORPHANED REJECTED",
-				Message: fmt.Sprintf("%s — assigned to %s but agent is %s (orphaned %ds+)",
-					task.ID, assignee, agentStatus, int(OrphanedGracePeriod.Seconds())),
-			})
-			delete(cache, cacheKey)
-		}
+		verdictAt := models.LatestHistoryTime(task, models.TaskEventRejected)
+		alerts = append(alerts, Alert{
+			Timestamp: now,
+			Level:     AlertLevelCritical,
+			Category:  "ORPHANED REJECTED",
+			Message: fmt.Sprintf("%s — assigned to %s but agent is %s (no rework %dm+ after verdict)",
+				task.ID, assignee, agentStatus, int(models.VerdictHandoffGrace.Minutes())),
+			Identity: fmt.Sprintf("%s|%s|%s", task.ID, assignee, verdictAt.UTC().Format(time.RFC3339Nano)),
+		})
 	}
 
 	return alerts
+}
+
+// isRejectedStatus reports whether the task sits in its role pair's rejected
+// status. Without a pipeline resolver only the coding pair's status is known.
+func isRejectedStatus(task *models.Task, pr models.PipelineResolver) bool {
+	if pr != nil && task.RolePair != "" {
+		rejected, err := pr.RejectedStatus(task.RolePair)
+		return err == nil && task.Status == rejected
+	}
+	return task.Status == models.TaskStatusRejected
 }
 
 func checkReviewLoops(state *models.State) []Alert {
@@ -1157,6 +1191,8 @@ func checkHypothesisExhaustion(state *models.State) []Alert {
 				Level:     AlertLevelCritical,
 				Category:  "HYPOTHESIS EXHAUSTION",
 				Message:   fmt.Sprintf("%s — requires rescope", task.ID),
+				// Another failed doer is a new condition.
+				Identity: task.ID + "|" + strings.Join(slices.Sorted(slices.Values(task.FailedBy)), ","),
 			})
 		}
 	}
@@ -1258,6 +1294,7 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Aler
 				Level:     AlertLevelCritical,
 				Category:  "STALE SENTINEL",
 				Message:   fmt.Sprintf("%s stuck in transition — manual repair needed", task.ID),
+				Identity:  task.ID + "|" + *task.AssignedTo,
 			})
 		}
 	}
@@ -1279,10 +1316,14 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Aler
 // checkStalled detects stalled progress by finding the latest task history
 // timestamp across all tasks. Heartbeat writes do not create history entries,
 // so this signal is immune to lease-renewal traffic. Falls back to the earliest
-// task Created time when no history exists. Throttles alerts to once every 5 minutes.
-func checkStalled(state *models.State, cache map[string]time.Time, pr models.PipelineResolver) []Alert {
+// task Created time when no history exists.
+//
+// It reports on every check while stalled; the identity is the stall episode
+// (the latest progress time) and its escalation step, so the gate writes one
+// line at 30, 60, 120, 240… minutes, restarting at 30 after new progress.
+func checkStalled(state *models.State, pr models.PipelineResolver) []Alert {
 	var alerts []Alert
-	now := time.Now().UTC()
+	now := watchNow().UTC()
 
 	// Find latest history timestamp and check for active tasks.
 	var latestProgress time.Time
@@ -1301,7 +1342,6 @@ func checkStalled(state *models.State, cache map[string]time.Time, pr models.Pip
 
 	// A parked run makes no progress by design; AWAITING HUMAN names the remedy.
 	if !hasActive || runParked(state) {
-		delete(cache, "stalled:alert")
 		return alerts
 	}
 
@@ -1321,23 +1361,18 @@ func checkStalled(state *models.State, cache map[string]time.Time, pr models.Pip
 
 	age := now.Sub(latestProgress)
 	if age <= StallThreshold {
-		delete(cache, "stalled:alert")
 		return alerts
 	}
 
-	cacheKey := "stalled:alert"
-	lastAlert, seen := cache[cacheKey]
-	if !seen || now.Sub(lastAlert) >= 5*time.Minute {
-		alerts = append(alerts, Alert{
-			Timestamp: now,
-			Level:     AlertLevelWarning,
-			Category:  "STALLED",
-			Message:   fmt.Sprintf("no task progress for %d minutes%s", int(age.Minutes()), stallDiagnosis(state, pr, now)),
-		})
-		cache[cacheKey] = now
-	}
-
-	return alerts
+	// Step k covers ages in [30m·2^k, 30m·2^(k+1)).
+	step := bits.Len64(uint64(age/StallThreshold)) - 1
+	return append(alerts, Alert{
+		Timestamp: now,
+		Level:     AlertLevelWarning,
+		Category:  "STALLED",
+		Message:   fmt.Sprintf("no task progress for %d minutes%s", int(age.Minutes()), stallDiagnosis(state, pr, now)),
+		Identity:  fmt.Sprintf("%s|step %d", latestProgress.UTC().Format(time.RFC3339Nano), step),
+	})
 }
 
 // stallDiagnosis explains a stall in the terms that decide what to do about it.
@@ -1470,6 +1505,8 @@ func checkStaleDrafts(state *models.State) []Alert {
 				Category:  "STALE DRAFT",
 				Message: fmt.Sprintf("%s — created %dmin ago, never finalized (Orchestrator crash?)",
 					task.ID, int(age.Minutes())),
+				// The message carries the age; the draft is the condition.
+				Identity: task.ID + "|" + task.Created.UTC().Format(time.RFC3339Nano),
 			})
 		}
 	}

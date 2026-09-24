@@ -214,7 +214,7 @@ func validateWaitingTaskReference(resolver *pipeline.Resolver, agentID string, a
 		if task.AssignedTo == nil || *task.AssignedTo != agentID {
 			return fmt.Errorf("agent %s says WAITING %s as doer, but task assigned_to is %s", agentID, task.ID, ownerValue(task.AssignedTo))
 		}
-		if !isAwaitingVerdictTask(task, resolver) {
+		if !isAwaitingVerdictTask(task, resolver) && !isVerdictHandoff(task, resolver) {
 			return fmt.Errorf("agent %s says WAITING %s as doer, but task status %s is not awaiting review verdict", agentID, task.ID, task.Status)
 		}
 		return nil
@@ -253,6 +253,16 @@ func isAwaitingVerdictTask(task *models.Task, resolver *pipeline.Resolver) bool 
 	}
 	partiallyApproved, err := resolver.PartiallyApprovedStatus(task.RolePair)
 	return err == nil && task.Status == partiallyApproved
+}
+
+// isVerdictHandoff accepts the doer's WAITING row between a verdict and its
+// await-verdict call releasing current_task: the task sits in its role pair's
+// approved or rejected status, set by a verdict within VerdictHandoffGrace.
+func isVerdictHandoff(task *models.Task, resolver *pipeline.Resolver) bool {
+	approved, approvedErr := resolver.ApprovedStatus(task.RolePair)
+	rejected, rejectedErr := resolver.RejectedStatus(task.RolePair)
+	verdictStatus := (approvedErr == nil && task.Status == approved) || (rejectedErr == nil && task.Status == rejected)
+	return verdictStatus && models.InVerdictHandoff(task, time.Now().UTC())
 }
 
 func isAwaitingResubmissionTask(task *models.Task, resolver *pipeline.Resolver) bool {

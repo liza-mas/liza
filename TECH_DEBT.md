@@ -739,3 +739,19 @@ mutation and failing closed on a read error. That is a separate policy change.
 
 - a `no_follow_up` run executes a pipeline transition;
 - the next change to how `proceed` loads its resolver.
+
+## Blocked-alert once-ledger grows without pruning
+
+**What:** `alerts.Write` records one key per blocked episode and message in
+`alerts.log.once` beside `alerts.log` (D66), and reads the whole ledger under its
+lock before every BLOCKED write. Nothing prunes keys of episodes that ended.
+
+**Why deferred:** Growth is bounded by blocked episodes: the 2026-09-23/24 omni
+run logged 112 BLOCKED lines, 27 of them same-episode duplicates, so at most 85
+keys in two days. alerts.log itself is never pruned either. Pruning needs a rule for when an episode can no longer be
+written again, which the ledger cannot tell from its keys alone.
+
+**Payback trigger:** Either of these:
+
+- the ledger exceeds 1 MB;
+- BLOCKED writes show up in watch tick latency.

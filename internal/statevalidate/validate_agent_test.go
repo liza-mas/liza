@@ -438,3 +438,84 @@ func activeDoerOwnershipState(now time.Time) (*models.State, string) {
 	}
 	return state, doerID
 }
+
+// A doer keeps WAITING on its task until its await-verdict call observes the
+// verdict and releases current_task, so the verdict and the doer row land in
+// separate writes. The bounded grace accepts that handoff and nothing else.
+func TestValidateAgentInvariants_WaitingDoerVerdictHandoffGrace(t *testing.T) {
+	resolver := loadTestResolver(t)
+	now := time.Now().UTC()
+
+	waitingDoerAfterVerdict := func(status models.TaskStatus, event string, verdictAt time.Time) *models.State {
+		state, doerID := activeDoerOwnershipState(now)
+		state.Tasks[0].Status = status
+		state.Tasks[0].History = append(state.Tasks[0].History, models.TaskHistoryEntry{
+			Time:  verdictAt,
+			Event: event,
+			Agent: testhelpers.StringPtr("code-reviewer-1"),
+		})
+		agent := state.Agents[doerID]
+		agent.Status = models.AgentStatusWaiting
+		agent.CurrentTask = testhelpers.StringPtr(state.Tasks[0].ID)
+		agent.LeaseExpires = nil
+		state.Agents[doerID] = agent
+		return state
+	}
+
+	t.Run("rejected verdict within grace is valid", func(t *testing.T) {
+		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(-30*time.Second))
+
+		if err := validateAgentInvariants(state, "", true, io.Discard, resolver); err != nil {
+			t.Fatalf("validateAgentInvariants() error = %v, want nil during verdict handoff", err)
+		}
+	})
+
+	t.Run("approved verdict within grace is valid", func(t *testing.T) {
+		state := waitingDoerAfterVerdict(models.TaskStatusApproved, models.TaskEventApproved, now.Add(-30*time.Second))
+
+		if err := validateAgentInvariants(state, "", true, io.Discard, resolver); err != nil {
+			t.Fatalf("validateAgentInvariants() error = %v, want nil during verdict handoff", err)
+		}
+	})
+
+	t.Run("verdict older than grace is invalid", func(t *testing.T) {
+		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(-models.VerdictHandoffGrace-time.Second))
+
+		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		assertErrorContains(t, err, "agent coder-1 says WAITING task-1 as doer, but task status CODE_REJECTED is not awaiting review verdict")
+	})
+
+	t.Run("future verdict grants no grace", func(t *testing.T) {
+		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(time.Minute))
+
+		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		assertErrorContains(t, err, "is not awaiting review verdict")
+	})
+
+	t.Run("later history entry ends the grace", func(t *testing.T) {
+		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(-30*time.Second))
+		state.Tasks[0].History = append(state.Tasks[0].History, models.TaskHistoryEntry{
+			Time:  now.Add(-10 * time.Second),
+			Event: models.TaskEventRejectionRCARecorded,
+		})
+
+		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		assertErrorContains(t, err, "is not awaiting review verdict")
+	})
+
+	t.Run("verdict without history grants no grace", func(t *testing.T) {
+		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now)
+		state.Tasks[0].History = nil
+
+		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		assertErrorContains(t, err, "is not awaiting review verdict")
+	})
+
+	t.Run("owner check still applies within grace", func(t *testing.T) {
+		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(-30*time.Second))
+		state.Tasks[0].AssignedTo = testhelpers.StringPtr("coder-2")
+
+		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		assertErrorContains(t, err, "agent coder-1 says WAITING task-1 as doer, but task assigned_to is coder-2")
+	})
+}

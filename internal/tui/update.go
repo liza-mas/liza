@@ -82,15 +82,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cmdResult != nil && time.Now().After(m.cmdExpiry) {
 			m.cmdResult = nil
 		}
-		return m, tea.Batch(
-			readStateCmd(m.blackboard),
-			runChecksCmd(m.projectRoot, m.alertsLogPath, m.state, m.stateCache),
-			readLogCmd(m.logPath, m.logPosition),
-			tickCmd(),
-		)
+		cmds := []tea.Cmd{readStateCmd(m.blackboard), readLogCmd(m.logPath, m.logPosition), tickCmd()}
+		if !m.checksInFlight {
+			m.checksInFlight = true
+			cmds = append(cmds, runChecksCmd(m.projectRoot, m.alertsLogPath, m.state, m.stateCache))
+		}
+		return m, tea.Batch(cmds...)
 
 	case alertsMsg:
 		// Update state cache with modified copy from check goroutine
+		m.checksInFlight = false
 		m.stateCache = msg.StateCache
 		m.activities = resolveInactiveAlerts(m.activities, msg.ActiveAlertKeys)
 		m.activities = dropResolvedTransientAlerts(m.activities)

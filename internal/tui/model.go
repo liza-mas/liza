@@ -200,6 +200,9 @@ type Model struct {
 
 	// Watch state (for anomaly throttling, same as WatchConfig.StateCache)
 	stateCache map[string]time.Time
+	// checksInFlight holds back the next anomaly check until the running one
+	// returns its cache; a check started from a stale copy re-emits alerts.
+	checksInFlight bool
 
 	// Data layer
 	watcher          StateWatcher   // fsnotify subscription; nil after close

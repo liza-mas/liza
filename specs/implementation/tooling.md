@@ -705,13 +705,13 @@ Agents must read `human_notes` relevant to their task before starting/resuming w
 | Invalid active owner row | Executing or reviewing task owner row has the wrong role, status, or current_task; or an active agent row points at a task that does not point back | `🚨 INVALID AGENT OWNERSHIP: {task} — status {status} has {owner_kind} {agent} with invalid agent row: {reason}` |
 | Live supervisor missing from state | `liza validate` or `liza get agents --zombies` finds a current-goal `liza agent` PID absent from `state.yaml` | `zombie liza agent process detected: pid {pid} role {role}` |
 | Task blocked | Any | `⚠️ BLOCKED: {task} — {reason}` |
-| Orphaned rejected | REJECTED task, assignee not WORKING (30s grace) | `🚨 ORPHANED REJECTED: {task} — assigned to {agent} but agent is {status}` |
+| Orphaned rejected | Role pair's rejected status, assignee not WORKING, verdict older than 2 min (a missing verdict time grants no grace) | `🚨 ORPHANED REJECTED: {task} — assigned to {agent} but agent is {status} (no rework 2m+ after verdict)` |
 | Same task reassigned | 2nd coder | `⚠️ REASSIGNED: {task} — hypothesis exhaustion risk` |
 | Review cycle count | ≥5 (cliff) | `🚨 REVIEW LOOP: {task} — {count} cycles (at cliff)` |
 | Integration failure | Any | `🚨 INTEGRATION FAILED: {task}` |
 | Hypothesis exhaustion | 2 coders failed | `🚨 HYPOTHESIS EXHAUSTION: {task} — requires rescope` |
 | Approaching limits | 8/10 iter, 3/5 review | `⚠️ APPROACHING LIMIT: {task} — {metric}` |
-| Goal stalled | No state change >30min | `⚠️ STALLED: no progress for {duration}` |
+| Goal stalled | No task history entry for 30, 60, 120, 240… min (restarts at 30 after progress) | `⚠️ STALLED: no task progress for {minutes} minutes` |
 | Stale draft | DRAFT >30min | `⚠️ STALE DRAFT: {task} — created {age}min ago (Planner crash?)` |
 | Immediate discovery | urgency=immediate, not converted | `🚨 IMMEDIATE DISCOVERY: {id} — {desc} (Planner should wake)` |
 | Blackboard invalid | Validation fails | `🚨 INVALID STATE: {error}` |
@@ -723,6 +723,8 @@ Agents must read `human_notes` relevant to their task before starting/resuming w
 Alerts write to:
 - stderr (visible in watch terminal)
 - `.liza/alerts.log` (persistent)
+
+Each condition is written once per episode, not per check: a repeat is suppressed while the condition stays active, and a condition that resolves and recurs alerts again. The episode is the condition's identity — usually the message; for LEASE EXPIRED the lease, for HYPOTHESIS EXHAUSTION the failed-by set, for STALLED the stall and its escalation step, for ORPHANED REJECTED the rejection. INVALID STATE reports only the first validation error, so its alerts clear only on a clean validation. BLOCKED is written by both `mark-blocked` and the watcher; they share `alerts.log.once`, a ledger of blocked-episode keys (task, blocked history time, message), so one episode gives one line whichever writes first.
 
 Optional: desktop notification via `notify-send` if available.
 

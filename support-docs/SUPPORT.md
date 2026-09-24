@@ -188,8 +188,10 @@ written once per episode.
 
 ### Reading a STALLED alert
 
-`⚠️ STALLED: no task progress for N minutes` names which of two situations it
-found, because they need opposite responses:
+`⚠️ STALLED: no task progress for N minutes` is written when the stall reaches
+30 minutes and again at 60, 120, 240… minutes; new progress restarts that
+cadence. It names which of two situations it found, because they need opposite
+responses:
 
 - `… claims are being refused, not unstaffed` — there is claimable work *and*
   live idle agents for that role, so a claim precondition is failing. The reason

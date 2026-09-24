@@ -202,11 +202,15 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 	}
 
 	var warnings []string
+	message := fmt.Sprintf("%s — %s", taskID, reason)
 	if err := alerts.Write(lp.AlertsLogPath(), alerts.Alert{
 		Timestamp: now,
 		Level:     alerts.AlertLevelWarning,
 		Category:  "BLOCKED",
-		Message:   fmt.Sprintf("%s — %s", taskID, reason),
+		Message:   message,
+		// now is the blocked history entry's time, so watchers derive the same
+		// key from state and this episode is logged once between us.
+		OnceKey: alerts.BlockedEpisodeKey(taskID, now, message),
 	}); err != nil {
 		warnings = append(warnings, fmt.Sprintf("alert write failed: %v", err))
 	}
