@@ -129,7 +129,7 @@ func startReviewExecutionWatchdog(ctx context.Context, config SupervisorConfig, 
 		return func() bool { return false }, nil
 	}
 	bb := db.For(config.StatePath)
-	state, err := bb.ReadContext(ctx)
+	state, err := bb.ReadContextPatient(ctx)
 	if err != nil {
 		return nil, err
 	}

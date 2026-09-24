@@ -224,7 +224,7 @@ func newProviderLaunchGate(config SupervisorConfig) LLMAgentLaunchGate {
 func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validation *ops.ValidationPreflight) LLMAgentLaunchGate {
 	return func(ctx context.Context, start func() error) error {
 		return ops.WithAgentLifecycleLock(ctx, config.ProjectRoot, config.Authority.ID, "provider-start", func() error {
-			state, err := db.For(config.StatePath).ReadContext(ctx)
+			state, err := db.For(config.StatePath).ReadContextPatient(ctx)
 			if err != nil {
 				return fmt.Errorf("read current agent authority before provider start: %w", err)
 			}
@@ -264,7 +264,7 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	session.ForceCheck = true
 	var validation *ops.ValidationPreflight
 	if taskID != "" {
-		validation, err = ops.PrepareValidationPreflight(config.ProjectRoot, taskID, config.AgentID, "", session)
+		validation, err = ops.PrepareValidationPreflightContext(ctx, config.ProjectRoot, taskID, config.AgentID, "", session)
 		if err != nil {
 			return 0, "", releaseFailedValidation(config, taskID, err)
 		}

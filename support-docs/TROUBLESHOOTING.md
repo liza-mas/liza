@@ -151,6 +151,8 @@ cat §BRAND_PROJECT_DIRNAME§/state.yaml.lock.owner.json   # Best-effort diagnos
 
 **Common causes:** Long-running operation under lock, many agents competing, hung process, slow filesystem (network mount).
 
+**Supervisor exits:** A supervisor waits up to 60s for five state reads: the prompt read, the provider-start authority read, the review-watchdog start read, the launch validation-preflight read, and the agent-ID auto-assignment read. Other lock operations keep the ordinary budget; these include heartbeats, claims, and the validation-readiness write. A supervisor that exits on `lock error (timeout)` from one of these reads met contention that lasted over 60s. Reduce the load; adding agents does not help.
+
 **Solutions:**
 - If holder is alive and working → wait 30-60s, retry
 - If holder is hung → stop the owning `§BRAND_BINARY_NAME§` process; do not delete lock files based on PID metadata alone

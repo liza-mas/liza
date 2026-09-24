@@ -640,3 +640,32 @@ neither reopens nor replaces that task or adopts its proposed two-phase design.
 AC-161-6 and AC-161-8 recovery proof remains outstanding, as the preserved report
 also records. Documentation and supersession resolve neither runtime defect
 (F4 or cp-6 F1) and supply no immutable clean global integration acceptance.
+
+## Supervisor state-read lock exhaustion is still fatal
+
+**What:** D69 gave five supervisor state reads a 60s patient lock wait
+(`db.(*Blackboard).ReadContextPatient`):
+
+- the prompt read (`internal/agent/supervisor.go`)
+- the provider-start authority read (`internal/agent/systemctl.go`)
+- the review-watchdog start read (`internal/agent/review_execution.go`)
+- the launch validation-preflight read (`ops.PrepareValidationPreflightContext`)
+- agent-ID auto-assignment (`internal/agent/registration.go`)
+
+Once that wait elapses, the lock timeout still exits the supervisor. Supervisor-path
+writes still exit after the ordinary 10s wait, including the validation-readiness
+write in `prepareValidationPreflight`. A supervisor that dies after a claim can
+orphan it until lease expiry (operator note D75). The mitigation's effect on the
+death rate was not measured. Agent-ID auto-assignment waits without cancellation,
+because its signature carries no context.
+
+**Why deferred:** Making these failures non-fatal needs loop-level recovery in
+`RunSupervisor` for a partially executed turn: a claimed task, a built prompt, or a
+started preflight. Those semantics have not been designed. Removing the saturation
+itself is D69 Steps 2–3: snapshot reads for the TUI and read-only CLI commands,
+per-entity validation under the lock, and archiving terminal tasks.
+
+**Payback trigger:** Either of these:
+
+- any supervisor exit whose final error is `lock error (timeout)`;
+- D69 Steps 2–3 land and such exits still recur.

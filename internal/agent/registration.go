@@ -189,7 +189,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 // retries (up to maxRetries). Returns the assigned ID or the first non-collision error.
 func AutoAssignAgentID(bb *db.Blackboard, role string, maxRetries int, tryFn func(agentID string) error) (string, error) {
 	for attempt := range maxRetries {
-		state, err := bb.Read()
+		state, err := bb.ReadContextPatient(context.Background())
 		if err != nil {
 			return "", fmt.Errorf("failed to read state for agent ID auto-generation: %w", err)
 		}

@@ -877,8 +877,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Build and save prompt
-		stateBefore, err := bb.Read()
+		stateBefore, err := bb.ReadContextPatient(supervisorCtx)
 		if err != nil {
+			if supervisorCtx.Err() != nil {
+				continue // Preserve the existing cancellation/heartbeat exit handling.
+			}
 			return fmt.Errorf("failed to read state for prompt: %w", err)
 		}
 		if orchestrator, ok := strategy.(*orchestratorStrategy); ok {

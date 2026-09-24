@@ -196,11 +196,27 @@ func ValidationRetryPending(projectRoot string, state *models.State, task *model
 	return validationFailureCoolingDown(p.SessionScope()+"\x00"+session.Execution, time.Now())
 }
 
+// PrepareValidationPreflightContext is PrepareValidationPreflight for a
+// supervisor about to launch a provider: its initial state read waits
+// patiently for the state lock and aborts when ctx is canceled. Claim paths,
+// including the CLI, keep the ordinary wait of PrepareValidationPreflight.
+func PrepareValidationPreflightContext(ctx context.Context, projectRoot, taskID, agentID, worktree string, session *ValidationSession) (*ValidationPreflight, error) {
+	return prepareValidationPreflight(projectRoot, taskID, agentID, worktree, session, func(bb *db.Blackboard) (*models.State, *models.Task, error) {
+		return readTaskStatePatient(ctx, bb, taskID)
+	})
+}
+
 // PrepareValidationPreflight always reruns successful checks. Only an unchanged
 // failure in this producing process has a bounded retry delay.
 func PrepareValidationPreflight(projectRoot, taskID, agentID, worktree string, session *ValidationSession) (*ValidationPreflight, error) {
+	return prepareValidationPreflight(projectRoot, taskID, agentID, worktree, session, func(bb *db.Blackboard) (*models.State, *models.Task, error) {
+		return readTaskState(bb, taskID)
+	})
+}
+
+func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, session *ValidationSession, readTask func(*db.Blackboard) (*models.State, *models.Task, error)) (*ValidationPreflight, error) {
 	bb := db.For(paths.New(projectRoot).StatePath())
-	state, task, err := readTaskState(bb, taskID)
+	state, task, err := readTask(bb)
 	if err != nil {
 		return nil, err
 	}

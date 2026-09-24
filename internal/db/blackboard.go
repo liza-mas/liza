@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/liza-mas/liza/internal/errors"
@@ -41,13 +42,32 @@ type Blackboard struct {
 	cachedMtime time.Time
 }
 
+// defaultLockTimeoutNanos overrides the lock wait of Blackboards created by
+// New when positive. Only SetDefaultLockTimeoutForTest sets it.
+var defaultLockTimeoutNanos atomic.Int64
+
 // New creates a Blackboard backed by the given state file path.
 // Use For() in production code to get a shared process-level singleton.
 // New is intended for tests that need independent instances.
 func New(statePath string) *Blackboard {
+	fileLock := filelock.New(statePath)
+	if timeout := time.Duration(defaultLockTimeoutNanos.Load()); timeout > 0 {
+		fileLock = fileLock.WithTimeout(timeout)
+	}
 	return &Blackboard{
 		statePath: statePath,
-		fileLock:  filelock.New(statePath),
+		fileLock:  fileLock,
+	}
+}
+
+// SetDefaultLockTimeoutForTest changes the lock wait of Blackboards created
+// afterwards, including instances For creates for new paths. It exists so lock
+// contention can be exercised without slow tests; callers must not run in
+// parallel with tests that depend on the ordinary wait.
+func SetDefaultLockTimeoutForTest(timeout time.Duration) func() {
+	previous := defaultLockTimeoutNanos.Swap(int64(timeout))
+	return func() {
+		defaultLockTimeoutNanos.Store(previous)
 	}
 }
 
@@ -148,6 +168,18 @@ func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
 	}
 
 	return state, nil
+}
+
+// patientReadLockTimeout bounds the lock wait of ReadContextPatient.
+var patientReadLockTimeout = 60 * time.Second
+
+// ReadContextPatient is ReadContext with a longer lock wait, for supervisor
+// reads whose ordinary timeout would exit the supervisor while writers merely
+// saturate the lock. It keeps polling for the whole wait, remains an exclusive
+// read, and aborts when ctx is canceled. Once the wait elapses it returns the
+// ordinary lock-timeout error. These reads are absent from lock metrics.
+func (bb *Blackboard) ReadContextPatient(ctx context.Context) (*models.State, error) {
+	return bb.WithLockTimeout(patientReadLockTimeout).ReadContext(ctx)
 }
 
 // ReadSnapshot reads one complete published state without acquiring the state
