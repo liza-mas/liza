@@ -46,7 +46,7 @@ Models own declarations and safe evidence; `internal/sessionvalidation` resolves
 environments and runs probes; ops owns assignment identity/revalidation; agent
 adapters freeze and consume launch snapshots. No ops-to-agent dependency is
 introduced. CLI and ACPX, including interactive paths, consistently refresh
-env-file overlays. Explicit unreadable overlays fail; missing optional built-in
+env-file overlays. Explicit unreadable overlays fail; missing embedded or fetched
 catalog defaults remain optional.
 
 Check fresh/resumed doer and reviewer ownership, await-based executable reclaim,

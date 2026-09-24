@@ -1276,10 +1276,10 @@ provider start. Executable lookup uses that snapshot's PATH. Configured env-file
 overlays refresh for CLI and ACPX, including interactive launches. Relative paths
 are project-root-relative; files retain the existing KEY=VALUE format without
 shell expansion or quote interpretation. An explicitly configured unreadable
-file fails before execution, including for tasks without prerequisites. Missing
-optional built-in catalog defaults remain optional. Empty files are valid but
-do not satisfy missing required variables. Do not store credential values in
-task declarations or check argv.
+file fails before execution, including for tasks without prerequisites. Catalog
+defaults, including those added by a fetched catalog, may be absent. Empty files
+are valid but do not satisfy missing required variables. Do not store credential
+values in task declarations or check argv.
 
 Changing `post_worktree_cmd` or merging dependencies does not refresh a running
 supervisor's inherited environment. Repair the selected environment/dependencies,

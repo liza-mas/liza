@@ -62,8 +62,9 @@ passes that snapshot to preflight and provider subprocesses. Executable lookup
 uses its PATH, not the supervisor's ambient PATH. Probes run in the task worktree;
 the provider retains its configured project-root startup directory. Configured
 env-file overlays refresh for CLI and ACPX launches, including interactive runs.
-Explicitly configured files that cannot be read fail the attempt; absent optional
-built-in catalog defaults remain optional. Empty overlays are valid files but
+Explicitly configured files that cannot be read fail the attempt. Catalog defaults
+may be absent, even when a fetched catalog differs from the embedded version;
+other read errors still fail the attempt. Empty overlays are valid files but
 cannot satisfy a missing required variable. The existing KEY=VALUE format does
 not perform shell expansion or quote interpretation.
 

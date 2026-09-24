@@ -279,7 +279,7 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		PromptTransport:      transport,
 		PromptFile:           req.PromptFile,
 		EnvFiles:             append([]string(nil), tool.EnvFiles...),
-		OptionalEnvFiles:     len(req.RuntimeConfig.AgentTools[toolName].EnvFiles) == 0 && slices.Equal(tool.EnvFiles, embeddedCatalog.RuntimeTools()[toolName].EnvFiles),
+		OptionalEnvFiles:     len(req.RuntimeConfig.AgentTools[toolName].EnvFiles) == 0,
 		ValidationExecution:  tool.ValidationExecution,
 		RequiredExecutables:  append([]string(nil), tool.RequiredExecutables...),
 		ContractKey:          strings.TrimSpace(tool.ContractKey),
