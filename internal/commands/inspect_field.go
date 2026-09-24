@@ -9,6 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/render"
 	"gopkg.in/yaml.v3"
 )
@@ -197,7 +198,7 @@ func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) 
 	if opts.Summary || opts.OutputSummary || opts.Active || opts.Zombies || len(opts.Fields) > 0 {
 		return "", &errors.ValidationError{Message: "field queries do not support --field, --summary, --output-summary, --active, or --zombies"}
 	}
-	value, err := taskInspectionField(task, field)
+	value, err := taskInspectionField(opts.ProjectRoot, task, field)
 	if err != nil {
 		return "", err
 	}
@@ -206,7 +207,7 @@ func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) 
 
 // taskInspectionField is shared by dotted queries and projections. Sanitize
 // before traversal so intermediate lifecycle objects cannot bypass redaction.
-func taskInspectionField(task *models.Task, field string) (any, error) {
+func taskInspectionField(projectRoot string, task *models.Task, field string) (any, error) {
 	parts := strings.Split(field, ".")
 	if slices.Contains(parts, "") || slices.Contains(parts, "generation_digest") {
 		return nil, &errors.NotFoundError{Entity: "task", ID: task.ID, Field: field}
@@ -216,6 +217,13 @@ func taskInspectionField(task *models.Task, field string) (any, error) {
 		return taskComputedField(task, field)
 	}
 	safeTask := redactTaskLifecycleForInspection(*task)
+	// Only a query into the receipt reads its archive object; redaction
+	// covers lifecycle metadata, which restoration never touches.
+	if parts[0] == models.ArchivedFieldAcceptanceReceipt {
+		if err := ops.HydrateArchivedFields(projectRoot, &safeTask); err != nil {
+			return nil, err
+		}
+	}
 	value, err := resolveFieldByYAMLPath(reflect.ValueOf(safeTask), parts, "task."+task.ID)
 	if err != nil || value == nil {
 		return value, err

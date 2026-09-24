@@ -42,6 +42,50 @@ value rather than displaying it. Add `status_changed_at`, set it wherever
 `Task.Status` is assigned, and keep the history derivation as the fallback for
 tasks predating the field.
 
+## Terminal task history stays in live state
+
+**What:** Archival moves only terminal tasks' `acceptance_receipt` out of live
+`state.yaml` ([Archived Task Fields](specs/architecture/blackboard-schema.md#archived-task-fields)).
+Terminal task history stays live, including `orchestrator_assessment` (about
+12% of a measured 5 MB run state) and `pre_execution_checkpoint` (about 8%),
+as do lifecycle receipts (about 7%).
+
+**Why deferred:** Removing history entries changes history counts that live
+code relies on: `TaskTransitionID` hashes `len(task.History)`
+(`internal/models/lifecycle.go`), feeding lifecycle request/replay outcomes;
+`ops.TasksAssessedBetween` compares per-task assessment counts across an
+orchestrator turn of up to four hours to mark human notes consumed; and
+`claim_failure_anomaly.go`, `review_execution.go` and `replace_task.go` use
+history lengths or offsets. The usage report, `analyze` and `inspect` also
+read the archived kinds. Each needs a logical history count (live plus
+archived) or an archive-aware read before any entry can move.
+
+**Payback trigger:** State bytes still dominate `Modify` lock hold after
+receipt archival — measured by re-timing one Modify cycle on a run's state —
+or a run's `state.yaml` exceeds 5 MB again. Introduce a logical history count,
+switch the count consumers to it, restore history positionally (preserving
+order, including equal timestamps) for display readers, then archive the
+assessment and checkpoint kinds.
+
+## Archive objects have no sweep; Windows directory durability
+
+**What:** An archive transaction that fails after writing an object (state
+publication or durability-barrier failure) leaves a complete, unreferenced
+object; a retry reuses it, but an abandoned attempt keeps it forever. A crash
+mid-write can also leave a `*.tmp.*` file beside the objects. On Windows the
+directory fsyncs of the durability barrier are skipped because a directory
+cannot be opened for sync, so crash ordering between an object and the state
+that references it is best-effort there, like state publication itself.
+
+**Why deferred:** Orphans are bounded by failed attempts and never read as
+objects; a sweep must prove an object is referenced by no state snapshot an
+operator may still inspect, which needs a retention policy of its own.
+
+**Payback trigger:** The archive directory holds more unreferenced than
+referenced bytes, disk pressure is reported, or a Windows crash is observed to
+leave a reference to a missing object. Add a sweep of objects unreferenced by
+current state and older than a retention window, and remove stale temp files.
+
 ## Quarantined verdict retention
 
 **What:** Issue #153 retains unique quarantined judgments, generation

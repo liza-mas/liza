@@ -1268,6 +1268,18 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		warnings = append(warnings, fmt.Sprintf("failed to start repo-root index refresh: %v", err))
 	}
 
+	// Shrink live state by archiving terminal acceptance receipts — non-fatal.
+	// Only a newly committed merge gets here (a replay returns earlier), and the
+	// write carries the caller's authority so the generation fence still holds.
+	if lifecycleOutcome.Outcome == models.LifecycleCompleted {
+		if postMergeArchiveTestHook != nil {
+			postMergeArchiveTestHook()
+		}
+		if _, err := archiveTerminalAcceptanceReceipts(projectRoot, authority, DefaultArchiveLimit); err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to archive terminal acceptance receipts: %v", err))
+		}
+	}
+
 	return &MergeResult{
 		LifecycleOutcome:  lifecycleOutcome,
 		TaskID:            taskID,

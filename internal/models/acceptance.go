@@ -49,6 +49,18 @@ func (r AcceptanceCommandResult) MarshalYAML() (any, error) {
 	}, nil
 }
 
+// ArchivedFieldAcceptanceReceipt is the only task field that may be archived.
+const ArchivedFieldAcceptanceReceipt = "acceptance_receipt"
+
+// ArchivedFieldRef records a terminal-task field moved out of live state into
+// the content-addressed archive object named by SHA256. The object path is
+// derived from the digest, never stored, so state cannot direct archive I/O.
+type ArchivedFieldRef struct {
+	Field      string    `yaml:"field" json:"field"`
+	SHA256     string    `yaml:"sha256" json:"sha256"`
+	ArchivedAt time.Time `yaml:"archived_at" json:"archived_at"`
+}
+
 // AcceptanceReceipt binds validated mappings and successful executions to one
 // immutable review commit. Admission stores it atomically with review state.
 type AcceptanceReceipt struct {

@@ -896,8 +896,16 @@ Issue #153 adds durable quarantined verdict evidence without automatic
 eviction. Its explicit archival trigger and preservation requirements are
 tracked in [Quarantined verdict retention](../../TECH_DEBT.md#quarantined-verdict-retention).
 
+**Traceability (D69 step 3, mitigated):** terminal tasks' `acceptance_receipt`
+values (about 12% of a measured 5 MB run state) now leave live state for
+immutable archive objects after each merge or on operator request; see
+[Archived Task Fields](blackboard-schema.md#archived-task-fields). Terminal task
+history, assessments, checkpoints, lifecycle receipts, discoveries, anomalies
+and notes remain in live state; history compaction first needs history counts
+that survive archival ([TECH_DEBT](../../TECH_DEBT.md#terminal-task-history-stays-in-live-state)).
+
 **Future options:**
-- Archive or compact terminal tasks and associated audit entries after a retention window
+- Archive or compact terminal task history and associated audit entries after a retention window
 - Prune history older than N days
 - Split blackboard by concern (tasks, agents, anomalies)
 

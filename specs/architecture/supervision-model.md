@@ -58,6 +58,7 @@ These actions are **automatically triggered by the supervisor loop**. The CLI co
 | Reviewer task claim | Before launch (`claimReviewerTask`) | *(none)* | *(inline in supervisor)* |
 | Worktree merge | Reviewer loop (`handleApprovedMerges`) | `liza wt-merge` | `commands.WtMergeCommand` |
 | Stale review clearing | Reviewer startup (`registerAgent`) | `liza clear-stale-review-claims` | `commands.ClearStaleReviewClaimsCommand` |
+| Terminal receipt archival | After each newly completed merge (`mergeWorktree`) | `archive-acceptance-receipts` subcommand of the configured executable (operator-only) | `ops.ArchiveTerminalAcceptanceReceipts` |
 
 **Why CLI fallback exists:** Orchestrators or humans may need to trigger these manually (e.g., merge a task approved outside the normal reviewer flow, or clear a stale claim without restarting).
 

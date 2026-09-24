@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/render"
 )
@@ -50,6 +51,7 @@ type taskInfo struct {
 	Validation        []string                  `json:"validation,omitempty" yaml:"validation,omitempty"`
 	AcceptanceSource  *models.AcceptanceSource  `json:"acceptance_source,omitempty" yaml:"acceptance_source,omitempty"`
 	AcceptanceReceipt *models.AcceptanceReceipt `json:"acceptance_receipt,omitempty" yaml:"acceptance_receipt,omitempty"`
+	Archived          []models.ArchivedFieldRef `json:"archived,omitempty" yaml:"archived,omitempty"`
 	DestructiveDB     bool                      `json:"destructive_db,omitempty" yaml:"destructive_db,omitempty"`
 	RCARequired       bool                      `json:"rca_required,omitempty" yaml:"rca_required,omitempty"`
 	Scope             string                    `json:"scope,omitempty" yaml:"scope,omitempty"`
@@ -125,12 +127,12 @@ func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
 	}
 	if len(opts.Fields) > 0 {
 		// Validate the schema even when filters (or an empty run) yield no tasks.
-		if _, err := projectTaskFields(&models.Task{}, opts.Fields); err != nil {
+		if _, err := projectTaskFields(opts.ProjectRoot, &models.Task{}, opts.Fields); err != nil {
 			return nil, err
 		}
 		projection := make([]map[string]any, 0, len(filtered))
 		for i := range filtered {
-			fields, err := projectTaskFields(&filtered[i], opts.Fields)
+			fields, err := projectTaskFields(opts.ProjectRoot, &filtered[i], opts.Fields)
 			if err != nil {
 				return nil, err
 			}
@@ -165,8 +167,12 @@ func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
 	}
 
 	taskInfos := make([]taskInfo, len(filtered))
-	for i, task := range filtered {
-		taskInfos[i] = buildTaskInfo(&task, opts.ProjectRoot)
+	for i := range filtered {
+		task, err := restoreArchivedForOutput(&filtered[i], opts)
+		if err != nil {
+			return nil, err
+		}
+		taskInfos[i] = buildTaskInfo(task, opts.ProjectRoot)
 	}
 
 	if opts.Internal {
@@ -182,7 +188,7 @@ func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (
 		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
 	}
 	if len(opts.Fields) > 0 {
-		projection, err := projectTaskFields(foundTask, opts.Fields)
+		projection, err := projectTaskFields(opts.ProjectRoot, foundTask, opts.Fields)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +222,11 @@ func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (
 		return formatTaskOutputSummaryOutput(info, opts.Format)
 	}
 
-	info := buildTaskInfo(foundTask, opts.ProjectRoot)
+	restored, err := restoreArchivedForOutput(foundTask, opts)
+	if err != nil {
+		return nil, err
+	}
+	info := buildTaskInfo(restored, opts.ProjectRoot)
 	if opts.Internal {
 		return info, nil
 	}
@@ -234,16 +244,30 @@ func filterInspectionTasks(tasks []models.Task, opts inspectTasksOptions) ([]mod
 	return filterTasks(tasks, opts), nil
 }
 
-func projectTaskFields(task *models.Task, fields []string) (map[string]any, error) {
+func projectTaskFields(projectRoot string, task *models.Task, fields []string) (map[string]any, error) {
 	projection := make(map[string]any, len(fields))
 	for _, field := range fields {
-		value, err := taskInspectionField(task, field)
+		value, err := taskInspectionField(projectRoot, task, field)
 		if err != nil {
 			return nil, err
 		}
 		projection[field] = value
 	}
 	return projection, nil
+}
+
+// restoreArchivedForOutput returns a copy of task with its archived fields
+// restored when the output will carry them: structured results and JSON/YAML.
+// Table and value formats never print receipts, so they do no archive I/O.
+func restoreArchivedForOutput(task *models.Task, opts inspectTasksOptions) (*models.Task, error) {
+	if len(task.Archived) == 0 || !(opts.Internal || opts.Format == "json" || opts.Format == "yaml") {
+		return task, nil
+	}
+	restored := *task
+	if err := ops.HydrateArchivedFields(opts.ProjectRoot, &restored); err != nil {
+		return nil, err
+	}
+	return &restored, nil
 }
 
 // buildTaskInfo converts a Task to taskInfo with computed fields
@@ -268,6 +292,7 @@ func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 		Validation:         task.Validation,
 		AcceptanceSource:   task.AcceptanceSource,
 		AcceptanceReceipt:  task.AcceptanceReceipt,
+		Archived:           task.Archived,
 		DestructiveDB:      task.DestructiveDB,
 		RCARequired:        task.RCARequired,
 		Scope:              task.Scope,

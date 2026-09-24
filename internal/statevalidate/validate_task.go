@@ -324,9 +324,12 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 // Admission performs repository checks. State validation only checks persisted
 // shape, leaving missing receipts repairable through update-review-commit.
 func validateAcceptanceState(task *models.Task) error {
+	if err := validateArchivedFields(task); err != nil {
+		return err
+	}
 	source := task.AcceptanceSource
 	if source == nil {
-		if task.AcceptanceReceipt != nil {
+		if task.AcceptanceReceipt != nil || len(task.Archived) > 0 {
 			return fmt.Errorf("task %s acceptance_receipt requires acceptance_source", task.ID)
 		}
 		return nil
@@ -364,6 +367,38 @@ func validateAcceptanceState(task *models.Task) error {
 	}
 	if totalOutput > 1024*1024 {
 		return fmt.Errorf("task %s acceptance_receipt output exceeds 1 MiB", task.ID)
+	}
+	return nil
+}
+
+// validateArchivedFields checks the refs of fields moved to archive objects.
+// Like receipts, it checks shape only and opens no files: one ref per field,
+// only on terminal tasks, never alongside the live value it replaces.
+func validateArchivedFields(task *models.Task) error {
+	if len(task.Archived) == 0 {
+		return nil
+	}
+	if !task.Status.IsTerminal() {
+		return fmt.Errorf("task %s in status %s has archived fields; only terminal tasks may", task.ID, task.Status)
+	}
+	seen := map[string]bool{}
+	for _, ref := range task.Archived {
+		if ref.Field != models.ArchivedFieldAcceptanceReceipt {
+			return fmt.Errorf("task %s archived field %q is not archivable", task.ID, ref.Field)
+		}
+		if seen[ref.Field] {
+			return fmt.Errorf("task %s has more than one archived %s", task.ID, ref.Field)
+		}
+		seen[ref.Field] = true
+		if _, err := hex.DecodeString(ref.SHA256); err != nil || len(ref.SHA256) != 64 || strings.ToLower(ref.SHA256) != ref.SHA256 {
+			return fmt.Errorf("task %s archived %s requires a lowercase SHA-256 digest", task.ID, ref.Field)
+		}
+		if ref.ArchivedAt.IsZero() {
+			return fmt.Errorf("task %s archived %s requires archived_at", task.ID, ref.Field)
+		}
+	}
+	if seen[models.ArchivedFieldAcceptanceReceipt] && task.AcceptanceReceipt != nil {
+		return fmt.Errorf("task %s has both a live and an archived acceptance_receipt", task.ID)
 	}
 	return nil
 }

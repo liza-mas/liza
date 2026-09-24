@@ -91,7 +91,10 @@ old task state. Legacy same-commit repair retains its existing no-op behavior.
 
 Clear the live receipt whenever submitted-attempt metadata is cleared on
 rejection, reclaim, recovery or retirement. Preserve adopted source identity to
-prevent downgrade. Preserve a merged task's successful receipt as audit evidence.
+prevent downgrade. Preserve a merged task's successful receipt as audit evidence:
+once the task is terminal the receipt may leave live state for an immutable
+archive object (see [Archived Task Fields](../architecture/blackboard-schema.md#archived-task-fields)),
+and inspection restores it verbatim.
 Reviewers read all mappings and command outcomes in their prompt, then use the
 configured binary's `get tasks <task-id> --format json` for full recorded output.
 

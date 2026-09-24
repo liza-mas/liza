@@ -13,7 +13,7 @@
 | `lifecycle-metrics/` | Fixed operation/outcome counters per sprint, with observation-window metadata; a non-empty subset of the known counts matrix is available with missing cells at zero, and the next recording materializes the full matrix; missing files are unavailable, while existing empty, truncated, malformed, bad-identity or unknown-key files remain unavailable and are never overwritten | Locked atomic replacement per sprint |
 | `usage/` | Durable provider-turn usage outside `state.yaml`; day-rolled `records-YYYY-MM-DD.jsonl` and numbered size-rotation parts; a missing directory means unavailable, not zero | Append-only JSONL under a leaf day lock; no retention pruning |
 | `alerts.log` | Persistent watcher alerts | Append-only |
-| `archive/` | Terminal-state tasks older than threshold | Periodic pruning |
+| `archive/` | `sprint-N.yaml` sprint records written at sprint advance; `objects/<sha[0:2]>/<sha>.json` immutable task-field objects (see [Archived Task Fields](#archived-task-fields)) | Write-once; never rewritten or pruned |
 | `circuit_breaker_report.md` | Latest qualifying circuit-breaker response report | Rewritten by `analyze` for each qualifying response |
 | `ESCALATION` | Stale checkpoint notification | Overwrite by watcher |
 
@@ -612,6 +612,56 @@ optional metrics projection reports availability and `observed_since`.
 Missing/corrupt data is unavailable, not zero; a first write starts a new
 observation window. Counter snapshots are scoped to sprint identity and cannot
 claim lossless coverage across process death or manual deletion.
+
+### Archived Task Fields
+
+A terminal task's `acceptance_receipt` may leave live state to shrink every
+state read, parse and write. It moves into an immutable archive object, and the
+task keeps a reference:
+
+```yaml
+archived:
+  - field: acceptance_receipt
+    sha256: <lowercase SHA-256 of the object bytes>
+    archived_at: 2026-09-24T10:00:00Z
+```
+
+- **Eligibility.** The task status is terminal (MERGED, ABANDONED, SUPERSEDED)
+  and it carries a live receipt. Terminal statuses have no outgoing
+  transitions, and every non-inspection reader of the receipt serves an active
+  task. History is never archived: history counts feed transition IDs, wake
+  detection and sprint metrics.
+- **Object.** `archive/objects/<sha[0:2]>/<sha>.json` is the JSON envelope
+  `{format_version: 1, task_id, field, value}` with the receipt verbatim. It is
+  named by the SHA-256 of its exact bytes, installed without replacing an
+  existing file, and never rewritten, so every state snapshot that references
+  it stays restorable. The path is derived from the validated digest, never
+  stored.
+- **Durability.** Before the reference is published under the state lock, the
+  object file and every directory from its prefix directory up to the runtime
+  directory are fsynced. This barrier runs on every write, including reuse of
+  an existing identical object, so a retry cannot skip a failed barrier. A
+  failure leaves at most an unreferenced object that the retry reuses. Windows
+  cannot fsync directories; there, crash ordering is best-effort, as for state
+  publication.
+- **Validation.** At most one reference per field; only on terminal tasks;
+  never alongside the live value it replaces; the task keeps
+  `acceptance_source`. Validation checks shape only and opens no files.
+- **Triggers.** Each newly completed `wt-merge` runs one bounded archive
+  transaction afterwards, under the merge caller's authority (the generation
+  fence applies) and never on replay; a failure is a merge warning. Operators
+  drain a backlog with the configured executable's
+  `archive-acceptance-receipts` subcommand. Agent sessions are
+  refused. A transaction takes at most 8 tasks and a soft 4 MiB of objects:
+  the first object always progresses. With nothing eligible it reads a snapshot
+  and takes no lock.
+- **Restoration.** `get tasks <id>` and task lists in JSON/YAML, structured
+  results, `task.<id>.acceptance_receipt` and `--field acceptance_receipt`
+  restore the receipt after verifying digest, task, field and format; the
+  `archived` reference stays visible. A missing or corrupt object is an
+  explicit error naming task, digest and path, never an absent receipt. Table
+  and value output, summaries, other fields and computed queries do no archive
+  I/O. Other readers (status, TUI, watch, usage, prompts) show compact state.
 
 ### Iteration Field Lifecycle
 

@@ -256,6 +256,7 @@ All system mechanics are provided by the `liza` Go binary (assumed in PATH). See
 | `liza submit-verdict <task> <V> [--reason "<reason>" \| --reason-file <path\|->]` | Record review verdict; `--reason-file -` reads a bounded multiline reason from stdin |
 | `liza release-claim <task> [--role R]` | Release claim on task or review |
 | `liza clear-stale-review-claims` | Clean up abandoned reviews |
+| `archive-acceptance-receipts` subcommand (configured executable) | Operator-only: move terminal tasks' acceptance receipts to the archive |
 | `liza update-sprint-metrics` | Sprint statistics |
 | `liza wt-create <task> [--fresh]` | Create worktree |
 | `liza wt-merge <task>` | Merge (supervisor-executed after APPROVED) |
