@@ -16,6 +16,7 @@ import (
 
 func TestAddTaskValidationPrerequisitesPersistAndReject(t *testing.T) {
 	root := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, root)
 	stateFile, _ := testhelpers.SetupLizaDir(t, root)
 	testhelpers.CreateSpecFile(t, root, "vision.md", "# Vision\n")
 	testhelpers.CreateSpecFile(t, root, "feature.md", "# Feature\n")

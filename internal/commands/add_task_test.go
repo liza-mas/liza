@@ -175,6 +175,7 @@ func TestAddTaskCommand(t *testing.T) {
 			tmpDir := t.TempDir()
 
 			// Setup liza directory and spec file
+			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 			testhelpers.SetupPipelineConfig(t, tmpDir)
 			logFile := paths.New(tmpDir).LogPath()
@@ -483,6 +484,7 @@ func TestAddTaskCommandFromFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Setup liza directory and spec file
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
 	logFile := paths.New(tmpDir).LogPath()
@@ -683,6 +685,7 @@ func TestAddTaskCommandTaskType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 			testhelpers.SetupPipelineConfig(t, tmpDir)
 			logFile := paths.New(tmpDir).LogPath()

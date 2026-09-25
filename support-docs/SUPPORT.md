@@ -351,6 +351,15 @@ self-approval or changed allocation remains a refusal. Do not fabricate an
 assignee or remove the acceptance declaration. `update-review-commit` repairs
 submitted/reviewing candidates, not the metadata of a MERGED parent.
 
+If `add-task` or `replace-task` fails with `acceptance.source (...): ... refused
+at creation`, claim would refuse the task at the current integration commit, so
+nothing was created. The diagnostic `field` names what to correct: use the exact
+heading text of the reviewed section rather than a slug, and copy its ordered
+validation commands. `add-task` cannot give a task a planning parent, so a section
+carrying an Acceptance Contract can be allocated only through its planning
+transition or a same-pair `§BRAND_BINARY_NAME§ replace-task` of an allocated
+child. A `RETRYABLE` outcome means integration could not be resolved; retry.
+
 If submission says `code tasks must include test files`, inspect the reported
 `changed_files_considered`, `test_files_matched` and `matcher_patterns` for the
 exact committed range. C# test filenames ending in `Test.cs` or `Tests.cs` are

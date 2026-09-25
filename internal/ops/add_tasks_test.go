@@ -178,6 +178,7 @@ func TestAddTask_PersistsDestructiveDB(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -259,6 +260,7 @@ func TestAddTask_Success(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -389,6 +391,7 @@ func TestAddTask_LongDescription(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
 			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 			logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 			testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -549,6 +552,7 @@ const minimalPipelineYAML = `pipeline:
 func setupPipelineProject(t *testing.T) (stateFile, logFile string) {
 	t.Helper()
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ = testhelpers.SetupLizaDir(t, tmpDir)
 	logFile = filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -915,6 +919,7 @@ func TestAddTask_DuplicateID(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 
@@ -943,6 +948,7 @@ func TestAddTask_DegradedCurrentStatePersistsTaskWithWarning(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -1029,6 +1035,7 @@ func TestAddTasks_PartialSuccess(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -1114,6 +1121,7 @@ func TestAddTasks_DegradedCurrentStatePersistsValidTasksWithWarning(t *testing.T
 	t.Parallel()
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
@@ -1424,6 +1432,7 @@ func TestInTransactionCores_AddTaskCoresMatchCommand(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	logFile := filepath.Join(tmpDir, paths.ProjectDirName(), "log.jsonl")
 	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")

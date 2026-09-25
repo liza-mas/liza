@@ -45,6 +45,21 @@ contract, not future implementation: it does not require the child's manifest,
 proof files or runnable validation tools and does not establish parent approval.
 Coding claim and submission still enforce those later boundaries independently.
 
+Task creation (`add-task`, each `add-tasks` item, `replace-task`) runs claim's
+allocation check on the candidate coding task at the current integration commit,
+outside the state lock. It refuses, as field-attributed `INVALID_INPUT`, what
+claim would refuse there: an unresolvable heading, validation that differs from
+the reviewed commands, or a strict declaration without an allocating parent.
+`add-task` cannot set a parent, so only the planning transition or a same-pair
+`replace-task` of an allocated child can create a strictly allocated task. The
+check adopts nothing and executes nothing. It judges one captured commit and does
+not promise later claimability; a carrier present at integration must resolve at
+creation even if a pending dependency would change it. Non-coding tasks, legacy
+paths and carriers absent from integration are not judged. `replace-task` reports
+the verdict after replay and returns `STATE_CHANGED` when the inherited parents'
+evidence changed during the check. An unresolvable integration commit is
+`RETRYABLE`.
+
 1. Submission preflight resolves the committed manifest and validates exact-set
    obligation coverage before rebase or execution. Field diagnostics identify
    missing mappings, invalid proof files and unapproved exceptions.

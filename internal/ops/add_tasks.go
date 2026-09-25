@@ -83,6 +83,18 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 
 	bb := db.For(statePath)
 
+	// An ad-hoc task has no parent, so a snapshot supplies only configuration;
+	// the Git reads stay outside the state lock, as at claim.
+	if acceptanceCreationApplies(&newTask) {
+		snapshot, err := bb.ReadSnapshot()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read state for the acceptance check: %w", err)
+		}
+		if err := checkCreatedTaskAcceptance(projectRoot, snapshot, &newTask).lifecycleError("add-task", nil); err != nil {
+			return nil, err
+		}
+	}
+
 	var postValidationErr error
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		if err := insertTaskInState(state, projectRoot, newTask, input, resolver); err != nil {

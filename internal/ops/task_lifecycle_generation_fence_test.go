@@ -179,7 +179,7 @@ func TestOrchestratorLifecycleMutationGenerationFence(t *testing.T) {
 	}
 
 	t.Run("add-task", func(t *testing.T) {
-		fixture := newOrchestratorLifecycleFixture(t, false, models.TaskStatusReady)
+		fixture := newOrchestratorLifecycleFixture(t, true, models.TaskStatusReady)
 		input := validAdd()
 		interleaving := fixture.replaceAtLifecycleWrite(t, 1)
 
@@ -191,7 +191,7 @@ func TestOrchestratorLifecycleMutationGenerationFence(t *testing.T) {
 	})
 
 	t.Run("add-tasks", func(t *testing.T) {
-		fixture := newOrchestratorLifecycleFixture(t, false, models.TaskStatusReady)
+		fixture := newOrchestratorLifecycleFixture(t, true, models.TaskStatusReady)
 		first := validAdd()
 		first.ID = "task-2"
 		second := validAdd()

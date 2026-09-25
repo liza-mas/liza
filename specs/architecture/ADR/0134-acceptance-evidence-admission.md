@@ -85,3 +85,14 @@ It preserves the existing approval and immutable-commit mechanisms.
   with ADR-0133. Reuse its IDs and pin provenance instead.
 - **Domain-specific test recognition:** cannot serve arbitrary project stacks
   and would confuse syntactic recognition with semantic correctness.
+
+## Amendment (2026-09-25)
+
+Task creation is an admission boundary for the allocation check. `add-task` and
+`replace-task` refuse a coding task that claim would refuse at the current
+integration commit, before persisting it: ad-hoc creations carried every
+allocation input (refs, validation, lineage) while claim was the first to judge
+them, so an unclaimable task was reported as created and stalled its dependents
+for hours. The check adopts and executes nothing and does not replace claim,
+which remains authoritative as integration moves. The
+[runtime protocol](../../protocols/acceptance-evidence.md) states its scope.

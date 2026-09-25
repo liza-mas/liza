@@ -1305,23 +1305,25 @@ func TestAcceptanceProvenance_SamePairReplacementKeepsAllocation(t *testing.T) {
 						DoneWhen: "Boundary proven", Scope: "boundary", Priority: 1},
 				}, models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration},
 					LifecycleRequestOptions{RequestID: "replace-acceptance", ExpectedTransition: models.TaskTransitionID(&source)})
-				if err != nil {
-					t.Fatal(err)
-				}
 
-				// THEN the replacement is adoptable exactly when the reviewed allocation still matches
-				state := readAcceptanceState(t, bb)
-				replacement := state.FindTask(replacementID)
-				input, err := loadAcceptanceInput(root, state, replacement, testhelpers.MustGit(t, root, "rev-parse", "integration"))
-				if allocation == "unchanged" {
-					if err != nil || input == nil || input.source.ParentTask != "acceptance-parent" {
-						t.Fatalf("replacement lost reviewed allocation: input=%+v err=%v", input, err)
+				// THEN the replacement is adoptable exactly when the reviewed allocation
+				// still matches; a mismatched one is refused at creation, so inherited
+				// lineage cannot carry it to adoption either
+				if allocation == "mismatched" {
+					var lifecycle *LifecycleError
+					if !errors.As(err, &lifecycle) || lifecycle.Outcome.Outcome != models.LifecycleInvalidInput || readAcceptanceState(t, bb).FindTask(replacementID) != nil {
+						t.Fatalf("mismatched allocation created through inherited lineage: err=%v", err)
 					}
 					return
 				}
-				var evidenceErr *AcceptanceEvidenceError
-				if !errors.As(err, &evidenceErr) || evidenceErr.Field != "acceptance.source" {
-					t.Fatalf("mismatched allocation adopted through inherited lineage: input=%+v err=%v", input, err)
+				if err != nil {
+					t.Fatal(err)
+				}
+				state := readAcceptanceState(t, bb)
+				replacement := state.FindTask(replacementID)
+				input, err := loadAcceptanceInput(root, state, replacement, testhelpers.MustGit(t, root, "rev-parse", "integration"))
+				if err != nil || input == nil || input.source.ParentTask != "acceptance-parent" {
+					t.Fatalf("replacement lost reviewed allocation: input=%+v err=%v", input, err)
 				}
 			})
 		}

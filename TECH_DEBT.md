@@ -755,3 +755,22 @@ written again, which the ledger cannot tell from its keys alone.
 
 - the ledger exceeds 1 MB;
 - BLOCKED writes show up in watch tick latency.
+
+## Creation acceptance check reports inner read failures as invalid input
+
+**What:** `add-task` and `replace-task` run claim's `loadAcceptanceInput` on the
+candidate (D52). A Git read failure inside it (`cannot inspect integration
+source`, a blob read error, or a parent check that folds an error into "not
+allocated") comes back as the same `AcceptanceEvidenceError` as a content fault,
+so creation refuses it as `INVALID_INPUT`/`correct_input` instead of
+`RETRYABLE`. Only an unresolvable integration commit is classified as retryable.
+
+**Why deferred:** separating them needs an origin class on
+`AcceptanceEvidenceError`, which the D63 change adds to the same type and the
+same call sites. The refusal is stateless and its reason names the read that
+failed, so a spurious one costs the orchestrator one retry.
+
+**Payback trigger:** Either of these:
+
+- D63's fault class on `AcceptanceEvidenceError` merges (map its I/O class to `RETRYABLE` at creation);
+- an orchestrator edits a valid task after a creation refusal caused by a read failure.

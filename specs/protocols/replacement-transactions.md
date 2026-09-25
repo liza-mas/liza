@@ -46,7 +46,9 @@ Pipeline-dependent constraints still apply at mutation.
 A replacement whose `role_pair` equals the source's continues the same
 allocation and inherits the source's `parent_task`/`parent_tasks`. Fan-in
 cohorts and parent-scoped checks therefore still see the work; acceptance
-adoption still requires an exact match with the parent's reviewed allocation.
+adoption still requires an exact match with the parent's reviewed allocation,
+which creation already checks at the current integration commit
+([Acceptance Evidence](acceptance-evidence.md)).
 `epic_ref` is not inherited, because the payload cannot restate it and
 replacement is how a broken one is dropped. A many-to-one cohort represents
 each SUPERSEDED member by its successors. Every supersession chain must stay
@@ -131,13 +133,15 @@ action without parsing error prose. `changed` is absent on failures.
 ## Transaction and audit boundary
 
 Structural checks reject malformed input before state acquisition. Declared-base
-Git validation runs outside locks, retaining its result or error. Lock order is
+Git validation and the replacement's acceptance check run outside locks,
+retaining their results or errors. Lock order is
 project lifecycle shared lock, source ownership/worktree lock, then blackboard
 lock. One generation-fenced mutation checks receipt identity and replay lineage
 first. An exact replay returns the retained completion; a fresh request must
 pass the retained Git validation result before candidate mutation. It then checks
 source eligibility, ID collision and dependency expectations; builds the
-replacement; applies consumer updates;
+replacement with its inherited lineage and requires the retained acceptance
+check to pass against unchanged parent evidence; applies consumer updates;
 supersedes the source; validates the full candidate; and records completion.
 The source must be in its role-pair initial or rejected status, `BLOCKED`, or
 `INTEGRATION_FAILED`. Source supersession also canonicalizes affected consumers

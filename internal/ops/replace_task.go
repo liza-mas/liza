@@ -113,6 +113,9 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 	// Git stays outside the state lock, but its admission error must not
 	// invalidate a retained receipt after the successor worktree is cleaned up.
 	base, baseErr := validateReplacementBase(projectRoot, input)
+	// Like the base, the acceptance verdict is reported only after replay, so a
+	// completed request still replays when today's carrier would refuse it.
+	acceptance := checkReplacementAcceptance(projectRoot, state, source, input, pb)
 	var hadWorktree bool
 	if hook, ok := replaceTaskCandidateTestHooks.Load(bb); ok && hook.(replaceTaskTestHooks).beforeLock != nil {
 		hook.(replaceTaskTestHooks).beforeLock()
@@ -170,13 +173,17 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 			if err != nil {
 				return err
 			}
-			// A same-pair replacement continues the source's allocation: keep its
-			// parent lineage so fan-in cohorts and parent-scoped checks still see
-			// the work. epic_ref is not inherited; the payload cannot restate it,
-			// and replacement is how a broken one is dropped.
-			if replacement.RolePair == source.RolePair {
-				replacement.ParentTask = cloneStringPtr(source.ParentTask)
-				replacement.ParentTasks = slices.Clone(source.ParentTasks)
+			inheritReplacementLineage(&replacement, source)
+			// The acceptance check ran on a pre-lock snapshot. Its result holds
+			// only while the parent evidence it read is unchanged.
+			if acceptance.parentFence != "" {
+				current, err := acceptanceParentFence(candidate, &replacement)
+				if err != nil || current != acceptance.parentFence {
+					return WrapLifecycleError(operation, observed, fmt.Errorf("replacement allocation evidence changed during its acceptance check"), models.LifecycleStateChanged, "requery", "none")
+				}
+			}
+			if err := acceptance.lifecycleError(operation, observed); err != nil {
+				return err
 			}
 			if base != nil {
 				replacement.BaseCommit = &base.BaseCommit
@@ -251,6 +258,31 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 		result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
 	}
 	return result, nil
+}
+
+// inheritReplacementLineage applies the replacement's parent lineage. A
+// same-pair replacement continues the source's allocation: keep its parent
+// lineage so fan-in cohorts and parent-scoped checks still see the work.
+// epic_ref is not inherited; the payload cannot restate it, and replacement is
+// how a broken one is dropped.
+func inheritReplacementLineage(replacement, source *models.Task) {
+	if replacement.RolePair == source.RolePair {
+		replacement.ParentTask = cloneStringPtr(source.ParentTask)
+		replacement.ParentTasks = slices.Clone(source.ParentTasks)
+	}
+}
+
+// checkReplacementAcceptance runs the creation acceptance check on the
+// replacement as the transaction will build it, inherited lineage included.
+func checkReplacementAcceptance(projectRoot string, state *models.State, source *models.Task, input ReplaceTaskInput, pb *pipelineBundle) acceptanceCreationCheck {
+	replacementInput := input.Replacement
+	replacement, err := buildReplacementTask(&replacementInput, pb.resolver)
+	if err != nil {
+		// The transaction rebuilds it and reports this error in its own order.
+		return acceptanceCreationCheck{}
+	}
+	inheritReplacementLineage(&replacement, source)
+	return checkCreatedTaskAcceptance(projectRoot, state, &replacement)
 }
 
 func replacementRewrittenConsumers(state *models.State, sourceID string, historyStarts map[string]int) []string {
