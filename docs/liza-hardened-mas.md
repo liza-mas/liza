@@ -384,6 +384,22 @@ A PreToolUse hook (`git-guard.sh`) blocks destructive git operations for Liza ag
 Active only for Liza agents (detected via `LIZA_AGENT_ID` env var).
 Pairing sessions are exempt (human already in the loop).
 
+### Background-Job Stop Guard
+
+A headless Claude session kills every background job it started when the turn ends,
+including commands moved to the background by the 600 s shell cap. An agent that ends its
+turn during a long validation or submit gate silently destroys that run and any
+single-use inputs it consumed.
+
+A Claude Code Stop hook (`hook-stop-guard`, a hidden CLI subcommand) refuses the turn end
+while such a job runs, naming each job so the agent waits for it. `await-*` commands are
+exempt: their own instructions end the turn when the harness backgrounds them. Input the
+hook cannot read blocks too, since an unrecognised job may be the one to protect.
+
+Bounds: Claude overrides the hook after 8 consecutive blocks, so a hung job is still killed;
+the supervisor's post-exit detection then preserves the claim. Active only for agents
+(agent ID env var set); interactive Pairing sessions keep background jobs across turns.
+
 ### Rebase-Before-Review
 
 Before submission, the supervisor ensures the worktree is rebased onto the current integration branch

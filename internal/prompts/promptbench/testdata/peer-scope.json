@@ -5,8 +5,8 @@
     {
       "role": "architect",
       "variant": "architecture-main-pair",
-      "before_bytes": 291432,
-      "after_bytes": 286656,
+      "before_bytes": 291458,
+      "after_bytes": 286682,
       "delta_bytes": -4776,
       "reference_before_bytes": 278459,
       "reference_after_bytes": 273683
@@ -14,8 +14,8 @@
     {
       "role": "architecture-reviewer",
       "variant": "architecture-main-pair",
-      "before_bytes": 288571,
-      "after_bytes": 283795,
+      "before_bytes": 288597,
+      "after_bytes": 283821,
       "delta_bytes": -4776,
       "reference_before_bytes": 275647,
       "reference_after_bytes": 270871
@@ -23,8 +23,8 @@
     {
       "role": "architect",
       "variant": "architecture-pair",
-      "before_bytes": 288962,
-      "after_bytes": 284186,
+      "before_bytes": 288988,
+      "after_bytes": 284212,
       "delta_bytes": -4776,
       "reference_before_bytes": 278459,
       "reference_after_bytes": 273683
@@ -32,8 +32,8 @@
     {
       "role": "architecture-reviewer",
       "variant": "architecture-pair",
-      "before_bytes": 286429,
-      "after_bytes": 281653,
+      "before_bytes": 286455,
+      "after_bytes": 281679,
       "delta_bytes": -4776,
       "reference_before_bytes": 275647,
       "reference_after_bytes": 270871
@@ -41,8 +41,8 @@
     {
       "role": "code-planner",
       "variant": "code-planning-main-pair",
-      "before_bytes": 288182,
-      "after_bytes": 283406,
+      "before_bytes": 288208,
+      "after_bytes": 283432,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -50,8 +50,8 @@
     {
       "role": "code-plan-reviewer",
       "variant": "code-planning-main-pair",
-      "before_bytes": 286820,
-      "after_bytes": 282044,
+      "before_bytes": 286846,
+      "after_bytes": 282070,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -59,8 +59,8 @@
     {
       "role": "code-planner",
       "variant": "code-planning-pair",
-      "before_bytes": 294557,
-      "after_bytes": 289781,
+      "before_bytes": 294583,
+      "after_bytes": 289807,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -68,8 +68,8 @@
     {
       "role": "code-plan-reviewer",
       "variant": "code-planning-pair",
-      "before_bytes": 290777,
-      "after_bytes": 286001,
+      "before_bytes": 290803,
+      "after_bytes": 286027,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -77,8 +77,8 @@
     {
       "role": "coder",
       "variant": "coding-pair",
-      "before_bytes": 289944,
-      "after_bytes": 285168,
+      "before_bytes": 289970,
+      "after_bytes": 285194,
       "delta_bytes": -4776,
       "reference_before_bytes": 266436,
       "reference_after_bytes": 261660
@@ -86,8 +86,8 @@
     {
       "role": "code-reviewer",
       "variant": "coding-pair",
-      "before_bytes": 290159,
-      "after_bytes": 285383,
+      "before_bytes": 290185,
+      "after_bytes": 285409,
       "delta_bytes": -4776,
       "reference_before_bytes": 266453,
       "reference_after_bytes": 261677
@@ -95,8 +95,8 @@
     {
       "role": "epic-planner",
       "variant": "epic-planning-main-pair",
-      "before_bytes": 291671,
-      "after_bytes": 286895,
+      "before_bytes": 291697,
+      "after_bytes": 286921,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -104,8 +104,8 @@
     {
       "role": "epic-plan-reviewer",
       "variant": "epic-planning-main-pair",
-      "before_bytes": 290468,
-      "after_bytes": 285692,
+      "before_bytes": 290494,
+      "after_bytes": 285718,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -113,8 +113,8 @@
     {
       "role": "epic-planner",
       "variant": "epic-planning-pair",
-      "before_bytes": 289201,
-      "after_bytes": 284425,
+      "before_bytes": 289227,
+      "after_bytes": 284451,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -122,8 +122,8 @@
     {
       "role": "epic-plan-reviewer",
       "variant": "epic-planning-pair",
-      "before_bytes": 288326,
-      "after_bytes": 283550,
+      "before_bytes": 288352,
+      "after_bytes": 283576,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -131,8 +131,8 @@
     {
       "role": "integration-analyst",
       "variant": "integration-pair",
-      "before_bytes": 290634,
-      "after_bytes": 285858,
+      "before_bytes": 290660,
+      "after_bytes": 285884,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -140,8 +140,8 @@
     {
       "role": "integration-reviewer",
       "variant": "integration-pair",
-      "before_bytes": 289221,
-      "after_bytes": 284445,
+      "before_bytes": 289247,
+      "after_bytes": 284471,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -149,8 +149,8 @@
     {
       "role": "integration-analyst",
       "variant": "slice-integration-pair",
-      "before_bytes": 290634,
-      "after_bytes": 285858,
+      "before_bytes": 290660,
+      "after_bytes": 285884,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -158,8 +158,8 @@
     {
       "role": "integration-reviewer",
       "variant": "slice-integration-pair",
-      "before_bytes": 289221,
-      "after_bytes": 284445,
+      "before_bytes": 289247,
+      "after_bytes": 284471,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -167,8 +167,8 @@
     {
       "role": "us-writer",
       "variant": "us-writing-pair",
-      "before_bytes": 285004,
-      "after_bytes": 280228,
+      "before_bytes": 285030,
+      "after_bytes": 280254,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -176,8 +176,8 @@
     {
       "role": "us-reviewer",
       "variant": "us-writing-pair",
-      "before_bytes": 287449,
-      "after_bytes": 282673,
+      "before_bytes": 287475,
+      "after_bytes": 282699,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -185,8 +185,8 @@
     {
       "role": "orchestrator",
       "variant": "wake INITIAL_PLANNING",
-      "before_bytes": 20385,
-      "after_bytes": 20385,
+      "before_bytes": 20411,
+      "after_bytes": 20411,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -194,8 +194,8 @@
     {
       "role": "orchestrator",
       "variant": "wake BLOCKED_TASKS",
-      "before_bytes": 27985,
-      "after_bytes": 27985,
+      "before_bytes": 28011,
+      "after_bytes": 28011,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -203,8 +203,8 @@
     {
       "role": "orchestrator",
       "variant": "wake HYPOTHESIS_EXHAUSTED",
-      "before_bytes": 20919,
-      "after_bytes": 20919,
+      "before_bytes": 20945,
+      "after_bytes": 20945,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -212,8 +212,8 @@
     {
       "role": "orchestrator",
       "variant": "wake IMMEDIATE_DISCOVERY",
-      "before_bytes": 19396,
-      "after_bytes": 19396,
+      "before_bytes": 19422,
+      "after_bytes": 19422,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -221,8 +221,8 @@
     {
       "role": "orchestrator",
       "variant": "wake PLANNING_COMPLETE",
-      "before_bytes": 19047,
-      "after_bytes": 19047,
+      "before_bytes": 19073,
+      "after_bytes": 19073,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -230,8 +230,8 @@
     {
       "role": "orchestrator",
       "variant": "wake MANY_TO_ONE_READY",
-      "before_bytes": 18857,
-      "after_bytes": 18857,
+      "before_bytes": 18883,
+      "after_bytes": 18883,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -239,8 +239,8 @@
     {
       "role": "orchestrator",
       "variant": "wake CODING_COMPLETE",
-      "before_bytes": 18556,
-      "after_bytes": 18556,
+      "before_bytes": 18582,
+      "after_bytes": 18582,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -248,8 +248,8 @@
     {
       "role": "orchestrator",
       "variant": "wake SPRINT_COMPLETE",
-      "before_bytes": 18634,
-      "after_bytes": 18634,
+      "before_bytes": 18660,
+      "after_bytes": 18660,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -257,8 +257,8 @@
     {
       "role": "orchestrator",
       "variant": "wake HUMAN_NOTE",
-      "before_bytes": 18093,
-      "after_bytes": 18093,
+      "before_bytes": 18119,
+      "after_bytes": 18119,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0

@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1367,6 +1368,23 @@ func TestEmbeddedClaudeSettingsSkillPermissionsIncludeInputReadiness(t *testing.
 	if !allowSet["Skill(check-liza-input-readiness)"] {
 		t.Fatalf("permissions.allow missing Skill(check-liza-input-readiness)")
 	}
+}
+
+func TestEmbeddedClaudeSettingsStopHookRunsStopGuard(t *testing.T) {
+	var settings map[string]any
+	if err := json.Unmarshal(renderEmbeddedAsset(claudeSettingsContent), &settings); err != nil {
+		t.Fatalf("embedded claude-settings.json is invalid JSON: %v", err)
+	}
+
+	hooks, _ := settings["hooks"].(map[string]any)
+	entries, _ := hooks["Stop"].([]any)
+	want := brand.Command("hook-stop-guard")
+	for _, entry := range entries {
+		if slices.Contains(hookEntryCommands(entry), want) {
+			return
+		}
+	}
+	t.Fatalf("hooks.Stop missing %q: %v", want, hooks["Stop"])
 }
 
 func TestEmbeddedClaudeSettingsTmpPermissions(t *testing.T) {

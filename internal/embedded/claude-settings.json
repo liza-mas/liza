@@ -11,6 +11,17 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "__BRAND_BINARY_NAME__ hook-stop-guard",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [

@@ -218,6 +218,16 @@ Parallel Read calls fail as a group if any one errors. Before fanning out,
 use **Glob** to check existence **FIRST**, THEN read only files that exist.
 Do NOT mix the check and the reads in the same batch.
 
+#### Background Jobs - Claude only
+
+A command started with `run_in_background`, or moved there by the 600 s foreground cap, dies when a headless session ends its turn. In agent sessions a Stop hook refuses the turn end while one runs, until Claude overrides it after 8 consecutive blocks.
+
+Wait in bounded foreground steps: a Bash call with `timeout: 600000` running
+`timeout 570 sh -c 'until tail -n1 "<output-file>" | grep -q "^\[exited with code"; do sleep 10; done'`,
+where `<output-file>` is the path given by the tool result that started the job. Never guess it.
+- Exit 0: the job ended. Its last line is `[exited with code N]`; nonzero N means the command failed, so read the output file.
+- Exit 124: completion was not observed. If the output file exists and is readable, repeat the call; otherwise report that the job cannot be observed instead of looping.
+
 #### RTK (Rust Token Killer)
 
 RTK is a **trusted** Token-optimized CLI proxy for shell commands.

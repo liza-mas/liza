@@ -47,9 +47,9 @@ BASH CONSTRAINTS (all roles — CLI sandboxes may block these patterns):
   unless the task explicitly targets installed dependency contents.
 - Avoid using sed/awk for file editing.
 - Shell commands have a hard 600 s foreground cap; longer commands are forced to the
-  background and the completion notice never reaches you, because the supervisor ends
-  your session at end_turn. Scope long validations to fit, or poll the background job
-  with TaskOutput in the same turn. Never end a turn with a validation still running.
+  background. Ending the turn can kill every background job you started, so never end a
+  turn while one runs: wait for it to exit as ~/{{globalDirName}}/AGENT_TOOLS.md describes
+  for your provider, then act on its result.
   This does not apply to await-* commands, which have their own instructions.
 
 QUERY TOOLS (all roles):
@@ -70,7 +70,7 @@ QUERY TOOLS (all roles):
 CODEBASE EXPLORATION:
 DO comply with the guidance defined in ~/{{globalDirName}}/AGENT_TOOLS.md
 
-No custom polling: do not use Monitor/ScheduleWakeup/Cron, tail/sleep/PID loops, or /tmp task-output polling. Use only documented {{brandTitle}} wait commands, foreground validation, or stop.
+No custom polling: do not use Monitor/ScheduleWakeup/Cron, tail/sleep/PID loops, or /tmp task-output polling, except waiting for your own background job as AGENT_TOOLS.md describes. Use only documented {{brandTitle}} wait commands, foreground validation, or stop.
 
 COMMUNICATION: Agents communicate via blackboard only through CLI commands, not direct interaction.
 

@@ -1609,9 +1609,9 @@ func TestBasePromptRegressionGuard(t *testing.T) {
 		`--glob '!**/node_modules/**'`,
 		"sed/awk for file editing",
 		"hard 600 s foreground cap",
-		"poll the background job",
-		"with TaskOutput in the same turn",
-		"Never end a turn with a validation still running",
+		"Ending the turn can kill every background job you started",
+		"turn while one runs: wait for it to exit as",
+		"then act on its result",
 		"does not apply to await-* commands",
 	})
 
