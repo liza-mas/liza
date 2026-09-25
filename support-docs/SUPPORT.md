@@ -307,7 +307,10 @@ test effects remain unknown, and the original request stays stale. Inspect the
 task and worktree, repair the evidence, then submit its current immutable SHA
 with a fresh request and inspected transition; registration need not change.
 Process abandonment and uncertain merge completion retain their preparations
-and require inspected recovery before further work.
+and require inspected recovery before further work. A claim that could not
+retire its preparation retries on its next claim; if claims keep reporting
+`unresolved preparation remains`, restart the preparing agent or, when the
+marker is `recover-task`, run a fresh `§BRAND_BINARY_NAME§ recover-task` request.
 See [Lifecycle Results](../specs/protocols/lifecycle-results.md) for receipt
 expiry, interrupted preparations and best-effort sprint counters.
 

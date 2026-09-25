@@ -774,3 +774,23 @@ failed, so a spurious one costs the orchestrator one retry.
 
 - D63's fault class on `AcceptanceEvidenceError` merges (map its I/O class to `RETRYABLE` at creation);
 - an orchestrator edits a valid task after a creation refusal caused by a read failure.
+
+## Failed-retirement markers outlive a process that never claims again
+
+**What:** A claim or submission that fails after reserving retires its own
+lifecycle preparation on the patient state-lock wait; when even that write
+fails, only an in-process doer or reviewer claim queues it for its next claim in
+the project (D60). The marker still blocks every claim of the task when the
+process exits first, when it makes no further claim (for example, it goes on to
+work another task for its whole lease), or when the failed invocation was
+`submit-for-review`, which runs in a short-lived CLI process and queues
+nothing. A restart (new generation) or inspected recovery clears it, as before.
+
+**Why deferred:** a durable pending-retirement record would need the same
+contended state lock that failed, and letting a same-generation retry adopt
+the marker cannot tell a returned invocation from an abandoned CLI subprocess,
+which the lifecycle contract keeps fenced.
+
+**Payback trigger:** any `unresolved preparation remains` stall after this fix
+whose preparing invocation had returned, found in supervisor logs as
+`failed to retire lifecycle preparation` with no later retirement.

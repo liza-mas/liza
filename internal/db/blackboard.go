@@ -184,6 +184,17 @@ func (bb *Blackboard) Patient() *Blackboard {
 	return bb.WithLockTimeout(patientReadLockTimeout)
 }
 
+// SetPatientReadLockTimeoutForTest shortens the Patient wait so a lock held past
+// it can be exercised without slow tests. Callers must not run in parallel with
+// other Patient operations.
+func SetPatientReadLockTimeoutForTest(timeout time.Duration) func() {
+	previous := patientReadLockTimeout
+	patientReadLockTimeout = timeout
+	return func() {
+		patientReadLockTimeout = previous
+	}
+}
+
 // ReadContextPatient is ReadContext with the Patient lock wait. It remains an
 // exclusive read and aborts when ctx is canceled.
 func (bb *Blackboard) ReadContextPatient(ctx context.Context) (*models.State, error) {

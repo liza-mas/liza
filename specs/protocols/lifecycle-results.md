@@ -174,9 +174,21 @@ Retirement advances revision without a completion
 receipt or a claim that external effects were rolled back. A denied concurrent
 invocation cannot retire another invocation's preparation. Lost authority,
 changed boundaries, process abandonment and panic retain any still-unresolved
-preparation. Failure to commit the retirement transaction leaves the marker
-intact. Retirement performs no external effects and does not require reacquiring
+preparation. Retirement usually follows state-lock contention, so it waits the
+patient state-lock budget. Failure to commit the retirement transaction leaves
+the marker intact; a doer or reviewer claim then queues the retirement in its
+process, scoped to the project state file, and that process retries it before
+its next doer or reviewer claim in the project, with the recorded authority and
+exact reservation. Exit discards the queue: a restart's new generation, or
+inspected recovery, resolves the marker instead. Submission runs in a
+short-lived process and queues nothing, so its marker then waits for the same.
+Retirement performs no external effects and does not require reacquiring
 the task lock after a finalization timeout.
+Preserve-mode `recover-task` refused by read-only inspection of an existing
+worktree retires its own reservation with `effects=none`; the refused request
+stays stale, so a fresh request follows. A refusal after an attempted worktree
+attach, and fresh or agent recovery, retain the fence. A fresh inspected
+`recover-task` request also replaces a generation-less marker.
 An observed failure of the configured idempotent post-worktree setup command
 preserves the worktree and original error. After inspection and repair, a fresh
 claim follows the existing setup recovery path. An interrupted command with

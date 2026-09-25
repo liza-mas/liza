@@ -288,6 +288,16 @@ func pruneLifecycleReceipts(receipts []models.LifecycleReceipt, sequence uint64)
 	return keep
 }
 
+// retirementUncommittedError marks a failed invocation whose retirement write did
+// not commit: the reservation it meant to release is still recorded.
+type retirementUncommittedError struct{ err error }
+
+func (e *retirementUncommittedError) Error() string {
+	return "failed to retire lifecycle preparation: " + e.err.Error()
+}
+
+func (e *retirementUncommittedError) Unwrap() error { return e.err }
+
 // retireFailedLifecyclePreparation releases only a reservation committed by this
 // invocation after its external work has returned. It proves neither completion
 // nor rollback. Crashes and callers with uncertain unfinished effects retain it.
@@ -323,7 +333,7 @@ func retireFailedLifecyclePreparation(bb *db.Blackboard, taskID string, authorit
 	if cleanupErr != nil {
 		observed = nil // A failed write's candidate is not committed evidence.
 		effects = "unknown"
-		originalErr = errors.Join(originalErr, fmt.Errorf("failed to retire lifecycle preparation: %w", cleanupErr))
+		originalErr = errors.Join(originalErr, &retirementUncommittedError{err: cleanupErr})
 	}
 	if IsAgentAuthorityError(originalErr) {
 		observed = nil

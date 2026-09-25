@@ -134,6 +134,7 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (result *ClaimReviewerTaskR
 		return nil, &PreconditionError{Reason: "task ID is required with reviewer claim request options"}
 	}
 	err = WithProjectLifecycleSharedLock(input.ProjectRoot, "claim-reviewer-task", func() error {
+		drainDeferredLifecycleRetirements(input.ProjectRoot)
 		var inner error
 		result, inner = claimReviewerTask(input, invocation)
 		return inner
@@ -196,7 +197,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 		if invocation.effects {
 			effects = "unknown"
 		}
-		resultErr = retireFailedLifecyclePreparation(bb, selected.ID, input.Authority, preparation, resultErr, effects)
+		resultErr = retireOrDeferFailedLifecyclePreparation(input.ProjectRoot, selected.ID, input.Authority, preparation, resultErr, effects)
 	}()
 	var needsPreflight, needsTaskLock, taskLocked bool
 	requestFor := func(task *models.Task) (LifecycleRequest, error) {

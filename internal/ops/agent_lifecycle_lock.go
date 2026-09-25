@@ -38,8 +38,11 @@ func WithAgentLifecycleLock(ctx context.Context, projectRoot, agentID, operation
 		return err
 	}
 	timeout := time.Duration(agentLifecycleLockTimeoutNanos.Load())
-	err = lock.WithTimeout(timeout).WithLockOperationContext(ctx, operation, fn)
-	if filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
+	// Only this lock's own acquisition timeout gets its label; one returned by
+	// fn came from a lock taken inside.
+	entered := false
+	err = lock.WithTimeout(timeout).WithLockOperationContext(ctx, operation, func() error { entered = true; return fn() })
+	if !entered && filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
 		return fmt.Errorf("agent lifecycle operation %q for %s could not acquire the lock within %s; another registration or provider start is still running: %w", operation, agentID, timeout, err)
 	}
 	return err

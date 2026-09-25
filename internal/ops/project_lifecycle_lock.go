@@ -45,13 +45,17 @@ func WithProjectLifecycleExclusiveLock(projectRoot, operation string, fn func() 
 
 func withProjectLifecycleLock(lock *filelock.FileLock, operation string, shared bool, timeout time.Duration, fn func() error) error {
 	lock = lock.WithTimeout(timeout)
+	// A timeout fn returns belongs to a lock taken inside; naming this lock for
+	// it sends the operator after the wrong holder (D60).
+	entered := false
+	enter := func() error { entered = true; return fn() }
 	var err error
 	if shared {
-		err = lock.WithSharedLockOperation(operation, fn)
+		err = lock.WithSharedLockOperation(operation, enter)
 	} else {
-		err = lock.WithLockOperation(operation, fn)
+		err = lock.WithLockOperation(operation, enter)
 	}
-	if filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
+	if !entered && filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
 		return fmt.Errorf("project lifecycle operation %q could not acquire the lock within %s; one or more cleanup, agent registration, or worktree provisioning/recovery operations are still running; wait for those operations to finish and retry: %w", operation, timeout, err)
 	}
 	return err

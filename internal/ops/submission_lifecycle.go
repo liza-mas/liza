@@ -72,13 +72,16 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 	}
 	err = WithProjectLifecycleSharedLock(projectRoot, integrationOperationSubmitForReview, func() error {
 		lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
+		// Retirement usually follows a state-lock timeout, so it waits the
+		// patient budget; this short-lived CLI process cannot retry it later.
+		retirementBB := db.For(paths.New(projectRoot).StatePath()).Patient()
 		var prepared *preparedSubmission
 		if prepareErr := lock.WithLockOperation(integrationOperationSubmitForReview, func() error {
 			var inner error
 			prepared, inner = prepareSubmitForReview(projectRoot, taskID, commitRef, agentID, authority, opts, invocation)
 			return inner
 		}); prepareErr != nil {
-			return retireFailedLifecyclePreparation(db.For(paths.New(projectRoot).StatePath()), taskID, authority, invocation.preparation, prepareErr, "unknown")
+			return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, prepareErr, "unknown")
 		}
 		if prepared.replay != nil {
 			result = prepared.replay
@@ -93,7 +96,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		if result != nil {
 			result.Warnings = append(result.Warnings, warnings...)
 		}
-		return retireFailedLifecyclePreparation(db.For(paths.New(projectRoot).StatePath()), taskID, authority, invocation.preparation, commitErr, "unknown")
+		return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, commitErr, "unknown")
 	})
 	return result, err
 }

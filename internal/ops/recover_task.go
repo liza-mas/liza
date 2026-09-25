@@ -212,6 +212,7 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 		return nil, fmt.Errorf("task %s role_pair %q has no initial status", taskID, task.RolePair)
 	}
 	snapshot := newRecoverTaskSnapshot(task)
+	var preparation models.LifecyclePreparation
 	if err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
@@ -223,7 +224,11 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 		if err := recoverTaskCheckLiveClaims(taskID, task, state, opts.Force, opts.Fresh, result); err != nil {
 			return err
 		}
-		return prepareOwnerEndingRequest(task, invocation.request)
+		if err := prepareOwnerEndingRequest(task, invocation.request); err != nil {
+			return err
+		}
+		preparation = *task.Lifecycle.Preparation
+		return nil
 	}); err != nil {
 		return nil, err
 	}
@@ -233,9 +238,18 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 		return recoverTaskFreshReset(bb, gitWrapper, taskID, reason, statuses, artifact, snapshot, result, invocation)
 	}
 
+	// Without an attach, every preserve refusal is a read-only inspection, so the
+	// refused request retires its own reservation instead of leaving a marker no
+	// agent can retire (D60). An attach, even a failed one, may have changed Git
+	// state and keeps the fence.
+	attachAttempted := !artifact.Worktree && artifact.Branch
 	preserve, err := recoverTaskPreserveArtifacts(gitWrapper, task, statuses, &artifact, result)
 	if err != nil {
-		return nil, err
+		if attachAttempted {
+			return nil, err
+		}
+		invocation.effects = false
+		return nil, retireFailedLifecyclePreparation(bb.Patient(), taskID, nil, &preparation, err, "none")
 	}
 	if testRecoverTaskHooks != nil && testRecoverTaskHooks.beforePreserveModify != nil {
 		testRecoverTaskHooks.beforePreserveModify()

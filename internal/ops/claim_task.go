@@ -85,6 +85,7 @@ func ClaimTaskWithRequest(projectRoot, taskID, agentID string, authority *models
 		return nil, &PreconditionError{Reason: err.Error()}
 	}
 	err = WithProjectLifecycleSharedLock(projectRoot, "task-claim-worktree", func() error {
+		drainDeferredLifecycleRetirements(projectRoot)
 		var claimErr error
 		result, claimErr = claimTask(projectRoot, taskID, agentID, authority, invocation, sessions...)
 		return claimErr
@@ -467,9 +468,11 @@ func completeClaimTaskAfterValidation(
 	}
 	// Arm retirement only after our preparation is persisted. Ordinary returns
 	// unwind Git cleanup first; a panic never assigns retErr and stays fenced.
+	// The failure is usually state-lock contention, so retirement waits the
+	// patient budget and, failing that, is retried by this process's next claim.
 	defer func() {
 		if retErr != nil {
-			retErr = retireFailedLifecyclePreparation(bb, taskID, authority, &preparation, retErr, "unknown")
+			retErr = retireOrDeferFailedLifecyclePreparation(projectRoot, taskID, authority, &preparation, retErr, "unknown")
 		}
 	}()
 	invocation.effects = true
