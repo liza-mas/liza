@@ -92,6 +92,14 @@ func validateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 				return fmt.Errorf("%s anomaly at index %d missing required details (%s)",
 					models.AnomalyTypeObligationContentDrifted, i, strings.Join(missing, ", "))
 			}
+		case models.AnomalyTypePendingMergeStalled:
+			// An operator finds the stuck merge from the reviewer that owns it
+			// and judges persistence from the rounds it spent.
+			missing := missingAnomalyDetails(anomaly, "agent_id", "role", "rounds")
+			if len(missing) > 0 {
+				return fmt.Errorf("%s anomaly at index %d missing required details (%s)",
+					models.AnomalyTypePendingMergeStalled, i, strings.Join(missing, ", "))
+			}
 		}
 	}
 	return nil

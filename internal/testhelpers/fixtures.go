@@ -317,6 +317,24 @@ func TimePtr(t time.Time) *time.Time {
 	return &t
 }
 
+// LegacyPendingMergeStallAnomaly returns the exact record the reviewer's
+// pending-merge stall writer persisted before D83: a retry_loop without the
+// count and error_pattern that type requires. States still carrying it fail
+// every whole-state validation until migrated.
+func LegacyPendingMergeStallAnomaly() models.Anomaly {
+	return models.Anomaly{
+		Timestamp: time.Date(2026, 9, 24, 15, 33, 14, 0, time.UTC),
+		Reporter:  "code-plan-reviewer-1",
+		Type:      "retry_loop",
+		Details: map[string]any{
+			"agent_id": "code-plan-reviewer-1",
+			"role":     "code-plan-reviewer",
+			"rounds":   21,
+			"impact":   "an approved task this reviewer owns has not merged; downstream work stays gated until it does",
+		},
+	}
+}
+
 // TransitionToReviewing transitions a READY_FOR_REVIEW task to REVIEWING state.
 // This simulates what the supervisor does when a reviewer claims a task for review.
 func TransitionToReviewing(t *testing.T, bb *db.Blackboard, taskID, reviewerID string) {

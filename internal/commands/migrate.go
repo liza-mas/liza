@@ -12,7 +12,8 @@ import (
 
 // MigrateCommand normalizes legacy state.yaml records written by an older
 // binary: underscore-form role names, legacy attempted fields, ownership
-// tuples left half-populated, and oversized or raw transcript text. Returns
+// tuples left half-populated, pending-merge stall anomalies filed as
+// incomplete retry_loop records, and oversized or raw transcript text. Returns
 // (changed, error) where changed indicates whether any modifications were made.
 //
 // Uses ReadRaw + manual unmarshal to bypass db.Read()'s read-path
@@ -57,6 +58,13 @@ func MigrateCommand(statePath string) (bool, error) {
 		// it for inspection.
 		if state.Tasks[i].AssignedTo == nil && state.Tasks[i].LeaseExpires != nil {
 			state.Tasks[i].LeaseExpires = nil
+			changed = true
+		}
+	}
+	// Global post-mutation validation rejects every later mutation while one
+	// such record remains, the same trap as the stranded lease above.
+	for i := range state.Anomalies {
+		if state.Anomalies[i].MigrateLegacyPendingMergeStall() {
 			changed = true
 		}
 	}

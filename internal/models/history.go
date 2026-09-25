@@ -219,6 +219,18 @@ const AnomalyTypeReviewerClaimCircuitOpen = "reviewer_claim_circuit_open"
 //     reviewed_section.
 const AnomalyTypeObligationContentDrifted = "obligation_content_drifted"
 
+// AnomalyTypePendingMergeStalled records that a reviewer's bounded wake gave up
+// retrying a merge it owns. It is not a retry_loop: that type describes a retry
+// cluster inside a task's execution, and retry-cluster detection answers it
+// with HALT, which repeated stalls of one supervisor loop do not warrant.
+// Detail validation is owned by statevalidate.
+const AnomalyTypePendingMergeStalled = "pending_merge_stalled"
+
+// PendingMergeStallImpact is the impact detail every pending-merge stall
+// record carries. Legacy stall records are recognized by it, so it must not
+// change while such records may remain unmigrated.
+const PendingMergeStallImpact = "an approved task this reviewer owns has not merged; downstream work stays gated until it does"
+
 // Anomaly represents an execution anomaly that may trigger circuit breaker
 type Anomaly struct {
 	Timestamp time.Time      `yaml:"timestamp"`
@@ -238,8 +250,28 @@ func (a *Anomaly) IsValidType() bool {
 		"review_exhaustion", "reviewer_loop", "stale_verdict", "system_ambiguity",
 		"provider_audit_degraded", "agent_degraded", "submit_verdict_failed",
 		AnomalyTypeReviewerClaimCircuitOpen, AnomalyTypeObligationContentDrifted,
+		AnomalyTypePendingMergeStalled,
 	}
 	return slices.Contains(validTypes, a.Type)
+}
+
+// MigrateLegacyPendingMergeStall retypes a pending-merge stall record written
+// before AnomalyTypePendingMergeStalled existed, when the writer filed it as a
+// retry_loop without the count and error_pattern that type requires. Only the
+// writer's full signature qualifies; a partial match is someone else's
+// malformed record and stays for inspection. Returns true if the record changed.
+func (a *Anomaly) MigrateLegacyPendingMergeStall() bool {
+	if a.Type != "retry_loop" || a.Details["count"] != nil || a.Details["error_pattern"] != nil {
+		return false
+	}
+	if a.Details["agent_id"] == nil || a.Details["role"] == nil || a.Details["rounds"] == nil {
+		return false
+	}
+	if impact, _ := a.Details["impact"].(string); impact != PendingMergeStallImpact {
+		return false
+	}
+	a.Type = AnomalyTypePendingMergeStalled
+	return true
 }
 
 // CircuitBreakerResponseType identifies the proportional action selected for a

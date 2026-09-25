@@ -1197,6 +1197,54 @@ func stringPtr(value string) *string {
 	return &value
 }
 
+// TestDetectPatterns_PendingMergeStallsDoNotFormRetryCluster pins why merge
+// stalls have their own anomaly type: retry_cluster's default response is
+// HALT, and repeated stalls of one supervisor loop are not a retry cluster
+// inside task execution. Exclusion is by type, so the stall records here even
+// share an error_pattern.
+func TestDetectPatterns_PendingMergeStallsDoNotFormRetryCluster(t *testing.T) {
+	now := time.Now()
+	stalls := func() []models.Anomaly {
+		var out []models.Anomaly
+		for i := range 3 {
+			out = append(out, models.Anomaly{
+				Timestamp: now.Add(time.Duration(i) * time.Minute),
+				Reporter:  "code-reviewer-1",
+				Type:      "pending_merge_stalled",
+				Details: map[string]any{
+					"agent_id":      "code-reviewer-1",
+					"role":          "code-reviewer",
+					"rounds":        21,
+					"error_pattern": "pending merge did not converge",
+				},
+			})
+		}
+		return out
+	}
+	retry := func(pattern string) models.Anomaly {
+		return models.Anomaly{Timestamp: now, Task: "task-1", Reporter: "coder-1", Type: "retry_loop",
+			Details: map[string]any{"count": 3, "error_pattern": pattern}}
+	}
+
+	t.Run("stalls alone never trigger", func(t *testing.T) {
+		anomalies := append(stalls(), retry("connection refused"), retry("timeout"))
+		if result := DetectPatterns(anomalies); result.Triggered {
+			t.Errorf("DetectPatterns() = %s (%s), want no trigger from merge stalls", result.Pattern, result.Evidence)
+		}
+	})
+
+	t.Run("genuine cluster still triggers and counts only retry loops", func(t *testing.T) {
+		anomalies := append(stalls(), retry("connection refused"), retry("connection refused"), retry("timeout"))
+		result := DetectPatterns(anomalies)
+		if result.Pattern != "retry_cluster" {
+			t.Fatalf("DetectPatterns() pattern = %q, want retry_cluster", result.Pattern)
+		}
+		if !strings.HasPrefix(result.Evidence, "3 retry_loop anomalies") {
+			t.Errorf("evidence = %q, want it to count the 3 retry loops and not the stalls", result.Evidence)
+		}
+	})
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || contains(s[1:], substr)))
 }

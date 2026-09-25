@@ -2,6 +2,7 @@ package commands
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/statehygiene"
+	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"gopkg.in/yaml.v3"
 )
@@ -533,5 +535,111 @@ func TestMigrateCommand_ClearsLeaseWithoutAssignee(t *testing.T) {
 	}
 	if again {
 		t.Error("second MigrateCommand() changed = true, want idempotent")
+	}
+}
+
+// TestMigrateCommand_RetypesLegacyPendingMergeStall pins the D83 repair: the
+// stall record an older reviewer wrote as an incomplete retry_loop becomes a
+// pending_merge_stalled record carrying the same evidence, so whole-state
+// validation — and every rejected-task reclaim gated on it — passes again.
+func TestMigrateCommand_RetypesLegacyPendingMergeStall(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	legacy := testhelpers.LegacyPendingMergeStallAnomaly()
+	genuine := models.Anomaly{
+		Timestamp: legacy.Timestamp.Add(time.Minute),
+		Task:      "task-1",
+		Reporter:  "coder-1",
+		Type:      "retry_loop",
+		Details:   map[string]any{"count": 3, "error_pattern": "connection refused"},
+	}
+	state := testhelpers.CreateValidState()
+	state.Anomalies = []models.Anomaly{legacy, genuine}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	changed, err := MigrateCommand(statePath)
+	if err != nil {
+		t.Fatalf("MigrateCommand() error = %v", err)
+	}
+	if !changed {
+		t.Fatal("MigrateCommand() changed = false, want true")
+	}
+
+	updated, err := db.New(statePath).Read()
+	if err != nil {
+		t.Fatalf("read migrated state: %v", err)
+	}
+	if len(updated.Anomalies) != 2 {
+		t.Fatalf("anomalies = %d, want 2", len(updated.Anomalies))
+	}
+	stall := updated.Anomalies[0]
+	if stall.Type != "pending_merge_stalled" {
+		t.Errorf("stall type = %q, want pending_merge_stalled", stall.Type)
+	}
+	if !stall.Timestamp.Equal(legacy.Timestamp) || stall.Reporter != legacy.Reporter || stall.Task != legacy.Task {
+		t.Errorf("stall identity changed: got (%v, %q, %q), want (%v, %q, %q)",
+			stall.Timestamp, stall.Reporter, stall.Task, legacy.Timestamp, legacy.Reporter, legacy.Task)
+	}
+	if !reflect.DeepEqual(stall.Details, legacy.Details) {
+		t.Errorf("stall details = %v, want preserved %v", stall.Details, legacy.Details)
+	}
+	if got := updated.Anomalies[1]; got.Type != "retry_loop" || !reflect.DeepEqual(got.Details, genuine.Details) {
+		t.Errorf("genuine retry_loop changed: %+v", got)
+	}
+	if err := statevalidate.ValidateAnomalies(updated, tmpDir, true); err != nil {
+		t.Errorf("migrated anomalies fail validation: %v", err)
+	}
+
+	again, err := MigrateCommand(statePath)
+	if err != nil {
+		t.Fatalf("second MigrateCommand() error = %v", err)
+	}
+	if again {
+		t.Error("second MigrateCommand() changed = true, want idempotent")
+	}
+}
+
+// TestMigrateCommand_LeavesUnrecognizedMalformedRetryLoop guards the migration
+// predicate: only the full legacy stall signature is retyped. A record that
+// matches partly is someone else's malformed evidence and stays for
+// inspection rather than becoming a stall record it cannot vouch for.
+func TestMigrateCommand_LeavesUnrecognizedMalformedRetryLoop(t *testing.T) {
+	cases := map[string]func(details map[string]any){
+		"missing agent_id": func(d map[string]any) { delete(d, "agent_id") },
+		"missing role":     func(d map[string]any) { delete(d, "role") },
+		"missing rounds":   func(d map[string]any) { delete(d, "rounds") },
+		"different impact": func(d map[string]any) { d["impact"] = "some other loop" },
+		"partial canonical retry details": func(d map[string]any) {
+			d["count"] = 21
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+			record := testhelpers.LegacyPendingMergeStallAnomaly()
+			mutate(record.Details)
+			state := testhelpers.CreateValidState()
+			state.Anomalies = []models.Anomaly{record}
+			testhelpers.WriteInitialState(t, statePath, state)
+
+			changed, err := MigrateCommand(statePath)
+			if err != nil {
+				t.Fatalf("MigrateCommand() error = %v", err)
+			}
+			if changed {
+				t.Error("MigrateCommand() changed = true, want the record left alone")
+			}
+			updated, err := db.New(statePath).Read()
+			if err != nil {
+				t.Fatalf("read state: %v", err)
+			}
+			got := updated.Anomalies[0]
+			if got.Type != "retry_loop" || !reflect.DeepEqual(got.Details, record.Details) {
+				t.Errorf("record changed: got %+v, want %+v", got, record)
+			}
+		})
 	}
 }

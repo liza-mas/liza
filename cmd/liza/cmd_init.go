@@ -464,7 +464,7 @@ Reports whether any changes were made.`,
 			return err
 		}
 		if changed {
-			fmt.Println("Migration complete: legacy state fields normalized (role names, attempted fields, oversized text, and raw provider transcript payloads where needed).")
+			fmt.Println("Migration complete: legacy state fields normalized (role names, attempted fields, legacy anomaly types, oversized text, and raw provider transcript payloads where needed).")
 		} else {
 			fmt.Println("No changes needed: no legacy state fields require migration.")
 		}

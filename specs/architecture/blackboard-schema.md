@@ -1469,6 +1469,7 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `agent_degraded` | Supervisor / CLI | Agent epoch cannot provide effective role capacity |
 | `submit_verdict_failed` | CLI | Submit-verdict failed after accepting a verdict attempt; best-effort when the blackboard remains writable |
 | `reviewer_claim_circuit_open` | Supervisor | Repeated identical pre-claim reviewer failures against an unchanged task/state boundary crossed the threshold |
+| `pending_merge_stalled` | Supervisor | A reviewer's bounded wake gave up retrying a merge it owns; kept out of retry-cluster detection |
 
 **Required Details Fields (validated by `liza validate`):**
 
@@ -1486,6 +1487,7 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `agent_degraded` | `agent_id`, `role`, `reason`, `last_error` | Preserve claim-capacity degradation evidence |
 | `submit_verdict_failed` | `verdict`, `error` | Preserve failed verdict-write cause for operator diagnosis |
 | `reviewer_claim_circuit_open` | `role`, `failure_class`, `attempts`, `first_failure`, `last_failure`, `recovery` | Bounded quarantine evidence, one durable record per failure key |
+| `pending_merge_stalled` | `agent_id`, `role`, `rounds` | Locate the reviewer owning the unmerged task |
 
 The Supervisor also retains `boundary_version`, bounded masked `error`, and
 `cooldown_until` on `reviewer_claim_circuit_open`. Role, task, failure class and
@@ -1523,6 +1525,11 @@ details:
 Legacy states containing raw transcript payloads in anomaly messages should be
 repaired with `liza migrate`, which preserves the anomaly and routing details
 while replacing the raw message with a bounded summary and scrub metadata.
+The `migrate` command also retypes pending-merge stall records that older binaries
+filed as `retry_loop` without `count`/`error_pattern` to
+`pending_merge_stalled`, keeping every detail; only the writer's exact legacy
+shape qualifies. Migration reads and writes the state in separate steps, so
+run it with no agent running.
 
 ```yaml
 required_fields:
@@ -1575,7 +1582,7 @@ invariants:
   - "Task arch_ref must reference an existing file (checked via checkSpecFileExists against project root then integration branch)"
   - "Task output entry arch_ref must not contain worktree prefix (.worktrees/) — must be repo-relative"
   # Note: output entry arch_ref does NOT have file-existence validation (entries are set before merge)
-  - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_budget_exhausted, review_exhaustion, reviewer_loop, stale_verdict, system_ambiguity, provider_audit_degraded, agent_degraded, submit_verdict_failed"
+  - "Anomaly type must be one of: retry_loop, trade_off, spec_ambiguity, external_blocker, assumption_violated, scope_deviation, workaround, debt_created, spec_changed, hypothesis_exhaustion, spec_gap, review_budget_exhausted, review_exhaustion, reviewer_loop, stale_verdict, system_ambiguity, provider_audit_degraded, agent_degraded, submit_verdict_failed, reviewer_claim_circuit_open, obligation_content_drifted, pending_merge_stalled"
   # Transition invariants (runtime-enforced, not statically validated)
   # These are enforced by agent behavior and atomic operations during state transitions.
   # `liza validate` validates static state invariants; these require history analysis.

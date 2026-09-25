@@ -374,7 +374,7 @@ applicable.
 | Supervisor logs recognized `reviewer_claim_circuit_open` once per unchanged pre-claim failure key, updating retry evidence in place on failed re-probes | Repeated reviewer claim failures, anomaly floods | code (`claim_breaker.go`, `claim_failure_anomaly.go`), spec ([Circuit Breaker](specs/protocols/circuit-breaker.md)) |
 | A doer claim refused for its acceptance allocation leaves the claimable pool through `BLOCKED` — content faults at once, allocation refusals after three identical observations — and only while the observed integration commit and task/parent/reaffirmation records are unchanged; unclassified read failures are never escalated | Unclaimable tasks retried indefinitely, orchestrator never woken, stale refusals blocking repaired work | code (`acceptance_claim_block.go`, `acceptance_refusal.go`), spec ([ADR-0160](specs/architecture/ADR/0160-doer-acceptance-refusal-escalation.md)) |
 | Anomaly type validation: only recognized types accepted | Invalid anomaly categorization | code (`validate_entity.go`) |
-| Type-specific detail requirements (e.g., `retry_loop` needs `count` + `error_pattern`); `reviewer_claim_circuit_open` requires `role`, `failure_class`, `attempts`, `first_failure`, `last_failure`, `recovery` | Unactionable anomaly records | code (`validate_entity.go`) |
+| Type-specific detail requirements (e.g., `retry_loop` needs `count` + `error_pattern`); `reviewer_claim_circuit_open` requires `role`, `failure_class`, `attempts`, `first_failure`, `last_failure`, `recovery`; `pending_merge_stalled` requires `agent_id`, `role`, `rounds` | Unactionable anomaly records | code (`validate_entity.go`) |
 
 ---
 

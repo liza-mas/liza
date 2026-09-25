@@ -145,3 +145,52 @@ func TestValidateAnomalyObligationContentDroppedKeepsEmptyCurrentSection(t *test
 		t.Fatal("validateAnomalies() = nil, want rejection when current_section is absent rather than empty")
 	}
 }
+
+// completePendingMergeStalledDetails returns the detail set the reviewer's
+// pending-merge stall writer records.
+func completePendingMergeStalledDetails() map[string]any {
+	return map[string]any{
+		"agent_id": "code-reviewer-1",
+		"role":     "code-reviewer",
+		"rounds":   21,
+		"impact":   models.PendingMergeStallImpact,
+	}
+}
+
+func pendingMergeStalledState(details map[string]any) *models.State {
+	return &models.State{
+		Anomalies: []models.Anomaly{{
+			Reporter: "code-reviewer-1",
+			Type:     models.AnomalyTypePendingMergeStalled,
+			Details:  details,
+		}},
+	}
+}
+
+func TestValidateAnomalyPendingMergeStalled(t *testing.T) {
+	t.Parallel()
+
+	t.Run("complete anomaly is accepted", func(t *testing.T) {
+		t.Parallel()
+
+		if err := validateAnomalies(pendingMergeStalledState(completePendingMergeStalledDetails()), "", true); err != nil {
+			t.Fatalf("validateAnomalies() = %v, want nil for a complete anomaly", err)
+		}
+	})
+
+	for _, field := range []string{"agent_id", "role", "rounds"} {
+		t.Run("missing "+field+" is rejected", func(t *testing.T) {
+			t.Parallel()
+
+			details := completePendingMergeStalledDetails()
+			delete(details, field)
+			err := validateAnomalies(pendingMergeStalledState(details), "", true)
+			if err == nil {
+				t.Fatalf("validateAnomalies() = nil, want rejection for missing %q", field)
+			}
+			if !strings.Contains(err.Error(), models.AnomalyTypePendingMergeStalled) || !strings.Contains(err.Error(), field) {
+				t.Errorf("error = %q, want it to name the anomaly type and the missing detail %q", err, field)
+			}
+		})
+	}
+}

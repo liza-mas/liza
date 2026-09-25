@@ -744,6 +744,46 @@ func TestClaimRejectedTask(t *testing.T) {
 	})
 }
 
+// TestClaimTask_RejectedReclaimAfterLegacyStallMigration reproduces D83 and
+// proves its repair: an incomplete retry_loop stall record left by an older
+// reviewer makes the rejected claim's whole-state validation refuse, and the
+// migrated record lets the same reclaim through.
+func TestClaimTask_RejectedReclaimAfterLegacyStallMigration(t *testing.T) {
+	fixture := newRejectedHandoffFixture(t, true)
+	bb := db.For(fixture.stateFile)
+	if err := bb.Modify(func(state *models.State) error {
+		state.Anomalies = append(state.Anomalies, testhelpers.LegacyPendingMergeStallAnomaly())
+		return nil
+	}); err != nil {
+		t.Fatalf("inject legacy stall anomaly: %v", err)
+	}
+
+	_, err := ClaimTask(fixture.projectRoot, fixture.taskID, "coder-2")
+	if err == nil || !strings.Contains(err.Error(), "missing required details (count, error_pattern)") {
+		t.Fatalf("ClaimTask() error = %v, want the legacy stall record to refuse the rejected claim", err)
+	}
+
+	if err := bb.Modify(func(state *models.State) error {
+		migrated := 0
+		for i := range state.Anomalies {
+			if state.Anomalies[i].MigrateLegacyPendingMergeStall() {
+				migrated++
+			}
+		}
+		if migrated != 1 {
+			return fmt.Errorf("migrated %d legacy stall records, want 1", migrated)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("migrate legacy stall anomaly: %v", err)
+	}
+
+	if _, err := ClaimTask(fixture.projectRoot, fixture.taskID, "coder-2"); err != nil {
+		t.Fatalf("ClaimTask() after migration error: %v", err)
+	}
+	assertRejectedClaimState(t, fixture, "coder-2", fixture.branchSHA)
+}
+
 // TestClaimTask_RejectedWorktreeMissing_Recreated verifies that when a REJECTED
 // task's worktree directory is absent, ClaimTask recreates it from integration.
 func TestClaimTask_RejectedWorktreeMissing_Recreated(t *testing.T) {

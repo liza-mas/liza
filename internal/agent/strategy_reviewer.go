@@ -14,7 +14,7 @@ import (
 
 const defaultMaxMergeRetries = 3
 
-const pendingMergeStallAnomalyType = "retry_loop"
+const pendingMergeStallAnomalyType = models.AnomalyTypePendingMergeStalled
 
 // Overridable in tests, which must not spend the production cadence to observe
 // one round of it.
@@ -206,7 +206,7 @@ func (s *reviewerStrategy) recordPendingMergeStall(bb *db.Blackboard, config Sup
 				"agent_id": config.AgentID,
 				"role":     s.role,
 				"rounds":   s.mergeStallRounds,
-				"impact":   "an approved task this reviewer owns has not merged; downstream work stays gated until it does",
+				"impact":   models.PendingMergeStallImpact,
 			},
 		})
 		return nil

@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -167,5 +168,15 @@ func TestReviewerPreWork_PendingMergeStallRecordsAnomaly(t *testing.T) {
 	}
 	if !found.IsValidType() {
 		t.Errorf("anomaly type %q is not accepted by the state model", found.Type)
+	}
+	// A stall is a supervisor loop, not a retry cluster inside a task: a
+	// retry_loop here would feed retry-cluster detection and its HALT.
+	if found.Type != "pending_merge_stalled" {
+		t.Errorf("anomaly type = %q, want pending_merge_stalled", found.Type)
+	}
+	// The record must satisfy its type's required details, or every later
+	// mutation that validates the whole state refuses on it (D83).
+	if err := statevalidate.ValidateAnomalies(&models.State{Anomalies: []models.Anomaly{*found}}, "", true); err != nil {
+		t.Errorf("recorded anomaly fails state validation: %v", err)
 	}
 }

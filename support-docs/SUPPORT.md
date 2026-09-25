@@ -96,6 +96,14 @@ post-mutation validation means no command can repair it — each one is refused
 by the record it would fix. Run `§BRAND_BINARY_NAME§ migrate` to clear the
 stranded lease, then retry.
 
+If every rejected-task reclaim, `validate`, or task repair fails with
+`retry_loop anomaly at index N missing required details (count, error_pattern)`,
+the record is a merge-stall anomaly written by an older reviewer. Run
+`§BRAND_BINARY_NAME§ stop`, wait for the agents to exit, run
+`§BRAND_BINARY_NAME§ migrate` to retype it as `pending_merge_stalled`, then
+`§BRAND_BINARY_NAME§ start` and restart the agents. Migration reads and writes
+the state in separate steps, so a running agent's write in between is lost.
+
 If a write fails because a legacy `goal.alignment_history[].summary` exceeds
 the 4096-byte state text limit, run `§BRAND_BINARY_NAME§ migrate`, then retry.
 Migration replaces oversized summaries with a bounded scrub notice while

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"maps"
 	"reflect"
 	"strings"
 	"testing"
@@ -89,6 +90,67 @@ func TestAnomalyIsValidTypeVocabulary(t *testing.T) {
 		if a.IsValidType() {
 			t.Errorf("Anomaly type %q should not be valid", typ)
 		}
+	}
+}
+
+func TestAnomalyMigrateLegacyPendingMergeStall(t *testing.T) {
+	legacyDetails := func() map[string]any {
+		return map[string]any{
+			"agent_id": "code-plan-reviewer-1",
+			"role":     "code-plan-reviewer",
+			"rounds":   21,
+			"impact":   PendingMergeStallImpact,
+		}
+	}
+	if stalled := (Anomaly{Type: AnomalyTypePendingMergeStalled}); !stalled.IsValidType() {
+		t.Fatalf("%q is not a valid anomaly type", AnomalyTypePendingMergeStalled)
+	}
+
+	t.Run("full legacy signature is retyped with evidence kept", func(t *testing.T) {
+		a := Anomaly{Reporter: "code-plan-reviewer-1", Type: "retry_loop", Details: legacyDetails()}
+		if !a.MigrateLegacyPendingMergeStall() {
+			t.Fatal("MigrateLegacyPendingMergeStall() = false, want true")
+		}
+		if a.Type != AnomalyTypePendingMergeStalled {
+			t.Errorf("Type = %q, want %q", a.Type, AnomalyTypePendingMergeStalled)
+		}
+		if !reflect.DeepEqual(a.Details, legacyDetails()) {
+			t.Errorf("Details = %v, want unchanged %v", a.Details, legacyDetails())
+		}
+		if a.MigrateLegacyPendingMergeStall() {
+			t.Error("second MigrateLegacyPendingMergeStall() = true, want idempotent")
+		}
+	})
+
+	unchanged := map[string]Anomaly{
+		"genuine retry loop":            {Type: "retry_loop", Details: map[string]any{"count": 3, "error_pattern": "timeout"}},
+		"other type with the signature": {Type: "workaround", Details: legacyDetails()},
+	}
+	for field, mutate := range map[string]func(map[string]any){
+		"missing agent_id": func(d map[string]any) { delete(d, "agent_id") },
+		"missing role":     func(d map[string]any) { delete(d, "role") },
+		"missing rounds":   func(d map[string]any) { delete(d, "rounds") },
+		"missing impact":   func(d map[string]any) { delete(d, "impact") },
+		"different impact": func(d map[string]any) { d["impact"] = "some other loop" },
+		"has count":        func(d map[string]any) { d["count"] = 21 },
+		"has error_pattern": func(d map[string]any) {
+			d["error_pattern"] = "pending merge did not converge"
+		},
+	} {
+		details := legacyDetails()
+		mutate(details)
+		unchanged[field] = Anomaly{Type: "retry_loop", Details: details}
+	}
+	for name, a := range unchanged {
+		t.Run(name+" is left alone", func(t *testing.T) {
+			wantType, wantDetails := a.Type, maps.Clone(a.Details)
+			if a.MigrateLegacyPendingMergeStall() {
+				t.Error("MigrateLegacyPendingMergeStall() = true, want false")
+			}
+			if a.Type != wantType || !reflect.DeepEqual(a.Details, wantDetails) {
+				t.Errorf("record changed to %+v", a)
+			}
+		})
 	}
 }
 
