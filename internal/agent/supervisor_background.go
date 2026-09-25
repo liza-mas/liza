@@ -149,6 +149,11 @@ func handleAbandonedBackgroundTaskRetry(
 			"summary", abandoned.Summary,
 			"count", count,
 			"threshold", threshold)
+		message := fmt.Sprintf("%s's session on %s ended while background job %s (%s) was still running; the provider killed it. Claim preserved for a re-run (%d/%d). Check what the job consumed or left half-applied.",
+			config.AgentID, taskID, abandoned.TaskID, abandoned.Summary, count, threshold)
+		if alertErr := LogAlert(config.ProjectRoot, "⚠️", "ABANDONED BACKGROUND JOB", message); alertErr != nil {
+			GetLogger().Warn("Failed to write abandoned background job alert", "error", alertErr)
+		}
 		return false
 	}
 

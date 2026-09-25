@@ -3169,6 +3169,64 @@ func TestAbandonedBackgroundTaskRetry_DoesNotConsumeSpinBudget(t *testing.T) {
 	}
 }
 
+func TestAbandonedBackgroundTaskRetry_AlertsOperatorOnFirstAbandonment(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+
+	now := time.Now().UTC()
+	taskID := "task-abandoned-alert"
+	agentID := "coder-1"
+	task := testhelpers.BuildTaskByStatus(taskID, models.TaskStatusImplementing, now)
+	task.AssignedTo = &agentID
+
+	state := testhelpers.CreateValidState()
+	state.Config.SpinningRestartThreshold = 2
+	state.Tasks = []models.Task{task}
+	state.Agents[agentID] = models.Agent{Role: models.RoleCoder, Status: models.AgentStatusWorking, CurrentTask: &taskID}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	config := SupervisorConfig{
+		AgentID:     agentID,
+		Authority:   testSupervisorAuthority(t, bb, agentID),
+		Role:        models.RoleCoder,
+		ProjectRoot: projectRoot,
+		StatePath:   statePath,
+		CLIName:     "claude",
+	}
+	abandoned := abandonedBackgroundTask{TaskID: "bgate123", Summary: "Submit for review with live gate"}
+
+	if blocked := handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, newRuntimeFailureTracker(), newSpinningTracker()); blocked {
+		t.Fatal("first abandonment blocked the task, want the claim preserved")
+	}
+
+	data, err := os.ReadFile(paths.New(projectRoot).AlertsLogPath())
+	if err != nil {
+		t.Fatalf("read alerts log: %v", err)
+	}
+	alerts := string(data)
+	if strings.Count(alerts, "\n") != 1 {
+		t.Fatalf("want exactly one alert line, got:\n%s", alerts)
+	}
+	for _, want := range []string{"⚠️ ABANDONED BACKGROUND JOB —", agentID, taskID, "bgate123", "(1/2)"} {
+		if !strings.Contains(alerts, want) {
+			t.Errorf("alert missing %q: %s", want, alerts)
+		}
+	}
+	if strings.Contains(alerts, "LOOP") {
+		t.Errorf("first abandonment must not raise the loop alert: %s", alerts)
+	}
+
+	current, err := bb.Read()
+	if err != nil {
+		t.Fatalf("bb.Read: %v", err)
+	}
+	if currentTask := current.FindTask(taskID); currentTask.AssignedTo == nil || *currentTask.AssignedTo != agentID {
+		t.Fatal("alerting must not release the claim")
+	}
+}
+
 func TestDetectAbandonedBackgroundTask_ProseMentionDoesNotMaskAbandonment(t *testing.T) {
 	output := `{"type":"system","subtype":"task_notification","task_id":"babandoned","status":"stopped","summary":"Run full race test suite"}
 {"type":"assistant","message":{"content":[{"type":"text","text":"The review noted that Successfully stopped task: babandoned would exclude it."}]}}`
