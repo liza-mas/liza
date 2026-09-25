@@ -90,9 +90,13 @@ func claudeFailureResult(store *Store, hook ClaudeHookInput, metadata Result) (m
 // actually stops before sampling. Check only residual unfiltered native/MCP
 // content, so successful already-compacted results do not generate duplicate
 // telemetry. This is a fail-closed stop, not a failed-tool output rewrite.
+// Batch entries carry no failure flag, and native entries arrive as longer
+// model-facing text (line-numbered Read), so native byte budgets belong to
+// PostToolUse: the size check applies to MCP only, sanitization to both.
 func claudeBatchGuard(store *Store, hook ClaudeHookInput, metadata Result) (map[string]any, error) {
 	for _, call := range hook.ToolCalls {
-		if call.Tool != "Read" && call.Tool != "Grep" && call.Tool != "Glob" && !strings.HasPrefix(call.Tool, "mcp__") {
+		native := call.Tool == "Read" || call.Tool == "Grep" || call.Tool == "Glob"
+		if !native && !strings.HasPrefix(call.Tool, "mcp__") {
 			continue
 		}
 		content, ok := call.Response.(string)
@@ -103,7 +107,8 @@ func claudeBatchGuard(store *Store, hook ClaudeHookInput, metadata Result) (map[
 			}
 			content = string(encoded)
 		}
-		if len(content) <= store.config.ThresholdBytes && store.sanitizeContent(content, !ok) == content {
+		oversized := !native && len(content) > store.config.ThresholdBytes
+		if !oversized && store.sanitizeContent(content, !ok) == content {
 			continue
 		}
 		call.Event, call.Error, call.SessionID = "PostToolUseFailure", content, hook.SessionID

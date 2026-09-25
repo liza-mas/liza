@@ -14,7 +14,9 @@ The boundary is automatically installed by managed **non-interactive** launches:
   preserving their structured schemas. Failed oversized MCP output cannot be
   transparently replaced by Claude: the available provider error is sanitized and
   retained once, then the batch boundary terminates before another model sample.
-  Existing user settings are not rewritten.
+  The batch boundary does not re-budget native Read/Grep/Glob results, whose
+  byte budget belongs to the per-tool hook; it still stops on any guarded
+  result the sanitizer would change. Existing user settings are not rewritten.
 - **Codex CLI:** native shell capture runs before output
   caps or streaming yields. Synchronous post hooks externalize other local/MCP
   results. Nested code-mode MCP calls receive the digest as a recoverable rejected
