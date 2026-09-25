@@ -436,6 +436,7 @@ func completeClaimTaskAfterValidation(
 	}
 	acceptance, err := loadAcceptanceInput(projectRoot, acceptanceState, lockedTask, baseCommit)
 	if err != nil {
+		observeAcceptanceClaimRefusal(err, acceptanceState, lockedTask, baseCommit)
 		return nil, err
 	}
 	// Reserve the external effect while both the task worktree lock and the

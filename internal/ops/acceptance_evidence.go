@@ -17,16 +17,47 @@ import (
 	"github.com/liza-mas/liza/internal/referencecontract"
 )
 
+// AcceptanceFault classifies where an acceptance refusal came from, decided at
+// the site that refuses. The zero value covers Git read failures and every site
+// whose determinism is not established; a supervisor never escalates it.
+type AcceptanceFault string
+
+const (
+	// AcceptanceFaultContent is a pure function of bytes and state that were
+	// read successfully, so an unchanged claim is refused identically.
+	AcceptanceFaultContent AcceptanceFault = "content"
+	// AcceptanceFaultAllocation is a parent-allocation or ancestry refusal. The
+	// helpers behind it read Git "false" for both a mismatch and a failed read,
+	// so repetition can be observed but determinism cannot.
+	AcceptanceFaultAllocation AcceptanceFault = "allocation"
+)
+
+// AcceptanceClaimObservation is what a refused claim validated against: the
+// allocation reference, the integration commit and AcceptanceObservation of
+// the task and state. It marks the error as claim-stage.
+type AcceptanceClaimObservation struct {
+	AllocationRef     string
+	IntegrationCommit string
+	Digest            string
+}
+
 // AcceptanceEvidenceError is a repairable admission precondition, never an
 // integration failure. It identifies the task and field requiring correction.
 type AcceptanceEvidenceError struct {
 	TaskID string
 	Field  string
 	Reason string
+	Class  AcceptanceFault
+	// Claim is set only when the refusal came from a claim, whose task is
+	// unsubmitted and whose acceptance fields only the orchestrator can change.
+	Claim *AcceptanceClaimObservation
 }
 
 func (e *AcceptanceEvidenceError) Error() string {
 	message := fmt.Sprintf("task %s %s: %s — correct the evidence and submit, or run %s for a submitted task", e.TaskID, e.Field, e.Reason, brand.Command("update-review-commit", e.TaskID))
+	if e.Claim != nil {
+		message = fmt.Sprintf("task %s %s (%s): %s — the task's acceptance allocation must be corrected by the orchestrator (%s) or its integration-side cause repaired; claiming cannot fix it", e.TaskID, e.Field, e.Claim.AllocationRef, e.Reason, brand.Command("replace-task"))
+	}
 	return acceptanceExecutionMask(os.Environ())(message)
 }
 
@@ -56,12 +87,17 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		return nil, nil
 	}
 	ref := acceptanceAllocationRef(task)
-	fail := func(reason string) (*acceptanceInput, error) {
-		return nil, acceptanceError(task.ID, "acceptance.source", reason)
+	failAs := func(class AcceptanceFault, reason string) (*acceptanceInput, error) {
+		return nil, &AcceptanceEvidenceError{TaskID: task.ID, Field: "acceptance.source", Reason: reason, Class: class}
 	}
+	// fail is for sites that read Git and cannot tell a failed read from a
+	// refusal; content and allocation name the sites that can.
+	fail := func(reason string) (*acceptanceInput, error) { return failAs("", reason) }
+	content := func(reason string) (*acceptanceInput, error) { return failAs(AcceptanceFaultContent, reason) }
+	allocation := func(reason string) (*acceptanceInput, error) { return failAs(AcceptanceFaultAllocation, reason) }
 	if ref == "" {
 		if task.AcceptanceSource != nil {
-			return fail("adopted source reference was removed")
+			return content("adopted source reference was removed")
 		}
 		return nil, nil
 	}
@@ -71,7 +107,7 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		if task.AcceptanceSource == nil {
 			return nil, nil
 		}
-		return fail("adopted source path is invalid")
+		return content("adopted source path is invalid")
 	}
 	g := git.New(root)
 	mode, present, err := g.TreePathMode(integrationCommit, path)
@@ -82,39 +118,39 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 		if task.AcceptanceSource == nil {
 			return nil, nil
 		}
-		return fail("adopted source is missing from integration")
+		return content("adopted source is missing from integration")
 	}
 	if mode != "100644" && mode != "100755" {
-		return fail("source must be a regular committed file")
+		return content("source must be a regular committed file")
 	}
-	content, _, err := readAcceptanceBlob(root, integrationCommit, path)
+	carrier, _, err := readAcceptanceBlob(root, integrationCommit, path)
 	if err != nil {
 		return fail(err.Error())
 	}
-	contract, err := referencecontract.ParseAcceptance(content, heading)
+	contract, err := referencecontract.ParseAcceptance(carrier, heading)
 	if err != nil {
-		return fail(err.Error())
+		return content(err.Error())
 	}
 	// ParseAcceptance above already resolved this heading, so neither can fail
 	// here; the values are what the parent comparison and the stored identity
 	// need.
-	integrationSpan, _ := carrierSpan(content, heading)
-	spanIdentity, _ := carrierSpanIdentity(content, heading)
+	integrationSpan, _ := carrierSpan(carrier, heading)
+	spanIdentity, _ := carrierSpanIdentity(carrier, heading)
 	if contract == nil {
 		if task.AcceptanceSource != nil {
-			return fail("adopted acceptance declaration was removed; downgrade is forbidden")
+			return content("adopted acceptance declaration was removed; downgrade is forbidden")
 		}
 		return nil, nil
 	}
 	if !reflect.DeepEqual(contract.Validation, task.Validation) {
-		return fail("validation must equal the reviewed ordered canonical commands")
+		return content("validation must equal the reviewed ordered canonical commands")
 	}
 	if err := models.ValidateValidationSafety("acceptance.validation", task.Validation, task.DestructiveDB); err != nil {
-		return fail(err.Error())
+		return content(err.Error())
 	}
-	refs, err := referencecontract.Parse(strings.ReplaceAll(content, "\r\n", "\n"))
+	refs, err := referencecontract.Parse(strings.ReplaceAll(carrier, "\r\n", "\n"))
 	if err != nil || refs == nil {
-		return fail("strict Source References are required")
+		return content("strict Source References are required")
 	}
 	for _, direct := range refs.DirectReferences {
 		revision := direct.EffectiveRevision(refs.SourceRevision)
@@ -123,7 +159,7 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 			return fail("cannot resolve pinned reference " + direct.ID)
 		}
 		if _, err := referencecontract.ExtractSection(span, direct.Heading); err != nil {
-			return fail("cannot resolve exact heading for reference " + direct.ID)
+			return content("cannot resolve exact heading for reference " + direct.ID)
 		}
 	}
 
@@ -146,15 +182,15 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 			continue
 		}
 		if source != nil {
-			return fail("multiple reviewed parents claim the same allocation")
+			return content("multiple reviewed parents claim the same allocation")
 		}
 		source = &models.AcceptanceSource{Ref: ref, Commit: integrationCommit, Blob: spanIdentity, ParentTask: parent.ID, ParentReviewCommit: *parent.ReviewCommit}
 	}
 	if source == nil {
 		if driftedReference != "" {
-			return fail(fmt.Sprintf("requires allocation by a direct independently approved merged planning parent; approved-proof reference %q has drifted — an authorized orchestrator may inspect the changed content and use %s to reaffirm this transition", driftedReference, brand.Command("reaffirm-proof", task.ID, driftedReference)))
+			return allocation(fmt.Sprintf("requires allocation by a direct independently approved merged planning parent; approved-proof reference %q has drifted — an authorized orchestrator may inspect the changed content and use %s to reaffirm this transition", driftedReference, brand.Command("reaffirm-proof", task.ID, driftedReference)))
 		}
-		return fail("requires allocation by a direct independently approved merged planning parent")
+		return allocation("requires allocation by a direct independently approved merged planning parent")
 	}
 	// Keep the original carrier identity when unrelated integration work lands.
 	//
@@ -168,7 +204,7 @@ func loadAcceptanceInput(root string, state *models.State, task *models.Task, in
 	if old := task.AcceptanceSource; old != nil && old.Ref == source.Ref && old.ParentTask == source.ParentTask && old.ParentReviewCommit == source.ParentReviewCommit {
 		ancestor, err := g.IsAncestor(old.Commit, integrationCommit)
 		if err != nil || !ancestor {
-			return fail("adopted source commit is no longer in integration ancestry")
+			return allocation("adopted source commit is no longer in integration ancestry")
 		}
 		source.Commit = old.Commit
 	}

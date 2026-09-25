@@ -59,6 +59,20 @@ func requireAcceptanceError(t *testing.T, err error, taskID string) {
 	}
 }
 
+// requireClaimAcceptanceError is requireAcceptanceError for a refused claim:
+// the task is unsubmitted and its acceptance fields are the orchestrator's, so
+// the advice must name that repair and must not offer update-review-commit (D63).
+func requireClaimAcceptanceError(t *testing.T, err error, taskID string) {
+	t.Helper()
+	var evidenceErr *AcceptanceEvidenceError
+	if !errors.As(err, &evidenceErr) || !strings.Contains(err.Error(), taskID) {
+		t.Fatalf("want typed acceptance error with task ID, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "replace-task") || strings.Contains(err.Error(), "update-review-commit") {
+		t.Fatalf("claim refusal advice = %q, want the orchestrator's replace-task repair and no update-review-commit", err.Error())
+	}
+}
+
 func TestAcceptanceLifecycleClaimAdoptsSourceAndReclaimCannotDowngrade(t *testing.T) {
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	resetForClaim := func(state *models.State) error {
@@ -94,7 +108,7 @@ func TestAcceptanceLifecycleClaimAdoptsSourceAndReclaimCannotDowngrade(t *testin
 	}
 	before := readAcceptanceState(t, bb)
 	_, err = ClaimTask(root, taskID, agentID)
-	requireAcceptanceError(t, err, taskID)
+	requireClaimAcceptanceError(t, err, taskID)
 	after := readAcceptanceState(t, bb)
 	if !reflect.DeepEqual(before.Tasks, after.Tasks) || !reflect.DeepEqual(before.Agents, after.Agents) || !reflect.DeepEqual(adopted.AcceptanceSource, after.FindTask(taskID).AcceptanceSource) {
 		t.Fatal("failed reclaim downgraded source adoption or mutated claim state")

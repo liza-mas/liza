@@ -18,6 +18,7 @@ type doerStrategy struct {
 	executionTimeout time.Duration      // from YAML; 0 = use type default
 	yamlPollSec      int                // from YAML; 0 = use type default
 	yamlMaxWaitSec   int                // from YAML; 0 = use type default
+	refusals         *acceptanceRefusalTracker
 }
 
 const defaultDoerTimeout = 2 * time.Hour
@@ -105,7 +106,10 @@ func (s *doerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (st
 	if err != nil {
 		return "", "", err
 	}
-	taskID, _, err := claimDoerTaskWithAuthority(config.ProjectRoot, config.Authority, s.role, bb, session)
+	if s.refusals == nil {
+		s.refusals = newAcceptanceRefusalTracker()
+	}
+	taskID, _, err := claimDoerTaskEscalating(config.ProjectRoot, config.Authority, s.role, bb, s.refusals, session)
 	if err != nil {
 		return "", "", err
 	}

@@ -603,6 +603,8 @@ Before claiming fresh work, doer supervisors also look for executing tasks alrea
 
 Resume then validates the task's worktree metadata and on-disk health. Healthy worktrees are resumed with an `owned_task_resumed` history event and a renewed lease. Missing or unhealthy worktrees transition the task to `BLOCKED` with a diagnostic instead of spawning a child process that would fail immediately.
 
+A fresh claim refused for its acceptance allocation is escalated the same way (ADR-0160): the doer supervisor moves the task from its role-pair initial or rejected status to `BLOCKED` — on the first content refusal, or the third identical allocation refusal — only while the integration commit and the task, parent and reaffirmation records it validated against are unchanged. The record keeps `acceptance_source`, worktree and base commit; `unblock-task` restores it after the orchestrator's repair.
+
 `liza validate --repair` may clear invalid or dead doer ownership back to the
 role-pair initial status when process checks are available and the assigned PID
 is not live. It leaves the physical worktree on disk for inspection, but a later

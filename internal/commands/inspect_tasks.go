@@ -56,6 +56,8 @@ type taskInfo struct {
 	RCARequired       bool                      `json:"rca_required,omitempty" yaml:"rca_required,omitempty"`
 	Scope             string                    `json:"scope,omitempty" yaml:"scope,omitempty"`
 	SpecRef           string                    `json:"spec_ref,omitempty" yaml:"spec_ref,omitempty"`
+	PlanRef           string                    `json:"plan_ref,omitempty" yaml:"plan_ref,omitempty"`
+	ParentTasks       []string                  `json:"parent_tasks,omitempty" yaml:"parent_tasks,omitempty"`
 	MergeCommit       *string                   `json:"merge_commit,omitempty" yaml:"merge_commit,omitempty"`
 	PRURL             *string                   `json:"pr_url,omitempty" yaml:"pr_url,omitempty"`
 	RejectionReason   *string                   `json:"rejection_reason,omitempty" yaml:"rejection_reason,omitempty"`
@@ -297,6 +299,8 @@ func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 		RCARequired:        task.RCARequired,
 		Scope:              task.Scope,
 		SpecRef:            task.SpecRef,
+		PlanRef:            task.PlanRef,
+		ParentTasks:        task.EffectiveParentTasks(),
 		MergeCommit:        task.MergeCommit,
 		PRURL:              latestIntegrationPRURL(task),
 		RejectionReason:    task.RejectionReason,

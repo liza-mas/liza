@@ -21,14 +21,20 @@ import (
 var ErrAgentDegraded = ops.ErrAgentDegraded
 
 func claimDoerTask(projectRoot, agentID, role string, bb *db.Blackboard) (taskID, worktree string, err error) {
-	return claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role, nil, bb)
+	return claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role, nil, nil, bb)
 }
 
 func claimDoerTaskWithAuthority(projectRoot string, authority models.AgentAuthority, role string, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree string, err error) {
-	return claimDoerTaskWithOptionalAuthority(projectRoot, authority.ID, role, &authority, bb, sessions...)
+	return claimDoerTaskWithOptionalAuthority(projectRoot, authority.ID, role, &authority, nil, bb, sessions...)
 }
 
-func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, authority *models.AgentAuthority, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree string, err error) {
+// claimDoerTaskEscalating is claimDoerTaskWithAuthority for a supervisor that
+// escalates refused candidates through refusals instead of retrying them.
+func claimDoerTaskEscalating(projectRoot string, authority models.AgentAuthority, role string, bb *db.Blackboard, refusals *acceptanceRefusalTracker, sessions ...*ops.ValidationSession) (taskID, worktree string, err error) {
+	return claimDoerTaskWithOptionalAuthority(projectRoot, authority.ID, role, &authority, refusals, bb, sessions...)
+}
+
+func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, authority *models.AgentAuthority, refusals *acceptanceRefusalTracker, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree string, err error) {
 	logger := GetLogger()
 	var session *ops.ValidationSession
 	if len(sessions) > 0 {
@@ -119,8 +125,16 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 			if classifyErr := markAgentDegradedForInfraClaim(projectRoot, agentID, role, task.ID, candidateIDs, claimErr, authority); classifyErr != nil {
 				return "", "", classifyErr
 			}
+			if refusals != nil && authority != nil {
+				if escalateErr := escalateAcceptanceRefusal(projectRoot, *authority, refusals, task.ID, claimErr); escalateErr != nil {
+					return "", "", escalateErr
+				}
+			}
 			lastErr = claimErr
 			continue
+		}
+		if refusals != nil {
+			refusals.forget(result.TaskID)
 		}
 		var clearErr error
 		if authority == nil {

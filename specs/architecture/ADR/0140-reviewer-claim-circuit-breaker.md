@@ -113,8 +113,10 @@ Three residual paths survive, each bounded:
    quarantine, never an anomaly. They degrade to the previous behavior with a
    growing delay instead of a constant one.
 
-The doer claim path shares the supervisor branch, so it inherits the backoff tier
-and the authority stop for free; no doer-specific quarantine exists. The new
+The doer claim path shares the supervisor branch, so it inherits the authority
+stop. It does not inherit the backoff tier, which lives in `claimFailureObserver`
+and only the reviewer strategy implements (corrected by ADR-0160, which
+escalates doer acceptance refusals instead); no doer-specific quarantine exists. The new
 anomaly type carries required-detail validation, mitigating one row of the open
 "anomaly detail validation incomplete" issue without closing it.
 

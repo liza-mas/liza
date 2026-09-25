@@ -223,7 +223,7 @@ func TestAcceptanceProvenance_ParentSubmissionSurvivesOwnershipRelease(t *testin
 			before := readAcceptanceState(t, bb)
 			_, err := ClaimTask(root, taskID, agentID)
 			if !tc.allow {
-				requireAcceptanceError(t, err, taskID)
+				requireClaimAcceptanceError(t, err, taskID)
 				requireAcceptanceStateUnchanged(t, bb, before)
 				return
 			}

@@ -128,6 +128,14 @@ re-attempts up to the threshold before re-quarantining, and adds no anomaly.
 Quarantine is supervisor-local — it bounds one claim loop and does not by itself
 feed the pattern detection or responses below.
 
+Doer claims have no quarantine. A doer claim refused for its acceptance
+allocation is escalated instead (ADR-0160): a content fault on the first refusal
+and an allocation refusal on the third identical one move the task to `BLOCKED`,
+which wakes the orchestrator. Unclassified refusals (a failed Git read of the
+carrier or a pinned reference) keep the fixed retry; the allocation escalation
+may still catch a repeated read failure that its helpers report as "not
+allocated".
+
 ---
 
 ## Pattern Detection Rules

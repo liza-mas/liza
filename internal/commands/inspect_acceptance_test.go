@@ -60,3 +60,34 @@ func TestInspectAcceptanceEvidenceThroughTaskDispatch(t *testing.T) {
 		t.Fatalf("legacy inspection invented evidence: %s", legacy)
 	}
 }
+
+// D63: before a claim adopts acceptance_source, the allocation inputs a claim
+// refusal is judged on — plan_ref and the parent tasks — must be inspectable.
+func TestInspectTaskShowsAcceptanceAllocationInputs(t *testing.T) {
+	projectRoot := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+	parent := "plan-7"
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{{
+		ID: "task-7", Status: models.TaskStatusReady, Created: time.Date(2026, 9, 24, 9, 44, 0, 0, time.UTC),
+		SpecRef: "specs/goal.md", PlanRef: "specs/plan.md#Task 2", ParentTask: &parent,
+		Validation: []string{"make check"},
+	}}
+	testhelpers.WriteInitialState(t, statePath, state)
+
+	output, err := InspectCommand([]string{"tasks", "task-7"}, InspectOptions{Format: "json", ProjectRoot: projectRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		PlanRef     string   `json:"plan_ref"`
+		ParentTasks []string `json:"parent_tasks"`
+	}
+	if err := json.Unmarshal([]byte(output), &got); err != nil {
+		t.Fatalf("task inspection was not JSON: %v", err)
+	}
+	if got.PlanRef != "specs/plan.md#Task 2" || len(got.ParentTasks) != 1 || got.ParentTasks[0] != parent {
+		t.Fatalf("task inspection hides the allocation inputs (plan_ref=%q parent_tasks=%v): %s", got.PlanRef, got.ParentTasks, output)
+	}
+}
