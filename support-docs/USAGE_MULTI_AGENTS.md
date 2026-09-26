@@ -691,10 +691,16 @@ receipt pruning and re-registration limit replay proof. See
 [Replacement Transactions](../specs/protocols/replacement-transactions.md) for
 the payload, outcomes and remaining limits.
 
-A dependency update that would give an executing task an unmet dependency returns
-`ALREADY_TRANSITIONED` with `details.prerequisite = consumer_not_executing`: wait
-for that task to leave execution, or block it, before retrying. See
-[Outcomes and safe actions](../specs/protocols/replacement-transactions.md#outcomes-and-safe-actions).
+A corrective plan that replaces several tasks names each original in its
+outputs' `supersedes` field instead of in prose. Generating the plan's children
+retires each original and retargets its consumers in the same transaction, or
+changes nothing and reports why in the transition failures. A plan naming a
+missing or already delivered task cannot be passed and must be replanned; one
+naming a task still in flight waits for it. A dependency update that would give
+an executing task an unmet dependency returns `ALREADY_TRANSITIONED` with
+`details.prerequisite = consumer_not_executing`: wait for that task to leave
+execution, or block it, before retrying. See
+[Plan-declared replacement](../specs/protocols/replacement-transactions.md#plan-declared-replacement).
 
 For a repair spanning multiple active tasks or complete dependency lists, write
 a JSON request with operation `apply-dependency-repair`, the blocked source task

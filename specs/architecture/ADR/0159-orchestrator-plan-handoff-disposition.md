@@ -6,6 +6,9 @@ ACCEPTED — implemented 2026-09-24. Narrows automatic transition creation from
 a merged plan; operator resume and `proceed` keep their authority except over a
 human hold.
 
+Amended by [ADR-0161](0161-plan-declared-replacement.md): the classifier also
+weighs the originals a plan's outputs `supersede`.
+
 ## Context and Problem Statement
 
 A merged plan's `output[]` becomes coding tasks after a `PLANNING_COMPLETE`
@@ -65,7 +68,9 @@ Chose **Option 3**.
   planning dependency has transitioned or is itself admissibly passed; a
   replanned or held upstream makes a passed consumer `needs_reconciliation`
   (replan or hold it), an unreviewed one makes it wait. Blockers carry the
-  upstream chain.
+  upstream chain. A missing or terminal `supersedes` original is a blocker
+  that refuses a pass and makes a passed plan `needs_reconciliation`; an
+  original still in flight makes a passed plan wait (ADR-0161).
 - **Admission.** Automatic paths (auto-resume, orchestrator and reviewer
   PreWork) expand an in-domain plan only when it is classified `passed`, judged
   under the lock that creates the children. An operator resume or `proceed`

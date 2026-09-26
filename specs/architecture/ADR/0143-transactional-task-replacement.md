@@ -4,6 +4,9 @@
 
 ACCEPTED — 2026-09-20. Records the approved
 [replacement plan](../../plans/20260918-fix-gh-issues/20260918-211707-cpm-1-cp-4.md#transaction-design-and-interface-contract).
+Amended by [ADR-0161](0161-plan-declared-replacement.md): plan-generated
+replacements get the same atomicity through `output[].supersedes`, and every
+dependency update refuses to stall an executing consumer.
 
 ## Context
 

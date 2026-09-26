@@ -42,6 +42,8 @@ type PlanHandoffDomain struct {
 	planningPairs    map[string]bool
 	gatedTransitions map[string]bool
 	gatedByPair      map[string][]string
+	// resolver judges declared replacement originals; nil skips that check.
+	resolver *pipeline.Resolver
 }
 
 // PlanningPairsOnly is a domain with no reviewed hand-off, for callers that
@@ -56,6 +58,7 @@ func NewPlanHandoffDomain(resolver *pipeline.Resolver) PlanHandoffDomain {
 		planningPairs:    resolver.TransitionSourcePairs(),
 		gatedTransitions: make(map[string]bool),
 		gatedByPair:      make(map[string][]string),
+		resolver:         resolver,
 	}
 	for _, td := range resolver.AllTransitions() {
 		if td.Trigger != "manual" || (td.Cardinality != "per-subtask" && td.Cardinality != "one-to-one") {
@@ -151,7 +154,11 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 	case models.PlanCheckHeld:
 		return PlanHandoffHeld, task.PlanCheck.Ask
 	case models.PlanCheckPassed:
-		switch kind, blocker := d.upstreamBlocker(state, task, map[string]bool{task.ID: true}); kind {
+		kind, blocker := d.upstreamBlocker(state, task, map[string]bool{task.ID: true})
+		if replaced, replacedBlocker := d.replacementBlocker(state, task); replaced > kind {
+			kind, blocker = replaced, replacedBlocker
+		}
+		switch kind {
 		case upstreamReconcile:
 			return PlanHandoffNeedsReconciliation, blocker
 		case upstreamWaiting:
@@ -161,8 +168,43 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 		}
 	default:
 		_, blocker := d.upstreamBlocker(state, task, map[string]bool{task.ID: true})
+		// Only a permanent replacement blocker refuses a pass: an original
+		// still in flight may yet become supersedable.
+		if replaced, replacedBlocker := d.replacementBlocker(state, task); blocker == "" && replaced == upstreamReconcile {
+			blocker = replacedBlocker
+		}
 		return PlanHandoffNeedsReview, blocker
 	}
+}
+
+// replacementBlocker judges the tasks the plan's outputs supersede (ADR-0161).
+// A missing or terminal original can never be retired — a delivered one means
+// the plan is stale — so the plan must be replanned. A live original that is
+// not yet supersedable (claimed, in review, approved) is a wait. The first
+// output of the worst kind is reported.
+func (d PlanHandoffDomain) replacementBlocker(state *models.State, task *models.Task) (upstreamKind, string) {
+	if d.resolver == nil {
+		return upstreamAdmissible, ""
+	}
+	worst, blocker := upstreamAdmissible, ""
+	for i, entry := range task.Output {
+		if entry.Supersedes == "" {
+			continue
+		}
+		kind, text := upstreamAdmissible, ""
+		switch original := state.FindTask(entry.Supersedes); {
+		case original == nil:
+			kind, text = upstreamReconcile, fmt.Sprintf("output[%d] supersedes %s, which does not exist", i, entry.Supersedes)
+		case original.Status.IsTerminal():
+			kind, text = upstreamReconcile, fmt.Sprintf("output[%d] supersedes %s, which is already %s", i, entry.Supersedes, original.Status)
+		case !replacementEligible(original, d.resolver):
+			kind, text = upstreamWaiting, fmt.Sprintf("output[%d] supersedes %s, which is still %s", i, entry.Supersedes, original.Status)
+		}
+		if kind > worst {
+			worst, blocker = kind, text
+		}
+	}
+	return worst, blocker
 }
 
 type upstreamKind int

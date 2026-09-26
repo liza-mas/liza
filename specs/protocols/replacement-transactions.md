@@ -220,7 +220,63 @@ claim still performs its own preserved-worktree checks and rebase.
 5. **Standalone primitives remain individually non-atomic as a replacement
    workflow.** Each keeps its own transaction; a sequence of `add-task`,
    dependency repair and `supersede-task` is not one atomic replacement. Callers
-   must adopt `replace-task` to obtain this guarantee.
+   must adopt `replace-task`, or a plan output's `supersedes` (below), to obtain
+   this guarantee.
+
+## Plan-declared replacement
+
+A corrective plan replaces several tasks through its generated children
+([ADR-0161](../architecture/ADR/0161-plan-declared-replacement.md)). Each
+`output[]` entry may name one existing task in `supersedes`; several entries
+may name the same task to split it. The per-subtask transition that generates
+the children also, in the same state mutation:
+
+- sets the child's `supersedes` to the original;
+- supersedes each original with every child generated for it, through the
+  audited supersession path (direction checks, pruning of illegal edges,
+  ownership release, consumer retargeting);
+- records `superseded: {original: [children]}` on the plan's
+  `transition_executed` (or crash-recovery) history event.
+
+The transition runs on a copy of the state that must pass full-state
+validation (spec-file disk checks skipped, since generation does not touch
+them) and is adopted only on success. A refusal changes nothing and is reported
+in the transition pass's failures; other transitions in the pass still commit.
+Kind deduplication ignores the named originals, so a replacement is generated
+rather than remapped onto the task it retires.
+
+Eligibility is `replace-task`'s source rule: role-pair initial or rejected,
+`BLOCKED`, or `INTEGRATION_FAILED`, in the child's role pair. It is judged
+three times:
+
+| When | Missing, terminal or wrong-pair original | Live original not yet eligible |
+|---|---|---|
+| `set-task-output` | Refused (`supersedes` named in the reason); also when the entry's `task_depends_on` names its own original | Accepted |
+| Hand-off classification ([ADR-0159](../architecture/ADR/0159-orchestrator-plan-handoff-disposition.md)) | `needs_review` reports it as the blocker, so `plan-check --pass` is refused; a passed plan becomes `needs_reconciliation`: replan it. A delivered (`MERGED`) original means the plan is stale; delivered work is never superseded | A passed plan waits (`waiting_upstream`); a pass is not refused |
+| Generation (under the state lock) | Transition refused | Transition refused (reachable only through operator admission) |
+
+Generation can also refuse a plan the classifier passed: when the candidate
+fails validation on pre-existing unrelated corruption, on a cycle the planner
+authored between outputs, or when Kind deduplication leaves a superseding
+output without a child of its own. An operator-admitted pass reports it; the
+automatic pass only logs it, and the plan stays passed and ungenerated.
+
+Crash recovery recreates missing children with their `supersedes` and leaves an
+original already retired by those children alone. A live original under an
+executed marker can only come from a hand-edited state and is refused.
+
+A replacing output's inherited phase-gate dependencies exclude the originals
+being retired: a corrective plan usually depends on the plan whose children it
+replaces, and default inheritance would otherwise make each replacement wait on
+the tasks it retires, which supersession turns into self-dependencies and
+sibling cycles. Order among replacements stays expressed by their sibling
+`depends_on`. A non-replacing output keeps those edges; supersession retargets
+them to the replacements, so it still waits for the corrected work.
+
+Ceilings: an original named by a passed, not yet transitioned plan stays
+claimable until the next transition pass; a replacement stated only in prose
+is not detected; an automatic-pass generation refusal of a passed plan is only
+logged. All three are tracked in `TECH_DEBT.md`.
 
 Master output 7 owns shared-register reconciliation: add the transaction and
 replay invariants to `INVARIANTS.md`, describe the source event and existing

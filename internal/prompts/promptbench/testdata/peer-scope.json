@@ -41,8 +41,8 @@
     {
       "role": "code-planner",
       "variant": "code-planning-main-pair",
-      "before_bytes": 288282,
-      "after_bytes": 283506,
+      "before_bytes": 288503,
+      "after_bytes": 283727,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -59,8 +59,8 @@
     {
       "role": "code-planner",
       "variant": "code-planning-pair",
-      "before_bytes": 294661,
-      "after_bytes": 289885,
+      "before_bytes": 294882,
+      "after_bytes": 290106,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -194,8 +194,8 @@
     {
       "role": "orchestrator",
       "variant": "wake BLOCKED_TASKS",
-      "before_bytes": 28011,
-      "after_bytes": 28011,
+      "before_bytes": 28114,
+      "after_bytes": 28114,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -203,8 +203,8 @@
     {
       "role": "orchestrator",
       "variant": "wake HYPOTHESIS_EXHAUSTED",
-      "before_bytes": 20945,
-      "after_bytes": 20945,
+      "before_bytes": 21048,
+      "after_bytes": 21048,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -212,8 +212,8 @@
     {
       "role": "orchestrator",
       "variant": "wake IMMEDIATE_DISCOVERY",
-      "before_bytes": 19422,
-      "after_bytes": 19422,
+      "before_bytes": 19525,
+      "after_bytes": 19525,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0

@@ -163,7 +163,7 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 			if baseErr != nil {
 				return baseErr
 			}
-			if !replacementSourceEligible(source, pb) {
+			if !replacementEligible(source, pb.resolver) {
 				return WrapLifecycleError(operation, observed, fmt.Errorf("source is no longer eligible for replacement"), models.LifecycleAlreadyTransitioned, "stop", "none")
 			}
 			if candidate.FindTask(input.Replacement.ID) != nil {
@@ -343,21 +343,6 @@ func validateReplaceTaskInput(input ReplaceTaskInput) error {
 		seen[update.TaskID] = true
 	}
 	return nil
-}
-
-func replacementSourceEligible(task *models.Task, pb *pipelineBundle) bool {
-	if task.Status == models.TaskStatusBlocked || task.Status == models.TaskStatusIntegrationFailed {
-		return true
-	}
-	if task.RolePair == "" {
-		return task.Status == models.TaskStatusReady || task.Status == models.TaskStatusRejected
-	}
-	initial, err := pb.resolver.InitialStatus(task.RolePair)
-	if err == nil && task.Status == initial {
-		return true
-	}
-	rejected, err := pb.resolver.RejectedStatus(task.RolePair)
-	return err == nil && task.Status == rejected
 }
 
 func validateReplacementBase(projectRoot string, input ReplaceTaskInput) (*PreservedTaskBase, error) {

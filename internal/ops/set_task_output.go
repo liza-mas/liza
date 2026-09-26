@@ -139,6 +139,11 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 		if err := validateTaskDependsOn(entry.TaskDependsOn, i); err != nil {
 			return &PreconditionError{Reason: err.Error()}
 		}
+		if entry.Supersedes != "" {
+			if err := paths.ValidateTaskID(entry.Supersedes); err != nil {
+				return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes: %v", i, err)}
+			}
+		}
 	}
 
 	// Normalize spec_ref and plan_ref on each output entry to strip worktree prefixes.
@@ -227,6 +232,11 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 				if err := validateDependencyDirection(state, resolver, fmt.Sprintf("%s output[%d]", task.ID, i), consumerRolePair, entry.TaskDependsOn); err != nil {
 					return err
 				}
+			}
+		}
+		for i, entry := range input.Output {
+			if err := validateOutputSupersedes(state, task, consumerRolePairs, i, entry); err != nil {
+				return err
 			}
 		}
 
@@ -542,4 +552,29 @@ func normalizeTaskDependsOn(deps []string) []string {
 		}
 	}
 	return normalized
+}
+
+// validateOutputSupersedes rejects a supersedes target the generating
+// transition could never retire (ADR-0161). Generation re-checks eligibility
+// under its own lock; this only fails the planner early. A live original that
+// is not yet supersedable is accepted: it may become so before generation.
+func validateOutputSupersedes(state *models.State, plan *models.Task, consumerRolePairs []string, index int, entry models.OutputEntry) error {
+	id := entry.Supersedes
+	if id == "" {
+		return nil
+	}
+	original := state.FindTask(id)
+	switch {
+	case original == nil:
+		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes references non-existent task %q", index, id)}
+	case id == plan.ID:
+		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes cannot name the planning task itself %q", index, id)}
+	case original.Status.IsTerminal():
+		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes references terminal task %q (status: %s); delivered or retired work is not replaced", index, id, original.Status)}
+	case !slices.Contains(consumerRolePairs, original.RolePair):
+		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes references %q in role pair %q; this output generates %v children", index, id, original.RolePair, consumerRolePairs)}
+	case slices.Contains(entry.TaskDependsOn, id):
+		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes %q also appears in its task_depends_on; a child cannot depend on the task it replaces", index, id)}
+	}
+	return nil
 }

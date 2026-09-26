@@ -816,3 +816,27 @@ graph view in planning context that does not exist yet.
 **Payback trigger:** a run after this change where a generated child carries an
 inherited edge it does not consume, or where idle agents with zero claimable
 tasks recur behind a dependency chain (lean W-1 falsifier).
+
+## Plan-declared replacement leaves three gaps (ADR-0161)
+
+**What:** (1) A task named in `supersedes` by a passed plan that has not yet
+transitioned stays claimable until the next transition pass; a coder can start
+it minutes before it is retired. (2) A replacement stated only in prose
+(no `supersedes`) is still invisible: the original and its duplicate stay live
+and `validate` reports nothing. (3) When generation refuses a plan the
+classifier passed (pre-existing unrelated corruption, a planner-authored cycle
+between outputs, a Kind-dedup skip), the automatic pass only logs a warning:
+the plan stays passed, ungenerated and without an orchestrator wake.
+
+**Why deferred:** (1) needs claim eligibility to consult every passed plan's
+outputs on each claim, a claim-path cost for a window that had no observed
+incident. (2) has no reliable detector: the prose is inconsistent and the tasks
+share no structured scope key, so a heuristic would be noisy. (3) needs a
+durable refusal record the classifier reads, with a release path once the
+cause is repaired; the known causes are rare once inherited dependencies
+exclude retired originals.
+
+**Payback trigger:** (1) a claim of a task later retired by the same pass's
+plan; (2) any duplicate-work incident on a corrective plan whose outputs omit
+`supersedes`; (3) a `Pipeline transition failed` warning naming `plan
+replacement` or `supersedes` for a plan classified `passed`.

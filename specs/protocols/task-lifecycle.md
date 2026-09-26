@@ -188,6 +188,11 @@ When planner rescopes a blocked task:
 
 Original task history is preserved. No silent rewrites.
 
+A corrective plan declares the original on each replacing output
+(`output[].supersedes`); generating the children performs steps 1-2 and
+retargets the original's consumers in one transaction. See
+[Plan-declared replacement](replacement-transactions.md#plan-declared-replacement).
+
 ---
 
 ## Blocked Escalation

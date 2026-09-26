@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -351,5 +352,33 @@ func TestReplaceTask_ParentEvidenceChangeDuringCheckRequeries(t *testing.T) {
 	}
 	if replacementState(t, f).FindTask("replacement") != nil {
 		t.Fatal("replacement persisted on stale parent evidence")
+	}
+}
+
+// D53: a same-pair replacement that only changes dependencies continues the
+// reviewed allocation: it keeps the source's parent, is created and claimable.
+func TestReplaceTask_ChangedDependenciesKeepAllocation(t *testing.T) {
+	f := newAcceptanceCreationFixture(t)
+	if err := db.For(f.statePath).Modify(func(s *models.State) error {
+		s.Agents["coder-1"] = testhelpers.RegisteredTestAgent(models.RoleCoder)
+		s.Tasks = append(s.Tasks, testhelpers.BuildTaskByStatus("new-provider", models.TaskStatusMerged, time.Now().UTC()))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.input.Replacement.DependsOn = []string{"new-provider"}
+
+	if _, err := f.run(); err != nil {
+		t.Fatalf("dependency-only replacement refused: %v", err)
+	}
+	replacement := replacementState(t, f).FindTask("replacement")
+	if replacement.ParentTask == nil || *replacement.ParentTask != "acceptance-parent" || !slices.Equal(replacement.DependsOn, []string{"new-provider"}) {
+		t.Fatalf("replacement lineage = parent %v deps %v, want acceptance-parent and [new-provider]", replacement.ParentTask, replacement.DependsOn)
+	}
+	if _, err := ClaimTask(f.root, "replacement", "coder-1"); err != nil {
+		t.Fatalf("dependency-only replacement is not claimable: %v", err)
+	}
+	if source := replacementState(t, f).FindTask("replacement").AcceptanceSource; source == nil || source.ParentTask != "acceptance-parent" {
+		t.Fatalf("claim did not adopt the inherited allocation: %+v", source)
 	}
 }

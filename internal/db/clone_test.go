@@ -87,7 +87,7 @@ func TestCloneStateIsolation(t *testing.T) {
 	source := buildNestedState(t)
 	before := marshalState(t, source)
 
-	clone := cloneState(source)
+	clone := CloneState(source)
 	if got := marshalState(t, clone); got != before {
 		t.Fatalf("clone differs from source:\ngot:\n%s\nwant:\n%s", got, before)
 	}
@@ -207,7 +207,7 @@ func BenchmarkStateParse(b *testing.B) {
 	}
 }
 
-// TestStateModelShapeIsCloneable guards the one assumption cloneState makes
+// TestStateModelShapeIsCloneable guards the one assumption CloneState makes
 // about the model: a struct carrying unexported fields is copied by assignment,
 // which is only sound while such structs hold no caller-mutable references.
 // time.Time is the sanctioned case. A new model type with unexported fields
@@ -237,7 +237,7 @@ func TestStateModelShapeIsCloneable(t *testing.T) {
 					field := t2.Field(i)
 					if field.IsExported() && needsDeepCopy(field.Type) {
 						t.Errorf("%s (%s) has unexported fields and reference-bearing field %s: "+
-							"cloneState would copy it shallowly and alias the cache",
+							"CloneState would copy it shallowly and alias the cache",
 							path, t2, field.Name)
 					}
 				}

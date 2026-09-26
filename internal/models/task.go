@@ -632,6 +632,10 @@ type OutputEntry struct {
 	Decomposition           *DecompositionManifest   `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
 	// TaskDependsOn names existing concrete task IDs to copy onto generated child tasks.
 	TaskDependsOn []string `yaml:"task_depends_on,omitempty" json:"task_depends_on,omitempty"`
+	// Supersedes names one existing task this output replaces. Generating the
+	// child retires that task and retargets its consumers in the same state
+	// transaction; several outputs may name one task to split it.
+	Supersedes string `yaml:"supersedes,omitempty" json:"supersedes,omitempty"`
 	// InheritInputs declares whether this child waits for a whole upstream
 	// phase or only for selected upstream outputs. Nil means the whole-phase
 	// barrier, which is the pre-existing behavior.

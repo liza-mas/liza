@@ -260,7 +260,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	bb.cacheMu.RUnlock()
 
 	if cachedState != nil && currentMtime.Equal(cachedMtime) {
-		return cloneState(cachedState), nil
+		return CloneState(cachedState), nil
 	}
 
 	data, err := readStateFile(bb.statePath)
@@ -279,7 +279,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	bb.cachedMtime = currentMtime
 	bb.cacheMu.Unlock()
 
-	return cloneState(state), nil
+	return CloneState(state), nil
 }
 
 // InvalidateCache forces the next ReadCached call to reload from disk.

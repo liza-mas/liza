@@ -49,11 +49,13 @@ func manyToOneChildID(cohortParentID, transitionName string) string {
 // crash-recovery runs. Tasks with empty Kind are ignored. Tasks whose
 // Status.IsTerminal() returns true (MERGED | ABANDONED | SUPERSEDED) are
 // ignored; BLOCKED is non-terminal and counts as in-flight.
-func collectNonTerminalByKind(s *models.State) map[string]string {
+func collectNonTerminalByKind(s *models.State, retiring map[string]bool) map[string]string {
 	byKind := map[string][]string{}
 	for i := range s.Tasks {
 		t := &s.Tasks[i]
-		if t.Kind == "" {
+		// A task the generating outputs supersede is not an incumbent: its
+		// replacement must be generated, not remapped onto it.
+		if t.Kind == "" || retiring[t.ID] {
 			continue
 		}
 		if t.Status.IsTerminal() {
@@ -126,6 +128,12 @@ type ProceedResult struct {
 	TransitionName string
 	ChildTaskIDs   []string
 	CohortTaskIDs  []string // populated for many-to-one transitions
+	// RetiredTaskIDs are the originals this transition's outputs superseded.
+	RetiredTaskIDs []string
+
+	replacements     *planReplacements
+	recovering       bool
+	retiredWorktrees []string
 }
 
 // transitionDef defines a manual transition between role pairs.
@@ -197,7 +205,7 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 			}
 		}
 
-		if err := proceedInner(s, taskID, transitionName, tDef, inheritedDeps, resolver, now, result); err != nil {
+		if err := proceedTransaction(blackboard, s, projectRoot, taskID, transitionName, tDef, inheritedDeps, resolver, now, result); err != nil {
 			return err
 		}
 
@@ -214,6 +222,8 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 	// Exercise the exact transition path against the read snapshot so invalid
 	// requests retain their native errors before integration reconciliation. The
 	// in-memory mutations are discarded; the transaction below rechecks them.
+	// A replacing plan therefore runs its clone, retirements, validation and
+	// planReplacementTestHooks twice.
 	if err := execute(preflightState, newResult()); err != nil {
 		return nil, fmt.Errorf("proceed failed: %w", err)
 	}
@@ -231,6 +241,9 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 
 	if err != nil {
 		return nil, fmt.Errorf("proceed failed: %w", err)
+	}
+	for _, warning := range cleanupRetiredOriginals(blackboard, projectRoot, []ProceedResult{*result}) {
+		log.Printf("WARNING: proceed: %s", warning)
 	}
 
 	return result, nil
@@ -560,9 +573,15 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	var skipEntry map[int]string
 	var remapSibling map[int]string
 	var siblingIDs []string
+	retiring := declaredOriginals(outputEntries)
 	if tDef.cardinality == "per-subtask" {
-		inFlightByKind := collectNonTerminalByKind(s)
+		inFlightByKind := collectNonTerminalByKind(s, retiring)
 		siblingIDs, skipEntry, remapSibling = resolvePerSubtaskSiblings(outputEntries, inFlightByKind, taskID, tDef.taskSlug)
+		replacements, err := groupPlanReplacements(outputEntries, siblingIDs, skipEntry)
+		if err != nil {
+			return err
+		}
+		result.replacements = replacements
 	}
 
 	var children []models.Task
@@ -582,6 +601,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			if err != nil {
 				return err
 			}
+			entryInherited = excludeRetiring(entryInherited, entry, retiring)
 			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, entryInherited, task.EpicRef, task.ArchRef, task.RCARequired, now)
 			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn, allowedMissingDeps)
 			if err != nil {
@@ -671,8 +691,14 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		// Re-compute dedup decision against current repo-wide state. For skipped
 		// entries, siblingIDs[i] must point at the foreign incumbent so downstream
 		// dep resolution remaps correctly — mirrors proceedInner's per-subtask path.
-		inFlightByKind := collectNonTerminalByKind(s)
+		retiring := declaredOriginals(canonicalOutput)
+		inFlightByKind := collectNonTerminalByKind(s, retiring)
 		siblingIDs, skipEntry, _ := resolvePerSubtaskSiblings(canonicalOutput, inFlightByKind, taskID, tDef.taskSlug)
+		replacements, err := groupPlanReplacements(canonicalOutput, siblingIDs, skipEntry)
+		if err != nil {
+			return err
+		}
+		result.replacements, result.recovering = replacements, true
 		allowedMissingDeps := stringSet(siblingIDs)
 		var missingChildren []int
 		var patches []dependencyPatch
@@ -702,6 +728,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 				if err != nil {
 					return err
 				}
+				entryInherited = excludeRetiring(entryInherited, canonicalOutput[i], retiring)
 				mergedDeps := mergeInheritedDeps(canonicalDeps, entryInherited)
 				mergedDeps, _, err = canonicalizeChildDependsOn(s, resolver, existing.ID, existing.RolePair, mergedDeps, allowedMissingDeps)
 				if err != nil {
@@ -730,6 +757,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			if err != nil {
 				return err
 			}
+			entryInherited = excludeRetiring(entryInherited, canonicalOutput[idx], retiring)
 			child := buildChildTask(siblingIDs[idx], taskID, canonicalOutput[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, entryInherited, task.EpicRef, task.ArchRef, task.RCARequired, now)
 			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn, allowedMissingDeps)
 			if err != nil {
@@ -1376,7 +1404,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 				TransitionName: p.name,
 			}
 
-			if err := proceedInner(s, p.taskID, p.name, p.tDef, inheritedDeps, resolver, now, &result); err != nil {
+			if err := proceedTransaction(blackboard, s, projectRoot, p.taskID, p.name, p.tDef, inheritedDeps, resolver, now, &result); err != nil {
 				if !errors.Is(err, errTransitionAlreadyExecuted) && !errors.Is(err, errManyToOneCohortIncomplete) {
 					fail(p.taskID, p.name, err)
 				}
@@ -1411,6 +1439,9 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 
 	if err != nil {
 		return TransitionReport{}, fmt.Errorf("execute available transitions failed: %w", err)
+	}
+	for _, warning := range cleanupRetiredOriginals(blackboard, projectRoot, results) {
+		log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
 	}
 
 	return TransitionReport{Results: results, Failures: failures}, nil
@@ -1492,6 +1523,10 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 	if entry.RCARequired != nil {
 		rcaRequired = *entry.RCARequired
 	}
+	var supersedes *string
+	if entry.Supersedes != "" {
+		supersedes = &entry.Supersedes
+	}
 
 	return models.Task{
 		ID:                      childID,
@@ -1514,6 +1549,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		DestructiveDB:           entry.DestructiveDB,
 		Scope:                   entry.Scope,
 		DependsOn:               deps,
+		Supersedes:              supersedes,
 		Created:                 now,
 		History:                 []models.TaskHistoryEntry{},
 	}
