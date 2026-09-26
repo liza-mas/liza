@@ -163,6 +163,9 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 		if len(canonical) == 0 {
 			return &PreconditionError{Reason: "retarget-dependency cannot remove all dependencies; use an explicit dependency-removal operation instead"}
 		}
+		if err := rejectUnmetDependencyOnExecutingConsumer(state, resolver, retargetDependencyOperation, task, canonical); err != nil {
+			return err
+		}
 
 		repairExtra := matchingRetargetRepairExtra(task.RepairRequest, taskID, oldDependency, canonical)
 		repairRequestCleared := repairExtra != nil

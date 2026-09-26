@@ -115,6 +115,14 @@ by both steps appear once; unchanged tasks and earlier rewrites are excluded.
 | Invalid payload | `INVALID_INPUT` | Absent | `correct_input` | `none` |
 | Source no longer eligible, after boundary checks | `ALREADY_TRANSITIONED` | Absent | `stop` | `none` |
 | Stale consumer expected dependencies | `STATE_CHANGED` | Absent | `requery` | `none` |
+| Consumer update would give an executing consumer an unmet dependency | `ALREADY_TRANSITIONED` | Absent | `stop` | `none` |
+
+The executing-consumer refusal is checked before any mutation and carries
+`details.prerequisite = consumer_not_executing` with the consumer's `task_id`,
+`status` and `unmet_dependencies`: wait until the consumer leaves execution, or
+block it, before retrying. `retarget-dependency` and `apply-dependency-repair`
+apply the same rule through the shared dependency-update core. The executing
+set is every role pair's, as in the state invariant it anticipates.
 
 The server returns one safe action, never a choice for the caller. Replay uses
 `ALREADY_COMPLETED`, not `NO_CHANGE`. `transition_id` describes the current

@@ -691,6 +691,11 @@ receipt pruning and re-registration limit replay proof. See
 [Replacement Transactions](../specs/protocols/replacement-transactions.md) for
 the payload, outcomes and remaining limits.
 
+A dependency update that would give an executing task an unmet dependency returns
+`ALREADY_TRANSITIONED` with `details.prerequisite = consumer_not_executing`: wait
+for that task to leave execution, or block it, before retrying. See
+[Outcomes and safe actions](../specs/protocols/replacement-transactions.md#outcomes-and-safe-actions).
+
 For a repair spanning multiple active tasks or complete dependency lists, write
 a JSON request with operation `apply-dependency-repair`, the blocked source task
 as `target`, unique `dependency_updates`, structured evidence, and validation.

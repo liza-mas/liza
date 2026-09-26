@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -363,4 +364,43 @@ func operationalOutputMayBeConsumed(state *models.State, resolver *pipeline.Reso
 		}
 	}
 	return false
+}
+
+// rejectUnmetDependencyOnExecutingConsumer refuses a dependency update that
+// would give an executing task an unmet dependency (D13). State validation
+// rejects that candidate too, but only after mutation and with a class that
+// invites a correction or retry which cannot succeed while the task executes.
+// The executing set is every role pair's, as in the state invariant.
+func rejectUnmetDependencyOnExecutingConsumer(state *models.State, resolver *pipeline.Resolver, operation string, task *models.Task, dependencies []string) error {
+	if resolver == nil {
+		return nil
+	}
+	var executing []models.TaskStatus
+	for _, rolePair := range resolver.RolePairNames() {
+		if status, err := resolver.ExecutingStatus(rolePair); err == nil {
+			executing = append(executing, status)
+		}
+	}
+	if !isExecutingStatus(task.Status, executing) {
+		return nil
+	}
+	depResolver := models.NewDependencyResolver(state)
+	var unmet []string
+	for _, dependency := range dependencies {
+		if !depResolver.Resolve(dependency).Satisfied() {
+			unmet = append(unmet, dependency)
+		}
+	}
+	if len(unmet) == 0 {
+		return nil
+	}
+	return WrapLifecycleError(operation, task, &PreconditionError{
+		Reason: fmt.Sprintf("task %s is executing (%s): a dependency update cannot add unmet dependencies %s; wait until it leaves execution or block it first", task.ID, task.Status, strings.Join(unmet, ", ")),
+		Details: map[string]any{
+			"prerequisite":       "consumer_not_executing",
+			"task_id":            task.ID,
+			"status":             string(task.Status),
+			"unmet_dependencies": unmet,
+		},
+	}, models.LifecycleAlreadyTransitioned, "stop", "none")
 }

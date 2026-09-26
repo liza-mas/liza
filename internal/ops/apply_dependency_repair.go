@@ -262,6 +262,9 @@ func applyDependencyUpdatesInState(state *models.State, resolver *pipeline.Resol
 		if err != nil {
 			return nil, err
 		}
+		if err := rejectUnmetDependencyOnExecutingConsumer(state, resolver, operation, task, canonical); err != nil {
+			return nil, err
+		}
 		prepared = append(prepared, preparedDependencyUpdate{
 			task:      task,
 			requested: update,
