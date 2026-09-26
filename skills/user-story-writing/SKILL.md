@@ -40,6 +40,11 @@ When the source is a parent epic, read the assigned capability anchor and its de
 references. Inherited personas, NFRs, assumptions, and open questions remain authoritative in the
 epic or its sources. Cite them; do not copy or contradict them.
 
+Stories state acceptance criteria, not structuring requirements. NFRs, guarantees and their
+conditions come from upstream: cite them at their stated precision. When one the story needs is
+missing or its bound unclear, raise an Open Question. Never originate or tighten one in an AC or
+assumption (e.g. "not specified" → "no think time").
+
 **Scope discipline (two-tier):**
 - **Upfront:** Read the assigned anchors and declared direct references; scan existing stories in
   the same domain for consistency.
@@ -118,7 +123,8 @@ Every user story follows the canonical form:
 > **As a** <persona>, **I want to** <action>, **so that** <outcome/value>.
 
 **Before writing each assumption, check:**
-- System quality nobody would dispute? → NFR, not assumption.
+- States a system quality (availability, durability, a security guarantee)? → Not the story's to
+  state: cite the inherited NFR, or raise an OQ if none exists.
 - Specifies a data type, format, or representation? → Design territory. State the behavioral need only.
 - Provides an answer that an Open Question also asks? → Keep the OQ, drop the assumption.
 - Another aspect of the same source gap is already an OQ? → The assumption needs a clear
@@ -138,8 +144,8 @@ implemented or tested without ST-Y existing. Shared concepts do not imply implem
 
 **Assumptions are first-class outputs** that resolve behavioral ambiguity, not technical. Well-identified
 LOW-confidence assumptions are more valuable than papered-over gaps. If an assumption names a data type, format,
-encoding, storage engine, library, or protocol — state the behavioral need only. If it describes a quality nobody
-would dispute (persistence, latency, error reporting) — it's an NFR.
+encoding, storage engine, library, or protocol — state the behavioral need only. If it describes a system quality
+(persistence, latency, error reporting), it is not the story's to state: cite the inherited NFR, or raise an OQ.
 
 **Acceptance criteria are contracts.** They define done. A Coder who satisfies all ACs has completed the story.
 If your ACs don't fully define done, your story is incomplete.
@@ -173,7 +179,7 @@ Before submitting for review, verify:
 - [ ] A Coder can act from the assigned story, its direct references, and task envelope (no hidden context dependencies)
 - [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
 - [ ] Local story decisions do not silently redefine inherited authority
-- [ ] No assumption prescribes implementation (data types, formats, libraries) or states something nobody would dispute (reclassify as NFR)
+- [ ] No assumption prescribes implementation (data types, formats, libraries) or states a system quality (cite the inherited NFR or raise an OQ)
 - [ ] No assumption overlaps with an OQ — if overlap exists, keep the OQ and drop the assumption
 - [ ] Every AC traces to stated or implied source behavior — unmentioned scenarios belong in Assumptions or Open Questions, not ACs
 - [ ] No OQ contradicts or is resolved by an existing story — if so, either the story is premature or the OQ is unnecessary

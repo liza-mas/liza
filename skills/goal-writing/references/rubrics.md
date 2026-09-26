@@ -163,12 +163,25 @@ Ask these whatever the entry point, once the altitude's functional and structura
 
 - How many users or requests must this carry at launch? In a year?
 - What response time would make a user abandon it?
+- What would count as breaking each target: under what usage (pause between actions, arrival rate,
+  sustained or peak), measured where? Does it gate acceptance, or is it indicative?
 - What availability is expected, and what does an hour of downtime cost?
 - What stack may this use, and what is ruled out — by policy, licensing, or what the team can actually operate?
 - What regulatory, security, privacy, or data-residency rules bind it?
 - What data is sensitive, and who must never see it?
 - Who operates this once it ships, and what do they already run?
 - What cost ceiling applies — to build, or to run?
+
+**Challenge overkill.** Test each target against the business context the goal states (who relies
+on it, what an hour of degradation actually costs) and against what comparable parts of the product
+already meet. No baseline means unknown; a first-of-its-kind bar is worth saying. Achievable is not
+the test; proportionate is. HA for a non-critical internal tool, tamper-proof time for a pilot, a
+load target far above the known user base: each costs real work to build and to prove. Say what it
+costs and what it protects, and propose the proportionate level. Record the human's decision with
+the cost as stated to them; a bare "confirmed" is not a decision. Never ask to confirm an unbounded
+absolute (100% availability, "never fails"): explain why it cannot be met or proven and ask for a
+level. A bounded, verifiable guarantee (every existing record survives this migration) is an
+ordinary target, still subject to the overkill test.
 
 If an answer names a structure rather than a bound, what to do depends on who is left to decide it:
 

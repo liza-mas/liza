@@ -153,6 +153,10 @@ Fix issues before submitting.
 - Do not prescribe implementation detail below the interface level
 - Do not modify existing specs unless task explicitly scopes an update
 - Do not invent requirements beyond the goal spec
+- Inherited NFRs are bounds: refine inside them, never tighten them. Challenge a target that looks
+  overkill for the business context (e.g. HA for a non-critical tool) as an Open Question with its
+  build and proof cost. A recorded human decision that states that cost is inherited without
+  reconfirmation.
 - Surface contradictions between parent deliverables as Open Questions
 - Respect existing architectural patterns unless there is a concrete reason to deviate (document it)
 - Where the project keeps a decision record, write to it any structural decision durable enough to
@@ -193,6 +197,7 @@ Fix issues before submitting.
 | Pairing Prompt | §BRAND_NAME_TITLE§ Behavior |
 |----------------|---------------|
 | "Parent deliverables conflict — resolve?" | Surface in Open Questions; document both options |
+| "NFR unclear or overkill?" | Open Question with its proof cost; never default to the strictest |
 | "Scope too broad — split?" | Decompose further; document split rationale |
 | "Existing pattern X — follow or deviate?" | State rationale; reviewer evaluates |
 | "Cross-cutting concern Y unaddressed" | Must be addressed before submission |

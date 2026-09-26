@@ -154,6 +154,7 @@ Then, throughout:
 - On the second detail-level correction, ask for the frame instead of proposing another wording.
 - Do not accept approval where a decision was owed. Name the missing contribution and stay in the phase.
 - Settle priority with the human, not by default: each outcome and constraint is Must, Should, Could, or Won't this run, and mandatory outcomes are separated from desired enhancements. Must and Won't bind every downstream stage; a missing label is an unclaimed decision, not an implicit Must (shared contract: [Priority, Commitments and Proof Stage](../shared/references/reference-first-authoring.md#priority-commitments-and-proof-stage)).
+- Challenge each want before it gets a label: ask what fails, for whom, without it or with a simpler alternative. One that cannot answer is not grounded — propose dropping it and record the human's answer. What survives is the least that meets the need; Should/Could holds grounded but deferrable wants, not ungrounded ones.
 - Close each turn with the useful next move. This is direction, not a continuation gate: a habitual *shall I continue?* trains the human to answer without reading.
 
 ## Tells

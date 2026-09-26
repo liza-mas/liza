@@ -60,7 +60,8 @@ Check every input document for:
 | Dependencies | External systems, prerequisites, sequencing, and constraints are explicit. |
 | Ambiguity | Critical-path TBDs, open questions, contradictions, and low-confidence assumptions are surfaced. |
 | Priority | Each outcome and constraint carries Must/Should/Could/Won't. The Must set is coherent and independently useful at the entry point and respects every Won't; a Must that needs a Won't capability is a source conflict, not a readiness pass. Uncertainty confined to separable optional scope is a note; uncertainty on Must feasibility, shared interfaces, or mandatory constraints is a blocker. |
-| Non-functional constraints | Load, latency, availability, security, privacy, regulatory, stack, operability, and cost bounds are stated wherever they apply. |
+| Proportionality | Each Must is a need, not a want: it names what fails, for whom, without it or with a simpler alternative. Scope, targets and required evidence are the least that meets that need, and success criteria say what evidence is enough (a demonstration, a focused check, one rehearsal) — a ceiling as well as a floor. A want belongs in Should/Could. A Must, target or proof demand that is overkill for the stated context (criticality, users, cost of failure, comparable product baseline) stands only with a recorded human decision stating its cost. |
+| Non-functional constraints | Load, latency, availability, security, privacy, regulatory, stack, operability, and cost bounds are stated wherever they apply. Each is a clear bound (it is evident what would violate it; for a load target, which load and where measured) or is marked indicative; detail inside a clear bound is refinement, not a gap. |
 | Documentation | The documentation the product ships, who reads it, and whether the project keeps an ADR record are stated — wherever no existing convention on disk already settles them. |
 | Leanness | No detail takes a decision a downstream stage still had. Detail recording a decision already made elsewhere is a constraint, not excess. |
 
@@ -69,6 +70,11 @@ Readiness runs in both directions. Too little detail makes agents guess or block
 Do not demand lower-level detail than the entry point needs. A `general-objective` document should not need API shapes; a `technical-spec` document usually does. Conversely, test detail by asking who still had the choice. Detail that takes a live downstream decision and **contradicts** something else in the document is a blocker; detail that merely exceeds the altitude is a `Note`. Structural vocabulary is not the test and misleads reliably: an inherited stack, a portability bound, and an engineering guardrail aimed at the agents who will build it all read as architecture while deciding nothing that was still open.
 
 Never treat a non-functional constraint as excess detail, at any entry point. A constraint bounds the solution space; a design picks a point inside it. Stack candidates, load and scalability targets, latency, availability, security, privacy, regulatory and cost bounds are constraints the human owns at every altitude — their absence is a gap, not their presence.
+
+An unclear gating bound, or overkill that materially drives build or proof cost without that
+decision, is a **blocker**, never a note: a note asking later stages to "make it explicit" hands
+them a decision the human owns, and they will resolve it to the strictest reading. A missing
+ceiling or a minor want is a note: later stages take the least costly sufficient reading.
 
 ## 4. Apply Entry-Point Rubric
 

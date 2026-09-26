@@ -50,6 +50,16 @@ consequential API or platform assumption is checked against the implementation,
 primary documentation, or a targeted probe — a test of an invented adapter
 proves nothing about the real one.
 
+**Bounds, not benchmarks.** A source bounds the solution; it need not specify
+it. Refining inside a clear bound belongs to later stages; moving or tightening
+it belongs to the human. Take the least costly reading that satisfies the
+source's words and framing, never the strictest. A guarantee, threat model, or
+supporting machinery (recovery, telemetry, canaries, evidence frameworks) the
+source does not name must name the required outcome that fails without it and
+use the least costly sufficient mechanism; a citation alone does not establish
+necessity. Once the required outcome is demonstrated, more assurance is
+optional unless a concrete defect or binding obligation requires it.
+
 Priority, readiness, and proof stage are separate properties:
 
 | Proof kind | Treatment |

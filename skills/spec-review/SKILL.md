@@ -31,8 +31,9 @@ Reject a strict planning artifact for any of these contract violations:
 6. detailed prose is duplicated only to make Markdown and `output[]` character-identical;
 7. a correction accumulates unchanged or resolved history;
 8. an assigned obligation maps to no reference, or its mapped anchor span omits that obligation;
-9. a priority is silently promoted, demoted, or dropped, Must coverage is missing, or Won't scope
-   is included;
+9. a priority is silently promoted, demoted, or dropped, a bound is tightened or an obligation
+   added past its source (Reference-First Authoring, *Bounds*), Must coverage is missing, or
+   Won't scope is included;
 10. the next role cannot act from the assigned scope and references without inventing policy or
     waiting on an unallocated prerequisite, or evidence is demanded at the wrong stage; or
 11. a consequential guarantee has no owner and evidence.
