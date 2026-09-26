@@ -846,7 +846,12 @@ func (e *integrationProgressEvaluator) resolveLineageWithStack(
 		return lineageResolution{taskIDs: []string{taskID}}, nil
 	case models.TaskStatusSuperseded:
 		if len(task.SupersededBy) == 0 {
-			return lineageResolution{}, fmt.Errorf("integration progress: superseded task %q has no replacements", taskID)
+			// supersede-task allows no replacements (work done elsewhere, with a recorded
+			// recoverability command): the lineage settles as an abandoned one does.
+			if abandonedBlocks {
+				return lineageResolution{settled: true, blocked: true, taskIDs: []string{taskID}}, nil
+			}
+			return lineageResolution{settled: true}, nil
 		}
 		visiting[taskID] = true
 		defer delete(visiting, taskID)
@@ -970,7 +975,8 @@ func (e *integrationProgressEvaluator) mergedLineageLeaves(rootID string) ([]str
 			return nil
 		}
 		if len(task.SupersededBy) == 0 {
-			return fmt.Errorf("integration progress: superseded task %q has no replacements", taskID)
+			// Superseded without replacements: no merged leaf on this branch.
+			return nil
 		}
 		visiting[taskID] = true
 		defer delete(visiting, taskID)

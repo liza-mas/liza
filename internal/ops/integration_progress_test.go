@@ -325,8 +325,37 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 		}
 	})
 
-	t.Run("blocked or abandoned finding repairs block", func(t *testing.T) {
-		for _, status := range []models.TaskStatus{models.TaskStatusBlocked, models.TaskStatusAbandoned} {
+	t.Run("superseded tasks without replacements settle without merging", func(t *testing.T) {
+		state := integrationProgressState(
+			progressPlan("plan-a", models.TaskStatusMerged, true),
+			progressCoding("coding-dropped", "plan-a"),
+			progressCoding("coding-root", "plan-a"),
+			progressReplacement("coding-leaf", "coding-root", models.TaskStatusMerged),
+			progressReplacement("coding-leaf-dropped", "coding-root", models.TaskStatusSuperseded),
+			progressPlan("plan-other", models.TaskStatusMerged, true),
+			progressCoding("coding-other", "plan-other"),
+		)
+		state.FindTask("coding-dropped").Status = models.TaskStatusSuperseded
+		root := state.FindTask("coding-root")
+		root.Status = models.TaskStatusSuperseded
+		root.SupersededBy = []string{"coding-leaf", "coding-leaf-dropped"}
+
+		decision := evaluateProgress(t, state, available, "head-1")
+		wantCohort := &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{
+			{PlanTaskID: "plan-a", RootTaskIDs: []string{"coding-root"}},
+			{PlanTaskID: "plan-other", RootTaskIDs: []string{"coding-other"}},
+		}}
+		if !reflect.DeepEqual(decision.ContributingSet, wantCohort) {
+			t.Fatalf("cohort = %#v, want %#v", decision.ContributingSet, wantCohort)
+		}
+		coverage := progressCoverageByPlan(t, decision.Coverage, "plan-a")
+		if got := progressReviewedTaskIDs(coverage.ApprovalAttestations); !reflect.DeepEqual(got, []string{"coding-leaf"}) {
+			t.Fatalf("reviewed tasks = %v, want only the merged leaf", got)
+		}
+	})
+
+	t.Run("blocked, abandoned or unreplaced superseded finding repairs block", func(t *testing.T) {
+		for _, status := range []models.TaskStatus{models.TaskStatusBlocked, models.TaskStatusAbandoned, models.TaskStatusSuperseded} {
 			t.Run(string(status), func(t *testing.T) {
 				state := readyGlobalProgressState("head-1")
 				state.Goal.Integration.GlobalGenerations = []models.IntegrationGlobalGeneration{{
