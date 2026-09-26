@@ -124,6 +124,7 @@ Specialized protocols agents load conditionally. Each contains a single `SKILL.m
 | `feynman/` | Explaining complex ideas simply |
 | `lesson-capture/` | Capturing project-specific operational lessons |
 | `context-engineering/` | Analyzing agent prompts and outputs for context quality, bloat, and handoff fit |
+| `lean-thinking/` | Inventorying wastes and frictions in a process, workflow, agent system, or codebase |
 
 Skills execute within contract constraints — contract gates are non-negotiable, skill steps operate within them.
 
