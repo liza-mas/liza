@@ -63,7 +63,7 @@ Master Output Contract properties 1-6:
 3. Shared-file ownership. Exactly one entry writes each shared file; readers
    declare read-only use and depends_on ordering.
 4. Dependency ordering. Compare interface ownership and consumption with the plan's stated data flow before assigning depends_on or task_depends_on.
-   A consumer may depend on its provider; do not make a provider depend on its consumer solely because both tasks share a role-pair.
+   A consumer may depend on its provider, naming whether it consumes the provider's contract or its implementation; do not make a provider depend on its consumer solely because both tasks share a role-pair.
    An inverse edge requires another explicit relationship named in the plan that justifies that direction.
    Independent scopes remain parallel and cycles are rejected.
 5. Inherited constraints. Each entry cites the master artifact via

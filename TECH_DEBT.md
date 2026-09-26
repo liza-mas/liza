@@ -794,3 +794,25 @@ which the lifecycle contract keeps fenced.
 **Payback trigger:** any `unresolved preparation remains` stall after this fix
 whose preparing invocation had returned, found in supervisor logs as
 `failed to retire lifecycle preparation` with no later retirement.
+
+## Critical-path pressure is review-only
+
+**What:** D51 made superfluous dependencies a reviewable defect at every
+planning level (ADR-0150 amendment), but two mechanisms stay as they were:
+
+- **Whole-phase inheritance by default.** An output that omits `inherit_inputs`
+  still waits for every child of every upstream phase (ADR-0048,
+  `models.InheritModeAll`), so one upper-level ordering edge becomes a coding
+  barrier unless a planner opts out and a reviewer notices.
+- **No critical-path visibility.** No role is shown the dependency chain length
+  it creates; planners and reviewers judge each edge alone.
+
+**Why deferred:** changing the inheritance default alters every generated child's
+dependencies (ADR-0048 phase-gate contract, replan and narrowing paths) and
+would not have caught the implementation-bound client edges that dominated the
+incident, which named their consumed artifact. Measuring the chain needs a
+graph view in planning context that does not exist yet.
+
+**Payback trigger:** a run after this change where a generated child carries an
+inherited edge it does not consume, or where idle agents with zero claimable
+tasks recur behind a dependency chain (lean W-1 falsifier).

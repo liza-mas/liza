@@ -51,7 +51,8 @@ architecture; do not restate their prose. Every new plan must include the strict
 `## Source References` section with non-empty direct references and obligation coverage.
 Carry each requirement's effective priority (Must/Should/Could/Won't) into the matrix rows
 and outputs; keep optional work separately deferrable. For every depends_on, task_depends_on,
-and inherit_inputs choice, state in the plan what the input supplies; an output that needs
+and inherit_inputs choice, state in the plan the earliest artifact that supplies the input (a
+merged contract or fixture before an implementation); an output that needs
 nothing from an upstream phase must not inherit its whole barrier (see inherit_inputs in TOOLS).
 Record a consequential unresolved commitment once, at its owner, and distinguish a new semantic
 decision from a demonstrated implementation bug (contract: Priority, Commitments and Proof Stage).
@@ -254,7 +255,12 @@ needs from optional extensions; check a consequential platform or API assumption
 the implementation, primary documentation, or a targeted probe before it becomes an
 interface guarantee; and place each proof at its stage — design prerequisite,
 implementation prerequisite, or final acceptance evidence — with a named owner and
-hold, never a pre-coding gate without a concrete dependency reason.
+hold, never a pre-coding gate without a concrete dependency reason. Make each dependency
+wait for the earliest artifact that suffices: a frozen contract and contract-derived fixtures
+before a provider implementation, and add a verification task that depends on client and provider
+and that every consumer of the client's behavior depends on;
+split a consumed fixture from a later proof; and weigh a per-scope split before routing
+several scopes through one shared file.
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Use the assigned goal carrier and declared direct-reference spans for inherited product behavior.
 {{- if gt (len .ParentTaskContexts) 0}}

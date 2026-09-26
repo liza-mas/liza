@@ -88,6 +88,21 @@ separately ([ADR-0149](0149-per-role-instruction-budget.md)). W5a adds versioned
 scenario inputs, a retained protocol trial with hashes, and flips the budget gate
 to `true`.
 
+**Amendment (2026-09-26) — critical-path duties.** W2's Dependency meaning was
+satisfiable by naming a provider *implementation* as the consumed artifact, and
+only missing edges were ever rejected, so a run serialized behind whole-phase
+barriers, implementation-bound clients, a fixture bundled with its proof, and
+architecture-chosen shared-file writer chains. Every edge now names the earliest
+artifact that suffices: code planner and Dependency meaning; master property 4
+(contract or implementation); architecture Dependency ordering (superfluous
+edges). The architect's prompt and the new architecture Critical path row cover
+contract-first clients, fixture/proof separation and per-scope splits of a shared
+file. `architecture-planning` gains False Dependence. Contract-first keeps the
+no-fake-provider guard through one hold point: a verification task that depends
+on client and provider, which every consumer of the client's behavior depends on.
+The [ADR-0048](0048-multi-phase-planning.md) `inherit_inputs: all` default and
+critical-path visibility are deferred in `TECH_DEBT.md`.
+
 ## Rationale
 
 Option 1 is what produced the conflicting instructions: each location was correct

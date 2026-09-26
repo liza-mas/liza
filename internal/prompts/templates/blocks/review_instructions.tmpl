@@ -124,7 +124,7 @@ REVIEW CHECKLIST:
 | Cross-reference consistency | For every cross-reference in the plan ("owned by CPx", "depends on CPx", "out of scope for CPx"), the referenced task must explicitly state that responsibility, dependency, or exclusion. Reject if any dangling reference. |
 | e2e/doc coverage | Spec compliance matrix missing mandatory E2E or DOC impact rows, or rows marked N/A without justification, or feature adds user-visible behavior but no e2e test or doc update task planned |
 {{template "handoff-review-rows"}}
-| Dependency meaning | For a depends_on, task_depends_on, or inherit_inputs choice the plan does not say what the input supplies, or the inherited phase barrier would hold a child that needs nothing from that upstream (see inherit_inputs in TOOLS) |
+| Dependency meaning | For a depends_on, task_depends_on, or inherit_inputs choice the plan does not name the earliest artifact that supplies the input (an implementation where its merged contract or fixture suffices), or the inherited phase barrier would hold a child that needs nothing from that upstream (see inherit_inputs in TOOLS) |
 {{- if .RCARequired}}
 | Root cause evidence | Plan has no "## Root Cause Analysis" section; a source or code-path claim lacks a file:line you can check; or a runtime claim lacks a checkable artifact — exact command and output, log excerpt, or explicit reporter attribution |
 | Mechanism, not category | RCA names a failure category ("race condition", "state corruption") without the code path that produces it |
@@ -323,8 +323,9 @@ REVIEW CHECKLIST:
 | Falsifiable done_when | done_when for output[] entries is vague or untestable |
 | validation satisfiable | An output[] validation command can exit 0 without exercising its intended check, or hook/check intent is not declared in durable architecture/task text |
 | validation command shape | A validation[] command is not single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. |
-| Dependency ordering | Output[] entries have circular or missing dependencies |
+| Dependency ordering | Output[] entries have circular, missing, or superfluous dependencies — an edge naming no consumed artifact, or an inherited whole-phase barrier |
 | Shared-file dependencies | Two output[] entries may modify the same files without depends_on |
+| Critical path | A client waits on its provider's implementation where the frozen contract and contract-derived fixtures suffice; a contract-first client lacks a verification task that depends on client and provider and that every consumer of the client's behavior depends on; a consumed fixture is bundled with a later proof; or several scopes write one shared file (migration, test file, registry) in series without weighing a per-scope split |
 | arch_ref set | Output[] entries missing arch_ref pointing to the architecture document |
 | Spec alignment | Architecture decisions contradict or ignore spec requirements |
 {{template "handoff-review-rows"}}

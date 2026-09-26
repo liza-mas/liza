@@ -116,7 +116,7 @@ work within a scope is code-planner territory.
 1. **Identify scopes** — natural boundaries from the design
 2. **Scope independence** — each code-planner should work without waiting for another
 3. **Scope completeness** — each scope is implementable and testable on its own
-4. **Ordering constraints** — `depends_on` only when scope B cannot be implemented without A's output
+4. **Ordering constraints** — `depends_on` only when scope B cannot be implemented without A's output, naming the earliest one that suffices (see False Dependence)
 5. **Shared-file audit** — overlapping file access needs `depends_on` or explicit interface contracts
 
 **Decomposition heuristics:**
@@ -170,6 +170,7 @@ Fix issues before submitting.
 | **Monolithic Scope** | One giant scope spanning unrelated domain boundaries. Decompose when a scope covers multiple domains. |
 | **Task-Level Decomposition** | Splitting within a domain by implementation steps (e.g., "scaffolding" then "logic", or "core" then "wiring"). Build config and stubs that serve one feature are not a separate domain. Implementation sequencing is code-planner territory; the architect decomposes by domain. |
 | **False Independence** | Scopes sharing state or files without `depends_on`. Shared-file audit catches file overlap; also audit for shared-state overlap. |
+| **False Dependence** | Waiting on more than is consumed: a whole-epic barrier; a client waiting on its provider's implementation when the frozen contract plus contract-derived fixtures suffice — then add a verification task that depends on client and provider and that every consumer of the client's behavior depends on (an invented provider stays forbidden); a consumed fixture bundled with a later proof; several scopes writing one shared file (migration, test file, registry) in series when a per-scope split was not weighed. Each edge adds its upstream's full duration to the critical path. |
 | **Invisible Decisions** | Structural choices without rationale. Every boundary should answer "why here?" |
 | **Cathedral Planning** | Pursuing perfect upfront design. Define boundaries and interfaces; implementation detail crystallizes during code-planning. |
 | **Pattern Imposition** | Forcing design patterns onto the problem. Name the problem first; pattern is the solution, not the starting point. |

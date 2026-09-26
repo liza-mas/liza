@@ -42,7 +42,7 @@ Reject if any output[] entry is missing `{{.MasterOutputRefField}}`, has missing
    entry; consumers reference the master contract instead of redefining it.
 3. Shared-file ownership. Exactly one entry writes each shared file; readers
    declare read-only use and depends_on ordering.
-4. Dependency ordering. Verify provider-before-consumer direction from interface ownership, consumption, and the plan's stated data flow.
+4. Dependency ordering. Verify provider-before-consumer direction from interface ownership, consumption, and the plan's stated data flow, and that each edge names whether it consumes the provider's contract or its implementation.
    Reject a provider/consumer inversion unless another explicit relationship named in the plan justifies the inverse edge.
    Independent scopes remain parallel and cycles are rejected.
 5. Inherited constraints. Each entry cites the master artifact via
