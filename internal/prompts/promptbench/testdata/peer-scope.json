@@ -59,8 +59,8 @@
     {
       "role": "code-planner",
       "variant": "code-planning-pair",
-      "before_bytes": 294882,
-      "after_bytes": 290106,
+      "before_bytes": 295111,
+      "after_bytes": 290335,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452

@@ -56,6 +56,9 @@ merged contract or fixture before an implementation); an output that needs
 nothing from an upstream phase must not inherit its whole barrier (see inherit_inputs in TOOLS).
 Record a consequential unresolved commitment once, at its owner, and distinguish a new semantic
 decision from a demonstrated implementation bug (contract: Priority, Commitments and Proof Stage).
+Leave out any guarantee or supporting machinery (recovery, telemetry, canaries, evidence
+frameworks) your sources do not name; if a required outcome fails without it, mark BLOCKED
+with that question and its build and proof cost.
 {{- if or .ArchRef .EpicRef}}
 {{template "artifact-ref-fallback" .}}
 {{- end}}

@@ -55,9 +55,10 @@ it. Refining inside a clear bound belongs to later stages; moving or tightening
 it belongs to the human. Take the least costly reading that satisfies the
 source's words and framing, never the strictest. A guarantee, threat model, or
 supporting machinery (recovery, telemetry, canaries, evidence frameworks) the
-source does not name must name the required outcome that fails without it and
-use the least costly sufficient mechanism; a citation alone does not establish
-necessity. Once the required outcome is demonstrated, more assurance is
+source does not name is the human's to add, not a necessary implication, even
+with a citation: leave it out, or raise an Open Question stating the outcome
+it protects and its build and proof cost. Only a recorded human decision puts
+it in scope. Once the required outcome is demonstrated, more assurance is
 optional unless a concrete defect or binding obligation requires it.
 
 Priority, readiness, and proof stage are separate properties:
