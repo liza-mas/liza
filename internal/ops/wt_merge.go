@@ -404,27 +404,27 @@ func provenMergeEffect(state *models.State, gw *git.Git, integrationRef, taskID,
 }
 
 // interruptedMergePreparation reports whether the refusal in the caller's way is
-// this actor's own unresolved wt-merge preparation at this exact boundary — the
-// state left behind when the integration ref moved but the MERGED write did not
-// land.
+// an unresolved wt-merge preparation at this exact boundary, left by any actor.
+// mergeWorktreeLifecycle is the only creator of wt-merge preparations and holds
+// the task review lock for its whole call, so a preparation seen under that
+// lock belongs to an invocation that has ended. Its Git effect is settled from
+// Git and receipts, never from the preparer's identity or liveness: a merge
+// owner handed over from a departed approver must be able to finish it.
 func interruptedMergePreparation(task *models.Task, request LifecycleRequest) bool {
 	if task == nil || task.Lifecycle == nil || task.Lifecycle.Preparation == nil {
 		return false
 	}
 	p := task.Lifecycle.Preparation
-	// Registry omitted deliberately: this path already requires the preparer to
-	// be the requester, so the requester's own generation is the authenticated
-	// second generation and a registry lookup cannot add evidence.
-	return p.Operation == integrationOperationWTMerge && p.Actor == request.Actor &&
-		preparationStillCurrent(task, request, nil)
+	return p.Operation == integrationOperationWTMerge && preparationStillCurrent(task, request, nil)
 }
 
 // retireProvenMergePreparation clears an interrupted wt-merge preparation whose
-// external effect is proven, so the merge can be finished instead of requerying
-// forever. The fence it lifts exists because an unresolved preparation means
-// uncertain effects; the receipt and ancestry checks in provenMergeEffect remove
-// that uncertainty. Exactly-once does not rest on this fence — the locked
-// approved-status recheck before publication refuses any duplicate.
+// external effect is settled — proven landed, or proven absent — so the merge
+// can be finished or retried instead of requerying forever. The fence it lifts
+// exists because an unresolved preparation means uncertain effects; the checks
+// in resumeInterruptedMerge remove that uncertainty. Exactly-once does not rest
+// on this fence — the locked approved-status recheck before publication refuses
+// any duplicate.
 func retireProvenMergePreparation(bb *db.Blackboard, taskID string, authority *models.AgentAuthority, prepared models.LifecyclePreparation, request LifecycleRequest) error {
 	return modifyLifecycleState(bb, authority, func(state *models.State) error {
 		task := state.FindTask(taskID)
@@ -442,8 +442,11 @@ func retireProvenMergePreparation(bb *db.Blackboard, taskID string, authority *m
 }
 
 // resumeInterruptedMerge admits a retry that CheckLifecycleRequest refused,
-// when the refusal is this actor's own interrupted wt-merge and the integration
-// effect it left behind is proven. It reports false, with no state change, for
+// when the refusal is an interrupted wt-merge whose integration effect is
+// settled: a receipt proves the merge landed, or integration does not carry the
+// approved commit, so no effect exists to duplicate. When integration carries
+// the approved commit without an attributable receipt the effect is unknown; it
+// stays fenced for inspection. It reports false, with no state change, for
 // every other refusal.
 func resumeInterruptedMerge(bb *db.Blackboard, projectRoot string, state *models.State, task *models.Task, request LifecycleRequest, authority *models.AgentAuthority) (bool, error) {
 	if !interruptedMergePreparation(task, request) || task.ReviewCommit == nil {
@@ -458,14 +461,31 @@ func resumeInterruptedMerge(bb *db.Blackboard, projectRoot string, state *models
 	if integrationBranch == "" {
 		integrationBranch = "main"
 	}
-	proven, err := provenMergeEffect(state, gitWrapper, "refs/heads/"+integrationBranch, task.ID, expectedCommit)
+	integrationRef := "refs/heads/" + integrationBranch
+	proven, err := provenMergeEffect(state, gitWrapper, integrationRef, task.ID, expectedCommit)
 	if err != nil {
 		return false, err
 	}
+	preparer := task.Lifecycle.Preparation.Actor
 	if proven == nil {
-		return false, nil
+		head, err := gitWrapper.GetCommitSHA(integrationRef)
+		if err != nil {
+			return false, fmt.Errorf("failed to get integration HEAD: %w", err)
+		}
+		carried, err := gitWrapper.IsAncestor(expectedCommit, head)
+		if err != nil {
+			return false, fmt.Errorf("failed to check approved commit reachability: %w", err)
+		}
+		if carried {
+			return false, fmt.Errorf("wt-merge preparation by %s left approved commit %s on integration without an attributable receipt; inspect before recovery", preparer, shortSHA(expectedCommit))
+		}
+		log.Printf("wt-merge %s: retiring orphaned merge preparation by %s — integration does not carry %s", task.ID, preparer, shortSHA(expectedCommit))
+		if err := retireProvenMergePreparation(bb, task.ID, authority, *task.Lifecycle.Preparation, request); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-	log.Printf("wt-merge %s: resuming interrupted merge — integration already carries %s", task.ID, shortSHA(proven.afterCommit))
+	log.Printf("wt-merge %s: resuming interrupted merge by %s — integration already carries %s", task.ID, preparer, shortSHA(proven.afterCommit))
 	if err := retireProvenMergePreparation(bb, task.ID, authority, *task.Lifecycle.Preparation, request); err != nil {
 		return false, err
 	}

@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -521,6 +522,25 @@ func hasPendingMergesInState(state *models.State, agentID string, pr models.Pipe
 		}
 	}
 	return false
+}
+
+// ownedPendingMergeFingerprint identifies the approved merges this agent owns,
+// each at its current task boundary. Empty means it owns none. A reviewer can
+// become the owner without any reviewable work appearing — its approver left
+// the registry — so a change in this value is itself work for merge handling.
+func ownedPendingMergeFingerprint(state *models.State, agentID string, pr models.PipelineResolver) string {
+	if pr == nil {
+		return ""
+	}
+	var owned []string
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if approvedMergePending(task, state, agentID, pr) {
+			owned = append(owned, task.ID+"@"+models.TaskTransitionID(task))
+		}
+	}
+	sort.Strings(owned)
+	return strings.Join(owned, ",")
 }
 
 func approvedMergePending(task *models.Task, state *models.State, agentID string, pr models.PipelineResolver) bool {

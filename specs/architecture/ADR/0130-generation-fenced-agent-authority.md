@@ -79,6 +79,25 @@ observations as permission to discard live ownership.
   legacy internal callers. This is not universal authentication of every
   internal mutation.
 
+## 2026-09-28 Amendment: Merge Takeover Settles Preparations by Effect
+
+The approved-merge takeover could not finish a merge whose `wt-merge`
+preparation a departed approver had left. Resumption required the preparer to
+be the requester, and a missing registration does not count as retirement.
+Every inheritor therefore requeried forever (operator note D106).
+
+A preparation seen under the task review lock belongs to an ended invocation,
+because the merge holds that lock for its whole call. It is therefore settled by
+effect, not identity:
+- a receipt-proven merge finishes;
+- an approved commit absent from integration retires the preparation and merges
+  afresh;
+- an approved commit reachable without an attributable receipt stays fenced for
+  inspection.
+
+Exactly-once still rests on the locked approved-status recheck. The inheriting
+reviewer also wakes from its wait when the set of merges it owns changes.
+
 ## Related Decisions
 
 Extends [ADR-0062](0062-ghost-agent-claim-prevention-and-ownership-reconciliation.md)

@@ -163,9 +163,9 @@ unresolved preparation is separate from receipt retention and is never evicted
 by receipt pruning. Finalization compares its reservation, commits the result
 receipt, advances revision and clears the marker in one state transaction.
 An interrupted preparation reports `effects=unknown` and `requery`; it does
-not authorize repeating arbitrary setup, tests, deletion or merge. The single
-exception is an effect proven by a durable, task-attributed record, described
-for merge below.
+not authorize repeating arbitrary setup, tests, deletion or merge. There are two
+exceptions, both described for merge below: an effect proven by a durable,
+task-attributed record, and a merge effect proven absent.
 When an invocation returns a normal error before committing its transition,
 it may retire only the preparation it successfully reserved, in a blackboard
 transaction that verifies current authority while holding the project lifecycle
@@ -262,6 +262,20 @@ A later attempt then retires the preparation and finishes the merge once. The
 CAS merge re-verifies ancestry and performs no second ref write, and the task's
 merge commit is taken from the receipt so an intervening merge is not
 misattributed.
+An interrupted merge whose effect is proven absent is settled too. If the
+integration ref does not reach the approved review commit, no merge carrying it
+is live, so a later attempt retires the preparation and merges afresh.
+
+Settlement reads Git and receipts, never the preparer's identity or liveness.
+Any current owner, including one that inherited the merge from a departed
+approver, may settle a preparation another reviewer left. The task review lock
+is held through the whole merge, so a preparation seen under it belongs to an
+invocation that has ended.
+
+If the approved commit is reachable but no receipt attributes it, the effect is
+neither proven nor proven absent. The preparation stays in place, and the
+refusal names its preparer and asks for inspection. The owner's bounded retries
+end in `pending_merge_stalled`.
 A merge that provably published nothing also retires its own preparation:
 its forward integration lock timed out before the callback ran, or the
 candidate artifact guard, which runs before `update-ref` and reads state

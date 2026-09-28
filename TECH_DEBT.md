@@ -840,3 +840,19 @@ exclude retired originals.
 plan; (2) any duplicate-work incident on a corrective plan whose outputs omit
 `supersedes`; (3) a `Pipeline transition failed` warning naming `plan
 replacement` or `supersedes` for a plan classified `passed`.
+
+## Unattributable merge effect stays fenced without a recovery command (D106)
+
+**What:** When a `wt-merge` preparation remains and the integration ref reaches
+the approved commit with no attributable mutation receipt, the merge owner
+refuses: the effect is neither proven nor proven absent. The owner's bounded
+retries end in `pending_merge_stalled`, and no command settles the case after
+inspection.
+
+**Why deferred:** The case needs a way for Git to carry the approved commit
+without this task's receipt, such as a manual merge or a lost receipt write.
+Neither has been observed. An inspected-settlement command needs its own
+authority and evidence design.
+
+**Payback trigger:** One occurrence of the "without an attributable receipt"
+refusal, or a second fenced-merge incident of any case.

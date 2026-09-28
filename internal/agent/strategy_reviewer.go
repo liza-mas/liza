@@ -44,6 +44,15 @@ type reviewerStrategy struct {
 	yamlPollSec      int                // from YAML; 0 = use type default
 	yamlMaxWaitSec   int                // from YAML; 0 = use type default
 
+	// parkedMergeFingerprint is the set of owned pending merges PreWork last
+	// stepped away from (stall or yield to review work). The wait wakes for
+	// merge handling only when the owned set differs from it, so an inherited
+	// merge wakes the reviewer while an unchanged stalled one does not.
+	parkedMergeFingerprint string
+	// preWorkWake marks a wait that ended for merge handling rather than for
+	// review work, so the claim step declines and the loop re-runs PreWork.
+	preWorkWake bool
+
 	// breaker quarantines candidates whose claim keeps failing the same way.
 	// Built on first use: NewRoleStrategy and tests construct the struct
 	// directly, and the supervisor loop reads and writes it from one goroutine.
@@ -136,6 +145,7 @@ func (s *reviewerStrategy) PreWork(ctx context.Context, bb *db.Blackboard, confi
 				return false, err
 			}
 			if yield {
+				s.parkPendingMerges(bb, config.AgentID, pr)
 				s.resetMergeCounters()
 				return false, nil
 			}
@@ -147,8 +157,10 @@ func (s *reviewerStrategy) PreWork(ctx context.Context, bb *db.Blackboard, confi
 			"agent_id", config.AgentID,
 			"rounds", s.mergeStallRounds)
 		s.recordPendingMergeStall(bb, config)
+		s.parkPendingMerges(bb, config.AgentID, pr)
 		s.resetMergeCounters()
 	} else {
+		s.parkedMergeFingerprint = ""
 		s.resetMergeCounters()
 	}
 
@@ -159,6 +171,22 @@ func (s *reviewerStrategy) resetMergeCounters() {
 	s.mergeRetries = 0
 	s.mergeStallRounds = 0
 }
+
+// parkPendingMerges records the owned pending merges PreWork is stepping away
+// from, so the following wait does not wake again for the same set.
+func (s *reviewerStrategy) parkPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResolver) {
+	state, err := bb.ReadCached()
+	if err != nil {
+		return // Unparked: the wait re-runs merge handling once, which is safe.
+	}
+	s.parkedMergeFingerprint = ownedPendingMergeFingerprint(state, agentID, pr)
+}
+
+// errPreWorkWake declines the claim step after a wait that ended for merge
+// handling. The supervisor's claim-failure path re-enters the loop top, so
+// ABORT, the gates and PreWork run before anything is claimed, and this
+// role-specific routing stays out of the shared supervisor loop.
+var errPreWorkWake = errors.New("wait ended for merge handling; re-running pre-work")
 
 // awaitPendingMergeWake waits up to pendingMergeWakeInterval for the situation
 // to change. It returns yield=true when the reviewer should stop retrying and
@@ -217,6 +245,7 @@ func (s *reviewerStrategy) recordPendingMergeStall(bb *db.Blackboard, config Sup
 }
 
 func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, config SupervisorConfig, pollInterval, maxWait time.Duration) (bool, error) {
+	s.preWorkWake = false // Only this wait's outcome routes the next claim.
 	if cleared, err := ops.ClearStaleReviewClaims(config.ProjectRoot); err != nil {
 		GetLogger().Warn("Failed to clear stale review claims before reviewer wait", "error", err)
 	} else if cleared > 0 {
@@ -226,6 +255,13 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 	pr := loadResolver(config.ProjectRoot)
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
+			// Merges run only in PreWork, and an owned merge is not reviewable
+			// work: without this, a reviewer that inherits a merge sleeps for
+			// reviewer_max_wait while downstream work waits on it.
+			if fingerprint := ownedPendingMergeFingerprint(state, config.AgentID, pr); fingerprint != "" && fingerprint != s.parkedMergeFingerprint {
+				s.preWorkWake = true
+				return true, "Owned pending merge changed; returning to merge handling"
+			}
 			breaker := s.activeBreaker()
 			if config.InitialTask != "" {
 				task := state.FindTask(config.InitialTask)
@@ -268,6 +304,10 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (string, string, error) {
 	logger := GetLogger()
 	s.claimConfig = config
+	if s.preWorkWake {
+		s.preWorkWake = false
+		return "", "", errPreWorkWake
+	}
 
 	session, err := prepareClaimSession(config, bb)
 	if err != nil {
@@ -332,6 +372,9 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 // key it opened. The error arrives typed from ops.ClaimReviewerTask with its
 // candidates intact; only a candidate-free error is classified here.
 func (s *reviewerStrategy) ObserveClaimFailure(err error) claimBreakerDecision {
+	if errors.Is(err, errPreWorkWake) {
+		return claimBreakerDecision{} // Not a claim failure: retry the loop at once.
+	}
 	failure := ops.ClassifyReviewClaimError(s.role, err)
 	if failure == nil {
 		return claimBreakerDecision{}

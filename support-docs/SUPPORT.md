@@ -651,6 +651,11 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 **Diagnosis**: `§BRAND_BINARY_NAME§ get tasks` — check `lease_expires` is in the past (see Lease defaults above).
 **Fix**: `§BRAND_BINARY_NAME§ recover-task <task-id>` or `§BRAND_BINARY_NAME§ release-claim <task-id>`.
 
+### Approved task never merges (`pending_merge_stalled`)
+**Symptom**: Task stays approved; the owning reviewer records `pending_merge_stalled`, and its merge refusal says a `wt-merge` preparation "left approved commit … on integration without an attributable receipt; inspect before recovery".
+**Diagnosis**: The integration branch already contains the approved review commit, but no mutation receipt attributes it to the task. The merge may or may not have been this task's, so it is not repeated automatically. Other interrupted merges resume or retry on their own, including those left by an approver that has since exited.
+**Fix**: No command settles this case yet. Inspect integration history to see how the approved commit landed, then escalate to the human with that evidence. Do not edit the blackboard.
+
 ### Agent crash loop
 **Symptom**: Supervisor keeps restarting, agent exits non-zero repeatedly.
 **Diagnosis**: Check agent output logs in `§BRAND_PROJECT_DIRNAME§/agent-outputs/` and the bootstrap prompt in `§BRAND_PROJECT_DIRNAME§/agent-prompts/` (what the agent was told to do).
