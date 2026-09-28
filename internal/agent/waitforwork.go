@@ -199,7 +199,7 @@ func waitForWorkPolling(
 		case <-ctx.Done():
 			return false, ctx.Err()
 		case <-ticker.C:
-			state, err := bb.Read()
+			state, err := bb.ReadSnapshot()
 			if err != nil {
 				return false, fmt.Errorf("failed to read state: %w", err)
 			}

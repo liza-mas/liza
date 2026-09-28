@@ -1,8 +1,9 @@
 // Package db implements the atomic YAML database layer with file locking.
 // It provides safe concurrent access to state.yaml using flock-based mutual exclusion.
 //
-// Operator inspection and observation-only reads (TUI, watch, validation and
-// usage reports, lifecycle metrics capture) use [Blackboard.ReadSnapshot]: an
+// Operator inspection, observation-only reads (TUI, watch, validation and
+// usage reports, lifecycle metrics capture), and supervisor polling and gate
+// reads use [Blackboard.ReadSnapshot]: an
 // uncached, lock-free read of one atomically published file, decoded after the
 // file is closed.
 // A snapshot may be stale immediately; it does not authorize later mutations.

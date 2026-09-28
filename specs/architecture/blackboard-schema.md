@@ -1396,6 +1396,19 @@ rename; inspection sees either publication, never a partially written state.
 The file is closed before YAML decoding. Missing files and malformed YAML remain
 errors. In-place external writes are outside this guarantee.
 
+Supervisor observation, polling, and gate reads (wait-for-work, pause and abort
+checks, progress and review-ownership watchdogs, claim and merge candidate
+selection, worktree setup, prompt build, the provider-start gate, agent ID
+auto-assignment) also use snapshots. A locked read holds the exclusive lock
+through the file read and YAML decode, so under a large state these reads
+delayed writers until they timed out. It releases the lock before its caller
+acts, so its only extra guarantee is ordering after a writer holding the lock. The
+same qualification applies: claims and merges revalidate under the lock, and the
+provider-start gate runs under the agent lifecycle lock that registration and
+`recover-agent` also take. A read that is the only authority fence in front of an
+effect stays locked: clean-task worktree cleanup, because `DeleteWorktree` does
+not check authority.
+
 Snapshots may become stale immediately. Status derives runtime transition policy
 from its captured state; process/filesystem diagnostics remain separate observations.
 Snapshots do not authorize mutations: existing locked reads and locked

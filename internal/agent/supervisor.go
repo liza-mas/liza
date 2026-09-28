@@ -41,6 +41,16 @@ type SupervisorConfig struct {
 var waitWhilePausedForSupervisor = waitWhilePaused
 var newSupervisorDelayTimer = time.NewTimer // claim-failure pacing; overridable in tests
 
+// readStateSnapshot is the lock-free read for supervisor observation and gate
+// paths (D100): it returns ctx's error when already cancelled, as the locked
+// ReadContext it replaces did, then reads the last published state.
+func readStateSnapshot(ctx context.Context, bb *db.Blackboard) (*models.State, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return bb.ReadSnapshot()
+}
+
 type exit42RestartState struct {
 	RestartCount int
 	Signature    string
@@ -71,7 +81,7 @@ func (t *exit42RestartTracker) reset(taskID string) {
 
 func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, taskID string, authority models.AgentAuthority) (exit42RestartOutcome, error) {
 	agentID := authority.ID
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return exit42RestartOutcome{}, fmt.Errorf("read state for exit-42 tracking: %w", err)
 	}
@@ -705,7 +715,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 	}()
 
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
 	}
@@ -877,7 +887,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Build and save prompt
-		stateBefore, err := bb.ReadContextPatient(supervisorCtx)
+		stateBefore, err := readStateSnapshot(supervisorCtx, bb)
 		if err != nil {
 			if supervisorCtx.Err() != nil {
 				continue // Preserve the existing cancellation/heartbeat exit handling.
@@ -1100,7 +1110,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			// Track crash restarts per task.
 			if effectiveTask != "" {
 				var sig string
-				if s, rErr := bb.Read(); rErr == nil {
+				if s, rErr := bb.ReadSnapshot(); rErr == nil {
 					if task := s.FindTask(effectiveTask); task != nil {
 						sig = exit42TaskProgressSignature(task)
 					}

@@ -98,7 +98,7 @@ func (s *orchestratorStrategy) WaitConfig(state *models.State) (pollInterval, ma
 func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, config SupervisorConfig) (bool, error) {
 	logger := GetLogger()
 
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		logger.Warn("Failed to read state for transition check", "error", err)
 		return false, nil

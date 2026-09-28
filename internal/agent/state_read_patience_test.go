@@ -13,9 +13,11 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// D69: supervisor-path state reads must outlast a transient state-lock hold
-// longer than the ordinary lock timeout. These tests shorten the ordinary
-// timeout, so they must not run in parallel.
+// D69: supervisor-path state operations must outlast a transient state-lock
+// hold longer than the ordinary lock timeout. The reads below now take
+// snapshots and never wait (D100, state_snapshot_read_test.go); the writes
+// still wait patiently. These tests shorten the ordinary timeout, so they must
+// not run in parallel.
 const (
 	patienceTestLockTimeout = 200 * time.Millisecond
 	patienceTestLockHold    = 600 * time.Millisecond

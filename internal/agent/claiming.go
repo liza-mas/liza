@@ -82,7 +82,7 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 		logger.Warn("Blocked owned executing task during resume", "task_id", ownedResult.BlockedTaskID, "agent_id", agentID, "reason", ownedResult.BlockReason)
 	}
 
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to read state: %w", err)
 	}
@@ -171,7 +171,7 @@ func ensureDoerWorktreeSetup(projectRoot, agentID, role, taskID, worktreeRel str
 	if worktreeRel == "" {
 		return nil
 	}
-	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+	state, err := db.For(paths.New(projectRoot).StatePath()).ReadSnapshot()
 	if err != nil {
 		return fmt.Errorf("read state for worktree setup: %w", err)
 	}
@@ -398,7 +398,7 @@ func handleApprovedMergesWithAuthority(projectRoot string, authority models.Agen
 
 func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, authority *models.AgentAuthority, bb *db.Blackboard, pr models.PipelineResolver) error {
 	logger := GetLogger()
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return err
 	}
@@ -632,6 +632,9 @@ func handleAutoTransitions(projectRoot string) error {
 func handleCleanTaskCleanup(projectRoot string, authority models.AgentAuthority) error {
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
+	// Locked read, unlike the other supervisor reads (D100): the authority check
+	// below is the only fence in front of DeleteWorktree's effects, so it must
+	// observe a generation replacement published by a writer holding the lock.
 	state, err := bb.Read()
 	if err != nil {
 		return err
@@ -696,7 +699,7 @@ func handleCleanTaskCleanup(projectRoot string, authority models.AgentAuthority)
 }
 
 func logTaskSubmissionIfCompleted(bb *db.Blackboard, taskID, agentID string, pr models.PipelineResolver) error {
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return fmt.Errorf("failed to read state: %w", err)
 	}

@@ -24,7 +24,7 @@ import (
 // lost work.
 func ensureProjectRootIndexActivation(bb *db.Blackboard, projectRoot string) {
 	logger := GetLogger()
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		logger.Warn("Cannot check project-root index hooks", "error", err)
 		return

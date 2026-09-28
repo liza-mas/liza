@@ -30,7 +30,7 @@ var errGoalComplete = errors.New("goal complete")
 func checkAbort(projectRoot string) bool {
 	statePath := paths.New(projectRoot).StatePath()
 	if bb := db.For(statePath); bb != nil {
-		state, err := bb.Read()
+		state, err := bb.ReadSnapshot()
 		if err == nil {
 			stopped, _ := isSystemStopped(state)
 			return stopped
@@ -124,7 +124,7 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 		pauseReason := ""
 
 		if bb := db.For(statePath); bb != nil {
-			state, err := bb.Read()
+			state, err := bb.ReadSnapshot()
 			if err == nil {
 				pauseReason = RolePauseReason(state, roleType)
 				isPaused = pauseReason != ""
@@ -224,7 +224,9 @@ func newProviderLaunchGate(config SupervisorConfig) LLMAgentLaunchGate {
 func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validation *ops.ValidationPreflight) LLMAgentLaunchGate {
 	return func(ctx context.Context, start func() error) error {
 		return ops.WithAgentLifecycleLock(ctx, config.ProjectRoot, config.Authority.ID, "provider-start", func() error {
-			state, err := db.For(config.StatePath).ReadContextPatient(ctx)
+			// Registration and recover-agent take this agent's lifecycle lock, so
+			// the snapshot cannot miss a generation change for it.
+			state, err := readStateSnapshot(ctx, db.For(config.StatePath))
 			if err != nil {
 				return fmt.Errorf("read current agent authority before provider start: %w", err)
 			}
@@ -718,7 +720,7 @@ func reconcileEffectiveIntegrationOutcome(projectRoot string, bb *db.Blackboard,
 	if err != nil {
 		return fmt.Errorf("reconcile requested integration analyses: %w", err)
 	}
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return fmt.Errorf("read reconciled integration state: %w", err)
 	}

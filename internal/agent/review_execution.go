@@ -129,7 +129,7 @@ func startReviewExecutionWatchdog(ctx context.Context, config SupervisorConfig, 
 		return func() bool { return false }, nil
 	}
 	bb := db.For(config.StatePath)
-	state, err := bb.ReadContextPatient(ctx)
+	state, err := readStateSnapshot(ctx, bb)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func startReviewExecutionWatchdog(ctx context.Context, config SupervisorConfig, 
 			case <-watchCtx.Done():
 				return
 			case <-ticker.C:
-				current, err := bb.ReadContext(watchCtx)
+				current, err := readStateSnapshot(watchCtx, bb)
 				if err != nil {
 					if watchCtx.Err() == nil {
 						GetLogger().Warn("Review ownership observation failed; will retry", "task_id", taskID, "error", err)

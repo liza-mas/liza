@@ -65,7 +65,7 @@ func prepareSupervisorSession(config SupervisorConfig, runtime models.Config) (*
 }
 
 func prepareClaimSession(config SupervisorConfig, bb *db.Blackboard) (*ops.ValidationSession, error) {
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return nil, err
 	}

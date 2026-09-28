@@ -429,7 +429,7 @@ func drainPendingCheckpointSummary(ctx context.Context, bb *db.Blackboard, proje
 	if ctx.Err() != nil || bb == nil {
 		return
 	}
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return
 	}

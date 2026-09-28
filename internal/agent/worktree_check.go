@@ -71,7 +71,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	logger.Warn("Worktree missing for reviewer task", "task_id", taskID)
 
 	// Check if already recovered once.
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return false, fmt.Errorf("read state: %w", err)
 	}
@@ -199,7 +199,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 // intact reviewer worktree. Returns the setup error unchanged; the caller owns
 // claim release and agent degradation.
 func runReviewerWorktreeSetup(bb *db.Blackboard, taskID, wtPath string) error {
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return fmt.Errorf("read state: %w", err)
 	}

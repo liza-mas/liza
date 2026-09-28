@@ -152,7 +152,7 @@ func runExecutionProgressWatchdog(
 }
 
 func readExecutionProgressSnapshot(ctx context.Context, projectRoot string, bb *db.Blackboard, taskID string, agentID string, pr models.PipelineResolver) (string, bool, error) {
-	state, err := bb.ReadContext(ctx)
+	state, err := readStateSnapshot(ctx, bb)
 	if err != nil {
 		return "", false, err
 	}
@@ -178,7 +178,7 @@ func readExecutionProgressSnapshot(ctx context.Context, projectRoot string, bb *
 }
 
 func readSuccessfulTurnProgressSnapshot(projectRoot string, bb *db.Blackboard, taskID string, agentID string, pr models.PipelineResolver) (string, bool, error) {
-	state, err := bb.Read()
+	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return "", false, err
 	}
