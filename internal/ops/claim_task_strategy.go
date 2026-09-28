@@ -26,6 +26,7 @@ type claimContext struct {
 	baseCommit          string
 	preservedBaseCommit string
 	worktreeHead        string
+	adoptedWIP          string // WIP commit adopting a preserved worktree's uncommitted work
 	leaseExpires        time.Time
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 }
@@ -173,11 +174,12 @@ func (preservedInitialClaimStrategy) handleWorktree(
 		return result, err
 	}
 	if strings.TrimSpace(status) != "" {
-		reason := fmt.Sprintf("preserved worktree is dirty: %s", strings.Join(strings.Fields(status), " "))
-		if markErr := markPreservedInitialClaimRecovery(bb, ctx, "clean_preserved_claim_worktree", reason, reason); markErr != nil {
-			return result, fmt.Errorf("%s; failed to record recovery state: %w", reason, markErr)
+		if err := adoptPreservedWIP(bb, gitWrapper, ctx, status); err != nil {
+			return result, err
 		}
-		return result, &PreconditionError{Reason: reason}
+		if head, err = gitWrapper.GetWorktreeHEAD(ctx.taskID); err != nil {
+			return result, err
+		}
 	}
 
 	targetAncestor, err := gitWrapper.IsAncestor(ctx.baseCommit, head)
@@ -214,8 +216,49 @@ func (preservedInitialClaimStrategy) handleWorktree(
 	if !ancestor {
 		return result, &PreconditionError{Reason: fmt.Sprintf("preserved worktree HEAD %s does not descend from captured integration commit %s", head, ctx.baseCommit)}
 	}
+	if ctx.adoptedWIP != "" {
+		ctx.adoptedWIP = head // The WIP commit is the tip, including after a rebase.
+	}
 	ctx.worktreeHead = head
 	return result, nil
+}
+
+// adoptPreservedWIP commits the uncommitted work a previous owner left in the
+// preserved worktree, so the claim continues it instead of blocking on it. A
+// Git operation in progress is refused: committing would record unresolved
+// state as resolved. Every refusal blocks the task with the clean-worktree
+// repair and deletes nothing. Before staging the worktree is untouched; a
+// failed commit may leave the work staged; residue after the commit keeps the
+// WIP commit on the task branch.
+func adoptPreservedWIP(bb *db.Blackboard, gitWrapper *git.Git, ctx *claimContext, status string) error {
+	block := func(reason string) error {
+		if markErr := markPreservedInitialClaimRecovery(bb, ctx, "clean_preserved_claim_worktree", reason, reason); markErr != nil {
+			return fmt.Errorf("%s; failed to record recovery state: %w", reason, markErr)
+		}
+		return &PreconditionError{Reason: reason}
+	}
+	dirt := strings.Join(strings.Fields(status), " ")
+	operation, err := gitWrapper.InterruptedOperation(ctx.worktreeDir)
+	if err != nil {
+		return block(fmt.Sprintf("preserved worktree is dirty and its Git state cannot be inspected: %s: %v", dirt, err))
+	}
+	if operation != "" {
+		return block(fmt.Sprintf("preserved worktree is dirty with an interrupted %s: %s", operation, dirt))
+	}
+	message := fmt.Sprintf("WIP: adopt uncommitted work preserved in task worktree — auto-committed at claim, hooks skipped\n\nTask: %s\nClaimed by: %s\n", ctx.taskID, ctx.agentID)
+	sha, _, err := gitWrapper.CommitAllWIP(ctx.worktreeDir, message)
+	if err != nil {
+		return block(fmt.Sprintf("preserved worktree is dirty and adopting it failed: %s: %v", dirt, err))
+	}
+	residual, err := gitWrapper.WorktreeStatusShort(ctx.worktreeDir)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(residual) != "" {
+		return block(fmt.Sprintf("preserved worktree is still dirty after adopting %s: %s", shortSHA(sha), strings.Join(strings.Fields(residual), " ")))
+	}
+	ctx.adoptedWIP = sha
+	return nil
 }
 
 func markPreservedInitialClaimRecovery(
@@ -290,13 +333,17 @@ func (preservedInitialClaimStrategy) mutateTask(task *models.Task, ctx *claimCon
 
 func (preservedInitialClaimStrategy) historyEntry(now time.Time, ctx *claimContext) models.TaskHistoryEntry {
 	agentPtr := &ctx.agentID
+	extra := map[string]any{
+		"preserved_worktree": true,
+	}
+	if ctx.adoptedWIP != "" {
+		extra["adopted_wip_commit"] = ctx.adoptedWIP
+	}
 	return models.TaskHistoryEntry{
 		Time:  now,
 		Event: models.TaskEventClaimed,
 		Agent: agentPtr,
-		Extra: map[string]any{
-			"preserved_worktree": true,
-		},
+		Extra: extra,
 	}
 }
 

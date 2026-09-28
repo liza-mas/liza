@@ -2596,11 +2596,17 @@ func TestClaimTask_PreservedInitialIntegrationMoveAfterEqualityWaitsForAssignmen
 	}
 }
 
+// Uncommitted work is adopted at claim (see claim_task_adopt_wip_test.go), so
+// the recovery state now needs dirt adoption must refuse: Git mid-operation.
 func TestClaimTask_PreservedInitialDirtyWorktreeBecomesRecoveryState(t *testing.T) {
 	fixture := newPreservedInitialClaimFixture(t)
 	advancePreservedClaimIntegration(t, fixture.projectRoot, "dependency.txt", "merged dependency\n", "Merge dependency")
 	if err := os.WriteFile(filepath.Join(fixture.worktreeDir, "task.txt"), []byte("dirty task work\n"), 0o644); err != nil {
 		t.Fatalf("dirty task worktree: %v", err)
+	}
+	cherryPickHead := testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "--path-format=absolute", "--git-path", "CHERRY_PICK_HEAD")
+	if err := os.WriteFile(cherryPickHead, []byte(fixture.preservedHead+"\n"), 0o644); err != nil {
+		t.Fatalf("mark an interrupted cherry-pick: %v", err)
 	}
 
 	_, err := ClaimTask(fixture.projectRoot, fixture.taskID, fixture.agentID)
@@ -2608,6 +2614,35 @@ func TestClaimTask_PreservedInitialDirtyWorktreeBecomesRecoveryState(t *testing.
 		t.Fatalf("ClaimTask() error = %v, want dirty recovery error", err)
 	}
 	assertPreservedInitialRecoveryState(t, fixture, "dirty")
+	if head := testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD"); head != fixture.preservedHead {
+		t.Fatalf("worktree HEAD = %s, want untouched %s", head, fixture.preservedHead)
+	}
+}
+
+// TestClaimTask_PreservedInitialAdoptedWorkRebasesOntoIntegration covers the
+// adoption followed by the claim-time rebase: the recorded WIP commit is the
+// rebased tip, not the pre-rebase commit.
+func TestClaimTask_PreservedInitialAdoptedWorkRebasesOntoIntegration(t *testing.T) {
+	fixture := newPreservedInitialClaimFixture(t)
+	advancePreservedClaimIntegration(t, fixture.projectRoot, "dependency.txt", "merged dependency\n", "Merge dependency")
+	integration := testhelpers.MustGit(t, fixture.projectRoot, "rev-parse", "integration")
+	if err := os.WriteFile(filepath.Join(fixture.worktreeDir, "task.txt"), []byte("dirty task work\n"), 0o644); err != nil {
+		t.Fatalf("dirty task worktree: %v", err)
+	}
+
+	if _, err := ClaimTask(fixture.projectRoot, fixture.taskID, fixture.agentID); err != nil {
+		t.Fatalf("ClaimTask() error = %v, want the work adopted and rebased", err)
+	}
+	assertGitStatusClean(t, fixture.worktreeDir)
+	head := testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, fixture.worktreeDir, "merge-base", "--is-ancestor", integration, head)
+	if got := testhelpers.MustGit(t, fixture.worktreeDir, "show", "HEAD:task.txt"); got != "dirty task work" {
+		t.Fatalf("HEAD task.txt = %q, want the adopted work", got)
+	}
+	task := readClaimStateForTest(t, fixture.stateFile).FindTask(fixture.taskID)
+	if got, _ := claimedHistoryEntry(t, task).Extra["adopted_wip_commit"].(string); got != head {
+		t.Fatalf("adopted_wip_commit = %q, want the rebased tip %s", got, head)
+	}
 }
 
 func TestClaimTask_PreservedInitialNonConflictRebaseFailureBecomesRecoveryState(t *testing.T) {

@@ -882,3 +882,20 @@ is identical today. Changing merge ownership selection belongs in its own
 change.
 
 **Payback trigger:** The next change to either liveness rule.
+
+## Failed WIP adoption can leave a staged index or a residual WIP commit (D59)
+
+**What:** When claim-time adoption of a preserved worktree's uncommitted work
+fails after `git add -A` (the commit fails), the task is blocked with the work
+staged. When the worktree is still dirty after the WIP commit (a writer still
+active), the task is blocked with that commit kept on the task branch. Nothing
+is deleted, but the repair starts from a state different from the one the
+previous owner left.
+
+**Why deferred:** Restoring the exact pre-adoption index and HEAD needs a
+restoration transaction, which is more machinery than either rare failure
+justifies. Both states are recoverable: after `unblock-task`, the next claim
+adopts again (staging is idempotent), or a human commits.
+
+**Payback trigger:** A claim blocked with "adopting it failed" or "still dirty
+after adopting".

@@ -305,6 +305,8 @@ git worktree remove .worktrees/<task-id> --force
 
 ### Worktree directory is dirty
 
+Claiming a preserved task adopts its uncommitted work as a WIP commit automatically. You need the steps below only when the task was blocked instead: its blocked reason names an interrupted Git operation, a failed adoption, or residue after adoption. Finish or abort the interrupted operation first.
+
 ```bash
 cd .worktrees/<task-id> && git status
 

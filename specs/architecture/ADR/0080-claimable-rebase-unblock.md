@@ -29,6 +29,20 @@ If the unblock-time rebase conflicts, Liza leaves the task `BLOCKED` with repair
 
 Issue #118 separates restoration to a role-pair initial status from immediate claimability. Unassigned `unblock-task` may restore a repaired task with valid pending dependencies, but the restored task remains dependency-held and unclaimable until every direct dependency is `MERGED`; direct `--assign-to` remains rejected while any dependency is unmet. Once the dependencies merge, preserved-worktree claim uses one captured integration SHA for rebase and ancestry validation. It then holds the completion lock across the final integration-ref equality check and assignment, ordering cooperating integration movement on either side without holding the integration mutation lock across the blackboard write.
 
+## 2026-09-28 Amendment: Claim-Time Adoption of Uncommitted Work
+
+A preserved worktree holding a dead owner's uncommitted edits made every claim
+block the task for manual cleanup (operator note D59). Its successor could not
+continue the work it was meant to inherit.
+
+Claim now adopts that work as one hook-skipping WIP commit on the task branch
+before the captured-integration rebase, and records the commit in the claim
+history. Adoption reuses the Git primitives that quota-terminated doers use to
+save their work. It is refused when Git is mid-operation, because committing
+would record unresolved state as resolved. Refusals and commit failures keep
+this ADR's blocked repair flow and delete nothing. Failure states that may remain
+(staged work, or a WIP commit with residue) are tracked in `TECH_DEBT.md`.
+
 ## Consequences
 
 Positive:

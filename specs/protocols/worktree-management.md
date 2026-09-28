@@ -172,8 +172,15 @@ one integration commit, and rebases or validates the preserved HEAD on that
 captured integration SHA. The completion lock then encloses the final ref
 equality check and assignment, ordering cooperating integration movement before
 or after the assignment without holding the integration mutation lock across the
-blackboard write. A stale ref, changed HEAD, dirty worktree, or failed rebase
-leaves the task unassigned and preserves actionable recovery state.
+blackboard write. Uncommitted work in the preserved worktree, typically left by
+a doer that died mid-edit, is adopted before the rebase. It becomes one
+hook-skipping `WIP: adopt uncommitted work …` commit on the task branch, and the
+claim's history records it as `adopted_wip_commit`. Adoption is refused when Git
+is mid-operation (merge, rebase, cherry-pick, revert or unmerged entries). A
+stale ref, changed HEAD, refused or failed adoption, or failed rebase leaves the
+task unassigned and preserves actionable recovery state; no work is deleted. A
+commit that fails after staging may leave the work staged. Residue after the WIP
+commit keeps that commit.
 
 ---
 
