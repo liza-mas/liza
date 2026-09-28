@@ -62,6 +62,30 @@ type IntegrationCoverageSummary struct {
 	SliceReport          *IntegrationSliceReportSummary
 }
 
+// IntegrationTaskChangeSummary is one goal task's reviewed change range.
+type IntegrationTaskChangeSummary struct {
+	ID           string
+	Description  string
+	BaseCommit   string
+	ReviewCommit string
+	PathCount    int
+}
+
+// IntegrationPlanSurfaceSummary is the goal-owned change of one contributing plan.
+type IntegrationPlanSurfaceSummary struct {
+	PlanTaskID         string
+	Tasks              []IntegrationTaskChangeSummary
+	PathCount          int
+	InterfacesOwned    []string
+	InterfacesConsumed []string
+}
+
+// IntegrationSeamSummary is a path or declared interface shared by plans.
+type IntegrationSeamSummary struct {
+	Name        string
+	PlanTaskIDs []string
+}
+
 // TaskGraphDigest provides bounded task graph context so agents can load exact
 // related tasks instead of pulling the full task list.
 type TaskGraphDigest struct {
@@ -215,6 +239,10 @@ type RoleContextData struct {
 	IntegrationAffectedPaths   []string
 	IntegrationSnapshotPaths   []string
 	IntegrationCoverage        []IntegrationCoverageSummary
+	IntegrationPlanSurfaces    []IntegrationPlanSurfaceSummary
+	IntegrationPriorRepairs    []IntegrationTaskChangeSummary
+	IntegrationSeamPaths       []IntegrationSeamSummary
+	IntegrationSeamInterfaces  []IntegrationSeamSummary
 
 	// Task artifact / integration context
 	IntegrationBranch string
@@ -255,9 +283,4 @@ func (d *RoleContextData) ShellIntegrationWorktree() string {
 // ShellIntegrationSnapshot returns one immutable git object operand.
 func (d *RoleContextData) ShellIntegrationSnapshot(path string) string {
 	return shellQuote(d.IntegrationSourceCommit + ":" + path)
-}
-
-// ShellIntegrationDiffRange returns the immutable aggregate range as one operand.
-func (d *RoleContextData) ShellIntegrationDiffRange() string {
-	return shellQuote(d.GoalBaseCommit + ".." + d.IntegrationSourceCommit)
 }

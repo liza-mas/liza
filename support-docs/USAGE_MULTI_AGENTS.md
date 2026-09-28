@@ -480,9 +480,12 @@ lineages that produced merged work—receives exactly one slice analysis. This
 coverage map is navigation evidence, not proof of aggregate correctness.
 
 Global analysis begins only after all required coverage and slice repairs are
-resolved, then performs an independent global review of the current aggregate
-branch. Global fixes or later integration-HEAD mutations cause the next global
-generation to rescan the branch independently while budget remains. A blocked
+resolved. It then checks only the seams between plans (paths or declared
+interfaces two plans share, over the goal's own reviewed changes) and runs the
+suites at integration HEAD. Defects in code the goal did not change are reported
+as observations, never fix tasks. Global fixes or later integration-HEAD
+mutations cause the next global generation to recheck independently while
+budget remains. A blocked
 slice blocks global integration; exhausting the configured global generation
 limit returns `global_generations_exhausted` instead of successful completion.
 

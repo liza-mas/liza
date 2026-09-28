@@ -376,7 +376,7 @@ Each fix-task must be well-formed (single intent, falsifiable done_when, correct
 {{- if eq .IntegrationPhase "slice"}}
 Review intra-plan composition and shared intent for originating plan {{.IntegrationOriginatingPlan.ID}}. Do not reopen sibling or goal-wide concerns.
 {{- else if eq .IntegrationPhase "global"}}
-Independently review cross-scope interactions, shared interfaces, aggregate tests and specifications, architectural drift, emergent risks, omissions, and goal-level merge readiness. Coverage is navigation evidence, not a correctness verdict.
+Review only the cross-plan seams listed above and suite failures observed at HEAD in code or tests this goal changed. Plan-internal code is out of scope without an observed suite failure; defects confined to code this goal did not change are observations, never fix tasks. Coverage is navigation evidence, not a correctness verdict.
 {{- else}}
 Enrich with systemic analysis: interaction effects across fixes, architectural drift, emergent risks.
 {{- end}}
@@ -387,14 +387,9 @@ INSTRUCTIONS:
 2. Invoke skill: systemic-thinking for intra-plan composition analysis.
 3. Check that the descendants compose and satisfy their shared plan intent; later sibling changes belong to global analysis.
 {{- else if eq .IntegrationPhase "global"}}
-1. Changed-file map and stat first:
-	git -C {{.ShellIntegrationWorktree}} diff --name-only {{.ShellIntegrationDiffRange}}
-	git -C {{.ShellIntegrationWorktree}} diff --stat {{.ShellIntegrationDiffRange}}
-	Read touched files/artifacts from this list before any broad repository search; use supporting rg/glob only after the changed-file map gives you a specific question.
-2. Invoke skill: systemic-thinking for systemic analysis framing.
-3. Read the branch diff by targeted path/hunk, not by unbounded full diff:
-	git -C {{.ShellIntegrationWorktree}} diff {{.ShellIntegrationDiffRange}} -- <path>
-	If total diff output would exceed ~80K chars or any single-file diff would exceed ~20K chars, do not read the full diff; inspect targeted paths, stats, and source line ranges instead.
+1. Re-read the cross-plan seams above at {{.IntegrationSourceCommit}} with the seam-review commands; read a task's change only for a seam path or a reported suite failure.
+2. Invoke skill: systemic-thinking for seam interaction analysis.
+3. Check that the plans agree at each seam, and that each reported suite failure is reproduced at HEAD and attributed to goal-owned or foreign code.
 {{- else}}
 1. Changed-file map and stat first:
 	git -C {{.Worktree}} diff --name-only {{.GoalBaseCommit}}..HEAD
@@ -414,6 +409,9 @@ INSTRUCTIONS:
 	e. Verify any validation[] command is single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
 {{- if eq .IntegrationPhase "slice"}}
 5. Enrich only within the originating plan: check dependency and interface fit, acceptance-criteria composition, and missing intra-plan findings.
+{{- else if eq .IntegrationPhase "global"}}
+	f. Reject a fix-task unless it repairs a seam finding or a suite failure observed at HEAD, and targets code this goal changed.
+5. Enrich only within the seams and observed suite failures: could fixing A break the fix for B, and did the analyst miss a seam disagreement or a goal-owned suite failure?
 {{- else}}
 5. Systemic enrichment: after reviewing individual fix-tasks, analyze:
 	a. Interaction effects: could fixing A break the fix for B?
@@ -421,7 +419,7 @@ INSTRUCTIONS:
 	c. Emergent risks: are there cross-cutting concerns invisible at the individual finding level?
 	d. Missing findings: are there integration issues the analyst missed?
 {{- end}}
-6. If enrichment produces additional fix-tasks, include them in the rejection with specific task definitions.
+6. If enrichment produces additional fix-tasks{{if eq .IntegrationPhase "global"}} within that boundary{{end}}, include them in the rejection with specific task definitions.
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}
 {{- end}}

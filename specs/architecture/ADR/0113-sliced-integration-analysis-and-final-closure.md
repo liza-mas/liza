@@ -63,6 +63,10 @@ than allowing global analysis to begin.
 
 ### Independent global review and bounded rescans
 
+> Amended by [ADR-0162](0162-seam-scoped-global-integration-analysis.md): the
+> global analyst reviews the goal's own reviewed task ranges, only at seams
+> shared by two or more plans, plus suites at HEAD.
+
 Global analysis waits for settled planning and terminal coding and integration
 repair work. When the frozen cohort has at least two scopes, it also waits for
 complete coverage for every contributing scope and resolution of every created

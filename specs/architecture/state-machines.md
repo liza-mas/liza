@@ -227,8 +227,8 @@ The transition CODING_PLAN_APPROVED → DRAFT (coding pair) is executed by the o
 ### Integration-Pair State Machine
 
 Integration has two analysis phases. Slice analyses provide bounded local
-composition evidence; global generations independently judge the aggregate
-integration branch. Both use the integration analyst/reviewer protocol, but
+composition evidence; global generations independently judge the cross-plan
+seams of the goal's own changes plus suites at integration HEAD. Both use the integration analyst/reviewer protocol, but
 their role pairs and persisted `integration_analysis.phase` values are distinct.
 
 | Phase | Role pair | State cycle |
@@ -270,8 +270,8 @@ concurrent wake or restart attempts either create exactly one requested task or
 validate the existing task and planned membership as an unchanged no-op.
 
 **Goal.BaseCommit:** Snapshotted when the first coding-pair children are created
-(from any transition). Global analysis still receives the goal-wide integration
-surface. For a zero-scope cohort with no coding children, reconciliation instead
+(from any transition). Global analysis receives the goal's own reviewed task
+ranges per plan, not the base-to-HEAD branch range. For a zero-scope cohort with no coding children, reconciliation instead
 snapshots the first global analysis source commit before creating that task.
 Slice metadata records its narrower immutable source surface.
 

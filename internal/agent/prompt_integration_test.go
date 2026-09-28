@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -241,7 +243,7 @@ func TestGlobalIntegrationContext(t *testing.T) {
 			},
 			{ID: "plan-single", Description: "Single lineage plan", Status: models.TaskStatusMerged, Created: now},
 			{ID: "plan-sliced", Description: "Multi-lineage plan", Status: models.TaskStatusMerged, Created: now},
-			{ID: "coding-single", DoneWhen: "Single lineage remains approved", Status: models.TaskStatusMerged, MergeCommit: &mergeCommit, Created: now},
+			{ID: "coding-single", Description: "coding-single change", DoneWhen: "Single lineage remains approved", Status: models.TaskStatusMerged, MergeCommit: &mergeCommit, Created: now},
 			{ID: "coding-left", Status: models.TaskStatusMerged, Created: now},
 			{ID: "coding-right", Status: models.TaskStatusMerged, Created: now},
 			{
@@ -268,6 +270,31 @@ func TestGlobalIntegrationContext(t *testing.T) {
 	reviewBoundary := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
 	state.Tasks[0].BaseCommit = &reviewBoundary
 	state.Tasks[0].ReviewCommit = &reviewBoundary
+	// Goal tasks own reviewed ranges; a foreign commit lands between them on the same branch.
+	commitRange := func(taskID string, files ...string) {
+		t.Helper()
+		base := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+		for _, file := range files {
+			if err := os.WriteFile(filepath.Join(projectRoot, file), []byte(taskID+"\n"), 0o644); err != nil {
+				t.Fatalf("write %s: %v", file, err)
+			}
+		}
+		testhelpers.MustGit(t, projectRoot, append([]string{"add"}, files...)...)
+		testhelpers.MustGit(t, projectRoot, "commit", "-m", taskID)
+		review := testhelpers.MustGit(t, projectRoot, "rev-parse", "HEAD")
+		if task := state.FindTask(taskID); task != nil {
+			task.BaseCommit = &base
+			task.ReviewCommit = &review
+			if task.MergeCommit == nil {
+				task.MergeCommit = &review
+			}
+		}
+	}
+	commitRange("coding-single", "shared.go", "single.go")
+	commitRange("coding-left", "shared.go", "left.go")
+	commitRange("foreign-ticket", "foreign.txt")
+	commitRange("coding-right", "right.go")
+	singleRange := *state.FindTask("coding-single").BaseCommit + ".." + *state.FindTask("coding-single").ReviewCommit
 	analyst := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationAnalyst, projectRoot)
 	reviewer := renderIntegrationRoleContext(t, state, "global-analysis", roles.IntegrationReviewer, projectRoot)
 	worktreePath := resolveWorktreePath(projectRoot, &worktree)
@@ -286,30 +313,41 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		"plan-sliced",
 		"slice_report",
 		"slice-report-task",
-		"git -C "+quotedWorktreePath+" diff --name-only 'goal-base-222..global-source-456'",
-		"git -C "+quotedWorktreePath+" diff --stat 'goal-base-222..global-source-456'",
-		"git -C "+quotedWorktreePath+" diff 'goal-base-222..global-source-456' -- <path>",
-		"independent aggregate review",
+		"GOAL CONTRIBUTION",
+		"- plan-single (tasks 1, paths 2)",
+		"- plan-sliced (tasks 2, paths 3)",
+		"(paths 1)\n",
+		"coding-single @ "+singleRange+" (paths 2): coding-single change",
+		"CROSS-PLAN SEAMS:\n- path shared.go: plan-single, plan-sliced",
+		"Plan-internal code is out of scope",
+		"git -C "+quotedWorktreePath+" show 'global-source-456:<path>'",
+		"SUITES AT HEAD",
+		"A failure is a finding when it breaks code or tests this goal changed (listed above), seam or not",
+		"Defects confined to code this goal did not change are observations in your report, never fix tasks.",
 	)
 	assertContainsAll(t, reviewer,
-		"cross-scope interactions",
-		"shared interfaces",
-		"aggregate tests and specifications",
-		"architectural drift",
-		"emergent risks",
-		"omissions",
-		"goal-level merge readiness",
+		"CROSS-PLAN SEAMS:",
+		"Review only the cross-plan seams listed above and suite failures observed at HEAD in code or tests this goal changed.",
+		"defects confined to code this goal did not change are observations, never fix tasks",
+		"f. Reject a fix-task unless it repairs a seam finding or a suite failure observed at HEAD, and targets code this goal changed.",
+		"additional fix-tasks within that boundary",
 		"global-source-456",
 	)
+	for _, unwanted := range []string{"architectural drift", "Architectural drift", "Emergent risks", "aggregate tests and specifications"} {
+		assertNotContains(t, reviewer, unwanted)
+	}
 	for _, output := range []string{analyst, reviewer} {
 		for _, unwanted := range []string{
 			"unrelated-merged",
 			"Distracting merged task",
+			"foreign.txt",
+			"foreign-ticket",
+			"path left.go",
+			"path right.go",
 			"..HEAD",
 			"intra-plan composition",
-			"git -C " + worktreePath + " diff --name-only goal-base-222..global-source-456",
-			"git -C " + worktreePath + " diff --stat goal-base-222..global-source-456",
-			"git -C " + worktreePath + " diff goal-base-222..global-source-456 -- <path>",
+			"goal-base-222..global-source-456",
+			"independent aggregate review",
 		} {
 			assertNotContains(t, output, unwanted)
 		}
@@ -344,7 +382,7 @@ func TestGlobalIntegrationContext(t *testing.T) {
 				reduced := stateWithIntegration(testCase.scopes, nil)
 				task := reduced.FindTask("global-analysis")
 				data := &prompts.RoleContextData{}
-				if err := populateGlobalIntegrationContext(task, reduced, data); err != nil {
+				if err := populateGlobalIntegrationContext(task, reduced, projectRoot, data); err != nil {
 					t.Fatalf("populateGlobalIntegrationContext() error = %v", err)
 				}
 				if got := len(data.IntegrationCoverage); got != 0 {
@@ -356,6 +394,7 @@ func TestGlobalIntegrationContext(t *testing.T) {
 					assertContainsAll(t, context,
 						"GLOBAL INTEGRATION CONTEXT",
 						"no local coverage records; fewer than two contributing scopes bypass local coverage",
+						"(no cross-plan seam: no path or declared interface is shared by two plans; only suites at HEAD apply)",
 					)
 				}
 			})
@@ -402,7 +441,7 @@ func TestGlobalIntegrationContext(t *testing.T) {
 			t.Run(testCase.name, func(t *testing.T) {
 				broken := stateWithIntegration(testCase.scopes, testCase.coverage)
 				task := broken.FindTask("global-analysis")
-				err := populateGlobalIntegrationContext(task, broken, &prompts.RoleContextData{})
+				err := populateGlobalIntegrationContext(task, broken, projectRoot, &prompts.RoleContextData{})
 				if err == nil || !strings.Contains(err.Error(), testCase.want) {
 					t.Fatalf("populateGlobalIntegrationContext() error = %v, want containing %q", err, testCase.want)
 				}

@@ -90,6 +90,15 @@ func TestGlobalIntegrationContext(t *testing.T) {
 				},
 			},
 		},
+		IntegrationPlanSurfaces: []IntegrationPlanSurfaceSummary{{
+			PlanTaskID:      "plan-single",
+			Tasks:           []IntegrationTaskChangeSummary{{ID: "coding-single", Description: "Single change", BaseCommit: "base-aaa", ReviewCommit: "review-bbb", PathCount: 2}},
+			PathCount:       2,
+			InterfacesOwned: []string{"api:v1"},
+		}},
+		IntegrationPriorRepairs:   []IntegrationTaskChangeSummary{{ID: "fix-global", BaseCommit: "base-ccc", ReviewCommit: "review-ddd", PathCount: 1}},
+		IntegrationSeamPaths:      []IntegrationSeamSummary{{Name: "shared.go", PlanTaskIDs: []string{"plan-single", "plan-sliced"}}},
+		IntegrationSeamInterfaces: []IntegrationSeamSummary{{Name: "api:v1", PlanTaskIDs: []string{"plan-single", "plan-sliced"}}},
 	}
 
 	output := renderIntegrationContextForTest(t, data)
@@ -100,11 +109,13 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		"plan-sliced",
 		"slice_report",
 		"navigation evidence, not proof of aggregate correctness",
-		"git -C '/tmp/global worktree; echo marker' diff --name-only 'goal-base-222..global-source-456'",
-		"git -C '/tmp/global worktree; echo marker' diff 'goal-base-222..global-source-456' -- <path>",
-		"independent aggregate review",
-		"cross-scope interactions",
-		"goal-level merge readiness",
+		"- plan-single (tasks 1, paths 2)\n  - coding-single @ base-aaa..review-bbb (paths 2): Single change\n  Interfaces owned: api:v1",
+		"PRIOR GLOBAL REPAIRS (navigation and suite diagnosis; not seams by themselves):\n- fix-global @ base-ccc..review-ddd (paths 1)\n",
+		"CROSS-PLAN SEAMS:\n- path shared.go: plan-single, plan-sliced\n- interface api:v1: plan-single, plan-sliced",
+		"git -C '/tmp/global worktree; echo marker' show 'global-source-456:<path>'",
+		"Plan-internal code is out of scope",
+		"Defects confined to code this goal did not change are observations in your report, never fix tasks.",
+		"Review only the cross-plan seams listed above",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("global context missing %q:\n%s", want, output)
@@ -114,13 +125,20 @@ func TestGlobalIntegrationContext(t *testing.T) {
 		"..HEAD",
 		"intra-plan composition",
 		"SLICE INTEGRATION CONTEXT",
-		"git -C /tmp/global worktree; echo marker diff --name-only goal-base-222..global-source-456",
-		"git -C /tmp/global worktree; echo marker diff --stat goal-base-222..global-source-456",
-		"git -C /tmp/global worktree; echo marker diff goal-base-222..global-source-456 -- <path>",
+		"goal-base-222..global-source-456",
+		"independent aggregate review",
+		"goal-level merge readiness",
+		"no cross-plan seam",
 	} {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("global context contains %q:\n%s", unwanted, output)
 		}
+	}
+
+	data.IntegrationSeamPaths = nil
+	data.IntegrationSeamInterfaces = nil
+	if output := renderIntegrationContextForTest(t, data); !strings.Contains(output, "CROSS-PLAN SEAMS:\n(no cross-plan seam: no path or declared interface is shared by two plans; only suites at HEAD apply)") {
+		t.Fatalf("seamless global context missing suites-only notice:\n%s", output)
 	}
 }
 

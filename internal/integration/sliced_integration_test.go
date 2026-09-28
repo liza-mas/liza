@@ -115,13 +115,16 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 					worktree := filepath.Join(fixture.root, *claimed.Worktree)
 					diffRange := fixture.head + ".." + fixture.head
 					for _, want := range []string{
-						"git -C '" + worktree + "' diff --name-only '" + diffRange + "'",
-						"git -C '" + worktree + "' diff --stat '" + diffRange + "'",
-						"git -C '" + worktree + "' diff '" + diffRange + "' -- <path>",
+						"(no cross-plan seam: no path or declared interface is shared by two plans; only suites at HEAD apply)",
+						"git -C '" + worktree + "' show '" + fixture.head + ":<path>'",
+						"SUITES AT HEAD",
 					} {
 						if !strings.Contains(prompt, want) {
-							t.Fatalf("zero-scope global prompt missing aggregate boundary %q", want)
+							t.Fatalf("zero-scope global prompt missing seam boundary %q", want)
 						}
+					}
+					if strings.Contains(prompt, diffRange) {
+						t.Fatalf("zero-scope global prompt still renders the branch range %q", diffRange)
 					}
 					completeIntegrationAnalysis(t, fixture, global.ID, nil)
 					if _, err := ops.StopForGoalCompletion(fixture.root, "zero-scope goal complete"); err != nil {
@@ -1040,7 +1043,8 @@ func assertGlobalIntegrationPrompt(t *testing.T, fixture *slicedLifecycleFixture
 	}
 	for _, want := range []string{
 		"GLOBAL INTEGRATION CONTEXT", "GENERATION: 1", "SOURCE COMMIT: " + source,
-		"COVERAGE MAP", "navigation evidence, not proof of aggregate correctness", "independent aggregate review",
+		"COVERAGE MAP", "navigation evidence, not proof of aggregate correctness",
+		"GOAL CONTRIBUTION", "CROSS-PLAN SEAMS:", "SUITES AT HEAD",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("global prompt missing %q", want)
@@ -1076,23 +1080,24 @@ func assertGlobalIntegrationPrompt(t *testing.T, fixture *slicedLifecycleFixture
 		}
 	}
 	worktree := filepath.Join(fixture.root, *task.Worktree)
-	diffRange := fixture.goalBase + ".." + source
-	for _, want := range []string{
-		"git -C '" + worktree + "' diff --name-only '" + diffRange + "'",
-		"git -C '" + worktree + "' diff --stat '" + diffRange + "'",
-		"git -C '" + worktree + "' diff '" + diffRange + "' -- <path>",
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("global prompt missing aggregate boundary %q", want)
+	if want := "git -C '" + worktree + "' show '" + source + ":<path>'"; !strings.Contains(prompt, want) {
+		t.Fatalf("global prompt missing seam snapshot read %q", want)
+	}
+	if diffRange := fixture.goalBase + ".." + source; strings.Contains(prompt, diffRange) {
+		t.Fatalf("global prompt renders the branch range %q instead of goal-owned task ranges", diffRange)
+	}
+	for id, commit := range fixture.commits {
+		if want := ".." + commit + " (paths 1)"; !strings.Contains(prompt, id+" @ ") || !strings.Contains(prompt, want) {
+			t.Fatalf("global prompt missing goal-owned reviewed range for %s ending %q", id, want)
 		}
 	}
-	changedPaths := strings.Fields(testhelpers.MustGit(t, fixture.root, "diff", "--name-only", diffRange))
-	if !slices.Contains(changedPaths, fixture.aggregateSentinelPath) {
-		t.Fatalf("aggregate boundary paths = %v, missing %s", changedPaths, fixture.aggregateSentinelPath)
-	}
+	// The unattributed commit is on the branch, so suites at HEAD see it, but it is not goal contribution.
 	contents := testhelpers.MustGit(t, fixture.root, "show", source+":"+fixture.aggregateSentinelPath)
 	if contents != fixture.aggregateSentinel {
 		t.Fatalf("aggregate source sentinel = %q, want %q", contents, fixture.aggregateSentinel)
+	}
+	if strings.Contains(prompt, fixture.aggregateSentinelPath) {
+		t.Fatalf("global prompt attributes unattributed branch commit %s to the goal", fixture.aggregateSentinelPath)
 	}
 	for _, localSentinel := range fixture.sourceSentinels {
 		if strings.Contains(prompt, localSentinel) {

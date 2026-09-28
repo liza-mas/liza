@@ -89,13 +89,49 @@ COVERAGE MAP (navigation evidence, not proof of aggregate correctness):
 (no local coverage records; fewer than two contributing scopes bypass local coverage)
 {{- end}}
 
-INDEPENDENT AGGREGATE REVIEW:
-Perform an independent aggregate review: use the coverage map for navigation, then inspect the goal-wide source snapshot.
-git -C {{.ShellIntegrationWorktree}} diff --name-only {{.ShellIntegrationDiffRange}}
-git -C {{.ShellIntegrationWorktree}} diff --stat {{.ShellIntegrationDiffRange}}
-Inspect only targeted paths from the map:
-git -C {{.ShellIntegrationWorktree}} diff {{.ShellIntegrationDiffRange}} -- <path>
-Run the smallest tests covering the aggregate changed paths, declared validation, or plausible cross-scope risks from {{.Worktree}}.
+GOAL CONTRIBUTION (reviewed task ranges; commits that reached the integration branch through other work are excluded):
+{{- range .IntegrationPlanSurfaces}}
+- {{.PlanTaskID}} (tasks {{len .Tasks}}, paths {{.PathCount}})
+{{- range .Tasks}}
+  - {{.ID}} @ {{.BaseCommit}}..{{.ReviewCommit}} (paths {{.PathCount}}){{with .Description}}: {{.}}{{end}}
+{{- end}}
+{{- if .InterfacesOwned}}
+  Interfaces owned: {{range $index, $value := .InterfacesOwned}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- if .InterfacesConsumed}}
+  Interfaces consumed: {{range $index, $value := .InterfacesConsumed}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- end}}
+{{- if .IntegrationPriorRepairs}}
+
+PRIOR GLOBAL REPAIRS (navigation and suite diagnosis; not seams by themselves):
+{{- range .IntegrationPriorRepairs}}
+- {{.ID}} @ {{.BaseCommit}}..{{.ReviewCommit}} (paths {{.PathCount}}){{with .Description}}: {{.}}{{end}}
+{{- end}}
+{{- end}}
+
+CROSS-PLAN SEAMS:
+{{- if or .IntegrationSeamPaths .IntegrationSeamInterfaces}}
+{{- range .IntegrationSeamPaths}}
+- path {{.Name}}: {{range $index, $value := .PlanTaskIDs}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- range .IntegrationSeamInterfaces}}
+- interface {{.Name}}: {{range $index, $value := .PlanTaskIDs}}{{if $index}}, {{end}}{{$value}}{{end}}
+{{- end}}
+{{- else}}
+(no cross-plan seam: no path or declared interface is shared by two plans; only suites at HEAD apply)
+{{- end}}
+
+SEAM REVIEW:
+Check only whether the plans agree at each seam above (shared path, interface, data contract, shared resource) at the source commit. Plan-internal code is out of scope: task code review and slice analysis already covered it; do not audit it.
+git -C {{.ShellIntegrationWorktree}} show {{.ShellIntegrationSnapshot "<path>"}}
+git -C {{.ShellIntegrationWorktree}} diff <base>..<review> -- <path>
+git -C {{.ShellIntegrationWorktree}} diff --name-only <base>..<review>
+
+SUITES AT HEAD:
+Run the project's declared test, lint, and type-check suites once from {{.Worktree}} over the whole branch: a merge from other work can break goal code.
+A failure is a finding when it breaks code or tests this goal changed (listed above), seam or not; the fix targets goal-owned code.
+Defects confined to code this goal did not change are observations in your report, never fix tasks.
 {{- else if ne .GoalBaseCommit ""}}
 
 === BRANCH INTEGRATION CONTEXT ===

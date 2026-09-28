@@ -590,8 +590,8 @@ bounded retry, safe diagnostics, and repaired-session revalidation.
 ## Integration Phase
 
 Integration reverses planning's fan-out: it first establishes bounded local
-coverage, then independently reviews the aggregate branch in one or more global
-generations. `goal.base_commit` remains the stable goal-wide diff base, while
+coverage, then independently reviews the seams between plans in one or more
+global generations. `goal.base_commit` remains the stable goal lower bound, while
 each analysis also carries immutable `integration_analysis` metadata.
 
 ### Lifecycle
@@ -634,9 +634,15 @@ each analysis also carries immutable `integration_analysis` metadata.
    coverage for every contributing scope and every created slice to be resolved;
    a zero- or one-scope cohort has no coverage records to await. Local records,
    when present, are navigation evidence, not proof of aggregate correctness.
-   The `integration-pair` independently checks the current goal-wide integration
-   HEAD for cross-scope interaction, shared-interface, test/specification,
-   architectural, and merge-readiness failures.
+   The `integration-pair` independently checks only the seams between plans and
+   the suites at the current integration HEAD (ADR-0162). Its surface is the
+   goal's own reviewed task ranges attributed per plan, never the branch range,
+   so work merged into the integration branch by others is absent. A seam is a
+   path or declared interface touched by two or more plans; a single-plan cohort
+   has none. Findings are seam disagreements or suite failures at HEAD in code or
+   tests the goal changed; plan-internal code is not audited without such a
+   failure, and defects confined to code the goal did not change are
+   observations, never fix tasks.
 6. **Repeat bounded global generations.** Global metadata uses deterministic
    keys `global:<generation>` and binds each verdict and report commit to an
    immutable source commit. Promoted integration-escalation repairs remain
@@ -697,8 +703,8 @@ from terminal-count heuristics.
 
 `goal.base_commit` is snapshotted when the first coding-pair children are
 created (from any pipeline transition). It records the integration branch HEAD
-at that point, giving global analysis the stable lower bound for the goal-wide
-diff. If a settled goal has no contributing coding scopes and therefore never
+at that point, the stable lower bound of the goal. Global analysis does not
+diff from it: it uses the goal tasks' reviewed ranges (ADR-0162). If a settled goal has no contributing coding scopes and therefore never
 created coding children, reconciliation snapshots the first global analysis's
 immutable source commit as `goal.base_commit` before materializing that task.
 Per-slice immutable source snapshots are recorded separately.
