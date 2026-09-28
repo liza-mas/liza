@@ -15,6 +15,7 @@ INTEGRATION ANALYST TOOLS:
   JSON file contains: [
     {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "validation": ["<canonical command>"], "depends_on": ["0"], "task_depends_on": ["existing-task-id"]}
   ]
+  spec_ref: <path>#<heading>, where <heading> is the exact heading text as written in that file, never a slug.
   validation: optional ordered array of canonical commands the child task should run; each must be satisfiable for the child scope, with intended hooks/checks declared in fix-task desc, done_when, or supporting artifact text. Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.

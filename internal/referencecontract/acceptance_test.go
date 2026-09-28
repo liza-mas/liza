@@ -225,3 +225,37 @@ func TestValidateAcceptancePath(t *testing.T) {
 		}
 	}
 }
+
+// D101: submit (ResolveScalarFragment) and claim (ParseAcceptance) enforce a
+// scalar fragment under one rule: only a carrier with an eligible Source
+// References or Acceptance Contract heading is strict; elsewhere a fragment,
+// slug included, stays a display-only hint (ADR-0133).
+func TestScalarFragmentPolicyAgreesAtSubmitAndClaim(t *testing.T) {
+	const slug = "story-st-002--measure-the-constraints"
+	story := "\n## Story ST-002 — Measure the constraints\n\nMeasure them.\n"
+	sources := strictDocument(`- "source": "specs/requirements.md#Requirements"`, `- "AC-identity" -> "source"`)
+	for _, tc := range []struct {
+		name, document, fragment string
+		enforced                 bool
+	}{
+		{"marker-free slug", "# Stories\n" + story, slug, false},
+		{"marker-free exact heading", "# Stories\n" + story, "Story ST-002 — Measure the constraints", false},
+		{"fenced pseudo-markers", "```markdown\n## Source References\n### Acceptance Contract\n```\n" + story, slug, false},
+		{"indented pseudo-markers", "    ## Source References\n    ### Acceptance Contract\n" + story, slug, false},
+		{"source references only", sources + story, slug, true},
+		{"malformed source references", strings.Replace(sources, "Source revision:", "Revision:", 1) + story, slug, true},
+		{"acceptance contract without source references", "# Plan\n" + story + "\n## Task One\n\n### Acceptance Contract\n\n```json\n" + acceptanceDeclaration + "\n```\n", slug, true},
+		{"strict acceptance carrier", acceptanceDocument(acceptanceDeclaration), slug, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			submitErr := ResolveScalarFragment(tc.document, tc.fragment)
+			contract, claimErr := ParseAcceptance(tc.document, tc.fragment)
+			if (submitErr != nil) != tc.enforced || (claimErr != nil) != tc.enforced {
+				t.Fatalf("submit error = %v, claim error = %v; want both refusing = %t", submitErr, claimErr, tc.enforced)
+			}
+			if !tc.enforced && contract != nil {
+				t.Fatalf("claim adopted %#v from a marker-free carrier", contract)
+			}
+		})
+	}
+}

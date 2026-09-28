@@ -45,15 +45,25 @@ func ExtractSection(markdown, exactHeading string) (string, error) {
 // strict carrier a non-empty fragment must select exactly one eligible heading,
 // while marker-free files keep fragments as display-only hints.
 func ResolveScalarFragment(markdown, fragment string) error {
-	contract, err := Parse(markdown)
-	if err != nil {
+	if _, err := Parse(markdown); err != nil {
 		return err
 	}
-	if contract == nil || fragment == "" {
+	if fragment == "" || !hasReferenceMarker(markdown) {
 		return nil
 	}
-	_, err = ExtractSection(markdown, fragment)
+	_, err := ExtractSection(markdown, fragment)
 	return err
+}
+
+// hasReferenceMarker reports whether markdown is a strict carrier: it has an
+// eligible Source References or Acceptance Contract heading. Presence, not
+// validity, decides, so a malformed marker still fails where it is parsed.
+// Submission and claim both judge fragments by it, so they agree on which
+// fragments must resolve.
+func hasReferenceMarker(markdown string) bool {
+	headings := scanMarkdown(markdown).headings
+	return len(headingsMatching(headings, 2, sourceReferencesHeading)) > 0 ||
+		len(headingsMatching(headings, 0, acceptanceHeading)) > 0
 }
 
 type markdownScan struct {

@@ -29,7 +29,10 @@ transaction. Reviewed upstream corrections can refresh this snapshot and clear
 the receipt; an adopted source cannot lose its marker to become legacy. Strict
 sources discovered on an already executing task undergo the same checks at submit.
 Marker-free and reference-first-only legacy sources keep existing admission and
-are identified as not machine acceptance-evidenced.
+are identified as not machine acceptance-evidenced. A carrier with neither a
+Source References nor an Acceptance Contract heading keeps its ref fragment as a
+display hint: output submission and claim both admit an unresolvable one, while
+a carrier with either heading has it resolved exactly at both.
 
 ## Admission boundaries
 

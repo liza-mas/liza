@@ -152,6 +152,27 @@ func (p acceptanceRefusalProject) requireEscalatedToOrchestrator(t *testing.T, p
 	}
 }
 
+// D101: an integration fix task's spec_ref slug into a marker-free story file
+// is a display-only hint, so the fix task is claimed instead of blocked.
+func TestDoerClaim_MarkerFreeSlugSpecRefIsClaimable(t *testing.T) {
+	// GIVEN a fix-task shape: no plan_ref, spec_ref slug into a marker-free carrier
+	project := setupAcceptanceRefusalProject(t, func(task *models.Task) {
+		task.PlanRef = ""
+		task.SpecRef = "specs/acceptance-goal.md#identity"
+	})
+
+	// WHEN a doer supervisor attempts it
+	taskID, _, err := project.strategy.ClaimTask(project.config, project.bb)
+
+	// THEN it is claimed, with no acceptance source adopted
+	if err != nil || taskID != project.taskID {
+		t.Fatalf("ClaimTask() = %q, %v; want %q claimed", taskID, err, project.taskID)
+	}
+	if _, task := project.task(t); task.AcceptanceSource != nil || task.Status == models.TaskStatusBlocked {
+		t.Fatalf("claimed task status=%s acceptance_source=%v, want legacy admission", task.Status, task.AcceptanceSource)
+	}
+}
+
 // D63: a content fault in the allocation is deterministic, so the first
 // refused claim escalates instead of being retried every few seconds.
 func TestDoerClaim_ContentAcceptanceFaultBlocksOnFirstRefusal(t *testing.T) {

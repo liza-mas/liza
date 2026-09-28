@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -56,10 +58,20 @@ func TestAddTaskAcceptanceRefusalEnvelopeCarriesFieldDiagnostic(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.Agents["orchestrator-1"] = testhelpers.RegisteredTestAgent("orchestrator")
 	testhelpers.WriteInitialState(t, statePath, state)
-	// README.md is committed on integration and has no such heading, so claim
-	// would refuse the task at every commit that keeps this file unchanged.
+	// specs/plan.md is a strict carrier committed on integration with no such
+	// heading, so claim would refuse the task at every commit that keeps this
+	// file unchanged. A marker-free carrier would admit the fragment as a hint.
+	if err := os.MkdirAll(filepath.Join(root, "specs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "specs/plan.md"), []byte("# Plan\n\n## Task 1\n\n### Acceptance Contract\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/plan.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "test: strict carrier")
+	testhelpers.MustGit(t, root, "branch", "-f", "integration", "HEAD")
 	input := &ops.AddTaskInput{ID: "adhoc", RolePair: "coding-pair", Description: "repair", SpecRef: "README.md",
-		PlanRef: "README.md#no-such-heading", DoneWhen: "done", Scope: "repair", Priority: 1}
+		PlanRef: "specs/plan.md#no-such-heading", DoneWhen: "done", Scope: "repair", Priority: 1}
 	_, addErr := ops.AddTaskWithAuthority(statePath, logPath, input, models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration})
 
 	var output bytes.Buffer

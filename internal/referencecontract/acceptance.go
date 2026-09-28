@@ -52,12 +52,17 @@ type AcceptanceManifest struct {
 }
 
 // ParseAcceptance selects one declaration using the existing fence-aware
-// Markdown scanner. No eligible marker means legacy (nil, nil). Once present,
-// both its source references and declaration must be valid. An empty heading
-// selects the whole carrier, which must contain at most one declaration.
+// Markdown scanner. No eligible marker means legacy (nil, nil); a carrier with
+// no marker at all is legacy before its heading is resolved, since there its
+// fragment is only a display hint. Once present, both its source references
+// and declaration must be valid. An empty heading selects the whole carrier,
+// which must contain at most one declaration.
 func ParseAcceptance(markdown, heading string) (*AcceptanceContract, error) {
 	if len(markdown) > AcceptanceMaxBytes {
 		return nil, fmt.Errorf("acceptance.source: exceeds %d bytes", AcceptanceMaxBytes)
+	}
+	if !hasReferenceMarker(markdown) {
+		return nil, nil
 	}
 	selected := markdown
 	if heading != "" {

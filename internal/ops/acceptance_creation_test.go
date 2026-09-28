@@ -191,6 +191,7 @@ func TestAddTask_AdmitsWhatClaimAdmits(t *testing.T) {
 		input       *AddTaskInput
 	}{
 		"marker-free exact heading":     {input: adHocCodingInput(creationGoalRef + "#Identity")},
+		"marker-free slug":              {input: adHocCodingInput(creationGoalRef + "#identity")},
 		"carrier absent at integration": {uncommitted: "specs/not-yet-merged.md", input: adHocCodingInput("specs/not-yet-merged.md#Task 1")},
 		"non-coding task with a slug": {input: &AddTaskInput{ID: "adhoc", RolePair: "code-planning-pair", Description: "plan", SpecRef: creationGoalRef,
 			PlanRef: "specs/acceptance-plan.md#task-1", DoneWhen: "planned", Scope: "plan", Priority: 1}},
