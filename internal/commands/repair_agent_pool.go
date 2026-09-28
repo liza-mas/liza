@@ -406,20 +406,11 @@ func findValidationAgentCapacity(state *models.State, pr models.PipelineResolver
 // repair and stall diagnosis — agrees by construction rather than by three
 // copies of the same expression.
 func agentLivenessWindow(config models.Config) time.Duration {
-	return models.NormalizeHeartbeatInterval(config.HeartbeatInterval) + models.LeaseExpiryGracePeriod
+	return models.AgentLivenessWindow(config)
 }
 
 func agentHasLiveRegistration(agentState models.Agent, now time.Time, nilLeaseHeartbeatWindow time.Duration) bool {
-	if agentState.Role == "" {
-		return false
-	}
-	if agentState.LeaseExpires != nil {
-		return agentState.LeaseExpires.After(now)
-	}
-	if agentState.Heartbeat.IsZero() {
-		return false
-	}
-	return agentState.Heartbeat.After(now.Add(-nilLeaseHeartbeatWindow))
+	return models.AgentRegistrationLive(agentState, now, nilLeaseHeartbeatWindow)
 }
 
 func agentHealthIsCurrentDegraded(health models.AgentHealth, agentState models.Agent) bool {

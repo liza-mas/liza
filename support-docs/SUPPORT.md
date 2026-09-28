@@ -649,6 +649,7 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 ### Stuck task (stale lease)
 **Symptom**: Task in executing or reviewing state but agent is gone.
 **Diagnosis**: `§BRAND_BINARY_NAME§ get tasks` — check `lease_expires` is in the past (see Lease defaults above).
+**Automatic recovery**: An executing doer claim whose holder has no live registration is taken over by the next doer of the role, and autorepair spawns one when none is live. The worktree and branch are kept, and history records `doer_claim_released` with `previous_assignee`. A holder whose registration is still live keeps the task until that registration expires. Claims without `base_commit` stay manual.
 **Fix**: `§BRAND_BINARY_NAME§ recover-task <task-id>` or `§BRAND_BINARY_NAME§ release-claim <task-id>`.
 
 ### Approved task never merges (`pending_merge_stalled`)

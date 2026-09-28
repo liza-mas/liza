@@ -113,18 +113,21 @@ block worktree creation.
 
 ## Lease Expiration and Worktree State
 
-When a coder's lease expires:
+When a coder's task lease expires, the task stays IMPLEMENTING with `lease_expires` in the past. What happens next depends on the holder's registration, never on process evidence:
 
-1. **Task becomes reclaimable** — status stays IMPLEMENTING but lease_expires is in the past
-2. **Original coder must self-abort** — if they return after expiry, they exit immediately
-3. **Worktree handling depends on who supervisor assigns:**
-   - Same coder: worktree preserved (agent returning after brief network issue)
-   - Different coder: supervisor deletes and recreates worktree fresh
+1. **Holder registration still live**: the claim stays with the holder, which may return and continue.
+2. **Holder gone**: the holder's row is absent, or its registration lease/heartbeat has expired. The claim is *stranded*, and the task counts as ready doer work, so autorepair staffs it when no coder is live. The takeover is one generation-fenced transaction under the task claim lock:
+   - it releases the claim into the preserved-branch continuation: initial status, `worktree` and `base_commit` kept;
+   - it clears the holder's `current_task` and retires its preparation;
+   - it records `doer_claim_released` with `previous_assignee`.
+
+   The claiming doer then resumes the task branch like any preserved initial task. A request pinned to the old executing boundary (`--expected-transition`) is refused with `requery`.
+3. **Continuation needs its base**: stranded claims without `base_commit`, such as integration-fix claims, stay manual (`recover-task`).
 
 **Design Rationale:**
-- Same coder reclaiming: preserve work (crash recovery)
-- Different coder reclaiming: fresh start (salvaging failed work costs more than restarting)
-- Handoff notes (if written) provide context regardless of worktree state
+- Reusing the worktree preserves the dead holder's committed branch progress for any successor.
+- Liveness is lease-first, so an agent with a live registration is never displaced.
+- Handoff notes (if written) provide context either way.
 
 ---
 

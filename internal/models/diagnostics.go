@@ -77,8 +77,11 @@ func countRoleReadyTasks(state *State, role string, pr PipelineResolver, now tim
 // available only to its current owner, not to the role queue; malformed
 // ownership without a lease fails closed.
 func IsRoleTaskReady(state *State, task *Task, role string, pr PipelineResolver, now time.Time) bool {
-	if state == nil || task == nil || pr == nil || !task.IsClaimable(role, state.Tasks, pr) {
+	if state == nil || task == nil || pr == nil {
 		return false
+	}
+	if !task.IsClaimable(role, state.Tasks, pr) {
+		return strandedForRole(state, task, role, pr, now)
 	}
 
 	doerRole, err := pr.DoerRole(task.RolePair)
@@ -99,6 +102,78 @@ func IsRoleTaskReady(state *State, task *Task, role string, pr PipelineResolver,
 		return false
 	}
 	return !task.LeaseExpires.After(now)
+}
+
+// StrandedDoerClaimReason explains why an executing doer claim is stranded, or
+// returns "" when it is not. Stranded means the task lease expired and the
+// holder has no live registration — it died without its exit release — so the
+// claim can pass to another doer as a preserved continuation, which needs the
+// worktree and base commit it reuses. Liveness is lease-first: a holder whose
+// registration is live keeps its claim, and no process evidence is consulted.
+func StrandedDoerClaimReason(state *State, task *Task, pr PipelineResolver, now time.Time) string {
+	if state == nil || task == nil || pr == nil {
+		return ""
+	}
+	executing, err := pr.ExecutingStatus(task.RolePair)
+	if err != nil || task.Status != executing {
+		return ""
+	}
+	if task.AssignedTo == nil || *task.AssignedTo == "" || strings.HasPrefix(*task.AssignedTo, "$") {
+		return ""
+	}
+	if task.LeaseExpires == nil || task.LeaseExpires.After(now) {
+		return ""
+	}
+	if task.Worktree == nil || *task.Worktree == "" || task.BaseCommit == nil || *task.BaseCommit == "" {
+		return ""
+	}
+	if !checkDependencies(task, state.Tasks) {
+		return ""
+	}
+	holder := *task.AssignedTo
+	expired := task.LeaseExpires.UTC().Format(time.RFC3339)
+	agent, registered := state.Agents[holder]
+	if !registered {
+		return fmt.Sprintf("holder %s is no longer registered and the task lease expired at %s", holder, expired)
+	}
+	if AgentRegistrationLive(agent, now, AgentLivenessWindow(state.Config)) {
+		return ""
+	}
+	return fmt.Sprintf("holder %s has no live registration and the task lease expired at %s", holder, expired)
+}
+
+// strandedForRole reports whether a task is a stranded claim the given role
+// may take over: only the task's own doer role can. A nil resolver sees no
+// work, as everywhere else.
+func strandedForRole(state *State, task *Task, role string, pr PipelineResolver, now time.Time) bool {
+	if pr == nil {
+		return false
+	}
+	doerRole, err := pr.DoerRole(task.RolePair)
+	return err == nil && role == doerRole && StrandedDoerClaimReason(state, task, pr, now) != ""
+}
+
+// AgentLivenessWindow is how long a registration without a lease stays live on
+// heartbeat alone.
+func AgentLivenessWindow(config Config) time.Duration {
+	return NormalizeHeartbeatInterval(config.HeartbeatInterval) + LeaseExpiryGracePeriod
+}
+
+// AgentRegistrationLive reports whether an agent's registration is live: an
+// unexpired lease or, for a registration without one, a heartbeat within
+// nilLeaseHeartbeatWindow. Every reader of "is this agent live" shares it so
+// they agree by construction.
+func AgentRegistrationLive(agent Agent, now time.Time, nilLeaseHeartbeatWindow time.Duration) bool {
+	if agent.Role == "" {
+		return false
+	}
+	if agent.LeaseExpires != nil {
+		return agent.LeaseExpires.After(now)
+	}
+	if agent.Heartbeat.IsZero() {
+		return false
+	}
+	return agent.Heartbeat.After(now.Add(-nilLeaseHeartbeatWindow))
 }
 
 // CountClaimableTasks preserves the legacy lifecycle-level count for a role.
@@ -126,6 +201,9 @@ func DoerClaimBlockedReason(state *State, task *Task, role, agentID string, pr P
 		return "agent ID is required"
 	}
 	if !task.IsClaimable(role, state.Tasks, pr) {
+		if strandedForRole(state, task, role, pr, now) {
+			return ""
+		}
 		return fmt.Sprintf("task %s is %s (not claimable by %s)", task.ID, task.Status, role)
 	}
 

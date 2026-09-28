@@ -841,6 +841,20 @@ plan; (2) any duplicate-work incident on a corrective plan whose outputs omit
 `supersedes`; (3) a `Pipeline transition failed` warning naming `plan
 replacement` or `supersedes` for a plan classified `passed`.
 
+## Stranded executing claims without `base_commit` stay manual (D75)
+
+**What:** `models.StrandedDoerClaimReason` requires `worktree` and
+`base_commit`, because the takeover continues the preserved branch. An
+executing claim without them, such as an integration-fix claim, stays assigned
+to its dead holder and needs `recover-task`.
+
+**Why deferred:** Taking such a claim over needs a different continuation per
+claim kind (integration-fix recreates from the failed merge), not a preserved
+branch. No incident has involved one.
+
+**Payback trigger:** An operator journal records a stranded executing claim
+without `base_commit`.
+
 ## Unattributable merge effect stays fenced without a recovery command (D106)
 
 **What:** When a `wt-merge` preparation remains and the integration ref reaches
@@ -856,3 +870,15 @@ authority and evidence design.
 
 **Payback trigger:** One occurrence of the "without an attributable receipt"
 refusal, or a second fenced-merge incident of any case.
+
+## `approvedMergeOwner` keeps an inline registration-liveness copy
+
+**What:** `internal/agent/claiming.go` `approvedMergeOwner` repeats the lease /
+heartbeat-window rule that `models.AgentRegistrationLive` now owns for pool
+repair, status, watch and stranded-claim takeover.
+
+**Why deferred:** It is out of scope for the D75/D106 fixes and its behavior
+is identical today. Changing merge ownership selection belongs in its own
+change.
+
+**Payback trigger:** The next change to either liveness rule.

@@ -89,3 +89,29 @@ for cancellation and observation limits.
 
 This amendment preserves the original requirement that heartbeat alone cannot
 repair corrupt ownership. It adds no schema fields or dependencies.
+
+## 2026-09-28 Amendment: Lease-First Doer Takeover
+
+A doer that dies without its exit release left its executing claim assigned to
+it indefinitely. Nothing counted the task as work, so autorepair saw no coder
+demand, and no doer could claim it (operator note D75, 2026-09-27).
+
+An executing doer claim is now *stranded* when:
+- its task lease has expired;
+- its holder has no live registration (row absent, or lease/heartbeat expired);
+- it has `worktree`, `base_commit` and met dependencies.
+
+A stranded claim is ready work for its doer role. Any doer of that role takes it
+over under the task claim lock and the claimant's generation fence. The takeover
+releases the claim into the preserved continuation, clears the holder's
+`current_task` without touching its registration lease, and retires the holder's
+preparation. It then claims the task as an ordinary preserved initial task.
+
+The decision stays lease-first. A live registration keeps its claim, and PID
+evidence never authorizes takeover. The takeover adds no schema fields.
+
+## 2026-09-28 Amendment: Registration Liveness in One Place
+
+The takeover shares one registration-liveness rule, `models.AgentRegistrationLive`,
+with pool repair, status and watch. `approvedMergeOwner` still keeps an inline
+copy, tracked in `TECH_DEBT.md`.

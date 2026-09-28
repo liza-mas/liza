@@ -213,6 +213,17 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 		return nil, err
 	}
 	invocation.request = request
+	if models.StrandedDoerClaimReason(state, task, resolver, time.Now().UTC()) != "" {
+		// The takeover advances the boundary the request was built against, so
+		// the claim continues under a request rebuilt on the released state.
+		if state, task, err = takeOverStrandedDoerClaim(bb, lp.StatePath(), state, task, agentID, runtimeRole, resolver, authority, invocation); err != nil {
+			return nil, err
+		}
+		if request, err = NewLifecycleRequest("claim-task", task, agentID, authority, invocation.opts, nil); err != nil {
+			return nil, err
+		}
+		invocation.request = request
+	}
 	receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 	if err != nil {
 		return nil, err
@@ -244,12 +255,8 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	}
 	pipelineTransitions = BuildPipelineTransitions(resolver)
 
-	agent, err := requireRegisteredClaimAgent(state, agentID, runtimeRole)
-	if err != nil {
+	if err := requireFreeClaimant(state, agentID, runtimeRole, taskID); err != nil {
 		return nil, err
-	}
-	if agent.CurrentTask != nil && *agent.CurrentTask != "" && *agent.CurrentTask != taskID {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("agent %s is already working on task %s", agentID, *agent.CurrentTask)}
 	}
 
 	// Store values for Phase 2
