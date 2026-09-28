@@ -1040,6 +1040,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			}
 		}
 
+		commitQuotaTerminationWIP(supervisorCtx, config, exitCode, effectiveTask, currentOutput)
 		// Reset runtime status after CLI exits, but preserve explicit command-driven
 		// states such as WAITING and HANDOFF.
 		if err := resetAgentAfterExit(bb, config.Authority, config.ProjectRoot); err != nil {

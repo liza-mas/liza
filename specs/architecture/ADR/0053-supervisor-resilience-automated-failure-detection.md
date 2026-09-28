@@ -36,6 +36,8 @@ Chose **Option 1**: three independent detection layers, each addressing a distin
 
 **Amended 2026-09-25: pool auto-repair restores a missing orchestrator.** Pool demand came only from claimable tasks' role pairs, so an orchestrator that left, whether after a quota termination, a lock timeout, or a clean idle exit, stayed gone while doers and reviewers were re-staffed (operator defect D61). The watcher now treats the orchestrator as required capacity while the goal is IN_PROGRESS and the system is RUNNING. Presence is lease-first, the same `Occupied` predicate registration uses to refuse a second orchestrator. Once the absence outlasts the 60-second grace of the `ORCHESTRATOR MISSING` alert (one shared episode), the existing pool repair spawns one, with its 60-second backoff, its budget of three unregistered starts, and the quota spawn gate above. The grace keeps launchers that start the watcher and the orchestrator together from racing the one-instance limit. Registration remains the cross-process singleton guarantee. Each absence is still announced once, and restarts that register reset the budget, so a registered crash loop is restarted indefinitely, the policy already accepted for other roles; pause or the auto-repair switch stops it.
 
+**Amended 2026-09-28: a quota-terminated doer's work is committed before its claim is released.** The claim release after every exit keeps the task's worktree for continuation, and the next claim blocks a preserved worktree that is dirty. A quota cutoff mid-edit therefore turned a pause into a block that needed a human and a free doer to repair (operator defects D57, D59; 2026-09-27). Before the release, the supervisor now commits the session's tracked and untracked changes on the task branch with `--no-verify`: the project hooks would refuse half-edited files, and the commit attests no quality; later commits, review of the full `base_commit`→`review_commit` range, and integration still gate the content. The commit takes recover-agent's lock order (project lifecycle, agent lifecycle, task claim-worktree), re-checks the caller's generation and that the task is still assigned to it and executing, and refuses a worktree off its task branch or mid-merge, rebase, cherry-pick or revert. A refusal changes nothing and falls back to the dirty block. Provider-unavailable terminations are not covered.
+
 **Layer 2 — Crash-Restart Tracker:**
 - In-memory counter per task tracking consecutive non-zero, non-42 exits
 - Maintains a task state signature (JSON snapshot); resets counter when state changes (progress detected)
@@ -57,7 +59,7 @@ Supervisor Loop (per iteration):
   │   └─ Spinning tracker: if same task re-executed N times without progress → block task
   ├─ Execute agent
   ├─ Read output tail (8KB)
-  │   ├─ Quota pattern match → signal file + alert + terminate
+  │   ├─ Quota pattern match → WIP-commit owned worktree → release → signal file + alert + terminate
   │   ├─ Exit 42 → existing backoff + limit (now all roles)
   │   └─ Non-zero exit → crash tracker
   │       └─ If N consecutive crashes without progress → block task

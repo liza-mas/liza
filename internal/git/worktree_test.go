@@ -403,6 +403,51 @@ func TestWorktreeProgressSignatureHandlesLargeUntrackedContent(t *testing.T) {
 	}
 }
 
+// The watchdog cancels an in-flight signature when a session ends, which
+// kills its Git process. A killed index writer leaves index.lock behind and
+// every later commit in the worktree fails, so the signature must never take it.
+func TestWorktreeProgressSignatureDoesNotWriteIndex(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	g := New(repoDir)
+
+	taskID := "task-read-only-progress"
+	if _, err := g.CreateWorktree(taskID, "integration"); err != nil {
+		t.Fatalf("CreateWorktree() error = %v", err)
+	}
+	worktreePath := g.GetWorktreePath(taskID)
+	// A tracked file whose stat no longer matches the index makes any
+	// index-refreshing command rewrite the index.
+	future := time.Now().Add(2 * time.Hour)
+	if err := os.Chtimes(filepath.Join(worktreePath, "README.md"), future, future); err != nil {
+		t.Fatalf("touch tracked file: %v", err)
+	}
+	indexPath := testhelpers.MustGit(t, worktreePath, "rev-parse", "--path-format=absolute", "--git-path", "index")
+	before, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+
+	if _, err := g.WorktreeProgressSignature(taskID); err != nil {
+		t.Fatalf("WorktreeProgressSignature() error = %v", err)
+	}
+
+	after, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("WorktreeProgressSignature rewrote the worktree index, want read-only Git commands")
+	}
+}
+
+func TestStatusRecordPathsSkipsRenameSources(t *testing.T) {
+	output := []byte(" M changed.go\x00R  new.go\x00old.go\x00D  gone.go\x00")
+	got := strings.Join(statusRecordPaths(output), ",")
+	if want := "changed.go,new.go,gone.go"; got != want {
+		t.Fatalf("statusRecordPaths() = %q, want %q", got, want)
+	}
+}
+
 func TestWorktreeProgressSignatureContextHonorsCancellation(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	g := New(repoDir)

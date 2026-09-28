@@ -218,7 +218,9 @@ func (g *Git) WorktreeProgressSignature(taskID string) (string, error) {
 }
 
 // WorktreeProgressSignatureContext returns the progress signature and aborts
-// Git commands and dirty-file hashing when ctx is canceled.
+// Git commands and dirty-file hashing when ctx is canceled. Its Git commands
+// skip optional index refreshes: canceling kills them, and a killed index
+// writer leaves index.lock behind, failing every later commit in the worktree.
 func (g *Git) WorktreeProgressSignatureContext(ctx context.Context, taskID string) (string, error) {
 	if err := paths.ValidateTaskID(taskID); err != nil {
 		return "", fmt.Errorf("invalid task ID: %w", err)
@@ -228,7 +230,7 @@ func (g *Git) WorktreeProgressSignatureContext(ctx context.Context, taskID strin
 	if err != nil {
 		return "", err
 	}
-	status, err := g.execInDirContext(ctx, worktreePath, "status", "--porcelain")
+	status, err := g.execInDirContext(ctx, worktreePath, "--no-optional-locks", "status", "--porcelain")
 	if err != nil {
 		return "", err
 	}
@@ -242,13 +244,15 @@ func (g *Git) WorktreeProgressSignatureContext(ctx context.Context, taskID strin
 func (g *Git) worktreeDirtyContentSignature(ctx context.Context, worktreePath string) (string, error) {
 	h := sha256.New()
 
-	tracked, err := gitenv.OutputContext(ctx, worktreePath, "diff", "--name-only", "-z", "HEAD", "--")
+	// Not `git diff HEAD`: it rewrites the index to record refreshed stat data,
+	// even with --no-optional-locks.
+	tracked, err := gitenv.OutputContext(ctx, worktreePath, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=no")
 	if err != nil {
-		return "", fmt.Errorf("git diff failed: %w\nOutput: %s", err, tracked)
+		return "", fmt.Errorf("git status failed: %w\nOutput: %s", err, tracked)
 	}
 	h.Write([]byte("tracked\x00"))
 	h.Write(tracked)
-	for _, relPath := range nulRecords(tracked) {
+	for _, relPath := range statusRecordPaths(tracked) {
 		if err := writeWorktreeFileSignature(ctx, h, worktreePath, relPath); err != nil {
 			return "", err
 		}
@@ -281,6 +285,24 @@ func nulRecords(output []byte) []string {
 		}
 	}
 	return nonEmpty
+}
+
+// statusRecordPaths returns the current path of each `status --porcelain=v1 -z`
+// record. A rename or copy record is followed by its source path, skipped here.
+func statusRecordPaths(output []byte) []string {
+	records := nulRecords(output)
+	var paths []string
+	for i := 0; i < len(records); i++ {
+		record := records[i]
+		if len(record) < 4 {
+			continue
+		}
+		paths = append(paths, record[3:])
+		if record[0] == 'R' || record[0] == 'C' {
+			i++
+		}
+	}
+	return paths
 }
 
 func writeWorktreeFileSignature(ctx context.Context, w io.Writer, worktreePath, relPath string) error {
