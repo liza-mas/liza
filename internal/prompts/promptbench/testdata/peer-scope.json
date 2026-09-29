@@ -131,8 +131,8 @@
     {
       "role": "integration-analyst",
       "variant": "integration-pair",
-      "before_bytes": 290660,
-      "after_bytes": 285884,
+      "before_bytes": 290771,
+      "after_bytes": 285995,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -149,8 +149,8 @@
     {
       "role": "integration-analyst",
       "variant": "slice-integration-pair",
-      "before_bytes": 290660,
-      "after_bytes": 285884,
+      "before_bytes": 290771,
+      "after_bytes": 285995,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
