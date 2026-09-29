@@ -3,11 +3,13 @@ package agent
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
@@ -327,46 +329,7 @@ func TestRunCheckpointSummaryCLI_ReportMissing(t *testing.T) {
 	}
 }
 
-func TestRunCheckpointSummaryCLI_RejectsUnexpectedProjectMutation(t *testing.T) {
-	tmp := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, tmp)
-	installFakeCLI(t, "claude", []string{
-		"mkdir -p " + paths.ProjectDirName(),
-		"printf '# checkpoint summary\\n' > " + paths.ProjectDirName() + "/checkpoint-summary.md",
-		"printf 'unexpected\\n' > unexpected.txt",
-	})
-
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
-	if err == nil {
-		t.Fatal("expected unexpected mutation error, got nil")
-	}
-	if !strings.Contains(err.Error(), "modified unexpected paths") {
-		t.Fatalf("error = %q, want unexpected paths", err.Error())
-	}
-	if !strings.Contains(err.Error(), "unexpected.txt") {
-		t.Fatalf("error = %q, want unexpected.txt", err.Error())
-	}
-}
-
-func TestRunCheckpointSummaryCLI_RejectsUnexpectedLizaMutation(t *testing.T) {
-	tmp := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, tmp)
-	installFakeCLI(t, "claude", []string{
-		"mkdir -p " + paths.ProjectDirName(),
-		"printf '# checkpoint summary\\n' > " + paths.ProjectDirName() + "/checkpoint-summary.md",
-		"printf 'unexpected\\n' > " + paths.ProjectDirName() + "/other.md",
-	})
-
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
-	if err == nil {
-		t.Fatal("expected unexpected runtime-directory mutation error, got nil")
-	}
-	if !strings.Contains(err.Error(), paths.ProjectDirName()+"/other.md") {
-		t.Fatalf("error = %q, want %s/other.md", err.Error(), paths.ProjectDirName())
-	}
-}
-
-func TestRunCheckpointSummaryCLI_RejectsAlreadyDirtyMutation(t *testing.T) {
+func TestRunCheckpointSummaryCLI_ToleratesConcurrentWrites(t *testing.T) {
 	tmp := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmp)
 	if err := os.WriteFile(filepath.Join(tmp, "notes.md"), []byte("clean\n"), 0o644); err != nil {
@@ -374,22 +337,127 @@ func TestRunCheckpointSummaryCLI_RejectsAlreadyDirtyMutation(t *testing.T) {
 	}
 	testhelpers.MustGit(t, tmp, "add", "notes.md")
 	testhelpers.MustGit(t, tmp, "commit", "-m", "Add notes")
-	if err := os.WriteFile(filepath.Join(tmp, "notes.md"), []byte("human draft\n"), 0o644); err != nil {
-		t.Fatalf("dirty notes.md: %v", err)
+
+	// The handshake is a FIFO outside the repository, so it never shows in its
+	// status: opening its write end blocks until the CLI opens it for reading,
+	// which proves the run started, and the CLI then waits for a line.
+	release := filepath.Join(t.TempDir(), "release")
+	installFakeCLI(t, "claude", []string{
+		"mkdir -p " + paths.ProjectDirName(),
+		"read _ < '" + release + "'",
+		"printf '# checkpoint summary\\n' > " + paths.ProjectDirName() + "/checkpoint-summary.md",
+	})
+	if output, err := exec.Command("mkfifo", release).CombinedOutput(); err != nil {
+		t.Fatalf("mkfifo: %v\n%s", err, output)
 	}
 
+	result := make(chan error, 1)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		result <- runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	}()
+	opened := make(chan *os.File, 1)
+	go func() {
+		defer close(opened)
+		if f, err := os.OpenFile(release, os.O_WRONLY, 0); err == nil {
+			opened <- f
+		}
+	}()
+	// On every exit path, close the write end (the CLI's read then fails and it
+	// exits) or, if the CLI never opened the FIFO, satisfy the pending open, so
+	// neither the CLI nor a goroutine outlives the test.
+	var writer *os.File
+	t.Cleanup(func() {
+		if writer == nil {
+			go func() {
+				if f, err := os.Open(release); err == nil {
+					f.Close()
+				}
+			}()
+			if f, ok := <-opened; ok {
+				writer = f
+			}
+		}
+		if writer != nil {
+			writer.Close()
+		}
+		select {
+		case <-finished:
+		case <-time.After(15 * time.Second):
+			t.Error("checkpoint-summary runner still running after release")
+		}
+	})
+
+	select {
+	case f, ok := <-opened:
+		if !ok {
+			t.Fatal("open release FIFO for writing failed")
+		}
+		writer = f
+	case err := <-result:
+		t.Fatalf("runCheckpointSummaryCLI() returned before the CLI started: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("fake CLI never opened the release FIFO")
+	}
+
+	// Writes by other processes while the CLI runs, as supervisors and hooks do.
+	statePath := filepath.Join(tmp, paths.ProjectDirName(), paths.StateFileName)
+	if err := os.WriteFile(statePath, []byte("sprint: {}\n"), 0o644); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "notes.md"), []byte("hook output\n"), 0o644); err != nil {
+		t.Fatalf("modify notes.md: %v", err)
+	}
+	if _, err := writer.WriteString("go\n"); err != nil {
+		t.Fatalf("release fake CLI: %v", err)
+	}
+
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("runCheckpointSummaryCLI() error = %v", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("runCheckpointSummaryCLI() did not return")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, filepath.FromSlash(checkpointSummaryRelPath()))); err != nil {
+		t.Errorf("expected report at %s: %v", checkpointSummaryRelPath(), err)
+	}
+}
+
+func TestRunCheckpointSummaryCLI_NonZeroExitReturnsError(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
 	installFakeCLI(t, "claude", []string{
 		"mkdir -p " + paths.ProjectDirName(),
 		"printf '# checkpoint summary\\n' > " + paths.ProjectDirName() + "/checkpoint-summary.md",
-		"printf 'cli overwrite with different size\\n' > notes.md",
+		"exit 7",
 	})
 
 	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
 	if err == nil {
-		t.Fatal("expected already-dirty mutation error, got nil")
+		t.Fatal("expected non-zero exit error, got nil")
 	}
-	if !strings.Contains(err.Error(), "notes.md") {
-		t.Fatalf("error = %q, want notes.md", err.Error())
+	if !strings.Contains(err.Error(), "exit status 7") {
+		t.Fatalf("error = %q, want exit status 7", err.Error())
+	}
+}
+
+func TestRunCheckpointSummaryCLI_ReportEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"mkdir -p " + paths.ProjectDirName(),
+		": > " + paths.ProjectDirName() + "/checkpoint-summary.md",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err == nil {
+		t.Fatal("expected empty report error, got nil")
+	}
+	if !strings.Contains(err.Error(), "report is empty") {
+		t.Fatalf("error = %q, want report is empty", err.Error())
 	}
 }
 

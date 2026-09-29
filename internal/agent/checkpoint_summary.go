@@ -7,13 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -175,11 +173,6 @@ file. Do not ask follow-up questions.
 // but keeps output discarded because this is a best-effort side effect rather
 // than a supervised agent session.
 func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Config) error {
-	beforeStatus, err := gitStatusSnapshot(projectRoot)
-	if err != nil {
-		return fmt.Errorf("failed to snapshot git status before checkpoint-summary: %w", err)
-	}
-
 	reportRelPath := checkpointSummaryRelPath()
 	reportPath := filepath.Join(projectRoot, filepath.FromSlash(reportRelPath))
 	if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
@@ -209,19 +202,11 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 
-	runErr := cmd.Run()
-	statusErr := validateCheckpointSummaryStatus(projectRoot, beforeStatus)
-	if runErr != nil {
+	if runErr := cmd.Run(); runErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("checkpoint-summary CLI %q timed out after %s", cliName, checkpointSummaryDefaultTimeout)
 		}
-		if statusErr != nil {
-			return fmt.Errorf("checkpoint-summary CLI %q failed: %w; %v", cliName, runErr, statusErr)
-		}
 		return fmt.Errorf("checkpoint-summary CLI %q failed: %w", cliName, runErr)
-	}
-	if statusErr != nil {
-		return statusErr
 	}
 
 	// Sanity: confirm the report was actually written. If the CLI exited 0
@@ -287,111 +272,6 @@ func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models
 		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: prompt-file transport of %q is not supported", cliName)
 	}
 	return plan, nil
-}
-
-type checkpointStatusEntry struct {
-	status      string
-	fingerprint string
-}
-
-func gitStatusSnapshot(projectRoot string) (map[string]checkpointStatusEntry, error) {
-	output, err := gitenv.Output(projectRoot, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-	if err != nil {
-		return nil, err
-	}
-
-	entries := parseGitStatusPorcelainZ(output)
-	snapshot := make(map[string]checkpointStatusEntry, len(entries))
-	for _, entry := range entries {
-		snapshot[entry.path] = checkpointStatusEntry{
-			status:      entry.status,
-			fingerprint: checkpointPathFingerprint(projectRoot, entry.path),
-		}
-	}
-	return snapshot, nil
-}
-
-type gitStatusEntry struct {
-	status string
-	path   string
-}
-
-func parseGitStatusPorcelainZ(output []byte) []gitStatusEntry {
-	records := strings.Split(string(output), "\x00")
-	var entries []gitStatusEntry
-	for i := 0; i < len(records); i++ {
-		record := records[i]
-		if record == "" {
-			continue
-		}
-		if len(record) < 4 {
-			continue
-		}
-		status := record[:2]
-		entries = append(entries, gitStatusEntry{
-			status: status,
-			path:   filepath.ToSlash(record[3:]),
-		})
-		if strings.ContainsAny(status, "RC") && i+1 < len(records) {
-			i++ // porcelain -z includes the source path as a separate record.
-		}
-	}
-	return entries
-}
-
-func checkpointPathFingerprint(projectRoot, relPath string) string {
-	info, err := os.Lstat(filepath.Join(projectRoot, filepath.FromSlash(relPath)))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "missing"
-		}
-		return "stat-error:" + err.Error()
-	}
-	return fmt.Sprintf("mode=%s size=%d mod=%d", info.Mode().String(), info.Size(), info.ModTime().UnixNano())
-}
-
-func validateCheckpointSummaryStatus(projectRoot string, before map[string]checkpointStatusEntry) error {
-	after, err := gitStatusSnapshot(projectRoot)
-	if err != nil {
-		return fmt.Errorf("failed to snapshot git status after checkpoint-summary: %w", err)
-	}
-	unexpected := unexpectedCheckpointSummaryStatusChanges(before, after)
-	if len(unexpected) > 0 {
-		return fmt.Errorf("checkpoint-summary CLI modified unexpected paths: %s", strings.Join(unexpected, ", "))
-	}
-	return nil
-}
-
-func unexpectedCheckpointSummaryStatusChanges(before, after map[string]checkpointStatusEntry) []string {
-	var unexpected []string
-	for path, afterEntry := range after {
-		if path == checkpointSummaryRelPath() {
-			continue
-		}
-		beforeEntry, existed := before[path]
-		if existed && beforeEntry == afterEntry {
-			continue
-		}
-		unexpected = append(unexpected, formatCheckpointStatusEntry(afterEntry, path))
-	}
-
-	for path, beforeEntry := range before {
-		if path == checkpointSummaryRelPath() {
-			continue
-		}
-		if _, stillPresent := after[path]; !stillPresent {
-			unexpected = append(unexpected, formatCheckpointStatusEntry(beforeEntry, path)+" (removed)")
-		}
-	}
-	sort.Strings(unexpected)
-	return unexpected
-}
-
-func formatCheckpointStatusEntry(entry checkpointStatusEntry, path string) string {
-	if entry.status == "" {
-		return path
-	}
-	return entry.status + " " + path
 }
 
 // filterAPIKeyEnv removes ANTHROPIC_API_KEY from the env list. The user's

@@ -18,7 +18,7 @@ The operation is best-effort:
 - nothing depends on summary generation
 - failures are logged rather than rolled back
 - `auto_checkpoint_summary: false` disables the behavior
-- the subprocess may only mutate `.liza/checkpoint-summary.md`
+- the subprocess may only mutate `.liza/checkpoint-summary.md` (instructed by the skill, no longer checked after the run: see the 2026-09-30 amendment)
 
 **Amended 2026-09-21 — the trigger moved from every merge to the checkpoint boundary.** The original decision named merges as "the natural steering point after merged progress". Run evidence contradicted that: a merge is a task-level event, a checkpoint is the steering point. Emitting per merge produced one CLI subprocess per merged task — 86 in one observed sprint — each spawned inside the reviewer's merge loop, each re-reading a state file that had grown to 2.69 MB. It also produced the concurrent-writer race recorded as OP-006, because several reviewers could merge at once and write the same report.
 
@@ -36,6 +36,8 @@ Three narrower designs were tried and each was reachable only some of the time, 
 
 This amendment supersedes alternative 2 below ("keep checkpoint summaries manual"), which remains rejected: the report is still automatic, just at a coarser and more meaningful boundary. It also removes the motivation for building report isolation and revision binding, since concurrent writers are no longer structurally possible.
 
+**Amended 2026-09-30 — the post-run mutation guard is removed.** The runner used to compare `git status` and per-path size and modification time before and after the subprocess, and to fail on any path other than the report that appeared, changed or disappeared. It cannot tell which process wrote a path, and the run lasts up to five minutes while supervisors, agents, Git hooks and the operator keep writing to the project root by design. In checkouts where the runtime directory is not ignored, any runtime write during the run tripped it, and the checkpoint reported the summary as failed ("not written") although the report had been written. A committed file rewritten by a hook tripped it even where the runtime directory was ignored. The guard only detected after the fact; it never prevented or reverted a write, and it was already blind to the runtime directory wherever that directory is ignored. It was removed rather than narrowed, knowing that a summary CLI which edits project files is no longer reported. The report-only rule remains an instruction in the `checkpoint-summary` skill. Launch failure, non-zero exit, timeout and a missing or empty report are still reported.
+
 The summary is intentionally generated from blackboard state rather than from raw logs.
 
 ## Consequences
@@ -51,7 +53,7 @@ Trade-offs:
 - Summary generation adds a subprocess dependency to the merge loop.
 - The report is only as good as the blackboard and skill interpretation.
 - Best-effort behavior means a missing summary does not halt the system.
-- Mutation guarding is required to prevent the subprocess from changing project files.
+- Mutation guarding is required to prevent the subprocess from changing project files. (Superseded 2026-09-30: nothing enforces the report-only rule; the skill instruction is the only control.)
 
 ## Alternatives Considered
 
