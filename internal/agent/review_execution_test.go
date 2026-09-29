@@ -13,6 +13,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -172,6 +173,43 @@ func TestReviewExecutionReacquisitionRetiresOwnVerdict(t *testing.T) {
 	}}
 	if _, _, err := executeAgent(context.Background(), config, "review", nil, "review-task", runtimeConfig); !errors.Is(err, errReviewOwnershipLost) {
 		t.Fatalf("executeAgent = %v, want ownership loss", err)
+	}
+}
+
+// A real verdict releases the reviewer, clearing its agent lease until the next
+// heartbeat. Neither that window nor the await-resubmission that follows is an
+// ownership loss.
+func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
+	config, bb, runtimeConfig := reviewExecutionFixture(t)
+	reviewCommit := mustGitInDir(t, config.ProjectRoot, "rev-parse", "HEAD")
+	if err := bb.Modify(func(s *models.State) error {
+		s.Tasks[0].ReviewCommit = &reviewCommit
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
+		if _, err := ops.SubmitVerdictWithAuthority(config.ProjectRoot, "review-task", "REJECTED", "needs work", config.Authority, "", reviewCommit); err != nil {
+			return err
+		}
+		released, err := bb.Read()
+		if err != nil {
+			return err
+		}
+		if lease := released.Agents[config.AgentID].LeaseExpires; lease != nil {
+			t.Errorf("verdict kept the agent lease (%v); test no longer covers the released window", lease)
+		}
+		select {
+		case <-ctx.Done():
+			t.Error("turn cancelled after the reviewer's own rejection")
+			return nil
+		case <-time.After(2500 * time.Millisecond):
+		}
+		_, err = ops.AwaitResubmissionWithAuthority(ctx, config.ProjectRoot, "review-task", config.Authority, 2500*time.Millisecond)
+		return err
+	}}
+	if _, _, err := executeAgent(context.Background(), config, "review", nil, "review-task", runtimeConfig); err != nil {
+		t.Fatalf("executeAgent: %v", err)
 	}
 }
 

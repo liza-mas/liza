@@ -61,8 +61,10 @@ func newReviewExecution(state *models.State, config SupervisorConfig, taskID str
 	return guard, nil
 }
 
+// A verdict releases the agent (nil lease) until the next heartbeat renews it;
+// only an expired lease means lost liveness. Replacement is fenced by generation.
 func (g *reviewExecution) registrationCurrent(a models.Agent, now time.Time) bool {
-	return a.Role == g.role && !a.Heartbeat.IsZero() && a.LeaseExpires != nil && a.LeaseExpires.After(now)
+	return a.Role == g.role && !a.Heartbeat.IsZero() && (a.LeaseExpires == nil || a.LeaseExpires.After(now))
 }
 
 func (g *reviewExecution) ownsReview(task *models.Task, a models.Agent, now time.Time, activeOnly bool) bool {
