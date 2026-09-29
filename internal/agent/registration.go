@@ -91,10 +91,12 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 		// Singularity check via resolver: at most N instances per role.
 		// For orchestrator roles, singularity is enforced by resolved type
 		// (not role key) so that two different orchestrator role keys cannot
-		// coexist. Non-orchestrator roles use per-role-key counting.
+		// coexist. Non-orchestrator roles use per-role-key counting, capped
+		// by the role's max-instances or else the project default.
 		if resolver != nil {
-			maxInst, err := resolver.MaxInstances(role)
-			if err == nil && maxInst > 0 {
+			roleMax, err := resolver.MaxInstances(role)
+			if err == nil {
+				maxInst := models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances)
 				roleType, _ := resolver.RoleType(role)
 				agentIDs := make([]string, 0, len(state.Agents))
 				for id := range state.Agents {

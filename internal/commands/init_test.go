@@ -2408,6 +2408,49 @@ func TestInitCommandWithConfig_NoFollowUp(t *testing.T) {
 	}
 }
 
+func TestInitCommandWithConfig_AgentPoolDefaults(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		maxInstances int
+		want         int
+	}{
+		{name: "unset flag value stores the built-in default", want: models.DefaultMaxInstances},
+		{name: "explicit value is stored", maxInstances: 5, want: 5},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := setupGitRepo(t)
+			defer os.RemoveAll(tmpDir)
+			setupGlobalLiza(t)
+			originalDir, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Chdir(originalDir)
+			if err := os.Chdir(tmpDir); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+			err = InitCommandWithConfig(InitParams{Description: "Pool goal", SpecRef: "specs/vision.md", MaxInstances: tt.maxInstances})
+			if err != nil {
+				t.Fatalf("InitCommandWithConfig() error = %v", err)
+			}
+
+			state, err := db.New(filepath.Join(tmpDir, paths.ProjectDirName(), "state.yaml")).Read()
+			if err != nil {
+				t.Fatalf("Failed to read state: %v", err)
+			}
+			if state.Config.MaxInstances != tt.want {
+				t.Errorf("max_instances = %d, want %d", state.Config.MaxInstances, tt.want)
+			}
+			if state.Config.DoerMaxWait != 600 || state.Config.ReviewerMaxWait != 600 || state.Config.OrchestratorMaxWait != 18000 {
+				t.Errorf("waits = doer %d reviewer %d orchestrator %d, want 600/600/18000",
+					state.Config.DoerMaxWait, state.Config.ReviewerMaxWait, state.Config.OrchestratorMaxWait)
+			}
+		})
+	}
+}
+
 func TestInitCommandWithConfig_NewDefaultEntryPoints(t *testing.T) {
 	for _, entryPoint := range []string{"functional-spec", "technical-spec"} {
 		t.Run(entryPoint, func(t *testing.T) {

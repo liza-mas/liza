@@ -51,6 +51,7 @@ type InitParams struct {
 	AutoResume                      bool   // --auto-resume: automatically resume at checkpoint and sprint completion
 	NoFollowUp                      bool   // --no-follow-up: suppress top-level pipeline-transitions after the entry subpipeline
 	MaxGlobalIntegrationGenerations int
+	MaxInstances                    int      // --max-instances: default live-agent cap per non-orchestrator role
 	DefaultCLI                      string   // --default-cli: default CLI for agent spawning
 	DefaultDoerCLI                  string   // --default-doer-cli: default CLI for doer and orchestrator agent spawning
 	DefaultReviewerCLI              string   // --default-reviewer-cli: default CLI for reviewer agent spawning
@@ -1226,14 +1227,15 @@ func InitCommandWithConfig(params InitParams) error {
 			MaxCoderIterations:              10,
 			MaxReviewCycles:                 5,
 			MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(params.MaxGlobalIntegrationGenerations),
+			MaxInstances:                    models.EffectiveMaxInstances(0, params.MaxInstances),
 			HeartbeatInterval:               60,
 			LeaseDuration:                   1800,
 			CoderPollInterval:               30,
-			DoerMaxWait:                     18000,
+			DoerMaxWait:                     600,
 			OrchestratorPollInterval:        60,
 			OrchestratorMaxWait:             18000,
 			ReviewerPollInterval:            30,
-			ReviewerMaxWait:                 18000,
+			ReviewerMaxWait:                 600,
 			AgentProgressTimeout:            models.DefaultAgentProgressTimeoutSec,
 			DefaultCLI:                      params.DefaultCLI,
 			DefaultDoerCLI:                  params.DefaultDoerCLI,

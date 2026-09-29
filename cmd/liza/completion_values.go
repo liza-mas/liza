@@ -135,7 +135,7 @@ func completeConfigKeys(_ *cobra.Command, args []string, toComplete string) ([]s
 	if len(args) != 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	return filterCompletionValues([]string{ops.PostWorktreeConfigKey}, toComplete), cobra.ShellCompDirectiveNoFileComp
+	return filterCompletionValues(supportedConfigKeys(), toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
 func completionState(cmd *cobra.Command) (*models.State, bool) {

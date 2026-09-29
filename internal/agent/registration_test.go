@@ -1645,6 +1645,96 @@ pipeline:
 	}
 }
 
+// TestRegisterDefaultMaxInstances verifies that a role without its own
+// max-instances is capped by config.max_instances, else the built-in default,
+// and that a role's own value wins over the project default.
+func TestRegisterDefaultMaxInstances(t *testing.T) {
+	cfg, err := pipeline.LoadFromBytes([]byte(`
+pipeline:
+  roles:
+    orchestrator:
+      type: orchestrator
+      display-name: "Orchestrator"
+    coder:
+      type: doer
+      max-instances: 1
+      display-name: "Coder"
+    code-reviewer:
+      type: reviewer
+      display-name: "Code Reviewer"
+  role-pairs:
+    coding-pair:
+      doer: coder
+      reviewer: code-reviewer
+      states:
+        initial: DRAFT_CODE
+        executing: IMPLEMENTING_CODE
+        submitted: CODE_READY_FOR_REVIEW
+        reviewing: REVIEWING_CODE
+        approved: CODE_APPROVED
+        rejected: CODE_REJECTED
+  sub-pipelines:
+    coding-subpipeline:
+      steps:
+        - coding-pair
+  entry-points:
+    default: coding-subpipeline.coding-pair
+`))
+	if err != nil {
+		t.Fatalf("LoadFromBytes: %v", err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	tests := []struct {
+		name         string
+		role         string
+		configured   int
+		occupied     int
+		wantRefusal  bool
+		wantMaxInMsg string
+	}{
+		{name: "built-in default admits the third reviewer", role: "code-reviewer", occupied: 2},
+		{name: "built-in default refuses the fourth reviewer", role: "code-reviewer", occupied: 3, wantRefusal: true, wantMaxInMsg: "(max 3)"},
+		{name: "project default refuses the second reviewer", role: "code-reviewer", configured: 1, occupied: 1, wantRefusal: true, wantMaxInMsg: "(max 1)"},
+		{name: "project default admits beyond the built-in default", role: "code-reviewer", configured: 5, occupied: 4},
+		{name: "role max-instances wins over the project default", role: "coder", configured: 5, occupied: 1, wantRefusal: true, wantMaxInMsg: "(max 1)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// GIVEN occupied registrations of the role
+			tmpDir := t.TempDir()
+			t.Cleanup(ops.SetAgentProcessProcRootForTest(filepath.Join(t.TempDir(), "missing-proc")))
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			state := testhelpers.CreateValidState()
+			state.Config.MaxInstances = tt.configured
+			for i := range tt.occupied {
+				state.Agents[fmt.Sprintf("%s-%d", tt.role, i+1)] = models.Agent{
+					Role:         tt.role,
+					Status:       models.AgentStatusIdle,
+					LeaseExpires: testhelpers.TimePtr(time.Now().UTC().Add(10 * time.Minute)),
+					Heartbeat:    time.Now().UTC(),
+					PID:          os.Getpid(),
+				}
+			}
+			bb := testhelpers.WriteInitialState(t, statePath, state)
+
+			// WHEN another agent of the role registers
+			err := registerAgent(bb, tmpDir, fmt.Sprintf("%s-%d", tt.role, tt.occupied+1), tt.role, "terminal-new", 1800, "claude", resolver)
+
+			// THEN
+			if tt.wantRefusal {
+				if err == nil || !strings.Contains(err.Error(), tt.wantMaxInMsg) {
+					t.Fatalf("err = %v, want refusal containing %q", err, tt.wantMaxInMsg)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("registration refused: %v", err)
+			}
+		})
+	}
+}
+
 func TestRegisterMaxInstancesUsesLeaseFirstCapacity(t *testing.T) {
 	const maxInstances = 2
 

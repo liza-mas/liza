@@ -9,6 +9,7 @@ import (
 	"math/bits"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/procscan"
 )
 
 const (
@@ -35,6 +37,10 @@ const (
 	StaleSentinelThreshold       = 2 * time.Minute
 	AutoRepairAgentPoolBackoff   = 60 * time.Second
 	AutoRepairAgentPoolMaxStarts = 3
+	// AutoRepairAgentPoolPendingTimeout is how long a started agent process
+	// may stay unregistered before it counts as a failed start. It keeps
+	// covering demand until it registers or is seen to exit.
+	AutoRepairAgentPoolPendingTimeout = 5 * time.Minute
 	// OrchestratorMissingGracePeriod absorbs launch ordering and supervisor
 	// restarts before an absent orchestrator is announced.
 	OrchestratorMissingGracePeriod = 60 * time.Second
@@ -48,6 +54,9 @@ const invalidStateCategory = "INVALID STATE"
 const autoRepairAgentPoolCachePrefix = "auto-repair-agent-pool:"
 const autoRepairAgentPoolStartCountPrefix = "auto-repair-agent-pool-start-count:"
 const autoRepairAgentPoolSuppressedPrefix = "auto-repair-agent-pool-suppressed:"
+const autoRepairAgentPoolPendingPrefix = "auto-repair-agent-pool-pending:"
+const autoRepairAgentPoolPendingTimeoutPrefix = "auto-repair-agent-pool-pending-timeout:"
+const autoRepairAgentPoolUnservablePrefix = "auto-repair-agent-pool-unservable:"
 const autoRepairAgentPoolEnvWarningKey = "auto-repair-agent-pool-env-warning"
 const orchestratorMissingSinceKey = "orchestrator-missing:since"
 const orchestratorMissingAlertedKey = "orchestrator-missing:alerted"
@@ -204,11 +213,24 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 		return outcome
 	}
 
-	missing := FindMissingRolesWithClaimableWork(state, pr)
 	now := time.Now().UTC()
+	pending, pendingIDs := resolveAutoRepairPendingSpawns(state, config.StateCache, now)
+	missing, unservable := FindRoleCapacityDeficits(state, pr, "", pendingIDs, now)
 	if roleWork, due := orchestratorRepairDue(state, pr, config.StateCache, now); due {
 		missing = append(missing, roleWork)
 	}
+	// Backoff and failed-start bookkeeping lives while a role has demand or
+	// started processes pending; pending ones may already cover the demand.
+	episodeRoles := make(map[string]bool, len(missing)+len(pending))
+	for _, roleWork := range missing {
+		episodeRoles[roleWork.Role] = true
+	}
+	for role := range pending {
+		episodeRoles[role] = true
+	}
+	clearAutoRepairAgentPoolCache(config.StateCache, episodeRoles)
+	missing = subtractPendingSpawns(missing, pending)
+	outcome.Alerts = append(outcome.Alerts, autoRepairUnservableAlerts(unservable, config.StateCache, now)...)
 	suppressedAlerts, suppressedRoles := autoRepairSuppressedAlerts(missing, config.StateCache, now)
 	outcome.Alerts = append(outcome.Alerts, suppressedAlerts...)
 	outcome.SuppressedRoles = append(outcome.SuppressedRoles, suppressedRoles...)
@@ -219,8 +241,10 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 	outcome.AttemptedRoles = append(outcome.AttemptedRoles, roles...)
 
 	result, err := RepairAgentPool(RepairAgentPoolOptions{
-		ProjectRoot: config.ProjectRoot,
-		Roles:       roles,
+		ProjectRoot:     config.ProjectRoot,
+		Roles:           roles,
+		PendingSpawns:   pending,
+		PendingAgentIDs: pendingIDs,
 	})
 	now = time.Now().UTC()
 	// Stamp every attempted role, including failures, to avoid hammering a
@@ -233,8 +257,9 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 		outcome.Spawned = append(outcome.Spawned, result.Spawned...)
 		outcome.Failed = append(outcome.Failed, result.Failed...)
 		for _, spawned := range result.Spawned {
-			count := incrementAutoRepairStartCount(config.StateCache, spawned.Role)
-			config.StateCache[autoRepairAgentPoolStartCountPrefix+spawned.Role] = autoRepairCountTime(count, now)
+			if spawned.PID > 0 {
+				config.StateCache[autoRepairPendingKey(spawned.Role, spawned.PID, spawned.AgentID)] = now
+			}
 		}
 		if logErr := logAutoRepairAgentPoolSpawn(config.ProjectRoot, result.Spawned); logErr != nil {
 			fmt.Fprintf(config.WarnWriter, "WARNING: failed to log auto-repair spawn: %v\n", logErr)
@@ -280,11 +305,9 @@ func spawnedAgentPIDs(spawned []SpawnedAgent) []int {
 }
 
 func autoRepairDueRoles(missing []MissingRoleWork, cache map[string]time.Time, now time.Time) []string {
-	missingSet := make(map[string]bool, len(missing))
 	roles := make([]string, 0, len(missing))
 	for _, roleWork := range missing {
 		role := roleWork.Role
-		missingSet[role] = true
 		if autoRepairStartCount(cache, role) >= AutoRepairAgentPoolMaxStarts {
 			continue
 		}
@@ -294,17 +317,14 @@ func autoRepairDueRoles(missing []MissingRoleWork, cache map[string]time.Time, n
 		}
 		roles = append(roles, role)
 	}
-	clearAutoRepairAgentPoolCache(cache, missingSet)
 	return roles
 }
 
 func autoRepairSuppressedAlerts(missing []MissingRoleWork, cache map[string]time.Time, now time.Time) ([]Alert, []string) {
-	missingSet := make(map[string]bool, len(missing))
 	var out []Alert
 	var roles []string
 	for _, roleWork := range missing {
 		role := roleWork.Role
-		missingSet[role] = true
 		if autoRepairStartCount(cache, role) < AutoRepairAgentPoolMaxStarts {
 			delete(cache, autoRepairAgentPoolSuppressedPrefix+role)
 			continue
@@ -324,7 +344,6 @@ func autoRepairSuppressedAlerts(missing []MissingRoleWork, cache map[string]time
 				role, AutoRepairAgentPoolMaxStarts),
 		})
 	}
-	clearAutoRepairAgentPoolCache(cache, missingSet)
 	return out, roles
 }
 
@@ -347,10 +366,112 @@ func clearAutoRepairAgentPoolCache(cache map[string]time.Time, missingSet map[st
 	}
 }
 
-func incrementAutoRepairStartCount(cache map[string]time.Time, role string) int {
-	count := autoRepairStartCount(cache, role)
-	count++
-	return count
+// recordAutoRepairFailedStart counts one started agent process that did not
+// register. The count is consecutive: a registration resets it.
+func recordAutoRepairFailedStart(cache map[string]time.Time, role string, now time.Time) {
+	count := autoRepairStartCount(cache, role) + 1
+	cache[autoRepairAgentPoolStartCountPrefix+role] = autoRepairCountTime(count, now)
+}
+
+// autoRepairPendingKey names one started process: its role, PID and, when it
+// was started under an explicit ID, that ID.
+func autoRepairPendingKey(role string, pid int, agentID string) string {
+	return fmt.Sprintf("%s%s:%d:%s", autoRepairAgentPoolPendingPrefix, role, pid, agentID)
+}
+
+// autoRepairPendingProcessStatus observes a started agent process; tests
+// replace it.
+var autoRepairPendingProcessStatus = func(pid int, role string) procscan.AgentProcessStatus {
+	return procscan.AgentProcessStatusForPID(pid, role, "", "")
+}
+
+// resolveAutoRepairPendingSpawns settles the agent processes this watcher
+// started, independently of current demand, and returns per role those still
+// pending. A process that registered resets its role's failed-start count; one
+// seen to exit (dead, or its PID now names another program) counts as a failed
+// start. A live or unobservable process stays pending, since no evidence says
+// it stopped consuming capacity; past AutoRepairAgentPoolPendingTimeout it
+// also counts once as a failed start, which can trigger suppression but never
+// frees its capacity. It also returns the explicit IDs pending processes will
+// register, which new starts must not reuse.
+func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.Time, now time.Time) (map[string]int, map[string]bool) {
+	registered := make(map[string]bool, len(state.Agents))
+	for _, agentState := range state.Agents {
+		if agentState.PID > 0 {
+			registered[fmt.Sprintf("%s:%d", agentState.Role, agentState.PID)] = true
+		}
+	}
+	pending := make(map[string]int)
+	pendingIDs := make(map[string]bool)
+	for _, key := range slices.Sorted(maps.Keys(cache)) {
+		entry, ok := strings.CutPrefix(key, autoRepairAgentPoolPendingPrefix)
+		if !ok {
+			continue
+		}
+		timeoutKey := autoRepairAgentPoolPendingTimeoutPrefix + entry
+		_, timeoutCounted := cache[timeoutKey]
+		parts := strings.Split(entry, ":")
+		pid := 0
+		if len(parts) == 3 {
+			pid, _ = strconv.Atoi(parts[1])
+		}
+		if pid <= 0 || parts[0] == "" {
+			delete(cache, key)
+			delete(cache, timeoutKey)
+			continue
+		}
+		role, agentID := parts[0], parts[2]
+		switch {
+		case registered[fmt.Sprintf("%s:%d", role, pid)]:
+			delete(cache, key)
+			delete(cache, timeoutKey)
+			delete(cache, autoRepairAgentPoolStartCountPrefix+role)
+		case autoRepairPendingProcessStatus(pid, role).IsDeadOrMismatched():
+			delete(cache, key)
+			delete(cache, timeoutKey)
+			if !timeoutCounted {
+				recordAutoRepairFailedStart(cache, role, now)
+			}
+		default:
+			pending[role]++
+			if agentID != "" {
+				pendingIDs[agentID] = true
+			}
+			if !timeoutCounted && now.Sub(cache[key]) >= AutoRepairAgentPoolPendingTimeout {
+				cache[timeoutKey] = now
+				recordAutoRepairFailedStart(cache, role, now)
+			}
+		}
+	}
+	return pending, pendingIDs
+}
+
+// autoRepairUnservableAlerts warns once per role while reviewer work stays
+// unservable by the configured spawn CLI.
+func autoRepairUnservableAlerts(unservable []UnservableRoleWork, cache map[string]time.Time, now time.Time) []Alert {
+	current := make(map[string]bool, len(unservable))
+	var out []Alert
+	for _, work := range unservable {
+		current[work.Role] = true
+		key := autoRepairAgentPoolUnservablePrefix + work.Role
+		if _, seen := cache[key]; seen {
+			continue
+		}
+		cache[key] = now
+		out = append(out, Alert{
+			Timestamp: now,
+			Level:     AlertLevelWarning,
+			Category:  "AUTO REPAIR UNSERVABLE",
+			Message: fmt.Sprintf("%d %s task(s) (%s) cannot be claimed by a new reviewer started with --cli %s; auto repair does not start one. They wait for an eligible reviewer, or start one with `%s`",
+				len(work.TaskIDs), work.Role, strings.Join(work.TaskIDs, ", "), work.CLI, brand.Command("agent", work.Role, "--cli", "<other-cli>")),
+		})
+	}
+	for key := range cache {
+		if role, ok := strings.CutPrefix(key, autoRepairAgentPoolUnservablePrefix); ok && !current[role] {
+			delete(cache, key)
+		}
+	}
+	return out
 }
 
 func autoRepairStartCount(cache map[string]time.Time, role string) int {

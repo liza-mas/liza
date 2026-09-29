@@ -178,3 +178,70 @@ func TestConfigSetAfterMergeDetectionReturnsConflict(t *testing.T) {
 		t.Fatal("detected command lost")
 	}
 }
+
+func TestConfigPoolKeys(t *testing.T) {
+	root, statePath := setupMutationTestProject(t, nil)
+	run := func(args ...string) (string, error) {
+		t.Helper()
+		return executeRootCommandCapture(t, root, append([]string{"config"}, args...)...)
+	}
+
+	// Unset max_instances takes a first value without --replace.
+	stdout, err := run("set", ops.MaxInstancesConfigKey, "5", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true {
+		t.Fatalf("first set failed: %v %s", err, stdout)
+	}
+	if got := readState(t, statePath).Config.MaxInstances; got != 5 {
+		t.Fatalf("max_instances = %d, want 5", got)
+	}
+
+	// A different value needs --replace with --reason.
+	stdout, err = run("set", ops.MaxInstancesConfigKey, "4", "--json")
+	if err == nil {
+		t.Fatal("replacement without --replace succeeded")
+	}
+	assertJSONError(t, stdout, "validation", "already set to 5", "--replace")
+	stdout, err = run("set", ops.MaxInstancesConfigKey, "4", "--replace", "--reason", "narrower fan-out", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true {
+		t.Fatalf("replacement failed: %v %s", err, stdout)
+	}
+	if got := readState(t, statePath).Config.MaxInstances; got != 4 {
+		t.Fatalf("max_instances = %d, want 4", got)
+	}
+	stdout, err = run("get", ops.MaxInstancesConfigKey, "--json")
+	if err != nil || parseEnvelope(t, stdout)["result"] != float64(4) {
+		t.Fatalf("config get = %s (%v), want 4", stdout, err)
+	}
+
+	// Bounds and parsing are enforced before any write.
+	for _, tc := range []struct {
+		key, value, want string
+	}{
+		{ops.MaxInstancesConfigKey, "0", "at least 1"},
+		{ops.DoerMaxWaitConfigKey, "120", "at least 300"},
+		{ops.ReviewerMaxWaitConfigKey, "ten", "integer"},
+	} {
+		stdout, err = run("set", tc.key, tc.value, "--replace", "--reason", "bounds", "--json")
+		if err == nil {
+			t.Fatalf("set %s %s succeeded", tc.key, tc.value)
+		}
+		assertJSONError(t, stdout, "validation", tc.want)
+	}
+	stdout, err = run("set", ops.ReviewerMaxWaitConfigKey, "900", "--replace", "--reason", "slower idle exit", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true {
+		t.Fatalf("reviewer wait set failed: %v %s", err, stdout)
+	}
+	if got := readState(t, statePath).Config.ReviewerMaxWait; got != 900 {
+		t.Fatalf("reviewer_max_wait = %d, want 900", got)
+	}
+
+	// Agents cannot resize their own pool.
+	stdout, err = run("set", ops.MaxInstancesConfigKey, "9", "--agent-id", "orchestrator-1", "--replace", "--reason", "agent", "--json")
+	if err == nil {
+		t.Fatal("agent write accepted")
+	}
+	assertJSONError(t, stdout, "validation", "operator-only")
+	if got := readState(t, statePath).Config.MaxInstances; got != 4 {
+		t.Fatalf("max_instances = %d after refused agent write, want 4", got)
+	}
+}

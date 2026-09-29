@@ -21,6 +21,7 @@ type spawnedAgentCall struct {
 	projectRoot string
 	role        string
 	cli         string
+	agentID     string
 }
 
 func withFakeRepairSpawner(t *testing.T, calls *[]spawnedAgentCall, err error) {
@@ -35,11 +36,12 @@ func withFakeRepairSpawnerByRole(t *testing.T, calls *[]spawnedAgentCall, errFor
 	t.Helper()
 
 	original := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli string) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string) (int, error) {
 		*calls = append(*calls, spawnedAgentCall{
 			projectRoot: projectRoot,
 			role:        role,
 			cli:         cli,
+			agentID:     agentID,
 		})
 		err := errForRole(role)
 		if err != nil {
@@ -369,12 +371,13 @@ func TestRepairAgentPool_DryRunUsesRoleSpecificDefaultCLIs(t *testing.T) {
 	if !slices.Contains(result.Commands, brand.BinaryName+" agent coder --cli codex") {
 		t.Errorf("commands = %v, want coder codex command", result.Commands)
 	}
-	if !slices.Contains(result.Commands, brand.BinaryName+" agent code-reviewer --cli gemini") {
+	// Reviewers start under an explicit ID the claim filters accept.
+	if !slices.Contains(result.Commands, brand.BinaryName+" agent code-reviewer --cli gemini --agent-id code-reviewer-1") {
 		t.Errorf("commands = %v, want code-reviewer gemini command", result.Commands)
 	}
 }
 
-func TestRepairAgentPool_ExplicitCLISpawnsOneAgentPerMissingRole(t *testing.T) {
+func TestRepairAgentPool_ExplicitCLISpawnsOneAgentPerUncoveredTask(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
@@ -393,14 +396,16 @@ func TestRepairAgentPool_ExplicitCLISpawnsOneAgentPerMissingRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RepairAgentPool() error = %v", err)
 	}
-	if len(calls) != 1 {
-		t.Fatalf("spawn calls = %+v, want one", calls)
+	if len(calls) != 2 {
+		t.Fatalf("spawn calls = %+v, want one per uncovered task", calls)
 	}
-	if calls[0].role != "coder" || calls[0].cli != "codex" {
-		t.Errorf("spawn call = %+v, want coder/codex", calls[0])
+	for _, call := range calls {
+		if call.role != "coder" || call.cli != "codex" {
+			t.Errorf("spawn call = %+v, want coder/codex", call)
+		}
 	}
-	if len(result.Spawned) != 1 {
-		t.Fatalf("spawned = %+v, want one", result.Spawned)
+	if len(result.Spawned) != 2 {
+		t.Fatalf("spawned = %+v, want two", result.Spawned)
 	}
 	if result.CLI != "codex" {
 		t.Errorf("CLI = %q, want codex for explicit CLI", result.CLI)
@@ -448,9 +453,13 @@ func TestRepairAgentPool_RegisteredRoleIsNotMissing(t *testing.T) {
 	state.Tasks = []models.Task{
 		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
 	}
+	// Idle capacity covers demand only when it could pass claim admission,
+	// which requires a provider and a live process.
 	state.Agents["coder-1"] = models.Agent{
 		Role:         "coder",
 		Status:       models.AgentStatusIdle,
+		Provider:     "claude",
+		PID:          os.Getpid(),
 		Heartbeat:    now,
 		LeaseExpires: &leaseExpires,
 	}
@@ -570,7 +579,7 @@ func TestRepairAgentPool_StaleDegradedEpochDoesNotSuppressCapacity(t *testing.T)
 		Role:         "coder",
 		Status:       models.AgentStatusIdle,
 		Provider:     "codex",
-		PID:          5678,
+		PID:          os.Getpid(),
 		Heartbeat:    now,
 		RegisteredAt: now,
 		LeaseExpires: &leaseExpires,
@@ -613,6 +622,8 @@ func TestRepairAgentPool_NilLeaseWithRecentHeartbeatIsNotMissing(t *testing.T) {
 	state.Agents["coder-1"] = models.Agent{
 		Role:      "coder",
 		Status:    models.AgentStatusIdle,
+		Provider:  "claude",
+		PID:       os.Getpid(),
 		Heartbeat: now.Add(-time.Minute),
 	}
 	projectRoot := writeRepairAgentPoolState(t, state)
@@ -755,7 +766,7 @@ func TestRepairAgentPoolAttemptsAllMissingRolesOnSpawnFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("RepairAgentPool() error = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "failed to start 1 of 3 missing role agent") {
+	if !strings.Contains(err.Error(), "started 2 of 3 planned agent(s)") {
 		t.Fatalf("error = %q, want summarized spawn failure", err)
 	}
 	if result == nil {

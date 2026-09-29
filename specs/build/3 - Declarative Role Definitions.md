@@ -97,7 +97,7 @@ pipeline:
       timeouts:
         execution: 2h          # default for doer if omitted: 2h
         poll-interval: 30s     # default for doer if omitted: 30s
-        max-wait: 5h           # default for doer if omitted: 5h
+        max-wait: 10m          # default for doer if omitted: 10m (idle doers leave the pool)
       context-sections:        # template blocks to assemble (order matters)
         - assigned-task
         - collective-plan-scoping
@@ -132,7 +132,7 @@ pipeline:
       timeouts:
         execution: 2h          # default for reviewer if omitted: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m          # default for reviewer if omitted: 10m
       context-sections:
         - review-task
         - collective-plan-scoping
@@ -523,6 +523,9 @@ This preserves the existing override mechanism while making per-role defaults vi
   defined. Existing deployments that don't customize roles get identical behavior.
 - **Orchestrator remains singular.** `max-instances: 1` is enforced for `type: orchestrator`
   regardless of YAML value.
+- **Other roles are capped.** A role without its own `max-instances` is capped by
+  `config.max_instances` (default 3) at registration; pool auto-repair starts agents up to that cap
+  ([ADR-0163](../architecture/ADR/0163-demand-based-agent-pool.md)).
 - **Query operations are universal.** `liza_get`, `liza_status`, `liza_validate` are available
   to all roles — not subject to `allowed-operations` filtering.
 

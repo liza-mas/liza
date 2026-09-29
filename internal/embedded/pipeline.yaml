@@ -46,7 +46,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - write-checkpoint
         - submit-for-review
@@ -79,7 +79,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - submit-verdict
         - await-resubmission
@@ -108,7 +108,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - write-checkpoint
         - submit-for-review
@@ -139,7 +139,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - submit-verdict
         - await-resubmission
@@ -167,7 +167,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - write-checkpoint
         - submit-for-review
@@ -199,7 +199,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - submit-verdict
         - await-resubmission
@@ -229,7 +229,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - write-checkpoint
         - submit-for-review
@@ -266,7 +266,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - submit-verdict
         - await-resubmission
@@ -297,7 +297,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - write-checkpoint
         - submit-for-review
@@ -328,7 +328,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - submit-verdict
         - await-resubmission
@@ -356,7 +356,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - write-checkpoint
         - submit-for-review
@@ -389,7 +389,7 @@ pipeline:
       timeouts:
         execution: 2h
         poll-interval: 30s
-        max-wait: 5h
+        max-wait: 10m
       allowed-operations:
         - submit-verdict
         - await-resubmission

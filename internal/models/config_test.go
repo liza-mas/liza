@@ -113,3 +113,29 @@ func TestEffectiveHighChurnRejectionThreshold(t *testing.T) {
 		t.Fatalf("DefaultHighChurnRejectionThreshold = %d, want 4", models.DefaultHighChurnRejectionThreshold)
 	}
 }
+
+func TestEffectiveMaxInstances(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		roleMax int
+		want    int
+	}{
+		{name: "absent project default", data: "{}\n", want: models.DefaultMaxInstances},
+		{name: "non-positive project default", data: "max_instances: -1\n", want: models.DefaultMaxInstances},
+		{name: "project default", data: "max_instances: 5\n", want: 5},
+		{name: "role value wins", data: "max_instances: 5\n", roleMax: 2, want: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config models.Config
+			if err := yaml.Unmarshal([]byte(tt.data), &config); err != nil {
+				t.Fatalf("unmarshal config: %v", err)
+			}
+			if got := models.EffectiveMaxInstances(tt.roleMax, config.MaxInstances); got != tt.want {
+				t.Fatalf("EffectiveMaxInstances() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

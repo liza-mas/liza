@@ -547,15 +547,15 @@ func TestWaitConfig(t *testing.T) {
 		wantMaxWait time.Duration
 	}{
 		// Doer roles use doer defaults
-		{"coder", 30 * time.Second, 18000 * time.Second},
-		{"code-planner", 30 * time.Second, 18000 * time.Second},
-		{"epic-planner", 30 * time.Second, 18000 * time.Second},
-		{"us-writer", 30 * time.Second, 18000 * time.Second},
+		{"coder", 30 * time.Second, 600 * time.Second},
+		{"code-planner", 30 * time.Second, 600 * time.Second},
+		{"epic-planner", 30 * time.Second, 600 * time.Second},
+		{"us-writer", 30 * time.Second, 600 * time.Second},
 		// Reviewer roles use Reviewer defaults
-		{"code-reviewer", 30 * time.Second, 18000 * time.Second},
-		{"code-plan-reviewer", 30 * time.Second, 18000 * time.Second},
-		{"epic-plan-reviewer", 30 * time.Second, 18000 * time.Second},
-		{"us-reviewer", 30 * time.Second, 18000 * time.Second},
+		{"code-reviewer", 30 * time.Second, 600 * time.Second},
+		{"code-plan-reviewer", 30 * time.Second, 600 * time.Second},
+		{"epic-plan-reviewer", 30 * time.Second, 600 * time.Second},
+		{"us-reviewer", 30 * time.Second, 600 * time.Second},
 		// Orchestrator uses Orchestrator defaults
 		{"orchestrator", 60 * time.Second, 18000 * time.Second},
 	}
@@ -641,7 +641,7 @@ func TestWaitConfig(t *testing.T) {
 
 	// Three-level hierarchy: state.yaml > YAML > type default
 	t.Run("hierarchy/yaml_overrides_type_default", func(t *testing.T) {
-		// YAML sets coder poll=45s, max-wait=20m — differs from type defaults (30s, 5h)
+		// YAML sets coder poll=45s, max-wait=20m — differs from type defaults (30s, 10m)
 		yaml := minimalPipelineYAML("2h", "45s", "20m", "4h", "60s", "30m")
 		r := loadTestResolver(t, yaml)
 

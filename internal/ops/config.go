@@ -93,3 +93,88 @@ func SetPostWorktreeCmd(projectRoot string, input SetPostWorktreeCmdInput) (*Con
 	}
 	return result, nil
 }
+
+// Agent-pool sizing keys settable after init. They are operator-only: an
+// agent must not resize its own pool.
+const (
+	MaxInstancesConfigKey    = "config.max_instances"
+	DoerMaxWaitConfigKey     = "config.doer_max_wait"
+	ReviewerMaxWaitConfigKey = "config.reviewer_max_wait"
+)
+
+// MinPoolMaxWaitSeconds is the smallest accepted doer/reviewer idle wait.
+const MinPoolMaxWaitSeconds = 300
+
+// PoolConfigKeys lists the integer agent-pool keys in display order.
+var PoolConfigKeys = []string{MaxInstancesConfigKey, DoerMaxWaitConfigKey, ReviewerMaxWaitConfigKey}
+
+// SetPoolConfigInput describes an operator write of one agent-pool key.
+type SetPoolConfigInput struct {
+	Key     string
+	Value   int
+	Replace bool
+	Reason  string
+}
+
+func poolConfigField(config *models.Config, key string) (*int, int, bool) {
+	switch key {
+	case MaxInstancesConfigKey:
+		return &config.MaxInstances, 1, true
+	case DoerMaxWaitConfigKey:
+		return &config.DoerMaxWait, MinPoolMaxWaitSeconds, true
+	case ReviewerMaxWaitConfigKey:
+		return &config.ReviewerMaxWait, MinPoolMaxWaitSeconds, true
+	}
+	return nil, 0, false
+}
+
+// SetPoolConfig stores one agent-pool key under the same rule as other
+// runtime configuration: compare and write in one transaction, and replacing
+// a different set value requires --replace with --reason. Zero means unset.
+// Running supervisors keep the wait they read at start.
+func SetPoolConfig(projectRoot string, input SetPoolConfigInput) (*ConfigSetResult, error) {
+	var probe models.Config
+	if _, minimum, ok := poolConfigField(&probe, input.Key); !ok {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("unsupported agent-pool config key %q", input.Key)}
+	} else if input.Value < minimum {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("%s must be at least %d", input.Key, minimum)}
+	}
+	if input.Replace && strings.TrimSpace(input.Reason) == "" {
+		return nil, &PreconditionError{Reason: "--replace requires a non-empty --reason"}
+	}
+
+	bb := db.For(paths.New(projectRoot).StatePath())
+	result := &ConfigSetResult{Key: input.Key}
+	previous := 0
+	err := bb.Modify(func(state *models.State) error {
+		field, _, _ := poolConfigField(&state.Config, input.Key)
+		previous = *field
+		switch {
+		case previous == input.Value:
+			result.Outcome = "unchanged"
+		case previous != 0 && !input.Replace:
+			result.Outcome = "conflict"
+			return &PreconditionError{
+				Reason:  fmt.Sprintf("%s is already set to %d; use --replace with --reason to replace it", input.Key, previous),
+				Details: map[string]any{"key": input.Key, "conflict": "existing_value"},
+			}
+		default:
+			*field = input.Value
+			result.Outcome = "set"
+			if previous != 0 {
+				result.Outcome = "replaced"
+			}
+		}
+		return nil
+	})
+	if err != nil && result.Outcome != "conflict" {
+		result.Outcome = "failed"
+	}
+	mask := secretmask.New()
+	log.Printf("config_set key=%s outcome=%s actor=%q project=%q previous=%d value=%d reason=%q",
+		input.Key, result.Outcome, "operator", mask.MaskText(projectRoot), previous, input.Value, boundPostWorktreeCmd(mask.MaskText(input.Reason)))
+	if err != nil {
+		return nil, fmt.Errorf("set %s: %w", input.Key, err)
+	}
+	return result, nil
+}

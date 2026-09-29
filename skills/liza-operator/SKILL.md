@@ -141,9 +141,10 @@ process-identity guidance below.
   (backgrounding disrupts cwd → false `§BRAND_PROJECT_DIRNAME§/state.yaml.lock`).
 - **Do not spawn blindly.** Orchestrator registration enforces singularity/max-instances, but duplicate
   watcher processes can still race and create noise. Use state/registration evidence first.
-- **Missing claimable-role capacity is normally auto-repaired.** TUI/headless watch auto-runs the
-  repair-agent-pool behavior by default; use manual spawning only when auto-repair is disabled, failing,
-  or too slow for the run.
+- **Role pools normally follow claimable work.** TUI/headless watch auto-runs repair-agent-pool by
+  default: one agent per claimable task idle agents don't cover, up to the role's `max-instances`
+  (`config.max_instances`, default 3); idle doers/reviewers exit after `doer_max_wait`/`reviewer_max_wait`.
+  Spawn manually only when auto-repair is disabled, failing, or too slow; raise the cap rather than staff past it.
 
 # Sandboxes, PID namespaces, and zombie agents
 Read `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` process-status and zombie guidance first. PID visibility is namespace-
@@ -162,12 +163,12 @@ commands. Never dump process environments, use broad `pkill`, or kill an unverif
 
 # Do not join the agent pool
 The orchestrator creates and manages task flow across roles such as writers, reviewers, architects,
-code-planners, coders, and integration agents. TUI/headless watch normally auto-repairs missing
-claimable-role capacity for doer/reviewer work. Do **not** routinely `§BRAND_BINARY_NAME§ agent <role>` or
+code-planners, coders, and integration agents. TUI/headless watch normally sizes doer/reviewer pools to
+claimable work. Do **not** routinely `§BRAND_BINARY_NAME§ agent <role>` or
 `repair-agent-pool` — no-ops when healthy.
 For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility.
-Manually staff only as a genuine exception: claimable/reviewable work stranded with **no** live agent
-for that role and auto-repair is disabled, failing, or too slow for the run. *(If you must launch one headless, detach
+Manually staff only as a genuine exception: claimable/reviewable work no idle agent covers
+and auto-repair is disabled, failing, or too slow for the run. *(If you must launch one headless, detach
 it — `setsid nohup … & disown`; harness-backgrounded `§BRAND_BINARY_NAME§ agent` gets reaped, `context canceled`.)*
 
 # Giving agents an environment (test DBs, config)
@@ -362,8 +363,8 @@ scope) → draft the goal doc → **human reviews** → cold review + `/systemic
   untested.
 - **Fix root causes, not symptoms.** Patch the deepest layer you control; downstream patches compound
   into a system no one can reason about.
-- **Size the agent pool to claimable work** *(mostly auto now; verify)* — parallelize only dependency-
-  unblocked work; cap same-role agents (~4) for rate limits; don't staff dependency-blocked tasks.
+- **Size the agent pool to claimable work** *(auto-repair does it; verify)* — parallelize only dependency-
+  unblocked work; cap same-role agents with `config.max_instances` for rate limits; don't staff dependency-blocked tasks.
 - **Cross-platform** — target projects/operators may be Windows; avoid Linux-only deps, POSIX-only
   shell assumptions, and `/`-assumed paths unless the project explicitly requires them.
 - **A pre-existing red test holds "full-suite-green" tasks hostage** — verify the failure is red on

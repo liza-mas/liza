@@ -1083,14 +1083,15 @@ config:
   max_coder_iterations: 10      # Default for all tasks
   max_review_cycles: 5          # Default for all tasks
   high_churn_rejection_threshold: 4  # Durable rejections per RCA cycle; non-positive uses default 4
+  max_instances: 3              # Live agents per non-orchestrator role without its own max-instances; non-positive uses default 3
   heartbeat_interval: 60        # Seconds
   lease_duration: 1800          # Seconds (30 minutes)
   coder_poll_interval: 30       # Seconds between work availability checks
-  doer_max_wait: 18000          # Max seconds doer supervisors wait for claimable work
+  doer_max_wait: 600            # Max idle seconds before a doer supervisor exits the pool
   orchestrator_poll_interval: 60 # Seconds between orchestrator work checks
   orchestrator_max_wait: 18000  # Max seconds orchestrator waits for work
   reviewer_poll_interval: 30    # Seconds between reviewer work checks
-  reviewer_max_wait: 18000      # Max seconds reviewers wait for work
+  reviewer_max_wait: 600        # Max idle seconds before a reviewer supervisor exits the pool
   exit42_restart_threshold: 5   # Consecutive exit-42 restarts without progress before BLOCKED (default: 5)
   exit42_max_backoff_seconds: 60 # Max backoff delay between exit-42 restarts (default: 60)
   default_cli: claude           # Optional global default agent CLI

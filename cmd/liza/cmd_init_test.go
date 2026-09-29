@@ -114,6 +114,16 @@ func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 			wantErr: "--no-follow-up requires full workspace init",
 		},
 		{
+			name:    "agent flag with max-instances and no description errors",
+			args:    []string{"init", "--codex", "--max-instances", "5"},
+			wantErr: "workspace flags",
+		},
+		{
+			name:    "non-positive max-instances errors",
+			args:    []string{"init", "--max-instances", "0", "Goal"},
+			wantErr: "invalid --max-instances: 0",
+		},
+		{
 			name:    "invalid default-cli value errors",
 			args:    []string{"init", "--default-cli", "invalid", "Goal"},
 			wantErr: "invalid --default-cli",

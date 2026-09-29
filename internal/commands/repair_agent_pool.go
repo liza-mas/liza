@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"sort"
@@ -24,19 +25,42 @@ type RepairAgentPoolOptions struct {
 	CLI         string
 	DryRun      bool
 	Roles       []string
+	// PendingSpawns counts, per role, started agent processes that have not
+	// registered yet; they already cover demand and consume headroom.
+	PendingSpawns map[string]int
+	// PendingAgentIDs are explicit IDs those processes will register; new
+	// starts must not reuse them.
+	PendingAgentIDs map[string]bool
 }
 
 type MissingRoleWork struct {
 	Role      string   `json:"role"`
 	TaskIDs   []string `json:"task_ids"`
 	TaskCount int      `json:"task_count"`
-	CLI       string   `json:"cli,omitempty"`
+	// SpawnCount is how many agents to start: uncovered demand bounded by
+	// the role's remaining max-instances headroom.
+	SpawnCount int `json:"spawn_count"`
+	// AgentIDs, when set, are the explicit IDs to start reviewers under,
+	// one per start: IDs the claim filters accept for the demand, since the
+	// auto-assigned ID could be a prior approver's.
+	AgentIDs []string `json:"agent_ids,omitempty"`
+	CLI      string   `json:"cli,omitempty"`
 	// Reason explains demand that does not come from claimable tasks.
 	Reason string `json:"reason,omitempty"`
 }
 
+// UnservableRoleWork is reviewer demand that an agent started with CLI could
+// not claim, so starting one would only fill capacity.
+type UnservableRoleWork struct {
+	Role    string   `json:"role"`
+	CLI     string   `json:"cli"`
+	TaskIDs []string `json:"task_ids"`
+	Reason  string   `json:"reason"`
+}
+
 type SpawnedAgent struct {
 	Role    string `json:"role"`
+	AgentID string `json:"agent_id,omitempty"`
 	CLI     string `json:"cli"`
 	Command string `json:"command"`
 	PID     int    `json:"pid,omitempty"`
@@ -62,6 +86,7 @@ type RepairAgentPoolResult struct {
 	RoleCLIs   map[string]string         `json:"role_clis,omitempty"`
 	DryRun     bool                      `json:"dry_run"`
 	Missing    []MissingRoleWork         `json:"missing"`
+	Unservable []UnservableRoleWork      `json:"unservable,omitempty"`
 	Degraded   []DegradedAgentCapacity   `json:"degraded,omitempty"`
 	Spawned    []SpawnedAgent            `json:"spawned,omitempty"`
 	Failed     []FailedAgentSpawn        `json:"failed,omitempty"`
@@ -81,8 +106,14 @@ type ValidationAgentCapacity struct {
 	RecoverHint string `json:"recover_hint"`
 }
 
-var repairAgentPoolSpawn = func(projectRoot, role, cli string) (int, error) {
-	cmd, err := process.SpawnAgent(projectRoot, role, cli)
+// repairAgentPoolSpawn starts one agent; an empty agentID lets the agent
+// auto-assign its ID.
+var repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string) (int, error) {
+	var extraArgs []string
+	if agentID != "" {
+		extraArgs = []string{"--agent-id", agentID}
+	}
+	cmd, err := process.SpawnAgent(projectRoot, role, cli, extraArgs...)
 	if err != nil {
 		return 0, err
 	}
@@ -90,6 +121,15 @@ var repairAgentPoolSpawn = func(projectRoot, role, cli string) (int, error) {
 		return 0, nil
 	}
 	return cmd.Process.Pid, nil
+}
+
+// SetRepairAgentPoolSpawnForTest replaces the agent launcher so tests outside
+// this package can observe the IDs agents are started under. It returns the
+// restore function.
+func SetRepairAgentPoolSpawnForTest(spawn func(projectRoot, role, cli, agentID string) (int, error)) func() {
+	previous := repairAgentPoolSpawn
+	repairAgentPoolSpawn = spawn
+	return func() { repairAgentPoolSpawn = previous }
 }
 
 var EnvAutoRepairAgentPool = brand.EnvName("AUTO_REPAIR_AGENT_POOL")
@@ -142,13 +182,16 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 		return nil, fmt.Errorf("invalid CLI: %s (must be %s)", opts.CLI, strings.Join(availableCLIs, ", "))
 	}
 
-	missing := FindMissingRolesWithClaimableWork(state, pr)
-	missing = append(missing, findMissingOrchestrator(state, pr, time.Now().UTC())...)
+	now := time.Now().UTC()
+	missing, unservable := FindRoleCapacityDeficits(state, pr, opts.CLI, opts.PendingAgentIDs, now)
+	missing = append(missing, findMissingOrchestrator(state, pr, now)...)
+	missing = subtractPendingSpawns(missing, opts.PendingSpawns)
 	missing = filterMissingRoleWork(missing, opts.Roles)
 	result := &RepairAgentPoolResult{
 		CLI:        opts.CLI,
 		DryRun:     opts.DryRun,
 		Missing:    missing,
+		Unservable: filterUnservableRoleWork(unservable, opts.Roles),
 		Degraded:   findCurrentDegradedAgentCapacity(state),
 		Validation: findValidationAgentCapacity(state, pr, opts.Roles),
 	}
@@ -173,29 +216,35 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 				heterogeneousImplicitCLI = true
 			}
 		}
-		spawn := SpawnedAgent{
-			Role:    roleWork.Role,
-			CLI:     cliName,
-			Command: fmt.Sprintf("%s --cli %s", brand.Command("agent", roleWork.Role), cliName),
+		starts := make([]SpawnedAgent, 0, roleWork.SpawnCount)
+		for i := range roleWork.SpawnCount {
+			start := SpawnedAgent{Role: roleWork.Role, CLI: cliName, Command: fmt.Sprintf("%s --cli %s", brand.Command("agent", roleWork.Role), cliName)}
+			if i < len(roleWork.AgentIDs) {
+				start.AgentID = roleWork.AgentIDs[i]
+				start.Command += " --agent-id " + start.AgentID
+			}
+			starts = append(starts, start)
+			result.Commands = append(result.Commands, start.Command)
 		}
-		result.Commands = append(result.Commands, spawn.Command)
-
 		if opts.DryRun {
 			continue
 		}
 
-		pid, err := repairAgentPoolSpawn(opts.ProjectRoot, roleWork.Role, cliName)
-		if err != nil {
-			result.Failed = append(result.Failed, FailedAgentSpawn{
-				Role:    roleWork.Role,
-				CLI:     cliName,
-				Command: spawn.Command,
-				Error:   err.Error(),
-			})
-			continue
+		for _, start := range starts {
+			pid, err := repairAgentPoolSpawn(opts.ProjectRoot, roleWork.Role, cliName, start.AgentID)
+			if err != nil {
+				// The next start for this role would fail the same way.
+				result.Failed = append(result.Failed, FailedAgentSpawn{
+					Role:    roleWork.Role,
+					CLI:     cliName,
+					Command: start.Command,
+					Error:   err.Error(),
+				})
+				break
+			}
+			start.PID = pid
+			result.Spawned = append(result.Spawned, start)
 		}
-		spawn.PID = pid
-		result.Spawned = append(result.Spawned, spawn)
 	}
 
 	if opts.CLI == "" && !heterogeneousImplicitCLI {
@@ -251,8 +300,296 @@ func repairAgentPoolSpawnError(result *RepairAgentPoolResult) error {
 	for _, failure := range result.Failed {
 		failures = append(failures, fmt.Sprintf("%s: %s", failure.Role, failure.Error))
 	}
-	return fmt.Errorf("failed to start %d of %d missing role agent(s): %s",
-		len(result.Failed), len(result.Missing), strings.Join(failures, "; "))
+	planned := 0
+	for _, roleWork := range result.Missing {
+		planned += roleWork.SpawnCount
+	}
+	return fmt.Errorf("started %d of %d planned agent(s): %s",
+		len(result.Spawned), planned, strings.Join(failures, "; "))
+}
+
+func filterUnservableRoleWork(unservable []UnservableRoleWork, roles []string) []UnservableRoleWork {
+	if len(roles) == 0 {
+		return unservable
+	}
+	filtered := make([]UnservableRoleWork, 0, len(unservable))
+	for _, work := range unservable {
+		if slices.Contains(roles, work.Role) {
+			filtered = append(filtered, work)
+		}
+	}
+	return filtered
+}
+
+// subtractPendingSpawns removes demand already covered by started agent
+// processes that have not registered yet. Roles left with nothing to start
+// are dropped.
+func subtractPendingSpawns(missing []MissingRoleWork, pending map[string]int) []MissingRoleWork {
+	if len(pending) == 0 {
+		return missing
+	}
+	kept := missing[:0]
+	for _, roleWork := range missing {
+		roleWork.SpawnCount -= pending[roleWork.Role]
+		if roleWork.SpawnCount > 0 {
+			roleWork.AgentIDs = roleWork.AgentIDs[:min(len(roleWork.AgentIDs), roleWork.SpawnCount)]
+			kept = append(kept, roleWork)
+		}
+	}
+	return kept
+}
+
+type maxInstancesResolver interface {
+	MaxInstances(role string) (int, error)
+}
+
+// FindRoleCapacityDeficits reports, per role, claimable work that idle
+// claim-valid agents do not cover, and how many agents to start for it within
+// the role's max-instances headroom. Headroom counts occupied registrations
+// the way registration does, so a dead-but-leased agent keeps its slot
+// without covering demand. Reviewer tasks that an agent started with the
+// role's spawn CLI could not claim under any ID it could start with are
+// returned as unservable instead; the others carry the ID to start with.
+// reservedIDs are explicit IDs of started agents not registered yet.
+func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, explicitCLI string, reservedIDs map[string]bool, now time.Time) ([]MissingRoleWork, []UnservableRoleWork) {
+	if state == nil || pr == nil {
+		return nil, nil
+	}
+
+	window := agentLivenessWindow(state.Config)
+	occupied := make(map[string]int)
+	idle := make(map[string][]string)
+	usable := make(map[string][]string)
+	for _, agentID := range slices.Sorted(maps.Keys(state.Agents)) {
+		agentState := state.Agents[agentID]
+		if ops.AgentProcessOwnership(agentID, agentState, now).Occupied() {
+			occupied[agentState.Role]++
+		}
+		if !agentHasLiveRegistration(agentState, now, window) ||
+			agentHealthIsCurrentDegraded(state.AgentHealth[agentID], agentState) ||
+			!ops.HasValidClaimRegistration(state, agentID, agentState.Role) {
+			continue
+		}
+		usable[agentState.Role] = append(usable[agentState.Role], agentID)
+		// Holding no task is what frees an agent to claim; lifecycle status
+		// is not consulted.
+		if agentState.CurrentTask == nil || *agentState.CurrentTask == "" {
+			idle[agentState.Role] = append(idle[agentState.Role], agentID)
+		}
+	}
+
+	reviewerPolicy, _ := pr.(ops.ReviewerClaimPolicyResolver)
+	planners := make(map[string]*reviewerStartPlanner)
+	plannedIDs := make(map[string][]string)
+	matched := make(map[string]bool)
+	idleDoersUsed := make(map[string]int)
+	uncovered := make(map[string][]string)
+	unservable := make(map[string][]string)
+
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.Status.IsTerminal() || task.RolePair == "" {
+			continue
+		}
+		doerRole, err := pr.DoerRole(task.RolePair)
+		if err != nil {
+			continue
+		}
+		reviewerRole, err := pr.ReviewerRole(task.RolePair)
+		if err != nil {
+			continue
+		}
+
+		// An agent that failed this task's validation needs repair and
+		// revalidation, not an equivalent replacement process.
+		validationFailedFor := func(role string) bool {
+			return slices.ContainsFunc(usable[role], func(agentID string) bool {
+				return models.ValidationTaskKnownFailed(state, task, agentID, now)
+			})
+		}
+
+		if models.IsRoleTaskReady(state, task, doerRole, pr, now) && !validationFailedFor(doerRole) {
+			if idleDoersUsed[doerRole] < len(idle[doerRole]) {
+				idleDoersUsed[doerRole]++
+			} else {
+				uncovered[doerRole] = append(uncovered[doerRole], task.ID)
+			}
+		}
+
+		if !models.IsRoleTaskReady(state, task, reviewerRole, pr, now) || validationFailedFor(reviewerRole) {
+			continue
+		}
+		if reviewerPolicy == nil {
+			uncovered[reviewerRole] = append(uncovered[reviewerRole], task.ID)
+			continue
+		}
+		if matchIdleReviewer(state, task, reviewerRole, idle[reviewerRole], matched, reviewerPolicy, now) {
+			continue
+		}
+		planner, ok := planners[reviewerRole]
+		if !ok {
+			planner = newReviewerStartPlanner(state, pr, explicitCLI, reviewerRole, reservedIDs, now)
+			planners[reviewerRole] = planner
+		}
+		if planner == nil {
+			// The spawn path reports the CLI error; count the demand as usual.
+			uncovered[reviewerRole] = append(uncovered[reviewerRole], task.ID)
+			continue
+		}
+		agentID, ok := planner.assign(task, reviewerPolicy)
+		if !ok {
+			unservable[reviewerRole] = append(unservable[reviewerRole], task.ID)
+			continue
+		}
+		uncovered[reviewerRole] = append(uncovered[reviewerRole], task.ID)
+		plannedIDs[reviewerRole] = append(plannedIDs[reviewerRole], agentID)
+	}
+
+	maxResolver, _ := pr.(maxInstancesResolver)
+	var missing []MissingRoleWork
+	for _, role := range slices.Sorted(maps.Keys(uncovered)) {
+		roleMax := 0
+		if maxResolver != nil {
+			roleMax, _ = maxResolver.MaxInstances(role)
+		}
+		headroom := models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances) - occupied[role]
+		taskIDs := uncovered[role]
+		spawnCount := min(len(taskIDs), headroom)
+		if spawnCount <= 0 {
+			continue
+		}
+		sort.Strings(taskIDs)
+		var agentIDs []string
+		if ids := plannedIDs[role]; len(ids) > 0 {
+			agentIDs = ids[:spawnCount]
+		}
+		missing = append(missing, MissingRoleWork{
+			Role:       role,
+			TaskIDs:    taskIDs,
+			TaskCount:  len(taskIDs),
+			SpawnCount: spawnCount,
+			AgentIDs:   agentIDs,
+		})
+	}
+
+	var notServable []UnservableRoleWork
+	for _, role := range slices.Sorted(maps.Keys(unservable)) {
+		taskIDs := unservable[role]
+		sort.Strings(taskIDs)
+		notServable = append(notServable, UnservableRoleWork{
+			Role:    role,
+			CLI:     planners[role].cli,
+			TaskIDs: taskIDs,
+			Reason:  "no reviewer this CLI could start would be allowed to claim these tasks (provider diversity or claim cooldown); they wait for an eligible reviewer",
+		})
+	}
+	return missing, notServable
+}
+
+// matchIdleReviewer assigns task to the first unmatched idle reviewer that
+// may claim it. Greedy matching can overestimate demand; the overshoot is
+// bounded by max-instances and idle agents leave after their max-wait.
+func matchIdleReviewer(state *models.State, task *models.Task, reviewerRole string, idle []string, matched map[string]bool, policy ops.ReviewerClaimPolicyResolver, now time.Time) bool {
+	for _, agentID := range idle {
+		if matched[agentID] {
+			continue
+		}
+		if ops.ReviewerClaimEligible(ops.ReviewerClaimEligibilityInput{
+			State: state, Task: task, AgentID: agentID,
+			ReviewerRole: reviewerRole, Now: now, Resolver: policy,
+		}) {
+			matched[agentID] = true
+			return true
+		}
+	}
+	return false
+}
+
+// reviewerStartPlanner picks the IDs reviewers are started under. The
+// launch path would auto-assign the first free <role>-N, which can be a prior
+// approver's ID once that agent unregistered, so each start gets an explicit
+// ID that the production claim filters accept for the task it is planned for.
+// Candidates are evaluated in an isolated state projection holding one
+// hypothetical reviewer registered the way a new one would be: the spawn CLI
+// as provider and this process's PID for the live-process admission check.
+type reviewerStartPlanner struct {
+	projection *models.State
+	role       string
+	cli        string
+	row        models.Agent
+	taken      map[string]bool
+	now        time.Time
+}
+
+func newReviewerStartPlanner(state *models.State, pr models.PipelineResolver, explicitCLI, reviewerRole string, reservedIDs map[string]bool, now time.Time) *reviewerStartPlanner {
+	cliName, err := resolveRepairCLI(explicitCLI, reviewerRole, state, pr)
+	if err != nil {
+		return nil
+	}
+	// Same occupancy as the launch-side allocator: IDs with an unexpired
+	// lease, plus IDs of started agents still registering.
+	taken := make(map[string]bool, len(state.Agents)+len(reservedIDs))
+	for id, agentState := range state.Agents {
+		if agentState.LeaseExpires != nil && agentState.LeaseExpires.After(now) {
+			taken[id] = true
+		}
+	}
+	for id := range reservedIDs {
+		taken[id] = true
+	}
+	projection := *state
+	projection.Agents = maps.Clone(state.Agents)
+	if projection.Agents == nil {
+		projection.Agents = make(map[string]models.Agent)
+	}
+	leaseExpires := now.Add(time.Duration(models.DefaultLeaseDurationSeconds) * time.Second)
+	return &reviewerStartPlanner{
+		projection: &projection,
+		role:       reviewerRole,
+		cli:        cliName,
+		row: models.Agent{
+			Role:         reviewerRole,
+			Status:       models.AgentStatusIdle,
+			Provider:     cliName,
+			PID:          os.Getpid(),
+			Heartbeat:    now,
+			RegisteredAt: now,
+			LeaseExpires: &leaseExpires,
+		},
+		taken: taken,
+		now:   now,
+	}
+}
+
+// assign returns the lowest free ID a new reviewer could claim task under
+// and reserves it. Only IDs named by the task's approvals, history or
+// validation records can be refused for the ID itself, so the search stops
+// once every such ID could have been skipped; beyond that a refusal is about
+// the provider.
+func (p *reviewerStartPlanner) assign(task *models.Task, policy ops.ReviewerClaimPolicyResolver) (string, bool) {
+	limit := len(p.taken) + len(task.Approvals) + len(task.History) + len(p.projection.ValidationReadiness) + 1
+	for n := 1; n <= limit; n++ {
+		agentID := fmt.Sprintf("%s-%d", p.role, n)
+		if p.taken[agentID] {
+			continue
+		}
+		previous, existed := p.projection.Agents[agentID]
+		p.projection.Agents[agentID] = p.row
+		eligible := ops.ReviewerClaimEligible(ops.ReviewerClaimEligibilityInput{
+			State: p.projection, Task: task, AgentID: agentID,
+			ReviewerRole: p.role, Now: p.now, Resolver: policy,
+		})
+		if existed {
+			p.projection.Agents[agentID] = previous
+		} else {
+			delete(p.projection.Agents, agentID)
+		}
+		if eligible {
+			p.taken[agentID] = true
+			return agentID, true
+		}
+	}
+	return "", false
 }
 
 func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineResolver) []MissingRoleWork {
@@ -359,9 +696,10 @@ func findMissingOrchestrator(state *models.State, pr models.PipelineResolver, no
 // ownership is by type, so one spawn restores the capacity.
 func orchestratorRoleWork(presence orchestratorPresence) MissingRoleWork {
 	return MissingRoleWork{
-		Role:    presence.Roles[0],
-		TaskIDs: []string{},
-		Reason:  "no live orchestrator while goal is IN_PROGRESS",
+		Role:       presence.Roles[0],
+		TaskIDs:    []string{},
+		SpawnCount: 1,
+		Reason:     "no live orchestrator while goal is IN_PROGRESS",
 	}
 }
 
@@ -452,8 +790,8 @@ func findCurrentDegradedAgentCapacity(state *models.State) []DegradedAgentCapaci
 }
 
 func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
-	if len(result.Missing) == 0 && len(result.Degraded) == 0 && len(result.Validation) == 0 {
-		fmt.Println("No missing roles with claimable work.")
+	if len(result.Missing) == 0 && len(result.Degraded) == 0 && len(result.Validation) == 0 && len(result.Unservable) == 0 {
+		fmt.Println("No role needs more agents for claimable work.")
 		return
 	}
 	if len(result.Validation) > 0 {
@@ -476,6 +814,16 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 		}
 	}
 
+	if len(result.Unservable) > 0 {
+		fmt.Println("Reviewer work a new agent could not claim (not started):")
+		for _, work := range result.Unservable {
+			fmt.Printf("  %s with --cli %s: %d task(s) (%s)\n    hint: %s\n", work.Role, work.CLI, len(work.TaskIDs), strings.Join(work.TaskIDs, ", "), work.Reason)
+		}
+		if len(result.Missing) > 0 {
+			fmt.Println()
+		}
+	}
+
 	if len(result.Missing) == 0 {
 		return
 	}
@@ -487,10 +835,10 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 			continue
 		}
 		if !printedHeading {
-			fmt.Println("Missing roles with claimable work:")
+			fmt.Println("Roles with claimable work not covered by idle agents:")
 			printedHeading = true
 		}
-		fmt.Printf("  %s: %d task(s) (%s)\n", roleWork.Role, roleWork.TaskCount, strings.Join(roleWork.TaskIDs, ", "))
+		fmt.Printf("  %s: %d task(s) (%s); starting %d agent(s)\n", roleWork.Role, roleWork.TaskCount, strings.Join(roleWork.TaskIDs, ", "), roleWork.SpawnCount)
 	}
 
 	if result.DryRun {

@@ -81,11 +81,11 @@ const (
 	defaultMaxGlobalIntegrationGenerations = 3
 	DefaultLeaseDurationSeconds            = 1800 // 30 minutes
 	DefaultCoderPollInterval               = 30
-	DefaultDoerMaxWait                     = 18000 // 5 hours
+	DefaultDoerMaxWait                     = 600 // 10 minutes; idle doers leave the pool
 	DefaultOrchestratorPollInterval        = 60
 	DefaultOrchestratorMaxWait             = 18000 // 5 hours
 	DefaultReviewerPollInterval            = 30
-	DefaultReviewerMaxWait                 = 18000 // 5 hours
+	DefaultReviewerMaxWait                 = 600 // 10 minutes; idle reviewers leave the pool
 	DefaultExit42MaxBackoffSec             = 60
 	DefaultExit42RestartLimit              = 5
 	DefaultCrashRestartThreshold           = 5
@@ -95,6 +95,9 @@ const (
 	// which a reviewed task is gated on a classified RCA. It sits below
 	// DefaultMaxReviewCycles so the gate fires before the review budget.
 	DefaultHighChurnRejectionThreshold = 4
+	// DefaultMaxInstances caps live agents per non-orchestrator role when
+	// neither the role's max-instances nor config.max_instances is set.
+	DefaultMaxInstances = 3
 )
 
 var EnvEnableCopyWorktreeEnvFiles = brand.EnvName("ENABLE_COPY_ENV_FILES")
@@ -134,6 +137,19 @@ func EffectiveHighChurnRejectionThreshold(config Config) int {
 	return config.HighChurnRejectionThreshold
 }
 
+// EffectiveMaxInstances returns the live-agent cap for a role: the role's own
+// positive max-instances, else the positive project default, else
+// DefaultMaxInstances. Registration and pool auto-repair share it.
+func EffectiveMaxInstances(roleMax, configured int) int {
+	if roleMax > 0 {
+		return roleMax
+	}
+	if configured > 0 {
+		return configured
+	}
+	return DefaultMaxInstances
+}
+
 // Config holds system configuration parameters
 type Config struct {
 	MaxCoderIterations              int `yaml:"max_coder_iterations"`
@@ -142,10 +158,13 @@ type Config struct {
 	// HighChurnRejectionThreshold is the per-project durable rejection count
 	// that gates a task on a classified RCA. Non-positive means the default.
 	HighChurnRejectionThreshold int `yaml:"high_churn_rejection_threshold,omitempty"`
-	HeartbeatInterval           int `yaml:"heartbeat_interval"`
-	LeaseDuration               int `yaml:"lease_duration"`
-	CoderPollInterval           int `yaml:"coder_poll_interval"`
-	DoerMaxWait                 int `yaml:"doer_max_wait"`
+	// MaxInstances is the project default live-agent cap for roles without
+	// their own max-instances. Non-positive means DefaultMaxInstances.
+	MaxInstances      int `yaml:"max_instances,omitempty"`
+	HeartbeatInterval int `yaml:"heartbeat_interval"`
+	LeaseDuration     int `yaml:"lease_duration"`
+	CoderPollInterval int `yaml:"coder_poll_interval"`
+	DoerMaxWait       int `yaml:"doer_max_wait"`
 	// DeprecatedCoderMaxWait preserves read compatibility for state files that
 	// still use coder_max_wait. New state files should write doer_max_wait.
 	DeprecatedCoderMaxWait   int `yaml:"coder_max_wait,omitempty" inspect:"-"`

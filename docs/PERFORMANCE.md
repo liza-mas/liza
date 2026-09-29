@@ -99,7 +99,8 @@ All agents use a hybrid approach: event-driven primary, 30s polling fallback.
 |-----------|---------|-----------|
 | `heartbeat_interval` | 60s | Lower = faster crash detection, more writes |
 | `lease_duration` | 1800s (30min) | Lower = faster crash recovery, more renewals |
-| `doer_max_wait` | 18000s (5hr) | Lower = agents exit faster when idle |
+| `doer_max_wait` / `reviewer_max_wait` | 600s (10min) | Lower = idle agents leave the pool sooner (fewer heartbeats and state re-reads); higher = fewer restarts when work arrives in bursts |
+| `max_instances` | 3 per role | Higher = more parallel claims per role, more concurrent provider sessions |
 | Lock timeout | 10s (code) | Lower = fail fast, may false-positive on slow systems |
 
 ### Tuning Profiles

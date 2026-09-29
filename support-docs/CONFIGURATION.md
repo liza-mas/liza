@@ -427,14 +427,15 @@ are loaded at runtime from the provider catalog.
 | `max_review_cycles` | 5 | 1 | 20 | count | Max review rejection cycles |
 | `high_churn_rejection_threshold` | 4 | 1 | 100 | count | Durable rejections per RCA gate cycle, across all reviewed task types |
 | `max_global_integration_generations` | 3 | 1 | — | count | Max aggregate integration scans before exhaustion |
+| `max_instances` | 3 | 1 | — | count | Live agents per non-orchestrator role without its own pipeline `max-instances`; enforced at registration and used as the auto-repair pool cap |
 | `heartbeat_interval` | 60 | 1 | 300 | seconds | Heartbeat frequency |
 | `lease_duration` | 1800 | 300 | 7200 | seconds | Task lease duration |
 | `coder_poll_interval` | 30 | 5 | 120 | seconds | Check interval (legacy, now event-driven) |
-| `doer_max_wait` | 18000 | 300 | — | seconds | Max idle before doer-role supervisors exit |
+| `doer_max_wait` | 600 | 300 | — | seconds | Max idle before doer-role supervisors exit and leave the pool |
 | `orchestrator_poll_interval` | 60 | — | — | seconds | Orchestrator polling interval |
 | `orchestrator_max_wait` | 18000 | — | — | seconds | Max orchestrator idle before exit |
 | `reviewer_poll_interval` | 30 | — | — | seconds | Reviewer polling interval |
-| `reviewer_max_wait` | 18000 | — | — | seconds | Max reviewer idle before exit |
+| `reviewer_max_wait` | 600 | 300 | — | seconds | Max idle before reviewer supervisors exit and leave the pool |
 | `agent_progress_timeout` | 1800 | — | — | seconds | Max active execution time without state, worktree, or provider-output progress before blocking the task |
 | `default_cli` | (none) | — | — | CLI name | Global default coding agent CLI |
 | `default_doer_cli` | (none) | — | — | CLI name | Default coding agent CLI for doers and orchestrators |
@@ -1230,7 +1231,7 @@ Preview the resolved command without launching a provider:
 §BRAND_BINARY_NAME§ agent coder --explain-launch
 ```
 
-Headless watch automatically runs the repair-agent-pool behavior when a task is immediately claimable but has no live usable agent capacity for the required role. For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. It also starts an orchestrator when the goal is IN_PROGRESS, the system is RUNNING, and no orchestrator has held a fresh lease for 60 seconds. This is enabled by default. Set `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0`, `false`, or `no` to disable it. Unset or empty values enable it; other invalid non-empty values also leave it enabled and emit a warning.
+Headless watch automatically runs the repair-agent-pool behavior, which sizes each role's agent pool to its claimable work. For every role it counts the immediately claimable tasks that idle agents do not cover and starts that many agents, up to the role's `max-instances` minus the agents already occupying the role. An idle agent covers a task only if it holds no task and could pass claim admission (live process, provider). For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. Reviewers are started under an explicit `--agent-id` that the claim filters accept for the task, so a prior approver's ID is not reused after that agent exited; reviewer tasks that no reviewer on the selected CLI could claim are reported as `AUTO REPAIR UNSERVABLE` instead of staffed. Started agents that have not registered yet count as capacity until they register or exit. It also starts an orchestrator when the goal is IN_PROGRESS, the system is RUNNING, and no orchestrator has held a fresh lease for 60 seconds. This is enabled by default. Set `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0`, `false`, or `no` to disable it. Unset or empty values enable it; other invalid non-empty values also leave it enabled and emit a warning.
 
 | CLI | Notes |
 |-----|-------|
@@ -1249,6 +1250,15 @@ Headless watch automatically runs the repair-agent-pool behavior when a task is 
 | `devin` | Devin CLI from the remote provider catalog. Use `§BRAND_BINARY_NAME§ setup --provider devin` for global skills and `§BRAND_BINARY_NAME§ init --provider devin` to link §BRAND_NAME_TITLE§'s contract at the catalog-defined repo path. |
 | `devin-acp` | Devin through ACPX from the remote provider catalog. Requires both `acpx` and `devin` on `PATH`; ACPX is invoked with `--agent "devin acp"` because Devin's ACP server is the `devin acp` command, not a standalone executable. Reuses Devin's catalog-defined contract setup. |
 | `pi` | Pi (`pi-coding-agent`) CLI, built into the embedded provider catalog (not yet in the remote catalog). Use `§BRAND_BINARY_NAME§ setup --pi` for global skills and `§BRAND_BINARY_NAME§ init --pi` for global contract activation (`~/.pi/agent/AGENTS.md`); both install the pi init-gate extension at `~/§BRAND_GLOBAL_DIRNAME§/extensions/init-gate.ts`, which spawns load with `pi -p -e` and which blocks mutating tools until the init docs are read. Spawns re-deploy a missing gate. Provider keys go in a repo-root `pi.env`; pin a model with an `agent_tools.pi.run_args` override. |
+
+### Agent pool sizing
+
+The pool shrinks on its own: an idle doer or reviewer supervisor exits after `doer_max_wait` / `reviewer_max_wait` (default 10 minutes) with no claimable work, and no minimum pool is kept. Scale-up depends on a running TUI or headless watch with auto-repair enabled; without one, a role whose agents have exited stays empty until you start one.
+
+- Cap: a role's own `max-instances` in the pipeline wins; otherwise `max_instances` (set with `§BRAND_BINARY_NAME§ init --max-instances <n>`, default 3). The orchestrator is always capped at 1.
+- After init: `§BRAND_BINARY_NAME§ config set config.max_instances <n>`, `config.doer_max_wait <seconds>` or `config.reviewer_max_wait <seconds>`. These keys are operator-only, and replacing a set value needs `--replace --reason`.
+- A changed wait applies to supervisors started afterwards; running ones keep the wait they read at start.
+- Workspaces initialized before pool sizing keep their stored `doer_max_wait` / `reviewer_max_wait` (often 18000) and get the default cap of 3 per role; lower the waits with `config set` to let idle agents leave.
 
 ### Validation execution prerequisites
 

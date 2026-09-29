@@ -430,13 +430,17 @@ By default, refuses to recover agents whose PID is still alive.`,
 
 var repairAgentPoolCmd = &cobra.Command{
 	Use:   "repair-agent-pool",
-	Short: "Repair missing agent roles for claimable work",
-	Long: fmt.Sprintf(`Repair the runtime agent pool for claimable work.
+	Short: "Start agents for claimable work not covered by idle agents",
+	Long: fmt.Sprintf(`Size the runtime agent pool to claimable work.
 
-By default, detects roles with immediately claimable tasks but no live usable
-agent capacity, then spawns one agent process per missing role. For reviewer work,
-capacity requires a live usable agent that can pass the existing claim filters for
-the task, including prior-approval and configured provider-diversity eligibility.
+By default, counts per role the immediately claimable tasks that idle live usable
+agents do not cover, then starts that many agent processes, bounded by the role's
+max-instances (its own pipeline value, else config.max_instances, default 3) minus
+the agents already occupying the role. For reviewer work, an idle agent covers a
+task only if it passes the existing claim filters for that task, including
+prior-approval and configured provider-diversity eligibility; tasks that a new
+reviewer started with the selected CLI could not claim are reported, not staffed.
+Idle agents leave the pool on their own after doer_max_wait/reviewer_max_wait.
 While the goal is IN_PROGRESS and the system is RUNNING, a missing orchestrator
 (no orchestrator-type agent holding a fresh lease) is repaired the same way.
 The --missing flag is kept as an explicit spelling of the default behavior.
