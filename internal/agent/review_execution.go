@@ -113,6 +113,11 @@ func (g *reviewExecution) current(state *models.State, now time.Time) bool {
 		if event.Time.Before(g.startedAt) || event.Agent == nil {
 			continue
 		}
+		if event.Event == models.TaskEventReviewClaimReleased {
+			// Recovery released this claim: no earlier verdict excuses the turn.
+			ownVerdict = false
+			continue
+		}
 		if event.Event == models.TaskEventClaimed {
 			roleType, _ := g.resolver.RoleType(state.Agents[*event.Agent].Role)
 			if *event.Agent == g.authority.ID || roleType == "reviewer" {

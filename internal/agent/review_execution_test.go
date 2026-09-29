@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -176,10 +177,9 @@ func TestReviewExecutionReacquisitionRetiresOwnVerdict(t *testing.T) {
 	}
 }
 
-// A real verdict releases the reviewer, clearing its agent lease until the next
-// heartbeat. Neither that window nor the await-resubmission that follows is an
-// ownership loss.
-func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
+// rejectableReviewFixture lets the real SubmitVerdict accept the review.
+func rejectableReviewFixture(t *testing.T) (SupervisorConfig, *db.Blackboard, models.Config, string) {
+	t.Helper()
 	config, bb, runtimeConfig := reviewExecutionFixture(t)
 	reviewCommit := mustGitInDir(t, config.ProjectRoot, "rev-parse", "HEAD")
 	if err := bb.Modify(func(s *models.State) error {
@@ -188,6 +188,14 @@ func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	return config, bb, runtimeConfig, reviewCommit
+}
+
+// A real verdict releases the reviewer, clearing its agent lease until the next
+// heartbeat. Neither that window nor the await-resubmission that follows is an
+// ownership loss.
+func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
+	config, bb, runtimeConfig, reviewCommit := rejectableReviewFixture(t)
 	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
 		if _, err := ops.SubmitVerdictWithAuthority(config.ProjectRoot, "review-task", "REJECTED", "needs work", config.Authority, "", reviewCommit); err != nil {
 			return err
@@ -210,6 +218,57 @@ func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
 	}}
 	if _, _, err := executeAgent(context.Background(), config, "review", nil, "review-task", runtimeConfig); err != nil {
 		t.Fatalf("executeAgent: %v", err)
+	}
+}
+
+// A forced release while the reviewer awaits resubmission retires its verdict:
+// the obsolete turn must stop instead of taking the review back.
+func TestReviewExecutionForcedReleaseRetiresOwnVerdict(t *testing.T) {
+	config, bb, runtimeConfig, reviewCommit := rejectableReviewFixture(t)
+	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
+		if _, err := ops.SubmitVerdictWithAuthority(config.ProjectRoot, "review-task", "REJECTED", "needs work", config.Authority, "", reviewCommit); err != nil {
+			return err
+		}
+		awaitDone := make(chan struct{})
+		go func() {
+			defer close(awaitDone)
+			_, _ = ops.AwaitResubmissionWithAuthority(ctx, config.ProjectRoot, "review-task", config.Authority, 10*time.Second)
+		}()
+		defer func() { <-awaitDone }()
+		watcher, err := bb.WatchForChanges()
+		if err != nil {
+			return err
+		}
+		defer watcher.Close()
+		deadline := time.After(5 * time.Second)
+		for {
+			s, err := bb.Read()
+			if err != nil {
+				return err
+			}
+			if owner := s.Tasks[0].ReviewingBy; owner != nil && *owner == config.AgentID {
+				break
+			}
+			select {
+			case <-watcher.Events():
+			case err := <-watcher.Errors():
+				return err
+			case <-deadline:
+				return errors.New("await-resubmission never took review ownership")
+			}
+		}
+		if _, err := ops.ReleaseClaim(config.ProjectRoot, "review-task", roles.ClaimReviewer, true, "operator release", "operator"); err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(3200 * time.Millisecond):
+			t.Error("turn kept running after its review claim was force-released")
+		}
+		return nil
+	}}
+	if _, _, err := executeAgent(context.Background(), config, "review", nil, "review-task", runtimeConfig); !errors.Is(err, errReviewOwnershipLost) {
+		t.Fatalf("executeAgent = %v, want ownership loss", err)
 	}
 }
 
