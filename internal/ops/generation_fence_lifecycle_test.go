@@ -262,13 +262,23 @@ func TestAwaitMutationGenerationFence(t *testing.T) {
 			agentID: reviewerID,
 			prepare: func(state *models.State) {
 				agent := state.Agents[reviewerID]
+				agent.Status = models.AgentStatusWaiting
 				agent.CurrentTask = stringPtr(taskID)
 				state.Agents[reviewerID] = agent
 				state.Tasks[0].ReviewingBy = stringPtr(reviewerID)
 				state.Tasks[0].ReviewLeaseExpires = timePtr(time.Now().UTC().Add(time.Hour))
 			},
 			mutate: func(bb *db.Blackboard, authority models.AgentAuthority) error {
-				return releaseReviewOwnership(bb, authority.ID, taskID, &authority)
+				state, err := bb.Read()
+				if err != nil {
+					return err
+				}
+				reservation := &reviewReservation{historyLen: len(state.FindTask(taskID).History)}
+				lost, err := releaseReviewOwnership(bb, authority.ID, taskID, &authority, reservation, false)
+				if lost != nil {
+					return errors.New("held reservation reported lost: " + lost.Reason)
+				}
+				return err
 			},
 		},
 	}

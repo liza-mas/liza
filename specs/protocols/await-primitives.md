@@ -101,6 +101,16 @@ correct — the agent is leaving.
   `CurrentTask` is set.
 - **Reviewer:** additionally sets `task.ReviewingBy` and `task.ReviewLeaseExpires`,
   which is what stops a second reviewer claiming a task someone is actively awaiting.
+  This acquisition is the wait's *reservation*, bounded by the task-history length at
+  that moment. It holds while those fields and the agent's WAITING `current_task`
+  still match and no later claim superseded it: another reviewer holding the task,
+  or a `review_claim_released`, or a `claimed` or `claim_released` by this agent,
+  recorded since. A wait outliving its cancelled provider turn therefore cannot
+  touch a later claim by the same registration, even one whose fields match
+  exactly. Losing the reservation ends the wait with a final `ABORTED` ("review
+  ownership lost") and no mutation; callers must not retry. Only a terminal outcome
+  tolerates a released agent (`mark-blocked` releases it itself): it is lost only to
+  a later claim. The early-resubmission path acquires no reservation before reclaim.
 
 A doer entering `await-verdict` first passes a budget gate: if iteration or
 review-cycle limits are already at capacity, it returns `ErrBudgetExhausted`
@@ -161,7 +171,7 @@ A session never resumes, so exit is always terminal for the agent's hold on a ta
 Both primitives release everything they own on the way out:
 
 - **Reviewer:** `releaseReviewOwnership` clears `ReviewingBy` and `ReviewLeaseExpires`
-  on every interval expiry, final or not.
+  on every interval expiry, final or not, while the wait's reservation holds.
 - **Doer:** ownership (`agent.CurrentTask`) is cleared per expiry, and on final budget
   exhaustion the *assignment* — `assigned_to` and `lease_expires` — is released too, via
   `ReleaseDepartedDoerAssignment`. Status, worktree, commits and the submitted attempt

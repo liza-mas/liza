@@ -180,14 +180,15 @@ func TestReviewerValidationPreflightBeforeAssignmentAndReclaim(t *testing.T) {
 					_, err := AwaitResubmissionWithAuthority(context.Background(), f.root, "task-1", authority, time.Minute)
 					return err
 				}
-				if err := acquireReviewOwnership(f.bb, authority.ID, "task-1", &authority, time.Minute); err != nil {
+				ownership, err := acquireReviewOwnershipSnapshot(f.bb, authority.ID, "task-1", &authority, time.Minute)
+				if err != nil {
 					t.Fatal(err)
 				}
 				resolver, _, err := loadResolver(f.root)
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, err = reclaimForReview(f.root, f.bb, "task-1", authority.ID, &authority, resolver, "coding-pair")
+				_, err = reclaimForReview(f.root, f.bb, "task-1", authority.ID, &authority, resolver, "coding-pair", ownership.reservation)
 				return err
 			}
 			requireAssignmentPreflightError(t, call(false))

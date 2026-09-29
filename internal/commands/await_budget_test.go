@@ -153,6 +153,22 @@ func TestAwaitResubmissionWithBudget_OmitsBudgetFromNonTimeoutOutcome(t *testing
 	}
 }
 
+// Ownership loss must stay final with budget remaining: a POLL would invite
+// the caller to reacquire a claim that now belongs to another turn.
+func TestAwaitResubmissionWithBudget_OwnershipLossIsNotRetryable(t *testing.T) {
+	calls := 0
+	result, err := awaitResubmissionWithBudget(250*time.Second, 100*time.Second, func(interval time.Duration) (*ops.AwaitResubmissionResult, error) {
+		calls++
+		return &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionAborted, Reason: "review ownership lost"}, nil
+	})
+	if err != nil {
+		t.Fatalf("awaitResubmissionWithBudget error: %v", err)
+	}
+	if calls != 1 || result.Verdict != ops.ResubmissionAborted || result.TimeoutSeconds != 0 {
+		t.Errorf("calls=%d verdict=%q timeout_seconds=%d, want one final ABORTED", calls, result.Verdict, result.TimeoutSeconds)
+	}
+}
+
 func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 	verdictFixture := setupBoundedAwaitFixture(
 		t,

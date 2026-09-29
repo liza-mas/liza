@@ -151,7 +151,7 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 	// wait loop and validate evidence before acquiring any ownership.
 	submitted, _ := resolver.SubmittedStatus(task.RolePair)
 	if task.Status == submitted {
-		return reclaimForReview(projectRoot, bb, taskID, agentID, authority, resolver, task.RolePair)
+		return reclaimForReview(projectRoot, bb, taskID, agentID, authority, resolver, task.RolePair, nil)
 	}
 
 	// Acquire ownership only when actually waiting for the doer's submission.
@@ -159,6 +159,7 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 	if err != nil {
 		return nil, &OperationalError{Message: "failed to acquire review ownership", Err: err}
 	}
+	reservation := ownership.reservation
 	defer func() {
 		var evidenceErr *AcceptanceEvidenceError
 		if !stderrors.As(resultErr, &evidenceErr) {
@@ -203,7 +204,7 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 
 	watcher, watchErr := newAwaitResubmissionWatcher(bb)
 	if watchErr != nil {
-		return awaitResubmissionPolling(ctx, projectRoot, bb, taskID, agentID, authority, deadline, task.Status, resolver, rolePair, opts.FallbackPollInterval)
+		return awaitResubmissionPolling(ctx, projectRoot, bb, taskID, agentID, authority, reservation, deadline, task.Status, resolver, rolePair, opts.FallbackPollInterval)
 	}
 	defer watcher.Close()
 
@@ -216,7 +217,7 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 	for {
 		select {
 		case <-ctx.Done():
-			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, ctx.Err())
+			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil, ctx.Err())
 
 		case <-abortTicker.C:
 			abortState, abortErr := bb.Read()
@@ -224,18 +225,21 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 				continue
 			}
 			if abortState.Config.Mode == models.SystemModeStopped {
-				return finishAwaitResubmission(bb, agentID, taskID, authority,
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation,
 					&AwaitResubmissionResult{Verdict: ResubmissionAborted, TaskStatus: task.Status}, nil)
 			}
 			currentTask := abortState.FindTask(taskID)
 			if currentTask == nil {
-				return finishAwaitResubmission(bb, agentID, taskID, authority, &AwaitResubmissionResult{
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, &AwaitResubmissionResult{
 					Verdict: ResubmissionTerminal,
 					Reason:  "task disappeared from state",
 				}, nil)
 			}
 			if rc := checkResubmissionStatus(currentTask, resolver, rolePair); rc != nil {
-				return handleResubmissionResult(projectRoot, bb, currentTask, agentID, authority, resolver, rolePair)
+				return handleResubmissionResult(projectRoot, bb, currentTask, agentID, authority, resolver, rolePair, reservation)
+			}
+			if reservationLost(bb, reservation, abortState, currentTask, agentID) {
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, reviewOwnershipLostResult(currentTask.Status), nil)
 			}
 
 		case <-watcher.Events():
@@ -244,27 +248,30 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 				continue
 			}
 			if evState.Config.Mode == models.SystemModeStopped {
-				return finishAwaitResubmission(bb, agentID, taskID, authority,
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation,
 					&AwaitResubmissionResult{Verdict: ResubmissionAborted, TaskStatus: task.Status}, nil)
 			}
 			currentTask := evState.FindTask(taskID)
 			if currentTask == nil {
-				return finishAwaitResubmission(bb, agentID, taskID, authority, &AwaitResubmissionResult{
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, &AwaitResubmissionResult{
 					Verdict: ResubmissionTerminal,
 					Reason:  "task disappeared from state",
 				}, nil)
 			}
 			if rc := checkResubmissionStatus(currentTask, resolver, rolePair); rc != nil {
-				return handleResubmissionResult(projectRoot, bb, currentTask, agentID, authority, resolver, rolePair)
+				return handleResubmissionResult(projectRoot, bb, currentTask, agentID, authority, resolver, rolePair, reservation)
+			}
+			if reservationLost(bb, reservation, evState, currentTask, agentID) {
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, reviewOwnershipLostResult(currentTask.Status), nil)
 			}
 
 		case watcherErr := <-watcher.Errors():
 			log.Printf("Watcher error, falling back to polling: %v", watcherErr)
 			watcher.Close()
-			return awaitResubmissionPolling(ctx, projectRoot, bb, taskID, agentID, authority, deadline, task.Status, resolver, rolePair, opts.FallbackPollInterval)
+			return awaitResubmissionPolling(ctx, projectRoot, bb, taskID, agentID, authority, reservation, deadline, task.Status, resolver, rolePair, opts.FallbackPollInterval)
 
 		case <-deadlineTimer.C:
-			return finishAwaitResubmission(bb, agentID, taskID, authority,
+			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation,
 				&AwaitResubmissionResult{Verdict: ResubmissionTimeout, TaskStatus: task.Status}, nil)
 		}
 	}
@@ -327,6 +334,68 @@ type reviewOwnershipSnapshot struct {
 	agent        models.Agent
 	lifecycle    *models.TaskLifecycle
 	leaseExpires time.Time
+	reservation  *reviewReservation
+}
+
+// reviewReservation is the WAITING ownership one await acquired. A process
+// outliving its cancelled provider turn keeps its reservation after the same
+// registration has released it and claimed the task again; cleanup and reclaim
+// must act only on this await's own reservation.
+type reviewReservation struct {
+	historyLen int // Task history is append-only; later events postdate acquisition.
+}
+
+// supersededIn reports whether a later claim replaced the reservation: another
+// reviewer holds the task, or a release or same-agent claim was recorded since
+// acquisition. The doer's claim events do not touch review ownership, and a
+// task transition that merely releases the waiting agent is no later claim.
+func (r *reviewReservation) supersededIn(task *models.Task, agentID string) bool {
+	if (task.ReviewingBy != nil && *task.ReviewingBy != agentID) || len(task.History) < r.historyLen {
+		return true
+	}
+	for _, event := range task.History[r.historyLen:] {
+		switch event.Event {
+		case models.TaskEventReviewClaimReleased:
+			return true
+		case models.TaskEventClaimed, models.TaskEventClaimReleased:
+			if event.Agent != nil && *event.Agent == agentID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// heldBy reports whether the reservation still stands: not superseded, and its
+// claim fields and the agent's WAITING hold on the task are intact. Anything
+// but a terminal outcome requires it, since ownership can also be cleared
+// without a history event (stale-claim cleanup).
+func (r *reviewReservation) heldBy(state *models.State, task *models.Task, agentID string) bool {
+	agent, ok := state.Agents[agentID]
+	return ok && task.ReviewingBy != nil && *task.ReviewingBy == agentID && agent.Status == models.AgentStatusWaiting &&
+		agent.CurrentTask != nil && *agent.CurrentTask == task.ID && !r.supersededIn(task, agentID)
+}
+
+// reservationLost confirms a loss seen in a cached observation on a fresh
+// read: mtime caching can lag a write, and the wait must only end on a real loss.
+func reservationLost(bb *db.Blackboard, reservation *reviewReservation, observed *models.State, task *models.Task, agentID string) bool {
+	if reservation.heldBy(observed, task, agentID) {
+		return false
+	}
+	fresh, err := bb.Read()
+	if err != nil {
+		return false
+	}
+	freshTask := fresh.FindTask(task.ID)
+	return freshTask != nil && !reservation.heldBy(fresh, freshTask, agentID)
+}
+
+var errReviewReservationLost = stderrors.New("review reservation lost")
+
+// Ownership loss is final: the caller must not retry and reacquire a claim
+// that now belongs to another turn.
+func reviewOwnershipLostResult(status models.TaskStatus) *AwaitResubmissionResult {
+	return &AwaitResubmissionResult{Verdict: ResubmissionAborted, TaskStatus: status, Reason: "review ownership lost"}
 }
 
 // Capture the rollback boundary in the acquisition transaction, so concurrent
@@ -347,7 +416,8 @@ func acquireReviewOwnershipSnapshot(bb *db.Blackboard, agentID, taskID string, a
 		if task.ReviewingBy != nil && *task.ReviewingBy != agentID {
 			return WrapLifecycleError("claim-reviewer-task", task, fmt.Errorf("review ownership changed"), models.LifecycleStateChanged, "requery", "none")
 		}
-		snapshot = reviewOwnershipSnapshot{task: *task, agent: agent, leaseExpires: leaseExpiry}
+		snapshot = reviewOwnershipSnapshot{task: *task, agent: agent, leaseExpires: leaseExpiry,
+			reservation: &reviewReservation{historyLen: len(task.History)}}
 		if task.Lifecycle != nil {
 			snapshot.task.Lifecycle = cloneTaskLifecycle(task.Lifecycle)
 		}
@@ -368,16 +438,28 @@ func acquireReviewOwnershipSnapshot(bb *db.Blackboard, agentID, taskID string, a
 	return &snapshot, err
 }
 
-// releaseReviewOwnership clears the reviewer's ownership from both the task
-// and the agent. Agent status is intentionally left unchanged — the
-// supervisor's resetAgentAfterExit handles status transitions.
-func releaseReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority *models.AgentAuthority) error {
-	return modifyLifecycleState(bb, authority, func(s *models.State) error {
-		if agent, ok := s.Agents[agentID]; ok {
+// releaseReviewOwnership clears the wait's reservation from both the task and
+// the agent. Without a reservation (early resubmission) there is nothing to
+// release. A lost reservation leaves state untouched and yields the final
+// ownership-lost result. A terminal outcome loses it only to a later claim: a
+// terminal transition may release the waiting agent itself (mark-blocked).
+// Agent status is intentionally left unchanged — the supervisor's
+// resetAgentAfterExit handles status transitions.
+func releaseReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority *models.AgentAuthority, reservation *reviewReservation, terminal bool) (*AwaitResubmissionResult, error) {
+	if reservation == nil {
+		return nil, nil
+	}
+	var lost *AwaitResubmissionResult
+	err := modifyLifecycleState(bb, authority, func(s *models.State) error {
+		task := s.FindTask(taskID)
+		if task != nil && ((terminal && reservation.supersededIn(task, agentID)) || (!terminal && !reservation.heldBy(s, task, agentID))) {
+			lost = reviewOwnershipLostResult(task.Status)
+			return errReviewReservationLost
+		}
+		if agent, ok := s.Agents[agentID]; ok && agent.CurrentTask != nil && *agent.CurrentTask == taskID {
 			agent.CurrentTask = nil
 			s.Agents[agentID] = agent
 		}
-		task := s.FindTask(taskID)
 		if task != nil && task.ReviewingBy != nil && *task.ReviewingBy == agentID {
 			models.AdvanceLifecycle(task)
 			task.ReviewingBy = nil
@@ -385,19 +467,29 @@ func releaseReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority
 		}
 		return nil
 	})
+	if lost != nil {
+		return lost, nil
+	}
+	return nil, err
 }
 
+// finishAwaitResubmission releases the reservation and reports the outcome.
+// Confirmed ownership loss replaces any pending outcome, so a TIMEOUT never
+// becomes a retryable POLL for a claim this wait no longer holds.
 func finishAwaitResubmission(
 	bb *db.Blackboard,
 	agentID, taskID string,
 	authority *models.AgentAuthority,
+	reservation *reviewReservation,
 	result *AwaitResubmissionResult,
 	primaryErr error,
 ) (*AwaitResubmissionResult, error) {
-	return result, joinAwaitCleanupError(
-		primaryErr,
-		releaseReviewOwnership(bb, agentID, taskID, authority),
-	)
+	terminal := result != nil && result.Verdict == ResubmissionTerminal
+	lost, releaseErr := releaseReviewOwnership(bb, agentID, taskID, authority, reservation, terminal)
+	if lost != nil {
+		return lost, nil
+	}
+	return result, joinAwaitCleanupError(primaryErr, releaseErr)
 }
 
 // resubmissionCheck holds the result of checking whether a resubmission has arrived.
@@ -432,15 +524,15 @@ func checkResubmissionStatus(task *models.Task, resolver *pipeline.Resolver, rol
 }
 
 // handleResubmissionResult maps the observed task status to an AwaitResubmissionResult.
-func handleResubmissionResult(projectRoot string, bb *db.Blackboard, task *models.Task, agentID string, authority *models.AgentAuthority, resolver *pipeline.Resolver, rolePair string) (*AwaitResubmissionResult, error) {
+func handleResubmissionResult(projectRoot string, bb *db.Blackboard, task *models.Task, agentID string, authority *models.AgentAuthority, resolver *pipeline.Resolver, rolePair string, reservation *reviewReservation) (*AwaitResubmissionResult, error) {
 	submitted, _ := resolver.SubmittedStatus(rolePair)
 
 	if task.Status == submitted {
-		return reclaimForReview(projectRoot, bb, task.ID, agentID, authority, resolver, rolePair)
+		return reclaimForReview(projectRoot, bb, task.ID, agentID, authority, resolver, rolePair, reservation)
 	}
 
 	// Terminal state — release ownership and report.
-	return finishAwaitResubmission(bb, agentID, task.ID, authority, &AwaitResubmissionResult{
+	return finishAwaitResubmission(bb, agentID, task.ID, authority, reservation, &AwaitResubmissionResult{
 		Verdict:    ResubmissionTerminal,
 		TaskStatus: task.Status,
 		Reason:     fmt.Sprintf("task entered terminal status: %s", task.Status),
@@ -449,10 +541,10 @@ func handleResubmissionResult(projectRoot string, bb *db.Blackboard, task *model
 
 // reclaimForReview atomically transitions the task from submitted to reviewing,
 // refreshes the review lease, and sets the agent to reviewing status.
-func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, resolver *pipeline.Resolver, rolePair string) (*AwaitResubmissionResult, error) {
+func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, resolver *pipeline.Resolver, rolePair string, reservation *reviewReservation) (*AwaitResubmissionResult, error) {
 	reviewing, err := resolver.ReviewingStatus(rolePair)
 	if err != nil {
-		return finishAwaitResubmission(bb, agentID, taskID, authority, nil,
+		return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil,
 			&OperationalError{Message: "failed to resolve reviewing status", Err: err})
 	}
 
@@ -463,18 +555,19 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 	var baseCommit string
 	var reviewCycle int
 	var reviewBoundaryErr error
+	var lostStatus models.TaskStatus
 	_, candidate, readErr := readTaskState(bb, taskID)
 	if readErr != nil {
-		return finishAwaitResubmission(bb, agentID, taskID, authority, nil, readErr)
+		return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil, readErr)
 	}
 	var preflight *ValidationPreflight
 	if len(candidate.ValidationPrerequisites) > 0 {
 		if candidate.Worktree == nil || *candidate.Worktree == "" {
-			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, validationError("worktree_unavailable"))
+			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil, validationError("worktree_unavailable"))
 		}
 		preflight, err = prepareResumedValidation(projectRoot, taskID, agentID, *candidate.Worktree, nil, authority)
 		if err != nil {
-			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, err)
+			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil, err)
 		}
 	}
 
@@ -485,6 +578,10 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 		task := s.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
+		}
+		if reservation != nil && !reservation.heldBy(s, task, agentID) {
+			lostStatus = task.Status
+			return errReviewReservationLost
 		}
 		if len(task.ValidationPrerequisites) > 0 && preflight == nil {
 			return validationError("context_changed")
@@ -534,6 +631,9 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 		s.Agents[agentID] = agent
 		return nil
 	})
+	if stderrors.Is(modErr, errReviewReservationLost) {
+		return reviewOwnershipLostResult(lostStatus), nil
+	}
 	if modErr != nil {
 		var evidenceErr *AcceptanceEvidenceError
 		if stderrors.As(modErr, &evidenceErr) {
@@ -541,9 +641,9 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 		}
 		var repairNeeded *ReviewBoundaryRepairNeededError
 		if stderrors.As(modErr, &repairNeeded) {
-			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, repairNeeded)
+			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil, repairNeeded)
 		}
-		return finishAwaitResubmission(bb, agentID, taskID, authority, nil,
+		return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil,
 			&OperationalError{Message: "failed to reclaim task for review", Err: modErr})
 	}
 	if reviewBoundaryErr != nil {
@@ -561,7 +661,7 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 
 // awaitResubmissionPolling is the polling fallback for when fsnotify is unavailable.
 // It checks state every 5 seconds until a resubmission arrives or the deadline expires.
-func awaitResubmissionPolling(ctx context.Context, projectRoot string, bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, deadline time.Time, taskStatus models.TaskStatus, resolver *pipeline.Resolver, rolePair string, pollInterval time.Duration) (*AwaitResubmissionResult, error) {
+func awaitResubmissionPolling(ctx context.Context, projectRoot string, bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, reservation *reviewReservation, deadline time.Time, taskStatus models.TaskStatus, resolver *pipeline.Resolver, rolePair string, pollInterval time.Duration) (*AwaitResubmissionResult, error) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	deadlineTimer := time.NewTimer(time.Until(deadline))
@@ -570,7 +670,7 @@ func awaitResubmissionPolling(ctx context.Context, projectRoot string, bb *db.Bl
 	for {
 		select {
 		case <-ctx.Done():
-			return finishAwaitResubmission(bb, agentID, taskID, authority, nil, ctx.Err())
+			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil, ctx.Err())
 
 		case <-ticker.C:
 			state, err := bb.ReadCached()
@@ -578,23 +678,26 @@ func awaitResubmissionPolling(ctx context.Context, projectRoot string, bb *db.Bl
 				continue
 			}
 			if state.Config.Mode == models.SystemModeStopped {
-				return finishAwaitResubmission(bb, agentID, taskID, authority,
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation,
 					&AwaitResubmissionResult{Verdict: ResubmissionAborted}, nil)
 			}
 			currentTask := state.FindTask(taskID)
 			if currentTask == nil {
-				return finishAwaitResubmission(bb, agentID, taskID, authority, &AwaitResubmissionResult{
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, &AwaitResubmissionResult{
 					Verdict: ResubmissionTerminal,
 					Reason:  "task disappeared from state",
 				}, nil)
 			}
 			taskStatus = currentTask.Status
 			if rc := checkResubmissionStatus(currentTask, resolver, rolePair); rc != nil {
-				return handleResubmissionResult(projectRoot, bb, currentTask, agentID, authority, resolver, rolePair)
+				return handleResubmissionResult(projectRoot, bb, currentTask, agentID, authority, resolver, rolePair, reservation)
+			}
+			if reservationLost(bb, reservation, state, currentTask, agentID) {
+				return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, reviewOwnershipLostResult(currentTask.Status), nil)
 			}
 
 		case <-deadlineTimer.C:
-			return finishAwaitResubmission(bb, agentID, taskID, authority,
+			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation,
 				&AwaitResubmissionResult{Verdict: ResubmissionTimeout, TaskStatus: taskStatus}, nil)
 		}
 	}
