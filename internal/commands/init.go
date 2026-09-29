@@ -29,6 +29,7 @@ import (
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
 	"github.com/liza-mas/liza/internal/termutil"
+	"github.com/liza-mas/liza/internal/worktreeexclude"
 )
 
 var (
@@ -1013,6 +1014,11 @@ func InitCommandWithConfig(params InitParams) error {
 	// Create directory structure
 	if err := os.MkdirAll(lizaPaths.LizaDir(), 0755); err != nil {
 		return fmt.Errorf("failed to create %s directory: %w", paths.ProjectDirName(), err)
+	}
+	// Keep runtime writes out of git status (best effort: a missing exclude only
+	// adds noise and risks accidental staging).
+	if err := worktreeexclude.EnsureRepoExclude(lizaPaths.ProjectRoot(), "/"+paths.ProjectDirName()+"/"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to exclude %s/ from git status: %v\n", paths.ProjectDirName(), err)
 	}
 
 	archiveDir := lizaPaths.ArchiveDir()

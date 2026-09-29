@@ -131,6 +131,79 @@ func TestEnsurePrivateExcludeEnablesWorktreeConfig(t *testing.T) {
 	}
 }
 
+func TestEnsureRepoExcludeKeepsUserExcludesAndIsIdempotent(t *testing.T) {
+	userExclude := filepath.Join(t.TempDir(), "user-exclude")
+	if err := os.WriteFile(userExclude, []byte("user-owned/\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", userExclude, err)
+	}
+	// Let Git write the value: a raw Windows path would be read as config escapes.
+	configDir := t.TempDir()
+	globalConfig := filepath.Join(configDir, "gitconfig")
+	gitRun(t, configDir, "config", "--file", globalConfig, "core.excludesFile", userExclude)
+	t.Setenv("GIT_CONFIG_GLOBAL", globalConfig)
+
+	repo := newGitRepoWithWorktrees(t)
+	worktreeExclude := filepath.Join(t.TempDir(), "worktree-exclude")
+	gitRun(t, repo.root, "config", "extensions.worktreeConfig", "true")
+	gitRun(t, repo.root, "config", "--worktree", "core.excludesFile", worktreeExclude)
+	repoExclude := filepath.Join(repo.root, ".git", "info", "exclude")
+	if err := os.WriteFile(repoExclude, []byte("# existing\nbuild/"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", repoExclude, err)
+	}
+	pattern := "/" + paths.ProjectDirName() + "/"
+
+	for i := 0; i < 2; i++ {
+		if err := EnsureRepoExclude(repo.root, pattern); err != nil {
+			t.Fatalf("EnsureRepoExclude() iteration %d error = %v", i+1, err)
+		}
+	}
+
+	content := readFileString(t, repoExclude)
+	if !strings.HasPrefix(content, "# existing\nbuild/\n") {
+		t.Fatalf("repo exclude content = %q, want existing lines preserved", content)
+	}
+	assertLineCount(t, content, pattern, 1)
+	if got := gitOutput(t, repo.root, "config", "--global", "--get", "core.excludesFile"); got != userExclude {
+		t.Fatalf("global core.excludesFile = %q, want unchanged %q", got, userExclude)
+	}
+	if got := gitOutput(t, repo.root, "config", "--worktree", "--get", "core.excludesFile"); got != worktreeExclude {
+		t.Fatalf("worktree core.excludesFile = %q, want unchanged %q", got, worktreeExclude)
+	}
+	gitRun(t, repo.root, "check-ignore", "-q", paths.ProjectDirName()+"/state.yaml")
+}
+
+func TestEnsureRepoExcludeFromLinkedWorktreeWritesSharedExclude(t *testing.T) {
+	repo := newGitRepoWithWorktrees(t, "task-one")
+	worktree := repo.worktrees["task-one"]
+	privateExclude := filepath.Join(revParseGitDir(t, worktree), "info", "exclude")
+	pattern := "/" + paths.ProjectDirName() + "/"
+
+	if err := EnsureRepoExclude(worktree, pattern); err != nil {
+		t.Fatalf("EnsureRepoExclude() error = %v", err)
+	}
+
+	assertLineCount(t, readFileString(t, filepath.Join(repo.root, ".git", "info", "exclude")), pattern, 1)
+	assertPrivateExcludeNotWritten(t, privateExclude)
+	for _, dir := range []string{repo.root, worktree} {
+		gitRun(t, dir, "check-ignore", "-q", paths.ProjectDirName()+"/state.yaml")
+	}
+}
+
+func TestEnsureRepoExcludeRejectsInvalidPatterns(t *testing.T) {
+	repo := newGitRepoWithWorktrees(t)
+	repoExclude := filepath.Join(repo.root, ".git", "info", "exclude")
+	before := readFileString(t, repoExclude)
+
+	for _, pattern := range []string{"", "  ", "/a/\n/b/"} {
+		if err := EnsureRepoExclude(repo.root, pattern); err == nil {
+			t.Fatalf("EnsureRepoExclude(%q) error = nil, want rejection", pattern)
+		}
+	}
+	if got := readFileString(t, repoExclude); got != before {
+		t.Fatalf("repo exclude = %q, want unchanged %q", got, before)
+	}
+}
+
 type gitRepoFixture struct {
 	root      string
 	worktrees map[string]string

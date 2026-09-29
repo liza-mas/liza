@@ -94,6 +94,10 @@ Depending on selected providers and options, `§BRAND_BINARY_NAME§ init` writes
   overrides
 - `.claudeignore` when absent or explicitly refreshed
 - `GUARDRAILS.md` when absent
+- a `/§BRAND_PROJECT_DIRNAME§/` line in the repository's private `.git/info/exclude`
+  for a MAS workspace, so runtime files stay out of `git status` without
+  touching `.gitignore` or your `core.excludesFile` (best effort: a failure is
+  a warning)
 - `§BRAND_PROJECT_DIRNAME§/state.yaml`, `§BRAND_PROJECT_DIRNAME§/log.yaml`, and `§BRAND_PROJECT_DIRNAME§/pipeline.yaml` for a MAS
   workspace
 - the configured integration branch for MAS runs

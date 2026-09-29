@@ -60,6 +60,47 @@ func EnsurePrivateExclude(worktreeRoot string, entries ...string) error {
 	return nil
 }
 
+// EnsureRepoExclude appends missing gitignore patterns to the repository's
+// shared info/exclude, which Git reads natively in the main checkout and in
+// every linked worktree. Unlike EnsurePrivateExclude it never touches Git
+// config, so a user's core.excludesFile keeps applying. Patterns may be
+// root-anchored ("/dir/").
+func EnsureRepoExclude(repoRoot string, patterns ...string) error {
+	trimmed := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		if strings.ContainsAny(pattern, "\r\n") {
+			return fmt.Errorf("repository exclude pattern %q must be a single line", pattern)
+		}
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			return errors.New("repository exclude pattern is empty")
+		}
+		trimmed = append(trimmed, pattern)
+	}
+
+	root, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return fmt.Errorf("resolve repository root: %w", err)
+	}
+	// --git-path resolves info/exclude to the common directory, which
+	// --git-dir would miss from a linked worktree.
+	output, err := gitenv.Output(root, "rev-parse", "--git-path", "info/exclude")
+	if err != nil {
+		return fmt.Errorf("resolve repository exclude path: %w", err)
+	}
+	excludePath := strings.TrimSpace(string(output))
+	if excludePath == "" {
+		return errors.New("resolve repository exclude path: git rev-parse --git-path returned empty path")
+	}
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(root, excludePath)
+	}
+
+	privateExcludeMu.Lock()
+	defer privateExcludeMu.Unlock()
+	return appendMissingEntries(filepath.Clean(excludePath), trimmed)
+}
+
 func normalizeEntries(entries []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(entries))
 	normalized := make([]string, 0, len(entries))

@@ -292,6 +292,50 @@ func TestGlobalIntegrationGenerationLimitDefaults(t *testing.T) {
 	}
 }
 
+func TestInitCommandExcludesRuntimeDirectory(t *testing.T) {
+	for _, projectDir := range []string{brand.ProjectDirName, ".acme"} {
+		t.Run(projectDir, func(t *testing.T) {
+			withTestBrandDirs(t, brand.GlobalDirName, projectDir)
+			tmpDir := setupGitRepo(t)
+			setupGlobalLiza(t)
+
+			originalDir, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Chdir(originalDir)
+			if err := os.Chdir(tmpDir); err != nil {
+				t.Fatal(err)
+			}
+
+			testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+			for i := 0; i < 2; i++ {
+				if err := InitCommandWithConfig(InitParams{
+					Description: "Test goal",
+					SpecRef:     "specs/vision.md",
+					AutoConfirm: true,
+				}); err != nil {
+					t.Fatalf("InitCommandWithConfig() run %d error = %v", i+1, err)
+				}
+			}
+
+			testhelpers.MustGit(t, tmpDir, "check-ignore", "-q", projectDir+"/state.yaml")
+			status := testhelpers.MustGit(t, tmpDir, "status", "--porcelain", "--untracked-files=all")
+			if strings.Contains(status, projectDir+"/") {
+				t.Fatalf("git status lists runtime files:\n%s", status)
+			}
+			exclude := testhelpers.MustGit(t, tmpDir, "rev-parse", "--git-path", "info/exclude")
+			data, err := os.ReadFile(filepath.Join(tmpDir, exclude))
+			if err != nil {
+				t.Fatalf("read repository exclude: %v", err)
+			}
+			if got := strings.Count(string(data), "/"+projectDir+"/\n"); got != 1 {
+				t.Fatalf("repository exclude has %d runtime entries, want 1:\n%s", got, data)
+			}
+		})
+	}
+}
+
 func TestInitCommandDirectoryStructure(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)
