@@ -170,8 +170,7 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 		cleanupErr := modifyLifecycleState(bb, authority, func(s *models.State) error {
 			currentTask := s.FindTask(taskID)
 			restoredOwnership := false
-			if currentTask != nil && currentTask.ReviewingBy != nil && *currentTask.ReviewingBy == agentID &&
-				currentTask.ReviewLeaseExpires != nil && currentTask.ReviewLeaseExpires.Equal(ownership.leaseExpires) {
+			if currentTask != nil && reservation.heldBy(s, currentTask, agentID) {
 				// Undo only our temporary revision. A changed status keeps both the
 				// pre-wait and waiting tokens stale; never revive an old preparation
 				// or overwrite a completion written during the wait. Otherwise
@@ -330,11 +329,10 @@ func acquireReviewOwnership(bb *db.Blackboard, agentID, taskID string, authority
 }
 
 type reviewOwnershipSnapshot struct {
-	task         models.Task
-	agent        models.Agent
-	lifecycle    *models.TaskLifecycle
-	leaseExpires time.Time
-	reservation  *reviewReservation
+	task        models.Task
+	agent       models.Agent
+	lifecycle   *models.TaskLifecycle
+	reservation *reviewReservation
 }
 
 // reviewReservation is the WAITING ownership one await acquired. A process
@@ -416,8 +414,7 @@ func acquireReviewOwnershipSnapshot(bb *db.Blackboard, agentID, taskID string, a
 		if task.ReviewingBy != nil && *task.ReviewingBy != agentID {
 			return WrapLifecycleError("claim-reviewer-task", task, fmt.Errorf("review ownership changed"), models.LifecycleStateChanged, "requery", "none")
 		}
-		snapshot = reviewOwnershipSnapshot{task: *task, agent: agent, leaseExpires: leaseExpiry,
-			reservation: &reviewReservation{historyLen: len(task.History)}}
+		snapshot = reviewOwnershipSnapshot{task: *task, agent: agent, reservation: &reviewReservation{historyLen: len(task.History)}}
 		if task.Lifecycle != nil {
 			snapshot.task.Lifecycle = cloneTaskLifecycle(task.Lifecycle)
 		}

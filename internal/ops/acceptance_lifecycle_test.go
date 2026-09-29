@@ -352,6 +352,96 @@ func TestAcceptanceLifecycleWaitingReviewerRefusalRestoresOwnership(t *testing.T
 	}
 }
 
+// The rollback identifies the wait's ownership by its reservation: a heartbeat
+// renewing the lease during the wait must not skip it, and a later same-agent
+// claim with identical fields must not be undone.
+func TestAcceptanceLifecycleWaitingReviewerRefusalOwnershipIdentity(t *testing.T) {
+	for _, tc := range []string{"heartbeat_renewed_lease", "superseded_before_rollback"} {
+		t.Run(tc, func(t *testing.T) {
+			root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
+			if _, err := SubmitForReview(root, taskID, commit, agentID); err != nil {
+				t.Fatal(err)
+			}
+			reviewer := "code-reviewer-1"
+			registerAcceptanceReviewer(t, bb, reviewer)
+			if err := bb.Modify(func(state *models.State) error {
+				task := state.FindTask(taskID)
+				task.Status = models.TaskStatusRejected
+				task.History = append(task.History, models.TaskHistoryEntry{Time: time.Now().UTC(), Event: models.TaskEventRejected, Agent: &reviewer})
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			before := readAcceptanceState(t, bb)
+			authority := models.AgentAuthority{ID: reviewer, Generation: before.Agents[reviewer].Generation}
+
+			previousWatcher := newAwaitResubmissionWatcher
+			t.Cleanup(func() { newAwaitResubmissionWatcher = previousWatcher })
+			var waitLease *time.Time
+			newAwaitResubmissionWatcher = func(*db.Blackboard) (awaitResubmissionWatcher, error) {
+				waitLease = readAcceptanceState(t, bb).FindTask(taskID).ReviewLeaseExpires
+				if err := bb.Modify(func(state *models.State) error {
+					task := state.FindTask(taskID)
+					task.Status = models.TaskStatusReadyForReview
+					task.AcceptanceReceipt = nil
+					if tc == "heartbeat_renewed_lease" {
+						renewed := time.Now().UTC().Add(time.Hour)
+						task.ReviewLeaseExpires = &renewed
+					}
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+				return bb.WatchForChanges()
+			}
+			// Acquisition, reclaim, then rollback: the third fenced transaction.
+			fenced := 0
+			previousHook := lifecycleBeforeModifyTestHook
+			t.Cleanup(func() { lifecycleBeforeModifyTestHook = previousHook })
+			lifecycleBeforeModifyTestHook = func() {
+				if fenced++; fenced != 3 || tc != "superseded_before_rollback" {
+					return
+				}
+				if err := bb.Modify(func(state *models.State) error {
+					task := state.FindTask(taskID)
+					now := time.Now().UTC()
+					task.History = append(task.History,
+						models.TaskHistoryEntry{Time: now, Event: models.TaskEventClaimReleased, Agent: &reviewer},
+						models.TaskHistoryEntry{Time: now, Event: models.TaskEventClaimed, Agent: &reviewer})
+					return nil
+				}); err != nil {
+					t.Error(err)
+				}
+			}
+
+			_, err := AwaitResubmissionWithAuthorityOptions(context.Background(), root, taskID, authority, 5*time.Second,
+				AwaitResubmissionOptions{AbortPollInterval: time.Millisecond})
+			requireAcceptanceError(t, err, taskID)
+			if fenced != 3 {
+				t.Fatalf("fenced transactions = %d, want acquisition, reclaim and rollback", fenced)
+			}
+
+			after := readAcceptanceState(t, bb)
+			task, agent := after.FindTask(taskID), after.Agents[reviewer]
+			if task.Status != models.TaskStatusReadyForReview || task.AcceptanceReceipt != nil {
+				t.Fatalf("rollback lost the resubmission: status=%s receipt=%v", task.Status, task.AcceptanceReceipt)
+			}
+			if tc == "heartbeat_renewed_lease" {
+				prior, priorAgent := before.FindTask(taskID), before.Agents[reviewer]
+				if !reflect.DeepEqual(task.ReviewingBy, prior.ReviewingBy) || !reflect.DeepEqual(task.ReviewLeaseExpires, prior.ReviewLeaseExpires) ||
+					agent.Status != priorAgent.Status || !reflect.DeepEqual(agent.CurrentTask, priorAgent.CurrentTask) {
+					t.Fatalf("heartbeat-renewed wait kept its ownership: reviewing_by=%v lease=%v agent=%s/%v", task.ReviewingBy, task.ReviewLeaseExpires, agent.Status, agent.CurrentTask)
+				}
+				return
+			}
+			if task.ReviewingBy == nil || *task.ReviewingBy != reviewer || !reflect.DeepEqual(task.ReviewLeaseExpires, waitLease) ||
+				agent.Status != models.AgentStatusWaiting || agent.CurrentTask == nil || *agent.CurrentTask != taskID {
+				t.Fatalf("rollback undid the later claim: reviewing_by=%v lease=%v agent=%s/%v", task.ReviewingBy, task.ReviewLeaseExpires, agent.Status, agent.CurrentTask)
+			}
+		})
+	}
+}
+
 func TestAcceptanceLifecycleCleanupPreservesAdoption(t *testing.T) {
 	t.Parallel()
 	root, taskID, commit, agentID, bb := completeAcceptanceScenario(t)
