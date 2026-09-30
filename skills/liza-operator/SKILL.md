@@ -69,11 +69,24 @@ Conflict between "keep moving" and an operating constraint → the constraint wi
    automatic non-finding.
 4. **Forks** — anything past authority: hold, escalate.
 5. **Report** — report (format below).
-6. **Notes** — update `§BRAND_PROJECT_DIRNAME§/operator-notes.md` for interventions and significant agent
-   friction; name new entries in the report so the human can veto/amend.
+6. **Frictions → notes** — every round, collect the frictions since the last one: excessive token
+   consumption, workflow contention, tool errors, manual actions you performed, and decision requests to
+   the human. Report unmeasurable token usage as unmeasured, never as zero. Record each friction and
+   intervention in `§BRAND_PROJECT_DIRNAME§/operator-notes.md`, including self-recovered ones; name new
+   entries in the report so the human can veto/amend.
 7. **Queue** — is the next goal ready? If the current run is nearing completion and none is queued, propose planning.
 
-Quiet round → one line: *"Steady: no changes, no forks."*
+**Points of attention.** Humans repeatedly asked about these during runs; raise them unprompted when a
+round shows the symptom:
+- task count growing faster than scope: corrective, superseded and replanned tasks per plan task, and why;
+- token burn: which agents and sessions consumed it over the period, and on what;
+- a task claimed many times: the cause of each claim;
+- error and refusal tallies across supervisor logs, separating failures from expected diagnostics;
+- long turns: where the time goes (validation runs, setup, waits);
+- work redone: HEAD- or input-bound work repeated after integration or inputs moved;
+- scope creep: code and tasks beyond what the goal and spec require.
+
+Quiet round → one line: *"Steady: no changes, no forks, no frictions."*
 
 **Instruments.** Read-only under `§BRAND_PROJECT_DIRNAME§/`: `state.yaml` (authoritative for task transitions), `log.yaml` (history;
 the watcher daemon parses it — a YAML-corrupting char blinds drift/breaker detection), `alerts.log`
@@ -91,7 +104,7 @@ Recheck suspected races after a short agent-poll interval, independent of report
 # Operator notes
 Create or resume `§BRAND_PROJECT_DIRNAME§/operator-notes.md` at session start.
 It is a rolling evidence-backed operational report, not only a chronological
-scratchpad. Record every intervention and significant friction, including
+scratchpad. Record every intervention and friction (step 6 categories), including
 self-recovered issues, and retain resolved incidents with their outcomes.
 
 Keep these sections current:
@@ -107,7 +120,7 @@ Keep these sections current:
 - run-wide role, supervisor, environment, tool, error, struggle, and context
   patterns, quantified when evidence supports it;
 - current watch state;
-- deduplicated follow-up defects with owner, validation, and status;
+- defect register (below);
 - non-findings that prevent repeated investigation.
 
 For each issue, capture:
@@ -117,6 +130,20 @@ For each issue, capture:
 - expected automatic behavior and why it did not resolve the issue;
 - intervention, resulting state, and validation;
 - root-cause hypothesis and durable follow-up, explicitly marking unknowns.
+
+**Defect register.** Promote an incident to a numbered defect (D-n) when a durable fix to the execution
+setup (environment, configuration, specs, tooling, or §BRAND_NAME_TITLE§ itself) would remove its cause;
+append recurrences to the existing entry. When the cause is in §BRAND_NAME_TITLE§, suggest raising an
+issue with its maintainers; the human decides. Rank by token consumption and workflow contention:
+- P1: recurring provider turns or sessions burned for no progress, or critical-path contention
+  (hours of stall, many tasks held, operator or human needed to move the run);
+- P2: bounded waste or a localized stall needing one repair or corrective task;
+- P3: low cost and contention (diagnostics, hygiene, rare single incidents).
+Each entry: evidence (cite journal entries, don't restate), mechanism, why this priority, owner, fix as
+a hypothesis with its validation (the observation that would disprove it), related IDs, dated status.
+Keep a short top-priority list and re-rank it with the human. Durable fixes for register defects are
+made only on human request (routine recovery stays delegated); track fix status (commit, rebuild
+needed, verified in a run or not) only for those.
 
 Before a terminal-state or human handoff, run `/§BRAND_BINARY_NAME§-logs` over
 the complete run and reconcile its
@@ -326,6 +353,7 @@ Blocking chain: <provider → held consumers → next concrete change | none>
 I handled: <actions + one-line why | "nothing — steady">
 Human call: <decision · Options (1)…(2)… · my read> | "none"
 Health: <steady | drift on task-X | thrash on coding-pair>
+Frictions: <tokens | contention | tool errors | manual actions | human decisions — one line each | none>
 Queue: <next goal: empty | drafting | ready>
 Logged: <operator-notes entry | durable lesson promoted | none>
 ```
@@ -348,9 +376,12 @@ scope) → draft the goal doc → **human reviews** → cold review + `/systemic
   `…/§BRAND_PROJECT_DIRNAME§/state.yaml.lock`).
 - **One run per repo** (`§BRAND_PROJECT_DIRNAME§`/`.worktrees`/`task/…` are repo-global). A parallel effort needs a
   separate clone.
-- **Do not manually rebase active task branches.** Live task worktrees carry `base_commit`, review, and
-  branch-state assumptions. Let normal submit/recovery paths handle staleness, or coordinate an explicit
-  repair. For preserved blocked worktrees, use `§BRAND_BINARY_NAME§ unblock-task --rebase-on` so state, `base_commit`,
+- **Do not rebase active task branches yourself.** Live task worktrees carry `base_commit`, review, and
+  branch-state assumptions. The owning doer may rebase its own worktree before HEAD-bound work
+  (submission re-establishes `base_commit`), and a rejected re-claim attempts a best-effort rebase
+  when clean; a conflict keeps the old base and records `rebase_skipped` in claim history.
+  Otherwise let normal submit/recovery paths handle staleness, or coordinate an explicit repair. For
+  preserved blocked worktrees, use `§BRAND_BINARY_NAME§ unblock-task --rebase-on` so state, `base_commit`,
   and repair metadata stay coherent.
 - **Capture run-specific interventions in `§BRAND_PROJECT_DIRNAME§/operator-notes.md`.** Promote a transferable
   lesson into maintained project guidance when warranted; do not create an unspecified parallel journal.
