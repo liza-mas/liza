@@ -24,66 +24,13 @@ func validateDiscovered(v *violations, state *models.State) {
 // Prevents agents from logging anomalies that cannot be analysed by the
 // circuit breaker or human reviewers.
 //
-// Each missing detail is its own violation, so recording one of several
-// missing details is a repair rather than a new violation.
+// The rule is models.AnomalyViolations, which Blackboard.Modify also enforces
+// on the anomalies a transaction adds (ADR-0166). Each missing detail is its
+// own violation, so recording one of several missing details is a repair
+// rather than a new violation.
 func validateAnomalies(v *violations, state *models.State) {
-	for i, anomaly := range state.Anomalies {
-		// Check type is valid
-		if !anomaly.IsValidType() {
-			v.add(fmt.Errorf("unknown anomaly type '%s' at index %d", anomaly.Type, i))
-			continue
-		}
-
-		// Type-specific detail validation
-		switch anomaly.Type {
-		case "retry_loop":
-			requireAnomalyDetails(v, i, anomaly, "count", "error_pattern")
-		case "trade_off":
-			requireAnomalyDetails(v, i, anomaly, "what", "why", "debt_created")
-		case "external_blocker":
-			requireAnomalyDetails(v, i, anomaly, "blocker_service")
-		case "assumption_violated":
-			requireAnomalyDetails(v, i, anomaly, "assumption", "reality")
-		case "system_ambiguity":
-			requireAnomalyDetails(v, i, anomaly, "protocol_section", "question")
-		case "provider_audit_degraded":
-			requireAnomalyDetails(v, i, anomaly, "provider", "agent_id", "message")
-		case "agent_degraded":
-			requireAnomalyDetails(v, i, anomaly, "agent_id", "role", "reason", "last_error")
-		case "stale_verdict":
-			requireAnomalyDetails(v, i, anomaly, "attempted_verdict", "current_status")
-		case "submit_verdict_failed":
-			requireAnomalyDetails(v, i, anomaly, "verdict", "error")
-		case models.AnomalyTypeReviewerClaimCircuitOpen:
-			// The breaker keys a quarantine on role, failure class and boundary
-			// version, and an operator recovers from the counters and the hint;
-			// a record missing any of them cannot be acted on.
-			requireAnomalyDetails(v, i, anomaly, "role", "failure_class", "attempts", "first_failure", "last_failure", "recovery")
-		case models.AnomalyTypeObligationContentDrifted:
-			// A reviewer re-reads the section this names, so the record must
-			// locate it and say whose obligations rest on it; without the
-			// identities there is nothing to compare against the approval.
-			// current_section must be present but may be empty: a dropped
-			// section has no current content to read, only the reviewed
-			// content the obligation no longer rests on.
-			requireAnomalyDetails(v, i, anomaly, "path", "heading", "change",
-				"reviewed_section", "current_section", "carriers", "obligations")
-		case models.AnomalyTypePendingMergeStalled:
-			// An operator finds the stuck merge from the reviewer that owns it
-			// and judges persistence from the rounds it spent.
-			requireAnomalyDetails(v, i, anomaly, "agent_id", "role", "rounds")
-		}
-	}
-}
-
-// requireAnomalyDetails reports each required detail field absent from
-// anomaly as its own violation, in the order given, naming what the writer
-// failed to record.
-func requireAnomalyDetails(v *violations, index int, anomaly models.Anomaly, required ...string) {
-	for _, field := range required {
-		if anomaly.Details[field] == nil {
-			v.add(fmt.Errorf("%s anomaly at index %d missing required details (%s)", anomaly.Type, index, field))
-		}
+	for _, violation := range models.AnomalyViolations(state.Anomalies) {
+		v.addID(violation.ID, violation.Err)
 	}
 }
 

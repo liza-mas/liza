@@ -414,7 +414,46 @@ func marshalStateForWrite(state *models.State) ([]byte, error) {
 	return rewritten, nil
 }
 
-// Write writes the state to the state file atomically with fsync
+// checkWrittenAnomalies refuses a transaction that adds an anomaly violation
+// (ADR-0166): an unknown type or a missing required detail, by the rule
+// validate reports (models.AnomalyViolations). Violations the pre-image
+// already had are not the transaction's, so they never block it and may be
+// repaired one detail at a time (ADR-0165); identities are counted, so a
+// second copy of an invalid record is new. The pre-image is decoded only
+// when the candidate has a violation, so the valid path costs one scan.
+func checkWrittenAnomalies(preImage []byte, state *models.State) error {
+	found := models.AnomalyViolations(state.Anomalies)
+	if len(found) == 0 {
+		return nil
+	}
+	before, err := decodeState(preImage, "anomaly pre-image")
+	if err != nil {
+		return fmt.Errorf("anomaly write refused: pre-image unreadable: %w", err)
+	}
+	remaining := make(map[string]int)
+	for _, violation := range models.AnomalyViolations(before.Anomalies) {
+		remaining[violation.ID]++
+	}
+	var added []string
+	for _, violation := range found {
+		if remaining[violation.ID] > 0 {
+			remaining[violation.ID]--
+			continue
+		}
+		added = append(added, violation.Err.Error())
+	}
+	if len(added) == 0 {
+		return nil
+	}
+	return fmt.Errorf("anomaly write refused: %s", strings.Join(added, "; "))
+}
+
+// Write writes the state to the state file atomically with fsync.
+//
+// Write does not run checkWrittenAnomalies: it replaces the whole state with
+// no transaction pre-image, and its callers are initialization, which writes
+// no anomalies, and migration, which repairs legacy records and must still
+// write a state that holds others. Runtime writers go through Modify.
 func (bb *Blackboard) Write(state *models.State) error {
 	err := bb.fileLock.WithLockOperation("write", func() error {
 		data, err := marshalStateForWrite(state)
@@ -444,8 +483,12 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 			return err
 		}
 
+		preImage := data
 		if err := fn(state); err != nil {
 			return fmt.Errorf("modification function failed: %w", err)
+		}
+		if err := checkWrittenAnomalies(preImage, state); err != nil {
+			return err
 		}
 
 		data, err = marshalStateForWrite(state)

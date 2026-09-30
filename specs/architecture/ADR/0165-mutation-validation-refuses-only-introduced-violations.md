@@ -108,9 +108,11 @@ replaces whole-state `ValidateState` on the mutation paths.
     defect that hides behind an old one in these fields. A hand-edited record
     can still carry a second defect in one field that stays unreported until
     the first is fixed.
-  - Ordinary writes that bypass these mutation paths (anomaly writers among
-    them) still do not run entity validation, which is how D83's record got
-    in. Validating anomaly writers at write time is a separate follow-up.
+  - Ordinary writes that bypass these mutation paths still do not run entity
+    validation, which is how D83's record got in. Anomaly writers are now
+    covered by [ADR-0166](0166-anomaly-records-validated-at-write-boundary.md),
+    which applies this decision's introduced-violation rule to anomalies in
+    every `Modify` transaction.
 
 ## Related Decisions and Provenance
 

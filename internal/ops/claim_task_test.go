@@ -768,12 +768,7 @@ func TestClaimRejectedTask(t *testing.T) {
 func TestClaimTask_RejectedReclaimAfterLegacyStallMigration(t *testing.T) {
 	fixture := newRejectedHandoffFixture(t, true)
 	bb := db.For(fixture.stateFile)
-	if err := bb.Modify(func(state *models.State) error {
-		state.Anomalies = append(state.Anomalies, testhelpers.LegacyPendingMergeStallAnomaly())
-		return nil
-	}); err != nil {
-		t.Fatalf("inject legacy stall anomaly: %v", err)
-	}
+	injectLegacyStall(t, fixture.stateFile)
 
 	if err := bb.Modify(func(state *models.State) error {
 		migrated := 0

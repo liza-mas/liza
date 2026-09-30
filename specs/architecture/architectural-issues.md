@@ -481,7 +481,7 @@ Implicit dependencies that constrain system behavior.
 
 **Implication:** Single malformed entry can cascade into systemic stop conditions across all roles.
 
-**Current mitigation:** `liza validate` checks invariants and lists every violation. Mutation-path validation refuses only violations the mutation adds ([ADR-0165](ADR/0165-mutation-validation-refuses-only-introduced-violations.md)), so a malformed record a mutation does not touch no longer stops it; the record is warned about on each mutation until repaired. Still open: ordinary writes (anomaly writers among them) do not run entity validation, and reads still assume well-formed fields.
+**Current mitigation:** `liza validate` checks invariants and lists every violation. Mutation-path validation refuses only violations the mutation adds ([ADR-0165](ADR/0165-mutation-validation-refuses-only-introduced-violations.md)), so a malformed record a mutation does not touch no longer stops it; the record is warned about on each mutation until repaired. Every `Modify` transaction refuses anomaly violations it adds ([ADR-0166](ADR/0166-anomaly-records-validated-at-write-boundary.md)), so no writer can persist a record like D83's. Still open: ordinary writes of other entities do not run entity validation, and reads still assume well-formed fields.
 
 **Future options:**
 - Schema validation on every state read
@@ -931,14 +931,14 @@ that survive archival ([TECH_DEBT](../../TECH_DEBT.md#terminal-task-history-stay
 **Skill:** code-review
 **Category:** FRAGILITY
 
-**Issue:** The merged model accepts 21 anomaly types. `internal/statevalidate/validate_entity.go` enforces type-specific detail fields for 11 of them; the other 10, including `reviewer_loop` and `review_exhaustion`, receive no type-specific detail validation even where specs or prompts expect structured fields.
+**Issue:** The merged model accepts 21 anomaly types. `internal/models/history.go` (`anomalyRequiredDetails`, enforced by `validate` and, since [ADR-0166](ADR/0166-anomaly-records-validated-at-write-boundary.md), on every `Modify`) declares type-specific detail fields for 11 of them; the other 10, including `reviewer_loop` and `review_exhaustion`, receive no type-specific detail validation even where specs or prompts expect structured fields.
 
 **Traceability (#156, mitigated):** [ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md) adds `reviewer_claim_circuit_open` with its six required fields, bringing the planned output's counts to 20 accepted / 10 validated. The merged tree additionally contains `obligation_content_drifted` and its detail validator (21 / 11 in total). The ten unvalidated types are unchanged; this issue remains open.
 
 **Implication:** Agents can write structurally valid but informationally empty anomalies. Circuit breaker pattern detection and retrospective analysis degrade when detail fields are missing.
 
 **Future options:**
-- Add cases for the 10 unvalidated types in `internal/statevalidate/validate_entity.go`
+- Add entries for the 10 unvalidated types to `anomalyRequiredDetails` in `internal/models/history.go`
 - Generate validation from a single type→fields declaration (eliminate spec/code/template as three separate lists)
 
 ### Operation Vocabulary Spans Five Registers

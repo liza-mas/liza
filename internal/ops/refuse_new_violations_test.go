@@ -19,13 +19,18 @@ import (
 // and no longer hides what the mutation itself got wrong.
 
 // injectLegacyStall persists the D83 record: a retry_loop anomaly missing the
-// details its type requires, attached to no task.
+// details its type requires, attached to no task. Modify now refuses to add
+// such a record (ADR-0166), so it is written through the unchecked Write, as
+// if an older binary had left it.
 func injectLegacyStall(t *testing.T, stateFile string) {
 	t.Helper()
-	if err := db.For(stateFile).Modify(func(state *models.State) error {
-		state.Anomalies = append(state.Anomalies, testhelpers.LegacyPendingMergeStallAnomaly())
-		return nil
-	}); err != nil {
+	bb := db.For(stateFile)
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state before injecting legacy stall anomaly: %v", err)
+	}
+	state.Anomalies = append(state.Anomalies, testhelpers.LegacyPendingMergeStallAnomaly())
+	if err := bb.Write(state); err != nil {
 		t.Fatalf("inject legacy stall anomaly: %v", err)
 	}
 }

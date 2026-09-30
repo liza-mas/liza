@@ -729,6 +729,7 @@ func retryLoopAnomaly(timestamp time.Time, agentID string) models.Anomaly {
 		Reporter:  agentID,
 		Type:      "retry_loop",
 		Details: map[string]any{
+			"count":         1,
 			"error_pattern": "connection refused",
 		},
 	}

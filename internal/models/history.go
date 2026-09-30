@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+	"reflect"
 	"slices"
 	"time"
 )
@@ -199,15 +201,15 @@ type SpecChange struct {
 }
 
 // AnomalyTypeReviewerClaimCircuitOpen records a reviewer-claim circuit breaker
-// opening after repeated identical pre-claim failures. Detail validation is
-// owned by statevalidate.
+// opening after repeated identical pre-claim failures. Its required details
+// are listed in anomalyRequiredDetails.
 const AnomalyTypeReviewerClaimCircuitOpen = "reviewer_claim_circuit_open"
 
 // AnomalyTypeObligationContentDrifted records that the content an approved
 // plan's obligation rests on is no longer what the reviewer saw. It is a
 // reviewable event, never a block: refusing here would strand every child of a
 // merged plan whose review boundary no command can move (ADR-0133 clause 4).
-// Detail validation is owned by statevalidate.
+// Its required details are listed in anomalyRequiredDetails.
 //
 // reviewed_section and current_section mean different things per change:
 //   - repinned, retargeted: the section at the authorizing review commit
@@ -223,7 +225,7 @@ const AnomalyTypeObligationContentDrifted = "obligation_content_drifted"
 // retrying a merge it owns. It is not a retry_loop: that type describes a retry
 // cluster inside a task's execution, and retry-cluster detection answers it
 // with HALT, which repeated stalls of one supervisor loop do not warrant.
-// Detail validation is owned by statevalidate.
+// Its required details are listed in anomalyRequiredDetails.
 const AnomalyTypePendingMergeStalled = "pending_merge_stalled"
 
 // PendingMergeStallImpact is the impact detail every pending-merge stall
@@ -253,6 +255,78 @@ func (a *Anomaly) IsValidType() bool {
 		AnomalyTypePendingMergeStalled,
 	}
 	return slices.Contains(validTypes, a.Type)
+}
+
+// AnomalyViolation is one anomaly defect: an unknown type or one missing
+// required detail. ID is its identity when a state is compared with its
+// pre-image (ADR-0165); Err is the operator-facing message.
+type AnomalyViolation struct {
+	ID  string
+	Err error
+}
+
+// anomalyRequiredDetails lists, per anomaly type, the details a record cannot
+// be acted on without. Types absent here require none.
+var anomalyRequiredDetails = map[string][]string{
+	"retry_loop":              {"count", "error_pattern"},
+	"trade_off":               {"what", "why", "debt_created"},
+	"external_blocker":        {"blocker_service"},
+	"assumption_violated":     {"assumption", "reality"},
+	"system_ambiguity":        {"protocol_section", "question"},
+	"provider_audit_degraded": {"provider", "agent_id", "message"},
+	"agent_degraded":          {"agent_id", "role", "reason", "last_error"},
+	"stale_verdict":           {"attempted_verdict", "current_status"},
+	"submit_verdict_failed":   {"verdict", "error"},
+	// The breaker keys a quarantine on role, failure class and boundary
+	// version, and an operator recovers from the counters and the hint; a
+	// record missing any of them cannot be acted on.
+	AnomalyTypeReviewerClaimCircuitOpen: {"role", "failure_class", "attempts", "first_failure", "last_failure", "recovery"},
+	// A reviewer re-reads the section this names, so the record must locate
+	// it and say whose obligations rest on it; without the identities there
+	// is nothing to compare against the approval. current_section must be
+	// present but may be empty: a dropped section has no current content to
+	// read, only the reviewed content the obligation no longer rests on.
+	AnomalyTypeObligationContentDrifted: {"path", "heading", "change", "reviewed_section", "current_section", "carriers", "obligations"},
+	// An operator finds the stuck merge from the reviewer that owns it and
+	// judges persistence from the rounds it spent.
+	AnomalyTypePendingMergeStalled: {"agent_id", "role", "rounds"},
+}
+
+// AnomalyViolations returns every defect of anomalies, in order: one per
+// unknown type, and one per missing required detail. Each identity names the
+// record by index, which is stable because anomalies are only appended, so
+// recording one of several missing details repairs one violation and adds
+// none (ADR-0165). statevalidate reports these; Blackboard.Modify refuses the
+// ones a transaction adds (ADR-0166).
+func AnomalyViolations(anomalies []Anomaly) []AnomalyViolation {
+	var violations []AnomalyViolation
+	add := func(err error) {
+		violations = append(violations, AnomalyViolation{ID: err.Error(), Err: err})
+	}
+	for i := range anomalies {
+		anomaly := &anomalies[i]
+		if !anomaly.IsValidType() {
+			add(fmt.Errorf("unknown anomaly type '%s' at index %d", anomaly.Type, i))
+			continue
+		}
+		for _, field := range anomalyRequiredDetails[anomaly.Type] {
+			if anomalyDetailMissing(anomaly.Details[field]) {
+				add(fmt.Errorf("%s anomaly at index %d missing required details (%s)", anomaly.Type, i, field))
+			}
+		}
+	}
+	return violations
+}
+
+// anomalyDetailMissing reports whether a detail is absent once persisted: nil,
+// or a nil pointer, which YAML writes as null. Nil or empty slices and maps are
+// written as [] and {} and stay present.
+func anomalyDetailMissing(value any) bool {
+	if value == nil {
+		return true
+	}
+	v := reflect.ValueOf(value)
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 // MigrateLegacyPendingMergeStall retypes a pending-merge stall record written
