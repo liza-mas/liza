@@ -1304,7 +1304,11 @@ config:
 ```
 
 `local` is an operator assertion that this provider's validation tools execute
-locally with the supplied environment and task worktree. It does not change
+locally with the supplied environment and task worktree. `§BRAND_BINARY_NAME§ init
+--validation-execution local`, or `y` at init's interactive prompt, writes it for
+every CLI the pipeline's roles launch with by default (models.yaml, then the
+default CLI settings); init lists them. `--yes` and non-interactive runs never
+make the assertion. It does not change
 permissions or establish equivalence with a sandbox or remote wrapper. Unset or
 unsupported values fail closed for tasks with prerequisites. `artifact-only`
 also fails closed: signed validation artifacts are not implemented and cannot
@@ -1335,6 +1339,14 @@ authenticated in-session operations still check afresh. For a blocked task with 
 prerequisites, unblock without `--assign-to` so the target supervisor checks its
 own context before claiming it. Diagnostics identify safe codes, check indices
 and required variable names, never variable values or probe output.
+
+When every doer and reviewer role of the pair that consumes a code plan's
+`output[]` launches on a CLI with `validation_execution: local`, code planners are
+told to declare `validation_prerequisites` for each validation command and code
+plan reviewers check them. Otherwise nothing changes: declarations would fail
+closed. A new failed preflight observation raises a `VALIDATION PREFLIGHT FAILED`
+alert naming the task, agent, diagnostic code and check indices; an unchanged
+retry does not repeat it.
 
 See the [validation prerequisite protocol](../specs/protocols/validation-prerequisites.md)
 for task/output YAML examples, exact command matching, limits and evidence rules.

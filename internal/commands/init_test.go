@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -745,6 +746,70 @@ func TestInitCommandPreCommitConfigMustBeClean(t *testing.T) {
 				t.Fatalf("InitCommand() error = %v, want dirty pre-commit config precondition", err)
 			}
 			if _, statErr := os.Stat(paths.New(tmpDir).LizaDir()); !os.IsNotExist(statErr) {
+				t.Fatalf("project runtime directory state after failed init = %v, want not exist", statErr)
+			}
+		})
+	}
+}
+
+func TestInitCommandRequiresPreCommitExecutable(t *testing.T) {
+	tests := []struct {
+		name    string
+		lookErr error
+	}{
+		{name: "missing", lookErr: exec.ErrNotFound},
+		{name: "present"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// GIVEN a clean spec and pre-commit config, and a controlled lookup
+			tmpDir := setupGitRepo(t)
+			defer os.RemoveAll(tmpDir)
+			setupGlobalLiza(t)
+			originalDir, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Chdir(originalDir)
+			if err := os.Chdir(tmpDir); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+			var looked []string
+			t.Cleanup(SetInitPreCommitLookPathForTest(func(name string) (string, error) {
+				looked = append(looked, name)
+				if tt.lookErr != nil {
+					return "", tt.lookErr
+				}
+				return "/stub/" + name, nil
+			}))
+
+			// WHEN init runs
+			err = InitCommand("Test goal", "specs/vision.md", nil)
+
+			// THEN it looked up pre-commit, and fails before writing state only when absent
+			if !slices.Equal(looked, []string{"pre-commit"}) {
+				t.Fatalf("pre-commit lookups = %q, want exactly [pre-commit]", looked)
+			}
+			_, statErr := os.Stat(paths.New(tmpDir).LizaDir())
+			if tt.lookErr == nil {
+				if err != nil {
+					t.Fatalf("InitCommand() error = %v, want success with pre-commit on PATH", err)
+				}
+				if statErr != nil {
+					t.Fatalf("project runtime directory after init: %v, want created", statErr)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("InitCommand() succeeded without pre-commit on PATH")
+			}
+			for _, want := range []string{"pre-commit is not on PATH", brand.Command("toolchain", "install", "--include", "pre-commit")} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("InitCommand() error = %v, want it to contain %q", err, want)
+				}
+			}
+			if !os.IsNotExist(statErr) {
 				t.Fatalf("project runtime directory state after failed init = %v, want not exist", statErr)
 			}
 		})
@@ -2689,6 +2754,83 @@ func TestInitCommandWithConfig_PostWorktreeCmd(t *testing.T) {
 	}
 	if *state.Config.PostWorktreeCmd != "make sync-embedded" {
 		t.Errorf("state.Config.PostWorktreeCmd = %q, want %q", *state.Config.PostWorktreeCmd, "make sync-embedded")
+	}
+}
+
+func TestInitCommandWithConfig_ValidationExecution(t *testing.T) {
+	local := models.AgentToolConfig{ValidationExecution: "local"}
+	tests := []struct {
+		name      string
+		params    InitParams
+		wantTools map[string]models.AgentToolConfig
+		wantErr   string
+	}{
+		{name: "flag without CLI flags asserts the default chain's CLI",
+			params:    InitParams{ValidationExecution: "local"},
+			wantTools: map[string]models.AgentToolConfig{"claude": local}},
+		{name: "flag asserts every role's CLI",
+			params:    InitParams{ValidationExecution: "local", DefaultDoerCLI: "claude", DefaultReviewerCLI: "codex"},
+			wantTools: map[string]models.AgentToolConfig{"claude": local, "codex": local}},
+		{name: "non-interactive without flag asserts nothing",
+			params: InitParams{}},
+		{name: "interactive yes asserts",
+			params:    InitParams{ForceInteractive: true, Stdin: strings.NewReader("y\n")},
+			wantTools: map[string]models.AgentToolConfig{"claude": local}},
+		{name: "interactive no asserts nothing",
+			params: InitParams{ForceInteractive: true, Stdin: strings.NewReader("n\n")}},
+		{name: "auto-confirm never asserts on the operator's behalf",
+			params: InitParams{ForceInteractive: true, AutoConfirm: true}},
+		{name: "unsupported value is refused before any write",
+			params:  InitParams{ValidationExecution: "artifact-only"},
+			wantErr: `--validation-execution must be "local"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// GIVEN a clean repo, no CLI defaults from the shell, and a set setup command so the
+			// validation-execution prompt is the first one
+			tmpDir := setupGitRepo(t)
+			defer os.RemoveAll(tmpDir)
+			setupGlobalLiza(t)
+			for _, suffix := range []string{"DEFAULT_CLI", "DEFAULT_DOER_CLI", "DEFAULT_REVIEWER_CLI"} {
+				t.Setenv(brand.EnvName(suffix), "")
+				t.Setenv(brand.LegacyEnvName(suffix), "")
+			}
+			originalDir, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Chdir(originalDir)
+			if err := os.Chdir(tmpDir); err != nil {
+				t.Fatal(err)
+			}
+			testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+			params := tt.params
+			params.Description, params.SpecRef, params.PostWorktreeCmd = "Goal", "specs/vision.md", "make setup"
+
+			// WHEN init runs
+			err = InitCommandWithConfig(params)
+
+			// THEN state records exactly the asserted tools
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("InitCommandWithConfig() error = %v, want containing %q", err, tt.wantErr)
+				}
+				if _, statErr := os.Stat(paths.New(tmpDir).LizaDir()); !os.IsNotExist(statErr) {
+					t.Fatalf("project runtime directory state after refused init = %v, want not exist", statErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("InitCommandWithConfig() error = %v", err)
+			}
+			state, err := db.New(paths.New(tmpDir).StatePath()).Read()
+			if err != nil {
+				t.Fatalf("read state: %v", err)
+			}
+			if (len(state.Config.AgentTools) != 0 || len(tt.wantTools) != 0) && !reflect.DeepEqual(state.Config.AgentTools, tt.wantTools) {
+				t.Fatalf("state.Config.AgentTools = %v, want %v", state.Config.AgentTools, tt.wantTools)
+			}
+		})
 	}
 }
 

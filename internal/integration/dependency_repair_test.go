@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -31,10 +32,13 @@ var dependencyRepairCLIBuild struct {
 // TestMain switches the index env gates off for the whole integration package,
 // since developer shells set them and CI does not: with them on, MAS init and
 // orchestrator starts here would install index hooks in their temp
-// repositories. Tests that exercise indexing opt in with t.Setenv.
+// repositories. Tests that exercise indexing opt in with t.Setenv. In-process
+// init likewise must not depend on whether this host has pre-commit.
 func TestMain(m *testing.M) {
 	testhelpers.DisableIndexEnvGates()
+	restorePreCommit := commands.SetInitPreCommitLookPathForTest(func(name string) (string, error) { return "/stub/" + name, nil })
 	code := m.Run()
+	restorePreCommit()
 	if dependencyRepairCLIBuild.tempDir != "" {
 		if err := os.RemoveAll(dependencyRepairCLIBuild.tempDir); err != nil {
 			fmt.Fprintf(os.Stderr, "remove dependency-repair test binary: %v\n", err)

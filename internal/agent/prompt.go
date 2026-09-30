@@ -409,6 +409,10 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		}
 	}
 
+	if config.Role == models.RoleCodePlanner || config.Role == models.RoleCodePlanReviewer {
+		data.DeclareValidationPrerequisites = consumersValidateLocally(task.RolePair, state.Config, config.ProjectRoot, resolver)
+	}
+
 	// Reviewer-specific fields
 	if roleType == "reviewer" {
 		data.BaseCommit = derefString(task.BaseCommit)
@@ -770,6 +774,35 @@ func cloneDecompositionManifest(manifest *models.DecompositionManifest) *models.
 	clone.InterfacesOwned = slices.Clone(manifest.InterfacesOwned)
 	clone.InterfacesConsumed = slices.Clone(manifest.InterfacesConsumed)
 	return &clone
+}
+
+// consumersValidateLocally reports whether every doer and reviewer role of the
+// pairs consuming rolePair's output[] launches by default on a CLI asserting
+// validation_execution: local. Declarations under any other policy fail closed
+// at claim, so an unresolved or mixed selection is not local.
+func consumersValidateLocally(rolePair string, config models.Config, projectRoot string, resolver *pipeline.Resolver) bool {
+	pairs, err := resolver.OutputConsumerRolePairs(rolePair)
+	if err != nil || len(pairs) == 0 {
+		return false
+	}
+	var roles []string
+	for _, pair := range pairs {
+		doer, err := resolver.DoerRole(pair)
+		if err != nil {
+			return false
+		}
+		reviewer, err := resolver.ReviewerRole(pair)
+		if err != nil {
+			return false
+		}
+		roles = append(roles, doer, reviewer)
+	}
+	roleModels, err := LoadRoleModels(projectRoot)
+	if err != nil {
+		return false
+	}
+	roleCLIs, err := DefaultRoleCLIs(roles, resolver, config, roleModels)
+	return err == nil && AllValidationLocal(roleCLIs, config)
 }
 
 // TaskContextSections extends a role's configured context sections with the

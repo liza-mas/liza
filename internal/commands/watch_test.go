@@ -3894,6 +3894,18 @@ func TestCheckStalled_DiagnosesRefusedVersusUnstaffed(t *testing.T) {
 			wantPart: "claims refused",
 		},
 		{
+			name:     "a current failed validation preflight names the refusal",
+			state:    preflightStallState(staleTask(), liveIdle("coder"), now.Add(-10*time.Second)),
+			wantPart: "claims are being refused, not unstaffed; validation preflight failed for t1 (coder-1: executable_missing)",
+			notPart:  "supervisor logs",
+		},
+		{
+			name:     "an expired preflight observation is not the current reason",
+			state:    preflightStallState(staleTask(), liveIdle("coder"), now.Add(-2*models.ValidationRetryInterval)),
+			wantPart: "read supervisor logs for the refusal reason",
+			notPart:  "validation preflight",
+		},
+		{
 			name: "a working agent is not idle capacity",
 			state: &models.State{
 				Tasks:  []models.Task{staleTask()},
@@ -3920,6 +3932,22 @@ func TestCheckStalled_DiagnosesRefusedVersusUnstaffed(t *testing.T) {
 				t.Fatalf("message = %q, must not contain %q", alerts[0].Message, tt.notPart)
 			}
 		})
+	}
+}
+
+// preflightStallState is one declared task refused by one idle coder whose
+// failed preflight was observed at checkedAt.
+func preflightStallState(task models.Task, coder models.Agent, checkedAt time.Time) *models.State {
+	task.Validation = []string{"make check"}
+	task.ValidationPrerequisites = []models.ValidationPrerequisite{{Command: "make check", Executables: []string{"make"}}}
+	coder.Generation = "gen-1"
+	return &models.State{
+		Tasks:  []models.Task{task},
+		Agents: map[string]models.Agent{"coder-1": coder},
+		ValidationReadiness: map[string]map[string]models.ValidationReadiness{"coder-1": {task.ID: {
+			Generation: "gen-1", TaskID: task.ID, CheckedAt: checkedAt, Result: "failed", Code: "executable_missing",
+			Digest: models.ValidationPrerequisiteDigest(task.Validation, task.ValidationPrerequisites),
+		}}},
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/commands"
 )
 
 var nonDefaultBrandBuild struct {
@@ -21,7 +23,10 @@ var nonDefaultBrandBuild struct {
 }
 
 func TestMain(m *testing.M) {
+	// In-process init must not depend on whether this host has pre-commit.
+	restorePreCommit := commands.SetInitPreCommitLookPathForTest(func(name string) (string, error) { return "/stub/" + name, nil })
 	code := m.Run()
+	restorePreCommit()
 	if nonDefaultBrandBuild.tempDir != "" {
 		if err := os.RemoveAll(nonDefaultBrandBuild.tempDir); err != nil {
 			fmt.Fprintf(os.Stderr, "remove non-default-brand test binary: %v\n", err)

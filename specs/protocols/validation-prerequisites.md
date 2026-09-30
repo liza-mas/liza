@@ -48,6 +48,19 @@ and scoped to prerequisite checks rather than full suites. Each probe has a
 10-second deadline; all checks together have a 30-second deadline. Probe stdout
 and stderr are discarded at the process boundary, including failures.
 
+## Adoption in planning
+
+`init --validation-execution local` (or `y` at its prompt) writes the policy for
+every CLI the pipeline's roles launch with by default. When every doer and
+reviewer role of the pairs consuming a code plan's `output[]` resolves to a
+`local` CLI, the code-planner prompt requires one declaration per validation
+command and the code-plan review checklist checks it. Declarations name only
+what exists after worktree setup and before implementation; an executable the
+task itself builds is covered by its build tool. Resolution uses models.yaml and
+the default CLI chain; an agent started with an explicit `--cli` or `--profile`
+is checked only at claim and launch. See
+[ADR-0168](../architecture/ADR/0168-adopt-validation-prerequisites-in-planning.md).
+
 ## Execution context
 
 The selected project `config.agent_tools.<tool>.validation_execution` must be
@@ -113,6 +126,11 @@ task review metadata (`review_commit` when present), integration SHA,
 command/prerequisite digest, opaque environment fingerprint, timestamp, direct
 method, result and fixed diagnostic code with check indices or a variable name.
 It stores no raw environment, probe output or underlying process error.
+A failed observation that differs from the previous one for the same agent and
+task in result, code, command/check index, variable name or contract digest
+raises a `VALIDATION PREFLIGHT FAILED` alert carrying only those fields; an
+unchanged retry does not. A stall alert names current failed observations of
+idle live agents as the refusal reason.
 
 The fingerprint is an HMAC with a random process-private key. Neither key nor
 comparison domain is exported to children as authority. Fingerprints are
@@ -143,6 +161,7 @@ Retry from the repaired session and let the fresh checks establish readiness.
 
 - [Declared validation decision](../architecture/ADR/0072-declared-validation-commands.md)
 - [Session prerequisite decision](../architecture/ADR/0136-validation-session-prerequisites.md)
+- [Planning adoption decision](../architecture/ADR/0168-adopt-validation-prerequisites-in-planning.md)
 - [Blackboard schema](../architecture/blackboard-schema.md)
 - [Configuration reference](../../support-docs/CONFIGURATION.md#validation-execution-prerequisites)
 - [Deferred signed-artifact support](../../TECH_DEBT.md#signed-validation-artifacts-for-unavailable-execution-contexts)

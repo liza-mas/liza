@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agent"
 	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
@@ -38,7 +40,18 @@ var (
 
 	initBashPolicyLookPath bashpolicycli.ExecutableLookup
 	initBashPolicyRunner   bashpolicycli.CommandRunner
+
+	initPreCommitLookPath = exec.LookPath
 )
+
+// SetInitPreCommitLookPathForTest replaces the pre-commit executable lookup so
+// tests outside this package run init without the tool on PATH. It returns the
+// restore function.
+func SetInitPreCommitLookPathForTest(lookPath func(string) (string, error)) func() {
+	previous := initPreCommitLookPath
+	initPreCommitLookPath = lookPath
+	return func() { initPreCommitLookPath = previous }
+}
 
 // InitParams holds the parameters for InitCommand.
 type InitParams struct {
@@ -48,6 +61,7 @@ type InitParams struct {
 	EntryPoint                      string // --entry-point: name of entry-point in config
 	Branch                          string // --branch: integration branch name (default: "integration")
 	PostWorktreeCmd                 string // --post-worktree-cmd: shell command to run after worktree creation
+	ValidationExecution             string // --validation-execution: "local" asserts agent CLIs validate locally
 	CopyWorktreeEnvFiles            bool   // --copy-worktree-env-files: copy ignored root env files into task worktrees
 	AutoResume                      bool   // --auto-resume: automatically resume at checkpoint and sprint completion
 	NoFollowUp                      bool   // --no-follow-up: suppress top-level pipeline-transitions after the entry subpipeline
@@ -938,6 +952,10 @@ func InitCommandWithConfig(params InitParams) error {
 		}
 	}
 
+	if params.ValidationExecution != "" && params.ValidationExecution != agent.ValidationExecutionLocal {
+		return fmt.Errorf("--validation-execution must be %q, got %q", agent.ValidationExecutionLocal, params.ValidationExecution)
+	}
+
 	// Get project paths
 	lizaPaths, err := paths.LizaPathsFromGit()
 	if err != nil {
@@ -960,6 +978,11 @@ func InitCommandWithConfig(params InitParams) error {
 	}
 	if _, err := initcheck.EnsurePreCommitConfigCommittedClean(lizaPaths.ProjectRoot(), branch); err != nil {
 		return err
+	}
+	// The committed config is useless to agents without the tool that runs it:
+	// they would discover the gap only when a hook-driven validation fails.
+	if _, err := initPreCommitLookPath("pre-commit"); err != nil {
+		return fmt.Errorf("pre-commit is not on PATH; agents need it to run the committed .pre-commit-config.yaml. Install it (%s) or add it to PATH, then re-run %s", brand.Command("toolchain", "install", "--include", "pre-commit"), brand.Command("init"))
 	}
 
 	// Validate global config exists (setup must have been run).
@@ -1162,6 +1185,12 @@ func InitCommandWithConfig(params InitParams) error {
 		}
 	}
 
+	validationTools, err := resolveValidationExecutionTools(params, lizaPaths.ProjectRoot(), pipelineCfg, stdin, rawStdin)
+	if err != nil {
+		cleanupInit()
+		return err
+	}
+
 	// No agent refreshes project-root indexes: the lifecycle hooks do. Install
 	// them after the last prompt, so a cancelled init leaves Git hooks alone,
 	// and before writing state, so an unmanaged hook collision fails init
@@ -1257,6 +1286,7 @@ func InitCommandWithConfig(params InitParams) error {
 			NoFollowUp:                      params.NoFollowUp,
 			PostWorktreeCmd:                 stringPtrOrNil(postWorktreeCmd),
 			CopyWorktreeEnvFiles:            copyWorktreeEnvFiles,
+			AgentTools:                      validationTools,
 		},
 	}
 
@@ -1443,6 +1473,56 @@ func confirmMissingPostWorktreeCmd(params InitParams, projectRoot string, stdin 
 		return fmt.Errorf("initialization cancelled by user")
 	}
 	return nil
+}
+
+// resolveValidationExecutionTools returns agent_tools entries asserting
+// validation_execution: local for every CLI the pipeline's roles launch with by
+// default, when the operator asserts it (flag or prompt). The assertion is the
+// operator's (ADR-0136), so auto-confirm and non-interactive runs never make it.
+// Without it, declared validation prerequisites stay off.
+func resolveValidationExecutionTools(params InitParams, projectRoot string, pipelineCfg *pipeline.PipelineConfig, stdin *bufio.Reader, rawStdin io.Reader) (map[string]models.AgentToolConfig, error) {
+	asserted := params.ValidationExecution == agent.ValidationExecutionLocal
+	ask := !asserted && !params.AutoConfirm && (params.ForceInteractive || isInteractive(rawStdin))
+	if !asserted && !ask {
+		fmt.Fprintf(os.Stderr, "Validation prerequisites are off; pass --validation-execution %s if the agent CLIs run validation commands locally.\n", agent.ValidationExecutionLocal)
+		return nil, nil
+	}
+	resolver := pipeline.NewResolver(pipelineCfg)
+	roleModels, err := agent.LoadRoleModels(projectRoot)
+	var roleCLIs []agent.RoleCLI
+	if err == nil {
+		roleCLIs, err = agent.DefaultRoleCLIs(resolver.AllRoleNames(), resolver, models.Config{DefaultCLI: params.DefaultCLI}, roleModels)
+	}
+	if err != nil {
+		if asserted {
+			return nil, fmt.Errorf("--validation-execution: cannot resolve the agent CLIs to assert it for: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Skipping validation execution setup: %v\n", err)
+		return nil, nil
+	}
+	var clis []string
+	for _, rc := range roleCLIs {
+		if !slices.Contains(clis, rc.CLI) {
+			clis = append(clis, rc.CLI)
+		}
+	}
+	slices.Sort(clis)
+	if ask {
+		fmt.Fprintf(os.Stderr, "Do these agent CLIs run validation commands locally, in this host's environment and the task worktree: %s?\n", strings.Join(clis, ", "))
+		fmt.Fprint(os.Stderr, "Yes enables declared validation prerequisites, checked before agents claim work. (y/n): ")
+		response, err := termutil.ReadSingleKey(stdin)
+		fmt.Fprintln(os.Stderr)
+		if err != nil || response != "y" {
+			return nil, nil
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "Validation execution: %s for %s\n", agent.ValidationExecutionLocal, strings.Join(clis, ", "))
+	}
+	tools := make(map[string]models.AgentToolConfig, len(clis))
+	for _, cli := range clis {
+		tools[cli] = models.AgentToolConfig{ValidationExecution: agent.ValidationExecutionLocal}
+	}
+	return tools, nil
 }
 
 // detectPkgManagerContext returns a human-readable description of what was

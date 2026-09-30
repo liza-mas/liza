@@ -28,6 +28,9 @@ CODE PLANNER TOOLS:
   ]
 {{- end}}
   validation: optional ordered array of canonical commands the child task should run; each must be satisfiable for the child scope. Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
+{{- if and .DeclareValidationPrerequisites (not .DecompositionRoot)}}
+  validation_prerequisites: REQUIRED, one entry per validation[] command: {"command": "<exact command>", "executables": ["..."], "env": ["NAME"], "probes": [["argv", "..."]]} (at least one check). Declare only what exists after worktree setup and before implementation: interpreter, runner, build tool, env names, cheap probes. Never declare what the task builds: for `./bin/tool --self-test` declare the build tool (e.g. `go`), not `./bin/tool`; a builtin-only command declares its shell. Sessions are checked before claiming, so a missing tool blocks the claim, not finished work.
+{{- end}}
   For every coding child, emit an Acceptance Contract in its exact plan_ref section using
   the shared acceptance-evidence.md guide. Allocate existing Source References obligation IDs,
   a committed manifest path, and the exact same ordered validation commands as output[].

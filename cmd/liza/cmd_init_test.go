@@ -49,6 +49,16 @@ func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 			wantErr: "requires a description argument",
 		},
 		{
+			name:    "validation-execution without description errors",
+			args:    []string{"init", "--validation-execution", "local"},
+			wantErr: "requires a description argument",
+		},
+		{
+			name:    "agent flag with validation-execution and no description errors",
+			args:    []string{"init", "--claude", "--validation-execution", "local"},
+			wantErr: "workspace flags",
+		},
+		{
 			name:    "copy-worktree-env-files without description errors",
 			args:    []string{"init", "--copy-worktree-env-files"},
 			wantErr: "requires a description argument",
@@ -457,6 +467,35 @@ func TestInitDispatch_ScipSearchPlanFlagRequiresPairingInit(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--scip-search-plan is only supported for pairing init") {
 		t.Fatalf("full init error = %v, want pairing-only diagnostic", err)
+	}
+}
+
+func TestInitDispatch_ValidationExecutionFlagPersistsConfig(t *testing.T) {
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	testhelpers.SetupGlobalLiza(t)
+	testhelpers.CreateCommittedSpecFile(t, projectRoot, "vision.md", "# Vision\n")
+	testhelpers.CreateCommittedPreCommitConfig(t, projectRoot)
+	testhelpers.MustGit(t, projectRoot, "branch", "-f", "integration", "HEAD")
+
+	err := executeRootCommand(t, projectRoot, "init", "--spec", "specs/vision.md",
+		"--default-doer-cli", "claude", "--default-reviewer-cli", "codex",
+		"--validation-execution", "local", "Goal with validation execution")
+	if err != nil {
+		t.Fatalf("init with --validation-execution failed: %v", err)
+	}
+
+	state, err := db.New(filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml")).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	for _, cli := range []string{"claude", "codex"} {
+		if got := state.Config.AgentTools[cli].ValidationExecution; got != "local" {
+			t.Fatalf("state.Config.AgentTools[%s].ValidationExecution = %q, want local", cli, got)
+		}
+	}
+	if len(state.Config.AgentTools) != 2 {
+		t.Fatalf("state.Config.AgentTools = %v, want exactly claude and codex", state.Config.AgentTools)
 	}
 }
 

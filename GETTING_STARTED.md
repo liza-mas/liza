@@ -315,7 +315,8 @@ named. See also [How to Produce a Goal](support-docs/how-to-produce-a-goal.md).
 
 - **Commit the spec and `.pre-commit-config.yaml`.** Init requires both;
   the pre-commit configuration must also exist on the configured integration
-  branch if that branch already exists. Commit other files agents need, too:
+  branch if that branch already exists, and the `pre-commit` executable must be
+  on PATH (the toolchain installer can provide it). Commit other files agents need, too:
   task worktrees are created from the integration branch, so they do not inherit
   uncommitted changes in your working directory.
 - **Configure worktree setup when needed.** Fresh worktrees do not contain your
@@ -325,6 +326,12 @@ named. See also [How to Produce a Goal](support-docs/how-to-produce-a-goal.md).
   layouts, so check the suggested command. Empty repositories can start without
   one and configure it after scaffolding. See
   [Worktree Setup](support-docs/CONFIGURATION.md#worktree-setup-post_worktree_cmd).
+- **Let agents check validation tools before claiming work.** If your agent
+  CLIs run validation commands locally, pass `--validation-execution local`
+  to init (or answer `y` at its prompt). Code planners then declare what each
+  validation command needs, and an agent missing a tool is refused the claim,
+  with an alert, instead of discovering the gap after finishing the work. See
+  [Validation execution prerequisites](support-docs/CONFIGURATION.md#validation-execution-prerequisites).
 - **Fill in `GUARDRAILS.md`.** Project activation creates an empty template.
   Add and commit project constraints before launching agents, such as required
   validation commands, compatibility requirements, and architectural boundaries.

@@ -152,6 +152,9 @@ planning against a hypothesis.
       do not copy it into the orchestration envelope merely for textual identity.
       Verify every validation[] command is semantically and referentially consistent with the plan,
       satisfiable for the task scope, and agent-executable under the validation command-shape rule.
+{{- if .DeclareValidationPrerequisites}}
+      Verify each validation[] command has its validation_prerequisites entry (see TOOLS).
+{{- end}}
       A hook-runner command's paths must match each intended hook's effective file filters unless that
       hook always runs (e.g. `always_run: true`), and a
       behavior-changing child's tests must match a submission test-file pattern ({{testFilePatterns}}).

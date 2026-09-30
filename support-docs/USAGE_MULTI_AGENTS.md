@@ -110,7 +110,10 @@ Use this section once the global setup is complete.
 §BRAND_BINARY_NAME§ init "[Goal description]" --yes
 
 # spec_ref: Path to goal specification (default: specs/vision.md)
-# .pre-commit-config.yaml must exist on the configured integration branch.
+# .pre-commit-config.yaml must exist on the configured integration branch,
+# and the pre-commit executable must be on PATH.
+# --validation-execution local: agent CLIs validate locally, so planners declare
+# validation prerequisites and agents are checked before claiming.
 # Examples:
 #   §BRAND_BINARY_NAME§ init "Implement retry logic"                        # uses specs/vision.md
 #   §BRAND_BINARY_NAME§ init "Add auth" --spec specs/auth-feature.md        # uses custom spec

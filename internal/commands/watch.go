@@ -1614,18 +1614,48 @@ func stallDiagnosis(state *models.State, pr models.PipelineResolver, now time.Ti
 		unstaffed = append(unstaffed, fmt.Sprintf("%d for %s", role.Count, role.Role))
 	}
 
+	reason := "read supervisor logs for the refusal reason"
+	if failed := failedValidationPreflights(state, pr, now); len(failed) > 0 {
+		reason = "validation preflight failed for " + strings.Join(failed, ", ")
+	}
 	switch {
 	case len(refused) > 0 && len(unstaffed) > 0:
-		return fmt.Sprintf(" — claims refused (%s) and unstaffed (%s): read supervisor logs for the refusal reason",
-			strings.Join(refused, ", "), strings.Join(unstaffed, ", "))
+		return fmt.Sprintf(" — claims refused (%s) and unstaffed (%s): %s",
+			strings.Join(refused, ", "), strings.Join(unstaffed, ", "), reason)
 	case len(refused) > 0:
-		return fmt.Sprintf(" — %s: claims are being refused, not unstaffed; read supervisor logs for the refusal reason",
-			strings.Join(refused, ", "))
+		return fmt.Sprintf(" — %s: claims are being refused, not unstaffed; %s",
+			strings.Join(refused, ", "), reason)
 	case len(unstaffed) > 0:
 		return fmt.Sprintf(" — %s: no live agent for that role", strings.Join(unstaffed, ", "))
 	default:
 		return ""
 	}
+}
+
+// failedValidationPreflights names the idle, live agents whose current
+// preflight of a task they could claim failed, as "task (agent: code)". Only
+// observations CurrentValidationReadiness accepts count: an expired or
+// superseded record is history, not the reason for this refusal.
+func failedValidationPreflights(state *models.State, pr models.PipelineResolver, now time.Time) []string {
+	window := agentLivenessWindow(state.Config)
+	var failed []string
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if len(task.ValidationPrerequisites) == 0 {
+			continue
+		}
+		for agentID, agentState := range state.Agents {
+			if agentState.Status != models.AgentStatusIdle || !agentHasLiveRegistration(agentState, now, window) ||
+				!models.IsRoleTaskReady(state, task, agentState.Role, pr, now) {
+				continue
+			}
+			if record, ok := models.CurrentValidationReadiness(state, task, agentID, now); ok && record.Result == "failed" {
+				failed = append(failed, fmt.Sprintf("%s (%s: %s)", task.ID, agentID, record.Code))
+			}
+		}
+	}
+	slices.Sort(failed)
+	return failed
 }
 
 // idleAgentsByRole counts live, healthy, idle agents per role — the capacity

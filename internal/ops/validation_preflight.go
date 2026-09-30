@@ -6,11 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	gitpkg "github.com/liza-mas/liza/internal/git"
@@ -322,6 +325,7 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 			p.record.Code = local.code
 		}
 	}
+	var newFailure bool
 	err = bb.Modify(func(current *models.State) error {
 		if err := p.CheckCurrent(current); err != nil {
 			return err
@@ -332,11 +336,16 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 		if current.ValidationReadiness[agentID] == nil {
 			current.ValidationReadiness[agentID] = make(map[string]models.ValidationReadiness)
 		}
+		previous, recorded := current.ValidationReadiness[agentID][taskID]
+		newFailure = p.record.Result == "failed" && !(recorded && sameValidationObservation(previous, p.record))
 		current.ValidationReadiness[agentID][taskID] = p.record
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if newFailure {
+		writeValidationPreflightAlert(projectRoot, agentID, p.record)
 	}
 	if checkErr != nil {
 		validationFailures.Lock()
@@ -349,6 +358,38 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 	validationFailures.Unlock()
 	return p, nil
 }
+
+// sameValidationObservation compares the sanitized fields that tell an operator
+// what to repair. An unchanged failure retried every interval is one condition;
+// a different code, check or contract is a new one.
+func sameValidationObservation(a, b models.ValidationReadiness) bool {
+	return a.Result == b.Result && a.Code == b.Code && a.CommandIndex == b.CommandIndex &&
+		a.CheckIndex == b.CheckIndex && a.Variable == b.Variable && a.Digest == b.Digest
+}
+
+// writeValidationPreflightAlert surfaces a failed preflight: the claim is
+// released and retried silently otherwise. It carries only the sanitized
+// record fields, never command, probe or environment content.
+func writeValidationPreflightAlert(projectRoot, agentID string, record models.ValidationReadiness) {
+	detail := fmt.Sprintf("command=%d check=%d", record.CommandIndex, record.CheckIndex)
+	if record.Variable != "" {
+		detail += " variable=" + record.Variable
+	}
+	err := alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
+		Timestamp: time.Now().UTC(),
+		Level:     alerts.AlertLevelWarning,
+		Category:  ValidationPreflightFailedCategory,
+		Message: fmt.Sprintf("%s — agent %s failed validation preflight: %s (%s); repair that prerequisite in the agent's launch environment, then let it retry (%s)",
+			record.TaskID, agentID, record.Code, detail, brand.Command("repair-agent-pool", "--dry-run")),
+	})
+	if err != nil {
+		log.Printf("WARNING: validation preflight alert for %s: %v", record.TaskID, err)
+	}
+}
+
+// ValidationPreflightFailedCategory is the alert category of a new failed
+// validation preflight observation.
+const ValidationPreflightFailedCategory = "VALIDATION PREFLIGHT FAILED"
 
 func validationSession(sessions []*ValidationSession) *ValidationSession {
 	if len(sessions) == 0 {

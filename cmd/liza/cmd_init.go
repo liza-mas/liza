@@ -174,6 +174,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 			configPath, _ := cmd.Flags().GetString("config")
 			branch, _ := cmd.Flags().GetString("branch")
 			postWorktreeCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
+			validationExecution, _ := cmd.Flags().GetString("validation-execution")
 
 			if result.Mode == "pairing" {
 				if autoResume {
@@ -202,6 +203,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 				EntryPoint:           result.EntryPoint,
 				Branch:               branch,
 				PostWorktreeCmd:      postWorktreeCmd,
+				ValidationExecution:  validationExecution,
 				CopyWorktreeEnvFiles: copyWorktreeEnvFiles,
 				AutoResume:           autoResume,
 				NoFollowUp:           noFollowUp,
@@ -234,7 +236,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 				return fmt.Errorf("--no-follow-up requires full workspace init (provide a description)")
 			}
 			if hasExplicitInitFlags(cmd) {
-				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --copy-worktree-env-files, --max-instances, --default-cli, --default-doer-cli, --default-reviewer-cli) require a description argument for full workspace init")
+				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --validation-execution, --copy-worktree-env-files, --max-instances, --default-cli, --default-doer-cli, --default-reviewer-cli) require a description argument for full workspace init")
 			}
 			if err := commands.InitPairingCommand(commands.InitPairingParams{
 				Agents:          agents,
@@ -256,6 +258,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		entryPoint, _ := cmd.Flags().GetString("entry-point")
 		branch, _ := cmd.Flags().GetString("branch")
 		postCreateCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
+		validationExecution, _ := cmd.Flags().GetString("validation-execution")
 		if err := commands.InitCommandWithConfig(commands.InitParams{
 			Description:          description,
 			SpecRef:              specRef,
@@ -263,6 +266,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 			EntryPoint:           entryPoint,
 			Branch:               branch,
 			PostWorktreeCmd:      postCreateCmd,
+			ValidationExecution:  validationExecution,
 			CopyWorktreeEnvFiles: copyWorktreeEnvFiles,
 			AutoResume:           autoResume,
 			NoFollowUp:           noFollowUp,
@@ -490,7 +494,7 @@ var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini",
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
 func hasExplicitInitFlags(cmd *cobra.Command) bool {
-	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "copy-worktree-env-files", "max-instances", "default-cli", "default-doer-cli", "default-reviewer-cli"} {
+	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "validation-execution", "copy-worktree-env-files", "max-instances", "default-cli", "default-doer-cli", "default-reviewer-cli"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}
@@ -693,6 +697,7 @@ func init() {
 	initCmd.Flags().String("entry-point", "", `entry-point name: "general-objective", "functional-spec", "technical-spec", or legacy "detailed-spec" in default pipeline (default: auto-classified by orchestrator)`)
 	initCmd.Flags().String("branch", "integration", "integration branch name")
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
+	initCmd.Flags().String("validation-execution", "", `"local": assert that the agent CLIs run validation commands locally, enabling declared validation prerequisites`)
 	initCmd.Flags().Bool("copy-worktree-env-files", false, "copy ignored root env files into worktrees before setup commands")
 	initCmd.Flags().Int("max-instances", models.DefaultMaxInstances, "default max live agents per non-orchestrator role without its own max-instances; auto-repair scales each role up to it")
 	initCmd.Flags().Bool("auto-resume", false, "automatically resume at checkpoint and sprint completion")

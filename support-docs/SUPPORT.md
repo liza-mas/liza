@@ -671,6 +671,11 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 **Diagnosis**: Check agent output logs in `§BRAND_PROJECT_DIRNAME§/agent-outputs/` and the bootstrap prompt in `§BRAND_PROJECT_DIRNAME§/agent-prompts/` (what the agent was told to do).
 **Fix**: After 5 restarts without progress, supervisor auto-blocks the task. Check `blocked_reason`. May need `§BRAND_BINARY_NAME§ recover-task` then manual investigation.
 
+### Claim refused by validation preflight
+**Symptom**: `§BRAND_PROJECT_DIRNAME§/alerts.log` contains `VALIDATION PREFLIGHT FAILED`, or a stall alert says `validation preflight failed for <task> (<agent>: <code>)`; the task stays claimable but is not claimed.
+**Diagnosis**: The agent's launch environment lacks something the task declares in `validation_prerequisites` (`executable_missing`, `environment_missing`, `probe_failed`), or its CLI does not assert `validation_execution: local` (`execution_policy_required`). `§BRAND_BINARY_NAME§ repair-agent-pool --dry-run --json` lists the observation per agent.
+**Fix**: Provide the named tool or variable in that agent's environment (or restart its supervisor with the corrected environment); the agent retries on its own. Do not unblock or reassign: the claim was never granted.
+
 ### BLOCKED task
 **Symptom**: Task in BLOCKED state, agents skip it.
 **Diagnosis**: Read `blocked_reason`, `blocked_questions`, `depends_on`, and optional `repair_request` in state.yaml. A `BLOCKED` alert is raised when a task blocks; if the orchestrator assesses but cannot resolve it, an `UNRESOLVED BLOCKED` alert is raised.
