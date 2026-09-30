@@ -56,8 +56,8 @@ reviewer role of the pairs consuming a code plan's `output[]` resolves to a
 `local` CLI, the code-planner prompt requires one declaration per validation
 command and the code-plan review checklist checks it. Declarations name only
 what exists after worktree setup and before implementation; an executable the
-task itself builds is covered by its build tool. Resolution uses models.yaml and
-the default CLI chain; an agent started with an explicit `--cli` or `--profile`
+task itself builds is covered by its build tool. Resolution uses models.yaml,
+every item of a reviewer list included, and the default CLI chain; an agent started with an explicit `--cli` or `--profile`
 is checked only at claim and launch. See
 [ADR-0168](../architecture/ADR/0168-adopt-validation-prerequisites-in-planning.md).
 

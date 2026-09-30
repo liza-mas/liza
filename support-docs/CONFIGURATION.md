@@ -1247,7 +1247,18 @@ roles:
   architect: {cli: claude, model: claude-fable-5-1}  # overrides the default for one role
 ```
 
-A model is passed as a first-class launch argument (`--model` for `claude`, `-m` for `codex`); an entry setting a model for any other CLI is refused. Do not also pin a model in an `agent_tools` override of the same CLI. The file is validated at every start: an unknown key, role or CLI stops the agent start, and pool repair raises `AUTO REPAIR FAILED`. Reviewer lists for quorum slots are not supported yet.
+A model is passed as a first-class launch argument (`--model` for `claude`, `-m` for `codex`); an entry setting a model for any other CLI is refused. Do not also pin a model in an `agent_tools` override of the same CLI. The file is validated at every start: an unknown key, role or CLI, or an empty entry, stops the agent start, and pool repair raises `AUTO REPAIR FAILED`.
+
+A reviewer role, or `defaults.reviewer`, may hold a list that assigns quorum slots in order: item 1 reviews first, item 2 gives the second approval, and slots past the end reuse the last item. A rejection restarts at item 1. With a list, a reviewer claims a task only when its CLI and model match the item for that task's slot, and pool repair starts the reviewer that item names. A single entry binds no claims. Quorum and provider diversity stay in the pipeline; a list shorter than the quorum is valid and means less diversity.
+
+```yaml
+roles:
+  code-reviewer:
+    - {cli: codex, model: gpt-5}     # first review
+    - {cli: claude}                  # second review, tool default model
+```
+
+An unreadable file stops reviewer claims until it is fixed.
 
 An agent start resolves its CLI, model and profile together; the first matching row applies:
 
@@ -1259,7 +1270,7 @@ An agent start resolves its CLI, model and profile together; the first matching 
 | entry in `roles.<role>`, else `defaults.<doer\|reviewer>` | entry | entry | none |
 | none of the above | default profile CLI, then the chain above | tool default | default profile |
 
-Pool repair, and the TUI when its suggested CLI is kept, start a role covered by the file without `--cli`, so the agent applies the same entry, model included. `--explain-launch` prints the selection `source` and `model`. The agent record and each approval record the model an agent launched with.
+Pool repair, and the TUI when its suggested CLI is kept, start a role covered by the file without `--cli`, so the agent applies the same entry, model included; a reviewer list starts with item 1, and pool repair starts each reviewer on its slot's item. `--explain-launch` prints the selection `source` and `model`. The agent record and each approval record the model an agent launched with.
 
 Headless watch automatically runs the repair-agent-pool behavior, which sizes each role's agent pool to its claimable work. For every role it counts the immediately claimable tasks that idle agents do not cover and starts that many agents, up to the role's `max-instances` minus the agents already occupying the role. An idle agent covers a task only if it holds no task and could pass claim admission (live process, provider). For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. Reviewers are started under an explicit `--agent-id` that the claim filters accept for the task, so a prior approver's ID is not reused after that agent exited; reviewer tasks that no reviewer on the selected CLI could claim are reported as `AUTO REPAIR UNSERVABLE` instead of staffed. Started agents that have not registered yet count as capacity until they register or exit. It also starts an orchestrator when the goal is IN_PROGRESS, the system is RUNNING, and no orchestrator has held a fresh lease for 60 seconds. This is enabled by default. Set `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0`, `false`, or `no` to disable it. Unset or empty values enable it; other invalid non-empty values also leave it enabled and emit a warning.
 
@@ -1306,8 +1317,8 @@ config:
 `local` is an operator assertion that this provider's validation tools execute
 locally with the supplied environment and task worktree. `§BRAND_BINARY_NAME§ init
 --validation-execution local`, or `y` at init's interactive prompt, writes it for
-every CLI the pipeline's roles launch with by default (models.yaml, then the
-default CLI settings); init lists them. `--yes` and non-interactive runs never
+every CLI the pipeline's roles launch with by default (models.yaml, every item
+of a reviewer list included, then the default CLI settings); init lists them. `--yes` and non-interactive runs never
 make the assertion. It does not change
 permissions or establish equivalence with a sandbox or remote wrapper. Unset or
 unsupported values fail closed for tasks with prerequisites. `artifact-only`

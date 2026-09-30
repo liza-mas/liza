@@ -24,6 +24,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/procscan"
+	"github.com/liza-mas/liza/internal/rolemodels"
 )
 
 const (
@@ -219,7 +220,7 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 	}
 
 	now := time.Now().UTC()
-	roleModels, err := agent.LoadValidatedRoleModels(config.ProjectRoot, pr.AllRoleNames(), state.Config)
+	roleModels, err := agent.LoadValidatedRoleModels(config.ProjectRoot, agent.RoleTypesOf(pr), state.Config)
 	if err != nil {
 		key := autoRepairModelsErrorKey + err.Error()
 		if _, seen := config.StateCache[key]; !seen {
@@ -280,7 +281,7 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 		outcome.Failed = append(outcome.Failed, result.Failed...)
 		for _, spawned := range result.Spawned {
 			if spawned.PID > 0 {
-				config.StateCache[autoRepairPendingKey(spawned.Role, spawned.PID, spawned.AgentID)] = now
+				config.StateCache[autoRepairPendingKey(spawned.Role, spawned.PID, spawned.AgentID, spawned.Item)] = now
 			}
 		}
 		if logErr := logAutoRepairAgentPoolSpawn(config.ProjectRoot, result.Spawned); logErr != nil {
@@ -403,10 +404,11 @@ func recordAutoRepairFailedStart(cache map[string]time.Time, role string, now ti
 	cache[autoRepairAgentPoolStartCountPrefix+role] = autoRepairCountTime(count, now)
 }
 
-// autoRepairPendingKey names one started process: its role, PID and, when it
-// was started under an explicit ID, that ID.
-func autoRepairPendingKey(role string, pid int, agentID string) string {
-	return fmt.Sprintf("%s%s:%d:%s", autoRepairAgentPoolPendingPrefix, role, pid, agentID)
+// autoRepairPendingKey names one started process: its role, PID, the
+// explicit ID it was started under (if any) and the models.yaml list item it
+// was started with (0 for none).
+func autoRepairPendingKey(role string, pid int, agentID string, modelsItem int) string {
+	return fmt.Sprintf("%s%s:%d:%s:%d", autoRepairAgentPoolPendingPrefix, role, pid, agentID, modelsItem)
 }
 
 // autoRepairPendingProcessStatus observes a started agent process; tests
@@ -422,16 +424,17 @@ var autoRepairPendingProcessStatus = func(pid int, role string) procscan.AgentPr
 // start. A live or unobservable process stays pending, since no evidence says
 // it stopped consuming capacity; past AutoRepairAgentPoolPendingTimeout it
 // also counts once as a failed start, which can trigger suppression but never
-// frees its capacity. It also returns the explicit IDs pending processes will
-// register, which new starts must not reuse.
-func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.Time, now time.Time) (map[string]int, map[string]bool) {
+// frees its capacity. Each pending process is listed as the models.yaml list
+// item it was started with. It also returns the explicit IDs pending
+// processes will register, which new starts must not reuse.
+func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.Time, now time.Time) (map[string][]int, map[string]bool) {
 	registered := make(map[string]bool, len(state.Agents))
 	for _, agentState := range state.Agents {
 		if agentState.PID > 0 {
 			registered[fmt.Sprintf("%s:%d", agentState.Role, agentState.PID)] = true
 		}
 	}
-	pending := make(map[string]int)
+	pending := make(map[string][]int)
 	pendingIDs := make(map[string]bool)
 	for _, key := range slices.Sorted(maps.Keys(cache)) {
 		entry, ok := strings.CutPrefix(key, autoRepairAgentPoolPendingPrefix)
@@ -441,9 +444,10 @@ func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.T
 		timeoutKey := autoRepairAgentPoolPendingTimeoutPrefix + entry
 		_, timeoutCounted := cache[timeoutKey]
 		parts := strings.Split(entry, ":")
-		pid := 0
-		if len(parts) == 3 {
+		pid, item := 0, 0
+		if len(parts) == 4 {
 			pid, _ = strconv.Atoi(parts[1])
+			item, _ = strconv.Atoi(parts[3])
 		}
 		if pid <= 0 || parts[0] == "" {
 			delete(cache, key)
@@ -463,7 +467,7 @@ func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.T
 				recordAutoRepairFailedStart(cache, role, now)
 			}
 		default:
-			pending[role]++
+			pending[role] = append(pending[role], item)
 			if agentID != "" {
 				pendingIDs[agentID] = true
 			}
@@ -482,22 +486,30 @@ func autoRepairUnservableAlerts(unservable []UnservableRoleWork, cache map[strin
 	current := make(map[string]bool, len(unservable))
 	var out []Alert
 	for _, work := range unservable {
-		current[work.Role] = true
-		key := autoRepairAgentPoolUnservablePrefix + work.Role
+		kind := work.Role
+		if work.Item > 0 {
+			kind += "#" + strconv.Itoa(work.Item)
+		}
+		current[kind] = true
+		key := autoRepairAgentPoolUnservablePrefix + kind
 		if _, seen := cache[key]; seen {
 			continue
 		}
 		cache[key] = now
+		remedy := fmt.Sprintf("start one with `%s`", brand.Command("agent", work.Role, "--cli", "<other-cli>"))
+		if work.Item > 0 {
+			remedy = "change that item in " + paths.ModelsFileName
+		}
 		out = append(out, Alert{
 			Timestamp: now,
 			Level:     AlertLevelWarning,
 			Category:  "AUTO REPAIR UNSERVABLE",
-			Message: fmt.Sprintf("%d %s task(s) (%s) cannot be claimed by a new reviewer started with --cli %s; auto repair does not start one. They wait for an eligible reviewer, or start one with `%s`",
-				len(work.TaskIDs), work.Role, strings.Join(work.TaskIDs, ", "), work.CLI, brand.Command("agent", work.Role, "--cli", "<other-cli>")),
+			Message: fmt.Sprintf("%d %s task(s) (%s) cannot be claimed by a new reviewer started with %s; auto repair does not start one. They wait for an eligible reviewer, or %s",
+				len(work.TaskIDs), work.Role, strings.Join(work.TaskIDs, ", "), work.startedWith(), remedy),
 		})
 	}
 	for key := range cache {
-		if role, ok := strings.CutPrefix(key, autoRepairAgentPoolUnservablePrefix); ok && !current[role] {
+		if kind, ok := strings.CutPrefix(key, autoRepairAgentPoolUnservablePrefix); ok && !current[kind] {
 			delete(cache, key)
 		}
 	}
@@ -652,6 +664,8 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 	}
 	// pr is nil on any error — pipeline-aware checks skip gracefully.
 
+	// Pool repair alerts on an unreadable models.yaml; here it binds nothing.
+	roleModels, _ := rolemodels.Load(config.ProjectRoot)
 	lizaPaths := paths.New(config.ProjectRoot)
 	checks := []func() []Alert{
 		func() []Alert { return checkExpiredLeases(state) },
@@ -669,7 +683,7 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 		func() []Alert { return checkStalled(state, pr) },
 		func() []Alert { return checkStaleDrafts(state) },
 		func() []Alert { return checkImmediateDiscoveries(state) },
-		func() []Alert { return checkMissingRoles(state, pr, config.StateCache) },
+		func() []Alert { return checkMissingRoles(state, pr, roleModels, config.StateCache) },
 		func() []Alert { return checkMissingOrchestrator(state, pr, config.StateCache, time.Now().UTC()) },
 	}
 	for _, check := range checks {
@@ -1762,7 +1776,7 @@ func checkImmediateDiscoveries(state *models.State) []Alert {
 // blocked by unmet deps won't trigger an alert even if the needed role is
 // missing — the alert fires later when deps resolve. This is conservative
 // (fewer false positives) at the cost of delayed detection.
-func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache map[string]time.Time) []Alert {
+func checkMissingRoles(state *models.State, pr models.PipelineResolver, roleModels rolemodels.File, cache map[string]time.Time) []Alert {
 	if pr == nil {
 		return nil
 	}
@@ -1771,7 +1785,7 @@ func checkMissingRoles(state *models.State, pr models.PipelineResolver, cache ma
 	var alerts []Alert
 	now := time.Now().UTC()
 
-	missingRoles := FindMissingRolesWithClaimableWork(state, pr)
+	missingRoles := FindMissingRolesWithClaimableWork(state, pr, roleModels)
 	missingRoleSet := make(map[string]bool, len(missingRoles))
 	for _, roleWork := range missingRoles {
 		role := roleWork.Role

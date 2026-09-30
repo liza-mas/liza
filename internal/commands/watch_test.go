@@ -23,6 +23,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/procscan"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -2166,7 +2167,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0; alerts: %v", len(alerts), alerts)
 		}
@@ -2184,7 +2185,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Fatalf("len(alerts) = %d, want 1; alerts: %v", len(alerts), alerts)
 		}
@@ -2217,7 +2218,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Fatalf("len(alerts) = %d, want 1; alerts: %v", len(alerts), alerts)
 		}
@@ -2237,7 +2238,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Fatalf("len(alerts) = %d, want 1; alerts: %v", len(alerts), alerts)
 		}
@@ -2257,7 +2258,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			Agents: map[string]models.Agent{},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0 (terminal tasks); alerts: %v", len(alerts), alerts)
 		}
@@ -2277,7 +2278,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			Agents: map[string]models.Agent{},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0 (dep-blocked task not claimable); alerts: %v", len(alerts), alerts)
 		}
@@ -2294,7 +2295,7 @@ func TestCheckMissingRoles(t *testing.T) {
 		cache := make(map[string]time.Time)
 
 		// First call — should alert.
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Fatalf("first call: len(alerts) = %d, want 1", len(alerts))
 		}
@@ -2303,7 +2304,7 @@ func TestCheckMissingRoles(t *testing.T) {
 		}
 
 		// Second call — should be throttled.
-		alerts = checkMissingRoles(state, pr, cache)
+		alerts = checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("second call: len(alerts) = %d, want 0 (throttled)", len(alerts))
 		}
@@ -2311,7 +2312,7 @@ func TestCheckMissingRoles(t *testing.T) {
 		// Agent of that role appears — cache should clear.
 		leaseExpires := now.Add(30 * time.Minute)
 		state.Agents["coder-1"] = models.Agent{Role: "coder", Status: models.AgentStatusIdle, LeaseExpires: &leaseExpires}
-		alerts = checkMissingRoles(state, pr, cache)
+		alerts = checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("after agent appears: len(alerts) = %d, want 0", len(alerts))
 		}
@@ -2321,7 +2322,7 @@ func TestCheckMissingRoles(t *testing.T) {
 
 		// Agent removed again — should re-fire.
 		delete(state.Agents, "coder-1")
-		alerts = checkMissingRoles(state, pr, cache)
+		alerts = checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Errorf("after agent removed: len(alerts) = %d, want 1", len(alerts))
 		}
@@ -2337,7 +2338,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			Agents: map[string]models.Agent{},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0 (unknown role pair); alerts: %v", len(alerts), alerts)
 		}
@@ -2351,7 +2352,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			Agents: map[string]models.Agent{},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, nil, cache)
+		alerts := checkMissingRoles(state, nil, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0 (nil resolver)", len(alerts))
 		}
@@ -2363,7 +2364,7 @@ func TestCheckMissingRoles(t *testing.T) {
 		task.RolePair = ""
 		state := &models.State{Tasks: []models.Task{task}, Agents: map[string]models.Agent{}}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("len(alerts) = %d, want 0 (no role pair)", len(alerts))
 		}
@@ -2380,7 +2381,7 @@ func TestCheckMissingRoles(t *testing.T) {
 		cache := make(map[string]time.Time)
 
 		// First call — alerts for missing coder.
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Fatalf("first call: len(alerts) = %d, want 1", len(alerts))
 		}
@@ -2390,7 +2391,7 @@ func TestCheckMissingRoles(t *testing.T) {
 
 		// Task gets merged — no longer claimable (role still absent).
 		state.Tasks[0].Status = models.TaskStatusMerged
-		alerts = checkMissingRoles(state, pr, cache)
+		alerts = checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 0 {
 			t.Errorf("after merge: len(alerts) = %d, want 0", len(alerts))
 		}
@@ -2402,7 +2403,7 @@ func TestCheckMissingRoles(t *testing.T) {
 		state.Tasks = []models.Task{
 			testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
 		}
-		alerts = checkMissingRoles(state, pr, cache)
+		alerts = checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Fatalf("new claimable task: len(alerts) = %d, want 1", len(alerts))
 		}
@@ -2424,7 +2425,7 @@ func TestCheckMissingRoles(t *testing.T) {
 			Agents: map[string]models.Agent{},
 		}
 		cache := make(map[string]time.Time)
-		alerts := checkMissingRoles(state, pr, cache)
+		alerts := checkMissingRoles(state, pr, rolemodels.File{}, cache)
 		if len(alerts) != 1 {
 			t.Fatalf("len(alerts) = %d, want 1; alerts: %v", len(alerts), alerts)
 		}
@@ -3495,7 +3496,7 @@ func TestRunAutoRepairAgentPool_LogsSuccessfulSpawnWithoutAlert(t *testing.T) {
 	projectRoot, state := setupAutoRepairMissingArchitectState(t, now)
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool, _ int) (int, error) {
 		if role != "architect" {
 			t.Fatalf("role = %q, want architect", role)
 		}
@@ -3538,7 +3539,7 @@ func TestRunChecks_AutoRepairSpawnDoesNotRaiseZombieAlert(t *testing.T) {
 	alertsLog := paths.New(projectRoot).AlertsLogPath()
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool, _ int) (int, error) {
 		if role != "architect" {
 			t.Fatalf("role = %q, want architect", role)
 		}
@@ -3582,7 +3583,7 @@ func TestRunAutoRepairAgentPool_ReportsSpawnFailure(t *testing.T) {
 	projectRoot, state := setupAutoRepairMissingArchitectState(t, now)
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool, _ int) (int, error) {
 		return 0, errors.New("spawn denied")
 	}
 	t.Cleanup(func() { repairAgentPoolSpawn = originalSpawn })
@@ -3615,7 +3616,7 @@ func TestRunAutoRepairAgentPool_SuppressesRepeatedUnregisteredStarts(t *testing.
 	cache[autoRepairAgentPoolStartCountPrefix+"architect"] = autoRepairCountTime(AutoRepairAgentPoolMaxStarts, now)
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool, _ int) (int, error) {
 		t.Fatalf("spawn should be suppressed after repeated unregistered starts")
 		return 0, nil
 	}

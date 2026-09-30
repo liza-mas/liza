@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func newPoolRepairHarness(t *testing.T) *poolRepairHarness {
 		status:  make(map[int]procscan.AgentProcessState),
 	}
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(_, _, _, _ string, _ bool) (int, error) {
+	repairAgentPoolSpawn = func(_, _, _, _ string, _ bool, _ int) (int, error) {
 		h.nextPID++
 		h.spawned = append(h.spawned, h.nextPID)
 		h.status[h.nextPID] = procscan.AgentProcessLiveMatching
@@ -142,7 +143,7 @@ func TestRunAutoRepairAgentPool_StalePendingCountsOnceAndKeepsCapacity(t *testin
 	// GIVEN one started coder that stays unregistered past the timeout
 	h := newPoolRepairHarness(t)
 	h.tick(coderDemand(1))
-	key := autoRepairPendingKey("coder", h.spawned[0], "")
+	key := autoRepairPendingKey("coder", h.spawned[0], "", 0)
 	h.cache[key] = time.Now().UTC().Add(-AutoRepairAgentPoolPendingTimeout - time.Second)
 
 	// WHEN two ticks observe it still alive
@@ -198,7 +199,7 @@ func TestRunAutoRepairAgentPool_RegistrationResetsFailedStarts(t *testing.T) {
 	h := newPoolRepairHarness(t)
 	now := time.Now().UTC()
 	pid := os.Getpid()
-	h.cache[autoRepairPendingKey("coder", pid, "")] = now
+	h.cache[autoRepairPendingKey("coder", pid, "", 0)] = now
 	h.status[pid] = procscan.AgentProcessLiveMatching
 	recordAutoRepairFailedStart(h.cache, "coder", now)
 	recordAutoRepairFailedStart(h.cache, "coder", now)
@@ -243,8 +244,8 @@ func TestResolveAutoRepairPendingSpawns_ReservesExplicitIDs(t *testing.T) {
 	// start that auto-assigns
 	h := newPoolRepairHarness(t)
 	now := time.Now().UTC()
-	h.cache[autoRepairPendingKey("code-reviewer", 50001, "code-reviewer-2")] = now
-	h.cache[autoRepairPendingKey("coder", 50002, "")] = now
+	h.cache[autoRepairPendingKey("code-reviewer", 50001, "code-reviewer-2", 2)] = now
+	h.cache[autoRepairPendingKey("coder", 50002, "", 0)] = now
 	h.status[50001] = procscan.AgentProcessLiveMatching
 	h.status[50002] = procscan.AgentProcessLiveMatching
 
@@ -252,8 +253,8 @@ func TestResolveAutoRepairPendingSpawns_ReservesExplicitIDs(t *testing.T) {
 	pending, ids := resolveAutoRepairPendingSpawns(testhelpers.CreateValidState(), h.cache, now)
 
 	// THEN both cover demand and only the explicit ID is reserved
-	if pending["code-reviewer"] != 1 || pending["coder"] != 1 {
-		t.Fatalf("pending = %v, want one per role", pending)
+	if !slices.Equal(pending["code-reviewer"], []int{2}) || !slices.Equal(pending["coder"], []int{0}) {
+		t.Fatalf("pending = %v, want one per role, the reviewer's with its models.yaml item", pending)
 	}
 	if len(ids) != 1 || !ids["code-reviewer-2"] {
 		t.Fatalf("reserved IDs = %v, want only code-reviewer-2", ids)

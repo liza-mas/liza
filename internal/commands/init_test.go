@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 
 	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
@@ -24,6 +23,7 @@ import (
 	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
@@ -5519,14 +5519,14 @@ func TestInitCommandWithConfig_RoleSpecificDefaultCLIs(t *testing.T) {
 	if state.Config.DefaultDoerCLI != "" || state.Config.DefaultReviewerCLI != "" {
 		t.Errorf("state role CLIs = %q/%q, want empty", state.Config.DefaultDoerCLI, state.Config.DefaultReviewerCLI)
 	}
-	rm, err := agent.LoadRoleModels(tmpDir)
+	rm, err := rolemodels.Load(tmpDir)
 	if err != nil {
-		t.Fatalf("LoadRoleModels() error = %v", err)
+		t.Fatalf("rolemodels.Load() error = %v", err)
 	}
-	if rm.Defaults.Doer == nil || rm.Defaults.Doer.CLI != "codex" {
+	if rm.Defaults.Doer == nil || rm.Defaults.Doer.First().CLI != "codex" {
 		t.Errorf("defaults.doer = %+v, want cli codex", rm.Defaults.Doer)
 	}
-	if rm.Defaults.Reviewer == nil || rm.Defaults.Reviewer.CLI != "gemini" {
+	if rm.Defaults.Reviewer == nil || rm.Defaults.Reviewer.First().CLI != "gemini" {
 		t.Errorf("defaults.reviewer = %+v, want cli gemini", rm.Defaults.Reviewer)
 	}
 }
@@ -5544,14 +5544,18 @@ func TestInitModelsFileSeedsOnlyGivenFlags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rm, err := agent.ParseRoleModels(initModelsFile(tt.params))
+			rm, err := rolemodels.Parse(initModelsFile(tt.params))
 			if err != nil {
-				t.Fatalf("ParseRoleModels() error = %v", err)
+				t.Fatalf("rolemodels.Parse() error = %v", err)
 			}
-			got := func(e *agent.RoleModelEntry) string {
-				if e == nil {
+			got := func(s *rolemodels.Selection) string {
+				if s == nil {
 					return ""
 				}
+				if s.List {
+					t.Errorf("seeded %+v as a list, want a single entry", s)
+				}
+				e := s.First()
 				if e.Model != "" {
 					t.Errorf("seeded model = %q, want none", e.Model)
 				}

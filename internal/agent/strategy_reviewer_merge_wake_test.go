@@ -180,3 +180,65 @@ func TestReviewerPreWork_PendingMergeStallRecordsAnomaly(t *testing.T) {
 		t.Errorf("recorded anomaly fails state validation: %v", err)
 	}
 }
+
+// A merge retry yields only to review work this reviewer's models.yaml slot
+// admits: the normal wait ignores the parked merge and rejects other-slot
+// work, so yielding to it would idle the reviewer until its max wait. The
+// fixture reviewer registers with provider "test".
+func TestReviewerPreWork_PendingMergeYieldsOnlyToAdmittedWork(t *testing.T) {
+	tests := []struct {
+		name, modelsYAML, initialTask string
+		wantYield                     bool
+	}{
+		{name: "other slot keeps retrying", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: other}\n"},
+		{name: "unreadable file keeps retrying", modelsYAML: "roles:\n  code-reviewer: []\n"},
+		{name: "matching slot yields", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: test}\n", wantYield: true},
+		{name: "initial task in other slot keeps retrying", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: other}\n", initialTask: "needs-review"},
+		{name: "initial task in matching slot yields", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: test}\n", initialTask: "needs-review", wantYield: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withPendingMergeWake(t, 100*time.Millisecond, 20)
+			reviewable := testhelpers.BuildTaskByStatus("needs-review", models.TaskStatusReadyForReview, time.Now().UTC())
+			reviewer, bb, config, _ := pendingMergeReviewer(t, reviewable)
+			writeReviewSlots(t, config.ProjectRoot, tt.modelsYAML)
+			config.InitialTask = tt.initialTask
+			reviewer.mergeRetries = reviewer.effectiveMaxRetries()
+
+			shouldContinue, err := reviewer.PreWork(context.Background(), bb, config)
+			if err != nil {
+				t.Fatalf("PreWork() error = %v", err)
+			}
+			if shouldContinue == tt.wantYield {
+				t.Fatalf("PreWork() shouldContinue = %v, want yield %v", shouldContinue, tt.wantYield)
+			}
+			if parked := reviewer.parkedMergeFingerprint != ""; parked != tt.wantYield {
+				t.Fatalf("merge parked = %v, want %v", parked, tt.wantYield)
+			}
+		})
+	}
+}
+
+// A merge that stops pending still ends the wake under a slot binding that
+// admits none of the review work.
+func TestReviewerAwaitPendingMergeWake_ResolvedMergeWakesDespiteOtherSlot(t *testing.T) {
+	withPendingMergeWake(t, 5*time.Second, 20)
+	reviewable := testhelpers.BuildTaskByStatus("needs-review", models.TaskStatusReadyForReview, time.Now().UTC())
+	reviewer, bb, config, pr := pendingMergeReviewer(t, reviewable)
+	writeReviewSlots(t, config.ProjectRoot, "roles:\n  code-reviewer:\n    - {cli: other}\n")
+	if err := bb.Modify(func(state *models.State) error {
+		state.FindTask("approved-unmerged").Status = models.TaskStatusMerged
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	yield, err := reviewer.awaitPendingMergeWake(context.Background(), bb, config, pr)
+	if err != nil || !yield {
+		t.Fatalf("awaitPendingMergeWake() = (%v, %v), want a yield for the resolved merge", yield, err)
+	}
+	if elapsed := time.Since(start); elapsed >= 5*time.Second {
+		t.Fatalf("awaitPendingMergeWake() took %v, want an immediate wake", elapsed)
+	}
+}

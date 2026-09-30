@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/rolemodels"
 )
 
 type fakeRoleTypes map[string]string
@@ -31,10 +32,12 @@ func clearCLIEnv(t *testing.T) {
 }
 
 func TestDefaultRoleCLIs(t *testing.T) {
+	codexDefault, codexDoer := single("codex", ""), single("codex", "")
+	reviewerList := rolemodels.Selection{Items: []rolemodels.Entry{{CLI: "codex"}, {CLI: "claude"}, {CLI: "opencode"}}, List: true}
 	tests := []struct {
 		name    string
 		config  models.Config
-		models  RoleModels
+		models  rolemodels.File
 		env     map[string]string
 		want    []RoleCLI
 		wantErr string
@@ -49,11 +52,14 @@ func TestDefaultRoleCLIs(t *testing.T) {
 			want:   []RoleCLI{{"coder", "codex"}, {"code-reviewer", "claude"}}},
 		{name: "models.yaml type defaults beat config",
 			config: models.Config{DefaultCLI: "claude"},
-			models: RoleModels{Defaults: RoleModelDefaults{Reviewer: &RoleModelEntry{CLI: "codex"}}},
+			models: rolemodels.File{Defaults: rolemodels.Defaults{Reviewer: &codexDefault}},
 			want:   []RoleCLI{{"coder", "claude"}, {"code-reviewer", "codex"}}},
 		{name: "models.yaml role entry beats type default",
-			models: RoleModels{Defaults: RoleModelDefaults{Doer: &RoleModelEntry{CLI: "codex"}}, Roles: map[string]RoleModelEntry{"coder": {CLI: "opencode"}}},
+			models: rolemodels.File{Defaults: rolemodels.Defaults{Doer: &codexDoer}, Roles: map[string]rolemodels.Selection{"coder": single("opencode", "")}},
 			want:   []RoleCLI{{"coder", "opencode"}, {"code-reviewer", DefaultCLI}}},
+		{name: "reviewer list contributes every item's CLI",
+			models: rolemodels.File{Roles: map[string]rolemodels.Selection{"code-reviewer": reviewerList}},
+			want:   []RoleCLI{{"coder", DefaultCLI}, {"code-reviewer", "codex"}, {"code-reviewer", "claude"}, {"code-reviewer", "opencode"}}},
 		{name: "unknown default profile is a resolution error",
 			config:  models.Config{DefaultDoerProfile: "missing"},
 			wantErr: "role coder"},
@@ -83,7 +89,7 @@ func TestDefaultRoleCLIs(t *testing.T) {
 
 func TestDefaultRoleCLIsUnknownRoleType(t *testing.T) {
 	clearCLIEnv(t)
-	_, err := DefaultRoleCLIs([]string{"ghost"}, codingPairTypes, models.Config{}, RoleModels{})
+	_, err := DefaultRoleCLIs([]string{"ghost"}, codingPairTypes, models.Config{}, rolemodels.File{})
 	if err == nil || !strings.Contains(err.Error(), "role ghost") {
 		t.Fatalf("DefaultRoleCLIs() error = %v, want role ghost resolution error", err)
 	}

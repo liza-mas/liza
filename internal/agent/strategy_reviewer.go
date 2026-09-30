@@ -9,7 +9,9 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/rolemodels"
 )
 
 const defaultMaxMergeRetries = 3
@@ -213,7 +215,7 @@ func (s *reviewerStrategy) awaitPendingMergeWake(ctx context.Context, bb *db.Bla
 				logger.Info("Pending merge resolved, returning to normal wait", "agent_id", config.AgentID)
 				return true, ""
 			}
-			if config.InitialTask != "" || models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr) > 0 {
+			if s.hasAdmittedReviewWork(state, config, pr) {
 				logger.Info("Review work available while a merge is pending, yielding merge retry",
 					"agent_id", config.AgentID)
 				return true, ""
@@ -263,6 +265,13 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 				return true, "Owned pending merge changed; returning to merge handling"
 			}
 			breaker := s.activeBreaker()
+			// A reviewer list binds each review to one entry; work bound to
+			// another entry is not this agent's, so it must not wake the claim.
+			slots, self, err := s.reviewSlots(state, config)
+			if err != nil {
+				return false, fmt.Sprintf("Cannot read review slots: %v", err)
+			}
+			admit := func(task *models.Task) bool { return ops.ReviewerSlotAdmits(slots, task, self) }
 			if config.InitialTask != "" {
 				task := state.FindTask(config.InitialTask)
 				if task == nil {
@@ -277,6 +286,10 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 				if breaker.Quarantined(task, s.role, time.Now()) {
 					return false, fmt.Sprintf("Initial review task %s is quarantined after repeated claim failures", config.InitialTask)
 				}
+				if !admit(task) {
+					slot := len(task.Approvals)
+					return false, fmt.Sprintf("Initial review task %s waits for %s slot %d (%s)", config.InitialTask, paths.ModelsFileName, slot+1, describeEntry(slots.Slot(slot)))
+				}
 				return true, fmt.Sprintf("Found initial %s-reviewable task %s", s.role, config.InitialTask)
 			}
 
@@ -285,12 +298,16 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 			// different reviewer (see filterAlreadyApprovedByAgent in ops) —
 			// minus the candidates the breaker has quarantined, so the loop
 			// parks here instead of re-claiming a boundary it cannot repair.
-			count := breaker.ClaimableAfterQuarantine(state, s.role, config.AgentID, pr, time.Now())
+			count := breaker.ClaimableAfterQuarantine(state, s.role, config.AgentID, pr, time.Now(), admit)
 			if count > 0 {
 				return true, fmt.Sprintf("Found %d %s-reviewable task(s)", count, s.role)
 			}
-			if quarantined := models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr); quarantined > 0 {
+			otherSlot := countOtherSlotTasks(state, s.role, config.AgentID, pr, admit)
+			if quarantined := models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr) - otherSlot; quarantined > 0 {
 				return false, fmt.Sprintf("%d %s-reviewable task(s) quarantined after repeated claim failures; waiting for the cooldown or a boundary change", quarantined, s.role)
+			}
+			if otherSlot > 0 {
+				return false, fmt.Sprintf("%d %s-reviewable task(s) wait for another %s slot", otherSlot, s.role, paths.ModelsFileName)
 			}
 
 			// Use richer diagnostics for code-reviewer role
@@ -299,6 +316,61 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 			}
 			return false, fmt.Sprintf("No %s-reviewable tasks", s.role)
 		})
+}
+
+// reviewSlots returns the role's models.yaml selection, which binds claims
+// only when it is a list, and the agent as the claim gate will see it: its
+// registered record, or its launch selection before registration is visible.
+func (s *reviewerStrategy) reviewSlots(state *models.State, config SupervisorConfig) (rolemodels.Selection, models.Agent, error) {
+	file, err := rolemodels.Load(config.ProjectRoot)
+	if err != nil {
+		return rolemodels.Selection{}, models.Agent{}, err
+	}
+	slots, _ := file.ReviewSlots(s.role)
+	self, ok := state.Agents[config.AgentID]
+	if !ok {
+		self = models.Agent{Provider: config.CLIName, Model: config.Model}
+	}
+	return slots, self, nil
+}
+
+// hasAdmittedReviewWork reports review work worth leaving a merge retry for:
+// the initial task, or any reviewable task, that this agent's review slot
+// admits. Work bound to another slot would not wake the normal wait, which
+// ignores the parked merge, so yielding to it would idle the reviewer. An
+// unreadable models.yaml admits no work, as in the normal wait.
+func (s *reviewerStrategy) hasAdmittedReviewWork(state *models.State, config SupervisorConfig, pr models.PipelineResolver) bool {
+	slots, self, err := s.reviewSlots(state, config)
+	if err != nil {
+		return false
+	}
+	admit := func(task *models.Task) bool { return ops.ReviewerSlotAdmits(slots, task, self) }
+	if config.InitialTask != "" {
+		task := state.FindTask(config.InitialTask)
+		return task == nil || admit(task)
+	}
+	return models.CountReviewableTasksForAgent(state, s.role, config.AgentID, pr)-countOtherSlotTasks(state, s.role, config.AgentID, pr, admit) > 0
+}
+
+// countOtherSlotTasks counts the tasks the agent could claim for the role but
+// whose next review is bound to another models.yaml entry. It repeats the two
+// predicates of models.CountReviewableTasksForAgent.
+func countOtherSlotTasks(state *models.State, role, agentID string, pr models.PipelineResolver, admit func(*models.Task) bool) int {
+	count := 0
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.IsClaimable(role, state.Tasks, pr) && !task.HasApprovalFromAgent(agentID) && !admit(task) {
+			count++
+		}
+	}
+	return count
+}
+
+func describeEntry(e rolemodels.Entry) string {
+	if e.Model == "" {
+		return e.CLI + ", default model"
+	}
+	return e.CLI + ", model " + e.Model
 }
 
 func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard) (string, string, error) {

@@ -18,6 +18,7 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/render"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -812,7 +813,7 @@ func TestBuildStatusDataPipelineReadinessMatchesClaimsAndMissingRoles(t *testing
 		t.Fatalf("aggregate readiness (%d, %d) does not match role sums (%d, %d)", data.Tasks.Claimable, data.Tasks.Reviewable, claimableSum, reviewableSum)
 	}
 
-	missing := FindMissingRolesWithClaimableWork(state, pr)
+	missing := FindMissingRolesWithClaimableWork(state, pr, rolemodels.File{})
 	missingCounts := make(map[string]int, len(missing))
 	for _, entry := range missing {
 		missingCounts[entry.Role] = entry.TaskCount

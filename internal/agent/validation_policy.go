@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/rolemodels"
 )
 
 // ValidationExecutionLocal is the only validation_execution value under which
@@ -23,10 +24,11 @@ type RoleTyper interface {
 }
 
 // DefaultRoleCLIs resolves each role's default launch CLI through
-// ResolveLaunchSelection: models.yaml, then the configured CLI chain.
-// Explicit agent-start flags bypass this; only claim/launch preflight can
-// check those.
-func DefaultRoleCLIs(roles []string, types RoleTyper, config models.Config, roleModels RoleModels) ([]RoleCLI, error) {
+// ResolveLaunchSelection: models.yaml, then the configured CLI chain. A
+// reviewer list contributes every item's CLI, since pool repair starts each
+// item for its review slot. Explicit agent-start flags bypass this; only
+// claim/launch preflight can check those.
+func DefaultRoleCLIs(roles []string, types RoleTyper, config models.Config, roleModels rolemodels.File) ([]RoleCLI, error) {
 	out := make([]RoleCLI, 0, len(roles))
 	for _, role := range roles {
 		roleType, err := types.RoleType(role)
@@ -41,6 +43,11 @@ func DefaultRoleCLIs(roles []string, types RoleTyper, config models.Config, role
 			return nil, fmt.Errorf("role %s: no CLI resolved", role)
 		}
 		out = append(out, RoleCLI{Role: role, CLI: sel.CLI})
+		if slots, bound := roleModels.ReviewSlots(role); bound && roleType == "reviewer" {
+			for _, item := range slots.Items[1:] {
+				out = append(out, RoleCLI{Role: role, CLI: item.CLI})
+			}
+		}
 	}
 	return out, nil
 }

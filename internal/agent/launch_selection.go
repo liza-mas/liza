@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/rolemodels"
 )
 
 // Launch selection sources, reported by --explain-launch.
@@ -24,8 +25,10 @@ type LaunchSelectionRequest struct {
 	CLIChanged bool
 	Model      string
 	Profile    string
+	// Item is the 1-based models.yaml list item a slot start runs; 0 for none.
+	Item       int
 	Config     models.Config
-	RoleModels RoleModels
+	RoleModels rolemodels.File
 }
 
 // LaunchSelection is the single effective choice an agent launches with.
@@ -39,6 +42,7 @@ type LaunchSelection struct {
 }
 
 // ResolveLaunchSelection applies the first matching rule:
+//  0. --models-item: that item of the role's entry list, alone.
 //  1. --profile: the profile, with --cli or its CLI (as before); --model is refused.
 //  2. --model: that model on --cli, else the covering entry's CLI, else the role default CLI.
 //  3. --cli: that CLI with the default profile's vars (as before).
@@ -46,9 +50,25 @@ type LaunchSelection struct {
 //  5. The default profile and CLI chain (as before).
 func ResolveLaunchSelection(req LaunchSelectionRequest) (LaunchSelection, error) {
 	model := strings.TrimSpace(req.Model)
-	entry, covered := req.RoleModels.EntryFor(req.Role, req.RoleType)
+	selection, covered := req.RoleModels.For(req.Role, req.RoleType)
+	var entry rolemodels.Entry
+	if covered {
+		entry = selection.First()
+	}
 	var sel LaunchSelection
 	switch {
+	case req.Item != 0:
+		if req.CLIChanged || model != "" || strings.TrimSpace(req.Profile) != "" {
+			return LaunchSelection{}, fmt.Errorf("--models-item cannot be combined with --cli, --model or --profile")
+		}
+		if !covered || !selection.List {
+			return LaunchSelection{}, fmt.Errorf("--models-item needs a models.yaml entry list for role %s", req.Role)
+		}
+		if req.Item < 1 || req.Item > len(selection.Items) {
+			return LaunchSelection{}, fmt.Errorf("--models-item %d is out of range: role %s lists %d entries", req.Item, req.Role, len(selection.Items))
+		}
+		item := selection.Items[req.Item-1]
+		sel = LaunchSelection{CLI: item.CLI, Model: item.Model, Source: SelectionSourceModelsFile}
 	case strings.TrimSpace(req.Profile) != "":
 		if model != "" {
 			return LaunchSelection{}, fmt.Errorf("--model cannot be combined with --profile; set the model in the profile")

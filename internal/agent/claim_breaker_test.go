@@ -213,7 +213,7 @@ func TestClaimBreakerQuarantineExcludesOnlyTheFailingTask(t *testing.T) {
 	pr := breakerTestResolver(t)
 	quarantined, healthy := reviewableTask("task-a"), reviewableTask("task-b")
 	state := &models.State{Tasks: []models.Task{quarantined, healthy}}
-	if got := breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow); got != 2 {
+	if got := breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow, nil); got != 2 {
 		t.Fatalf("fixture: ClaimableAfterQuarantine() = %d, want 2", got)
 	}
 
@@ -221,19 +221,19 @@ func TestClaimBreakerQuarantineExcludesOnlyTheFailingTask(t *testing.T) {
 		breaker.Observe(quarantineFailure("task-a", ops.ReviewClaimBoundaryVersion(&quarantined)), breakerTestNow)
 	}
 
-	if got := breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow); got != 1 {
+	if got := breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow, nil); got != 1 {
 		t.Fatalf("ClaimableAfterQuarantine() = %d, want 1 (task-b stays claimable)", got)
 	}
 	if breaker.Quarantined(&healthy, breakerTestRole, breakerTestNow) {
 		t.Fatal("healthy task reported quarantined")
 	}
-	if got := breaker.ClaimableAfterQuarantine(state, "architecture-reviewer", "code-reviewer-1", pr, breakerTestNow); got != 0 {
+	if got := breaker.ClaimableAfterQuarantine(state, "architecture-reviewer", "code-reviewer-1", pr, breakerTestNow, nil); got != 0 {
 		t.Fatalf("ClaimableAfterQuarantine() for another role = %d, want 0 (IsClaimable honored)", got)
 	}
 
 	// The count still honors the already-approved filter.
 	state.Tasks[1].Approvals = []models.Approval{{Agent: "code-reviewer-1", Provider: "claude"}}
-	if got := breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow); got != 0 {
+	if got := breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow, nil); got != 0 {
 		t.Fatalf("ClaimableAfterQuarantine() = %d, want 0 once task-b is approved by this agent", got)
 	}
 }
@@ -423,7 +423,7 @@ func TestClaimBreakerConcurrentReadsAreRaceFree(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < 200; j++ {
 				breaker.Quarantined(&taskA, breakerTestRole, breakerTestNow)
-				breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow)
+				breaker.ClaimableAfterQuarantine(state, breakerTestRole, "code-reviewer-1", pr, breakerTestNow, nil)
 				breaker.Counters(key)
 			}
 		}()

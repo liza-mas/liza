@@ -823,3 +823,124 @@ func TestReviewerObserveClaimFailureUsesTypedClassification(t *testing.T) {
 		t.Fatalf("nil decision = %+v, want the zero decision", decision)
 	}
 }
+
+func writeReviewSlots(t *testing.T, root, content string) {
+	t.Helper()
+	if err := os.WriteFile(paths.New(root).ModelsPath(), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// waitForWorkReason runs one short wait and returns its outcome and the logged
+// no-work diagnostics.
+func waitForWorkReason(t *testing.T, reviewer *reviewerStrategy, project *reviewClaimProject, config SupervisorConfig) (bool, string) {
+	t.Helper()
+	if err := project.bb.Modify(func(state *models.State) error {
+		state.Config.DiagnosticLogging = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	logs := captureAgentLogsAtLevel(t, slog.LevelInfo)
+	hasWork, err := reviewer.WaitForWork(context.Background(), project.bb, config, 100*time.Millisecond, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("WaitForWork() error = %v", err)
+	}
+	return hasWork, logs.String()
+}
+
+// The fixture reviewer registers with provider "test" and no model.
+func TestReviewerWaitForWorkHonorsReviewSlots(t *testing.T) {
+	tests := []struct {
+		name, modelsYAML, initialTask string
+		wantWork                      bool
+		wantReason                    string
+	}{
+		{name: "matching slot", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: test}\n", wantWork: true},
+		{name: "single entry binds nothing", modelsYAML: "roles:\n  code-reviewer: {cli: other}\n", wantWork: true},
+		{name: "other slot", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: other}\n",
+			wantReason: "1 code-reviewer-reviewable task(s) wait for another models.yaml slot"},
+		{name: "model must match", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: test, model: m}\n",
+			wantReason: "wait for another models.yaml slot"},
+		{name: "initial task in other slot", modelsYAML: "roles:\n  code-reviewer:\n    - {cli: other, model: m}\n", initialTask: "task-1",
+			wantReason: "Initial review task task-1 waits for models.yaml slot 1 (other, model m)"},
+		{name: "unreadable file", modelsYAML: "roles:\n  code-reviewer: []\n",
+			wantReason: "Cannot read review slots"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			project := setupReviewClaimProject(t)
+			project.addReviewableTask(t, "task-1", false)
+			writeReviewSlots(t, project.root, tt.modelsYAML)
+			config := project.supervisorConfig(t)
+			config.InitialTask = tt.initialTask
+			hasWork, logs := waitForWorkReason(t, newReviewerStrategyForTest(t), project, config)
+			if hasWork != tt.wantWork {
+				t.Fatalf("WaitForWork() = %v, want %v\n%s", hasWork, tt.wantWork, logs)
+			}
+			if !strings.Contains(logs, tt.wantReason) {
+				t.Fatalf("no-work diagnostic lacks %q:\n%s", tt.wantReason, logs)
+			}
+		})
+	}
+}
+
+// A task bound to another slot is not reported as quarantined: the count
+// covers only the tasks this reviewer's slot admits.
+func TestReviewerWaitForWorkQuarantineCountsAdmittedTasksOnly(t *testing.T) {
+	project := setupReviewClaimProject(t)
+	project.addReviewableTask(t, "task-broken", true)
+	config := project.supervisorConfig(t)
+	reviewer := newReviewerStrategyForTest(t)
+	quarantineThroughRealClaims(t, reviewer, config, project.bb)
+
+	writeReviewSlots(t, project.root, "roles:\n  code-reviewer:\n    - {cli: test}\n    - {cli: other}\n")
+	if err := project.bb.Modify(func(state *models.State) error {
+		task := testhelpers.BuildTaskByStatus("task-second", models.TaskStatusPartiallyApproved, time.Now().UTC())
+		task.Approvals = []models.Approval{{Agent: "code-reviewer-9", Provider: "test"}}
+		state.Tasks = append(state.Tasks, task)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hasWork, logs := waitForWorkReason(t, reviewer, project, config)
+	if hasWork {
+		t.Fatalf("WaitForWork() = work, want none\n%s", logs)
+	}
+	if !strings.Contains(logs, "1 code-reviewer-reviewable task(s) quarantined") {
+		t.Fatalf("quarantine diagnostic does not count only the admitted task:\n%s", logs)
+	}
+}
+
+// An owned pending merge wakes the reviewer before models.yaml is read, so
+// neither an unreadable file nor a slot binding can mask it.
+func TestReviewerWaitForWorkPendingMergeWakesDespiteReviewSlots(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	pr, err := ops.LoadResolverForModels(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadResolverForModels() error = %v", err)
+	}
+	const owner = "code-reviewer-1"
+	tasks := []models.Task{{
+		ID:        "approved-unmerged",
+		Status:    models.TaskStatusApproved,
+		RolePair:  "coding-pair",
+		Approvals: []models.Approval{{Agent: owner, Provider: "claude"}},
+	}}
+	state := testhelpers.CreateValidState()
+	state.Tasks = tasks
+	registerEligibleMergeTestAgents(state, tasks, owner, pr)
+	testhelpers.WriteInitialState(t, statePath, state)
+	writeReviewSlots(t, tmpDir, "roles:\n  code-reviewer: []\n")
+
+	bb := db.New(statePath)
+	if !hasPendingMerges(bb, owner, pr) {
+		t.Fatal("fixture: the reviewer does not own the pending merge")
+	}
+	config := SupervisorConfig{AgentID: owner, Role: models.RoleCodeReviewer, ProjectRoot: tmpDir, Authority: testSupervisorAuthority(t, bb, owner)}
+	hasWork, err := newReviewerStrategyForTest(t).WaitForWork(context.Background(), bb, config, 50*time.Millisecond, time.Second)
+	if err != nil || !hasWork {
+		t.Fatalf("WaitForWork() = (%v, %v), want a wake for the owned merge", hasWork, err)
+	}
+}

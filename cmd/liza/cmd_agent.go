@@ -102,11 +102,12 @@ Example:
 		if pipelineErr != nil {
 			return fmt.Errorf("failed to load pipeline config: %w", pipelineErr)
 		}
-		validRoles := pipeline.NewResolver(pipelineCfg).AllRoleNames()
+		resolver := pipeline.NewResolver(pipelineCfg)
+		validRoles := resolver.AllRoleNames()
 		if !slices.Contains(validRoles, role) {
 			return fmt.Errorf("invalid role: %s (valid: %s)", role, strings.Join(validRoles, ", "))
 		}
-		roleType, err := pipeline.NewResolver(pipelineCfg).RoleType(role)
+		roleType, err := resolver.RoleType(role)
 		if err != nil {
 			return err
 		}
@@ -129,6 +130,7 @@ Example:
 		cliName, _ := cmd.Flags().GetString("cli")
 		profileName, _ := cmd.Flags().GetString("profile")
 		modelName, _ := cmd.Flags().GetString("model")
+		modelsItem, _ := cmd.Flags().GetInt("models-item")
 		goalID, _ := cmd.Flags().GetString("goal-id")
 		interactive, _ := cmd.Flags().GetBool("interactive")
 		explainLaunch, _ := cmd.Flags().GetBool("explain-launch")
@@ -152,7 +154,7 @@ Example:
 			runtimeConfig = state.Config
 		}
 
-		roleModels, err := agent.LoadValidatedRoleModels(projectRoot, validRoles, runtimeConfig)
+		roleModels, err := agent.LoadValidatedRoleModels(projectRoot, agent.RoleTypesOf(resolver), runtimeConfig)
 		if err != nil {
 			return err
 		}
@@ -163,6 +165,7 @@ Example:
 			CLIChanged: cmd.Flags().Changed("cli"),
 			Model:      modelName,
 			Profile:    profileName,
+			Item:       modelsItem,
 			Config:     runtimeConfig,
 			RoleModels: roleModels,
 		})
@@ -579,6 +582,11 @@ func init() {
 	agentCmd.Flags().String("cli", "", "CLI to use; defaults by "+paths.ModelsFileName+", then role-specific then global config/env ("+providerCLIHelpHint+")")
 	agentCmd.Flags().String("model", "", "model to launch the CLI with (claude, codex); defaults by "+paths.ModelsFileName)
 	agentCmd.Flags().String("profile", "", "structured launch profile from config.agent_profiles")
+	// Pool repair starts a reviewer for one review slot of the role's list.
+	agentCmd.Flags().Int("models-item", 0, "1-based item of the role's "+paths.ModelsFileName+" entry list to launch")
+	if err := agentCmd.Flags().MarkHidden("models-item"); err != nil {
+		panic(err)
+	}
 	agentCmd.Flags().Bool("explain-launch", false, "resolve and print provider launch configuration without running an agent")
 	agentCmd.Flags().String("goal-id", "", "goal identifier marker for process diagnostics (must match state goal.id when supplied)")
 	agentCmd.Flags().BoolP("interactive", "i", false, "Print prompt location, don't execute CLI")

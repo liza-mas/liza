@@ -200,7 +200,8 @@ func TestAgentCmd_ExplainLaunchUsesModelsFileEntry(t *testing.T) {
 	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
 	t.Setenv("LIZA_DEFAULT_REVIEWER_CLI", "")
 	projectRoot := setupAgentTestProject(t, "")
-	modelsYAML := "defaults:\n  doer: {cli: claude}\nroles:\n  coder: {cli: codex, model: gpt-x}\n"
+	modelsYAML := "defaults:\n  doer: {cli: claude}\nroles:\n  coder: {cli: codex, model: gpt-x}\n" +
+		"  code-reviewer:\n    - {cli: claude, model: m1}\n    - {cli: codex, model: m2}\n"
 	if err := os.WriteFile(paths.New(projectRoot).ModelsPath(), []byte(modelsYAML), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -223,6 +224,14 @@ func TestAgentCmd_ExplainLaunchUsesModelsFileEntry(t *testing.T) {
 			want: []string{"tool: claude", "source: flag", "args: -p --permission-mode auto"}},
 		{name: "model with profile refused", args: []string{"agent", "coder", "--profile", "any", "--model", "m", "--explain-launch", "--no-log"},
 			wantErr: "--model cannot be combined with --profile"},
+		{name: "list role starts item 1", args: []string{"agent", "code-reviewer", "--explain-launch", "--no-log"},
+			want: []string{"tool: claude", "source: models-file", "model: m1", "args: --model m1 -p --permission-mode auto"}},
+		{name: "models item 2", args: []string{"agent", "code-reviewer", "--models-item", "2", "--explain-launch", "--no-log"},
+			want: []string{"tool: codex", "source: models-file", "model: m2", "args: -m m2 exec -"}},
+		{name: "models item out of range", args: []string{"agent", "code-reviewer", "--models-item", "3", "--explain-launch", "--no-log"},
+			wantErr: "--models-item 3 is out of range"},
+		{name: "models item on single entry", args: []string{"agent", "coder", "--models-item", "1", "--explain-launch", "--no-log"},
+			wantErr: "--models-item needs a models.yaml entry list for role coder"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

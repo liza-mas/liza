@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -25,6 +26,7 @@ type spawnedAgentCall struct {
 	agentID     string
 	// fromConfig reports a start without --cli (models.yaml-covered role).
 	fromConfig bool
+	modelsItem int
 }
 
 func withFakeRepairSpawner(t *testing.T, calls *[]spawnedAgentCall, err error) {
@@ -39,13 +41,14 @@ func withFakeRepairSpawnerByRole(t *testing.T, calls *[]spawnedAgentCall, errFor
 	t.Helper()
 
 	original := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string, fromConfig bool) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string, fromConfig bool, modelsItem int) (int, error) {
 		*calls = append(*calls, spawnedAgentCall{
 			projectRoot: projectRoot,
 			role:        role,
 			cli:         cli,
 			agentID:     agentID,
 			fromConfig:  fromConfig,
+			modelsItem:  modelsItem,
 		})
 		err := errForRole(role)
 		if err != nil {
@@ -136,7 +139,7 @@ func TestFindMissingRolesWithClaimableWork_ReviewerClaimEligibility(t *testing.T
 			reviewerRole:     "quorum-reviewer",
 		}
 
-		missing := FindMissingRolesWithClaimableWork(baseState(), resolver)
+		missing := FindMissingRolesWithClaimableWork(baseState(), resolver, rolemodels.File{})
 		if len(missing) != 1 {
 			t.Fatalf("missing = %+v, want one reviewer role", missing)
 		}
@@ -154,7 +157,7 @@ func TestFindMissingRolesWithClaimableWork_ReviewerClaimEligibility(t *testing.T
 			reviewerRole:     "quorum-reviewer",
 		}
 
-		if missing := FindMissingRolesWithClaimableWork(state, resolver); len(missing) != 0 {
+		if missing := FindMissingRolesWithClaimableWork(state, resolver, rolemodels.File{}); len(missing) != 0 {
 			t.Fatalf("missing = %+v, want none with a claim-eligible reviewer", missing)
 		}
 	})
@@ -166,7 +169,7 @@ func TestFindMissingRolesWithClaimableWork_ReviewerClaimEligibility(t *testing.T
 			reviewerRole:     "quorum-reviewer",
 		}
 
-		if missing := FindMissingRolesWithClaimableWork(baseState(), resolver); len(missing) != 0 {
+		if missing := FindMissingRolesWithClaimableWork(baseState(), resolver, rolemodels.File{}); len(missing) != 0 {
 			t.Fatalf("missing = %+v, want none when resolver error leaves reviewer claim-eligible", missing)
 		}
 	})
@@ -183,7 +186,7 @@ func TestFindMissingRolesWithClaimableWork_ReviewerClaimEligibility(t *testing.T
 		}
 		resolver := repairReviewerPolicyResolver{PipelineResolver: baseResolver, diversity: "preferred"}
 
-		if missing := FindMissingRolesWithClaimableWork(state, resolver); len(missing) != 0 {
+		if missing := FindMissingRolesWithClaimableWork(state, resolver, rolemodels.File{}); len(missing) != 0 {
 			t.Fatalf("missing = %+v, want doer capacity semantics unchanged", missing)
 		}
 	})

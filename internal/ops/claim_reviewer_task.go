@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -64,18 +65,28 @@ type ReviewerClaimEligibilityInput struct {
 	ReviewerRole string
 	Now          time.Time
 	Resolver     ReviewerClaimPolicyResolver
+	// Slots is the reviewer role's models.yaml selection; only a list binds.
+	Slots rolemodels.Selection
 }
 
 type reviewerClaimEligibility struct {
 	registrationErr        error
 	alreadyApproved        bool
 	inCooldown             bool
+	wrongSlot              bool
 	blockedByDoerDiversity bool
 	validationFailed       bool
 }
 
 func (e reviewerClaimEligibility) eligible() bool {
-	return e.registrationErr == nil && !e.alreadyApproved && !e.inCooldown && !e.blockedByDoerDiversity && !e.validationFailed
+	return e.registrationErr == nil && !e.alreadyApproved && !e.inCooldown && !e.wrongSlot && !e.blockedByDoerDiversity && !e.validationFailed
+}
+
+// ReviewerSlotAdmits reports whether agent may take task's next review: always
+// when sel is not a list, else only when agent runs the entry for review slot
+// len(task.Approvals) (ADR-0167).
+func ReviewerSlotAdmits(sel rolemodels.Selection, task *models.Task, agent models.Agent) bool {
+	return !sel.List || sel.Slot(len(task.Approvals)).Matches(agent.Provider, agent.Model)
 }
 
 // ReviewerClaimEligible projects the agent-specific reviewer claim gates for
@@ -95,7 +106,8 @@ func projectReviewerClaimEligibility(input ReviewerClaimEligibilityInput) review
 	return reviewerClaimEligibility{
 		alreadyApproved:        input.Task.HasApprovalFromAgent(input.AgentID),
 		inCooldown:             isInReviewClaimCooldown(input.Task, input.AgentID, input.Now.Add(-defaultReviewClaimCooldown)),
-		blockedByDoerDiversity: isBlockedByDoerDiversityAt(input.Task, agent.Provider, input.AgentID, input.State, input.Resolver, input.Now),
+		wrongSlot:              !ReviewerSlotAdmits(input.Slots, input.Task, agent),
+		blockedByDoerDiversity: isBlockedByDoerDiversityAt(input.Task, agent.Provider, input.AgentID, input.State, input.Resolver, input.Slots, input.Now),
 		validationFailed:       models.ValidationTaskKnownFailed(input.State, input.Task, input.AgentID, input.Now),
 	}
 }
@@ -185,6 +197,14 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
 	pr := pb.pr
+
+	// An unreadable models.yaml refuses the claim rather than ignoring the
+	// review slots it may bind.
+	modelsFile, err := rolemodels.Load(input.ProjectRoot)
+	if err != nil {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot read review slots: %v", err)}
+	}
+	slots, _ := modelsFile.ReviewSlots(role)
 
 	var preflight *ValidationPreflight
 	var selected *models.Task
@@ -281,7 +301,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 			for _, task := range candidates {
 				projected[task] = projectReviewerClaimEligibility(ReviewerClaimEligibilityInput{
 					State: state, Task: task, AgentID: input.AgentID,
-					ReviewerRole: role, Now: now, Resolver: pb.resolver,
+					ReviewerRole: role, Now: now, Resolver: pb.resolver, Slots: slots,
 				})
 			}
 
@@ -301,6 +321,13 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 			})
 			if len(candidates) == 0 {
 				return &PreconditionError{Reason: "all reviewable tasks in claim cooldown"}
+			}
+
+			candidates = filterByReviewerClaimEligibility(candidates, projected, func(e reviewerClaimEligibility) bool {
+				return !e.wrongSlot
+			})
+			if len(candidates) == 0 {
+				return &PreconditionError{Reason: "no reviewable tasks match this reviewer's " + paths.ModelsFileName + " slot"}
 			}
 
 			// Look up claiming reviewer's provider from agent state.
@@ -718,7 +745,7 @@ func isBlockedByDoerDiversity(
 		ReviewerRole(string) (string, error)
 	},
 ) bool {
-	return isBlockedByDoerDiversityAt(task, claimerProvider, claimerAgentID, state, resolver, time.Now().UTC())
+	return isBlockedByDoerDiversityAt(task, claimerProvider, claimerAgentID, state, resolver, rolemodels.Selection{}, time.Now().UTC())
 }
 
 func isBlockedByDoerDiversityAt(
@@ -727,6 +754,7 @@ func isBlockedByDoerDiversityAt(
 	claimerAgentID string,
 	state *models.State,
 	resolver ReviewerClaimPolicyResolver,
+	slots rolemodels.Selection,
 	now time.Time,
 ) bool {
 	// Resolve effective impact from task history, then check if provider-diversity
@@ -752,7 +780,8 @@ func isBlockedByDoerDiversityAt(
 	}
 
 	// Claimer shares the doer's provider. Block only if a valid
-	// different-provider reviewer is registered for this role-pair (even if busy).
+	// different-provider reviewer is registered for this role-pair (even if
+	// busy) and its review slot binding lets it take this review.
 	reviewerRole, err := resolver.ReviewerRole(task.RolePair)
 	if err != nil {
 		return false
@@ -764,7 +793,7 @@ func isBlockedByDoerDiversityAt(
 		if !hasReviewerCapacity(agent, reviewerRole, now) || models.ValidationTaskKnownFailed(state, task, agentID, now) {
 			continue
 		}
-		if agent.Provider != doerAgent.Provider {
+		if agent.Provider != doerAgent.Provider && ReviewerSlotAdmits(slots, task, agent) {
 			return true
 		}
 	}

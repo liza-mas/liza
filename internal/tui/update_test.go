@@ -1362,6 +1362,11 @@ func TestRoleLaunchDefault_ModelsFileEntry(t *testing.T) {
 		t.Errorf("roleLaunchDefault(code-reviewer) = %q, %v, %v; want claude from the CLI chain", cli, fromConfig, ok)
 	}
 
+	write("roles:\n  code-reviewer:\n    - {cli: codex}\n    - {cli: claude}\n")
+	if cli, fromConfig, ok := m.roleLaunchDefault("code-reviewer"); !ok || !fromConfig || cli != "codex" {
+		t.Errorf("roleLaunchDefault(code-reviewer) with a list = %q, %v, %v; want item 1's codex from config", cli, fromConfig, ok)
+	}
+
 	write("roles:\n  typo: {cli: codex}\n")
 	if cli, fromConfig, ok := m.roleLaunchDefault("coder"); !ok || fromConfig || cli != "claude" {
 		t.Errorf("roleLaunchDefault(coder) with invalid file = %q, %v, %v; want chain fallback", cli, fromConfig, ok)

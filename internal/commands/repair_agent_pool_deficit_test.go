@@ -216,7 +216,7 @@ func TestRepairAgentPool_PendingSpawnsCoverDemand(t *testing.T) {
 	withFakeRepairSpawner(t, &calls, nil)
 
 	// WHEN
-	result, err := RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: root, CLI: "claude", PendingSpawns: map[string]int{"coder": 2}})
+	result, err := RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: root, CLI: "claude", PendingSpawns: map[string][]int{"coder": {0, 0}}})
 
 	// THEN only the remaining gap is started
 	if err != nil {
@@ -231,7 +231,7 @@ func TestRepairAgentPool_PendingSpawnsCoverDemand(t *testing.T) {
 
 	// WHEN pending covers everything
 	calls = nil
-	result, err = RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: root, CLI: "claude", PendingSpawns: map[string]int{"coder": 3}})
+	result, err = RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: root, CLI: "claude", PendingSpawns: map[string][]int{"coder": {0, 0, 0}}})
 
 	// THEN nothing starts
 	if err != nil || len(calls) != 0 || slices.ContainsFunc(result.Missing, func(w MissingRoleWork) bool { return w.Role == "coder" }) {

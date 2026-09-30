@@ -244,13 +244,10 @@ func (m Model) roleLaunchDefault(role string) (cli string, fromConfig bool, ok b
 	if m.state != nil {
 		config = m.state.Config
 	}
-	roleNames := make([]string, 0, len(m.roleTypes))
-	for name := range m.roleTypes {
-		roleNames = append(roleNames, name)
-	}
-	if roleModels, err := agent.LoadValidatedRoleModels(m.projectRoot, roleNames, config); err == nil {
-		if entry, covered := roleModels.EntryFor(role, roleType); covered {
-			return entry.CLI, true, true
+	if roleModels, err := agent.LoadValidatedRoleModels(m.projectRoot, m.roleTypes, config); err == nil {
+		// A reviewer list starts with item 1, like an agent started without flags.
+		if selection, covered := roleModels.For(role, roleType); covered {
+			return selection.First().CLI, true, true
 		}
 	}
 	return agent.ResolveDefaultCLIForRole(roleType, m.cliResolutionConfig()), false, true

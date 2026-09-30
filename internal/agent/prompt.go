@@ -16,6 +16,7 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/precommit"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
@@ -797,7 +798,7 @@ func consumersValidateLocally(rolePair string, config models.Config, projectRoot
 		}
 		roles = append(roles, doer, reviewer)
 	}
-	roleModels, err := LoadRoleModels(projectRoot)
+	roleModels, err := rolemodels.Load(projectRoot)
 	if err != nil {
 		return false
 	}

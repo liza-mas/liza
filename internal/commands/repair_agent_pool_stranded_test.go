@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -42,7 +43,7 @@ func TestFindMissingRolesWithClaimableWork_StrandedExecutingClaim(t *testing.T) 
 	}
 
 	t.Run("dead holder makes the stranded task coder demand", func(t *testing.T) {
-		missing := FindMissingRolesWithClaimableWork(buildState(expired), resolver)
+		missing := FindMissingRolesWithClaimableWork(buildState(expired), resolver, rolemodels.File{})
 		var coder *MissingRoleWork
 		for i := range missing {
 			if missing[i].Role == models.RoleCoder {
@@ -58,7 +59,7 @@ func TestFindMissingRolesWithClaimableWork_StrandedExecutingClaim(t *testing.T) 
 	})
 
 	t.Run("live holder is not demand", func(t *testing.T) {
-		for _, work := range FindMissingRolesWithClaimableWork(buildState(live), resolver) {
+		for _, work := range FindMissingRolesWithClaimableWork(buildState(live), resolver, rolemodels.File{}) {
 			if work.Role == models.RoleCoder {
 				t.Fatalf("missing = %+v, want no coder demand while the holder is registered", work)
 			}

@@ -2,7 +2,7 @@
 
 ## Status
 
-ACCEPTED — 2026-09-30. Step 1 implemented; step 2 decided, not implemented.
+ACCEPTED — 2026-09-30. Steps 1 and 2 implemented.
 
 ## Context
 
@@ -54,7 +54,7 @@ roles:
   carries at most one model flag and the recorded model is the one passed. A
   missing file, or a role it does not cover, keeps the previous behavior.
 - **Validation.** The file is decoded strictly at every start; an unknown key,
-  role or CLI, a missing `cli`, a second YAML document, or a model on a tool
+  role or CLI, a missing `cli`, an empty entry, a second YAML document, or a model on a tool
   that cannot pass one stops the start. Pool repair raises `AUTO REPAIR FAILED`, once per distinct error.
 - **Spawning.** Pool repair and the TUI start a covered role without `--cli`,
   so the agent applies the same entry, model included, through the same
@@ -68,21 +68,54 @@ roles:
 - **Provenance.** The agent record and each approval record `model`. No policy
   reads it.
 
-### Step 2 — slot-bound reviewer lists (not implemented)
+### Step 2 — slot-bound reviewer lists
 
-A reviewer role's entry may become a list in priority order. The next review of
-a task uses slot `len(task.Approvals)` — item 1 for the first approval, item 2
-for the second; slots past the end reuse the last item, so one item under
-quorum 2 means no diversity. A rejection clears approvals, so re-review
-restarts at item 1. A reviewer claims only when its (cli, model) matches the
-task's slot, and pool repair starts per task the reviewer its slot names.
-Quorum and provider diversity stay pipeline policy; the claim-time diversity
-gate would count only reviewers matching the current slot, so `preferred`
-yields instead of stalling. Step 1 refuses lists until then.
+```yaml
+roles:
+  code-reviewer:
+    - {cli: codex, model: gpt-5}     # slot 1
+    - {cli: claude}                  # slot 2 and later
+```
+
+- **Slots.** `defaults.reviewer` and reviewer roles may hold a list in
+  priority order; a list elsewhere, or an empty one, is a load error. The next
+  review of a task uses slot `len(task.Approvals)` — item 1 for the first
+  approval, item 2 for the second; slots past the end reuse the last item, so
+  one item under quorum 2 means no diversity. A rejection clears approvals, so
+  re-review restarts at item 1.
+- **Only a list binds.** A reviewer may claim a task only when its registered
+  (cli, model) equals the entry for the task's slot, the empty model matching
+  only the tool default. A single mapping keeps step 1 behavior: it picks what
+  reviewers start with and binds no claim, so step 1 files are unchanged, and
+  `[{cli: codex}]` differs from `{cli: codex}`.
+- **Claim gate.** `claim-reviewer-task` reads the file once per claim; an
+  unreadable file refuses the claim rather than ignoring slots it may bind.
+  Quorum and provider diversity stay pipeline policy; the claim-time diversity
+  gate counts only reviewers the current slot admits, so `preferred` yields
+  instead of stalling.
+- **Waiting.** A reviewer's work predicate applies the same test, so work bound
+  to another slot does not wake it; it idles and exits at `reviewer_max_wait`,
+  freeing its role slot. An owned pending merge still wakes it.
+- **Starting.** A reviewer started without flags launches item 1. Pool repair
+  plans each uncovered task for the item its slot names, projecting a
+  registration with that item's CLI and model; items share the role's ID
+  reservations and `max-instances` headroom. It starts them with the internal
+  flag `--models-item N`, without `--cli`, so the agent resolves that item
+  itself; `--models-item` combined with `--cli`, `--model` or `--profile`, on a
+  role without a list, or out of range fails. A failed or still-registering
+  start counts against its own item only, so one unavailable item does not
+  hold back another. An explicit
+  `repair-agent-pool --cli` starts every reviewer on that CLI; work its
+  registration cannot take is reported unservable. The missing-role alert
+  applies the same binding.
 
 ## Consequences
 
 - Choosing a model for `claude` or `codex` needs no tool redefinition, per role.
+- With a list, a slot whose entry cannot start (quota, missing binary) stalls
+  that review until it starts or the file changes: slots are assignments, not
+  fallbacks. A reviewer idling on another slot's work holds a role slot for up
+  to `reviewer_max_wait`.
 - A hand-edited, start-time source joins state config and profiles;
   `default_*_cli` and default profiles stay as lower layers. Workspaces
   initialized afterwards hold role CLI defaults in the file, not state config.

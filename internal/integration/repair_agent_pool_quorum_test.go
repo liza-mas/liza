@@ -225,7 +225,7 @@ func TestRepairAgentPoolStartsReviewerUnderClaimableID(t *testing.T) {
 			t.Fatalf("auto-assignment would pick %s, want the approver's %s for this regression", got, approverID)
 		}
 		var started []string
-		restore := commands.SetRepairAgentPoolSpawnForTest(func(_, role, _, agentID string, _ bool) (int, error) {
+		restore := commands.SetRepairAgentPoolSpawnForTest(func(_, role, _, agentID string, _ bool, _ int) (int, error) {
 			started = append(started, role+"/"+agentID)
 			return 0, nil
 		})

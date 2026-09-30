@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"gopkg.in/yaml.v3"
 )
@@ -277,7 +278,7 @@ func statusPipelineReadinessFromPredicates(t *testing.T, state *models.State, re
 func assertStatusPipelineMissingRoles(t *testing.T, state *models.State, resolver models.PipelineResolver, readiness ...[]models.RoleTaskReadiness) {
 	t.Helper()
 	missingCounts := make(map[string]int)
-	for _, missing := range commands.FindMissingRolesWithClaimableWork(state, resolver) {
+	for _, missing := range commands.FindMissingRolesWithClaimableWork(state, resolver, rolemodels.File{}) {
 		missingCounts[missing.Role] = missing.TaskCount
 	}
 	wantMissingCounts := make(map[string]int)

@@ -263,15 +263,19 @@ func (b *claimBreaker) quarantinedLocked(task *models.Task, role string, now tim
 }
 
 // ClaimableAfterQuarantine counts the tasks the agent could claim for the role
-// once quarantined candidates are set aside. It repeats the two predicates of
+// once quarantined candidates, and those admit refuses, are set aside; a nil
+// admit refuses none. It repeats the two predicates of
 // models.CountReviewableTasksForAgent, which takes no extra filter.
-func (b *claimBreaker) ClaimableAfterQuarantine(state *models.State, role, agentID string, pr models.PipelineResolver, now time.Time) int {
+func (b *claimBreaker) ClaimableAfterQuarantine(state *models.State, role, agentID string, pr models.PipelineResolver, now time.Time, admit func(*models.Task) bool) int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	count := 0
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if !task.IsClaimable(role, state.Tasks, pr) || task.HasApprovalFromAgent(agentID) {
+			continue
+		}
+		if admit != nil && !admit(task) {
 			continue
 		}
 		if b.quarantinedLocked(task, role, now) {

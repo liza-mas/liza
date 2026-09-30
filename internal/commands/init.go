@@ -27,6 +27,7 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/projectdetect"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
@@ -1488,7 +1489,7 @@ func resolveValidationExecutionTools(params InitParams, projectRoot string, pipe
 		return nil, nil
 	}
 	resolver := pipeline.NewResolver(pipelineCfg)
-	roleModels, err := agent.LoadRoleModels(projectRoot)
+	roleModels, err := rolemodels.Load(projectRoot)
 	var roleCLIs []agent.RoleCLI
 	if err == nil {
 		roleCLIs, err = agent.DefaultRoleCLIs(resolver.AllRoleNames(), resolver, models.Config{DefaultCLI: params.DefaultCLI}, roleModels)
@@ -1557,6 +1558,8 @@ func initModelsFile(params InitParams) []byte {
 # for claude and codex. defaults.doer also covers orchestrators. Roles without
 # an entry use the configured default CLI. An agent started with --cli or
 # --profile ignores this file; --model replaces only the entry's model.
+# A reviewer entry may be a list assigning quorum slots: item 1 reviews first,
+# item 2 gives the second approval, the last item any later one.
 `)
 	if doer != "" || reviewer != "" {
 		b.WriteString("defaults:\n")
@@ -1575,6 +1578,9 @@ func initModelsFile(params InitParams) []byte {
 	b.WriteString(`#
 # roles:
 #   <role>: {cli: claude, model: <model>}
+#   <reviewer-role>:
+#     - {cli: codex, model: <model>}
+#     - {cli: claude, model: <model>}
 `)
 	return []byte(b.String())
 }
