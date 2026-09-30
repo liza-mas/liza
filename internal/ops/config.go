@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -177,4 +178,72 @@ func SetPoolConfig(projectRoot string, input SetPoolConfigInput) (*ConfigSetResu
 		return nil, fmt.Errorf("set %s: %w", input.Key, err)
 	}
 	return result, nil
+}
+
+// RuntimeInputRegistryConfigKey names the repository-relative recipe registry
+// runtime-input declarations resolve against (ADR-0169). Operator-only: the
+// registry decides which recipes a plan may name.
+const RuntimeInputRegistryConfigKey = "config.runtime_input_registry"
+
+// SetRuntimeInputRegistryInput describes an operator write of the registry path.
+type SetRuntimeInputRegistryInput struct {
+	Path    string
+	Replace bool
+	Reason  string
+}
+
+// SetRuntimeInputRegistry stores the registry path under the shared config
+// rule: compare and write in one transaction; replacing a different value
+// requires --replace with --reason. The file itself is read at the
+// integration commit when a declaration is admitted, not here.
+func SetRuntimeInputRegistry(projectRoot string, input SetRuntimeInputRegistryInput) (*ConfigSetResult, error) {
+	if err := validateRuntimeInputRegistryPath(input.Path); err != nil {
+		return nil, err
+	}
+	if input.Replace && strings.TrimSpace(input.Reason) == "" {
+		return nil, &PreconditionError{Reason: "--replace requires a non-empty --reason"}
+	}
+	bb := db.For(paths.New(projectRoot).StatePath())
+	result := &ConfigSetResult{Key: RuntimeInputRegistryConfigKey}
+	previous := ""
+	err := bb.Modify(func(state *models.State) error {
+		previous = state.Config.RuntimeInputRegistry
+		switch {
+		case previous == input.Path:
+			result.Outcome = "unchanged"
+		case previous != "" && !input.Replace:
+			result.Outcome = "conflict"
+			return &PreconditionError{
+				Reason:  RuntimeInputRegistryConfigKey + " is already set to a different path; use --replace with --reason to replace it",
+				Details: map[string]any{"key": RuntimeInputRegistryConfigKey, "conflict": "existing_value"},
+			}
+		default:
+			state.Config.RuntimeInputRegistry = input.Path
+			result.Outcome = "set"
+			if previous != "" {
+				result.Outcome = "replaced"
+			}
+		}
+		return nil
+	})
+	if err != nil && result.Outcome != "conflict" {
+		result.Outcome = "failed"
+	}
+	mask := secretmask.New()
+	log.Printf("config_set key=%s outcome=%s actor=%q project=%q previous=%q value=%q reason=%q",
+		RuntimeInputRegistryConfigKey, result.Outcome, "operator", mask.MaskText(projectRoot), previous, input.Path, boundPostWorktreeCmd(mask.MaskText(input.Reason)))
+	if err != nil {
+		return nil, fmt.Errorf("set %s: %w", RuntimeInputRegistryConfigKey, err)
+	}
+	return result, nil
+}
+
+// validateRuntimeInputRegistryPath accepts one clean repository-relative
+// file path, the shape Git reads at a commit.
+func validateRuntimeInputRegistryPath(value string) error {
+	if value == "" || !filepath.IsLocal(value) || filepath.ToSlash(filepath.Clean(value)) != value ||
+		strings.ContainsAny(value, "\\\r\n\x00") || !utf8.ValidString(value) {
+		return &PreconditionError{Reason: RuntimeInputRegistryConfigKey + " must be one clean repository-relative file path"}
+	}
+	return nil
 }

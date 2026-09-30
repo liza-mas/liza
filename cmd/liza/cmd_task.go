@@ -217,6 +217,7 @@ Example YAML file format:
 				DoneWhen:                input.DoneWhen,
 				Validation:              input.Validation,
 				ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
+				RuntimeInputs:           models.CloneRuntimeInputs(input.RuntimeInputs),
 				DestructiveDB:           input.DestructiveDB,
 				Scope:                   input.Scope,
 				Priority:                input.Priority,

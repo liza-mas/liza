@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	gitpkg "github.com/liza-mas/liza/internal/git"
+	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/sessionvalidation"
@@ -223,6 +224,11 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 	if err != nil {
 		return nil, err
 	}
+	// Runtime inputs come from the ledger, not the session, so their
+	// readiness needs neither prerequisites nor an execution policy.
+	if err := checkAgentRuntimeInputReadiness(projectRoot, bb, state, task, agentID); err != nil {
+		return nil, err
+	}
 	if len(task.ValidationPrerequisites) == 0 {
 		if session != nil {
 			return nil, session.PreparationError
@@ -308,6 +314,12 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		checkErr = sessionvalidation.Check(ctx, task.Validation, task.ValidationPrerequisites, worktree, append([]string(nil), session.Environment...))
 		cancel()
+		var missing *sessionvalidation.Error
+		if errors.As(checkErr, &missing) && missing.Code == "environment_missing" && models.RuntimeInputDenyNames(state)[missing.Variable] {
+			// A legacy prerequisite demands a name reserved for runtime inputs,
+			// which every launch strips (ADR-0169): name the cause.
+			missing.Code = "runtime_input_scrubbed"
+		}
 	}
 	p.record.Result = "passed"
 	if checkErr != nil {
@@ -479,4 +491,51 @@ func ReleaseValidationOwnership(projectRoot, taskID, agentID string, authority *
 		}
 		return nil
 	})
+}
+
+// runtimeInputPreflightError is a failed runtime-input readiness check. It
+// classifies as a preflight failure and names the operator action.
+type runtimeInputPreflightError struct{ refusal *AcceptanceEvidenceError }
+
+func (e *runtimeInputPreflightError) Error() string {
+	return "validation preflight: " + runtimeInputCodeUnavailable + ": " + e.refusal.Error()
+}
+
+func (e *runtimeInputPreflightError) Unwrap() error { return sessionvalidation.ErrPreflight }
+
+// checkAgentRuntimeInputReadiness applies role-aware runtime-input readiness
+// before an executable claim or launch: the task's reviewer role needs only
+// reusable inputs, any other agent every input. A failure records the
+// deduplicated operator anomaly.
+func checkAgentRuntimeInputReadiness(projectRoot string, bb *db.Blackboard, state *models.State, task *models.Task, agentID string) error {
+	if len(task.RuntimeInputs) == 0 {
+		return nil
+	}
+	refusals := runtimeInputReadinessRefusals(projectRoot, state, task, runtimeInputReviewerAgent(projectRoot, task, agentID))
+	if len(refusals) == 0 {
+		return nil
+	}
+	_ = bb.Modify(func(current *models.State) error {
+		now := time.Now().UTC()
+		for _, refusal := range refusals {
+			appendRuntimeInputAnomaly(current, task.ID, refusal.declaration.ID, refusal.code, "preflight", refusal.bound, agentID, now)
+		}
+		return nil
+	})
+	return &runtimeInputPreflightError{refusal: runtimeInputRefusalError(task.ID, refusals, nil)}
+}
+
+// runtimeInputReviewerAgent reports whether agentID acts as the task's
+// reviewer: it holds the review, or its role is the pair's reviewer role.
+func runtimeInputReviewerAgent(projectRoot string, task *models.Task, agentID string) bool {
+	if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
+		return true
+	}
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil || task.RolePair == "" {
+		return false
+	}
+	pair, err := resolver.RolePair(task.RolePair)
+	role, roleErr := identity.ExtractRole(agentID)
+	return err == nil && roleErr == nil && role == pair.Reviewer
 }

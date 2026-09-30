@@ -20,6 +20,7 @@ type TaskInput struct {
 	DoneWhen                string                          `yaml:"done_when"`
 	Validation              []string                        `yaml:"validation,omitempty"`
 	ValidationPrerequisites []models.ValidationPrerequisite `yaml:"validation_prerequisites,omitempty"`
+	RuntimeInputs           []models.RuntimeInput           `yaml:"runtime_inputs,omitempty"`
 	DestructiveDB           bool                            `yaml:"destructive_db,omitempty"`
 	Scope                   string                          `yaml:"scope"`
 	Priority                int                             `yaml:"priority"`
@@ -66,6 +67,7 @@ func addTaskCommand(statePath, logPath string, input *TaskInput, add func(*ops.A
 		DoneWhen:                input.DoneWhen,
 		Validation:              input.Validation,
 		ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
+		RuntimeInputs:           models.CloneRuntimeInputs(input.RuntimeInputs),
 		DestructiveDB:           input.DestructiveDB,
 		Scope:                   input.Scope,
 		Priority:                input.Priority,

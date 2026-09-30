@@ -28,6 +28,10 @@ const (
 	// helpers behind it read Git "false" for both a mismatch and a failed read,
 	// so repetition can be observed but determinism cannot.
 	AcceptanceFaultAllocation AcceptanceFault = "allocation"
+	// AcceptanceFaultRuntimeInput is a declared runtime input with no usable
+	// ledger instance (ADR-0169). Only an operator can record one, so it
+	// escalates at once like a content refusal, and no agent retry helps.
+	AcceptanceFaultRuntimeInput AcceptanceFault = "runtime_input"
 )
 
 // AcceptanceClaimObservation is what a refused claim validated against: the
@@ -49,10 +53,27 @@ type AcceptanceEvidenceError struct {
 	// Claim is set only when the refusal came from a claim, whose task is
 	// unsubmitted and whose acceptance fields only the orchestrator can change.
 	Claim *AcceptanceClaimObservation
+	// Input names the first refused runtime input of a runtime-input refusal.
+	Input string
+	// Blocked reports that the refusing submission also moved the task to
+	// BLOCKED; BlockFailed that it tried and could not.
+	Blocked     bool
+	BlockFailed bool
 }
 
 func (e *AcceptanceEvidenceError) Error() string {
 	message := fmt.Sprintf("task %s %s: %s — correct the evidence and submit, or run %s for a submitted task", e.TaskID, e.Field, e.Reason, brand.Command("update-review-commit", e.TaskID))
+	if e.Class == AcceptanceFaultRuntimeInput {
+		message = fmt.Sprintf("task %s %s: %s — operator action required: %s. No command ran and no review cycle was spent. Do not retry, change evidence or run %s: an agent cannot provide this input",
+			e.TaskID, e.Field, e.Reason, runtimeInputOperatorAction(e.TaskID, e.Input), brand.Command("update-review-commit"))
+		switch {
+		case e.Blocked:
+			message += "; the task is now BLOCKED until the operator records the input and runs " + brand.Command("unblock-task", e.TaskID)
+		case e.BlockFailed:
+			message += fmt.Sprintf("; blocking the task failed, so run %s with this reason and stop", brand.Command("mark-blocked", e.TaskID))
+		}
+		return acceptanceExecutionMask(os.Environ())(message)
+	}
 	if e.Claim != nil {
 		message = fmt.Sprintf("task %s %s (%s): %s — the task's acceptance allocation must be corrected by the orchestrator (%s) or its integration-side cause repaired; claiming cannot fix it", e.TaskID, e.Field, e.Claim.AllocationRef, e.Reason, brand.Command("replace-task"))
 	}
@@ -78,7 +99,17 @@ type acceptanceInput struct {
 
 // loadAcceptanceInput derives authority from the allocated, independently
 // reviewed source at integration. Candidate worktree bytes cannot supply it.
+// A task that declares runtime inputs must turn out strict: only the strict
+// gate runs the canonical commands that consume them (ADR-0169).
 func loadAcceptanceInput(root string, state *models.State, task *models.Task, integrationCommit string) (*acceptanceInput, error) {
+	input, err := loadDeclaredAcceptanceInput(root, state, task, integrationCommit)
+	if err == nil && input == nil && len(task.RuntimeInputs) > 0 {
+		return nil, &AcceptanceEvidenceError{TaskID: task.ID, Field: "runtime_inputs", Reason: runtimeInputsStrictReason, Class: AcceptanceFaultContent}
+	}
+	return input, err
+}
+
+func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.Task, integrationCommit string) (*acceptanceInput, error) {
 	// Planning can consume documents containing coding allocations. Do not
 	// adopt those contracts, but never let a type change erase prior adoption.
 	if task.EffectiveType() != models.TaskTypeCoding && task.AcceptanceSource == nil {
@@ -242,7 +273,8 @@ func parentAllocatesTask(g *git.Git, root string, task, parent *models.Task, pat
 	}
 	allocated := false
 	for _, output := range parent.Output {
-		if output.PlanRef == task.PlanRef && output.SpecRef == task.SpecRef && reflect.DeepEqual(output.Validation, task.Validation) && output.DestructiveDB == task.DestructiveDB {
+		if output.PlanRef == task.PlanRef && output.SpecRef == task.SpecRef && reflect.DeepEqual(output.Validation, task.Validation) && output.DestructiveDB == task.DestructiveDB &&
+			models.RuntimeInputsEqual(output.RuntimeInputs, task.RuntimeInputs) {
 			allocated = true
 		}
 	}
@@ -661,7 +693,10 @@ func checkAcceptanceWorktree(root, taskID, commit string) error {
 	return nil
 }
 
-func executeAcceptanceReceipt(root string, task *models.Task, input *acceptanceInput, commit string) (*models.AcceptanceReceipt, error) {
+// executeAcceptanceReceipt runs the strict gate. Runtime inputs are acquired
+// here, after every non-executing precondition, so a refused manifest or a
+// dirty worktree never spends a single_use input (ADR-0169).
+func executeAcceptanceReceipt(root string, task *models.Task, input *acceptanceInput, commit string, gate runtimeInputGate) (*models.AcceptanceReceipt, error) {
 	receipt, err := prepareAcceptanceReceipt(root, task, input, commit)
 	if err != nil || receipt == nil {
 		return receipt, err
@@ -669,7 +704,11 @@ func executeAcceptanceReceipt(root string, task *models.Task, input *acceptanceI
 	if err := checkAcceptanceWorktree(root, task.ID, commit); err != nil {
 		return nil, err
 	}
-	receipt.Commands, err = executeAcceptanceCommands(task.ID, git.New(root).GetWorktreePath(task.ID), input.contract.Validation, input.contract.TimeoutSeconds)
+	grant, err := gate.acquire(task)
+	if err != nil {
+		return nil, err
+	}
+	receipt.Commands, err = executeAcceptanceCommandsWith(task.ID, git.New(root).GetWorktreePath(task.ID), input.contract.Validation, input.contract.TimeoutSeconds, grant)
 	if err != nil {
 		return nil, acceptanceError(task.ID, "acceptance.execution", err.Error())
 	}

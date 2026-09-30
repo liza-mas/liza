@@ -124,6 +124,9 @@ REVIEW CHECKLIST:
 {{- if .DeclareValidationPrerequisites}}
 | validation prerequisites | A coding child's validation[] command lacks exactly one validation_prerequisites entry; an entry names something the task itself creates; or it omits the interpreter, runner, build tool or env names the command needs before implementation |
 {{- end}}
+{{- if .DeclareRuntimeInputs}}
+| runtime inputs | A validation command needs a live input (fixture, principal, credential, evidence index) its entry does not declare in runtime_inputs; a declaration names an unregistered recipe, the wrong consumption or an unmarked secret; or a runtime-input env name is also a validation_prerequisites name |
+{{- end}}
 | Cross-reference consistency | For every cross-reference in the plan ("owned by CPx", "depends on CPx", "out of scope for CPx"), the referenced task must explicitly state that responsibility, dependency, or exclusion. Reject if any dangling reference. |
 | e2e/doc coverage | Spec compliance matrix missing mandatory E2E or DOC impact rows, or rows marked N/A without justification, or feature adds user-visible behavior but no e2e test or doc update task planned |
 {{template "handoff-review-rows"}}

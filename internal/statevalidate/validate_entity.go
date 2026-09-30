@@ -34,6 +34,15 @@ func validateAnomalies(v *violations, state *models.State) {
 	}
 }
 
+// validateRuntimeInputLedger checks the static shape of the runtime-input
+// consumption ledger (ADR-0169). Its transition rules are enforced by
+// Blackboard.Modify against the locked pre-image.
+func validateRuntimeInputLedger(v *violations, state *models.State) {
+	for _, err := range models.RuntimeInputInstanceViolations(state.RuntimeInputs) {
+		v.add(err)
+	}
+}
+
 // validateHandoffEvents checks that:
 // (1) each HandoffEvent has non-zero Timestamp, non-empty Agent, and valid Trigger
 // (2) tasks in post-submission states have at least one event with trigger submission

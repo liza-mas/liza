@@ -148,6 +148,8 @@ Key command groups:
 
 **Review & merge:** `liza submit-for-review`, `liza submit-verdict`, `liza release-claim`, `liza clear-stale-review-claims`
 
+**Runtime inputs:** `liza provision --record`, `liza run-live`
+
 **Worktree management:** `liza wt-create`, `liza wt-merge`, `liza wt-delete`
 
 **System control:** `liza pause`, `liza resume`, `liza stop`, `liza start`, `liza status`, `liza get`, `liza version`

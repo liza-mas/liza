@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -27,8 +28,24 @@ var errAcceptanceOutputLimit = errors.New("acceptance execution output limit exc
 // executeAcceptanceCommands returns trusted executions only when every command
 // passes, and nil results on any error. Callers own immutable input validation.
 func executeAcceptanceCommands(taskID, worktree string, commands []string, timeoutSeconds int) ([]models.AcceptanceCommandResult, error) {
+	return executeAcceptanceCommandsWith(taskID, worktree, commands, timeoutSeconds, nil)
+}
+
+// executeAcceptanceCommandsWith runs the canonical commands with the runtime
+// inputs grant allows: every reserved name is scrubbed from each command's
+// environment and only its authorized variables are overlaid. Masking covers
+// the inherited environment, the overlays and the declared secret values, and
+// is applied before any result, excerpt or error is built.
+func executeAcceptanceCommandsWith(taskID, worktree string, commands []string, timeoutSeconds int, grant *runtimeInputGrant) ([]models.AcceptanceCommandResult, error) {
 	environ := os.Environ()
-	mask := acceptanceExecutionMask(environ)
+	masked := environ
+	if grant != nil {
+		masked = slices.Clone(environ)
+		for _, overlay := range grant.overlays {
+			masked = append(masked, overlay...)
+		}
+	}
+	mask := acceptanceExecutionMaskWith(masked, grant.secretValues())
 	fail := func(index int, reason string) error {
 		return fmt.Errorf("acceptance.execution[%d] for task %s: %s", index, mask(taskID), mask(reason))
 	}
@@ -59,7 +76,7 @@ func executeAcceptanceCommands(taskID, worktree string, commands []string, timeo
 			return nil, fail(i, "cannot prepare command: "+err.Error())
 		}
 		cmd.Stdout, cmd.Stderr = output, output
-		cmd.Env = environ
+		cmd.Env = grant.commandEnvironment(environ, command)
 		configProcessGroupKill(cmd)
 		cmd.WaitDelay = 5 * time.Second
 		err = cmd.Run()
@@ -131,8 +148,20 @@ var acceptanceDSNEscape = regexp.MustCompile(`\\(.)`)
 // Extend the standard environment masker for URL/DSN variables. Explicit
 // passwords also need local replacement because secretmask excludes short values.
 func acceptanceExecutionMask(environ []string) func(string) string {
+	return acceptanceExecutionMaskWith(environ, nil)
+}
+
+// acceptanceExecutionMaskWith also masks a declared set of values regardless
+// of the variable names that carry them: brokered runtime-input secrets
+// (ADR-0169), with their URL and path escapes.
+func acceptanceExecutionMaskWith(environ []string, declared []string) func(string) string {
 	masker := secretmask.NewFromEnv(environ)
 	var credentials []string
+	for _, value := range declared {
+		if value != "" {
+			credentials = append(credentials, value, url.QueryEscape(value), url.PathEscape(value))
+		}
+	}
 	for _, entry := range environ {
 		key, value, ok := strings.Cut(entry, "=")
 		if !ok || value == "" {

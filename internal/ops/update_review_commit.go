@@ -115,13 +115,24 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (*UpdateReviewCom
 			return nil, &PreconditionError{Reason: fmt.Sprintf("review boundary already matches worktree HEAD %s and base %s — no update needed", wtHEAD, effectiveBase)}
 		}
 	}
-	receipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, wtHEAD)
+	pipelineTransitions := BuildPipelineTransitions(resolver)
+	// A runtime-input refusal leaves the review boundary and receipt as they
+	// were. A reviewer repairing its own claimed task cannot review without
+	// the receipt, so the refusal releases that claim the way a successful
+	// repair does (ADR-0169); an operator or supervisor caller touches none.
+	gate := runtimeInputGate{projectRoot: projectRoot, bb: bb, actor: changedBy, operation: "update-review-commit",
+		onRefusal: func(state *models.State, task *models.Task) error {
+			if task.ReviewingBy == nil || *task.ReviewingBy != changedBy {
+				return nil
+			}
+			return releaseReviewClaimToSubmitted(state, task, submittedStatus, reviewingStatus, reviewing2Status, pipelineTransitions)
+		}}
+	receipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, wtHEAD, gate)
 	if err != nil {
 		return nil, err
 	}
 
 	// Phase 3: Atomic state update
-	pipelineTransitions := BuildPipelineTransitions(resolver)
 	now := time.Now().UTC()
 	reviewerReleased := false
 
@@ -157,21 +168,10 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (*UpdateReviewCom
 		// If reviewer is claimed, release them and reset to submitted —
 		// they must re-claim and re-review the updated content.
 		if isReviewingAuth && task.ReviewingBy != nil {
-			releasedAgent := *task.ReviewingBy
-			if a, ok := state.Agents[releasedAgent]; ok {
-				if a.CurrentTask != nil && *a.CurrentTask == taskID {
-					state.ReleaseAgent(releasedAgent)
-				}
-			}
-			task.ReviewingBy = nil
-			task.ReviewLeaseExpires = nil
-			reviewerReleased = true
-
-			if err := task.TransitionWith(submittedStatus, pipelineTransitions); err != nil {
+			if err := releaseReviewClaimToSubmitted(state, task, submittedStatus, reviewingStatus, reviewing2Status, pipelineTransitions); err != nil {
 				return err
 			}
-
-			log.Printf("update-review-commit %s: released reviewer %s", taskID, releasedAgent)
+			reviewerReleased = true
 		}
 
 		oldReviewForReason := "<nil>"
@@ -227,4 +227,28 @@ func cloneStringPtr(value *string) *string {
 	}
 	cloned := *value
 	return &cloned
+}
+
+// releaseReviewClaimToSubmitted releases a claimed reviewer and returns the
+// task to its submitted status, keeping receipt and review boundary: a
+// reviewing task without a reviewer is not a valid state. A task that is not
+// in a reviewing status is left unchanged.
+func releaseReviewClaimToSubmitted(state *models.State, task *models.Task, submittedStatus, reviewingStatus, reviewing2Status models.TaskStatus, transitions map[models.TaskStatus][]models.TaskStatus) error {
+	reviewing := task.Status == reviewingStatus || (reviewing2Status != "" && task.Status == reviewing2Status)
+	if !reviewing || task.ReviewingBy == nil {
+		return nil
+	}
+	releasedAgent := *task.ReviewingBy
+	if a, ok := state.Agents[releasedAgent]; ok {
+		if a.CurrentTask != nil && *a.CurrentTask == task.ID {
+			state.ReleaseAgent(releasedAgent)
+		}
+	}
+	task.ReviewingBy = nil
+	task.ReviewLeaseExpires = nil
+	if err := task.TransitionWith(submittedStatus, transitions); err != nil {
+		return err
+	}
+	log.Printf("update-review-commit %s: released reviewer %s", task.ID, releasedAgent)
+	return nil
 }

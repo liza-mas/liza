@@ -50,8 +50,9 @@ func observeAcceptanceClaimRefusal(err error, state *models.State, task *models.
 
 // AcceptanceObservation digests every state input acceptance validation reads
 // for task: the whole task record, the whole record of each effective parent
-// (a missing parent is recorded as such) and the proof reaffirmations recorded
-// against those parents. Whole records rather than a field list keep it
+// (a missing parent is recorded as such), the proof reaffirmations recorded
+// against those parents and the runtime-input instances bound to task. Whole
+// records rather than a field list keep it
 // conservative: any change to them, including a repair, yields a different
 // digest. It returns "" when the records cannot be encoded, which never matches.
 func AcceptanceObservation(state *models.State, task *models.Task) string {
@@ -73,11 +74,23 @@ func AcceptanceObservation(state *models.State, task *models.Task) string {
 			reaffirmations = append(reaffirmations, reaffirmation)
 		}
 	}
+	// Recording or binding an instance repairs a runtime-input refusal, so the
+	// task's ledger instances are part of what the refusal observed.
+	var instances map[string]models.RuntimeInputInstance
+	for id, instance := range state.RuntimeInputs {
+		if instance.BoundTo(task.ID) {
+			if instances == nil {
+				instances = map[string]models.RuntimeInputInstance{}
+			}
+			instances[id] = instance
+		}
+	}
 	payload, err := json.Marshal(struct {
 		Task           *models.Task
 		Parents        []any
 		Reaffirmations []models.ProofReaffirmation
-	}{task, parents, reaffirmations})
+		RuntimeInputs  map[string]models.RuntimeInputInstance `json:",omitempty"`
+	}{task, parents, reaffirmations, instances})
 	if err != nil {
 		return ""
 	}
@@ -183,6 +196,9 @@ func acceptanceRefusalBlockText(refusal *AcceptanceEvidenceError) (string, strin
 	case AcceptanceFaultContent:
 		reason = "acceptance_evidence_invalid: " + fault
 		question = fmt.Sprintf("Correct the task's acceptance allocation (plan_ref/spec_ref, validation, parent tasks) to match the reviewed section — normally with %s, which supersedes this task — or repair its integration-side cause and, keeping this task, run %s to restore it for a new claim.", brand.Command("replace-task"), unblock)
+	case AcceptanceFaultRuntimeInput:
+		reason, question = runtimeInputBlockText(refusal)
+		return truncateForDiagnostics(reason, acceptanceBlockedReasonLimit), question, true
 	case AcceptanceFaultAllocation:
 		reason = fmt.Sprintf("acceptance_claim_refused_repeatedly: %d identical refusals at %s: %s — may be an invalid allocation or a persistent repository read failure", AcceptanceAllocationRefusalThreshold, refusal.Claim.IntegrationCommit, fault)
 		question = fmt.Sprintf("Check the allocation (parent tasks and their approval and output, plan_ref, validation, proof reaffirmations) and repository health; replace this task with %s, or repair the cause and, keeping this task, run %s to restore it for a new claim.", brand.Command("replace-task"), unblock)
@@ -204,4 +220,14 @@ func acceptanceRefusalBlockableStatus(task *models.Task, resolver *pipeline.Reso
 	}
 	rejected, err := resolver.RejectedStatus(task.RolePair)
 	return err == nil && task.Status == rejected
+}
+
+// runtimeInputBlockText is the blocked reason and operator question for a
+// runtime-input refusal, at claim or at the submission gate. It names input
+// ids only, never artifact paths.
+func runtimeInputBlockText(refusal *AcceptanceEvidenceError) (string, string) {
+	reason := "runtime_input_unavailable: " + refusal.Reason
+	question := fmt.Sprintf("Operator: %s for each refused input (%s), then run %s to restore it.",
+		runtimeInputOperatorAction(refusal.TaskID, refusal.Input), refusal.Reason, brand.Command("unblock-task", refusal.TaskID))
+	return reason, question
 }

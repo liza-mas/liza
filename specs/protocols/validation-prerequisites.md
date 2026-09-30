@@ -25,7 +25,13 @@ validation_prerequisites:
 This is a project-specific example, not a built-in Python requirement. Declare
 the actual interpreter, packages and tools used by each canonical command.
 Keep credentials out of declarations: `env` contains variable names only, and
-probe argv must not contain secret values.
+probe argv must not contain secret values. A variable a live command needs but
+no session should hold, a single-use fixture or a credential, is a runtime
+input instead ([runtime-inputs.md](runtime-inputs.md)). The two name classes are
+exclusive: admission refuses a prerequisite `env` name that any task declares
+as a runtime input, and the reverse. Launches strip every runtime-input name,
+so a legacy prerequisite that still requires one fails as
+`runtime_input_scrubbed`.
 
 When prerequisites are present, every canonical command must be unique and have
 exactly one nonempty declaration. `command` matches the full command text,
@@ -162,6 +168,7 @@ Retry from the repaired session and let the fresh checks establish readiness.
 - [Declared validation decision](../architecture/ADR/0072-declared-validation-commands.md)
 - [Session prerequisite decision](../architecture/ADR/0136-validation-session-prerequisites.md)
 - [Planning adoption decision](../architecture/ADR/0168-adopt-validation-prerequisites-in-planning.md)
+- [Runtime inputs](runtime-inputs.md)
 - [Blackboard schema](../architecture/blackboard-schema.md)
 - [Configuration reference](../../support-docs/CONFIGURATION.md#validation-execution-prerequisites)
 - [Deferred signed-artifact support](../../TECH_DEBT.md#signed-validation-artifacts-for-unavailable-execution-contexts)

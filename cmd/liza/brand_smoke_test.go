@@ -88,6 +88,19 @@ func TestNonDefaultBrandRepairAgentPoolHelpDescribesClaimEligibleReviewerCapacit
 	assertNoDefaultBrandLeaks(t, "repair-agent-pool help", help)
 }
 
+func TestNonDefaultBrandRuntimeInputHelp(t *testing.T) {
+	bin := buildNonDefaultBrandBinary(t)
+	provision := runBrandSmokeCommand(t, bin, "provision", "--help")
+	assertContains(t, provision, "acme-agent unblock-task <task-id>")
+	runLive := runBrandSmokeCommand(t, bin, "run-live", "--help")
+	assertContains(t, runLive, "acme-agent provision --record")
+	configSet := runBrandSmokeCommand(t, bin, "config", "set", "--help")
+	assertContains(t, configSet, "config.runtime_input_registry")
+	for label, output := range map[string]string{"provision help": provision, "run-live help": runLive, "config set help": configSet} {
+		assertNoDefaultBrandLeaks(t, label, output)
+	}
+}
+
 func buildNonDefaultBrandBinary(t *testing.T) string {
 	t.Helper()
 

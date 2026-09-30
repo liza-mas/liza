@@ -200,6 +200,10 @@ type Config struct {
 	NoFollowUp               bool                          `yaml:"no_follow_up,omitempty"`
 	PostWorktreeCmd          *string                       `yaml:"post_worktree_cmd,omitempty"`
 	CopyWorktreeEnvFiles     bool                          `yaml:"copy_worktree_env_files,omitempty"`
+	// RuntimeInputRegistry is the repository-relative path of the runtime-input
+	// recipe registry, read at the integration commit (ADR-0169). Empty means
+	// no task may declare runtime inputs.
+	RuntimeInputRegistry string `yaml:"runtime_input_registry,omitempty"`
 	// AutoCheckpointSummary controls whether the runtime auto-invokes the
 	// checkpoint-summary skill against a task that just reached MERGED and
 	// writes the result to the project runtime directory. Default (nil) is ON.

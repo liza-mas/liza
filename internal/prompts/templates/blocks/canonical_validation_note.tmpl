@@ -4,4 +4,10 @@ If a stored validation command violates BASH CONSTRAINTS, do not execute it lite
 {{ if .DestructiveDB }}
 DESTRUCTIVE DB VALIDATION: The {{destructiveDBAllowMarker}} marker is part of each canonical command and must not be translated away. Run only against a disposable target.
 {{- end }}
+{{- if .RuntimeInputs }}
+RUNTIME INPUTS: never in this session or its files. The submission gate receives them all; `{{binaryName}} run-live --task {{.TaskID}} -- <command>` receives the reusable ones. Never run a command using a single_use input yourself: the gate spends it, and reviewers rely on its receipt. A missing input is operator work; do not work around it.
+{{- range .RuntimeInputs }}
+- {{.ID}}: {{.Consumption}}{{if .Secret}}, secret{{end}}, used by {{len .Commands}} command(s)
+{{- end }}
+{{- end }}
 {{ end -}}

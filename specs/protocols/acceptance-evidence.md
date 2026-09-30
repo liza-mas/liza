@@ -70,6 +70,10 @@ evidence changed during the check. An unresolvable integration commit is
    boundary, require a clean worktree, and execute every canonical command with
    the declared overall deadline and bounded masked output. Require unchanged
    HEAD and a clean worktree afterward. Execution occurs outside the state lock.
+   A task declaring `runtime_inputs` acquires them here, after the clean-worktree
+   check and before the first command: `single_use` instances are consumed
+   durably, or the run is refused before anything executes
+   ([runtime-inputs.md](runtime-inputs.md)).
 3. Under the existing generation-fenced final transaction, recheck allocation,
    source, parent, validation, manifest and HEAD identities. Only success writes
    `acceptance_receipt` atomically with submitted status and `review_commit`.
@@ -101,6 +105,9 @@ acceptance preconditions and skips invalid candidates without mutating them,
 allowing healthy candidates to progress. An exhausted or explicit targeted claim
 returns actionable diagnostics; the returning reviewer receives its task's error
 directly. No commands execute during assignment.
+
+Reviewers do not run a canonical command that uses a `single_use` runtime input:
+the receipt is its evidence. They may run other live subsets with `run-live`.
 
 `update-review-commit <task-id>` validates and executes strict evidence before
 atomically replacing receipt and review boundary and releasing a prior reviewer.

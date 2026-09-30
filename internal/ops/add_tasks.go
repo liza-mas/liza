@@ -29,6 +29,7 @@ type AddTaskInput struct {
 	DoneWhen                string                          `json:"done"`
 	Validation              []string                        `json:"validation,omitempty"`
 	ValidationPrerequisites []models.ValidationPrerequisite `json:"validation_prerequisites,omitempty"`
+	RuntimeInputs           []models.RuntimeInput           `json:"runtime_inputs,omitempty"`
 	DestructiveDB           bool                            `json:"destructive_db,omitempty"`
 	Scope                   string                          `json:"scope"`
 	Priority                int                             `json:"priority"`
@@ -83,14 +84,23 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 
 	bb := db.For(statePath)
 
+	if diagnostics := runtimeInputsNeedStrictCarrier(&newTask); diagnostics != nil {
+		return nil, runtimeInputAdmissionError("add-task", nil, diagnostics, nil)
+	}
 	// An ad-hoc task has no parent, so a snapshot supplies only configuration;
 	// the Git reads stay outside the state lock, as at claim.
-	if acceptanceCreationApplies(&newTask) {
+	if acceptanceCreationApplies(&newTask) || len(newTask.ValidationPrerequisites) > 0 {
 		snapshot, err := bb.ReadSnapshot()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read state for the acceptance check: %w", err)
 		}
-		if err := checkCreatedTaskAcceptance(projectRoot, snapshot, &newTask).lifecycleError("add-task", nil); err != nil {
+		if acceptanceCreationApplies(&newTask) {
+			if err := checkCreatedTaskAcceptance(projectRoot, snapshot, &newTask).lifecycleError("add-task", nil); err != nil {
+				return nil, err
+			}
+		}
+		diagnostics, err := checkRuntimeInputDeclarations(projectRoot, snapshot, []string{newTask.ID}, []runtimeInputCarrier{{inputs: newTask.RuntimeInputs, prerequisites: newTask.ValidationPrerequisites}})
+		if err := runtimeInputAdmissionError("add-task", nil, diagnostics, err); err != nil {
 			return nil, err
 		}
 	}
@@ -156,6 +166,9 @@ func validateAddTaskInput(input *AddTaskInput) error {
 		return &PreconditionError{Reason: err.Error()}
 	}
 	if err := models.ValidateValidationPrerequisites(input.Validation, input.ValidationPrerequisites); err != nil {
+		return &PreconditionError{Reason: err.Error()}
+	}
+	if err := models.ValidateRuntimeInputs(input.Validation, input.RuntimeInputs); err != nil {
 		return &PreconditionError{Reason: err.Error()}
 	}
 	if input.Scope == "" {
@@ -233,6 +246,7 @@ func buildReplacementTask(input *AddTaskInput, resolver *pipeline.Resolver) (mod
 		DoneWhen:                input.DoneWhen,
 		Validation:              slices.Clone(input.Validation),
 		ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
+		RuntimeInputs:           models.CloneRuntimeInputs(input.RuntimeInputs),
 		DestructiveDB:           input.DestructiveDB,
 		RCARequired:             input.RCARequired,
 		Scope:                   input.Scope,

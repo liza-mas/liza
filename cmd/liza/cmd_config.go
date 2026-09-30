@@ -20,7 +20,7 @@ var configCmd = &cobra.Command{
 	Short: "Read and update supported runtime configuration",
 	Long: fmt.Sprintf(`Read and update runtime configuration using the same dotted keys as %s.
 Supported keys: config.post_worktree_cmd, config.max_instances,
-config.doer_max_wait and config.reviewer_max_wait.
+config.doer_max_wait, config.reviewer_max_wait and config.runtime_input_registry.
 The general state query remains available: %s config.post_worktree_cmd --json`, brand.Command("get"), brand.Command("get")),
 }
 
@@ -66,6 +66,9 @@ agent is refused):
 Replacing a different value needs --replace and --reason, as above. A changed
 wait applies to agents started afterwards; running ones keep theirs.
 
+config.runtime_input_registry is the repository-relative path of the
+runtime-input recipe registry, read at the integration commit. Operator-only.
+
 Examples:
   %s config.post_worktree_cmd "make setup"
   %s config.max_instances 5 --replace --reason "wider fan-out"`, brand.Command("config", "get"), brand.Command("get"), brand.Command("config", "set"), brand.Command("config", "set")),
@@ -83,6 +86,9 @@ Examples:
 		agentID, err := identity.Resolve(identity.Config{FlagValue: flagID})
 		if err != nil {
 			return err
+		}
+		if args[0] == ops.RuntimeInputRegistryConfigKey {
+			return setRuntimeInputRegistry(cmd, projectRoot, agentID, args, replace, reason)
 		}
 		if args[0] != ops.PostWorktreeConfigKey {
 			return setPoolConfig(cmd, projectRoot, agentID, args, replace, reason)
@@ -147,8 +153,26 @@ func setPoolConfig(cmd *cobra.Command, projectRoot, agentID string, args []strin
 	return nil
 }
 
+// setRuntimeInputRegistry writes the recipe registry path on the operator
+// path only: the registry decides which recipes a plan may name.
+func setRuntimeInputRegistry(cmd *cobra.Command, projectRoot, agentID string, args []string, replace bool, reason string) error {
+	if agentID != "" {
+		return cliValidationError(fmt.Sprintf("%s is operator-only; agent %s cannot set it", args[0], agentID))
+	}
+	result, err := ops.SetRuntimeInputRegistry(projectRoot, ops.SetRuntimeInputRegistryInput{Path: args[1], Replace: replace, Reason: reason})
+	if isJSON(cmd) {
+		return jsonout.WriteResult(os.Stdout, result, nil, err)
+	}
+	if err != nil {
+		return err
+	}
+	cmd.Printf("%s: %s\n", result.Key, result.Outcome)
+	return nil
+}
+
 func supportedConfigKeys() []string {
-	return append([]string{ops.PostWorktreeConfigKey}, ops.PoolConfigKeys...)
+	keys := append([]string{ops.PostWorktreeConfigKey}, ops.PoolConfigKeys...)
+	return append(keys, ops.RuntimeInputRegistryConfigKey)
 }
 
 func validateConfigArgs(args []string, count int) error {

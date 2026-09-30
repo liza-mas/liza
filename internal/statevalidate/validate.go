@@ -220,6 +220,7 @@ func collectStateViolations(state *models.State, projectRoot string, skipSpecFil
 	validateAgentInvariants(v, state, warnWriter, resolver, now)
 	validateDiscovered(v, state)
 	validateAnomalies(v, state)
+	validateRuntimeInputLedger(v, state)
 	validateQuarantinedVerdicts(v, state)
 	validateProofReaffirmations(v, state)
 	validateHandoffEvents(v, state)

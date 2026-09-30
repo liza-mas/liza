@@ -109,7 +109,18 @@ func validatePlanningOutputAcceptance(root string, task *models.Task, commit str
 			ref = output.SpecRef
 		}
 		path, heading, _ := strings.Cut(ref, "#")
+		// Runtime inputs are admitted only on an output its coding child will
+		// adopt as a strict acceptance contract (ADR-0169).
+		notStrict := func() error {
+			if len(output.RuntimeInputs) == 0 {
+				return nil
+			}
+			return acceptanceError(task.ID, fmt.Sprintf("output[%d].runtime_inputs", i), runtimeInputsStrictReason)
+		}
 		if referencecontract.ValidateAcceptancePath(path) != nil {
+			if err := notStrict(); err != nil {
+				return err
+			}
 			continue // Legacy refs retain their existing artifact validation route.
 		}
 		fail := func(reason string) error {
@@ -120,6 +131,9 @@ func validatePlanningOutputAcceptance(root string, task *models.Task, commit str
 			return fail("cannot inspect candidate source")
 		}
 		if !present {
+			if err := notStrict(); err != nil {
+				return err
+			}
 			continue // Match legacy admission when no committed source is adopted.
 		}
 		content, _, err := readAcceptanceBlob(root, commit, path)
@@ -133,8 +147,32 @@ func validatePlanningOutputAcceptance(root string, task *models.Task, commit str
 		if contract != nil && !slices.Equal(contract.Validation, output.Validation) {
 			return fail("declaration must equal output's ordered validation commands")
 		}
+		if contract == nil {
+			if err := notStrict(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+// validatePlanningOutputRuntimeInputs applies the state- and registry-bound
+// runtime-input rules to a submission's output entries, whatever produced
+// them: consumers that generate coding tasks, and the registry read at
+// integration, so a plan cannot declare a recipe that only lands with it.
+func validatePlanningOutputRuntimeInputs(root string, state *models.State, task *models.Task) error {
+	if !slices.ContainsFunc(task.Output, func(entry models.OutputEntry) bool {
+		return len(entry.RuntimeInputs) > 0 || len(entry.ValidationPrerequisites) > 0
+	}) {
+		return nil
+	}
+	resolver, _, err := loadResolver(root)
+	if err != nil {
+		return runtimeInputAdmissionError(integrationOperationSubmitForReview, task, nil, err)
+	}
+	diagnostics := runtimeInputConsumerDiagnostics(resolver, task, task.Output)
+	checked, err := checkRuntimeInputDeclarations(root, state, []string{task.ID}, runtimeInputCarriersOfOutput(task.Output))
+	return runtimeInputAdmissionError(integrationOperationSubmitForReview, task, append(diagnostics, checked...), err)
 }
 
 // checkPlanningOutputSnapshot prevents publishing an allocation other than the

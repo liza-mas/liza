@@ -19,9 +19,12 @@ type State struct {
 	Anomalies           []Anomaly                                 `yaml:"anomalies"`
 	QuarantinedVerdicts []QuarantinedVerdict                      `yaml:"quarantined_verdicts,omitempty"`
 	ProofReaffirmations []ProofReaffirmation                      `yaml:"proof_reaffirmations,omitempty"`
-	Sprint              Sprint                                    `yaml:"sprint"`
-	SprintHistory       []SprintSummary                           `yaml:"sprint_history,omitempty"`
-	CircuitBreaker      CircuitBreaker                            `yaml:"circuit_breaker"`
+	// RuntimeInputs is the consumption ledger (ADR-0169), keyed by each
+	// instance's keyed identity digest.
+	RuntimeInputs  map[string]RuntimeInputInstance `yaml:"runtime_inputs,omitempty"`
+	Sprint         Sprint                          `yaml:"sprint"`
+	SprintHistory  []SprintSummary                 `yaml:"sprint_history,omitempty"`
+	CircuitBreaker CircuitBreaker                  `yaml:"circuit_breaker"`
 	// PendingCheckpointSummary records a checkpoint whose steering report has
 	// not been written yet. It lives here rather than on Sprint because a
 	// sprint rollover replaces Sprint wholesale — including its timeline — so

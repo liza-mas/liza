@@ -116,6 +116,7 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 	// Like the base, the acceptance verdict is reported only after replay, so a
 	// completed request still replays when today's carrier would refuse it.
 	acceptance := checkReplacementAcceptance(projectRoot, state, source, input, pb)
+	runtimeInputVerdict := checkReplacementRuntimeInputs(projectRoot, state, source, input, pb)
 	var hadWorktree bool
 	if hook, ok := replaceTaskCandidateTestHooks.Load(bb); ok && hook.(replaceTaskTestHooks).beforeLock != nil {
 		hook.(replaceTaskTestHooks).beforeLock()
@@ -183,6 +184,9 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 				}
 			}
 			if err := acceptance.lifecycleError(operation, observed); err != nil {
+				return err
+			}
+			if err := runtimeInputVerdict(operation, observed); err != nil {
 				return err
 			}
 			if base != nil {

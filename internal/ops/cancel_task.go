@@ -139,6 +139,7 @@ func cancelTaskLifecycle(projectRoot, taskID, reason, agentID string, authority 
 		clearAttemptState(currentTask, attemptStateRetire)
 
 		now := time.Now().UTC()
+		retireRuntimeInputBindings(state, currentTask, nil, now)
 		currentTask.History = append(currentTask.History, models.TaskHistoryEntry{
 			Time:   now,
 			Event:  models.TaskEventAbandoned,

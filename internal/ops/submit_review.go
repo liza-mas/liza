@@ -239,6 +239,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	if err := validatePlanningOutputAcceptance(projectRoot, task, preRebaseCommit); err != nil {
 		return nil, err
 	}
+	if err := validatePlanningOutputRuntimeInputs(projectRoot, state, task); err != nil {
+		return nil, err
+	}
 	if err := validateOutputRefFragments(projectRoot, task, preRebaseCommit); err != nil {
 		return nil, err
 	}
@@ -452,7 +455,8 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 			if err := ValidateLifecyclePreparation(current.FindTask(taskID), request); err != nil {
 				return nil, err
 			}
-			acceptanceReceipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, postRebaseCommit)
+			gate := runtimeInputGate{projectRoot: projectRoot, bb: bb, authority: authority, actor: agentID, operation: integrationOperationSubmitForReview}
+			acceptanceReceipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, postRebaseCommit, gate)
 			if err != nil {
 				return nil, err
 			}

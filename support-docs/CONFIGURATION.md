@@ -452,6 +452,7 @@ are loaded at runtime from the provider catalog.
 | `codex_package_version` | (none) | — | — | npm package version | Pins headless Codex agents to `@openai/codex@<version>` |
 | `post_worktree_cmd` | (none) | — | — | shell cmd | Command run after worktree creation (e.g. `npm install`) |
 | `copy_worktree_env_files` | false | — | — | boolean | Explicitly authorize copying ignored root env files into task worktrees |
+| `runtime_input_registry` | (none) | — | — | repo-relative path | Committed recipe registry for `runtime_inputs`; see [Runtime inputs](#runtime-inputs) |
 | `auto_checkpoint_summary` | true | — | — | boolean | Auto-runs checkpoint-summary when the sprint reaches a checkpoint and writes `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` |
 | `scip_search` | (none) | — | — | language list | Durable allowlist of SCIP languages §BRAND_NAME_TITLE§ may index when `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH` is truthy |
 
@@ -1051,7 +1052,7 @@ a second run must change nothing observable. Git status must stay clean.
 
 **Behavior:** The command runs via `sh -c` in the worktree directory, and it must succeed. A failure fails closed rather than warning: a task claim aborts before the claim is recorded (and the claiming agent is marked degraded with reason `claim_worktree_setup_failed`, so it stops claiming instead of retrying every task), a reviewer session releases its claim back to the task's reviewable status (the task is not blocked, so review-ready work survives), and `§BRAND_BINARY_NAME§ wt-create` exits non-zero. Doer resumes after a handoff or restart enforce it too. The failing worktree is left on disk so the command can be re-run against it. The recorded diagnostic is the masked, truncated command plus the worktree path and exit status. The command's own output is not captured, logged, or stored — a setup command can print secrets §BRAND_NAME_TITLE§ has no way to mask, such as a database URL loaded from a worktree env file. Rerun the command in the named worktree to see why it failed. There is no warn-only mode.
 
-**Ignored env files:** Worktrees are created from committed files, so untracked `.env` files are not present by default. Set `copy_worktree_env_files: true`, initialize with `§BRAND_BINARY_NAME§ init "Goal" --copy-worktree-env-files`, or set `§BRAND_ENV_PREFIX§_ENABLE_COPY_ENV_FILES=true` during init to explicitly authorize §BRAND_NAME_TITLE§ to copy root-level env files before `post_worktree_cmd` runs. Eligible files are regular files only and must match exactly one of these root-level patterns: `.env`, `.env.*`, `*.env`, `.envrc`. The `*.env` pattern includes names such as `secrets.env` when they are ignored. §BRAND_NAME_TITLE§ verifies the source is ignored, configures the task worktree private exclude, verifies the destination path is ignored, and then copies only when the destination is missing. Unsafe cases are warning-only and path-only; contents are not logged.
+**Ignored env files:** Worktrees are created from committed files, so untracked `.env` files are not present by default. Set `copy_worktree_env_files: true`, initialize with `§BRAND_BINARY_NAME§ init "Goal" --copy-worktree-env-files`, or set `§BRAND_ENV_PREFIX§_ENABLE_COPY_ENV_FILES=true` during init to explicitly authorize §BRAND_NAME_TITLE§ to copy root-level env files before `post_worktree_cmd` runs. Eligible files are regular files only and must match exactly one of these root-level patterns: `.env`, `.env.*`, `*.env`, `.envrc`. The `*.env` pattern includes names such as `secrets.env` when they are ignored. §BRAND_NAME_TITLE§ verifies the source is ignored, configures the task worktree private exclude, verifies the destination path is ignored, and then copies only when the destination is missing. A file that mentions a runtime-input variable name is not copied ([Runtime inputs](#runtime-inputs)). Unsafe cases are warning-only and path-only; contents are not logged.
 
 `.envrc` is included because direnv setup is commonly required for build/test commands, but it is shell configuration. Enabling this option authorizes copying local shell environment setup as well as env values. Custom names such as `.flaskenv` are not copied in this v1 behavior.
 
@@ -1361,6 +1362,40 @@ retry does not repeat it.
 
 See the [validation prerequisite protocol](../specs/protocols/validation-prerequisites.md)
 for task/output YAML examples, exact command matching, limits and evidence rules.
+
+### Runtime inputs
+
+Do not put live-validation fixtures or credentials in agent env files. Declare
+them as `runtime_inputs` of the strict task that needs them and record each
+instance as the operator:
+
+```bash
+§BRAND_BINARY_NAME§ config set config.runtime_input_registry config/runtime-inputs.yaml
+§BRAND_BINARY_NAME§ provision --record --task <task-id> --input <input-id> --file /abs/path/outside/repo.env
+```
+
+The registry is a committed YAML file (`version: 1`, `recipes: {<name>:
+{description: ...}}`) read at the integration commit; planner prompts mention
+runtime inputs only once it is configured. The envelope passed to `--file` is a
+`KEY=VALUE` file outside the repository and its worktrees. The submission gate
+delivers each value only to the commands that use it and masks secrets; agents
+run local live subsets with `§BRAND_BINARY_NAME§ run-live --task <task-id> -- <command>`,
+which delivers `reusable` inputs only.
+
+Every runtime-input variable name is removed from agent launches, and an env
+file that mentions one is not copied into worktrees (the warning names it). A
+`validation_prerequisites` entry cannot require such a name, and process
+variables (`PATH`, `HOME`, `LD_*`, ...) and §BRAND_NAME_TITLE§'s own
+`§BRAND_ENV_PREFIX§_*` variables cannot be runtime inputs. An agent env file
+that sets a runtime-input name fails the launch
+(`runtime_input_provider_collision`): never reuse the agent provider's own
+variable, such as its API key, as a runtime input.
+
+The first `provision --record` creates the operator key
+`runtime-input.key` in the global `§BRAND_GLOBAL_DIRNAME§` directory. Back it up with your secret sources: while
+recorded instances exist, a missing or different key fails closed. The key is
+shared by all your projects, so restore it before recording in any of them. See the
+[runtime inputs protocol](../specs/protocols/runtime-inputs.md).
 
 ## Provider Catalog
 

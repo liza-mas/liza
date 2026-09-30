@@ -922,3 +922,36 @@ Windows CI observations of admission waits approaching `DefaultLockTimeout`.
 At that point raise the default, make it configurable, or reduce per-hold
 metadata writes; remove this entry once the default is validated under load
 on Windows.
+
+## Runtime input provisioning: Should set
+
+**What:** [ADR-0169](specs/architecture/ADR/0169-runtime-input-provisioning.md)
+ships the recorded-instance path only. Deferred:
+
+- **Provisioner and approvals.** Recipes are descriptions; the operator produces
+  every instance by hand. No recipe execution, first-run approval or new-scope
+  approval.
+- **Source-bound invalidation.** No `binding: source_commit`: an instance is
+  not invalidated when the code that produced or consumes it changes. The key
+  is refused at admission rather than accepted and ignored.
+- **Churn budget.** No `runtime_input_churn` signal for a task that spends
+  fixtures repeatedly.
+- **Minted tokens (JWT).** Credentials are static envelope values.
+- **Key rotation and identity reset.** A lost operator key fails closed while
+  the ledger holds instances; the only recovery is restoring the key from
+  backup. A new key cannot recognize spent materializations, so rotation needs
+  a design that carries spent identity across key versions.
+- **Ledger growth.** `state.runtime_inputs` instances are permanent and never
+  archived.
+
+**Why deferred:** The recorded-instance path removes the harms observed (manual
+fixture regeneration outside the pipeline, reviewers spending fixtures,
+credentials in agent env files) and stands alone. The rest needs its own
+review, and rotation needs a safe design.
+
+**Payback trigger:** Provisioner and approvals: the first project needing
+unattended re-provisioning. Source binding: the first stale fixture accepted
+after its source changed. Churn: a task spending more than a handful of fixtures
+without reaching review. Rotation: the first key loss or a required rotation.
+Ledger growth: `state.runtime_inputs` noticeably slowing state reads, or more
+than a few thousand instances.

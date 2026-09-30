@@ -551,6 +551,7 @@ type Task struct {
 	DoneWhen                string                   `yaml:"done_when"`
 	Validation              []string                 `yaml:"validation,omitempty" json:"validation,omitempty"`
 	ValidationPrerequisites []ValidationPrerequisite `yaml:"validation_prerequisites,omitempty" json:"validation_prerequisites,omitempty"`
+	RuntimeInputs           []RuntimeInput           `yaml:"runtime_inputs,omitempty" json:"runtime_inputs,omitempty"`
 	DestructiveDB           bool                     `yaml:"destructive_db,omitempty" json:"destructive_db,omitempty"`
 	Scope                   string                   `yaml:"scope"`
 	RejectionReason         *string                  `yaml:"rejection_reason,omitempty"`
@@ -627,6 +628,7 @@ type OutputEntry struct {
 	Kind                    string                   `yaml:"kind,omitempty" json:"kind,omitempty"`
 	Validation              []string                 `yaml:"validation,omitempty" json:"validation,omitempty"`
 	ValidationPrerequisites []ValidationPrerequisite `yaml:"validation_prerequisites,omitempty" json:"validation_prerequisites,omitempty"`
+	RuntimeInputs           []RuntimeInput           `yaml:"runtime_inputs,omitempty" json:"runtime_inputs,omitempty"`
 	DestructiveDB           bool                     `yaml:"destructive_db,omitempty" json:"destructive_db,omitempty"`
 	RCARequired             *bool                    `yaml:"rca_required,omitempty" json:"rca_required,omitempty"`
 	DependsOn               []string                 `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`

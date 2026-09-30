@@ -194,19 +194,24 @@ type RoleContextData struct {
 	// launches on a CLI asserting validation_execution: local, so planners
 	// declare validation_prerequisites and reviewers check them.
 	DeclareValidationPrerequisites bool
-	AcceptanceSource               *models.AcceptanceSource
-	AcceptanceReceipt              *models.AcceptanceReceipt
-	DestructiveDB                  bool
-	TaskDecomposition              *models.DecompositionManifest
-	ValidationPlan                 string
-	Worktree                       string // resolved absolute path
-	IterationNum                   int
-	AttemptNum                     int
-	PriorRejection                 string // empty if no prior rejection
-	PriorAttemptOutcome            string // reason from prior attempt (empty unless AttemptNum == 2)
-	PriorAttemptRejection          string // reviewer feedback from prior attempt (empty unless AttemptNum == 2 and Note present)
-	ResolvedReferenceContext       string // pre-rendered strict carrier and direct-reference spans, empty for legacy-only context
-	LegacyArtifactReferences       []LegacyArtifactReference
+	// DeclareRuntimeInputs: the project configures a runtime-input registry,
+	// so planners declare live validation inputs and reviewers check them.
+	DeclareRuntimeInputs bool
+	// RuntimeInputs are this task's declared live inputs (ADR-0169).
+	RuntimeInputs            []models.RuntimeInput
+	AcceptanceSource         *models.AcceptanceSource
+	AcceptanceReceipt        *models.AcceptanceReceipt
+	DestructiveDB            bool
+	TaskDecomposition        *models.DecompositionManifest
+	ValidationPlan           string
+	Worktree                 string // resolved absolute path
+	IterationNum             int
+	AttemptNum               int
+	PriorRejection           string // empty if no prior rejection
+	PriorAttemptOutcome      string // reason from prior attempt (empty unless AttemptNum == 2)
+	PriorAttemptRejection    string // reviewer feedback from prior attempt (empty unless AttemptNum == 2 and Note present)
+	ResolvedReferenceContext string // pre-rendered strict carrier and direct-reference spans, empty for legacy-only context
+	LegacyArtifactReferences []LegacyArtifactReference
 
 	// Review (populated for reviewer roles)
 	BaseCommit      string // git diff base for reviewer

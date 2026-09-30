@@ -659,6 +659,8 @@ the appropriate supervisor-launched agent session. See
 | `§BRAND_BINARY_NAME§ apply-dependency-repair <blocked-task-id> --reason "..."` | Orchestrator-only consumer for one stored declarative dependency repair. Atomically compares every expected list, commits every canonical desired list and audit entry, and clears the request only on complete success; the source remains BLOCKED. |
 | `§BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason <reason>` | Orchestrator-only repair for one SUPERSEDED task. Atomically removes all illegal downstream direct dependencies, retains legal edges and terminal/replacement metadata, audits removed and retained IDs, and validates the full candidate state. |
 | `§BRAND_BINARY_NAME§ unblock-task <task-id> --reason "..." [--assign-to <agent-id>] [--rebase-on <branch>] [--allow-dirty]` | Restore a repaired BLOCKED task. Without `--assign-to`, valid pending dependencies are allowed: the task returns to its role-pair initial status but stays dependency-held and unclaimable until every direct dependency is `MERGED`. Direct `--assign-to` remains rejected while any dependency is unmet. `--rebase-on` handles unblock-time repair; once dependencies merge, preserved-worktree claim rebases and validates on one captured integration SHA, then uses the completion lock to order the final ref equality check and assignment against cooperating integration movement, without holding the integration mutation lock across the blackboard write. |
+| `§BRAND_BINARY_NAME§ provision --record --task <task-id> --input <input-id> --file <envelope>` | Operator-only. Record a hand-produced runtime input instance (fixture or credential) from a `KEY=VALUE` file outside the repository into the consumption ledger. Repeat `--task` to bind a `reusable` input to several tasks. See [Runtime inputs](#runtime-inputs-blocked-at-first-claim). |
+| `§BRAND_BINARY_NAME§ run-live --task <task-id> [--timeout <seconds>] -- <command> [args...]` | Run a local live command with the task's `reusable` runtime inputs, output masked, exit code propagated. For the assigned doer, the claiming reviewer or the operator; refuses canonical commands that use a `single_use` input. |
 | `§BRAND_BINARY_NAME§ assess-hypothesis-exhausted <task-id>` | Record orchestrator assessment of a hypothesis-exhausted task (2+ coders failed)                                     |
 | `§BRAND_BINARY_NAME§ cancel-task <task-id> "reason"` | Cancel a non-approved, non-terminal task, including active/submitted/reviewing work, by transitioning it to ABANDONED with audit trail. Releases §BRAND_NAME_TITLE§ state claims and removes the task worktree/branch best-effort; it does not kill a live provider process. |
 | `§BRAND_BINARY_NAME§ handoff <task-id> <summary> <next-action>` | Context-exhaustion handoff for a doer agent's claimed task                                                           |
@@ -770,6 +772,19 @@ instead; that guarded transition clears canonical blocker metadata. It returns
 the task to its role-pair initial status, but claimability still depends on direct dependencies:
 valid pending dependencies keep it dependency-held and unclaimable until every direct
 dependency is `MERGED`.
+
+#### Runtime inputs: BLOCKED at first claim
+
+A task declaring `runtime_inputs` (live fixtures or credentials, see
+[the protocol](../specs/protocols/runtime-inputs.md)) is normally BLOCKED at its
+first doer claim until you record its instances: the reason reads
+`runtime_input_unavailable: runtime_input_missing:<input-id>` and the question
+gives the exact `provision --record` command. Record each input, then
+`§BRAND_BINARY_NAME§ unblock-task <task-id> --reason "inputs recorded"`. Recording
+them as soon as the plan's children exist avoids the block. A spent
+`single_use` fixture blocks the next submission the same way
+(`runtime_input_consumed`): record a fresh instance and unblock. Each refusal
+also appends one `runtime_input_unavailable` anomaly per task and input.
 
 If `§BRAND_BINARY_NAME§ retarget-dependency A old-dependency B --reason "..."
 --json` would create a cycle, full candidate-state validation returns this safe

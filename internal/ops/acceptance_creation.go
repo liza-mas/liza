@@ -94,8 +94,11 @@ func (c acceptanceCreationCheck) lifecycleError(operation string, observed *mode
 	}
 	mask := acceptanceExecutionMask(os.Environ())
 	field := c.refField
-	if c.reason == acceptanceValidationMismatchReason {
+	switch c.reason {
+	case acceptanceValidationMismatchReason:
 		field = "validation"
+	case runtimeInputsStrictReason:
+		field = "runtime_inputs"
 	}
 	commit := c.commit
 	if len(commit) > 12 {

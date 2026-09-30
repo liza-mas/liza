@@ -252,7 +252,7 @@ func (a *Anomaly) IsValidType() bool {
 		"review_exhaustion", "reviewer_loop", "stale_verdict", "system_ambiguity",
 		"provider_audit_degraded", "agent_degraded", "submit_verdict_failed",
 		AnomalyTypeReviewerClaimCircuitOpen, AnomalyTypeObligationContentDrifted,
-		AnomalyTypePendingMergeStalled,
+		AnomalyTypePendingMergeStalled, AnomalyTypeRuntimeInputUnavailable,
 	}
 	return slices.Contains(validTypes, a.Type)
 }
@@ -290,6 +290,9 @@ var anomalyRequiredDetails = map[string][]string{
 	// An operator finds the stuck merge from the reviewer that owns it and
 	// judges persistence from the rounds it spent.
 	AnomalyTypePendingMergeStalled: {"agent_id", "role", "rounds"},
+	// An operator provisions the named input for the named task; the bound
+	// instance re-arms deduplication once a new instance is recorded.
+	AnomalyTypeRuntimeInputUnavailable: {"task_id", "input_id", "code", "operation", "bound_instance"},
 }
 
 // AnomalyViolations returns every defect of anomalies, in order: one per

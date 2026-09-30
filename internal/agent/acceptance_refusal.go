@@ -34,7 +34,7 @@ func (t *acceptanceRefusalTracker) observe(refusal *ops.AcceptanceEvidenceError)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	switch refusal.Class {
-	case ops.AcceptanceFaultContent:
+	case ops.AcceptanceFaultContent, ops.AcceptanceFaultRuntimeInput:
 		delete(t.seen, refusal.TaskID)
 		return true
 	case ops.AcceptanceFaultAllocation:

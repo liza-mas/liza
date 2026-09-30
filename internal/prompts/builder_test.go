@@ -3335,6 +3335,48 @@ func TestBuildRoleContext_PlanRefAndValidationPlan(t *testing.T) {
 		}
 	})
 
+	t.Run("runtime inputs render the session confinement note", func(t *testing.T) {
+		command := "sh tests/live/enrol.sh"
+		inputs := []models.RuntimeInput{
+			{ID: "w03", Commands: []string{command}, Recipe: "project.w03", Consumption: models.RuntimeInputSingleUse, Env: []string{"W03_FIXTURE"}},
+			{ID: "principals", Commands: []string{command}, Recipe: "project.principals", Consumption: models.RuntimeInputReusable, Secret: true, Env: []string{"MEMBER_CREDENTIAL"}},
+		}
+		for _, role := range []string{"coder", "code-reviewer"} {
+			data := &RoleContextData{
+				Role: role, AgentID: role + "-1", RoleType: "doer",
+				TaskID: "task-live", Description: "Enrol a member",
+				DoneWhen: "Enrolment passes live", Scope: "internal/enrol",
+				Worktree:           projectRoot + "/.worktrees/task-live",
+				IterationNum:       1,
+				IntegrationBranch:  "integration",
+				ValidationCommands: []string{command},
+				RuntimeInputs:      inputs,
+				ProjectRoot:        projectRoot,
+			}
+			if role == "code-reviewer" {
+				data.RoleType, data.BaseCommit, data.ReviewCommit, data.AssignedTo = "reviewer", "abc", "def", "coder-1"
+			}
+			sections, _ := resolver.ContextSections(role)
+			output, err := BuildRoleContext(role, sections, data)
+			if err != nil {
+				t.Fatalf("%s BuildRoleContext: %v", role, err)
+			}
+			for _, want := range []string{
+				"RUNTIME INPUTS: never in this session or its files.",
+				brand.Command("run-live", "--task", "task-live", "--", "<command>"),
+				"- w03: single_use, used by 1 command(s)",
+				"- principals: reusable, secret, used by 1 command(s)",
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("%s output missing %q:\n%s", role, want, output)
+				}
+			}
+			if strings.Contains(output, "MEMBER_CREDENTIAL") || strings.Contains(output, "project.principals") {
+				t.Fatalf("%s note should name input ids only:\n%s", role, output)
+			}
+		}
+	})
+
 	t.Run("code-reviewer with PlanRef and ValidationPlan", func(t *testing.T) {
 		data := &RoleContextData{
 			Role: "code-reviewer", AgentID: "code-reviewer-1", RoleType: "reviewer",

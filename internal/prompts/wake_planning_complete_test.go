@@ -42,6 +42,8 @@ func TestPlanningCompleteInstructionsReviewDispositions(t *testing.T) {
 		strings.Join(ops.TestFileMatcherPatterns(), ", "),
 		"plan_ref anchor names exactly one ATX heading",
 		"has a producer (a task, a committed generator, or an explicit human step)",
+		"its instances are recorded after the children exist, so do not hold for them",
+		"replan it into runtime_inputs when",
 		brand.Command("replan") + ` <task-id> --reason "<check>: <evidence> → <required correction>" --changed-by orchestrator-1`,
 		brand.Command("plan-check") + ` <task-id> --hold "<exact human action>" --agent-id orchestrator-1 --json`,
 		brand.Command("plan-check") + " <task-id> --pass --agent-id orchestrator-1 --json",

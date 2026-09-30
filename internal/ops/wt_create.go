@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -217,10 +219,18 @@ func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
 // from the project root into a task worktree. It never walks subdirectories and
 // never follows symlinks; only root-level regular files matching the candidate
 // predicate are eligible. Destination ignore setup is verified before any copy.
+//
+// Lines defining a runtime-input variable are dropped from the copy: those
+// values are delivered only through the runtime-input ledger and never copied
+// into worktrees (ADR-0169).
 func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 	entries, err := os.ReadDir(projectRoot)
 	if err != nil {
 		return []string{fmt.Sprintf("copy-worktree-env-files: read project root: %v", err)}
+	}
+	deny, err := worktreeEnvFileDenyNames(projectRoot)
+	if err != nil {
+		return []string{fmt.Sprintf("copy-worktree-env-files: read runtime-input declarations: %v; no env file copied", err)}
 	}
 
 	var warnings []string
@@ -263,11 +273,61 @@ func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 			continue
 		}
 
-		if err := copyFilePreserveMode(src, dst); err != nil {
+		reserved, err := copyEnvFileUnlessReserved(src, dst, info.Mode().Perm(), deny)
+		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: copy: %v", rel, err))
+		} else if len(reserved) > 0 {
+			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: not copied: it mentions runtime-input variables %s; move them out of the file and deliver them through the runtime-input ledger", rel, strings.Join(reserved, ", ")))
 		}
 	}
 	return warnings
+}
+
+func worktreeEnvFileDenyNames(projectRoot string) (map[string]bool, error) {
+	statePath := paths.New(projectRoot).StatePath()
+	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+		return nil, nil
+	}
+	state, err := db.For(statePath).Read()
+	if err != nil {
+		return nil, err
+	}
+	return models.RuntimeInputDenyNames(state), nil
+}
+
+// copyEnvFileUnlessReserved copies src to a new dst unless the file mentions
+// a denied name anywhere, as a whole word; then it copies nothing and returns
+// the names found. Shell env files allow several assignments per line,
+// continuation lines and multi-line quoted values, so dropping lines cannot
+// reliably remove a value: a file mentioning a runtime-input name is refused
+// whole (ADR-0169).
+func copyEnvFileUnlessReserved(src, dst string, mode os.FileMode, deny map[string]bool) ([]string, error) {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return nil, err
+	}
+	var found []string
+	for _, word := range strings.FieldsFunc(string(data), func(r rune) bool {
+		return r != '_' && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	}) {
+		if deny[word] && !slices.Contains(found, word) {
+			found = append(found, word)
+		}
+	}
+	if len(found) > 0 {
+		sort.Strings(found)
+		return found, nil
+	}
+	file, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return nil, err
+	}
+	_, writeErr := file.Write(data)
+	closeErr := file.Close()
+	if writeErr != nil {
+		return nil, writeErr
+	}
+	return nil, closeErr
 }
 
 func isWorktreeEnvFileCandidate(name string) bool {

@@ -239,6 +239,9 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 				return err
 			}
 		}
+		if err := checkOutputRuntimeInputs(state, resolver, task, input.Output); err != nil {
+			return err
+		}
 
 		previousCount := len(task.Output)
 		task.Output = input.Output

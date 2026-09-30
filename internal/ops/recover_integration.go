@@ -120,6 +120,7 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 		currentTask.ReviewingBy, currentTask.ReviewLeaseExpires = nil, nil
 		currentTask.Worktree = nil
 		clearAttemptState(currentTask, attemptStateRetire)
+		retireRuntimeInputBindings(current, currentTask, nil, recovery.At)
 		actor := "human"
 		currentTask.History = append(currentTask.History, models.TaskHistoryEntry{Time: recovery.At, Event: models.TaskEventAbandoned, Agent: &actor, Reason: &reason, Extra: map[string]any{"operation": "recover-integration", "report_commit": recovery.ReportCommit, "preservation_ref": recovery.PreservationRef}})
 		current.Goal.Integration.ContributingSet = nil

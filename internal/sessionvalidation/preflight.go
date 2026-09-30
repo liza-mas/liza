@@ -25,7 +25,7 @@ type Error struct {
 func (e *Error) Error() string {
 	code := e.Code
 	switch code {
-	case "env_file_unavailable", "invalid_contract", "environment_missing", "executable_missing", "probe_start_failed", "probe_failed", "probe_timeout", "preflight_canceled", "execution_policy_required", "artifact_unsupported", "context_unavailable", "context_changed", "retry_pending":
+	case "env_file_unavailable", "invalid_contract", "environment_missing", "executable_missing", "probe_start_failed", "probe_failed", "probe_timeout", "preflight_canceled", "execution_policy_required", "artifact_unsupported", "context_unavailable", "context_changed", "retry_pending", "runtime_input_scrubbed":
 	default:
 		code = "prerequisite_failed"
 	}

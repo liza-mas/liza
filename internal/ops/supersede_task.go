@@ -278,6 +278,7 @@ func supersedeTaskInState(state *models.State, pb *pipelineBundle, task *models.
 	task.ReviewLeaseExpires = nil
 	task.Worktree = nil
 	clearAttemptState(task, attemptStateRetire)
+	retireRuntimeInputBindings(state, task, replacementIDs, now)
 
 	var note string
 	if len(replacementIDs) > 0 {

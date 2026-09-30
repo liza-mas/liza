@@ -449,6 +449,12 @@ func completeClaimTaskAfterValidation(
 		observeAcceptanceClaimRefusal(err, acceptanceState, lockedTask, baseCommit)
 		return nil, err
 	}
+	// A doer claim needs every declared runtime input resolvable now, so a
+	// missing one blocks the task before a coding turn is spent (ADR-0169).
+	if refusal := checkRuntimeInputReadiness(projectRoot, acceptanceState, lockedTask, false); refusal != nil {
+		observeAcceptanceClaimRefusal(refusal, acceptanceState, lockedTask, baseCommit)
+		return nil, refusal
+	}
 	// Reserve the external effect while both the task worktree lock and the
 	// generation-fenced state transaction establish the current boundary.
 	var preparation models.LifecyclePreparation

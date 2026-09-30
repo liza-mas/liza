@@ -352,6 +352,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		AcceptanceSource:   task.AcceptanceSource,
 		AcceptanceReceipt:  task.AcceptanceReceipt,
 		DestructiveDB:      task.DestructiveDB,
+		RuntimeInputs:      task.RuntimeInputs,
 		TaskDecomposition:  task.Decomposition,
 		Worktree:           resolveWorktreePath(config.ProjectRoot, task.Worktree),
 		IterationNum:       task.Iteration,
@@ -412,6 +413,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 
 	if config.Role == models.RoleCodePlanner || config.Role == models.RoleCodePlanReviewer {
 		data.DeclareValidationPrerequisites = consumersValidateLocally(task.RolePair, state.Config, config.ProjectRoot, resolver)
+		data.DeclareRuntimeInputs = state.Config.RuntimeInputRegistry != ""
 	}
 
 	// Reviewer-specific fields

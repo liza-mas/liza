@@ -46,11 +46,17 @@ func validateSetTaskOutputPayload(payload any) []models.FieldDiagnostic {
 	if diagnostics != nil {
 		return diagnostics
 	}
+	rawEntries := decodeSetTaskOutputRawEntries(payload)
 
 	ownedFiles := map[string]int{}
 	interfacesOwned := map[string]int{}
 	for i, entry := range entries {
 		diagnostics = append(diagnostics, validateOutputEntryScalars(i, entry, len(entries))...)
+		var rawInputs any
+		if i < len(rawEntries) {
+			rawInputs = rawEntries[i]["runtime_inputs"]
+		}
+		diagnostics = append(diagnostics, runtimeInputPayloadDiagnostics(fmt.Sprintf("/output/%d", i), rawInputs, entry.Validation, entry.RuntimeInputs)...)
 		diagnostics = append(diagnostics, validateOutputEntryRefs(i, entry)...)
 		diagnostics = append(diagnostics, validateOutputEntryDecomposition(i, entry, len(entries), ownedFiles, interfacesOwned)...)
 	}

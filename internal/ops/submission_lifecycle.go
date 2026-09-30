@@ -98,7 +98,28 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		}
 		return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, commitErr, "unknown")
 	})
+	blockRuntimeInputRefusal(projectRoot, taskID, agentID, authority, err)
 	return result, err
+}
+
+// blockRuntimeInputRefusal moves a task whose submission gate refused a
+// runtime input to BLOCKED with the operator question, after the submission's
+// locks are released. The refusal and its anomaly are already durable; a
+// failed block is reported on the refusal so the doer can block by hand.
+func blockRuntimeInputRefusal(projectRoot, taskID, agentID string, authority *models.AgentAuthority, err error) {
+	var refusal *AcceptanceEvidenceError
+	if !errors.As(err, &refusal) || refusal.Class != AcceptanceFaultRuntimeInput || refusal.Claim != nil {
+		return
+	}
+	reason, question := runtimeInputBlockText(refusal)
+	var blockErr error
+	if authority != nil {
+		_, blockErr = MarkBlockedWithAuthority(projectRoot, taskID, reason, []string{question}, *authority, MarkBlockedOptions{})
+	} else {
+		_, blockErr = MarkBlocked(projectRoot, taskID, reason, []string{question}, agentID)
+	}
+	refusal.Blocked = blockErr == nil
+	refusal.BlockFailed = blockErr != nil
 }
 
 func fullSubmissionSHA(value string) bool {

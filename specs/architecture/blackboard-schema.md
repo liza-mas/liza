@@ -105,6 +105,7 @@ tasks:
     validation_prerequisites:  # optional; exact command association, names only
       - command: make test
         executables: [make]
+    runtime_inputs: []  # optional, strict acceptance tasks only; see "Runtime input ledger"
     history:
       - { time: "2025-01-17T14:05:00Z", event: "created" }
       - { time: "2025-01-17T14:06:00Z", event: "claimed", agent: "coder-1" }
@@ -356,7 +357,7 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
     code-plan-to-coding: true
   plan_check:                      # Orchestrator hand-off disposition of a merged plan (ADR-0159)
     verdict: held                  # passed | held
-    ask: "Provision smoke credentials in the agent env files"  # held only: the human action awaited
+    ask: "Register recipe project.smoke-login, then replan its runtime_inputs"  # held only: the human action awaited
     by: orchestrator-1
     at: 2026-09-24T09:30:00Z
 ```
@@ -1102,6 +1103,7 @@ config:
   default_reviewer_cli: gemini  # Optional default CLI for reviewer roles
   integration_branch: integration
   escalation_webhook: null      # Optional: URL for external notifications
+  runtime_input_registry: config/runtime-inputs.yaml  # Optional: committed recipe registry (ADR-0169)
 ```
 
 **Circuit-breaker response and compatibility model:** `WARNING`, `CHECKPOINT`,
@@ -1489,6 +1491,7 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `submit_verdict_failed` | CLI | Submit-verdict failed after accepting a verdict attempt; best-effort when the blackboard remains writable |
 | `reviewer_claim_circuit_open` | Supervisor | Repeated identical pre-claim reviewer failures against an unchanged task/state boundary crossed the threshold |
 | `pending_merge_stalled` | Supervisor | A reviewer's bounded wake gave up retrying a merge it owns; kept out of retry-cluster detection |
+| `runtime_input_unavailable` | CLI | A runtime input could not be acquired or resolved; names the operator action. Deduplicated per task and input; not counted by the circuit breaker (ADR-0169) |
 
 **Required Details Fields (validated by `liza validate`):**
 
@@ -1507,6 +1510,7 @@ For detailed definition including edge cases (submodules, untracked files), see 
 | `submit_verdict_failed` | `verdict`, `error` | Preserve failed verdict-write cause for operator diagnosis |
 | `reviewer_claim_circuit_open` | `role`, `failure_class`, `attempts`, `first_failure`, `last_failure`, `recovery` | Bounded quarantine evidence, one durable record per failure key |
 | `pending_merge_stalled` | `agent_id`, `role`, `rounds` | Locate the reviewer owning the unmerged task |
+| `runtime_input_unavailable` | `task_id`, `input_id`, `code`, `operation`, `bound_instance` | Operator provisioning signal; a new bound instance re-arms deduplication |
 
 The Supervisor also retains `boundary_version`, bounded masked `error`, and
 `cooldown_until` on `reviewer_claim_circuit_open`. Role, task, failure class and
@@ -1628,6 +1632,35 @@ that observation even when the worktree HEAD is unchanged. `passed` never author
 launch without fresh checks. HMAC fingerprints use a private per-process key
 and cannot prove environment equality across processes or restarts. Records and
 diagnostics exclude raw environment values, probe output and process errors.
+
+## Runtime input ledger
+
+Strict acceptance tasks and `output[]` entries accept optional `runtime_inputs`
+declarations (`id`, `commands`, `recipe`, `consumption`, `secret`, `env`,
+`files`, `after`). The operator records instances with `provision --record`:
+
+```yaml
+runtime_inputs:                   # keyed by HMAC identity of the materialization
+  3f9c...e1:
+    recipe: project.w03-fixture
+    input_id: w03
+    consumption: single_use       # single_use | reusable
+    key_id: 8a41c0d2e5f6a7b8      # names the operator key; reveals no value
+    envelope: /home/operator/fixtures/w03-0001.env  # locator, not identity
+    names: [W03_FIXTURE]          # never values
+    tasks: [task-7]
+    state: consumed               # available | consumed | invalidated
+    registered_at: 2026-10-01T09:00:00Z
+    consumed: {task: task-7, run_id: 5d1e..., agent: coder-1, at: 2026-10-01T09:20:00Z}
+```
+
+Instances are permanent and `consumed`/`invalidated` are terminal. `Modify`
+refuses an introduced transition that changes a terminal instance, changes an
+available one's fields other than `tasks`, `state` and its terminal record,
+removes one, or creates one other than `available`; `validate` checks the same
+records statically. `Modify` also refuses a write that makes a name both a
+runtime input and a validation prerequisite of a live task or of an output
+entry that can still generate children. See the [runtime inputs protocol](../protocols/runtime-inputs.md).
 
 ## Related Documents
 

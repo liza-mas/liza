@@ -23,6 +23,7 @@ type addTaskPayload struct {
 	DoneWhen                string                          `json:"done"`
 	Validation              []string                        `json:"validation"`
 	ValidationPrerequisites []models.ValidationPrerequisite `json:"validation_prerequisites"`
+	RuntimeInputs           []models.RuntimeInput           `json:"runtime_inputs"`
 	DestructiveDB           bool                            `json:"destructive_db"`
 	Scope                   string                          `json:"scope"`
 	Priority                int                             `json:"priority"`
@@ -71,6 +72,7 @@ func validateAddTaskPayload(payload any) []models.FieldDiagnostic {
 	if err := models.ValidateValidationPrerequisites(input.Validation, input.ValidationPrerequisites); err != nil {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/validation_prerequisites", err.Error(), models.FieldValueClassMalformed))
 	}
+	diagnostics = append(diagnostics, runtimeInputPayloadDiagnostics("", object["runtime_inputs"], input.Validation, input.RuntimeInputs)...)
 	if input.RolePair == "" {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/role_pair", "role_pair is required", models.FieldValueClassMissing))
 	}

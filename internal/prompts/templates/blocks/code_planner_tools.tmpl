@@ -31,6 +31,9 @@ CODE PLANNER TOOLS:
 {{- if and .DeclareValidationPrerequisites (not .DecompositionRoot)}}
   validation_prerequisites: REQUIRED, one entry per validation[] command: {"command": "<exact command>", "executables": ["..."], "env": ["NAME"], "probes": [["argv", "..."]]} (at least one check). Declare only what exists after worktree setup and before implementation: interpreter, runner, build tool, env names, cheap probes. Never declare what the task builds: for `./bin/tool --self-test` declare the build tool (e.g. `go`), not `./bin/tool`; a builtin-only command declares its shell. Sessions are checked before claiming, so a missing tool blocks the claim, not finished work.
 {{- end}}
+{{- if and .DeclareRuntimeInputs (not .DecompositionRoot)}}
+  runtime_inputs: declare every live input a validation command needs (fixture, principal, credential, evidence index) instead of describing it in prose: {"id": "...", "commands": ["<exact command>"], "recipe": "<registry name>", "consumption": "single_use|reusable", "secret": false, "env": ["NAME"], "files": ["NAME"], "after": ["<id>"]} (files and after optional). Strict acceptance children only. The recipe must already be in the registry at integration: otherwise plan its authoring first and declare the input in a later replan. The submission gate spends single_use inputs; its env names are never validation_prerequisites names.
+{{- end}}
   For every coding child, emit an Acceptance Contract in its exact plan_ref section using
   the shared acceptance-evidence.md guide. Allocate existing Source References obligation IDs,
   a committed manifest path, and the exact same ordered validation commands as output[].

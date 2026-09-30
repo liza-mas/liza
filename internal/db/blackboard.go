@@ -1,11 +1,13 @@
 package db
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -448,6 +450,61 @@ func checkWrittenAnomalies(preImage []byte, state *models.State) error {
 	return fmt.Errorf("anomaly write refused: %s", strings.Join(added, "; "))
 }
 
+// checkRuntimeInputTransitions refuses a transaction that breaks the
+// consumption ledger's transition rules (ADR-0169): an instance removed, a
+// consumed or invalidated instance changed, or an available one changing
+// anything but its bindings and state. The rules compare candidate and locked
+// pre-image, so every violation is the transaction's own. The pre-image is
+// decoded only when either side has a ledger; the top-level key sits at
+// column zero, which no nested field does.
+func checkRuntimeInputTransitions(preImage []byte, state *models.State) error {
+	if len(state.RuntimeInputs) == 0 && !bytes.HasPrefix(preImage, []byte("runtime_inputs:")) &&
+		!bytes.Contains(preImage, []byte("\nruntime_inputs:")) {
+		return nil
+	}
+	before, err := decodeState(preImage, "runtime-input pre-image")
+	if err != nil {
+		return fmt.Errorf("runtime-input write refused: pre-image unreadable: %w", err)
+	}
+	violations := models.RuntimeInputTransitionViolations(before.RuntimeInputs, state.RuntimeInputs)
+	if len(violations) == 0 {
+		return nil
+	}
+	messages := make([]string, len(violations))
+	for i, violation := range violations {
+		messages[i] = violation.Error()
+	}
+	return fmt.Errorf("runtime-input write refused: %s", strings.Join(messages, "; "))
+}
+
+// checkRuntimeInputNameCollisions refuses a transaction that makes a name
+// both a runtime input and a session prerequisite (ADR-0169): the name is
+// stripped from every session, so the prerequisite could never pass. It is the
+// fence behind the admission diagnostics, covering every writer and any
+// concurrent pair of declarations. Only collisions absent from the locked
+// pre-image are refused, so legacy states stay writable (ADR-0165).
+func checkRuntimeInputNameCollisions(preImage []byte, state *models.State) error {
+	collisions := models.RuntimeInputNameCollisions(state)
+	if len(collisions) == 0 {
+		return nil
+	}
+	before, err := decodeState(preImage, "runtime-input name pre-image")
+	if err != nil {
+		return fmt.Errorf("runtime-input write refused: pre-image unreadable: %w", err)
+	}
+	existing := models.RuntimeInputNameCollisions(before)
+	var introduced []string
+	for _, name := range collisions {
+		if !slices.Contains(existing, name) {
+			introduced = append(introduced, name)
+		}
+	}
+	if len(introduced) == 0 {
+		return nil
+	}
+	return fmt.Errorf("runtime-input write refused: %s would be both a runtime input and a validation prerequisite; runtime-input names are stripped from sessions, so deliver the variable one way only", strings.Join(introduced, ", "))
+}
+
 // Write writes the state to the state file atomically with fsync.
 //
 // Write does not run checkWrittenAnomalies: it replaces the whole state with
@@ -488,6 +545,12 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 			return fmt.Errorf("modification function failed: %w", err)
 		}
 		if err := checkWrittenAnomalies(preImage, state); err != nil {
+			return err
+		}
+		if err := checkRuntimeInputTransitions(preImage, state); err != nil {
+			return err
+		}
+		if err := checkRuntimeInputNameCollisions(preImage, state); err != nil {
 			return err
 		}
 

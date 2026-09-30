@@ -190,6 +190,9 @@ func validateTaskInvariants(v *violations, state *models.State, projectRoot stri
 		for _, err := range models.ValidationPrerequisiteViolations(task.Validation, task.ValidationPrerequisites) {
 			v.add(fmt.Errorf("task %s %w", task.ID, err))
 		}
+		for _, err := range models.RuntimeInputViolations(task.Validation, task.RuntimeInputs) {
+			v.add(fmt.Errorf("task %s %w", task.ID, err))
+		}
 
 		// Track assignments for duplicate check (executing tasks count as active)
 		if task.AssignedTo != nil && sc.IsExecuting(task.Status) {
@@ -961,6 +964,9 @@ func validateTaskOutput(v *violations, task *models.Task, validateArtifactRefs b
 			v.add(fmt.Errorf("task %s %w", task.ID, err))
 		}
 		for _, err := range models.ValidationPrerequisiteViolations(entry.Validation, entry.ValidationPrerequisites) {
+			v.add(fmt.Errorf("task %s output[%d]: %w", task.ID, i, err))
+		}
+		for _, err := range models.RuntimeInputViolations(entry.Validation, entry.RuntimeInputs) {
 			v.add(fmt.Errorf("task %s output[%d]: %w", task.ID, i, err))
 		}
 		if !validateArtifactRefs {
