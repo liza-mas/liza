@@ -350,11 +350,14 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 				return CmdResultMsg{Success: false, Message: fmt.Sprintf("unknown role %q", value)}
 			}
 		}
-		cli, ok := m.resolvedDefaultCLIForRole(value)
+		cli, fromConfig, ok := m.roleLaunchDefault(value)
 		if !ok {
 			return m, func() tea.Msg {
 				return CmdResultMsg{Success: false, Message: fmt.Sprintf("role type for %q is not loaded yet", value)}
 			}
+		}
+		if fromConfig {
+			return m, spawnConfiguredAgentCmd(m.projectRoot, value, cli)
 		}
 		return m, spawnAgentCmd(m.projectRoot, value, cli)
 	case InlineActionSpawnWith:
@@ -384,8 +387,8 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 		return m, nil
 	case InlineActionSpawnCLI:
 		cli := value
+		defaultCLI, fromConfig, ok := m.roleLaunchDefault(m.spawnRole)
 		if cli == "" {
-			resolvedCLI, ok := m.resolvedDefaultCLIForRole(m.spawnRole)
 			if !ok {
 				role := m.spawnRole
 				m.spawnRole = ""
@@ -393,7 +396,7 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 					return CmdResultMsg{Success: false, Message: fmt.Sprintf("role type for %q is not loaded yet", role)}
 				}
 			}
-			cli = resolvedCLI
+			cli = defaultCLI
 		}
 		if !slices.Contains(m.availableCLIs(), cli) {
 			m.spawnRole = ""
@@ -403,6 +406,10 @@ func (m Model) executeInlineAction(action InlineAction, value string) (tea.Model
 		}
 		role := m.spawnRole
 		m.spawnRole = ""
+		// Keeping the models.yaml CLI keeps its entry, model included.
+		if ok && fromConfig && cli == defaultCLI {
+			return m, spawnConfiguredAgentCmd(m.projectRoot, role, cli)
+		}
 		return m, spawnAgentCmd(m.projectRoot, role, cli)
 	case InlineActionPause:
 		return m, pauseSystemCmd(m.projectRoot, value)

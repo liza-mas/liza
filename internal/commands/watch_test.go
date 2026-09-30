@@ -3495,7 +3495,7 @@ func TestRunAutoRepairAgentPool_LogsSuccessfulSpawnWithoutAlert(t *testing.T) {
 	projectRoot, state := setupAutoRepairMissingArchitectState(t, now)
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
 		if role != "architect" {
 			t.Fatalf("role = %q, want architect", role)
 		}
@@ -3538,7 +3538,7 @@ func TestRunChecks_AutoRepairSpawnDoesNotRaiseZombieAlert(t *testing.T) {
 	alertsLog := paths.New(projectRoot).AlertsLogPath()
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
 		if role != "architect" {
 			t.Fatalf("role = %q, want architect", role)
 		}
@@ -3582,7 +3582,7 @@ func TestRunAutoRepairAgentPool_ReportsSpawnFailure(t *testing.T) {
 	projectRoot, state := setupAutoRepairMissingArchitectState(t, now)
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
 		return 0, errors.New("spawn denied")
 	}
 	t.Cleanup(func() { repairAgentPoolSpawn = originalSpawn })
@@ -3615,7 +3615,7 @@ func TestRunAutoRepairAgentPool_SuppressesRepeatedUnregisteredStarts(t *testing.
 	cache[autoRepairAgentPoolStartCountPrefix+"architect"] = autoRepairCountTime(AutoRepairAgentPoolMaxStarts, now)
 
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, _ string, _ bool) (int, error) {
 		t.Fatalf("spawn should be suppressed after repeated unregistered starts")
 		return 0, nil
 	}

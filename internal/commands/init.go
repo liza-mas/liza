@@ -1042,6 +1042,11 @@ func InitCommandWithConfig(params InitParams) error {
 		return fmt.Errorf("failed to freeze pipeline config: %w", err)
 	}
 
+	if err := os.WriteFile(lizaPaths.ModelsPath(), initModelsFile(params), 0644); err != nil {
+		cleanupInit()
+		return fmt.Errorf("failed to write %s: %w", paths.ModelsFileName, err)
+	}
+
 	// Write/merge Claude Code settings and deploy hooks to .claude/
 	// This is non-fatal - if it fails, just warn
 	// Note: This may prompt user for input if settings file exists
@@ -1244,8 +1249,6 @@ func InitCommandWithConfig(params InitParams) error {
 			ReviewerMaxWait:                 600,
 			AgentProgressTimeout:            models.DefaultAgentProgressTimeoutSec,
 			DefaultCLI:                      params.DefaultCLI,
-			DefaultDoerCLI:                  params.DefaultDoerCLI,
-			DefaultReviewerCLI:              params.DefaultReviewerCLI,
 			ScipSearch:                      scipSearchConfig.Languages,
 			IntegrationBranch:               branch,
 			EscalationWebhook:               nil,
@@ -1455,4 +1458,43 @@ func entryPointNames(cfg *pipeline.PipelineConfig) string {
 	}
 	slices.Sort(names)
 	return strings.Join(names, ", ")
+}
+
+// initModelsFile renders the initial models.yaml. The CLI init flags seed its
+// defaults; roles without a flag stay commented out so they keep resolving
+// through the configured CLI chain (including role environment variables).
+func initModelsFile(params InitParams) []byte {
+	doer, reviewer := params.DefaultDoerCLI, params.DefaultReviewerCLI
+	if doer == "" {
+		doer = params.DefaultCLI
+	}
+	if reviewer == "" {
+		reviewer = params.DefaultCLI
+	}
+	var b strings.Builder
+	b.WriteString(`# Per-role CLI and model selection, read at every agent start.
+# An entry is {cli: <cli>, model: <model>}; model is optional and is supported
+# for claude and codex. defaults.doer also covers orchestrators. Roles without
+# an entry use the configured default CLI. An agent started with --cli or
+# --profile ignores this file; --model replaces only the entry's model.
+`)
+	if doer != "" || reviewer != "" {
+		b.WriteString("defaults:\n")
+		for _, d := range []struct{ key, cli string }{{"doer", doer}, {"reviewer", reviewer}} {
+			if d.cli != "" {
+				fmt.Fprintf(&b, "  %s: {cli: %s}\n", d.key, d.cli)
+			}
+		}
+	} else {
+		b.WriteString(`#
+# defaults:
+#   doer: {cli: claude, model: <model>}
+#   reviewer: {cli: codex, model: <model>}
+`)
+	}
+	b.WriteString(`#
+# roles:
+#   <role>: {cli: claude, model: <model>}
+`)
+	return []byte(b.String())
 }

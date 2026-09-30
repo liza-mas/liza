@@ -260,6 +260,7 @@ tasks:
     reviewing_by: code-reviewer-1         # Code Reviewer who claimed this review
     review_lease_expires: 2025-01-17T17:05:00Z  # Code Reviewer lease (same mechanics as coder)
     approved_by: null  # Set on approval; used by supervisor to merge only its reviewer's approvals
+    approvals: []  # One {agent, provider, model, timestamp} per approval; model omitted for the tool default
     spec_ref: specs/api.md#rate-limiting
     done_when: "Public endpoints return 429 with Retry-After header when limit exceeded"
     created: 2025-01-17T16:45:00Z
@@ -866,6 +867,8 @@ agents:
     lease_expires: 2025-01-17T14:57:00Z
     heartbeat: 2025-01-17T14:52:00Z
     terminal: /dev/pts/2  # For human observation: which terminal window is this agent?
+    provider: claude  # CLI the agent runs; used by provider-diversity policy
+    model: claude-opus-5-5  # First-class model it launched with (ADR-0167); omitted for the tool default, read by no policy
     iterations_total: 47  # Total iterations across all tasks this session (agent-level aggregate)
     context_percent: 34  # v1: heuristic estimate, not measured — see task-lifecycle.md#context-tracking
 
@@ -1161,7 +1164,8 @@ watermark. Later `OK` entries do not move it. If `status == TRIGGERED` or
 
 **Config Scope:**
 - Config values are **goal-level defaults** (apply to all tasks in current goal)
-- Agent CLI defaults resolve in this order: explicit `--cli`, role-specific config
+- Agent CLI defaults resolve in this order: explicit `--cli`, the role's `models.yaml` entry
+  (ADR-0167), role-specific config
   (`default_doer_cli` for doers and orchestrators, `default_reviewer_cli` for reviewers),
   role-specific env (`LIZA_DEFAULT_DOER_CLI` / `LIZA_DEFAULT_REVIEWER_CLI`),
   `default_cli`, `LIZA_DEFAULT_CLI`, then `claude`.

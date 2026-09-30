@@ -498,13 +498,14 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 			task.IntegrationFailure = nil
 
 			// Build approval from agent registry and append to approvals list
-			provider := ""
+			provider, model := "", ""
 			if agent, ok := state.Agents[agentID]; ok {
-				provider = agent.Provider
+				provider, model = agent.Provider, agent.Model
 			}
 			task.Approvals = append(task.Approvals, models.Approval{
 				Agent:     agentID,
 				Provider:  provider,
+				Model:     model,
 				Timestamp: now,
 			})
 

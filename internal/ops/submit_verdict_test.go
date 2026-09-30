@@ -929,6 +929,7 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 			Role:     "code-reviewer",
 			Status:   models.AgentStatusWorking,
 			Provider: "claude",
+			Model:    "claude-opus-5-5",
 		}
 		testhelpers.WriteInitialState(t, stateFile, state)
 
@@ -961,6 +962,9 @@ func TestSubmitVerdictApprovals(t *testing.T) {
 		}
 		if approval.Provider != "claude" {
 			t.Errorf("Approval.Provider = %q, want %q", approval.Provider, "claude")
+		}
+		if approval.Model != "claude-opus-5-5" {
+			t.Errorf("Approval.Model = %q, want the registered agent's model", approval.Model)
 		}
 		if approval.Timestamp.IsZero() {
 			t.Error("Approval.Timestamp is zero")

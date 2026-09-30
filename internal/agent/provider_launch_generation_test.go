@@ -142,7 +142,7 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 				registrationDone := make(chan models.AgentAuthority, 1)
 				registrationErr := make(chan error, 1)
 				go func() {
-					authority, err := registerAgentWithAuthority(fixture.bb, fixture.projectRoot, fixture.agentID, "coder", "terminal-b", 1800, "claude", fixture.resolver)
+					authority, err := registerAgentWithAuthority(fixture.bb, fixture.projectRoot, fixture.agentID, "coder", "terminal-b", 1800, "claude", "", fixture.resolver)
 					if err != nil {
 						registrationErr <- err
 						return
@@ -216,7 +216,7 @@ func TestProviderLaunchGenerationLinearization(t *testing.T) {
 
 				registrationDone := make(chan error, 1)
 				go func() {
-					_, err := registerAgentWithAuthority(fixture.bb, fixture.projectRoot, fixture.agentID, "coder", "terminal-b", 1800, "claude", fixture.resolver)
+					_, err := registerAgentWithAuthority(fixture.bb, fixture.projectRoot, fixture.agentID, "coder", "terminal-b", 1800, "claude", "", fixture.resolver)
 					registrationDone <- err
 				}()
 				select {
@@ -453,7 +453,7 @@ func newProviderGenerationFixture(t *testing.T) providerGenerationFixture {
 	testhelpers.SetupPipelineConfig(t, projectRoot)
 	bb := testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
 	resolver := testResolver(t)
-	authorityA, err := registerAgentWithAuthority(bb, projectRoot, "coder-1", "coder", "terminal-a", 1800, "codex", resolver)
+	authorityA, err := registerAgentWithAuthority(bb, projectRoot, "coder-1", "coder", "terminal-a", 1800, "codex", "", resolver)
 	if err != nil {
 		t.Fatalf("register generation A: %v", err)
 	}
@@ -479,7 +479,7 @@ func (f providerGenerationFixture) expireCurrent(t *testing.T) {
 
 func (f providerGenerationFixture) registerReplacement(t *testing.T) models.AgentAuthority {
 	t.Helper()
-	authority, err := registerAgentWithAuthority(f.bb, f.projectRoot, f.agentID, "coder", "terminal-b", 1800, "claude", f.resolver)
+	authority, err := registerAgentWithAuthority(f.bb, f.projectRoot, f.agentID, "coder", "terminal-b", 1800, "claude", "", f.resolver)
 	if err != nil {
 		t.Fatalf("register generation B: %v", err)
 	}

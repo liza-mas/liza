@@ -98,8 +98,8 @@ Depending on selected providers and options, `§BRAND_BINARY_NAME§ init` writes
   for a MAS workspace, so runtime files stay out of `git status` without
   touching `.gitignore` or your `core.excludesFile` (best effort: a failure is
   a warning)
-- `§BRAND_PROJECT_DIRNAME§/state.yaml`, `§BRAND_PROJECT_DIRNAME§/log.yaml`, and `§BRAND_PROJECT_DIRNAME§/pipeline.yaml` for a MAS
-  workspace
+- `§BRAND_PROJECT_DIRNAME§/state.yaml`, `§BRAND_PROJECT_DIRNAME§/log.yaml`, `§BRAND_PROJECT_DIRNAME§/pipeline.yaml`, and
+  `§BRAND_PROJECT_DIRNAME§/models.yaml` (see [Per-role models](#per-role-models)) for a MAS workspace
 - the configured integration branch for MAS runs
 - optional tool activation artifacts when `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT`,
   `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH`, or `§BRAND_ENV_PREFIX§_ENABLE_SEMBLE` is enabled
@@ -442,8 +442,8 @@ are loaded at runtime from the provider catalog.
 | `reviewer_max_wait` | 600 | 300 | — | seconds | Max idle before reviewer supervisors exit and leave the pool |
 | `agent_progress_timeout` | 1800 | — | — | seconds | Max active execution time without state, worktree, or provider-output progress before blocking the task |
 | `default_cli` | (none) | — | — | CLI name | Global default coding agent CLI |
-| `default_doer_cli` | (none) | — | — | CLI name | Default coding agent CLI for doers and orchestrators |
-| `default_reviewer_cli` | (none) | — | — | CLI name | Default coding agent CLI for reviewers |
+| `default_doer_cli` | (none) | — | — | CLI name | Default coding agent CLI for doers and orchestrators; ranks below `models.yaml` |
+| `default_reviewer_cli` | (none) | — | — | CLI name | Default coding agent CLI for reviewers; ranks below `models.yaml` |
 | `default_profile` | (none) | — | — | profile name | Global default structured launch profile |
 | `default_doer_profile` | (none) | — | — | profile name | Default launch profile for doers and orchestrators |
 | `default_reviewer_profile` | (none) | — | — | profile name | Default launch profile for reviewers |
@@ -1209,7 +1209,7 @@ as an auto-summary failure and change nothing else.
 
 ## Supported CLIs
 
-The `--cli` flag on `§BRAND_BINARY_NAME§ agent` and `§BRAND_BINARY_NAME§ repair-agent-pool` selects which coding agent to invoke. When omitted, §BRAND_NAME_TITLE§ first applies the selected structured profile, then falls back to role-specific config (`config.default_doer_cli` for doers and orchestrators, `config.default_reviewer_cli` for reviewers), role-specific env (`§BRAND_ENV_PREFIX§_DEFAULT_DOER_CLI` for doers and orchestrators, `§BRAND_ENV_PREFIX§_DEFAULT_REVIEWER_CLI` for reviewers), `config.default_cli`, `§BRAND_ENV_PREFIX§_DEFAULT_CLI`, then `claude`. Set built-in defaults at init time with `§BRAND_BINARY_NAME§ init --default-cli <cli>`, `§BRAND_BINARY_NAME§ init --default-doer-cli <cli>`, or `§BRAND_BINARY_NAME§ init --default-reviewer-cli <cli>`.
+The `--cli` flag on `§BRAND_BINARY_NAME§ agent` and `§BRAND_BINARY_NAME§ repair-agent-pool` selects which coding agent to invoke. When omitted, the role's [`models.yaml`](#per-role-models) entry applies; otherwise §BRAND_NAME_TITLE§ applies the selected structured profile, then falls back to role-specific config (`config.default_doer_cli` for doers and orchestrators, `config.default_reviewer_cli` for reviewers), role-specific env (`§BRAND_ENV_PREFIX§_DEFAULT_DOER_CLI` for doers and orchestrators, `§BRAND_ENV_PREFIX§_DEFAULT_REVIEWER_CLI` for reviewers), `config.default_cli`, `§BRAND_ENV_PREFIX§_DEFAULT_CLI`, then `claude`. Set built-in defaults at init time with `§BRAND_BINARY_NAME§ init --default-cli <cli>`, `§BRAND_BINARY_NAME§ init --default-doer-cli <cli>`, or `§BRAND_BINARY_NAME§ init --default-reviewer-cli <cli>`; they seed `models.yaml`.
 
 Use `agent_tools` for project-local custom launch definitions. §BRAND_NAME_TITLE§ executes these as structured argv through `exec.Command`; values are not shell-split. `prompt_transport` is `stdin`, `arg`, or `file`. `contract_key` may reuse a known setup provider such as `codex`, or use `none` when §BRAND_NAME_TITLE§ should not suggest a setup command for the custom tool.
 
@@ -1234,6 +1234,32 @@ Preview the resolved command without launching a provider:
 ```bash
 §BRAND_BINARY_NAME§ agent coder --explain-launch
 ```
+
+### Per-role models
+
+`§BRAND_PROJECT_DIRNAME§/models.yaml` selects the CLI, and optionally the model, each role launches with. It is read at every agent start, so edits apply to agents started afterwards without re-initialization. `§BRAND_BINARY_NAME§ init --spec` writes it: `--default-doer-cli`, `--default-reviewer-cli` and `--default-cli` seed `defaults`, and roles without a flag stay commented out. A missing or comment-only file changes nothing.
+
+```yaml
+defaults:
+  doer:     {cli: claude, model: claude-opus-5-5}   # doers and orchestrators
+  reviewer: {cli: codex}                             # tool default model
+roles:
+  architect: {cli: claude, model: claude-fable-5-1}  # overrides the default for one role
+```
+
+A model is passed as a first-class launch argument (`--model` for `claude`, `-m` for `codex`); an entry setting a model for any other CLI is refused. Do not also pin a model in an `agent_tools` override of the same CLI. The file is validated at every start: an unknown key, role or CLI stops the agent start, and pool repair raises `AUTO REPAIR FAILED`. Reviewer lists for quorum slots are not supported yet.
+
+An agent start resolves its CLI, model and profile together; the first matching row applies:
+
+| Start | CLI | Model | Profile |
+|-------|-----|-------|---------|
+| `--profile <p>` | `--cli`, else the profile's CLI | tool default; `--model` is refused | `<p>` |
+| `--model <m>` | `--cli`, else the entry's CLI, else the role default CLI | `<m>` | none |
+| `--cli <c>` | `<c>` | tool default | default profile vars, as before |
+| entry in `roles.<role>`, else `defaults.<doer\|reviewer>` | entry | entry | none |
+| none of the above | default profile CLI, then the chain above | tool default | default profile |
+
+Pool repair, and the TUI when its suggested CLI is kept, start a role covered by the file without `--cli`, so the agent applies the same entry, model included. `--explain-launch` prints the selection `source` and `model`. The agent record and each approval record the model an agent launched with.
 
 Headless watch automatically runs the repair-agent-pool behavior, which sizes each role's agent pool to its claimable work. For every role it counts the immediately claimable tasks that idle agents do not cover and starts that many agents, up to the role's `max-instances` minus the agents already occupying the role. An idle agent covers a task only if it holds no task and could pass claim admission (live process, provider). For reviewer work, capacity requires a live usable agent that can pass the existing claim filters for the task, including prior-approval and configured provider-diversity eligibility. Reviewers are started under an explicit `--agent-id` that the claim filters accept for the task, so a prior approver's ID is not reused after that agent exited; reviewer tasks that no reviewer on the selected CLI could claim are reported as `AUTO REPAIR UNSERVABLE` instead of staffed. Started agents that have not registered yet count as capacity until they register or exit. It also starts an orchestrator when the goal is IN_PROGRESS, the system is RUNNING, and no orchestrator has held a fresh lease for 60 seconds. This is enabled by default. Set `§BRAND_ENV_PREFIX§_AUTO_REPAIR_AGENT_POOL=0`, `false`, or `no` to disable it. Unset or empty values enable it; other invalid non-empty values also leave it enabled and emit a warning.
 

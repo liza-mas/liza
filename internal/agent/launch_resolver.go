@@ -41,6 +41,7 @@ type ResolvedProfile struct {
 type LaunchPlan struct {
 	ToolName             string
 	ProfileName          string
+	Model                string
 	Backend              string
 	Executable           string
 	Args                 []string
@@ -70,6 +71,7 @@ type LaunchPlanRequest struct {
 	ToolName         string
 	ProfileName      string
 	ProfileVars      map[string]string
+	Model            string // first-class model selection; empty keeps the tool default
 	Prompt           string
 	PromptFile       string
 	ProjectRoot      string
@@ -196,6 +198,10 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	if backend != ToolBackendCLI && backend != ToolBackendACPX {
 		return LaunchPlan{}, fmt.Errorf("unsupported backend for %s: %s", toolName, backend)
 	}
+	model := strings.TrimSpace(req.Model)
+	if model != "" && !SupportsModelSelection(tool) {
+		return LaunchPlan{}, fmt.Errorf("%s does not support model selection", toolName)
+	}
 
 	args := tool.RunArgs
 	if req.Interactive {
@@ -252,6 +258,16 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	if err != nil {
 		return LaunchPlan{}, fmt.Errorf("%s args: %w", toolName, err)
 	}
+	if model != "" {
+		// Model flags lead the argv: the supported CLIs take them as
+		// top-level options, before any subcommand such as codex exec.
+		modelVars := map[string]string{"model": model}
+		modelArgs, err := renderArgs(tool.ModelArgs, modelVars)
+		if err != nil {
+			return LaunchPlan{}, fmt.Errorf("%s model args: %w", toolName, err)
+		}
+		renderedArgs = append(modelArgs, renderedArgs...)
+	}
 	acpxShowArgs, err := renderArgs(tool.ACPXShowArgs, vars)
 	if err != nil {
 		return LaunchPlan{}, fmt.Errorf("%s acpx show args: %w", toolName, err)
@@ -273,6 +289,7 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		ToolName:             toolName,
 		Directory:            req.ProjectRoot,
 		ProfileName:          req.ProfileName,
+		Model:                model,
 		Backend:              backend,
 		Executable:           executable,
 		Args:                 renderedArgs,
@@ -297,6 +314,14 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	}, nil
 }
 
+// SupportsModelSelection reports whether a tool passes a first-class model:
+// it declares model_args and runs as a direct CLI. ACPX launches carry no
+// argv model, so a model there would be recorded without being used.
+func SupportsModelSelection(tool models.AgentToolConfig) bool {
+	backend := strings.TrimSpace(tool.Backend)
+	return len(tool.ModelArgs) > 0 && (backend == "" || backend == ToolBackendCLI)
+}
+
 func mergeAgentToolConfig(name string, base, override models.AgentToolConfig) models.AgentToolConfig {
 	out := base
 	if override.ValidationExecution != "" {
@@ -319,6 +344,9 @@ func mergeAgentToolConfig(name string, base, override models.AgentToolConfig) mo
 	}
 	if len(override.InteractiveArgs) > 0 {
 		out.InteractiveArgs = append([]string(nil), override.InteractiveArgs...)
+	}
+	if len(override.ModelArgs) > 0 {
+		out.ModelArgs = append([]string(nil), override.ModelArgs...)
 	}
 	if len(override.EnvFiles) > 0 {
 		out.EnvFiles = append([]string(nil), override.EnvFiles...)

@@ -137,7 +137,7 @@ func TestFindRoleCapacityDeficits_DoerDemandWithinCap(t *testing.T) {
 			}
 
 			// WHEN
-			missing, unservable := FindRoleCapacityDeficits(state, pr, "claude", nil, now)
+			missing, unservable := FindRoleCapacityDeficits(state, pr, RepairCLI{Explicit: "claude"}, nil, now)
 
 			// THEN
 			if len(unservable) != 0 {
@@ -170,7 +170,7 @@ func TestFindRoleCapacityDeficits_RoleMaxInstancesOverridesProjectDefault(t *tes
 	pr := maxInstancesOverride{PipelineResolver: loadRepairResolver(t), role: "coder", max: 2}
 
 	// WHEN
-	missing, _ := FindRoleCapacityDeficits(state, pr, "claude", nil, now)
+	missing, _ := FindRoleCapacityDeficits(state, pr, RepairCLI{Explicit: "claude"}, nil, now)
 
 	// THEN
 	got, ok := coderDeficit(t, missing)
@@ -198,7 +198,7 @@ func TestFindRoleCapacityDeficits_FailedValidationIsNotDemand(t *testing.T) {
 	}}}
 
 	// WHEN
-	missing, _ := FindRoleCapacityDeficits(state, loadRepairResolver(t), "claude", nil, now)
+	missing, _ := FindRoleCapacityDeficits(state, loadRepairResolver(t), RepairCLI{Explicit: "claude"}, nil, now)
 
 	// THEN the failed task starts no replacement and the idle coder covers the other
 	if got, ok := coderDeficit(t, missing); ok {

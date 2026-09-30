@@ -106,14 +106,19 @@ type ValidationAgentCapacity struct {
 	RecoverHint string `json:"recover_hint"`
 }
 
-// repairAgentPoolSpawn starts one agent; an empty agentID lets the agent
-// auto-assign its ID.
-var repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string) (int, error) {
+// repairAgentPoolSpawn starts one agent on cli; an empty agentID lets the
+// agent auto-assign its ID. cliFromConfig starts it without --cli, so it
+// resolves its models.yaml entry, model included, itself.
+var repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string, cliFromConfig bool) (int, error) {
 	var extraArgs []string
 	if agentID != "" {
 		extraArgs = []string{"--agent-id", agentID}
 	}
-	cmd, err := process.SpawnAgent(projectRoot, role, cli, extraArgs...)
+	spawn := process.SpawnAgent
+	if cliFromConfig {
+		spawn = process.SpawnConfiguredAgent
+	}
+	cmd, err := spawn(projectRoot, role, cli, extraArgs...)
 	if err != nil {
 		return 0, err
 	}
@@ -126,7 +131,7 @@ var repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string) (int, er
 // SetRepairAgentPoolSpawnForTest replaces the agent launcher so tests outside
 // this package can observe the IDs agents are started under. It returns the
 // restore function.
-func SetRepairAgentPoolSpawnForTest(spawn func(projectRoot, role, cli, agentID string) (int, error)) func() {
+func SetRepairAgentPoolSpawnForTest(spawn func(projectRoot, role, cli, agentID string, cliFromConfig bool) (int, error)) func() {
 	previous := repairAgentPoolSpawn
 	repairAgentPoolSpawn = spawn
 	return func() { repairAgentPoolSpawn = previous }
@@ -182,8 +187,14 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 		return nil, fmt.Errorf("invalid CLI: %s (must be %s)", opts.CLI, strings.Join(availableCLIs, ", "))
 	}
 
+	roleModels, err := agent.LoadValidatedRoleModels(opts.ProjectRoot, pr.AllRoleNames(), state.Config)
+	if err != nil {
+		return nil, err
+	}
+	repairCLI := RepairCLI{Explicit: opts.CLI, RoleModels: roleModels}
+
 	now := time.Now().UTC()
-	missing, unservable := FindRoleCapacityDeficits(state, pr, opts.CLI, opts.PendingAgentIDs, now)
+	missing, unservable := FindRoleCapacityDeficits(state, pr, repairCLI, opts.PendingAgentIDs, now)
 	missing = append(missing, findMissingOrchestrator(state, pr, now)...)
 	missing = subtractPendingSpawns(missing, opts.PendingSpawns)
 	missing = filterMissingRoleWork(missing, opts.Roles)
@@ -199,7 +210,7 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 	commonImplicitCLI := ""
 	heterogeneousImplicitCLI := false
 	for i, roleWork := range missing {
-		cliName, err := resolveRepairCLI(opts.CLI, roleWork.Role, state, pr)
+		cliName, spawnCLI, err := resolveRepairCLI(repairCLI, roleWork.Role, state, pr)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +229,10 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 		}
 		starts := make([]SpawnedAgent, 0, roleWork.SpawnCount)
 		for i := range roleWork.SpawnCount {
-			start := SpawnedAgent{Role: roleWork.Role, CLI: cliName, Command: fmt.Sprintf("%s --cli %s", brand.Command("agent", roleWork.Role), cliName)}
+			start := SpawnedAgent{Role: roleWork.Role, CLI: cliName, Command: brand.Command("agent", roleWork.Role)}
+			if spawnCLI != "" {
+				start.Command += " --cli " + spawnCLI
+			}
 			if i < len(roleWork.AgentIDs) {
 				start.AgentID = roleWork.AgentIDs[i]
 				start.Command += " --agent-id " + start.AgentID
@@ -231,7 +245,7 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 		}
 
 		for _, start := range starts {
-			pid, err := repairAgentPoolSpawn(opts.ProjectRoot, roleWork.Role, cliName, start.AgentID)
+			pid, err := repairAgentPoolSpawn(opts.ProjectRoot, roleWork.Role, cliName, start.AgentID, spawnCLI == "")
 			if err != nil {
 				// The next start for this role would fail the same way.
 				result.Failed = append(result.Failed, FailedAgentSpawn{
@@ -275,24 +289,49 @@ func filterMissingRoleWork(missing []MissingRoleWork, roles []string) []MissingR
 	return filtered
 }
 
-func resolveRepairCLI(explicitCLI, role string, state *models.State, pr models.PipelineResolver) (string, error) {
-	if explicitCLI != "" {
-		return explicitCLI, nil
+// RepairCLI chooses the CLI pool repair starts agents with.
+type RepairCLI struct {
+	// Explicit is the operator's --cli; it applies to every role.
+	Explicit string
+	// RoleModels is the models.yaml selection, used when Explicit is empty.
+	RoleModels agent.RoleModels
+}
+
+// resolveRepairCLI returns the CLI an agent of role will run, and the --cli
+// value to start it with. A role covered by models.yaml is started without
+// --cli, so the agent resolves the same entry, model included, itself.
+func resolveRepairCLI(sel RepairCLI, role string, state *models.State, pr models.PipelineResolver) (cliName, spawnCLI string, err error) {
+	if sel.Explicit != "" {
+		return sel.Explicit, sel.Explicit, nil
 	}
 	roleType, err := pr.RoleType(role)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	cliName := agent.ResolveDefaultCLIForRole(roleType, agent.CLIResolutionConfig{
-		DefaultCLI:         state.Config.DefaultCLI,
-		DefaultDoerCLI:     state.Config.DefaultDoerCLI,
-		DefaultReviewerCLI: state.Config.DefaultReviewerCLI,
+	selection, err := agent.ResolveLaunchSelection(agent.LaunchSelectionRequest{
+		Role:       role,
+		RoleType:   roleType,
+		Config:     state.Config,
+		RoleModels: sel.RoleModels,
 	})
+	if err != nil {
+		return "", "", err
+	}
+	if selection.Source == agent.SelectionSourceModelsFile {
+		cliName = selection.CLI
+	} else {
+		cliName = agent.ResolveDefaultCLIForRole(roleType, agent.CLIResolutionConfig{
+			DefaultCLI:         state.Config.DefaultCLI,
+			DefaultDoerCLI:     state.Config.DefaultDoerCLI,
+			DefaultReviewerCLI: state.Config.DefaultReviewerCLI,
+		})
+		spawnCLI = cliName
+	}
 	availableCLIs := agent.AvailableCLIs(state.Config)
 	if !slices.Contains(availableCLIs, cliName) {
-		return "", fmt.Errorf("invalid CLI for role %s: %s (must be %s)", role, cliName, strings.Join(availableCLIs, ", "))
+		return "", "", fmt.Errorf("invalid CLI for role %s: %s (must be %s)", role, cliName, strings.Join(availableCLIs, ", "))
 	}
-	return cliName, nil
+	return cliName, spawnCLI, nil
 }
 
 func repairAgentPoolSpawnError(result *RepairAgentPoolResult) error {
@@ -351,7 +390,7 @@ type maxInstancesResolver interface {
 // role's spawn CLI could not claim under any ID it could start with are
 // returned as unservable instead; the others carry the ID to start with.
 // reservedIDs are explicit IDs of started agents not registered yet.
-func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, explicitCLI string, reservedIDs map[string]bool, now time.Time) ([]MissingRoleWork, []UnservableRoleWork) {
+func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, repairCLI RepairCLI, reservedIDs map[string]bool, now time.Time) ([]MissingRoleWork, []UnservableRoleWork) {
 	if state == nil || pr == nil {
 		return nil, nil
 	}
@@ -428,7 +467,7 @@ func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, e
 		}
 		planner, ok := planners[reviewerRole]
 		if !ok {
-			planner = newReviewerStartPlanner(state, pr, explicitCLI, reviewerRole, reservedIDs, now)
+			planner = newReviewerStartPlanner(state, pr, repairCLI, reviewerRole, reservedIDs, now)
 			planners[reviewerRole] = planner
 		}
 		if planner == nil {
@@ -521,8 +560,8 @@ type reviewerStartPlanner struct {
 	now        time.Time
 }
 
-func newReviewerStartPlanner(state *models.State, pr models.PipelineResolver, explicitCLI, reviewerRole string, reservedIDs map[string]bool, now time.Time) *reviewerStartPlanner {
-	cliName, err := resolveRepairCLI(explicitCLI, reviewerRole, state, pr)
+func newReviewerStartPlanner(state *models.State, pr models.PipelineResolver, repairCLI RepairCLI, reviewerRole string, reservedIDs map[string]bool, now time.Time) *reviewerStartPlanner {
+	cliName, _, err := resolveRepairCLI(repairCLI, reviewerRole, state, pr)
 	if err != nil {
 		return nil
 	}

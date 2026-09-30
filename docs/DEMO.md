@@ -181,7 +181,8 @@ one backend for every role:
 liza launch wezterm mas --preset functional-spec --cli codex
 ```
 
-When `--cli` is omitted, each role resolves its backend from role-specific config
+When `--cli` is omitted, each role resolves its backend from its `.liza/models.yaml`
+entry, then role-specific config
 (`config.default_doer_cli` for doers and orchestrators,
 `config.default_reviewer_cli` for reviewers), then role-specific env, then
 global defaults, then `claude`.

@@ -195,6 +195,63 @@ func TestAgentCmd_ExplainLaunchUsesConfiguredToolProfile(t *testing.T) {
 	}
 }
 
+func TestAgentCmd_ExplainLaunchUsesModelsFileEntry(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_CLI", "")
+	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
+	t.Setenv("LIZA_DEFAULT_REVIEWER_CLI", "")
+	projectRoot := setupAgentTestProject(t, "")
+	modelsYAML := "defaults:\n  doer: {cli: claude}\nroles:\n  coder: {cli: codex, model: gpt-x}\n"
+	if err := os.WriteFile(paths.New(projectRoot).ModelsPath(), []byte(modelsYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldDir) }()
+	_ = os.Chdir(projectRoot)
+
+	tests := []struct {
+		name    string
+		args    []string
+		want    []string
+		wantErr string
+	}{
+		{name: "file entry", args: []string{"agent", "coder", "--explain-launch", "--no-log"},
+			want: []string{"tool: codex", "source: models-file", "model: gpt-x", "args: -m gpt-x exec -"}},
+		{name: "model flag replaces entry model", args: []string{"agent", "coder", "--model", "gpt-y", "--explain-launch", "--no-log"},
+			want: []string{"tool: codex", "source: flag", "model: gpt-y", "args: -m gpt-y exec -"}},
+		{name: "cli flag ignores file", args: []string{"agent", "coder", "--cli", "claude", "--explain-launch", "--no-log"},
+			want: []string{"tool: claude", "source: flag", "args: -p --permission-mode auto"}},
+		{name: "model with profile refused", args: []string{"agent", "coder", "--profile", "any", "--model", "m", "--explain-launch", "--no-log"},
+			wantErr: "--model cannot be combined with --profile"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetRootCmdForTest(t)
+			var out bytes.Buffer
+			rootCmd.SetOut(&out)
+			rootCmd.SetArgs(tt.args)
+			err := rootCmd.Execute()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("agent --explain-launch error: %v", err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("explain output missing %q:\n%s", want, out.String())
+				}
+			}
+			if strings.Contains(tt.name, "cli flag") && strings.Contains(out.String(), "model:") {
+				t.Fatalf("explicit --cli must not carry the file model:\n%s", out.String())
+			}
+		})
+	}
+}
+
 func TestAgentCmd_RoleSpecificEnvOverridesGlobalEnv(t *testing.T) {
 	tests := []struct {
 		name     string

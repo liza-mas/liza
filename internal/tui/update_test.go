@@ -2,6 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 // stubWatcher implements StateWatcher for testing.
@@ -1329,6 +1333,95 @@ func TestResolvedDefaultCLIForRole_RoleSpecificConfig(t *testing.T) {
 	}
 	if got, ok := m.resolvedDefaultCLIForRole("code-reviewer"); !ok || got != "gemini" {
 		t.Errorf("resolvedDefaultCLIForRole(code-reviewer) = %q, want gemini", got)
+	}
+}
+
+func TestRoleLaunchDefault_ModelsFileEntry(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
+	t.Setenv("LIZA_DEFAULT_REVIEWER_CLI", "")
+	m := testModel()
+	m.projectRoot = t.TempDir()
+	m.roleTypes = map[string]string{"coder": "doer", "code-reviewer": "reviewer"}
+	m.state = &models.State{Config: models.Config{DefaultDoerCLI: "claude", DefaultReviewerCLI: "claude"}}
+	modelsPath := paths.New(m.projectRoot).ModelsPath()
+	if err := os.MkdirAll(filepath.Dir(modelsPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(content string) {
+		t.Helper()
+		if err := os.WriteFile(modelsPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("roles:\n  coder: {cli: codex, model: gpt-model}\n")
+	if cli, fromConfig, ok := m.roleLaunchDefault("coder"); !ok || !fromConfig || cli != "codex" {
+		t.Errorf("roleLaunchDefault(coder) = %q, %v, %v; want codex from config", cli, fromConfig, ok)
+	}
+	if cli, fromConfig, ok := m.roleLaunchDefault("code-reviewer"); !ok || fromConfig || cli != "claude" {
+		t.Errorf("roleLaunchDefault(code-reviewer) = %q, %v, %v; want claude from the CLI chain", cli, fromConfig, ok)
+	}
+
+	write("roles:\n  typo: {cli: codex}\n")
+	if cli, fromConfig, ok := m.roleLaunchDefault("coder"); !ok || fromConfig || cli != "claude" {
+		t.Errorf("roleLaunchDefault(coder) with invalid file = %q, %v, %v; want chain fallback", cli, fromConfig, ok)
+	}
+}
+
+func TestSpawnActionsDispatchModelsFileRolesWithoutCLI(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
+	t.Setenv("LIZA_DEFAULT_REVIEWER_CLI", "")
+	m := testModel()
+	m.projectRoot = t.TempDir()
+	m.roleTypes = map[string]string{"coder": "doer", "code-reviewer": "reviewer"}
+	m.state = &models.State{Config: models.Config{DefaultDoerCLI: "claude", DefaultReviewerCLI: "claude"}}
+	modelsPath := paths.New(m.projectRoot).ModelsPath()
+	if err := os.MkdirAll(filepath.Dir(modelsPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modelsPath, []byte("roles:\n  coder: {cli: codex, model: gpt-model}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	launcher := func(kind string) func(string, string, string, ...string) (*exec.Cmd, error) {
+		return func(_, role, cli string, _ ...string) (*exec.Cmd, error) {
+			got = append(got, kind+" "+role+" "+cli)
+			return nil, nil
+		}
+	}
+	originalPlain, originalConfigured := spawnAgentProcess, spawnConfiguredAgentProcess
+	spawnAgentProcess, spawnConfiguredAgentProcess = launcher("cli"), launcher("configured")
+	t.Cleanup(func() { spawnAgentProcess, spawnConfiguredAgentProcess = originalPlain, originalConfigured })
+
+	tests := []struct {
+		name   string
+		action InlineAction
+		role   string
+		value  string
+		want   string
+	}{
+		{"spawn covered role", InlineActionSpawn, "", "coder", "configured coder codex"},
+		{"spawn uncovered role", InlineActionSpawn, "", "code-reviewer", "cli code-reviewer claude"},
+		{"accept suggested file CLI", InlineActionSpawnCLI, "coder", "", "configured coder codex"},
+		{"type the file CLI", InlineActionSpawnCLI, "coder", "codex", "configured coder codex"},
+		{"choose another CLI", InlineActionSpawnCLI, "coder", "claude", "cli coder claude"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got = nil
+			m.spawnRole = tt.role
+			_, cmd := m.executeInlineAction(tt.action, tt.value)
+			if cmd == nil {
+				t.Fatal("executeInlineAction() returned no command")
+			}
+			if msg, ok := cmd().(CmdResultMsg); !ok || !msg.Success {
+				t.Fatalf("spawn result = %#v, want success", msg)
+			}
+			if len(got) != 1 || got[0] != tt.want {
+				t.Fatalf("launches = %v, want [%s]", got, tt.want)
+			}
+		})
 	}
 }
 

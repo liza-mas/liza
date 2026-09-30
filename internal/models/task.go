@@ -215,6 +215,7 @@ func (ts TaskStatus) IsPipelineSprintTerminal(terminalStates []TaskStatus) bool 
 type Approval struct {
 	Agent     string    `yaml:"agent"`
 	Provider  string    `yaml:"provider"`
+	Model     string    `yaml:"model,omitempty"`
 	Timestamp time.Time `yaml:"timestamp"`
 }
 

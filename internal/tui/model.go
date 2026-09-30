@@ -226,11 +226,34 @@ func (m Model) resolvedDefaultCLI() string {
 
 // resolvedDefaultCLIForRole returns the effective default CLI for a role name.
 func (m Model) resolvedDefaultCLIForRole(role string) (string, bool) {
+	cli, _, ok := m.roleLaunchDefault(role)
+	return cli, ok
+}
+
+// roleLaunchDefault returns the CLI a role starts with when none is chosen,
+// and whether it comes from the role's models.yaml entry. Such an agent is
+// started without --cli so it applies the entry's model too. An unreadable or
+// invalid file falls back to the configured CLI chain; the started agent then
+// reports the file error itself.
+func (m Model) roleLaunchDefault(role string) (cli string, fromConfig bool, ok bool) {
 	roleType, ok := m.roleTypes[role]
 	if !ok || roleType == "" {
-		return "", false
+		return "", false, false
 	}
-	return agent.ResolveDefaultCLIForRole(roleType, m.cliResolutionConfig()), true
+	var config models.Config
+	if m.state != nil {
+		config = m.state.Config
+	}
+	roleNames := make([]string, 0, len(m.roleTypes))
+	for name := range m.roleTypes {
+		roleNames = append(roleNames, name)
+	}
+	if roleModels, err := agent.LoadValidatedRoleModels(m.projectRoot, roleNames, config); err == nil {
+		if entry, covered := roleModels.EntryFor(role, roleType); covered {
+			return entry.CLI, true, true
+		}
+	}
+	return agent.ResolveDefaultCLIForRole(roleType, m.cliResolutionConfig()), false, true
 }
 
 func (m Model) cliResolutionConfig() agent.CLIResolutionConfig {

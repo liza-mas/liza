@@ -76,6 +76,7 @@ type Agent struct {
 	RegisteredAt    time.Time      `yaml:"registered_at,omitempty"`
 	Terminal        string         `yaml:"terminal"`
 	Provider        string         `yaml:"provider,omitempty"`
+	Model           string         `yaml:"model,omitempty"` // first-class launch model, "" for the tool default; provenance only
 	IterationsTotal int            `yaml:"iterations_total"`
 	ContextPercent  int            `yaml:"context_percent"`
 	PID             int            `yaml:"pid,omitempty"`

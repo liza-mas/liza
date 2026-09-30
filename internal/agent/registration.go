@@ -54,23 +54,25 @@ func validateIdentity(agentID, role string) error {
 // for review quorum provider-diversity checks.
 // resolver is used for role classification (singularity, reviewer detection).
 func registerAgent(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider string, resolver *pipeline.Resolver) error {
-	_, err := registerAgentWithAuthority(bb, projectRoot, agentID, role, terminal, leaseDuration, provider, resolver)
+	_, err := registerAgentWithAuthority(bb, projectRoot, agentID, role, terminal, leaseDuration, provider, "", resolver)
 	return err
 }
 
-func registerAgentWithAuthority(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider string, resolver *pipeline.Resolver) (models.AgentAuthority, error) {
+// model is the first-class model the agent launches with, empty for the
+// tool default; it is recorded for provenance only.
+func registerAgentWithAuthority(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider, model string, resolver *pipeline.Resolver) (models.AgentAuthority, error) {
 	var authority models.AgentAuthority
 	err := ops.WithProjectLifecycleSharedLock(projectRoot, "agent-register", func() error {
 		return ops.WithAgentLifecycleLock(context.Background(), projectRoot, agentID, "agent-register", func() error {
 			var err error
-			authority, err = registerAgentLocked(bb, projectRoot, agentID, role, terminal, leaseDuration, provider, resolver)
+			authority, err = registerAgentLocked(bb, projectRoot, agentID, role, terminal, leaseDuration, provider, model, resolver)
 			return err
 		})
 	})
 	return authority, err
 }
 
-func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider string, resolver *pipeline.Resolver) (models.AgentAuthority, error) {
+func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider, model string, resolver *pipeline.Resolver) (models.AgentAuthority, error) {
 	logger := GetLogger()
 	now := time.Now().UTC()
 	leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
@@ -161,6 +163,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 			RegisteredAt: now,
 			Terminal:     terminal,
 			Provider:     provider,
+			Model:        model,
 			LeaseExpires: &leaseExpires,
 			PID:          pid,
 		}

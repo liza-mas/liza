@@ -14,6 +14,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -22,6 +23,8 @@ type spawnedAgentCall struct {
 	role        string
 	cli         string
 	agentID     string
+	// fromConfig reports a start without --cli (models.yaml-covered role).
+	fromConfig bool
 }
 
 func withFakeRepairSpawner(t *testing.T, calls *[]spawnedAgentCall, err error) {
@@ -36,12 +39,13 @@ func withFakeRepairSpawnerByRole(t *testing.T, calls *[]spawnedAgentCall, errFor
 	t.Helper()
 
 	original := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string) (int, error) {
+	repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string, fromConfig bool) (int, error) {
 		*calls = append(*calls, spawnedAgentCall{
 			projectRoot: projectRoot,
 			role:        role,
 			cli:         cli,
 			agentID:     agentID,
+			fromConfig:  fromConfig,
 		})
 		err := errForRole(role)
 		if err != nil {
@@ -374,6 +378,72 @@ func TestRepairAgentPool_DryRunUsesRoleSpecificDefaultCLIs(t *testing.T) {
 	// Reviewers start under an explicit ID the claim filters accept.
 	if !slices.Contains(result.Commands, brand.BinaryName+" agent code-reviewer --cli gemini --agent-id code-reviewer-1") {
 		t.Errorf("commands = %v, want code-reviewer gemini command", result.Commands)
+	}
+}
+
+func TestRepairAgentPool_ModelsFileCoveredRoleStartsWithoutCLIFlag(t *testing.T) {
+	state := testhelpers.CreateValidState()
+	state.Config.DefaultReviewerCLI = "claude"
+	now := time.Now().UTC()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		testhelpers.BuildTaskByStatus("review-1", models.TaskStatusReadyForReview, now),
+	}
+	projectRoot := writeRepairAgentPoolState(t, state)
+	modelsYAML := "roles:\n  coder: {cli: codex, model: gpt-model}\n"
+	if err := os.WriteFile(paths.New(projectRoot).ModelsPath(), []byte(modelsYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls []spawnedAgentCall
+	withFakeRepairSpawner(t, &calls, nil)
+
+	result, err := RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: projectRoot, Missing: true})
+	if err != nil {
+		t.Fatalf("RepairAgentPool() error = %v", err)
+	}
+	want := map[string]spawnedAgentCall{
+		"coder":         {role: "coder", cli: "codex", fromConfig: true},
+		"code-reviewer": {role: "code-reviewer", cli: "claude", agentID: "code-reviewer-1"},
+	}
+	if len(calls) != len(want) {
+		t.Fatalf("spawn calls = %+v, want %d", calls, len(want))
+	}
+	for _, call := range calls {
+		call.projectRoot = ""
+		if call != want[call.role] {
+			t.Errorf("spawn call = %+v, want %+v", call, want[call.role])
+		}
+	}
+	for _, command := range []string{
+		brand.BinaryName + " agent coder",
+		brand.BinaryName + " agent code-reviewer --cli claude --agent-id code-reviewer-1",
+	} {
+		if !slices.Contains(result.Commands, command) {
+			t.Errorf("commands = %v, want %q", result.Commands, command)
+		}
+	}
+	if result.RoleCLIs["coder"] != "codex" {
+		t.Errorf("RoleCLIs[coder] = %q, want the file's codex", result.RoleCLIs["coder"])
+	}
+}
+
+func TestRepairAgentPool_InvalidModelsFileFailsRepair(t *testing.T) {
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())}
+	projectRoot := writeRepairAgentPoolState(t, state)
+	if err := os.WriteFile(paths.New(projectRoot).ModelsPath(), []byte("roles:\n  typo: {cli: codex}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var calls []spawnedAgentCall
+	withFakeRepairSpawner(t, &calls, nil)
+
+	_, err := RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: projectRoot, Missing: true})
+	if err == nil || !strings.Contains(err.Error(), "roles.typo: unknown role") {
+		t.Fatalf("error = %v, want unknown role in models file", err)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("spawn calls = %+v, want none", calls)
 	}
 }
 

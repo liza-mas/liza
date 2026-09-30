@@ -25,7 +25,7 @@ type SupervisorConfig struct {
 	StatePath        string
 	LogPath          string
 	SpecsDir         string // For prompt building
-	CLIName          string // "claude", "codex", "gemini", "mistral", "kimi"
+	CLIName, Model   string // CLI ("claude", "codex", ...); first-class model, "" for the tool default
 	ProfileName      string // Optional structured launch profile name
 	ProfileVars      map[string]string
 	Interactive      bool          // Print prompt location, don't execute
@@ -699,7 +699,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		ApplyYAMLTimeouts(strategy, timeouts.Execution, timeouts.PollInterval, timeouts.MaxWait)
 	}
 
-	authority, err := registerAgentWithAuthority(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName, resolver)
+	authority, err := registerAgentWithAuthority(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName, config.Model, resolver)
 	if err != nil {
 		return err
 	}

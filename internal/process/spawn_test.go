@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,24 @@ func TestBuildSpawnCommand_AddsGoalIDFromState(t *testing.T) {
 	wantArgs := []string{"liza", "agent", "coder", "--cli", "codex", "--goal-id", "goal-xyz"}
 	if strings.Join(args, " ") != strings.Join(wantArgs, " ") {
 		t.Fatalf("args = %v, want %v", args, wantArgs)
+	}
+}
+
+func TestBuildSpawnCommand_EmptyCLIOmitsFlag(t *testing.T) {
+	projectRoot := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
+
+	cmd, devNull, readyPath, err := buildSpawnCommand(projectRoot, "coder", "")
+	if err != nil {
+		t.Fatalf("buildSpawnCommand() error = %v", err)
+	}
+	defer devNull.Close()
+	defer os.Remove(readyPath)
+
+	args, _ := splitSupervisorLogArgs(t, cmd.Args)
+	if slices.Contains(args, "--cli") {
+		t.Fatalf("args = %v, want no --cli so the agent resolves models.yaml itself", args)
 	}
 }
 

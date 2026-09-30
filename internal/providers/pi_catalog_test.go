@@ -63,6 +63,19 @@ func TestEmbeddedCatalogIncludesPiProvider(t *testing.T) {
 // silently falls back to the cache or the embedded catalog. pi depends on the
 // pi_extension activation asset, which released binaries do not know, so pi
 // ships embedded-only until the oldest supported binary understands the field.
+// TestPublishedCatalogOmitsModelArgsUntilReleased guards the same version
+// skew for model_args: released binaries reject it, and the embedded catalog
+// keeps supplying it because loaded tools merge field by field.
+func TestPublishedCatalogOmitsModelArgsUntilReleased(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "provider-catalog.yaml"))
+	if err != nil {
+		t.Fatalf("read provider-catalog.yaml: %v", err)
+	}
+	if bytes.Contains(data, []byte("model_args")) {
+		t.Fatal("provider-catalog.yaml must not publish model_args: released binaries reject the catalog on unknown fields")
+	}
+}
+
 func TestPublishedCatalogOmitsPiUntilReleased(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "provider-catalog.yaml"))
 	if err != nil {

@@ -128,6 +128,7 @@ Example:
 
 		cliName, _ := cmd.Flags().GetString("cli")
 		profileName, _ := cmd.Flags().GetString("profile")
+		modelName, _ := cmd.Flags().GetString("model")
 		goalID, _ := cmd.Flags().GetString("goal-id")
 		interactive, _ := cmd.Flags().GetBool("interactive")
 		explainLaunch, _ := cmd.Flags().GetBool("explain-launch")
@@ -151,17 +152,25 @@ Example:
 			runtimeConfig = state.Config
 		}
 
-		resolvedProfile, err := agent.ResolveProfileForRole(profileName, roleType, runtimeConfig)
+		roleModels, err := agent.LoadValidatedRoleModels(projectRoot, validRoles, runtimeConfig)
 		if err != nil {
 			return err
 		}
-
-		// Resolve default CLI from state config when --cli is not explicitly set
-		flagChanged := cmd.Flags().Changed("cli")
-		cliName, err = agent.ResolveCLIWithProfile(flagChanged, cliName, resolvedProfile, roleType, runtimeConfig)
+		selection, err := agent.ResolveLaunchSelection(agent.LaunchSelectionRequest{
+			Role:       role,
+			RoleType:   roleType,
+			CLI:        cliName,
+			CLIChanged: cmd.Flags().Changed("cli"),
+			Model:      modelName,
+			Profile:    profileName,
+			Config:     runtimeConfig,
+			RoleModels: roleModels,
+		})
 		if err != nil {
 			return err
 		}
+		cliName = selection.CLI
+		resolvedProfile := selection.Profile
 
 		availableCLIs := agent.AvailableCLIs(runtimeConfig)
 		if !slices.Contains(availableCLIs, cliName) {
@@ -202,7 +211,7 @@ Example:
 		}
 
 		if explainLaunch {
-			return explainAgentLaunch(cmd, cliName, resolvedProfile, projectRoot, outputsDir, runtimeConfig)
+			return explainAgentLaunch(cmd, selection, projectRoot, outputsDir, runtimeConfig)
 		}
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -222,6 +231,7 @@ Example:
 					CLIName:     cliName,
 					ProfileName: resolvedProfile.Name,
 					ProfileVars: resolvedProfile.Vars,
+					Model:       selection.Model,
 					Interactive: interactive,
 					InitialTask: initialTask,
 					LLMAgent:    agent.NewLLMAgentForCLIWithConfig(cliName, outputsDir, runtimeConfig),
@@ -241,6 +251,7 @@ Example:
 			CLIName:     cliName,
 			ProfileName: resolvedProfile.Name,
 			ProfileVars: resolvedProfile.Vars,
+			Model:       selection.Model,
 			Interactive: interactive,
 			InitialTask: initialTask,
 			LLMAgent:    agent.NewLLMAgentForCLIWithConfig(cliName, outputsDir, runtimeConfig),
@@ -250,7 +261,8 @@ Example:
 	},
 }
 
-func explainAgentLaunch(cmd *cobra.Command, cliName string, profile agent.ResolvedProfile, projectRoot, outputsDir string, runtimeConfig models.Config) error {
+func explainAgentLaunch(cmd *cobra.Command, selection agent.LaunchSelection, projectRoot, outputsDir string, runtimeConfig models.Config) error {
+	cliName, profile := selection.CLI, selection.Profile
 	promptFile := ""
 	if tool, ok := agent.AgentToolRegistry(runtimeConfig)[cliName]; ok && tool.PromptTransport == agent.PromptTransportFile {
 		promptFile = "<prompt-file>"
@@ -259,6 +271,7 @@ func explainAgentLaunch(cmd *cobra.Command, cliName string, profile agent.Resolv
 		ToolName:      cliName,
 		ProfileName:   profile.Name,
 		ProfileVars:   profile.Vars,
+		Model:         selection.Model,
 		Prompt:        "<prompt>",
 		PromptFile:    promptFile,
 		ProjectRoot:   projectRoot,
@@ -270,6 +283,10 @@ func explainAgentLaunch(cmd *cobra.Command, cliName string, profile agent.Resolv
 	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "tool: %s\n", plan.ToolName)
+	fmt.Fprintf(out, "source: %s\n", selection.Source)
+	if plan.Model != "" {
+		fmt.Fprintf(out, "model: %s\n", plan.Model)
+	}
 	if plan.ProfileName != "" {
 		fmt.Fprintf(out, "profile: %s\n", plan.ProfileName)
 	}
@@ -559,7 +576,8 @@ func init() {
 
 	// Agent command flags
 	addAgentIDFlag(agentCmd)
-	agentCmd.Flags().String("cli", "", "CLI to use; defaults by role-specific then global config/env ("+providerCLIHelpHint+")")
+	agentCmd.Flags().String("cli", "", "CLI to use; defaults by "+paths.ModelsFileName+", then role-specific then global config/env ("+providerCLIHelpHint+")")
+	agentCmd.Flags().String("model", "", "model to launch the CLI with (claude, codex); defaults by "+paths.ModelsFileName)
 	agentCmd.Flags().String("profile", "", "structured launch profile from config.agent_profiles")
 	agentCmd.Flags().Bool("explain-launch", false, "resolve and print provider launch configuration without running an agent")
 	agentCmd.Flags().String("goal-id", "", "goal identifier marker for process diagnostics (must match state goal.id when supplied)")

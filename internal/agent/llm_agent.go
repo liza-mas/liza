@@ -75,6 +75,7 @@ type LLMAgentRunRequest struct {
 	WarmSession    bool
 	ProfileName    string
 	ProfileVars    map[string]string
+	Model          string
 	Prompt         string
 	PromptFile     string
 	ProjectRoot    string
@@ -116,6 +117,7 @@ type LLMAgentInteractiveRequest struct {
 	SessionID      string
 	ProfileName    string
 	ProfileVars    map[string]string
+	Model          string
 	ProjectRoot    string
 	AdditionalDirs []string
 	RuntimeConfig  models.Config

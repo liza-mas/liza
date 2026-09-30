@@ -359,9 +359,9 @@ export LIZA_DEFAULT_REVIEWER_CLI=opencode
 
 `LIZA_DEFAULT_DOER_CLI` applies to doers and the orchestrator;
 `LIZA_DEFAULT_REVIEWER_CLI` applies to reviewers. You can choose different
-providers for the two groups. An explicit `--cli`, a selected profile's CLI,
-or the corresponding role-specific default in project state takes precedence
-over these environment variables. See
+providers for the two groups. An explicit `--cli`, a role entry in `.liza/models.yaml`, a selected profile's
+CLI, or the corresponding role-specific default in project state takes
+precedence over these environment variables. See
 [CLI selection](support-docs/USAGE_MULTI_AGENTS.md) for details.
 
 Set the exports before starting the TUI or agent processes: changing them in

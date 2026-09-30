@@ -219,6 +219,9 @@ type AgentToolConfig struct {
 	RunArgs             []string `yaml:"run_args,omitempty"`
 	LoggedRunArgs       []string `yaml:"logged_run_args,omitempty"`
 	InteractiveArgs     []string `yaml:"interactive_args,omitempty"`
+	// ModelArgs passes a selected model to the tool; {{model}} is the model.
+	// A tool without it cannot take a first-class model selection.
+	ModelArgs           []string `yaml:"model_args,omitempty"`
 	EnvFiles            []string `yaml:"env_files,omitempty"`
 	RequiredExecutables []string `yaml:"required_executables,omitempty"`
 	ContractKey         string   `yaml:"contract_key,omitempty"`

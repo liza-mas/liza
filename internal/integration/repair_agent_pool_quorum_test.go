@@ -225,7 +225,7 @@ func TestRepairAgentPoolStartsReviewerUnderClaimableID(t *testing.T) {
 			t.Fatalf("auto-assignment would pick %s, want the approver's %s for this regression", got, approverID)
 		}
 		var started []string
-		restore := commands.SetRepairAgentPoolSpawnForTest(func(_, role, _, agentID string) (int, error) {
+		restore := commands.SetRepairAgentPoolSpawnForTest(func(_, role, _, agentID string, _ bool) (int, error) {
 			started = append(started, role+"/"+agentID)
 			return 0, nil
 		})
@@ -257,7 +257,7 @@ func TestRepairAgentPoolStartsReviewerUnderClaimableID(t *testing.T) {
 		}
 
 		// WHEN the deficit is planned
-		missing, _ := commands.FindRoleCapacityDeficits(state, pr, "claude", map[string]bool{quorumReviewerRole + "-2": true}, time.Now().UTC())
+		missing, _ := commands.FindRoleCapacityDeficits(state, pr, commands.RepairCLI{Explicit: "claude"}, map[string]bool{quorumReviewerRole + "-2": true}, time.Now().UTC())
 
 		// THEN the next start skips both the approver and the pending ID
 		if len(missing) != 1 || !slices.Equal(missing[0].AgentIDs, []string{quorumReviewerRole + "-3"}) {

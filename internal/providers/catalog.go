@@ -160,6 +160,7 @@ type Runtime struct {
 	RunArgs             []string `yaml:"run_args,omitempty"`
 	LoggedRunArgs       []string `yaml:"logged_run_args,omitempty"`
 	InteractiveArgs     []string `yaml:"interactive_args,omitempty"`
+	ModelArgs           []string `yaml:"model_args,omitempty"`
 	EnvFiles            []string `yaml:"env_files,omitempty"`
 	RequiredExecutables []string `yaml:"required_executables,omitempty"`
 	ContractKey         string   `yaml:"contract_key,omitempty"`
@@ -505,6 +506,7 @@ func runtimeToolConfig(id, backend string, rt Runtime) models.AgentToolConfig {
 		RunArgs:             append([]string(nil), rt.RunArgs...),
 		LoggedRunArgs:       append([]string(nil), rt.LoggedRunArgs...),
 		InteractiveArgs:     append([]string(nil), rt.InteractiveArgs...),
+		ModelArgs:           append([]string(nil), rt.ModelArgs...),
 		EnvFiles:            append([]string(nil), rt.EnvFiles...),
 		RequiredExecutables: required,
 		ContractKey:         rt.ContractKey,

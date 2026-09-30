@@ -2,9 +2,12 @@
 
 Liza wraps provider **CLIs**, not their APIs. Model choice therefore happens at
 the CLI layer — via each CLI's own configuration, or via Liza's `agent_tools`
-state overrides. This doc shows how to run Liza agents on three specific
-setups and how the behavioral-contract + guardrails enforcement behaves in
-each.
+state overrides. For `claude` and `codex`, pick a model per role in
+`.liza/models.yaml` instead (see
+[Per-role models](../support-docs/CONFIGURATION.md#per-role-models)); the
+overrides below cover the other CLIs. This doc shows how to run Liza agents on
+three specific setups and how the behavioral-contract + guardrails enforcement
+behaves in each.
 
 ## 1. Pi (`pi-coding-agent`) as a Liza backend
 

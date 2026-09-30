@@ -30,8 +30,13 @@ const (
 	supervisorBootstrapPollInterval = 10 * time.Millisecond
 )
 
+// buildSpawnCommand builds the agent start command. An empty cli omits
+// --cli, so the agent resolves its CLI and model itself.
 func buildSpawnCommand(projectRoot, role, cli string, extraArgs ...string) (*exec.Cmd, *os.File, string, error) {
-	args := []string{"agent", role, "--cli", cli}
+	args := []string{"agent", role}
+	if cli != "" {
+		args = append(args, "--cli", cli)
+	}
 	if goalID := readGoalID(projectRoot); goalID != "" && !hasFlag(extraArgs, "--goal-id") {
 		args = append(args, "--goal-id", goalID)
 	}
@@ -108,6 +113,18 @@ func hasFlag(args []string, name string) bool {
 // Returns the started command and an error. The caller owns lifecycle
 // management (the process is already started and will be reaped).
 func SpawnAgent(projectRoot, role, cli string, extraArgs ...string) (*exec.Cmd, error) {
+	return spawnAgent(projectRoot, role, cli, true, extraArgs...)
+}
+
+// SpawnConfiguredAgent starts an agent whose CLI, and model, come from the
+// project's models.yaml entry for its role. cli is that entry's CLI: it is
+// checked as SpawnAgent checks it but not passed, so the agent resolves the
+// same entry, model included, itself.
+func SpawnConfiguredAgent(projectRoot, role, cli string, extraArgs ...string) (*exec.Cmd, error) {
+	return spawnAgent(projectRoot, role, cli, false, extraArgs...)
+}
+
+func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string) (*exec.Cmd, error) {
 	guardKey := projectRoot + "\x00" + role
 	agentSpawnGuard.Lock()
 	if agentSpawnGuard.inFlight[guardKey] {
@@ -141,7 +158,11 @@ func SpawnAgent(projectRoot, role, cli string, extraArgs ...string) (*exec.Cmd, 
 		return nil, fmt.Errorf("spawn %s with %s: %w", role, cli, err)
 	}
 
-	cmd, devNull, readyPath, err := buildSpawnCommand(projectRoot, role, cli, extraArgs...)
+	flagCLI := cli
+	if !passCLI {
+		flagCLI = ""
+	}
+	cmd, devNull, readyPath, err := buildSpawnCommand(projectRoot, role, flagCLI, extraArgs...)
 	if err != nil {
 		return nil, err
 	}

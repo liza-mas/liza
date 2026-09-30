@@ -51,7 +51,7 @@ func prepareSupervisorSession(config SupervisorConfig, runtime models.Config) (*
 	}
 	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
 		ToolName: config.CLIName, ProfileName: config.ProfileName,
-		ProfileVars: config.ProfileVars, ProjectRoot: config.ProjectRoot,
+		ProfileVars: config.ProfileVars, Model: config.Model, ProjectRoot: config.ProjectRoot,
 		AgentID: config.AgentID, RuntimeConfig: runtime, Interactive: config.Interactive,
 	})
 	if err != nil {

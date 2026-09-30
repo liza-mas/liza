@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 
 	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
@@ -5371,11 +5372,56 @@ func TestInitCommandWithConfig_RoleSpecificDefaultCLIs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read state: %v", err)
 	}
-	if state.Config.DefaultDoerCLI != "codex" {
-		t.Errorf("state.Config.DefaultDoerCLI = %q, want %q", state.Config.DefaultDoerCLI, "codex")
+	// Role CLI flags seed models.yaml, which outranks state config, instead
+	// of state config (ADR-0167).
+	if state.Config.DefaultDoerCLI != "" || state.Config.DefaultReviewerCLI != "" {
+		t.Errorf("state role CLIs = %q/%q, want empty", state.Config.DefaultDoerCLI, state.Config.DefaultReviewerCLI)
 	}
-	if state.Config.DefaultReviewerCLI != "gemini" {
-		t.Errorf("state.Config.DefaultReviewerCLI = %q, want %q", state.Config.DefaultReviewerCLI, "gemini")
+	rm, err := agent.LoadRoleModels(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadRoleModels() error = %v", err)
+	}
+	if rm.Defaults.Doer == nil || rm.Defaults.Doer.CLI != "codex" {
+		t.Errorf("defaults.doer = %+v, want cli codex", rm.Defaults.Doer)
+	}
+	if rm.Defaults.Reviewer == nil || rm.Defaults.Reviewer.CLI != "gemini" {
+		t.Errorf("defaults.reviewer = %+v, want cli gemini", rm.Defaults.Reviewer)
+	}
+}
+
+func TestInitModelsFileSeedsOnlyGivenFlags(t *testing.T) {
+	tests := []struct {
+		name                 string
+		params               InitParams
+		wantDoer, wantReview string
+	}{
+		{name: "no flags", params: InitParams{}},
+		{name: "global only", params: InitParams{DefaultCLI: "codex"}, wantDoer: "codex", wantReview: "codex"},
+		{name: "role flag beats global", params: InitParams{DefaultCLI: "codex", DefaultReviewerCLI: "claude"}, wantDoer: "codex", wantReview: "claude"},
+		{name: "doer only", params: InitParams{DefaultDoerCLI: "codex"}, wantDoer: "codex"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rm, err := agent.ParseRoleModels(initModelsFile(tt.params))
+			if err != nil {
+				t.Fatalf("ParseRoleModels() error = %v", err)
+			}
+			got := func(e *agent.RoleModelEntry) string {
+				if e == nil {
+					return ""
+				}
+				if e.Model != "" {
+					t.Errorf("seeded model = %q, want none", e.Model)
+				}
+				return e.CLI
+			}
+			if d, r := got(rm.Defaults.Doer), got(rm.Defaults.Reviewer); d != tt.wantDoer || r != tt.wantReview {
+				t.Errorf("defaults = %q/%q, want %q/%q", d, r, tt.wantDoer, tt.wantReview)
+			}
+			if len(rm.Roles) != 0 {
+				t.Errorf("roles = %v, want none", rm.Roles)
+			}
+		})
 	}
 }
 

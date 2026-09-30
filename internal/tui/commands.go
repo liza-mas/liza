@@ -6,6 +6,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -186,8 +187,25 @@ func tickCmd() tea.Cmd {
 // Delegates to process.SpawnAgent for detached subprocess lifecycle.
 // Returns CmdResultMsg with success/error status.
 func spawnAgentCmd(projectRoot, role, cli string) tea.Cmd {
+	return spawnWith(spawnAgentProcess, projectRoot, role, cli)
+}
+
+// spawnConfiguredAgentCmd spawns an agent whose CLI comes from its
+// models.yaml entry, without --cli, so the entry's model applies too.
+func spawnConfiguredAgentCmd(projectRoot, role, cli string) tea.Cmd {
+	return spawnWith(spawnConfiguredAgentProcess, projectRoot, role, cli)
+}
+
+// Agent launchers behind the spawn commands; tests replace them to observe
+// which one a spawn action dispatches to.
+var (
+	spawnAgentProcess           = process.SpawnAgent
+	spawnConfiguredAgentProcess = process.SpawnConfiguredAgent
+)
+
+func spawnWith(spawn func(string, string, string, ...string) (*exec.Cmd, error), projectRoot, role, cli string) tea.Cmd {
 	return func() tea.Msg {
-		if _, err := process.SpawnAgent(projectRoot, role, cli); err != nil {
+		if _, err := spawn(projectRoot, role, cli); err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("spawn %s: %v", role, err)}
 		}
 		return CmdResultMsg{Success: true, Message: "Spawned " + role + " (" + cli + ")"}

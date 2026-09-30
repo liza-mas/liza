@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -35,7 +36,7 @@ func newPoolRepairHarness(t *testing.T) *poolRepairHarness {
 		status:  make(map[int]procscan.AgentProcessState),
 	}
 	originalSpawn := repairAgentPoolSpawn
-	repairAgentPoolSpawn = func(_, _, _, _ string) (int, error) {
+	repairAgentPoolSpawn = func(_, _, _, _ string, _ bool) (int, error) {
 		h.nextPID++
 		h.spawned = append(h.spawned, h.nextPID)
 		h.status[h.nextPID] = procscan.AgentProcessLiveMatching
@@ -256,5 +257,46 @@ func TestResolveAutoRepairPendingSpawns_ReservesExplicitIDs(t *testing.T) {
 	}
 	if len(ids) != 1 || !ids["code-reviewer-2"] {
 		t.Fatalf("reserved IDs = %v, want only code-reviewer-2", ids)
+	}
+}
+
+func TestRunAutoRepairAgentPool_InvalidModelsFileAlertsOncePerError(t *testing.T) {
+	h := newPoolRepairHarness(t)
+	modelsPath := paths.New(h.root).ModelsPath()
+	write := func(content string) {
+		t.Helper()
+		if err := os.WriteFile(modelsPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failedAlerts := func(outcome AutoRepairAgentPoolOutcome) int {
+		count := 0
+		for _, alert := range outcome.Alerts {
+			if alert.Category == "AUTO REPAIR FAILED" {
+				count++
+			}
+		}
+		return count
+	}
+
+	write("roles:\n  typo: {cli: codex}\n")
+	if got := failedAlerts(h.tick(coderDemand(1))); got != 1 {
+		t.Fatalf("first tick alerts = %d, want 1", got)
+	}
+	if got := failedAlerts(h.tick(coderDemand(1))); got != 0 {
+		t.Fatalf("repeated tick alerts = %d, want 0 for the same error", got)
+	}
+	if len(h.spawned) != 0 {
+		t.Fatalf("spawned = %v, want none while the file is invalid", h.spawned)
+	}
+
+	write("roles:\n  coder: {cli: codex}\n")
+	h.tick(coderDemand(1))
+	if len(h.spawned) != 1 {
+		t.Fatalf("spawned = %v, want one coder once the file is fixed", h.spawned)
+	}
+	write("roles:\n  typo: {cli: codex}\n")
+	if got := failedAlerts(h.tick(coderDemand(2))); got != 1 {
+		t.Fatalf("alerts after the error returns = %d, want 1", got)
 	}
 }

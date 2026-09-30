@@ -37,7 +37,7 @@ func TestAgentGeneration(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
 	resolver := testResolver(t)
 
-	authorityA, err := registerAgentWithAuthority(bb, projectRoot, "coder-1", "coder", "terminal-a", 1800, "codex", resolver)
+	authorityA, err := registerAgentWithAuthority(bb, projectRoot, "coder-1", "coder", "terminal-a", 1800, "codex", "", resolver)
 	if err != nil {
 		t.Fatalf("register generation A: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestAgentGeneration(t *testing.T) {
 		t.Fatalf("expire generation A: %v", err)
 	}
 
-	authorityB, err := registerAgentWithAuthority(bb, projectRoot, "coder-1", "coder", "terminal-b", 1800, "claude", resolver)
+	authorityB, err := registerAgentWithAuthority(bb, projectRoot, "coder-1", "coder", "terminal-b", 1800, "claude", "", resolver)
 	if err != nil {
 		t.Fatalf("register takeover generation B: %v", err)
 	}
@@ -1924,5 +1924,25 @@ func writeRegistrationProcCmdline(t *testing.T, procRoot string, pid int, argv [
 	cmdline := strings.Join(argv, "\x00") + "\x00"
 	if err := os.WriteFile(filepath.Join(procDir, "cmdline"), []byte(cmdline), 0644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRegisterAgentRecordsLaunchModel(t *testing.T) {
+	t.Cleanup(ops.SetAgentProcessProcRootForTest(filepath.Join(t.TempDir(), "missing-proc")))
+	projectRoot := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+	bb := testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
+
+	authority, err := registerAgentWithAuthority(bb, projectRoot, "coder-1", "coder", "terminal-a", 1800, "codex", "gpt-model", testResolver(t))
+	if err != nil {
+		t.Fatalf("registerAgentWithAuthority() error = %v", err)
+	}
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if got := state.Agents[authority.ID]; got.Provider != "codex" || got.Model != "gpt-model" {
+		t.Fatalf("agent = provider %q model %q, want codex gpt-model", got.Provider, got.Model)
 	}
 }

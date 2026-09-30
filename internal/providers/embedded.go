@@ -29,6 +29,7 @@ providers:
       prompt_transport: stdin
       run_args: [-p, --permission-mode, auto]
       logged_run_args: [-p, --permission-mode, auto, --verbose, --output-format, stream-json]
+      model_args: [--model, "{{model}}"]
       env_files: [claude.env]
       contract_key: claude
 
@@ -58,6 +59,7 @@ providers:
       prompt_transport: stdin
       run_args: [exec, "-"]
       logged_run_args: [exec, --json, "-"]
+      model_args: [-m, "{{model}}"]
       env_files: [codex.env]
       contract_key: codex
     acp_runtime:

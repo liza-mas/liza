@@ -17,7 +17,9 @@ const (
 	LizaDirName   = ".liza"      // Legacy default name of the Liza directory
 	StateFileName = "state.yaml" // Name of the state file
 	LogFileName   = "log.yaml"   // Name of the log file
-	LockSuffix    = ".lock"      // Suffix for lock files
+	// ModelsFileName names the per-role CLI and model selection file.
+	ModelsFileName = "models.yaml"
+	LockSuffix     = ".lock" // Suffix for lock files
 
 	// TaskBranchPrefix is the prefix used for task-specific git branches.
 	// Task branches are named: task/<taskID>
@@ -87,6 +89,11 @@ func (p LizaPaths) StatePath() string {
 // LogPath returns the path to the log file.
 func (p LizaPaths) LogPath() string {
 	return p.get(LogFileName)
+}
+
+// ModelsPath returns the path to the per-role CLI and model selection file.
+func (p LizaPaths) ModelsPath() string {
+	return p.get(ModelsFileName)
 }
 
 // LockPath returns the path to the lock file.

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/analysis"
 	"github.com/liza-mas/liza/internal/brand"
@@ -58,6 +59,10 @@ const autoRepairAgentPoolPendingPrefix = "auto-repair-agent-pool-pending:"
 const autoRepairAgentPoolPendingTimeoutPrefix = "auto-repair-agent-pool-pending-timeout:"
 const autoRepairAgentPoolUnservablePrefix = "auto-repair-agent-pool-unservable:"
 const autoRepairAgentPoolEnvWarningKey = "auto-repair-agent-pool-env-warning"
+
+// autoRepairModelsErrorKey holds the last models.yaml error alerted, so an
+// invalid file raises one alert per distinct error rather than one per tick.
+const autoRepairModelsErrorKey = "auto-repair-models-error:"
 const orchestratorMissingSinceKey = "orchestrator-missing:since"
 const orchestratorMissingAlertedKey = "orchestrator-missing:alerted"
 
@@ -214,8 +219,25 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 	}
 
 	now := time.Now().UTC()
+	roleModels, err := agent.LoadValidatedRoleModels(config.ProjectRoot, pr.AllRoleNames(), state.Config)
+	if err != nil {
+		key := autoRepairModelsErrorKey + err.Error()
+		if _, seen := config.StateCache[key]; !seen {
+			clearAutoRepairModelsError(config.StateCache)
+			config.StateCache[key] = now
+			fmt.Fprintf(config.WarnWriter, "WARNING: auto repair skipped: %v\n", err)
+			outcome.Alerts = append(outcome.Alerts, Alert{
+				Timestamp: now,
+				Level:     AlertLevelWarning,
+				Category:  "AUTO REPAIR FAILED",
+				Message:   err.Error(),
+			})
+		}
+		return outcome
+	}
+	clearAutoRepairModelsError(config.StateCache)
 	pending, pendingIDs := resolveAutoRepairPendingSpawns(state, config.StateCache, now)
-	missing, unservable := FindRoleCapacityDeficits(state, pr, "", pendingIDs, now)
+	missing, unservable := FindRoleCapacityDeficits(state, pr, RepairCLI{RoleModels: roleModels}, pendingIDs, now)
 	if roleWork, due := orchestratorRepairDue(state, pr, config.StateCache, now); due {
 		missing = append(missing, roleWork)
 	}
@@ -278,6 +300,14 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 		Message:   message,
 	})
 	return outcome
+}
+
+func clearAutoRepairModelsError(cache map[string]time.Time) {
+	for key := range cache {
+		if strings.HasPrefix(key, autoRepairModelsErrorKey) {
+			delete(cache, key)
+		}
+	}
 }
 
 // orchestratorRepairDue reports a missing orchestrator once its absence has
