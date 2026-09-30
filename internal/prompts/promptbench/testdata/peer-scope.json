@@ -77,8 +77,8 @@
     {
       "role": "coder",
       "variant": "coding-pair",
-      "before_bytes": 289970,
-      "after_bytes": 285194,
+      "before_bytes": 290332,
+      "after_bytes": 285556,
       "delta_bytes": -4776,
       "reference_before_bytes": 266436,
       "reference_after_bytes": 261660

@@ -29,6 +29,10 @@ Read the epic at {{.EpicRef}} for requirement context and user stories at specs/
 {{- end}}
 {{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
+   Before work bound to the exact HEAD (index builds, live or rehearsal runs, commit-pinned evidence),
+   check integration: git -C {{.Worktree}} log --oneline -1 HEAD..{{.IntegrationBranch}}
+   If it prints a commit, rebase first: git -C {{.Worktree}} rebase {{.IntegrationBranch}}. Resolve
+   conflicts in the worktree, or abort the rebase and mark BLOCKED naming them.
 2. TDD (code tasks): Write tests FIRST that verify done_when criteria, then implement until tests pass
 3. Tests are MANDATORY for code tasks — Code Reviewer will reject code without tests. Invoke skill: testing.
    Tests must be discoverable via standard runners (e.g. pytest, go test) — not just runnable when explicitly named.

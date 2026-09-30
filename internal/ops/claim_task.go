@@ -437,6 +437,9 @@ func completeClaimTaskAfterValidation(
 		}
 	}
 	claimCtx.baseCommit = baseCommit
+	// Rejected claims replace baseCommit with the preserved base; keep the
+	// captured integration commit as their rebase target.
+	claimCtx.integrationCommit = baseCommit
 	acceptanceState, err := bb.Read()
 	if err != nil {
 		return nil, err
@@ -913,7 +916,7 @@ func ensureRejectedWorktreeExists(
 		if err := validateRejectedWorktree(gitWrapper, ctx); err != nil {
 			return result, err
 		}
-		return result, nil
+		return result, rebaseRejectedWorktree(gitWrapper, ctx)
 	}
 
 	if worktreeDirExists {
@@ -934,7 +937,7 @@ func ensureRejectedWorktreeExists(
 		if err := validateRejectedWorktree(gitWrapper, ctx); err != nil {
 			return result, err
 		}
-		return result, nil
+		return result, rebaseRejectedWorktree(gitWrapper, ctx)
 	}
 
 	createdBase, err := gitWrapper.CreateWorktree(ctx.taskID, ctx.integrationBranch)

@@ -43,6 +43,26 @@ would record unresolved state as resolved. Refusals and commit failures keep
 this ADR's blocked repair flow and delete nothing. Failure states that may remain
 (staged work, or a WIP commit with residue) are tracked in `TECH_DEBT.md`.
 
+## 2026-09-30 Amendment: Claim-Time Rebase of Rejected Work
+
+A rejected re-claim, including await-verdict's automatic one, kept its old
+base, so rework and any work bound to the exact HEAD ran on stale integration
+until submission rebased it (operator note D95). A rejected claim that reuses
+its worktree now rebases it onto the integration commit captured for the claim
+when integration has advanced from `base_commit`, and records the old HEAD and
+target in the claim history.
+
+Unlike the preserved claim above, this rebase is best effort. A conflict, a
+refusal before the rebase starts, or tracked uncommitted work keeps the branch
+and `base_commit` and records `rebase_skipped`. The doer continues rejected work
+it already owns and meets the conflict at its own rebase or at submission, so
+blocking a rework loop on it would cost a repair cycle for no safety gain. The
+claim fails closed only when Git state after the attempt is unknown, or does
+not match the pre-rebase HEAD and branch. There is no integration-ref equality
+check at assignment: a later integration commit makes the base less fresh, not
+invalid. The rebase target always descends from the old base, so a claim that
+fails after rebasing leaves a branch the next claim still validates.
+
 ## Consequences
 
 Positive:

@@ -5,7 +5,7 @@
 | Event | Action | Actor |
 |-------|--------|-------|
 | Task IMPLEMENTING (fresh) | Create worktree via `liza claim-task` | Supervisor |
-| Task IMPLEMENTING (reassignment) | Create fresh worktree via `liza claim-task` | Supervisor |
+| Task IMPLEMENTING (re-claim after REJECTED) | Reuse the task worktree and rebase it onto current integration when clean (see Rejected re-claim rule) via `liza claim-task` | Supervisor |
 | Task APPROVED | Merge eligible | — |
 | Task MERGED | `liza wt-merge task-N` | Supervisor (after Code Reviewer approves) |
 | Task BLOCKED | Delete worktree: `liza wt-delete task-N` | Planner |
@@ -16,7 +16,7 @@
 
 **Note:** Worktree creation is supervisor-only (via `liza claim-task`), not agent-callable. This ensures worktrees exist before agents are spawned.
 
-**Reassignment rule:** When a different coder claims a task after `REJECTED`, the worktree is deleted and recreated fresh. Same coder re-claiming keeps the existing worktree. Rationale: salvaging failed work often costs more than restarting from spec.
+**Rejected re-claim rule:** A `REJECTED` task keeps its work whether the same coder re-claims it or, after the ownership lease expires, a different coder does: the claim reuses a healthy worktree, reattaches the task branch when the directory is missing, and recreates from integration only when neither exists. When integration has advanced from the task's `base_commit`, the claim rebases the branch onto the captured integration commit and updates `base_commit`, so rework and HEAD-bound work start from current integration. A conflict, a refused rebase, or tracked uncommitted work skips the rebase: branch and `base_commit` stay as they were, the claim history records `rebase_skipped`, and the doer meets the conflict at its own rebase or at submission. The claim fails only when it cannot prove the worktree is back at its pre-rebase HEAD.
 
 **Blocked-task note:** In the current state machine, `BLOCKED` tasks do not transition back to `READY`. They are resolved via `SUPERSEDED` (with or without replacement tasks) or `ABANDONED`; any existing worktree should be cleaned up via `liza wt-delete task-N`.
 

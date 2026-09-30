@@ -27,6 +27,9 @@ type claimContext struct {
 	preservedBaseCommit string
 	worktreeHead        string
 	adoptedWIP          string // WIP commit adopting a preserved worktree's uncommitted work
+	integrationCommit   string // integration commit captured before the worktree phase
+	rebaseOldHead       string // rejected worktree HEAD before a claim-time rebase
+	rebaseSkipped       string // why a rejected claim kept its old base
 	leaseExpires        time.Time
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 }
@@ -393,6 +396,11 @@ func (rejectedClaimStrategy) historyEntry(now time.Time, ctx *claimContext) mode
 		Time:  now,
 		Agent: agentPtr,
 	}
+	if ctx.rebaseOldHead != "" {
+		entry.Extra = map[string]any{"rebase_old_head": ctx.rebaseOldHead, "rebase_target_sha": ctx.baseCommit}
+	} else if ctx.rebaseSkipped != "" {
+		entry.Extra = map[string]any{"rebase_skipped": ctx.rebaseSkipped}
+	}
 	if ctx.previousAssignee == ctx.agentID {
 		entry.Event = models.TaskEventReclaimedAfterRejection
 		return entry
@@ -403,6 +411,117 @@ func (rejectedClaimStrategy) historyEntry(now time.Time, ctx *claimContext) mode
 		entry.PreviousAssignee = &ctx.previousAssignee
 	}
 	return entry
+}
+
+// rebaseRejectedWorktree moves reused rejected work onto the integration commit
+// captured for this claim, so rework starts from current integration instead of
+// meeting integration's movement only at submission. It is best effort: a
+// refused or conflicting rebase keeps the branch and base_commit, records why,
+// and leaves the conflict to the doer, who meets it again at submission. The
+// claim fails closed only when it cannot prove the worktree is as it found it.
+func rebaseRejectedWorktree(gitWrapper *git.Git, ctx *claimContext) error {
+	target := ctx.integrationCommit
+	if target == "" || target == ctx.baseCommit {
+		return nil
+	}
+	// Rebasing only onto a descendant of the old base keeps that base an
+	// ancestor of HEAD, which the next claim validates if this one fails later.
+	advanced, err := gitWrapper.IsAncestor(ctx.baseCommit, target)
+	if err != nil {
+		return err
+	}
+	if !advanced {
+		ctx.rebaseSkipped = fmt.Sprintf("integration %s does not descend from base_commit %s", shortSHA(target), shortSHA(ctx.baseCommit))
+		return nil
+	}
+	head, err := gitWrapper.GetWorktreeHEAD(ctx.taskID)
+	if err != nil {
+		return err
+	}
+	current, err := gitWrapper.IsAncestor(target, head)
+	if err != nil {
+		return err
+	}
+	if current {
+		ctx.baseCommit = target
+		return nil
+	}
+	operation, err := gitWrapper.InterruptedOperation(ctx.worktreeDir)
+	if err != nil {
+		return failClosedRejectedRebase(ctx, fmt.Sprintf("cannot inspect Git state: %v", err))
+	}
+	if operation != "" {
+		return failClosedRejectedRebase(ctx, "interrupted "+operation)
+	}
+	status, err := gitWrapper.WorktreeStatusShort(ctx.worktreeDir)
+	if err != nil {
+		return err
+	}
+	if tracked := trackedStatusLines(status); len(tracked) > 0 {
+		ctx.rebaseSkipped = "worktree has tracked changes: " + strings.Join(tracked, "; ")
+		return nil
+	}
+
+	rebaseErr := gitWrapper.RebaseOnto(ctx.worktreeDir, target)
+	if rebaseErr == nil {
+		ctx.rebaseOldHead = head
+		ctx.baseCommit = target
+		return nil
+	}
+	if err := restoreRejectedWorktreeAfterRebase(gitWrapper, ctx, head); err != nil {
+		return err
+	}
+	var conflict *git.RebaseConflictError
+	if stderrors.As(rebaseErr, &conflict) {
+		ctx.rebaseSkipped = fmt.Sprintf("rebase conflict onto %s", shortSHA(target))
+	} else {
+		ctx.rebaseSkipped = fmt.Sprintf("rebase onto %s failed: %s", shortSHA(target), truncateForDiagnostics(rebaseErr.Error(), 500))
+	}
+	return nil
+}
+
+// restoreRejectedWorktreeAfterRebase aborts only a rebase this claim started
+// (a refusal before start leaves none) and proves the pre-rebase boundary.
+func restoreRejectedWorktreeAfterRebase(gitWrapper *git.Git, ctx *claimContext, preHead string) error {
+	operation, err := gitWrapper.InterruptedOperation(ctx.worktreeDir)
+	if err != nil {
+		return failClosedRejectedRebase(ctx, fmt.Sprintf("cannot inspect Git state: %v", err))
+	}
+	switch operation {
+	case "":
+	case "rebase":
+		if err := gitWrapper.AbortRebase(ctx.worktreeDir); err != nil {
+			return failClosedRejectedRebase(ctx, fmt.Sprintf("rebase abort failed: %v", err))
+		}
+		if operation, err = gitWrapper.InterruptedOperation(ctx.worktreeDir); err != nil || operation != "" {
+			return failClosedRejectedRebase(ctx, fmt.Sprintf("Git state after rebase abort: %q, %v", operation, err))
+		}
+	default:
+		return failClosedRejectedRebase(ctx, "interrupted "+operation)
+	}
+	branch, err := gitWrapper.GetWorktreeBranch(ctx.worktreeDir)
+	if err != nil || branch != paths.TaskBranchPrefix+ctx.taskID {
+		return failClosedRejectedRebase(ctx, fmt.Sprintf("branch after rebase = %q, %v", branch, err))
+	}
+	head, err := gitWrapper.GetWorktreeHEAD(ctx.taskID)
+	if err != nil || head != preHead {
+		return failClosedRejectedRebase(ctx, fmt.Sprintf("HEAD after rebase = %s, %v; want %s", head, err, preHead))
+	}
+	status, err := gitWrapper.WorktreeStatusShort(ctx.worktreeDir)
+	if err != nil {
+		return failClosedRejectedRebase(ctx, fmt.Sprintf("cannot read status: %v", err))
+	}
+	if tracked := trackedStatusLines(status); len(tracked) > 0 {
+		return failClosedRejectedRebase(ctx, "tracked changes after rebase: "+strings.Join(tracked, "; "))
+	}
+	return nil
+}
+
+func failClosedRejectedRebase(ctx *claimContext, detail string) error {
+	return &PreconditionError{Reason: fmt.Sprintf(
+		"rejected worktree %s is not in a known state for claim-time rebase onto %s: %s; inspect with git -C %s status",
+		ctx.worktreeRel, shortSHA(ctx.integrationCommit), detail, ctx.worktreeRel,
+	)}
 }
 
 type integrationFixClaimStrategy struct{}
