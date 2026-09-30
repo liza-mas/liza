@@ -43,6 +43,35 @@ func validateOutputRefFragments(root string, task *models.Task, commit string) e
 	return nil
 }
 
+// validateReviewCarriers builds the reviewed range base..review the way the
+// reviewer's prompt context will (ADR-0133): every strict carrier the range
+// changed must parse and resolve its direct references against head. Content
+// the author can correct is refused as input; a Git failure stays operational,
+// since editing the carrier would not fix it. Integration moving after
+// submission can still fail the reviewer's build, which remains authoritative.
+func validateReviewCarriers(repo referencecontract.ReviewRepository, root, taskID, base, review, head string) error {
+	// A current-review range never consults drift proofs, so none is supplied.
+	_, err := referencecontract.LoadDiffCarriers(repo, root, base, review, head, referencecontract.CarrierReview, false, nil)
+	if err == nil {
+		return nil
+	}
+	var invalid *referencecontract.InvalidCarrierError
+	if errors.As(err, &invalid) {
+		return &PreconditionError{Reason: fmt.Sprintf("task %s: reviewed carriers: %v; fix the carrier and resubmit", taskID, err)}
+	}
+	return &OperationalError{
+		Code:    "git_operation",
+		Phase:   "review-carriers",
+		Message: "failed to build the reviewed carriers",
+		Details: map[string]any{
+			"operation":     integrationOperationSubmitForReview,
+			"task_id":       taskID,
+			"recovery_hint": "Inspect the repository objects for the reviewed range, then retry submit-for-review.",
+		},
+		Err: err,
+	}
+}
+
 // ResolveRefFragmentAt resolves ref's fragment at commit the way prompt context
 // does. Refs without a fragment, and refs whose file is absent at commit, keep
 // the legacy route and resolve trivially.

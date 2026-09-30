@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -305,6 +306,194 @@ func TestSubmitForReview_OutputRefFragmentAfterRebase(t *testing.T) {
 			}
 			if head := testhelpers.MustGit(t, git.New(root).GetWorktreePath(taskID), "rev-parse", "HEAD"); head == commit {
 				t.Fatal("test did not exercise a changed post-rebase candidate")
+			}
+		})
+	}
+}
+
+// reviewCarrier is a strict carrier declaring one direct reference to target
+// pinned at revision.
+func reviewCarrier(revision, target string) string {
+	return fmt.Sprintf("# Extra\n\n## Source References\n\nSource revision: %q\n\n### Direct References\n\n- \"src\": %q\n\n### Obligation Coverage\n\n- \"OB-1\" -> \"src\"\n", revision, target)
+}
+
+func commitWorktreeFiles(t *testing.T, wt string, files map[string]string) string {
+	t.Helper()
+	for name, content := range files {
+		path := filepath.Join(wt, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		testhelpers.MustGit(t, wt, "add", name)
+	}
+	testhelpers.MustGit(t, wt, "commit", "-m", "Add review carrier")
+	return testhelpers.MustGit(t, wt, "rev-parse", "HEAD")
+}
+
+// The reviewer's supervisor builds its prompt from every strict carrier the
+// candidate changed; a carrier it cannot build must be refused at submission,
+// while the author still holds the task and its worktree.
+func TestSubmitForReview_ReviewCarriers(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		files     func(base string) map[string]string
+		wantError string
+	}{
+		{
+			name: "malformed direct reference",
+			files: func(base string) map[string]string {
+				return map[string]string{"specs/extra.md": reviewCarrier(base, "README.md")}
+			},
+			wantError: "reference target must contain a non-empty path and exact heading separated by '#'",
+		},
+		{
+			name: "missing heading at pin",
+			files: func(base string) map[string]string {
+				return map[string]string{"specs/extra.md": reviewCarrier(base, "README.md#Nope")}
+			},
+			wantError: `eligible ATX heading "Nope" is missing`,
+		},
+		{
+			name: "pin predates referenced sibling",
+			files: func(base string) map[string]string {
+				return map[string]string{
+					"specs/extra.md":   reviewCarrier(base, "specs/sibling.md#Sibling"),
+					"specs/sibling.md": "# Sibling\n\nAdded in the same submission.\n",
+				}
+			},
+			wantError: "not present at its pinned revision",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN a candidate that commits a strict carrier the reviewer could not build
+			root, taskID, _, agentID, bb := setupPlanningAcceptanceSubmission(t, "", false)
+			base := testhelpers.MustGit(t, root, "rev-parse", "integration")
+			commit := commitWorktreeFiles(t, git.New(root).GetWorktreePath(taskID), tc.files(base))
+			before, err := bb.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// WHEN the author submits
+			result, err := SubmitForReview(root, taskID, commit, agentID)
+
+			// THEN the submission is refused as correctable input, before any state change or rebase
+			testhelpers.RequireErrorContains(t, err, tc.wantError)
+			testhelpers.RequireErrorContains(t, err, "specs/extra.md")
+			var lifecycle *LifecycleError
+			if !errors.As(err, &lifecycle) || lifecycle.Outcome.SafeAction != "correct_input" {
+				t.Fatalf("refusal = %v, want correct_input", err)
+			}
+			after, readErr := bb.Read()
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if result != nil || !reflect.DeepEqual(before, after) {
+				t.Fatal("unbuildable review carrier changed submission state")
+			}
+			if head := testhelpers.MustGit(t, git.New(root).GetWorktreePath(taskID), "rev-parse", "HEAD"); head != commit {
+				t.Fatal("unbuildable review carrier rebased the worktree")
+			}
+		})
+	}
+}
+
+// Rebase can merge an integration edit into a carrier the candidate changed;
+// the reviewer reads the rebased range, so submission checks it too.
+func TestSubmitForReview_ReviewCarriersAfterRebase(t *testing.T) {
+	// GIVEN integration adopts the candidate's carrier and breaks its reference,
+	// while the candidate edits an unrelated section of the same carrier
+	root, taskID, commit, agentID, bb := setupPlanningAcceptanceSubmission(t, outputRefFragmentSection, false)
+	testhelpers.MustGit(t, root, "cherry-pick", commit)
+	path := filepath.Join(root, "specs/plans/child.md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(content), `"README.md#Test"`, `"README.md#Gone"`, 1)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testhelpers.MustGit(t, root, "add", "specs/plans/child.md")
+	testhelpers.MustGit(t, root, "commit", "-m", "Break carrier reference on integration")
+	wt := git.New(root).GetWorktreePath(taskID)
+	wtContent, err := os.ReadFile(filepath.Join(wt, "specs/plans/child.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := commitWorktreeFiles(t, wt, map[string]string{
+		"specs/plans/child.md": strings.Replace(string(wtContent), "Second capability.", "Second capability, revised.", 1),
+	})
+
+	// WHEN the author submits a candidate whose own carrier content was valid
+	result, err := SubmitForReview(root, taskID, candidate, agentID)
+
+	// THEN the rebased range is refused and nothing is published
+	testhelpers.RequireErrorContains(t, err, `eligible ATX heading "Gone" is missing`)
+	state, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	task := state.FindTask(taskID)
+	if result != nil || task.Status != models.TaskStatusCodePlanning || task.ReviewCommit != nil || task.AssignedTo == nil || *task.AssignedTo != agentID {
+		t.Fatal("post-rebase unbuildable carrier was submitted or lost its author")
+	}
+	if head := testhelpers.MustGit(t, wt, "rev-parse", "HEAD"); head == candidate {
+		t.Fatal("test did not exercise a rebased candidate")
+	}
+}
+
+// carrierRepository serves one carrier at "review" whose pin resolves through
+// resolveErr; diffErr fails the range enumeration itself.
+type carrierRepository struct {
+	carrier    string
+	diffErr    error
+	resolveErr error
+}
+
+func (r carrierRepository) DiffFiles(string, string, string) ([]string, error) {
+	return []string{"specs/extra.md"}, r.diffErr
+}
+
+func (r carrierRepository) TreePathMode(string, string) (string, bool, error) {
+	return "100644", true, nil
+}
+
+func (r carrierRepository) ReadBlob(string, string) (string, error) { return r.carrier, nil }
+
+func (r carrierRepository) BlobOID(string, string) (string, error) { return "oid", nil }
+
+func (r carrierRepository) ResolveCommit(ref string) (string, error) { return ref, r.resolveErr }
+
+// Only content the author can correct is refused as input; a Git failure must
+// not tell the author to edit a valid carrier.
+func TestValidateReviewCarriersClassifiesFailures(t *testing.T) {
+	valid := reviewCarrier(strings.Repeat("a", 40), "README.md#Test")
+	gitFailure := errors.New("git: cannot open repository")
+	for _, tc := range []struct {
+		name        string
+		repo        carrierRepository
+		correctable bool
+	}{
+		{name: "malformed carrier", repo: carrierRepository{carrier: reviewCarrier(strings.Repeat("a", 40), "README.md")}, correctable: true},
+		{name: "range enumeration failure", repo: carrierRepository{carrier: valid, diffErr: gitFailure}},
+		{name: "pin lookup failure", repo: carrierRepository{carrier: valid, resolveErr: gitFailure}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateReviewCarriers(tc.repo, "root", "task-1", "base", "review", "head")
+
+			var precondition *PreconditionError
+			var operational *OperationalError
+			if tc.correctable {
+				if !errors.As(err, &precondition) {
+					t.Fatalf("error = %v, want *PreconditionError", err)
+				}
+				return
+			}
+			if errors.As(err, &precondition) || !errors.As(err, &operational) || !errors.Is(err, gitFailure) {
+				t.Fatalf("error = %#v, want *OperationalError wrapping the Git failure", err)
 			}
 		})
 	}

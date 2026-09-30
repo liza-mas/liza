@@ -6,6 +6,20 @@ import (
 	"sort"
 )
 
+// InvalidCarrierError marks a failure caused by carrier content its author can
+// correct — grammar, a heading, a pin, or drift under it — as opposed to a Git
+// failure, which editing the carrier would not fix. Its text is the wrapped
+// error's, so wrapping never changes what a caller reports.
+type InvalidCarrierError struct {
+	Err error
+}
+
+func (e *InvalidCarrierError) Error() string { return e.Err.Error() }
+
+func (e *InvalidCarrierError) Unwrap() error { return e.Err }
+
+func invalidCarrier(err error) error { return &InvalidCarrierError{Err: err} }
+
 // ReviewRepository extends Repository with the tree and diff queries needed to
 // discover strict carriers inside a reviewed range.
 type ReviewRepository interface {
@@ -55,7 +69,7 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 		}
 		contract, parseErr := Parse(content)
 		if parseErr != nil {
-			return nil, fmt.Errorf("parse reviewed carrier %q: %w", path, parseErr)
+			return nil, invalidCarrier(fmt.Errorf("parse reviewed carrier %q: %w", path, parseErr))
 		}
 		if contract == nil {
 			continue
@@ -78,7 +92,7 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 				return nil, fmt.Errorf("freshness check %q: %w", path, headErr)
 			}
 			if !presentAtHead {
-				return nil, fmt.Errorf("reviewed carrier %q was deleted at integration HEAD", path)
+				return nil, invalidCarrier(fmt.Errorf("reviewed carrier %q was deleted at integration HEAD", path))
 			}
 			headOID, headErr := repo.BlobOID(head, path)
 			if headErr != nil {
@@ -91,10 +105,10 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 				}
 				headContract, parseHeadErr := Parse(headContent)
 				if parseHeadErr != nil {
-					return nil, fmt.Errorf("parse reviewed carrier %q at integration HEAD: %w", path, parseHeadErr)
+					return nil, invalidCarrier(fmt.Errorf("parse reviewed carrier %q at integration HEAD: %w", path, parseHeadErr))
 				}
 				if headContract == nil {
-					return nil, fmt.Errorf("reviewed carrier %q lost its Source References at integration HEAD", path)
+					return nil, invalidCarrier(fmt.Errorf("reviewed carrier %q lost its Source References at integration HEAD", path))
 				}
 				content, contract, oid, revision = headContent, headContract, headOID, head
 			}
@@ -129,12 +143,18 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview string, contract *Contract, refuses func(referenceID string) bool) ([]Reference, error) {
 	refs := make([]Reference, 0, len(contract.DirectReferences))
 	for _, ref := range contract.DirectReferences {
+		// An unresolvable pin stays operational: this interface cannot tell a
+		// revision Git lacks from a Git failure. Upgrade trigger: a lookup that
+		// reports absence distinctly.
 		revision, err := repo.ResolveCommit(ref.EffectiveRevision(contract.SourceRevision))
 		if err != nil {
 			return nil, err
 		}
 		content, err := repo.ReadBlob(revision, ref.Path)
 		if err != nil {
+			if _, present, probeErr := repo.TreePathMode(revision, ref.Path); probeErr == nil && !present {
+				return nil, invalidCarrier(fmt.Errorf("direct reference %q: %q is not present at its pinned revision %s", ref.ID, ref.Path, revision))
+			}
 			return nil, err
 		}
 		pinnedOID, err := repo.BlobOID(revision, ref.Path)
@@ -163,16 +183,16 @@ func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview
 				return nil, baseErr
 			}
 			if presentAtBase {
-				return nil, fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID)
+				return nil, invalidCarrier(fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID))
 			}
 			freshRevision, where = localReview, "review commit"
 		}
 		pinned.Span, err = ExtractSection(content, ref.Heading)
 		if err != nil {
-			return nil, err
+			return nil, invalidCarrier(err)
 		}
 		if !presentAtHead && localReview == "" {
-			if err := unresolvable("path deleted", fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID)); err != nil {
+			if err := unresolvable("path deleted", invalidCarrier(fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID))); err != nil {
 				return nil, err
 			}
 			continue
@@ -188,14 +208,14 @@ func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview
 			}
 			freshSpan, spanErr := ExtractSection(freshContent, ref.Heading)
 			if spanErr != nil {
-				if err := unresolvable(spanErr.Error(), fmt.Errorf("direct reference %q is stale at %s: %w", ref.ID, where, spanErr)); err != nil {
+				if err := unresolvable(spanErr.Error(), invalidCarrier(fmt.Errorf("direct reference %q is stale at %s: %w", ref.ID, where, spanErr))); err != nil {
 					return nil, err
 				}
 				continue
 			}
 			if freshSpan != pinned.Span {
 				if refuses(ref.ID) {
-					return nil, fmt.Errorf("direct reference %q is stale at %s", ref.ID, where)
+					return nil, invalidCarrier(fmt.Errorf("direct reference %q is stale at %s", ref.ID, where))
 				}
 				refs = append(refs, Reference{
 					Path: ref.Path, Heading: ref.Heading, Revision: freshRevision, BlobOID: freshOID,

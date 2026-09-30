@@ -352,6 +352,15 @@ prompt context is built. Fix the fragment or the heading, then resubmit.
 integration HEAD, such as those in state created before this check or those left
 behind by a later heading edit.
 
+Submission also builds the reviewer's carrier context for its own range, both
+before publication and after the rebase: every strict carrier the submission
+changed must parse, and every direct reference must resolve at its pin and
+still match integration HEAD. A refusal names the carrier, and usually the
+line or reference. Fix the carrier and resubmit; the task stays with its author.
+A Git failure during the check is reported as operational instead: retry rather
+than edit. Integration moving after submission can still block the reviewer's
+claim, and that check stays authoritative.
+
 If a strict coding claim reports `acceptance.source: requires allocation by a
 direct independently approved merged planning parent`, inspect the direct
 parent's merged review, output allocation and author evidence. Ownership release

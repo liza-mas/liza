@@ -288,6 +288,27 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 			Err: err,
 		}
 	}
+	// Before publication, so correctable carrier content is refused while the
+	// worktree is still unrebased; the rebased range is checked below. The range
+	// starts at the merge-base, as the review boundary does: a worktree the
+	// author already rebased must not claim integration's carriers as its own.
+	candidateBase, err := g.GetMergeBase(preRebaseCommit, rebaseBase)
+	if err != nil {
+		return nil, &OperationalError{
+			Code:    "git_operation",
+			Phase:   "candidate-merge-base",
+			Message: "failed to resolve the candidate's merge-base with the integration branch",
+			Details: map[string]any{
+				"operation":     integrationOperationSubmitForReview,
+				"task_id":       taskID,
+				"recovery_hint": "Inspect the task worktree and integration branch history, then retry submit-for-review.",
+			},
+			Err: err,
+		}
+	}
+	if err := validateReviewCarriers(g, projectRoot, taskID, candidateBase, preRebaseCommit, rebaseBase); err != nil {
+		return nil, err
+	}
 
 	acceptance, err := loadAcceptanceInput(projectRoot, state, task, rebaseBase)
 	if err != nil {
@@ -386,6 +407,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		return nil, err
 	}
 	if err := validateOutputRefFragments(projectRoot, task, postRebaseCommit); err != nil {
+		return nil, err
+	}
+	if err := validateReviewCarriers(g, projectRoot, taskID, rebaseBase, postRebaseCommit, rebaseBase); err != nil {
 		return nil, err
 	}
 	// Validate against the boundary that will be written below; the state copy
