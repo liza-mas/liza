@@ -30,6 +30,12 @@ var providerUnavailablePatterns = []providerUnavailablePattern{
 		Needles:    []string{"thread/start failed", "error creating thread", ".codex/sessions"},
 		Diagnostic: "thread/start failed: error creating thread using .codex/sessions",
 	},
+	{
+		// An expired login fails every session until a human logs in again.
+		Provider:   "claude",
+		Needles:    []string{"Failed to authenticate", "OAuth session expired"},
+		Diagnostic: "Failed to authenticate: OAuth session expired and could not be refreshed",
+	},
 }
 
 // ProviderUnavailable holds details about a provider startup/readiness failure.

@@ -68,6 +68,40 @@ func TestDetectProviderUnavailable_RequiresBoundedEvidenceLine(t *testing.T) {
 	}
 }
 
+const wantClaudeOAuthExpiredDiagnostic = "Failed to authenticate: OAuth session expired and could not be refreshed"
+
+// claudeOAuthExpiredOutput is the tail of a Claude stream-json session whose
+// login expired, trimmed from an observed run: the CLI fails before any turn.
+const claudeOAuthExpiredOutput = `{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Failed to authenticate: OAuth session expired and could not be refreshed"}]},"error":"authentication_failed","is_api_error_message":true}
+{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","duration_ms":247,"num_turns":1,"result":"Failed to authenticate: OAuth session expired and could not be refreshed"}`
+
+func TestDetectProviderUnavailable_ClaudeOAuthSessionExpired(t *testing.T) {
+	result := DetectProviderUnavailable(claudeOAuthExpiredOutput, "claude")
+	if result == nil {
+		t.Fatal("expected provider unavailable detected, got nil")
+	}
+	if result.Provider != "claude" {
+		t.Errorf("Provider = %q, want %q", result.Provider, "claude")
+	}
+	if result.Message != wantClaudeOAuthExpiredDiagnostic {
+		t.Errorf("Message = %q, want %q", result.Message, wantClaudeOAuthExpiredDiagnostic)
+	}
+
+	if result := DetectProviderUnavailable(claudeOAuthExpiredOutput, "codex"); result != nil {
+		t.Errorf("expected nil for wrong provider, got %+v", result)
+	}
+}
+
+func TestDetectProviderUnavailable_ClaudeIgnoresQuotedAuthFailure(t *testing.T) {
+	// A healthy session that read alerts quoting an earlier expired login.
+	output := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"Failed to authenticate: OAuth session expired and could not be refreshed"}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"Unblocked the tasks held while the OAuth session was expired."}`
+
+	if result := DetectProviderUnavailable(output, "claude"); result != nil {
+		t.Errorf("expected nil for quoted auth failure, got %+v", result)
+	}
+}
+
 func TestProviderUnavailableSignal_WriteCheckClear(t *testing.T) {
 	projectRoot := t.TempDir()
 	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())
@@ -254,6 +288,35 @@ func TestHandleClassifiedProviderCrash_CodexACPWritesCanonicalSignal(t *testing.
 	}
 	if !CheckProviderUnavailableSignal(projectRoot, "codex") {
 		t.Fatal("canonical codex provider unavailable signal should exist")
+	}
+}
+
+func TestHandleClassifiedProviderCrash_ClaudeOAuthSessionExpiredWritesSignal(t *testing.T) {
+	projectRoot := t.TempDir()
+	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	handled := handleClassifiedProviderCrash(SupervisorConfig{
+		AgentID:     "orchestrator-1",
+		ProjectRoot: projectRoot,
+		CLIName:     "claude",
+	}, claudeOAuthExpiredOutput)
+	if !handled {
+		t.Fatal("handleClassifiedProviderCrash returned false, want true: an expired login must not count as a crash")
+	}
+	if !CheckProviderUnavailableSignal(projectRoot, "claude") {
+		t.Fatal("claude provider unavailable signal should exist")
+	}
+
+	data, err := os.ReadFile(filepath.Join(lizaDir, "alerts.log"))
+	if err != nil {
+		t.Fatalf("failed to read alerts log: %v", err)
+	}
+	want := "PROVIDER UNAVAILABLE — claude: " + wantClaudeOAuthExpiredDiagnostic
+	if got := strings.Count(string(data), want); got != 1 {
+		t.Fatalf("alerts log has %d %q entries, want exactly 1:\n%s", got, want, string(data))
 	}
 }
 
