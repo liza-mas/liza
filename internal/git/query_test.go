@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,6 +235,33 @@ func TestReferenceContractRepositoryQueriesRejectInvalidInputs(t *testing.T) {
 	}
 	if _, err := git.ReadBlob("HEAD", "."); err == nil {
 		t.Error("ReadBlob(tree path) error = nil, want blob-type rejection")
+	}
+}
+
+// cat-file answers "missing" whether the revision or only the path is absent;
+// the error must say which, since the remedies differ.
+func TestBlobLookupsNameWhatIsMissing(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+	absentRevision := strings.Repeat("0", 40)
+
+	for _, tc := range []struct {
+		name     string
+		revision string
+		want     string
+	}{
+		{name: "path absent at revision", revision: "HEAD", want: `failed to resolve blob OID for "missing.md" at "HEAD": path not present at that revision`},
+		{name: "revision absent", revision: absentRevision, want: fmt.Sprintf(`failed to resolve blob OID for "missing.md" at %q: revision not found`, absentRevision)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, readErr := git.ReadBlob(tc.revision, "missing.md")
+			_, oidErr := git.BlobOID(tc.revision, "missing.md")
+			for label, err := range map[string]error{"ReadBlob": readErr, "BlobOID": oidErr} {
+				if err == nil || err.Error() != tc.want {
+					t.Errorf("%s error = %v, want %q", label, err, tc.want)
+				}
+			}
+		})
 	}
 }
 

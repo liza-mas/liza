@@ -357,6 +357,33 @@ func TestResolvedReferenceContextReviewCarrierMayReferenceTaskIntroducedPath(t *
 	}
 }
 
+// A carrier cannot pin the commit that introduces its own sibling; the refusal
+// must say so and name the two-commit remedy rather than a missing git object.
+func TestResolvedReferenceContextPinPredatingReferencedPathNamesRemedy(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "README.md", "# Base\n")
+	commitReferenceFixture(t, repo, "test: base")
+	base := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	testhelpers.MustGit(t, repo, "checkout", "-b", "candidate")
+	writeReferenceFixture(t, repo, "specs/digest.md", "# Digest\n\n## Issue\nVerbatim issue body.\n")
+	writeReferenceFixture(t, repo, "specs/candidate.md", strictCarrier(base, "ISSUE", "specs/digest.md", "Issue", "# Candidate\n\nPlan anchored to the digest.\n"))
+	review := commitReferenceFixture(t, repo, "test: add candidate pinning a sibling it introduces")
+	testhelpers.MustGit(t, repo, "checkout", "main")
+
+	task := models.Task{ID: "review-1", BaseCommit: &base, ReviewCommit: &review}
+	state := referenceTestState(task)
+	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "reviewer")
+	for _, want := range []string{
+		`"specs/digest.md" is not present at its pinned revision ` + base,
+		"a file added in this submission must be committed before the commit that pins it",
+	} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want it to contain %q", err, want)
+		}
+	}
+}
+
 func TestResolvedReferenceContextReviewCarrierReferenceDeletedAtHeadBlocks(t *testing.T) {
 	repo := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, repo)

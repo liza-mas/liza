@@ -128,7 +128,7 @@ func (g *Git) ReadBlob(revision, path string) (string, error) {
 	}
 	object := objects[0]
 	if object.Missing {
-		return "", fmt.Errorf("failed to resolve blob OID for %q at %q: object %s", path, revision, object.Status)
+		return "", fmt.Errorf("failed to resolve blob OID for %q at %q: %s", path, revision, g.missingBlobReason(revision, object.Status))
 	}
 	if object.Type != "blob" {
 		return "", fmt.Errorf("object for %q at %q is %s, not a blob", path, revision, object.Type)
@@ -205,7 +205,7 @@ func (g *Git) BlobOIDs(lookups []BlobPath) ([]ObjectIDResult, error) {
 		lookup := lookups[i]
 		switch {
 		case object.Missing:
-			results[i].Err = fmt.Errorf("failed to resolve blob OID for %q at %q: object %s", lookup.Path, lookup.Revision, object.Status)
+			results[i].Err = fmt.Errorf("failed to resolve blob OID for %q at %q: %s", lookup.Path, lookup.Revision, g.missingBlobReason(lookup.Revision, object.Status))
 		case object.Type != "blob":
 			results[i].Err = fmt.Errorf("object for %q at %q is %s, not a blob", lookup.Path, lookup.Revision, object.Type)
 		default:
@@ -213,6 +213,25 @@ func (g *Git) BlobOIDs(lookups []BlobPath) ([]ObjectIDResult, error) {
 		}
 	}
 	return results, nil
+}
+
+// missingBlobReason says why a revision:path name did not resolve. cat-file
+// answers "missing" whether the revision or only the path is absent, and the
+// remedies differ, so one more lookup of the revision's tree decides; it runs
+// only on this error path. Any other status, or a failed probe, is reported
+// as Git gave it.
+func (g *Git) missingBlobReason(revision, status string) string {
+	if status != "missing" {
+		return "object " + status
+	}
+	objects, err := g.catFileBatch([]string{revision + "^{tree}"}, false)
+	if err != nil {
+		return "object missing"
+	}
+	if objects[0].Missing {
+		return "revision not found"
+	}
+	return "path not present at that revision"
 }
 
 // blobOIDByArgs is the argument-based lookup kept for names a batch stdin line

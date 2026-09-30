@@ -153,7 +153,7 @@ func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview
 		content, err := repo.ReadBlob(revision, ref.Path)
 		if err != nil {
 			if _, present, probeErr := repo.TreePathMode(revision, ref.Path); probeErr == nil && !present {
-				return nil, invalidCarrier(fmt.Errorf("direct reference %q: %q is not present at its pinned revision %s", ref.ID, ref.Path, revision))
+				return nil, invalidCarrier(fmt.Errorf("direct reference %q: %q is not present at its pinned revision %s; pin a commit that contains it — a file added in this submission must be committed before the commit that pins it", ref.ID, ref.Path, revision))
 			}
 			return nil, err
 		}
