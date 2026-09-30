@@ -201,6 +201,8 @@ The authority matrix is:
 | Coder task | Orchestration envelope and direct executable references | Plan detail, AC text, architecture rationale |
 | Review feedback | Current findings, severity, evidence, closure conditions | Unchanged contracts and resolved history |
 
+**Amended 2026-09-30: scalar refs naming one path form one observation.** Each scalar ref used to become its own observation, narrowed to its own fragment. A task whose `spec_ref` named a section of the file its `arch_ref` named whole therefore carried two spans of one blob, and the same-class provenance check blocked it at claim, although both were read at one captured HEAD. Scalar refs naming one path now form one observation. It narrows to a fragment only when every ref on that path names the same fragment. A fragment-less ref assigns the whole file, and two different fragments render the whole file, because narrowing to either would drop the other. The same agreed fragment is the assigned heading when that path holds the most specific ref, so a parent range that rediscovers the path narrows only on agreement. Each fragment is still resolved, so an unresolvable one still refuses. Same-class blob divergence still blocks.
+
 ## Consequences
 
 - Downstream context contains local decisions and explicit authority instead

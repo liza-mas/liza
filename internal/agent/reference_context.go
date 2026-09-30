@@ -54,8 +54,14 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 	// through a parent range, that observation wins the path and is assigned
 	// anyway, so the scalar route is the fallback for a parent that is not
 	// merged or has no reviewed range.
+	//
+	// Scalar refs naming one path read one blob at the captured HEAD, so they
+	// form one observation. It narrows to a fragment only when every ref on
+	// the path names that fragment: a fragment-less ref assigns the whole file,
+	// and narrowing to one of two fragments would drop the other.
 	assignedIndex, assignedRank := -1, -1
-	assignedHeading := ""
+	scalarIndex := make(map[string]int)
+	agreedFragment := make(map[string]string) // "" renders the whole file
 	for _, scalar := range []struct {
 		field string
 		ref   string
@@ -78,12 +84,19 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 			return "", nil, loadErr
 		}
 		if strict {
-			observation.ElideRefs = true
-			if scalar.rank > assignedRank {
-				assignedIndex, assignedRank = len(observations), scalar.rank
-				assignedHeading = paths.SplitRefFragment(scalar.ref)
+			fragment := paths.SplitRefFragment(scalar.ref)
+			index, seen := scalarIndex[observation.Path]
+			if !seen {
+				index = len(observations)
+				scalarIndex[observation.Path], agreedFragment[observation.Path] = index, fragment
+				observation.ElideRefs = true
+				observations = append(observations, observation)
+			} else if agreedFragment[observation.Path] != fragment {
+				agreedFragment[observation.Path] = ""
 			}
-			observations = append(observations, observation)
+			if scalar.rank > assignedRank {
+				assignedIndex, assignedRank = index, scalar.rank
+			}
 			continue
 		}
 		legacyReferences = append(legacyReferences, prompts.LegacyArtifactReference{
@@ -92,8 +105,20 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 			File:  paths.SplitRefFile(scalar.ref),
 		})
 	}
+	for path, index := range scalarIndex {
+		if fragment := agreedFragment[path]; fragment != "" {
+			// loadScalarCarrier already resolved this fragment in the same blob.
+			span, err := referencecontract.ExtractSection(observations[index].Span, fragment)
+			if err != nil {
+				return "", nil, fmt.Errorf("select strict scalar carrier %q: %w", path+"#"+fragment, err)
+			}
+			observations[index].Span = span
+		}
+	}
+	assignedHeading := ""
 	if assignedIndex >= 0 {
 		observations[assignedIndex].ElideRefs = false
+		assignedHeading = agreedFragment[observations[assignedIndex].Path]
 	}
 
 	for _, parentID := range task.EffectiveParentTasks() {
@@ -229,10 +254,9 @@ func loadScalarCarrier(repo referenceContextRepository, head, ref string, proofs
 	if contract == nil {
 		return referencecontract.Carrier{}, false, nil
 	}
-	span := content
+	// The caller narrows the span once it knows every scalar ref on this path.
 	if fragment != "" {
-		span, err = referencecontract.ExtractSection(content, fragment)
-		if err != nil {
+		if _, err := referencecontract.ExtractSection(content, fragment); err != nil {
 			return referencecontract.Carrier{}, false, fmt.Errorf("select strict scalar carrier %q: %w", ref, err)
 		}
 	}
@@ -244,5 +268,5 @@ func loadScalarCarrier(repo referenceContextRepository, head, ref string, proofs
 	if err != nil {
 		return referencecontract.Carrier{}, false, fmt.Errorf("scalar carrier %q: %w", path, err)
 	}
-	return referencecontract.Carrier{Path: path, Span: span, Revision: head, Class: referencecontract.CarrierScalar, BlobOID: oid, Refs: refs}, true, nil
+	return referencecontract.Carrier{Path: path, Span: content, Revision: head, Class: referencecontract.CarrierScalar, BlobOID: oid, Refs: refs}, true, nil
 }

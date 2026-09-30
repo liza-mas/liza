@@ -1237,3 +1237,121 @@ func TestResolvedReferenceContextWholeFilePlanRefElidesNothing(t *testing.T) {
 		t.Errorf("whole-file plan_ref narrowed the carrier anyway:\n%s", context)
 	}
 }
+
+// samePathScalarFixture commits a strict architecture carrier with two sibling
+// scopes and a strict plan carrier, each declaring one reference of its own.
+func samePathScalarFixture(t *testing.T, repo string) {
+	t.Helper()
+	writeReferenceFixture(t, repo, "specs/source.md", "# Source\n\n## Contract\nINHERITED-CONTRACT\n")
+	writeReferenceFixture(t, repo, "specs/story.md", "# Story\n\n## Acceptance\nSTORY-AC-TEXT\n")
+	sourceRevision := commitReferenceFixture(t, repo, "test: add sources")
+	writeReferenceFixture(t, repo, "specs/arch.md", strictCarrier(sourceRevision, "AC-1", "specs/source.md", "Contract",
+		"# Arch\n\n## Overview\nARCH-SHARED-TEXT\n\n## Scopes\n\n### Scope A\nSCOPE-A-TEXT\n\n### Scope B\nSCOPE-B-TEXT\n"))
+	writeReferenceFixture(t, repo, "specs/plan.md", strictCarrier(sourceRevision, "AC-2", "specs/story.md", "Acceptance",
+		"# Plan\n\n## Tasks\n\n### Task 1\nTASK-ONE-TEXT\n\n### Task 2\nTASK-TWO-TEXT\n"))
+}
+
+func requireContextCounts(t *testing.T, context string, want map[string]int) {
+	t.Helper()
+	for text, count := range want {
+		if got := strings.Count(context, text); got != count {
+			t.Errorf("%q rendered %d times, want %d:\n%s", text, got, count, context)
+		}
+	}
+}
+
+// Scalar refs naming one file read one blob at one HEAD: differing fragments
+// are two views of it, not conflicting provenance. A fragment-less ref assigns
+// the whole file.
+func TestResolvedReferenceContextSamePathScalarRefsWithDifferentFragments(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	samePathScalarFixture(t, repo)
+	commitReferenceFixture(t, repo, "test: add carriers")
+	task := models.Task{ID: "coder", SpecRef: "specs/arch.md#Scope A", ArchRef: "specs/arch.md", PlanRef: "specs/plan.md#Task 1"}
+	state := referenceTestState(task)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	requireContextCounts(t, context, map[string]int{
+		"SCOPE-A-TEXT": 1, "SCOPE-B-TEXT": 1, "ARCH-SHARED-TEXT": 1, // whole architecture file, once
+		"TASK-ONE-TEXT": 1, "TASK-TWO-TEXT": 0, // plan narrowing untouched
+		"STORY-AC-TEXT": 1, "INHERITED-CONTRACT": 0, // plan assigned, architecture an ancestor
+	})
+}
+
+// When every scalar ref on a path agrees, that one observation is the assigned
+// carrier if any of those refs is the most specific: its references inline.
+func TestResolvedReferenceContextSamePathScalarRefsAgreeingOnAssignedFragment(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	samePathScalarFixture(t, repo)
+	commitReferenceFixture(t, repo, "test: add carriers")
+	task := models.Task{ID: "coder", SpecRef: "specs/arch.md#Scope A", ArchRef: "specs/arch.md#Scope A"}
+	state := referenceTestState(task)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	requireContextCounts(t, context, map[string]int{"SCOPE-A-TEXT": 1, "SCOPE-B-TEXT": 0, "INHERITED-CONTRACT": 1})
+}
+
+// Two different fragments of one path never narrow to either: narrowing on a
+// guess would drop the other assigned section.
+func TestResolvedReferenceContextSamePathScalarRefsWithTwoFragments(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	samePathScalarFixture(t, repo)
+	commitReferenceFixture(t, repo, "test: add carriers")
+	task := models.Task{ID: "story", EpicRef: "specs/arch.md#Scope A", PlanRef: "specs/arch.md#Scope B"}
+	state := referenceTestState(task)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	requireContextCounts(t, context, map[string]int{"SCOPE-A-TEXT": 1, "SCOPE-B-TEXT": 1, "INHERITED-CONTRACT": 1, "peer of your assigned section": 0})
+}
+
+func samePathParentFixture(t *testing.T, repo string) (models.Task, string) {
+	t.Helper()
+	parentBase := testhelpers.MustGit(t, repo, "rev-parse", "main")
+	samePathScalarFixture(t, repo)
+	parentReview := commitReferenceFixture(t, repo, "test: add planner carriers")
+	parent := models.Task{ID: "planner-1", Status: models.TaskStatusMerged, BaseCommit: &parentBase, ReviewCommit: &parentReview, MergeCommit: &parentReview}
+	return parent, parent.ID
+}
+
+// A merged parent that rediscovers the path wins it, but the scalar refs still
+// decide its narrowing: disagreeing fragments render the whole file.
+func TestResolvedReferenceContextParentCarrierWithDisagreeingScalarFragments(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	parent, parentID := samePathParentFixture(t, repo)
+	child := models.Task{ID: "coder-1", ParentTasks: []string{parentID}, SpecRef: "specs/arch.md#Scope A", PlanRef: "specs/arch.md#Scope B"}
+	state := referenceTestState(parent, child)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	requireContextCounts(t, context, map[string]int{"SCOPE-A-TEXT": 1, "SCOPE-B-TEXT": 1, `SECTION "specs/arch.md#`: 0})
+}
+
+// Control: agreeing fragments keep narrowing the winning parent observation.
+func TestResolvedReferenceContextParentCarrierWithAgreeingScalarFragments(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	parent, parentID := samePathParentFixture(t, repo)
+	child := models.Task{ID: "coder-1", ParentTasks: []string{parentID}, SpecRef: "specs/arch.md#Scope A", PlanRef: "specs/arch.md#Scope A"}
+	state := referenceTestState(parent, child)
+
+	context, err := buildResolvedReferenceContext(&state.Tasks[1], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	if err != nil {
+		t.Fatalf("buildResolvedReferenceContext: %v", err)
+	}
+	requireContextCounts(t, context, map[string]int{"SCOPE-A-TEXT": 1, "ARCH-SHARED-TEXT": 1, "SCOPE-B-TEXT": 0, `SECTION "specs/arch.md#Scope B" @ `: 1})
+}
