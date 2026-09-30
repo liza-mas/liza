@@ -77,7 +77,7 @@ func TestValidateHandoffEvents_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := validateHandoffEvents(tt.state, "/tmp", false); err != nil {
+			if err := handoffEventsErr(tt.state, "/tmp", false); err != nil {
 				t.Fatalf("expected no error, got: %v", err)
 			}
 		})
@@ -126,7 +126,7 @@ func TestValidateHandoffEvents_MissingFields(t *testing.T) {
 					},
 				},
 			}
-			err := validateHandoffEvents(state, "/tmp", false)
+			err := handoffEventsErr(state, "/tmp", false)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -218,7 +218,7 @@ func TestValidateHandoffEvents_MissingEvents(t *testing.T) {
 			state := &models.State{
 				Tasks: []models.Task{tt.task},
 			}
-			err := validateHandoffEvents(state, "/tmp", false)
+			err := handoffEventsErr(state, "/tmp", false)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}

@@ -2,7 +2,6 @@ package ops
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"slices"
 	"sort"
@@ -384,7 +383,7 @@ func narrowInheritedDependenciesWithOptionalAuthority(projectRoot, producerID, t
 			},
 		})
 
-		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 			return err
 		}
 

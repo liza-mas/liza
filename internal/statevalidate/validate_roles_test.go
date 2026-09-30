@@ -71,7 +71,7 @@ func TestValidateRoleNames_UnderscoreDetected(t *testing.T) {
 					"test-agent": {Role: tt.role},
 				},
 			}
-			err := validateRoleNames(state, "/tmp", false)
+			err := roleNamesErr(state, "/tmp", false)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for role %q, got nil", tt.role)
@@ -98,7 +98,7 @@ func TestValidateRoleNames_MultipleAgents(t *testing.T) {
 			"reviewer-1": {Role: "code_reviewer"},
 		},
 	}
-	err := validateRoleNames(state, "/tmp", false)
+	err := roleNamesErr(state, "/tmp", false)
 	if err == nil {
 		t.Fatal("expected error when any agent has underscore role")
 	}
@@ -115,7 +115,7 @@ func TestValidateRoleNames_UsesBrandedMigrateCommand(t *testing.T) {
 		},
 	}
 
-	err := validateRoleNames(state, "/tmp", false)
+	err := roleNamesErr(state, "/tmp", false)
 	if err == nil {
 		t.Fatal("expected error for underscore role")
 	}
@@ -131,7 +131,7 @@ func TestValidateRoleNames_NoAgents(t *testing.T) {
 	state := &models.State{
 		Agents: map[string]models.Agent{},
 	}
-	if err := validateRoleNames(state, "/tmp", false); err != nil {
+	if err := roleNamesErr(state, "/tmp", false); err != nil {
 		t.Fatalf("empty agents should pass: %v", err)
 	}
 }

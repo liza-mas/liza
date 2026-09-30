@@ -3,7 +3,6 @@ package ops
 import (
 	stderrors "errors"
 	"fmt"
-	"io"
 	"os"
 	"runtime/debug"
 	"slices"
@@ -649,7 +648,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 			if testSubmitVerdictHooks != nil && testSubmitVerdictHooks.beforeValidation != nil {
 				testSubmitVerdictHooks.beforeValidation(state)
 			}
-			if err := validateIntegrationLifecycleCandidate(projectRoot, previousLifecycleState, state); err != nil {
+			if err := validateIntegrationLifecycleCandidate(projectRoot, bb.ReadSnapshot, previousLifecycleState, state); err != nil {
 				return err
 			}
 		}
@@ -835,8 +834,12 @@ func appendIntegrationVerdictEvidence(state *models.State, task *models.Task, ve
 	return nil
 }
 
-func validateIntegrationLifecycleCandidate(projectRoot string, previous, candidate *models.State) error {
-	if err := statevalidate.ValidateState(candidate, projectRoot, false, io.Discard); err != nil {
+// validateIntegrationLifecycleCandidate refuses violations the verdict adds,
+// judged against baseline, the locked pre-image. previous is only the
+// lifecycle snapshot for the append-only transition check: its Agents map
+// aliases the candidate's, so it cannot serve as the delta baseline.
+func validateIntegrationLifecycleCandidate(projectRoot string, baseline func() (*models.State, error), previous, candidate *models.State) error {
+	if err := statevalidate.ValidateCandidate(candidate, baseline, projectRoot, false, os.Stderr); err != nil {
 		return fmt.Errorf("invalid integration lifecycle candidate: %w", err)
 	}
 	normalizeEmptyIntegrationPrefixes(previous, candidate)

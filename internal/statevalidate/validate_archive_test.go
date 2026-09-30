@@ -27,7 +27,7 @@ func archivedReceiptTask(status models.TaskStatus) models.Task {
 func TestValidateAcceptanceStateAcceptsArchivedReceipt(t *testing.T) {
 	for _, status := range []models.TaskStatus{models.TaskStatusMerged, models.TaskStatusSuperseded, models.TaskStatusAbandoned} {
 		task := archivedReceiptTask(status)
-		if err := validateAcceptanceState(&task); err != nil {
+		if err := acceptanceStateErr(&task); err != nil {
 			t.Errorf("%s compact task rejected: %v", status, err)
 		}
 	}
@@ -56,7 +56,7 @@ func TestValidateAcceptanceStateRejectsInvalidArchivedRefs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			task := archivedReceiptTask(models.TaskStatusMerged)
 			mutate(&task)
-			if err := validateAcceptanceState(&task); err == nil {
+			if err := acceptanceStateErr(&task); err == nil {
 				t.Fatal("invalid archived ref accepted")
 			}
 		})

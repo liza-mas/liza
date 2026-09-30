@@ -95,10 +95,10 @@ func TestValidateAgentInvariants_ActiveReviewOwnership(t *testing.T) {
 				tt.mutateState(state, reviewerID)
 			}
 
-			err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+			err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 			if tt.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateAgentInvariants() error = %v, want nil", err)
+					t.Fatalf("agentInvariantsErr() error = %v, want nil", err)
 				}
 				return
 			}
@@ -114,9 +114,9 @@ func TestValidateAgentInvariants_NonReviewingOrphanReviewingByNotActiveOwnership
 	state.Tasks[0].ReviewingBy = testhelpers.StringPtr("missing-reviewer")
 	state.Tasks[0].ReviewLeaseExpires = testhelpers.TimePtr(now.Add(-time.Hour))
 
-	err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+	err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 	if err != nil {
-		t.Fatalf("validateAgentInvariants() error = %v, want nil for non-reviewing orphan reviewing_by", err)
+		t.Fatalf("agentInvariantsErr() error = %v, want nil for non-reviewing orphan reviewing_by", err)
 	}
 }
 
@@ -215,10 +215,10 @@ func TestValidateAgentInvariants_ActiveDoerOwnership(t *testing.T) {
 				tt.mutateState(state, doerID)
 			}
 
-			err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+			err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 			if tt.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateAgentInvariants() error = %v, want nil", err)
+					t.Fatalf("agentInvariantsErr() error = %v, want nil", err)
 				}
 				return
 			}
@@ -245,9 +245,9 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 			PID:          os.Getpid(),
 		}
 
-		err := validateAgentInvariants(state, "", true, io.Discard, fullResolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, fullResolver)
 		if err != nil {
-			t.Fatalf("validateAgentInvariants() error = %v, want nil", err)
+			t.Fatalf("agentInvariantsErr() error = %v, want nil", err)
 		}
 	})
 
@@ -264,7 +264,7 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 			PID:          os.Getpid(),
 		}
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent coder-1 says WORKING task-1, but task assigned_to is coder-2")
 
 	})
@@ -273,7 +273,7 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 		state, _ := activeReviewOwnershipState(now)
 		state.Tasks[0].Status = models.TaskStatusReadyForReview
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent code-reviewer-1 says REVIEWING task-1, but task status CODE_TO_REVIEW is not active review")
 
 	})
@@ -287,9 +287,9 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 		agent.LeaseExpires = nil
 		state.Agents[doerID] = agent
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		if err != nil {
-			t.Fatalf("validateAgentInvariants() error = %v, want nil", err)
+			t.Fatalf("agentInvariantsErr() error = %v, want nil", err)
 		}
 	})
 
@@ -312,7 +312,7 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 			PID:          os.Getpid(),
 		}
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent coder-1 says WAITING task-1 as doer, but task assigned_to is coder-2")
 	})
 
@@ -331,9 +331,9 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 			PID:         os.Getpid(),
 		}
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		if err != nil {
-			t.Fatalf("validateAgentInvariants() error = %v, want nil", err)
+			t.Fatalf("agentInvariantsErr() error = %v, want nil", err)
 		}
 	})
 
@@ -351,7 +351,7 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 			PID:         os.Getpid(),
 		}
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent code-reviewer-1 says WAITING task-1 as reviewer, but task has no review_lease_expires")
 	})
 
@@ -370,7 +370,7 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 			PID:         os.Getpid(),
 		}
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent code-reviewer-1 says WAITING task-1 as reviewer, but review_lease_expires is not in the future")
 	})
 
@@ -387,7 +387,7 @@ func TestValidateAgentInvariants_ReverseActiveOwnership(t *testing.T) {
 			PID:         os.Getpid(),
 		}
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent code-reviewer-1 says WAITING task-1 as reviewer, but task reviewing_by is <none>")
 	})
 }
@@ -465,30 +465,30 @@ func TestValidateAgentInvariants_WaitingDoerVerdictHandoffGrace(t *testing.T) {
 	t.Run("rejected verdict within grace is valid", func(t *testing.T) {
 		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(-30*time.Second))
 
-		if err := validateAgentInvariants(state, "", true, io.Discard, resolver); err != nil {
-			t.Fatalf("validateAgentInvariants() error = %v, want nil during verdict handoff", err)
+		if err := agentInvariantsErr(state, "", true, io.Discard, resolver); err != nil {
+			t.Fatalf("agentInvariantsErr() error = %v, want nil during verdict handoff", err)
 		}
 	})
 
 	t.Run("approved verdict within grace is valid", func(t *testing.T) {
 		state := waitingDoerAfterVerdict(models.TaskStatusApproved, models.TaskEventApproved, now.Add(-30*time.Second))
 
-		if err := validateAgentInvariants(state, "", true, io.Discard, resolver); err != nil {
-			t.Fatalf("validateAgentInvariants() error = %v, want nil during verdict handoff", err)
+		if err := agentInvariantsErr(state, "", true, io.Discard, resolver); err != nil {
+			t.Fatalf("agentInvariantsErr() error = %v, want nil during verdict handoff", err)
 		}
 	})
 
 	t.Run("verdict older than grace is invalid", func(t *testing.T) {
 		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(-models.VerdictHandoffGrace-time.Second))
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent coder-1 says WAITING task-1 as doer, but task status CODE_REJECTED is not awaiting review verdict")
 	})
 
 	t.Run("future verdict grants no grace", func(t *testing.T) {
 		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(time.Minute))
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "is not awaiting review verdict")
 	})
 
@@ -499,7 +499,7 @@ func TestValidateAgentInvariants_WaitingDoerVerdictHandoffGrace(t *testing.T) {
 			Event: models.TaskEventRejectionRCARecorded,
 		})
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "is not awaiting review verdict")
 	})
 
@@ -507,7 +507,7 @@ func TestValidateAgentInvariants_WaitingDoerVerdictHandoffGrace(t *testing.T) {
 		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now)
 		state.Tasks[0].History = nil
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "is not awaiting review verdict")
 	})
 
@@ -515,7 +515,7 @@ func TestValidateAgentInvariants_WaitingDoerVerdictHandoffGrace(t *testing.T) {
 		state := waitingDoerAfterVerdict(models.TaskStatusRejected, models.TaskEventRejected, now.Add(-30*time.Second))
 		state.Tasks[0].AssignedTo = testhelpers.StringPtr("coder-2")
 
-		err := validateAgentInvariants(state, "", true, io.Discard, resolver)
+		err := agentInvariantsErr(state, "", true, io.Discard, resolver)
 		assertErrorContains(t, err, "agent coder-1 says WAITING task-1 as doer, but task assigned_to is coder-2")
 	})
 }

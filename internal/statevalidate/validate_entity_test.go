@@ -41,8 +41,8 @@ func TestValidateAnomalyReviewerClaimCircuitOpen(t *testing.T) {
 		t.Parallel()
 
 		state := reviewerClaimCircuitOpenState(completeReviewerClaimCircuitOpenDetails())
-		if err := validateAnomalies(state, "", true); err != nil {
-			t.Fatalf("validateAnomalies() = %v, want nil for a complete anomaly", err)
+		if err := anomaliesErr(state, "", true); err != nil {
+			t.Fatalf("anomaliesErr() = %v, want nil for a complete anomaly", err)
 		}
 	})
 
@@ -53,9 +53,9 @@ func TestValidateAnomalyReviewerClaimCircuitOpen(t *testing.T) {
 
 			details := completeReviewerClaimCircuitOpenDetails()
 			delete(details, field)
-			err := validateAnomalies(reviewerClaimCircuitOpenState(details), "", true)
+			err := anomaliesErr(reviewerClaimCircuitOpenState(details), "", true)
 			if err == nil {
-				t.Fatalf("validateAnomalies() = nil, want rejection for missing %q", field)
+				t.Fatalf("anomaliesErr() = nil, want rejection for missing %q", field)
 			}
 			if !strings.Contains(err.Error(), models.AnomalyTypeReviewerClaimCircuitOpen) {
 				t.Errorf("error = %q, want it to name the anomaly type", err)
@@ -101,8 +101,8 @@ func TestValidateAnomalyObligationContentDrifted(t *testing.T) {
 		t.Parallel()
 
 		state := obligationContentDriftedState(completeObligationContentDriftedDetails())
-		if err := validateAnomalies(state, "", true); err != nil {
-			t.Fatalf("validateAnomalies() = %v, want nil for a complete anomaly", err)
+		if err := anomaliesErr(state, "", true); err != nil {
+			t.Fatalf("anomaliesErr() = %v, want nil for a complete anomaly", err)
 		}
 	})
 
@@ -113,9 +113,9 @@ func TestValidateAnomalyObligationContentDrifted(t *testing.T) {
 
 			details := completeObligationContentDriftedDetails()
 			delete(details, field)
-			err := validateAnomalies(obligationContentDriftedState(details), "", true)
+			err := anomaliesErr(obligationContentDriftedState(details), "", true)
 			if err == nil {
-				t.Fatalf("validateAnomalies() = nil, want rejection for missing %q", field)
+				t.Fatalf("anomaliesErr() = nil, want rejection for missing %q", field)
 			}
 			if !strings.Contains(err.Error(), models.AnomalyTypeObligationContentDrifted) {
 				t.Errorf("error = %q, want it to name the anomaly type", err)
@@ -136,13 +136,13 @@ func TestValidateAnomalyObligationContentDroppedKeepsEmptyCurrentSection(t *test
 	details := completeObligationContentDriftedDetails()
 	details["change"] = "dropped"
 	details["current_section"] = ""
-	if err := validateAnomalies(obligationContentDriftedState(details), "", true); err != nil {
-		t.Fatalf("validateAnomalies() = %v, want nil for a dropped section", err)
+	if err := anomaliesErr(obligationContentDriftedState(details), "", true); err != nil {
+		t.Fatalf("anomaliesErr() = %v, want nil for a dropped section", err)
 	}
 
 	delete(details, "current_section")
-	if err := validateAnomalies(obligationContentDriftedState(details), "", true); err == nil {
-		t.Fatal("validateAnomalies() = nil, want rejection when current_section is absent rather than empty")
+	if err := anomaliesErr(obligationContentDriftedState(details), "", true); err == nil {
+		t.Fatal("anomaliesErr() = nil, want rejection when current_section is absent rather than empty")
 	}
 }
 
@@ -173,8 +173,8 @@ func TestValidateAnomalyPendingMergeStalled(t *testing.T) {
 	t.Run("complete anomaly is accepted", func(t *testing.T) {
 		t.Parallel()
 
-		if err := validateAnomalies(pendingMergeStalledState(completePendingMergeStalledDetails()), "", true); err != nil {
-			t.Fatalf("validateAnomalies() = %v, want nil for a complete anomaly", err)
+		if err := anomaliesErr(pendingMergeStalledState(completePendingMergeStalledDetails()), "", true); err != nil {
+			t.Fatalf("anomaliesErr() = %v, want nil for a complete anomaly", err)
 		}
 	})
 
@@ -184,9 +184,9 @@ func TestValidateAnomalyPendingMergeStalled(t *testing.T) {
 
 			details := completePendingMergeStalledDetails()
 			delete(details, field)
-			err := validateAnomalies(pendingMergeStalledState(details), "", true)
+			err := anomaliesErr(pendingMergeStalledState(details), "", true)
 			if err == nil {
-				t.Fatalf("validateAnomalies() = nil, want rejection for missing %q", field)
+				t.Fatalf("anomaliesErr() = nil, want rejection for missing %q", field)
 			}
 			if !strings.Contains(err.Error(), models.AnomalyTypePendingMergeStalled) || !strings.Contains(err.Error(), field) {
 				t.Errorf("error = %q, want it to name the anomaly type and the missing detail %q", err, field)

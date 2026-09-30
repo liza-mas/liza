@@ -3,7 +3,7 @@ package ops
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -190,7 +190,7 @@ func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reaso
 		}
 		source.RepairRequest = nil
 
-		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 			return err
 		}
 

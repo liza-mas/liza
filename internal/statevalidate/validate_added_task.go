@@ -55,19 +55,12 @@ func ValidateAddedTask(state *models.State, projectRoot, taskID string, skipSpec
 	scoped := task
 	scoped.ParentTask, scoped.ParentTasks = nil, nil
 	taskState := scopedTaskState(state, scoped)
-	if err := validateTaskStates(taskState, projectRoot, skipSpecFileCheck, resolver); err != nil {
-		return err
-	}
-	if err := validateTaskInvariants(taskState, projectRoot, skipSpecFileCheck, resolver, cfg); err != nil {
-		return err
-	}
-	if err := validateDependenciesForTask(state, projectRoot, skipSpecFileCheck, resolver, cfg, warnWriter, &task); err != nil {
-		return err
-	}
-	if err := checkCircular(task.ID, task.ID, map[string]bool{}, state); err != nil {
-		return err
-	}
-	return nil
+	return collectErr(func(v *violations) {
+		validateTaskStates(v, taskState, resolver)
+		validateTaskInvariants(v, taskState, projectRoot, skipSpecFileCheck, resolver, cfg)
+		validateDependenciesForTask(v, state, resolver, cfg, warnWriter, &task)
+		v.add(checkCircular(task.ID, task.ID, map[string]bool{}, state))
+	})
 }
 
 func scopedTaskState(state *models.State, task models.Task) *models.State {

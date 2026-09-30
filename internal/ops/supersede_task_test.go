@@ -327,15 +327,19 @@ func TestSupersedeTask_SupersessionPathInvalidCandidateLeavesStateUnchanged(t *t
 	downstreamPath.RolePair = "code-planning-pair"
 	downstreamPath.SupersededBy = []string{"coding-a"}
 	downstreamPath.RescopeReason = testhelpers.StringPtr("Split into coding replacement")
-	invalid := testhelpers.BuildTaskByStatus("invalid-task", models.TaskStatusReady, now)
-	invalid.DependsOn = []string{"missing-task"}
+	consumer := testhelpers.BuildTaskByStatus("active-consumer", models.TaskStatusReady, now)
+	consumer.DependsOn = []string{"plan-old"}
+	// Superseding plan-old redirects the consumer to replacement-plan, which
+	// already depends on it: the candidate gains a cycle it did not have.
+	replacement := testhelpers.BuildTaskByStatus("replacement-plan", models.TaskStatusDraftCodingPlan, now)
+	replacement.DependsOn = []string{"active-consumer"}
 	state := testhelpers.CreateValidState()
 	state.Tasks = []models.Task{
 		target,
 		downstreamPath,
 		testhelpers.BuildTaskByStatus("coding-a", models.TaskStatusReady, now),
-		testhelpers.BuildTaskByStatus("replacement-plan", models.TaskStatusDraftCodingPlan, now),
-		invalid,
+		replacement,
+		consumer,
 	}
 	setTaskSpecRefs(state)
 	testhelpers.WriteInitialState(t, stateFile, state)
@@ -346,7 +350,7 @@ func TestSupersedeTask_SupersessionPathInvalidCandidateLeavesStateUnchanged(t *t
 		t.Fatalf("read initial state: %v", err)
 	}
 	_, err = SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1")
-	testhelpers.RequireErrorContains(t, err, "missing-task")
+	requireIntroducedViolation(t, err, "circular dependency detected")
 	after, err := bb.Read()
 	if err != nil {
 		t.Fatalf("read state after rejected candidate: %v", err)
@@ -372,10 +376,11 @@ func TestSupersedeTask_InvalidCandidateLeavesStateUnchanged(t *testing.T) {
 	replacement := testhelpers.BuildTaskByStatus("replacement-plan", models.TaskStatusDraftCodingPlan, now)
 	consumer := testhelpers.BuildTaskByStatus("active-consumer", models.TaskStatusReady, now)
 	consumer.DependsOn = []string{"plan-old"}
-	invalid := testhelpers.BuildTaskByStatus("invalid-task", models.TaskStatusReady, now)
-	invalid.DependsOn = []string{"missing-task"}
+	// Superseding plan-old redirects the consumer to replacement-plan, which
+	// already depends on it: the candidate gains a cycle it did not have.
+	replacement.DependsOn = []string{"active-consumer"}
 	state := testhelpers.CreateValidState()
-	state.Tasks = []models.Task{target, codingA, legalPlan, codingB, replacement, consumer, invalid}
+	state.Tasks = []models.Task{target, codingA, legalPlan, codingB, replacement, consumer}
 	for i := range state.Tasks {
 		state.Tasks[i].SpecRef = state.Goal.SpecRef
 	}
@@ -387,7 +392,7 @@ func TestSupersedeTask_InvalidCandidateLeavesStateUnchanged(t *testing.T) {
 		t.Fatalf("Failed to read initial state: %v", err)
 	}
 	_, err = SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1")
-	testhelpers.RequireErrorContains(t, err, "missing-task")
+	requireIntroducedViolation(t, err, "circular dependency detected")
 	after, err := bb.Read()
 	if err != nil {
 		t.Fatalf("Failed to read state after rejected candidate: %v", err)

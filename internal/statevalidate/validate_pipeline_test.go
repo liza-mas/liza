@@ -48,7 +48,7 @@ func TestValidateTaskStates_RejectsMissingRolePair_PipelineGoal(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"task-1"}
 
-	err := validateTaskStates(state, "", true, resolver)
+	err := taskStatesErr(state, "", true, resolver)
 	if err == nil {
 		t.Fatal("Expected error for pipeline-goal task missing role_pair")
 	}
@@ -78,7 +78,7 @@ func TestValidateTaskStates_RejectsMissingRolePair_BlockedStatus(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"task-2"}
 
-	err := validateTaskStates(state, "", true, resolver)
+	err := taskStatesErr(state, "", true, resolver)
 	if err == nil {
 		t.Fatal("Expected error for BLOCKED pipeline-goal task missing role_pair")
 	}
@@ -104,7 +104,7 @@ func TestValidateTaskStates_RejectsInvalidRolePair(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"task-3"}
 
-	err := validateTaskStates(state, "", true, resolver)
+	err := taskStatesErr(state, "", true, resolver)
 	if err == nil {
 		t.Fatal("Expected error for task with invalid role_pair")
 	}
@@ -130,7 +130,7 @@ func TestValidateTaskStates_AcceptsValidRolePair(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"task-4"}
 
-	err := validateTaskStates(state, "", true, resolver)
+	err := taskStatesErr(state, "", true, resolver)
 	if err != nil {
 		t.Fatalf("Unexpected error for valid pipeline task: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestValidateTaskStates_AcceptsPipelineDeclaredStatus(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"task-5"}
 
-	err := validateTaskStates(state, "", true, resolver)
+	err := taskStatesErr(state, "", true, resolver)
 	if err != nil {
 		t.Fatalf("Unexpected error for pipeline-declared status: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestValidateTaskStates_RejectsUnknownStatusInPipelineGoal(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"task-6"}
 
-	err := validateTaskStates(state, "", true, resolver)
+	err := taskStatesErr(state, "", true, resolver)
 	if err == nil {
 		t.Fatal("Expected error for unknown status in pipeline goal")
 	}
@@ -203,7 +203,7 @@ func TestValidateTaskStates_LegacyGoalNoRolePairRequired(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"task-7"}
 
-	err := validateTaskStates(state, "", true, nil)
+	err := taskStatesErr(state, "", true, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error for legacy goal task without role_pair: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestValidateDependencies_PipelineExecutingUnmetDeps(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"dep-task", "task-exec"}
 
-	err := validateDependencies(state, "", true, resolver, cfg, nil)
+	err := dependenciesErr(state, "", true, resolver, cfg, nil)
 	if err == nil {
 		t.Fatal("Expected error for pipeline executing task with unmet dependencies")
 	}
@@ -293,7 +293,7 @@ func TestValidateDependencies_PipelineExecutingMetDeps(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"dep-task", "task-exec"}
 
-	err := validateDependencies(state, "", true, resolver, cfg, nil)
+	err := dependenciesErr(state, "", true, resolver, cfg, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error for pipeline executing task with met dependencies: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestValidateDependencies_ExecutingUnmetDeps(t *testing.T) {
 	}
 	state.Sprint.Scope.Planned = []string{"dep-task", "task-impl"}
 
-	err := validateDependencies(state, "", true, resolver, cfg, nil)
+	err := dependenciesErr(state, "", true, resolver, cfg, nil)
 	if err == nil {
 		t.Fatal("Expected error for IMPLEMENTING task with unmet dependencies")
 	}
@@ -391,9 +391,9 @@ func TestValidateDependencies_SupersededDepWithMergedReplacementRejectedForActiv
 	}
 	state.Sprint.Scope.Planned = []string{"dep-task", "replacement-task", "task-exec"}
 
-	err := validateDependencies(state, "", true, resolver, cfg, nil)
+	err := dependenciesErr(state, "", true, resolver, cfg, nil)
 	if err == nil {
-		t.Fatal("validateDependencies() error = nil, want terminal dependency error")
+		t.Fatal("dependenciesErr() error = nil, want terminal dependency error")
 	}
 	if !strings.Contains(err.Error(), "non-terminal task task-exec depends on terminal non-merged task dep-task") {
 		t.Fatalf("error = %q, want terminal dependency error", err.Error())

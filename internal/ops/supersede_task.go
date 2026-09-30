@@ -2,7 +2,6 @@ package ops
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"time"
@@ -197,7 +196,7 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 		// Legacy tasks predate pipeline-wide validation. For pipeline tasks, validate
 		// every structural invariant while skipping unchanged external artifact refs.
 		if currentTask.RolePair != "" {
-			if err := statevalidate.ValidateState(state, projectRoot, true, io.Discard); err != nil {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
 				return err
 			}
 		}

@@ -25,67 +25,93 @@ var prerequisiteEnvName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // rejects partial, ambiguous, vacuous, or unbounded protected-task contracts.
 // Errors identify fields and indices without echoing command or probe contents.
 func ValidateValidationPrerequisites(commands []string, prerequisites []ValidationPrerequisite) error {
+	return firstError(ValidationPrerequisiteViolations(commands, prerequisites))
+}
+
+// ValidationPrerequisiteViolations returns every defect
+// ValidateValidationPrerequisites checks, in the order it checks them, so the
+// first is the error it returns.
+func ValidationPrerequisiteViolations(commands []string, prerequisites []ValidationPrerequisite) []error {
 	if len(prerequisites) == 0 {
 		return nil
 	}
-	if len(commands) == 0 || len(commands) > 64 || len(prerequisites) != len(commands) {
-		return fmt.Errorf("validation_prerequisites requires one declaration per validation command (maximum 64)")
+	var errs []error
+	// Two independent constraints. No commands with declarations present is a
+	// count mismatch, so it needs no check of its own.
+	if len(prerequisites) != len(commands) {
+		errs = append(errs, fmt.Errorf("validation_prerequisites requires one declaration per validation command (maximum 64)"))
 	}
-	if err := ValidateValidationCommands("validation", commands); err != nil {
-		return err
+	if len(commands) > 64 {
+		errs = append(errs, fmt.Errorf("validation_prerequisites requires one declaration per validation command (maximum 64): validation has more than 64 commands"))
 	}
+	errs = append(errs, ValidationCommandViolations("validation", commands)...)
 	identities := make(map[string]bool, len(commands))
 	for i, command := range commands {
 		if len(command) > 4096 || strings.ContainsRune(command, 0) {
-			return fmt.Errorf("validation[%d] exceeds bounds or contains NUL", i)
+			errs = append(errs, fmt.Errorf("validation[%d] exceeds bounds or contains NUL", i))
 		}
 		if _, exists := identities[command]; exists {
-			return fmt.Errorf("validation[%d] duplicates a canonical command", i)
+			errs = append(errs, fmt.Errorf("validation[%d] duplicates a canonical command", i))
 		}
 		identities[command] = false
 	}
 	bytes := 0
+	bytesReported := false
 	for i, prerequisite := range prerequisites {
 		seen, exists := identities[prerequisite.Command]
 		if !exists || seen {
-			return fmt.Errorf("validation_prerequisites[%d].command must identify a distinct canonical command", i)
+			errs = append(errs, fmt.Errorf("validation_prerequisites[%d].command must identify a distinct canonical command", i))
 		}
-		identities[prerequisite.Command] = true
+		if exists {
+			identities[prerequisite.Command] = true
+		}
 		bytes += len(prerequisite.Command)
 		if len(prerequisite.Env)+len(prerequisite.Executables)+len(prerequisite.Probes) == 0 {
-			return fmt.Errorf("validation_prerequisites[%d] requires at least one check", i)
+			errs = append(errs, fmt.Errorf("validation_prerequisites[%d] requires at least one check", i))
 		}
-		if len(prerequisite.Env) > 64 || len(prerequisite.Executables) > 64 || len(prerequisite.Probes) > 64 {
-			return fmt.Errorf("validation_prerequisites[%d] exceeds the 64 checks per list limit", i)
+		for _, list := range []struct {
+			name string
+			size int
+		}{
+			{"env", len(prerequisite.Env)},
+			{"executables", len(prerequisite.Executables)},
+			{"probes", len(prerequisite.Probes)},
+		} {
+			if list.size > 64 {
+				errs = append(errs, fmt.Errorf("validation_prerequisites[%d] exceeds the 64 checks per list limit (%s)", i, list.name))
+			}
 		}
 		for j, name := range prerequisite.Env {
 			bytes += len(name)
 			if len(name) > 256 || !prerequisiteEnvName.MatchString(name) {
-				return fmt.Errorf("validation_prerequisites[%d].env[%d] must be a variable identifier of at most 256 bytes", i, j)
+				errs = append(errs, fmt.Errorf("validation_prerequisites[%d].env[%d] must be a variable identifier of at most 256 bytes", i, j))
 			}
 		}
 		for j, executable := range prerequisite.Executables {
 			bytes += len(executable)
 			if !validPrerequisiteString(executable) || strings.TrimSpace(executable) == "" {
-				return fmt.Errorf("validation_prerequisites[%d].executables[%d] is empty or invalid", i, j)
+				errs = append(errs, fmt.Errorf("validation_prerequisites[%d].executables[%d] is empty or invalid", i, j))
 			}
 		}
 		for j, probe := range prerequisite.Probes {
 			if len(probe) == 0 || len(probe) > 32 {
-				return fmt.Errorf("validation_prerequisites[%d].probes[%d] requires 1 to 32 argv entries", i, j)
+				errs = append(errs, fmt.Errorf("validation_prerequisites[%d].probes[%d] requires 1 to 32 argv entries", i, j))
 			}
 			for k, argument := range probe {
 				bytes += len(argument)
 				if !validPrerequisiteString(argument) || (k == 0 && strings.TrimSpace(argument) == "") {
-					return fmt.Errorf("validation_prerequisites[%d].probes[%d][%d] is invalid", i, j, k)
+					errs = append(errs, fmt.Errorf("validation_prerequisites[%d].probes[%d][%d] is invalid", i, j, k))
 				}
 			}
 		}
-		if bytes > 65536 {
-			return fmt.Errorf("validation_prerequisites exceeds the 65536 byte contract limit")
+		// Reported where the running total first crosses the limit, which is
+		// where the fail-first order met it.
+		if bytes > 65536 && !bytesReported {
+			errs = append(errs, fmt.Errorf("validation_prerequisites exceeds the 65536 byte contract limit"))
+			bytesReported = true
 		}
 	}
-	return nil
+	return errs
 }
 
 func validPrerequisiteString(value string) bool {

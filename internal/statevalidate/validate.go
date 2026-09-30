@@ -5,7 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -169,68 +171,63 @@ func ValidateStateFile(statePath string, skipSpecFileCheck bool, warnWriter io.W
 }
 
 // ValidateState validates an in-memory state using the same rules as
-// ValidateStateFile. Callers use this before persisting candidate mutations.
+// ValidateStateFile. It reports every violation, not only the first, as a
+// *ViolationList. Mutation paths use ValidateCandidate instead, which refuses
+// only the violations a mutation adds.
 func ValidateState(state *models.State, projectRoot string, skipSpecFileCheck bool, warnWriter io.Writer) error {
 	if warnWriter == nil {
 		warnWriter = io.Discard
 	}
-	if err := statehygiene.ValidateState(state); err != nil {
+	found, err := collectStateViolations(state, projectRoot, skipSpecFileCheck, warnWriter, time.Now().UTC())
+	if err != nil {
 		return err
 	}
+	return found.err()
+}
 
-	// Load pipeline resolver
+// collectStateViolations runs every validator against state and collects what
+// each finds; no validator's failure stops another from running. now is the
+// single instant every time-dependent check uses. The returned error is not a
+// state violation but a failure to validate at all (pipeline configuration).
+func collectStateViolations(state *models.State, projectRoot string, skipSpecFileCheck bool, warnWriter io.Writer, now time.Time) (*violations, error) {
+	// Hygiene needs no pipeline config, so it is reported even when the
+	// config cannot load, as it was before validation collected.
+	hygieneErr := statehygiene.ValidateState(state)
 	var resolver *pipeline.Resolver
 	cfg, cfgErr := pipeline.LoadFrozen(projectRoot)
 	if cfgErr != nil {
-		return &lizaerrors.PipelineConfigError{Operation: "validate", Err: cfgErr}
+		if hygieneErr != nil {
+			return nil, hygieneErr
+		}
+		return nil, &lizaerrors.PipelineConfigError{Operation: "validate", Err: cfgErr}
 	}
 	if cfg != nil {
 		resolver = pipeline.NewResolver(cfg)
 	}
 
-	validators := []func(*models.State, string, bool) error{
-		validateRoleNames,
-		validateRequiredFields,
-		validateUniqueTaskIDs,
-		validateIntegrationLifecycle,
-		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-			return validateTaskStates(state, projectRoot, skipSpecFileCheck, resolver)
-		},
-		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-			return validateTaskInvariants(state, projectRoot, skipSpecFileCheck, resolver, cfg)
-		},
-		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-			return validateDependencies(state, projectRoot, skipSpecFileCheck, resolver, cfg, warnWriter)
-		},
-		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-			warnBlockedReasonMissingDependsOn(state, warnWriter)
-			return nil
-		},
-		func(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-			return validateAgentInvariants(state, projectRoot, skipSpecFileCheck, warnWriter, resolver)
-		},
-		validateDiscovered,
-		validateAnomalies,
-		func(state *models.State, _ string, _ bool) error {
-			return ValidateQuarantinedVerdicts(state)
-		},
-		func(state *models.State, _ string, _ bool) error {
-			return ValidateProofReaffirmations(state)
-		},
-		validateHandoffEvents,
-		validateSprint,
-	}
-
-	for _, validator := range validators {
-		if err := validator(state, projectRoot, skipSpecFileCheck); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	v := &violations{}
+	// Hygiene is also enforced on every write, so a hygiene violation cannot
+	// persist; here it is one violation among the others.
+	v.add(hygieneErr)
+	validateRoleNames(v, state)
+	validateRequiredFields(v, state, projectRoot, skipSpecFileCheck)
+	validateUniqueTaskIDs(v, state)
+	validateIntegrationLifecycle(v, state)
+	validateTaskStates(v, state, resolver)
+	validateTaskInvariants(v, state, projectRoot, skipSpecFileCheck, resolver, cfg)
+	validateDependencies(v, state, resolver, cfg, warnWriter)
+	warnBlockedReasonMissingDependsOn(state, warnWriter)
+	validateAgentInvariants(v, state, warnWriter, resolver, now)
+	validateDiscovered(v, state)
+	validateAnomalies(v, state)
+	validateQuarantinedVerdicts(v, state)
+	validateProofReaffirmations(v, state)
+	validateHandoffEvents(v, state)
+	validateSprint(v, state)
+	return v, nil
 }
 
-func validateUniqueTaskIDs(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+func validateUniqueTaskIDs(v *violations, state *models.State) {
 	firstIndexByID := make(map[string]int, len(state.Tasks))
 	for i, task := range state.Tasks {
 		if task.ID == "" {
@@ -238,11 +235,24 @@ func validateUniqueTaskIDs(state *models.State, projectRoot string, skipSpecFile
 		}
 		firstIndex, exists := firstIndexByID[task.ID]
 		if exists {
-			return fmt.Errorf("duplicate task ID %q at tasks[%d] and tasks[%d]", task.ID, firstIndex, i)
+			// Identity by ID, not index: appending an unrelated task must not
+			// make an old duplicate look new. Each extra copy is one violation.
+			v.addID("duplicate task ID "+task.ID, fmt.Errorf("duplicate task ID %q at tasks[%d] and tasks[%d]", task.ID, firstIndex, i))
+			continue
 		}
 		firstIndexByID[task.ID] = i
 	}
-	return nil
+}
+
+// sortedAgentIDs returns the agent IDs in a stable order, so violations found
+// by iterating agents are reported deterministically.
+func sortedAgentIDs(state *models.State) []string {
+	ids := make([]string, 0, len(state.Agents))
+	for id := range state.Agents {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // ValidateAgentInvariants exposes agent-only invariant checks for package-level tests.
@@ -250,12 +260,12 @@ func ValidateAgentInvariants(state *models.State, projectRoot string, skipSpecFi
 	if warnWriter == nil {
 		warnWriter = io.Discard
 	}
-	return validateAgentInvariants(state, projectRoot, skipSpecFileCheck, warnWriter, nil)
+	return collectErr(func(v *violations) { validateAgentInvariants(v, state, warnWriter, nil, time.Now().UTC()) })
 }
 
 // ValidateAnomalies exposes anomaly validation for package-level tests.
 func ValidateAnomalies(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
-	return validateAnomalies(state, projectRoot, skipSpecFileCheck)
+	return collectErr(func(v *violations) { validateAnomalies(v, state) })
 }
 
 // checkSpecFileExists verifies that a spec_ref points to an existing file on

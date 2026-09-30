@@ -24,13 +24,20 @@ func TestValidateDependencies_DependencyCyclePath(t *testing.T) {
 	taskC.DependsOn = []string{"A"}
 	state.Tasks = []models.Task{taskA, taskB, taskC}
 
-	err := validateDependencies(state, "", true, nil, nil, nil)
+	err := dependenciesErr(state, "", true, nil, nil, nil)
 	var cycleErr *DependencyCycleError
 	if !errors.As(err, &cycleErr) {
-		t.Fatalf("validateDependencies() error = %T %v, want *DependencyCycleError", err, err)
+		t.Fatalf("dependenciesErr() error = %T %v, want *DependencyCycleError", err, err)
 	}
-	if got, want := err.Error(), "circular dependency detected: A eventually depends on itself"; got != want {
-		t.Fatalf("validateDependencies() error = %q, want %q", got, want)
+	// One violation per cyclic edge, in task order (ADR-0165): each edge is
+	// an identity, so a new cycle cannot hide behind an old one.
+	want := strings.Join([]string{
+		"circular dependency detected: A eventually depends on itself",
+		"circular dependency detected: B eventually depends on itself",
+		"circular dependency detected: C eventually depends on itself",
+	}, "\n")
+	if got := err.Error(); got != want {
+		t.Fatalf("dependenciesErr() error = %q, want %q", got, want)
 	}
 	wantPath := []string{"A", "B", "C", "A"}
 	if !slices.Equal(cycleErr.CyclePath, wantPath) {
@@ -81,7 +88,7 @@ func TestValidateDependencies_RejectsMalformedDependsOn(t *testing.T) {
 			dep := testhelpers.BuildTaskByStatus("dep-1", models.TaskStatusMerged, now)
 			state.Tasks = []models.Task{tt.task, dep}
 
-			err := validateDependencies(state, "", true, nil, nil, nil)
+			err := dependenciesErr(state, "", true, nil, nil, nil)
 			if err == nil {
 				t.Fatal("Expected error, got nil")
 			}
@@ -100,9 +107,9 @@ func TestValidateDependencies_RejectsNonTerminalSupersededDependency(t *testing.
 	dep := models.Task{ID: "dep-1", Status: models.TaskStatusSuperseded}
 	state.Tasks = []models.Task{task, dep}
 
-	err := validateDependencies(state, "", true, nil, nil, nil)
+	err := dependenciesErr(state, "", true, nil, nil, nil)
 	if err == nil {
-		t.Fatal("validateDependencies() error = nil, want terminal dependency error")
+		t.Fatal("dependenciesErr() error = nil, want terminal dependency error")
 	}
 	if !strings.Contains(err.Error(), "non-terminal task task-1 depends on terminal non-merged task dep-1") {
 		t.Fatalf("error = %q, want terminal dependency error", err.Error())
@@ -118,8 +125,8 @@ func TestValidateDependencies_DoesNotWarnForNonExecutingDirectPendingDependency(
 	state.Tasks = []models.Task{task, dep}
 
 	var warnings bytes.Buffer
-	if err := validateDependencies(state, "", true, nil, nil, &warnings); err != nil {
-		t.Fatalf("validateDependencies() error = %v", err)
+	if err := dependenciesErr(state, "", true, nil, nil, &warnings); err != nil {
+		t.Fatalf("dependenciesErr() error = %v", err)
 	}
 	if warnings.Len() != 0 {
 		t.Fatalf("warnings = %q, want none for ordinary pending dependency", warnings.String())
@@ -137,9 +144,9 @@ func TestValidateDependencies_RejectsDownstreamDependency(t *testing.T) {
 	dep.RolePair = "coding-pair"
 	state := &models.State{Tasks: []models.Task{task, dep}}
 
-	err := validateDependencies(state, "", true, resolver, cfg, nil)
+	err := dependenciesErr(state, "", true, resolver, cfg, nil)
 	if err == nil {
-		t.Fatal("validateDependencies() error = nil, want downstream dependency error")
+		t.Fatal("dependenciesErr() error = nil, want downstream dependency error")
 	}
 	if !strings.Contains(err.Error(), "role_pair coding-pair is downstream of code-planning-pair") {
 		t.Fatalf("error = %q, want downstream role-pair error", err.Error())
@@ -160,9 +167,9 @@ func TestValidateDependencies_RejectsNonTerminalSupersededDependencyWithReplacem
 	coding.RolePair = "coding-pair"
 	state := &models.State{Tasks: []models.Task{task, oldPlan, coding}}
 
-	err := validateDependencies(state, "", true, resolver, cfg, nil)
+	err := dependenciesErr(state, "", true, resolver, cfg, nil)
 	if err == nil {
-		t.Fatal("validateDependencies() error = nil, want terminal dependency error")
+		t.Fatal("dependenciesErr() error = nil, want terminal dependency error")
 	}
 	if !strings.Contains(err.Error(), "non-terminal task plan-1 depends on terminal non-merged task old-plan") {
 		t.Fatalf("error = %q, want terminal dependency error", err.Error())

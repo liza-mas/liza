@@ -2,7 +2,7 @@ package ops
 
 import (
 	"fmt"
-	"io"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -64,7 +64,9 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 		if r.AnalysisTaskID != taskID || r.Reason != reason {
 			return nil, fmt.Errorf("integration was already recovered with a different task or reason")
 		}
-		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+		// A replay writes nothing, so unrelated records cannot veto it; it
+		// still vouches for its own recovery evidence before reporting success.
+		if err := statevalidate.ValidatePrematureRecovery(state); err != nil {
 			return nil, err
 		}
 		return &RecoverIntegrationResult{LifecycleOutcome: NewLifecycleOutcome("recover-integration", state.FindTask(taskID), models.LifecycleAlreadyCompleted, "continue", "none"), TaskID: taskID, DryRun: dryRun, Replayed: true, Recovery: r}, nil
@@ -126,7 +128,7 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 		if err := statevalidate.ValidateIntegrationLifecycleTransition(previous, current); err != nil {
 			return err
 		}
-		return statevalidate.ValidateState(current, projectRoot, false, io.Discard)
+		return statevalidate.ValidateCandidate(current, bb.ReadSnapshot, projectRoot, false, os.Stderr)
 	})
 	if err != nil {
 		return nil, WrapLifecycleError("recover-integration", task, fmt.Errorf("recovery refused; submitted report remains preserved at %s: %w", recovery.PreservationRef, err), models.LifecycleStateChanged, "requery", "unknown")

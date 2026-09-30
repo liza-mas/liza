@@ -3,7 +3,7 @@ package ops
 import (
 	"errors"
 	"fmt"
-	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -221,7 +221,7 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 				extra["preserved_base_commit"] = base.BaseCommit
 			}
 			source.History = append(source.History, models.TaskHistoryEntry{Time: now, Event: models.TaskEventReplacementCommitted, Agent: &authority.ID, Extra: extra})
-			if err := statevalidate.ValidateState(candidate, projectRoot, false, io.Discard); err != nil {
+			if err := statevalidate.ValidateCandidate(candidate, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 				return err
 			}
 			outcome, err := CompleteLifecycleRequest(source, request, models.LifecycleProjection{SourceStatus: originalStatus}, candidate.Agents)

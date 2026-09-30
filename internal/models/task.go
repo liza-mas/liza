@@ -803,19 +803,35 @@ func ValidateKind(kind string) error {
 // ValidateValidationCommands rejects malformed task-declared canonical
 // validation commands before they enter state or prompts.
 func ValidateValidationCommands(field string, commands []string) error {
+	return firstError(ValidationCommandViolations(field, commands))
+}
+
+// ValidationCommandViolations returns every defect ValidateValidationCommands
+// checks, in the order it checks them, so the first is the error it returns.
+func ValidationCommandViolations(field string, commands []string) []error {
+	var errs []error
 	for i, command := range commands {
 		trimmed := strings.TrimSpace(command)
 		if trimmed == "" {
-			return fmt.Errorf("%s[%d] must not be empty", field, i)
+			// The shape checks below have nothing to judge.
+			errs = append(errs, fmt.Errorf("%s[%d] must not be empty", field, i))
+			continue
 		}
 		if command != trimmed {
-			return fmt.Errorf("%s[%d] must not have leading or trailing whitespace", field, i)
+			errs = append(errs, fmt.Errorf("%s[%d] must not have leading or trailing whitespace", field, i))
 		}
 		if strings.ContainsAny(command, "\r\n") {
-			return fmt.Errorf("%s[%d] must be a single-line command", field, i)
+			errs = append(errs, fmt.Errorf("%s[%d] must be a single-line command", field, i))
 		}
 	}
-	return nil
+	return errs
+}
+
+func firstError(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs[0]
 }
 
 // HasLeadingDestructiveDBAllowMarker reports whether command begins with the
@@ -855,22 +871,26 @@ func hasLeadingDestructiveDBAllowMarker(command, prefix string) bool {
 // ValidateValidationSafety rejects unsafe validation metadata combinations
 // before destructive DB work can be persisted into state or downstream prompts.
 func ValidateValidationSafety(field string, commands []string, destructiveDB bool) error {
-	if err := ValidateValidationCommands(field, commands); err != nil {
-		return err
-	}
+	return firstError(ValidationSafetyViolations(field, commands, destructiveDB))
+}
+
+// ValidationSafetyViolations returns every defect ValidateValidationSafety
+// checks, in the order it checks them, so the first is the error it returns.
+func ValidationSafetyViolations(field string, commands []string, destructiveDB bool) []error {
+	errs := ValidationCommandViolations(field, commands)
 	if !destructiveDB {
-		return nil
+		return errs
 	}
 	if len(commands) == 0 {
-		return fmt.Errorf("%s destructive_db requires at least one validation command", field)
+		return append(errs, fmt.Errorf("%s destructive_db requires at least one validation command", field))
 	}
 	for i, command := range commands {
 		if !HasLeadingDestructiveDBAllowMarker(command) {
 			marker := CurrentDestructiveDBAllowMarker()
-			return fmt.Errorf("%s[%d] destructive_db requires command to start with %s or env %s", field, i, marker, marker)
+			errs = append(errs, fmt.Errorf("%s[%d] destructive_db requires command to start with %s or env %s", field, i, marker, marker))
 		}
 	}
-	return nil
+	return errs
 }
 
 // ValidateDependsOn checks that DependsOn indices are valid references within
@@ -1159,77 +1179,103 @@ func IsResumableOwnedTask(state *State, task *Task, agentID string, pr PipelineR
 // row is a valid active owner. It accepts both ordinary WORKING ownership and
 // the explicit HANDOFF window.
 func ActiveDoerOwnershipReason(state *State, task *Task, agentID string, pr PipelineResolver) string {
+	if defects := ActiveDoerOwnershipDefects(state, task, agentID, pr); len(defects) > 0 {
+		return defects[0].Reason
+	}
+	return ""
+}
+
+// OwnershipDefect is one reason an owner row is not a valid active owner.
+// Check names the constraint without the values the reason reports, so a
+// defect keeps its identity while those values change.
+type OwnershipDefect struct {
+	Check  string
+	Reason string
+}
+
+// ActiveDoerOwnershipDefects returns every defect ActiveDoerOwnershipReason
+// checks, in its order, so the first carries the reason it returns. It stops
+// only where a later check has nothing to judge: no task, no matching
+// assignment, no agent row.
+func ActiveDoerOwnershipDefects(state *State, task *Task, agentID string, pr PipelineResolver) []OwnershipDefect {
+	one := func(check, reason string) []OwnershipDefect {
+		return []OwnershipDefect{{Check: check, Reason: reason}}
+	}
 	if state == nil {
-		return "missing state"
+		return one("state", "missing state")
 	}
 	if task == nil {
-		return "missing task"
+		return one("task", "missing task")
 	}
 	if agentID == "" {
-		return "missing agent ID"
+		return one("agent_id", "missing agent ID")
 	}
 	if pr == nil {
-		return "missing pipeline resolver"
+		return one("resolver", "missing pipeline resolver")
 	}
 	if !IsExecutingStatus(task, pr) {
-		return fmt.Sprintf("task status %s is not executing", task.Status)
+		return one("executing", fmt.Sprintf("task status %s is not executing", task.Status))
 	}
 	if task.AssignedTo == nil || *task.AssignedTo == "" {
-		return "missing assigned_to"
+		return one("assigned_to", "missing assigned_to")
 	}
 	if *task.AssignedTo != agentID {
-		return fmt.Sprintf("assigned_to %s, want %s", *task.AssignedTo, agentID)
+		return one("assigned_to", fmt.Sprintf("assigned_to %s, want %s", *task.AssignedTo, agentID))
+	}
+	var defects []OwnershipDefect
+	add := func(check, reason string) {
+		defects = append(defects, OwnershipDefect{Check: check, Reason: reason})
 	}
 	if task.LeaseExpires == nil {
-		return "without lease_expires"
+		add("task_lease", "without lease_expires")
 	}
 
 	agent, ok := state.Agents[agentID]
 	if !ok {
-		return fmt.Sprintf("assigned_to %s has no matching agent", agentID)
+		add("agent", fmt.Sprintf("assigned_to %s has no matching agent", agentID))
+		return defects
 	}
 
 	doerRole, err := pr.DoerRole(task.RolePair)
 	if err != nil {
-		return fmt.Sprintf("doer role resolution failed for role_pair %q: %v", task.RolePair, err)
-	}
-	if agent.Role != doerRole {
-		return fmt.Sprintf("assigned_to %s has role %q, want %q", agentID, agent.Role, doerRole)
+		add("agent_role", fmt.Sprintf("doer role resolution failed for role_pair %q: %v", task.RolePair, err))
+	} else if agent.Role != doerRole {
+		add("agent_role", fmt.Sprintf("assigned_to %s has role %q, want %q", agentID, agent.Role, doerRole))
 	}
 	if agent.Provider == "" {
-		return fmt.Sprintf("assigned_to %s has agent without provider", agentID)
+		add("agent_provider", fmt.Sprintf("assigned_to %s has agent without provider", agentID))
 	}
 	if agent.PID <= 0 {
-		return fmt.Sprintf("assigned_to %s has agent without pid", agentID)
+		add("agent_pid", fmt.Sprintf("assigned_to %s has agent without pid", agentID))
 	}
 	if agent.LeaseExpires == nil {
-		return fmt.Sprintf("assigned_to %s has agent without lease_expires", agentID)
+		add("agent_lease", fmt.Sprintf("assigned_to %s has agent without lease_expires", agentID))
 	}
 
+	mismatched := fmt.Sprintf("assigned_to %s has mismatched current_task", agentID)
 	if task.HandoffPending {
 		if agent.Status != AgentStatusHandoff {
-			return fmt.Sprintf("assigned_to %s has agent status %s, want HANDOFF", agentID, agent.Status)
+			add("agent_status", fmt.Sprintf("assigned_to %s has agent status %s, want HANDOFF", agentID, agent.Status))
 		}
 		if agent.CurrentTask == nil || *agent.CurrentTask != task.ID {
-			return fmt.Sprintf("assigned_to %s has mismatched current_task", agentID)
+			add("agent_current_task", mismatched)
 		}
-		return ""
+		return defects
 	}
 
 	switch agent.Status {
 	case AgentStatusWorking:
 		if agent.CurrentTask == nil || *agent.CurrentTask != task.ID {
-			return fmt.Sprintf("assigned_to %s has mismatched current_task", agentID)
+			add("agent_current_task", mismatched)
 		}
 	case AgentStatusIdle:
 		if agent.CurrentTask != nil && *agent.CurrentTask != "" && *agent.CurrentTask != task.ID {
-			return fmt.Sprintf("assigned_to %s has mismatched current_task", agentID)
+			add("agent_current_task", mismatched)
 		}
 	default:
-		return fmt.Sprintf("assigned_to %s has agent status %s, want WORKING or resumable IDLE", agentID, agent.Status)
+		add("agent_status", fmt.Sprintf("assigned_to %s has agent status %s, want WORKING or resumable IDLE", agentID, agent.Status))
 	}
-
-	return ""
+	return defects
 }
 
 // ResumableOwnedTaskReason returns "" when IsResumableOwnedTask would return

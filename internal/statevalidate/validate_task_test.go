@@ -290,7 +290,7 @@ func TestValidateTaskInvariants_EnforcesStatusSpecificRequiredFields(t *testing.
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			err := taskInvariantsErr(stateWithTasks(tc.task()), "", true, resolver, cfg)
 			assertErrorContains(t, err, tc.wantErr)
 		})
 	}
@@ -301,7 +301,7 @@ func TestValidateTaskInvariants_DuplicateFailedByUsesBrandedStatePath(t *testing
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
 	task.FailedBy = []string{"coder-1", "coder-1"}
 
-	err := validateTaskInvariants(stateWithTasks(task), "", true, nil, nil)
+	err := taskInvariantsErr(stateWithTasks(task), "", true, nil, nil)
 	assertErrorContains(t, err, ".acme/state.yaml")
 	if strings.Contains(err.Error(), ".liza/state.yaml") {
 		t.Fatalf("error = %v, want no default project dir", err)
@@ -346,7 +346,7 @@ func TestValidateTaskInvariants_RejectsStaleIntegrationFailureOnReviewStates(t *
 				"reason":    "merge conflict",
 			}
 
-			err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg)
+			err := taskInvariantsErr(stateWithTasks(task), "", true, resolver, cfg)
 			testhelpers.RequireErrorContains(t, err, string(status)+" task has stale integration_failure outside integration recovery: task-1")
 		})
 	}
@@ -360,7 +360,7 @@ func TestValidateTaskInvariants_SupersededWithoutReplacements(t *testing.T) {
 	task.SupersededBy = nil
 	task.RescopeReason = testhelpers.StringPtr("Work already merged in prior sprint")
 
-	err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg)
+	err := taskInvariantsErr(stateWithTasks(task), "", true, resolver, cfg)
 	if err != nil {
 		t.Errorf("superseded without replacements should be valid, got: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestValidateTaskInvariants_LegacyRepairEvidenceRemainsValid(t *testing.T) {
 		Validation: []string{"go test ./cmd/liza"},
 	}
 
-	err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg)
+	err := taskInvariantsErr(stateWithTasks(task), "", true, resolver, cfg)
 	if err != nil {
 		t.Errorf("legacy repair evidence should remain valid, got: %v", err)
 	}
@@ -403,7 +403,7 @@ func validDeclarativeRepairTask() models.Task {
 func TestValidateTask_DeclarativeDependencyRepairRequest(t *testing.T) {
 	cfg := loadTestConfig(t)
 	resolver := pipeline.NewResolver(cfg)
-	if err := validateTaskInvariants(stateWithTasks(validDeclarativeRepairTask()), "", true, resolver, cfg); err != nil {
+	if err := taskInvariantsErr(stateWithTasks(validDeclarativeRepairTask()), "", true, resolver, cfg); err != nil {
 		t.Fatalf("valid declarative repair request rejected: %v", err)
 	}
 
@@ -441,7 +441,7 @@ func TestValidateTask_DeclarativeDependencyRepairRequest(t *testing.T) {
 	for _, tt := range tests {
 		task := validDeclarativeRepairTask()
 		tt.mutate(task.RepairRequest)
-		err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg)
+		err := taskInvariantsErr(stateWithTasks(task), "", true, resolver, cfg)
 		if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 			t.Fatalf("%s: Error = %v, want substring %q", tt.name, err, tt.wantErr)
 		}
@@ -450,7 +450,7 @@ func TestValidateTask_DeclarativeDependencyRepairRequest(t *testing.T) {
 	legacyWithUpdates := validDeclarativeRepairTask()
 	legacyWithUpdates.RepairRequest.Operation = "add-task"
 	legacyWithUpdates.RepairRequest.Command = "liza add-task --json"
-	err := validateTaskInvariants(stateWithTasks(legacyWithUpdates), "", true, resolver, cfg)
+	err := taskInvariantsErr(stateWithTasks(legacyWithUpdates), "", true, resolver, cfg)
 	if err == nil || !strings.Contains(err.Error(), "must not include dependency_updates") {
 		t.Fatalf("legacy request with declarative updates error = %v", err)
 	}
@@ -533,14 +533,14 @@ func TestValidateTaskInvariants_CompletionFieldRequirements(t *testing.T) {
 
 			var err error
 			if tc.useResolver {
-				err = validateTaskInvariants(state, "", true, resolver, cfg)
+				err = taskInvariantsErr(state, "", true, resolver, cfg)
 			} else {
-				err = validateTaskInvariants(state, "", true, nil, nil)
+				err = taskInvariantsErr(state, "", true, nil, nil)
 			}
 
 			if tc.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+					t.Fatalf("taskInvariantsErr() unexpected error = %v", err)
 				}
 				return
 			}
@@ -583,10 +583,10 @@ func TestValidateTaskInvariants_IntegrationFixHistoryLinkage(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, nil, nil)
+			err := taskInvariantsErr(stateWithTasks(tc.task()), "", true, nil, nil)
 			if tc.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+					t.Fatalf("taskInvariantsErr() unexpected error = %v", err)
 				}
 				return
 			}
@@ -816,10 +816,10 @@ func TestValidateTaskInvariants_RejectsBrokenReferencesAndOutput(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTaskInvariants(stateWithTasks(tc.tasks...), "", true, nil, nil)
+			err := taskInvariantsErr(stateWithTasks(tc.tasks...), "", true, nil, nil)
 			if tc.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+					t.Fatalf("taskInvariantsErr() unexpected error = %v", err)
 				}
 				return
 			}
@@ -930,7 +930,7 @@ func TestValidateTaskInvariants_Reviewing2RequiresReviewMetadata(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			err := taskInvariantsErr(stateWithTasks(tc.task()), "", true, resolver, cfg)
 			assertErrorContains(t, err, tc.wantErr)
 		})
 	}
@@ -1031,10 +1031,10 @@ func TestValidateTaskInvariants_AttemptValidation(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			err := taskInvariantsErr(stateWithTasks(tc.task()), "", true, resolver, cfg)
 			if tc.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+					t.Fatalf("taskInvariantsErr() unexpected error = %v", err)
 				}
 				return
 			}
@@ -1046,7 +1046,7 @@ func TestValidateTaskInvariants_AttemptValidation(t *testing.T) {
 func TestValidate_ArchRefWorktreePrefix(t *testing.T) {
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
 	task.ArchRef = "/project/.worktrees/t1/specs/arch-plan/feature.md"
-	err := validateTaskInvariants(stateWithTasks(task), "", true, nil, nil)
+	err := taskInvariantsErr(stateWithTasks(task), "", true, nil, nil)
 	assertErrorContains(t, err, "arch_ref contains worktree prefix")
 }
 
@@ -1058,7 +1058,7 @@ func TestValidate_ArchRefFileExistence(t *testing.T) {
 	}
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
 	task.ArchRef = "specs/arch-plan/nonexistent.md"
-	err := validateTaskInvariants(stateWithTasks(task), tmpDir, false, nil, nil)
+	err := taskInvariantsErr(stateWithTasks(task), tmpDir, false, nil, nil)
 	assertErrorContains(t, err, "arch_ref")
 	assertErrorContains(t, err, "file not found")
 }
@@ -1066,7 +1066,7 @@ func TestValidate_ArchRefFileExistence(t *testing.T) {
 func TestValidate_ArchRefOutputWorktreePrefix(t *testing.T) {
 	task := validOutputTask("task-1")
 	task.Output[0].ArchRef = "/project/.worktrees/t1/specs/arch-plan/feature.md"
-	err := validateTaskInvariants(stateWithTasks(task), "", true, nil, nil)
+	err := taskInvariantsErr(stateWithTasks(task), "", true, nil, nil)
 	assertErrorContains(t, err, "arch_ref contains worktree prefix")
 }
 
@@ -1086,9 +1086,9 @@ func TestValidate_ArchRefValidPath(t *testing.T) {
 	}
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
 	task.ArchRef = "specs/arch-plan/feature.md"
-	err := validateTaskInvariants(stateWithTasks(task), tmpDir, false, nil, nil)
+	err := taskInvariantsErr(stateWithTasks(task), tmpDir, false, nil, nil)
 	if err != nil {
-		t.Fatalf("validateTaskInvariants() unexpected error = %v", err)
+		t.Fatalf("taskInvariantsErr() unexpected error = %v", err)
 	}
 }
 
@@ -1105,10 +1105,10 @@ func stateWithTasks(tasks ...models.Task) *models.State {
 func assertErrorContains(t *testing.T, err error, want string) {
 	t.Helper()
 	if err == nil {
-		t.Fatalf("validateTaskInvariants() error = nil, want substring %q", want)
+		t.Fatalf("taskInvariantsErr() error = nil, want substring %q", want)
 	}
 	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("validateTaskInvariants() error = %q, want substring %q", err.Error(), want)
+		t.Fatalf("taskInvariantsErr() error = %q, want substring %q", err.Error(), want)
 	}
 }
 
@@ -1608,7 +1608,7 @@ func TestValidateTaskRejectionRCAState(t *testing.T) {
 
 	for _, tc := range invalid {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg)
+			err := taskInvariantsErr(stateWithTasks(tc.task()), "", true, resolver, cfg)
 			assertErrorContains(t, err, tc.wantErr)
 		})
 	}
@@ -1647,8 +1647,8 @@ func TestValidateTaskRejectionRCAState(t *testing.T) {
 
 	for _, tc := range valid {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validateTaskInvariants(stateWithTasks(tc.task()), "", true, resolver, cfg); err != nil {
-				t.Fatalf("validateTaskInvariants() error = %v, want nil", err)
+			if err := taskInvariantsErr(stateWithTasks(tc.task()), "", true, resolver, cfg); err != nil {
+				t.Fatalf("taskInvariantsErr() error = %v, want nil", err)
 			}
 		})
 	}
@@ -1677,14 +1677,14 @@ func TestValidateTaskInvariants_AcceptanceSourceRequiresObjectIDs(t *testing.T) 
 
 	t.Run("span object id is valid", func(t *testing.T) {
 		task := withSource(objectID)
-		if err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg); err != nil {
+		if err := taskInvariantsErr(stateWithTasks(task), "", true, resolver, cfg); err != nil {
 			t.Fatalf("validateTaskInvariants = %v, want nil for an object-id span identity", err)
 		}
 	})
 
 	t.Run("sha256 digest is rejected", func(t *testing.T) {
 		task := withSource("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-		err := validateTaskInvariants(stateWithTasks(task), "", true, resolver, cfg)
+		err := taskInvariantsErr(stateWithTasks(task), "", true, resolver, cfg)
 		if err == nil || !strings.Contains(err.Error(), "immutable lowercase object IDs") {
 			t.Fatalf("validateTaskInvariants = %v, want the object-id requirement to reject a 64-char digest", err)
 		}

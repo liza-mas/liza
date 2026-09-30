@@ -44,7 +44,7 @@ func TestValidateTaskInvariants_PlanCheckShape(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTaskInvariants(stateWithTasks(tc.task), "", true, resolver, cfg)
+			err := taskInvariantsErr(stateWithTasks(tc.task), "", true, resolver, cfg)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("validateTaskInvariants = %v, want nil", err)

@@ -2,7 +2,6 @@ package statevalidate
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
 )
@@ -11,13 +10,12 @@ import (
 // (either "deferred" or "immediate", or empty). Prevents typos and invalid
 // urgency levels from entering the backlog where they would be silently ignored
 // by the scheduler.
-func validateDiscovered(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+func validateDiscovered(v *violations, state *models.State) {
 	for i, disc := range state.Discovered {
 		if disc.Urgency != "" && disc.Urgency != "deferred" && disc.Urgency != "immediate" {
-			return fmt.Errorf("discovered item %d has invalid urgency '%s' (must be 'deferred' or 'immediate')", i, disc.Urgency)
+			v.add(fmt.Errorf("discovered item %d has invalid urgency '%s' (must be 'deferred' or 'immediate')", i, disc.Urgency))
 		}
 	}
-	return nil
 }
 
 // validateAnomalies checks that each anomaly has a valid type and that
@@ -25,60 +23,42 @@ func validateDiscovered(state *models.State, projectRoot string, skipSpecFileChe
 // count and error_pattern; trade_off requires what, why, debt_created).
 // Prevents agents from logging anomalies that cannot be analysed by the
 // circuit breaker or human reviewers.
-func validateAnomalies(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+//
+// Each missing detail is its own violation, so recording one of several
+// missing details is a repair rather than a new violation.
+func validateAnomalies(v *violations, state *models.State) {
 	for i, anomaly := range state.Anomalies {
 		// Check type is valid
 		if !anomaly.IsValidType() {
-			return fmt.Errorf("unknown anomaly type '%s' at index %d", anomaly.Type, i)
+			v.add(fmt.Errorf("unknown anomaly type '%s' at index %d", anomaly.Type, i))
+			continue
 		}
 
 		// Type-specific detail validation
 		switch anomaly.Type {
 		case "retry_loop":
-			if anomaly.Details["count"] == nil || anomaly.Details["error_pattern"] == nil {
-				return fmt.Errorf("retry_loop anomaly at index %d missing required details (count, error_pattern)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "count", "error_pattern")
 		case "trade_off":
-			if anomaly.Details["what"] == nil || anomaly.Details["why"] == nil || anomaly.Details["debt_created"] == nil {
-				return fmt.Errorf("trade_off anomaly at index %d missing required details (what, why, debt_created)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "what", "why", "debt_created")
 		case "external_blocker":
-			if anomaly.Details["blocker_service"] == nil {
-				return fmt.Errorf("external_blocker anomaly at index %d missing required details (blocker_service)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "blocker_service")
 		case "assumption_violated":
-			if anomaly.Details["assumption"] == nil || anomaly.Details["reality"] == nil {
-				return fmt.Errorf("assumption_violated anomaly at index %d missing required details (assumption, reality)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "assumption", "reality")
 		case "system_ambiguity":
-			if anomaly.Details["protocol_section"] == nil || anomaly.Details["question"] == nil {
-				return fmt.Errorf("system_ambiguity anomaly at index %d missing required details (protocol_section, question)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "protocol_section", "question")
 		case "provider_audit_degraded":
-			if anomaly.Details["provider"] == nil || anomaly.Details["agent_id"] == nil || anomaly.Details["message"] == nil {
-				return fmt.Errorf("provider_audit_degraded anomaly at index %d missing required details (provider, agent_id, message)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "provider", "agent_id", "message")
 		case "agent_degraded":
-			if anomaly.Details["agent_id"] == nil || anomaly.Details["role"] == nil || anomaly.Details["reason"] == nil || anomaly.Details["last_error"] == nil {
-				return fmt.Errorf("agent_degraded anomaly at index %d missing required details (agent_id, role, reason, last_error)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "agent_id", "role", "reason", "last_error")
 		case "stale_verdict":
-			if anomaly.Details["attempted_verdict"] == nil || anomaly.Details["current_status"] == nil {
-				return fmt.Errorf("stale_verdict anomaly at index %d missing required details (attempted_verdict, current_status)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "attempted_verdict", "current_status")
 		case "submit_verdict_failed":
-			if anomaly.Details["verdict"] == nil || anomaly.Details["error"] == nil {
-				return fmt.Errorf("submit_verdict_failed anomaly at index %d missing required details (verdict, error)", i)
-			}
+			requireAnomalyDetails(v, i, anomaly, "verdict", "error")
 		case models.AnomalyTypeReviewerClaimCircuitOpen:
 			// The breaker keys a quarantine on role, failure class and boundary
 			// version, and an operator recovers from the counters and the hint;
 			// a record missing any of them cannot be acted on.
-			missing := missingAnomalyDetails(anomaly, "role", "failure_class", "attempts", "first_failure", "last_failure", "recovery")
-			if len(missing) > 0 {
-				return fmt.Errorf("%s anomaly at index %d missing required details (%s)",
-					models.AnomalyTypeReviewerClaimCircuitOpen, i, strings.Join(missing, ", "))
-			}
+			requireAnomalyDetails(v, i, anomaly, "role", "failure_class", "attempts", "first_failure", "last_failure", "recovery")
 		case models.AnomalyTypeObligationContentDrifted:
 			// A reviewer re-reads the section this names, so the record must
 			// locate it and say whose obligations rest on it; without the
@@ -86,70 +66,64 @@ func validateAnomalies(state *models.State, projectRoot string, skipSpecFileChec
 			// current_section must be present but may be empty: a dropped
 			// section has no current content to read, only the reviewed
 			// content the obligation no longer rests on.
-			missing := missingAnomalyDetails(anomaly, "path", "heading", "change",
+			requireAnomalyDetails(v, i, anomaly, "path", "heading", "change",
 				"reviewed_section", "current_section", "carriers", "obligations")
-			if len(missing) > 0 {
-				return fmt.Errorf("%s anomaly at index %d missing required details (%s)",
-					models.AnomalyTypeObligationContentDrifted, i, strings.Join(missing, ", "))
-			}
 		case models.AnomalyTypePendingMergeStalled:
 			// An operator finds the stuck merge from the reviewer that owns it
 			// and judges persistence from the rounds it spent.
-			missing := missingAnomalyDetails(anomaly, "agent_id", "role", "rounds")
-			if len(missing) > 0 {
-				return fmt.Errorf("%s anomaly at index %d missing required details (%s)",
-					models.AnomalyTypePendingMergeStalled, i, strings.Join(missing, ", "))
-			}
+			requireAnomalyDetails(v, i, anomaly, "agent_id", "role", "rounds")
 		}
 	}
-	return nil
 }
 
-// missingAnomalyDetails lists the required detail fields absent from anomaly, in
-// the order given, so the error names what the writer failed to record.
-func missingAnomalyDetails(anomaly models.Anomaly, required ...string) []string {
-	var missing []string
+// requireAnomalyDetails reports each required detail field absent from
+// anomaly as its own violation, in the order given, naming what the writer
+// failed to record.
+func requireAnomalyDetails(v *violations, index int, anomaly models.Anomaly, required ...string) {
 	for _, field := range required {
 		if anomaly.Details[field] == nil {
-			missing = append(missing, field)
+			v.add(fmt.Errorf("%s anomaly at index %d missing required details (%s)", anomaly.Type, index, field))
 		}
 	}
-	return missing
 }
 
 // validateHandoffEvents checks that:
 // (1) each HandoffEvent has non-zero Timestamp, non-empty Agent, and valid Trigger
 // (2) tasks in post-submission states have at least one event with trigger submission
 // (3) tasks in MERGED state have at least one event with trigger completion
-func validateHandoffEvents(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+func validateHandoffEvents(v *violations, state *models.State) {
 	for _, task := range state.Tasks {
 		for j, event := range task.HandoffEvents {
 			if event.Timestamp.IsZero() {
-				return fmt.Errorf("task %s: handoff_events[%d] has zero timestamp", task.ID, j)
+				v.add(fmt.Errorf("task %s: handoff_events[%d] has zero timestamp", task.ID, j))
 			}
 			if event.Agent == "" {
-				return fmt.Errorf("task %s: handoff_events[%d] has empty agent", task.ID, j)
+				v.add(fmt.Errorf("task %s: handoff_events[%d] has empty agent", task.ID, j))
 			}
 			if !isValidHandoffTrigger(event.Trigger) {
-				return fmt.Errorf("task %s: handoff_events[%d] has invalid trigger %q", task.ID, j, event.Trigger)
+				v.add(fmt.Errorf("task %s: handoff_events[%d] has invalid trigger %q", task.ID, j, event.Trigger))
 			}
 		}
 
 		if isPostSubmissionStatus(task.Status) {
-			if !hasHandoffTrigger(task.HandoffEvents, models.HandoffTriggerSubmission) {
-				return fmt.Errorf("task %s in status %s has no handoff event with trigger %q",
-					task.ID, task.Status, models.HandoffTriggerSubmission)
-			}
+			requireHandoffTrigger(v, task, models.HandoffTriggerSubmission)
 		}
-
 		if task.Status == models.TaskStatusMerged {
-			if !hasHandoffTrigger(task.HandoffEvents, models.HandoffTriggerCompletion) {
-				return fmt.Errorf("task %s in status %s has no handoff event with trigger %q",
-					task.ID, task.Status, models.HandoffTriggerCompletion)
-			}
+			requireHandoffTrigger(v, task, models.HandoffTriggerCompletion)
 		}
 	}
-	return nil
+}
+
+// requireHandoffTrigger reports a task lacking an event with trigger. The
+// message names the status for the operator; the identity leaves it out, so a
+// task moving between statuses that both require the event keeps one
+// violation rather than trading an old one for a new one.
+func requireHandoffTrigger(v *violations, task models.Task, trigger models.HandoffTrigger) {
+	if hasHandoffTrigger(task.HandoffEvents, trigger) {
+		return
+	}
+	v.addID(fmt.Sprintf("task %s has no handoff event with trigger %q", task.ID, trigger),
+		fmt.Errorf("task %s in status %s has no handoff event with trigger %q", task.ID, task.Status, trigger))
 }
 
 func isValidHandoffTrigger(trigger models.HandoffTrigger) bool {

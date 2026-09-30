@@ -216,7 +216,10 @@ func TestRepairSupersededDependencies_PrunesSupersessionPathDownstreamDependency
 	}
 }
 
-func TestRepairSupersededDependencies_SupersessionPathInvalidCandidateLeavesAuditUnchanged(t *testing.T) {
+// Removing a terminal task's edges cannot add a violation, so an unrelated
+// invalid record, which used to refuse this repair, is now left in place
+// (ADR-0165). Rollback on refusal is pinned by the precondition tests below.
+func TestRepairSupersededDependencies_SupersessionPathIgnoresUnrelatedInvalidRecord(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -245,36 +248,20 @@ func TestRepairSupersededDependencies_SupersessionPathInvalidCandidateLeavesAudi
 	}
 	setTaskSpecRefs(state)
 	testhelpers.WriteInitialState(t, stateFile, state)
-	logger := activitylog.New(paths.New(tmpDir).LogPath())
-	seedEntry := activitylog.Entry{Timestamp: now, Agent: "orchestrator-1", Action: "seed"}
-	if err := logger.Append(seedEntry); err != nil {
-		t.Fatalf("seed activity log: %v", err)
-	}
 
-	bb := db.New(stateFile)
-	beforeState, err := bb.Read()
+	result, err := RepairSupersededDependencies(tmpDir, "plan-old", "Repair terminal dependency metadata", "orchestrator-1")
 	if err != nil {
-		t.Fatalf("read initial state: %v", err)
+		t.Fatalf("RepairSupersededDependencies() error = %v, want the unrelated invalid task ignored", err)
 	}
-	beforeAudit, err := logger.Read()
+	if !slices.Equal(result.RemovedDependencies, []string{"retired-downstream-plan"}) {
+		t.Fatalf("RemovedDependencies = %v, want [retired-downstream-plan]", result.RemovedDependencies)
+	}
+	after, err := db.New(stateFile).Read()
 	if err != nil {
-		t.Fatalf("read initial activity log: %v", err)
+		t.Fatalf("read state: %v", err)
 	}
-	_, err = RepairSupersededDependencies(tmpDir, "plan-old", "Repair terminal dependency metadata", "orchestrator-1")
-	testhelpers.RequireErrorContains(t, err, "missing-task")
-	afterState, err := bb.Read()
-	if err != nil {
-		t.Fatalf("read state after rejected repair: %v", err)
-	}
-	afterAudit, err := logger.Read()
-	if err != nil {
-		t.Fatalf("read activity log after rejected repair: %v", err)
-	}
-	if !reflect.DeepEqual(afterState, beforeState) {
-		t.Fatalf("state changed after rejected repair\nbefore: %#v\nafter:  %#v", beforeState, afterState)
-	}
-	if !reflect.DeepEqual(afterAudit, beforeAudit) {
-		t.Fatalf("audit log changed after rejected repair\nbefore: %#v\nafter:  %#v", beforeAudit, afterAudit)
+	if got := after.FindTask("invalid-task").DependsOn; !slices.Equal(got, []string{"missing-task"}) {
+		t.Fatalf("invalid-task depends_on = %v, want untouched [missing-task]", got)
 	}
 }
 
@@ -309,27 +296,6 @@ func TestRepairSupersededDependencies_RejectsAlreadyValidTaskWithoutMutation(t *
 	}
 
 	assertRepairSupersededDependenciesRejectedWithoutMutation(t, state, "has no illegal downstream dependencies")
-}
-
-func TestRepairSupersededDependencies_RejectsStillInvalidCandidateWithoutMutation(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-	target := testhelpers.BuildTaskByStatus("plan-old", models.TaskStatusSuperseded, now)
-	target.RolePair = "code-planning-pair"
-	target.DependsOn = []string{"coding-a", "coding-b"}
-	target.RescopeReason = testhelpers.StringPtr("Replaced invalid plan")
-	invalid := testhelpers.BuildTaskByStatus("invalid-task", models.TaskStatusReady, now)
-	invalid.DependsOn = []string{"missing-task"}
-	state := testhelpers.CreateValidState()
-	state.Tasks = []models.Task{
-		target,
-		testhelpers.BuildTaskByStatus("coding-a", models.TaskStatusReady, now),
-		testhelpers.BuildTaskByStatus("coding-b", models.TaskStatusReady, now),
-		invalid,
-	}
-
-	assertRepairSupersededDependenciesRejectedWithoutMutation(t, state, "missing-task")
 }
 
 func assertRepairSupersededDependenciesRejectedWithoutMutation(t *testing.T, state *models.State, wantError string) {

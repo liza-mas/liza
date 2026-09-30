@@ -2,7 +2,7 @@ package ops
 
 import (
 	"fmt"
-	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -145,7 +145,7 @@ func repairSupersededDependenciesWithOptionalAuthority(projectRoot, taskID, reas
 			},
 		})
 
-		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 			return err
 		}
 

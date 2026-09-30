@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -17,45 +18,43 @@ import (
 // validateRequiredFields checks that the top-level state structure contains all
 // mandatory fields (version, goal, tasks, agents, config, sprint). Prevents
 // operating on a partially-initialised or corrupted state file.
-func validateRequiredFields(state *models.State, projectRoot string, skipSpecFileCheck bool) error {
+func validateRequiredFields(v *violations, state *models.State, projectRoot string, skipSpecFileCheck bool) {
 	if state.Version == 0 {
-		return fmt.Errorf("missing required field 'version'")
+		v.add(fmt.Errorf("missing required field 'version'"))
 	}
 
 	if state.Goal.ID == "" {
-		return fmt.Errorf("missing required field 'goal'")
+		v.add(fmt.Errorf("missing required field 'goal'"))
 	}
 
 	if state.Tasks == nil {
-		return fmt.Errorf("missing required field 'tasks'")
+		v.add(fmt.Errorf("missing required field 'tasks'"))
 	}
 
 	if state.Agents == nil {
-		return fmt.Errorf("missing required field 'agents'")
+		v.add(fmt.Errorf("missing required field 'agents'"))
 	}
 
 	if state.Config.IntegrationBranch == "" {
-		return fmt.Errorf("missing required field 'config'")
+		v.add(fmt.Errorf("missing required field 'config'"))
 	}
 
 	if state.Sprint.ID == "" {
-		return fmt.Errorf("missing required field 'sprint'")
+		v.add(fmt.Errorf("missing required field 'sprint'"))
 	}
 
 	if !skipSpecFileCheck && state.Goal.SpecRef != "" {
 		if err := checkSpecFileExists(projectRoot, state.Goal.SpecRef, state.Config.IntegrationBranch); err != nil {
-			return fmt.Errorf("goal %w", err)
+			v.add(fmt.Errorf("goal %w", err))
 		}
 	}
-
-	return nil
 }
 
 // validateTaskStates ensures every task has a valid status (either hardcoded or
 // pipeline-declared), a valid task type, and — for pipeline-configured goals —
 // a role_pair that maps to a known pipeline role pair. Prevents tasks from
 // entering undefined lifecycle states.
-func validateTaskStates(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver) error {
+func validateTaskStates(v *violations, state *models.State, resolver *pipeline.Resolver) {
 	for _, task := range state.Tasks {
 		statusValid := task.Status.IsValid()
 		if !statusValid && resolver != nil {
@@ -63,23 +62,21 @@ func validateTaskStates(state *models.State, projectRoot string, skipSpecFileChe
 			statusValid = task.Status.IsPipelineValid(resolver.AllDeclaredStates())
 		}
 		if !statusValid {
-			return fmt.Errorf("unknown task status '%s' for task %s", task.Status, task.ID)
+			v.add(fmt.Errorf("unknown task status '%s' for task %s", task.Status, task.ID))
 		}
 		if !task.EffectiveType().IsValid() {
-			return fmt.Errorf("unknown task type '%s' for task %s", task.Type, task.ID)
+			v.add(fmt.Errorf("unknown task type '%s' for task %s", task.Type, task.ID))
 		}
 
 		// Pipeline-goal tasks: role_pair is required unconditionally
 		if resolver != nil {
 			if task.RolePair == "" {
-				return fmt.Errorf("task %s missing role_pair (required for pipeline-configured goals)", task.ID)
-			}
-			if _, err := resolver.InitialStatus(task.RolePair); err != nil {
-				return fmt.Errorf("task %s has invalid role_pair %q: %w", task.ID, task.RolePair, err)
+				v.add(fmt.Errorf("task %s missing role_pair (required for pipeline-configured goals)", task.ID))
+			} else if _, err := resolver.InitialStatus(task.RolePair); err != nil {
+				v.add(fmt.Errorf("task %s has invalid role_pair %q: %w", task.ID, task.RolePair, err))
 			}
 		}
 	}
-	return nil
 }
 
 // statusClassifier resolves whether a TaskStatus belongs to a given lifecycle
@@ -177,24 +174,21 @@ func (sc *statusClassifier) IsRejected(s models.TaskStatus) bool {
 // integration_fix history consistency, failed_by uniqueness, parent_task
 // referential integrity, and output entry completeness. Prevents invalid task
 // state combinations that would cause downstream agent or merge failures.
-func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) error {
+// Each constraint is checked on its own, so one defect of a task does not hide
+// another.
+func validateTaskInvariants(v *violations, state *models.State, projectRoot string, skipSpecFileCheck bool, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig) {
 	assignments := make(map[string][]string) // agent ID -> task IDs
 	taskIDs := buildTaskIDSet(state.Tasks)
 	sc := newStatusClassifier(resolver, cfg)
 
 	for _, task := range state.Tasks {
-		if err := ValidateTaskLifecycle(&task); err != nil {
-			return err
+		validateTaskLifecycle(v, &task)
+		validateStatusFields(v, &task, &sc)
+		for _, err := range models.ValidationSafetyViolations("validation", task.Validation, task.DestructiveDB) {
+			v.add(fmt.Errorf("task %s %w", task.ID, err))
 		}
-		if err := validateStatusFields(&task, &sc); err != nil {
-			return err
-		}
-		if err := models.ValidateValidationSafety("validation", task.Validation, task.DestructiveDB); err != nil {
-			return fmt.Errorf("task %s %w", task.ID, err)
-		}
-
-		if err := models.ValidateValidationPrerequisites(task.Validation, task.ValidationPrerequisites); err != nil {
-			return fmt.Errorf("task %s %w", task.ID, err)
+		for _, err := range models.ValidationPrerequisiteViolations(task.Validation, task.ValidationPrerequisites) {
+			v.add(fmt.Errorf("task %s %w", task.ID, err))
 		}
 
 		// Track assignments for duplicate check (executing tasks count as active)
@@ -206,51 +200,37 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		if sc.IsExecuting(task.Status) && task.Worktree != nil && projectRoot != "" {
 			wtPath := filepath.Join(projectRoot, *task.Worktree)
 			if _, err := os.Stat(wtPath); os.IsNotExist(err) {
-				return fmt.Errorf("%s task %s has worktree=%s but directory does not exist", task.Status, task.ID, *task.Worktree)
+				// The status is context, not the constraint: moving between
+				// executing statuses keeps the same missing directory.
+				v.addID(fmt.Sprintf("task %s worktree=%s directory does not exist", task.ID, *task.Worktree),
+					fmt.Errorf("%s task %s has worktree=%s but directory does not exist", task.Status, task.ID, *task.Worktree))
 			}
 		}
 
 		if requiresCompletionFields(task.Status, resolver, cfg) {
 			if task.DoneWhen == "" {
-				return fmt.Errorf("non-DRAFT task missing done_when: %s", task.ID)
+				v.add(fmt.Errorf("non-DRAFT task missing done_when: %s", task.ID))
 			}
 			if task.SpecRef == "" {
-				return fmt.Errorf("non-DRAFT task missing spec_ref: %s", task.ID)
+				v.add(fmt.Errorf("non-DRAFT task missing spec_ref: %s", task.ID))
 			}
 		}
 
-		validateArtifactRefs := !artifactRefsRetired(task)
-		if validateArtifactRefs {
-			if task.SpecRef != "" && strings.Contains(task.SpecRef, ".worktrees/") {
-				return fmt.Errorf("task %s spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.SpecRef)
-			}
-			if !skipSpecFileCheck && task.SpecRef != "" {
-				if err := checkArtifactRefFileExists(projectRoot, "spec_ref", task.SpecRef, state.Config.IntegrationBranch, task.ID); err != nil {
-					return err
+		if !artifactRefsRetired(task) {
+			for _, ref := range []struct{ field, value string }{
+				{"spec_ref", task.SpecRef},
+				{"epic_ref", task.EpicRef},
+				{"plan_ref", task.PlanRef},
+				{"arch_ref", task.ArchRef},
+			} {
+				if ref.value == "" {
+					continue
 				}
-			}
-			if task.EpicRef != "" && strings.Contains(task.EpicRef, ".worktrees/") {
-				return fmt.Errorf("task %s epic_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.EpicRef)
-			}
-			if !skipSpecFileCheck && task.EpicRef != "" {
-				if err := checkArtifactRefFileExists(projectRoot, "epic_ref", task.EpicRef, state.Config.IntegrationBranch, task.ID); err != nil {
-					return err
+				if strings.Contains(ref.value, ".worktrees/") {
+					v.add(fmt.Errorf("task %s %s contains worktree prefix (must be repo-relative): %s", task.ID, ref.field, ref.value))
 				}
-			}
-			if task.PlanRef != "" && strings.Contains(task.PlanRef, ".worktrees/") {
-				return fmt.Errorf("task %s plan_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.PlanRef)
-			}
-			if !skipSpecFileCheck && task.PlanRef != "" {
-				if err := checkArtifactRefFileExists(projectRoot, "plan_ref", task.PlanRef, state.Config.IntegrationBranch, task.ID); err != nil {
-					return err
-				}
-			}
-			if task.ArchRef != "" && strings.Contains(task.ArchRef, ".worktrees/") {
-				return fmt.Errorf("task %s arch_ref contains worktree prefix (must be repo-relative): %s", task.ID, task.ArchRef)
-			}
-			if !skipSpecFileCheck && task.ArchRef != "" {
-				if err := checkArtifactRefFileExists(projectRoot, "arch_ref", task.ArchRef, state.Config.IntegrationBranch, task.ID); err != nil {
-					return err
+				if !skipSpecFileCheck {
+					v.add(checkArtifactRefFileExists(projectRoot, ref.field, ref.value, state.Config.IntegrationBranch, task.ID))
 				}
 			}
 		}
@@ -265,7 +245,7 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 				}
 			}
 			if !hasFailedEvent {
-				return fmt.Errorf("task %s has integration_fix:true but no INTEGRATION_FAILED event in history", task.ID)
+				v.add(fmt.Errorf("task %s has integration_fix:true but no INTEGRATION_FAILED event in history", task.ID))
 			}
 		}
 
@@ -275,7 +255,8 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 			for _, agent := range task.FailedBy {
 				if seen[agent] {
 					stateRelPath := filepath.ToSlash(filepath.Join(paths.ProjectDirName(), paths.StateFileName))
-					return fmt.Errorf("task %s has duplicate agent IDs in failed_by (manually edit %s to remove duplicates)", task.ID, stateRelPath)
+					v.addID(fmt.Sprintf("task %s duplicate failed_by agent %q", task.ID, agent),
+						fmt.Errorf("task %s has duplicate agent IDs in failed_by (manually edit %s to remove duplicates)", task.ID, stateRelPath))
 				}
 				seen[agent] = true
 			}
@@ -284,154 +265,196 @@ func validateTaskInvariants(state *models.State, projectRoot string, skipSpecFil
 		// parent_task / parent_tasks must reference existing tasks
 		for _, parentID := range task.EffectiveParentTasks() {
 			if !taskIDs[parentID] {
-				return fmt.Errorf("task %s has parent_task referencing non-existent task '%s'", task.ID, parentID)
+				v.add(fmt.Errorf("task %s has parent_task referencing non-existent task '%s'", task.ID, parentID))
 			}
 		}
 
-		if err := validateTaskOutput(&task, validateArtifactRefs); err != nil {
-			return err
-		}
-		if err := validateAcceptanceState(&task); err != nil {
-			return err
-		}
-		if err := validatePlanCheck(&task, resolver); err != nil {
-			return err
-		}
+		validateTaskOutput(v, &task, !artifactRefsRetired(task))
+		validateAcceptanceState(v, &task)
+		validatePlanCheck(v, &task, resolver)
 
 		// Attempt must be 0 (unset/legacy), 1, or 2
 		if task.Attempt < 0 || task.Attempt > 2 {
-			return fmt.Errorf("task %s has invalid attempt value %d", task.ID, task.Attempt)
+			v.add(fmt.Errorf("task %s has invalid attempt value %d", task.ID, task.Attempt))
 		}
 
 		// Cross-check: attempt 2 in initial status must have reset counters
 		if task.Attempt == 2 && sc.IsInitial(task.Status) {
 			if task.Iteration != 0 {
-				return fmt.Errorf("task %s at attempt 2 in initial status has non-zero iteration %d", task.ID, task.Iteration)
+				v.add(fmt.Errorf("task %s at attempt 2 in initial status has non-zero iteration %d", task.ID, task.Iteration))
 			}
 			if task.ReviewCyclesCurrent != 0 {
-				return fmt.Errorf("task %s at attempt 2 in initial status has non-zero review_cycles_current %d", task.ID, task.ReviewCyclesCurrent)
+				v.add(fmt.Errorf("task %s at attempt 2 in initial status has non-zero review_cycles_current %d", task.ID, task.ReviewCyclesCurrent))
 			}
 		}
 	}
 
 	// Check for duplicate assignments
-	for agent, taskIDs := range assignments {
-		if len(taskIDs) > 1 {
-			return fmt.Errorf("agent %s assigned to multiple active tasks simultaneously: %v", agent, taskIDs)
+	agents := make([]string, 0, len(assignments))
+	for agent := range assignments {
+		agents = append(agents, agent)
+	}
+	sort.Strings(agents)
+	for _, agent := range agents {
+		taskIDs := assignments[agent]
+		sort.Strings(taskIDs)
+		// One violation per conflicting pair: releasing one task leaves the
+		// other pairs' identities intact, and assigning a further task adds
+		// pairs of its own.
+		for i := range taskIDs {
+			for _, other := range taskIDs[i+1:] {
+				v.add(fmt.Errorf("agent %s assigned to multiple active tasks simultaneously: [%s %s]", agent, taskIDs[i], other))
+			}
 		}
 	}
-
-	return nil
 }
 
 // validatePlanCheck checks the persisted shape of an orchestrator plan
 // disposition. Admission rules (domain, dependencies, sticky holds) live in ops.
-func validatePlanCheck(task *models.Task, resolver *pipeline.Resolver) error {
+func validatePlanCheck(v *violations, task *models.Task, resolver *pipeline.Resolver) {
 	check := task.PlanCheck
 	if check == nil {
-		return nil
+		return
 	}
 	switch check.Verdict {
 	case models.PlanCheckPassed:
 	case models.PlanCheckHeld:
 		if strings.TrimSpace(check.Ask) == "" {
-			return fmt.Errorf("task %s plan_check held requires ask", task.ID)
+			v.add(fmt.Errorf("task %s plan_check held requires ask", task.ID))
 		}
 	default:
-		return fmt.Errorf("task %s plan_check has invalid verdict %q", task.ID, check.Verdict)
+		v.add(fmt.Errorf("task %s plan_check has invalid verdict %q", task.ID, check.Verdict))
 	}
-	if check.By == "" || check.At.IsZero() {
-		return fmt.Errorf("task %s plan_check requires by and at", task.ID)
+	if check.By == "" {
+		v.add(fmt.Errorf("task %s plan_check requires by and at (missing by)", task.ID))
+	}
+	if check.At.IsZero() {
+		v.add(fmt.Errorf("task %s plan_check requires by and at (missing at)", task.ID))
 	}
 	if task.Status != models.TaskStatusMerged {
-		return fmt.Errorf("task %s plan_check requires MERGED status, got %s", task.ID, task.Status)
+		v.addID(fmt.Sprintf("task %s plan_check requires MERGED status", task.ID),
+			fmt.Errorf("task %s plan_check requires MERGED status, got %s", task.ID, task.Status))
 	}
 	if resolver != nil && !resolver.TransitionSourcePairs()[task.RolePair] {
-		return fmt.Errorf("task %s plan_check on non-planning role_pair %q", task.ID, task.RolePair)
+		v.add(fmt.Errorf("task %s plan_check on non-planning role_pair %q", task.ID, task.RolePair))
 	}
-	return nil
 }
 
 // Admission performs repository checks. State validation only checks persisted
 // shape, leaving missing receipts repairable through update-review-commit.
-func validateAcceptanceState(task *models.Task) error {
-	if err := validateArchivedFields(task); err != nil {
-		return err
-	}
+func validateAcceptanceState(v *violations, task *models.Task) {
+	validateArchivedFields(v, task)
 	source := task.AcceptanceSource
 	if source == nil {
 		if task.AcceptanceReceipt != nil || len(task.Archived) > 0 {
-			return fmt.Errorf("task %s acceptance_receipt requires acceptance_source", task.ID)
+			v.add(fmt.Errorf("task %s acceptance_receipt requires acceptance_source", task.ID))
 		}
-		return nil
+		return
 	}
-	if source.Ref == "" || source.ParentTask == "" {
-		return fmt.Errorf("task %s acceptance_source requires ref and parent_task", task.ID)
+	if source.Ref == "" {
+		v.add(fmt.Errorf("task %s acceptance_source requires ref and parent_task (missing ref)", task.ID))
 	}
-	for _, value := range []string{source.Commit, source.Blob, source.ParentReviewCommit} {
-		if _, err := hex.DecodeString(value); err != nil || len(value) != 40 || strings.ToLower(value) != value {
-			return fmt.Errorf("task %s acceptance_source requires immutable lowercase object IDs", task.ID)
+	if source.ParentTask == "" {
+		v.add(fmt.Errorf("task %s acceptance_source requires ref and parent_task (missing parent_task)", task.ID))
+	}
+	for _, id := range []struct{ field, value string }{
+		{"commit", source.Commit},
+		{"blob", source.Blob},
+		{"parent_review_commit", source.ParentReviewCommit},
+	} {
+		if _, err := hex.DecodeString(id.value); err != nil || len(id.value) != 40 || strings.ToLower(id.value) != id.value {
+			v.add(fmt.Errorf("task %s acceptance_source requires immutable lowercase object IDs (%s)", task.ID, id.field))
 		}
 	}
 	receipt := task.AcceptanceReceipt
 	if receipt == nil {
-		return nil
+		return
 	}
-	if receipt.Version != 1 || task.ReviewCommit == nil || receipt.ReviewCommit != *task.ReviewCommit || receipt.Source != *source {
-		return fmt.Errorf("task %s acceptance_receipt does not match its source and review_commit", task.ID)
+	for _, check := range []struct {
+		name   string
+		broken bool
+	}{
+		{"version", receipt.Version != 1},
+		{"review_commit", task.ReviewCommit == nil || receipt.ReviewCommit != *task.ReviewCommit},
+		{"source", receipt.Source != *source},
+	} {
+		if check.broken {
+			v.add(fmt.Errorf("task %s acceptance_receipt does not match its source and review_commit (%s)", task.ID, check.name))
+		}
 	}
-	if receipt.ManifestPath == "" || len(receipt.Mappings) == 0 || len(receipt.Mappings) > 256 || len(receipt.Commands) > 64 {
-		return fmt.Errorf("task %s acceptance_receipt has invalid manifest or result bounds", task.ID)
+	for _, check := range []struct {
+		name   string
+		broken bool
+	}{
+		{"manifest_path", receipt.ManifestPath == ""},
+		{"mappings", len(receipt.Mappings) == 0 || len(receipt.Mappings) > 256},
+		{"commands", len(receipt.Commands) > 64},
+	} {
+		if check.broken {
+			v.add(fmt.Errorf("task %s acceptance_receipt has invalid manifest or result bounds (%s)", task.ID, check.name))
+		}
 	}
 	if _, err := hex.DecodeString(receipt.ManifestBlob); err != nil || len(receipt.ManifestBlob) != 40 {
-		return fmt.Errorf("task %s acceptance_receipt requires manifest blob identity", task.ID)
+		v.add(fmt.Errorf("task %s acceptance_receipt requires manifest blob identity", task.ID))
 	}
 	totalOutput := 0
-	for _, command := range receipt.Commands {
+	// A receipt is written once and never edited, so a command's index is a
+	// stable owner: the same defect on two commands stays two violations.
+	for i, command := range receipt.Commands {
 		totalOutput += len(command.Output)
-		if command.ExitCode != 0 || command.StartedAt.IsZero() || command.FinishedAt.Before(command.StartedAt) {
-			return fmt.Errorf("task %s acceptance_receipt contains unsuccessful execution", task.ID)
-		}
-		if _, err := hex.DecodeString(command.CommandSHA256); err != nil || len(command.CommandSHA256) != 64 {
-			return fmt.Errorf("task %s acceptance_receipt requires canonical command identity", task.ID)
-		}
+		v.within(fmt.Sprintf("task %s acceptance_receipt command %d", task.ID, i), func(v *violations) {
+			for _, check := range []struct {
+				name   string
+				broken bool
+			}{
+				{"exit code", command.ExitCode != 0},
+				{"started_at", command.StartedAt.IsZero()},
+				{"finished_at", command.FinishedAt.Before(command.StartedAt)},
+			} {
+				if check.broken {
+					v.add(fmt.Errorf("task %s acceptance_receipt contains unsuccessful execution (command %d %s)", task.ID, i, check.name))
+				}
+			}
+			if _, err := hex.DecodeString(command.CommandSHA256); err != nil || len(command.CommandSHA256) != 64 {
+				v.add(fmt.Errorf("task %s acceptance_receipt requires canonical command identity (command %d)", task.ID, i))
+			}
+		})
 	}
 	if totalOutput > 1024*1024 {
-		return fmt.Errorf("task %s acceptance_receipt output exceeds 1 MiB", task.ID)
+		v.add(fmt.Errorf("task %s acceptance_receipt output exceeds 1 MiB", task.ID))
 	}
-	return nil
 }
 
 // validateArchivedFields checks the refs of fields moved to archive objects.
 // Like receipts, it checks shape only and opens no files: one ref per field,
 // only on terminal tasks, never alongside the live value it replaces.
-func validateArchivedFields(task *models.Task) error {
+func validateArchivedFields(v *violations, task *models.Task) {
 	if len(task.Archived) == 0 {
-		return nil
+		return
 	}
 	if !task.Status.IsTerminal() {
-		return fmt.Errorf("task %s in status %s has archived fields; only terminal tasks may", task.ID, task.Status)
+		v.addID(fmt.Sprintf("task %s has archived fields but is not terminal", task.ID),
+			fmt.Errorf("task %s in status %s has archived fields; only terminal tasks may", task.ID, task.Status))
 	}
 	seen := map[string]bool{}
 	for _, ref := range task.Archived {
 		if ref.Field != models.ArchivedFieldAcceptanceReceipt {
-			return fmt.Errorf("task %s archived field %q is not archivable", task.ID, ref.Field)
+			v.add(fmt.Errorf("task %s archived field %q is not archivable", task.ID, ref.Field))
 		}
 		if seen[ref.Field] {
-			return fmt.Errorf("task %s has more than one archived %s", task.ID, ref.Field)
+			v.add(fmt.Errorf("task %s has more than one archived %s", task.ID, ref.Field))
 		}
 		seen[ref.Field] = true
 		if _, err := hex.DecodeString(ref.SHA256); err != nil || len(ref.SHA256) != 64 || strings.ToLower(ref.SHA256) != ref.SHA256 {
-			return fmt.Errorf("task %s archived %s requires a lowercase SHA-256 digest", task.ID, ref.Field)
+			v.add(fmt.Errorf("task %s archived %s requires a lowercase SHA-256 digest", task.ID, ref.Field))
 		}
 		if ref.ArchivedAt.IsZero() {
-			return fmt.Errorf("task %s archived %s requires archived_at", task.ID, ref.Field)
+			v.add(fmt.Errorf("task %s archived %s requires archived_at", task.ID, ref.Field))
 		}
 	}
 	if seen[models.ArchivedFieldAcceptanceReceipt] && task.AcceptanceReceipt != nil {
-		return fmt.Errorf("task %s has both a live and an archived acceptance_receipt", task.ID)
+		v.add(fmt.Errorf("task %s has both a live and an archived acceptance_receipt", task.ID))
 	}
-	return nil
 }
 
 // validateStatusFields checks that each task status has the fields required by
@@ -439,112 +462,126 @@ func validateArchivedFields(task *models.Task) error {
 // base_commit, and lease_expires; reviewing tasks need reviewing_by and
 // review_lease_expires). Prevents tasks from entering states without the
 // metadata needed for agents to operate on them.
-func validateStatusFields(task *models.Task, sc *statusClassifier) error {
+//
+// Messages name the status for the operator. Identities name the phase and
+// the field instead, so a task moving between statuses of the same phase keeps
+// its violation rather than trading an old one for a new one.
+func validateStatusFields(v *violations, task *models.Task, sc *statusClassifier) {
+	missing := func(phase, field string) {
+		v.addID(fmt.Sprintf("task %s: %s task without %s", task.ID, phase, field),
+			fmt.Errorf("%s task without %s: %s", task.Status, field, task.ID))
+	}
+
 	if sc.IsInitial(task.Status) && task.AssignedTo != nil {
-		return fmt.Errorf("%s task with assigned_to: %s", task.Status, task.ID)
+		v.addID(fmt.Sprintf("task %s: initial task with assigned_to", task.ID),
+			fmt.Errorf("%s task with assigned_to: %s", task.Status, task.ID))
 	}
 
 	if sc.IsExecuting(task.Status) {
 		if task.AssignedTo == nil {
-			return fmt.Errorf("%s task without assigned_to: %s", task.Status, task.ID)
+			missing("executing", "assigned_to")
 		}
 		if task.Worktree == nil {
-			return fmt.Errorf("%s task without worktree: %s", task.Status, task.ID)
+			missing("executing", "worktree")
 		}
 		if !task.IntegrationFix && task.BaseCommit == nil {
-			return fmt.Errorf("%s task without base_commit: %s", task.Status, task.ID)
+			missing("executing", "base_commit")
 		}
 		if task.LeaseExpires == nil {
-			return fmt.Errorf("%s task without lease_expires: %s", task.Status, task.ID)
+			missing("executing", "lease_expires")
 		}
 	}
 
 	if sc.IsSubmitted(task.Status) && task.ReviewCommit == nil {
-		return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
+		missing("submitted", "review_commit")
 	}
 
 	if sc.IsReviewing(task.Status) {
 		if task.ReviewingBy == nil {
-			return fmt.Errorf("%s task without reviewing_by: %s", task.Status, task.ID)
+			missing("reviewing", "reviewing_by")
 		}
 		if task.ReviewLeaseExpires == nil {
-			return fmt.Errorf("%s task without review_lease_expires: %s", task.Status, task.ID)
+			missing("reviewing", "review_lease_expires")
 		}
 		if task.ReviewCommit == nil {
-			return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
+			missing("reviewing", "review_commit")
 		}
 	}
 
 	if sc.IsApproved(task.Status) && task.ReviewCommit == nil {
-		return fmt.Errorf("%s task without review_commit: %s", task.Status, task.ID)
+		missing("approved", "review_commit")
 	}
 	if task.IntegrationFailure != nil && disallowsIntegrationFailure(task.Status, sc) {
-		return fmt.Errorf("%s task has stale integration_failure outside integration recovery: %s", task.Status, task.ID)
+		v.addID(fmt.Sprintf("task %s: stale integration_failure outside integration recovery", task.ID),
+			fmt.Errorf("%s task has stale integration_failure outside integration recovery: %s", task.Status, task.ID))
 	}
 
 	if task.Status == models.TaskStatusMerged && task.Worktree != nil {
-		return fmt.Errorf("MERGED task still has worktree: %s", task.ID)
+		v.add(fmt.Errorf("MERGED task still has worktree: %s", task.ID))
 	}
 
 	if task.Status == models.TaskStatusBlocked {
 		if task.BlockedReason == nil {
-			return fmt.Errorf("BLOCKED task without blocked_reason: %s", task.ID)
+			v.add(fmt.Errorf("BLOCKED task without blocked_reason: %s", task.ID))
 		}
 		if len(task.BlockedQuestions) == 0 {
-			return fmt.Errorf("BLOCKED task without blocked_questions: %s", task.ID)
+			v.add(fmt.Errorf("BLOCKED task without blocked_questions: %s", task.ID))
 		}
-		if task.RepairRequest != nil && strings.TrimSpace(task.RepairRequest.Operation) == "" {
-			return fmt.Errorf("BLOCKED task repair_request without operation: %s", task.ID)
-		}
-		if task.RepairRequest != nil && strings.TrimSpace(task.RepairRequest.Target) == "" {
-			return fmt.Errorf("BLOCKED task repair_request without target: %s", task.ID)
-		}
-		if task.RepairRequest != nil {
-			if err := validateRepairRequestShape(task); err != nil {
-				return err
+		if request := task.RepairRequest; request != nil {
+			if strings.TrimSpace(request.Operation) == "" {
+				v.add(fmt.Errorf("BLOCKED task repair_request without operation: %s", task.ID))
 			}
-		}
-		if task.RepairRequest != nil && len(nonEmptyStrings(task.RepairRequest.Evidence)) == 0 {
-			return fmt.Errorf("BLOCKED task repair_request without evidence: %s", task.ID)
-		}
-		if task.RepairRequest != nil && len(nonEmptyStrings(task.RepairRequest.Validation)) == 0 {
-			return fmt.Errorf("BLOCKED task repair_request without validation: %s", task.ID)
+			if strings.TrimSpace(request.Target) == "" {
+				v.add(fmt.Errorf("BLOCKED task repair_request without target: %s", task.ID))
+			}
+			validateRepairRequestShape(v, task)
+			if len(nonEmptyStrings(request.Evidence)) == 0 {
+				v.add(fmt.Errorf("BLOCKED task repair_request without evidence: %s", task.ID))
+			}
+			if len(nonEmptyStrings(request.Validation)) == 0 {
+				v.add(fmt.Errorf("BLOCKED task repair_request without validation: %s", task.ID))
+			}
 		}
 	}
 
-	if sc.IsRejected(task.Status) && task.RejectionReason == nil {
-		return fmt.Errorf("%s task without rejection_reason: %s", task.Status, task.ID)
-	}
 	if sc.IsRejected(task.Status) {
+		if task.RejectionReason == nil {
+			missing("rejected", "rejection_reason")
+		}
 		if task.Worktree != nil {
 			canonicalWorktree := filepath.ToSlash(filepath.Join(paths.WorktreesDirName, task.ID))
 			if *task.Worktree != canonicalWorktree {
-				return fmt.Errorf("%s task has worktree=%q, want %q", task.Status, *task.Worktree, canonicalWorktree)
+				v.addID(fmt.Sprintf("task %s: rejected task worktree=%q, want %q", task.ID, *task.Worktree, canonicalWorktree),
+					fmt.Errorf("%s task has worktree=%q, want %q", task.Status, *task.Worktree, canonicalWorktree))
 			}
 		}
 		if task.AssignedTo != nil && task.LeaseExpires == nil {
-			return fmt.Errorf("%s task has assigned_to without lease_expires: %s", task.Status, task.ID)
+			v.addID(fmt.Sprintf("task %s: rejected task has assigned_to without lease_expires", task.ID),
+				fmt.Errorf("%s task has assigned_to without lease_expires: %s", task.Status, task.ID))
 		}
 		if task.AssignedTo == nil && task.LeaseExpires != nil {
-			return fmt.Errorf("%s task has lease_expires without assigned_to: %s", task.Status, task.ID)
+			v.addID(fmt.Sprintf("task %s: rejected task has lease_expires without assigned_to", task.ID),
+				fmt.Errorf("%s task has lease_expires without assigned_to: %s", task.Status, task.ID))
 		}
 		if task.AssignedTo == nil {
 			if task.Worktree != nil && task.BaseCommit == nil {
-				return fmt.Errorf("%s released task has worktree without base_commit: %s", task.Status, task.ID)
+				v.addID(fmt.Sprintf("task %s: released rejected task has worktree without base_commit", task.ID),
+					fmt.Errorf("%s released task has worktree without base_commit: %s", task.Status, task.ID))
 			}
 			if task.Worktree == nil && task.BaseCommit != nil {
-				return fmt.Errorf("%s released task has base_commit without worktree: %s", task.Status, task.ID)
+				v.addID(fmt.Sprintf("task %s: released rejected task has base_commit without worktree", task.ID),
+					fmt.Errorf("%s released task has base_commit without worktree: %s", task.Status, task.ID))
 			}
 		}
 	}
 
 	if task.Status == models.TaskStatusSuperseded {
 		if task.RescopeReason == nil {
-			return fmt.Errorf("SUPERSEDED task without rescope_reason: %s", task.ID)
+			v.add(fmt.Errorf("SUPERSEDED task without rescope_reason: %s", task.ID))
 		}
 	}
 
-	return validateTaskRejectionRCA(task)
+	validateTaskRejectionRCA(v, task)
 }
 
 // Structural bounds for the rejection-RCA request payloads. Every bound below
@@ -741,154 +778,139 @@ func payloadDiagnostic(field, constraint, valueClass string) models.FieldDiagnos
 // request boundaries use, and its disposition. A BLOCKED task whose gate is
 // open must additionally carry the typed blocked_reason token, so the reason
 // class stays legible to consumers that only read state.
-func validateTaskRejectionRCA(task *models.Task) error {
-	if err := validateRejectionRCAGateReason(task); err != nil {
-		return err
-	}
+func validateTaskRejectionRCA(v *violations, task *models.Task) {
+	validateRejectionRCAGateReason(v, task)
 	record := task.RejectionRCA
 	if record == nil {
-		return nil
+		return
 	}
-	if err := validateRejectionRCASeededFields(task.ID, record); err != nil {
-		return err
-	}
+	validateRejectionRCASeededFields(v, task.ID, record)
 	// A fingerprint is written only together with the caller fields, so it is
 	// the marker that distinguishes a seeded record from a recorded one.
 	recorded := record.Fingerprint != ""
 	if recorded {
-		if err := validateRejectionRCARecordedFields(task.ID, record); err != nil {
-			return err
-		}
+		validateRejectionRCARecordedFields(v, task.ID, record)
 	}
-	return validateRejectionRCADisposition(task.ID, record.Disposition, recorded)
+	validateRejectionRCADisposition(v, task.ID, record.Disposition, recorded)
 }
 
-func validateRejectionRCAGateReason(task *models.Task) error {
+func validateRejectionRCAGateReason(v *violations, task *models.Task) {
 	if task.Status != models.TaskStatusBlocked || !task.RejectionRCAGateOpen() {
-		return nil
+		return
 	}
 	reason := ""
 	if task.BlockedReason != nil {
 		reason = strings.TrimSpace(*task.BlockedReason)
 	}
 	if strings.HasPrefix(reason, models.BlockedReasonRejectionRCARequired) {
-		return nil
+		return
 	}
-	return fmt.Errorf("BLOCKED task with an open rejection_rca gate requires a blocked_reason starting with %s: %s",
-		models.BlockedReasonRejectionRCARequired, task.ID)
+	v.add(fmt.Errorf("BLOCKED task with an open rejection_rca gate requires a blocked_reason starting with %s: %s",
+		models.BlockedReasonRejectionRCARequired, task.ID))
 }
 
-func validateRejectionRCASeededFields(taskID string, record *models.RejectionRCARecord) error {
+func validateRejectionRCASeededFields(v *violations, taskID string, record *models.RejectionRCARecord) {
 	if record.SchemaVersion != models.RejectionRCASchemaVersion {
-		return fmt.Errorf("task %s rejection_rca schema_version must be %d", taskID, models.RejectionRCASchemaVersion)
+		v.add(fmt.Errorf("task %s rejection_rca schema_version must be %d", taskID, models.RejectionRCASchemaVersion))
 	}
 	if record.Threshold < 1 {
-		return fmt.Errorf("task %s rejection_rca threshold must be at least 1", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca threshold must be at least 1", taskID))
 	}
 	if record.RejectionCount < record.Threshold {
-		return fmt.Errorf("task %s rejection_rca rejection_count must be at least its threshold: %d", taskID, record.Threshold)
+		v.add(fmt.Errorf("task %s rejection_rca rejection_count must be at least its threshold: %d", taskID, record.Threshold))
 	}
 	if record.GatedAt.IsZero() {
-		return fmt.Errorf("task %s rejection_rca requires gated_at", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca requires gated_at", taskID))
 	}
-	return nil
 }
 
-func validateRejectionRCARecordedFields(taskID string, record *models.RejectionRCARecord) error {
-	if diagnostics := ValidateRejectionRCARequest(record.Request()); len(diagnostics) > 0 {
-		return fmt.Errorf("task %s rejection_rca %s violates: %s", taskID, diagnostics[0].Field, diagnostics[0].Constraint)
+func validateRejectionRCARecordedFields(v *violations, taskID string, record *models.RejectionRCARecord) {
+	for _, diagnostic := range ValidateRejectionRCARequest(record.Request()) {
+		v.add(fmt.Errorf("task %s rejection_rca %s violates: %s", taskID, diagnostic.Field, diagnostic.Constraint))
 	}
 	if strings.TrimSpace(record.RecordedBy) == "" {
-		return fmt.Errorf("task %s rejection_rca requires recorded_by", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca requires recorded_by", taskID))
 	}
 	if record.RecordedAt == nil || record.RecordedAt.IsZero() {
-		return fmt.Errorf("task %s rejection_rca requires recorded_at", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca requires recorded_at", taskID))
 	}
-	return nil
 }
 
-func validateRejectionRCADisposition(taskID string, disposition *models.RejectionRCADisposition, recorded bool) error {
+func validateRejectionRCADisposition(v *violations, taskID string, disposition *models.RejectionRCADisposition, recorded bool) {
 	if disposition == nil {
-		return nil
+		return
 	}
 	if !recorded {
-		return fmt.Errorf("task %s rejection_rca disposition requires a recorded RCA", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca disposition requires a recorded RCA", taskID))
 	}
 	if !models.IsRecoveryPath(disposition.RecoveryPath) {
-		return fmt.Errorf("task %s rejection_rca disposition has an unknown recovery_path", taskID)
-	}
-	if disposition.RestoreMode != models.RejectionRCARestoreMode(disposition.RecoveryPath) {
-		return fmt.Errorf("task %s rejection_rca disposition restore_mode does not match its recovery_path", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca disposition has an unknown recovery_path", taskID))
+	} else if disposition.RestoreMode != models.RejectionRCARestoreMode(disposition.RecoveryPath) {
+		v.add(fmt.Errorf("task %s rejection_rca disposition restore_mode does not match its recovery_path", taskID))
 	}
 	if strings.TrimSpace(disposition.Actor) == "" {
-		return fmt.Errorf("task %s rejection_rca disposition requires actor", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca disposition requires actor", taskID))
 	}
 	if disposition.DecidedAt.IsZero() {
-		return fmt.Errorf("task %s rejection_rca disposition requires decided_at", taskID)
+		v.add(fmt.Errorf("task %s rejection_rca disposition requires decided_at", taskID))
 	}
-	return nil
 }
 
-func validateRepairRequestShape(task *models.Task) error {
+func validateRepairRequestShape(v *violations, task *models.Task) {
 	request := task.RepairRequest
 	if request.Operation != models.RepairOperationApplyDependencyRepair {
 		if strings.TrimSpace(request.Command) == "" {
-			return fmt.Errorf("BLOCKED task repair_request without command: %s", task.ID)
+			v.add(fmt.Errorf("BLOCKED task repair_request without command: %s", task.ID))
 		}
 		if request.DependencyUpdates != nil {
-			return fmt.Errorf("BLOCKED task command-based repair_request must not include dependency_updates: %s", task.ID)
+			v.add(fmt.Errorf("BLOCKED task command-based repair_request must not include dependency_updates: %s", task.ID))
 		}
-		return nil
+		return
 	}
 
 	if strings.TrimSpace(request.Target) != task.ID {
-		return fmt.Errorf("BLOCKED task declarative repair_request target must match blocked task: %s", task.ID)
+		v.add(fmt.Errorf("BLOCKED task declarative repair_request target must match blocked task: %s", task.ID))
 	}
 	if strings.TrimSpace(request.Command) != "" {
-		return fmt.Errorf("BLOCKED task declarative repair_request must not include command: %s", task.ID)
+		v.add(fmt.Errorf("BLOCKED task declarative repair_request must not include command: %s", task.ID))
 	}
 	if len(request.DependencyUpdates) == 0 {
-		return fmt.Errorf("BLOCKED task declarative repair_request without dependency_updates: %s", task.ID)
+		v.add(fmt.Errorf("BLOCKED task declarative repair_request without dependency_updates: %s", task.ID))
 	}
 
 	seenTasks := make(map[string]bool, len(request.DependencyUpdates))
 	for i, update := range request.DependencyUpdates {
 		updateTaskID := strings.TrimSpace(update.TaskID)
 		if updateTaskID == "" {
-			return fmt.Errorf("BLOCKED task repair_request dependency_updates[%d].task_id is required: %s", i, task.ID)
-		}
-		if seenTasks[updateTaskID] {
-			return fmt.Errorf("BLOCKED task repair_request has duplicate dependency update task_id %q: %s", updateTaskID, task.ID)
+			v.add(fmt.Errorf("BLOCKED task repair_request dependency_updates[%d].task_id is required: %s", i, task.ID))
+		} else if seenTasks[updateTaskID] {
+			v.add(fmt.Errorf("BLOCKED task repair_request has duplicate dependency update task_id %q: %s", updateTaskID, task.ID))
 		}
 		seenTasks[updateTaskID] = true
 
-		if err := validateExplicitDependencyList(update.ExpectedDependsOn, "expected_depends_on", i, task.ID); err != nil {
-			return err
-		}
-		if err := validateExplicitDependencyList(update.DesiredDependsOn, "desired_depends_on", i, task.ID); err != nil {
-			return err
-		}
+		validateExplicitDependencyList(v, update.ExpectedDependsOn, "expected_depends_on", i, task.ID)
+		validateExplicitDependencyList(v, update.DesiredDependsOn, "desired_depends_on", i, task.ID)
 	}
-	return nil
 }
 
-func validateExplicitDependencyList(values []string, field string, updateIndex int, blockedTaskID string) error {
+func validateExplicitDependencyList(v *violations, values []string, field string, updateIndex int, blockedTaskID string) {
 	if values == nil {
-		return fmt.Errorf("BLOCKED task repair_request dependency_updates[%d].%s must be an explicit list: %s", updateIndex, field, blockedTaskID)
+		v.add(fmt.Errorf("BLOCKED task repair_request dependency_updates[%d].%s must be an explicit list: %s", updateIndex, field, blockedTaskID))
+		return
 	}
 
 	seen := make(map[string]bool, len(values))
 	for _, value := range values {
 		dependencyID := strings.TrimSpace(value)
 		if dependencyID == "" {
-			return fmt.Errorf("BLOCKED task repair_request dependency_updates[%d].%s contains an empty task ID: %s", updateIndex, field, blockedTaskID)
+			v.add(fmt.Errorf("BLOCKED task repair_request dependency_updates[%d].%s contains an empty task ID: %s", updateIndex, field, blockedTaskID))
+			continue
 		}
 		if seen[dependencyID] {
-			return fmt.Errorf("BLOCKED task repair_request dependency_updates[%d] has duplicate %s entry %q: %s", updateIndex, field, dependencyID, blockedTaskID)
+			v.add(fmt.Errorf("BLOCKED task repair_request dependency_updates[%d] has duplicate %s entry %q: %s", updateIndex, field, dependencyID, blockedTaskID))
 		}
 		seen[dependencyID] = true
 	}
-	return nil
 }
 
 func disallowsIntegrationFailure(status models.TaskStatus, sc *statusClassifier) bool {
@@ -923,55 +945,39 @@ func nonEmptyStrings(values []string) []string {
 // (desc, done_when, scope, spec_ref) and that spec_ref values are
 // repo-relative (not worktree-prefixed). Prevents downstream coding tasks
 // from being created with incomplete or unreachable specifications.
-func validateTaskOutput(task *models.Task, validateArtifactRefs bool) error {
+func validateTaskOutput(v *violations, task *models.Task, validateArtifactRefs bool) {
 	for i, entry := range task.Output {
-		if entry.Desc == "" {
-			return fmt.Errorf("task %s output[%d] missing desc", task.ID, i)
+		for _, field := range []struct{ name, value string }{
+			{"desc", entry.Desc},
+			{"done_when", entry.DoneWhen},
+			{"scope", entry.Scope},
+			{"spec_ref", entry.SpecRef},
+		} {
+			if field.value == "" {
+				v.add(fmt.Errorf("task %s output[%d] missing %s", task.ID, i, field.name))
+			}
 		}
-		if entry.DoneWhen == "" {
-			return fmt.Errorf("task %s output[%d] missing done_when", task.ID, i)
+		for _, err := range models.ValidationSafetyViolations(fmt.Sprintf("output[%d].validation", i), entry.Validation, entry.DestructiveDB) {
+			v.add(fmt.Errorf("task %s %w", task.ID, err))
 		}
-		if entry.Scope == "" {
-			return fmt.Errorf("task %s output[%d] missing scope", task.ID, i)
-		}
-		if entry.SpecRef == "" {
-			return fmt.Errorf("task %s output[%d] missing spec_ref", task.ID, i)
-		}
-		if err := models.ValidateValidationSafety(fmt.Sprintf("output[%d].validation", i), entry.Validation, entry.DestructiveDB); err != nil {
-			return fmt.Errorf("task %s %w", task.ID, err)
-		}
-		if err := models.ValidateValidationPrerequisites(entry.Validation, entry.ValidationPrerequisites); err != nil {
-			return fmt.Errorf("task %s output[%d]: %w", task.ID, i, err)
+		for _, err := range models.ValidationPrerequisiteViolations(entry.Validation, entry.ValidationPrerequisites) {
+			v.add(fmt.Errorf("task %s output[%d]: %w", task.ID, i, err))
 		}
 		if !validateArtifactRefs {
 			continue
 		}
-		if strings.Contains(entry.SpecRef, ".worktrees/") {
-			return fmt.Errorf("task %s output[%d] spec_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.SpecRef)
-		}
-		if err := ValidateArtifactRefScalar(fmt.Sprintf("output[%d].spec_ref", i), entry.SpecRef, task.ID); err != nil {
-			return err
-		}
-		if entry.EpicRef != "" && strings.Contains(entry.EpicRef, ".worktrees/") {
-			return fmt.Errorf("task %s output[%d] epic_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.EpicRef)
-		}
-		if err := ValidateArtifactRefScalar(fmt.Sprintf("output[%d].epic_ref", i), entry.EpicRef, task.ID); err != nil {
-			return err
-		}
-		if entry.PlanRef != "" && strings.Contains(entry.PlanRef, ".worktrees/") {
-			return fmt.Errorf("task %s output[%d] plan_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.PlanRef)
-		}
-		if err := ValidateArtifactRefScalar(fmt.Sprintf("output[%d].plan_ref", i), entry.PlanRef, task.ID); err != nil {
-			return err
-		}
-		if entry.ArchRef != "" && strings.Contains(entry.ArchRef, ".worktrees/") {
-			return fmt.Errorf("task %s output[%d] arch_ref contains worktree prefix (must be repo-relative): %s", task.ID, i, entry.ArchRef)
-		}
-		if err := ValidateArtifactRefScalar(fmt.Sprintf("output[%d].arch_ref", i), entry.ArchRef, task.ID); err != nil {
-			return err
+		for _, ref := range []struct{ field, value string }{
+			{"spec_ref", entry.SpecRef},
+			{"epic_ref", entry.EpicRef},
+			{"plan_ref", entry.PlanRef},
+			{"arch_ref", entry.ArchRef},
+		} {
+			if strings.Contains(ref.value, ".worktrees/") {
+				v.add(fmt.Errorf("task %s output[%d] %s contains worktree prefix (must be repo-relative): %s", task.ID, i, ref.field, ref.value))
+			}
+			v.add(ValidateArtifactRefScalar(fmt.Sprintf("output[%d].%s", i, ref.field), ref.value, task.ID))
 		}
 	}
-	return nil
 }
 
 // requiresCompletionFields returns true if a task in the given status must have

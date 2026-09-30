@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	stderrors "errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path"
@@ -623,7 +622,7 @@ func completeClaimTaskAfterValidation(
 		agent.Heartbeat = now
 		state.Agents[agentID] = agent
 		if rejectedClaim {
-			if err := statevalidate.ValidateState(state, projectRoot, true, io.Discard); err != nil {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
 				return fmt.Errorf("rejected claim produced invalid state: %w", err)
 			}
 		}

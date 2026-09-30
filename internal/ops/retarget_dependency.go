@@ -3,7 +3,7 @@ package ops
 import (
 	stderrors "errors"
 	"fmt"
-	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -195,7 +195,7 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 			Extra:  extra,
 		})
 
-		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 			return err
 		}
 

@@ -14,43 +14,103 @@ import (
 // conflict gate uses it. Malformed evidence fails closed instead of becoming
 // an implicit clearance through an unknown verdict or disposition.
 func ValidateQuarantinedVerdicts(state *models.State) error {
+	return collectErr(func(v *violations) { validateQuarantinedVerdicts(v, state) })
+}
+
+func validateQuarantinedVerdicts(v *violations, state *models.State) {
 	ids := make(map[string]bool, len(state.QuarantinedVerdicts))
 	for i, finding := range state.QuarantinedVerdicts {
 		prefix := fmt.Sprintf("quarantined_verdicts[%d]", i)
+		// delete-task prunes findings, so the index shifts; the finding ID
+		// is the stable owner, the index only a fallback when it is unusable.
+		owner := "quarantined verdict " + finding.ID
 		if finding.ID == "" || ids[finding.ID] {
-			return fmt.Errorf("%s requires a unique nonempty id", prefix)
+			owner = prefix
 		}
+		v.within(owner, func(v *violations) {
+			validateQuarantinedVerdict(v, state, prefix, finding, ids)
+		})
 		ids[finding.ID] = true
-		if state.FindTask(finding.TaskID) == nil || finding.ReviewerID == "" || finding.Timestamp.IsZero() || !models.IsFullReviewCommit(finding.ReviewCommit) {
-			return fmt.Errorf("%s requires an existing task, reviewer, timestamp and full review commit", prefix)
-		}
-		if finding.Verdict != "APPROVED" && finding.Verdict != "REJECTED" {
-			return fmt.Errorf("%s has an invalid verdict", prefix)
-		}
-		if !utf8.ValidString(finding.Reason) || len(finding.Reason) > statehygiene.MaxStateTextBytes ||
-			(finding.Verdict == "REJECTED" && strings.TrimSpace(finding.Reason) == "") {
-			return fmt.Errorf("%s requires a bounded UTF-8 reason (nonempty for rejection)", prefix)
-		}
-		if len(finding.GenerationFingerprints) == 0 {
-			return fmt.Errorf("%s requires generation fingerprints", prefix)
-		}
-		fingerprints := make(map[string]bool, len(finding.GenerationFingerprints))
-		for _, fingerprint := range finding.GenerationFingerprints {
-			_, err := hex.DecodeString(fingerprint)
-			if len(fingerprint) != 64 || err != nil || fingerprints[fingerprint] {
-				return fmt.Errorf("%s requires unique SHA-256 generation fingerprints", prefix)
-			}
-			fingerprints[fingerprint] = true
-		}
-		previous := finding.Timestamp
-		for j, reconciliation := range finding.Reconciliations {
-			if reconciliation.Actor == "" || reconciliation.Timestamp.IsZero() || reconciliation.Timestamp.Before(previous) ||
-				!models.IsVerdictDisposition(reconciliation.Disposition) || strings.TrimSpace(reconciliation.Reason) == "" ||
-				!utf8.ValidString(reconciliation.Reason) || len(reconciliation.Reason) > statehygiene.MaxStateTextBytes {
-				return fmt.Errorf("%s.reconciliations[%d] requires actor, chronological timestamp, supported disposition and bounded nonempty UTF-8 reason", prefix, j)
-			}
-			previous = reconciliation.Timestamp
-		}
 	}
-	return nil
+}
+
+func validateQuarantinedVerdict(v *violations, state *models.State, prefix string, finding models.QuarantinedVerdict, ids map[string]bool) {
+	// The message names the finding's index for the operator; the identity is
+	// the constraint alone, owned by the finding (see validateQuarantinedVerdicts),
+	// so pruning an earlier finding does not make this one's defects look new.
+	add := func(constraint string) {
+		v.addID(constraint, fmt.Errorf("%s%s", prefix, constraint))
+	}
+	if finding.ID == "" {
+		add(" requires a unique nonempty id (empty)")
+	} else if ids[finding.ID] {
+		add(" requires a unique nonempty id (duplicate)")
+	}
+	if state.FindTask(finding.TaskID) == nil {
+		add(" requires an existing task")
+	}
+	if finding.ReviewerID == "" {
+		add(" requires a reviewer")
+	}
+	if finding.Timestamp.IsZero() {
+		add(" requires a timestamp")
+	}
+	if !models.IsFullReviewCommit(finding.ReviewCommit) {
+		add(" requires a full review commit")
+	}
+	if finding.Verdict != "APPROVED" && finding.Verdict != "REJECTED" {
+		add(" has an invalid verdict")
+	}
+	if !utf8.ValidString(finding.Reason) {
+		add(" requires a bounded UTF-8 reason (UTF-8)")
+	}
+	if len(finding.Reason) > statehygiene.MaxStateTextBytes {
+		add(" requires a bounded UTF-8 reason (length)")
+	}
+	if finding.Verdict == "REJECTED" && strings.TrimSpace(finding.Reason) == "" {
+		add(" requires a nonempty reason for rejection")
+	}
+	if len(finding.GenerationFingerprints) == 0 {
+		add(" requires generation fingerprints")
+	}
+	fingerprints := make(map[string]bool, len(finding.GenerationFingerprints))
+	for j, fingerprint := range finding.GenerationFingerprints {
+		// Shape and uniqueness are separate: a malformed entry can still
+		// repeat another.
+		if _, err := hex.DecodeString(fingerprint); len(fingerprint) != 64 || err != nil {
+			add(fmt.Sprintf(" requires unique SHA-256 generation fingerprints (fingerprint %d malformed)", j))
+		}
+		if fingerprints[fingerprint] {
+			add(fmt.Sprintf(" requires unique SHA-256 generation fingerprints (fingerprint %d duplicate)", j))
+		}
+		fingerprints[fingerprint] = true
+	}
+	previous := finding.Timestamp
+	for j, reconciliation := range finding.Reconciliations {
+		entry := fmt.Sprintf(".reconciliations[%d]", j)
+		if reconciliation.Actor == "" {
+			add(entry + " requires actor")
+		}
+		if reconciliation.Timestamp.IsZero() {
+			add(entry + " requires a chronological timestamp (zero)")
+		} else if reconciliation.Timestamp.Before(previous) {
+			add(entry + " requires a chronological timestamp (before previous)")
+		}
+		if !models.IsVerdictDisposition(reconciliation.Disposition) {
+			add(entry + " requires a supported disposition")
+		}
+		for _, check := range []struct {
+			name   string
+			broken bool
+		}{
+			{"empty", strings.TrimSpace(reconciliation.Reason) == ""},
+			{"UTF-8", !utf8.ValidString(reconciliation.Reason)},
+			{"length", len(reconciliation.Reason) > statehygiene.MaxStateTextBytes},
+		} {
+			if check.broken {
+				add(entry + " requires a bounded nonempty UTF-8 reason (" + check.name + ")")
+			}
+		}
+		previous = reconciliation.Timestamp
+	}
 }

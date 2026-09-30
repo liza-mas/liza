@@ -65,7 +65,7 @@ func TestIntegrationRecoveryGlobalTwoCanCloseWithoutLosingOldEvidence(t *testing
 	l.ContributingSet = &models.IntegrationContributingSet{}
 	l.GlobalGenerations = []models.IntegrationGlobalGeneration{{Generation: 2, AnalysisTaskID: "integration-global-2", AnalysisKey: "global:2", Verdict: models.IntegrationAnalysisVerdictClean, SourceCommit: "valid-source", ReportCommit: report}}
 	l.Closure = &models.IntegrationClosure{Status: models.IntegrationClosureStatusClean, Generation: 2, AnalysisKey: "global:2", SourceCommit: "valid-source"}
-	if err := validateIntegrationLifecycle(state, "", true); err != nil {
+	if err := integrationLifecycleErr(state, "", true); err != nil {
 		t.Fatalf("valid recovered closure refused: %v", err)
 	}
 	previous := cloneIntegrationState(t, state)

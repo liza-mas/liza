@@ -104,6 +104,9 @@ func reconcileIntegrationAnalyses(projectRoot string, completionLockHeld bool) (
 			}
 
 			previous := snapshotIntegrationLifecycleState(snapshot)
+			// The candidate shares maps such as Agents with snapshot, so the delta
+			// baseline is an independent copy taken before projection.
+			baseline := db.CloneState(snapshot)
 			candidate := snapshotIntegrationLifecycleState(snapshot)
 			candidate.Sprint.Scope.Planned = slices.Clone(snapshot.Sprint.Scope.Planned)
 			changed, projectionErr := projectIntegrationProgressDecision(
@@ -120,7 +123,7 @@ func reconcileIntegrationAnalyses(projectRoot string, completionLockHeld bool) (
 			if hooks := testReconcileIntegrationAnalysesHooks; hooks != nil && hooks.beforeValidation != nil {
 				hooks.beforeValidation(candidate)
 			}
-			if validationErr := validateIntegrationLifecycleCandidate(projectRoot, previous, candidate); validationErr != nil {
+			if validationErr := validateIntegrationLifecycleCandidate(projectRoot, func() (*models.State, error) { return baseline, nil }, previous, candidate); validationErr != nil {
 				return validationErr
 			}
 

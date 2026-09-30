@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"io"
+	"os"
 	"sort"
 	"time"
 
@@ -405,7 +405,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		dropSupersededWakeSnapshots(task)
 		task.History = append(task.History, entry)
 		if reconcile {
-			if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 				return err
 			}
 			result.Reason = opts.Reason

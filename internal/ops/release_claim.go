@@ -2,8 +2,8 @@ package ops
 
 import (
 	"fmt"
-	"io"
 	"log"
+	"os"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -358,7 +358,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 			return &LifecycleError{Outcome: NewLifecycleOutcome("release-claim", task, models.LifecycleAlreadyTransitioned, "stop", "none"), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
 		}
 		if validateRejectedHandoff {
-			if err := statevalidate.ValidateState(state, projectRoot, true, io.Discard); err != nil {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
 				return fmt.Errorf("released rejected claim produced invalid state: %w", err)
 			}
 		}

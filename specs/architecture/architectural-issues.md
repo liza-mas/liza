@@ -481,7 +481,7 @@ Implicit dependencies that constrain system behavior.
 
 **Implication:** Single malformed entry can cascade into systemic stop conditions across all roles.
 
-**Current mitigation:** `liza validate` checks invariants.
+**Current mitigation:** `liza validate` checks invariants and lists every violation. Mutation-path validation refuses only violations the mutation adds ([ADR-0165](ADR/0165-mutation-validation-refuses-only-introduced-violations.md)), so a malformed record a mutation does not touch no longer stops it; the record is warned about on each mutation until repaired. Still open: ordinary writes (anomaly writers among them) do not run entity validation, and reads still assume well-formed fields.
 
 **Future options:**
 - Schema validation on every state read

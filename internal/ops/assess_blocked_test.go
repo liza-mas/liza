@@ -913,21 +913,16 @@ func TestAssessBlocked_PrunesSupersededWakeSnapshots(t *testing.T) {
 func TestAssessBlocked_CandidateValidationRollback(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusBlocked, now)
-	task.AssignedTo = nil
-	task.RepairRequest = testAssessBlockedRepairRequest()
-	state.Tasks = []models.Task{task}
-	state.Goal.SpecRef = "specs/missing-goal-spec.md"
-	setTaskSpecRefs(state)
-	testhelpers.WriteInitialState(t, stateFile, state)
+	// The open rejection_rca gate requires its reason prefix; the new reason
+	// drops it, a violation only candidate validation catches.
+	fixture := newRejectionRCAFixture(t, func(task *models.Task) {
+		task.RepairRequest = testAssessBlockedRepairRequest()
+	})
+	stateFile := fixture.statePath
 	before := readAssessBlockedTask(t, stateFile, "task-1")
 
 	_, err := AssessBlockedWithOptions(
-		tmpDir,
+		fixture.projectRoot,
 		"task-1",
 		"must roll back",
 		"orchestrator-1",
@@ -936,9 +931,7 @@ func TestAssessBlocked_CandidateValidationRollback(t *testing.T) {
 			Questions: []string{"new question"},
 		},
 	)
-	if err == nil {
-		t.Fatal("AssessBlockedWithOptions() error = nil, want full-state validation failure")
-	}
+	requireIntroducedViolation(t, err, "requires a blocked_reason starting with")
 
 	after := readAssessBlockedTask(t, stateFile, "task-1")
 	assertAssessBlockedStateUnchanged(t, before, after)

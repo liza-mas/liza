@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -265,7 +265,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 			}
 			return err
 		}
-		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 			return err
 		}
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)

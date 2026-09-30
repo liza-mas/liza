@@ -761,10 +761,10 @@ func TestClaimRejectedTask(t *testing.T) {
 	})
 }
 
-// TestClaimTask_RejectedReclaimAfterLegacyStallMigration reproduces D83 and
-// proves its repair: an incomplete retry_loop stall record left by an older
-// reviewer makes the rejected claim's whole-state validation refuse, and the
-// migrated record lets the same reclaim through.
+// TestClaimTask_RejectedReclaimAfterLegacyStallMigration proves D83's repair:
+// migrating the incomplete retry_loop stall record left by an older reviewer
+// makes the whole state valid again. The record no longer refuses the reclaim
+// (ADR-0165; TestClaimTask_RejectedReclaimOverUnrelatedInvalidRecord).
 func TestClaimTask_RejectedReclaimAfterLegacyStallMigration(t *testing.T) {
 	fixture := newRejectedHandoffFixture(t, true)
 	bb := db.For(fixture.stateFile)
@@ -773,11 +773,6 @@ func TestClaimTask_RejectedReclaimAfterLegacyStallMigration(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("inject legacy stall anomaly: %v", err)
-	}
-
-	_, err := ClaimTask(fixture.projectRoot, fixture.taskID, "coder-2")
-	if err == nil || !strings.Contains(err.Error(), "missing required details (count, error_pattern)") {
-		t.Fatalf("ClaimTask() error = %v, want the legacy stall record to refuse the rejected claim", err)
 	}
 
 	if err := bb.Modify(func(state *models.State) error {

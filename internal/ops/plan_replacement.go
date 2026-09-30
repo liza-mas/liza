@@ -3,7 +3,7 @@ package ops
 import (
 	"errors"
 	"fmt"
-	"io"
+	"os"
 	"slices"
 	"sync"
 	"time"
@@ -152,7 +152,7 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 			return discard(applyErr)
 		}
 	}
-	if validateErr := statevalidate.ValidateState(candidate, projectRoot, true, io.Discard); validateErr != nil {
+	if validateErr := statevalidate.ValidateCandidate(candidate, func() (*models.State, error) { return s, nil }, projectRoot, true, os.Stderr); validateErr != nil {
 		return discard(fmt.Errorf("plan replacement leaves an invalid state: %w", validateErr))
 	}
 	*s = *candidate

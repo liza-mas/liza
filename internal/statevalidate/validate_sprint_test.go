@@ -13,7 +13,7 @@ func TestValidateSprint_NegativeNumber(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.Sprint.Number = -1
 
-	err := validateSprint(state, "", true)
+	err := sprintErr(state, "", true)
 	if err == nil {
 		t.Fatal("Expected error for negative sprint number")
 	}
@@ -26,7 +26,7 @@ func TestValidateSprint_ZeroNumber_Legacy(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.Sprint.Number = 0 // legacy pre-multi-sprint state
 
-	err := validateSprint(state, "", true)
+	err := sprintErr(state, "", true)
 	if err != nil {
 		t.Fatalf("Expected no error for legacy zero sprint number, got: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestValidateSprintHistory_Valid(t *testing.T) {
 		},
 	}
 
-	err := validateSprintHistory(state)
+	err := sprintHistoryErr(state)
 	if err != nil {
 		t.Fatalf("Expected no error for valid sprint history, got: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestValidateSprintHistory_DuplicateID(t *testing.T) {
 		},
 	}
 
-	err := validateSprintHistory(state)
+	err := sprintHistoryErr(state)
 	if err == nil {
 		t.Fatal("Expected error for duplicate sprint ID in history")
 	}
@@ -94,7 +94,7 @@ func TestValidateSprintHistory_MissingID(t *testing.T) {
 		},
 	}
 
-	err := validateSprintHistory(state)
+	err := sprintHistoryErr(state)
 	if err == nil {
 		t.Fatal("Expected error for missing sprint history ID")
 	}
@@ -116,7 +116,7 @@ func TestValidateSprintHistory_InvalidNumber(t *testing.T) {
 		},
 	}
 
-	err := validateSprintHistory(state)
+	err := sprintHistoryErr(state)
 	if err == nil {
 		t.Fatal("Expected error for sprint history number < 1")
 	}
@@ -129,7 +129,7 @@ func TestValidateSprintHistory_Empty(t *testing.T) {
 	state := testhelpers.CreateValidState()
 	state.SprintHistory = []models.SprintSummary{}
 
-	err := validateSprintHistory(state)
+	err := sprintHistoryErr(state)
 	if err != nil {
 		t.Fatalf("Expected no error for empty sprint history, got: %v", err)
 	}
