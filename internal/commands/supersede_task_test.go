@@ -195,7 +195,7 @@ func TestSupersedeTaskCommand(t *testing.T) {
 			}
 
 			// Execute command
-			err = SupersedeTaskCommand(tmpDir, tt.taskID, tt.replacementIDs, tt.reason, "test-agent", tt.recoverability)
+			err = SupersedeTaskCommand(tmpDir, tt.taskID, tt.replacementIDs, tt.reason, "test-agent", tt.recoverability, "test: changed since block")
 
 			// Check error expectations
 			if tt.wantErr {
@@ -381,6 +381,7 @@ func TestSupersedeTaskCommand_RaceCondition(t *testing.T) {
 				"test-agent",
 				// Recoverability command is only valid for no-replacement cleanup.
 				"",
+				"test: changed since block",
 			)
 			results <- err
 		}(i)
@@ -497,7 +498,7 @@ func TestSupersedeTaskCommand_ValidationIntegration(t *testing.T) {
 	}
 
 	// Execute supersede command
-	err = SupersedeTaskCommand(tmpDir, "task-1", []string{"task-2"}, "Test reason", "test-agent", "")
+	err = SupersedeTaskCommand(tmpDir, "task-1", []string{"task-2"}, "Test reason", "test-agent", "", "test: changed since block")
 	if err != nil {
 		t.Fatalf("Failed to supersede task: %v", err)
 	}
@@ -577,7 +578,7 @@ func TestSupersedeTaskCommand_LeaseFieldsCleared(t *testing.T) {
 	}
 
 	// Execute supersede command
-	err = SupersedeTaskCommand(tmpDir, "task-1", []string{"task-2"}, "Test reason", "test-agent", "")
+	err = SupersedeTaskCommand(tmpDir, "task-1", []string{"task-2"}, "Test reason", "test-agent", "", "test: changed since block")
 	if err != nil {
 		t.Fatalf("Failed to supersede task: %v", err)
 	}

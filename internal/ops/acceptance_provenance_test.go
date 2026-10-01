@@ -1325,7 +1325,7 @@ func TestAcceptanceProvenance_SamePairReplacementKeepsAllocation(t *testing.T) {
 				// WHEN the orchestrator replaces it within the same role pair
 				replacementID := taskID + "-r1"
 				_, err := ReplaceTaskWithAuthorityAndOptions(root, ReplaceTaskInput{
-					SourceTaskID: taskID, Reason: reason, Consumers: []models.DependencyUpdate{},
+					SourceTaskID: taskID, Reason: reason, Changed: "test: changed since block", Consumers: []models.DependencyUpdate{},
 					Replacement: AddTaskInput{ID: replacementID, RolePair: source.RolePair, Description: "Complete the boundary",
 						SpecRef: source.SpecRef, PlanRef: source.PlanRef, Validation: source.Validation,
 						DoneWhen: "Boundary proven", Scope: "boundary", Priority: 1},

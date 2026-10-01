@@ -791,6 +791,25 @@ plan; (2) any duplicate-work incident on a corrective plan whose outputs omit
 `supersedes`; (3) a `Pipeline transition failed` warning naming `plan
 replacement` or `supersedes` for a plan classified `passed`.
 
+## Blocked-recovery cap can be bypassed without lineage (ADR-0171)
+
+**What:** The cap counts recoveries only through `superseded_by`/`supersedes`.
+An agent that cancels or no-replacement-supersedes a capped task and adds an
+unlinked successor (`cancel-task` + `add-tasks`) starts a fresh lineage, and
+neither the cap nor `blocked_replacement_chain` sees it. Separately, a plan
+output authored before `changed` existed is refused at generation when its
+original is now `BLOCKED`, and an automatic pass only logs that refusal: see
+gap (3) of the ADR-0161 entry above.
+
+**Why deferred:** Detecting an unlinked successor shares gap (2) above: tasks
+share no structured scope key, so a heuristic would be noisy. The lineage
+policy already forbids prose-only and unlinked replacement.
+
+**Payback trigger:** A run where a capped task is cancelled or superseded
+without replacements and new work for the same scope follows, or a
+`blocked_replacement_chain` halt whose lineage omits a predecessor the evidence
+shows existed.
+
 ## Stranded executing claims without `base_commit` stay manual (D75)
 
 **What:** `models.StrandedDoerClaimReason` requires `worktree` and

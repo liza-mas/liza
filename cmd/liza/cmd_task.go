@@ -242,6 +242,10 @@ Requirements:
   - Task must be in BLOCKED, rejected, or initial status
   - --reason is always required
   - --recoverability-command is required when no replacements are given
+  - --changed is required when replacing a BLOCKED task: state what differs
+    from the blocked attempt. Agents may replace a lineage's BLOCKED tasks at
+    most %[4]d times; the next replacement is refused until a human resolves
+    the %[5]s circuit-breaker halt for that blocked episode
 
 Replacement task IDs are optional and should be comma-separated.
 When no replacements are given, the task's branch is deleted immediately after
@@ -249,8 +253,8 @@ recording pre-supersession branch/worktree evidence and the operator-provided
 recoverability audit command. %[3]s records that command but does not execute it.
 
 Examples:
-  %[1]s task-3 task-4,task-5 --reason "Split into smaller tasks"
-  %[1]s task-3 --reason "Work already merged in prior sprint" --recoverability-command "%[2]s"`, brand.Command("supersede-task"), brand.Command("recover-task", "task-3"), brand.NameTitle),
+  %[1]s task-3 task-4,task-5 --reason "Split into smaller tasks" --changed "Interface contract now fixed by task-2"
+  %[1]s task-3 --reason "Work already merged in prior sprint" --recoverability-command "%[2]s"`, brand.Command("supersede-task"), brand.Command("recover-task", "task-3"), brand.NameTitle, models.MaxAgentBlockedRecoveries, models.BlockedReplacementChainPattern),
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -275,6 +279,7 @@ Examples:
 
 		reason, _ := cmd.Flags().GetString("reason")
 		recoverabilityCommand, _ := cmd.Flags().GetString("recoverability-command")
+		changed, _ := cmd.Flags().GetString("changed")
 
 		var replacementIDs []string
 		if len(args) == 2 {
@@ -306,10 +311,11 @@ Examples:
 			result, err := ops.SupersedeTaskWithAuthority(projectRoot, taskID, replacementIDs, reason, authority, ops.SupersedeTaskOptions{
 				Request:               requestOpts,
 				RecoverabilityCommand: recoverabilityCommand,
+				Changed:               changed,
 			})
 			return jsonout.WriteResult(os.Stdout, result, nil, err)
 		}
-		return commands.SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, replacementIDs, reason, recoverabilityCommand, authority, requestOpts)
+		return commands.SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, replacementIDs, reason, recoverabilityCommand, changed, authority, requestOpts)
 	},
 }
 
@@ -1623,6 +1629,7 @@ func init() {
 	addAgentIDFlag(supersedeTaskCmd)
 	supersedeTaskCmd.Flags().String("reason", "", "reason for superseding (required)")
 	supersedeTaskCmd.Flags().String("recoverability-command", "", "operator audit command recorded before superseding without replacements")
+	supersedeTaskCmd.Flags().String("changed", "", "what differs from the blocked attempt (required when replacing a BLOCKED task)")
 	supersedeTaskCmd.MarkFlagRequired("reason")
 	addAgentIDFlag(retargetDependencyCmd)
 	retargetDependencyCmd.Flags().String("reason", "", "reason for retargeting this dependency (required)")

@@ -382,7 +382,16 @@ type CircuitBreakerResponse struct {
 	Classification CircuitBreakerEvidenceClass `yaml:"classification"`
 	Explanation    string                      `yaml:"explanation"`
 	ReportFile     string                      `yaml:"report_file"`
+	Subject        *CircuitBreakerSubject      `yaml:"subject,omitempty"`
 	Extra          map[string]any              `yaml:",inline"`
+}
+
+// CircuitBreakerSubject binds a response to the one task and blocked episode it
+// reported, so resolving it releases only that episode (see
+// BlockedRecoveryReleased). Patterns that are not task-scoped leave it nil.
+type CircuitBreakerSubject struct {
+	TaskID    string    `yaml:"task_id"`
+	BlockedAt time.Time `yaml:"blocked_at"`
 }
 
 // CircuitBreaker tracks circuit breaker status and history
@@ -423,5 +432,6 @@ type CircuitBreakerHistory struct {
 	SupersededByResponse CircuitBreakerResponseType `yaml:"superseded_by_response,omitempty"`
 	Resolution           *string                    `yaml:"resolution,omitempty"`
 	ResolvedAt           *time.Time                 `yaml:"resolved_at,omitempty"`
+	Subject              *CircuitBreakerSubject     `yaml:"subject,omitempty"`
 	Extra                map[string]any             `yaml:",inline"`
 }

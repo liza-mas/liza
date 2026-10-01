@@ -257,7 +257,7 @@ func TestMutationCommandWiring(t *testing.T) {
 			}
 		})
 
-		err := executeRootCommand(t, projectRoot, "supersede-task", "task-supersede-repl", "task-new-1,task-new-2", "--reason", "Split into smaller tasks", "--agent-id", "orchestrator-1")
+		err := executeRootCommand(t, projectRoot, "supersede-task", "task-supersede-repl", "task-new-1,task-new-2", "--reason", "Split into smaller tasks", "--changed", "test: changed since block", "--agent-id", "orchestrator-1")
 		if err != nil {
 			t.Fatalf("supersede-task execute failed: %v", err)
 		}

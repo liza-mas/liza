@@ -85,7 +85,7 @@ func TestSupersedeTask_OverUnrelatedInvalidRecord(t *testing.T) {
 	setTaskSpecRefs(state)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	if _, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Split", "orchestrator-1"); err != nil {
+	if _, err := SupersedeTaskWithOptions(tmpDir, "task-1", []string{"task-2"}, "Split", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"}); err != nil {
 		t.Fatalf("SupersedeTask() error = %v, want the unrelated invalid task ignored", err)
 	}
 	after, err := db.New(stateFile).Read()

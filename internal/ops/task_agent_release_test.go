@@ -49,7 +49,7 @@ func TestSupersedeTask_ReleasesAssignedAgent(t *testing.T) {
 	state.Agents[agentID] = workingAgentForTask(taskID, now)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, taskID, []string{"task-2"}, "Split into smaller tasks", "orchestrator-1")
+	_, err := SupersedeTaskWithOptions(tmpDir, taskID, []string{"task-2"}, "Split into smaller tasks", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	if err != nil {
 		t.Fatalf("SupersedeTask() error = %v", err)
 	}

@@ -30,6 +30,9 @@ type SupersedeTaskOptions struct {
 	// RecoverabilityCommand records the operator-provided audit command for
 	// unreplaced supersession. Liza records the command but does not execute it.
 	RecoverabilityCommand string
+	// Changed states what differs from the blocked attempt. Required when
+	// replacing a BLOCKED task (ADR-0171); recorded masked.
+	Changed string
 }
 
 // SupersedeTask transitions an initial, rejected, or BLOCKED task to SUPERSEDED
@@ -88,6 +91,7 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 	} else if recoverabilityCommand != "" {
 		return nil, &PreconditionError{Reason: "recoverability command is only valid when superseding without replacements"}
 	}
+	opts.Changed = secretmask.New().MaskText(strings.TrimSpace(opts.Changed))
 	retErr = withOwnershipTaskLock(projectRoot, taskID, "supersede-task", func() error {
 		var err error
 		result, err = supersedeTaskLifecycle(projectRoot, taskID, replacementIDs, reason, agentID, recoverabilityCommand, opts, authority, &observed)
@@ -120,7 +124,8 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 	request, err := NewLifecycleRequest("supersede-task", task, agentID, authority, opts.Request, struct {
 		Replacements                  []string
 		Reason, RecoverabilityCommand string
-	}{replacementIDs, reason, recoverabilityCommand})
+		Changed                       string `json:",omitempty"`
+	}{replacementIDs, reason, recoverabilityCommand, opts.Changed})
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +195,7 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 			return WrapLifecycleError("supersede-task", currentTask, fmt.Errorf("task status changed before supersession"), models.LifecycleStateChanged, "requery", "none")
 		}
 
-		if _, err := supersedeTaskInState(state, pb, currentTask, replacementIDs, reason, agentID, salvage, time.Now().UTC()); err != nil {
+		if _, err := supersedeTaskInState(state, pb, currentTask, replacementIDs, reason, opts.Changed, agentID, salvage, time.Now().UTC()); err != nil {
 			return err
 		}
 		// Legacy tasks predate pipeline-wide validation. For pipeline tasks, validate
@@ -254,7 +259,18 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 // returns the dependency edges pruned as illegal downstream links, so a
 // composing transaction can record them. Full-state validation and the
 // lifecycle receipt stay with the caller.
-func supersedeTaskInState(state *models.State, pb *pipelineBundle, task *models.Task, replacementIDs []string, reason, agentID string, salvage map[string]any, now time.Time) ([]string, error) {
+//
+// Replacing a BLOCKED task is a blocked recovery (ADR-0171): it is refused at
+// the agent cap, requires a stated change, and marks the audit entry so later
+// recoveries in the lineage count it. changed must already be masked.
+func supersedeTaskInState(state *models.State, pb *pipelineBundle, task *models.Task, replacementIDs []string, reason, changed, agentID string, salvage map[string]any, now time.Time) ([]string, error) {
+	var blockedRecovery map[string]any
+	if task.Status == models.TaskStatusBlocked && len(replacementIDs) > 0 {
+		if err := checkBlockedRecovery(state, task, changed); err != nil {
+			return nil, err
+		}
+		blockedRecovery = models.BlockedRecoveryRecord(task, changed)
+	}
 	if err := validateDependencyDirection(state, pb.resolver, task.ID, task.RolePair, replacementIDs); err != nil {
 		return nil, err
 	}
@@ -302,12 +318,40 @@ func supersedeTaskInState(state *models.State, pb *pipelineBundle, task *models.
 		}
 		historyEntry.Extra["removed_dependencies"] = append([]string(nil), removedDependencies...)
 	}
+	if blockedRecovery != nil {
+		if historyEntry.Extra == nil {
+			historyEntry.Extra = make(map[string]any)
+		}
+		historyEntry.Extra[models.BlockedRecoveryKey] = blockedRecovery
+	}
 	task.History = append(task.History, historyEntry)
 
 	if err := rewriteActiveDependents(state, pb.resolver, task.ID, replacementIDs, agentID, now); err != nil {
 		return nil, err
 	}
 	return removedDependencies, nil
+}
+
+// checkBlockedRecovery refuses replacing the BLOCKED task when its lineage is
+// at the agent blocked-recovery cap, or when no change since the block is
+// stated.
+func checkBlockedRecovery(state *models.State, task *models.Task, changed string) error {
+	if chain, capped := models.BlockedRecoveryCapped(state, task); capped {
+		return &PreconditionError{Reason: fmt.Sprintf(
+			"replacing BLOCKED task %s exceeds the blocked-recovery cap: lineage %s already had %d blocked recoveries (%s). "+
+				"Hold it with assess-blocked for a human decision; resolving the %s circuit-breaker halt for this blocked episode (analyze, then resume) authorizes one further replacement",
+			task.ID, strings.Join(chain.Path, " -> "), len(chain.Recoveries), strings.Join(chain.Recoveries, ", "), models.BlockedReplacementChainPattern)}
+	}
+	if strings.TrimSpace(changed) == "" {
+		blockedReason := ""
+		if task.BlockedReason != nil {
+			blockedReason = *task.BlockedReason
+		}
+		return &PreconditionError{Reason: fmt.Sprintf(
+			"replacing BLOCKED task %s requires stating what changed since it blocked (supersede-task --changed, or field changed in a replace-task payload or plan output); blocked_reason: %q",
+			task.ID, blockedReason)}
+	}
+	return nil
 }
 
 func collectSupersedeSalvageSnapshot(gw *git.Git, task *models.Task, originalStatus models.TaskStatus, recoverabilityCommand string) (map[string]any, error) {

@@ -31,6 +31,7 @@ func TestReplaceTaskSchema(t *testing.T) {
 		{"explicit lists", "/consumers/0/expected_depends_on", models.FieldValueClassNull, func(p map[string]any) { p["consumers"] = []any{map[string]any{"task_id": "consumer"}} }},
 		{"base-only", "/preserved_base/worktree", models.FieldValueClassMissing, func(p map[string]any) { p["preserved_base"] = map[string]any{"base_commit": "abc"} }},
 		{"self replacement", "/replacement/id", models.FieldValueClassConflict, func(p map[string]any) { p["replacement"].(map[string]any)["id"] = "source" }},
+		{"changed type", "/changed", models.FieldValueClassWrongType, func(p map[string]any) { p["changed"] = 5 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := validReplaceTaskPayload()

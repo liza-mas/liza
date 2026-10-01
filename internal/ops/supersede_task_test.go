@@ -71,7 +71,7 @@ func TestSupersedeTask_FromBlocked(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2", "task-3"}, "Split into smaller tasks", "orchestrator-1")
+	result, err := SupersedeTaskWithOptions(tmpDir, "task-1", []string{"task-2", "task-3"}, "Split into smaller tasks", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestSupersedeTask_RewritesActiveDependentDependencies(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "task-1", []string{"replacement-a", "replacement-b"}, "Split into replacements", "orchestrator-1")
+	_, err := SupersedeTaskWithOptions(tmpDir, "task-1", []string{"replacement-a", "replacement-b"}, "Split into replacements", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestSupersedeTask_PrunesOwnDownstreamDependencies(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1")
+	_, err := SupersedeTaskWithOptions(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestSupersedeTask_PrunesSupersessionPathDownstreamDependency(t *testing.T) 
 	setTaskSpecRefs(state)
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1")
+	_, err := SupersedeTaskWithOptions(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -349,7 +349,7 @@ func TestSupersedeTask_SupersessionPathInvalidCandidateLeavesStateUnchanged(t *t
 	if err != nil {
 		t.Fatalf("read initial state: %v", err)
 	}
-	_, err = SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1")
+	_, err = SupersedeTaskWithOptions(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	requireIntroducedViolation(t, err, "circular dependency detected")
 	after, err := bb.Read()
 	if err != nil {
@@ -391,7 +391,7 @@ func TestSupersedeTask_InvalidCandidateLeavesStateUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read initial state: %v", err)
 	}
-	_, err = SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1")
+	_, err = SupersedeTaskWithOptions(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	requireIntroducedViolation(t, err, "circular dependency detected")
 	after, err := bb.Read()
 	if err != nil {
@@ -427,7 +427,7 @@ func TestSupersedeTask_RewritesOperationalOutputTaskDependsOn(t *testing.T) {
 	state.Tasks = []models.Task{parent, oldDep, replacementA, replacementB}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "old-dep", []string{"replacement-a", "replacement-b"}, "Split into replacements", "orchestrator-1")
+	_, err := SupersedeTaskWithOptions(tmpDir, "old-dep", []string{"replacement-a", "replacement-b"}, "Split into replacements", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -469,7 +469,7 @@ func TestSupersedeTask_InvalidOutputReplacementLeavesStateUnchanged(t *testing.T
 	state.Tasks = []models.Task{parent, oldDep, replacement}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "old-dep", []string{"replacement-coding"}, "Replace with coding work", "orchestrator-1")
+	_, err := SupersedeTaskWithOptions(tmpDir, "old-dep", []string{"replacement-coding"}, "Replace with coding work", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	testhelpers.RequireErrorContains(t, err, "downstream dependency")
 
 	bb := db.New(stateFile)
@@ -649,7 +649,7 @@ func TestSupersedeTask_RejectsDownstreamReplacement(t *testing.T) {
 	state.Tasks = []models.Task{planningTask, codingTask}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := SupersedeTask(tmpDir, "plan-1", []string{"coding-1"}, "Coding work already exists", "orchestrator-1")
+	_, err := SupersedeTaskWithOptions(tmpDir, "plan-1", []string{"coding-1"}, "Coding work already exists", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	testhelpers.RequireErrorContains(t, err, "role_pair coding-pair is downstream of code-planning-pair")
 }
 
@@ -973,7 +973,7 @@ func TestSupersedeTask_CleansUpWorktree(t *testing.T) {
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	result, err := SupersedeTask(tmpDir, "task-1", []string{"task-2"}, "Split into smaller tasks", "orchestrator-1")
+	result, err := SupersedeTaskWithOptions(tmpDir, "task-1", []string{"task-2"}, "Split into smaller tasks", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"})
 	if err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
@@ -1037,7 +1037,7 @@ func TestInTransactionCores_SupersedeTaskInStateMatchesCommand(t *testing.T) {
 	}
 
 	testhelpers.WriteInitialState(t, stateFile, fixture())
-	if _, err := SupersedeTask(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1"); err != nil {
+	if _, err := SupersedeTaskWithOptions(tmpDir, "plan-old", []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1", SupersedeTaskOptions{Changed: "test: changed since block"}); err != nil {
 		t.Fatalf("SupersedeTask() error: %v", err)
 	}
 	commandState, err := db.New(stateFile).Read()
@@ -1055,7 +1055,7 @@ func TestInTransactionCores_SupersedeTaskInStateMatchesCommand(t *testing.T) {
 	if target.Lifecycle != nil {
 		revisionBefore = target.Lifecycle.Revision
 	}
-	removed, err := supersedeTaskInState(coreState, pb, target, []string{"replacement-plan"}, "Replace invalid plan", "orchestrator-1", nil, seeded)
+	removed, err := supersedeTaskInState(coreState, pb, target, []string{"replacement-plan"}, "Replace invalid plan", "test: changed since block", "orchestrator-1", nil, seeded)
 	if err != nil {
 		t.Fatalf("supersedeTaskInState() error: %v", err)
 	}

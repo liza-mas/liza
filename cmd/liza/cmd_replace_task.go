@@ -24,7 +24,8 @@ var replaceTaskCmd = &cobra.Command{
 
 The JSON file declares source_task_id, reason, replacement (the add-task
 object), consumers (expected and desired dependency lists), and optionally
-preserved_base (both base_commit and an existing matching worktree).
+preserved_base (both base_commit and an existing matching worktree) and changed
+(what differs from the blocked attempt; required when the source is BLOCKED).
 
 Requires an orchestrator with the replace-task capability. Both --request-id
 and --expected-transition are required; preserve the original pair and payload

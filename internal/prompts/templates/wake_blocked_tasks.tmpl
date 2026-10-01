@@ -43,24 +43,12 @@ Tasks are BLOCKED. Analyze and resolve immediately:
      d. Otherwise run: {{binaryName}} unblock-task <task-id> --reason "Verified blocker is resolved" --agent-id {{.AgentID}} --json
      e. Default: any doer's next claim continues the iteration. Add --new-iteration only for a new product iteration; --assign-to <doer-agent-id> only to resume with a specific idle doer now.
      f. A --rebase-on conflict remains BLOCKED with a fresh repair_request; do not treat it as submit/merge INTEGRATION_FAILED.
-   - To supersede (create clean replacement):
-   Example supersede workflow:
-   a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still BLOCKED.
+   - To replace (create a clean replacement):
+   a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still BLOCKED; take its transition_id.
       If status changed (e.g., task was claimed), skip — the task is being actively worked.
-   b. Write a tasks JSON file as a bare array — NOT a wrapper object:
-      [{
-        "id": "<new-task-id>",
-        "desc": "<short task description>",
-        "spec": "<spec path>",
-        "done": "<falsifiable completion condition>",
-        "scope": "<allowed files or behavior>",
-        "priority": 1,
-        "depends": [],
-        "type": "coding",
-        "role_pair": "coding-pair"
-      }]
-   c. Run: {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
-   d. Run: {{binaryName}} supersede-task <task-id> <new-id-1>,<new-id-2> --reason "Split due to complexity" --agent-id {{.AgentID}} --json
+   b. One replacement: write a payload with source_task_id, reason (why a narrower repair cannot work), changed (what differs from the blocked attempt), replacement (the add-task object) and consumers ({{binaryName}} replace-task --help), then run: {{binaryName}} replace-task --replacement-file <path.json> --request-id <id> --expected-transition <transition_id> --agent-id {{.AgentID}} --json
+   c. Several replacements: a corrective plan whose outputs name the task in supersedes, each with changed.
+   d. Never add-tasks the replacements first: a refused replacement would leave them runnable.
    e. Run: {{binaryName}} wt-delete <task-id> --json (if worktree exists)
 5. After analyzing each blocked task:
    - If you resolved it (unblocked or superseded): name the closure evidence — the intended consumer is eligible or progresses beyond the old failure point; a new task ID or transition alone is not closure

@@ -169,6 +169,14 @@ tasks:
     rescope_reason: "Wrong granularity — split into auth and validation subtasks"
     priority: 2
     created: 2025-01-17T14:10:00Z
+    history:
+      - timestamp: 2025-01-17T16:00:00Z
+        event: superseded
+        reason: "Wrong granularity — split into auth and validation subtasks"
+        blocked_recovery:      # Present only when the task was BLOCKED when replaced (ADR-0171)
+          blocked_reason: "Shared session interface undefined"
+          blocked_at: 2025-01-17T15:40:00Z
+          changed: "Interface now owned by task-4a; task-4b consumes it"
 
   - id: task-5
     description: "Task whose work was completed in a prior sprint"
@@ -1120,8 +1128,11 @@ observation-only and creates no `current_response`.
 
 An active `current_response` contains `timestamp`, `pattern`, `severity`, typed
 `response`, provider-evidence `classification`, `explanation`, and
-`report_file`. History entries may carry `response`, `classification`, and
-`explanation` alongside their existing fields. A history entry may also carry
+`report_file`, plus a typed `subject` (`task_id`, `blocked_at`) on
+task-scoped responses: only `blocked_replacement_chain` sets it, and resolving
+that response releases exactly that task's blocked episode (ADR-0171). History
+entries may carry `response`, `classification`, `explanation`, and `subject`
+alongside their existing fields. A history entry may also carry
 `superseded_by_response: HALT`, an optional HALT-only replacement marker written
 when an active provider-audit `CHECKPOINT` escalates. These additions are
 optional for backward compatibility: readers accept legacy state without them,

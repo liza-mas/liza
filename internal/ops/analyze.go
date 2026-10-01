@@ -268,6 +268,7 @@ func patternResultFromResponse(response *models.CircuitBreakerResponse) analysis
 		Response:       response.Response,
 		Classification: response.Classification,
 		Explanation:    response.Explanation,
+		Subject:        response.Subject,
 	}
 }
 
@@ -333,6 +334,7 @@ func applyCircuitBreakerResponse(state *models.State, result analysis.PatternRes
 		Response:       result.Response,
 		Classification: result.Classification,
 		Explanation:    result.Explanation,
+		Subject:        result.Subject,
 	})
 }
 
@@ -345,5 +347,6 @@ func circuitBreakerResponse(result analysis.PatternResult, timestamp time.Time, 
 		Classification: result.Classification,
 		Explanation:    result.Explanation,
 		ReportFile:     reportPath,
+		Subject:        result.Subject,
 	}
 }

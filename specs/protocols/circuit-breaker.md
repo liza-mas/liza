@@ -186,9 +186,25 @@ circuit_breaker_rules:
       condition: task.type=planning AND durable_rejection_count >= 4
       severity: PLANNING_CONVERGENCE_DEGRADED
       action: TRIP_MODE
+
+    - name: blocked_replacement_chain
+      description: "A BLOCKED task whose lineage already had two blocked-recovery replacements"
+      condition: task.status=BLOCKED AND blocked_recoveries(lineage) >= 2 AND NOT released(task, blocked_episode_at)
+      severity: RECOVERY_CONVERGENCE_DEGRADED
+      action: TRIP_MODE
 ```
 
 For `planning_review_churn`, a positive `review_cycles_total` is the authoritative durable count; when `review_cycles_total` is zero, count timestamped `rejected` and `review_verdict_rejected` task-history events instead. A count of four or more cycles triggers regardless of current task status; `MERGED` tasks remain eligible.
+
+`blocked_replacement_chain` uses the same rule that refuses an agent's next
+replacement ([ADR-0171](../architecture/ADR/0171-cap-agent-blocked-recovery-replacements.md)).
+Lineage is read from both `superseded_by` and `supersedes`, and counts only
+predecessors whose `superseded` entry carries the `blocked_recovery` marker.
+Because the cap holds the reported task `BLOCKED`, the evidence stays current.
+The response carries a typed `subject` (`task_id`, `blocked_at`). Resolving it
+with `resume` releases one further replacement of exactly that task and blocked
+episode. Other capped chains, and later blocks, stay capped, and the next one
+is reported on the following check.
 
 ### Pattern Matching Functions
 
@@ -436,9 +452,10 @@ circuit_breaker:
 | `superseded_by_response` | Analyze | On provider checkpoint escalation | Optional `HALT`-only replacement marker; not an acknowledgement or provider watermark |
 | `resolution` | Resume/human | On acknowledgement | Free text describing acknowledgement/corrective action |
 | `resolved_at` | Resume/human | On acknowledgement | Timestamp that makes the response an evidence boundary |
+| `subject` | Analyze | On a task-scoped response | `task_id` and `blocked_at` of the reported episode; only `blocked_replacement_chain` sets it, and only a matching resolved entry releases that episode |
 
 `current_response` uses the same timestamp, pattern, severity, response,
-classification, explanation, and report-file fields. It exists only for active
+classification, explanation, subject, and report-file fields. It exists only for active
 `CHECKPOINT` and `HALT` responses. `HALT` additionally populates the legacy
 `current_trigger` and `status: TRIGGERED` fields; `CHECKPOINT` does not.
 Readers must accept older state without `current_response`, `response`,

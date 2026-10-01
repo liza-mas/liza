@@ -59,7 +59,7 @@ func TestAdjacentLifecycleExactRequestReplay(t *testing.T) {
 					}
 					return models.LifecycleOutcome{}, err
 				case "supersede-task":
-					r, err := SupersedeTaskWithOptions(root, task.ID, []string{"replacement"}, reason, "orchestrator-1", SupersedeTaskOptions{Request: opts})
+					r, err := SupersedeTaskWithOptions(root, task.ID, []string{"replacement"}, reason, "orchestrator-1", SupersedeTaskOptions{Request: opts, Changed: "test: changed since block"})
 					if r != nil {
 						return r.LifecycleOutcome, err
 					}

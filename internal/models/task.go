@@ -640,6 +640,9 @@ type OutputEntry struct {
 	// child retires that task and retargets its consumers in the same state
 	// transaction; several outputs may name one task to split it.
 	Supersedes string `yaml:"supersedes,omitempty" json:"supersedes,omitempty"`
+	// Changed states what differs from the attempt that blocked. Required when
+	// Supersedes names a BLOCKED task (ADR-0171).
+	Changed string `yaml:"changed,omitempty" json:"changed,omitempty"`
 	// InheritInputs declares whether this child waits for a whole upstream
 	// phase or only for selected upstream outputs. Nil means the whole-phase
 	// barrier, which is the pre-existing behavior.

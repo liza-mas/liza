@@ -578,6 +578,14 @@ func validateOutputSupersedes(state *models.State, plan *models.Task, consumerRo
 		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes references %q in role pair %q; this output generates %v children", index, id, original.RolePair, consumerRolePairs)}
 	case slices.Contains(entry.TaskDependsOn, id):
 		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes %q also appears in its task_depends_on; a child cannot depend on the task it replaces", index, id)}
+	case strings.TrimSpace(entry.Changed) == "":
+		// Required whatever the original's status: it may block before
+		// generation, which then requires the statement (ADR-0171).
+		return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes %q requires changed: what this replacement does differently from the original", index, id)}
+	case original.Status == models.TaskStatusBlocked:
+		if err := checkBlockedRecovery(state, original, entry.Changed); err != nil {
+			return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes: %v", index, err)}
+		}
 	}
 	return nil
 }

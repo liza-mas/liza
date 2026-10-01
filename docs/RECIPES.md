@@ -166,8 +166,11 @@ liza resume
 | workaround_pattern | ARCHITECTURE_FLAW | Root cause patched repeatedly |
 | external_service_outage | EXTERNAL_DEPENDENCY | External service unavailable |
 | planning_review_churn | PLANNING_CONVERGENCE_DEGRADED | Code-planning convergence requires rejection-evidence review |
+| blocked_replacement_chain | RECOVERY_CONVERGENCE_DEGRADED | Replacements keep blocking; agents can no longer replace the task |
 
 For `planning_review_churn`, pause downstream fan-out and inspect rejection evidence before choosing remediation.
+
+For `blocked_replacement_chain`, read each recorded cause and stated change in the evidence, then decide: unblock, cancel, fix the source, or allow one more replacement. `resume` releases exactly the reported task's current blocked episode.
 
 ## Integration Failure Recovery
 

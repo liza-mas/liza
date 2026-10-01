@@ -456,6 +456,7 @@ Circuit-breaker detection uses anomalies and planning task review evidence to es
 | Workaround pattern | 2+ workarounds with same root cause | ARCHITECTURE_FLAW |
 | External service outage | 2+ tasks blocked by same service | EXTERNAL_DEPENDENCY |
 | planning_review_churn | four or more planning rejection cycles; `MERGED` tasks remain eligible | PLANNING_CONVERGENCE_DEGRADED |
+| blocked_replacement_chain | `BLOCKED` task after two blocked-recovery replacements in its lineage; agents cannot replace it until `resume` releases that episode | RECOVERY_CONVERGENCE_DEGRADED |
 
 When triggered: sprint pauses, markdown report generated with evidence, human decision required.
 The circuit breaker is observation-only — it never proposes solutions, modifies code,

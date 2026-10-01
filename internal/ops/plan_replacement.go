@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/secretmask"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -37,6 +39,8 @@ const planReplacementActor = "system"
 type planReplacements struct {
 	originals []string
 	children  map[string][]string
+	// changed holds each original's stated changes, one per output naming it.
+	changed map[string][]string
 }
 
 // declaredOriginals returns the tasks a plan's outputs supersede.
@@ -69,7 +73,7 @@ func excludeRetiring(deps []string, entry models.OutputEntry, retiring map[strin
 // runs before any child is appended: an output deduplicated onto another
 // in-flight task has no child of its own to take the original's place.
 func groupPlanReplacements(entries []models.OutputEntry, siblingIDs []string, skipped map[int]string) (*planReplacements, error) {
-	set := &planReplacements{children: make(map[string][]string)}
+	set := &planReplacements{children: make(map[string][]string), changed: make(map[string][]string)}
 	for i, entry := range entries {
 		if entry.Supersedes == "" {
 			continue
@@ -81,6 +85,9 @@ func groupPlanReplacements(entries []models.OutputEntry, siblingIDs []string, sk
 			set.originals = append(set.originals, entry.Supersedes)
 		}
 		set.children[entry.Supersedes] = append(set.children[entry.Supersedes], siblingIDs[i])
+		if changed := strings.TrimSpace(entry.Changed); changed != "" {
+			set.changed[entry.Supersedes] = append(set.changed[entry.Supersedes], changed)
+		}
 	}
 	if len(set.originals) == 0 {
 		return nil, nil
@@ -192,7 +199,8 @@ func applyPlanReplacements(bb *db.Blackboard, s *models.State, planID string, re
 			result.retiredWorktrees = append(result.retiredWorktrees, originalID)
 		}
 		reason := fmt.Sprintf("replaced by plan %s", planID)
-		if _, err := supersedeTaskInState(s, pb, original, children, reason, planReplacementActor, nil, now); err != nil {
+		changed := secretmask.New().MaskText(strings.Join(set.changed[originalID], "; "))
+		if _, err := supersedeTaskInState(s, pb, original, children, reason, changed, planReplacementActor, nil, now); err != nil {
 			return fmt.Errorf("retire %s: %w", originalID, err)
 		}
 		result.RetiredTaskIDs = append(result.RetiredTaskIDs, originalID)

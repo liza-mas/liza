@@ -20,6 +20,9 @@ type PatternResult struct {
 	Response       models.CircuitBreakerResponseType
 	Classification models.CircuitBreakerEvidenceClass
 	Explanation    string
+	// Subject binds a task-scoped pattern to the task and blocked episode it
+	// reports; resolving the response releases only that episode.
+	Subject *models.CircuitBreakerSubject
 }
 
 // DetectPatterns analyzes anomalies and detects circuit breaker patterns.
@@ -75,6 +78,9 @@ func DetectUnacknowledgedPatterns(state *models.State) (PatternResult, []models.
 	}
 
 	result := checkPlanningReviewChurn(state)
+	if result.Pattern == "" {
+		result = checkBlockedReplacementChain(state)
+	}
 	if result.Pattern != "" {
 		result.Response = models.CircuitBreakerResponseHalt
 	}
@@ -166,6 +172,47 @@ func checkPlanningReviewChurn(state *models.State) PatternResult {
 		}
 	}
 	return PatternResult{Triggered: false}
+}
+
+// checkBlockedReplacementChain reports the first BLOCKED task whose lineage is
+// at the agent blocked-recovery cap and not yet released (ADR-0171). The cap
+// keeps such a task BLOCKED, so the evidence stays current until a human
+// resolves this response, which releases exactly the reported episode.
+func checkBlockedReplacementChain(state *models.State) PatternResult {
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		chain, capped := models.BlockedRecoveryCapped(state, task)
+		if !capped {
+			continue
+		}
+		evidence := fmt.Sprintf("task %s is BLOCKED after %d blocked-recovery replacements (lineage %s); blocked_reason: %q",
+			task.ID, len(chain.Recoveries), strings.Join(chain.Path, " -> "), truncateEvidence(task.BlockedReason))
+		for _, id := range chain.Recoveries {
+			record := models.BlockedRecovery(state.FindTask(id))
+			reason, _ := record["blocked_reason"].(string)
+			changed, _ := record["changed"].(string)
+			evidence += fmt.Sprintf("; %s blocked on %q, replaced with change %q", id, truncateEvidence(&reason), truncateEvidence(&changed))
+		}
+		return PatternResult{
+			Triggered: true,
+			Pattern:   models.BlockedReplacementChainPattern,
+			Severity:  "RECOVERY_CONVERGENCE_DEGRADED",
+			Evidence:  evidence,
+			Subject:   &models.CircuitBreakerSubject{TaskID: task.ID, BlockedAt: models.BlockedEpisodeAt(task)},
+		}
+	}
+	return PatternResult{Triggered: false}
+}
+
+func truncateEvidence(text *string) string {
+	const limit = 200
+	if text == nil {
+		return ""
+	}
+	if runes := []rune(*text); len(runes) > limit {
+		return string(runes[:limit]) + "…"
+	}
+	return *text
 }
 
 func planningRejectionHistory(history []models.TaskHistoryEntry) (int, time.Time) {

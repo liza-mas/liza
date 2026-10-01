@@ -219,7 +219,7 @@ func TestSlicedIntegrationLifecycle(t *testing.T) {
 		}
 
 		addReplacementTask(t, fixture, "slice-fix-replacement")
-		if _, err := ops.SupersedeTask(fixture.root, fixID, []string{"slice-fix-replacement"}, "replace blocked slice repair", "orchestrator-1"); err != nil {
+		if _, err := ops.SupersedeTaskWithOptions(fixture.root, fixID, []string{"slice-fix-replacement"}, "replace blocked slice repair", "orchestrator-1", ops.SupersedeTaskOptions{Changed: "test: changed since block"}); err != nil {
 			t.Fatalf("SupersedeTask(slice fix): %v", err)
 		}
 		mergeCodingTask(t, fixture, "slice-fix-replacement", "slice-fix-replacement.txt")

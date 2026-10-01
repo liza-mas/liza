@@ -1002,7 +1002,7 @@ func TestRejectionRCAGateEndToEnd(t *testing.T) {
 		_, err = UnblockTask(fixture.root, fixture.taskID, coding.doer, "rescoped", rejectionRCATestActor)
 		requirePrecondition(t, err)
 
-		result, err := SupersedeTask(fixture.root, fixture.taskID, []string{fixture.taskID + "-split-a", fixture.taskID + "-split-b"}, "split after the RCA", rejectionRCATestActor)
+		result, err := SupersedeTaskWithOptions(fixture.root, fixture.taskID, []string{fixture.taskID + "-split-a", fixture.taskID + "-split-b"}, "split after the RCA", rejectionRCATestActor, SupersedeTaskOptions{Changed: "test: changed since block"})
 		if err != nil {
 			t.Fatalf("SupersedeTask() error: %v", err)
 		}

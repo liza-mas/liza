@@ -10,22 +10,24 @@ import (
 
 // SupersedeTaskCommand marks a task as SUPERSEDED and prints the result to stdout.
 // Delegates business logic to ops.SupersedeTask.
-func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, reason, agentID, recoverabilityCommand string) error {
+func SupersedeTaskCommand(projectRoot, taskID string, replacementIDs []string, reason, agentID, recoverabilityCommand, changed string) error {
 	result, err := ops.SupersedeTaskWithOptions(projectRoot, taskID, replacementIDs, reason, agentID, ops.SupersedeTaskOptions{
 		RecoverabilityCommand: recoverabilityCommand,
+		Changed:               changed,
 	})
 	return printSupersedeTaskResult(result, err)
 }
 
 // SupersedeTaskWithAuthorityCommand supersedes a task using generation-fenced authority.
 func SupersedeTaskWithAuthorityCommand(projectRoot, taskID string, replacementIDs []string, reason, recoverabilityCommand string, authority models.AgentAuthority) error {
-	return SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, replacementIDs, reason, recoverabilityCommand, authority, ops.LifecycleRequestOptions{})
+	return SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID, replacementIDs, reason, recoverabilityCommand, "", authority, ops.LifecycleRequestOptions{})
 }
 
-func SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID string, replacementIDs []string, reason, recoverabilityCommand string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
+func SupersedeTaskWithAuthorityAndOptionsCommand(projectRoot, taskID string, replacementIDs []string, reason, recoverabilityCommand, changed string, authority models.AgentAuthority, request ops.LifecycleRequestOptions) error {
 	result, err := ops.SupersedeTaskWithAuthority(projectRoot, taskID, replacementIDs, reason, authority, ops.SupersedeTaskOptions{
 		Request:               request,
 		RecoverabilityCommand: recoverabilityCommand,
+		Changed:               changed,
 	})
 	return printSupersedeTaskResult(result, err)
 }

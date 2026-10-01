@@ -6,22 +6,10 @@ Multiple coders failed on same task. Re-evaluate and act NOW:
 1. Read task history — understand what was tried and why it failed
 2. Determine if:
    - Task is impossible as specified — after the owning specialist has confirmed the unsupported assumption or infeasible contract, not before → supersede with revised tasks:
-     a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY).
+     a. Re-read the task via {{binaryName}} get <task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY); take its transition_id.
         If status changed (e.g., task was claimed), skip supersede — the task is being actively worked.
-     b. Write a tasks JSON file as a bare array — NOT a wrapper object:
-        [{
-          "id": "<new-task-id>",
-          "desc": "<short task description>",
-          "spec": "<spec path>",
-          "done": "<falsifiable completion condition>",
-          "scope": "<allowed files or behavior>",
-          "priority": 1,
-          "depends": [],
-          "type": "coding",
-          "role_pair": "coding-pair"
-        }]
-     c. Run: {{binaryName}} add-tasks --tasks-file <path.json> --agent-id {{.AgentID}} --json (create replacement tasks)
-     d. Run: {{binaryName}} supersede-task <old-id> <new-id-1>,<new-id-2> --reason "<reason>" --agent-id {{.AgentID}} --json
+     b. One replacement: write a payload with source_task_id, reason, changed (what differs from the failed attempts), replacement (the add-task object) and consumers ({{binaryName}} replace-task --help), then run: {{binaryName}} replace-task --replacement-file <path.json> --request-id <id> --expected-transition <transition_id> --agent-id {{.AgentID}} --json
+     c. Several replacements: a corrective plan whose outputs name the task in supersedes, each with changed. Never add-tasks the replacements first: a refused replacement would leave them runnable.
    - Missing context/docs → add to task description (update NOW)
    - Needs different approach → update scope/guidance (execute NOW)
    - Spec is wrong → fix spec first (update NOW)

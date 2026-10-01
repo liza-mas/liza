@@ -16,6 +16,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/payloadschema"
+	"github.com/liza-mas/liza/internal/secretmask"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -33,6 +34,9 @@ type ReplaceTaskInput struct {
 	Replacement   AddTaskInput              `json:"replacement"`
 	Consumers     []models.DependencyUpdate `json:"consumers"`
 	PreservedBase *PreservedTaskBase        `json:"preserved_base,omitempty"`
+	// Changed states what differs from the blocked attempt. Required when the
+	// source is BLOCKED (ADR-0171); recorded masked.
+	Changed string `json:"changed,omitempty"`
 }
 
 // ReplaceTaskResult reports the committed replacement graph and source boundary.
@@ -92,6 +96,7 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 	if err := validateReplaceTaskInput(input); err != nil {
 		return nil, err
 	}
+	input.Changed = secretmask.New().MaskText(strings.TrimSpace(input.Changed))
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 	state, source, err := readTaskState(bb, input.SourceTaskID)
@@ -216,7 +221,7 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 			}
 			hadWorktree = source.Worktree != nil
 			originalStatus := source.Status
-			if _, err := supersedeTaskInState(candidate, pb, source, []string{input.Replacement.ID}, input.Reason, authority.ID, nil, now); err != nil {
+			if _, err := supersedeTaskInState(candidate, pb, source, []string{input.Replacement.ID}, input.Reason, input.Changed, authority.ID, nil, now); err != nil {
 				return err
 			}
 			consumers := replacementRewrittenConsumers(candidate, source.ID, historyStarts)

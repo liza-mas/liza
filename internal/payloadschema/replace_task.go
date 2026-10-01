@@ -15,6 +15,7 @@ func validateReplaceTaskPayload(payload any) []models.FieldDiagnostic {
 	var input struct {
 		SourceTaskID  string                    `json:"source_task_id"`
 		Reason        string                    `json:"reason"`
+		Changed       string                    `json:"changed"`
 		Consumers     []models.DependencyUpdate `json:"consumers"`
 		PreservedBase *struct {
 			BaseCommit string `json:"base_commit"`

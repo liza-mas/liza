@@ -910,6 +910,9 @@ func TestReplaceTask_SourceEligibility(t *testing.T) {
 			s.Tasks[0] = testhelpers.BuildTaskByStatus("source", status, time.Now().UTC())
 			testhelpers.WriteInitialState(t, f.statePath, s)
 			f.opts.ExpectedTransition = models.TaskTransitionID(s.FindTask("source"))
+			if status == models.TaskStatusBlocked {
+				f.input.Changed = "test: changed since block"
+			}
 			before := replacementBytes(t, f.statePath)
 			_, err := f.run()
 			allowed := status == models.TaskStatusReady || status == models.TaskStatusRejected || status == models.TaskStatusBlocked || status == models.TaskStatusIntegrationFailed

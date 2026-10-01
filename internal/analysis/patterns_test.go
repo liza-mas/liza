@@ -1248,3 +1248,37 @@ func TestDetectPatterns_PendingMergeStallsDoNotFormRetryCluster(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || contains(s[1:], substr)))
 }
+
+func TestDetectBlockedReplacementChain(t *testing.T) {
+	blockedAt := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	superseded := func(id, successor string) models.Task {
+		reason := id + " blocked"
+		task := models.Task{ID: id, Status: models.TaskStatusSuperseded, BlockedReason: &reason, SupersededBy: []string{successor},
+			History: []models.TaskHistoryEntry{{Time: blockedAt, Event: models.TaskEventBlocked}}}
+		task.History = append(task.History, models.TaskHistoryEntry{Time: blockedAt.Add(time.Minute), Event: models.TaskEventSuperseded,
+			Extra: map[string]any{models.BlockedRecoveryKey: models.BlockedRecoveryRecord(&task, "retry "+id)}})
+		return task
+	}
+	headReason := "c blocked again"
+	head := models.Task{ID: "c", Status: models.TaskStatusBlocked, BlockedReason: &headReason,
+		History: []models.TaskHistoryEntry{{Time: blockedAt.Add(time.Hour), Event: models.TaskEventBlocked}}}
+
+	state := &models.State{Tasks: []models.Task{superseded("a", "b"), superseded("b", "c"), head}}
+	result, _, _ := DetectUnacknowledgedPatterns(state)
+	if result.Pattern != models.BlockedReplacementChainPattern || result.Response != models.CircuitBreakerResponseHalt {
+		t.Fatalf("result = %+v, want a %s halt", result, models.BlockedReplacementChainPattern)
+	}
+	if result.Subject == nil || result.Subject.TaskID != "c" || !result.Subject.BlockedAt.Equal(blockedAt.Add(time.Hour)) {
+		t.Fatalf("subject = %+v, want c at its latest block", result.Subject)
+	}
+	for _, want := range []string{"a -> b -> c", "c blocked again", "a blocked", "retry b"} {
+		if !strings.Contains(result.Evidence, want) {
+			t.Errorf("evidence %q missing %q", result.Evidence, want)
+		}
+	}
+
+	below := &models.State{Tasks: []models.Task{superseded("b", "c"), head}}
+	if result, _, _ := DetectUnacknowledgedPatterns(below); result.Pattern != "" {
+		t.Fatalf("one blocked recovery reported %+v", result)
+	}
+}

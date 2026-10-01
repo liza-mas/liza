@@ -61,7 +61,9 @@ existing `task_id`, distinct from both source and replacement, and explicit
 `expected_depends_on` and `desired_depends_on` arrays of unique nonempty IDs.
 Empty arrays are meaningful; the entire `consumers` list may be empty. Expected
 lists guard against stale dependency edits. `preserved_base` is optional, but
-when present requires both fields. Caller authority and request flags are
+when present requires both fields. Optional `changed` states what differs from
+the blocked attempt. The mutation requires it when the source is `BLOCKED` (see
+[Blocked recovery](#blocked-recovery)). Caller authority and request flags are
 invocation metadata, not fields of this payload.
 
 Preflight complex input with `validate-payload replace-task --payload <path>`.
@@ -261,6 +263,13 @@ authored between outputs, or when Kind deduplication leaves a superseding
 output without a child of its own. An operator-admitted pass reports it; the
 automatic pass only logs it, and the plan stays passed and ungenerated.
 
+Every output naming `supersedes` must also carry `changed`, the statement of
+what the replacement does differently. `set-task-output` checks this for any
+original status, because the original may block before generation, and refuses
+an original already at the blocked-recovery cap. Generation re-checks both
+rules under the lock. A legacy output without `changed` whose original is now
+`BLOCKED` is refused like any other generation refusal.
+
 Crash recovery recreates missing children with their `supersedes` and leaves an
 original already retired by those children alone. A live original under an
 executed marker can only come from a hand-edited state and is refused.
@@ -283,6 +292,24 @@ replay invariants to `INVARIANTS.md`, describe the source event and existing
 receipt use in `specs/architecture/blackboard-schema.md` (no new fields), index
 [ADR-0143](../architecture/ADR/0143-transactional-task-replacement.md), and
 consolidate these ceilings and their payback triggers in `TECH_DEBT.md`.
+
+## Blocked recovery
+
+Replacing a task that is `BLOCKED` is a blocked recovery
+([ADR-0171](../architecture/ADR/0171-cap-agent-blocked-recovery-replacements.md)).
+It applies to `supersede-task --changed`, `replace-task` and plan-declared
+replacement, all through the shared supersession core:
+
+- A non-empty, masked `changed` statement is required, and it is part of the
+  request fingerprint.
+- The original's `superseded` history entry records `blocked_recovery`
+  (`blocked_reason`, `blocked_at`, `changed`).
+- When the lineage already holds two such recoveries, the replacement is
+  refused until `resume` resolves the `blocked_replacement_chain`
+  circuit-breaker response whose subject is that task and blocked episode.
+  The refusal leaves state unchanged.
+
+Superseding without replacements is not a recovery.
 
 ## Evidence basis
 

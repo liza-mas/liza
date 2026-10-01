@@ -27,7 +27,7 @@ func replacementChildID(index int) string {
 }
 
 func replacingOutput(supersedes string) models.OutputEntry {
-	return models.OutputEntry{Desc: "replace " + supersedes, DoneWhen: "tests pass", Scope: "internal/", SpecRef: "README.md", Supersedes: supersedes}
+	return models.OutputEntry{Desc: "replace " + supersedes, DoneWhen: "tests pass", Scope: "internal/", SpecRef: "README.md", Supersedes: supersedes, Changed: "corrected interface for " + supersedes}
 }
 
 func replacementPlan(verdict models.PlanCheckVerdict, outputs ...models.OutputEntry) models.Task {
