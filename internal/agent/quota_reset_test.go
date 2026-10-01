@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -187,7 +188,7 @@ func TestQuotaAlerts_UseBrandedNames(t *testing.T) {
 	alerts := string(data)
 	// Resume keeps an unexpired signal (D58), so the early lift is deleting
 	// the file, named relative to the project root.
-	if !strings.Contains(alerts, "or delete .acme/provider-quota-exhausted-codex to lift it earlier") {
+	if !strings.Contains(alerts, "or delete "+filepath.Join(".acme", "provider-quota-exhausted-codex")+" to lift it earlier") {
 		t.Fatalf("spawn-blocked alert does not name the branded signal file:\n%s", alerts)
 	}
 	if strings.Contains(alerts, "resume") {
