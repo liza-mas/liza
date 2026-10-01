@@ -13,6 +13,9 @@ const (
 )
 
 func clearAttemptState(task *models.Task, profile attemptStateCleanupProfile) {
+	// A continuation entitles the next claim to resume the preserved work it
+	// was granted for; any attempt-state reset invalidates that work.
+	task.Continuation = false
 	switch profile {
 	case attemptStateReviewRejection:
 		// Rejection and retirement currently clear the same submitted-attempt

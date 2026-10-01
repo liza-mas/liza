@@ -185,8 +185,8 @@
     {
       "role": "orchestrator",
       "variant": "wake INITIAL_PLANNING",
-      "before_bytes": 20411,
-      "after_bytes": 20411,
+      "before_bytes": 20439,
+      "after_bytes": 20439,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -194,8 +194,8 @@
     {
       "role": "orchestrator",
       "variant": "wake BLOCKED_TASKS",
-      "before_bytes": 28114,
-      "after_bytes": 28114,
+      "before_bytes": 28194,
+      "after_bytes": 28194,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -203,8 +203,8 @@
     {
       "role": "orchestrator",
       "variant": "wake HYPOTHESIS_EXHAUSTED",
-      "before_bytes": 21048,
-      "after_bytes": 21048,
+      "before_bytes": 21076,
+      "after_bytes": 21076,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -212,8 +212,8 @@
     {
       "role": "orchestrator",
       "variant": "wake IMMEDIATE_DISCOVERY",
-      "before_bytes": 19525,
-      "after_bytes": 19525,
+      "before_bytes": 19553,
+      "after_bytes": 19553,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -221,8 +221,8 @@
     {
       "role": "orchestrator",
       "variant": "wake PLANNING_COMPLETE",
-      "before_bytes": 19073,
-      "after_bytes": 19073,
+      "before_bytes": 19101,
+      "after_bytes": 19101,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -230,8 +230,8 @@
     {
       "role": "orchestrator",
       "variant": "wake MANY_TO_ONE_READY",
-      "before_bytes": 18883,
-      "after_bytes": 18883,
+      "before_bytes": 18911,
+      "after_bytes": 18911,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -239,8 +239,8 @@
     {
       "role": "orchestrator",
       "variant": "wake CODING_COMPLETE",
-      "before_bytes": 18582,
-      "after_bytes": 18582,
+      "before_bytes": 18610,
+      "after_bytes": 18610,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -248,8 +248,8 @@
     {
       "role": "orchestrator",
       "variant": "wake SPRINT_COMPLETE",
-      "before_bytes": 18660,
-      "after_bytes": 18660,
+      "before_bytes": 18688,
+      "after_bytes": 18688,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
@@ -257,8 +257,8 @@
     {
       "role": "orchestrator",
       "variant": "wake HUMAN_NOTE",
-      "before_bytes": 18119,
-      "after_bytes": 18119,
+      "before_bytes": 18147,
+      "after_bytes": 18147,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0

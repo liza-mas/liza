@@ -523,6 +523,7 @@ type Task struct {
 	Worktree                *string                  `yaml:"worktree,omitempty"`
 	BaseCommit              *string                  `yaml:"base_commit,omitempty"`
 	Iteration               int                      `yaml:"iteration,omitempty"`
+	Continuation            bool                     `yaml:"continuation,omitempty"` // next claim resumes the current iteration; set by unblock-task
 	Output                  []OutputEntry            `yaml:"output,omitempty"`
 	Decomposition           *DecompositionManifest   `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
 	ParentTask              *string                  `yaml:"parent_task,omitempty"`

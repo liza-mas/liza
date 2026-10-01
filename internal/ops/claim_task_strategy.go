@@ -30,6 +30,7 @@ type claimContext struct {
 	integrationCommit   string // integration commit captured before the worktree phase
 	rebaseOldHead       string // rejected worktree HEAD before a claim-time rebase
 	rebaseSkipped       string // why a rejected claim kept its old base
+	continuation        bool   // the claim resumes the current iteration instead of starting one
 	leaseExpires        time.Time
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 }
@@ -341,6 +342,9 @@ func (preservedInitialClaimStrategy) historyEntry(now time.Time, ctx *claimConte
 	}
 	if ctx.adoptedWIP != "" {
 		extra["adopted_wip_commit"] = ctx.adoptedWIP
+	}
+	if ctx.continuation {
+		extra["continuation"] = true
 	}
 	return models.TaskHistoryEntry{
 		Time:  now,

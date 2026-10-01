@@ -4,6 +4,12 @@
 
 ACCEPTED
 
+Amended by [ADR-0170](0170-continuation-is-the-default-unblock.md): the
+restore mode fixes only whether the resume consumes an iteration (`assign`
+refuses `--new-iteration`, `claimable` requires it), and the `continuation`
+field written by `unblock-task` replaces direct assignment as the mechanism that
+avoids the increment.
+
 ## Context
 
 Repeated review rejection can mix product defects, unavailable validation

@@ -526,72 +526,24 @@ and [ADR-0141](specs/architecture/ADR/0141-blocked-assessment-idempotency.md).
 
 ## RCA assign restore conflicts with session preflight (F1)
 
-**What:** After `capability_reroute` or `lifecycle_repair` closes the rejection-RCA
-gate, a task with nonempty `validation_prerequisites` cannot recover through
-either form of `unblock-task`. Both paths require the `assign` restore mode.
-The [restore protocol](specs/protocols/task-lifecycle.md#restore-modes) remains
-subject to this unresolved limitation for prerequisite-bearing coding and
-planning tasks.
+**What:** The runtime defect is fixed by
+[ADR-0170](specs/architecture/ADR/0170-continuation-is-the-default-unblock.md):
+an `assign`-mode disposition now restores unassigned as a continuation, so a task
+with `validation_prerequisites` (which still refuses `--assign-to`) is claimed by
+its supervisor after a fresh target-session preflight, without consuming an
+iteration. Before, it had no restore form at all. What remains is proof.
 
-**Inspected evidence:** At commit
-`d2c4a8bf3a2f18aca667ee7dbe4d1e67933ed128`,
-[internal/ops/unblock_task.go:217-218](internal/ops/unblock_task.go#L217-L218)
-rejects `--assign-to` when prerequisites are nonempty: “validation preflight
-requires the target session; unblock without --assign-to and let its supervisor
-claim the task”. Without `--assign-to`,
-[internal/ops/unblock_task.go:428-436](internal/ops/unblock_task.go#L428-L436)
-rejects the assign-only disposition: “authorizes only the assign restore: retry
-unblock-task with --assign-to”. The preflight guard at line 217 runs before the
-RCA restore-mode check invoked at line 223, so neither form restores the task.
-These source ranges were rechecked at worktree base
-`02003b38d5c10a2c429b6fd0eb5e3bd5b8b7ceb9`; the file is unchanged from the
-inspected commit and navigation has not moved. This records fresh restoration,
-not the earlier exact-replay return.
+**Outstanding proof:** AC-161-6 and AC-161-8 end-to-end recovery proof: for
+prerequisite-bearing coding and planning tasks, a successful fresh check, the
+supervisor's claim with unchanged product iteration and retained RCA audit, and
+no execution ownership after a failed or stale check. `internal/ops` covers the
+unassigned restore of a prerequisite-bearing `lifecycle_repair` task only. The
+[slice finding](specs/plans/20260918-fix-gh-issues/20260921-integration-slice-cpm-1-cp-6.md#f1--non-product-recovery-strands-prerequisite-bearing-tasks)
+records the original reproduction.
 
-**Conflicting commitments:**
-[ADR-0136](specs/architecture/ADR/0136-validation-session-prerequisites.md#decision-outcome)
-requires fresh target-session preflight; persisted readiness is audit evidence,
-never reusable assignment authority. The same inspected sources confirm this in
-[validation_readiness.go:5-6](internal/models/validation_readiness.go#L5-L6)
-and [validation_preflight.go:199-201](internal/ops/validation_preflight.go#L199-L201):
-successful checks rerun. With no supplied session, the current process must
-match the target agent and generation
-([lines 262-268](internal/ops/validation_preflight.go#L262-L268)).
-[ADR-0145](specs/architecture/ADR/0145-rejection-rca-gate.md#decision) requires
-direct assignment for these non-product recoveries to avoid an iteration
-increment; the advisory `iteration_exempt` field cannot replace that mechanism.
-An ordinary claim or stored-readiness check therefore cannot reconcile the two.
-
-**Why deferred:** The operator's correction at
-`2026-09-20T23:25:19.174573658Z` withdrew in full the
-`2026-09-20T23:13:43.445282386Z` proposal to authorize assignment from stored
-`ValidationReadiness`. The correction required this documentation-only
-replacement for `integration-slice-cpm-1-cp-6-fix-1`, now superseded; it did not
-authorize changing either ADR or weakening either prerequisite or accounting.
-The required architecture/source-owner decision exceeds the fix task's authority.
-
-**Candidate, not adopted:** The operator proposed two-phase assignment: the
-orchestrator records assignment intent and the target supervisor completes it
-after its own fresh preflight. This aims to preserve direct assignment and fresh
-session checks together, but requires new transport in `UnblockTaskOptions`,
-which currently carries no target `ValidationSession`
-([unblock_task.go:34-40](internal/ops/unblock_task.go#L34-L40)). This entry neither
-selects that design nor authorizes its implementation.
-
-**Payback trigger:** An architecture/source-owner decision must authorize the
-fresh-session assignment mechanism and reconcile the ADR commitments, including
-any required ADR amendment, before implementation resumes. The subsequent repair
-must prove supported recovery for prerequisite-bearing coding and planning tasks
-on both paths, fresh successful checks, unchanged product iteration and retained
-RCA audit, while failed or stale checks acquire no execution ownership and
-generation/worktree/lease protections remain intact.
-
-**Outstanding proof:** AC-161-6 and AC-161-8 recovery proof remains outstanding.
-Documentation and supersession do not fix the runtime defect or prove frozen
-integration coverage. The [slice finding](specs/plans/20260918-fix-gh-issues/20260921-integration-slice-cpm-1-cp-6.md#f1--non-product-recovery-strands-prerequisite-bearing-tasks)
-records the original reproduction and proof limits; no new runtime recovery test
-is claimed here. F2 (`integration-slice-cpm-1-cp-6-fix-0`, override-rationale
-validation) remains merged and unaffected.
+**Payback trigger:** The next run that restores a prerequisite-bearing task
+after a `capability_reroute` or `lifecycle_repair` disposition, or an
+integration test of that path.
 
 ## Invocation telemetry conflicts with payload-validation boundaries (F4)
 
@@ -676,17 +628,12 @@ response/telemetry behavior at the affected boundaries and preserve the chosen
 sprint attribution before this debt can close. A fresh source-bound global
 integration review is then required for aggregate acceptance.
 
-**Independent limitation and outstanding proof:** Carry forward the
-[cp-6 F1 debt](#rca-assign-restore-conflicts-with-session-preflight-f1) and
-[restore-mode limitation](specs/protocols/task-lifecycle.md#restore-modes):
-prerequisite-bearing `capability_reroute`/`lifecycle_repair` recovery fails with
-`--assign-to` at target-session preflight and without it at the assign-only RCA
-guard. Its operator-directed deferral and superseded
-`integration-slice-cpm-1-cp-6-fix-1` lineage remain independent; this record
-neither reopens nor replaces that task or adopts its proposed two-phase design.
-AC-161-6 and AC-161-8 recovery proof remains outstanding, as the preserved report
-also records. Documentation and supersession resolve neither runtime defect
-(F4 or cp-6 F1) and supply no immutable clean global integration acceptance.
+**Independent limitation and outstanding proof:** The
+[cp-6 F1 debt](#rca-assign-restore-conflicts-with-session-preflight-f1) is
+independent; ADR-0170 fixed its runtime defect, and its AC-161-6 and AC-161-8
+recovery proof remains outstanding, as the preserved report also records.
+Documentation and supersession resolve no runtime defect of F4 and supply no
+immutable clean global integration acceptance.
 
 ## Supervisor state-read lock exhaustion is still fatal
 

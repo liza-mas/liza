@@ -614,8 +614,14 @@ func completeClaimTaskAfterValidation(
 		task.AssignedTo = &agentID
 		task.LeaseExpires = &leaseExpires
 
-		// Increment iteration (0 -> 1 on first claim, then 2, 3, etc.)
-		task.Iteration++
+		// A continuation resumes the preserved work of the current iteration;
+		// every other claim starts one (0 -> 1 on first claim, then 2, 3, etc.).
+		_, preserved := strategy.(preservedInitialClaimStrategy)
+		claimCtx.continuation = preserved && task.Continuation && task.Iteration > 0
+		task.Continuation = false
+		if !claimCtx.continuation {
+			task.Iteration++
+		}
 
 		strategy.mutateTask(task, &claimCtx)
 		if acceptance != nil {

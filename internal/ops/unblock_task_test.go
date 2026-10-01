@@ -1018,7 +1018,7 @@ func TestUnblockTaskRefusesOpenRejectionRCAGate(t *testing.T) {
 func TestUnblockTaskEnforcesRestoreMode(t *testing.T) {
 	t.Parallel()
 
-	t.Run("assign is refused without --assign-to", func(t *testing.T) {
+	t.Run("assign is refused with --new-iteration", func(t *testing.T) {
 		t.Parallel()
 
 		tmpDir := t.TempDir()
@@ -1034,13 +1034,78 @@ func TestUnblockTaskEnforcesRestoreMode(t *testing.T) {
 		testhelpers.WriteInitialState(t, stateFile, state)
 		before := string(readStateBytes(t, stateFile))
 
-		_, err := UnblockTaskWithOptions(tmpDir, "task-1", "capability rerouted", "orchestrator-1", UnblockTaskOptions{})
+		_, err := UnblockTaskWithOptions(tmpDir, "task-1", "capability rerouted", "orchestrator-1", UnblockTaskOptions{NewIteration: true})
 		outcome := requirePrecondition(t, err)
 		if outcome.Outcome != models.LifecycleInvalidInput || outcome.SafeAction != "correct_input" {
-			t.Errorf("outcome = %s/%s, want INVALID_INPUT/correct_input — the missing flag is a payload defect", outcome.Outcome, outcome.SafeAction)
+			t.Errorf("outcome = %s/%s, want INVALID_INPUT/correct_input — the wrong flag is a payload defect", outcome.Outcome, outcome.SafeAction)
 		}
-		if !strings.Contains(err.Error(), "--assign-to") {
-			t.Errorf("refusal = %q, want it to name --assign-to", err.Error())
+		if !strings.Contains(err.Error(), "without --new-iteration") {
+			t.Errorf("refusal = %q, want it to ask for a retry without --new-iteration", err.Error())
+		}
+		if after := string(readStateBytes(t, stateFile)); after != before {
+			t.Error("state changed during a refused unblock")
+		}
+	})
+
+	// TECH_DEBT F1: a prerequisite-bearing task refuses --assign-to, so an
+	// assign-only restore used to have no form at all.
+	t.Run("assign restores an unassigned continuation even with validation prerequisites", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		task := gatedRejectionRCATask("task-1", now)
+		task.Worktree = nil
+		task.BaseCommit = nil
+		task.Validation = []string{"check"}
+		task.ValidationPrerequisites = []models.ValidationPrerequisite{{Command: "check", Env: []string{"REQUIRED_ENV"}}}
+		closeRejectionRCAGate(&task, models.RecoveryLifecycleRepair, now)
+		state.Tasks = []models.Task{task}
+		testhelpers.WriteInitialState(t, stateFile, state)
+
+		result, err := UnblockTaskWithOptions(tmpDir, "task-1", "ownership repaired", "orchestrator-1", UnblockTaskOptions{})
+		if err != nil {
+			t.Fatalf("UnblockTaskWithOptions() error: %v", err)
+		}
+		if result.ToStatus != models.TaskStatusDraftCodingPlan || result.AssignedTo != "" {
+			t.Fatalf("result = %+v, want an unassigned %s restore", result, models.TaskStatusDraftCodingPlan)
+		}
+		if updated := mustReadTask(t, stateFile, "task-1"); !updated.Continuation || updated.Iteration != 3 {
+			t.Fatalf("continuation=%v iteration=%d, want true/3", updated.Continuation, updated.Iteration)
+		}
+	})
+
+	t.Run("claimable is refused without --new-iteration", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		testhelpers.SetupTestGitRepo(t, tmpDir)
+		testhelpers.SetupPipelineConfig(t, tmpDir)
+		stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+		now := time.Now().UTC()
+		state := testhelpers.CreateValidState()
+		task := gatedRejectionRCATask("task-1", now)
+		closeRejectionRCAGate(&task, models.RecoveryImplementationCorrection, now)
+		state.Tasks = []models.Task{task}
+		testhelpers.WriteInitialState(t, stateFile, state)
+		testhelpers.RegisterTestAgent(t, db.New(stateFile), "code-planner-1", "code-planner")
+		before := string(readStateBytes(t, stateFile))
+		// Neither assignment form lets a product correction skip the iteration.
+		for _, opts := range []UnblockTaskOptions{{}, {AssignTo: "code-planner-1"}} {
+			_, err := UnblockTaskWithOptions(tmpDir, "task-1", "implementation correction authorized", "orchestrator-1", opts)
+			outcome := requirePrecondition(t, err)
+			if outcome.Outcome != models.LifecycleInvalidInput || outcome.SafeAction != "correct_input" {
+				t.Errorf("assign-to %q: outcome = %s/%s, want INVALID_INPUT/correct_input", opts.AssignTo, outcome.Outcome, outcome.SafeAction)
+			}
+			if !strings.Contains(err.Error(), "with --new-iteration") {
+				t.Errorf("assign-to %q: refusal = %q, want it to ask for --new-iteration", opts.AssignTo, err.Error())
+			}
 		}
 		if after := string(readStateBytes(t, stateFile)); after != before {
 			t.Error("state changed during a refused unblock")
@@ -1079,7 +1144,7 @@ func TestUnblockTaskEnforcesRestoreMode(t *testing.T) {
 		}
 	})
 
-	t.Run("claimable restores to the initial status and the next claim iterates", func(t *testing.T) {
+	t.Run("claimable with --new-iteration restores to the initial status and the next claim iterates", func(t *testing.T) {
 		t.Parallel()
 
 		tmpDir := t.TempDir()
@@ -1096,7 +1161,7 @@ func TestUnblockTaskEnforcesRestoreMode(t *testing.T) {
 		state.Tasks = []models.Task{task}
 		testhelpers.WriteInitialState(t, stateFile, state)
 
-		result, err := UnblockTaskWithOptions(tmpDir, "task-1", "implementation correction authorized", "orchestrator-1", UnblockTaskOptions{})
+		result, err := UnblockTaskWithOptions(tmpDir, "task-1", "implementation correction authorized", "orchestrator-1", UnblockTaskOptions{NewIteration: true})
 		if err != nil {
 			t.Fatalf("UnblockTaskWithOptions() error: %v", err)
 		}
@@ -1168,7 +1233,7 @@ func TestUnblockTaskRetainsRejectionRCARecord(t *testing.T) {
 	state.Tasks = []models.Task{task}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	if _, err := UnblockTaskWithOptions(tmpDir, "task-1", "override authorized", "orchestrator-1", UnblockTaskOptions{}); err != nil {
+	if _, err := UnblockTaskWithOptions(tmpDir, "task-1", "override authorized", "orchestrator-1", UnblockTaskOptions{NewIteration: true}); err != nil {
 		t.Fatalf("UnblockTaskWithOptions() error: %v", err)
 	}
 

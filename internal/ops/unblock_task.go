@@ -27,16 +27,20 @@ type UnblockTaskResult struct {
 	ToStatus     models.TaskStatus        `json:"to_status"`
 	AssignedTo   string                   `json:"assigned_to,omitempty"`
 	Claimable    bool                     `json:"claimable"`
+	NewIteration bool                     `json:"new_iteration"`
 	LeaseExpires *time.Time               `json:"lease_expires,omitempty"`
 	Rebase       *UnblockTaskRebaseResult `json:"rebase,omitempty"`
 }
 
-// UnblockTaskOptions configures unblock-task behavior.
+// UnblockTaskOptions configures unblock-task behavior. By default the restore
+// is a continuation: resuming the preserved work consumes no iteration.
+// NewIteration makes the resume consume one; AssignTo only picks the doer.
 type UnblockTaskOptions struct {
-	Request    LifecycleRequestOptions
-	AssignTo   string
-	RebaseOn   string
-	AllowDirty bool
+	Request      LifecycleRequestOptions
+	AssignTo     string
+	RebaseOn     string
+	AllowDirty   bool
+	NewIteration bool
 }
 
 // UnblockTaskRebaseResult contains the outcome of a successful unblock rebase.
@@ -185,7 +189,9 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 	request, err := NewLifecycleRequest("unblock-task", observed, agentID, authority, opts.Request, struct {
 		Reason, AssignTo, RebaseOn string
 		AllowDirty                 bool
-	}{reason, opts.AssignTo, opts.RebaseOn, opts.AllowDirty})
+		// omitempty keeps the identity of requests made without the flag.
+		NewIteration bool `json:",omitempty"`
+	}{reason, opts.AssignTo, opts.RebaseOn, opts.AllowDirty, opts.NewIteration})
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +214,7 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 				return err
 			}
 			if receipt != nil {
-				result = UnblockTaskResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, FromStatus: receipt.Projection.SourceStatus, ToStatus: task.Status, AssignedTo: opts.AssignTo}
+				result = UnblockTaskResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, FromStatus: receipt.Projection.SourceStatus, ToStatus: task.Status, AssignedTo: opts.AssignTo, NewIteration: opts.NewIteration}
 				return errLifecycleReplay
 			}
 		}
@@ -220,7 +226,7 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 		if task.Status != models.TaskStatusBlocked {
 			return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
 		}
-		if err := checkUnblockRejectionRCAGate(task, opts.AssignTo); err != nil {
+		if err := checkUnblockRejectionRCAGate(task, opts.NewIteration); err != nil {
 			return err
 		}
 		if task.RolePair == "" {
@@ -306,6 +312,11 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 			historyExtra["assigned_to"] = opts.AssignTo
 			task.AssignedTo = &opts.AssignTo
 			task.LeaseExpires = &leaseExpires
+			// Direct assignment skips the claim, so it does the claim's accounting.
+			task.Continuation = false
+			if opts.NewIteration {
+				task.Iteration++
+			}
 			agent.Status = models.AgentStatusWorking
 			agent.CurrentTask = &taskID
 			agent.LeaseExpires = &leaseExpires
@@ -330,7 +341,9 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 			task.Status = targetStatus
 			task.AssignedTo = nil
 			task.LeaseExpires = nil
+			task.Continuation = !opts.NewIteration
 		}
+		historyExtra["new_iteration"] = opts.NewIteration
 		task.BlockedReason = nil
 		task.BlockedQuestions = nil
 		task.RepairRequest = nil
@@ -343,12 +356,13 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 		})
 
 		result = UnblockTaskResult{
-			TaskID:     taskID,
-			FromStatus: fromStatus,
-			ToStatus:   targetStatus,
-			AssignedTo: opts.AssignTo,
-			Claimable:  task.IsClaimable(expectedDoer, state.Tasks, resolver),
-			Rebase:     rebaseResult,
+			TaskID:       taskID,
+			FromStatus:   fromStatus,
+			ToStatus:     targetStatus,
+			AssignedTo:   opts.AssignTo,
+			Claimable:    task.IsClaimable(expectedDoer, state.Tasks, resolver),
+			NewIteration: opts.NewIteration,
+			Rebase:       rebaseResult,
 		}
 		if opts.AssignTo != "" {
 			result.LeaseExpires = &leaseExpires
@@ -403,8 +417,9 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 // disposition authorizes. unblock-task is the only operation that may restore a
 // BLOCKED task, so this is where the gate's promise — no further normal claim or
 // resubmission until a classified RCA and an authorized disposition exist — is
-// kept. A task that never gated carries no record and is untouched.
-func checkUnblockRejectionRCAGate(task *models.Task, assignTo string) error {
+// kept. A task that never gated carries no record and is untouched. The restore
+// mode fixes whether the resume consumes an iteration; who resumes is free.
+func checkUnblockRejectionRCAGate(task *models.Task, newIteration bool) error {
 	record := task.RejectionRCA
 	if record == nil {
 		return nil
@@ -423,16 +438,21 @@ func checkUnblockRejectionRCAGate(task *models.Task, assignTo string) error {
 			task.ID, missing)}, models.LifecycleStateChanged, "requery", "none")
 	}
 	switch mode := record.Disposition.RestoreMode; mode {
+	// A wrong flag is a payload defect, so both refusals ask to correct it.
 	case models.RestoreModeClaimable:
+		// A product correction is a new iteration.
+		if !newIteration {
+			return &PreconditionError{Reason: fmt.Sprintf(
+				"task %s recovery path %s is a product correction that consumes an iteration: retry unblock-task with --new-iteration",
+				task.ID, record.Disposition.RecoveryPath)}
+		}
 		return nil
 	case models.RestoreModeAssign:
-		if assignTo == "" {
-			// The assign restore is the non-incrementing one, which is how a
-			// capability or lifecycle cause avoids consuming a product
-			// iteration. The missing flag is a payload defect, so correct it.
+		// A capability or lifecycle cause continues the current iteration.
+		if newIteration {
 			return &PreconditionError{Reason: fmt.Sprintf(
-				"task %s recovery path %s authorizes only the %s restore: retry unblock-task with --assign-to",
-				task.ID, record.Disposition.RecoveryPath, mode)}
+				"task %s recovery path %s continues the current iteration: retry unblock-task without --new-iteration",
+				task.ID, record.Disposition.RecoveryPath)}
 		}
 		return nil
 	default:

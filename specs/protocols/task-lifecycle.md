@@ -310,36 +310,30 @@ Resume closes the gate but leaves the task `BLOCKED`.
 #### Restore modes
 
 Only `unblock-task` restores a `BLOCKED` task, preserving dependency, worktree and
-`--rebase-on` validation. It enforces the recorded disposition:
+`--rebase-on` validation. By default every restore is a continuation: the resume
+consumes no iteration. `--new-iteration` makes it consume one; `--assign-to` only
+picks the doer that resumes now (see
+[ADR-0170](../architecture/ADR/0170-continuation-is-the-default-unblock.md)). An
+unassigned continuation sets `continuation`; the next claim of the preserved
+worktree consumes it instead of incrementing `iteration`, and any attempt-state
+reset clears it. For a closed gate, the restore mode fixes the iteration choice:
 
 | Recovery path | Restore mode | Authorized restoration |
 |---------------|--------------|------------------------|
-| `implementation_correction` | `claimable` | Either unblock form; unassigned restore returns to the role-pair initial status and a later claim increments iteration |
-| `capability_reroute` | `assign` | Requires `--assign-to`; reroute validation without forcing a code change |
-| `lifecycle_repair` | `assign` | Requires `--assign-to`; repair ownership without consuming a product iteration |
+| `implementation_correction` | `claimable` | Requires `--new-iteration`, assigned or not |
+| `capability_reroute` | `assign` | Refuses `--new-iteration`; reroute validation without forcing a code change |
+| `lifecycle_repair` | `assign` | Refuses `--new-iteration`; repair ownership without consuming a product iteration |
 | `rescope` | `none` | Unblock refused; route to supersession |
-| `human_override` | `claimable` | Either unblock form, with a recorded rationale |
+| `human_override` | `claimable` | Requires `--new-iteration`, with a recorded rationale |
 
 For capability and lifecycle paths, resume sets `iteration_exempt` and resets
 `review_cycles_current` to zero; it leaves `iteration` and the durable total
-unchanged. Direct assignment is the mechanism that avoids the next claim's
-iteration increment; the exemption field alone does not bypass accounting.
-The RCA record survives successful unblock. Dependency-held unassigned restores
-remain unclaimable until dependencies finish; assignment still requires satisfied
-dependencies.
-
-**Known limitation (F1):** With nonempty `validation_prerequisites`, the
-assign-only `capability_reroute` and `lifecycle_repair` dispositions refuse both
-unblock forms. The target-session preflight guard rejects `--assign-to` before
-the RCA restore-mode check, which rejects its absence. ADR-0136's fresh preflight
-and audit-only readiness requirements conflict here with ADR-0145's direct,
-non-incrementing assignment commitment. See the
-[F1 debt record](../../TECH_DEBT.md#rca-assign-restore-conflicts-with-session-preflight-f1)
-for inspected commits/lines, the withdrawn stored-readiness proposal and the
-operator's unadopted two-phase assignment candidate. An architecture/source-owner
-decision is required before repair; AC-161-6/AC-161-8 recovery proof remains
-outstanding. Documentation and supersession establish neither a runtime fix nor
-frozen integration coverage. F2 remains merged and unaffected.
+unchanged. The continuation restore, not the exemption field, avoids the next
+increment. The RCA record survives successful unblock. Dependency-held unassigned
+restores remain unclaimable until dependencies finish; assignment still requires
+satisfied dependencies. A task with `validation_prerequisites` refuses
+`--assign-to`, so it restores unassigned and its supervisor claims it after a
+fresh target-session preflight.
 
 #### Durable event details and backstops
 

@@ -120,6 +120,7 @@ tasks:
     assigned_to: coder-1
     worktree: .worktrees/task-2
     iteration: 3  # Current iteration within this task (Ralph loop count)
+    continuation: false  # Set by unblock-task; the next preserved-worktree claim resumes iteration 3
     exit42_restart_count: 0   # Consecutive exit-42 restarts without progress (reset on state change)
     review_cycles_current: 2  # Reset to 0 on new attempt
     review_cycles_total: 2    # Never reset (audit trail)
@@ -301,8 +302,8 @@ unknown. Recovery paths are a closed enum:
 
 | Recovery path | Restore mode |
 |---------------|--------------|
-| `implementation_correction`, `human_override` | `claimable`: either unblock form |
-| `capability_reroute`, `lifecycle_repair` | `assign`: requires `--assign-to`; resets current review cycles and records `iteration_exempt` |
+| `implementation_correction`, `human_override` | `claimable`: requires `--new-iteration` |
+| `capability_reroute`, `lifecycle_repair` | `assign`: refuses `--new-iteration`; resets current review cycles and records `iteration_exempt` |
 | `rescope` | `none`: unblock refused; route to supersession |
 
 Resume closes the gate but leaves the task `BLOCKED`. Only `unblock-task` restores
@@ -682,6 +683,8 @@ The `iteration` field tracks coder work cycles on a task:
 | First claim (READY → IMPLEMENTING) | Set to 1 |
 | Work iteration complete | Unchanged (work within single claim) |
 | Review rejected (REJECTED → IMPLEMENTING, same coder) | Increment by 1 |
+| Unblocked, then claimed (default continuation) | Unchanged when the claim resumes the preserved worktree; otherwise increment by 1 |
+| Unblocked with `--new-iteration` | Increment by 1 at the next claim, or at the unblock with `--assign-to` |
 | New attempt triggered | Reset to 0 |
 | Task reaches terminal state | Preserved (audit trail) |
 

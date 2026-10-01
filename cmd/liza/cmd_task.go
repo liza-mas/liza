@@ -705,9 +705,12 @@ var unblockTaskCmd = &cobra.Command{
 	Short: "Restore a repaired BLOCKED task to its initial or executing state",
 	Long: `Restore a BLOCKED task after the orchestrator has verified that the blocker is gone.
 
-	This is for repair completion, not normal task claiming. Without --assign-to,
-	it moves the task back to the initial status for its role_pair. Pending dependencies
-	keep that task dependency-held and not immediately claimable. With --assign-to,
+	This is for repair completion, not normal task claiming. By default the restore
+	is a continuation: the task returns to the initial status for its role_pair, and
+	the next claim by any doer resumes its preserved work without consuming an
+	iteration. Pending dependencies keep that task dependency-held and
+	not immediately claimable. With --new-iteration, the resume consumes an
+	iteration. With --assign-to,
 	it directly restores the executing status and assigns the requested doer agent.
 	With --rebase-on, it rebases a preserved task worktree before unblocking, updates
 	base_commit, and leaves rebase conflicts BLOCKED with fresh repair metadata.`,
@@ -745,11 +748,16 @@ var unblockTaskCmd = &cobra.Command{
 		if !cmd.Flags().Changed("allow-dirty") {
 			allowDirty = false
 		}
+		newIteration, _ := cmd.Flags().GetBool("new-iteration")
+		if !cmd.Flags().Changed("new-iteration") {
+			newIteration = false
+		}
 		opts := ops.UnblockTaskOptions{
-			Request:    requestOpts,
-			AssignTo:   assignTo,
-			RebaseOn:   rebaseOn,
-			AllowDirty: allowDirty,
+			Request:      requestOpts,
+			AssignTo:     assignTo,
+			RebaseOn:     rebaseOn,
+			AllowDirty:   allowDirty,
+			NewIteration: newIteration,
 		}
 
 		authority, err := resolveOrchestratorAuthority(cmd)
@@ -1661,6 +1669,7 @@ func init() {
 	unblockTaskCmd.Flags().String("reason", "", "reason the blocked task can resume (required)")
 	unblockTaskCmd.Flags().String("rebase-on", "", "branch or commit to rebase the task worktree onto before unblocking")
 	unblockTaskCmd.Flags().Bool("allow-dirty", false, "allow tracked worktree changes during --rebase-on by using git rebase --autostash")
+	unblockTaskCmd.Flags().Bool("new-iteration", false, "make the resume consume an iteration; omitted, the next claim continues the current iteration")
 	unblockTaskCmd.MarkFlagRequired("reason")
 	registerCompletion(unblockTaskCmd, "agent-id", completeAgentIDs)
 	registerCompletion(unblockTaskCmd, "assign-to", completeAgentIDs)

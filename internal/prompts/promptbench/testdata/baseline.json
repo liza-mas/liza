@@ -1,5 +1,5 @@
 {
-  "total_bytes": 274990,
+  "total_bytes": 275018,
   "carrier_block": {
     "name": "RESOLVED REFERENCE CONTEXT",
     "bytes": 260562
@@ -11,7 +11,7 @@
     },
     {
       "name": "ORCHESTRATOR CONTEXT",
-      "bytes": 7675
+      "bytes": 7703
     },
     {
       "name": "SLICE INTEGRATION CONTEXT",
@@ -57,8 +57,8 @@
     }
   ],
   "depends_on_total_bytes": 5812,
-  "depends_on_share_of_total": 0.021135314011418598,
-  "carrier_share_of_total": 0.9475326375504564,
+  "depends_on_share_of_total": 0.021133162193020093,
+  "carrier_share_of_total": 0.9474361678144704,
   "duplicate_references": {
     "duplicated_blocks": 0,
     "duplicated_bytes": 0,

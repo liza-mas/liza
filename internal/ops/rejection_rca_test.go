@@ -893,7 +893,7 @@ func (f *gateLoopFixture) restore(mode string) {
 			f.t.Fatalf("assign restore ToStatus = %s, want the executing status", result.ToStatus)
 		}
 	case models.RestoreModeClaimable:
-		result, err := UnblockTaskWithOptions(f.root, f.taskID, "restore authorized by the disposition", rejectionRCATestActor, UnblockTaskOptions{})
+		result, err := UnblockTaskWithOptions(f.root, f.taskID, "restore authorized by the disposition", rejectionRCATestActor, UnblockTaskOptions{NewIteration: true})
 		if err != nil {
 			f.t.Fatalf("UnblockTaskWithOptions() error: %v", err)
 		}

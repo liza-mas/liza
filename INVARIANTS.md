@@ -88,7 +88,7 @@ Agent cannot claim if already assigned to another executing task.
 
 Unassigned `unblock-task` may restore a repaired task with valid pending dependencies to its role-pair initial status. The restored task remains dependency-held and unclaimable until every direct dependency is `MERGED`; `unblock-task --assign-to` remains rejected while any dependency is unmet.
 
-For a closed rejection-RCA gate, `unblock-task` enforces the disposition's restore mode: `assign` requires `--assign-to`, `claimable` permits either form, and `none` refuses restoration. Resume closes only the gate; it leaves the task `BLOCKED`. The RCA record survives successful unblock.
+An unblock is a continuation unless `--new-iteration` is passed: the next claim of the preserved worktree, or an `--assign-to` resume, consumes no iteration. Any attempt-state reset clears the continuation. For a closed rejection-RCA gate, `unblock-task` enforces the disposition's restore mode: `assign` refuses `--new-iteration`, `claimable` requires it, and `none` refuses restoration. Resume closes only the gate; it leaves the task `BLOCKED`. The RCA record survives successful unblock.
 
 **Enforced:** spec, code (`claim_task.go`, `unblock_task.go`, `rejection_rca.go`)
 

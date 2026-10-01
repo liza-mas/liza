@@ -4,6 +4,10 @@
 
 ACCEPTED
 
+Amended by [ADR-0170](0170-continuation-is-the-default-unblock.md): an
+unassigned restore continues the current iteration unless `--new-iteration` is
+passed, and `--assign-to` only picks the doer.
+
 ## Context
 
 Blocked tasks are often blocked because a required artifact is missing. The orchestrator can create a separate task to fill that gap, but once the repair task merges, the original blocked task's preserved worktree may still be based on an older integration branch that does not contain the newly introduced artifact.

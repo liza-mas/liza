@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/db"
 	activitylog "github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -1342,6 +1343,49 @@ func TestJSON_UnblockTask_PendingDependencyReportsNotClaimable(t *testing.T) {
 	}
 	if result["to_status"] != string(models.TaskStatusDraftCodingPlan) {
 		t.Fatalf("to_status = %v, want %s", result["to_status"], models.TaskStatusDraftCodingPlan)
+	}
+}
+
+func TestJSON_UnblockTask_NewIterationFlagReachesTheRestore(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		args             []string
+		wantNewIteration bool
+	}{
+		{name: "default continuation", wantNewIteration: false},
+		{name: "--new-iteration", args: []string{"--new-iteration"}, wantNewIteration: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
+				task := testhelpers.BuildTaskByStatus("task-json-unblock", models.TaskStatusBlocked, time.Now().UTC())
+				task.RolePair = "code-planning-pair"
+				task.Worktree = nil
+				task.BaseCommit = nil
+				task.AssignedTo = nil
+				task.LeaseExpires = nil
+				state.Tasks = []models.Task{task}
+			})
+
+			args := append([]string{"unblock-task", "task-json-unblock", "--reason", "repair verified", "--agent-id", "orchestrator-1", "--json"}, tc.args...)
+			stdout, err := executeRootCommandCapture(t, projectRoot, args...)
+			if err != nil {
+				t.Fatalf("unblock-task --json failed: %v\n%s", err, stdout)
+			}
+			result, ok := parseEnvelope(t, stdout)["result"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected result object in %s", stdout)
+			}
+			if result["new_iteration"] != tc.wantNewIteration {
+				t.Fatalf("new_iteration = %v, want %v", result["new_iteration"], tc.wantNewIteration)
+			}
+			state, err := db.New(statePath).Read()
+			if err != nil {
+				t.Fatalf("Read state: %v", err)
+			}
+			if got := state.FindTask("task-json-unblock").Continuation; got == tc.wantNewIteration {
+				t.Fatalf("continuation = %v, want %v", got, !tc.wantNewIteration)
+			}
+		})
 	}
 }
 

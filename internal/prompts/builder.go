@@ -352,7 +352,7 @@ func renderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
   Match notes by for=task-id or all and compare their timestamps with the last assessment.
   Inspect newly referenced recovery tasks even if they are still in an initial status; a claim failure may occur before BLOCKED.
   Apply current evidence through supported operations within existing scope and authority. A note grants no approval or permission to bypass review.
-- %[1]s unblock-task — Restore a repaired BLOCKED task to claimable state, or direct-resume with --assign-to
+- %[1]s unblock-task — Restore a repaired BLOCKED task, continuing its iteration; --new-iteration starts one, --assign-to direct-resumes
   %[1]s unblock-task <task-id> --reason "..." --agent-id "%[2]s" --json
   %[1]s unblock-task <task-id> --rebase-on <branch> --reason "..." --agent-id "%[2]s" --json
 - %[1]s wt-delete — Delete worktree for abandoned/superseded/blocked tasks
