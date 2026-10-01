@@ -726,25 +726,35 @@ func TestPause_FromRunning(t *testing.T) {
 	}
 }
 
-func TestPause_AlreadyPaused(t *testing.T) {
+// Pausing an already PAUSED system is an idempotent retry (D86): it rewrites
+// nothing and only waits for provider starts admitted before the pause.
+func TestPause_AlreadyPausedIsIdempotent(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
 	state := testhelpers.CreateValidState()
 	state.Config.Mode = models.SystemModePaused
+	changedAt := time.Date(2026, 9, 25, 1, 29, 0, 0, time.UTC)
+	changedBy := "operator"
+	state.Config.ModeChangedAt = &changedAt
+	state.Config.ModeChangedBy = &changedBy
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	_, err := Pause(tmpDir, "reason", "human")
-	if err == nil {
-		t.Fatal("Expected error when already PAUSED")
+	result, err := Pause(tmpDir, "retry", "human")
+	if err != nil {
+		t.Fatalf("Pause() on PAUSED error = %v, want idempotent success", err)
 	}
-	if !strings.Contains(err.Error(), "already PAUSED") {
-		t.Errorf("Error = %q, want to contain 'already PAUSED'", err.Error())
+	if result.Previous != models.SystemModePaused || result.New != models.SystemModePaused {
+		t.Errorf("result = %s -> %s, want PAUSED -> PAUSED", result.Previous, result.New)
 	}
-	var pe *PreconditionError
-	if !errors.As(err, &pe) {
-		t.Errorf("Expected PreconditionError, got %T", err)
+	after, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if after.Config.Mode != models.SystemModePaused || after.Config.ModeChangedAt == nil || !after.Config.ModeChangedAt.Equal(changedAt) ||
+		after.Config.ModeChangedBy == nil || *after.Config.ModeChangedBy != changedBy {
+		t.Errorf("idempotent pause rewrote mode metadata: %+v", after.Config)
 	}
 }
 

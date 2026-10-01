@@ -450,6 +450,59 @@ func resetAgentAfterExit(bb *db.Blackboard, authority models.AgentAuthority, pro
 	})
 }
 
+// releaseUnstartedTurn releases the agent after a provider turn that did not
+// run to completion: a start refused by a halt, or a review whose ownership was
+// lost.
+func releaseUnstartedTurn(bb *db.Blackboard, config SupervisorConfig, taskID string, halted bool) error {
+	if halted {
+		GetLogger().Info("Provider start refused by halt, releasing claim", "agent_id", config.AgentID, "task_id", taskID)
+		if err := releaseClaimForHalt(bb, config.Authority, config.ProjectRoot, taskID); err != nil {
+			return fmt.Errorf("release claim after halted launch: %w", err)
+		}
+		return nil
+	}
+	GetLogger().Info("Review ownership lost, checking for more work", "agent_id", config.AgentID, "task_id", taskID)
+	if err := resetAgentAfterExit(bb, config.Authority, config.ProjectRoot); err != nil {
+		return fmt.Errorf("reset after review ownership loss: %w", err)
+	}
+	return nil
+}
+
+// releaseClaimForHalt releases the claim of a provider that a halt refused to
+// start. Only a claim this agent still holds on taskID is released. A doer's
+// claim already started its iteration, so the task is marked as a continuation:
+// the next claim resumes that iteration instead of charging a new one.
+func releaseClaimForHalt(bb *db.Blackboard, authority models.AgentAuthority, projectRoot, taskID string) error {
+	now := time.Now().UTC()
+	agentID := authority.ID
+	pipelineTransitions, resolver := loadPipelineForRelease(projectRoot)
+
+	return ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
+		agent, exists := state.Agents[agentID]
+		if !exists {
+			return &errors.NotFoundError{Entity: "agent", ID: agentID}
+		}
+		if task := state.FindTask(taskID); task != nil && agent.CurrentTask != nil && *agent.CurrentTask == taskID {
+			heldAsDoer := task.AssignedTo != nil && *task.AssignedTo == agentID
+			heldAsReviewer := task.ReviewingBy != nil && *task.ReviewingBy == agentID
+			if heldAsDoer || heldAsReviewer {
+				if err := releaseTaskClaim(state, task, agent.Role, agentID, pipelineTransitions, resolver, now); err != nil {
+					return err
+				}
+				if heldAsDoer && task.AssignedTo == nil && task.Iteration > 0 {
+					task.Continuation = true
+				}
+			}
+		}
+		agent = state.Agents[agentID]
+		agent.Status = models.AgentStatusIdle
+		agent.CurrentTask = nil
+		agent.Heartbeat = now
+		state.Agents[agentID] = agent
+		return nil
+	})
+}
+
 // setAgentToOrchestratingStatus sets an orchestrator agent's status to PLANNING
 func setAgentToOrchestratingStatus(bb *db.Blackboard, authority models.AgentAuthority) error {
 	now := time.Now().UTC()

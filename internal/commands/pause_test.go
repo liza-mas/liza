@@ -46,15 +46,6 @@ func TestPauseCommand(t *testing.T) {
 			checkMessage: true,
 		},
 		{
-			name:        "cannot pause when already PAUSED",
-			initialMode: models.SystemModePaused,
-			reason:      "Test",
-			changedBy:   "human",
-			wantErr:     true,
-			errContains: "already PAUSED",
-			wantMode:    models.SystemModePaused,
-		},
-		{
 			name:        "cannot pause when STOPPED",
 			initialMode: models.SystemModeStopped,
 			reason:      "Test",
@@ -133,5 +124,31 @@ func TestPauseCommand(t *testing.T) {
 				t.Errorf("ModeChangedBy = %v, want %v", *updatedState.Config.ModeChangedBy, tt.changedBy)
 			}
 		})
+	}
+}
+
+// Pausing an already PAUSED system succeeds as a retry (D86) and leaves the
+// recorded pause untouched.
+func TestPauseCommand_AlreadyPausedIsIdempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModePaused
+	changedBy := "operator"
+	state.Config.ModeChangedBy = &changedBy
+	bb := testhelpers.WriteInitialState(t, stateFile, state)
+
+	testhelpers.AssertNoError(t, PauseCommand(tmpDir, "retry", "human"))
+
+	updated, err := bb.Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if updated.Config.Mode != models.SystemModePaused {
+		t.Errorf("Mode = %v, want PAUSED", updated.Config.Mode)
+	}
+	if updated.Config.ModeChangedBy == nil || *updated.Config.ModeChangedBy != changedBy {
+		t.Errorf("ModeChangedBy = %v, want unchanged %q", updated.Config.ModeChangedBy, changedBy)
 	}
 }

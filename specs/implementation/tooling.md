@@ -585,7 +585,7 @@ liza recover-agent coder-1 --force          # Override PID liveness check
 
 **liza pause / liza resume** — Pause/resume system
 ```bash
-liza pause    # Sets config.mode: PAUSED — agents exit gracefully
+liza pause    # Sets config.mode: PAUSED — no new claims, provider turns or merges; running turns finish
 liza resume   # Sets config.mode: RUNNING — supervisors restart agents
 ```
 
@@ -672,7 +672,7 @@ Human owns the intent and acts as observer and circuit-breaker, not approver.
 | Action | Mechanism | Effect |
 |--------|-----------|--------|
 | Kill agent | Ctrl+C / kill | Agent releases task claims on exit; supervisor restarts and re-reads blackboard |
-| Pause all | `liza pause` | Sets `config.mode: PAUSED`; agents exit gracefully (code 42), supervisors wait |
+| Pause all | `liza pause` | Sets `config.mode: PAUSED`; no new claims, provider turns or merges; running turns and prepared merges finish; supervisors wait (ADR-0173) |
 | Resume | `liza resume` | Sets `config.mode: RUNNING`; supervisors restart agents |
 | Force replan | `liza mark-blocked <task> --reason "human override"` | Planner escalation triggered |
 | Inject task | `liza add-task --id X ...` (as READY) | New task available for claim |

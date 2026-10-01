@@ -114,7 +114,7 @@ in the activity log.
 ## System Control
 
 ```bash
-§BRAND_BINARY_NAME§ pause                         # Pause new agent work (sets PAUSED)
+§BRAND_BINARY_NAME§ pause                         # Stop new claims, provider turns and merges (sets PAUSED)
 §BRAND_BINARY_NAME§ resume                        # Resume or advance sprint (see Sprint Lifecycle)
 §BRAND_BINARY_NAME§ stop                          # Abort system
 §BRAND_BINARY_NAME§ sprint-checkpoint             # Force checkpoint (halt + summary)

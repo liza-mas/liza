@@ -868,7 +868,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				return nil
 			}
 			delay := 5 * time.Second
-			if observer, ok := strategy.(claimFailureObserver); ok { // breaker-owning strategies pace and stop the loop
+			// Breaker-owning strategies pace and stop the loop; a halt refusal is not a claim failure.
+			if observer, ok := strategy.(claimFailureObserver); ok && !errors.Is(err, ops.ErrSystemHalted) {
 				decision := observer.ObserveClaimFailure(err)
 				if decision.Stop {
 					return nil
@@ -999,23 +1000,21 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Execute agent
 		exitCode, currentOutput, err := executeAgent(supervisorCtx, config, prompt, nil, effectiveTask, stateBefore.Config)
-		if errors.Is(err, errReviewOwnershipLost) {
-			GetLogger().Info("Review ownership lost, checking for more work", "agent_id", config.AgentID, "task_id", effectiveTask)
-			if resetErr := resetAgentAfterExit(bb, config.Authority, config.ProjectRoot); resetErr != nil {
-				if ops.IsAgentAuthorityError(resetErr) {
+		if halted := errors.Is(err, errLaunchHalted); halted || errors.Is(err, errReviewOwnershipLost) {
+			// No provider turn ran to completion: neither a crash nor a turn
+			// without progress, so no loop budget is charged.
+			if releaseErr := releaseUnstartedTurn(bb, config, effectiveTask, halted); releaseErr != nil {
+				if ops.IsAgentAuthorityError(releaseErr) {
 					return nil
 				}
-				return fmt.Errorf("reset after review ownership loss: %w", resetErr)
+				return releaseErr
 			}
-			// An externally interrupted review is neither a crash nor a
-			// successful turn without progress. Never charge either loop budget.
 			spinTracker.reset(effectiveTask)
 			crashTracker.reset(effectiveTask)
 			exit42Tracker.reset(taskID)
 			runtimeFailureTracker.reset(effectiveTask)
 			config.InitialTask = ""
-			// Pace repeated claim/launch disagreement without charging crash
-			// budgets or blocking work that another reviewer may own.
+			// Pace repeated claim/launch disagreement; a halt then parks at the gate.
 			if err := waitForSupervisorDelay(pollInterval); err != nil {
 				return err
 			}

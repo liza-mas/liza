@@ -67,7 +67,14 @@ func transitionToNewAttemptWithProjectLock(projectRoot, taskID, reason string, a
 }
 
 func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason string, authority *models.AgentAuthority) (*TransitionAttemptResult, error) {
-	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, "")
+	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, "", false)
+}
+
+// transitionToNewAttemptForClaim is the claim-triggered rollover: like the
+// claim, it is new work and is refused in a halt mode. Only phase 1 checks;
+// once the sentinel is set the rollover must finish or the task stays stranded.
+func transitionToNewAttemptForClaim(projectRoot, taskID, reason string, authority *models.AgentAuthority) (*TransitionAttemptResult, error) {
+	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, "", true)
 }
 
 // transitionToNewAttemptAfterVerdict runs only after the outer verdict review
@@ -77,23 +84,23 @@ func transitionToNewAttemptAfterVerdict(projectRoot, taskID, reason string, auth
 	if !lifecycleDigestValid(expectedCompletionToken) {
 		return nil, &PreconditionError{Reason: "attempt rollover requires the completed verdict transition token"}
 	}
-	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, expectedCompletionToken)
+	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, expectedCompletionToken, false)
 }
 
-func transitionToNewAttemptAtBoundary(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string) (*TransitionAttemptResult, error) {
+func transitionToNewAttemptAtBoundary(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string, requireAdmitted bool) (*TransitionAttemptResult, error) {
 	// Claim invokes rollover before taking this same task lock; verdict invokes
 	// it only after releasing its final state transaction.
 	lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
 	var result *TransitionAttemptResult
 	err := lock.WithLockOperation("transition-attempt", func() error {
 		var inner error
-		result, inner = transitionToNewAttemptLocked(projectRoot, taskID, reason, authority, expectedCompletionToken)
+		result, inner = transitionToNewAttemptLocked(projectRoot, taskID, reason, authority, expectedCompletionToken, requireAdmitted)
 		return inner
 	})
 	return result, err
 }
 
-func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string) (*TransitionAttemptResult, error) {
+func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string, requireAdmitted bool) (*TransitionAttemptResult, error) {
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
 
@@ -112,6 +119,11 @@ func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority 
 
 	// Phase 1: mark attempt boundary, block claims via sentinel.
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
+		if requireAdmitted {
+			if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+				return err
+			}
+		}
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}

@@ -43,6 +43,7 @@ type claimWorktreePhaseResult struct {
 }
 
 type claimTaskTestHooks struct {
+	afterInitialAdmission                  func()
 	beforePhase3Modify                     func()
 	afterPreservedIntegrationEqualityCheck func()
 }
@@ -168,6 +169,13 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 		}
 	}
 	invocation.observe(task)
+	// Fast refusal only; each claim-triggered write below rechecks under its lock.
+	if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+		return nil, err
+	}
+	if testClaimTaskHooks != nil && testClaimTaskHooks.afterInitialAdmission != nil {
+		testClaimTaskHooks.afterInitialAdmission()
+	}
 
 	runtimeRole, err := identity.ExtractRole(agentID)
 	if err != nil {
@@ -302,7 +310,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 		if shouldEscalate {
 			switch escalation.action {
 			case LimitActionNewAttempt:
-				result, taErr := transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, escalation.reason, authority)
+				result, taErr := transitionToNewAttemptForClaim(projectRoot, taskID, escalation.reason, authority)
 				if taErr != nil {
 					return nil, fmt.Errorf("failed to transition to new attempt: %w", taErr)
 				}
@@ -459,6 +467,9 @@ func completeClaimTaskAfterValidation(
 	// generation-fenced state transaction establish the current boundary.
 	var preparation models.LifecyclePreparation
 	if err := lifecycleMutation(bb, authority)(func(state *models.State) error {
+		if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+			return err
+		}
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}
@@ -559,6 +570,9 @@ func completeClaimTaskAfterValidation(
 	}
 
 	modifyClaimState := func(state *models.State) error {
+		if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+			return err
+		}
 		if err := preflight.CheckCurrent(state); err != nil {
 			return err
 		}
@@ -980,6 +994,10 @@ func enforceBlockedEscalation(
 	now := time.Now().UTC()
 
 	return lifecycleMutation(bb, authority)(func(state *models.State) error {
+		// Claim-triggered: a halted system must not block the task on a claim's behalf.
+		if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+			return err
+		}
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &errors.NotFoundError{Entity: "task", ID: taskID}

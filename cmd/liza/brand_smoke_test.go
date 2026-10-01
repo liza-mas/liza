@@ -101,6 +101,14 @@ func TestNonDefaultBrandRuntimeInputHelp(t *testing.T) {
 	}
 }
 
+func TestNonDefaultBrandPauseHelp(t *testing.T) {
+	bin := buildNonDefaultBrandBinary(t)
+	help := runBrandSmokeCommand(t, bin, "pause", "--help")
+	assertContains(t, help, "starts a provider turn")
+	assertContains(t, help, "acme-agent resume")
+	assertNoDefaultBrandLeaks(t, "pause help", help)
+}
+
 func buildNonDefaultBrandBinary(t *testing.T) string {
 	t.Helper()
 

@@ -239,6 +239,9 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 		needsPreflight = false
 		var pendingPreparation *models.LifecyclePreparation
 		err := lifecycleMutation(bb, input.Authority)(func(state *models.State) error {
+			if err := RequireWorkAdmitted(state, "claim-reviewer-task"); err != nil {
+				return err
+			}
 			claimingAgent, err := requireRegisteredClaimAgent(state, input.AgentID, role)
 			if err != nil {
 				return err

@@ -84,61 +84,10 @@ func setupAgentMergeRepo(t *testing.T) (projectRoot, stateFile, taskID string) {
 	// integration branch already created by SetupTestGitRepo; just check it out.
 	mustGit("checkout", "integration")
 
-	// Create worktree on a new branch.
-	wtDir := filepath.Join(tmpDir, ".worktrees", taskID)
-	if err := os.MkdirAll(filepath.Dir(wtDir), 0o755); err != nil {
-		t.Fatalf("mkdir worktrees: %v", err)
-	}
-	if out, err := exec.Command(
-		"git", "-C", tmpDir, "worktree", "add", wtDir, "integration", "-b", "task/"+taskID,
-	).CombinedOutput(); err != nil {
-		t.Fatalf("git worktree add: %v\n%s", err, string(out))
-	}
-
-	// Make a commit in the worktree.
-	wtFile := filepath.Join(wtDir, "feature.txt")
-	if err := os.WriteFile(wtFile, []byte("feature implementation\n"), 0o644); err != nil {
-		t.Fatalf("write feature.txt: %v", err)
-	}
-	if out, err := exec.Command("git", "-C", wtDir, "add", "feature.txt").CombinedOutput(); err != nil {
-		t.Fatalf("git add: %v\n%s", err, string(out))
-	}
-	if out, err := exec.Command("git", "-C", wtDir, "commit", "-m", "feat: add feature").CombinedOutput(); err != nil {
-		t.Fatalf("git commit: %v\n%s", err, string(out))
-	}
-	commitSHA := strings.TrimSpace(mustGitInDir(t, wtDir, "rev-parse", "HEAD"))
-
-	// Build the state with the task pre-approved by 2 reviewers.
-	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 	state.Config.IntegrationBranch = "integration"
 	state.Goal.SpecRef = "README.md"
-
-	worktreeRel := path.Join(".worktrees", taskID)
-	baseCommit := "base"
-	approvedBy := "code-reviewer-1"
-	state.Tasks = []models.Task{
-		{
-			ID:           taskID,
-			Description:  "feature work",
-			Status:       models.TaskStatusApproved,
-			Priority:     1,
-			Created:      now,
-			SpecRef:      "README.md",
-			DoneWhen:     "ok",
-			Scope:        "test",
-			RolePair:     "coding-pair",
-			Worktree:     &worktreeRel,
-			BaseCommit:   &baseCommit,
-			ReviewCommit: &commitSHA,
-			ApprovedBy:   &approvedBy,
-			Approvals: []models.Approval{
-				{Agent: "code-reviewer-1", Provider: "anthropic", Timestamp: now},
-				{Agent: "code-reviewer-2", Provider: "openai", Timestamp: now},
-			},
-			History: []models.TaskHistoryEntry{},
-		},
-	}
+	state.Tasks = []models.Task{approvedAgentMergeTask(t, tmpDir, taskID)}
 
 	// Register the merging reviewer so quorum checks don't trip.
 	state.Agents["code-reviewer-1"] = testhelpers.RegisteredTestAgent("code-reviewer")
@@ -146,6 +95,53 @@ func setupAgentMergeRepo(t *testing.T) (projectRoot, stateFile, taskID string) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	return tmpDir, stateFile, taskID
+}
+
+// approvedAgentMergeTask creates the task's worktree on a new branch with one
+// commit and returns the task APPROVED by two reviewers (quorum 2 met).
+func approvedAgentMergeTask(t *testing.T, projectRoot, taskID string) models.Task {
+	t.Helper()
+	wtDir := filepath.Join(projectRoot, ".worktrees", taskID)
+	if err := os.MkdirAll(filepath.Dir(wtDir), 0o755); err != nil {
+		t.Fatalf("mkdir worktrees: %v", err)
+	}
+	if out, err := exec.Command(
+		"git", "-C", projectRoot, "worktree", "add", wtDir, "integration", "-b", "task/"+taskID,
+	).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, string(out))
+	}
+	wtFile := filepath.Join(wtDir, taskID+".txt")
+	if err := os.WriteFile(wtFile, []byte("feature implementation\n"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", wtFile, err)
+	}
+	mustGitInDir(t, wtDir, "add", ".")
+	mustGitInDir(t, wtDir, "commit", "-m", "feat: add "+taskID)
+	commitSHA := mustGitInDir(t, wtDir, "rev-parse", "HEAD")
+
+	now := time.Now().UTC()
+	worktreeRel := path.Join(".worktrees", taskID)
+	baseCommit := "base"
+	approvedBy := "code-reviewer-1"
+	return models.Task{
+		ID:           taskID,
+		Description:  "feature work",
+		Status:       models.TaskStatusApproved,
+		Priority:     1,
+		Created:      now,
+		SpecRef:      "README.md",
+		DoneWhen:     "ok",
+		Scope:        "test",
+		RolePair:     "coding-pair",
+		Worktree:     &worktreeRel,
+		BaseCommit:   &baseCommit,
+		ReviewCommit: &commitSHA,
+		ApprovedBy:   &approvedBy,
+		Approvals: []models.Approval{
+			{Agent: "code-reviewer-1", Provider: "anthropic", Timestamp: now},
+			{Agent: "code-reviewer-2", Provider: "openai", Timestamp: now},
+		},
+		History: []models.TaskHistoryEntry{},
+	}
 }
 
 func mustGitInDir(t *testing.T, dir string, args ...string) string {

@@ -231,25 +231,44 @@ func validGoalCompleteStopToken(token goalCompleteStopToken) bool {
 		err == nil && len(operationID) == goalCompleteStopOperationIDBytes
 }
 
-// Pause transitions system mode to PAUSED. Agents block until resumed.
-// No terminal I/O.
+// Pause transitions system mode to PAUSED, then waits at the work-admission
+// barrier, so on success no provider start admitted before the pause is still
+// pending. Pausing an already PAUSED system writes nothing and only waits, which
+// makes a timed-out barrier safe to retry. No terminal I/O.
 func Pause(projectRoot, reason, changedBy string) (*ModeChangeResult, error) {
-	return changeMode(projectRoot, reason, changedBy, models.SystemModePaused)
+	result, err := changeModeAllowingSame(projectRoot, reason, changedBy, models.SystemModePaused, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := AwaitWorkAdmissionBarrier(projectRoot, "pause"); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // changeMode is the shared implementation for Start, Stop, and Pause.
 // It validates the transition via the systemModeTransitions table and applies it.
 func changeMode(projectRoot, reason, changedBy string, target models.SystemMode) (*ModeChangeResult, error) {
+	return changeModeAllowingSame(projectRoot, reason, changedBy, target, false)
+}
+
+// changeModeAllowingSame is changeMode; with allowSame, a system already in
+// target is left unwritten and reported as an unchanged transition.
+func changeModeAllowingSame(projectRoot, reason, changedBy string, target models.SystemMode, allowSame bool) (*ModeChangeResult, error) {
 	statePath := paths.New(projectRoot).StatePath()
 	blackboard := db.For(statePath)
 
 	timestamp := time.Now()
 	var previousMode models.SystemMode
+	errUnchanged := errors.New("mode unchanged")
 
 	err := blackboard.Modify(func(s *models.State) error {
 		previousMode = s.Config.Mode
 		if previousMode == "" {
 			previousMode = models.SystemModeRunning
+		}
+		if allowSame && previousMode == target {
+			return errUnchanged // Aborts the transaction: nothing to write.
 		}
 
 		if err := previousMode.ValidateTransition(target); err != nil {
@@ -266,7 +285,7 @@ func changeMode(projectRoot, reason, changedBy string, target models.SystemMode)
 		return nil
 	})
 
-	if err != nil {
+	if err != nil && !errors.Is(err, errUnchanged) {
 		return nil, err
 	}
 

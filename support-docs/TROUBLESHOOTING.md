@@ -69,7 +69,7 @@ ERROR: Failed to register agent planner-1 (collision?)
    §BRAND_BINARY_NAME§ agent planner --agent-id planner-2
    ```
 
-**Prevention:** Use `§BRAND_BINARY_NAME§ pause` before stopping agents — they'll exit gracefully at next check.
+**Prevention:** Use `§BRAND_BINARY_NAME§ pause` and let running turns finish before stopping agents — while PAUSED, no agent claims work or starts a turn.
 
 ### Agent Timeout (Execution Exceeds Time Limit)
 

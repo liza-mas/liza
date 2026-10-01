@@ -107,6 +107,11 @@ func (s *reviewerStrategy) PreWork(ctx context.Context, bb *db.Blackboard, confi
 			if ops.IsAgentAuthorityError(err) {
 				return false, err
 			}
+			if errors.Is(err, ops.ErrSystemHalted) {
+				// Back to the loop-top gate without spending merge retries,
+				// so no stall is recorded for a merge the halt refused.
+				return true, nil
+			}
 			logger.Warn("Merge handler error", "error", err)
 		}
 	}

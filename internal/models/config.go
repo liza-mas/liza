@@ -23,6 +23,12 @@ func (sm SystemMode) IsValid() bool {
 	return sm == SystemModeRunning || sm == SystemModePaused || sm == SystemModeStopped || sm == SystemModeCircuitBreakerTripped
 }
 
+// HaltsWork reports whether the mode refuses new claims, provider starts and
+// merge preparations while running agents finish their current turn.
+func (sm SystemMode) HaltsWork() bool {
+	return sm == SystemModePaused || sm == SystemModeCircuitBreakerTripped
+}
+
 // systemModeTransition defines allowed source modes and rejection messages for a target mode.
 type systemModeTransition struct {
 	AllowedFrom []SystemMode

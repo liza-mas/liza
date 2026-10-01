@@ -47,6 +47,9 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 	lock := filelock.New(claimTaskWorktreeLockPath(statePath, task.ID))
 	err = lock.WithLockOperation("claim-task-takeover", func() error {
 		return lifecycleMutation(bb, authority)(func(state *models.State) error {
+			if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+				return err
+			}
 			live := state.FindTask(task.ID)
 			if live == nil {
 				return &errors.NotFoundError{Entity: "task", ID: task.ID}

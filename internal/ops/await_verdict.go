@@ -434,6 +434,19 @@ func handleVerdictResult(bb *db.Blackboard, task *models.Task, agentID string, a
 			_, claimErr = ClaimTask(projectRoot, task.ID, agentID)
 		}
 		if claimErr != nil {
+			var halted *SystemHaltedError
+			if stderrors.As(claimErr, &halted) {
+				// The task stays rejected and is reclaimed after resume; this
+				// session must not start another iteration while halted.
+				return finishAwaitVerdict(bb, agentID, authority, &AwaitVerdictResult{
+					Verdict:       VerdictTerminal,
+					Reason:        fmt.Sprintf("auto-reclaim refused: system is %s; the task stays %s and is reclaimed after %q", halted.Mode, task.Status, brand.Command("resume")),
+					ReviewerAgent: reviewer,
+					TaskStatus:    task.Status,
+					Guidance:      stopVerdictGuidance(task.Status),
+					SafeAction:    SafeActionStop,
+				}, nil)
+			}
 			var pe *PreconditionError
 			if stderrors.As(claimErr, &pe) {
 				if strings.Contains(pe.Reason, "transitioned to attempt") {

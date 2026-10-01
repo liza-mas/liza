@@ -121,6 +121,9 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 			result, claimErr = ops.ClaimTaskWithAuthority(projectRoot, task.ID, *authority, session)
 		}
 		if claimErr != nil {
+			if errors.Is(claimErr, ops.ErrSystemHalted) {
+				return "", "", claimErr // Halted, not failed: no candidate is claimable.
+			}
 			logger.Warn("Claim attempt failed, trying next candidate",
 				"task_id", task.ID, "error", claimErr)
 			if classifyErr := markAgentDegradedForInfraClaim(projectRoot, agentID, role, task.ID, candidateIDs, claimErr, authority); classifyErr != nil {
@@ -469,7 +472,8 @@ func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, auth
 				result, err = ops.MergeWorktreeWithAuthority(projectRoot, task.ID, *authority, gate.extra)
 			}
 			if err != nil {
-				if ops.IsAgentAuthorityError(err) {
+				// Halted: stop the batch; no later merge would be admitted.
+				if ops.IsAgentAuthorityError(err) || errors.Is(err, ops.ErrSystemHalted) {
 					return err
 				}
 				var integrationErr *ops.IntegrationFailedError

@@ -26,6 +26,11 @@ import (
 // pending transitions). The supervisor must handle this as a clean exit.
 var errGoalComplete = errors.New("goal complete")
 
+// errLaunchHalted reports a provider start refused because the system entered
+// a halt mode after the claim. No provider ran; the supervisor releases the
+// claim without charging any budget and parks at the pause gate.
+var errLaunchHalted = errors.New("provider start refused: system halted")
+
 // checkAbort returns true if system mode is STOPPED
 func checkAbort(projectRoot string) bool {
 	statePath := paths.New(projectRoot).StatePath()
@@ -120,12 +125,15 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 	defer ticker.Stop()
 
 	for {
-		isPaused := false
-		pauseReason := ""
+		// Fail closed: a state that cannot be read cannot show the pause lifted.
+		isPaused := true
+		pauseReason := "[UNKNOWN] cannot read state"
 
 		if bb := db.For(statePath); bb != nil {
 			state, err := bb.ReadSnapshot()
-			if err == nil {
+			if err != nil {
+				pauseReason = fmt.Sprintf("[UNKNOWN] cannot read state: %v", err)
+			} else {
 				pauseReason = RolePauseReason(state, roleType)
 				isPaused = pauseReason != ""
 				switch {
@@ -224,27 +232,34 @@ func newProviderLaunchGate(config SupervisorConfig) LLMAgentLaunchGate {
 func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validation *ops.ValidationPreflight) LLMAgentLaunchGate {
 	return func(ctx context.Context, start func() error) error {
 		return ops.WithAgentLifecycleLock(ctx, config.ProjectRoot, config.Authority.ID, "provider-start", func() error {
-			// Registration and recover-agent take this agent's lifecycle lock, so
-			// the snapshot cannot miss a generation change for it.
-			state, err := readStateSnapshot(ctx, db.For(config.StatePath))
-			if err != nil {
-				return fmt.Errorf("read current agent authority before provider start: %w", err)
-			}
-			if err := ops.RequireAgentAuthority(state, config.Authority); err != nil {
-				return err
-			}
-			if _, err := newReviewExecution(state, config, taskID); err != nil {
-				return err
-			}
-			// A legacy task can acquire prerequisites after preparation. Such a
-			// change needs a fresh observation before any provider process starts.
-			if task := state.FindTask(taskID); task != nil && len(task.ValidationPrerequisites) > 0 && validation == nil {
-				return &sessionvalidation.Error{Code: "context_changed", CommandIndex: -1, CheckIndex: -1}
-			}
-			if err := validation.CheckLaunchCurrent(state); err != nil {
-				return err
-			}
-			return start()
+			// Held shared across the mode check and start, so a halt's barrier
+			// orders every start before or after it (ADR-0173).
+			return ops.WithWorkAdmissionSharedLock(ctx, config.ProjectRoot, "provider-start", func() error {
+				// Registration and recover-agent take this agent's lifecycle lock, so
+				// the snapshot cannot miss a generation change for it.
+				state, err := readStateSnapshot(ctx, db.For(config.StatePath))
+				if err != nil {
+					return fmt.Errorf("read current agent authority before provider start: %w", err)
+				}
+				if err := ops.RequireAgentAuthority(state, config.Authority); err != nil {
+					return err
+				}
+				if _, err := newReviewExecution(state, config, taskID); err != nil {
+					return err
+				}
+				// A legacy task can acquire prerequisites after preparation. Such a
+				// change needs a fresh observation before any provider process starts.
+				if task := state.FindTask(taskID); task != nil && len(task.ValidationPrerequisites) > 0 && validation == nil {
+					return &sessionvalidation.Error{Code: "context_changed", CommandIndex: -1, CheckIndex: -1}
+				}
+				if err := validation.CheckLaunchCurrent(state); err != nil {
+					return err
+				}
+				if err := ops.RequireWorkAdmitted(state, "provider-start"); err != nil {
+					return err
+				}
+				return start()
+			})
 		})
 	}
 }
@@ -274,8 +289,13 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 		return 0, "", session.PreparationError
 	}
 	checkedGate := newTaskProviderLaunchGate(config, taskID, validation)
+	// Backends report a gate refusal differently (ACPX masks it as exit 1), so
+	// the refusal is recorded here rather than recovered from Run's result.
+	halted := false
 	launchGate := LLMAgentLaunchGate(func(ctx context.Context, start func() error) error {
-		return releaseFailedValidation(config, taskID, checkedGate.launch(ctx, start))
+		err := checkedGate.launch(ctx, start)
+		halted = errors.Is(err, ops.ErrSystemHalted)
+		return releaseFailedValidation(config, taskID, err)
 	})
 
 	// Interactive mode: launch CLI without -p so user can paste the prompt
@@ -308,6 +328,9 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 			Environment:  session.Environment,
 			SessionScope: validation.SessionScope(),
 		})
+		if halted {
+			return 0, "", errLaunchHalted
+		}
 		return exitCode, "", err
 	}
 
@@ -362,6 +385,9 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 		SessionScope: validation.SessionScope(),
 	})
 	watchdogResult := stopWatchdog()
+	if halted {
+		return 0, "", errLaunchHalted
+	}
 	if stopReviewWatchdog() || errors.Is(err, errReviewOwnershipLost) {
 		// Cancellation can surface as an exit code, WaitDelay or a pipe error.
 		// Preserve the coordination outcome before provider-failure handling.

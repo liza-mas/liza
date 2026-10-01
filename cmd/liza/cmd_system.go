@@ -234,9 +234,14 @@ var pauseCmd = &cobra.Command{
 	Short: fmt.Sprintf("Pause the %s system", brand.NameTitle),
 	Long: fmt.Sprintf(`Pause the %s system by setting config.mode to PAUSED in state.yaml.
 
-Agents will detect the PAUSED mode and block at their next check. They will
-continue sending heartbeats but will not claim new tasks or make progress
-until the system is resumed.
+While PAUSED, no agent claims a task, starts a provider turn or starts a
+merge. Turns already running, and merges already prepared, finish; agents
+then wait at their next check, still sending heartbeats. A claim whose
+provider had not started yet is released and claimed again after resume.
+
+The command returns once every provider start admitted before the pause has
+happened. If one does not finish in time it reports an error, with the
+system still PAUSED; run pause again to wait for it.
 
 This is useful for:
 - Making manual adjustments to state.yaml

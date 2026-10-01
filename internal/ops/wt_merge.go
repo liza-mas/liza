@@ -70,6 +70,18 @@ var integrationMutationReceiptPersistTestHook func(models.IntegrationMutationRec
 var validateIntegrationLifecycleTransition = statevalidate.ValidateIntegrationLifecycleTransition
 var mergeFinalStateTestHook func()
 
+// mergePreparedTestHook is a test-only hook invoked right after a merge's
+// preparation commits, before any integration ref effect.
+var mergePreparedTestHook func(taskID string)
+
+// SetMergePreparedTestHookForTest installs mergePreparedTestHook for tests in
+// other packages and returns a restore function. Not for concurrent use.
+func SetMergePreparedTestHookForTest(hook func(taskID string)) func() {
+	previous := mergePreparedTestHook
+	mergePreparedTestHook = hook
+	return func() { mergePreparedTestHook = previous }
+}
+
 // Integration failure reason constants.
 const (
 	IntegrationReasonHEADMismatch           = "worktree HEAD mismatch"
@@ -427,6 +439,11 @@ func interruptedMergePreparation(task *models.Task, request LifecycleRequest) bo
 // any duplicate.
 func retireProvenMergePreparation(bb *db.Blackboard, taskID string, authority *models.AgentAuthority, prepared models.LifecyclePreparation, request LifecycleRequest) error {
 	return modifyLifecycleState(bb, authority, func(state *models.State) error {
+		// Retirement belongs to a retry, which is new work: a halt committed
+		// after the retry's first read leaves the preparation for resume.
+		if err := RequireWorkAdmitted(state, integrationOperationWTMerge); err != nil {
+			return err
+		}
 		task := state.FindTask(taskID)
 		if task == nil {
 			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
@@ -845,6 +862,11 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 			return nil, err
 		}
 	}
+	// Fast refusal before interrupted-preparation recovery, so a refused merge
+	// changes nothing; the preparation write below is the authoritative check.
+	if err := RequireWorkAdmitted(state, integrationOperationWTMerge); err != nil {
+		return nil, err
+	}
 	request, err := NewLifecycleRequest(integrationOperationWTMerge, task, agentID, authority, opts, mergeExtra)
 	if err != nil {
 		return nil, err
@@ -957,6 +979,11 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	// restarted invocation must requery while this preparation is unresolved.
 	var preparation models.LifecyclePreparation
 	err = modifyLifecycleState(bb, authority, func(s *models.State) error {
+		// Admission point: a preparation committed before a halt may finish;
+		// none is started after it.
+		if err := RequireWorkAdmitted(s, integrationOperationWTMerge); err != nil {
+			return err
+		}
 		live := s.FindTask(taskID)
 		if live == nil {
 			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
@@ -972,6 +999,9 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	})
 	if err != nil {
 		return nil, err
+	}
+	if mergePreparedTestHook != nil {
+		mergePreparedTestHook(taskID)
 	}
 	effects = "unknown"
 	casStarted := false

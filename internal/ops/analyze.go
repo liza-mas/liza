@@ -76,7 +76,9 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 	var committedReportPath string
 	var timestamp time.Time
 	var rejectionRCA *RejectionRCATelemetry
+	var tripped bool
 	err := blackboard.Modify(func(s *models.State) error {
+		defer func() { tripped = s.Config.Mode == models.SystemModeCircuitBreakerTripped }()
 		timestamp = time.Now()
 		rejectionRCA = deriveRejectionRCATelemetry(s.Tasks)
 		var consideredAnomalies []models.Anomaly
@@ -127,6 +129,13 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to update circuit breaker state: %w", err)
+	}
+	// A tripped breaker halts work like a pause: wait for admitted provider
+	// starts. Rerunning analyze while tripped reaches this barrier again.
+	if tripped {
+		if err := AwaitWorkAdmissionBarrier(projectRoot, "analyze"); err != nil {
+			return nil, fmt.Errorf("circuit breaker tripped: %w", err)
+		}
 	}
 
 	result := &AnalyzeResult{

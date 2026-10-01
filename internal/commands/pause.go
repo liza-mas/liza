@@ -16,7 +16,7 @@ func PauseCommand(projectRoot, reason, changedBy string) error {
 	}
 
 	printModeChangeResult("System paused", result,
-		"Agents will pause at their next check.",
+		"No new claims, provider turns or merges; running turns finish.",
 		fmt.Sprintf("Use '%s' to continue.", brand.Command("resume")),
 	)
 	return nil
