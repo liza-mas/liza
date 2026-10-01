@@ -40,7 +40,7 @@ func TestTerminalDependencyRecovery(t *testing.T) {
 		setTerminalRecoverySpecRefs(state)
 		blackboard := testhelpers.WriteInitialState(t, statePath, state)
 
-		if _, err := ops.SupersedeTask(projectRoot, "plan-old", []string{"plan-replacement"}, "Replace blocked plan", "orchestrator-1"); err != nil {
+		if _, err := ops.SupersedeTaskWithOptions(projectRoot, "plan-old", []string{"plan-replacement"}, "Replace blocked plan", "orchestrator-1", ops.SupersedeTaskOptions{Changed: "test: changed since block"}); err != nil {
 			t.Fatalf("SupersedeTask() error: %v", err)
 		}
 
