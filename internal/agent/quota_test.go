@@ -3,6 +3,8 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +36,26 @@ func TestDetectQuotaExhaustion_CodexMatch(t *testing.T) {
 	}
 	if result.Message == "" {
 		t.Error("Message should not be empty")
+	}
+}
+
+// Codex also prints its limit message with a typographic apostrophe (U+2019).
+// These are the 2026-09-22 lines that raised no signal (operator defect D58).
+func TestDetectQuotaExhaustion_CodexTypographicApostrophe(t *testing.T) {
+	message := "You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 29th, 2026 2:57 AM."
+	output := `{"type":"turn.started"}` + "\n" +
+		`{"type":"error","message":"` + message + `"}` + "\n" +
+		`{"type":"turn.failed","error":{"message":"` + message + `"}}`
+
+	result := DetectQuotaExhaustion(output, "codex")
+	if result == nil {
+		t.Fatal("expected quota exhaustion detected for the typographic apostrophe, got nil")
+	}
+	if result.Provider != "codex" {
+		t.Errorf("Provider = %q, want %q", result.Provider, "codex")
+	}
+	if want := time.Date(2026, time.September, 29, 2, 57, 0, 0, time.Local).UTC(); !result.ResetsAt.Equal(want) {
+		t.Errorf("ResetsAt = %v, want %v", result.ResetsAt, want)
 	}
 }
 
@@ -277,6 +299,87 @@ func TestClearQuotaSignal_Idempotent(t *testing.T) {
 	// Clear on non-existent file should not error.
 	if err := ClearQuotaSignal(projectRoot, "codex"); err != nil {
 		t.Fatalf("ClearQuotaSignal on missing file: %v", err)
+	}
+}
+
+// GIVEN signals that still block (announced reset, fresh legacy file,
+// unreadable path) and signals that no longer do (past expiry, old legacy file)
+// WHEN resume sweeps them
+// THEN only the latter are removed, and each held one names its expiry and file.
+func TestClearExpiredQuotaSignals_KeepsBlockingSignals(t *testing.T) {
+	projectRoot := t.TempDir()
+	makeQuotaProjectDir(t, projectRoot)
+	now := time.Now().UTC()
+	past := now.Add(-time.Hour).Format(time.RFC3339)
+	resetsAt := now.Add(48 * time.Hour).Truncate(time.Second)
+	if err := RaiseQuotaExhaustion(projectRoot, &QuotaExhaustion{Provider: "codex", Message: "limit", ResetsAt: resetsAt}); err != nil {
+		t.Fatal(err)
+	}
+	writeRawQuotaSignal(t, projectRoot, "claude", "provider: claude\ndetected: "+past+"\nmessage: limit\nresets_at: unknown\nexpires: "+past+"\n")
+	writeRawQuotaSignal(t, projectRoot, "cursor", "provider: cursor\ndetected: "+now.Format(time.RFC3339)+"\n")
+	writeRawQuotaSignal(t, projectRoot, "gemini", "provider: gemini\ndetected: "+now.Add(-2*time.Hour).Format(time.RFC3339)+"\n")
+	// A signal path that cannot be read fails closed, as at the spawn gate.
+	if err := os.MkdirAll(filepath.Join(QuotaSignalPath(projectRoot, "opencode"), "blocker"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	sweep := ClearExpiredQuotaSignals(projectRoot)
+
+	held := make(map[string]HeldQuotaSignal, len(sweep.Held))
+	for _, signal := range sweep.Held {
+		held[signal.Provider] = signal
+	}
+	if len(held) != 3 || held["codex"].Provider == "" || held["cursor"].Provider == "" || held["opencode"].Provider == "" {
+		t.Fatalf("held = %+v, want codex, cursor and opencode", sweep.Held)
+	}
+	if want := resetsAt.Add(quotaResetGrace); !held["codex"].Until.Equal(want) {
+		t.Errorf("codex held until %v, want %v", held["codex"].Until, want)
+	}
+	if want := filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-codex"); held["codex"].File != want {
+		t.Errorf("codex file = %q, want %q", held["codex"].File, want)
+	}
+	slices.Sort(sweep.Cleared)
+	if !slices.Equal(sweep.Cleared, []string{"claude", "gemini"}) || len(sweep.Failures) != 0 {
+		t.Fatalf("cleared = %v, failures = %v; want claude and gemini cleared without failures", sweep.Cleared, sweep.Failures)
+	}
+	for _, provider := range []string{"claude", "gemini"} {
+		if _, err := os.Stat(QuotaSignalPath(projectRoot, provider)); !os.IsNotExist(err) {
+			t.Errorf("%s signal still present after the sweep", provider)
+		}
+	}
+	if !CheckQuotaSignal(projectRoot, "codex") || !CheckQuotaSignal(projectRoot, "cursor") {
+		t.Error("held signals must still block")
+	}
+}
+
+func TestClearExpiredQuotaSignals_ReportsRemovalFailure(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("needs POSIX directory permissions enforced for this user")
+	}
+	projectRoot := t.TempDir()
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	writeRawQuotaSignal(t, projectRoot, "claude", "provider: claude\ndetected: "+past+"\nexpires: "+past+"\n")
+	dir := paths.New(projectRoot).LizaDir()
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
+
+	sweep := ClearExpiredQuotaSignals(projectRoot)
+
+	if len(sweep.Cleared) != 0 || len(sweep.Failures) != 1 || !strings.HasPrefix(sweep.Failures[0], "quota/claude: ") {
+		t.Fatalf("sweep = %+v, want one quota/claude failure", sweep)
+	}
+}
+
+// Codex can also print the limit on a plain stderr line, with either apostrophe.
+func TestDetectQuotaExhaustion_TypographicApostropheOnPlainLine(t *testing.T) {
+	result := DetectQuotaExhaustion("Error: You’ve hit your usage limit. Try again at 2:57 AM.", "codex")
+	if result == nil || result.Provider != "codex" {
+		t.Fatalf("result = %+v, want codex quota exhaustion", result)
+	}
+	if strings.Contains(result.Message, "’") {
+		t.Errorf("Message = %q, want the ASCII form recorded", result.Message)
 	}
 }
 

@@ -227,7 +227,8 @@ func pauseSystemCmd(projectRoot, reason string) tea.Cmd {
 
 // resumeSystemCmd resumes the system.
 // Calls ops.Resume() directly, then clears any provider-scoped stop signals
-// so restarted agents aren't immediately blocked.
+// so restarted agents aren't immediately blocked; a quota block whose expiry
+// has not passed stays.
 // Returns CmdResultMsg with result.
 func resumeSystemCmd(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
@@ -237,15 +238,8 @@ func resumeSystemCmd(projectRoot string) tea.Cmd {
 		}
 
 		// Clear provider-scoped stop signals (mirrors CLI resume behavior).
-		var clearErrors []string
-		if matches, err := filepath.Glob(agent.QuotaSignalGlob(projectRoot)); err == nil {
-			for _, m := range matches {
-				provider := agent.ProviderFromSignalFile(m)
-				if clearErr := agent.ClearQuotaSignal(projectRoot, provider); clearErr != nil {
-					clearErrors = append(clearErrors, fmt.Sprintf("quota/%s: %v", provider, clearErr))
-				}
-			}
-		}
+		sweep := agent.ClearExpiredQuotaSignals(projectRoot)
+		clearErrors := sweep.Failures
 		if matches, err := filepath.Glob(agent.ProviderUnavailableSignalGlob(projectRoot)); err == nil {
 			for _, m := range matches {
 				provider := agent.ProviderFromUnavailableSignalFile(m)
@@ -258,6 +252,9 @@ func resumeSystemCmd(projectRoot string) tea.Cmd {
 		msg := "System resumed"
 		if result.SystemRemainsStopped {
 			msg = fmt.Sprintf("HALT response acknowledged; system remains STOPPED; run %q before restarting agents", brand.Command("start"))
+		}
+		for _, held := range sweep.Held {
+			msg += fmt.Sprintf(" (quota still blocked: %s until %s; delete %s to lift it earlier)", held.Provider, held.Until.UTC().Format(time.RFC3339), held.File)
 		}
 		if len(clearErrors) > 0 {
 			msg += fmt.Sprintf(" (warning: failed to clear provider signals: %s)", strings.Join(clearErrors, "; "))

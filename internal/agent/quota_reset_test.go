@@ -185,8 +185,13 @@ func TestQuotaAlerts_UseBrandedNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	alerts := string(data)
-	if !strings.Contains(alerts, "run acme pause then acme resume to lift it earlier") {
-		t.Fatalf("spawn-blocked alert does not use the branded command:\n%s", alerts)
+	// Resume keeps an unexpired signal (D58), so the early lift is deleting
+	// the file, named relative to the project root.
+	if !strings.Contains(alerts, "or delete .acme/provider-quota-exhausted-codex to lift it earlier") {
+		t.Fatalf("spawn-blocked alert does not name the branded signal file:\n%s", alerts)
+	}
+	if strings.Contains(alerts, "resume") {
+		t.Fatalf("spawn-blocked alert still offers resume as the early lift:\n%s", alerts)
 	}
 	for _, literal := range []string{"liza", "Liza", "LIZA"} {
 		if strings.Contains(alerts, literal) {

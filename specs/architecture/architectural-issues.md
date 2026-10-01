@@ -1244,7 +1244,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 **Category:** STRUCTURAL DEBT
 **Related:** [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime)
 
-**Issue:** Quota exhaustion and provider-unavailable stop states are implemented as parallel agent-runtime helpers, then interpreted and cleared independently by CLI resume and TUI resume. The two presentation paths duplicate signal detection, cleanup, target-state selection, and user-facing reporting, with corresponding duplicated tests. Policy is therefore spread across `internal/agent`, `internal/commands`, and `internal/tui`.
+**Issue:** Quota exhaustion and provider-unavailable stop states are implemented as parallel agent-runtime helpers, then interpreted and cleared independently by CLI resume and TUI resume. The two presentation paths duplicate signal detection, cleanup, target-state selection, and user-facing reporting, with corresponding duplicated tests. Policy is therefore spread across `internal/agent`, `internal/commands`, and `internal/tui`. Narrowed 2026-10-01 (D58): which quota signals resume clears is decided once, by `agent.ClearExpiredQuotaSignals`; provider-unavailable clearing and the rendering of both stay duplicated.
 
 **Implication:** Adding a provider stop reason or changing recovery semantics requires coordinated edits across runtime and both interaction surfaces. Each surface can remain locally tested while disagreeing about which signals to clear or which agent state to restore.
 

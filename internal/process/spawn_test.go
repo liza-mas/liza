@@ -351,8 +351,12 @@ func TestSpawnAgent_QuotaSignalBlocksSpawnAndAlerts(t *testing.T) {
 	if !strings.Contains(alerts, "codex: refused to spawn coder while quota signal is set") {
 		t.Fatalf("alerts log missing spawn-blocked details:\n%s", alerts)
 	}
-	if !strings.Contains(alerts, "delete the flag file or run liza pause then liza resume") {
+	signalFile := filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-codex")
+	if !strings.Contains(alerts, "it lifts automatically then, or delete "+signalFile+" to lift it earlier") {
 		t.Fatalf("alerts log missing recovery hint:\n%s", alerts)
+	}
+	if strings.Contains(alerts, "resume") {
+		t.Fatalf("recovery hint still offers resume, which keeps an unexpired signal:\n%s", alerts)
 	}
 }
 

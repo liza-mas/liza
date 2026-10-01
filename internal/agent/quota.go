@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -74,6 +73,12 @@ func QuotaSignalPath(projectRoot, provider string) string {
 	return filepath.Join(paths.New(projectRoot).LizaDir(), quotaSignalPrefix+canonicalQuotaProvider(provider))
 }
 
+// QuotaSignalFile names the quota signal file for a provider relative to the
+// project root, as operator-facing remedies print it.
+func QuotaSignalFile(provider string) string {
+	return filepath.Join(paths.ProjectDirName(), quotaSignalPrefix+canonicalQuotaProvider(provider))
+}
+
 // QuotaSignalGlob returns a glob pattern matching all quota signal files.
 func QuotaSignalGlob(projectRoot string) string {
 	return filepath.Join(paths.New(projectRoot).LizaDir(), quotaSignalPrefix+"*")
@@ -110,9 +115,66 @@ func writeQuotaSignal(projectRoot, provider, message string, resetsAt, detected 
 // CheckQuotaSignal returns true while a quota signal for the provider exists
 // and has not reached its expiry.
 func CheckQuotaSignal(projectRoot, provider string) bool {
+	_, blocked := QuotaBlockedUntil(projectRoot, provider)
+	return blocked
+}
+
+// QuotaBlockedUntil reports whether a quota signal still blocks spawns on the
+// provider, and its expiry when it does. An unreadable signal blocks (fail
+// closed) with a zero expiry: none is known.
+func QuotaBlockedUntil(projectRoot, provider string) (time.Time, bool) {
 	now := time.Now()
-	expires, ok := readQuotaSignalExpiry(QuotaSignalPath(projectRoot, provider), now)
-	return ok && now.Before(expires)
+	expires, ok, readable := readQuotaSignalState(QuotaSignalPath(projectRoot, provider), now)
+	if !ok || !now.Before(expires) {
+		return time.Time{}, false
+	}
+	if !readable {
+		return time.Time{}, true
+	}
+	return expires, true
+}
+
+// HeldQuotaSignal is a quota signal that still blocks its provider.
+type HeldQuotaSignal struct {
+	Provider string
+	Until    time.Time
+	// File is the signal file relative to the project root.
+	File string
+}
+
+// QuotaSignalSweep reports what ClearExpiredQuotaSignals did.
+type QuotaSignalSweep struct {
+	Cleared  []string
+	Held     []HeldQuotaSignal
+	Failures []string // "quota/<provider>: <error>"
+}
+
+// ClearExpiredQuotaSignals removes the quota signals that no longer block and
+// keeps the others. Resume uses it: a provider-announced reset outlives a
+// pause, and recovering one provider (an account switch) must not lift
+// another's block, so the early lift is deleting that provider's file. An
+// unreadable signal is held, as the spawn gate treats it.
+func ClearExpiredQuotaSignals(projectRoot string) QuotaSignalSweep {
+	var sweep QuotaSignalSweep
+	matches, _ := filepath.Glob(QuotaSignalGlob(projectRoot)) // the pattern is well formed
+	now := time.Now()
+	for _, path := range matches {
+		provider := ProviderFromSignalFile(path)
+		expires, ok := readQuotaSignalExpiry(path, now)
+		if !ok {
+			continue // removed since the glob
+		}
+		if now.Before(expires) {
+			sweep.Held = append(sweep.Held, HeldQuotaSignal{Provider: provider, Until: expires, File: QuotaSignalFile(provider)})
+			continue
+		}
+		if err := ClearQuotaSignal(projectRoot, provider); err != nil {
+			sweep.Failures = append(sweep.Failures, fmt.Sprintf("quota/%s: %v", provider, err))
+			continue
+		}
+		sweep.Cleared = append(sweep.Cleared, provider)
+	}
+	return sweep
 }
 
 // LogAlert appends an alert line to alerts.log.
@@ -181,7 +243,7 @@ func LogQuotaSpawnBlockedAlert(projectRoot, provider, role string) error {
 	if expires, ok := readQuotaSignalExpiry(QuotaSignalPath(projectRoot, provider), now); ok {
 		until = expires.UTC().Format(time.RFC3339)
 	}
-	message := fmt.Sprintf("%s: refused to spawn %s while quota signal is set until %s; it lifts automatically then, or delete the flag file or run %s then %s to lift it earlier", provider, role, until, brand.Command("pause"), brand.Command("resume"))
+	message := fmt.Sprintf("%s: refused to spawn %s while quota signal is set until %s; it lifts automatically then, or delete %s to lift it earlier", provider, role, until, QuotaSignalFile(provider))
 	return LogAlert(projectRoot, "🚨", "PROVIDER QUOTA SPAWN BLOCKED", message)
 }
 

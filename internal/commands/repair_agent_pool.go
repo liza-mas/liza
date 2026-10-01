@@ -76,10 +76,64 @@ type UnservableRoleWork struct {
 
 // startedWith names how a reviewer for this work would be started.
 func (w UnservableRoleWork) startedWith() string {
-	if w.Item > 0 {
-		return fmt.Sprintf("%s item %d (%s)", paths.ModelsFileName, w.Item, w.CLI)
+	return startedWith(w.CLI, w.Item)
+}
+
+// startedWith names how an agent starting a list item (0 for none) on cli
+// would be started.
+func startedWith(cli string, item int) string {
+	if item > 0 {
+		return fmt.Sprintf("%s item %d (%s)", paths.ModelsFileName, item, cli)
 	}
-	return "--cli " + w.CLI
+	return "--cli " + cli
+}
+
+// ProviderBlock reports whether starting an agent on cli is blocked by a
+// provider quota signal, and until when. A nil ProviderBlock blocks nothing.
+type ProviderBlock func(cli string) (until time.Time, blocked bool)
+
+// QuotaProviderBlock blocks the CLIs whose quota signal is set in projectRoot.
+func QuotaProviderBlock(projectRoot string) ProviderBlock {
+	return func(cli string) (time.Time, bool) {
+		return agent.QuotaBlockedUntil(projectRoot, cli)
+	}
+}
+
+// ProviderBlockedRoleWork is claimable work that pool repair does not start an
+// agent for because the CLI the start would run is quota-blocked. Repair has
+// no fallback provider (ADR-0167), so the role has no usable provider until
+// then.
+type ProviderBlockedRoleWork struct {
+	Role string `json:"role"`
+	CLI  string `json:"cli"`
+	// Item is the 1-based models.yaml list item the start would use.
+	Item int `json:"models_item,omitempty"`
+	// Until is zero when the signal cannot be read: blocked, expiry unknown.
+	Until   time.Time `json:"until"`
+	TaskIDs []string  `json:"task_ids"`
+	// Reason explains demand that does not come from claimable tasks.
+	Reason string `json:"reason,omitempty"`
+}
+
+// describe returns what is waiting and the remedy, for alerts and output.
+func (w ProviderBlockedRoleWork) describe() (summary, hint string) {
+	demand := fmt.Sprintf("%d claimable task(s) (%s)", len(w.TaskIDs), strings.Join(w.TaskIDs, ", "))
+	if w.Reason != "" {
+		demand = w.Reason
+	}
+	until := "an unknown time (its signal file cannot be read)"
+	if !w.Until.IsZero() {
+		until = w.Until.UTC().Format(time.RFC3339)
+	}
+	summary = fmt.Sprintf("%s: %s and no usable provider: %s is quota-exhausted until %s",
+		w.Role, demand, startedWith(w.CLI, w.Item), until)
+	remedy := fmt.Sprintf("change the role's CLI in %s or start one with `%s`", paths.ModelsFileName, brand.Command("agent", w.Role, "--cli", "<other-cli>"))
+	if w.Item > 0 {
+		remedy = fmt.Sprintf("change item %d in %s", w.Item, paths.ModelsFileName)
+	}
+	hint = fmt.Sprintf("auto repair starts agents after that; to staff earlier, %s, or delete %s once %s has capacity again",
+		remedy, agent.QuotaSignalFile(w.CLI), w.CLI)
+	return summary, hint
 }
 
 type SpawnedAgent struct {
@@ -107,16 +161,18 @@ type DegradedAgentCapacity struct {
 }
 
 type RepairAgentPoolResult struct {
-	CLI        string                    `json:"cli"`
-	RoleCLIs   map[string]string         `json:"role_clis,omitempty"`
-	DryRun     bool                      `json:"dry_run"`
-	Missing    []MissingRoleWork         `json:"missing"`
-	Unservable []UnservableRoleWork      `json:"unservable,omitempty"`
-	Degraded   []DegradedAgentCapacity   `json:"degraded,omitempty"`
-	Spawned    []SpawnedAgent            `json:"spawned,omitempty"`
-	Failed     []FailedAgentSpawn        `json:"failed,omitempty"`
-	Commands   []string                  `json:"commands,omitempty"`
-	Validation []ValidationAgentCapacity `json:"validation,omitempty"`
+	CLI        string               `json:"cli"`
+	RoleCLIs   map[string]string    `json:"role_clis,omitempty"`
+	DryRun     bool                 `json:"dry_run"`
+	Missing    []MissingRoleWork    `json:"missing"`
+	Unservable []UnservableRoleWork `json:"unservable,omitempty"`
+	// ProviderBlocked is work not started because its CLI is quota-blocked.
+	ProviderBlocked []ProviderBlockedRoleWork `json:"provider_blocked,omitempty"`
+	Degraded        []DegradedAgentCapacity   `json:"degraded,omitempty"`
+	Spawned         []SpawnedAgent            `json:"spawned,omitempty"`
+	Failed          []FailedAgentSpawn        `json:"failed,omitempty"`
+	Commands        []string                  `json:"commands,omitempty"`
+	Validation      []ValidationAgentCapacity `json:"validation,omitempty"`
 }
 
 // ValidationAgentCapacity is a task-specific observation, not a reusable proof
@@ -223,15 +279,26 @@ func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error
 	repairCLI := RepairCLI{Explicit: opts.CLI, RoleModels: roleModels}
 
 	now := time.Now().UTC()
-	missing, unservable := FindRoleCapacityDeficits(state, pr, repairCLI, opts.PendingAgentIDs, now)
-	missing = append(missing, findMissingOrchestrator(state, pr, now)...)
+	blocked := QuotaProviderBlock(opts.ProjectRoot)
+	capacity := FindRoleCapacity(state, pr, repairCLI, opts.PendingAgentIDs, blocked, now)
+	missing, providerBlocked := capacity.Missing, capacity.ProviderBlocked
+	for _, roleWork := range findMissingOrchestrator(state, pr, now) {
+		if work, isBlocked := blockedOrchestratorWork(roleWork, repairCLI, state, pr, blocked); isBlocked {
+			providerBlocked = append(providerBlocked, work)
+			continue
+		}
+		missing = append(missing, roleWork)
+	}
 	missing = subtractPendingSpawns(missing, opts.PendingSpawns)
 	missing = filterMissingRoleWork(missing, opts.Roles)
 	result := &RepairAgentPoolResult{
 		CLI:        opts.CLI,
 		DryRun:     opts.DryRun,
 		Missing:    missing,
-		Unservable: filterUnservableRoleWork(unservable, opts.Roles),
+		Unservable: filterUnservableRoleWork(capacity.Unservable, opts.Roles),
+		ProviderBlocked: slices.DeleteFunc(providerBlocked, func(work ProviderBlockedRoleWork) bool {
+			return len(opts.Roles) > 0 && !slices.Contains(opts.Roles, work.Role)
+		}),
 		Degraded:   findCurrentDegradedAgentCapacity(state),
 		Validation: findValidationAgentCapacity(state, pr, opts.Roles),
 	}
@@ -470,8 +537,25 @@ type maxInstancesResolver interface {
 // returned as unservable instead; the others carry the ID to start with.
 // reservedIDs are explicit IDs of started agents not registered yet.
 func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, repairCLI RepairCLI, reservedIDs map[string]bool, now time.Time) ([]MissingRoleWork, []UnservableRoleWork) {
+	capacity := FindRoleCapacity(state, pr, repairCLI, reservedIDs, nil, now)
+	return capacity.Missing, capacity.Unservable
+}
+
+// RoleCapacity is pool repair's view of the claimable work idle agents do not
+// cover.
+type RoleCapacity struct {
+	Missing         []MissingRoleWork
+	Unservable      []UnservableRoleWork
+	ProviderBlocked []ProviderBlockedRoleWork
+}
+
+// FindRoleCapacity is FindRoleCapacityDeficits that also sets aside the work
+// whose start would run a CLI blocked reports blocked. That work is classified
+// per role and list item before any agent ID is reserved or headroom is
+// counted, so a blocked item never takes a start another item could use.
+func FindRoleCapacity(state *models.State, pr models.PipelineResolver, repairCLI RepairCLI, reservedIDs map[string]bool, blocked ProviderBlock, now time.Time) RoleCapacity {
 	if state == nil || pr == nil {
-		return nil, nil
+		return RoleCapacity{}
 	}
 
 	window := agentLivenessWindow(state.Config)
@@ -509,6 +593,32 @@ func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, r
 	}
 	unservable := make(map[startKind][]string)
 	unservableCLI := make(map[startKind]string)
+	blockedTasks := make(map[startKind][]string)
+	blockedStarts := make(map[startKind]ProviderBlockedRoleWork)
+	roleCLIs := make(map[string]string)
+	// setAside records task under kind when a start on cli is blocked.
+	setAside := func(kind startKind, cli, taskID string) bool {
+		if blocked == nil || cli == "" {
+			return false
+		}
+		until, isBlocked := blocked(cli)
+		if !isBlocked {
+			return false
+		}
+		blockedTasks[kind] = append(blockedTasks[kind], taskID)
+		blockedStarts[kind] = ProviderBlockedRoleWork{Role: kind.role, CLI: cli, Item: kind.item, Until: until}
+		return true
+	}
+	// roleCLI is the CLI a role's starts run when no list item picks one; a
+	// resolution error is left to the spawn path to report.
+	roleCLI := func(role string) string {
+		cli, ok := roleCLIs[role]
+		if !ok {
+			cli, _, _ = resolveRepairCLI(repairCLI, role, state, pr)
+			roleCLIs[role] = cli
+		}
+		return cli
+	}
 
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
@@ -533,9 +643,11 @@ func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, r
 		}
 
 		if models.IsRoleTaskReady(state, task, doerRole, pr, now) && !validationFailedFor(doerRole) {
-			if idleDoersUsed[doerRole] < len(idle[doerRole]) {
+			switch {
+			case idleDoersUsed[doerRole] < len(idle[doerRole]):
 				idleDoersUsed[doerRole]++
-			} else {
+			case setAside(startKind{doerRole, 0}, roleCLI(doerRole), task.ID):
+			default:
 				uncovered[doerRole] = append(uncovered[doerRole], task.ID)
 			}
 		}
@@ -544,7 +656,9 @@ func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, r
 			continue
 		}
 		if reviewerPolicy == nil {
-			uncovered[reviewerRole] = append(uncovered[reviewerRole], task.ID)
+			if !setAside(startKind{reviewerRole, 0}, roleCLI(reviewerRole), task.ID) {
+				uncovered[reviewerRole] = append(uncovered[reviewerRole], task.ID)
+			}
 			continue
 		}
 		slots, _ := repairCLI.RoleModels.ReviewSlots(reviewerRole)
@@ -559,6 +673,9 @@ func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, r
 		if planner == nil {
 			// The spawn path reports the CLI error; count the demand as usual.
 			uncovered[reviewerRole] = append(uncovered[reviewerRole], task.ID)
+			continue
+		}
+		if item := planner.itemFor(task); setAside(startKind{reviewerRole, item}, planner.cliFor(item), task.ID) {
 			continue
 		}
 		agentID, item, ok := planner.assign(task, reviewerPolicy)
@@ -610,14 +727,14 @@ func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, r
 		})
 	}
 
-	kinds := slices.SortedFunc(maps.Keys(unservable), func(a, b startKind) int {
+	byRoleThenItem := func(a, b startKind) int {
 		if c := strings.Compare(a.role, b.role); c != 0 {
 			return c
 		}
 		return a.item - b.item
-	})
+	}
 	var notServable []UnservableRoleWork
-	for _, kind := range kinds {
+	for _, kind := range slices.SortedFunc(maps.Keys(unservable), byRoleThenItem) {
 		taskIDs := unservable[kind]
 		sort.Strings(taskIDs)
 		notServable = append(notServable, UnservableRoleWork{
@@ -628,7 +745,31 @@ func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, r
 			Reason:  "no reviewer this CLI could start would be allowed to claim these tasks (provider diversity, claim cooldown or " + paths.ModelsFileName + " slot); they wait for an eligible reviewer",
 		})
 	}
-	return missing, notServable
+	var providerBlocked []ProviderBlockedRoleWork
+	for _, kind := range slices.SortedFunc(maps.Keys(blockedStarts), byRoleThenItem) {
+		work := blockedStarts[kind]
+		work.TaskIDs = blockedTasks[kind]
+		sort.Strings(work.TaskIDs)
+		providerBlocked = append(providerBlocked, work)
+	}
+	return RoleCapacity{Missing: missing, Unservable: notServable, ProviderBlocked: providerBlocked}
+}
+
+// blockedOrchestratorWork reports a missing orchestrator whose start CLI is
+// blocked. Its start takes no headroom, so it is checked on its own.
+func blockedOrchestratorWork(roleWork MissingRoleWork, repairCLI RepairCLI, state *models.State, pr models.PipelineResolver, blocked ProviderBlock) (ProviderBlockedRoleWork, bool) {
+	if blocked == nil {
+		return ProviderBlockedRoleWork{}, false
+	}
+	cli, _, err := resolveRepairCLI(repairCLI, roleWork.Role, state, pr)
+	if err != nil {
+		return ProviderBlockedRoleWork{}, false // the spawn path reports it
+	}
+	until, isBlocked := blocked(cli)
+	if !isBlocked {
+		return ProviderBlockedRoleWork{}, false
+	}
+	return ProviderBlockedRoleWork{Role: roleWork.Role, CLI: cli, Until: until, TaskIDs: roleWork.TaskIDs, Reason: roleWork.Reason}, true
 }
 
 // matchIdleReviewer assigns task to the first unmatched idle reviewer that
@@ -973,7 +1114,7 @@ func findCurrentDegradedAgentCapacity(state *models.State) []DegradedAgentCapaci
 }
 
 func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
-	if len(result.Missing) == 0 && len(result.Degraded) == 0 && len(result.Validation) == 0 && len(result.Unservable) == 0 {
+	if len(result.Missing) == 0 && len(result.Degraded) == 0 && len(result.Validation) == 0 && len(result.Unservable) == 0 && len(result.ProviderBlocked) == 0 {
 		fmt.Println("No role needs more agents for claimable work.")
 		return
 	}
@@ -1001,6 +1142,17 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 		fmt.Println("Reviewer work a new agent could not claim (not started):")
 		for _, work := range result.Unservable {
 			fmt.Printf("  %s with %s: %d task(s) (%s)\n    hint: %s\n", work.Role, work.startedWith(), len(work.TaskIDs), strings.Join(work.TaskIDs, ", "), work.Reason)
+		}
+		if len(result.Missing) > 0 {
+			fmt.Println()
+		}
+	}
+
+	if len(result.ProviderBlocked) > 0 {
+		fmt.Println("Roles with claimable work and no usable provider (not started):")
+		for _, work := range result.ProviderBlocked {
+			summary, hint := work.describe()
+			fmt.Printf("  %s\n    hint: %s\n", summary, hint)
 		}
 		if len(result.Missing) > 0 {
 			fmt.Println()

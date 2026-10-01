@@ -213,6 +213,55 @@ func TestResumeCommand_WarnsOnProviderSignalClearFailure(t *testing.T) {
 	}
 }
 
+// Resume must not erase a provider's announced reset (D58): the 2026-09-22
+// resumes erased Codex's multi-day block, so auto-repair restarted Codex agents.
+func TestResumeCommand_KeepsUnexpiredQuotaSignal(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModePaused
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	resetsAt := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
+	if err := agent.RaiseQuotaExhaustion(tmpDir, &agent.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
+		t.Fatal(err)
+	}
+	writeExpiredQuotaSignal(t, tmpDir, "claude")
+
+	stdout := captureStdout(t, func() {
+		if err := ResumeCommand(tmpDir, "human"); err != nil {
+			t.Fatalf("ResumeCommand() error = %v", err)
+		}
+	})
+
+	if !agent.CheckQuotaSignal(tmpDir, "codex") {
+		t.Error("codex should still be blocked after resume")
+	}
+	if _, err := os.Stat(agent.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
+		t.Error("expired claude quota signal should have been removed after resume")
+	}
+	signalFile := filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-codex")
+	until := resetsAt.Add(time.Minute).Format(time.RFC3339)
+	for _, want := range []string{
+		"Kept quota signal for provider: codex until " + until + "; delete " + signalFile + " to lift it earlier",
+		"Cleared expired quota signal for provider: claude",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func writeExpiredQuotaSignal(t *testing.T, projectRoot, provider string) {
+	t.Helper()
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	content := "provider: " + provider + "\ndetected: " + past + "\nmessage: limit\nresets_at: unknown\nexpires: " + past + "\n"
+	if err := os.WriteFile(agent.QuotaSignalPath(projectRoot, provider), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestResumeCommand_PrintsMidSprintTransitions(t *testing.T) {
 	tmpDir := t.TempDir()
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

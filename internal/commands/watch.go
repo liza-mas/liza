@@ -59,6 +59,7 @@ const autoRepairAgentPoolSuppressedPrefix = "auto-repair-agent-pool-suppressed:"
 const autoRepairAgentPoolPendingPrefix = "auto-repair-agent-pool-pending:"
 const autoRepairAgentPoolPendingTimeoutPrefix = "auto-repair-agent-pool-pending-timeout:"
 const autoRepairAgentPoolUnservablePrefix = "auto-repair-agent-pool-unservable:"
+const autoRepairAgentPoolProviderBlockedPrefix = "auto-repair-agent-pool-provider-blocked:"
 const autoRepairAgentPoolEnvWarningKey = "auto-repair-agent-pool-env-warning"
 
 // autoRepairModelsErrorKey holds the last models.yaml error alerted, so an
@@ -87,8 +88,10 @@ type AutoRepairAgentPoolOutcome struct {
 	Alerts          []Alert
 	AttemptedRoles  []string
 	SuppressedRoles []string
-	Spawned         []SpawnedAgent
-	Failed          []FailedAgentSpawn
+	// BlockedRoles have claimable work but no usable provider on this tick.
+	BlockedRoles []string
+	Spawned      []SpawnedAgent
+	Failed       []FailedAgentSpawn
 }
 
 // ParseAlertLine parses a line written by Alert.String() back into an Alert.
@@ -209,6 +212,8 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 	}
 	if !enabled {
 		clearAutoRepairAgentPoolCache(config.StateCache, nil)
+		// End blocked episodes, so re-enabling announces a still-blocked role.
+		autoRepairProviderBlockedAlerts(nil, config.StateCache, time.Now().UTC())
 		return outcome
 	}
 
@@ -238,9 +243,24 @@ func RunAutoRepairAgentPool(ctx context.Context, state *models.State, config Wat
 	}
 	clearAutoRepairModelsError(config.StateCache)
 	pending, pendingIDs := resolveAutoRepairPendingSpawns(state, config.StateCache, now)
-	missing, unservable := FindRoleCapacityDeficits(state, pr, RepairCLI{RoleModels: roleModels}, pendingIDs, now)
+	// Work whose start CLI is quota-blocked is set aside on every tick, before
+	// the due filter below, so its alert episode is reconciled against the
+	// whole pool rather than against the roles due for a start.
+	repairCLI, blocked := RepairCLI{RoleModels: roleModels}, QuotaProviderBlock(config.ProjectRoot)
+	capacity := FindRoleCapacity(state, pr, repairCLI, pendingIDs, blocked, now)
+	missing, unservable, providerBlocked := capacity.Missing, capacity.Unservable, capacity.ProviderBlocked
 	if roleWork, due := orchestratorRepairDue(state, pr, config.StateCache, now); due {
-		missing = append(missing, roleWork)
+		if work, isBlocked := blockedOrchestratorWork(roleWork, repairCLI, state, pr, blocked); isBlocked {
+			providerBlocked = append(providerBlocked, work)
+		} else {
+			missing = append(missing, roleWork)
+		}
+	}
+	outcome.Alerts = append(outcome.Alerts, autoRepairProviderBlockedAlerts(providerBlocked, config.StateCache, now)...)
+	for _, work := range providerBlocked {
+		if !slices.Contains(outcome.BlockedRoles, work.Role) {
+			outcome.BlockedRoles = append(outcome.BlockedRoles, work.Role)
+		}
 	}
 	// Backoff and failed-start bookkeeping lives while a role has demand or
 	// started processes pending; pending ones may already cover the demand.
@@ -480,6 +500,36 @@ func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.T
 	return pending, pendingIDs
 }
 
+// autoRepairProviderBlockedAlerts raises one NO USABLE PROVIDER alert per
+// episode: a role, list item and CLI blocked until one expiry. blocked must
+// be the whole pool's blocked work for this tick; an episode absent from it
+// has ended, so a later block of the same work alerts again.
+func autoRepairProviderBlockedAlerts(blocked []ProviderBlockedRoleWork, cache map[string]time.Time, now time.Time) []Alert {
+	current := make(map[string]bool, len(blocked))
+	var out []Alert
+	for _, work := range blocked {
+		key := fmt.Sprintf("%s%s#%d@%s@%s", autoRepairAgentPoolProviderBlockedPrefix, work.Role, work.Item, work.CLI, work.Until.UTC().Format(time.RFC3339))
+		current[key] = true
+		if _, seen := cache[key]; seen {
+			continue
+		}
+		cache[key] = now
+		summary, hint := work.describe()
+		out = append(out, Alert{
+			Timestamp: now,
+			Level:     AlertLevelCritical,
+			Category:  "NO USABLE PROVIDER",
+			Message:   summary + "; " + hint,
+		})
+	}
+	for key := range cache {
+		if strings.HasPrefix(key, autoRepairAgentPoolProviderBlockedPrefix) && !current[key] {
+			delete(cache, key)
+		}
+	}
+	return out
+}
+
 // autoRepairUnservableAlerts warns once per role while reviewer work stays
 // unservable by the configured spawn CLI.
 func autoRepairUnservableAlerts(unservable []UnservableRoleWork, cache map[string]time.Time, now time.Time) []Alert {
@@ -575,11 +625,8 @@ func formatAutoRepairAgentPoolFailure(result *RepairAgentPoolResult, err error) 
 }
 
 func FilterAlertsAfterAutoRepair(alertsIn []Alert, repairOutcome AutoRepairAgentPoolOutcome) []Alert {
-	handledRoles := make(map[string]bool, len(repairOutcome.AttemptedRoles)+len(repairOutcome.SuppressedRoles))
-	for _, role := range repairOutcome.AttemptedRoles {
-		handledRoles[role] = true
-	}
-	for _, role := range repairOutcome.SuppressedRoles {
+	handledRoles := make(map[string]bool, len(repairOutcome.AttemptedRoles)+len(repairOutcome.SuppressedRoles)+len(repairOutcome.BlockedRoles))
+	for _, role := range slices.Concat(repairOutcome.AttemptedRoles, repairOutcome.SuppressedRoles, repairOutcome.BlockedRoles) {
 		handledRoles[role] = true
 	}
 	if len(handledRoles) == 0 {

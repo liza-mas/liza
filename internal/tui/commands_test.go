@@ -298,14 +298,9 @@ func TestResumeSystemCmd_ClearsProviderSignals(t *testing.T) {
 	state.Config.Mode = models.SystemModePaused
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// Create a quota signal file
-	if err := agent.WriteQuotaSignal(tmpDir, "codex", "You've hit your usage limit"); err != nil {
-		t.Fatal(err)
-	}
+	// An expired quota signal no longer blocks; resume removes it.
+	writeExpiredQuotaSignal(t, tmpDir, "codex")
 	quotaSignalPath := agent.QuotaSignalPath(tmpDir, "codex")
-	if _, err := os.Stat(quotaSignalPath); err != nil {
-		t.Fatalf("quota signal file should exist before resume: %v", err)
-	}
 	if err := agent.WriteProviderUnavailableSignal(tmpDir, "codex", "session access denied"); err != nil {
 		t.Fatal(err)
 	}
@@ -333,6 +328,50 @@ func TestResumeSystemCmd_ClearsProviderSignals(t *testing.T) {
 	}
 	if _, err := os.Stat(unavailableSignalPath); !os.IsNotExist(err) {
 		t.Error("provider unavailable signal file should have been removed after resume")
+	}
+}
+
+// Resume must not erase a provider's announced reset (D58): recovering one
+// provider, e.g. after an account switch, left another's block in force.
+func TestResumeSystemCmd_KeepsUnexpiredQuotaSignal(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModePaused
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	resetsAt := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
+	if err := agent.RaiseQuotaExhaustion(tmpDir, &agent.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
+		t.Fatal(err)
+	}
+	writeExpiredQuotaSignal(t, tmpDir, "claude")
+
+	result, ok := resumeSystemCmd(tmpDir)().(CmdResultMsg)
+	if !ok || !result.Success {
+		t.Fatalf("resume result = %#v, want success", result)
+	}
+
+	if _, err := os.Stat(agent.QuotaSignalPath(tmpDir, "codex")); err != nil {
+		t.Errorf("unexpired codex quota signal should survive resume: %v", err)
+	}
+	if !agent.CheckQuotaSignal(tmpDir, "codex") {
+		t.Error("codex should still be blocked after resume")
+	}
+	if _, err := os.Stat(agent.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
+		t.Error("expired claude quota signal should have been removed after resume")
+	}
+	until := resetsAt.Add(time.Minute).Format(time.RFC3339)
+	if !strings.Contains(result.Message, "codex") || !strings.Contains(result.Message, until) {
+		t.Errorf("message = %q, want the kept provider and its expiry %s", result.Message, until)
+	}
+}
+
+func writeExpiredQuotaSignal(t *testing.T, projectRoot, provider string) {
+	t.Helper()
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	content := "provider: " + provider + "\ndetected: " + past + "\nmessage: limit\nresets_at: unknown\nexpires: " + past + "\n"
+	if err := os.WriteFile(agent.QuotaSignalPath(projectRoot, provider), []byte(content), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -394,8 +433,10 @@ func TestResumeSystemCmd_ReportsStoppedHaltAcknowledgement(t *testing.T) {
 	if updated.Config.Mode != models.SystemModeStopped || updated.CircuitBreaker.CurrentResponse != nil {
 		t.Errorf("resume result state = mode %s, response %+v; want STOPPED with acknowledged response", updated.Config.Mode, updated.CircuitBreaker.CurrentResponse)
 	}
-	if _, err := os.Stat(quotaSignalPath); !os.IsNotExist(err) {
-		t.Error("quota signal should be cleared by explicit operator acknowledgement")
+	// Acknowledging a HALT says nothing about provider capacity: an
+	// unexpired quota signal stays (D58).
+	if _, err := os.Stat(quotaSignalPath); err != nil {
+		t.Errorf("unexpired quota signal should survive the HALT acknowledgement: %v", err)
 	}
 }
 
@@ -408,8 +449,10 @@ func TestResumeSystemCmd_WarnsOnQuotaClearFailure(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	// Replace the signal file with a non-empty directory so os.Remove fails
-	// ("directory not empty") without affecting state.yaml writes.
-	signalPath := agent.QuotaSignalPath(tmpDir, "codex")
+	// ("directory not empty") without affecting state.yaml writes. A quota
+	// path that cannot be read counts as still blocking and is kept, so the
+	// clear-failure branch is driven through the provider-unavailable signal.
+	signalPath := agent.ProviderUnavailableSignalPath(tmpDir, "codex")
 	if err := os.MkdirAll(signalPath, 0755); err != nil {
 		t.Fatal(err)
 	}

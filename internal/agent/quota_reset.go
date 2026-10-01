@@ -126,18 +126,26 @@ func quotaSignalExpiry(resetsAt, detected time.Time) time.Time {
 // bounded fallback. ok is false when the file does not exist; any other read
 // failure reports a block that has not expired (fail closed).
 func readQuotaSignalExpiry(path string, now time.Time) (expires time.Time, ok bool) {
+	expires, ok, _ = readQuotaSignalState(path, now)
+	return expires, ok
+}
+
+// readQuotaSignalState is readQuotaSignalExpiry that also reports whether the file
+// could be read: a fail-closed expiry is re-derived from now on every read, so
+// it names no stable reset.
+func readQuotaSignalState(path string, now time.Time) (expires time.Time, ok, readable bool) {
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
-		return time.Time{}, false
+		return time.Time{}, false, false
 	}
 	if err != nil {
-		return now.Add(quotaFallbackBlock), true
+		return now.Add(quotaFallbackBlock), true, false
 	}
 	defer f.Close()
 	data, readErr := io.ReadAll(f)
 	info, statErr := f.Stat()
 	if readErr != nil || statErr != nil {
-		return now.Add(quotaFallbackBlock), true
+		return now.Add(quotaFallbackBlock), true, false
 	}
 	fields := map[string]string{}
 	for _, line := range strings.Split(string(data), "\n") {
@@ -148,10 +156,10 @@ func readQuotaSignalExpiry(path string, now time.Time) (expires time.Time, ok bo
 		}
 	}
 	if expires, err := time.Parse(time.RFC3339, fields["expires"]); err == nil {
-		return expires, true
+		return expires, true, true
 	}
 	if detected, err := time.Parse(time.RFC3339, fields["detected"]); err == nil {
-		return quotaSignalExpiry(time.Time{}, detected), true
+		return quotaSignalExpiry(time.Time{}, detected), true, true
 	}
-	return quotaSignalExpiry(time.Time{}, info.ModTime()), true
+	return quotaSignalExpiry(time.Time{}, info.ModTime()), true, true
 }
