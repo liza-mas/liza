@@ -203,6 +203,23 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 	}
 
 	emitCLIAgentUsage(ctx, req.EventSink, eventBase)
+	// A CLI may print its quota failure and still exit 0. Report it as a failed
+	// session, as the ACPX backend does, so the supervisor's quota path runs.
+	if qe := DetectQuotaExhaustion(output, cliName); qe != nil {
+		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
+			Kind:        LLMAgentEventCompleted,
+			BackendName: cliName,
+			AgentID:     agentID,
+			TaskID:      req.TaskID,
+			SessionID:   req.SessionID,
+			Message:     qe.Message,
+			Payload: map[string]any{
+				"exit_code": 1,
+				"quota":     true,
+			},
+		})
+		return LLMAgentRunResult{ExitCode: 1, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
+	}
 	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 		Kind:        LLMAgentEventCompleted,
 		BackendName: cliName,

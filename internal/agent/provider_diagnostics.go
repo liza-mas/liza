@@ -5,8 +5,13 @@ import (
 	"strings"
 )
 
+// typographicQuotes maps the quotes providers print (Codex writes "You’ve") to
+// the ASCII ones diagnostic patterns are written with.
+var typographicQuotes = strings.NewReplacer("\u2018", "'", "\u2019", "'", "\u02BC", "'", "\u201C", `"`, "\u201D", `"`)
+
 // providerDiagnosticLines separates provider failures from quoted tool output and
 // assistant text. Never recursively search a structured transcript for errors.
+// Returned lines have typographic quotes normalised to ASCII.
 func providerDiagnosticLines(output string) []string {
 	var diagnostics []string
 	for _, line := range strings.Split(output, "\n") {
@@ -15,7 +20,7 @@ func providerDiagnosticLines(output string) []string {
 			continue
 		}
 		if !strings.HasPrefix(line, "{") && !strings.HasPrefix(line, "[") {
-			diagnostics = append(diagnostics, line)
+			diagnostics = append(diagnostics, typographicQuotes.Replace(line))
 			continue
 		}
 		var event struct {
@@ -45,7 +50,8 @@ func providerDiagnosticLines(output string) []string {
 				message = event.Result
 			}
 		}
-		diagnostics = append(diagnostics, strings.Split(message, "\n")...)
+		// Normalise after parsing: mapping “ to " in the raw line would break the JSON.
+		diagnostics = append(diagnostics, strings.Split(typographicQuotes.Replace(message), "\n")...)
 	}
 	return diagnostics
 }

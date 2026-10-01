@@ -97,6 +97,18 @@ func TestDetectQuotaExhaustion_ClaudeHitYourLimitWithoutResetMatches(t *testing.
 	}
 }
 
+func TestDetectQuotaExhaustion_ClaudeTypographicApostropheMatch(t *testing.T) {
+	output := `{"type":"result","is_error":true,"result":"You’ve hit your limit · resets 8pm (Europe/Paris)"}`
+
+	result := DetectQuotaExhaustion(output, "claude")
+	if result == nil {
+		t.Fatal("expected quota exhaustion detected, got nil")
+	}
+	if result.Provider != "claude" {
+		t.Errorf("Provider = %q, want %q", result.Provider, "claude")
+	}
+}
+
 func TestDetectQuotaExhaustion_CursorACPUpgradePlanMatch(t *testing.T) {
 	output := "\n\nUpgrade your plan to continue"
 

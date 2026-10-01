@@ -86,6 +86,8 @@ func TestDetectQuotaExhaustion_CodexResetSources(t *testing.T) {
 		{name: "same day", output: message("2:57 PM."), now: local(24, 13, 0), want: local(24, 14, 57)},
 		{name: "date-less passed time rolls to next day", output: message("2:57 AM."), now: local(24, 10, 0), want: local(25, 2, 57)},
 		{name: "no reset text", output: `{"type":"error","message":"You've hit your usage limit. Upgrade to Pro."}`, now: local(24, 10, 0)},
+		// Verbatim 2026-09-22 failure: Codex prints a typographic apostrophe.
+		{name: "typographic apostrophe", output: `{"type":"turn.failed","error":{"message":"You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 29th, 2026 2:57 AM."}}`, now: local(22, 12, 37), want: local(29, 2, 57)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
