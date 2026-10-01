@@ -13,6 +13,7 @@ Tasks are BLOCKED. Analyze and resolve immediately:
    - Wrong or excessive dependency → state what each disputed edge supplies and what fails without it, then graph repair below; never delete all inherited edges (documentation can be a real provider)
    - Corrected inputs, valid task → unblock (--rebase-on when integration moved); run commands NOW
    - Genuine product ambiguity → assess-blocked with the minimal unresolved decision for the human, then route the answer to the source owner; not supersession by default
+   - Only a human can clear it (decision, credentials, provisioning, access) → assess-blocked --human-action "<exact one-line ask>" raises AWAITING HUMAN; --clear-human-action once agents own the repair. Unblock a human-owned block only after a human note or the ask's own closure
    - Unsupported technical assumption → the owning specialist investigates or proposes a feasible alternative; a product trade-off goes to the human
    - Blocked only on existing unfinished work (e.g. an earlier stage awaiting a later-stage correction) → route any correction to the source owner, then: edge allowed by direction (step 3) and acyclic → graph repair (retarget-dependency <task-id> <old> <old>,<new> or a complete-list repair), then unblock without --assign-to; direction forbids it → never a backward edge, hold with assess-blocked --awaits (step 5); edge would close a cycle → break the cycle first
    - Immutable reviewed ancestry cannot consume the correction → reviewed producer, normal generation, supported supersession, lineages preserved

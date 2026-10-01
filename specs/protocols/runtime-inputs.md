@@ -185,6 +185,10 @@ an accepted residual.
 - **Submission.** A gate refusal blocks the task through the `mark-blocked`
   core with the same text, after the gate's locks are released. If that write
   fails, the error tells the doer to stop and names the action.
+- **Both blocks are human-owned.** The question, its refused inputs cut to
+  whole codes within 1024 bytes plus a count of the rest, is recorded as the
+  episode's `awaiting_human` ask, so the watch raises `AWAITING HUMAN` with it
+  ([ADR-0172](../architecture/ADR/0172-human-owned-blocks.md)).
 - **`update-review-commit`.** A refusal leaves the task state and receipt
   unchanged. When the caller is the task's claiming reviewer, the claim is
   released and the task returns to its submitted status.

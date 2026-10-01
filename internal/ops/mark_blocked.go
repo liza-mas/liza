@@ -37,6 +37,9 @@ type MarkBlockedOptions struct {
 	Request       LifecycleRequestOptions
 	RepairRequest *models.RepairRequest
 	DependsOn     []string
+	// HumanAction, when set, is the action only a human can take to clear the
+	// block; it raises AWAITING HUMAN (ADR-0172).
+	HumanAction string
 }
 
 // MarkBlocked transitions a task from an executing status to BLOCKED. Only the
@@ -135,7 +138,9 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 			Questions    []string
 			Repair       *models.RepairRequest
 			Dependencies []string
-		}{reason, questions, repairRequest, dependsOn})
+			// Omitted when empty so earlier requests keep their identity.
+			HumanAction string `json:",omitempty"`
+		}{reason, questions, repairRequest, dependsOn, opts.HumanAction})
 		if err != nil {
 			return err
 		}
@@ -180,12 +185,16 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
 
-		task.History = append(task.History, models.TaskHistoryEntry{
+		entry := models.TaskHistoryEntry{
 			Time:   now,
 			Event:  models.TaskEventBlocked,
 			Agent:  &agentID,
 			Reason: &reason,
-		})
+		}
+		if opts.HumanAction != "" {
+			entry.Extra = map[string]any{models.AwaitingHumanExtraKey: opts.HumanAction}
+		}
+		task.History = append(task.History, entry)
 
 		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		return err
@@ -235,6 +244,7 @@ func MarkBlockedPayload(taskID, reason string, questions []string, opts MarkBloc
 		Questions:     questions,
 		DependsOn:     opts.DependsOn,
 		RepairRequest: opts.RepairRequest,
+		HumanAction:   opts.HumanAction,
 	}
 }
 

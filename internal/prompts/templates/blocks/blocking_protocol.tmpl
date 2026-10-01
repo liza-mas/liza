@@ -9,6 +9,7 @@ If a concrete task that pipeline direction allows as a prerequisite is blocking 
 This is both the scheduling guard and the orchestrator re-wake signal when the blocker changes. A correction owed by a later stage or an earlier-stage source owner is a hold, not an edge: describe it in blocked_reason and blocked_questions for the orchestrator to route; the engine rejects backward dependencies.
 For a dependency-graph repair that changes more than one task or complete dependency list, write a command-free JSON request with operation `apply-dependency-repair`, target set to this blocked task, explicit `dependency_updates`, evidence, and validation; pass it with `--repair-request-file <path>`. Do not encode dependency repairs as command sequences.
 For other orchestrator-only state repairs, use the individual `--repair-*` fields with one complete command.
+If only a human can clear it (credentials, provisioning, access, a product decision), add --human-action "<the exact action, one line>": it raises AWAITING HUMAN. Never for work an agent can do.
 Do NOT block for: questions answerable by reading specs, style preferences, missing nice-to-haves.
 DO block when a review finding and its fix cannot be reconciled: put the named harm in blocked_reason and the disagreement in blocked_questions. Plead first; block only after the reviewer has answered and the disagreement remains.
 

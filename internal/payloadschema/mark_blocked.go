@@ -31,6 +31,8 @@ type MarkBlockedPayload struct {
 	Questions     []string              `json:"questions,omitempty"`
 	DependsOn     []string              `json:"depends_on,omitempty"`
 	RepairRequest *models.RepairRequest `json:"repair_request,omitempty"`
+	// HumanAction is the ask when only a human can clear the block.
+	HumanAction string `json:"human_action,omitempty"`
 }
 
 func init() {
@@ -59,6 +61,7 @@ func validateMarkBlocked(payload any) []models.FieldDiagnostic {
 		diagnostics = append(diagnostics, markBlockedDiagnostic("/questions", "maximum 3 questions allowed per blocking protocol", models.FieldValueClassOutOfRange))
 	}
 	diagnostics = append(diagnostics, ValidateMarkBlockedDependsOn(decoded.DependsOn)...)
+	diagnostics = append(diagnostics, ValidateHumanAction("/human_action", decoded.HumanAction)...)
 	return append(diagnostics, ValidateMarkBlockedRepairRequest(decoded.RepairRequest, taskID)...)
 }
 

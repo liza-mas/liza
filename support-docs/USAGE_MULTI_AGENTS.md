@@ -545,6 +545,7 @@ artifact yourself and surfaces unflagged decisions agents baked in without marki
 | Accept & resume | `§BRAND_BINARY_NAME§ resume` | Satisfied with planner output or fan-in readiness, continue the sprint, start next sprint            |
 | Amend & replan | Edit plan file, commit, then `§BRAND_BINARY_NAME§ replan` | Want to change a planner's output before proceeding                                                  |
 | Release a held plan | Do the ask, then `§BRAND_BINARY_NAME§ plan-check <task-id> --clear` | The orchestrator held a plan for a human action (`AWAITING HUMAN` alert); the plan returns to its review |
+| Answer a human-owned block | Do the ask, then its closure step or `§BRAND_BINARY_NAME§ add-human-note <task-id> --note-file <path>` | A BLOCKED task named an action only a human can take (`AWAITING HUMAN` alert); the orchestrator unblocks it |
 | Pipeline transition | `§BRAND_BINARY_NAME§ proceed <task-id> <transition>` | Create child tasks for the next role-pair from output or a ready cohort. Automatically done in batch by `§BRAND_BINARY_NAME§ resume` |
 | Pause for manual work | (no command) | Want to make manual changes before continuing                                                        |
 | Abort | `§BRAND_BINARY_NAME§ stop` | Want to stop entirely                                                                                |
@@ -784,7 +785,8 @@ gives the exact `provision --record` command. Record each input, then
 them as soon as the plan's children exist avoids the block. A spent
 `single_use` fixture blocks the next submission the same way
 (`runtime_input_consumed`): record a fresh instance and unblock. Each refusal
-also appends one `runtime_input_unavailable` anomaly per task and input.
+also appends one `runtime_input_unavailable` anomaly per task and input. The
+block raises `AWAITING HUMAN` with the same question.
 
 If `§BRAND_BINARY_NAME§ retarget-dependency A old-dependency B --reason "..."
 --json` would create a cycle, full candidate-state validation returns this safe

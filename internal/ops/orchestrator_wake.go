@@ -85,13 +85,19 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 
 // currentBlockerCandidate is a BLOCKED task's current blocker triple plus the
 // awaited set of its latest assessment while that assessment belongs to the
-// current BLOCKED episode, without the assessment's own note.
+// current BLOCKED episode, and the episode's human ask, without the
+// assessment's own note.
 func currentBlockerCandidate(state *models.State, task *models.Task) AssessmentFingerprintCandidate {
 	candidate := AssessmentFingerprintCandidate{
 		Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest,
 	}
 	if task.BlockedReason != nil {
 		candidate.Reason = *task.BlockedReason
+	}
+	// The assessment writer hashes the ask it records, which is the current
+	// one once recorded.
+	if human, ok := models.CurrentAwaitingHuman(task); ok {
+		candidate.HumanAction = human.Ask
 	}
 	// A wait that now leads back to this task would suppress its wakes
 	// forever. Dropping the set changes the digest, so the task wakes; the

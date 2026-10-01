@@ -39,6 +39,19 @@ func AssessBlockedPayload(taskID, note, reason string, questions []string, repai
 	return payload
 }
 
+// WithAssessBlockedHumanAction adds the human-ask fields to an assess-blocked
+// payload, omitted when empty or false like the awaited fields, so payloads
+// without them are unchanged.
+func WithAssessBlockedHumanAction(payload map[string]any, humanAction string, clearHumanAction bool) map[string]any {
+	if humanAction != "" {
+		payload["human_action"] = humanAction
+	}
+	if clearHumanAction {
+		payload["clear_human_action"] = true
+	}
+	return payload
+}
+
 func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 	object, rejected := scalarPayloadObject(payload)
 	if rejected != nil {
@@ -56,7 +69,7 @@ func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 	}
 
 	var diagnostics []models.FieldDiagnostic
-	for _, field := range []string{"task_id", "note", "reason"} {
+	for _, field := range []string{"task_id", "note", "reason", "human_action"} {
 		if rejected := scalarPayloadString(object, field, field == "task_id"); rejected != nil {
 			diagnostics = append(diagnostics, *rejected)
 		}
@@ -73,8 +86,17 @@ func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 	if object["clear_awaits"] != nil && !clearOK {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/clear_awaits", "must be a boolean", models.FieldValueClassWrongType))
 	}
+	clearHuman, clearHumanOK := object["clear_human_action"].(bool)
+	if object["clear_human_action"] != nil && !clearHumanOK {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/clear_human_action", "must be a boolean", models.FieldValueClassWrongType))
+	}
 	if len(diagnostics) > 0 {
 		return diagnostics
+	}
+	humanAction, _ := object["human_action"].(string)
+	diagnostics = append(diagnostics, ValidateHumanAction("/human_action", humanAction)...)
+	if clearHuman && humanAction != "" {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/clear_human_action", "cannot be combined with human_action", models.FieldValueClassConflict))
 	}
 	for i, entry := range awaited {
 		if id, ok := entry.(string); !ok || strings.TrimSpace(id) == "" {

@@ -109,6 +109,17 @@ stated reason. Repeating the same `--awaits` names the cycle or the settled or
 failed task ([ADR-0157](../architecture/ADR/0157-blocked-assessment-wait-for-set.md),
 [ADR-0158](../architecture/ADR/0158-awaited-set-all-of-and-carry-forward.md)).
 
+## Human ask
+
+An episode's human ask ([ADR-0172](../architecture/ADR/0172-human-owned-blocks.md)) follows the awaited-set
+pattern: `--human-action` sets or replaces it, an assessment without it or
+`--clear-human-action` carries the current ask (reported as `human_action`),
+and `--clear-human-action` drops it. The two flags conflict. The resolved ask
+is added to the material as `awaiting_human`, normalized as text, only when
+non-empty: without one the material is byte-identical to earlier versions, a
+carried ask is no change, and setting, changing or clearing it is material. The
+reader derives the same ask from `models.CurrentAwaitingHuman`.
+
 ## Persistence and no-change result
 
 The key `assessment_fingerprint_v2` is stored in `TaskHistoryEntry.Extra`,
@@ -162,8 +173,8 @@ state. A nil repair request in reconciliation clears the old request.
 [orchestrator_wake.go](../../internal/ops/orchestrator_wake.go) and the blocked
 work detector use the same fingerprint builder and latest-entry validity check.
 The reader supplies current canonical blocker metadata, the note from the
-assessment that carries the digest, and that assessment's valid awaited set
-while it belongs to the current episode. Missing/invalid
+assessment that carries the digest, that assessment's valid awaited set
+while it belongs to the current episode, and the episode's human ask. Missing/invalid
 baselines are actionable; otherwise a differing digest is actionable.
 
 The writer's material-change predicate is a **superset** of the reader's wake
@@ -180,7 +191,8 @@ This contract applies to `BLOCKED`; hypothesis-exhaustion wake behavior remains
 separate.
 
 The registered `assess-blocked` v1 payload schema validates structural input,
-including `awaited_tasks` as a list of non-blank strings, before state
+including `awaited_tasks` as a list of non-blank strings and `human_action` as a
+non-blank single-line string exclusive of `clear_human_action`, before state
 acquisition. Preflight and mutation share that validator; role,
 generation, task status and state-dependent eligibility still belong to mutation.
 See [payload validation](payload-validation.md) for the preflight boundary.

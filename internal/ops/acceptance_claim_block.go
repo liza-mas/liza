@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -163,16 +164,22 @@ func BlockAcceptanceRefusedTask(projectRoot string, authority models.AgentAuthor
 			task.LeaseExpires = nil
 			models.AdvanceLifecycle(task)
 			releaseAgentsForTask(state, taskID)
+			extra := map[string]any{
+				"claim_refusal":      "acceptance_evidence",
+				"fault_class":        string(refusal.Class),
+				"integration_commit": refusal.Claim.IntegrationCommit,
+			}
+			// Only the operator can provision a runtime input, so the question
+			// is the episode's human ask; other classes are agent repairs.
+			if refusal.Class == AcceptanceFaultRuntimeInput {
+				extra[models.AwaitingHumanExtraKey] = runtimeInputHumanAsk(refusal)
+			}
 			task.History = append(task.History, models.TaskHistoryEntry{
 				Time:   time.Now().UTC(),
 				Event:  models.TaskEventBlocked,
 				Agent:  &authority.ID,
 				Reason: &reason,
-				Extra: map[string]any{
-					"claim_refusal":      "acceptance_evidence",
-					"fault_class":        string(refusal.Class),
-					"integration_commit": refusal.Claim.IntegrationCommit,
-				},
+				Extra:  extra,
 			})
 			blocked = true
 			return nil
@@ -226,8 +233,31 @@ func acceptanceRefusalBlockableStatus(task *models.Task, resolver *pipeline.Reso
 // runtime-input refusal, at claim or at the submission gate. It names input
 // ids only, never artifact paths.
 func runtimeInputBlockText(refusal *AcceptanceEvidenceError) (string, string) {
-	reason := "runtime_input_unavailable: " + refusal.Reason
-	question := fmt.Sprintf("Operator: %s for each refused input (%s), then run %s to restore it.",
-		runtimeInputOperatorAction(refusal.TaskID, refusal.Input), refusal.Reason, brand.Command("unblock-task", refusal.TaskID))
-	return reason, question
+	return "runtime_input_unavailable: " + refusal.Reason, runtimeInputQuestion(refusal, refusal.Reason)
+}
+
+func runtimeInputQuestion(refusal *AcceptanceEvidenceError, refused string) string {
+	return fmt.Sprintf("Operator: %s for each refused input (%s), then run %s to restore it.",
+		runtimeInputOperatorAction(refusal.TaskID, refusal.Input), refused, brand.Command("unblock-task", refusal.TaskID))
+}
+
+// runtimeInputHumanAskLimit bounds the AWAITING HUMAN ask a runtime-input
+// refusal records, well inside the 4096-byte human_action bound: a refusal can
+// list up to 64 inputs with 128-byte IDs. The blocked question keeps them all.
+const runtimeInputHumanAskLimit = 1024
+
+// runtimeInputHumanAsk is the blocked question, with the refused inputs cut to
+// as many whole codes as fit the limit and a count of the rest.
+func runtimeInputHumanAsk(refusal *AcceptanceEvidenceError) string {
+	codes := strings.Split(refusal.Reason, ", ")
+	for shown := len(codes); shown > 0; shown-- {
+		refused := strings.Join(codes[:shown], ", ")
+		if shown < len(codes) {
+			refused += fmt.Sprintf(" and %d more listed in blocked_questions", len(codes)-shown)
+		}
+		if ask := runtimeInputQuestion(refusal, refused); len(ask) <= runtimeInputHumanAskLimit {
+			return ask
+		}
+	}
+	return truncateForDiagnostics(runtimeInputQuestion(refusal, fmt.Sprintf("%d inputs listed in blocked_questions", len(codes))), runtimeInputHumanAskLimit)
 }

@@ -1263,7 +1263,9 @@ func runParked(state *models.State) bool {
 // checkAwaitingHuman is emitted every check while active; reconcileStuckAlerts
 // writes it once per episode and the TUI clears it on resume. A plan the
 // orchestrator held for a human action raises its own alert, keyed by task and
-// ask, because nothing expands it until an operator clears the hold.
+// ask, because nothing expands it until an operator clears the hold. So does a
+// BLOCKED task whose episode names a human action (D65), keyed by the ask's
+// occurrence and logged once across watchers through the once-ledger.
 func checkAwaitingHuman(state *models.State) []Alert {
 	var alerts []Alert
 	now := time.Now().UTC()
@@ -1277,6 +1279,10 @@ func checkAwaitingHuman(state *models.State) []Alert {
 	}
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
+		if alert, ok := blockedAwaitingHumanAlert(task, now); ok {
+			alerts = append(alerts, alert)
+			continue
+		}
 		if task.Status != models.TaskStatusMerged || task.PlanCheckVerdictOf() != models.PlanCheckHeld {
 			continue
 		}
@@ -1289,6 +1295,22 @@ func checkAwaitingHuman(state *models.State) []Alert {
 		})
 	}
 	return alerts
+}
+
+func blockedAwaitingHumanAlert(task *models.Task, now time.Time) (Alert, bool) {
+	human, ok := models.CurrentAwaitingHuman(task)
+	if !ok {
+		return Alert{}, false
+	}
+	key := alerts.AwaitingHumanOccurrenceKey(task.ID, human.Index, human.At, human.Ask)
+	return Alert{
+		Timestamp: now,
+		Level:     AlertLevelCritical,
+		Category:  "AWAITING HUMAN",
+		Message:   fmt.Sprintf("%s blocked on a human action: %s", task.ID, human.Ask),
+		Identity:  key,
+		OnceKey:   key,
+	}, true
 }
 
 func checkBlockedTasks(state *models.State, cache map[string]time.Time) []Alert {
@@ -1651,11 +1673,15 @@ func stallDiagnosis(state *models.State, pr models.PipelineResolver, now time.Ti
 	readiness := models.GetTaskReadiness(state, pr)
 	if readiness.Claimable == 0 && readiness.Reviewable == 0 {
 		blocked, waiting := countStallHolds(state, pr, now)
+		human := ""
+		if ids := humanOwnedBlockers(state); len(ids) > 0 {
+			human = "; awaiting human: " + strings.Join(ids, ", ")
+		}
 		switch {
 		case blocked > 0 && waiting > 0:
-			return fmt.Sprintf(" — no claimable work; %d task(s) held (read blocked_reason), %d task(s) waiting on dependencies", blocked, waiting)
+			return fmt.Sprintf(" — no claimable work; %d task(s) held (read blocked_reason), %d task(s) waiting on dependencies%s", blocked, waiting, human)
 		case blocked > 0:
-			return fmt.Sprintf(" — no claimable work; %d task(s) held (read blocked_reason)", blocked)
+			return fmt.Sprintf(" — no claimable work; %d task(s) held (read blocked_reason)%s", blocked, human)
 		case waiting > 0:
 			return fmt.Sprintf(" — no claimable work; %d task(s) waiting on dependencies", waiting)
 		}
@@ -1768,6 +1794,19 @@ func countStallHolds(state *models.State, pr models.PipelineResolver, now time.T
 		}
 	}
 	return blocked, waiting
+}
+
+// humanOwnedBlockers names the BLOCKED tasks only a human can clear, sorted, so
+// a stall caused by them says who must act rather than "read blocked_reason".
+func humanOwnedBlockers(state *models.State) []string {
+	var ids []string
+	for i := range state.Tasks {
+		if _, ok := models.CurrentAwaitingHuman(&state.Tasks[i]); ok {
+			ids = append(ids, state.Tasks[i].ID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 func checkStaleDrafts(state *models.State) []Alert {

@@ -103,6 +103,15 @@ func BlockedEpisodeKey(taskID string, episodeStart time.Time, message string) st
 	return fmt.Sprintf("BLOCKED|%s|%s|%x", taskID, episodeStart.UTC().Format(time.RFC3339Nano), digest[:8])
 }
 
+// AwaitingHumanOccurrenceKey identifies one AWAITING HUMAN alert per human ask
+// occurrence on a BLOCKED task: the history index and time where the ask began,
+// and the ask. Every watcher derives it from state, so the ask is logged once
+// across watchers and restarts, and a new occurrence of the same ask alerts.
+func AwaitingHumanOccurrenceKey(taskID string, index int, at time.Time, ask string) string {
+	digest := sha256.Sum256([]byte(ask))
+	return fmt.Sprintf("AWAITING HUMAN|%s|%d|%s|%x", taskID, index, at.UTC().Format(time.RFC3339Nano), digest[:8])
+}
+
 // onceLedgerLockTimeout bounds the wait of a watch tick or lifecycle writer on
 // the once-ledger; past it the alert is written without the ledger.
 const onceLedgerLockTimeout = 2 * time.Second

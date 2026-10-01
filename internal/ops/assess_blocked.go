@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -170,6 +171,7 @@ type AssessBlockedResult struct {
 	RepairRequest        *models.RepairRequest `json:"repair_request,omitempty"`
 	AwaitedTasks         []string              `json:"awaited_tasks,omitempty"`
 	AwaitedCarried       bool                  `json:"awaited_carried,omitempty"`
+	HumanAction          string                `json:"human_action,omitempty"`
 	Warnings             []string              `json:"warnings,omitempty"`
 	SuppressedEntryBytes int                   `json:"suppressed_entry_bytes,omitempty"`
 }
@@ -188,13 +190,17 @@ func (r *AssessBlockedResult) GetWarnings() []string {
 // state. AwaitedTasks works in either mode and replaces the awaited set. An
 // assessment without it keeps the current episode's set, minus satisfied
 // members, unless ClearAwaited drops it; the two are mutually exclusive.
+// HumanAction and ClearHumanAction treat the episode's human ask the same way
+// (ADR-0172): set or replace it, carry it when neither is given, or drop it.
 type AssessBlockedOptions struct {
-	Request       LifecycleRequestOptions
-	Reason        string
-	Questions     []string
-	RepairRequest *models.RepairRequest
-	AwaitedTasks  []string
-	ClearAwaited  bool
+	Request          LifecycleRequestOptions
+	Reason           string
+	Questions        []string
+	RepairRequest    *models.RepairRequest
+	AwaitedTasks     []string
+	ClearAwaited     bool
+	HumanAction      string
+	ClearHumanAction bool
 }
 
 // AssessBlocked records that the orchestrator has assessed a BLOCKED task.
@@ -249,7 +255,9 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
 	}
 
-	payload := payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest, opts.AwaitedTasks, opts.ClearAwaited)
+	payload := payloadschema.WithAssessBlockedHumanAction(
+		payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest, opts.AwaitedTasks, opts.ClearAwaited),
+		opts.HumanAction, opts.ClearHumanAction)
 	if err := rejectInvalidLifecyclePayload(operation, payload); err != nil {
 		return nil, err
 	}
@@ -310,9 +318,11 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			// Explicit inputs only, omitted when empty so earlier requests
 			// keep their identity. A carried set is derived from state and
 			// never part of identity.
-			AwaitedTasks []string `json:",omitempty"`
-			ClearAwaited bool     `json:",omitempty"`
-		}{note, opts.Reason, opts.Questions, repairRequest, awaited, opts.ClearAwaited})
+			AwaitedTasks     []string `json:",omitempty"`
+			ClearAwaited     bool     `json:",omitempty"`
+			HumanAction      string   `json:",omitempty"`
+			ClearHumanAction bool     `json:",omitempty"`
+		}{note, opts.Reason, opts.Questions, repairRequest, awaited, opts.ClearAwaited, opts.HumanAction, opts.ClearHumanAction})
 		if err != nil {
 			return err
 		}
@@ -349,9 +359,19 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		}
 		result.AwaitedTasks = append([]string(nil), effective...)
 		result.AwaitedCarried = carried
+		// Without either human-ask option the current ask carries forward, so a
+		// note-only re-check neither drops nor re-raises it.
+		humanAction := strings.TrimSpace(opts.HumanAction)
+		if humanAction == "" && !opts.ClearHumanAction {
+			if current, ok := models.CurrentAwaitingHuman(task); ok {
+				humanAction = current.Ask
+			}
+		}
+		result.HumanAction = humanAction
 
 		candidate := AssessmentFingerprintCandidate{
 			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note, Awaited: effective,
+			HumanAction: humanAction,
 		}
 		if task.BlockedReason != nil {
 			candidate.Reason = *task.BlockedReason
@@ -375,6 +395,9 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 		}
 		if len(effective) > 0 {
 			entry.Extra[AwaitedTasksExtraKey] = append([]string(nil), effective...)
+		}
+		if humanAction != "" {
+			entry.Extra[models.AwaitingHumanExtraKey] = humanAction
 		}
 		if reconcile {
 			entry.Reason = &opts.Reason

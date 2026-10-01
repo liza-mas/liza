@@ -197,6 +197,14 @@ written once per episode.
 - A plan the orchestrator held for a human action (`plan_check.verdict: held`)
   raises its own alert naming the ask. Nothing expands that plan until you do
   the ask and run `§BRAND_BINARY_NAME§ plan-check <task-id> --clear`.
+- A BLOCKED task only a human can clear (`<task-id> blocked on a human action:
+  <ask>`) names the ask its blocker recorded: a doer's `--human-action`, the
+  orchestrator's `assess-blocked --human-action`, or a missing runtime input.
+  Do the ask, then follow its closure step, or run
+  `§BRAND_BINARY_NAME§ add-human-note <task-id> --note-file <path>` so the
+  orchestrator unblocks it. `STALLED` lists these tasks as `awaiting human`.
+  Blocks recorded without an ask raise no `AWAITING HUMAN`; read
+  `blocked_reason`.
 
 ### Reading a STALLED alert
 

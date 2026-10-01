@@ -30,6 +30,9 @@ type AssessmentFingerprintCandidate struct {
 	// so only the set completing or a member failing makes the assessment
 	// stale, not every generated task or partial progress.
 	Awaited []string
+	// HumanAction is the episode's human ask the assessment carries, "" for
+	// none.
+	HumanAction string
 }
 
 type assessmentDependency struct {
@@ -79,6 +82,11 @@ func BuildAssessmentFingerprint(state *models.State, task *models.Task, candidat
 		delete(material, "descendants")
 		material["awaited"] = awaited
 		material["dependencies"] = uncoveredDependencies(state, task.DependsOn, covered)
+	}
+	// Likewise only a human ask enters the material: setting, changing or
+	// clearing it is a material change, carrying it is not.
+	if candidate.HumanAction != "" {
+		material["awaiting_human"] = normalizeAssessmentText(candidate.HumanAction)
 	}
 	data, err := json.Marshal(material)
 	if err != nil {

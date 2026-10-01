@@ -112,11 +112,13 @@ func blockRuntimeInputRefusal(projectRoot, taskID, agentID string, authority *mo
 		return
 	}
 	reason, question := runtimeInputBlockText(refusal)
+	// Only the operator can provision the input, so the question is the ask.
+	opts := MarkBlockedOptions{HumanAction: runtimeInputHumanAsk(refusal)}
 	var blockErr error
 	if authority != nil {
-		_, blockErr = MarkBlockedWithAuthority(projectRoot, taskID, reason, []string{question}, *authority, MarkBlockedOptions{})
+		_, blockErr = MarkBlockedWithAuthority(projectRoot, taskID, reason, []string{question}, *authority, opts)
 	} else {
-		_, blockErr = MarkBlocked(projectRoot, taskID, reason, []string{question}, agentID)
+		_, blockErr = MarkBlockedWithOptions(projectRoot, taskID, reason, []string{question}, agentID, opts)
 	}
 	refusal.Blocked = blockErr == nil
 	refusal.BlockFailed = blockErr != nil
