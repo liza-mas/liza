@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -617,7 +618,7 @@ func TestCopyEnvFileUnlessReservedRefusesAnyMention(t *testing.T) {
 	if got, err := os.ReadFile(dst); err != nil || string(got) != content {
 		t.Fatalf("copy = %q, %v", got, err)
 	}
-	if info, err := os.Stat(dst); err != nil || info.Mode().Perm() != 0o600 {
+	if info, err := os.Stat(dst); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatalf("copy mode = %v, %v", info.Mode(), err)
 	}
 	if _, err := copyEnvFileUnlessReserved(src, dst, 0o600, nil); err == nil {
