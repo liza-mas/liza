@@ -2038,7 +2038,7 @@ func TestCLISupportsStdin(t *testing.T) {
 		{"codex", true},
 		{"gemini", true},
 		{"vibe", false},
-		{"opencode", false},
+		{"opencode", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.cli, func(t *testing.T) {
@@ -2229,8 +2229,17 @@ func TestBuildCodexArgs(t *testing.T) {
 }
 
 func TestBuildOpenCodeArgs(t *testing.T) {
-	t.Run("prompt argument with permissions bypass", func(t *testing.T) {
-		args := buildOpenCodeArgs("do the thing", "")
+	t.Run("stdin prompt with permissions bypass", func(t *testing.T) {
+		args := buildOpenCodeArgs("do the thing", true, "")
+
+		want := []string{"run", "--dangerously-skip-permissions"}
+		if !slices.Equal(args, want) {
+			t.Fatalf("args = %v, want %v", args, want)
+		}
+	})
+
+	t.Run("prompt argument fallback without stdin", func(t *testing.T) {
+		args := buildOpenCodeArgs("do the thing", false, "")
 
 		want := []string{"run", "do the thing", "--dangerously-skip-permissions"}
 		if !slices.Equal(args, want) {
@@ -2239,7 +2248,7 @@ func TestBuildOpenCodeArgs(t *testing.T) {
 	})
 
 	t.Run("logging requests json format", func(t *testing.T) {
-		args := buildOpenCodeArgs("do the thing", "/tmp/logs")
+		args := buildOpenCodeArgs("do the thing", true, "/tmp/logs")
 
 		if !containsAdjacent(args, "--format", "json") {
 			t.Fatalf("args = %v, want json format flags", args)
