@@ -126,9 +126,9 @@ providers:
     runtime:
       provider_key: opencode
       executable: opencode
-      prompt_transport: arg
-      run_args: [run, "{{prompt}}", --dangerously-skip-permissions]
-      logged_run_args: [run, "{{prompt}}", --dangerously-skip-permissions, --format, json]
+      prompt_transport: stdin
+      run_args: [run, --dangerously-skip-permissions]
+      logged_run_args: [run, --dangerously-skip-permissions, --format, json]
       contract_key: opencode
     acp_runtime:
       provider_key: opencode
