@@ -503,7 +503,9 @@ managed `§BRAND_BINARY_NAME§-index.sh` entrypoint in Git's effective hooks dir
 `post-checkout`, `post-merge`, and `post-rewrite` so repo-root Pairing indexes
 stay fresh after normal local history changes. The wrappers skip task worktrees
 and file-only checkout events. The `post-commit` wrapper also skips empty commits
-and commits changing only `.md`, `.rst`, or `.adoc` files (case-insensitive).
+and commits changing only `.md`, `.rst`, or `.adoc` files, or `*-output.json`
+planning artifacts under `specs/plans/`, `specs/epics/`, or `specs/arch-plan/`
+(case-insensitive, including nested directories).
 Any other path, including dependency, build, or index configuration, triggers
 indexing. Root commits and all parents of merge commits are inspected; renames
 from code to documentation still trigger indexing because code was removed.

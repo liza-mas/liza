@@ -1106,7 +1106,10 @@ if [ "$hook_name" = "post-commit" ]; then
 	if changed_paths="$(git diff-tree --root --no-commit-id --name-only -r -m --no-renames HEAD -- . \
 		':(glob,exclude,icase)**/*.md' \
 		':(glob,exclude,icase)**/*.rst' \
-		':(glob,exclude,icase)**/*.adoc' 2>/dev/null)" && [ -z "$changed_paths" ]; then
+		':(glob,exclude,icase)**/*.adoc' \
+		':(glob,exclude,icase)specs/plans/**/*-output.json' \
+		':(glob,exclude,icase)specs/epics/**/*-output.json' \
+		':(glob,exclude,icase)specs/arch-plan/**/*-output.json' 2>/dev/null)" && [ -z "$changed_paths" ]; then
 		exit 0
 	fi
 fi
