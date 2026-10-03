@@ -676,7 +676,7 @@ printf 'stderr with no log\n' >&2
 	}
 }
 
-func TestCLIAgentRunsOpenCodePromptAsArgument(t *testing.T) {
+func TestCLIAgentRunsOpenCodePromptViaStdin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake CLI shell script test requires /bin/sh")
 	}
@@ -718,18 +718,17 @@ fi
 	}
 	for _, want := range []string{
 		"arg:run",
-		"arg:prompt body",
 		"arg:--dangerously-skip-permissions",
 		"arg:--format",
 		"arg:json",
-		"stdin-empty",
+		"stdin:prompt body",
 	} {
 		if !strings.Contains(result.Output, want) {
 			t.Fatalf("Output missing %q:\n%s", want, result.Output)
 		}
 	}
-	if strings.Contains(result.Output, "stdin:prompt body") {
-		t.Fatalf("prompt should not be passed via stdin: %q", result.Output)
+	if strings.Contains(result.Output, "arg:prompt body") {
+		t.Fatalf("prompt should not be passed via argv: %q", result.Output)
 	}
 }
 
