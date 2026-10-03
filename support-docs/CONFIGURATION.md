@@ -502,7 +502,16 @@ managed `§BRAND_BINARY_NAME§-index.sh` entrypoint in Git's effective hooks dir
 `core.hooksPath`. Managed wrappers invoke it from `post-commit`,
 `post-checkout`, `post-merge`, and `post-rewrite` so repo-root Pairing indexes
 stay fresh after normal local history changes. The wrappers skip task worktrees
-and file-only checkout events. This Git hook plumbing is separate from
+and file-only checkout events. The `post-commit` wrapper also skips empty commits
+and commits changing only `.md`, `.rst`, or `.adoc` files (case-insensitive).
+Any other path, including dependency, build, or index configuration, triggers
+indexing. Root commits and all parents of merge commits are inspected; renames
+from code to documentation still trigger indexing because code was removed.
+If Git cannot inspect the commit, indexing runs. Documentation and commit-history
+metadata in Stacklit therefore wait until the next refresh. Existing projects
+receive the updated dispatcher when init is rerun with indexing enabled, or at
+MAS orchestrator startup after upgrading the binary.
+This Git hook plumbing is separate from
 standalone `bash-policy` provider hooks.
 
 The script generates every artifact in a per-run directory under

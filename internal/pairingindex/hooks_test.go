@@ -231,6 +231,126 @@ func TestManagedHookDispatcherInvokesLocalIndexScriptWithoutLifecycleArguments(t
 	}
 }
 
+func TestManagedHookDispatcherPostCommitChangeFilter(t *testing.T) {
+	cases := []struct {
+		name            string
+		before          []string
+		changed         []string
+		remove          string
+		renameFrom      string
+		renameTo        string
+		root            bool
+		unborn          bool
+		merge           bool
+		laterParentCode bool
+		wrapper         bool
+		wantRun         bool
+	}{
+		{name: "empty", before: []string{"main.py"}},
+		{name: "root empty", root: true},
+		{name: "documentation", before: []string{"main.py"}, changed: []string{"README.md", "docs/guide.rst", "docs/guide.adoc", "docs/UPPER.MD", "docs/spaces in name.md"}},
+		{name: "documentation wrapper", changed: []string{"README.md"}, wrapper: true},
+		{name: "root documentation", changed: []string{"README.md"}, root: true},
+		{name: "root code", changed: []string{"main.py"}, root: true, wantRun: true},
+		{name: "mixed", changed: []string{"README.md", "main.py"}, wantRun: true},
+		{name: "unknown language", changed: []string{"src/main.rs"}, wantRun: true},
+		{name: "unknown extension", changed: []string{"project.custom"}, wantRun: true},
+		{name: "dependencies", changed: []string{"go.mod"}, wantRun: true},
+		{name: "text dependencies", changed: []string{"requirements.txt"}, wantRun: true},
+		{name: "build", changed: []string{"Makefile"}, wantRun: true},
+		{name: "index configuration", changed: []string{".stacklitrc.json"}, wantRun: true},
+		{name: "index insights", changed: []string{"stacklit-insights.json"}, wantRun: true},
+		{name: "documentation deletion", before: []string{"notes.md"}, remove: "notes.md"},
+		{name: "code deletion", before: []string{"main.py"}, remove: "main.py", wantRun: true},
+		{name: "documentation rename", before: []string{"notes.md"}, renameFrom: "notes.md", renameTo: "guide.rst"},
+		{name: "code to documentation rename", before: []string{"main.py"}, renameFrom: "main.py", renameTo: "notes.md", wantRun: true},
+		{name: "documentation to code rename", before: []string{"notes.md"}, renameFrom: "notes.md", renameTo: "main.py", wantRun: true},
+		{name: "code merge", changed: []string{"main.py"}, merge: true, wantRun: true},
+		{name: "documentation merge", changed: []string{"guide.md"}, merge: true},
+		{name: "later parent code difference", changed: []string{"guide.md"}, merge: true, laterParentCode: true, wantRun: true},
+		{name: "Git inspection failure", unborn: true, wantRun: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := initGitRepo(t)
+			runGit(t, repo, "config", "user.email", "test@example.invalid")
+			runGit(t, repo, "config", "user.name", "Index Hook Test")
+			for _, path := range tc.before {
+				writeFile(t, filepath.Join(repo, path), "initial\n", 0644)
+			}
+			if !tc.root && !tc.unborn {
+				runGit(t, repo, "add", ".")
+				runGit(t, repo, "commit", "--allow-empty", "-m", "test: initial tree")
+			}
+			if tc.merge {
+				runGit(t, repo, "checkout", "-b", "feature")
+			}
+			for _, path := range tc.changed {
+				fullPath := filepath.Join(repo, path)
+				if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+					t.Fatalf("create parent directory: %v", err)
+				}
+				writeFile(t, fullPath, "changed\n", 0644)
+			}
+			if tc.remove != "" {
+				runGit(t, repo, "rm", tc.remove)
+			}
+			if tc.renameFrom != "" {
+				runGit(t, repo, "mv", tc.renameFrom, tc.renameTo)
+			}
+			if !tc.unborn {
+				runGit(t, repo, "add", ".")
+				runGit(t, repo, "commit", "--allow-empty", "-m", "test: changed tree")
+			}
+			if tc.merge {
+				runGit(t, repo, "checkout", "-b", "integration", "HEAD^")
+				writeFile(t, filepath.Join(repo, "README.md"), "integration docs\n", 0644)
+				if tc.laterParentCode {
+					writeFile(t, filepath.Join(repo, "main.py"), "print(1)\n", 0644)
+					runGit(t, repo, "add", "main.py")
+				}
+				commitPath(t, repo, "README.md", "test: integration documentation")
+				runGit(t, repo, "merge", "--no-ff", "feature", "-m", "test: merge feature")
+				if tc.laterParentCode {
+					if got := runGitOutput(t, repo, "diff", "--name-only", "HEAD^1", "HEAD", "--", "main.py"); got != "" {
+						t.Fatalf("first parent code difference = %q, want none", got)
+					}
+					if got := runGitOutput(t, repo, "diff", "--name-only", "HEAD^2", "HEAD", "--", "main.py"); got != "main.py" {
+						t.Fatalf("second parent code difference = %q, want main.py", got)
+					}
+				}
+			}
+
+			useFakeCoordinator(t)
+			result, err := InstallLifecycleHooks(InstallHooksOptions{RepoRoot: repo, Hooks: []string{"post-commit"}})
+			if err != nil {
+				t.Fatalf("InstallLifecycleHooks() error = %v", err)
+			}
+			hookPath := filepath.Join(result.HooksDir, "post-commit")
+			if tc.wrapper {
+				// Use a separate wrapper rather than overwrite a dispatcher symlink.
+				hookPath = filepath.Join(result.HooksDir, "wrapper")
+				writeFile(t, hookPath, managedHookContent("post-commit"), 0755)
+			}
+			writeFile(t, filepath.Join(result.HooksDir, scriptName()), "#!/bin/sh\nexit 0\n", 0755)
+			logPath := filepath.Join(t.TempDir(), "coordinator.log")
+			cmd := scriptCommand(t, hookPath)
+			cmd.Dir = repo
+			cmd.Env = append(os.Environ(), "LIZA_TEST_COORDINATOR_LOG="+filepath.ToSlash(logPath))
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("post-commit hook failed: %v\n%s", err, output)
+			}
+			if tc.wantRun {
+				if got := readFile(t, logPath); got != RefreshCommandName+" --trigger post-commit\n" {
+					t.Fatalf("coordinator arguments = %q", got)
+				}
+			} else if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+				t.Fatalf("coordinator ran for documentation-only or empty commit; stat error = %v", err)
+			}
+		})
+	}
+}
+
 func TestManagedHookDispatcherSkipsPostCheckoutFileCheckout(t *testing.T) {
 	repo := initGitRepo(t)
 	result, err := InstallLifecycleHooks(InstallHooksOptions{

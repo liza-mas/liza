@@ -62,7 +62,9 @@ func TestIndexingActivationStacklitPairingInitInstallsLifecycleRefreshWithoutGlo
 	}
 
 	autoLogPath := filepath.Join(t.TempDir(), "stacklit-auto.log")
-	runIndexingActivationGit(t, projectDir, autoLogPath, "commit", "--allow-empty", "-m", "Trigger Stacklit lifecycle")
+	writeIndexingActivationFile(t, filepath.Join(projectDir, "indexing_fixture.go"), "package main\n")
+	runIndexingActivationGitPlain(t, projectDir, "add", "indexing_fixture.go")
+	runIndexingActivationGit(t, projectDir, autoLogPath, "commit", "-m", "test: trigger Stacklit lifecycle with source")
 
 	wantAutoCalls := "generate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"
 	if got := testhelpers.NormalizeIndexStagingPaths(readIndexingActivationFile(t, autoLogPath)); got != wantAutoCalls {

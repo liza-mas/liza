@@ -1098,6 +1098,19 @@ if [ ! -x "$script" ]; then
 fi
 
 cd "$repo_root"
+if [ "$hook_name" = "post-commit" ]; then
+	# Inspect root commits and every merge parent. Disabling rename detection
+	# keeps code renamed to documentation visible as a code deletion.
+	# --quiet does not reliably report merge differences. Check the path list;
+	# only a successful empty result skips refresh, and errors fall through.
+	if changed_paths="$(git diff-tree --root --no-commit-id --name-only -r -m --no-renames HEAD -- . \
+		':(glob,exclude,icase)**/*.md' \
+		':(glob,exclude,icase)**/*.rst' \
+		':(glob,exclude,icase)**/*.adoc' 2>/dev/null)" && [ -z "$changed_paths" ]; then
+		exit 0
+	fi
+fi
+
 %s%s
 if [ -n "$index_binary" ] && [ ! -x "$index_binary" ]; then
 	index_binary="$(command -v %s 2>/dev/null || true)"

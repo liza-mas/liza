@@ -41,7 +41,9 @@ func TestIndexingActivationGeneratedArtifactsStayOutOfGitStatusWhenUntracked(t *
 
 	logPath := filepath.Join(t.TempDir(), "index-refresh.log")
 
-	runIndexingActivationGit(t, projectDir, logPath, "commit", "--allow-empty", "-m", "Trigger index hooks")
+	writeIndexingActivationFile(t, filepath.Join(projectDir, "indexing_fixture.go"), "package main\n")
+	runIndexingActivationGitPlain(t, projectDir, "add", "indexing_fixture.go")
+	runIndexingActivationGit(t, projectDir, logPath, "commit", "-m", "test: trigger index hooks with source")
 
 	statusAfterRefresh := runIndexingActivationGitOutput(t, projectDir, "status", "--short")
 	if statusAfterRefresh != statusAfterInit {
@@ -88,7 +90,9 @@ func TestIndexingActivationTrackedGeneratedArtifactMayAppearInGitStatus(t *testi
 		t.Fatalf("InitPairingCommand(): %v", err)
 	}
 
-	runIndexingActivationGit(t, projectDir, filepath.Join(t.TempDir(), "stacklit.log"), "commit", "--allow-empty", "-m", "Refresh tracked index")
+	writeIndexingActivationFile(t, filepath.Join(projectDir, "indexing_fixture.go"), "package main\n")
+	runIndexingActivationGitPlain(t, projectDir, "add", "indexing_fixture.go")
+	runIndexingActivationGit(t, projectDir, filepath.Join(t.TempDir(), "stacklit.log"), "commit", "-m", "test: refresh tracked index with source")
 
 	status := runIndexingActivationGitOutput(t, projectDir, "status", "--short")
 	if strings.Contains(status, "?? stacklit.json") {
@@ -132,7 +136,9 @@ func TestIndexingActivationNonDefaultHooksPathUsesEffectiveHookDirectory(t *test
 	assertIndexingActivationDefaultHooksUnmanaged(t, projectDir)
 
 	logPath := filepath.Join(t.TempDir(), "custom-hooks-stacklit.log")
-	runIndexingActivationGit(t, projectDir, logPath, "commit", "--allow-empty", "-m", "Trigger effective hooks path")
+	writeIndexingActivationFile(t, filepath.Join(projectDir, "indexing_fixture.go"), "package main\n")
+	runIndexingActivationGitPlain(t, projectDir, "add", "indexing_fixture.go")
+	runIndexingActivationGit(t, projectDir, logPath, "commit", "-m", "test: trigger effective hooks path with source")
 	want := "generate-json -o $STAGING/stacklit.json --parse-workers 3\ninit-insights -i stacklit.json -o $STAGING/stacklit-insights.json\ngenerate-json -o $STAGING/stacklit.json --parse-workers 3\n"
 	if got := testhelpers.NormalizeIndexStagingPaths(readIndexingActivationFile(t, logPath)); got != want {
 		t.Fatalf("custom hooksPath Stacklit calls = %q, want effective hook path to run Liza indexing hook", got)
