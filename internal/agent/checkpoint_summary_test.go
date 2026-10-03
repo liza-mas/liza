@@ -187,7 +187,7 @@ func TestCheckpointSummaryLaunchPlan_Supported(t *testing.T) {
 		{cli: "gemini", stdin: true, argHints: []string{"-p"}},
 		{cli: "vibe", stdin: false, argHints: []string{"-p", "prompt"}},
 		{cli: "kimi", stdin: true, argHints: []string{"-p"}},
-		{cli: "opencode", stdin: false, argHints: []string{"run", "prompt", "--dangerously-skip-permissions"}},
+		{cli: "opencode", stdin: true, argHints: []string{"run", "--dangerously-skip-permissions"}},
 	}
 
 	for _, c := range cases {
@@ -215,8 +215,8 @@ func TestCheckpointSummaryLaunchPlan_ACPToolUsesCLICounterpart(t *testing.T) {
 	if plan.Backend != ToolBackendCLI || plan.Executable != "opencode" {
 		t.Errorf("plan = backend %q executable %q, want cli/opencode", plan.Backend, plan.Executable)
 	}
-	if plan.UsesStdin {
-		t.Error("opencode takes the prompt as an argument, not stdin")
+	if !plan.UsesStdin {
+		t.Error("opencode should read the prompt from stdin, not argv")
 	}
 }
 

@@ -541,7 +541,7 @@ func resolveCodexLaunchConfig(config models.Config, env []string) codexLaunchCon
 }
 
 func cliSupportsStdin(cliName string) bool {
-	return cliName != "vibe" && cliName != "opencode"
+	return cliName != "vibe"
 }
 
 func buildClaudeArgs(prompt string, useStdin bool, outputsDir string, disableSubagents bool) []string {
@@ -571,11 +571,14 @@ func buildCodexArgs(prompt string, useStdin bool, outputsDir string) []string {
 	return args
 }
 
-func buildOpenCodeArgs(prompt string, outputsDir string) []string {
-	// OpenCode documents `opencode run [message..]`; keep the prompt positional
-	// until a stdin/file prompt mode exists. Very large prompts remain bounded by
-	// the host OS argv limit.
-	args := []string{"run", prompt, "--dangerously-skip-permissions"}
+func buildOpenCodeArgs(prompt string, useStdin bool, outputsDir string) []string {
+	// OpenCode reads the prompt from stdin when no message positional is given.
+	// Keeping the prompt out of argv avoids the Windows ~8k command-line limit
+	// that made every large agent prompt fail with exit code 1.
+	args := []string{"run", "--dangerously-skip-permissions"}
+	if !useStdin {
+		args = []string{"run", prompt, "--dangerously-skip-permissions"}
+	}
 	if outputsDir != "" {
 		args = append(args, "--format", "json")
 	}
