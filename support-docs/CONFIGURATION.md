@@ -594,11 +594,12 @@ Pairing init behavior:
 
 MAS runtime behavior:
 
-At runtime, §BRAND_NAME_TITLE§ runs `stacklit generate-json -o stacklit.json` at controlled
-lifecycle points when `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is truthy:
-
-- Task worktree creation, reviewer worktree recovery, and submit-for-review
-  refresh `<worktree>/stacklit.json`.
+At runtime, §BRAND_NAME_TITLE§ never runs Stacklit in task worktrees. When
+`§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is truthy, worktree creation, claim,
+reviewer worktree recovery and submit-for-review copy
+`<project_root>/stacklit.json` to `<worktree>/stacklit.json`. Its paths are
+relative to the project root, so the copy is used as is. A missing repo-root
+index is reported as a warning and leaves the worktree without one.
 
 `<project_root>/stacklit.json` is not refreshed by any agent. It is owned by the
 same lifecycle git hooks as in Pairing mode (`post-commit`, `post-checkout`,
@@ -614,12 +615,12 @@ match the current gates, `scip_search` config and repository layout. This
 covers projects initialized before MAS init installed them; a failure there is
 written to the alerts log and does not stop the supervisor. Worktrees set their
 own `core.hooksPath` and therefore do not inherit those hooks, which is why task
-worktrees are indexed explicitly.
+worktrees receive copies of the repo-root indexes.
 
-Task-local `stacklit.json` is generated for prompt context only. §BRAND_NAME_TITLE§ requires
-`stacklit.json` to be either tracked or ignored before task-local generation.
+Task-local `stacklit.json` is copied for prompt context only. §BRAND_NAME_TITLE§ requires
+`stacklit.json` to be either tracked or ignored before the task-local copy.
 When it is tracked, §BRAND_NAME_TITLE§ marks only that task worktree copy as skip-worktree
-before regenerating it. When it is ignored, the generated task-local file remains
+before replacing it. When it is ignored, the task-local copy remains
 ignored. §BRAND_NAME_TITLE§ rejects the unsafe middle state where `stacklit.json` is neither
 tracked nor ignored, preserving the clean task-review invariant.
 
@@ -628,9 +629,9 @@ the agent and omits Stacklit prompt guidance when no task-local or project-root
 `stacklit.json` is available. If a previously generated project-root index is
 available after a failed root refresh, prompts may still include it as an
 available repository snapshot; agents are instructed to verify behavior against
-source files before editing. Runtime Stacklit refresh subprocesses are bounded
-by an implementation-owned 90-second timeout; timeout failures are reported as
-warnings and do not block the lifecycle transition that requested the refresh.
+source files before editing. Task worktrees run no Stacklit subprocess; a
+failed copy is reported as a warning and does not block the lifecycle
+transition that requested it.
 
 Pairing SessionStart and MAS prompts advertise Stacklit only when they have an
 explicit current-session index path. Agents must not infer index locations from
@@ -819,7 +820,7 @@ Installing `scip-search` does not install the indexers:
 | `typescript` | `scip-typescript` |
 | `python` | `scip-python` |
 
-Generated task indexes live under the task worktree:
+Task indexes live under the task worktree:
 
 ```text
 <worktree>/§BRAND_PROJECT_DIRNAME§/scip/
@@ -841,22 +842,31 @@ to stop that. Projects that ran earlier versions may also have
 those versions ran. Nothing reads or refreshes them any more, and they can be
 deleted.
 
-Indexes are snapshots generated at controlled lifecycle points. They reflect the
-source tree when §BRAND_NAME_TITLE§ created or refreshed them, not later edits made by an
-agent during the same task.
+Each repo-root language index is an aggregate index: the hooks run one or more
+language indexers into temporary SCIP files, then write the final
+`<language>.scip` with `scip-search aggregate-index --project-root <project_root>`.
+Document paths are relative to the project root.
 
-Each generated runtime language index is also an aggregate index. §BRAND_NAME_TITLE§ runs one
-or more language indexers into temporary SCIP files, then writes the final
-`<language>.scip` with `scip-search aggregate-index --project-root <target>`.
-Final document paths are relative to the task worktree or project root advertised
-to the agent.
+Task indexes are never generated. At worktree creation, claim, reviewer worktree
+recovery and submit-for-review, §BRAND_NAME_TITLE§ re-roots each repo-root index into the
+task worktree:
 
-Indexing failures degrade gracefully at runtime. If one enabled language fails
-to index, §BRAND_NAME_TITLE§ still spawns the agent and omits that failed language from the
-`scip-search` prompt guidance. If no index is available, §BRAND_NAME_TITLE§ omits the
-`scip-search` prompt section entirely. Runtime SCIP indexer and aggregate
-subprocesses are bounded by an implementation-owned 90-second timeout; timeout
-failures are isolated to the affected language and reported as warnings.
+```bash
+scip-search reroot --index <project_root>/<language>.scip --project-root <worktree> --out <worktree>/§BRAND_PROJECT_DIRNAME§/scip/<language>.scip
+```
+
+Only the index's project root changes, so `scip-search` output names the
+worktree. A task index reflects the repo-root index when it was copied: it can
+lag the worktree by one repo-root refresh and never includes the task's own
+edits.
+
+Failures degrade gracefully at runtime. If an enabled language has no repo-root
+index or fails to re-root, §BRAND_NAME_TITLE§ still spawns the agent and omits that language
+from the `scip-search` prompt guidance. If no index is available, §BRAND_NAME_TITLE§ omits the
+`scip-search` prompt section entirely. Runtime `scip-search reroot` subprocesses
+are bounded by an implementation-owned 90-second timeout; failures are isolated
+to the affected language and reported as warnings. A `scip-search` without the
+`reroot` command fails every language with a warning naming the upgrade command.
 
 Pairing SessionStart and MAS prompts advertise SCIP only when they have explicit
 current-session index paths. Agents must not search for default SCIP indexes or
@@ -891,11 +901,11 @@ The standard artifact path is target-local:
 Refresh requires all of these to be true for the current process:
 
 - `§BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS` is truthy.
-- `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is truthy and `stacklit.json` is available for the target.
-- `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH` is truthy and `config.scip_search` allows at least one detected SCIP language.
+- `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is truthy.
+- `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH` is truthy and `config.scip_search` lists at least one SCIP language.
 
-§BRAND_NAME_TITLE§ refreshes Functional Clusters after Stacklit and SCIP. The build uses
-temporary exports in this order:
+The repo-root index hooks build Functional Clusters after Stacklit and SCIP,
+from temporary exports in this order:
 
 ```bash
 stacklit export-architecture -i stacklit.json -o <tmp>/stacklit-architecture.json
@@ -903,10 +913,11 @@ scip-search graph-export --index <language>.scip -o <tmp>/<language>-scip-graph.
 functional-clusters build --scip-graph <tmp>/<language>-scip-graph.json --stacklit-architecture <tmp>/stacklit-architecture.json -o functional-clusters.json
 ```
 
-Each Functional Clusters refresh subprocess is bounded by an implementation-owned
-90-second timeout. Timeout failures degrade like other Functional Clusters
-refresh failures: §BRAND_NAME_TITLE§ reports a warning, omits the artifact when unavailable,
-and does not block the lifecycle transition that requested the refresh.
+Task worktrees get a copy of `<project_root>/functional-clusters.json` at the
+same lifecycle points as the other indexes; §BRAND_NAME_TITLE§ never runs the build there. A
+missing repo-root artifact degrades like other refresh failures: §BRAND_NAME_TITLE§ reports a
+warning, omits the worktree artifact, and does not block the lifecycle
+transition that requested the refresh.
 
 Pairing SessionStart and MAS prompts advertise Functional Clusters only when
 `§BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS` is truthy and the target-local

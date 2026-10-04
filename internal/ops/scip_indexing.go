@@ -12,8 +12,9 @@ var (
 	scipRuntimeRunner   scipsearch.RuntimeRunner
 )
 
-func refreshTaskWorktreeScipIndexes(worktreeDir string, configuredLanguages []string) []string {
+func refreshTaskWorktreeScipIndexes(projectRoot, worktreeDir string, configuredLanguages []string) []string {
 	result, err := scipsearch.RefreshIndexes(scipsearch.RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          worktreeDir,
 		ConfiguredLanguages: configuredLanguages,
 		Runner:              currentScipRuntimeRunner(),

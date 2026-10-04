@@ -55,6 +55,8 @@ In an interactive terminal, `§BRAND_BINARY_NAME§ toolchain install` opens a ch
 §BRAND_BINARY_NAME§ toolchain doctor --profile full --json
 ```
 
+`doctor` reports a tool as failed when its `--help` does not list a command
+§BRAND_NAME_TITLE§ requires, such as `scip-search reroot`, and names the upgrade command.
 `doctor` reports MCP/provider integrations as manual capabilities. Configure
 those in the active agent provider or MCP host; §BRAND_NAME_TITLE§ will not write credentials
 or provider-specific secrets.

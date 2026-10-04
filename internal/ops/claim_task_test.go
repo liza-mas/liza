@@ -1807,6 +1807,8 @@ func TestClaimTask_ScipIndexesEnabledWorktreeAfterPostWorktreeCmd(t *testing.T) 
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 	t.Setenv(stacklit.EnvEnableStacklit, "false")
 
+	writeClaimRootScipIndex(t, tmpDir)
+
 	markerPath := filepath.Join(tmpDir, "post-worktree-ran")
 	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
@@ -1837,8 +1839,8 @@ func TestClaimTask_ScipIndexesEnabledWorktreeAfterPostWorktreeCmd(t *testing.T) 
 	if len(result.Warnings) != 0 {
 		t.Fatalf("ClaimTask() warnings = %v, want none", result.Warnings)
 	}
-	if len(calls) != 2 || calls[0].Language != "go" || calls[1].Name != "scip-search" {
-		t.Fatalf("indexer calls = %#v, want go indexer and aggregate calls", calls)
+	if len(calls) != 1 || calls[0].Name != "scip-search" || calls[0].Args[0] != "reroot" {
+		t.Fatalf("runner calls = %#v, want one scip-search reroot call", calls)
 	}
 
 	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
@@ -1865,6 +1867,7 @@ func TestClaimTaskSembleIgnorePreparationRunsAfterPostWorktreeBeforeIndexRefresh
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
 	state.Config.ScipSearch = []string{"go"}
+	writeClaimRootScipIndex(t, tmpDir)
 	postCmd := "printf '" + paths.ProjectDirName() + "/\\n' > .sembleignore"
 	state.Config.PostWorktreeCmd = &postCmd
 	state.Tasks = []models.Task{
@@ -1932,10 +1935,11 @@ func TestClaimTask_ScipDisabledActivationNoop(t *testing.T) {
 	}
 }
 
-func TestClaimTask_ScipFailedIndexerWarningOnly(t *testing.T) {
+func TestClaimTask_ScipFailedRerootWarningOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForClaimScipTest(t, tmpDir)
+	writeClaimRootScipIndex(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 	t.Setenv(stacklit.EnvEnableStacklit, "false")
@@ -1949,12 +1953,12 @@ func TestClaimTask_ScipFailedIndexerWarningOnly(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
-		return "indexer stderr", stderrors.New("boom")
+		return "reroot stderr", stderrors.New("boom")
 	})
 
 	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
 	if err != nil {
-		t.Fatalf("ClaimTask() should succeed on indexer failure, got: %v", err)
+		t.Fatalf("ClaimTask() should succeed on reroot failure, got: %v", err)
 	}
 	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "scip-search go:") || !strings.Contains(result.Warnings[0], "boom") {
 		t.Fatalf("ClaimTask() warnings = %v, want scip-search go warning with diagnostic", result.Warnings)
@@ -1971,12 +1975,86 @@ func TestClaimTask_ScipFailedIndexerWarningOnly(t *testing.T) {
 
 	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
 	if indexes := availableClaimScipIndexes(t, worktreeDir, []string{"go"}); len(indexes) != 0 {
-		t.Fatalf("AvailableIndexes() = %#v, want none after failed indexer", indexes)
+		t.Fatalf("AvailableIndexes() = %#v, want none after failed reroot", indexes)
 	}
 	assertGitStatusClean(t, worktreeDir)
 }
 
-func TestClaimTask_FunctionalClustersFailedBuildWarningReturned(t *testing.T) {
+func TestClaimTask_CopiesRepoRootIndexesWithoutRunningIndexers(t *testing.T) {
+	tmpDir := setupClaimIndexedProject(t)
+	writeClaimRootScipIndex(t, tmpDir)
+	writeClaimRootFile(t, tmpDir, "stacklit.json", "repo-root stacklit\n")
+	writeClaimRootFile(t, tmpDir, "functional-clusters.json", "repo-root clusters\n")
+
+	var calls []scipsearch.RuntimeCommandPlan
+	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		calls = append(calls, plan)
+		return writeClaimScipIndex(plan, []byte(plan.Dir))
+	})
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() error: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("ClaimTask() warnings = %v, want none", result.Warnings)
+	}
+	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
+	wantArgs := []string{
+		"reroot",
+		"--index", filepath.Join(tmpDir, "go.scip"),
+		"--project-root", worktreeDir,
+		"--out", filepath.Join(worktreeDir, paths.ProjectDirName(), "scip", "go.scip"),
+	}
+	if len(calls) != 1 || calls[0].Name != "scip-search" || !slices.Equal(calls[0].Args, wantArgs) {
+		t.Fatalf("runner calls = %#v, want only scip-search %v", calls, wantArgs)
+	}
+	for name, want := range map[string]string{
+		"stacklit.json":            "repo-root stacklit\n",
+		"functional-clusters.json": "repo-root clusters\n",
+	} {
+		got, err := os.ReadFile(filepath.Join(worktreeDir, name))
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error: %v", name, err)
+		}
+		if string(got) != want {
+			t.Fatalf("worktree %s = %q, want repo-root copy %q", name, got, want)
+		}
+	}
+	assertGitStatusClean(t, worktreeDir)
+}
+
+func TestClaimTask_FunctionalClustersMissingRepoRootArtifactWarningReturned(t *testing.T) {
+	tmpDir := setupClaimIndexedProject(t)
+	writeClaimRootScipIndex(t, tmpDir)
+	writeClaimRootFile(t, tmpDir, "stacklit.json", "repo-root stacklit\n")
+
+	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
+		return writeClaimScipIndex(plan, []byte(plan.Dir))
+	})
+
+	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	if err != nil {
+		t.Fatalf("ClaimTask() should succeed without a repo-root Functional Clusters artifact, got: %v", err)
+	}
+	if len(result.Warnings) != 1 ||
+		!strings.Contains(result.Warnings[0], "functional-clusters:") ||
+		!strings.Contains(result.Warnings[0], "not found") {
+		t.Fatalf("ClaimTask() warnings = %v, want missing Functional Clusters artifact warning", result.Warnings)
+	}
+
+	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
+	if _, err := os.Stat(filepath.Join(worktreeDir, "functional-clusters.json")); !os.IsNotExist(err) {
+		t.Fatalf("functional-clusters.json stat error = %v, want absent", err)
+	}
+	assertGitStatusClean(t, worktreeDir)
+}
+
+// setupClaimIndexedProject returns a project with a claimable task and all
+// three index gates enabled; stacklit.json is ignored so worktree copies stay
+// prompt-local.
+func setupClaimIndexedProject(t *testing.T) string {
+	t.Helper()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForClaimScipTest(t, tmpDir)
@@ -1991,40 +2069,14 @@ func TestClaimTask_FunctionalClustersFailedBuildWarningReturned(t *testing.T) {
 	t.Setenv(stacklit.EnvEnableStacklit, "true")
 	t.Setenv(functionalclusters.EnvEnableFunctionalClusters, "true")
 
-	now := time.Now().UTC()
 	state := testhelpers.CreateValidState()
 	registerClaimTaskTestAgents(state)
 	state.Config.ScipSearch = []string{"go"}
 	state.Tasks = []models.Task{
-		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now),
+		testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC()),
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
-
-	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
-		return writeClaimScipIndex(plan, []byte(plan.Dir))
-	})
-	withClaimTaskStacklitRuntimeRunner(t, func(plan stacklit.RuntimeCommandPlan) (string, error) {
-		if err := os.WriteFile(plan.OutputPath, []byte("stacklit index\n"), 0o644); err != nil {
-			return "", err
-		}
-		return "", nil
-	})
-	withClaimTaskFunctionalClustersRuntimeRunner(t, func(functionalclusters.RuntimeCommandPlan) (string, error) {
-		return "functional-clusters stderr", stderrors.New("functional clusters boom")
-	})
-
-	result, err := ClaimTask(tmpDir, "task-1", "coder-1")
-	if err != nil {
-		t.Fatalf("ClaimTask() should succeed on Functional Clusters failure, got: %v", err)
-	}
-	if len(result.Warnings) != 1 ||
-		!strings.Contains(result.Warnings[0], "functional-clusters:") ||
-		!strings.Contains(result.Warnings[0], "functional clusters boom") {
-		t.Fatalf("ClaimTask() warnings = %v, want Functional Clusters warning with diagnostic", result.Warnings)
-	}
-
-	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
-	assertGitStatusClean(t, worktreeDir)
+	return tmpDir
 }
 
 func TestClaimTaskSembleIgnorePreparationWarningsAreBounded(t *testing.T) {
@@ -2093,6 +2145,8 @@ func TestClaimTask_ScipConcurrentClaimsUseIsolatedIndexes(t *testing.T) {
 		testhelpers.BuildTaskByStatus("task-2", models.TaskStatusReady, now),
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
+
+	writeClaimRootScipIndex(t, tmpDir)
 
 	var mu sync.Mutex
 	outputs := map[string]string{}
@@ -2978,32 +3032,18 @@ func withClaimTaskScipRuntimeRunner(t *testing.T, runner scipsearch.RuntimeRunne
 	})
 }
 
-func withClaimTaskStacklitRuntimeRunner(t *testing.T, runner stacklit.RuntimeRunner) {
+// writeClaimRootScipIndex publishes the repo-root Go index that claims
+// re-root into task worktrees.
+func writeClaimRootScipIndex(t *testing.T, projectRoot string) {
 	t.Helper()
-	stacklitRuntimeRunnerMu.Lock()
-	previous := stacklitRuntimeRunner
-	stacklitRuntimeRunner = runner
-	stacklitRuntimeRunnerMu.Unlock()
-
-	t.Cleanup(func() {
-		stacklitRuntimeRunnerMu.Lock()
-		stacklitRuntimeRunner = previous
-		stacklitRuntimeRunnerMu.Unlock()
-	})
+	writeClaimRootFile(t, projectRoot, "go.scip", "repo-root go index")
 }
 
-func withClaimTaskFunctionalClustersRuntimeRunner(t *testing.T, runner functionalclusters.RuntimeRunner) {
+func writeClaimRootFile(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
-	functionalClustersRuntimeRunnerMu.Lock()
-	previous := functionalClustersRuntimeRunner
-	functionalClustersRuntimeRunner = runner
-	functionalClustersRuntimeRunnerMu.Unlock()
-
-	t.Cleanup(func() {
-		functionalClustersRuntimeRunnerMu.Lock()
-		functionalClustersRuntimeRunner = previous
-		functionalClustersRuntimeRunnerMu.Unlock()
-	})
+	if err := os.WriteFile(filepath.Join(projectRoot, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error: %v", name, err)
+	}
 }
 
 func addTrackedGoSourceForClaimScipTest(t *testing.T, projectRoot string) {

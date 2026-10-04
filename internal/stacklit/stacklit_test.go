@@ -1,14 +1,11 @@
 package stacklit
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/liza-mas/liza/internal/subprocess"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -36,32 +33,24 @@ func TestRuntimeEnabledParsesEnvGate(t *testing.T) {
 	}
 }
 
-func TestRefreshIndexTaskWorktreeTrackedStacklitJSONIsPromptLocalAndClean(t *testing.T) {
+func TestRefreshIndexTaskWorktreeTrackedStacklitJSONCopiesRepoRootIndex(t *testing.T) {
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	commitTrackedStacklitJSON(t, projectRoot, "committed index\n")
 	testhelpers.CreateTestWorktree(t, projectRoot, "task-1")
 	worktreeRoot := filepath.Join(projectRoot, ".worktrees", "task-1")
+	writeRepoRootIndex(t, projectRoot, "repo-root index\n")
 	t.Setenv(EnvEnableStacklit, "true")
 
-	result, err := RefreshIndex(RefreshOptions{
-		TargetRoot: worktreeRoot,
-		Runner: func(plan RuntimeCommandPlan) (string, error) {
-			assertStacklitPlan(t, plan, worktreeRoot)
-			if err := os.WriteFile(plan.OutputPath, []byte("task-local index\n"), 0o644); err != nil {
-				return "", err
-			}
-			return "", nil
-		},
-	})
+	result, err := RefreshIndex(RefreshOptions{ProjectRoot: projectRoot, TargetRoot: worktreeRoot})
 	if err != nil {
 		t.Fatalf("RefreshIndex() error = %v", err)
 	}
 	if len(result.Failures) != 0 || len(result.Successes) != 1 {
 		t.Fatalf("RefreshIndex() = %#v, want one success and no failures", result)
 	}
-	if got := string(readFile(t, filepath.Join(worktreeRoot, "stacklit.json"))); got != "task-local index\n" {
-		t.Fatalf("stacklit.json content = %q, want task-local index", got)
+	if got := string(readFile(t, filepath.Join(worktreeRoot, "stacklit.json"))); got != "repo-root index\n" {
+		t.Fatalf("stacklit.json content = %q, want the repo-root index", got)
 	}
 	if status := gitOutput(t, worktreeRoot, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
@@ -80,32 +69,24 @@ func TestRefreshIndexTaskWorktreeTrackedStacklitJSONIsPromptLocalAndClean(t *tes
 	}
 }
 
-func TestRefreshIndexTaskWorktreeIgnoredStacklitJSONIsPromptLocalAndClean(t *testing.T) {
+func TestRefreshIndexTaskWorktreeIgnoredStacklitJSONCopiesRepoRootIndex(t *testing.T) {
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	commitIgnoredStacklitJSON(t, projectRoot)
 	testhelpers.CreateTestWorktree(t, projectRoot, "task-1")
 	worktreeRoot := filepath.Join(projectRoot, ".worktrees", "task-1")
+	writeRepoRootIndex(t, projectRoot, "repo-root index\n")
 	t.Setenv(EnvEnableStacklit, "true")
 
-	result, err := RefreshIndex(RefreshOptions{
-		TargetRoot: worktreeRoot,
-		Runner: func(plan RuntimeCommandPlan) (string, error) {
-			assertStacklitPlan(t, plan, worktreeRoot)
-			if err := os.WriteFile(plan.OutputPath, []byte("task-local index\n"), 0o644); err != nil {
-				return "", err
-			}
-			return "", nil
-		},
-	})
+	result, err := RefreshIndex(RefreshOptions{ProjectRoot: projectRoot, TargetRoot: worktreeRoot})
 	if err != nil {
 		t.Fatalf("RefreshIndex() error = %v", err)
 	}
 	if len(result.Failures) != 0 || len(result.Successes) != 1 {
 		t.Fatalf("RefreshIndex() = %#v, want one success and no failures", result)
 	}
-	if got := string(readFile(t, filepath.Join(worktreeRoot, "stacklit.json"))); got != "task-local index\n" {
-		t.Fatalf("stacklit.json content = %q, want task-local index", got)
+	if got := string(readFile(t, filepath.Join(worktreeRoot, "stacklit.json"))); got != "repo-root index\n" {
+		t.Fatalf("stacklit.json content = %q, want the repo-root index", got)
 	}
 	if status := gitOutput(t, worktreeRoot, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
@@ -113,39 +94,29 @@ func TestRefreshIndexTaskWorktreeIgnoredStacklitJSONIsPromptLocalAndClean(t *tes
 	if ignored := gitOutput(t, worktreeRoot, "check-ignore", "stacklit.json"); ignored != "stacklit.json" {
 		t.Fatalf("git check-ignore stacklit.json = %q, want ignored stacklit.json", ignored)
 	}
-
-	available, err := AvailableIndexes(RuntimePlanOptions{TargetRoot: worktreeRoot})
-	if err != nil {
-		t.Fatalf("AvailableIndexes() error = %v", err)
-	}
-	wantPath := filepath.Join(worktreeRoot, "stacklit.json")
-	if len(available) != 1 || available[0].Path != wantPath {
-		t.Fatalf("AvailableIndexes() = %#v, want %s", available, wantPath)
-	}
 }
 
-func TestRefreshIndexTaskWorktreeFailureRemovesPromptLocalIndex(t *testing.T) {
+func TestRefreshIndexTaskWorktreeMissingRepoRootIndexRemovesStaleCopy(t *testing.T) {
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
-	commitTrackedStacklitJSON(t, projectRoot, "committed index\n")
+	commitIgnoredStacklitJSON(t, projectRoot)
 	testhelpers.CreateTestWorktree(t, projectRoot, "task-1")
 	worktreeRoot := filepath.Join(projectRoot, ".worktrees", "task-1")
+	writeRepoRootIndex(t, worktreeRoot, "stale copy\n")
 	t.Setenv(EnvEnableStacklit, "true")
 
-	result, err := RefreshIndex(RefreshOptions{
-		TargetRoot: worktreeRoot,
-		Runner: func(RuntimeCommandPlan) (string, error) {
-			return "stacklit stderr", errors.New("stacklit failed")
-		},
-	})
+	result, err := RefreshIndex(RefreshOptions{ProjectRoot: projectRoot, TargetRoot: worktreeRoot})
 	if err != nil {
 		t.Fatalf("RefreshIndex() error = %v", err)
 	}
 	if len(result.Successes) != 0 || len(result.Failures) != 1 {
 		t.Fatalf("RefreshIndex() = %#v, want one failure and no successes", result)
 	}
+	if !strings.Contains(result.Failures[0].Diagnostic, "not found") {
+		t.Fatalf("failure diagnostic = %q, want missing repo-root index", result.Failures[0].Diagnostic)
+	}
 	if _, err := os.Stat(filepath.Join(worktreeRoot, "stacklit.json")); !os.IsNotExist(err) {
-		t.Fatalf("stacklit.json stat error = %v, want removed after failed task refresh", err)
+		t.Fatalf("stacklit.json stat error = %v, want stale copy removed", err)
 	}
 	if status := gitOutput(t, worktreeRoot, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
@@ -153,35 +124,7 @@ func TestRefreshIndexTaskWorktreeFailureRemovesPromptLocalIndex(t *testing.T) {
 	if available, err := AvailableIndexes(RuntimePlanOptions{TargetRoot: worktreeRoot}); err != nil {
 		t.Fatalf("AvailableIndexes() error = %v", err)
 	} else if len(available) != 0 {
-		t.Fatalf("AvailableIndexes() = %#v, want none after failed refresh", available)
-	}
-}
-
-func TestRunRuntimeCommandPlanTimesOutHungStacklit(t *testing.T) {
-	const timeout = 5 * time.Second
-	testhelpers.WithShortSubprocessTimeout(t, timeout)
-	testhelpers.AddSlowCommandToPathWithDelay(t, "stacklit", 15*time.Second)
-
-	start := time.Now()
-	output, err := runRuntimeCommandPlan(RuntimeCommandPlan{
-		Name: "stacklit",
-		Args: []string{"generate-json", "-o", "stacklit.json"},
-		Dir:  t.TempDir(),
-	})
-	elapsed := time.Since(start)
-
-	if err == nil {
-		t.Fatal("runRuntimeCommandPlan() error = nil, want timeout")
-	}
-	var timeoutErr *subprocess.TimeoutError
-	if !errors.As(err, &timeoutErr) {
-		t.Fatalf("runRuntimeCommandPlan() error = %T %v, want *subprocess.TimeoutError", err, err)
-	}
-	if elapsed >= timeout+2*time.Second {
-		t.Fatalf("runRuntimeCommandPlan() elapsed = %s, want under %s", elapsed, timeout+2*time.Second)
-	}
-	if !strings.Contains(output, "started") || strings.Contains(output, "late") {
-		t.Fatalf("output = %q, want pre-timeout output only", output)
+		t.Fatalf("AvailableIndexes() = %#v, want none without a repo-root index", available)
 	}
 }
 
@@ -190,24 +133,18 @@ func TestRefreshIndexTaskWorktreeRejectsUntrackedUnignoredStacklitJSON(t *testin
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	testhelpers.CreateTestWorktree(t, projectRoot, "task-1")
 	worktreeRoot := filepath.Join(projectRoot, ".worktrees", "task-1")
+	writeRepoRootIndex(t, projectRoot, "repo-root index\n")
 	t.Setenv(EnvEnableStacklit, "true")
 
-	called := false
-	result, err := RefreshIndex(RefreshOptions{
-		TargetRoot: worktreeRoot,
-		Runner: func(RuntimeCommandPlan) (string, error) {
-			called = true
-			return "", nil
-		},
-	})
+	result, err := RefreshIndex(RefreshOptions{ProjectRoot: projectRoot, TargetRoot: worktreeRoot})
 	if err == nil {
 		t.Fatal("RefreshIndex() error = nil, want stacklit.json git-state requirement")
 	}
 	if !strings.Contains(err.Error(), "neither tracked nor ignored") {
 		t.Fatalf("RefreshIndex() error = %v, want tracked-or-ignored stacklit.json guidance", err)
 	}
-	if called {
-		t.Fatal("runner called despite unsafe stacklit.json git state")
+	if _, err := os.Stat(filepath.Join(worktreeRoot, "stacklit.json")); !os.IsNotExist(err) {
+		t.Fatalf("stacklit.json stat error = %v, want no copy despite unsafe git state", err)
 	}
 	if len(result.Successes) != 0 || len(result.Failures) != 0 {
 		t.Fatalf("RefreshIndex() = %#v, want empty result on preparation error", result)
@@ -219,19 +156,16 @@ func TestRefreshIndexTaskWorktreeRejectsUntrackedUnignoredStacklitJSON(t *testin
 
 func TestRefreshIndexDisabledNoop(t *testing.T) {
 	t.Setenv(EnvEnableStacklit, "false")
-	called := false
-	result, err := RefreshIndex(RefreshOptions{
-		TargetRoot: t.TempDir(),
-		Runner: func(RuntimeCommandPlan) (string, error) {
-			called = true
-			return "", nil
-		},
-	})
+	projectRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	writeRepoRootIndex(t, projectRoot, "repo-root index\n")
+
+	result, err := RefreshIndex(RefreshOptions{ProjectRoot: projectRoot, TargetRoot: targetRoot})
 	if err != nil {
 		t.Fatalf("RefreshIndex() error = %v", err)
 	}
-	if called {
-		t.Fatal("runner called despite disabled Stacklit gate")
+	if _, err := os.Stat(filepath.Join(targetRoot, "stacklit.json")); !os.IsNotExist(err) {
+		t.Fatalf("stacklit.json stat error = %v, want no copy despite disabled Stacklit gate", err)
 	}
 	if len(result.Successes) != 0 || len(result.Failures) != 0 {
 		t.Fatalf("RefreshIndex() = %#v, want empty result", result)
@@ -258,19 +192,10 @@ func commitIgnoredStacklitJSON(t *testing.T, projectRoot string) {
 	testhelpers.MustGit(t, projectRoot, "branch", "-f", "integration", "HEAD")
 }
 
-func assertStacklitPlan(t *testing.T, plan RuntimeCommandPlan, worktreeRoot string) {
+func writeRepoRootIndex(t *testing.T, root, content string) {
 	t.Helper()
-	if plan.Name != "stacklit" {
-		t.Fatalf("plan.Name = %q, want stacklit", plan.Name)
-	}
-	if strings.Join(plan.Args, " ") != "generate-json -o stacklit.json" {
-		t.Fatalf("plan.Args = %v, want generate-json -o stacklit.json", plan.Args)
-	}
-	if plan.Dir != worktreeRoot {
-		t.Fatalf("plan.Dir = %q, want %q", plan.Dir, worktreeRoot)
-	}
-	if plan.OutputPath != filepath.Join(worktreeRoot, "stacklit.json") {
-		t.Fatalf("plan.OutputPath = %q, want worktree stacklit.json", plan.OutputPath)
+	if err := os.WriteFile(filepath.Join(root, "stacklit.json"), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(stacklit.json) error = %v", err)
 	}
 }
 

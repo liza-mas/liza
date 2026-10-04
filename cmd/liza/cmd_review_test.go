@@ -352,7 +352,7 @@ func TestSubmitForReviewCLI_JSONIncludesScipWarnings(t *testing.T) {
 	t.Setenv("LIZA_ENABLE_SCIP_SEARCH", "true")
 	t.Setenv("LIZA_ENABLE_STACKLIT", "false")
 	projectRoot, statePath, taskID, agentID := setupSubmitForReviewCLIProject(t)
-	installFailingSubmitReviewCLIIndexer(t)
+	installFailingSubmitReviewCLIReroot(t, projectRoot)
 
 	if err := db.For(statePath).Modify(func(state *models.State) error {
 		state.Config.ScipSearch = []string{"go"}
@@ -381,7 +381,7 @@ func TestSubmitForReviewCLI_JSONIncludesScipWarnings(t *testing.T) {
 		}
 		if strings.HasPrefix(message, "scip-search go:") {
 			scipWarnings++
-			if !strings.Contains(message, "fake scip-go failed") {
+			if !strings.Contains(message, "fake scip-search reroot failed") {
 				t.Fatalf("warning = %q, want scip-search go failure", message)
 			}
 		} else if message != "lifecycle metrics unavailable: unknown sprint identity" {
@@ -484,14 +484,19 @@ func setupSubmitForReviewCLIProject(t *testing.T) (projectRoot, statePath, taskI
 	return projectRoot, statePath, taskID, agentID
 }
 
-func installFailingSubmitReviewCLIIndexer(t *testing.T) {
+// installFailingSubmitReviewCLIReroot publishes a repo-root Go index and puts a
+// scip-search on PATH whose reroot fails.
+func installFailingSubmitReviewCLIReroot(t *testing.T, projectRoot string) {
 	t.Helper()
+	if err := os.WriteFile(filepath.Join(projectRoot, "go.scip"), []byte("repo-root go index"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	binDir := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\necho fake scip-go failed >&2\nexit 3\n"
-	testhelpers.WriteShellStub(t, filepath.Join(binDir, "scip-go"), script)
+	script := "#!/bin/sh\necho fake scip-search reroot failed >&2\nexit 3\n"
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "scip-search"), script)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 

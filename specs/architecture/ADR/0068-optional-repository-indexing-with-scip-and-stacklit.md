@@ -5,7 +5,9 @@
 ACCEPTED — project-root refresh for orchestrator context superseded by
 [ADR-0156](0156-repo-root-index-ownership-by-lifecycle-hooks.md): lifecycle Git
 hooks and a post-merge trigger now own repo-root indexes, at
-`<root>/<language>.scip`. Task worktree refresh is unchanged.
+`<root>/<language>.scip`. Task worktree refresh superseded by
+[ADR-0175](0175-task-worktrees-copy-repo-root-indexes.md): worktrees copy the
+repo-root indexes, re-rooting SCIP, and never run an indexer.
 
 ## Context
 

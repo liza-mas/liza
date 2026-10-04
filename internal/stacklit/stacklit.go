@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/liza-mas/liza/internal/atomicfile"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/gitenv"
-	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 var EnvEnableStacklit = brand.EnvName("ENABLE_STACKLIT")
@@ -27,27 +27,25 @@ type RuntimeCommandPlan struct {
 	OutputPath string
 }
 
-// RuntimeRunner executes one Stacklit runtime command plan.
-type RuntimeRunner func(RuntimeCommandPlan) (string, error)
-
-// RefreshOptions configures one best-effort runtime Stacklit refresh.
+// RefreshOptions configures one best-effort task worktree Stacklit refresh.
 type RefreshOptions struct {
-	TargetRoot string
-	Runner     RuntimeRunner
+	// ProjectRoot holds the repo-root stacklit.json the worktree copy comes from.
+	ProjectRoot string
+	TargetRoot  string
 }
 
-// RefreshResult contains the generated index and isolated failure diagnostics.
+// RefreshResult contains the provisioned index and isolated failure diagnostics.
 type RefreshResult struct {
 	Successes []IndexRef
 	Failures  []RefreshFailure
 }
 
-// IndexRef identifies one prompt-safe generated Stacklit index file.
+// IndexRef identifies one prompt-safe Stacklit index file.
 type IndexRef struct {
 	Path string
 }
 
-// RefreshFailure contains bounded diagnostics for a failed Stacklit generation.
+// RefreshFailure contains bounded diagnostics for a failed Stacklit refresh.
 type RefreshFailure struct {
 	Diagnostic string
 }
@@ -57,28 +55,9 @@ type RuntimePlanOptions struct {
 	TargetRoot string
 }
 
-var (
-	runnerMu sync.Mutex
-	// taskWorktreeStacklitGitStateMu serializes skip-worktree updates for
-	// stacklit.json so concurrent lifecycle hooks do not race on git index state.
-	taskWorktreeStacklitGitStateMu sync.Mutex
-	defaultRunner                  RuntimeRunner = runRuntimeCommandPlan
-)
-
-// SetRuntimeRunnerForTest replaces the process runner until the returned
-// restore function is called.
-func SetRuntimeRunnerForTest(runner RuntimeRunner) func() {
-	runnerMu.Lock()
-	previous := defaultRunner
-	defaultRunner = runner
-	runnerMu.Unlock()
-
-	return func() {
-		runnerMu.Lock()
-		defaultRunner = previous
-		runnerMu.Unlock()
-	}
-}
+// taskWorktreeStacklitGitStateMu serializes skip-worktree updates for
+// stacklit.json so concurrent lifecycle hooks do not race on git index state.
+var taskWorktreeStacklitGitStateMu sync.Mutex
 
 func parseEnvGate(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
@@ -95,18 +74,24 @@ func RuntimeEnabled() bool {
 	return parseEnvGate(envgate.Value(EnvEnableStacklit))
 }
 
-// RefreshIndex generates stacklit.json for one task worktree; the index
-// lifecycle hooks own the repo-root index. It first isolates the generated file
-// from task diffs: tracked stacklit.json is marked skip-worktree for that linked
-// worktree, while ignored stacklit.json is generated as an ignored prompt-local
-// file. Generation requires one of those git states so generated snapshots
-// cannot dirty task diffs.
+// RefreshIndex copies the repo-root stacklit.json into one task worktree; it
+// never runs Stacklit. The index lifecycle hooks own the repo-root index, and
+// its paths are relative to the project root, so the copy needs no rewrite. It
+// lags the worktree by at most one repo-root refresh and excludes the task's
+// own edits. The copy is first isolated from task diffs: tracked stacklit.json
+// is marked skip-worktree for that linked worktree, while ignored stacklit.json
+// stays an ignored prompt-local file. A missing repo-root index is reported as
+// a failure and leaves the worktree without one.
 func RefreshIndex(opts RefreshOptions) (RefreshResult, error) {
 	if !RuntimeEnabled() {
 		return RefreshResult{}, nil
 	}
 
 	plan, err := PlanRuntimeCommand(opts.TargetRoot)
+	if err != nil {
+		return RefreshResult{}, err
+	}
+	source, err := PlanRuntimeCommand(opts.ProjectRoot)
 	if err != nil {
 		return RefreshResult{}, err
 	}
@@ -118,21 +103,14 @@ func RefreshIndex(opts RefreshOptions) (RefreshResult, error) {
 		return RefreshResult{}, err
 	}
 
-	runner := opts.Runner
-	if runner == nil {
-		runner = getDefaultRunner()
-	}
-
-	output, err := runner(plan)
-	if err != nil {
-		_ = removeTaskWorktreeIndex(plan.OutputPath)
+	if _, err := os.Stat(source.OutputPath); errors.Is(err, os.ErrNotExist) {
 		return RefreshResult{
-			Failures: []RefreshFailure{{Diagnostic: boundedFailureDiagnostic(err, output)}},
+			Failures: []RefreshFailure{{Diagnostic: fmt.Sprintf("repo-root index %s not found; the worktree has no Stacklit index until the repo-root index exists", source.OutputPath)}},
 		}, nil
 	}
-	if _, err := os.Stat(plan.OutputPath); err != nil {
+	if err := atomicfile.Copy(source.OutputPath, plan.OutputPath); err != nil {
 		return RefreshResult{
-			Failures: []RefreshFailure{{Diagnostic: boundedFailureDiagnostic(fmt.Errorf("stacklit did not write %s: %w", plan.OutputPath, err), output)}},
+			Failures: []RefreshFailure{{Diagnostic: boundedFailureDiagnostic(err, "")}},
 		}, nil
 	}
 	return RefreshResult{Successes: []IndexRef{{Path: plan.OutputPath}}}, nil
@@ -175,16 +153,6 @@ func AvailableIndexes(opts RuntimePlanOptions) ([]IndexRef, error) {
 		return nil, nil
 	}
 	return []IndexRef{{Path: plan.OutputPath}}, nil
-}
-
-func getDefaultRunner() RuntimeRunner {
-	runnerMu.Lock()
-	defer runnerMu.Unlock()
-	return defaultRunner
-}
-
-func runRuntimeCommandPlan(plan RuntimeCommandPlan) (string, error) {
-	return subprocess.CombinedOutput(plan.Name, plan.Args, plan.Dir)
 }
 
 func prepareTaskWorktreeStacklitFile(targetRoot string) error {

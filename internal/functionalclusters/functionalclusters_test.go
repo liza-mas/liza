@@ -1,19 +1,14 @@
 package functionalclusters
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/stacklit"
-	"github.com/liza-mas/liza/internal/subprocess"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -68,62 +63,34 @@ func TestRefreshEnabledRequiresFunctionalClustersStacklitAndScip(t *testing.T) {
 	}
 }
 
-func TestRefreshIndexBuildsFunctionalClustersAfterExports(t *testing.T) {
-	projectRoot := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, projectRoot)
-	writeFile(t, filepath.Join(projectRoot, "go.mod"), "module example.com/project\n")
-	testhelpers.MustGit(t, projectRoot, "add", "go.mod")
-	testhelpers.MustGit(t, projectRoot, "commit", "-m", "Add go module")
-	writeFile(t, filepath.Join(projectRoot, "stacklit.json"), "{}\n")
-	writeFile(t, filepath.Join(projectRoot, paths.ProjectDirName(), "scip", "go.scip"), "go index\n")
-	t.Setenv(EnvEnableFunctionalClusters, "true")
-	t.Setenv(stacklit.EnvEnableStacklit, "true")
-	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+func TestRefreshIndexTaskWorktreeCopiesRepoRootArtifactAndStaysClean(t *testing.T) {
+	projectRoot, worktreeRoot := newIndexedWorktree(t)
+	writeFile(t, filepath.Join(projectRoot, "functional-clusters.json"), "repo-root clusters\n")
+	enableFunctionalClusters(t)
 
-	var calls []string
 	result, err := RefreshIndex(RefreshOptions{
-		TargetRoot:          projectRoot,
+		ProjectRoot:         projectRoot,
+		TargetRoot:          worktreeRoot,
 		ConfiguredLanguages: []string{"go"},
-		Runner: func(plan RuntimeCommandPlan) (string, error) {
-			calls = append(calls, plan.Name+" "+plan.Args[0])
-			switch {
-			case plan.Name == "stacklit" && len(plan.Args) >= 1 && plan.Args[0] == "export-architecture":
-				if err := os.WriteFile(plan.OutputPath, []byte("architecture\n"), 0o644); err != nil {
-					return "", err
-				}
-			case plan.Name == "scip-search" && len(plan.Args) >= 1 && plan.Args[0] == "graph-export":
-				if err := os.WriteFile(plan.OutputPath, []byte("graph\n"), 0o644); err != nil {
-					return "", err
-				}
-			case plan.Name == "functional-clusters" && len(plan.Args) >= 1 && plan.Args[0] == "build":
-				if err := os.WriteFile(plan.OutputPath, []byte("clusters\n"), 0o644); err != nil {
-					return "", err
-				}
-			default:
-				return "", errors.New("unexpected command: " + plan.Name + " " + strings.Join(plan.Args, " "))
-			}
-			return "", nil
-		},
 	})
 	if err != nil {
 		t.Fatalf("RefreshIndex() error = %v", err)
 	}
-	if len(result.Failures) != 0 || len(result.Successes) != 1 {
-		t.Fatalf("RefreshIndex() = %#v, want one success and no failures", result)
+	wantPath := filepath.Join(worktreeRoot, "functional-clusters.json")
+	if len(result.Failures) != 0 || len(result.Successes) != 1 || result.Successes[0].Path != wantPath {
+		t.Fatalf("RefreshIndex() = %#v, want one success at %s", result, wantPath)
 	}
-	wantCalls := []string{"stacklit export-architecture", "scip-search graph-export", "functional-clusters build"}
-	if !reflect.DeepEqual(calls, wantCalls) {
-		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
+	if got := string(readFile(t, wantPath)); got != "repo-root clusters\n" {
+		t.Fatalf("functional-clusters.json = %q, want the repo-root artifact", got)
 	}
-	wantPath := filepath.Join(projectRoot, "functional-clusters.json")
-	if result.Successes[0].Path != wantPath {
-		t.Fatalf("success path = %q, want %q", result.Successes[0].Path, wantPath)
+	if status := gitOutput(t, worktreeRoot, "status", "--porcelain"); status != "" {
+		t.Fatalf("git status --porcelain = %q, want clean", status)
 	}
-	if got := string(readFile(t, wantPath)); got != "clusters\n" {
-		t.Fatalf("functional-clusters.json = %q, want generated clusters", got)
+	if ignored := gitOutput(t, worktreeRoot, "check-ignore", "functional-clusters.json"); ignored != "functional-clusters.json" {
+		t.Fatalf("git check-ignore functional-clusters.json = %q, want worktree-private exclude", ignored)
 	}
 
-	available, err := AvailableIndexes(RuntimePlanOptions{TargetRoot: projectRoot})
+	available, err := AvailableIndexes(RuntimePlanOptions{TargetRoot: worktreeRoot})
 	if err != nil {
 		t.Fatalf("AvailableIndexes() error = %v", err)
 	}
@@ -132,71 +99,28 @@ func TestRefreshIndexBuildsFunctionalClustersAfterExports(t *testing.T) {
 	}
 }
 
-func TestRefreshIndexTaskWorktreeGeneratedArtifactIsPromptLocalAndClean(t *testing.T) {
-	projectRoot := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, projectRoot)
-	testhelpers.MustGit(t, projectRoot, "checkout", "integration")
-	writeFile(t, filepath.Join(projectRoot, ".gitignore"), "stacklit.json\n"+paths.ProjectDirName()+"/scip/\n")
-	writeFile(t, filepath.Join(projectRoot, "go.mod"), "module example.com/project\n")
-	testhelpers.MustGit(t, projectRoot, "add", ".gitignore", "go.mod")
-	testhelpers.MustGit(t, projectRoot, "commit", "-m", "Add indexed Go project")
-	testhelpers.CreateTestWorktree(t, projectRoot, "task-1")
-	worktreeRoot := filepath.Join(projectRoot, ".worktrees", "task-1")
-	writeFile(t, filepath.Join(worktreeRoot, "stacklit.json"), "{}\n")
-	writeFile(t, filepath.Join(worktreeRoot, paths.ProjectDirName(), "scip", "go.scip"), "go index\n")
-	t.Setenv(EnvEnableFunctionalClusters, "true")
-	t.Setenv(stacklit.EnvEnableStacklit, "true")
-	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
+func TestRefreshIndexTaskWorktreeMissingRepoRootArtifactRemovesStaleCopy(t *testing.T) {
+	projectRoot, worktreeRoot := newIndexedWorktree(t)
+	stalePath := filepath.Join(worktreeRoot, "functional-clusters.json")
+	writeFile(t, stalePath, "stale copy\n")
+	enableFunctionalClusters(t)
 
 	result, err := RefreshIndex(RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          worktreeRoot,
 		ConfiguredLanguages: []string{"go"},
-		Runner: func(plan RuntimeCommandPlan) (string, error) {
-			if err := os.WriteFile(plan.OutputPath, []byte(plan.Name+"\n"), 0o644); err != nil {
-				return "", err
-			}
-			return "", nil
-		},
 	})
 	if err != nil {
 		t.Fatalf("RefreshIndex() error = %v", err)
 	}
-	if len(result.Failures) != 0 || len(result.Successes) != 1 {
-		t.Fatalf("RefreshIndex() = %#v, want one success and no failures", result)
+	if len(result.Successes) != 0 || len(result.Failures) != 1 || !strings.Contains(result.Failures[0].Diagnostic, "not found") {
+		t.Fatalf("RefreshIndex() = %#v, want one missing-artifact failure", result)
+	}
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Fatalf("functional-clusters.json stat error = %v, want stale copy removed", err)
 	}
 	if status := gitOutput(t, worktreeRoot, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
-	}
-	if ignored := gitOutput(t, worktreeRoot, "check-ignore", "functional-clusters.json"); ignored != "functional-clusters.json" {
-		t.Fatalf("git check-ignore functional-clusters.json = %q, want worktree-private exclude", ignored)
-	}
-}
-
-func TestRunRuntimeCommandPlanTimesOutHungFunctionalClusters(t *testing.T) {
-	const timeout = 5 * time.Second
-	testhelpers.WithShortSubprocessTimeout(t, timeout)
-	testhelpers.AddSlowCommandToPathWithDelay(t, "functional-clusters", 15*time.Second)
-
-	start := time.Now()
-	output, err := runRuntimeCommandPlan(RuntimeCommandPlan{
-		Name: "functional-clusters",
-		Args: []string{"build"},
-		Dir:  t.TempDir(),
-	})
-	elapsed := time.Since(start)
-
-	if err == nil {
-		t.Fatal("runRuntimeCommandPlan() error = nil, want timeout")
-	}
-	var timeoutErr *subprocess.TimeoutError
-	if !errors.As(err, &timeoutErr) {
-		t.Fatalf("runRuntimeCommandPlan() error = %T %v, want *subprocess.TimeoutError", err, err)
-	}
-	if elapsed >= timeout+2*time.Second {
-		t.Fatalf("runRuntimeCommandPlan() elapsed = %s, want under %s", elapsed, timeout+2*time.Second)
-	}
-	if !strings.Contains(output, "started") || strings.Contains(output, "late") {
-		t.Fatalf("output = %q, want pre-timeout output only", output)
 	}
 }
 
@@ -204,24 +128,43 @@ func TestRefreshIndexDisabledNoop(t *testing.T) {
 	t.Setenv(EnvEnableFunctionalClusters, "false")
 	t.Setenv(stacklit.EnvEnableStacklit, "true")
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
-	called := false
+	projectRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	writeFile(t, filepath.Join(projectRoot, "functional-clusters.json"), "repo-root clusters\n")
+
 	result, err := RefreshIndex(RefreshOptions{
-		TargetRoot:          t.TempDir(),
+		ProjectRoot:         projectRoot,
+		TargetRoot:          targetRoot,
 		ConfiguredLanguages: []string{"go"},
-		Runner: func(RuntimeCommandPlan) (string, error) {
-			called = true
-			return "", nil
-		},
 	})
 	if err != nil {
 		t.Fatalf("RefreshIndex() error = %v", err)
 	}
-	if called {
-		t.Fatal("runner called despite disabled Functional Clusters gate")
+	if _, err := os.Stat(filepath.Join(targetRoot, "functional-clusters.json")); !os.IsNotExist(err) {
+		t.Fatalf("functional-clusters.json stat error = %v, want no copy despite disabled gate", err)
 	}
 	if len(result.Successes) != 0 || len(result.Failures) != 0 {
 		t.Fatalf("RefreshIndex() = %#v, want empty result", result)
 	}
+}
+
+func newIndexedWorktree(t *testing.T) (projectRoot, worktreeRoot string) {
+	t.Helper()
+	projectRoot = t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	testhelpers.MustGit(t, projectRoot, "checkout", "integration")
+	writeFile(t, filepath.Join(projectRoot, "go.mod"), "module example.com/project\n")
+	testhelpers.MustGit(t, projectRoot, "add", "go.mod")
+	testhelpers.MustGit(t, projectRoot, "commit", "-m", "Add indexed Go project")
+	testhelpers.CreateTestWorktree(t, projectRoot, "task-1")
+	return projectRoot, filepath.Join(projectRoot, ".worktrees", "task-1")
+}
+
+func enableFunctionalClusters(t *testing.T) {
+	t.Helper()
+	t.Setenv(EnvEnableFunctionalClusters, "true")
+	t.Setenv(stacklit.EnvEnableStacklit, "true")
+	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 }
 
 func writeFile(t *testing.T, path, content string) {

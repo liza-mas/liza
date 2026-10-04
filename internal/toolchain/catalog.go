@@ -76,6 +76,11 @@ type Tool struct {
 	LeanDefault       bool     `json:"lean_default"`
 	FullDefault       bool     `json:"full_default"`
 	ManualNote        string   `json:"manual_note,omitempty"`
+
+	// RequiredCommands are subcommands the binary's --help must list; doctor
+	// reports an installed binary without one as failed, so an outdated release
+	// is not mistaken for a working one.
+	RequiredCommands []string `json:"required_commands,omitempty"`
 }
 
 type Selection struct {
@@ -112,6 +117,9 @@ func Catalog() []Tool {
 			SourceRepo: "https://github.com/liza-mas/scip-search", SourcePackage: "./cmd/scip-search",
 			VersionArgs: []string{"--version"}, ActivationEnv: []string{brand.EnvName("ENABLE_SCIP_SEARCH") + "=1"},
 			BalancedDefault: true, LeanDefault: true, FullDefault: true,
+
+			// Task worktrees re-root repo-root SCIP indexes with reroot.
+			RequiredCommands: []string{"reroot"},
 		},
 		{
 			ID: "scip-go", Name: "SCIP Go indexer", Binary: "scip-go", Category: CategoryIndexing,

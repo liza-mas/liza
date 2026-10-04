@@ -80,9 +80,9 @@ export §BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS=1
 ```
 This should be done before running `§BRAND_BINARY_NAME§ init`.
 
-Scip, Stacklit, and Functional Clusters rely on indexes on every branch (repo root and worktrees). Stacklit and SCIP are refreshed directly; Functional Clusters is refreshed from their generated exports when all three gates are enabled. This slows down git operations but speeds up agents and greatly reduces token consumption.
+Scip, Stacklit, and Functional Clusters rely on indexes on every branch (repo root and worktrees). Repo-root Stacklit and SCIP indexes are refreshed directly; Functional Clusters is refreshed from their generated exports when all three gates are enabled. Task worktrees get copies of the repo-root indexes, with SCIP re-rooted to the worktree. This slows down git operations but speeds up agents and greatly reduces token consumption.
 
-`functional-clusters.json` is refreshed by §BRAND_NAME_TITLE§ after Stacklit and SCIP refreshes when `§BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS`, `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT`, and `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH` are truthy and the configured SCIP languages are available. The internal sequence is:
+The repo-root `functional-clusters.json` is refreshed after Stacklit and SCIP refreshes when `§BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS`, `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT`, and `§BRAND_ENV_PREFIX§_ENABLE_SCIP_SEARCH` are truthy and the configured SCIP languages are available. The internal sequence is:
 
 ```bash
 stacklit export-architecture -i stacklit.json -o stacklit-architecture.json

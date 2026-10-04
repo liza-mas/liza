@@ -77,8 +77,8 @@ Use this section once the global setup is complete.
 > prompts. `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` is the activation gate. Commit curated
 > Stacklit inputs such as `stacklit-insights.json` and `.stacklitrc.json` when
 > you use them, and either commit or ignore generated `stacklit.json`. §BRAND_NAME_TITLE§
-> refreshes task-local `stacklit.json` files in worktrees for prompt context
-> without adding them to task diffs. See [Configuration Reference](CONFIGURATION.md)
+> copies the repo-root `stacklit.json` into worktrees for prompt context
+> without adding it to task diffs. See [Configuration Reference](CONFIGURATION.md)
 > for the runtime contract and non-goals.
 
 > **Optional:** enable Semble for semantic discovery when MAS agents need

@@ -133,6 +133,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	}
 
 	refreshResult, refreshErr := reviewerWorktreeRefreshIndexes(scipsearch.RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          wtPath,
 		ConfiguredLanguages: state.Config.ScipSearch,
 	})
@@ -141,26 +142,28 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	}
 	for _, failure := range refreshResult.Failures {
 		logger.Warn(
-			"scip-search indexer failed after worktree recovery",
+			"scip-search index copy failed after worktree recovery",
 			"task_id", taskID,
 			"language", failure.Language,
 			"diagnostic", failure.Diagnostic,
 		)
 	}
 	stacklitResult, stacklitErr := reviewerWorktreeRefreshStacklitIndex(stacklit.RefreshOptions{
-		TargetRoot: wtPath,
+		ProjectRoot: projectRoot,
+		TargetRoot:  wtPath,
 	})
 	if stacklitErr != nil {
 		logger.Warn("stacklit refresh failed after worktree recovery", "task_id", taskID, "error", stacklitErr)
 	}
 	for _, failure := range stacklitResult.Failures {
 		logger.Warn(
-			"stacklit indexer failed after worktree recovery",
+			"stacklit index copy failed after worktree recovery",
 			"task_id", taskID,
 			"diagnostic", failure.Diagnostic,
 		)
 	}
 	functionalClustersResult, functionalClustersErr := reviewerWorktreeRefreshFunctionalClustersIndex(functionalclusters.RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          wtPath,
 		ConfiguredLanguages: state.Config.ScipSearch,
 	})
@@ -169,7 +172,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	}
 	for _, failure := range functionalClustersResult.Failures {
 		logger.Warn(
-			"functional-clusters build failed after worktree recovery",
+			"functional-clusters artifact copy failed after worktree recovery",
 			"task_id", taskID,
 			"diagnostic", failure.Diagnostic,
 		)

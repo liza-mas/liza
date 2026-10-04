@@ -425,9 +425,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 
 	return &preparedSubmission{
 		refresh: func() []string {
-			warnings := refreshSubmitReviewScipIndexes(wtPath, state.Config.ScipSearch)
-			warnings = append(warnings, refreshSubmitReviewStacklitIndex(wtPath)...)
-			return append(warnings, refreshSubmitReviewFunctionalClustersIndex(wtPath, state.Config.ScipSearch)...)
+			warnings := refreshSubmitReviewScipIndexes(projectRoot, wtPath, state.Config.ScipSearch)
+			warnings = append(warnings, refreshSubmitReviewStacklitIndex(projectRoot, wtPath)...)
+			return append(warnings, refreshSubmitReviewFunctionalClustersIndex(projectRoot, wtPath, state.Config.ScipSearch)...)
 		},
 		complete: func() (*SubmitForReviewResult, error) {
 			// Indexing ran without task locking. Recheck Git before publishing its candidate.
@@ -578,8 +578,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	}, nil
 }
 
-func refreshSubmitReviewScipIndexes(worktreePath string, configuredLanguages []string) []string {
+func refreshSubmitReviewScipIndexes(projectRoot, worktreePath string, configuredLanguages []string) []string {
 	result, err := submitReviewRefreshIndexes(scipsearch.RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          worktreePath,
 		ConfiguredLanguages: configuredLanguages,
 	})
@@ -590,9 +591,10 @@ func refreshSubmitReviewScipIndexes(worktreePath string, configuredLanguages []s
 	return warnings
 }
 
-func refreshSubmitReviewStacklitIndex(worktreePath string) []string {
+func refreshSubmitReviewStacklitIndex(projectRoot, worktreePath string) []string {
 	result, err := submitReviewRefreshStacklitIndex(stacklit.RefreshOptions{
-		TargetRoot: worktreePath,
+		ProjectRoot: projectRoot,
+		TargetRoot:  worktreePath,
 	})
 	warnings := stacklitRefreshWarnings(result)
 	if err != nil {
@@ -601,8 +603,9 @@ func refreshSubmitReviewStacklitIndex(worktreePath string) []string {
 	return warnings
 }
 
-func refreshSubmitReviewFunctionalClustersIndex(worktreePath string, configuredLanguages []string) []string {
+func refreshSubmitReviewFunctionalClustersIndex(projectRoot, worktreePath string, configuredLanguages []string) []string {
 	result, err := submitReviewRefreshFunctionalClustersIndex(functionalclusters.RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          worktreePath,
 		ConfiguredLanguages: configuredLanguages,
 	})

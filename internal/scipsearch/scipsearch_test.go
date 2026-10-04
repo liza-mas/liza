@@ -1281,13 +1281,17 @@ func TestRuntimeCommandPlanningPythonNoMarkerFallsBackToTargetRootForTrackedPyth
 	}
 }
 
-func TestRuntimeRefreshCreatesParentAndRunsExactCommandPlans(t *testing.T) {
+func TestRuntimeRefreshReRootsRepoRootIndexesWithoutRunningIndexers(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
+	projectRoot := t.TempDir()
+	writeTestFile(t, projectRoot, "go.scip", "root go")
+	writeTestFile(t, projectRoot, "typescript.scip", "root typescript")
 	target := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, target)
 	var calls []RuntimeCommandPlan
 
 	result, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          target,
 		ConfiguredLanguages: []string{"go", "typescript"},
 		GitFiles: func(string) ([]string, error) {
@@ -1307,27 +1311,24 @@ func TestRuntimeRefreshCreatesParentAndRunsExactCommandPlans(t *testing.T) {
 
 	goPath := filepath.Join(target, paths.ProjectDirName(), "scip", "go.scip")
 	tsPath := filepath.Join(target, paths.ProjectDirName(), "scip", "typescript.scip")
-	if got, want := len(calls), 4; got != want {
-		t.Fatalf("runner calls = %#v, want %d calls", calls, want)
+	want := []RuntimeCommandPlan{
+		{
+			Language:   "go",
+			Name:       "scip-search",
+			Args:       []string{"reroot", "--index", filepath.Join(projectRoot, "go.scip"), "--project-root", target, "--out", goPath},
+			Dir:        target,
+			OutputPath: goPath,
+		},
+		{
+			Language:   "typescript",
+			Name:       "scip-search",
+			Args:       []string{"reroot", "--index", filepath.Join(projectRoot, "typescript.scip"), "--project-root", target, "--out", tsPath},
+			Dir:        target,
+			OutputPath: tsPath,
+		},
 	}
-	if calls[0].Name != "scip-go" || calls[1].Name != "scip-search" || calls[2].Name != "scip-typescript" || calls[3].Name != "scip-search" {
-		t.Fatalf("runner call sequence = %#v, want indexer/aggregate pairs", calls)
-	}
-	if calls[1].OutputPath == goPath || calls[3].OutputPath == tsPath {
-		t.Fatalf("aggregate runner output paths = %q/%q, want temporary outputs before atomic rename", calls[1].OutputPath, calls[3].OutputPath)
-	}
-	if !strings.HasPrefix(calls[1].OutputPath, filepath.Dir(goPath)+string(os.PathSeparator)) ||
-		!strings.HasPrefix(calls[3].OutputPath, filepath.Dir(tsPath)+string(os.PathSeparator)) {
-		t.Fatalf("aggregate runner output paths = %q/%q, want temporary outputs beside final indexes", calls[1].OutputPath, calls[3].OutputPath)
-	}
-	if !strings.HasSuffix(calls[1].OutputPath, "go-aggregate.scip") || !strings.HasSuffix(calls[3].OutputPath, "typescript-aggregate.scip") {
-		t.Fatalf("aggregate runner output paths = %q/%q, want per-language temporary aggregate paths", calls[1].OutputPath, calls[3].OutputPath)
-	}
-	if got, want := calls[1].Args[:4], []string{"aggregate-index", "--project-root", target, "--root"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("go aggregate prefix = %#v, want %#v", got, want)
-	}
-	if got, want := calls[3].Args[:4], []string{"aggregate-index", "--project-root", target, "--root"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("typescript aggregate prefix = %#v, want %#v", got, want)
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("runner calls = %#v, want only reroot plans %#v", calls, want)
 	}
 	if !reflect.DeepEqual(result.Successes, []IndexRef{{Language: "go", Path: goPath}, {Language: "typescript", Path: tsPath}}) {
 		t.Fatalf("successes = %#v, want go/typescript paths", result.Successes)
@@ -1335,8 +1336,64 @@ func TestRuntimeRefreshCreatesParentAndRunsExactCommandPlans(t *testing.T) {
 	if len(result.Failures) != 0 {
 		t.Fatalf("failures = %#v, want none", result.Failures)
 	}
-	if _, err := os.Stat(filepath.Join(target, paths.ProjectDirName(), "scip")); err != nil {
-		t.Fatalf("Stat(%s/scip) error = %v", paths.ProjectDirName(), err)
+}
+
+func TestRuntimeRefreshReportsMissingRepoRootIndexWithoutRunningReroot(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	projectRoot := t.TempDir()
+	target := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, target)
+	writeTestFile(t, target, filepath.Join(paths.ProjectDirName(), "scip", "go.scip"), "stale go")
+
+	result, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         projectRoot,
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"go"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod"}, nil
+		},
+		Runner: func(RuntimeCommandPlan) (string, error) {
+			t.Fatal("runner must not execute without a repo-root index")
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RefreshIndexes() error = %v", err)
+	}
+	if len(result.Successes) != 0 || len(result.Failures) != 1 || result.Failures[0].Language != "go" {
+		t.Fatalf("RefreshIndexes() = %#v, want one go failure", result)
+	}
+	if !strings.Contains(result.Failures[0].Diagnostic, "not found") {
+		t.Fatalf("failure diagnostic = %q, want missing repo-root index", result.Failures[0].Diagnostic)
+	}
+	if _, err := os.Stat(filepath.Join(target, paths.ProjectDirName(), "scip", "go.scip")); !os.IsNotExist(err) {
+		t.Fatalf("stale go.scip stat error = %v, want removed", err)
+	}
+}
+
+func TestRuntimeRefreshNamesUpgradeWhenScipSearchLacksReroot(t *testing.T) {
+	t.Setenv(EnvEnableScipSearch, "true")
+	projectRoot := t.TempDir()
+	writeTestFile(t, projectRoot, "go.scip", "root go")
+	target := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, target)
+
+	result, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         projectRoot,
+		TargetRoot:          target,
+		ConfiguredLanguages: []string{"go"},
+		GitFiles: func(string) ([]string, error) {
+			return []string{"go.mod"}, nil
+		},
+		Runner: func(RuntimeCommandPlan) (string, error) {
+			return "unsupported command: reroot", errors.New("exit status 2")
+		},
+	})
+	if err != nil {
+		t.Fatalf("RefreshIndexes() error = %v", err)
+	}
+	if len(result.Failures) != 1 || !strings.Contains(result.Failures[0].Diagnostic, "toolchain install scip-search") {
+		t.Fatalf("failures = %#v, want upgrade guidance", result.Failures)
 	}
 }
 
@@ -1382,7 +1439,12 @@ func TestRuntimeRefreshReportsBoundedFailureWithoutSuppressingSuccesses(t *testi
 		t.Fatalf("WriteFile(%q) error = %v", staleGoPath, err)
 	}
 
+	projectRoot := t.TempDir()
+	writeTestFile(t, projectRoot, "go.scip", "root go")
+	writeTestFile(t, projectRoot, "typescript.scip", "root typescript")
+
 	result, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         projectRoot,
 		TargetRoot:          target,
 		ConfiguredLanguages: []string{"go", "typescript"},
 		GitFiles: func(string) ([]string, error) {
@@ -1522,6 +1584,7 @@ func TestAvailableProjectRootIndexesRespectsTheEnvGate(t *testing.T) {
 func TestRefreshTaskWorktreeScipUsesSharedExclude(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	repo := newGitRepoWithWorktrees(t, "task-one")
+	writeTestFile(t, repo.root, "go.scip", "root go")
 	worktree := repo.worktrees["task-one"]
 	privateExclude := filepath.Join(revParseGitDir(t, worktree), "info", "exclude")
 	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
@@ -1532,6 +1595,7 @@ func TestRefreshTaskWorktreeScipUsesSharedExclude(t *testing.T) {
 	}
 
 	result, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         repo.root,
 		TargetRoot:          worktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
@@ -1576,9 +1640,11 @@ func TestRefreshTaskWorktreeScipUsesSharedExclude(t *testing.T) {
 func TestRefreshTaskWorktreeScipHidesGeneratedIndexes(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	repo := newGitRepoWithWorktrees(t, "task-one")
+	writeTestFile(t, repo.root, "go.scip", "root go")
 	worktree := repo.worktrees["task-one"]
 
 	result, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         repo.root,
 		TargetRoot:          worktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
@@ -1608,10 +1674,12 @@ func TestRefreshTaskWorktreeScipHidesGeneratedIndexesWithBrandedProjectDir(t *te
 	t.Setenv(EnvEnableScipSearch, "true")
 	withTestScipProjectDirName(t, ".acme-agent")
 	repo := newGitRepoWithWorktrees(t, "task-one")
+	writeTestFile(t, repo.root, "go.scip", "root go")
 	worktree := repo.worktrees["task-one"]
 	brandedScipDir := filepath.Join(worktree, ".acme-agent", "scip")
 
 	result, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         repo.root,
 		TargetRoot:          worktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
@@ -1643,12 +1711,14 @@ func TestRefreshTaskWorktreeScipHidesGeneratedIndexesWithBrandedProjectDir(t *te
 func TestRefreshTaskWorktreeScipRepeatedRefreshIdempotent(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	repo := newGitRepoWithWorktrees(t, "task-one")
+	writeTestFile(t, repo.root, "go.scip", "root go")
 	worktree := repo.worktrees["task-one"]
 	privateExclude := filepath.Join(revParseGitDir(t, worktree), "info", "exclude")
 	var runnerCalls int
 
 	for i := 0; i < 2; i++ {
 		result, err := RefreshIndexes(RefreshOptions{
+			ProjectRoot:         repo.root,
 			TargetRoot:          worktree,
 			ConfiguredLanguages: []string{"go"},
 			Runner: func(plan RuntimeCommandPlan) (string, error) {
@@ -1670,8 +1740,8 @@ func TestRefreshTaskWorktreeScipRepeatedRefreshIdempotent(t *testing.T) {
 		}
 	}
 
-	if runnerCalls != 4 {
-		t.Fatalf("runner calls = %d, want 4", runnerCalls)
+	if runnerCalls != 2 {
+		t.Fatalf("runner calls = %d, want 2", runnerCalls)
 	}
 	assertIgnoreEntryInstalled(t, privateExclude)
 	if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
@@ -1682,6 +1752,7 @@ func TestRefreshTaskWorktreeScipRepeatedRefreshIdempotent(t *testing.T) {
 func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	repo := newGitRepoWithWorktrees(t, "task-one", "task-two")
+	writeTestFile(t, repo.root, "go.scip", "root go")
 	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
 	commonBefore := readFileString(t, commonExclude)
 	privateExcludes := map[string]string{
@@ -1703,6 +1774,7 @@ func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			result, err := RefreshIndexes(RefreshOptions{
+				ProjectRoot:         repo.root,
 				TargetRoot:          worktree,
 				ConfiguredLanguages: []string{"go"},
 				Runner: func(plan RuntimeCommandPlan) (string, error) {
@@ -1770,6 +1842,7 @@ func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 func TestRefreshTaskWorktreeScipReportsConflictingCoreExcludesFile(t *testing.T) {
 	t.Setenv(EnvEnableScipSearch, "true")
 	repo := newGitRepoWithWorktrees(t, "task-one")
+	writeTestFile(t, repo.root, "go.scip", "root go")
 	worktree := repo.worktrees["task-one"]
 	privateExclude := filepath.Join(revParseGitDir(t, worktree), "info", "exclude")
 	conflictingExclude := filepath.Join(t.TempDir(), "other-exclude")
@@ -1777,6 +1850,7 @@ func TestRefreshTaskWorktreeScipReportsConflictingCoreExcludesFile(t *testing.T)
 	runGit(t, worktree, "config", "core.excludesFile", conflictingExclude)
 
 	_, err := RefreshIndexes(RefreshOptions{
+		ProjectRoot:         repo.root,
 		TargetRoot:          worktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(RuntimeCommandPlan) (string, error) {

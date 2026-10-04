@@ -549,15 +549,15 @@ func completeClaimTaskAfterValidation(
 	for _, warning := range sembleWarnings {
 		log.Printf("WARNING: claim-task %s: %s", taskID, warning)
 	}
-	scipWarnings := refreshTaskWorktreeScipIndexes(claimCtx.worktreeDir, scipSearchLanguages)
+	scipWarnings := refreshTaskWorktreeScipIndexes(projectRoot, claimCtx.worktreeDir, scipSearchLanguages)
 	for _, warning := range scipWarnings {
 		log.Printf("WARNING: claim-task %s: %s", taskID, warning)
 	}
-	stacklitWarnings := refreshTaskWorktreeStacklitIndex(claimCtx.worktreeDir)
+	stacklitWarnings := refreshTaskWorktreeStacklitIndex(projectRoot, claimCtx.worktreeDir)
 	for _, warning := range stacklitWarnings {
 		log.Printf("WARNING: claim-task %s: %s", taskID, warning)
 	}
-	functionalClustersWarnings := refreshTaskWorktreeFunctionalClustersIndex(claimCtx.worktreeDir, scipSearchLanguages)
+	functionalClustersWarnings := refreshTaskWorktreeFunctionalClustersIndex(projectRoot, claimCtx.worktreeDir, scipSearchLanguages)
 	for _, warning := range functionalClustersWarnings {
 		log.Printf("WARNING: claim-task %s: %s", taskID, warning)
 	}

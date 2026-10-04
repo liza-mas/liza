@@ -2,20 +2,14 @@ package ops
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/liza-mas/liza/internal/stacklit"
 )
 
-var (
-	stacklitRuntimeRunnerMu sync.Mutex
-	stacklitRuntimeRunner   stacklit.RuntimeRunner
-)
-
-func refreshTaskWorktreeStacklitIndex(worktreeDir string) []string {
+func refreshTaskWorktreeStacklitIndex(projectRoot, worktreeDir string) []string {
 	result, err := stacklit.RefreshIndex(stacklit.RefreshOptions{
-		TargetRoot: worktreeDir,
-		Runner:     currentStacklitRuntimeRunner(),
+		ProjectRoot: projectRoot,
+		TargetRoot:  worktreeDir,
 	})
 	warnings := stacklitRefreshWarnings(result)
 	if err != nil {
@@ -30,10 +24,4 @@ func stacklitRefreshWarnings(result stacklit.RefreshResult) []string {
 		warnings = append(warnings, fmt.Sprintf("stacklit: %s", failure.Diagnostic))
 	}
 	return warnings
-}
-
-func currentStacklitRuntimeRunner() stacklit.RuntimeRunner {
-	stacklitRuntimeRunnerMu.Lock()
-	defer stacklitRuntimeRunnerMu.Unlock()
-	return stacklitRuntimeRunner
 }

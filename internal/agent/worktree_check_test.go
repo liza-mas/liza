@@ -219,6 +219,8 @@ func TestEnsureReviewerWorktree_MissingRecoverable_RefreshesScipAfterPostWorktre
 	branchName := paths.TaskBranchPrefix + "task-1"
 	testhelpers.MustGit(t, tmpDir, "branch", branchName)
 
+	writeReviewerRootScipIndex(t, tmpDir)
+
 	var calls []scipsearch.RuntimeCommandPlan
 	markerSeenByIndexer := false
 	restoreRefresh := replaceReviewerWorktreeScipRefreshForTest(func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
@@ -243,14 +245,11 @@ func TestEnsureReviewerWorktree_MissingRecoverable_RefreshesScipAfterPostWorktre
 
 	wtPath := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
 	if !markerSeenByIndexer {
-		t.Fatal("scip indexer ran before PostWorktreeCmd marker existed")
-	}
-	if len(calls) != 2 {
-		t.Fatalf("indexer calls = %#v, want go indexer and aggregate refresh", calls)
+		t.Fatal("scip reroot ran before PostWorktreeCmd marker existed")
 	}
 	wantIndexPath := filepath.Join(wtPath, paths.ProjectDirName(), "scip", "go.scip")
-	if calls[0].Language != "go" || calls[0].Dir != wtPath || calls[1].Name != "scip-search" || !strings.HasSuffix(calls[1].OutputPath, "go-aggregate.scip") {
-		t.Fatalf("indexer calls = %#v, want go plan and aggregate for recovered worktree", calls)
+	if len(calls) != 1 || calls[0].Name != "scip-search" || calls[0].Args[0] != "reroot" || calls[0].Dir != wtPath || calls[0].OutputPath != wantIndexPath {
+		t.Fatalf("runner calls = %#v, want one go reroot into the recovered worktree", calls)
 	}
 
 	available := availableReviewerScipIndexes(t, wtPath, []string{"go"})
@@ -318,10 +317,12 @@ func TestEnsureReviewerWorktree_MissingRecoverable_ScipFailureWarningOnlyAndOmit
 	branchName := paths.TaskBranchPrefix + "task-1"
 	testhelpers.MustGit(t, tmpDir, "branch", branchName)
 
+	writeReviewerRootScipIndex(t, tmpDir)
+
 	logs := captureAgentLogs(t)
 	restoreRefresh := replaceReviewerWorktreeScipRefreshForTest(func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
 		opts.Runner = func(scipsearch.RuntimeCommandPlan) (string, error) {
-			return "compiler exploded", errors.New("scip-go failed")
+			return "index unreadable", errors.New("scip-search reroot failed")
 		}
 		return scipsearch.RefreshIndexes(opts)
 	})
@@ -341,10 +342,10 @@ func TestEnsureReviewerWorktree_MissingRecoverable_ScipFailureWarningOnlyAndOmit
 		t.Fatalf("AvailableIndexes() = %#v, want failed go language omitted", available)
 	}
 	logOutput := logs.String()
-	if !strings.Contains(logOutput, "scip-search indexer failed after worktree recovery") ||
+	if !strings.Contains(logOutput, "scip-search index copy failed after worktree recovery") ||
 		!strings.Contains(logOutput, "language=go") ||
-		!strings.Contains(logOutput, "scip-go failed") {
-		t.Fatalf("logs = %q, want warning with failed go indexer diagnostic", logOutput)
+		!strings.Contains(logOutput, "scip-search reroot failed") {
+		t.Fatalf("logs = %q, want warning with failed go reroot diagnostic", logOutput)
 	}
 	if status := testhelpers.MustGit(t, wtPath, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
@@ -679,6 +680,15 @@ func writeReviewerScipIndex(plan scipsearch.RuntimeCommandPlan, content []byte) 
 		return "", err
 	}
 	return "indexed", nil
+}
+
+// writeReviewerRootScipIndex publishes the repo-root Go index that reviewer
+// worktree recovery re-roots.
+func writeReviewerRootScipIndex(t *testing.T, projectRoot string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(projectRoot, "go.scip"), []byte("repo-root go index"), 0o644); err != nil {
+		t.Fatalf("WriteFile(go.scip) error: %v", err)
+	}
 }
 
 func availableReviewerScipIndexes(t *testing.T, worktreeDir string, languages []string) []scipsearch.IndexRef {

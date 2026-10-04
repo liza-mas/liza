@@ -316,7 +316,7 @@ func TestSubmitForReviewCommand_PrintsScipWarnings(t *testing.T) {
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
-	installFailingSubmitReviewIndexer(t)
+	installFailingSubmitReviewReroot(t, tmpDir)
 
 	testhelpers.MustGit(t, tmpDir, "checkout", "integration")
 	g := git.New(tmpDir)
@@ -389,7 +389,7 @@ func TestSubmitForReviewCommand_PrintsScipWarnings(t *testing.T) {
 		return SubmitForReviewCommand(tmpDir, taskID, wtCommit, agentID)
 	})
 	testhelpers.AssertNoError(t, err)
-	if !strings.Contains(stderr, "warning: scip-search go:") || !strings.Contains(stderr, "fake scip-go failed") {
+	if !strings.Contains(stderr, "warning: scip-search go:") || !strings.Contains(stderr, "fake scip-search reroot failed") {
 		t.Fatalf("stderr = %q, want scip-search warning", stderr)
 	}
 }
@@ -502,14 +502,19 @@ func TestSubmitForReview_RebaseConflict(t *testing.T) {
 	}
 }
 
-func installFailingSubmitReviewIndexer(t *testing.T) {
+// installFailingSubmitReviewReroot publishes a repo-root Go index and puts a
+// scip-search on PATH whose reroot fails.
+func installFailingSubmitReviewReroot(t *testing.T, projectRoot string) {
 	t.Helper()
+	if err := os.WriteFile(filepath.Join(projectRoot, "go.scip"), []byte("repo-root go index"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	binDir := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\necho fake scip-go failed >&2\nexit 3\n"
-	testhelpers.WriteShellStub(t, filepath.Join(binDir, "scip-go"), script)
+	script := "#!/bin/sh\necho fake scip-search reroot failed >&2\nexit 3\n"
+	testhelpers.WriteShellStub(t, filepath.Join(binDir, "scip-search"), script)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 

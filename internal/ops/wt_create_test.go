@@ -363,6 +363,7 @@ func TestCreateWorktreePreparesSembleIgnoreForFreshWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
@@ -387,6 +388,7 @@ func TestCreateWorktreePreparesSembleIgnoreForExistingWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	requireFeatureGateUnset(t, stacklit.EnvEnableStacklit)
 
@@ -417,6 +419,7 @@ func TestCreateWorktree_ScipIndexesEnabledNewWorktreeAfterSetup(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	writeClaudeSettingsForCreateWorktreeScipTest(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
@@ -457,8 +460,8 @@ func TestCreateWorktree_ScipIndexesEnabledNewWorktreeAfterSetup(t *testing.T) {
 	if len(result.Warnings) != 0 {
 		t.Fatalf("CreateWorktree() warnings = %v, want none", result.Warnings)
 	}
-	if len(calls) != 2 || calls[0].Language != "go" || calls[1].Name != "scip-search" {
-		t.Fatalf("indexer calls = %#v, want go indexer and aggregate calls", calls)
+	if len(calls) != 1 || calls[0].Name != "scip-search" || calls[0].Args[0] != "reroot" {
+		t.Fatalf("runner calls = %#v, want one scip-search reroot call", calls)
 	}
 
 	wantIndexPath := filepath.Join(result.WorktreeDir, paths.ProjectDirName(), "scip", "go.scip")
@@ -476,6 +479,7 @@ func TestCreateWorktree_ScipExistingWorktreeRefreshesIdempotently(t *testing.T) 
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 
@@ -507,19 +511,18 @@ func TestCreateWorktree_ScipExistingWorktreeRefreshesIdempotently(t *testing.T) 
 	if !second.AlreadyExisted {
 		t.Fatal("second CreateWorktree() AlreadyExisted = false, want true")
 	}
-	if call != 4 {
-		t.Fatalf("indexer call count = %d, want 4", call)
+	if call != 2 {
+		t.Fatalf("reroot call count = %d, want 2", call)
 	}
 	wantPath := filepath.Join(first.WorktreeDir, paths.ProjectDirName(), "scip", "go.scip")
-	if len(outputPaths) != 4 || outputPaths[1] == wantPath || outputPaths[3] == wantPath ||
-		!strings.HasSuffix(outputPaths[1], "go-aggregate.scip") || !strings.HasSuffix(outputPaths[3], "go-aggregate.scip") {
-		t.Fatalf("output paths = %#v, want repeated temporary aggregate refresh before atomic rename to %s", outputPaths, wantPath)
+	if len(outputPaths) != 2 || outputPaths[0] != wantPath || outputPaths[1] != wantPath {
+		t.Fatalf("output paths = %#v, want repeated reroot to %s", outputPaths, wantPath)
 	}
 	content, err := os.ReadFile(wantPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s) error: %v", wantPath, err)
 	}
-	wantContent := "refresh-4:" + first.WorktreeDir
+	wantContent := "refresh-2:" + first.WorktreeDir
 	if string(content) != wantContent {
 		t.Fatalf("index content = %q, want %q", content, wantContent)
 	}
@@ -531,6 +534,7 @@ func TestCreateWorktree_ScipDisabledActivationNoop(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "false")
 	t.Setenv(stacklit.EnvEnableStacklit, "false")
@@ -566,6 +570,7 @@ func TestCreateWorktree_StacklitIndexesEnabledNewWorktreeAfterSetup(t *testing.T
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	commitTrackedStacklitForCreateWorktreeTest(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	t.Setenv(stacklit.EnvEnableStacklit, "true")
@@ -576,14 +581,7 @@ func TestCreateWorktree_StacklitIndexesEnabledNewWorktreeAfterSetup(t *testing.T
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	var calls []stacklit.RuntimeCommandPlan
-	withCreateWorktreeStacklitRuntimeRunner(t, func(plan stacklit.RuntimeCommandPlan) (string, error) {
-		calls = append(calls, plan)
-		if err := os.WriteFile(plan.OutputPath, []byte(plan.Dir), 0o644); err != nil {
-			return "", err
-		}
-		return "", nil
-	})
+	writeCreateWorktreeRootFile(t, tmpDir, "stacklit.json", "repo-root stacklit\n")
 
 	result, err := CreateWorktree(tmpDir, "task-1", false)
 	if err != nil {
@@ -592,15 +590,9 @@ func TestCreateWorktree_StacklitIndexesEnabledNewWorktreeAfterSetup(t *testing.T
 	if len(result.Warnings) != 0 {
 		t.Fatalf("CreateWorktree() warnings = %v, want none", result.Warnings)
 	}
-	if len(calls) != 1 {
-		t.Fatalf("stacklit calls = %#v, want one call", calls)
-	}
 	wantIndexPath := filepath.Join(result.WorktreeDir, "stacklit.json")
-	if calls[0].OutputPath != wantIndexPath {
-		t.Fatalf("stacklit output path = %q, want %q", calls[0].OutputPath, wantIndexPath)
-	}
-	if got := string(readCreateWorktreeFile(t, wantIndexPath)); got != result.WorktreeDir {
-		t.Fatalf("stacklit.json content = %q, want worktree dir", got)
+	if got := string(readCreateWorktreeFile(t, wantIndexPath)); got != "repo-root stacklit\n" {
+		t.Fatalf("stacklit.json content = %q, want the repo-root index", got)
 	}
 	if status := runGitInDir(t, result.WorktreeDir, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
@@ -610,10 +602,11 @@ func TestCreateWorktree_StacklitIndexesEnabledNewWorktreeAfterSetup(t *testing.T
 	}
 }
 
-func TestCreateWorktree_ScipFailedIndexerWarningOnly(t *testing.T) {
+func TestCreateWorktree_ScipFailedRerootWarningOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 	t.Setenv(stacklit.EnvEnableStacklit, "false")
@@ -626,18 +619,18 @@ func TestCreateWorktree_ScipFailedIndexerWarningOnly(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, stateFile, state)
 	withCreateWorktreeScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
-		return "indexer stderr", fmt.Errorf("boom")
+		return "reroot stderr", fmt.Errorf("boom")
 	})
 
 	result, err := CreateWorktree(tmpDir, "task-1", false)
 	if err != nil {
-		t.Fatalf("CreateWorktree() should succeed on indexer failure, got: %v", err)
+		t.Fatalf("CreateWorktree() should succeed on reroot failure, got: %v", err)
 	}
 	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "scip-search go:") || !strings.Contains(result.Warnings[0], "boom") {
 		t.Fatalf("CreateWorktree() warnings = %v, want scip-search go warning with diagnostic", result.Warnings)
 	}
 	if indexes := availableCreateWorktreeScipIndexes(t, result.WorktreeDir, []string{"go"}); len(indexes) != 0 {
-		t.Fatalf("AvailableIndexes() = %#v, want none after failed indexer", indexes)
+		t.Fatalf("AvailableIndexes() = %#v, want none after failed reroot", indexes)
 	}
 	assertGitStatusClean(t, result.WorktreeDir)
 }
@@ -646,6 +639,7 @@ func TestCreateWorktree_ScipConcurrentCreatesUseIsolatedIndexes(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	addTrackedGoSourceForCreateWorktreeScipTest(t, tmpDir)
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 	t.Setenv(stacklit.EnvEnableStacklit, "false")
@@ -1245,18 +1239,11 @@ func withCreateWorktreeScipRuntimeRunner(t *testing.T, runner scipsearch.Runtime
 	})
 }
 
-func withCreateWorktreeStacklitRuntimeRunner(t *testing.T, runner stacklit.RuntimeRunner) {
+func writeCreateWorktreeRootFile(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
-	stacklitRuntimeRunnerMu.Lock()
-	previous := stacklitRuntimeRunner
-	stacklitRuntimeRunner = runner
-	stacklitRuntimeRunnerMu.Unlock()
-
-	t.Cleanup(func() {
-		stacklitRuntimeRunnerMu.Lock()
-		stacklitRuntimeRunner = previous
-		stacklitRuntimeRunnerMu.Unlock()
-	})
+	if err := os.WriteFile(filepath.Join(projectRoot, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error: %v", name, err)
+	}
 }
 
 func addTrackedGoSourceForCreateWorktreeScipTest(t *testing.T, projectRoot string) {

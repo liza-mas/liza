@@ -103,9 +103,9 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 				}
 			}
 			result.Warnings = append(result.Warnings, PrepareSembleWorktreeIgnore(worktreeDir)...)
-			result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(worktreeDir, scipSearchLanguages)...)
-			result.Warnings = append(result.Warnings, refreshTaskWorktreeStacklitIndex(worktreeDir)...)
-			result.Warnings = append(result.Warnings, refreshTaskWorktreeFunctionalClustersIndex(worktreeDir, scipSearchLanguages)...)
+			result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
+			result.Warnings = append(result.Warnings, refreshTaskWorktreeStacklitIndex(lp.ProjectRoot(), worktreeDir)...)
+			result.Warnings = append(result.Warnings, refreshTaskWorktreeFunctionalClustersIndex(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
 			return result, nil
 		}
 	}
@@ -162,9 +162,9 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 		}
 	}
 	result.Warnings = append(result.Warnings, PrepareSembleWorktreeIgnore(worktreeDir)...)
-	result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(worktreeDir, scipSearchLanguages)...)
-	result.Warnings = append(result.Warnings, refreshTaskWorktreeStacklitIndex(worktreeDir)...)
-	result.Warnings = append(result.Warnings, refreshTaskWorktreeFunctionalClustersIndex(worktreeDir, scipSearchLanguages)...)
+	result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
+	result.Warnings = append(result.Warnings, refreshTaskWorktreeStacklitIndex(lp.ProjectRoot(), worktreeDir)...)
+	result.Warnings = append(result.Warnings, refreshTaskWorktreeFunctionalClustersIndex(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
 
 	return result, nil
 }

@@ -2,6 +2,7 @@ package scipsearch
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,6 @@ var EnvEnableScipSearch = brand.EnvName("ENABLE_SCIP_SEARCH")
 
 const maxFailureDiagnosticBytes = 1024
 const outputPathPlaceholder = "__SCIP_OUTPUT__"
-const aggregateOutputPathPlaceholder = "__SCIP_AGGREGATE_OUTPUT__"
 
 var supportedLanguages = []string{"go", "typescript", "python"}
 
@@ -123,11 +123,14 @@ type RuntimeCommandPlan struct {
 	Root       string
 }
 
-// RuntimeRunner executes one runtime indexer command plan.
+// RuntimeRunner executes one runtime scip-search command plan.
 type RuntimeRunner func(RuntimeCommandPlan) (string, error)
 
-// RefreshOptions configures one best-effort runtime index refresh.
+// RefreshOptions configures one best-effort task worktree index refresh.
 type RefreshOptions struct {
+	// ProjectRoot holds the repo-root <language>.scip indexes the worktree
+	// copies are re-rooted from.
+	ProjectRoot         string
 	TargetRoot          string
 	ConfiguredLanguages []string
 	GitFiles            GitFilesFunc
@@ -251,9 +254,14 @@ func PlanRuntimeCommands(opts RuntimePlanOptions) ([]LanguageAggregatePlan, erro
 	return buildRuntimeCommandPlans(targetRoot, filterRuntimeLanguages(opts.ConfiguredLanguages, detectLanguages(files)), files), nil
 }
 
-// RefreshIndexes executes selected runtime indexer command plans for one task
-// worktree and reports per-language results; the index lifecycle hooks own the
-// repo-root indexes. Indexer failures are isolated to their language.
+// RefreshIndexes re-roots the repo-root SCIP indexes into one task worktree and
+// reports per-language results; it never runs a language indexer. The index
+// lifecycle hooks own the repo-root indexes. Their document paths are relative,
+// but their project root is the repo root, which scip-search prints in every
+// result, so each copy is rewritten with scip-search reroot to name the
+// worktree. A copy lags the worktree by at most one repo-root refresh and
+// excludes the task's own edits. Failures, including a missing repo-root
+// index, are isolated to their language and leave it without an index.
 func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
 	plans, err := PlanRuntimeCommands(RuntimePlanOptions{
 		TargetRoot:          opts.TargetRoot,
@@ -265,6 +273,10 @@ func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
 	}
 	if len(plans) == 0 {
 		return RefreshResult{}, nil
+	}
+	projectRoot, err := filepath.Abs(opts.ProjectRoot)
+	if err != nil {
+		return RefreshResult{}, fmt.Errorf("resolve scip-search project root: %w", err)
 	}
 
 	if err := ensureTaskWorktreeScipExclude(plans[0].ProjectRoot); err != nil {
@@ -282,7 +294,7 @@ func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
 
 	var result RefreshResult
 	for _, plan := range plans {
-		output, err := runAggregateRefresh(plan, runner)
+		output, err := rerootProjectRootIndex(projectRoot, plan, runner)
 		if err != nil {
 			if cleanupErr := removeStaleIndex(plan.OutputPath); cleanupErr != nil {
 				err = fmt.Errorf("%w; additionally %v", err, cleanupErr)
@@ -293,54 +305,42 @@ func RefreshIndexes(opts RefreshOptions) (RefreshResult, error) {
 			})
 			continue
 		}
-		if _, err := os.Stat(plan.OutputPath); err != nil {
-			result.Failures = append(result.Failures, RefreshFailure{
-				Language:   plan.Language,
-				Diagnostic: boundedFailureDiagnostic(fmt.Errorf("indexer did not write %s: %w", plan.OutputPath, err), output),
-			})
-			_ = removeStaleIndex(plan.OutputPath)
-			continue
-		}
 		result.Successes = append(result.Successes, IndexRef{Language: plan.Language, Path: plan.OutputPath})
 	}
 	return result, nil
 }
 
-func runAggregateRefresh(plan LanguageAggregatePlan, runner RuntimeRunner) (string, error) {
-	tmpDir, err := os.MkdirTemp(filepath.Dir(plan.OutputPath), "."+brand.RuntimeValues().BinaryName+"-scip-"+plan.Language+"-")
-	if err != nil {
-		return "", fmt.Errorf("create temporary scip-search index directory: %w", err)
+// rerootProjectRootIndex writes plan.OutputPath from the language's repo-root
+// index. scip-search reroot publishes its output atomically.
+func rerootProjectRootIndex(projectRoot string, plan LanguageAggregatePlan, runner RuntimeRunner) (string, error) {
+	if err := removeStaleIndex(plan.OutputPath); err != nil {
+		return "", err
 	}
-	defer os.RemoveAll(tmpDir)
-
-	indexPaths := make([]string, 0, len(plan.IndexPlans))
-	for i, indexPlan := range plan.IndexPlans {
-		outputPath := filepath.Join(tmpDir, fmt.Sprintf("%s-%d.scip", plan.Language, i))
-		indexPlan = commandPlanWithOutputPath(indexPlan, outputPath)
-		output, err := runner(indexPlan)
-		if err != nil {
-			return output, err
-		}
-		if _, err := os.Stat(outputPath); err != nil {
-			return output, fmt.Errorf("indexer did not write %s: %w", outputPath, err)
-		}
-		indexPaths = append(indexPaths, outputPath)
+	source := projectRootIndexPath(projectRoot, plan.Language)
+	if _, err := os.Stat(source); errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("repo-root index %s not found; the worktree has no %s SCIP index until the repo-root index exists", source, plan.Language)
 	}
-
-	aggregateOutputPath := filepath.Join(tmpDir, plan.Language+"-aggregate.scip")
-	aggregatePlan := aggregateCommandPlan(plan, indexPaths)
-	aggregatePlan = aggregatePlanWithOutputPath(aggregatePlan, aggregateOutputPath)
-	output, err := runner(aggregatePlan)
+	output, err := runner(rerootCommandPlan(plan, source))
 	if err != nil {
+		if strings.Contains(output, "unsupported command") {
+			err = fmt.Errorf("%w (scip-search lacks the reroot command; upgrade it with %s toolchain install scip-search)", err, brand.RuntimeValues().BinaryName)
+		}
 		return output, err
 	}
-	if _, err := os.Stat(aggregateOutputPath); err != nil {
-		return output, fmt.Errorf("aggregate indexer did not write %s: %w", aggregateOutputPath, err)
-	}
-	if err := os.Rename(aggregateOutputPath, plan.OutputPath); err != nil {
-		return output, fmt.Errorf("replace aggregate scip-search index %s: %w", plan.OutputPath, err)
+	if _, err := os.Stat(plan.OutputPath); err != nil {
+		return output, fmt.Errorf("scip-search reroot did not write %s: %w", plan.OutputPath, err)
 	}
 	return output, nil
+}
+
+func rerootCommandPlan(plan LanguageAggregatePlan, source string) RuntimeCommandPlan {
+	return RuntimeCommandPlan{
+		Language:   plan.Language,
+		Name:       "scip-search",
+		Args:       []string{"reroot", "--index", source, "--project-root", plan.ProjectRoot, "--out", plan.OutputPath},
+		Dir:        plan.ProjectRoot,
+		OutputPath: plan.OutputPath,
+	}
 }
 
 // AvailableIndexes returns existing absolute index paths for selected runtime
@@ -745,32 +745,6 @@ func dedupeIndexPlans(plans []RuntimeCommandPlan) []RuntimeCommandPlan {
 		out = append(out, plan)
 	}
 	return out
-}
-
-func aggregateCommandPlan(plan LanguageAggregatePlan, indexPaths []string) RuntimeCommandPlan {
-	args := []string{"aggregate-index", "--project-root", plan.ProjectRoot}
-	for i, indexPlan := range plan.IndexPlans {
-		args = append(args, "--root", indexPlan.Root, "--index", indexPaths[i])
-	}
-	args = append(args, "--out", aggregateOutputPathPlaceholder)
-	return RuntimeCommandPlan{
-		Language:   plan.Language,
-		Name:       "scip-search",
-		Args:       args,
-		Dir:        plan.ProjectRoot,
-		OutputPath: aggregateOutputPathPlaceholder,
-	}
-}
-
-func aggregatePlanWithOutputPath(plan RuntimeCommandPlan, outputPath string) RuntimeCommandPlan {
-	plan.Args = append([]string(nil), plan.Args...)
-	for i, arg := range plan.Args {
-		if arg == aggregateOutputPathPlaceholder {
-			plan.Args[i] = outputPath
-		}
-	}
-	plan.OutputPath = outputPath
-	return plan
 }
 
 func removeStaleIndex(path string) error {

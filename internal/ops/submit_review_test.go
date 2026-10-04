@@ -699,7 +699,7 @@ func TestSubmitForReview_RebaseRewriteUsesPostRebaseHead(t *testing.T) {
 	}
 }
 
-func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransition(t *testing.T) {
+func TestSubmitForReview_ScipRefreshRunsAfterRebaseBeforeSubmittedTransition(t *testing.T) {
 	t.Setenv(scipsearch.EnvEnableScipSearch, "true")
 	t.Setenv(stacklit.EnvEnableStacklit, "false")
 
@@ -776,11 +776,16 @@ func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransiti
 	}
 	bb := testhelpers.WriteInitialState(t, statePath, initialState)
 
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
+
 	refreshCalls := 0
 	restore := replaceSubmitReviewScipRefreshForTest(func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
 		refreshCalls++
 		if opts.TargetRoot != wtPath {
 			t.Errorf("TargetRoot = %q, want %q", opts.TargetRoot, wtPath)
+		}
+		if opts.ProjectRoot != tmpDir {
+			t.Errorf("ProjectRoot = %q, want %q", opts.ProjectRoot, tmpDir)
 		}
 		state, err := bb.Read()
 		if err != nil {
@@ -798,12 +803,10 @@ func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransiti
 			if postRebaseHead == preRebaseCommit {
 				t.Fatal("refresh saw pre-rebase HEAD")
 			}
-			source, err := os.ReadFile(filepath.Join(wtPath, "feature.go"))
-			if err != nil {
-				return "", err
+			if plan.Name != "scip-search" || plan.Args[0] != "reroot" {
+				t.Fatalf("runner plan = %#v, want scip-search reroot", plan)
 			}
-			content := fmt.Sprintf("%s\n%s", postRebaseHead, source)
-			if err := os.WriteFile(plan.OutputPath, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(plan.OutputPath, []byte(postRebaseHead), 0644); err != nil {
 				return "", err
 			}
 			return "", nil
@@ -827,10 +830,10 @@ func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransiti
 	indexPath := filepath.Join(wtPath, paths.ProjectDirName(), "scip", "go.scip")
 	indexContent, err := os.ReadFile(indexPath)
 	if err != nil {
-		t.Fatalf("read regenerated index: %v", err)
+		t.Fatalf("read re-rooted index: %v", err)
 	}
-	if !strings.Contains(string(indexContent), postRebaseHead) || !strings.Contains(string(indexContent), "post-rebase") {
-		t.Fatalf("index content = %q, want post-rebase review candidate", indexContent)
+	if string(indexContent) != postRebaseHead {
+		t.Fatalf("index content = %q, want written after rebase to %s", indexContent, postRebaseHead)
 	}
 	available, err := scipsearch.AvailableIndexes(scipsearch.RuntimePlanOptions{
 		TargetRoot:          wtPath,
@@ -840,7 +843,7 @@ func TestSubmitForReview_ScipRefreshesPostRebaseCandidateBeforeSubmittedTransiti
 		t.Fatalf("AvailableIndexes() error = %v", err)
 	}
 	if len(available) != 1 || available[0].Language != "go" || available[0].Path != indexPath {
-		t.Fatalf("AvailableIndexes() = %#v, want regenerated go index", available)
+		t.Fatalf("AvailableIndexes() = %#v, want re-rooted go index", available)
 	}
 	if status := testhelpers.MustGit(t, wtPath, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
@@ -861,9 +864,11 @@ func TestSubmitForReview_ScipFailureWarnsAndOmitsFailedLanguage(t *testing.T) {
 		t.Fatalf("set scip config: %v", err)
 	}
 
+	writeCreateWorktreeRootFile(t, tmpDir, "go.scip", "repo-root go index")
+
 	restore := replaceSubmitReviewScipRefreshForTest(func(opts scipsearch.RefreshOptions) (scipsearch.RefreshResult, error) {
 		opts.Runner = func(scipsearch.RuntimeCommandPlan) (string, error) {
-			return "compiler exploded", stderrors.New("scip-go failed")
+			return "index unreadable", stderrors.New("scip-search reroot failed")
 		}
 		return scipsearch.RefreshIndexes(opts)
 	})
@@ -873,7 +878,7 @@ func TestSubmitForReview_ScipFailureWarnsAndOmitsFailedLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SubmitForReview() unexpected error: %v", err)
 	}
-	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "scip-search go:") || !strings.Contains(result.Warnings[0], "scip-go failed") {
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "scip-search go:") || !strings.Contains(result.Warnings[0], "scip-search reroot failed") {
 		t.Fatalf("Warnings = %v, want go scip-search failure", result.Warnings)
 	}
 	state, err := bb.Read()
