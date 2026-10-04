@@ -63,14 +63,25 @@ history lengths or offsets. The usage report, `analyze` and `inspect` also
 read the archived kinds. Each needs a logical history count (live plus
 archived) or an archive-aware read before any entry can move.
 
-**Payback trigger:** State bytes still dominate `Modify` lock hold after
-receipt archival — measured by re-timing one Modify cycle on a run's state —
-or a run's `state.yaml` exceeds 5 MB again. Introduce a logical history count,
-switch the count consumers to it, restore history positionally (preserving
-order, including equal timestamps) for display readers, then archive the
-assessment and checkpoint kinds.
-If contention persists after that archival, measure agent-write lock holds
-before introducing separate hot-state storage and its cross-record fencing.
+**Payback trigger:** Reached 2026-10-04 on a 5.7 MB run state: a no-op
+`Modify` held the lock 4.4–9.2 s under run load (YAML decode, marshal and
+re-parse, linear in bytes), and terminal tasks were 80% of the bytes
+(`history` 1.68 MB, `lifecycle` 1.36 MB, `output` 0.63 MB). Locked reads now
+decode after releasing the lock; writes still pay the full cost.
+
+**Next step:** Terminal status alone does not make these fields dead. A MERGED
+task's `output` feeds child generation, transition crash recovery, inherited
+dependencies, replan, integration settlement and runtime-input scrubbing;
+`TaskTransitionID` hashes `Lifecycle.Revision`, and terminal-task requests
+replay from receipts. Beyond the count consumers above, terminal history
+content drives the blocked-recovery cap, integration-fix validation,
+cycle-blocked planner detection, post-merge verdict matching, acceptance
+authorship and sprint metrics, and is appended after terminal transitions.
+The only count-preserving slice found, moving note/reason/extra of terminal
+`rejected`, `pre_execution_checkpoint` and `orchestrator_assessment` entries,
+saves 18% of the bytes. Decide on separate hot-state storage (agent
+heartbeats and leases, or terminal-task records) and its cross-record fencing in
+an ADR before further archival.
 
 ## Direct unblock assignment bypasses claim-stage review caps
 

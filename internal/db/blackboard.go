@@ -148,36 +148,41 @@ func (bb *Blackboard) GetMetricsRecorder() *filelock.MetricsRecorder {
 	return bb.fileLock.GetMetricsRecorder()
 }
 
-// Read returns the current state under an exclusive file lock.
+// readDecodeTestHook runs in ReadContext between the byte read and decoding.
+var readDecodeTestHook func()
+
+// Read returns the current state, reading its bytes under the exclusive file
+// lock and decoding them after release.
 func (bb *Blackboard) Read() (*models.State, error) {
 	return bb.ReadContext(context.Background())
 }
 
-// ReadContext returns the current state under an exclusive file lock,
-// aborting lock acquisition when ctx is canceled.
+// ReadContext returns the current state, aborting lock acquisition when ctx is
+// canceled. Only the byte read holds the exclusive lock, which orders the read
+// after any writer holding it. Writers publish by atomic rename, so the bytes
+// are one complete publication; decoding them is pure and takes seconds on a
+// large state, so it runs after release instead of delaying writers.
 func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
-	var state *models.State
+	var data []byte
 	err := bb.fileLock.WithLockOperationContext(ctx, "read", func() error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		data, err := readStateFile(bb.statePath)
-		if err != nil {
-			return err
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		state, err = decodeState(data, "state read")
+		var err error
+		data, err = readStateFile(bb.statePath)
 		return err
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
-	return state, nil
+	if readDecodeTestHook != nil {
+		readDecodeTestHook()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return decodeState(data, "state read")
 }
 
 // patientReadLockTimeout bounds the lock wait of Patient instances, including
