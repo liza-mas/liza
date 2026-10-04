@@ -49,6 +49,65 @@ func TestRetrySharingViolationDoesNotRetryOtherErrors(t *testing.T) {
 	}
 }
 
+func TestRetryReplaceCollisionRetriesHeldTarget(t *testing.T) {
+	for _, cause := range []syscall.Errno{5, 32} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			attempts := 0
+			err := retryReplaceCollision(func() error {
+				attempts++
+				if attempts == 1 {
+					return &os.LinkError{Op: "rename", Old: "tmp", New: "envelope.json", Err: cause}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("retryReplaceCollision() = %v, want nil", err)
+			}
+			if attempts != 2 {
+				t.Errorf("attempts = %d, want 2", attempts)
+			}
+		})
+	}
+}
+
+func TestRetryReplaceCollisionDoesNotRetryOtherErrors(t *testing.T) {
+	for _, cause := range []error{os.ErrNotExist, errors.New("disk detached")} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			original := &os.LinkError{Op: "rename", Old: "tmp", New: "envelope.json", Err: cause}
+			attempts := 0
+			err := retryReplaceCollision(func() error {
+				attempts++
+				return original
+			})
+			if err != original {
+				t.Errorf("retryReplaceCollision() = %v, want original %v", err, original)
+			}
+			if attempts != 1 {
+				t.Errorf("attempts = %d, want 1", attempts)
+			}
+		})
+	}
+}
+
+func TestRetryReplaceCollisionStopsAfterBudget(t *testing.T) {
+	original := &os.LinkError{Op: "rename", Old: "tmp", New: "envelope.json", Err: syscall.Errno(5)}
+	attempts := 0
+	start := time.Now()
+	err := retryReplaceCollision(func() error {
+		attempts++
+		return original
+	})
+	if elapsed := time.Since(start); elapsed < pendingVerdictRetryBudget {
+		t.Errorf("gave up after %v, want at least %v", elapsed, pendingVerdictRetryBudget)
+	}
+	if err != original {
+		t.Errorf("retryReplaceCollision() = %v, want original %v", err, original)
+	}
+	if attempts < 2 {
+		t.Errorf("attempts = %d, want a retry before giving up", attempts)
+	}
+}
+
 func TestRetrySharingViolationStopsAfterBudget(t *testing.T) {
 	original := &os.PathError{Op: "open", Path: "envelope.json", Err: syscall.Errno(32)}
 	attempts := 0

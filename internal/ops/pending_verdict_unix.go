@@ -7,3 +7,8 @@ package ops
 func retrySharingViolation(op func() error) error {
 	return op()
 }
+
+// retryReplaceCollision runs op once: POSIX renames replace open files.
+func retryReplaceCollision(op func() error) error {
+	return op()
+}

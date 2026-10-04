@@ -157,10 +157,18 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 	if err := errors.Join(writeErr, syncErr, closeErr); err != nil {
 		return "", err
 	}
-	if err := os.Rename(f.Name(), filename); err != nil {
-		if existing, readErr := readPendingVerdictFile(filename); readErr == nil && bytes.Equal(existing, data) {
-			return finishPublication() // Concurrent identical submission (also Windows).
+	// A concurrent identical submission may hold, replace, or remove the target
+	// between our rename and the fallback read; retry until one of them settles.
+	err = retryReplaceCollision(func() error {
+		renameErr := os.Rename(f.Name(), filename)
+		if renameErr != nil {
+			if existing, readErr := readPendingVerdictFile(filename); readErr == nil && bytes.Equal(existing, data) {
+				return nil
+			}
 		}
+		return renameErr
+	})
+	if err != nil {
 		return "", err
 	}
 	return finishPublication()
