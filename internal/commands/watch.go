@@ -43,6 +43,9 @@ const (
 	// may stay unregistered before it counts as a failed start. It keeps
 	// covering demand until it registers or is seen to exit.
 	AutoRepairAgentPoolPendingTimeout = 5 * time.Minute
+	// AutoRepairAgentPoolSuppressionCooldown bounds failed-start suppression
+	// so transient launch failures do not strand demand until watcher restart.
+	AutoRepairAgentPoolSuppressionCooldown = 5 * time.Minute
 	// OrchestratorMissingGracePeriod absorbs launch ordering and supervisor
 	// restarts before an absent orchestrator is announced.
 	OrchestratorMissingGracePeriod = 60 * time.Second
@@ -381,7 +384,13 @@ func autoRepairSuppressedAlerts(missing []MissingRoleWork, cache map[string]time
 			continue
 		}
 		key := autoRepairAgentPoolSuppressedPrefix + role
-		if _, seen := cache[key]; seen {
+		if suppressedAt, seen := cache[key]; seen {
+			if now.Sub(suppressedAt) >= AutoRepairAgentPoolSuppressionCooldown {
+				delete(cache, key)
+				delete(cache, autoRepairAgentPoolStartCountPrefix+role)
+				delete(cache, autoRepairAgentPoolCachePrefix+role)
+				continue
+			}
 			roles = append(roles, role)
 			continue
 		}
@@ -391,8 +400,8 @@ func autoRepairSuppressedAlerts(missing []MissingRoleWork, cache map[string]time
 			Timestamp: now,
 			Level:     AlertLevelWarning,
 			Category:  "AUTO REPAIR FAILED",
-			Message: fmt.Sprintf("auto repair suppressed for role %s after %d started agent process(es) did not register; start the role manually or restart the TUI to retry",
-				role, AutoRepairAgentPoolMaxStarts),
+			Message: fmt.Sprintf("auto repair suppressed for role %s after %d started agent process(es) did not register; automatic retry after %s cooldown",
+				role, AutoRepairAgentPoolMaxStarts, AutoRepairAgentPoolSuppressionCooldown),
 		})
 	}
 	return out, roles

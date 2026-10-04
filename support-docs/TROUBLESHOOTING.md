@@ -156,7 +156,8 @@ atomic snapshots. Supervisor-owned state writes retry acquisition timeouts with
 capped backoff until cancellation; shutdown cleanup has its own 60s budget.
 Filesystem and authority errors remain failures. Command locks still return
 classified retryable timeouts. Reduce load while the queue drains; adding agents
-does not help.
+does not help. Auto-repair suppression after three unregistered starts expires
+after five minutes and permits another bounded batch without restarting the TUI.
 
 **Solutions:**
 - If holder is alive and working → wait 30-60s, retry
