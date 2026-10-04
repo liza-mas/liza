@@ -29,7 +29,7 @@ const transitioning = "$transitioning"
 // in TransitionToNewAttempt. Nil in production — zero overhead.
 type transitionTestHooks struct {
 	// afterPhase1 is called after Phase 1 commits to the blackboard,
-	// before Phase 2 git operations. Use to inspect intermediate state.
+	// before the final state mutation. Use to inspect intermediate state.
 	afterPhase1 func()
 }
 
@@ -42,10 +42,12 @@ var testTransitionHooks *transitionTestHooks
 // Phase 1 (bb.Modify): Set Attempt=2, reset counters, set sentinel, append
 // history, release agent. Preserves Status, Worktree, BaseCommit, RejectionReason.
 //
-// Phase 2 (git ops, outside lock): Delete worktree and branch best-effort.
-//
-// Phase 3 (bb.Modify): Re-check sentinel, clear AssignedTo/RejectionReason/
+// Phase 2 (bb.Modify): Re-check sentinel, clear AssignedTo/RejectionReason/
 // Worktree/BaseCommit, transition to initial pipeline status.
+//
+// Phase 3 (git ops, outside state lock): Delete worktree and branch best-effort.
+// The task worktree lock remains held until cleanup finishes, preventing a
+// concurrent claim from attaching to artifacts being removed.
 func TransitionToNewAttempt(projectRoot, taskID, reason string) (*TransitionAttemptResult, error) {
 	return transitionToNewAttemptWithProjectLock(projectRoot, taskID, reason, nil)
 }
@@ -190,20 +192,9 @@ func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority 
 		return nil, err
 	}
 
-	// Test hook: inspect intermediate state after Phase 1.
+	// Test hook: inspect intermediate state before finalization.
 	if testTransitionHooks != nil && testTransitionHooks.afterPhase1 != nil {
 		testTransitionHooks.afterPhase1()
-	}
-
-	// Phase 2: delete worktree best-effort (outside lock).
-	worktreeDeleted := false
-	if worktreePath != "" {
-		gw := git.New(projectRoot)
-		if rmErr := gw.RemoveWorktree(taskID); rmErr != nil {
-			log.Printf("WARNING: failed to remove worktree for task %s: %v", taskID, rmErr)
-		} else {
-			worktreeDeleted = true
-		}
 	}
 
 	// Add attempt-boundary transition: original status → initial status.
@@ -211,7 +202,8 @@ func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority 
 	// the standard pipeline transitions (e.g. REJECTED → initial).
 	pb.transitions[originalStatus] = append(pb.transitions[originalStatus], initialStatus)
 
-	// Phase 3: release sentinel, make task claimable.
+	// Finalize state before destructive cleanup. A failed state write retains
+	// both the sentinel and the reviewed Git evidence for recover-task.
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
@@ -248,7 +240,16 @@ func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("phase 3 failed: %w", err)
+		return nil, fmt.Errorf("state finalization failed: %w", err)
+	}
+	worktreeDeleted := false
+	if worktreePath != "" {
+		gw := git.New(projectRoot)
+		if rmErr := gw.RemoveWorktree(taskID); rmErr != nil {
+			log.Printf("WARNING: failed to remove worktree for task %s: %v", taskID, rmErr)
+		} else {
+			worktreeDeleted = true
+		}
 	}
 
 	return &TransitionAttemptResult{

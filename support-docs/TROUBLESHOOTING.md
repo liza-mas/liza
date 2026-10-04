@@ -873,6 +873,9 @@ must still have `review_commit == worktree HEAD`. Use `--fresh` only when
 discarding the task branch/worktree is intentional. `--force` is separate: it
 bypasses live-PID checks, and it enables git-only cleanup when the task is no
 longer in state.
+Neither `--force` nor `--fresh` bypasses a failed state read. Git-only cleanup
+requires a successful read proving the task absent, so contention or malformed
+state cannot discard an in-state task's branch or worktree.
 
 `recover-agent` performs full agent cleanup: release claim, remove worktree, and
 delete the agent from state. Both commands are idempotent, but neither should be
@@ -903,6 +906,16 @@ unblock-task` for the guarded `BLOCKED` -> claimable transition.
 §BRAND_BINARY_NAME§ agent coder
 ```
 </details>
+
+### Interrupted attempt rollover
+
+If a rejected task has `assigned_to: $transitioning`, its attempt rollover
+committed the reservation but did not finish its final state write. The task
+branch and worktree remain available; destructive cleanup follows successful
+finalization. Inspect the task and Git artifacts, then run
+`§BRAND_BINARY_NAME§ recover-task <task-id>` to preserve coherent work and clear
+the reservation. Use `--force` only to bypass a live claimant PID, and `--fresh`
+only when explicitly discarding that work. Repair a failed state read first.
 
 ### Pending verdict replay
 

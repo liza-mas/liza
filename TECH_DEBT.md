@@ -19,7 +19,7 @@ recorded transition, which is too long:
   status — one event name, two different status effects.
 - **Attempt rollover.** `TransitionToNewAttempt` writes `new_attempt` in phase 1,
   which explicitly preserves status, then transitions to the initial status in
-  phase 3 (`internal/ops/transition_attempt.go:232`) without writing a further
+  finalization (`internal/ops/transition_attempt.go`) without writing a further
   entry. The transition has no timestamp of its own; `new_attempt` precedes it.
 - **Silent status writes.** `internal/ops/recover_task.go:273` resets status to
   the initial state on the preserve path and
@@ -32,7 +32,7 @@ schema field and every mutation site, to fix a display metric whose three
 surfaces had first to agree at all. Convergence was the reported defect; this
 residual is a smaller, separable correctness gap. Reclassifying `new_attempt`
 as a transition would approximate the rollover case within seconds, but it
-would make a phase-1 event stand for a phase-3 effect and still leave the
+  would make a reservation event stand for a finalization effect and still leave the
 conditional and silent cases wrong.
 
 **Payback trigger:** The first report of a stale `time_in_status` on a task

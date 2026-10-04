@@ -146,12 +146,12 @@ func recoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 	result := &RecoverTaskResult{TaskID: taskID}
 
 	state, err := bb.Read()
-	if err != nil && !opts.Force {
+	if err != nil {
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}
 
 	var task *models.Task
-	if err == nil && state != nil {
+	if state != nil {
 		task = state.FindTask(taskID)
 	}
 	if task != nil {

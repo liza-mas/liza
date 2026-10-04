@@ -137,6 +137,34 @@ func TestRecoverTask_NotInState_Force_NothingToClean(t *testing.T) {
 	}
 }
 
+func TestRecoverTask_ForceReadFailurePreservesGitArtifacts(t *testing.T) {
+	t.Parallel()
+	root, stateFile := setupImplementingTask(t, 0)
+	testhelpers.SetupTestGitRepo(t, root)
+	gitWrapper := git.New(root)
+	base, err := gitWrapper.CreateWorktree("task-1", "integration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A degraded read cannot establish that a task is absent, even with --force.
+	invalidState := []byte("tasks: [")
+	if err := os.WriteFile(stateFile, invalidState, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecoverTask(root, "task-1", true, "retry after contention"); err == nil || !strings.Contains(err.Error(), "failed to read state") {
+		t.Fatalf("forced recovery after failed state read = %v, want refusal", err)
+	}
+	if head := testhelpers.MustGit(t, gitWrapper.GetWorktreePath("task-1"), "rev-parse", "HEAD"); head != base {
+		t.Fatalf("preserved HEAD = %s, want %s", head, base)
+	}
+	if branch := testhelpers.MustGit(t, root, "rev-parse", "refs/heads/task/task-1"); branch != base {
+		t.Fatalf("preserved branch = %s, want %s", branch, base)
+	}
+	if got, err := os.ReadFile(stateFile); err != nil || string(got) != string(invalidState) {
+		t.Fatalf("failed recovery changed unreadable state: %q, %v", got, err)
+	}
+}
+
 func TestRecoverTask_ImplementingTask_WithAgent(t *testing.T) {
 	t.Parallel()
 	tmpDir, stateFile := setupImplementingTask(t, 999999)

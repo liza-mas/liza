@@ -88,6 +88,11 @@ a review lease only while the matching provider session is active, including
 that session's passive `WAITING` state. Once the provider exits, verdict recovery
 does not keep an otherwise abandoned review claim alive.
 
+Attempt rollover commits its final state before deleting task Git artifacts,
+under the task worktree lock. A failed final write retains both the
+`$transitioning` sentinel and the branch/worktree for explicit `recover-task`
+repair; see [Troubleshooting](../../support-docs/TROUBLESHOOTING.md#interrupted-attempt-rollover).
+
 ### Agent-Initiated (via CLI commands)
 
 These are workflow actions that only the agent can trigger — they represent the agent's work output.
