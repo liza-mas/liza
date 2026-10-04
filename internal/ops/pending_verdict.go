@@ -71,7 +71,7 @@ func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority
 	}
 	result, err := entry.submit(projectRoot)
 	if entry.settled(result, err) {
-		if removeErr := os.Remove(filename); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		if removeErr := removePendingVerdictFile(filename); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 			// Keep success truthful: the receipt makes a later drain idempotent.
 			return result, fmt.Errorf("verdict settled but private outbox cleanup failed: %w", removeErr)
 		}
@@ -129,7 +129,7 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 	// Repeat all barriers on retries: a previous publication may have renamed
 	// the file but failed before syncing the newly-created parent directory.
 	finishPublication := func() (string, error) {
-		if err := syncArchiveFile(filename); err != nil {
+		if err := retrySharingViolation(func() error { return syncArchiveFile(filename) }); err != nil {
 			return filename, err
 		}
 		for _, parent := range []string{dir, filepath.Dir(dir)} {
@@ -139,7 +139,7 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 		}
 		return filename, nil
 	}
-	if existing, err := os.ReadFile(filename); err == nil {
+	if existing, err := readPendingVerdictFile(filename); err == nil {
 		if bytes.Equal(existing, data) {
 			return finishPublication()
 		}
@@ -158,7 +158,7 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 		return "", err
 	}
 	if err := os.Rename(f.Name(), filename); err != nil {
-		if existing, readErr := os.ReadFile(filename); readErr == nil && bytes.Equal(existing, data) {
+		if existing, readErr := readPendingVerdictFile(filename); readErr == nil && bytes.Equal(existing, data) {
 			return finishPublication() // Concurrent identical submission (also Windows).
 		}
 		return "", err
@@ -213,7 +213,7 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 			}
 			result, submitErr := pending.submit(projectRoot)
 			if pending.settled(result, submitErr) {
-				if err := os.Remove(filename); err != nil && !errors.Is(err, os.ErrNotExist) {
+				if err := removePendingVerdictFile(filename); err != nil && !errors.Is(err, os.ErrNotExist) {
 					return fmt.Errorf("remove settled private verdict: %w", err)
 				}
 				break
@@ -234,10 +234,21 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 	return nil
 }
 
+// Identical concurrent submissions share one envelope path; on Windows any
+// operation on it can collide with another caller's rename or removal.
+func readPendingVerdictFile(filename string) (data []byte, err error) {
+	err = retrySharingViolation(func() (readErr error) { data, readErr = os.ReadFile(filename); return readErr })
+	return data, err
+}
+
+func removePendingVerdictFile(filename string) error {
+	return retrySharingViolation(func() error { return os.Remove(filename) })
+}
+
 func readPendingVerdict(filename string) (pendingVerdict, error) {
 	var pending pendingVerdict
-	f, err := os.Open(filename)
-	if err != nil {
+	var f *os.File
+	if err := retrySharingViolation(func() (err error) { f, err = os.Open(filename); return err }); err != nil {
 		return pending, err
 	}
 	defer f.Close()
