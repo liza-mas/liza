@@ -49,6 +49,9 @@ tasks predating the field.
 Terminal task history stays live, including `orchestrator_assessment` (about
 12% of a measured 5 MB run state) and `pre_execution_checkpoint` (about 8%),
 as do lifecycle receipts (about 7%).
+Whole terminal-record archival and separating hot agent metadata from task
+history are follow-ups to [contention-safe recovery](specs/architecture/ADR/0174-contention-safe-agent-recovery.md),
+not changes to the current transaction boundary.
 
 **Why deferred:** Removing history entries changes history counts that live
 code relies on: `TaskTransitionID` hashes `len(task.History)`
@@ -66,6 +69,8 @@ or a run's `state.yaml` exceeds 5 MB again. Introduce a logical history count,
 switch the count consumers to it, restore history positionally (preserving
 order, including equal timestamps) for display readers, then archive the
 assessment and checkpoint kinds.
+If contention persists after that archival, measure agent-write lock holds
+before introducing separate hot-state storage and its cross-record fencing.
 
 ## Archive objects have no sweep; Windows directory durability
 

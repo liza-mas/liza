@@ -13,6 +13,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -30,6 +31,8 @@ var errGoalComplete = errors.New("goal complete")
 // a halt mode after the claim. No provider ran; the supervisor releases the
 // claim without charging any budget and parks at the pause gate.
 var errLaunchHalted = errors.New("provider start refused: system halted")
+
+var errLaunchContended = errors.New("provider start delayed: lock contention")
 
 // checkAbort returns true if system mode is STOPPED
 func checkAbort(projectRoot string) bool {
@@ -265,8 +268,23 @@ func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validatio
 }
 
 // executeAgent executes the CLI with timeout.
-func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, additionalDirs []string, taskID string, runtimeConfig models.Config) (int, string, error) {
+func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, additionalDirs []string, taskID string, runtimeConfig models.Config) (exitCode int, output string, runErr error) {
 	logger := GetLogger()
+	startAttempted := false
+	var launchErr error
+	defer func() {
+		// Some backends mask gate failures as an exit code. Only contention
+		// proven to precede the provider start is a coordination retry; a
+		// callback that may have started the provider must never be replayed.
+		if !startAttempted {
+			if filelock.IsLockErrorType(launchErr, filelock.LockErrorTimeout) {
+				runErr = launchErr
+			}
+			if filelock.IsLockErrorType(runErr, filelock.LockErrorTimeout) {
+				runErr = fmt.Errorf("%w: %w", errLaunchContended, runErr)
+			}
+		}
+	}()
 
 	agent, err := resolveLLMAgent(config)
 	if err != nil {
@@ -293,8 +311,15 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	// the refusal is recorded here rather than recovered from Run's result.
 	halted := false
 	launchGate := LLMAgentLaunchGate(func(ctx context.Context, start func() error) error {
-		err := checkedGate.launch(ctx, start)
+		err := checkedGate.launch(ctx, func() error {
+			startAttempted = true
+			if err := start(); err != nil {
+				return err
+			}
+			return nil
+		})
 		halted = errors.Is(err, ops.ErrSystemHalted)
+		launchErr = err
 		return releaseFailedValidation(config, taskID, err)
 	})
 

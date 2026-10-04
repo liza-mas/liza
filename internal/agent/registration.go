@@ -450,10 +450,15 @@ func resetAgentAfterExit(bb *db.Blackboard, authority models.AgentAuthority, pro
 	})
 }
 
-// releaseUnstartedTurn releases the agent after a provider turn that did not
-// run to completion: a start refused by a halt, or a review whose ownership was
-// lost.
-func releaseUnstartedTurn(bb *db.Blackboard, config SupervisorConfig, taskID string, halted bool) error {
+// supervisorCleanupBlackboard lets exit bookkeeping finish after cancellation,
+// with the same bounded acquisition budget as deferred unregistration.
+func supervisorCleanupBlackboard(statePath string) (*db.Blackboard, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	return db.For(statePath).WithLockRetryContext(ctx), cancel
+}
+
+// releaseUnstartedTurn releases a halted/contended start or a lost review claim.
+func releaseUnstartedTurn(bb *db.Blackboard, config SupervisorConfig, taskID string, halted, contended bool) error {
 	if halted {
 		GetLogger().Info("Provider start refused by halt, releasing claim", "agent_id", config.AgentID, "task_id", taskID)
 		if err := releaseClaimForHalt(bb, config.Authority, config.ProjectRoot, taskID); err != nil {
@@ -461,9 +466,13 @@ func releaseUnstartedTurn(bb *db.Blackboard, config SupervisorConfig, taskID str
 		}
 		return nil
 	}
-	GetLogger().Info("Review ownership lost, checking for more work", "agent_id", config.AgentID, "task_id", taskID)
+	message := "Review ownership lost, checking for more work"
+	if contended {
+		message = "Provider start contended, checking for more work"
+	}
+	GetLogger().Info(message, "agent_id", config.AgentID, "task_id", taskID)
 	if err := resetAgentAfterExit(bb, config.Authority, config.ProjectRoot); err != nil {
-		return fmt.Errorf("reset after review ownership loss: %w", err)
+		return fmt.Errorf("reset after uncompleted provider turn: %w", err)
 	}
 	return nil
 }

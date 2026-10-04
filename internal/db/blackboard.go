@@ -118,11 +118,19 @@ func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 
 	newBB := &Blackboard{
 		statePath:   bb.statePath,
-		fileLock:    filelock.New(bb.statePath).WithTimeout(timeout),
+		fileLock:    bb.fileLock.WithTimeout(timeout),
 		cachedState: cachedState,
 		cachedMtime: cachedMtime,
 	}
 	return newBB
+}
+
+// WithLockRetryContext returns an independent supervisor instance whose lock
+// acquisition retries timeouts with backoff until ctx ends. Mutation callbacks
+// still run once, and all state/authority validation stays under the lock.
+// It is not cached by For and does not share lock metrics or cached state.
+func (bb *Blackboard) WithLockRetryContext(ctx context.Context) *Blackboard {
+	return &Blackboard{statePath: bb.statePath, fileLock: bb.fileLock.WithRetryContext(ctx)}
 }
 
 // EnableMetrics enables lock metrics collection.

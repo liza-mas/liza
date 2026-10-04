@@ -40,7 +40,7 @@ This continues the principle from [ADR-0006](ADR/0006-supervisor-assigns-work.md
 | Action | When | Why Supervisor-Only |
 |--------|------|---------------------|
 | Agent registration | Startup | Identity + collision detection before agent exists |
-| Agent unregistration | Exit (deferred) | Cleanup must happen even on crash. Claim release and row removal wait up to the patient lock-acquisition budget (60s), because the exit is often a lock timeout; an exit that skips the deferral (SIGKILL, OOM) or a longer lock queue leaves the claim until lease expiry |
+| Agent unregistration | Exit (deferred) | Claim release and row removal retry acquisition under a separate 60-second cleanup context, even after supervisor cancellation; SIGKILL, OOM or a longer lock queue leaves the claim until lease expiry |
 | Heartbeat | Background goroutine | Agent can't maintain its own liveness signal |
 | Post-exit reset to IDLE | After CLI exits | Agent is gone — can't update own status |
 | Orchestrator status setup | Before orchestrator launch | Sets WORKING atomically before agent sees blackboard |
@@ -65,6 +65,12 @@ These actions are **automatically triggered by the supervisor loop**. The CLI co
 Doer supervisors check work in this order: explicit handoff resume, owned executing recovery, then fresh claim. Owned executing recovery is not a handoff: it applies when an executing task is already assigned to the supervisor's agent ID, `handoff_pending` is false, the registered agent role matches the task role-pair's doer role, and the agent is either idle or already points at that task. Before spawning a replacement child CLI, the supervisor validates the existing worktree; missing or unhealthy worktrees transition the task to `BLOCKED` with a diagnostic instead of entering a restart loop.
 
 During a child CLI run, doer supervisors run an execution progress watchdog for the owned executing task. The watchdog treats task-state changes, worktree HEAD/status changes including untracked files, and provider stdout/stderr writes as progress. It polls at `agent_progress_timeout / 4`, capped at 15 seconds. If no progress occurs before `config.agent_progress_timeout`, the supervisor cancels the child process, waits for it to exit, transitions the still-owned executing task to `BLOCKED` with a diagnostic, and runs blocked-task worktree cleanup. Heartbeat and lease renewal alone are not progress.
+
+Supervisor metadata writes and exit resets retry lock acquisition with backoff
+until cancellation. They never replay a mutation callback that has started.
+Contention proven to occur before provider start releases the unstarted claim
+and waits for the next role poll without crash/spin accounting. Read-only runtime-input discovery uses an atomic snapshot;
+authority and prerequisite checks remain at the launch boundary.
 
 ### Agent-Initiated (via CLI commands)
 

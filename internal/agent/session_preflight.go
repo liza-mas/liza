@@ -53,7 +53,10 @@ func runtimeInputDenyNames(root string) (map[string]bool, error) {
 	if _, err := os.Stat(statePath); errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	state, err := db.For(statePath).Read()
+	// This is declaration discovery, not mutation authorization. Writers
+	// publish complete snapshots atomically; launch gates separately revalidate
+	// the task and session contract under the state lock before provider start.
+	state, err := db.For(statePath).ReadSnapshot()
 	if err != nil {
 		return nil, fmt.Errorf("read runtime-input declarations before launch: %w", err)
 	}

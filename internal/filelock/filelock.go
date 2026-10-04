@@ -26,9 +26,10 @@ const (
 // It wraps flock(2) with a polling acquisition loop, best-effort owner metadata,
 // classified error types, and optional metrics collection.
 type FileLock struct {
-	lockPath    string
-	ownerPath   string
-	lockTimeout time.Duration
+	lockPath     string
+	ownerPath    string
+	lockTimeout  time.Duration
+	retryContext context.Context
 
 	// Metrics collection (optional)
 	metricsRecorder *MetricsRecorder
@@ -49,9 +50,21 @@ func New(protectedPath string) *FileLock {
 // Metrics state is not shared with the original.
 func (fl *FileLock) WithTimeout(timeout time.Duration) *FileLock {
 	return &FileLock{
-		lockPath:    fl.lockPath,
-		ownerPath:   fl.ownerPath,
-		lockTimeout: timeout,
+		lockPath:     fl.lockPath,
+		ownerPath:    fl.ownerPath,
+		lockTimeout:  timeout,
+		retryContext: fl.retryContext,
+	}
+}
+
+// WithRetryContext returns an independent lock that retries acquisition timeouts
+// with capped backoff until ctx ends. The protected callback runs at most once;
+// errors from it, including nested lock timeouts, are never retried.
+// Ordinary locks keep their bounded timeout. Metrics are not shared.
+func (fl *FileLock) WithRetryContext(ctx context.Context) *FileLock {
+	return &FileLock{
+		lockPath: fl.lockPath, ownerPath: fl.ownerPath,
+		lockTimeout: fl.lockTimeout, retryContext: ctx,
 	}
 }
 
@@ -171,6 +184,38 @@ func (fl *FileLock) withLockOperation(operation string, shared bool, fn func() e
 }
 
 func (fl *FileLock) withLockOperationContext(ctx context.Context, operation string, shared bool, fn func() error) error {
+	if fl.retryContext == nil {
+		return fl.withLockAttempt(ctx, operation, shared, fn)
+	}
+	retryCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(fl.retryContext, cancel)
+	defer stop()
+	if fl.retryContext.Err() != nil {
+		cancel()
+	}
+	backoff := LockCheckInterval
+	for {
+		entered := false
+		err := fl.withLockAttempt(retryCtx, operation, shared, func() error {
+			entered = true
+			return fn()
+		})
+		if entered || !IsLockErrorType(err, LockErrorTimeout) {
+			return err
+		}
+		timer := time.NewTimer(backoff)
+		select {
+		case <-retryCtx.Done():
+			timer.Stop()
+			return retryCtx.Err()
+		case <-timer.C:
+		}
+		backoff = min(2*backoff, 5*time.Second)
+	}
+}
+
+func (fl *FileLock) withLockAttempt(ctx context.Context, operation string, shared bool, fn func() error) error {
 	var lock *flock.Flock
 	var err error
 

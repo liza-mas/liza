@@ -1439,6 +1439,15 @@ its bounded retry for filesystem handles held during the byte read. State byte
 reads also retry transient Windows sharing violations within the same bounded
 budget, without acquiring the state lock; other read errors remain immediate.
 
+Supervisor-owned state writes opt into acquisition retries with backoff (100ms,
+doubling to a 5s cap) until supervisor cancellation. The locked callback runs at
+most once: failures after callback entry, filesystem errors and authority
+refusals are never replayed by this mechanism. Completed-turn bookkeeping and
+unregistration have separate 60s shutdown budgets. Runtime-input declaration
+discovery also uses a snapshot;
+malformed state still refuses launch. Ordinary command locks retain their
+bounded acquisition timeout.
+
 ---
 
 ## Operations

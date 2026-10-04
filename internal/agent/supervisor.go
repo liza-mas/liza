@@ -639,32 +639,12 @@ func effectiveAgentProgressTimeout(cfg models.Config) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-func startSupervisorHeartbeat(
-	ctx context.Context,
-	start func(context.Context) error,
-	onError func(error),
-) func() {
-	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
-	heartbeatDone := make(chan struct{})
-	go func() {
-		defer close(heartbeatDone)
-		if err := start(heartbeatCtx); err != nil && err != context.Canceled {
-			onError(err)
-		}
-	}()
-
-	return func() {
-		cancelHeartbeat()
-		<-heartbeatDone
-	}
-}
-
 // RunSupervisor is the main entry point for the agent supervisor.
 func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
-	bb := db.For(config.StatePath)
 	lizaPaths := paths.New(config.ProjectRoot)
 	supervisorCtx, cancelSupervisor := context.WithCancel(ctx)
 	defer cancelSupervisor()
+	bb := db.For(config.StatePath).WithLockRetryContext(supervisorCtx)
 
 	// Validate identity
 	if err := validateIdentity(config.AgentID, config.Role); err != nil {
@@ -710,7 +690,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		ensureProjectRootIndexActivation(bb, config.ProjectRoot)
 	}
 	defer func() {
-		if err := unregisterAgent(bb, authority, config.ProjectRoot); err != nil {
+		// Shutdown cleanup has an independent bounded context.
+		cleanupBB, cancelCleanup := supervisorCleanupBlackboard(config.StatePath)
+		defer cancelCleanup()
+		if err := unregisterAgent(cleanupBB, authority, config.ProjectRoot); err != nil {
 			GetLogger().Warn("Failed to unregister agent", "error", err, "agent_id", authority.ID)
 		}
 	}()
@@ -1000,10 +983,10 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 		// Execute agent
 		exitCode, currentOutput, err := executeAgent(supervisorCtx, config, prompt, nil, effectiveTask, stateBefore.Config)
-		if halted := errors.Is(err, errLaunchHalted); halted || errors.Is(err, errReviewOwnershipLost) {
+		if halted := errors.Is(err, errLaunchHalted); halted || errors.Is(err, errReviewOwnershipLost) || errors.Is(err, errLaunchContended) {
 			// No provider turn ran to completion: neither a crash nor a turn
 			// without progress, so no loop budget is charged.
-			if releaseErr := releaseUnstartedTurn(bb, config, effectiveTask, halted); releaseErr != nil {
+			if releaseErr := releaseUnstartedTurn(bb, config, effectiveTask, halted, errors.Is(err, errLaunchContended)); releaseErr != nil {
 				if ops.IsAgentAuthorityError(releaseErr) {
 					return nil
 				}
@@ -1025,6 +1008,12 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				return hbErr
 			}
 			return fmt.Errorf("agent execution error: %w", err)
+		}
+		// Preserve completed-turn bookkeeping when cancellation ends the loop.
+		if supervisorCtx.Err() != nil {
+			cleanupBB, cancelCleanup := supervisorCleanupBlackboard(config.StatePath)
+			defer cancelCleanup()
+			bb = cleanupBB
 		}
 
 		if exitCode == 0 && effectiveTask != "" {

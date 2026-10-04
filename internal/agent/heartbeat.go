@@ -112,3 +112,23 @@ func (h *Heartbeat) beat() error {
 		return nil
 	})
 }
+
+func startSupervisorHeartbeat(
+	ctx context.Context,
+	start func(context.Context) error,
+	onError func(error),
+) func() {
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		if err := start(heartbeatCtx); err != nil && err != context.Canceled {
+			onError(err)
+		}
+	}()
+
+	return func() {
+		cancelHeartbeat()
+		<-heartbeatDone
+	}
+}
