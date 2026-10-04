@@ -36,6 +36,7 @@ type SupervisorConfig struct {
 	// ExecutionProgressTimeout is the maximum time an executing task may go
 	// without observable state, worktree, or provider-output progress.
 	ExecutionProgressTimeout time.Duration
+	sessionActivity          *providerSessionActivity
 }
 
 var waitWhilePausedForSupervisor = waitWhilePaused
@@ -679,6 +680,9 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		ApplyYAMLTimeouts(strategy, timeouts.Execution, timeouts.PollInterval, timeouts.MaxWait)
 	}
 
+	if err := ops.ReplayPendingVerdicts(supervisorCtx, config.ProjectRoot, config.AgentID); err != nil {
+		return fmt.Errorf("replay reached verdicts before registration: %w", err)
+	}
 	authority, err := registerAgentWithAuthority(bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName, config.Model, resolver)
 	if err != nil {
 		return err
@@ -708,11 +712,13 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	// during CLI execution). Without this, an IDLE agent's lease can
 	// expire, causing auto-assigned ID collision with new agents.
 	heartbeatErrCh := make(chan error, 1)
+	config.sessionActivity = &providerSessionActivity{}
 
 	hb := NewHeartbeat(HeartbeatConfig{
-		Authority: config.Authority,
-		StatePath: config.StatePath,
-		State:     state,
+		Authority:          config.Authority,
+		StatePath:          config.StatePath,
+		State:              state,
+		ActiveProviderTask: config.sessionActivity.currentTask,
 	})
 
 	stopHeartbeat := startSupervisorHeartbeat(supervisorCtx, hb.Start, func(err error) {
@@ -1003,9 +1009,15 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			}
 			continue
 		}
+		// Drain before ownership reset; cancellation retains pending verdicts.
+		if supervisorCtx.Err() == nil {
+			if replayErr := ops.ReplayPendingVerdicts(supervisorCtx, config.ProjectRoot, config.AgentID); replayErr != nil {
+				err = errors.Join(err, fmt.Errorf("replay reached verdicts after provider exit: %w", replayErr))
+			}
+		}
 		if err != nil {
 			if hbErr := checkHeartbeat(); hbErr != nil {
-				return hbErr
+				return errors.Join(err, hbErr)
 			}
 			return fmt.Errorf("agent execution error: %w", err)
 		}

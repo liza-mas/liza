@@ -196,6 +196,7 @@ Agent registration/unregistration, heartbeat, post-exit IDLE reset, orchestrator
 |-----------|------------------|----------|
 | Verdict must be APPROVED or REJECTED (case-insensitive) | Invalid review states | code (`submit_verdict.go`) |
 | REJECTED verdict must have non-empty reason | Unactionable feedback | code (`submit_verdict.go`) |
+| Pending authenticated verdicts retain their original generation, request identity, payload digest and review boundary; replay cannot acquire newer authority. Review leases renew only for the matching active provider session | Lost findings, stale verdict adoption, exited reviewers stranding work | code (`pending_verdict.go`, `heartbeat.go`), spec ([ADR-0174](specs/architecture/ADR/0174-contention-safe-agent-recovery.md)) |
 | Authenticated verdicts supply the full immutable SHA actually reviewed; a current caller's SHA must equal the live review boundary | Misattributed findings after registration or boundary replacement | code (`submit_verdict.go`, `quarantined_verdict.go`) |
 | A valid generation-fenced verdict can append only bounded quarantined evidence; it cannot change task, agent, lease, history, or quorum | Lost substantive findings or stale lifecycle authority | code (`quarantined_verdict.go`) |
 | Approval and every merge entry refuse applicable unresolved conflicting evidence, including explicit review-commit update lineage; unmatched evidence never gains a hold | Conflicting approval silently consuming a known rejected boundary | code (`quarantined_verdict.go`, `wt_merge.go`) |

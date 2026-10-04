@@ -904,6 +904,41 @@ unblock-task` for the guarded `BLOCKED` -> claimable transition.
 ```
 </details>
 
+### Pending verdict replay
+
+Reached verdicts awaiting retry are stored in the runtime directory's private
+`pending-verdicts` directory. Restart the same reviewer supervisor to replay
+them with their original request identity and registration generation. A
+replaced generation quarantines the finding rather than granting it current
+authority; inspect and reconcile that evidence through the existing verdict
+reconciliation workflow.
+
+Unreadable or invalid envelopes are skipped with a warning and retained; they
+do not block other supervisors. A valid envelope owned by the restarting agent
+can still prevent registration if replay repeatedly fails with a non-timeout
+error, such as a missing worktree or a failed state read. Repair that underlying
+error first. If registration remains blocked, stop that supervisor, inspect the
+task with `§BRAND_BINARY_NAME§ get tasks <task-id>` and check its Git evidence.
+For a readable envelope, inspect only its public identifiers:
+
+```bash
+jq '{task_id: .TaskID, verdict: .Verdict, review_commit: .ReviewCommit,
+     request_id: .Request.request_id}' §BRAND_PROJECT_DIRNAME§/pending-verdicts/<filename>.json
+```
+
+Then preserve the offending envelope outside the replay directory and restart
+the same supervisor:
+
+```bash
+mkdir -m 700 -p §BRAND_PROJECT_DIRNAME§/pending-verdicts-held
+mv §BRAND_PROJECT_DIRNAME§/pending-verdicts/<filename>.json §BRAND_PROJECT_DIRNAME§/pending-verdicts-held/
+```
+
+The held verdict is still unresolved; record it for reconciliation. After fixing
+the underlying issue, move it back under its original filename for replay.
+Never print or share the full envelope, which contains a registration credential,
+or edit its generation, request identity or reviewed SHA to force acceptance.
+
 ### Full state reset (nuclear option)
 
 ```bash

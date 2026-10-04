@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -17,19 +18,53 @@ const (
 )
 
 type HeartbeatConfig struct {
-	AgentID       string
-	Authority     models.AgentAuthority
-	StatePath     string
-	Interval      time.Duration
-	LeaseDuration time.Duration
-	State         *models.State // Optional: if provided, interval is read from state.Config.HeartbeatInterval
+	AgentID            string
+	Authority          models.AgentAuthority
+	StatePath          string
+	Interval           time.Duration
+	LeaseDuration      time.Duration
+	State              *models.State // Optional: if provided, interval is read from state.Config.HeartbeatInterval
+	ActiveProviderTask func() string // Review ownership is renewed only during this task's provider session.
 }
 
 type Heartbeat struct {
-	authority     models.AgentAuthority
-	bb            *db.Blackboard
-	interval      time.Duration
-	leaseDuration time.Duration
+	authority          models.AgentAuthority
+	bb                 *db.Blackboard
+	interval           time.Duration
+	leaseDuration      time.Duration
+	activeProviderTask func() string
+}
+
+// providerSessionActivity belongs to one supervisor, outside persisted agent
+// metadata: failed status cleanup must never impersonate a running session.
+type providerSessionActivity struct {
+	mu     sync.RWMutex
+	taskID string
+}
+
+func (a *providerSessionActivity) start(taskID string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	a.taskID = taskID
+	a.mu.Unlock()
+}
+
+func (a *providerSessionActivity) stop() {
+	if a == nil {
+		return
+	}
+	a.start("")
+}
+
+func (a *providerSessionActivity) currentTask() string {
+	if a == nil {
+		return ""
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.taskID
 }
 
 func NewHeartbeat(config HeartbeatConfig) *Heartbeat {
@@ -54,10 +89,31 @@ func NewHeartbeat(config HeartbeatConfig) *Heartbeat {
 	}
 
 	return &Heartbeat{
-		authority:     authority,
-		bb:            db.For(config.StatePath),
-		interval:      interval,
-		leaseDuration: leaseDuration,
+		authority:          authority,
+		bb:                 db.For(config.StatePath),
+		interval:           interval,
+		leaseDuration:      leaseDuration,
+		activeProviderTask: config.ActiveProviderTask,
+	}
+}
+
+func startSupervisorHeartbeat(
+	ctx context.Context,
+	start func(context.Context) error,
+	onError func(error),
+) func() {
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		if err := start(heartbeatCtx); err != nil && err != context.Canceled {
+			onError(err)
+		}
+	}()
+
+	return func() {
+		cancelHeartbeat()
+		<-heartbeatDone
 	}
 }
 
@@ -103,7 +159,8 @@ func (h *Heartbeat) beat() error {
 				if task.AssignedTo != nil && *task.AssignedTo == agentID && task.LeaseExpires != nil {
 					task.LeaseExpires = &newLease
 				}
-				if task.ReviewingBy != nil && *task.ReviewingBy == agentID && task.ReviewLeaseExpires != nil {
+				if task.ReviewingBy != nil && *task.ReviewingBy == agentID && task.ReviewLeaseExpires != nil &&
+					h.activeProviderTask != nil && h.activeProviderTask() == task.ID {
 					task.ReviewLeaseExpires = &newLease
 				}
 			}
@@ -111,24 +168,4 @@ func (h *Heartbeat) beat() error {
 
 		return nil
 	})
-}
-
-func startSupervisorHeartbeat(
-	ctx context.Context,
-	start func(context.Context) error,
-	onError func(error),
-) func() {
-	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
-	heartbeatDone := make(chan struct{})
-	go func() {
-		defer close(heartbeatDone)
-		if err := start(heartbeatCtx); err != nil && err != context.Canceled {
-			onError(err)
-		}
-	}()
-
-	return func() {
-		cancelHeartbeat()
-		<-heartbeatDone
-	}
 }

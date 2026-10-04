@@ -18,6 +18,9 @@ import (
 type LifecycleRequestOptions struct {
 	RequestID          string
 	ExpectedTransition string
+	// A private verdict outbox retains the original digest while storing only
+	// sanitized prose. Replaying it must preserve the caller's exact identity.
+	verdictPayloadDigest string
 }
 
 type LifecycleRequest = models.LifecycleIdentity

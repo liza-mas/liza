@@ -663,10 +663,11 @@ func TestHeartbeatRenewsReviewLease(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, initialState)
 
 	config := HeartbeatConfig{
-		AgentID:       "reviewer-1",
-		StatePath:     stateFile,
-		Interval:      50 * time.Millisecond,
-		LeaseDuration: 30 * time.Minute,
+		AgentID:            "reviewer-1",
+		StatePath:          stateFile,
+		Interval:           50 * time.Millisecond,
+		LeaseDuration:      30 * time.Minute,
+		ActiveProviderTask: func() string { return taskID },
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)

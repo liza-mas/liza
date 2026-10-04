@@ -117,7 +117,7 @@ func SubmitVerdictWithAuthority(projectRoot, taskID, verdict, reason string, aut
 }
 
 func SubmitVerdictWithAuthorityAndOptions(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (*VerdictResult, error) {
-	return submitVerdictLifecycle(projectRoot, taskID, verdict, reason, authority.ID, &authority, impact, reviewCommit, opts)
+	return submitDurableVerdict(projectRoot, taskID, verdict, reason, authority, impact, reviewCommit, opts)
 }
 
 func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (result *VerdictResult, retErr error) {
@@ -321,6 +321,9 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 	request, err := NewLifecycleRequest("submit-verdict", task, agentID, authority, opts, map[string]string{"verdict": verdict, "reason": requestReason, "impact": impact, "review_commit": reviewCommit})
 	if err != nil {
 		return nil, err
+	}
+	if opts.verdictPayloadDigest != "" {
+		request.PayloadDigest = opts.verdictPayloadDigest
 	}
 	receipt, err := CheckLifecycleRequest(task, request, initialState.Agents)
 	if err != nil {

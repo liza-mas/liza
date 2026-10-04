@@ -72,6 +72,22 @@ Contention proven to occur before provider start releases the unstarted claim
 and waits for the next role poll without crash/spin accounting. Read-only runtime-input discovery uses an atomic snapshot;
 authority and prerequisite checks remain at the launch boundary.
 
+### Reached Verdict Recovery
+
+An authenticated verdict is saved before submission in a private
+`pending-verdicts` directory under the project runtime directory. The envelope
+keeps the original registration generation, request identity, transition,
+payload digest and reviewed SHA; prose is sanitized. A lock timeout leaves it
+available for replay before supervisor registration and after a provider turn.
+Replay backs off through acquisition timeouts and settles through the existing
+lifecycle receipt or quarantined-evidence boundary. It never adopts a newer
+generation or review boundary. Cancellation retains unsettled envelopes.
+
+Heartbeat renews the registration lease while the supervisor lives. It renews
+a review lease only while the matching provider session is active, including
+that session's passive `WAITING` state. Once the provider exits, verdict recovery
+does not keep an otherwise abandoned review claim alive.
+
 ### Agent-Initiated (via CLI commands)
 
 These are workflow actions that only the agent can trigger — they represent the agent's work output.

@@ -270,6 +270,7 @@ func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validatio
 // executeAgent executes the CLI with timeout.
 func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, additionalDirs []string, taskID string, runtimeConfig models.Config) (exitCode int, output string, runErr error) {
 	logger := GetLogger()
+	defer config.sessionActivity.stop()
 	startAttempted := false
 	var launchErr error
 	defer func() {
@@ -313,7 +314,9 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	launchGate := LLMAgentLaunchGate(func(ctx context.Context, start func() error) error {
 		err := checkedGate.launch(ctx, func() error {
 			startAttempted = true
+			config.sessionActivity.start(taskID)
 			if err := start(); err != nil {
+				config.sessionActivity.stop()
 				return err
 			}
 			return nil
