@@ -14,6 +14,45 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+func TestExitResetOutlastsLockTimeoutAndPreservesWorkCycle(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path, _ := testhelpers.SetupLizaDir(t, root)
+	testhelpers.SetupPipelineConfig(t, root)
+	state := testhelpers.CreateValidState()
+	task := testhelpers.BuildTaskByStatus("interrupted", models.TaskStatusImplementing, time.Now().UTC())
+	task.Iteration = 3
+	task.AssignedTo = testhelpers.StringPtr("coder-1")
+	state.Tasks = []models.Task{task}
+	state.Agents["coder-1"] = models.Agent{
+		Role: "coder", Status: models.AgentStatusWorking,
+		CurrentTask: &task.ID, Heartbeat: time.Now().UTC(),
+	}
+	bb := testhelpers.WriteInitialState(t, path, state).WithLockTimeout(50 * time.Millisecond)
+	authority := testAgentAuthority(t, bb, "coder-1")
+	release := testhelpers.HoldFileLock(t, path)
+	time.AfterFunc(350*time.Millisecond, release)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := resetAgentAfterExit(bb.WithLockRetryContext(ctx), authority, root); err != nil {
+		t.Fatalf("reset abandoned after contention: %v", err)
+	}
+	got, err := bb.ReadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned := got.FindTask(task.ID)
+	if owned.AssignedTo != nil || owned.Status != models.TaskStatusReady || !owned.Continuation || owned.Iteration != 3 {
+		t.Fatalf("interrupted work cycle lost: status=%s assigned=%v continuation=%v iteration=%d", owned.Status, owned.AssignedTo, owned.Continuation, owned.Iteration)
+	}
+	if got.Agents[authority.ID].Status != models.AgentStatusIdle || got.Agents[authority.ID].CurrentTask != nil {
+		t.Fatal("reset left stale agent ownership")
+	}
+	if len(owned.History) != len(task.History)+1 {
+		t.Fatal("reset did not publish exactly one release")
+	}
+}
+
 func TestRuntimeInputDiscoveryUnderContentionStillScrubs(t *testing.T) {
 	// Not parallel: shorten newly-created singleton lock waits to expose the
 	// old pre-launch Read failure without a ten-second test.

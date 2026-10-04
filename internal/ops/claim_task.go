@@ -298,12 +298,19 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 
 	// Enforce coder iteration/review-cycle limits before doing any filesystem work.
 	// Attempt 1 cap hit → new attempt (TransitionToNewAttempt). Attempt 2 cap hit → BLOCKED.
-	if strategy.enforceIterationLimit() {
+	_, preservedClaim := strategy.(preservedInitialClaimStrategy)
+	continuingPreservedClaim := preservedClaim && task.Continuation && task.Iteration > 0
+	if strategy.enforceIterationLimit() || preservedClaim {
 		reviewLimit := effectiveReviewCycleLimit(state.Config)
+		iterationToCheck := task.Iteration
+		if continuingPreservedClaim {
+			// Resuming the same iteration does not waive the review budget.
+			iterationToCheck = 0
+		}
 		escalation, shouldEscalate := classifyLimitEscalation(
 			task.ReviewCyclesCurrent,
 			reviewLimit,
-			task.Iteration,
+			iterationToCheck,
 			maxCoderIterations,
 			task.EffectiveAttempt(),
 		)
@@ -847,11 +854,11 @@ func handleReadyClaimWorktree(
 	bb *db.Blackboard,
 	gitWrapper *git.Git,
 	taskID string, initialStatus models.TaskStatus,
-	integrationBranch, worktreeDir, worktreeRel string,
+	capturedBaseCommit, worktreeDir, worktreeRel string,
 	cleanupAllowed bool,
 ) error {
 	branchName := paths.TaskBranchPrefix + taskID
-	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err == nil {
+	if _, err := gitWrapper.CreateWorktree(taskID, capturedBaseCommit); err == nil {
 		return nil
 	} else if !isCreateWorktreeConflict(err) {
 		return fmt.Errorf("failed to create worktree: %w", err)
@@ -889,7 +896,7 @@ func handleReadyClaimWorktree(
 		}
 	}
 
-	if _, err := gitWrapper.CreateWorktree(taskID, integrationBranch); err != nil {
+	if _, err := gitWrapper.CreateWorktree(taskID, capturedBaseCommit); err != nil {
 		if isCreateWorktreeConflict(err) {
 			return fmt.Errorf("race condition: concurrent claim won after stale cleanup")
 		}

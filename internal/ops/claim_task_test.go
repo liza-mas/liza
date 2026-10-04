@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/functionalclusters"
@@ -2746,6 +2747,123 @@ func TestClaimTask_PreservedInitialRebaseConflictBecomesRecoveryState(t *testing
 	assertGitStatusClean(t, fixture.worktreeDir)
 	if head := testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD"); head != fixture.preservedHead {
 		t.Fatalf("HEAD after aborted rebase = %s, want %s", head, fixture.preservedHead)
+	}
+}
+
+func TestClaimTask_InvalidPreservedBaseBlocksWithoutDiscardingWork(t *testing.T) {
+	for _, unresolved := range []bool{false, true} {
+		t.Run(fmt.Sprintf("unresolved=%v", unresolved), func(t *testing.T) {
+			t.Parallel()
+			fixture := newPreservedInitialClaimFixture(t)
+			badBase := advancePreservedClaimIntegration(t, fixture.projectRoot, "later.txt", "later", "Later unrelated integration")
+			wantReason := "not an ancestor"
+			if unresolved {
+				badBase = strings.Repeat("f", 40)
+				wantReason = "does not resolve"
+			}
+			fixture.originalBase = badBase
+			if err := db.For(fixture.stateFile).Modify(func(state *models.State) error {
+				state.FindTask(fixture.taskID).BaseCommit = &badBase
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ClaimTask(fixture.projectRoot, fixture.taskID, fixture.agentID); err == nil || !strings.Contains(err.Error(), wantReason) {
+				t.Fatalf("invalid preserved base claim = %v, want %q", err, wantReason)
+			}
+			assertPreservedInitialRecoveryState(t, fixture, wantReason)
+			task := readClaimStateForTest(t, fixture.stateFile).FindTask(fixture.taskID)
+			if !strings.HasPrefix(task.RepairRequest.Command, brand.Command("recover-task", fixture.taskID)) || !strings.Contains(task.RepairRequest.Command, "--fresh") {
+				t.Fatalf("missing explicit fresh recovery hint: %+v", task.RepairRequest)
+			}
+			if task.Lifecycle != nil && task.Lifecycle.Preparation != nil {
+				t.Fatal("blocked preserved claim retained its preparation")
+			}
+		})
+	}
+}
+
+func TestClaimTask_NonFastForwardPreservedBaseProtectsTaskWork(t *testing.T) {
+	for _, work := range []string{"empty", "committed", "dirty"} {
+		t.Run(work, func(t *testing.T) {
+			t.Parallel()
+			fixture := newPreservedInitialClaimFixtureWithBaseFile(t, "removed.txt", "removed integration\n")
+			if work != "committed" {
+				testhelpers.MustGit(t, fixture.worktreeDir, "reset", "--hard", fixture.originalBase)
+			}
+			if work == "dirty" {
+				if err := os.WriteFile(filepath.Join(fixture.worktreeDir, "task.txt"), []byte("unfinished task\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Replace integration with a sibling of the recorded base, so replaying
+			// the old integration commit would wrongly restore removed.txt.
+			testhelpers.MustGit(t, fixture.projectRoot, "checkout", "-b", "replacement-integration", fixture.originalBase+"^")
+			target := advancePreservedClaimIntegration(t, fixture.projectRoot, "replacement.txt", "replacement\n", "Replace integration history")
+			_, err := ClaimTask(fixture.projectRoot, fixture.taskID, fixture.agentID)
+			task := readClaimStateForTest(t, fixture.stateFile).FindTask(fixture.taskID)
+			if work == "empty" {
+				if err != nil || task.Status != models.TaskStatusImplementing || task.BaseCommit == nil || *task.BaseCommit != target {
+					t.Fatalf("zero-work base recovery = %+v, %v", task, err)
+				}
+				if head := testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD"); head != target {
+					t.Fatalf("zero-work HEAD = %s, want captured integration %s", head, target)
+				}
+				if _, err := os.Stat(filepath.Join(fixture.worktreeDir, "removed.txt")); !os.IsNotExist(err) {
+					t.Fatalf("recovery replayed removed integration content: %v", err)
+				}
+				return
+			}
+			if err == nil || task.Status != models.TaskStatusBlocked || task.BaseCommit == nil || *task.BaseCommit != fixture.originalBase {
+				t.Fatalf("task work on removed base was not preserved for repair: %+v, %v", task, err)
+			}
+			wantContent := fixture.taskContent
+			if work == "dirty" {
+				wantContent = "unfinished task\n"
+			}
+			if content, readErr := os.ReadFile(filepath.Join(fixture.worktreeDir, "task.txt")); readErr != nil || string(content) != wantContent {
+				t.Fatalf("task work changed on repair block: %q, %v", content, readErr)
+			}
+			if work == "dirty" {
+				if head := testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD"); head == fixture.originalBase {
+					t.Fatal("uncommitted work was not retained in an adopted task commit")
+				}
+				if status := testhelpers.MustGit(t, fixture.worktreeDir, "status", "--short"); status != "" {
+					t.Fatalf("adopted task work remains uncommitted: %s", status)
+				}
+			}
+			if work == "committed" {
+				if head := testhelpers.MustGit(t, fixture.worktreeDir, "rev-parse", "HEAD"); head != fixture.preservedHead {
+					t.Fatalf("committed task HEAD changed: %s, want %s", head, fixture.preservedHead)
+				}
+			}
+		})
+	}
+}
+
+func TestClaimTask_PreservedIterationLimitAllowsOnlyContinuation(t *testing.T) {
+	for _, continuation := range []bool{false, true} {
+		t.Run(fmt.Sprintf("continuation=%v", continuation), func(t *testing.T) {
+			t.Parallel()
+			fixture := newPreservedInitialClaimFixture(t)
+			if err := db.For(fixture.stateFile).Modify(func(state *models.State) error {
+				task := state.FindTask(fixture.taskID)
+				task.Iteration, task.MaxIterations, task.Attempt = 2, 2, 2
+				task.Continuation = continuation
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := ClaimTask(fixture.projectRoot, fixture.taskID, fixture.agentID)
+			task := readClaimStateForTest(t, fixture.stateFile).FindTask(fixture.taskID)
+			if continuation {
+				if err != nil || task.Status != models.TaskStatusImplementing || task.Iteration != 2 || task.Continuation {
+					t.Fatalf("continuation at cap must resume without a new cycle: %+v, %v", task, err)
+				}
+			} else if err == nil || task.Status != models.TaskStatusBlocked || task.Iteration != 2 {
+				t.Fatalf("new preserved cycle bypassed cap: %+v, %v", task, err)
+			}
+		})
 	}
 }
 

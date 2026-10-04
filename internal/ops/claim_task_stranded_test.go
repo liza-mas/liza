@@ -92,6 +92,9 @@ func assertStrandedTakeover(t *testing.T, fixture *preservedInitialClaimFixture,
 	if task.Status != models.TaskStatusImplementing || task.AssignedTo == nil || *task.AssignedTo != claimant {
 		t.Fatalf("task = status %s assigned_to %v, want IMPLEMENTING for %s", task.Status, task.AssignedTo, claimant)
 	}
+	if task.Iteration != 1 || task.Continuation {
+		t.Fatalf("stranded takeover charged an interrupted cycle: iteration=%d continuation=%v", task.Iteration, task.Continuation)
+	}
 	if task.LeaseExpires == nil || !task.LeaseExpires.After(time.Now().UTC()) {
 		t.Fatalf("lease_expires = %v, want a fresh lease", task.LeaseExpires)
 	}

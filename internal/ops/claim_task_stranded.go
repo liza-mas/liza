@@ -74,6 +74,7 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 			}
 			live.AssignedTo = nil
 			live.LeaseExpires = nil
+			live.Continuation = live.Iteration > 0
 			models.AdvanceLifecycle(live) // Retires the dead holder's preparation.
 			// Not ReleaseAgent: it drops the registration lease, and a lease-less
 			// registration falls back to heartbeat liveness, which could present

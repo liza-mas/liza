@@ -725,7 +725,7 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 		func() []Alert { return checkIntegrationFailures(state, config.ProjectRoot) },
 		func() []Alert { return checkHypothesisExhaustion(state) },
 		func() []Alert { return checkReassigned(state, config.StateCache) },
-		func() []Alert { return checkApproachingLimits(state) },
+		func() []Alert { return checkApproachingLimits(state, pr) },
 		func() []Alert { return checkStaleSentinels(state, config.StateCache) },
 		func() []Alert { return checkStalled(state, pr) },
 		func() []Alert { return checkStaleDrafts(state) },
@@ -1501,20 +1501,32 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []Alert {
 	return alerts
 }
 
-func checkApproachingLimits(state *models.State) []Alert {
+func checkApproachingLimits(state *models.State, resolver models.PipelineResolver) []Alert {
 	var alerts []Alert
 	now := time.Now().UTC()
 
 	for _, task := range state.Tasks {
+		if task.Status.IsTerminal() {
+			continue
+		}
 		attemptNum := task.EffectiveAttempt()
+		iterationLimit, reviewLimit := ops.EffectiveIterationLimits(&task, state.Config)
+		executing := models.TaskStatusImplementing
+		if resolver != nil && task.RolePair != "" {
+			var err error
+			executing, err = resolver.ExecutingStatus(task.RolePair)
+			if err != nil {
+				continue
+			}
+		}
 
-		// Coder iterations: warn at 8, cliff at 10
-		if task.Status == models.TaskStatusImplementing && task.Iteration >= 8 && task.Iteration < 10 {
+		// Warn during the last two cycles before the enforced cap.
+		if task.Status == executing && task.Iteration > 0 && task.Iteration >= iterationLimit-2 && task.Iteration < iterationLimit {
 			var msg string
 			if attemptNum == 2 {
-				msg = fmt.Sprintf("%s — attempt 2 (final), iteration %d/10", task.ID, task.Iteration)
+				msg = fmt.Sprintf("%s — attempt 2 (final), iteration %d/%d", task.ID, task.Iteration, iterationLimit)
 			} else {
-				msg = fmt.Sprintf("%s — attempt %d, iteration %d/10", task.ID, attemptNum, task.Iteration)
+				msg = fmt.Sprintf("%s — attempt %d, iteration %d/%d", task.ID, attemptNum, task.Iteration, iterationLimit)
 			}
 			alerts = append(alerts, Alert{
 				Timestamp: now,
@@ -1524,13 +1536,12 @@ func checkApproachingLimits(state *models.State) []Alert {
 			})
 		}
 
-		// Review cycles: warn at 3, cliff at 5 (only for non-terminal tasks)
-		if !task.Status.IsTerminal() && task.ReviewCyclesCurrent >= 3 && task.ReviewCyclesCurrent < 5 {
+		if task.ReviewCyclesCurrent > 0 && task.ReviewCyclesCurrent >= reviewLimit-2 && task.ReviewCyclesCurrent < reviewLimit {
 			var msg string
 			if attemptNum == 2 {
-				msg = fmt.Sprintf("%s — attempt 2 (final), review cycle %d/5", task.ID, task.ReviewCyclesCurrent)
+				msg = fmt.Sprintf("%s — attempt 2 (final), review cycle %d/%d", task.ID, task.ReviewCyclesCurrent, reviewLimit)
 			} else {
-				msg = fmt.Sprintf("%s — attempt %d, review cycle %d/5", task.ID, attemptNum, task.ReviewCyclesCurrent)
+				msg = fmt.Sprintf("%s — attempt %d, review cycle %d/%d", task.ID, attemptNum, task.ReviewCyclesCurrent, reviewLimit)
 			}
 			alerts = append(alerts, Alert{
 				Timestamp: now,

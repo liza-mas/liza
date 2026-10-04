@@ -401,7 +401,8 @@ func TestRunSupervisor_HaltedDoerLaunchResumesSameIteration(t *testing.T) {
 		t.Fatalf("provider starts = %d, want 1", n)
 	}
 
-	// AND once that turn ends, an ordinary claim starts the next iteration
+	// AND an interrupted running turn resumes the same work cycle after restart.
+	// Stopping the provider completed no submission or review/rework cycle.
 	stop()
 	if task := readPauseTask(t, bb, "pause-task"); task.AssignedTo != nil {
 		if _, err := ops.ReleaseClaim(root, task.ID, "doer", true, "turn ended", "human"); err != nil {
@@ -417,8 +418,8 @@ func TestRunSupervisor_HaltedDoerLaunchResumesSameIteration(t *testing.T) {
 	if _, err := ops.ClaimTask(root, "pause-task", "coder-2"); err != nil {
 		t.Fatalf("ordinary reclaim: %v", err)
 	}
-	if task := readPauseTask(t, bb, "pause-task"); task.Iteration != 2 {
-		t.Fatalf("ordinary reclaim iteration = %d, want 2", task.Iteration)
+	if task := readPauseTask(t, bb, "pause-task"); task.Iteration != 1 || task.Continuation {
+		t.Fatalf("interrupted reclaim iteration = %d continuation=%v, want iteration 1 with the marker consumed", task.Iteration, task.Continuation)
 	}
 }
 

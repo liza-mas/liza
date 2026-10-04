@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -80,11 +81,15 @@ func (freshClaimStrategy) handleWorktree(
 		gitWrapper,
 		ctx.taskID,
 		ctx.taskStatus,
-		ctx.integrationBranch,
+		ctx.baseCommit,
 		ctx.worktreeDir,
 		ctx.worktreeRel,
 		cleanupAllowed,
 	); err != nil {
+		return result, err
+	}
+	ctx.baseCommit, err = gitWrapper.GetWorktreeHEAD(ctx.taskID)
+	if err != nil {
 		return result, err
 	}
 	result.created = true
@@ -162,15 +167,15 @@ func (preservedInitialClaimStrategy) handleWorktree(
 	if err != nil {
 		return result, err
 	}
-	if _, err := gitWrapper.GetCommitSHA(ctx.preservedBaseCommit); err != nil {
-		return result, &PreconditionError{Reason: fmt.Sprintf("preserved base_commit %s does not resolve: %v", ctx.preservedBaseCommit, err)}
+	if _, err := gitWrapper.GetCommitSHA(ctx.preservedBaseCommit + "^{commit}"); err != nil {
+		return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s does not resolve: %v", ctx.preservedBaseCommit, err))
 	}
 	ancestor, err := gitWrapper.IsAncestor(ctx.preservedBaseCommit, head)
 	if err != nil {
 		return result, err
 	}
 	if !ancestor {
-		return result, &PreconditionError{Reason: fmt.Sprintf("preserved base_commit %s is not an ancestor of worktree HEAD %s", ctx.preservedBaseCommit, head)}
+		return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s is not an ancestor of worktree HEAD %s", ctx.preservedBaseCommit, head))
 	}
 
 	status, err := gitWrapper.WorktreeStatusShort(ctx.worktreeDir)
@@ -184,6 +189,29 @@ func (preservedInitialClaimStrategy) handleWorktree(
 		if head, err = gitWrapper.GetWorktreeHEAD(ctx.taskID); err != nil {
 			return result, err
 		}
+	}
+
+	baseOnIntegration, err := gitWrapper.IsAncestor(ctx.preservedBaseCommit, ctx.baseCommit)
+	if err != nil {
+		return result, err
+	}
+	if !baseOnIntegration {
+		if head != ctx.preservedBaseCommit {
+			return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s no longer belongs to captured integration %s; task commits require manual repair", ctx.preservedBaseCommit, ctx.baseCommit))
+		}
+		operation, err := gitWrapper.InterruptedOperation(ctx.worktreeDir)
+		if err != nil {
+			return result, err
+		}
+		if operation != "" {
+			return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved worktree has an interrupted %s; cannot replace its removed integration base", operation))
+		}
+		// HEAD == recorded base and the clean worktree has no task commits.
+		// Reset only this task branch; rebasing would replay removed integration.
+		if err := git.New(ctx.worktreeDir).ResetHard(ctx.baseCommit); err != nil {
+			return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("could not move zero-work preserved branch to captured integration %s: %v", ctx.baseCommit, err))
+		}
+		head = ctx.baseCommit
 	}
 
 	targetAncestor, err := gitWrapper.IsAncestor(ctx.baseCommit, head)
@@ -225,6 +253,15 @@ func (preservedInitialClaimStrategy) handleWorktree(
 	}
 	ctx.worktreeHead = head
 	return result, nil
+}
+
+// Invalid preserved ancestry needs an operator decision; repeatedly claiming
+// the same boundary cannot repair it and must not discard task commits.
+func blockPreservedClaimBase(bb *db.Blackboard, ctx *claimContext, reason string) error {
+	if err := markPreservedInitialClaimRecovery(bb, ctx, "repair_preserved_claim_base", reason, reason); err != nil {
+		return fmt.Errorf("%s; failed to record recovery state: %w", reason, err)
+	}
+	return &PreconditionError{Reason: reason}
 }
 
 // adoptPreservedWIP commits the uncommitted work a previous owner left in the
@@ -277,7 +314,10 @@ func markPreservedInitialClaimRecovery(
 	statusCommand := fmt.Sprintf("git -C %s status --short", ctx.worktreeRel)
 	repairCommand := statusCommand
 	validation := []string{statusCommand}
-	if operation != "clean_preserved_claim_worktree" {
+	if operation == "repair_preserved_claim_base" {
+		repairCommand = brand.Command("recover-task", ctx.taskID) + " --fresh"
+		question = "Inspect the preserved task branch and repair its base metadata, or deliberately discard the preserved work with " + repairCommand + "."
+	} else if operation != "clean_preserved_claim_worktree" {
 		repairCommand = fmt.Sprintf("git -C %s rebase %s", ctx.worktreeRel, ctx.baseCommit)
 		validation = append(validation, repairCommand)
 	}

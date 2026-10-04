@@ -122,8 +122,8 @@ terminal task.
 
 | Metric | Warning | Cliff | Condition |
 |--------|---------|-------|-----------|
-| Coder iterations | 8 | 10 | Always |
-| Review cycles | 3 | 5 | Always |
+| Coder iterations | Two below effective cap (8 by default) | Effective task/configured cap (10 by default) | Executing task in any role pair |
+| Review cycles | Two below configured cap (3 by default) | Configured cap (5 by default) | Nonterminal tasks in any role pair |
 | Rejection RCA gate | — | 4 (configurable) | Every reviewed task type; cycle-relative threshold, not a separate TUI warning |
 | Attempt | — | 2 | Warning at attempt 2 start |
 
@@ -139,6 +139,12 @@ with independent iteration and review cycle budgets.
 
 Attempt transitions are independent of agent identity. Within an attempt, all
 claims share the same counter budget regardless of which coder is assigned.
+An interrupted executing claim preserves the current iteration through the
+`continuation` marker, including takeover after the old holder's lease expires.
+Explicit rework and `--new-iteration` still consume a cycle. A preserved claim
+without that marker must enforce the same effective cap as a fresh claim.
+Continuation exempts only the iteration charge; exhausted review budgets still
+escalate unless an authorized recovery explicitly resets that budget.
 
 **Orthogonal to hypothesis exhaustion:** `failed_by` tracks integration failures
 (two different coders BLOCKED on the same task). Cap-triggered attempt transitions

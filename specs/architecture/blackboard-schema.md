@@ -690,6 +690,7 @@ The `iteration` field tracks coder work cycles on a task:
 |-------|-------------------|
 | Task created (DRAFT/READY) | Not set (null) |
 | First claim (READY → IMPLEMENTING) | Set to 1 |
+| Interrupted executing claim released or taken over after lease expiry | Unchanged; the next preserved claim consumes `continuation` |
 | Work iteration complete | Unchanged (work within single claim) |
 | Review rejected (REJECTED → IMPLEMENTING, same coder) | Increment by 1 |
 | Unblocked, then claimed (default continuation) | Unchanged when the claim resumes the preserved worktree; otherwise increment by 1 |
@@ -698,7 +699,7 @@ The `iteration` field tracks coder work cycles on a task:
 | Task reaches terminal state | Preserved (audit trail) |
 
 **Semantics:**
-- `iteration` counts **claim cycles**, not internal work loops
+- `iteration` counts **work cycles**, not process restarts or internal work loops
 - A coder may make multiple commits within one iteration
 - Incrementing happens when the coder re-claims after rejection
 - The field supports limit enforcement (`max_iterations`) and trajectory tracking

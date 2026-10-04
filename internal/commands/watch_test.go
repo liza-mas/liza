@@ -836,7 +836,7 @@ func TestCheckApproachingLimits(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := &models.State{Tasks: tt.tasks}
-			alerts := checkApproachingLimits(state)
+			alerts := checkApproachingLimits(state, nil)
 
 			if len(alerts) != tt.wantAlerts {
 				t.Errorf("len(alerts) = %d, want %d", len(alerts), tt.wantAlerts)
@@ -847,6 +847,37 @@ func TestCheckApproachingLimits(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCheckApproachingLimits_ConfiguredCapsAndPlanningStatus(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	testhelpers.SetupPipelineConfig(t, root)
+	resolver, err := ops.LoadResolverForModels(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	planning := testhelpers.BuildTaskByStatus("planning", models.TaskStatusCodePlanning, now)
+	planning.Iteration, planning.MaxIterations = 2, 4
+	review := testhelpers.BuildTaskByStatus("review", models.TaskStatusRejected, now)
+	review.ReviewCyclesCurrent = 5
+	state := &models.State{
+		Config: models.Config{MaxCoderIterations: 20, MaxReviewCycles: 7},
+		Tasks:  []models.Task{planning, review},
+	}
+	alerts := checkApproachingLimits(state, resolver)
+	if len(alerts) != 2 || !strings.Contains(alerts[0].Message, "iteration 2/4") || !strings.Contains(alerts[1].Message, "review cycle 5/7") {
+		t.Fatalf("configured pipeline limit alerts = %+v", alerts)
+	}
+	state.Tasks[0].MaxIterations = 0
+	if alerts := checkApproachingLimits(state, resolver); len(alerts) != 1 || !strings.Contains(alerts[0].Message, "review cycle 5/7") {
+		t.Fatalf("project iteration cap should suppress the early task warning: %+v", alerts)
+	}
+	state.Tasks[0].Iteration = 18
+	if alerts := checkApproachingLimits(state, resolver); len(alerts) != 2 || !strings.Contains(alerts[0].Message, "iteration 18/20") {
+		t.Fatalf("project iteration cap warning = %+v", alerts)
 	}
 }
 

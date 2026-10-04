@@ -1,13 +1,37 @@
 package ops
 
 import (
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 )
+
+func TestFreshClaimStrategy_CreatesCapturedBase(t *testing.T) {
+	t.Parallel()
+	fixture := newPreservedInitialClaimFixture(t)
+	advancePreservedClaimIntegration(t, fixture.projectRoot, "later.txt", "later", "Integration moved")
+	ctx := &claimContext{
+		taskID: "fresh-task", taskStatus: models.TaskStatusReady,
+		worktreeDir:       filepath.Join(fixture.projectRoot, paths.WorktreesDirName, "fresh-task"),
+		worktreeRel:       filepath.ToSlash(filepath.Join(paths.WorktreesDirName, "fresh-task")),
+		integrationBranch: "integration", baseCommit: fixture.originalBase,
+	}
+	gitWrapper := git.New(fixture.projectRoot)
+	if _, err := (freshClaimStrategy{}).handleWorktree(db.For(fixture.stateFile), gitWrapper, ctx); err != nil {
+		t.Fatal(err)
+	}
+	head, err := gitWrapper.GetWorktreeHEAD(ctx.taskID)
+	if err != nil || head != fixture.originalBase || ctx.baseCommit != head {
+		t.Fatalf("fresh claim base %s, HEAD %s, want captured %s; %v", ctx.baseCommit, head, fixture.originalBase, err)
+	}
+}
 
 func TestFreshClaimStrategy_MutateTask_SetsAttemptOnFirstClaim(t *testing.T) {
 	t.Parallel()

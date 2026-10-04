@@ -303,6 +303,9 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 			if err := transitionTask(releasedInitial); err != nil {
 				return err
 			}
+			// An interrupted session continues its existing work cycle. Only
+			// actual rework or an explicit new-iteration recovery consumes one.
+			task.Continuation = task.Iteration > 0
 		}
 		task.AssignedTo = nil
 		task.LeaseExpires = nil
@@ -330,6 +333,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 				if err := transitionTask(releasedInitial); err != nil {
 					return err
 				}
+				task.Continuation = task.Iteration > 0
 			}
 			task.AssignedTo = nil
 			task.LeaseExpires = nil

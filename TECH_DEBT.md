@@ -72,6 +72,21 @@ assessment and checkpoint kinds.
 If contention persists after that archival, measure agent-write lock holds
 before introducing separate hot-state storage and its cross-record fencing.
 
+## Direct unblock assignment bypasses claim-stage review caps
+
+**What:** `unblock-task --assign-to` assigns the doer directly instead of going
+through `claim-task`'s review-budget escalation. A task unblocked at its review
+cap can therefore resume despite retaining that exhausted budget. Ordinary
+preserved continuation claims now enforce the review cap.
+
+**Why deferred:** This predates contention recovery and needs the direct-assignment
+path reconciled with the explicit review-budget resets in rejection-RCA recovery.
+The current fix changes interrupted claims, not direct operator assignment.
+
+**Payback trigger:** The first use of `--assign-to` on a task at its review cap,
+or any change making direct unblock assignment share normal claim enforcement.
+Add the same escalation check without inventing a budget reset.
+
 ## Archive objects have no sweep; Windows directory durability
 
 **What:** An archive transaction that fails after writing an object (state

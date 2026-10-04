@@ -53,10 +53,15 @@ func (g *Git) CreateWorktree(taskID, fromBranch string) (string, error) {
 		return "", fmt.Errorf("failed to get base commit: %w", err)
 	}
 
-	// Create worktree with new branch
+	// Use the captured immutable commit: the branch can move while waiting for
+	// the worktree lock, but the returned base must describe the created tree.
 	err = g.withWorktreeMutationLock("worktree-add", func() error {
-		_, execErr := g.exec("worktree", "add", worktreePath, fromBranch, "-b", branchName)
-		return execErr
+		if _, execErr := g.exec("worktree", "add", worktreePath, baseCommit, "-b", branchName); execErr != nil {
+			return execErr
+		}
+		var headErr error
+		baseCommit, headErr = g.GetWorktreeHEAD(taskID)
+		return headErr
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)

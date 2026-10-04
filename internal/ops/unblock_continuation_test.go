@@ -97,6 +97,39 @@ func TestUnblockTask_DefaultIsContinuationOfTheCurrentIteration(t *testing.T) {
 	}
 }
 
+func TestUnblockTask_ContinuationDoesNotWaiveExhaustedReviewBudget(t *testing.T) {
+	t.Parallel()
+	fixture := newPreservedInitialClaimFixture(t)
+	wantReason := reviewBudgetExhaustedReason(3, 3)
+	blockPreservedFixture(t, fixture, 2, func(task *models.Task) {
+		task.Attempt, task.MaxIterations = 2, 2
+		task.ReviewCyclesCurrent = 3
+		task.BlockedReason = &wantReason
+	})
+	if err := db.For(fixture.stateFile).Modify(func(state *models.State) error {
+		state.Config.MaxReviewCycles = 3
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Default unblock grants a continuation, without resetting the real review
+	// budget. A continuation grants no review-budget reset of its own.
+	if _, err := UnblockTaskWithOptions(fixture.projectRoot, fixture.taskID, "resume preserved work", "orchestrator-1", UnblockTaskOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	unblocked := mustReadTask(t, fixture.stateFile, fixture.taskID)
+	if !unblocked.Continuation || unblocked.Iteration != 2 || unblocked.ReviewCyclesCurrent != 3 {
+		t.Fatalf("default unblock changed the budgets: %+v", unblocked)
+	}
+	if _, err := ClaimTask(fixture.projectRoot, fixture.taskID, fixture.agentID); err == nil || !strings.Contains(err.Error(), wantReason) {
+		t.Fatalf("continuation bypassed review cap: %v", err)
+	}
+	blocked := mustReadTask(t, fixture.stateFile, fixture.taskID)
+	if blocked.Status != models.TaskStatusBlocked || blocked.BlockedReason == nil || *blocked.BlockedReason != wantReason || blocked.Iteration != 2 || blocked.ReviewCyclesCurrent != 3 || blocked.AssignedTo != nil {
+		t.Fatalf("review-only escalation changed work accounting or granted ownership: %+v", blocked)
+	}
+}
+
 func TestUnblockTask_NewIterationMakesTheNextClaimCount(t *testing.T) {
 	t.Parallel()
 	fixture := newPreservedInitialClaimFixture(t)

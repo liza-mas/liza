@@ -69,8 +69,17 @@ During a child CLI run, doer supervisors run an execution progress watchdog for 
 Supervisor metadata writes and exit resets retry lock acquisition with backoff
 until cancellation. They never replay a mutation callback that has started.
 Contention proven to occur before provider start releases the unstarted claim
-and waits for the next role poll without crash/spin accounting. Read-only runtime-input discovery uses an atomic snapshot;
+and waits for the next role poll without crash/spin accounting. An interrupted
+doer claim preserves its worktree and marks the current iteration as a
+continuation. Read-only runtime-input discovery uses an atomic snapshot;
 authority and prerequisite checks remain at the launch boundary.
+
+Fresh worktrees start at the captured immutable integration SHA and record
+their actual HEAD as `base_commit`. Invalid preserved ancestry blocks only
+that candidate with a repair hint. When integration history removes its old
+base, a clean worktree with HEAD equal to that base can advance to the captured
+integration SHA without losing task commits; a worktree containing task work
+requires explicit repair.
 
 ### Reached Verdict Recovery
 

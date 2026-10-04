@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,6 +74,44 @@ func TestCreateWorktree(t *testing.T) {
 	wtBranch := testhelpers.MustGit(t, worktreePath, "branch", "--show-current")
 	if wtBranch != "task/"+taskID {
 		t.Errorf("Worktree branch = %q, want %q", wtBranch, "task/"+taskID)
+	}
+}
+
+func TestCreateWorktree_PinsBaseWhenSourceBranchMoves(t *testing.T) {
+	repo := setupTestRepo(t)
+	base := testhelpers.MustGit(t, repo, "rev-parse", "integration")
+	testhelpers.MustGit(t, repo, "commit", "--allow-empty", "-m", "Later integration")
+	later := testhelpers.MustGit(t, repo, "rev-parse", "HEAD")
+	testhelpers.MustGit(t, repo, "update-ref", "refs/heads/integration", base)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	testhelpers.WriteShellStub(t, filepath.Join(bin, "git"), `#!/bin/sh
+set -eu
+if [ "$1" = rev-parse ] && [ "${2:-}" = integration ]; then
+    result=$("$PINNED_TEST_REAL_GIT" "$@")
+    "$PINNED_TEST_REAL_GIT" update-ref refs/heads/integration "$PINNED_TEST_LATER"
+    printf '%s\n' "$result"
+    exit 0
+fi
+exec "$PINNED_TEST_REAL_GIT" "$@"
+`)
+	t.Setenv("PINNED_TEST_REAL_GIT", filepath.ToSlash(realGit))
+	t.Setenv("PINNED_TEST_LATER", later)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	git := New(repo)
+	created, err := git.CreateWorktree("pinned-task", "integration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := git.GetWorktreeHEAD("pinned-task")
+	if err != nil || head != base || created != head {
+		t.Fatalf("created base %s, actual HEAD %s, want pinned %s; %v", created, head, base, err)
+	}
+	if current := testhelpers.MustGit(t, repo, "rev-parse", "refs/heads/integration"); current != later {
+		t.Fatalf("source branch did not move: %s, want %s", current, later)
 	}
 }
 

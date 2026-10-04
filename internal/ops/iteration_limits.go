@@ -20,6 +20,11 @@ type limitEscalation struct {
 	action    LimitAction
 }
 
+// EffectiveIterationLimits is shared by claim enforcement and operator alerts.
+func EffectiveIterationLimits(task *models.Task, config models.Config) (coder, review int) {
+	return effectiveCoderIterationLimit(task, config), effectiveReviewCycleLimit(config)
+}
+
 func effectiveCoderIterationLimit(task *models.Task, config models.Config) int {
 	if task != nil && task.MaxIterations > 0 {
 		return task.MaxIterations
