@@ -23,6 +23,12 @@ func newToolResultClaudeCmd(store func(*cobra.Command) (*toolresult.Store, error
 		if err := json.NewDecoder(cmd.InOrStdin()).Decode(&hook); err != nil {
 			return stopped()
 		}
+		// Claude evaluates permissions against updatedInput. In controlled modes,
+		// rewriting Bash changes the policy subject; preserve native evaluation
+		// without depending on capture storage or granting any permission.
+		if hook.Event == "PreToolUse" && hook.Tool == "Bash" && hook.PermissionMode != "bypassPermissions" {
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{})
+		}
 		s, err := store(cmd)
 		if err != nil {
 			return stopped()

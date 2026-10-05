@@ -993,3 +993,19 @@ an unchanged candidate repeating a batch longer than ten minutes.
 from the D-38 fix.
 
 **Payback trigger:** The next change that touches any of these fixtures.
+
+## Claude Bash capture in permission-controlled modes
+
+**What:** Bash output in controlled Claude modes (including managed `auto` and
+`dontAsk`), and missing/unknown modes, has no engine externalization,
+sanitization, deduplication, or capture telemetry. Explicit `bypassPermissions`
+retains full capture; native Read/Grep/Glob/MCP coverage is unchanged.
+
+**Why deferred:** The current pre-tool wrapper changes native permission
+matching. The maintainer accepted mode-specific degradation for D-37(c) on
+2026-10-05 to preserve original-command authority without upgrading launch modes.
+See [ADR-0178](specs/architecture/ADR/0178-claude-capture-preserves-permissions.md).
+
+**Payback trigger:** Claude exposes a supported execution-output boundary that
+keeps original-command permissions intact and covers failed/background output;
+enable it only after installed-client permission-parity and lifecycle tests pass.

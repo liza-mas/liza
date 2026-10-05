@@ -10,8 +10,15 @@ This is a byte-budget mechanism, not a claim of token or wall-clock savings.
 The boundary is automatically installed by managed **non-interactive** launches:
 
 - **Claude CLI:** launch-local hooks capture Bash in its native shell before
-  output persistence/truncation and replace native Read/Grep/Glob results while
-  preserving their structured schemas. Failed oversized MCP output cannot be
+  output persistence/truncation **only in `bypassPermissions`**. In controlled
+  modes (including managed `auto` and `dontAsk`), and missing/unknown modes,
+  Bash input stays unchanged so native allow/deny/ask rules and optional policy
+  hooks evaluate the original command. Bash results in those modes receive no
+  engine budgeting, sanitization, deduplication, or capture telemetry. The
+  engine does not switch permission modes to recover capture. See
+  [ADR-0178](../specs/architecture/ADR/0178-claude-capture-preserves-permissions.md).
+  Native Read/Grep/Glob results are still replaced while preserving their
+  structured schemas. Failed oversized MCP output cannot be
   transparently replaced by Claude: the available provider error is sanitized and
   retained once, then the batch boundary terminates before another model sample.
   The batch boundary does not re-budget native Read/Grep/Glob results, whose
@@ -54,7 +61,7 @@ actual boundaries used here.
 
 Native hooks are version-dependent; incompatible managed launches fail rather
 than silently claiming coverage. The implementation is tested against Claude
-2.1.267, Codex 0.154.0 and 0.156.1, and Devin 3000.10.21. Provider-hosted tools without hooks
+2.1.267 and 2.1.287, Codex 0.154.0 and 0.156.1, and Devin 3000.10.21. Provider-hosted tools without hooks
 (such as Codex hosted WebSearch) are not engine-controlled tool results. Custom
 adapters and direct interactive provider launches require their own supported
 boundary; this is not a claim that every arbitrary provider tool is intercepted.
@@ -315,11 +322,13 @@ while the same config keeps `sandbox_mode = "workspace-write"`; every other
 mode is denied the rewrite, so the boundary never elevates a constrained
 session.
 
-Claude's shell capture reserves an EXIT trap, private capture variables, and
+Claude's `bypassPermissions` shell capture reserves an EXIT trap, private capture variables, and
 fallback descriptors 198/199 on Bash 3.2. Explicit collisions are rejected rather
 than silently changing command semantics. Commands that dynamically replace the
 capture protocol fail closed. Normal shell cwd changes, failures, targeted reads,
 and background invocation behavior have dedicated regression coverage.
+Controlled modes pass Bash through before opening the capture store or checking
+capture reservations; native permission decisions remain provider-owned.
 
 Codex and Devin ACP wrapper scripts are immutable and content-addressed in the
 project's `tool-result-runtime` directory. They are not deleted after each

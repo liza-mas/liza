@@ -10,22 +10,24 @@ import (
 // deliberately remain accepted: the transformer preserves the original output
 // object rather than attempting to own Claude's evolving tool schema.
 type ClaudeHookInput struct {
-	ToolCalls []ClaudeHookInput `json:"tool_calls"`
-	Event     string            `json:"hook_event_name"`
-	Tool      string            `json:"tool_name"`
-	Input     map[string]any    `json:"tool_input"`
-	Response  any               `json:"tool_response"`
-	SessionID string            `json:"session_id"`
-	CWD       string            `json:"cwd"`
-	Error     string            `json:"error"`
-	ToolUseID string            `json:"tool_use_id"`
+	ToolCalls      []ClaudeHookInput `json:"tool_calls"`
+	Event          string            `json:"hook_event_name"`
+	Tool           string            `json:"tool_name"`
+	Input          map[string]any    `json:"tool_input"`
+	Response       any               `json:"tool_response"`
+	SessionID      string            `json:"session_id"`
+	CWD            string            `json:"cwd"`
+	Error          string            `json:"error"`
+	ToolUseID      string            `json:"tool_use_id"`
+	PermissionMode string            `json:"permission_mode"`
 }
 
 // ClaudePostToolResult rewrites supported textual native outputs using Claude
 // Code's PostToolUse updatedToolOutput contract. Returning an empty object is an
 // intentional no-op. Callers must stop the session on error, never emit raw data.
-// Bash must be captured before execution to cover failed and background output;
-// the post hook deliberately does not double-count that managed return path.
+// Bash capture is pre-execution and bypassPermissions-only to preserve native
+// permission checks. The post hook neither double-counts that managed return
+// path nor claims output coverage for permission-controlled Bash.
 func ClaudePostToolResult(store *Store, hook ClaudeHookInput, metadata Result) (map[string]any, error) {
 	empty := map[string]any{}
 	if hook.Event == "PostToolBatch" {
