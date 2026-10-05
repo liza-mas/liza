@@ -147,7 +147,7 @@ func newToolResultCmd() *cobra.Command {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(value)
 		}}
 	group.AddCommand(filter, read, stats, newToolResultRunCmd(store), newToolResultACPCmd(store), newToolResultCodexHookCmd(store))
-	group.AddCommand(newToolResultClaudeCmd(store), newToolResultClaudeCaptureCmd(store))
+	group.AddCommand(newToolResultClaudeCmd(store))
 	return group
 }
 

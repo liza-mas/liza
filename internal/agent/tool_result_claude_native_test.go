@@ -31,7 +31,7 @@ func TestClaudeToolResultNativeBoundary(t *testing.T) {
 	if _, err := os.Stat(binary); err != nil {
 		t.Fatal(err)
 	}
-	for _, sample := range []struct{ name, script string }{{"native", claudeNativeProbeScript}, {"lifecycle", claudeLifecycleProbeScript}, {"mcp", claudeMCPProbeScript}, {"mcp_failure", claudeMCPProbeScript}} {
+	for _, sample := range []struct{ name, script string }{{"native", claudeNativeProbeScript}, {"mcp", claudeMCPProbeScript}, {"mcp_failure", claudeMCPProbeScript}} {
 		t.Run(sample.name, func(t *testing.T) {
 			root := t.TempDir()
 			if err := validateClaudeToolResultBoundary(context.Background(), "claude", root, nil); err != nil {
@@ -125,36 +125,16 @@ func TestClaudeToolResultNativeBoundary(t *testing.T) {
 				}
 			}
 			if sample.name == "native" {
-				for _, id := range []string{"toolu_big", "toolu_fail", "toolu_read", "toolu_grep"} {
+				for _, id := range []string{"toolu_read", "toolu_grep"} {
 					content, _ := json.Marshal(results[id])
 					if !strings.Contains(string(content), "artifact_id") {
 						t.Fatalf("%s missing native digest: %s", id, content)
 					}
 				}
-				if results["toolu_fail"]["is_error"] != true {
-					t.Fatal("original Bash failure status lost")
-				}
-			} else if sample.name == "mcp" {
+			} else {
 				content, _ := json.Marshal(results["toolu_mcp"])
 				if !strings.Contains(string(content), "artifact_id") {
 					t.Fatalf("MCP result not rewritten: %s", content)
-				}
-			} else {
-				poll, _ := json.Marshal(results["toolu_poll"])
-				if !strings.Contains(string(poll), "artifact_id") {
-					t.Fatal("background output retrieval did not return digest")
-				}
-				cwd, _ := json.Marshal(results["toolu_checkcwd"])
-				if !strings.Contains(string(cwd), "/subdir|") {
-					t.Fatal("native cwd semantics regressed")
-				}
-				timeout, _ := json.Marshal(results["toolu_timeout"])
-				if !strings.Contains(strings.ToLower(string(timeout)), "background") {
-					t.Fatalf("expected native timeout auto-background: %s", timeout)
-				}
-				detached, _ := json.Marshal(results["toolu_detached"])
-				if !strings.Contains(string(detached), "DETACHED_DONE") {
-					t.Fatal("detached shell background command did not return")
 				}
 			}
 		})
@@ -162,7 +142,9 @@ func TestClaudeToolResultNativeBoundary(t *testing.T) {
 }
 
 // Compare the actual client's permission decisions, rather than inferring them
-// from hook JSON. The baseline must deny arbitrary Python without an allow.
+// from hook JSON. The dontAsk baseline must deny arbitrary Python without an
+// allow; bypass cases check that the boundary keeps deny rules matching the
+// original command, which a Bash input rewrite defeated (ADR-0178).
 func TestClaudeToolResultNativePermissions(t *testing.T) {
 	if os.Getenv("CLAUDE_TOOL_RESULT_NATIVE") != "1" {
 		t.Skip("set CLAUDE_TOOL_RESULT_NATIVE=1 to exercise installed Claude")
@@ -174,18 +156,22 @@ func TestClaudeToolResultNativePermissions(t *testing.T) {
 	command := `python3 -c 'from pathlib import Path; Path("executed").write_text("ORIGINAL_EXECUTED"); print("ORIGINAL_EXECUTED")'`
 	for _, sample := range []struct {
 		name, rule, decision string
-		allowed              bool
+		allowed, bypass      bool
 	}{
-		{"no_rule", "", "", false},
-		{"native_allow", "allow", "", true},
-		{"native_deny", "deny", "", false},
-		{"native_ask", "ask", "", false},
-		{"policy_allow", "", "allow", true},
-		{"policy_manual", "", "ask", false},
-		{"policy_deny", "", "deny", false},
-		{"policy_error", "", "error", false},
-		{"native_deny_policy_allow", "deny", "allow", false},
-		{"native_ask_policy_allow", "ask", "allow", false},
+		{"no_rule", "", "", false, false},
+		{"native_allow", "allow", "", true, false},
+		{"native_deny", "deny", "", false, false},
+		{"native_ask", "ask", "", false, false},
+		{"policy_allow", "", "allow", true, false},
+		{"policy_manual", "", "ask", false, false},
+		{"policy_deny", "", "deny", false, false},
+		{"policy_error", "", "error", false, false},
+		{"native_deny_policy_allow", "deny", "allow", false, false},
+		{"native_ask_policy_allow", "ask", "allow", false, false},
+		{"bypass_no_rule", "", "", true, true},
+		{"bypass_native_deny", "deny", "", false, true},
+		{"bypass_native_deny_policy_allow", "deny", "allow", false, true},
+		{"bypass_policy_deny", "", "deny", false, true},
 	} {
 		t.Run(sample.name, func(t *testing.T) {
 			baselineReturnedMarker := false
@@ -242,7 +228,9 @@ func TestClaudeToolResultNativePermissions(t *testing.T) {
 					t.Fatal(err)
 				}
 				script := strings.ReplaceAll(claudeNativeProbeScript, "__ROOT__", root)
-				script = strings.Replace(script, "'--dangerously-skip-permissions'", "'--permission-mode','dontAsk'", 1)
+				if !sample.bypass {
+					script = strings.Replace(script, "'--dangerously-skip-permissions'", "'--permission-mode','dontAsk'", 1)
+				}
 				script = strings.Replace(script, "e=os.environ.copy()", "e={k:os.environ[k] for k in ['PATH','HOME','TMPDIR','LANG'] if k in os.environ}", 1)
 				path := filepath.Join(root, "probe.py")
 				if err := os.WriteFile(path, []byte(script), 0600); err != nil {
@@ -312,7 +300,7 @@ class H(BaseHTTPRequestHandler):
   if '/count_tokens' in self.path:
    self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(b'{"input_tokens":100}');return
   calls.append(v); (p/'model_requests.json').write_text(json.dumps(calls))
-  n=len(calls); body=[{'type': 'tool_use', 'id': 'toolu_big', 'name': 'Bash', 'input': {'command': 'cat __ROOT__/fixture.txt'}}, {'type': 'tool_use', 'id': 'toolu_fail', 'name': 'Bash', 'input': {'command': 'cat __ROOT__/fixture.txt; exit 7'}}, {'type': 'tool_use', 'id': 'toolu_read', 'name': 'Read', 'input': {'file_path': '__ROOT__/fixture.txt'}}, {'type': 'tool_use', 'id': 'toolu_grep', 'name': 'Grep', 'input': {'pattern': 'LARGE_FIXTURE', 'path': '__ROOT__/fixture.txt', 'output_mode': 'content'}}, {'type': 'tool_use', 'id': 'toolu_glob', 'name': 'Glob', 'input': {'pattern': '*', 'path': '__ROOT__'}}] if n==1 else [{'type':'text','text':'MOCK_FINISHED'}]
+  n=len(calls); body=[{'type': 'tool_use', 'id': 'toolu_read', 'name': 'Read', 'input': {'file_path': '__ROOT__/fixture.txt'}}, {'type': 'tool_use', 'id': 'toolu_grep', 'name': 'Grep', 'input': {'pattern': 'LARGE_FIXTURE', 'path': '__ROOT__/fixture.txt', 'output_mode': 'content'}}, {'type': 'tool_use', 'id': 'toolu_glob', 'name': 'Glob', 'input': {'pattern': '*', 'path': '__ROOT__'}}] if n==1 else [{'type':'text','text':'MOCK_FINISHED'}]
   if (p/'permission-probe.json').exists():
    probe=json.loads((p/'permission-probe.json').read_text())
    body=[{'type':'tool_use','id':'toolu_permission','name':'Bash','input':probe}] if n==1 else [{'type':'text','text':'MOCK_FINISHED'}]
@@ -329,46 +317,6 @@ class H(BaseHTTPRequestHandler):
 s=HTTPServer(('127.0.0.1',0),H);threading.Thread(target=s.serve_forever,daemon=True).start()
 e=os.environ.copy();e['ANTHROPIC_BASE_URL']=f'http://127.0.0.1:{s.server_port}';e['CLAUDE_CODE_OAUTH_TOKEN']='sk-ant-oat01-dev778-local-fake-token';e.pop('ANTHROPIC_API_KEY',None)
 a=['claude','-p','--dangerously-skip-permissions','--setting-sources','','--settings',str(p/'settings.json'),'--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--tools','Bash,Read,Grep,Glob','--system-prompt','Test tool result transformation.','--model','claude-sonnet-4-6','--no-session-persistence','--output-format','stream-json','--verbose','Read the fixture using both tools and finish.']
-with (p/'mock_stdout.jsonl').open('w') as o,(p/'mock_stderr.txt').open('w') as err:r=subprocess.run(a,cwd=p,env=e,stdout=o,stderr=err,timeout=60)
-s.shutdown();print('exit',r.returncode,'requests',len(calls)); print((p/'mock_stderr.txt').read_text()[-1500:])
-if len(calls)>1:
- v=json.dumps(calls[-1]['messages']);print('NEXT_REQUEST_CONTAINS:',{x:x in v for x in ['PRIVATE_FIXTURE_ORIGINAL_8fc231','REPLACEMENT_BASH_K7D92','REPLACEMENT_READ_Q8E41']})
-`
-
-const claudeLifecycleProbeScript = `import json,os,threading,subprocess,pathlib,re,time
-from http.server import BaseHTTPRequestHandler,HTTPServer
-p=pathlib.Path('__ROOT__'); calls=[]
-class H(BaseHTTPRequestHandler):
- def log_message(self,*a):pass
- def do_GET(self):
-  self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(b'{"data":[]}')
- def do_POST(self):
-  v=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))))
-  if '/count_tokens' in self.path:
-   self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(b'{"input_tokens":100}');return
-  calls.append(v); (p/'model_requests.json').write_text(json.dumps(calls))
-  n=len(calls); body=([{'type':'tool_use','id':'toolu_bg','name':'Bash','input':{'command':'sleep 0.5; cat __ROOT__/fixture.txt','run_in_background':True}}] if n==1 else [{'type':'tool_use','id':'toolu_poll','name':'TaskOutput','input':{'task_id':__import__('re').search(r'(?:ID: |task_id["\s:=]+)([a-zA-Z0-9_-]+)',json.dumps(v['messages'])).group(1),'block':True,'timeout':30000}}] if n==2 else [{'type':'tool_use','id':'toolu_timeout','name':'Bash','input':{'command':'cat __ROOT__/fixture.txt; sleep 2','timeout':100}}] if n==3 else [{'type':'tool_use','id':'toolu_cwd','name':'Bash','input':{'command':'cd __ROOT__/subdir; export DEV778_EXPORTED=local_only; printf CHANGED'}}] if n==4 else [{'type':'tool_use','id':'toolu_checkcwd','name':'Bash','input':{'command':'printf "CURRENT:%s|%s" "$PWD" "$DEV778_EXPORTED"'}}] if n==5 else [{'type':'tool_use','id':'toolu_detached','name':'Bash','input':{'command':'sleep 2 & printf DETACHED_DONE'}}] if n==6 else [{'type':'text','text':'MOCK_FINISHED'}])
-  if n==2 and not any(t['name']=='TaskOutput' for t in v.get('tools',[])):
-   # New clients advertise Read for background output instead of TaskOutput.
-   result=next(b['content'] for m in v['messages'] if isinstance(m.get('content'),list) for b in m['content'] if b.get('type')=='tool_result' and b.get('tool_use_id')=='toolu_bg')
-   output=pathlib.Path(re.search(r'Output is being written to: (.+?\.output)',result).group(1))
-   deadline=time.monotonic()+10
-   while (not output.exists() or 'artifact_id' not in output.read_text()) and time.monotonic()<deadline:time.sleep(0.05)
-   if not output.exists() or 'artifact_id' not in output.read_text():raise RuntimeError('background capture did not publish its digest')
-   body=[{'type':'tool_use','id':'toolu_poll','name':'Read','input':{'file_path':str(output)}}]
-  msg={'id':f'msg_mock_{n}','type':'message','role':'assistant','model':'claude-sonnet-4-6','content':body,'stop_reason':'tool_use' if n<=6 else 'end_turn','stop_sequence':None,'usage':{'input_tokens':100,'output_tokens':10}}
-  self.send_response(200);self.send_header('Content-Type','text/event-stream' if v.get('stream') else 'application/json');self.end_headers()
-  if not v.get('stream'):self.wfile.write(json.dumps(msg).encode());return
-  def ev(kind,data):self.wfile.write(('event: '+kind+'\ndata: '+json.dumps({'type':kind,**data})+'\n\n').encode())
-  ev('message_start',{'message':{**msg,'content':[],'stop_reason':None}})
-  for i,b in enumerate(body):
-   ev('content_block_start',{'index':i,'content_block':{**b,**({'input':{}} if b['type']=='tool_use' else {'text':''})}})
-   ev('content_block_delta',{'index':i,'delta':{'type':'input_json_delta','partial_json':json.dumps(b['input'])} if b['type']=='tool_use' else {'type':'text_delta','text':b['text']}})
-   ev('content_block_stop',{'index':i})
-  ev('message_delta',{'delta':{'stop_reason':msg['stop_reason'],'stop_sequence':None},'usage':{'output_tokens':10}});ev('message_stop',{})
-s=HTTPServer(('127.0.0.1',0),H);threading.Thread(target=s.serve_forever,daemon=True).start()
-e=os.environ.copy();e['ANTHROPIC_BASE_URL']=f'http://127.0.0.1:{s.server_port}';e['CLAUDE_CODE_OAUTH_TOKEN']='sk-ant-oat01-dev778-local-fake-token';e.pop('ANTHROPIC_API_KEY',None)
-a=['claude','-p','--dangerously-skip-permissions','--setting-sources','','--settings',str(p/'settings.json'),'--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--tools','Bash,Read,Grep,Glob,TaskOutput','--system-prompt','Test tool result transformation.','--model','claude-sonnet-4-6','--no-session-persistence','--output-format','stream-json','--verbose','Read the fixture using both tools and finish.']
 with (p/'mock_stdout.jsonl').open('w') as o,(p/'mock_stderr.txt').open('w') as err:r=subprocess.run(a,cwd=p,env=e,stdout=o,stderr=err,timeout=60)
 s.shutdown();print('exit',r.returncode,'requests',len(calls)); print((p/'mock_stderr.txt').read_text()[-1500:])
 if len(calls)>1:

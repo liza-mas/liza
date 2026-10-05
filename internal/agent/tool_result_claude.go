@@ -35,7 +35,7 @@ func ClaudeToolResultSettings(executable, projectRoot string) (string, error) {
 	hook := func(matcher string) []any {
 		return []any{map[string]any{"matcher": matcher, "hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 60}}}}
 	}
-	payload, err := json.Marshal(map[string]any{"hooks": map[string]any{"PreToolUse": hook("Bash"), "PostToolUse": hook("Read|Grep|Glob|mcp__.*"), "PostToolBatch": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 60}}}}}})
+	payload, err := json.Marshal(map[string]any{"hooks": map[string]any{"PostToolUse": hook("Read|Grep|Glob|mcp__.*"), "PostToolBatch": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 60}}}}}})
 	return string(payload), err
 }
 

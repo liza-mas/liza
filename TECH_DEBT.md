@@ -994,16 +994,16 @@ from the D-38 fix.
 
 **Payback trigger:** The next change that touches any of these fixtures.
 
-## Claude Bash capture in permission-controlled modes
+## Claude Bash output capture
 
-**What:** Bash output in controlled Claude modes (including managed `auto` and
-`dontAsk`), and missing/unknown modes, has no engine externalization,
-sanitization, deduplication, or capture telemetry. Explicit `bypassPermissions`
-retains full capture; native Read/Grep/Glob/MCP coverage is unchanged.
+**What:** Claude Bash output has no engine externalization, sanitization,
+deduplication, or capture telemetry in any permission mode. Native
+Read/Grep/Glob/MCP coverage is unchanged.
 
-**Why deferred:** The current pre-tool wrapper changes native permission
-matching. The maintainer accepted mode-specific degradation for D-37(c) on
-2026-10-05 to preserve original-command authority without upgrading launch modes.
+**Why deferred:** A pre-tool wrapper changes native permission matching,
+including deny rules under `bypassPermissions`. The maintainer accepted the
+degradation for D-37(c) on 2026-10-05 to preserve original-command authority
+without upgrading launch modes.
 See [ADR-0178](specs/architecture/ADR/0178-claude-capture-preserves-permissions.md).
 
 **Payback trigger:** Claude exposes a supported execution-output boundary that

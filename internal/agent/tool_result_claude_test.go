@@ -20,12 +20,13 @@ func TestClaudeToolResultSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	hooks := value["hooks"].(map[string]any)
-	for _, event := range []string{"PreToolUse", "PostToolUse"} {
-		entry := hooks[event].([]any)[0].(map[string]any)
-		command := entry["hooks"].([]any)[0].(map[string]any)["command"].(string)
-		if !strings.Contains(command, "claude-hook") || !strings.Contains(command, "'\"'\"'") || !strings.Contains(command, "tool-results'") {
-			t.Fatalf("unsafe command: %s", command)
-		}
+	if _, ok := hooks["PreToolUse"]; ok {
+		t.Fatal("Bash input rewrites change Claude's native permission subject (ADR-0178)")
+	}
+	entry := hooks["PostToolUse"].([]any)[0].(map[string]any)
+	command := entry["hooks"].([]any)[0].(map[string]any)["command"].(string)
+	if !strings.Contains(command, "claude-hook") || !strings.Contains(command, "'\"'\"'") || !strings.Contains(command, "tool-results'") {
+		t.Fatalf("unsafe command: %s", command)
 	}
 	if strings.Contains(settings, "permissionDecision") || strings.Contains(settings, "bypass") {
 		t.Fatal("settings must not elevate permissions")
