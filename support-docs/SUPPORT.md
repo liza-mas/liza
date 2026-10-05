@@ -296,11 +296,9 @@ selected-input refusal is still unresolved. Equal material inputs stop automatic
 retries and planning wakes, while keeping completion/integration open. Repair the
 named source/selected upstream or retry explicitly; repeated identical failures
 produce no duplicate history/alerts. If a merged correction already exists, use
-the retirement action above rather than creating another replan. Retirement
-requires distinct merged plans with output in the same reviewed role-pair, no
-original children/executed transition, and a cleared hold. Pending plans that
-select the original must be retargeted/reviewed first. Retirement preserves
-MERGED and ordinary dependencies; pass/clear/replan/proceed cannot revive it.
+the retirement action above rather than creating another replan; its
+preconditions are listed in
+[ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md).
 
 ### Auto-Resume
 

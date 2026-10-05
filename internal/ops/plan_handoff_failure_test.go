@@ -299,7 +299,7 @@ func TestPlanHandoffRetirementAdmissionAndLifecycle(t *testing.T) {
 }
 
 func TestPlanHandoffRetirementRefusals(t *testing.T) {
-	for _, scenario := range []string{"held", "executed", "children", "selector", "not merged", "different pair", "self", "agent"} {
+	for _, scenario := range []string{"held", "executed", "children", "selector", "dependent", "not merged", "different pair", "self", "agent"} {
 		t.Run(scenario, func(t *testing.T) {
 			original, correction := handoffPlan("original", "code-planning-pair"), handoffPlan("correction", "code-planning-pair")
 			tasks := []models.Task{original, correction}
@@ -315,6 +315,8 @@ func TestPlanHandoffRetirementRefusals(t *testing.T) {
 				tasks = append(tasks, child)
 			case "selector":
 				tasks[1].Output[0].InheritInputs = &models.InheritInputs{Mode: models.InheritModeSelected, Selections: []models.InputSelection{{UpstreamTask: original.ID, Outputs: []int{0}}}}
+			case "dependent":
+				tasks = append(tasks, handoffPlan("downstream", "code-planning-pair", original.ID))
 			case "not merged":
 				tasks[1].Status = models.TaskStatusCodePlanning
 			case "different pair":

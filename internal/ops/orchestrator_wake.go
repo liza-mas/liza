@@ -113,18 +113,13 @@ func currentBlockerCandidate(state *models.State, task *models.Task) AssessmentF
 	return candidate
 }
 
-// BlockedTasksAwaitPlanningOutput reports whether an actionable BLOCKED task
+// BlockedTasksAwaitPlanningHandoff reports whether an actionable BLOCKED task
 // waits on planning output that only a PLANNING_COMPLETE checkpoint can
 // materialize: a dependency or awaited task (either followed through
 // supersession) that is a planned, PLANNING_COMPLETE-eligible planner merged after the last
 // transition attempt. A BLOCKED_TASKS turn cannot checkpoint, so such a wake
 // is wasted. The attempt bound keeps a planner whose transition already failed
 // from outranking blocked triage again in this sprint.
-func BlockedTasksAwaitPlanningOutput(state *models.State, planningPairs map[string]bool) bool {
-	return BlockedTasksAwaitPlanningHandoff(state, PlanningPairsOnly(planningPairs))
-}
-
-// BlockedTasksAwaitPlanningHandoff uses the project's actionable handoff domain.
 func BlockedTasksAwaitPlanningHandoff(state *models.State, handoff PlanHandoffDomain) bool {
 	if state.Sprint.Status == models.SprintStatusCheckpoint || state.Sprint.Status == models.SprintStatusCompleted {
 		return false

@@ -232,6 +232,12 @@ func retirePlanHandoff(state *models.State, domain PlanHandoffDomain, original *
 			(candidate.Status.IsTerminal() && !domain.Pending(candidate)) {
 			continue
 		}
+		if candidate.ID != input.ReplacedBy && candidate.RolePair == original.RolePair &&
+			slices.Contains(candidate.DependsOn, original.ID) {
+			// Its transition inherits only from same-pair upstreams that ran it: the
+			// original never will, and nothing redirects the edge to the correction.
+			return refuse(fmt.Sprintf("task %s depends on %s and would inherit no phase gate from %s; retarget or replan it before retirement", candidate.ID, original.ID, input.ReplacedBy))
+		}
 		for index, output := range candidate.Output {
 			if output.InheritInputs == nil {
 				continue

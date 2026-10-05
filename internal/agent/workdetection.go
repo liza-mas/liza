@@ -101,7 +101,7 @@ var orchestratorWakeTriggerSpecs = []orchestratorWakeTriggerSpec{
 // Priority order:
 //  1. No tasks (initial planning)
 //  2. Blocked tasks — or planning complete instead, when an actionable blocked
-//     task waits on a planner's untransitioned output (ops.BlockedTasksAwaitPlanningOutput)
+//     task waits on a planner's untransitioned output (ops.BlockedTasksAwaitPlanningHandoff)
 //  3. Hypothesis exhausted (2+ failed_by)
 //  4. Immediate discoveries (not yet converted to tasks)
 //  5. Operator notes not yet rendered in a completed turn

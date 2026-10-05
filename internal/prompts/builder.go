@@ -259,14 +259,14 @@ func renderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	// Same rule as wake detection: a held plan keeps the sprint open.
 	sprintCompleteForWake := sprintComplete && wakeOpen && !ops.HasHeldPlan(state)
 
+	// Without a pipeline nothing is gated here; the transition executor
+	// loads its own domain and still gates.
+	domain := ops.PlanningPairsOnly(planningPairs)
+	if detErr == nil {
+		domain = detCtx.PlanHandoff
+	}
 	var planningTasks []planningTaskData
 	if wakeOpen {
-		// Without a pipeline nothing is gated here; the transition executor
-		// loads its own domain and still gates.
-		domain := ops.PlanningPairsOnly(planningPairs)
-		if detErr == nil {
-			domain = detCtx.PlanHandoff
-		}
 		planningTasks = collectMergedPlanningTasks(state, domain)
 	}
 
@@ -283,7 +283,7 @@ func renderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 	if selected != nil {
 		wakeTrigger, integrationProjection = selected.Trigger, selected.Integration
 	} else {
-		if len(planningTasks) > 0 && ops.BlockedTasksAwaitPlanningOutput(state, planningPairs) {
+		if len(planningTasks) > 0 && ops.BlockedTasksAwaitPlanningHandoff(state, domain) {
 			// Same exception as the live selector: it takes BLOCKED_TASKS' rank.
 			wakeTrigger = "PLANNING_COMPLETE"
 		} else {

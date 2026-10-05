@@ -582,10 +582,9 @@ An initial output-validation or selective-inheritance refusal raises
 automatic retries/planning wakes while keeping the sprint open; relevant repair
 allows retry. If a separate correction is already merged, an operator can retire
 the unused original with `§BRAND_BINARY_NAME§ plan-check ORIGINAL --replaced-by
-MERGED_CORRECTION`. Both must have output in the same reviewed role-pair, with no
-original executed transition/children or uncleared hold. Retarget/review pending
-selected-input consumers first. Retirement preserves MERGED and ordinary
-dependencies, cannot be cleared/revived, and leaves correction review unchanged.
+MERGED_CORRECTION`; see
+[ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md)
+for its preconditions. Retirement cannot be cleared or revived.
 
 ```bash
 # Typical replan workflow

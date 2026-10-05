@@ -63,7 +63,9 @@ Chose **Option 3**.
   Both plans must be merged in the same reviewed role-pair with output. The
   original must have no executed transition or children and no sticky hold;
   the correction must not be held, replanned or retired. Pending selected-input
-  consumers naming the original must be retargeted/reviewed first. Retirement
+  consumers naming the original, and pending same-role-pair plans other than
+  the correction that depend on it, must be retargeted/reviewed first: their
+  transition would inherit no phase gate from either plan. Retirement
   preserves MERGED status and ordinary dependencies, creates no fake marker,
   and settles the original for carry-forward and integration. Same-target
   replay is unchanged; pass, hold, clear, replan and proceed cannot revive it.
