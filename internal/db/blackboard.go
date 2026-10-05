@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -430,17 +431,21 @@ func marshalStateForWrite(state *models.State) ([]byte, error) {
 	if err := statehygiene.ValidateState(state); err != nil {
 		return nil, fmt.Errorf("state hygiene validation failed: %w", err)
 	}
-	data, err := yaml.Marshal(state)
+	needsParse := false
+	view := projectWriteValue(reflect.ValueOf(state), &needsParse)
+	data, err := yaml.Marshal(view.Interface())
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state: %w", err)
+	}
+	if !needsParse {
+		return data, nil
 	}
 	if err := yamlBytesParse(data); err == nil {
 		return data, nil
 	}
 
-	// Why: go-yaml can emit broken explicit indent indicators such as `|4-`
-	// for leading-blank-line scalars; rewriting only the header preserves the
-	// original text while keeping state.yaml parseable.
+	// Custom YAML/raw nodes retain the legacy fail-closed publication check.
+	// Ordinary model and Extra strings are made safe before emission instead.
 	rewritten := rewriteUnsafeBlockScalarIndents(data)
 	if err := yamlBytesParse(rewritten); err != nil {
 		return nil, fmt.Errorf("failed to marshal parseable state YAML: %w", err)

@@ -174,6 +174,13 @@ ambiguous across process namespaces, so §BRAND_NAME_TITLE§ does not use it to 
 For shared locks, owner metadata identifies only the most recent acquirer, not
 the complete set of current holders.
 
+Sample `state.yaml.lock.owner.json` during a slow mutation. `operation` remains
+the stable category (for example, `modify`); `caller` is a bounded chain of
+compiled function names, including callers beyond database and authority
+wrappers. This distinguishes mutations in one process without recording source
+paths, arguments, environment values or state text. Treat it as best-effort
+attribution, never evidence that it is safe to delete a lock or stop a process.
+
 Project cleanup also uses a project lifecycle lock stored in Git metadata.
 Agent registration and worktree provisioning or recovery hold this lock while
 they establish resources, including while configured post-worktree setup and

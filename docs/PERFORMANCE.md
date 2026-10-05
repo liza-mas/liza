@@ -113,6 +113,23 @@ All agents use a hybrid approach: event-driven primary, 30s polling fallback.
 
 ### Lock Hold Time Optimization
 
+`Write` and `Modify` validate state hygiene and prepare a temporary serialization
+view before emitting YAML. Multiline strings with leading whitespace are quoted
+before emission so leading spaces and blank lines survive. Ordinary state,
+including lifecycle receipts and preparations, no longer incurs a full YAML
+decode after marshal. Custom YAML marshal/unmarshal, text and zero methods,
+raw YAML nodes, multiline inline-map keys, non-string-key maps and unsupported reflected shapes retain the
+legacy parse/repair safety path; timestamps and the audited acceptance-command
+marshaler keep their existing behavior without that parse. The source state is
+never mutated by serialization. Hygiene, transaction checks, fsync and atomic
+publication still run.
+
+Sample `state.yaml.lock.owner.json` while a long hold occurs. Its `operation`
+remains the stable metric category, while `caller` records up to eight compiled
+function names through mutation wrappers. It contains no arguments, state text
+or source-file paths. Metadata is diagnostic and can remain after release;
+`flock` is the authority for whether a lock is held.
+
 **Bad** -- expensive computation under lock:
 ```go
 bb.Modify(func(s *models.State) error {
@@ -209,6 +226,19 @@ go test -bench=. -benchtime=10s -count=5 ./internal/db/   # Multiple runs
 | Lock acquire | < 10ms | < 100ms | > 500ms |
 
 ### Regression Detection
+
+`BenchmarkMarshalStateForWriteLarge` measures hygiene, projection and emission
+together on roughly 4.3 MB of state, including a lifecycle receipt and
+preparation on each of 300 tasks, with ordinary and leading-blank history
+variants. Run it with `GOMAXPROCS=2` and `-benchmem -benchtime=3x -count=3`.
+A local comparison against the original whole-parse helper on an i7-1165G7
+reduced allocations from about 287k to 169k (ordinary) and 291k to 169k
+(leading-blank), and allocated bytes from 91 MB to 68 MB and 109 MB to 68 MB.
+Elapsed samples were noisy under host load: ordinary medians were 549 ms
+before and 330 ms after; leading-blank medians were 649 ms before and 306 ms
+after. These measure
+the complete marshal helper, excluding state reads and filesystem publication;
+they do not establish deployed lock occupancy or latency targets.
 
 ```bash
 go test -bench=. ./internal/db/ > baseline.txt

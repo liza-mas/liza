@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -91,6 +93,7 @@ type ownerMetadata struct {
 	PID        int    `json:"pid"`
 	Hostname   string `json:"hostname,omitempty"`
 	Operation  string `json:"operation"`
+	Caller     string `json:"caller,omitempty"`
 	AcquiredAt string `json:"acquired_at"`
 }
 
@@ -122,6 +125,7 @@ func (fl *FileLock) writeOwnerMetadata(operation string) {
 		PID:        os.Getpid(),
 		Hostname:   hostname,
 		Operation:  operation,
+		Caller:     lockCaller(),
 		AcquiredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
@@ -146,6 +150,27 @@ func (fl *FileLock) writeOwnerMetadata(operation string) {
 		return
 	}
 	_ = os.Rename(tmpPath, fl.ownerPath)
+}
+
+// lockCaller records a bounded function chain through db/authority wrappers.
+// Only compiled function names are exposed: no paths, arguments or state data.
+// Operation remains the stable metrics category; this field is diagnostic only.
+func lockCaller() string {
+	var pcs [32]uintptr
+	n := runtime.Callers(2, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	var names []string
+	for len(names) < 8 {
+		frame, more := frames.Next()
+		if frame.Function != "" && !strings.Contains(frame.Function, "/internal/filelock.(*FileLock).") &&
+			!strings.HasPrefix(frame.Function, "runtime.") && !strings.HasPrefix(frame.Function, "testing.") {
+			names = append(names, frame.Function)
+		}
+		if !more {
+			break
+		}
+	}
+	return strings.Join(names, " <- ")
 }
 
 // WithLock executes fn while holding an exclusive file lock.
