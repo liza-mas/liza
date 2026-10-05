@@ -54,6 +54,7 @@ var notUsefulEvents = map[string]struct{}{
 	models.TaskEventWorktreeRecovered:         {},
 	models.TaskEventClaimedForIntegrationFix:  {},
 	models.TaskEventTransitionCycleBlocked:    {},
+	models.TaskEventTransitionFailed:          {},
 	models.TaskEventTransitionCrashRecov:      {},
 	models.TaskEventPlanning:                  {},
 	models.TaskEventInitialization:            {},

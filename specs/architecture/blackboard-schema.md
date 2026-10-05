@@ -366,8 +366,9 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
   transitions_executed:            # Tracks which transitions have been applied
     code-plan-to-coding: true
   plan_check:                      # Orchestrator hand-off disposition of a merged plan (ADR-0159)
-    verdict: held                  # passed | held
+    verdict: held                  # passed | held | replaced
     ask: "Register recipe project.smoke-login, then replan its runtime_inputs"  # held only: the human action awaited
+    # replaced_by: merged-correction # replaced only: operator-declared replacement
     by: orchestrator-1
     at: 2026-09-24T09:30:00Z
 ```
@@ -382,7 +383,16 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task (deprecated: use `parent_tasks`) |
 | `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
-| `plan_check` | `*PlanCheck` | Orchestrator (`plan-check --pass/--hold`) / operator (`plan-check --clear`) | Disposition of a merged planning task whose manual `per-subtask`/`one-to-one` hand-off has not run. `passed` admits automatic expansion; `held` (with `ask`) blocks every expansion path until an operator clears it. Only on MERGED planning-pair tasks. See [ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md) |
+| `plan_check` | `*PlanCheck` | Orchestrator (`plan-check --pass/--hold`) / operator (`plan-check --clear/--replaced-by`) | Disposition of a merged planning task whose manual `per-subtask`/`one-to-one` hand-off has not run. `passed` admits automatic expansion; `held` (with `ask`) blocks every expansion path until operator clear; `replaced` (with `replaced_by`) irrevocably retires an unused hand-off by a distinct merged correction in the same role-pair. Preserves MERGED and ordinary dependencies. See [ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md) |
+
+`transition_failed` history records initial gated per-subtask output validation
+or selective-inheritance refusals. `extra` contains `version: 1`, `task_id`,
+`transition`, `failure_class` (`output_validation` or `selective_inheritance`),
+`output_index`, `input_fingerprint` (SHA256) and sanitized `error`. A current
+matching observation suppresses automatic retries/wakes but remains outstanding
+for completion and integration. Material repair permits retry; malformed or
+unknown observations fail open. Identical operator retries append no duplicate
+event. No children or executed marker are written on refusal.
 
 `set-task-output --json` returns a write receipt with `task_id`, `output_count`,
 and `state_path`. The same transaction appends a `task_output_set` history event

@@ -449,11 +449,14 @@ func IsPlanningPair(rolePair string, planningPairs map[string]bool) bool {
 
 // allPlannedTasksTerminalForProject checks if all planned tasks are sprint-terminal.
 func allPlannedTasksTerminalForProject(s *models.State, projectRoot string) (bool, error) {
-	terminals, err := SprintTerminalStates(projectRoot)
+	context, err := LoadDetectionContext(projectRoot)
 	if err != nil {
 		return false, err
 	}
-	return s.AllPlannedTasksTerminalWith(terminals), nil
+	if context.PlanHandoff.HasFailedPlan(s) {
+		return false, nil
+	}
+	return s.AllPlannedTasksTerminalWith(context.SprintTerminals), nil
 }
 
 // LoadResolverForModels loads the pipeline resolver as a models.PipelineResolver.

@@ -274,7 +274,7 @@ func validateTaskInvariants(v *violations, state *models.State, projectRoot stri
 
 		validateTaskOutput(v, &task, !artifactRefsRetired(task))
 		validateAcceptanceState(v, &task)
-		validatePlanCheck(v, &task, resolver)
+		validatePlanCheck(v, &task, state, resolver)
 
 		// Attempt must be 0 (unset/legacy), 1, or 2
 		if task.Attempt < 0 || task.Attempt > 2 {
@@ -314,7 +314,7 @@ func validateTaskInvariants(v *violations, state *models.State, projectRoot stri
 
 // validatePlanCheck checks the persisted shape of an orchestrator plan
 // disposition. Admission rules (domain, dependencies, sticky holds) live in ops.
-func validatePlanCheck(v *violations, task *models.Task, resolver *pipeline.Resolver) {
+func validatePlanCheck(v *violations, task *models.Task, state *models.State, resolver *pipeline.Resolver) {
 	check := task.PlanCheck
 	if check == nil {
 		return
@@ -325,8 +325,19 @@ func validatePlanCheck(v *violations, task *models.Task, resolver *pipeline.Reso
 		if strings.TrimSpace(check.Ask) == "" {
 			v.add(fmt.Errorf("task %s plan_check held requires ask", task.ID))
 		}
+	case models.PlanCheckReplaced:
+		replacement := state.FindTask(check.ReplacedBy)
+		if replacement == nil || replacement.ID == task.ID || replacement.Status != models.TaskStatusMerged || replacement.RolePair != task.RolePair || len(replacement.Output) == 0 {
+			v.add(fmt.Errorf("task %s plan_check replaced requires a distinct MERGED replaced_by task with output in the same role_pair", task.ID))
+		}
+		if check.Ask != "" {
+			v.add(fmt.Errorf("task %s plan_check replaced cannot carry ask", task.ID))
+		}
 	default:
 		v.add(fmt.Errorf("task %s plan_check has invalid verdict %q", task.ID, check.Verdict))
+	}
+	if check.Verdict != models.PlanCheckReplaced && check.ReplacedBy != "" {
+		v.add(fmt.Errorf("task %s plan_check replaced_by requires replaced verdict", task.ID))
 	}
 	if check.By == "" {
 		v.add(fmt.Errorf("task %s plan_check requires by and at (missing by)", task.ID))

@@ -299,6 +299,9 @@ func (e *integrationProgressEvaluator) contributingSet(
 	}
 	cohort := &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}}
 	for _, plan := range plans {
+		if plan.PlanHandoffRetired() {
+			continue
+		}
 		resolution, err := e.resolveLineage(plan.ID, false)
 		if err != nil {
 			return nil, false, false, err
@@ -339,6 +342,9 @@ func (e *integrationProgressEvaluator) unsettledPreIntegrationPlanningTasks(capa
 	for i := range e.state.Tasks {
 		task := &e.state.Tasks[i]
 		transitions, upstream := capability.PreIntegrationPlanningTransitions[task.RolePair]
+		if task.PlanHandoffRetired() {
+			continue
+		}
 		if capability.PreIntegrationPlanningTransitions == nil {
 			// Preserve the legacy pure evaluator input when no topology is supplied.
 			upstream = task.RolePair == "code-planning-pair" ||

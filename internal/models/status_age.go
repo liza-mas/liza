@@ -48,6 +48,7 @@ var nonStatusTransitionEvents = map[TaskEventName]struct{}{
 	TaskEventOwnedTaskResumed:          {},
 	TaskEventWorktreeRecovered:         {},
 	TaskEventTransitionExecuted:        {},
+	TaskEventTransitionFailed:          {},
 	TaskEventTransitionCrashRecov:      {},
 	TaskEventTransitionCycleBlocked:    {},
 	TaskEventOrchestratorAssessment:    {},

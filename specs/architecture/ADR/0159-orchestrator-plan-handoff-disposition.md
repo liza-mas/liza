@@ -49,8 +49,8 @@ Chose **Option 3**.
   gated one pending.
 - **Disposition.** `plan_check` on the merged task: `passed`, or `held` with the
   human action awaited (`ask`). The task ID is the plan's identity: output is
-  fixed after merge and every correction goes through `replan`, which mints a
-  new ID without a disposition.
+  fixed after merge. Replan mints a new ID without a disposition; an operator
+  may instead retire an unused hand-off by a separately merged correction.
 - **Commands.** `plan-check <id> --pass | --hold <ask>` (a role configured
   with the orchestrator type, bound to its registration generation) and
   `plan-check <id> --clear` (operator only, refused from an agent session).
@@ -58,6 +58,15 @@ Chose **Option 3**.
   allowed at `IN_PROGRESS` as well as `CHECKPOINT` (the no-children
   precondition under the lock is what makes it safe). The reason is appended
   to the replacement's description.
+- **Explicit retirement.** Operator-only `plan-check ORIGINAL --replaced-by
+  MERGED_CORRECTION` records `replaced` with `replaced_by`, actor and timestamp.
+  Both plans must be merged in the same reviewed role-pair with output. The
+  original must have no executed transition or children and no sticky hold;
+  the correction must not be held, replanned or retired. Pending selected-input
+  consumers naming the original must be retargeted/reviewed first. Retirement
+  preserves MERGED status and ordinary dependencies, creates no fake marker,
+  and settles the original for carry-forward and integration. Same-target
+  replay is unchanged; pass, hold, clear, replan and proceed cannot revive it.
 - **Sticky hold.** Pass, a different hold and replan are refused on a held
   plan; only an operator clear releases it. Hold replays with the same ask; a
   pass may be tightened to a hold before transition.
@@ -108,8 +117,18 @@ human action is still missing — so no path overrides it.
 - If no orchestrator dispositions a plan, automatic expansion stalls for it;
   the `PLANNING_COMPLETE` wake re-fires, and an operator resume or `proceed`
   still expands it.
-- A passed plan whose transition keeps failing re-wakes `PLANNING_COMPLETE`
-  as checkpoint-only work, as an unconsumed plan did before.
+- Initial gated per-subtask output validation and selective-inheritance
+  refusals persist `transition_failed` with a versioned material-input digest
+  under the attempt's state lock, before any child/output mutation. Equal inputs
+  suppress automatic retries and planning wakes across restarts; repaired
+  source, selected upstream, transition or matching kind incumbent re-admits
+  the hand-off. History, heartbeat, sprint and unrelated work do not. Unknown
+  observations fail open; cycles, configuration/graph failures, crash recovery
+  and live waits retain their existing handling.
+- A matching failure remains outstanding: status lists it as repair-required,
+  a once-key `PLAN HANDOFF FAILED` alert names recovery, carry-forward retains
+  it even if another outgoing transition ran, and completion/integration remain
+  unsettled. Operator retries still report refusal without duplicate evidence.
 - State decoding is not strict, so an older binary keeps `plan_check` in the
   task's inline extras but ignores it: it expands every plan, held ones
   included.

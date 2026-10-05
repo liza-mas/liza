@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,35 +20,38 @@ import (
 type PlanCheckAction string
 
 const (
-	PlanCheckActionPass  PlanCheckAction = "pass"
-	PlanCheckActionHold  PlanCheckAction = "hold"
-	PlanCheckActionClear PlanCheckAction = "clear"
+	PlanCheckActionPass    PlanCheckAction = "pass"
+	PlanCheckActionHold    PlanCheckAction = "hold"
+	PlanCheckActionClear   PlanCheckAction = "clear"
+	PlanCheckActionReplace PlanCheckAction = "replace"
 )
 
 // PlanCheckInput holds one plan-check request. Pass and hold are the
-// orchestrator's and need Authority; clear is an operator action and needs
-// ChangedBy.
+// orchestrator's and need Authority; clear and replace are operator actions
+// and need ChangedBy.
 type PlanCheckInput struct {
-	TaskID    string
-	Action    PlanCheckAction
-	Ask       string
-	Authority *models.AgentAuthority
-	ChangedBy string
+	TaskID     string
+	Action     PlanCheckAction
+	Ask        string
+	ReplacedBy string
+	Authority  *models.AgentAuthority
+	ChangedBy  string
 }
 
 // PlanCheckResult reports the disposition after the request.
 type PlanCheckResult struct {
-	TaskID   string                  `json:"task_id"`
-	Action   PlanCheckAction         `json:"action"`
-	Verdict  models.PlanCheckVerdict `json:"verdict,omitempty"`
-	Class    PlanHandoffClass        `json:"class"`
-	Blocker  string                  `json:"blocker,omitempty"`
-	Changed  bool                    `json:"changed"`
-	Warnings []string                `json:"warnings,omitempty"`
+	TaskID     string                  `json:"task_id"`
+	Action     PlanCheckAction         `json:"action"`
+	Verdict    models.PlanCheckVerdict `json:"verdict,omitempty"`
+	ReplacedBy string                  `json:"replaced_by,omitempty"`
+	Class      PlanHandoffClass        `json:"class"`
+	Blocker    string                  `json:"blocker,omitempty"`
+	Changed    bool                    `json:"changed"`
+	Warnings   []string                `json:"warnings,omitempty"`
 }
 
-// RecordPlanCheck applies a pass, hold or clear to a merged plan's hand-off
-// disposition. Rules, all evaluated under the state lock:
+// RecordPlanCheck applies a pass, hold, clear or retirement to a merged hand-off.
+// Rules, all evaluated under the state lock:
 //   - only a plan in the reviewed hand-off domain with unconsumed output can
 //     carry a disposition;
 //   - pass is refused while any in-domain upstream is replanned, held or not
@@ -76,15 +80,24 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 			return &PreconditionError{Reason: fmt.Sprintf("task %q not found", input.TaskID)}
 		}
 		class, blocker := domain.Classify(state, task)
-		switch class {
-		case PlanHandoffNotSource:
-			return &PreconditionError{Reason: fmt.Sprintf(
-				"task %s has no plan awaiting hand-off: it must be a MERGED planning task with output whose children do not exist yet and that was not replanned", task.ID)}
-		case PlanHandoffOutOfDomain:
-			return &PreconditionError{Reason: fmt.Sprintf(
-				"task %s has no reviewed hand-off (its transitions are automatic, many-to-one, or it has no output); it transitions without a plan-check", task.ID)}
+		if task.PlanHandoffRetired() && input.Action != PlanCheckActionReplace {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s handoff was retired by %s; it cannot be revived", task.ID, task.PlanCheck.ReplacedBy)}
 		}
-		next, changeErr := planCheckTransition(task, class, blocker, input, actor)
+		var next planCheckChange
+		var changeErr error
+		if input.Action == PlanCheckActionReplace {
+			next, changeErr = retirePlanHandoff(state, domain, task, input, actor)
+		} else {
+			switch class {
+			case PlanHandoffNotSource:
+				return &PreconditionError{Reason: fmt.Sprintf(
+					"task %s has no plan awaiting hand-off: it must be a MERGED planning task with output whose children do not exist yet and that was not replanned", task.ID)}
+			case PlanHandoffOutOfDomain:
+				return &PreconditionError{Reason: fmt.Sprintf(
+					"task %s has no reviewed hand-off (its transitions are automatic, many-to-one, or it has no output); it transitions without a plan-check", task.ID)}
+			}
+			next, changeErr = planCheckTransition(task, class, blocker, input, actor)
+		}
 		if changeErr != nil {
 			return changeErr
 		}
@@ -100,6 +113,9 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 		}
 		result.Changed = next.changed
 		result.Verdict = task.PlanCheckVerdictOf()
+		if task.PlanCheck != nil {
+			result.ReplacedBy = task.PlanCheck.ReplacedBy
+		}
 		result.Class, result.Blocker = domain.Classify(state, task)
 		return nil
 	}
@@ -147,9 +163,12 @@ func planCheckActor(resolver *pipeline.Resolver, input PlanCheckInput) (string, 
 			return "", &PreconditionError{Reason: "plan-check --hold requires the human action being awaited"}
 		}
 		return input.Authority.ID, nil
-	case PlanCheckActionClear:
+	case PlanCheckActionClear, PlanCheckActionReplace:
 		if input.Authority != nil {
-			return "", &PreconditionError{Reason: "plan-check --clear is an operator action"}
+			return "", &PreconditionError{Reason: "plan-check --clear/--replaced-by is an operator action"}
+		}
+		if input.Action == PlanCheckActionReplace && strings.TrimSpace(input.ReplacedBy) == "" {
+			return "", &PreconditionError{Reason: "plan-check --replaced-by requires a merged correction task ID"}
 		}
 		if input.ChangedBy == "" {
 			return "", &PreconditionError{Reason: "changed_by is required"}
@@ -181,6 +200,59 @@ type planCheckChange struct {
 	check   *models.PlanCheck
 	note    string
 	changed bool
+}
+
+func retirePlanHandoff(state *models.State, domain PlanHandoffDomain, original *models.Task, input PlanCheckInput, actor string) (planCheckChange, error) {
+	refuse := func(reason string) (planCheckChange, error) {
+		return planCheckChange{}, &PreconditionError{Reason: reason}
+	}
+	if original.PlanHandoffRetired() {
+		if original.PlanCheck.ReplacedBy == input.ReplacedBy {
+			return planCheckChange{}, nil
+		}
+		return refuse(fmt.Sprintf("task %s handoff was already retired by %s", original.ID, original.PlanCheck.ReplacedBy))
+	}
+	if !domain.InDomain(original) || !domain.Pending(original) {
+		return refuse(fmt.Sprintf("task %s must have an unused MERGED reviewed handoff", original.ID))
+	}
+	if original.PlanCheckVerdictOf() == models.PlanCheckHeld {
+		return refuse(fmt.Sprintf("task %s is held; operator plan-check %s --clear is required first", original.ID, original.ID))
+	}
+	for name, executed := range original.TransitionsExecuted {
+		if executed {
+			return refuse(fmt.Sprintf("task %s already executed %s; delivered output cannot be retired", original.ID, name))
+		}
+	}
+	for i := range state.Tasks {
+		candidate := &state.Tasks[i]
+		if slices.Contains(candidate.EffectiveParentTasks(), original.ID) {
+			return refuse(fmt.Sprintf("task %s already generated child %s", original.ID, candidate.ID))
+		}
+		if candidate.PlanHandoffRetired() || candidate.TransitionsExecuted["replanned"] ||
+			(candidate.Status.IsTerminal() && !domain.Pending(candidate)) {
+			continue
+		}
+		for index, output := range candidate.Output {
+			if output.InheritInputs == nil {
+				continue
+			}
+			for selection, selected := range output.InheritInputs.Selections {
+				if selected.UpstreamTask == original.ID {
+					return refuse(fmt.Sprintf("task %s output[%d].inherit_inputs.selections[%d] still selects %s; retarget and review that plan before retirement", candidate.ID, index, selection, original.ID))
+				}
+			}
+		}
+	}
+	correction := state.FindTask(input.ReplacedBy)
+	if correction == nil || correction.ID == original.ID || correction.Status != models.TaskStatusMerged ||
+		correction.RolePair != original.RolePair || !domain.InDomain(correction) || correction.PlanHandoffRetired() ||
+		correction.TransitionsExecuted["replanned"] || correction.PlanCheckVerdictOf() == models.PlanCheckHeld {
+		return refuse("replacement must be a distinct MERGED correction with output in the same reviewed role-pair, neither held, replanned nor retired")
+	}
+	return planCheckChange{
+		check: &models.PlanCheck{Verdict: models.PlanCheckReplaced, ReplacedBy: correction.ID, By: actor, At: time.Now().UTC()},
+		note:  "unused handoff replaced by " + correction.ID, changed: true,
+	}, nil
 }
 
 func planCheckTransition(task *models.Task, class PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {

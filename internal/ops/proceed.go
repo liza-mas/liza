@@ -196,6 +196,9 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 		task := s.FindTask(taskID)
 		var inheritedDeps inheritedDepSet
 		if task != nil {
+			if task.PlanHandoffRetired() {
+				return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.PlanCheck.ReplacedBy)
+			}
 			if err := canonicalizeTaskDependsOnForTransition(s, resolver, task); err != nil {
 				return fmt.Errorf("canonicalize dependencies: %w", err)
 			}
@@ -393,7 +396,6 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 	if task == nil {
 		return fmt.Errorf("task %q not found", taskID)
 	}
-
 	// Accept both the required status and MERGED (see Design Decision D3)
 	if task.Status != tDef.requiredStatus && task.Status != models.TaskStatusMerged {
 		return fmt.Errorf("task %q must be at %s (or MERGED) for many-to-one transition %q (current: %s)",
@@ -511,6 +513,9 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 //
 // The result.ChildTaskIDs slice is appended to with created child task IDs.
 func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
+	if task := s.FindTask(taskID); task != nil && task.PlanHandoffRetired() {
+		return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.PlanCheck.ReplacedBy)
+	}
 	if tDef.cardinality == "many-to-one" {
 		return proceedManyToOneInner(s, taskID, transitionName, tDef, inheritedDeps, resolver, now, result)
 	}
@@ -551,7 +556,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		outputChanged = changed
 		for i, entry := range canonicalOutput {
 			if err := validateOutputEntry(entry, i, len(task.Output)); err != nil {
-				return err
+				return &handoffInputError{class: handoffOutputRefusal, index: i, err: err}
 			}
 		}
 		if resolver != nil {
@@ -599,7 +604,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			}
 			entryInherited, err := inheritedDeps.forEntry(entry, i)
 			if err != nil {
-				return err
+				return &handoffInputError{class: handoffInputRefusal, index: i, err: err}
 			}
 			entryInherited = excludeRetiring(entryInherited, entry, retiring)
 			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, entryInherited, task.EpicRef, task.ArchRef, task.RCARequired, now)
@@ -906,6 +911,9 @@ type dependencyPatch struct {
 // isTransitionIncomplete checks if an executed transition has missing children.
 // Used to detect crash recovery needs in ExecuteAvailableTransitions phase 1b.
 func isTransitionIncomplete(s *models.State, task *models.Task, transName string, resolver *pipeline.Resolver) bool {
+	if task.PlanHandoffRetired() {
+		return false
+	}
 	td, err := resolver.Transition(transName)
 	if err != nil {
 		return false
@@ -1179,6 +1187,7 @@ func (f TransitionFailure) String() string {
 type TransitionReport struct {
 	Results  []ProceedResult
 	Failures []TransitionFailure
+	Warnings []string
 }
 
 // admitsHandoff decides a gated transition under the state lock that also
@@ -1242,6 +1251,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 	now := time.Now().UTC()
 	var results []ProceedResult
 	var failures []TransitionFailure
+	var observedFailures []PlanHandoffFailure
 	fail := func(taskID, transition string, err error) {
 		failures = append(failures, TransitionFailure{SourceTaskID: taskID, Transition: transition, Error: err.Error()})
 	}
@@ -1268,7 +1278,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 			// Replanned tasks must not spawn children — the replan replacement
 			// owns the downstream pipeline. Replan.go marks real transitions as
 			// executed (preventive), but this is a defensive second layer.
-			if task.TransitionsExecuted["replanned"] {
+			if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
 				continue
 			}
 
@@ -1289,6 +1299,9 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 				available = append(available, resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)...)
 			}
 			for _, transitionName := range available {
+				if admission == AdmitReviewed && handoff.TransitionFailure(s, task, transitionName) != nil {
+					continue
+				}
 				if handoff.GatesTransition(task, transitionName) && !admitsHandoff(handoff, s, task, admission) {
 					continue
 				}
@@ -1318,7 +1331,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 				continue
 			}
 			// Replanned tasks must not spawn children (same guard as Phase 1a).
-			if task.TransitionsExecuted["replanned"] {
+			if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
 				continue
 			}
 			for transName := range task.TransitionsExecuted {
@@ -1385,8 +1398,14 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 		// Phase 3: Execute in sorted order
 		for _, p := range sorted {
 			task := s.FindTask(p.taskID)
+			// Earlier transitions in this pass may have repaired selected inputs.
+			if admission == AdmitReviewed && handoff.TransitionFailure(s, task, p.name) != nil {
+				continue
+			}
+			var originalDeps []string
 			var inheritedDeps inheritedDepSet
 			if task != nil {
+				originalDeps = task.DependsOn
 				if err := canonicalizeTaskDependsOnForTransition(s, resolver, task); err != nil {
 					fail(p.taskID, p.name, fmt.Errorf("dependency canonicalization: %w", err))
 					continue
@@ -1405,6 +1424,15 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 			}
 
 			if err := proceedTransaction(blackboard, s, projectRoot, p.taskID, p.name, p.tDef, inheritedDeps, resolver, now, &result); err != nil {
+				var refusal *handoffInputError
+				if task != nil && errors.As(err, &refusal) && handoff.GatesTransition(task, p.name) && !task.TransitionsExecuted[p.name] {
+					// These two initial refusals precede all child/output mutations.
+					// Undo the earlier source-dependency normalization as well.
+					task.DependsOn = originalDeps
+					if observation := handoff.recordFailure(s, task, p.name, refusal, now); observation != nil {
+						observedFailures = append(observedFailures, *observation)
+					}
+				}
 				if !errors.Is(err, errTransitionAlreadyExecuted) && !errors.Is(err, errManyToOneCohortIncomplete) {
 					fail(p.taskID, p.name, err)
 				}
@@ -1444,7 +1472,15 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 		log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
 	}
 
-	return TransitionReport{Results: results, Failures: failures}, nil
+	var warnings []string
+	for _, observation := range observedFailures {
+		if alertErr := writeHandoffFailureAlert(projectRoot, observation, now); alertErr != nil {
+			warning := fmt.Sprintf("plan handoff failure alert write failed: %v", alertErr)
+			warnings = append(warnings, warning)
+			log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
+		}
+	}
+	return TransitionReport{Results: results, Failures: failures, Warnings: warnings}, nil
 }
 
 // buildTransitionDefFromPipeline resolves a transition definition from pipeline config.

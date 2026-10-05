@@ -65,6 +65,7 @@ const (
 	TaskEventHandoffResumed         TaskEventName = "handoff_resumed"
 	TaskEventOwnedTaskResumed       TaskEventName = "owned_task_resumed"
 	TaskEventTransitionExecuted     TaskEventName = "transition_executed"
+	TaskEventTransitionFailed       TaskEventName = "transition_failed"
 	TaskEventTransitionCrashRecov   TaskEventName = "transition_crash_recovery"
 	TaskEventReviewVerdictApproved  TaskEventName = "review_verdict_approved"
 	TaskEventReviewVerdictRejected  TaskEventName = "review_verdict_rejected"

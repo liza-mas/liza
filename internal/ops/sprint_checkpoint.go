@@ -54,7 +54,7 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 		if detCtx, detErr := LoadDetectionContext(projectRoot); detErr == nil {
 			for _, taskID := range state.Sprint.Scope.Planned {
 				task := state.FindTask(taskID)
-				if detCtx.PlanHandoff.Pending(task) {
+				if detCtx.PlanHandoff.HasUnfailedHandoff(state, task) {
 					trigger = models.CheckpointTriggerPlanningComplete
 					break
 				}

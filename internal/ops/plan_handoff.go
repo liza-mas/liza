@@ -98,7 +98,7 @@ func (d PlanHandoffDomain) Pending(task *models.Task) bool {
 	if !d.InDomain(task) {
 		return IsUnconsumedPlanningOutput(task, d.planningPairs)
 	}
-	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted["replanned"] {
+	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
 		return false
 	}
 	for _, name := range d.gatedByPair[task.RolePair] {
@@ -114,10 +114,28 @@ func (d PlanHandoffDomain) Pending(task *models.Task) bool {
 // directly or through an upstream. A passed task stays eligible until it
 // transitions, so a crash between its pass and the checkpoint re-wakes it.
 func (d PlanHandoffDomain) PlanningCompleteEligible(state *models.State, task *models.Task) bool {
-	return d.Pending(task) &&
-		task.PlanCheckVerdictOf() != models.PlanCheckHeld &&
-		!IsTransitionCycleBlocked(task) &&
-		!HasCycleBlockedDependency(task, state)
+	if !d.HasUnfailedHandoff(state, task) || task.PlanCheckVerdictOf() == models.PlanCheckHeld ||
+		IsTransitionCycleBlocked(task) || HasCycleBlockedDependency(task, state) {
+		return false
+	}
+	return true
+}
+
+// HasUnfailedHandoff distinguishes work that can be retried from outstanding
+// repair. Admission (review, hold and cycles) is evaluated separately.
+func (d PlanHandoffDomain) HasUnfailedHandoff(state *models.State, task *models.Task) bool {
+	if !d.Pending(task) {
+		return false
+	}
+	if !d.InDomain(task) {
+		return true
+	}
+	for _, name := range d.gatedByPair[task.RolePair] {
+		if !task.TransitionsExecuted[name] && d.TransitionFailure(state, task, name) == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // HasHeldPlan reports whether a planned task is held for a human action. A

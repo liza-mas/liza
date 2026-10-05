@@ -121,6 +121,11 @@ func currentBlockerCandidate(state *models.State, task *models.Task) AssessmentF
 // is wasted. The attempt bound keeps a planner whose transition already failed
 // from outranking blocked triage again in this sprint.
 func BlockedTasksAwaitPlanningOutput(state *models.State, planningPairs map[string]bool) bool {
+	return BlockedTasksAwaitPlanningHandoff(state, PlanningPairsOnly(planningPairs))
+}
+
+// BlockedTasksAwaitPlanningHandoff uses the project's actionable handoff domain.
+func BlockedTasksAwaitPlanningHandoff(state *models.State, handoff PlanHandoffDomain) bool {
 	if state.Sprint.Status == models.SprintStatusCheckpoint || state.Sprint.Status == models.SprintStatusCompleted {
 		return false
 	}
@@ -137,7 +142,7 @@ func BlockedTasksAwaitPlanningOutput(state *models.State, planningPairs map[stri
 		// Both lists follow supersession to the replacement that will merge.
 		for _, id := range waitsOn {
 			for _, candidate := range append([]string{id}, resolver.Resolve(id).Path...) {
-				if awaitsPlanningTransition(state, candidate, planningPairs) {
+				if awaitsPlanningTransition(state, candidate, handoff) {
 					return true
 				}
 			}
@@ -146,12 +151,12 @@ func BlockedTasksAwaitPlanningOutput(state *models.State, planningPairs map[stri
 	return false
 }
 
-func awaitsPlanningTransition(state *models.State, plannerID string, planningPairs map[string]bool) bool {
+func awaitsPlanningTransition(state *models.State, plannerID string, handoff PlanHandoffDomain) bool {
 	if !slices.Contains(state.Sprint.Scope.Planned, plannerID) {
 		return false
 	}
 	planner := state.FindTask(plannerID)
-	if !IsPlanningCompleteEligible(planner, planningPairs, state) {
+	if !handoff.PlanningCompleteEligible(state, planner) {
 		return false
 	}
 	attempted := state.Sprint.Timeline.TransitionsAttemptedAt

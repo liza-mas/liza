@@ -15,7 +15,7 @@ import (
 )
 
 var planCheckCmd = &cobra.Command{
-	Use:   "plan-check <task-id> (--pass | --hold <ask> | --clear)",
+	Use:   "plan-check <task-id> (--pass | --hold <ask> | --clear | --replaced-by <merged-correction>)",
 	Short: "Record the orchestrator's disposition of a merged plan before its children exist",
 	Long: `Record whether a merged plan may be expanded into child tasks.
 
@@ -31,6 +31,9 @@ expanded by no path until an operator clears the hold.
                  raises an AWAITING HUMAN alert
   --clear        operator only: remove the disposition after the human action;
                  the plan returns to orchestrator review
+  --replaced-by <merged-correction>
+                 operator only: retire an unused hand-off by an existing
+                 merged correction; preserves status and ordinary dependencies
 
 A plan the planner must correct is replanned instead (replan --reason).`,
 	Args: cobra.ExactArgs(1),
@@ -54,9 +57,9 @@ A plan the planner must correct is replanned instead (replan --reason).`,
 		if err != nil {
 			return err
 		}
-		if input.Action == ops.PlanCheckActionClear {
+		if input.Action == ops.PlanCheckActionClear || input.Action == ops.PlanCheckActionReplace {
 			if brand.LookupEnv(os.Getenv, "AGENT_ID").Value != "" {
-				return cliValidationError("plan-check --clear is operator-only; agent sessions cannot release a human hold")
+				return cliValidationError("plan-check --clear/--replaced-by is operator-only; agent sessions cannot release a hold or retire a hand-off")
 			}
 			input.ChangedBy = resolveChangedBy(cmd)
 		} else {
@@ -91,15 +94,17 @@ func planCheckInputFromFlags(cmd *cobra.Command, taskID string) (ops.PlanCheckIn
 	clear, _ := cmd.Flags().GetBool("clear")
 	holdSet := cmd.Flags().Changed("hold")
 	ask, _ := cmd.Flags().GetString("hold")
+	replacementSet := cmd.Flags().Changed("replaced-by")
+	replacement, _ := cmd.Flags().GetString("replaced-by")
 
 	selected := 0
-	for _, set := range []bool{pass, clear, holdSet} {
+	for _, set := range []bool{pass, clear, holdSet, replacementSet} {
 		if set {
 			selected++
 		}
 	}
 	if selected != 1 {
-		return ops.PlanCheckInput{}, cliValidationError("exactly one of --pass, --hold <ask>, --clear is required")
+		return ops.PlanCheckInput{}, cliValidationError("exactly one of --pass, --hold <ask>, --clear, --replaced-by <merged-correction> is required")
 	}
 	input := ops.PlanCheckInput{TaskID: taskID}
 	switch {
@@ -107,6 +112,12 @@ func planCheckInputFromFlags(cmd *cobra.Command, taskID string) (ops.PlanCheckIn
 		input.Action = ops.PlanCheckActionPass
 	case clear:
 		input.Action = ops.PlanCheckActionClear
+	case replacementSet:
+		if strings.TrimSpace(replacement) == "" {
+			return ops.PlanCheckInput{}, cliValidationError("--replaced-by requires a merged correction task ID")
+		}
+		input.Action = ops.PlanCheckActionReplace
+		input.ReplacedBy = strings.TrimSpace(replacement)
 	default:
 		if strings.TrimSpace(ask) == "" {
 			return ops.PlanCheckInput{}, cliValidationError("--hold requires the human action being awaited")
@@ -130,6 +141,9 @@ func printPlanCheckResult(result *ops.PlanCheckResult) {
 	if result.Blocker != "" {
 		fmt.Printf("  Blocker: %s\n", result.Blocker)
 	}
+	if result.ReplacedBy != "" {
+		fmt.Printf("  Replaced by: %s\n", result.ReplacedBy)
+	}
 	for _, w := range result.Warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
@@ -143,5 +157,6 @@ func init() {
 	planCheckCmd.Flags().Bool("pass", false, "orchestrator: admit the plan's hand-off")
 	planCheckCmd.Flags().String("hold", "", "orchestrator: hold the plan for the given human action")
 	planCheckCmd.Flags().Bool("clear", false, "operator: remove the disposition after the human action")
+	planCheckCmd.Flags().String("replaced-by", "", "operator: retire an unused hand-off by a merged correction")
 	planCheckCmd.Flags().String("agent-id", "", "orchestrator agent ID (auto-resolved if not provided)")
 }

@@ -57,3 +57,39 @@ func TestValidateTaskInvariants_PlanCheckShape(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateTaskInvariants_PlanCheckReplacement(t *testing.T) {
+	for _, scenario := range []string{"valid", "missing", "self", "not merged", "different pair", "wrong verdict"} {
+		t.Run(scenario, func(t *testing.T) {
+			cfg := loadTestConfig(t)
+			now := time.Now().UTC()
+			original := testhelpers.BuildTaskByStatus("original", models.TaskStatusMerged, now)
+			original.RolePair = "code-planning-pair"
+			original.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced, ReplacedBy: "correction", By: "operator", At: now}
+			correction := testhelpers.BuildTaskByStatus("correction", models.TaskStatusMerged, now)
+			correction.RolePair = original.RolePair
+			correction.Output = []models.OutputEntry{{Desc: "implement", DoneWhen: "tests pass", Scope: "pkg/", SpecRef: "README.md"}}
+			switch scenario {
+			case "missing":
+				original.PlanCheck.ReplacedBy = "absent"
+			case "self":
+				original.PlanCheck.ReplacedBy = original.ID
+			case "not merged":
+				correction = testhelpers.BuildTaskByStatus("correction", models.TaskStatusCodePlanning, now)
+				correction.RolePair = original.RolePair
+			case "different pair":
+				correction.RolePair = "architecture-pair"
+			case "wrong verdict":
+				original.PlanCheck.Verdict = models.PlanCheckPassed
+			}
+			err := taskInvariantsErr(stateWithTasks(original, correction), "", true, pipeline.NewResolver(cfg), cfg)
+			if scenario == "valid" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "replaced") {
+				t.Fatalf("replacement shape error = %v", err)
+			}
+		})
+	}
+}

@@ -199,7 +199,11 @@ func buildSprintAdvancePlan(s *models.State, now time.Time, detCtx *advanceDetec
 	newNumber := archivedSprint.Number + 1
 	newSprintID := fmt.Sprintf("sprint-%d", newNumber)
 	carriedTasks := collectNonTerminalTaskIDs(s, detCtx.sprintTerminals)
-	carriedTasks = append(carriedTasks, collectMergedPlanningWithUnconsumedOutput(s, detCtx.planningPairs)...)
+	handoff := detCtx.handoff
+	if handoff.resolver == nil {
+		handoff = PlanningPairsOnly(detCtx.planningPairs)
+	}
+	carriedTasks = append(carriedTasks, collectPendingPlanningHandoffs(s, handoff)...)
 	carriedTasks = append(carriedTasks, collectMergedManyToOneWithUnfiredTransition(s, detCtx.m2oTransitions)...)
 
 	return &sprintAdvancePlan{
@@ -227,7 +231,7 @@ func collectNonTerminalTaskIDs(state *models.State, pipelineTerminals []models.T
 // with output that has not yet been expanded into child tasks. Used by both
 // sprint advance (carry-forward) and orchestrator wake detection (PLANNING_COMPLETE).
 func IsUnconsumedPlanningOutput(task *models.Task, planningPairs map[string]bool) bool {
-	if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 {
+	if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 || task.PlanHandoffRetired() {
 		return false
 	}
 	if len(task.TransitionsExecuted) > 0 {
@@ -312,10 +316,14 @@ func IsPlanningCompleteEligible(task *models.Task, planningPairs map[string]bool
 // Iterates state.Sprint.Scope.Planned (not all tasks) to avoid reintroducing
 // tasks from prior sprints.
 func collectMergedPlanningWithUnconsumedOutput(state *models.State, planningPairs map[string]bool) []string {
+	return collectPendingPlanningHandoffs(state, PlanningPairsOnly(planningPairs))
+}
+
+func collectPendingPlanningHandoffs(state *models.State, handoff PlanHandoffDomain) []string {
 	var carried []string
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if IsUnconsumedPlanningOutput(task, planningPairs) {
+		if handoff.Pending(task) {
 			carried = append(carried, taskID)
 		}
 	}
@@ -344,6 +352,7 @@ func ApprovedPlanningTasksWithUnmergedOutput(state *models.State, planningPairs 
 
 // advanceDetectionContext holds the detection data needed for sprint advance.
 type advanceDetectionContext struct {
+	handoff                  PlanHandoffDomain
 	sprintTerminals          []models.TaskStatus
 	planningPairs            map[string]bool
 	planningApprovedStatuses map[string]models.TaskStatus
@@ -451,6 +460,7 @@ func loadDetectionContextForAdvance(projectRoot string) (*advanceDetectionContex
 		return nil, err
 	}
 	return &advanceDetectionContext{
+		handoff:                  detCtx.PlanHandoff,
 		sprintTerminals:          detCtx.SprintTerminals,
 		planningPairs:            detCtx.PlanningPairs,
 		planningApprovedStatuses: detCtx.PlanningApprovedStatuses,

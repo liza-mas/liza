@@ -77,6 +77,9 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		}
 
 		// Validate task state
+		if task.PlanHandoffRetired() {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s handoff was retired by %s; it cannot be replanned", task.ID, task.PlanCheck.ReplacedBy)}
+		}
 		if task.Status != models.TaskStatusMerged {
 			return &PreconditionError{Reason: fmt.Sprintf(
 				"task %s must be MERGED, got %s", task.ID, task.Status)}

@@ -159,7 +159,7 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 		if count := triggerSpec.Count(state); count > 0 {
 			// Revalidation (only set) keeps the selected predicate instead.
 			if triggerSpec.Trigger == WakeTriggerBlocked && only == WakeTriggerNone &&
-				ops.BlockedTasksAwaitPlanningOutput(state, planningPairs) {
+				ops.BlockedTasksAwaitPlanningHandoff(state, handoff) {
 				return OrchestratorWakeResult{
 					Trigger: WakeTriggerPlanningComplete,
 					Count:   countMergedPlanningTasksWithOutput(state, handoff),
@@ -202,7 +202,7 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 		// yet: the sprint waits for the human action, not for the orchestrator.
 		if state.Sprint.Status == models.SprintStatusCheckpoint ||
 			state.Sprint.Status == models.SprintStatusCompleted ||
-			ops.HasHeldPlan(state) {
+			ops.HasHeldPlan(state) || handoff.HasFailedPlan(state) {
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		if integrationProjection != nil && (state.Goal.BaseCommit != nil || state.Goal.Integration != nil) {

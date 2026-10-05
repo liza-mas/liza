@@ -577,6 +577,16 @@ Under auto-resume nobody reviews a `PLANNING_COMPLETE` checkpoint, so the orches
 
 Automatic paths (auto-resume, supervisor transition passes) create children only from passed plans. When you resume a checkpoint yourself, undispositioned plans are expanded too — your resume is the review — but a held plan never is, and the sprint does not complete while one is held. After doing the held plan's ask, run `§BRAND_BINARY_NAME§ plan-check <task-id> --clear`; the orchestrator then reviews it again. Many-to-one cohorts and automatic transitions need no disposition.
 
+An initial output-validation or selective-inheritance refusal raises
+`PLAN HANDOFF FAILED` and remains visible in status. Unchanged inputs stop
+automatic retries/planning wakes while keeping the sprint open; relevant repair
+allows retry. If a separate correction is already merged, an operator can retire
+the unused original with `§BRAND_BINARY_NAME§ plan-check ORIGINAL --replaced-by
+MERGED_CORRECTION`. Both must have output in the same reviewed role-pair, with no
+original executed transition/children or uncleared hold. Retarget/review pending
+selected-input consumers first. Retirement preserves MERGED and ordinary
+dependencies, cannot be cleared/revived, and leaves correction review unchanged.
+
 ```bash
 # Typical replan workflow
 vim specs/plan.md                      # edit the plan

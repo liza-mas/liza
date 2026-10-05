@@ -48,12 +48,13 @@ type pendingTransition struct {
 }
 
 type phaseHandoffStatus struct {
-	State               string               `json:"state" yaml:"state"`
-	Explanation         string               `json:"explanation" yaml:"explanation"`
-	ReadyPlanningTasks  []string             `json:"ready_planning_tasks" yaml:"ready_planning_tasks"`
-	MergeRequired       []phaseMergeRequired `json:"merge_required,omitempty" yaml:"merge_required,omitempty"`
-	BlockingTasks       []phaseHandoffTask   `json:"blocking_tasks,omitempty" yaml:"blocking_tasks,omitempty"`
-	StaleAssignedAgents []phaseHandoffTask   `json:"stale_assigned_agents,omitempty" yaml:"stale_assigned_agents,omitempty"`
+	State               string                   `json:"state" yaml:"state"`
+	Explanation         string                   `json:"explanation" yaml:"explanation"`
+	ReadyPlanningTasks  []string                 `json:"ready_planning_tasks" yaml:"ready_planning_tasks"`
+	FailedPlanningTasks []ops.PlanHandoffFailure `json:"failed_planning_tasks,omitempty" yaml:"failed_planning_tasks,omitempty"`
+	MergeRequired       []phaseMergeRequired     `json:"merge_required,omitempty" yaml:"merge_required,omitempty"`
+	BlockingTasks       []phaseHandoffTask       `json:"blocking_tasks,omitempty" yaml:"blocking_tasks,omitempty"`
+	StaleAssignedAgents []phaseHandoffTask       `json:"stale_assigned_agents,omitempty" yaml:"stale_assigned_agents,omitempty"`
 }
 
 type phaseMergeRequired struct {
@@ -339,6 +340,7 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 	}
 
 	var ready []string
+	var failed []ops.PlanHandoffFailure
 	var blockers []phaseHandoffTask
 	var stale []phaseHandoffTask
 	seenStale := make(map[string]bool)
@@ -355,7 +357,8 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 			continue
 		}
 
-		if ops.IsPlanningCompleteEligible(task, detCtx.PlanningPairs, state) {
+		failed = append(failed, detCtx.PlanHandoff.Failures(state, task)...)
+		if detCtx.PlanHandoff.PlanningCompleteEligible(state, task) {
 			ready = append(ready, task.ID)
 		}
 
@@ -404,13 +407,14 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 			State:               "MERGE_REQUIRED",
 			Explanation:         fmt.Sprintf("%d approved planning task(s) must be merged before the completed sprint can advance.", len(mergeRequired)),
 			ReadyPlanningTasks:  ready,
+			FailedPlanningTasks: failed,
 			MergeRequired:       mergeRequired,
 			BlockingTasks:       blockers,
 			StaleAssignedAgents: stale,
 		}
 	}
 
-	if len(ready) == 0 {
+	if len(ready) == 0 && len(failed) == 0 {
 		return nil
 	}
 
@@ -428,11 +432,16 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 		stateName = "COMPLETED"
 		explanation = fmt.Sprintf("%d merged planning task(s) are waiting in a completed sprint; resume/advance to execute their pipeline transitions.", len(ready))
 	}
+	if len(failed) > 0 {
+		stateName = "REPAIR_REQUIRED"
+		explanation = fmt.Sprintf("%d planning hand-off(s) failed with unchanged inputs; repair inputs or explicitly retire unused hand-offs by a merged correction. %d other plan(s) are ready.", len(failed), len(ready))
+	}
 
 	return &phaseHandoffStatus{
 		State:               stateName,
 		Explanation:         explanation,
 		ReadyPlanningTasks:  ready,
+		FailedPlanningTasks: failed,
 		BlockingTasks:       blockers,
 		StaleAssignedAgents: stale,
 	}
@@ -816,6 +825,12 @@ func writePhaseHandoffSection(b *strings.Builder, handoff *phaseHandoffStatus) {
 		b.WriteString("Merge required:\n")
 		for _, merge := range handoff.MergeRequired {
 			fmt.Fprintf(b, "  %s: %s\n", merge.TaskID, merge.Action)
+		}
+	}
+	if len(handoff.FailedPlanningTasks) > 0 {
+		b.WriteString("Planning hand-offs requiring repair:\n")
+		for _, failure := range handoff.FailedPlanningTasks {
+			fmt.Fprintf(b, "  %s (%s): %s\n", failure.TaskID, failure.Transition, failure.Error)
 		}
 	}
 	if len(handoff.BlockingTasks) > 0 {

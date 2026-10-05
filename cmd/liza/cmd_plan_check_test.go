@@ -87,3 +87,35 @@ func TestPlanCheckCLI_RequiresExactlyOneAction(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanCheckCLI_RetiresOriginalByMergedCorrection(t *testing.T) {
+	root := setupPlanCheckCLI(t)
+	bb := db.For(paths.New(root).StatePath())
+	if err := bb.Modify(func(state *models.State) error {
+		correction := state.Tasks[0]
+		correction.ID = "correction"
+		correction.DependsOn = []string{"plan-1"}
+		state.Tasks = append(state.Tasks, correction)
+		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, correction.ID)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := executeRootCommandCapture(t, root, "plan-check", "plan-1", "--replaced-by", "correction", "--json")
+	if err != nil {
+		t.Fatalf("operator retirement: %v (%s)", err, stdout)
+	}
+	result := parseEnvelope(t, stdout)["result"].(map[string]any)
+	if result["verdict"] != "replaced" || result["changed"] != true {
+		t.Fatalf("retirement result = %v", result)
+	}
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.FindTask("plan-1").Status != models.TaskStatusMerged ||
+		len(state.FindTask("plan-1").TransitionsExecuted) != 0 ||
+		len(state.FindTask("correction").DependsOn) != 1 || state.FindTask("correction").DependsOn[0] != "plan-1" {
+		t.Fatal("retirement changed status, pretended expansion, or rewrote dependencies")
+	}
+}

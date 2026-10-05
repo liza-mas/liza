@@ -264,6 +264,7 @@ unless system mode is `PAUSED` or `CIRCUIT_BREAKER_TRIPPED`. The human decides:
 | Accept & resume | `§BRAND_BINARY_NAME§ resume` | Satisfied with planner output or fan-in readiness, continue |
 | Amend & replan | Edit plan, commit, `§BRAND_BINARY_NAME§ replan` | Want to change planner output |
 | Release a held plan | Do the ask, then `§BRAND_BINARY_NAME§ plan-check <task-id> --clear` | The orchestrator held a plan for a human action |
+| Retire unused original | `§BRAND_BINARY_NAME§ plan-check ORIGINAL --replaced-by MERGED_CORRECTION` | A separate merged correction replaces its unused hand-off |
 | Pipeline transition | `§BRAND_BINARY_NAME§ proceed <task-id> <transition>` | Create child tasks from output or a ready cohort (auto-done by `§BRAND_BINARY_NAME§ resume` in batch) |
 | Pause for manual work | (no command) | Make manual changes first |
 | Abort | `§BRAND_BINARY_NAME§ stop` | Stop entirely |
@@ -287,6 +288,19 @@ git add -A && git commit -m "amend plan"
 ```
 
 Replan invalidates the old task's output (preserved for audit, marked superseded) and creates a new planning task with the same role-pair and spec; at CHECKPOINT it returns the sprint to IN_PROGRESS, at IN_PROGRESS it leaves the sprint alone. It needs a plan without children and without a human hold. `--reason` is appended to the new task's description. Multiple replans increment: `<task-id>-replan-1`, `<task-id>-replan-2`, etc.
+
+### Failed Hand-off
+
+`PLAN HANDOFF FAILED` and status `REPAIR_REQUIRED` mean an initial output or
+selected-input refusal is still unresolved. Equal material inputs stop automatic
+retries and planning wakes, while keeping completion/integration open. Repair the
+named source/selected upstream or retry explicitly; repeated identical failures
+produce no duplicate history/alerts. If a merged correction already exists, use
+the retirement action above rather than creating another replan. Retirement
+requires distinct merged plans with output in the same reviewed role-pair, no
+original children/executed transition, and a cleared hold. Pending plans that
+select the original must be retargeted/reviewed first. Retirement preserves
+MERGED and ordinary dependencies; pass/clear/replan/proceed cannot revive it.
 
 ### Auto-Resume
 
