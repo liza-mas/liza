@@ -945,6 +945,10 @@ is truthy. Selected providers are delegated to the standalone CLI;
 `full` profiles. §BRAND_NAME_TITLE§ prints a warning and continues when the
 executable is missing or either command fails.
 §BRAND_NAME_TITLE§ does not vendor or implement the policy engine.
+With RTK's Claude hook installed, native `Bash(...)` deny/ask rules stop matching
+the commands it rewrites; `bash-policy` in `on` mode evaluates the original command
+and still blocks it. See
+[Customizing Agent Tools](CUSTOMIZING_AGENT_TOOLS.md#session-token-reduction-tools).
 
 `§BRAND_ENV_PREFIX§_ENABLE_BASH_POLICY` is process-local activation, not durable project state.
 Values are trimmed and compared case-insensitively:

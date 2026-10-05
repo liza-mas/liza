@@ -319,6 +319,16 @@ agent prompt file, decline or remove them. §BRAND_NAME_TITLE§ owns RTK guidanc
 `AGENT_TOOLS.md`; duplicate vendor instructions can conflict with §BRAND_NAME_TITLE§'s
 fallback and mode-specific rules.
 
+RTK's Claude Code hook (`rtk hook claude`) answers Bash `PreToolUse` with a
+rewritten `rtk ...` command and `permissionDecision: "allow"`. Claude Code
+matches native permission rules against the rewritten command, so native
+`Bash(...)` deny and ask rules stop matching any command RTK rewrites, and RTK's
+allow lets it run. Policy hooks still receive the original command, and their
+deny overrides RTK's allow. Enforce Bash denials with `bash-policy` in `on`
+mode (see Bash Policy in [Configuration](CONFIGURATION.md)), not with native
+rules; `dry-run` and `off` modes enforce nothing. Observed with RTK 0.49.0 and
+Claude Code 2.1.287.
+
 ## Safer Default Direction For Multi-Agent Use
 
 Prefer tools that remain correct across divergent worktrees:
