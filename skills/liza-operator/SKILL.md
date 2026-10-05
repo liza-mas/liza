@@ -22,6 +22,9 @@ version-specific guidance "(as of <build/date>; verify)".
    `codex`) are on a **known-good, freshly-built** version. Update — but "latest" is not always right:
    a new build can regress. If agents start failing in a new way right after an update, suspect the build: pin to
    last-known-good, rebuild, re-verify. Rebuild after pulling §BRAND_BINARY_NAME§ source (e.g. `go build` the binary you run).
+   A mid-run rebuild takes effect by restarting every supervisor, watch and TUI together, never piecemeal:
+   mixed binaries can disagree on liveness. Heartbeats live in side records beside state.yaml, so read
+   liveness through the CLI, not by parsing state.yaml.
 2. **Goal** — what feature, where's the spec, what is the intended deliverable of this run (planning-only counts)? Unclear → ask first.
 3. **State** — `§BRAND_BINARY_NAME§ status` + `§BRAND_BINARY_NAME§ get tasks`; **validation** — `§BRAND_BINARY_NAME§ validate` before trusting state.
 4. **Start the default watch** — use the human's latest requested interval for the rest of the session;

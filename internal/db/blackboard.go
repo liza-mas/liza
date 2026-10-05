@@ -182,7 +182,7 @@ func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return decodeState(data, "state read")
+	return bb.decodeLiveState(data, "state read")
 }
 
 // patientReadLockTimeout bounds the lock wait of Patient instances, including
@@ -226,7 +226,18 @@ func (bb *Blackboard) ReadSnapshot() (*models.State, error) {
 	if err != nil {
 		return nil, err
 	}
-	return decodeState(data, "state snapshot")
+	return bb.decodeLiveState(data, "state snapshot")
+}
+
+// decodeLiveState decodes a published state and overlays pending liveness
+// records (ADR-0177). Pre-image decodes for write checks use decodeState.
+func (bb *Blackboard) decodeLiveState(data []byte, operation string) (*models.State, error) {
+	state, err := decodeState(data, operation)
+	if err != nil {
+		return nil, err
+	}
+	applyLiveness(state, bb.statePath)
+	return state, nil
 }
 
 func decodeState(data []byte, operation string) (*models.State, error) {
@@ -275,7 +286,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	bb.cacheMu.RUnlock()
 
 	if cachedState != nil && currentMtime.Equal(cachedMtime) {
-		return CloneState(cachedState), nil
+		return bb.withLiveness(CloneState(cachedState)), nil
 	}
 
 	data, err := readStateFile(bb.statePath)
@@ -294,7 +305,15 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	bb.cachedMtime = currentMtime
 	bb.cacheMu.Unlock()
 
-	return CloneState(state), nil
+	return bb.withLiveness(CloneState(state)), nil
+}
+
+// withLiveness overlays liveness records on a copy handed to a caller. The
+// cache keeps the decoded state without them: records change without changing
+// state.yaml's mtime, so a cached overlay would hide newer beats.
+func (bb *Blackboard) withLiveness(state *models.State) *models.State {
+	applyLiveness(state, bb.statePath)
+	return state
 }
 
 // InvalidateCache forces the next ReadCached call to reload from disk.
@@ -548,7 +567,9 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 			return fmt.Errorf("failed to read state: %w", err)
 		}
 
-		state, err := decodeState(data, "state modify")
+		// The overlay is persisted with the write, folding the liveness
+		// records read here under the lock before fn runs (ADR-0177).
+		state, err := bb.decodeLiveState(data, "state modify")
 		if err != nil {
 			return err
 		}

@@ -203,14 +203,15 @@ Role-specific decision tree for what to do first.
 
 ## Lease Maintenance
 
-During operation, agents must maintain their lease:
+During operation, the supervisor heartbeat maintains the lease, without the
+state lock ([ADR-0177](../architecture/ADR/0177-liveness-side-records.md)):
 
 ```
-Every 60 seconds (or before long operations):
-1. Acquire lock
-2. Update agents.{id}.heartbeat: now
-3. Update agents.{id}.lease_expires: now + 5 minutes
-4. Release lock
+Every heartbeat_interval (default 60 seconds):
+1. Check the registration generation against a lock-free state snapshot
+2. Publish this generation's liveness record: heartbeat now,
+   lease_expires now + lease_duration (default 30 minutes)
+3. Reads overlay the record; the next state mutation folds it into state.yaml
 ```
 
 Before long operations (test suites, large builds):

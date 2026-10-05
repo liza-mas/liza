@@ -58,6 +58,18 @@ func IsAgentAuthorityError(err error) bool {
 // RequireAgentAuthority validates caller-held authority against the currently
 // registered generation. It must run inside the mutation's blackboard lock.
 func RequireAgentAuthority(state *models.State, authority models.AgentAuthority) error {
+	return compareAgentAuthority(state, authority)
+}
+
+// CheckAgentAuthoritySnapshot compares caller-held authority against a
+// lock-free snapshot. It is advisory: it lets a fenced supervisor stop
+// promptly and authorizes no state mutation. Heartbeat records rely on their
+// generation-scoped paths, not on this check, for writer isolation (ADR-0177).
+func CheckAgentAuthoritySnapshot(state *models.State, authority models.AgentAuthority) error {
+	return compareAgentAuthority(state, authority)
+}
+
+func compareAgentAuthority(state *models.State, authority models.AgentAuthority) error {
 	currentGeneration := ""
 	if state != nil {
 		if agent, exists := state.Agents[authority.ID]; exists {

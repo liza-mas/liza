@@ -354,14 +354,18 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 	if !ok {
 		t.Fatal("resolve test source path")
 	}
-	for _, name := range []string{
-		"heartbeat.go",
-		"supervisor.go",
-		"claiming.go",
-		"strategy_orchestrator.go",
-		"provider_audit.go",
-		"worktree_check.go",
-	} {
+	// The heartbeat mutates no state: it publishes a generation-scoped liveness
+	// record after an advisory snapshot check (ADR-0177), so it is held to that
+	// shape instead of the locked fence.
+	fences := map[string][]string{
+		"heartbeat.go":             {"CheckAgentAuthoritySnapshot", "db.WriteLivenessRecord"},
+		"supervisor.go":            {"ModifyWithAgentAuthority"},
+		"claiming.go":              {"ModifyWithAgentAuthority"},
+		"strategy_orchestrator.go": {"ModifyWithAgentAuthority"},
+		"provider_audit.go":        {"ModifyWithAgentAuthority"},
+		"worktree_check.go":        {"ModifyWithAgentAuthority"},
+	}
+	for name, required := range fences {
 		data, err := os.ReadFile(filepath.Join(filepath.Dir(sourceFile), name))
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
@@ -369,8 +373,10 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 		if bytes.Contains(data, []byte(".Modify(")) {
 			t.Errorf("%s retains a direct blackboard mutation outside the shared authority fence", name)
 		}
-		if !bytes.Contains(data, []byte("ModifyWithAgentAuthority")) {
-			t.Errorf("%s does not route its supervisor-owned mutation through the shared authority fence", name)
+		for _, marker := range required {
+			if !bytes.Contains(data, []byte(marker)) {
+				t.Errorf("%s does not route its supervisor-owned write through %s", name, marker)
+			}
 		}
 	}
 }

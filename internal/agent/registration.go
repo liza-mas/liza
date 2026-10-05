@@ -169,6 +169,12 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 		}
 		authority = models.AgentAuthority{ID: agentID, Generation: generation}
 
+		// Under the state lock, so every other row's record is kept; the
+		// sweep's ceilings are documented on SweepLivenessRecords.
+		if err := db.SweepLivenessRecords(bb.GetStatePath(), state); err != nil {
+			logger.Warn("Failed to sweep liveness records", "error", err, "agent_id", agentID)
+		}
+
 		return nil
 	})
 

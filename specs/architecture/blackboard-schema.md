@@ -880,6 +880,7 @@ agents:
     current_task: task-2
     lease_expires: 2025-01-17T14:57:00Z
     heartbeat: 2025-01-17T14:52:00Z
+    liveness_seq: 1737125520000000000  # highest liveness side-record seq folded into this row (ADR-0177); omitted until a fold
     terminal: /dev/pts/2  # For human observation: which terminal window is this agent?
     provider: claude  # CLI the agent runs; used by provider-diversity policy
     model: claude-opus-5-5  # First-class model it launched with (ADR-0167); omitted for the tool default, read by no policy
@@ -1325,7 +1326,7 @@ agents:
 
 **Lease rules:**
 - On claim: set `lease_expires` to now + lease_duration (default: 30 minutes)
-- Heartbeat extends lease by lease_duration
+- Heartbeat extends lease by lease_duration, through a liveness side record rather than a state write (see [Locking](#locking))
 - Task reclaimable only after lease expires
 - If original agent returns after expiry → must self-abort immediately
 
@@ -1405,6 +1406,16 @@ flock -x .liza/state.yaml.lock -c 'operation'
 
 Lock hold time must be minimal (read, modify, write, release).
 
+Heartbeats are the one exception ([ADR-0177](ADR/0177-liveness-side-records.md)).
+Each registration generation publishes its liveness (heartbeat, lease, latest
+review renewal) to its own side record, `<state path>.liveness-<hash of ID and
+generation>`, by atomic rename without the lock. Every read path except
+`ReadRaw` overlays the current generation's record while its `seq` exceeds the
+agent's `liveness_seq`. `Modify` overlays it before its callback, so each
+mutation persists (folds) pending records. Readers that parse `state.yaml`
+directly see liveness only as of the last mutation, and so do binaries
+predating ADR-0177: restart all of a run's processes together on upgrade.
+
 Operator inspection (`status`, `get`, `get-tasks`) and observation-only reads
 (TUI, `watch`, `validate`, `usage-report`, shell completion, launch `--cli`
 validation, lifecycle metrics sprint capture) read one complete published state
@@ -1457,10 +1468,10 @@ bounded acquisition timeout.
 | Operation | Actor | Procedure |
 |-----------|-------|-----------|
 | Claim task | Supervisor | Two-phase: validate under lock → create worktree → re-validate and commit under lock (see tooling.md) |
-| Extend lease | Any | Lock → update heartbeat + lease_expires → unlock |
+| Extend lease | Supervisor heartbeat | Lock-free snapshot authority check → publish own generation's liveness record (no lock); reads overlay it and the next mutation folds it |
 | Request review | Coder | Lock → verify clean git status → write commit SHA + set READY_FOR_REVIEW atomically → unlock |
 | Claim review | Supervisor | Lock → verify READY_FOR_REVIEW → set REVIEWING + write reviewing_by + review_lease_expires → unlock |
-| Extend review lease | Code Reviewer | Lock → update review_lease_expires → unlock |
+| Extend review lease | Supervisor heartbeat | During the reviewer's active provider session only: carried in the liveness record as for Extend lease |
 | Submit verdict | Code Reviewer | Lock → verify REVIEWING + commit SHA matches + reviewing_by matches self → set APPROVED/REJECTED + reason + set approved_by on approval + clear review lease → unlock |
 | Quarantine fenced verdict | Fenced reviewer submission | Preserve immutable reviewed SHA and sanitized evidence only; never mutate task/agent lifecycle state |
 | Reconcile verdict | Current-generation orchestrator with capability | Task review lock → transactionally validate authority and append justified disposition; no task or quorum mutation |

@@ -73,6 +73,7 @@ type Agent struct {
 	CurrentTask     *string        `yaml:"current_task,omitempty"`
 	LeaseExpires    *time.Time     `yaml:"lease_expires,omitempty"`
 	Heartbeat       time.Time      `yaml:"heartbeat"`
+	LivenessSeq     int64          `yaml:"liveness_seq,omitempty"` // highest liveness record seq folded into this row (ADR-0177)
 	RegisteredAt    time.Time      `yaml:"registered_at,omitempty"`
 	Terminal        string         `yaml:"terminal"`
 	Provider        string         `yaml:"provider,omitempty"`

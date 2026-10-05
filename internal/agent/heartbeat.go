@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 )
@@ -33,6 +32,9 @@ type Heartbeat struct {
 	interval           time.Duration
 	leaseDuration      time.Duration
 	activeProviderTask func() string
+
+	mu   sync.Mutex
+	last db.LivenessRecord // last published record
 }
 
 // providerSessionActivity belongs to one supervisor, outside persisted agent
@@ -128,7 +130,7 @@ func (h *Heartbeat) Start(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			if err := h.beat(); err != nil {
-				if errors.IsNotFound(err) || ops.IsAgentAuthorityError(err) {
+				if ops.IsAgentAuthorityError(err) {
 					return err
 				}
 				// Non-fatal: supervisors detect stale agents via watch command
@@ -138,34 +140,53 @@ func (h *Heartbeat) Start(ctx context.Context) error {
 	}
 }
 
+// beatBeforePublishHook runs between the authority check and the record
+// publish, so tests can interleave a re-registration there.
+var beatBeforePublishHook func()
+
+// beat publishes this generation's liveness record instead of rewriting the
+// state under its lock (ADR-0177). Reads apply the record's agent and task
+// lease renewals; the next mutation folds it into state.yaml.
 func (h *Heartbeat) beat() error {
+	state, err := h.bb.ReadSnapshot()
+	if err != nil {
+		return err
+	}
+	if err := ops.CheckAgentAuthoritySnapshot(state, h.authority); err != nil {
+		return err
+	}
+	if beatBeforePublishHook != nil {
+		beatBeforePublishHook()
+	}
+
 	now := time.Now().UTC()
-	newLease := now.Add(h.leaseDuration)
+	lease := now.Add(h.leaseDuration)
 
-	return ops.ModifyWithAgentAuthority(h.bb, h.authority, func(state *models.State) error {
-		agentID := h.authority.ID
-		agent, exists := state.Agents[agentID]
-		if !exists {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	// Seq orders this generation's records against the seq a mutation folded;
+	// it stays monotonic when the wall clock steps back.
+	seq := max(now.UnixNano(), h.last.Seq+1)
+	record := db.LivenessRecord{
+		AgentID:      h.authority.ID,
+		Generation:   h.authority.Generation,
+		Seq:          seq,
+		Heartbeat:    now,
+		LeaseExpires: lease,
+		// Carry the latest review renewal: this record replaces the previous
+		// one, which may not be folded yet.
+		ReviewTask:         h.last.ReviewTask,
+		ReviewLeaseExpires: h.last.ReviewLeaseExpires,
+		ReviewSeq:          h.last.ReviewSeq,
+	}
+	if h.activeProviderTask != nil {
+		if task := h.activeProviderTask(); task != "" {
+			record.ReviewTask, record.ReviewLeaseExpires, record.ReviewSeq = task, lease, seq
 		}
-
-		agent.Heartbeat = now
-		agent.LeaseExpires = &newLease
-		state.Agents[agentID] = agent
-
-		// Renew task lease if agent is actively assigned
-		if agent.CurrentTask != nil {
-			if task := state.FindTask(*agent.CurrentTask); task != nil {
-				if task.AssignedTo != nil && *task.AssignedTo == agentID && task.LeaseExpires != nil {
-					task.LeaseExpires = &newLease
-				}
-				if task.ReviewingBy != nil && *task.ReviewingBy == agentID && task.ReviewLeaseExpires != nil &&
-					h.activeProviderTask != nil && h.activeProviderTask() == task.ID {
-					task.ReviewLeaseExpires = &newLease
-				}
-			}
-		}
-
-		return nil
-	})
+	}
+	if err := db.WriteLivenessRecord(h.bb.GetStatePath(), record); err != nil {
+		return err
+	}
+	h.last = record
+	return nil
 }
