@@ -94,6 +94,15 @@ Timeout and output-limit errors return no excerpt, since incomplete capture may
 split a secret.
 Diagnostic excerpts are not successful receipts; admission still fails and no
 partial execution results are published as evidence.
+
+During submit, canonical execution is fenced on the submitter's claim. Every 15
+seconds a lock-free state snapshot is checked for the task still being in its
+executing status, assigned to the submitting agent, under that agent's current
+registration. Once that no longer holds, the running command's process group is
+killed and submit returns a lifecycle error naming the lost ownership. The usual
+outcome is `STATE_CHANGED`; it is `STALE_CALLER` when the registration itself is
+gone. A snapshot that cannot be read never stops execution. Only the final
+transaction admits. Repair through `update-review-commit` is not fenced.
 Both successful output and failure diagnostics mask the current branded and legacy
 agent-generation environment values as well as known secrets and connection values.
 

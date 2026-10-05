@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
@@ -19,6 +20,8 @@ type preparedSubmission struct {
 	replay   *SubmitForReviewResult
 	refresh  func() []string
 	complete func() (*SubmitForReviewResult, error)
+	// acceptanceBatch is the canonical batch budget complete may spend.
+	acceptanceBatch time.Duration
 }
 
 type submissionInvocation struct {
@@ -86,6 +89,12 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		if prepared.replay != nil {
 			result = prepared.replay
 			return nil
+		}
+		if authority != nil {
+			// Lets the agent's own supervisor hold its timeouts while this
+			// submit runs, up to the marker's fixed deadline (D-38).
+			removeMarker := writeInflightSubmitMarker(projectRoot, *authority, taskID, prepared.acceptanceBatch, time.Now().UTC())
+			defer removeMarker()
 		}
 		warnings := prepared.refresh()
 		commitErr := lock.WithLockOperation("submit-for-review-finalize", func() error {

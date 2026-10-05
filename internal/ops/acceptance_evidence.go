@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"context"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
@@ -695,8 +696,9 @@ func checkAcceptanceWorktree(root, taskID, commit string) error {
 
 // executeAcceptanceReceipt runs the strict gate. Runtime inputs are acquired
 // here, after every non-executing precondition, so a refused manifest or a
-// dirty worktree never spends a single_use input (ADR-0169).
-func executeAcceptanceReceipt(root string, task *models.Task, input *acceptanceInput, commit string, gate runtimeInputGate) (*models.AcceptanceReceipt, error) {
+// dirty worktree never spends a single_use input (ADR-0169). Cancelling ctx
+// stops the running command.
+func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Task, input *acceptanceInput, commit string, gate runtimeInputGate) (*models.AcceptanceReceipt, error) {
 	receipt, err := prepareAcceptanceReceipt(root, task, input, commit)
 	if err != nil || receipt == nil {
 		return receipt, err
@@ -708,7 +710,7 @@ func executeAcceptanceReceipt(root string, task *models.Task, input *acceptanceI
 	if err != nil {
 		return nil, err
 	}
-	receipt.Commands, err = executeAcceptanceCommandsWith(task.ID, git.New(root).GetWorktreePath(task.ID), input.contract.Validation, input.contract.TimeoutSeconds, grant)
+	receipt.Commands, err = executeAcceptanceCommandsWith(ctx, task.ID, git.New(root).GetWorktreePath(task.ID), input.contract.Validation, input.contract.TimeoutSeconds, grant)
 	if err != nil {
 		return nil, acceptanceError(task.ID, "acceptance.execution", err.Error())
 	}

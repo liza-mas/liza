@@ -952,3 +952,44 @@ after its source changed. Churn: a task spending more than a handful of fixtures
 without reaching review. Rotation: the first key loss or a required rotation.
 Ledger growth: `state.runtime_inputs` noticeably slowing state reads, or more
 than a few thousand instances.
+
+## Submit validation still runs inside the doer session
+
+**What:** ADR-0176 fences canonical execution on claim loss, and lets the
+execution timeout and progress watchdog wait for an in-flight submit, bounded.
+Four gaps remain:
+
+- **Session-charged validation.** Validation still runs in the agent's tool
+  call. It holds the coder slot, and is lost when the provider is stopped for
+  quota (I-170, I-177), since the deferral covers only the execution timeout.
+- **Submit-parent SIGKILL.** If the `submit-for-review` process itself is
+  killed, its canonical command group is not stopped: `cmd.Cancel` never runs.
+- **Ownership lock across execution.** `submission_lifecycle.go` runs
+  `complete()`, canonical execution included, under the task's ownership lock.
+  `release-claim`, cancel, supersede, recover and unblock on that task wait up
+  to the batch timeout. The fence reacts only to direct state ownership changes.
+- **Evidence reuse.** Re-validating an unchanged candidate is not avoided.
+  Keying receipts by commit SHA and command digest rarely matches, because
+  submit rebases onto a moving integration branch.
+
+**Why deferred:** The structural fix is asynchronous, task-owned validation:
+submit records the candidate, and the engine validates and routes failures back
+like a rejection. That needs a task status, a runner and failure routing. D-38
+needed the bounded fix now.
+
+**Payback trigger:** Async validation: an in-flight submit lost to a quota
+stop, or coder slots measurably idle on validation. SIGKILL: an orphaned
+canonical command whose submit parent is dead. Lock scope: an operator release
+or cancel timing out on a task in canonical execution. Reuse: a resubmission of
+an unchanged candidate repeating a batch longer than ten minutes.
+
+## Duplicate acceptance submit fixtures
+
+**What:** `testhelpers.SetupAcceptanceSubmitScenario` overlaps the unexported
+`ops` fixtures `setupSuccessfulSubmitScenario`, `setupAcceptanceScenario` and
+`completeAcceptanceScenario`, which `internal/agent` tests cannot reach.
+
+**Why deferred:** Migrating the existing `ops` callers is a refactor separate
+from the D-38 fix.
+
+**Payback trigger:** The next change that touches any of these fixtures.

@@ -59,7 +59,7 @@ func startExecutionProgressWatchdog(ctx context.Context, config SupervisorConfig
 	watchCtx, cancelWatchdog := context.WithCancel(ctx)
 	resultCh := make(chan executionProgressWatchdogResult, 1)
 	go func() {
-		resultCh <- runExecutionProgressWatchdog(watchCtx, bb, config.ProjectRoot, taskID, config.AgentID, config.ExecutionProgressTimeout, pr, progress, cancelExec)
+		resultCh <- runExecutionProgressWatchdog(watchCtx, bb, config.ProjectRoot, taskID, config.AgentID, config.ExecutionProgressTimeout, pr, progress, sessionInflightSubmit(config, taskID), cancelExec)
 	}()
 
 	return newExecutionProgressWatchdogStop(cancelWatchdog, resultCh)
@@ -85,6 +85,7 @@ func runExecutionProgressWatchdog(
 	timeout time.Duration,
 	pr models.PipelineResolver,
 	progress <-chan struct{},
+	inflight inflightSubmit,
 	cancelExec context.CancelFunc,
 ) executionProgressWatchdogResult {
 	lastSignature, eligible, err := readExecutionProgressSnapshot(ctx, projectRoot, bb, taskID, agentID, pr)
@@ -131,6 +132,13 @@ func runExecutionProgressWatchdog(
 				lastProgress = time.Now()
 				continue
 			default:
+			}
+
+			// The session's own submit may run quiet canonical validation; its
+			// marker's fixed deadline bounds this exemption (D-38).
+			if _, ok := inflight(time.Now()); ok {
+				lastProgress = time.Now()
+				continue
 			}
 
 			if time.Since(lastProgress) < timeout {

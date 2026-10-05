@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -127,7 +128,7 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (*UpdateReviewCom
 			}
 			return releaseReviewClaimToSubmitted(state, task, submittedStatus, reviewingStatus, reviewing2Status, pipelineTransitions)
 		}}
-	receipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, wtHEAD, gate)
+	receipt, err := executeAcceptanceReceipt(context.Background(), projectRoot, task, acceptance, wtHEAD, gate)
 	if err != nil {
 		return nil, err
 	}

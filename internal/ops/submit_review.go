@@ -423,7 +423,12 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		return nil, err
 	}
 
+	var acceptanceBatch time.Duration
+	if acceptance != nil {
+		acceptanceBatch = acceptanceBatchTimeout(acceptance.contract.TimeoutSeconds)
+	}
 	return &preparedSubmission{
+		acceptanceBatch: acceptanceBatch,
 		refresh: func() []string {
 			warnings := refreshSubmitReviewScipIndexes(projectRoot, wtPath, state.Config.ScipSearch)
 			warnings = append(warnings, refreshSubmitReviewStacklitIndex(projectRoot, wtPath)...)
@@ -456,7 +461,11 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 				return nil, err
 			}
 			gate := runtimeInputGate{projectRoot: projectRoot, bb: bb, authority: authority, actor: agentID, operation: integrationOperationSubmitForReview}
-			acceptanceReceipt, err := executeAcceptanceReceipt(projectRoot, task, acceptance, postRebaseCommit, gate)
+			fenceCtx, stopFence := startAcceptanceOwnershipFence(bb, taskID, expectedCurrentStatus, agentID, authority)
+			acceptanceReceipt, err := executeAcceptanceReceipt(fenceCtx, projectRoot, task, acceptance, postRebaseCommit, gate)
+			if stopFence() {
+				return nil, &LifecycleError{Outcome: NewLifecycleOutcome(request.Operation, invocation.task, models.LifecycleStateChanged, "requery", "unknown"), Err: fmt.Errorf("submission ownership lost during canonical validation; validation stopped")}
+			}
 			if err != nil {
 				return nil, err
 			}

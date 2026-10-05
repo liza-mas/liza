@@ -363,7 +363,7 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	}
 
 	// Create timeout context for CLI execution
-	execCtx, cancelExec := context.WithTimeout(ctx, config.ExecutionTimeout)
+	execCtx, cancelExec := withExecutionDeadline(ctx, config.ExecutionTimeout, taskID, sessionInflightSubmit(config, taskID))
 	defer cancelExec()
 	stopReviewWatchdog, err := startReviewExecutionWatchdog(execCtx, config, taskID, models.NormalizeHeartbeatInterval(runtimeConfig.HeartbeatInterval), cancelExec)
 	if err != nil {
@@ -442,7 +442,7 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	}
 
 	// Check if timeout context was cancelled (even if Execute returned successfully)
-	if execCtx.Err() == context.DeadlineExceeded {
+	if executionTimedOut(execCtx) {
 		logger.Error("Agent execution timeout (context deadline exceeded)",
 			"agent_id", config.AgentID,
 			"timeout", config.ExecutionTimeout,

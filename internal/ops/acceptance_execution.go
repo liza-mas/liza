@@ -28,15 +28,25 @@ var errAcceptanceOutputLimit = errors.New("acceptance execution output limit exc
 // executeAcceptanceCommands returns trusted executions only when every command
 // passes, and nil results on any error. Callers own immutable input validation.
 func executeAcceptanceCommands(taskID, worktree string, commands []string, timeoutSeconds int) ([]models.AcceptanceCommandResult, error) {
-	return executeAcceptanceCommandsWith(taskID, worktree, commands, timeoutSeconds, nil)
+	return executeAcceptanceCommandsWith(context.Background(), taskID, worktree, commands, timeoutSeconds, nil)
+}
+
+// acceptanceBatchTimeout is the batch budget a contract's timeout_seconds
+// grants; zero means the default.
+func acceptanceBatchTimeout(timeoutSeconds int) time.Duration {
+	if timeoutSeconds == 0 {
+		timeoutSeconds = 600
+	}
+	return time.Duration(timeoutSeconds) * time.Second
 }
 
 // executeAcceptanceCommandsWith runs the canonical commands with the runtime
 // inputs grant allows: every reserved name is scrubbed from each command's
 // environment and only its authorized variables are overlaid. Masking covers
 // the inherited environment, the overlays and the declared secret values, and
-// is applied before any result, excerpt or error is built.
-func executeAcceptanceCommandsWith(taskID, worktree string, commands []string, timeoutSeconds int, grant *runtimeInputGrant) ([]models.AcceptanceCommandResult, error) {
+// is applied before any result, excerpt or error is built. Cancelling ctx
+// kills the running command's process group like the batch timeout does.
+func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string, commands []string, timeoutSeconds int, grant *runtimeInputGrant) ([]models.AcceptanceCommandResult, error) {
 	environ := os.Environ()
 	masked := environ
 	if grant != nil {
@@ -49,13 +59,10 @@ func executeAcceptanceCommandsWith(taskID, worktree string, commands []string, t
 	fail := func(index int, reason string) error {
 		return fmt.Errorf("acceptance.execution[%d] for task %s: %s", index, mask(taskID), mask(reason))
 	}
-	if timeoutSeconds == 0 {
-		timeoutSeconds = 600
-	}
-	if timeoutSeconds < 1 || timeoutSeconds > 3600 {
+	if timeoutSeconds < 0 || timeoutSeconds > 3600 {
 		return nil, fail(0, "timeout_seconds must be between 1 and 3600")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, acceptanceBatchTimeout(timeoutSeconds))
 	defer cancel()
 	results := make([]models.AcceptanceCommandResult, 0, len(commands))
 	remaining := acceptanceOutputLimit
