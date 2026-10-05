@@ -254,6 +254,15 @@ Git worktrees write the task index under the main repo metadata path
 (`.git/worktrees/<task>/index.lock`), not under the worktree directory itself,
 so the active project `.git` directory must be present in `writable_roots`.
 
+The managed non-interactive Codex tool-result hook rewrites Bash commands through
+the engine runner. Codex evaluates native `prefix_rule` entries against that
+wrapper, so `forbidden` and `prompt` rules for the original command can stop
+matching. `approval_policy = "never"` does not make those rules redundant:
+without the rewrite, both blocked the tested command. The configured OS sandbox
+remains a separate boundary; do not rely on rules for the original command to
+enforce denials while this hook is active. Observed with Codex 0.160.0; see the
+[probe results and sandbox limitation](../docs/tool-result-budget.md#codex-command-rule-limitation).
+
 Pin MAS Codex agents to a specific package version with this durable project
 config key:
 

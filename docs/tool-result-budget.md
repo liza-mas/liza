@@ -24,7 +24,9 @@ The boundary is automatically installed by managed **non-interactive** launches:
   byte budget belongs to the per-tool hook; it still stops on any guarded
   result the sanitizer would change. Existing user settings are not rewritten.
 - **Codex CLI:** native shell capture runs before output
-  caps or streaming yields. Synchronous post hooks externalize other local/MCP
+  caps or streaming yields, but the input rewrite can bypass native rules for
+  the original command (see [the limitation below](#codex-command-rule-limitation)).
+  Synchronous post hooks externalize other local/MCP
   results. Nested code-mode MCP calls receive the digest as a recoverable rejected
   promise: a history-only replacement does not protect the JavaScript value.
 - **Devin ACP:** acpx starts the engine's transparent ACP host proxy. It filters
@@ -73,6 +75,35 @@ artifacts or telemetry events. On exit, one final artifact/event is persisted
 for that terminal. Store/runtime references are durable within the project;
 retain them while agent sessions can still reference them.
 User-owned OpenCode tools are not silently replaced by the managed template.
+
+### Codex command-rule limitation
+
+The Bash `PreToolUse` hook replaces the original command with an
+`exec <engine> tool-result ... -- "$0" -c <original-command>` wrapper and returns
+`permissionDecision: "allow"`. Codex evaluates native `prefix_rule` entries
+against the replacement, so `forbidden` and `prompt` rules matching the original
+command can be evaded. The hook accepts `bypassPermissions`, reported for
+`approval_policy = "never"`; it does not independently verify the sandbox mode.
+The configured OS sandbox remains a separate boundary.
+
+On 2026-10-05, Codex 0.160.0 with engine build `dev-19cc53d9f` was tested using
+a local deterministic Responses fixture issuing a harmless `ls` command:
+
+- With `approval_policy = "never"`, a `prefix_rule` for `["ls"]` with either
+  `decision = "forbidden"` or `decision = "prompt"` rejected the original command.
+- With the tool-result rewrite, both rules stopped rejecting it. Execution was
+  confirmed under `sandbox_mode = "danger-full-access"`. Under `workspace-write`,
+  the command reached sandbox startup, which failed because the app-server socket
+  directory was not accepted as user-owned with mode `0700`; actual command
+  execution under that sandbox remains unverified.
+- Returning hook `allow` without rewriting still respected the prohibition.
+  A rule forbidding the rewritten `/usr/bin/zsh` invocation also blocked it.
+  The bypass therefore comes from changed rule matching, not unconditional
+  precedence of hook `allow` over a native prohibition.
+
+Do not rely on native rules for the original command to enforce denials while
+this hook is active. The existing native shell budget test passes
+`--ignore-rules`, so it does not cover preservation of command-rule decisions.
 
 ## Commands and limits
 
@@ -314,12 +345,11 @@ bound. No callback capability is granted implicitly.
 
 `claude-hook` and `codex-hook` are internal integration
 commands; provider launch helpers configure them automatically. Hooks treat all
-incoming tool content as data. They do not authorize a command that was otherwise
-restricted. Codex's pre-input rewrite is gated on the permission mode the managed
-configuration renders — `approval_policy = "never"` reports `bypassPermissions`,
-while the same config keeps `sandbox_mode = "workspace-write"`; every other
-mode is denied the rewrite, so the boundary never elevates a constrained
-session.
+incoming tool content as data. Codex's pre-input rewrite accepts only
+`bypassPermissions`, reported for `approval_policy = "never"`; every other mode
+is denied the rewrite. This gate does not preserve native rules matching the
+original command or verify the configured sandbox mode. See
+[Codex command-rule limitation](#codex-command-rule-limitation).
 
 Claude registers no pre-input hook, so Bash commands run exactly as written and
 native permission decisions remain provider-owned.
