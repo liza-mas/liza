@@ -586,7 +586,10 @@ func TestInitDispatch_FullInitSkipsScipSearchWhenEnvDisabled(t *testing.T) {
 }
 
 func TestInitDispatch_SembleEnabledFullInitThroughCobraHasNoDurableSurface(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve temp project root: %v", err)
+	}
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	fakeHome := testhelpers.SetupGlobalLiza(t)
 	testhelpers.CreateCommittedSpecFile(t, projectRoot, "vision.md", "# Vision\n")
@@ -598,7 +601,7 @@ func TestInitDispatch_SembleEnabledFullInitThroughCobraHasNoDurableSurface(t *te
 	t.Setenv("SEMBLE_TEST_LOG", logPath)
 	writeFakeSembleForTest(t, filepath.Join(fakeHome, "bin", "semble"))
 
-	err := executeRootCommand(
+	err = executeRootCommand(
 		t,
 		projectRoot,
 		"init",

@@ -129,6 +129,17 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 		return "", err
 	}
 	filename := filepath.Join(dir, fmt.Sprintf("%x.json", sha256.Sum256(data)))
+	var published string
+	err = filelock.New(dir).WithLockOperation("publish-pending-verdict", func() error {
+		var publishErr error
+		published, publishErr = publishPendingVerdictFile(filename, data)
+		return publishErr
+	})
+	return published, err
+}
+
+func publishPendingVerdictFile(filename string, data []byte) (string, error) {
+	dir := filepath.Dir(filename)
 	// Repeat all barriers on retries: a previous publication may have renamed
 	// the file but failed before syncing the newly-created parent directory.
 	finishPublication := func() (string, error) {
@@ -253,7 +264,10 @@ func readPendingVerdictFile(filename string) (data []byte, err error) {
 }
 
 func removePendingVerdictFile(filename string) error {
-	return retrySharingViolation(func() error { return os.Remove(filename) })
+	// Publication and cleanup share a lock; submission runs outside it.
+	return filelock.New(filepath.Dir(filename)).WithLockOperation("remove-pending-verdict", func() error {
+		return retrySharingViolation(func() error { return os.Remove(filename) })
+	})
 }
 
 func readPendingVerdict(filename string) (pendingVerdict, error) {

@@ -650,7 +650,10 @@ func TestD47SessionContextUsesTaskCheckout(t *testing.T) {
 			for _, scenario := range []string{"nested cwd", "absent cwd", "main checkout", "disabled gates", "empty branded gates", "missing artifacts"} {
 				t.Run(scenario, func(t *testing.T) {
 					hook := writeSessionContextHook(t)
-					root := t.TempDir()
+					root, err := filepath.EvalSymlinks(t.TempDir())
+					if err != nil {
+						t.Fatalf("resolve temp project root: %v", err)
+					}
 					worktree := filepath.Join(root, ".worktrees", "task-1")
 					for _, args := range [][]string{
 						{"init"}, {"config", "user.email", "test@example.invalid"}, {"config", "user.name", "Test"},
