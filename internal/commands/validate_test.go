@@ -1117,7 +1117,7 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 			errContains: "assigned to multiple active tasks",
 		},
 		{
-			name: "agent with REJECTED and IMPLEMENTING tasks passes",
+			name: "agent with REJECTED and IMPLEMENTING tasks is rejected",
 			setupTasks: func() []models.Task {
 				agent := "coder-1"
 				worktree := "wt-task-2"
@@ -1171,7 +1171,8 @@ func TestValidateCommand_DuplicateAssignments(t *testing.T) {
 					PID:          os.Getpid(),
 				}
 			},
-			wantErr: false,
+			wantErr:     true,
+			errContains: "assigned to multiple active tasks",
 		},
 	}
 

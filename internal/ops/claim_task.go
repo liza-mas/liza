@@ -632,6 +632,28 @@ func completeClaimTaskAfterValidation(
 		if err := task.TransitionWith(claimCtx.targetStatus, pipelineTransitions); err != nil {
 			return err
 		}
+		// CurrentTask alone misses retained assignments after a verdict. Reconcile
+		// them in this transaction so a failed claim cannot release prior work.
+		assignmentsReleased := false
+		for i := range state.Tasks {
+			previous := &state.Tasks[i]
+			if previous.ID == taskID || previous.AssignedTo == nil || *previous.AssignedTo != agentID || models.IsOperationallyTerminal(previous, resolver) {
+				continue
+			}
+			if models.IsExecutingStatus(previous, resolver) {
+				return &PreconditionError{Reason: fmt.Sprintf("agent %s is already assigned to executing task %s", agentID, previous.ID)}
+			}
+			previous.AssignedTo = nil
+			previous.LeaseExpires = nil
+			assignmentsReleased = true
+			models.AdvanceLifecycle(previous)
+			reason := fmt.Sprintf("doer claimed task %s", taskID)
+			previous.History = append(previous.History, models.TaskHistoryEntry{
+				Time: now, Event: models.TaskEventDoerClaimReleased,
+				Agent: &agentID, PreviousAssignee: &agentID, Reason: &reason,
+				Extra: map[string]any{"claimed_task": taskID},
+			})
+		}
 		task.AssignedTo = &agentID
 		task.LeaseExpires = &leaseExpires
 
@@ -657,9 +679,9 @@ func completeClaimTaskAfterValidation(
 		agent.LeaseExpires = &leaseExpires
 		agent.Heartbeat = now
 		state.Agents[agentID] = agent
-		if rejectedClaim {
+		if rejectedClaim || assignmentsReleased {
 			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
-				return fmt.Errorf("rejected claim produced invalid state: %w", err)
+				return fmt.Errorf("claim produced invalid state: %w", err)
 			}
 		}
 

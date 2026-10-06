@@ -194,8 +194,12 @@ func validateTaskInvariants(v *violations, state *models.State, projectRoot stri
 			v.add(fmt.Errorf("task %s %w", task.ID, err))
 		}
 
-		// Track assignments for duplicate check (executing tasks count as active)
-		if task.AssignedTo != nil && sc.IsExecuting(task.Status) {
+		// Dormant assignments still reserve an agent; terminal ones are history.
+		terminal := task.Status.IsTerminal()
+		if resolver != nil {
+			terminal = models.IsOperationallyTerminal(&task, resolver)
+		}
+		if task.AssignedTo != nil && *task.AssignedTo != "" && !strings.HasPrefix(*task.AssignedTo, "$") && !terminal {
 			assignments[*task.AssignedTo] = append(assignments[*task.AssignedTo], task.ID)
 		}
 

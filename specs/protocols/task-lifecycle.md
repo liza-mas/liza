@@ -47,6 +47,18 @@ This blocking path is orthogonal to attempt exhaustion — it does not increment
 
 ## Iteration Protocol
 
+**Assignment ownership:** An agent may be assigned to only one non-terminal task.
+When it claims new work, the final claim transaction clears `assigned_to` and the
+doer lease on its other dormant tasks, including rejected work and submitted
+attempts still under review. Their status, worktree, base/review evidence,
+reviewer ownership and counters survive. Each release advances the task lifecycle
+to retire stale preparations and appends `doer_claim_released` naming the agent,
+`previous_assignee` and newly `claimed_task`. Released rejected work is immediately
+available to another eligible doer. Another executing assignment refuses the
+claim, even if the agent's `current_task` is empty; a failed claim publishes no
+releases. Terminal tasks and pipeline-declared clean states retain historical
+assignments. Validation reports each conflicting pair of non-terminal assignments.
+
 ### Ralph-Style Loop
 
 Coder iterates until externally approved:

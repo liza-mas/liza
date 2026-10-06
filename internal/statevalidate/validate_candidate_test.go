@@ -119,7 +119,9 @@ func TestValidateCandidate_AllowsUnrelatedMutationOverInvalidRecord(t *testing.T
 	baseline := candidateFixture(blockedTask("task-a", now))
 	baseline.Anomalies = []models.Anomaly{testhelpers.LegacyPendingMergeStallAnomaly()}
 	candidate := db.CloneState(baseline)
-	candidate.Tasks = append(candidate.Tasks, blockedTask("task-b", now))
+	unassigned := blockedTask("task-b", now)
+	unassigned.AssignedTo = nil
+	candidate.Tasks = append(candidate.Tasks, unassigned)
 
 	var warnings bytes.Buffer
 	if err := ValidateCandidate(candidate, baselineOf(baseline), pipelineRoot(t), true, &warnings); err != nil {
@@ -409,6 +411,34 @@ func TestValidateCandidate_DuplicateAssignmentsByPair(t *testing.T) {
 	extra.Worktree = testhelpers.StringPtr(".")
 	added.Tasks = append(added.Tasks, extra)
 	requireRefused(t, added, baseline, "assigned to multiple active tasks simultaneously: [A D]")
+}
+
+func TestValidateCandidate_DormantAssignmentsByPair(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	baseline := candidateFixture()
+	for _, id := range []string{"A", "B", "C"} {
+		baseline.Tasks = append(baseline.Tasks, testhelpers.BuildTaskByStatus(id, models.TaskStatusRejected, now))
+	}
+	partial := db.CloneState(baseline)
+	partial.FindTask("A").AssignedTo = nil
+	partial.FindTask("A").LeaseExpires = nil
+	partial.FindTask("A").Worktree = nil
+	requireAllowed(t, partial, baseline)
+
+	reordered := db.CloneState(baseline)
+	reordered.Tasks[0], reordered.Tasks[2] = reordered.Tasks[2], reordered.Tasks[0]
+	// Changing a dormant phase does not create new conflicting pairs.
+	reordered.FindTask("A").Status = models.TaskStatusApproved
+	requireAllowed(t, reordered, baseline)
+
+	added := db.CloneState(baseline)
+	added.Tasks = append(added.Tasks, testhelpers.BuildTaskByStatus("D", models.TaskStatusRejected, now))
+	requireRefused(t, added, baseline, "assigned to multiple active tasks simultaneously: [A D]")
+
+	// A repaired old pair cannot pay for a newly introduced different pair.
+	partial.Tasks = append(partial.Tasks, testhelpers.BuildTaskByStatus("D", models.TaskStatusRejected, now))
+	requireRefused(t, partial, baseline, "assigned to multiple active tasks simultaneously: [B D]")
 }
 
 // C3: a new cycle through tasks already on other cycles is refused; breaking
