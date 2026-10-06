@@ -62,7 +62,13 @@ These actions are **automatically triggered by the supervisor loop**. The CLI co
 
 **Why CLI fallback exists:** Orchestrators or humans may need to trigger these manually (e.g., merge a task approved outside the normal reviewer flow, or clear a stale claim without restarting).
 
-Doer supervisors check work in this order: explicit handoff resume, owned executing recovery, then fresh claim. Owned executing recovery is not a handoff: it applies when an executing task is already assigned to the supervisor's agent ID, `handoff_pending` is false, the registered agent role matches the task role-pair's doer role, and the agent is either idle or already points at that task. Before spawning a replacement child CLI, the supervisor validates the existing worktree; missing or unhealthy worktrees transition the task to `BLOCKED` with a diagnostic instead of entering a restart loop.
+Doer supervisors check work in this order: explicit handoff resume, owned executing recovery, then ordered claims. Owned executing recovery is not a handoff: it applies when an executing task is already assigned to the supervisor's agent ID, `handoff_pending` is false, the registered agent role matches the task role-pair's doer role, and the agent is either idle or already points at that task. Before spawning a replacement child CLI, the supervisor validates the existing worktree; missing or unhealthy worktrees transition the task to `BLOCKED` with a diagnostic instead of entering a restart loop.
+
+Ordered claims preserve explicit numerical priority, then favor owned rejection,
+other rework, and active dependency demand, shuffling exact ties. Rejected work
+uses normal reclaim, not executing-task recovery, so its transition, iteration,
+lease and worktree checks still run. See [Doer Claim Precedence](../protocols/task-lifecycle.md#doer-claim-precedence)
+and [ADR-0182](ADR/0182-doer-rework-and-dependency-impact-priority.md).
 
 During a child CLI run, doer supervisors run an execution progress watchdog for the owned executing task. The watchdog treats task-state changes, worktree HEAD/status changes including untracked files, and provider stdout/stderr writes as progress. It polls at `agent_progress_timeout / 4`, capped at 15 seconds. If no progress occurs before `config.agent_progress_timeout`, the supervisor cancels the child process, waits for it to exit, transitions the still-owned executing task to `BLOCKED` with a diagnostic, and runs blocked-task worktree cleanup. Heartbeat and lease renewal alone are not progress.
 

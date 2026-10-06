@@ -100,6 +100,24 @@ claim, even if the agent's `current_task` is empty; a failed claim publishes no
 releases. Terminal tasks and pipeline-declared clean states retain historical
 assignments. Validation reports each conflicting pair of non-terminal assignments.
 
+### Doer Claim Precedence
+
+After handoff and owned-executing recovery, doer supervisors consider only
+eligible candidates at the lowest numerical `priority`. Within that tier they
+prefer the agent's own rejected task, then other rejected or `INTEGRATION_FAILED`
+rework, then fresh work. Within each class, more unique active transitive
+dependents take precedence; exact ties are shuffled. Explicit priority remains
+authoritative, including over lower-priority owned rework.
+
+Impact follows unmet ordinary dependencies through replacement lineage and valid
+typed provider prerequisites, including all selected pending children. It counts
+materialized operationally active consumers, excluding terminal/clean history and
+unborn output demand. This is a dependency-demand heuristic, not a duration-based
+critical path. Every top-tier candidate remains available for claim-failure
+fallback. Rejected work uses the normal reclaim transaction and iteration rules;
+ranking never bypasses ownership, prerequisite, validation or pause checks.
+See [ADR-0182](../architecture/ADR/0182-doer-rework-and-dependency-impact-priority.md).
+
 ### Ralph-Style Loop
 
 Coder iterates until externally approved:

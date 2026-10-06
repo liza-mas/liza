@@ -103,13 +103,13 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 			candidates = append(candidates, &state.Tasks[i])
 		}
 	}
-	tier := shuffledByPriorityTier(candidates)
+	tier := orderDoerCandidates(candidates, state, agentID, pr)
 
 	if len(tier) == 0 {
 		return "", "", fmt.Errorf("no claimable tasks found")
 	}
 
-	// Try each candidate in the shuffled tier until one succeeds.
+	// Try each candidate in scheduling order until one succeeds.
 	var lastErr error
 	candidateIDs := taskIDsFromCandidates(tier)
 	for _, task := range tier {
