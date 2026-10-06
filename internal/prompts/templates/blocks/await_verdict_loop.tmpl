@@ -1,18 +1,33 @@
 {{- define "await-verdict-loop" -}}
 - {{binaryName}} await-verdict — Block until review verdict arrives (call after submit-for-review; budget-aware)
   {{binaryName}} await-verdict {{.TaskID}} --agent-id {{.AgentID}} --json
-  One call lasts at most 100 seconds. Handle the response status:
+  {{template "await-foreground" .}}
+  Handle the response status:
   - `POLL`: run the same await-verdict command again in the foreground. Repeat until a non-POLL outcome.
     There is no call limit and no argument to carry over: {{brandTitle}} tracks the remaining budget from your
     submission time, and `timeout_seconds` is reported for visibility only.
   - `TIMEOUT`: stop waiting and exit normally; the overall budget is exhausted.
+  - `PAUSED`: exit normally; preserve the submitted work and tell the operator to resume the system.
   - REJECTED: if escalated to BLOCKED (including the rejection-RCA gate), stop; otherwise read rejection reason, fix, resubmit
   - APPROVED, TERMINAL, or ALREADY_TRANSITIONED with safe_action=stop: exit normally
   - NEW_ATTEMPT or ABORTED: exit normally
   - Budget error: exit normally
-  Harness backgrounding, a terminal/stop outcome, or exhausted retry policy means stop safely without custom polling or background execution.
-  If the harness backgrounds await-verdict and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.
   Do NOT poll {{binaryName}} get, cat /tmp, or any other command to check for verdict arrival between calls.
   Do NOT wrap in custom polling or background execution; await-verdict is the sole polling primitive.
   Do NOT run more worktree commands after APPROVED, TERMINAL, or ALREADY_TRANSITIONED with safe_action=stop; {{brandTitle}} may already have merged the task and cleaned up the worktree.
+{{- end -}}
+
+{{- define "await-foreground" -}}
+One call lasts at most {{if .AwaitIntervalSeconds}}{{.AwaitIntervalSeconds}}{{else}}100{{end}} seconds.
+{{if eq .CLIName "claude" -}}
+Set Bash's timeout to 600000 milliseconds for every await call to keep it in the foreground.
+{{else if eq .CLIName "codex" -}}
+If exec_command returns session_id, use write_stdin with that session ID until the same await process completes; do not launch another await.
+{{else -}}
+Use the harness's native wait for an in-flight await.
+{{end -}}
+{{if ne .CLIName "codex" -}}
+If the harness backgrounds an await and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.
+{{end -}}
+A terminal/stop outcome or exhausted retry policy ends waiting. Never duplicate an in-flight call or use custom polling/background commands.
 {{- end -}}

@@ -22,14 +22,15 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-const awaitResubmissionPassiveGuidance = "If the harness backgrounds await-resubmission and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file."
+const awaitResubmissionPassiveGuidance = "If the harness backgrounds an await and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file."
 const awaitResubmissionBoundaryGuidance = "On RESUBMITTED, use the returned `base_commit` and `review_commit` for every diff command in this same session."
 const validationCommandShapeRule = "Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree."
 const validationFallback = "If a stored validation command violates BASH CONSTRAINTS, do not execute it literally; treat it as validation intent, run an equivalent single-purpose command from the worktree/tool working directory, and record both the original command and translated command in validation evidence."
 
 var boundedAwaitLifecycleGuidance = []string{
 	"One call lasts at most 100 seconds.",
-	"Harness backgrounding, a terminal/stop outcome, or exhausted retry policy means stop safely without custom polling or background execution.",
+	"A terminal/stop outcome or exhausted retry policy ends waiting.",
+	"Never duplicate an in-flight call or use custom polling/background commands.",
 }
 
 var reviewerAwaitOutcomeGuidance = []string{
@@ -3067,7 +3068,8 @@ func TestBuildRoleContext_AwaitVerdictLoopRendersForAllDoers(t *testing.T) {
 		"There is no call limit and no argument to carry over",
 		"stop waiting and exit normally",
 		"sole polling primitive",
-		"If the harness backgrounds await-verdict and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.",
+		awaitResubmissionPassiveGuidance,
+		"`PAUSED`: exit normally",
 		"Do NOT poll " + brand.BinaryName + " get",
 		"Do NOT run more worktree commands after APPROVED, TERMINAL, or ALREADY_TRANSITIONED",
 	}
@@ -3210,6 +3212,57 @@ func TestBuildRoleContext_AwaitResubmissionLifecycleRendersForAllReviewers(t *te
 				t.Error("output contains raw default-brand await-resubmission command")
 			}
 		})
+	}
+}
+
+func TestBuildRoleContext_AwaitToolGuidance(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
+	resolver := testPipelineResolver(t)
+	withPromptBrandValues(t, func() { brand.NameTitle, brand.BinaryName = "Acme", "acme" })
+	for _, role := range []string{"coder", "architect", "code-planner", "epic-planner", "us-writer", "integration-analyst",
+		"code-reviewer", "integration-reviewer", "code-plan-reviewer", "epic-plan-reviewer", "us-reviewer", "architecture-reviewer"} {
+		for _, cli := range []string{"claude", "codex", "kimi", "claude-acp", ""} {
+			t.Run(role+"/"+cli, func(t *testing.T) {
+				roleType, _ := resolver.RoleType(role)
+				cap := 100
+				if cli == "claude" {
+					cap = 540
+				}
+				data := &RoleContextData{Role: role, AgentID: role + "-1", RoleType: roleType,
+					CLIName: cli, AwaitIntervalSeconds: cap, TaskID: "task-await-tool", ProjectRoot: projectRoot,
+					Worktree: projectRoot + "/.worktrees/task-await-tool", IntegrationBranch: "integration",
+					BaseCommit: "abc1234", ReviewCommit: "def5678", GoalBaseCommit: "abc1234"}
+				sections, err := resolver.ContextSections(role)
+				if err != nil {
+					t.Fatal(err)
+				}
+				output, err := BuildRoleContext(role, sections, data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, want := range []string{fmt.Sprintf("One call lasts at most %d seconds.", cap),
+					"`PAUSED`: exit normally", "Never duplicate an in-flight call", "acme await-"} {
+					if !strings.Contains(output, want) {
+						t.Errorf("await guidance missing %q", want)
+					}
+				}
+				claudeHint := "Set Bash's timeout to 600000 milliseconds"
+				codexHint := "use write_stdin with that session ID until the same await process completes"
+				if strings.Contains(output, claudeHint) != (cli == "claude") ||
+					strings.Contains(output, codexHint) != (cli == "codex") {
+					t.Fatal("tool guidance selected the wrong host wait mechanism")
+				}
+				if cli != "codex" && !strings.Contains(output, awaitResubmissionPassiveGuidance) {
+					t.Fatal("notification-host guidance lost its passive-wait safety rule")
+				}
+				if cli == "codex" && strings.Contains(output, "end the turn; do NOT call Monitor") {
+					t.Fatal("Codex native session continuation conflicts with notification-host exit guidance")
+				}
+				if strings.Contains(output, "liza await-") {
+					t.Fatal("await guidance leaked the default brand")
+				}
+			})
+		}
 	}
 }
 
@@ -3494,7 +3547,10 @@ func TestBuildRoleContext_ValidationCommandShapeGuidance(t *testing.T) {
 		})
 	}
 
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
+		"templates/blocks/review_instructions.tmpl",
+		"templates/blocks/await_verdict_loop.tmpl",
+	))
 	for _, role := range []string{"code-plan-reviewer", "epic-plan-reviewer", "architecture-reviewer", "integration-reviewer"} {
 		t.Run("reviewer/"+role, func(t *testing.T) {
 			data := RoleContextData{
@@ -3523,7 +3579,10 @@ func TestBuildRoleContext_ValidationCommandShapeGuidance(t *testing.T) {
 }
 
 func TestReviewInstructions_PostVerdictResubmissionBoundaryGuidance(t *testing.T) {
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
+		"templates/blocks/review_instructions.tmpl",
+		"templates/blocks/await_verdict_loop.tmpl",
+	))
 
 	for _, role := range []string{"code-reviewer", "integration-reviewer"} {
 		t.Run(role, func(t *testing.T) {
@@ -3960,7 +4019,10 @@ func TestBlockBranchIntegrationContext_NoCompletedTasks(t *testing.T) {
 }
 
 func TestBlockReviewInstructions_IntegrationReviewer(t *testing.T) {
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
+		"templates/blocks/review_instructions.tmpl",
+		"templates/blocks/await_verdict_loop.tmpl",
+	))
 
 	data := RoleContextData{
 		Role:           "integration-reviewer",
@@ -3996,7 +4058,10 @@ func TestBlockReviewInstructions_IntegrationReviewer(t *testing.T) {
 }
 
 func TestReviewInstructions_CodeReviewerSkipsIntegrationDriftWhenBranchMissing(t *testing.T) {
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
+		"templates/blocks/review_instructions.tmpl",
+		"templates/blocks/await_verdict_loop.tmpl",
+	))
 
 	data := RoleContextData{
 		Role:         "code-reviewer",
@@ -4038,7 +4103,10 @@ func TestReviewInstructions_CodeReviewerSkipsIntegrationDriftWhenBranchMissing(t
 }
 
 func TestReviewInstructions_CodeReviewerBoundsIntegrationDriftWhenBranchPresent(t *testing.T) {
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
+		"templates/blocks/review_instructions.tmpl",
+		"templates/blocks/await_verdict_loop.tmpl",
+	))
 
 	data := RoleContextData{
 		Role:              "code-reviewer",
@@ -4119,7 +4187,10 @@ func TestReviewTask_RendersIntegrationBranchOnlyForCodeReviewer(t *testing.T) {
 }
 
 func TestReviewInstructions_OutputReviewersUseFullTaskJSON(t *testing.T) {
-	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles("templates/blocks/review_instructions.tmpl"))
+	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFiles(
+		"templates/blocks/review_instructions.tmpl",
+		"templates/blocks/await_verdict_loop.tmpl",
+	))
 
 	for _, role := range []string{"code-plan-reviewer", "epic-plan-reviewer", "architecture-reviewer", "integration-reviewer"} {
 		t.Run(role, func(t *testing.T) {

@@ -86,13 +86,12 @@ DOER VALIDATION PLAN: {{.ValidationPlan}}
 POST-VERDICT (MANDATORY for REJECTED):
 After submitting a REJECTED verdict, MUST run {{binaryName}} await-resubmission immediately:
    {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
-Do NOT exit. One call lasts at most 100 seconds.
+Keep this session while waiting. {{template "await-foreground" .}}
 On `POLL`, run the same command again in the foreground. Repeat until a non-POLL outcome.
 There is no call limit and no argument to carry over: {{brandTitle}} tracks the remaining budget from your
 rejection time, and `timeout_seconds` is reported for visibility only.
 `TIMEOUT` is final budget exhaustion — exit normally.
-Harness backgrounding, a terminal/stop outcome, or exhausted retry policy means stop safely without custom polling or background execution.
-If the harness backgrounds await-resubmission and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.
+`PAUSED`: exit normally and tell the operator to resume the system.
 - RESUBMITTED: discard prompt-time BASE COMMIT / REVIEW_COMMIT and re-review using the returned base_commit..review_commit boundary
 - TERMINAL/ABORTED: exit normally
 {{- else if eq .Role "code-plan-reviewer"}}
@@ -433,13 +432,12 @@ INSTRUCTIONS:
 POST-VERDICT (MANDATORY for REJECTED):
 After submitting a REJECTED verdict, MUST run {{binaryName}} await-resubmission immediately:
    {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
-Do NOT exit. One call lasts at most 100 seconds.
+Keep this session while waiting. {{template "await-foreground" .}}
 On `POLL`, run the same command again in the foreground. Repeat until a non-POLL outcome.
 There is no call limit and no argument to carry over: {{brandTitle}} tracks the remaining budget from your
 rejection time, and `timeout_seconds` is reported for visibility only.
 `TIMEOUT` is final budget exhaustion — exit normally.
-Harness backgrounding, a terminal/stop outcome, or exhausted retry policy means stop safely without custom polling or background execution.
-If the harness backgrounds await-resubmission and says it will notify on completion, end the turn; do NOT call Monitor, search for Monitor, ScheduleWakeup, or read/tail/sleep/poll the output file.
+`PAUSED`: exit normally and tell the operator to resume the system.
 - RESUBMITTED: discard prompt-time BASE COMMIT / REVIEW_COMMIT and re-review using the returned base_commit..review_commit boundary
 - TERMINAL/ABORTED: exit normally
 {{- end}}

@@ -3341,6 +3341,43 @@ func TestBuildTaskRoleContextData_RCARequired(t *testing.T) {
 	}
 }
 
+func TestBuildTaskRoleContextData_AwaitToolPolicy(t *testing.T) {
+	resolver := testResolver(t)
+	state := &models.State{Version: 1, Tasks: []models.Task{{ID: "task-1", Status: models.TaskStatusImplementing,
+		RolePair: "coding-pair", Description: "await transport", DoneWhen: "verified", Created: time.Now().UTC()}},
+		Agents: map[string]models.Agent{}, Config: models.Config{IntegrationBranch: "main"}}
+	for _, role := range []string{"coder", "code-reviewer"} {
+		for _, cli := range []string{"claude", "codex", "kimi", "claude-acp", ""} {
+			t.Run(role+"/"+cli, func(t *testing.T) {
+				config := SupervisorConfig{Role: role, AgentID: role + "-1", CLIName: cli, ProjectRoot: t.TempDir()}
+				data, err := testBuildTaskRoleContextData(t, &state.Tasks[0], state, config, resolver)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := 100
+				if cli == "claude" {
+					want = 540
+				}
+				if data.CLIName != cli || data.AwaitIntervalSeconds != want {
+					t.Fatalf("prompt tool = %q, interval = %d; want %q/%d", data.CLIName, data.AwaitIntervalSeconds, cli, want)
+				}
+				sections, err := resolver.ContextSections(role)
+				if err != nil {
+					t.Fatal(err)
+				}
+				output, err := prompts.BuildRoleContext(role, sections, data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(output, fmt.Sprintf("One call lasts at most %d seconds.", want)) ||
+					!strings.Contains(output, "`PAUSED`: exit normally") {
+					t.Fatal("launched-tool policy did not reach the rendered await guidance")
+				}
+			})
+		}
+	}
+}
+
 // TestBuildTaskRoleContextData_AttemptNum_UsesEffectiveAttempt verifies that
 // AttemptNum is populated via task.EffectiveAttempt(), not len(task.Attempted)+1.
 func TestBuildTaskRoleContextData_AttemptNum_UsesEffectiveAttempt(t *testing.T) {

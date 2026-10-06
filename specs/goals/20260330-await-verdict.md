@@ -3,9 +3,11 @@
 > **Historical implementation plan (superseded).** The MCP surface described below
 > was removed. The current `await-verdict` CLI treats `--timeout-seconds` as the total
 > wait allowance (default 1,800 seconds, also a hard ceiling), caps one foreground call
-> at 100 seconds, and derives the remaining share from task history rather than from a
+> at 540 seconds for registered Claude Code (100 seconds for other tools), and derives
+> the remaining share from task history rather than from a
 > value the caller carries between calls: retries re-run the identical command, get
-> `POLL` while budget remains, and `TIMEOUT` once it is exhausted. Historical MCP names,
+> `POLL` while budget remains, and `TIMEOUT` once it is exhausted. A system halt returns
+> `PAUSED` with stop/resume guidance, preserving submitted work. Historical MCP names,
 > `MCP_TIMEOUT`, and direct 1,500-second blocking behavior below are retained only as
 > implementation provenance.
 

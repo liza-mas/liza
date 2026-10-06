@@ -27,7 +27,7 @@ func AwaitVerdictWithAuthority(projectRoot, taskID string, authority models.Agen
 // configurable polling intervals.
 func AwaitVerdictWithAuthorityOptions(projectRoot, taskID string, authority models.AgentAuthority, budget time.Duration, opts AwaitVerdictOptions) (*AwaitVerdictResult, error) {
 	remaining := ops.AwaitVerdictRemainingBudget(projectRoot, taskID, authority.ID, budget)
-	result, err := awaitVerdictWithBudget(remaining, maxAwaitInterval, func(interval time.Duration) (*ops.AwaitVerdictResult, error) {
+	result, err := awaitVerdictWithBudget(remaining, agentAwaitInterval(projectRoot, authority.ID), func(interval time.Duration) (*ops.AwaitVerdictResult, error) {
 		return runAwaitVerdictWithAuthorityOptions(context.Background(), projectRoot, taskID, authority, interval, opts)
 	})
 	if err == nil && result.Verdict == ops.VerdictTimeout {
@@ -53,7 +53,7 @@ func AwaitVerdict(projectRoot, taskID, agentID string, budget time.Duration) (*A
 // AwaitVerdictWithOptions is AwaitVerdict with configurable polling intervals.
 func AwaitVerdictWithOptions(projectRoot, taskID, agentID string, budget time.Duration, opts AwaitVerdictOptions) (*AwaitVerdictResult, error) {
 	remaining := ops.AwaitVerdictRemainingBudget(projectRoot, taskID, agentID, budget)
-	return awaitVerdictWithIntervalAndOptions(projectRoot, taskID, agentID, remaining, maxAwaitInterval, opts)
+	return awaitVerdictWithIntervalAndOptions(projectRoot, taskID, agentID, remaining, agentAwaitInterval(projectRoot, agentID), opts)
 }
 
 func awaitVerdictWithInterval(

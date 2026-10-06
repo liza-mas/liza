@@ -14,6 +14,8 @@ type AwaitResubmissionResult struct {
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
+var runAwaitResubmissionWithAuthorityOptions = ops.AwaitResubmissionWithAuthorityOptions
+
 // AwaitResubmissionWithAuthority applies the bounded foreground interval while
 // preserving caller-held generation authority through review ownership writes.
 func AwaitResubmissionWithAuthority(projectRoot, taskID string, authority models.AgentAuthority, budget time.Duration) (*AwaitResubmissionResult, error) {
@@ -24,8 +26,9 @@ func AwaitResubmissionWithAuthority(projectRoot, taskID string, authority models
 // configurable polling intervals.
 func AwaitResubmissionWithAuthorityOptions(projectRoot, taskID string, authority models.AgentAuthority, budget time.Duration, opts AwaitResubmissionOptions) (*AwaitResubmissionResult, error) {
 	remaining := ops.AwaitResubmissionRemainingBudget(projectRoot, taskID, authority.ID, budget)
-	return awaitResubmissionWithBudget(remaining, maxAwaitInterval, func(interval time.Duration) (*ops.AwaitResubmissionResult, error) {
-		return ops.AwaitResubmissionWithAuthorityOptions(context.Background(), projectRoot, taskID, authority, interval, opts)
+	return awaitResubmissionWithBudget(remaining, agentAwaitInterval(projectRoot, authority.ID), func(interval time.Duration) (*ops.AwaitResubmissionResult, error) {
+		opts.PollOnTimeout = interval < remaining
+		return runAwaitResubmissionWithAuthorityOptions(context.Background(), projectRoot, taskID, authority, interval, opts)
 	})
 }
 
@@ -42,7 +45,7 @@ func AwaitResubmission(projectRoot, taskID, agentID string, budget time.Duration
 // AwaitResubmissionWithOptions is AwaitResubmission with configurable polling intervals.
 func AwaitResubmissionWithOptions(projectRoot, taskID, agentID string, budget time.Duration, opts AwaitResubmissionOptions) (*AwaitResubmissionResult, error) {
 	remaining := ops.AwaitResubmissionRemainingBudget(projectRoot, taskID, agentID, budget)
-	return awaitResubmissionWithIntervalAndOptions(projectRoot, taskID, agentID, remaining, maxAwaitInterval, opts)
+	return awaitResubmissionWithIntervalAndOptions(projectRoot, taskID, agentID, remaining, agentAwaitInterval(projectRoot, agentID), opts)
 }
 
 func awaitResubmissionWithInterval(
@@ -58,6 +61,7 @@ func awaitResubmissionWithIntervalAndOptions(
 	opts AwaitResubmissionOptions,
 ) (*AwaitResubmissionResult, error) {
 	return awaitResubmissionWithBudget(remaining, maxInterval, func(interval time.Duration) (*ops.AwaitResubmissionResult, error) {
+		opts.PollOnTimeout = interval < remaining
 		return ops.AwaitResubmissionWithOptions(context.Background(), projectRoot, taskID, agentID, interval, opts)
 	})
 }

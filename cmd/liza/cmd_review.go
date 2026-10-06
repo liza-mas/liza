@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/spf13/cobra"
@@ -23,7 +24,8 @@ var awaitBudgetSecondsDefault = int(ops.DefaultAwaitBudget.Seconds())
 
 var awaitBudgetFlagUsage = fmt.Sprintf(
 	"total wait budget in seconds, measured from submission/rejection; "+
-		"each invocation waits at most 100 seconds; maximum %d", awaitBudgetSecondsDefault)
+		"each invocation waits at most %d seconds (%d for Claude Code); maximum %d",
+	int(providers.AwaitInterval("").Seconds()), int(providers.AwaitInterval("claude").Seconds()), awaitBudgetSecondsDefault)
 
 var awaitVerdict = commands.AwaitVerdictWithAuthority
 var awaitResubmission = commands.AwaitResubmissionWithAuthority
@@ -415,8 +417,9 @@ Possible outcomes:
   - APPROVED: work accepted, agent can exit
   - REJECTED: work needs revision, reason provided
   - ALREADY_TRANSITIONED: verdict was recovered after task moved onward; follow safe_action
-  - POLL: the 100-second call cap expired; run the same command again (no argument to carry over)
+  - POLL: the foreground call cap expired; run the same command again (no argument to carry over)
   - TIMEOUT: the total wait budget expired without a verdict
+  - PAUSED: the system halted; stop this session and follow the resume hint
   - NEW_ATTEMPT: task reassigned for fresh attempt
   - ABORTED: task was superseded or cancelled`,
 	Args: cobra.ExactArgs(1),
@@ -483,8 +486,9 @@ Requirements:
 
 Possible outcomes:
   - RESUBMITTED: doer submitted new changes; use returned base_commit..review_commit for re-review
-  - POLL: the 100-second call cap expired; run the same command again (no argument to carry over)
+  - POLL: the foreground call cap expired; run the same command again (no argument to carry over)
   - TIMEOUT: the total wait budget expired without a resubmission
+  - PAUSED: the system halted; stop this session and follow the resume hint
   - TERMINAL: task reached a terminal state (superseded, abandoned)
   - ABORTED: task was cancelled or reassigned`,
 	Args: cobra.ExactArgs(1),
@@ -573,6 +577,9 @@ func printAwaitResubmissionResult(result *commands.AwaitResubmissionResult) {
 	}
 	if result.Reason != "" {
 		fmt.Printf("Reason: %s\n", result.Reason)
+	}
+	if result.SafeAction != "" {
+		fmt.Printf("Safe action: %s\n", result.SafeAction)
 	}
 	if result.TimeoutSeconds > 0 {
 		fmt.Printf("Timeout seconds: %d\n", result.TimeoutSeconds)

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/functionalclusters"
@@ -16,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/precommit"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/scipsearch"
@@ -331,9 +333,11 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 
 	data := &prompts.RoleContextData{
 		// Identity
-		Role:     config.Role,
-		AgentID:  config.AgentID,
-		RoleType: roleType,
+		Role:                 config.Role,
+		AgentID:              config.AgentID,
+		RoleType:             roleType,
+		CLIName:              config.CLIName,
+		AwaitIntervalSeconds: int(providers.AwaitInterval(config.CLIName) / time.Second),
 
 		// Task
 		TaskID:             task.ID,

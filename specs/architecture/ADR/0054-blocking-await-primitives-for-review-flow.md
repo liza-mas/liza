@@ -110,7 +110,26 @@ Consequent changes: default budget 1500s → 1800s; reviewer session ceiling
 doer-side three-call prompt cap removed, which had bounded doer waiting at ~5
 minutes and abandoned the task on expiry.
 
-See `specs/protocols/await-primitives.md` for the current mechanism.
+See [Await Primitives](../../protocols/await-primitives.md) for the current mechanism.
+
+## Amendment (2026-10-05): foreground intervals and retained reviewer waits
+
+D-42 exposed unnecessary provider turns at the uniform 100s cap and review
+ownership churn that invalidated overlapping resubmission preparation (D-53).
+Both commands now use the same exact-tool policy: registered `claude` gets a
+540s interval with explicit Bash timeout 600000ms; other tools retain 100s.
+Backend/contract aliases do not inherit a harness limit. Codex yielding a session
+ID is handled by waiting on the same process with `write_stdin`.
+
+The 1800s history-anchored ceiling remains. A resubmission interval expiry returns
+POLL before cleanup, retaining its live, generation-fenced reservation; retry
+refreshes the lease without advancing lifecycle or discarding preparation. Final
+expiry, cancellation, stop, terminal state or reservation loss ends the hold.
+
+Halt modes return PAUSED with stop/resume guidance. Departed ownership is released
+narrowly while submitted work remains intact; resubmission reclaim refuses halt
+inside its transaction, including pause during preflight. No provider session
+resume capability or lifecycle-validation relaxation is introduced.
 
 ---
 *Reconstructed from commits 3f49344..ce6469a (2026-03-30 to 2026-03-31)*

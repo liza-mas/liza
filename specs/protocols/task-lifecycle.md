@@ -86,7 +86,7 @@ if iterations >= max_iterations and task.state != APPROVED:
     exit(42)
 ```
 
-**Wait Model:** Agents hold their session across the review boundary. After requesting review the doer calls `liza await-verdict`; after a REJECTED verdict the reviewer calls `liza await-resubmission`. Both loop in 100-second foreground calls until an outcome arrives or the wait budget is exhausted. A session never survives exit, so this is the only mechanism preserving agent context across a review cycle. On budget exhaustion the agent exits and a fresh session picks the task up — affinity is best-effort, not guaranteed. See [Await Primitives](await-primitives.md).
+**Wait Model:** Agents hold their session across the review boundary. After requesting review the doer calls `await-verdict`; after a REJECTED verdict the reviewer calls `await-resubmission`. Both use 540-second calls for registered Claude Code and 100-second calls for other tools, within the history-anchored wait budget. Reviewers retain their reservation across POLL; native tool yielding continues the same process. A system halt returns PAUSED with stop/resume guidance and releases the departed hold while preserving submitted work. A session never survives exit, so this is the only mechanism preserving context across a review cycle. On final expiry the agent exits and a fresh session picks the task up — affinity is best-effort, not guaranteed. See [Await Primitives](await-primitives.md).
 
 **Logging:** Coder MUST log anomalies as they occur (not at end of task). See [Roles](../architecture/roles.md#coder-logging-duties) for required anomaly types.
 

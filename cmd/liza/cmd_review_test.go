@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,13 +38,13 @@ func TestAwaitCommands_TimeoutHelp(t *testing.T) {
 			if flag.DefValue != "1800" {
 				t.Fatalf("--timeout-seconds default = %q, want 1800", flag.DefValue)
 			}
-			for _, phrase := range []string{"total wait budget", "at most 100 seconds"} {
+			for _, phrase := range []string{"total wait budget", "at most 100 seconds", "540 for Claude Code"} {
 				if !strings.Contains(flag.Usage, phrase) {
 					t.Errorf("--timeout-seconds help = %q, want phrase %q", flag.Usage, phrase)
 				}
 			}
-			if !strings.Contains(tt.cmd.Long, "POLL:") || !strings.Contains(tt.cmd.Long, "TIMEOUT:") {
-				t.Errorf("long help must list POLL and TIMEOUT separately:\n%s", tt.cmd.Long)
+			if !strings.Contains(tt.cmd.Long, "POLL:") || !strings.Contains(tt.cmd.Long, "TIMEOUT:") || !strings.Contains(tt.cmd.Long, "PAUSED:") {
+				t.Errorf("long help must list POLL, TIMEOUT and PAUSED separately:\n%s", tt.cmd.Long)
 			}
 		})
 	}
@@ -109,6 +110,21 @@ func TestAwaitVerdictCLI_BudgetAndOutput(t *testing.T) {
 			},
 			wantBudget:      1800 * time.Second,
 			wantJSONVerdict: ops.VerdictApproved,
+		},
+		{
+			name: "json paused verdict has stop guidance",
+			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1", "--json"},
+			result: &commands.AwaitVerdictResult{AwaitVerdictResult: &ops.AwaitVerdictResult{
+				Verdict: ops.VerdictPaused, TaskStatus: models.TaskStatusReadyForReview, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
+			wantBudget: 1800 * time.Second, wantJSONVerdict: ops.VerdictPaused,
+		},
+		{
+			name: "human paused verdict has stop guidance",
+			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1"},
+			result: &commands.AwaitVerdictResult{AwaitVerdictResult: &ops.AwaitVerdictResult{
+				Verdict: ops.VerdictPaused, TaskStatus: models.TaskStatusReadyForReview, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
+			wantBudget:      1800 * time.Second,
+			wantHumanOutput: "Verdict: PAUSED\nStatus: CODE_TO_REVIEW\nReason: operator can resume\nSafe action: stop\n",
 		},
 		{
 			name: "human immediate verdict retains existing fields",
@@ -224,6 +240,21 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			wantJSONVerdict: ops.ResubmissionResubmitted,
 		},
 		{
+			name: "json paused resubmission has stop guidance",
+			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--json"},
+			result: &commands.AwaitResubmissionResult{AwaitResubmissionResult: &ops.AwaitResubmissionResult{
+				Verdict: ops.ResubmissionPaused, TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
+			wantBudget: 1800 * time.Second, wantJSONVerdict: ops.ResubmissionPaused,
+		},
+		{
+			name: "human paused resubmission has stop guidance",
+			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
+			result: &commands.AwaitResubmissionResult{AwaitResubmissionResult: &ops.AwaitResubmissionResult{
+				Verdict: ops.ResubmissionPaused, TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
+			wantBudget:      1800 * time.Second,
+			wantHumanOutput: "Verdict: PAUSED\nStatus: CODE_REJECTED\nReason: operator can resume\nSafe action: stop\n",
+		},
+		{
 			name: "human immediate resubmission retains existing fields",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
 			result: &commands.AwaitResubmissionResult{
@@ -281,6 +312,11 @@ func assertAwaitJSONResult(t *testing.T, stdout, wantVerdict string, wantTimeout
 	}
 	if result["verdict"] != wantVerdict {
 		t.Errorf("verdict = %#v, want %q", result["verdict"], wantVerdict)
+	}
+	if wantVerdict == ops.VerdictPaused || wantVerdict == ops.ResubmissionPaused {
+		if result["safe_action"] != ops.SafeActionStop || !strings.Contains(fmt.Sprint(result["reason"]), "resume") {
+			t.Error("PAUSED JSON result omitted stop/resume guidance")
+		}
 	}
 	gotTimeout, hasTimeout := result["timeout_seconds"]
 	if wantVerdict == ops.VerdictPoll || wantVerdict == ops.ResubmissionPoll {

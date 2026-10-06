@@ -186,7 +186,8 @@ func TestAwaitVerdictAutoReclaim_ReclaimsWhileRunning(t *testing.T) {
 		t.Fatalf("loadResolver: %v", err)
 	}
 
-	result, err := handleVerdictResult(bb, &before, "coder-1", nil, projectRoot, resolver, before.RolePair)
+	submission, _ := latestSubmissionByAgent(&before, "coder-1")
+	result, err := handleVerdictResult(bb, &before, "coder-1", nil, projectRoot, resolver, before.RolePair, submission.index)
 
 	if err != nil {
 		t.Fatalf("handleVerdictResult: %v", err)
@@ -234,7 +235,8 @@ func TestAwaitVerdictAutoReclaim_RefusedWhilePaused(t *testing.T) {
 	}
 
 	// WHEN await-verdict handles the rejection
-	result, err := handleVerdictResult(bb, &before, "coder-1", nil, projectRoot, resolver, before.RolePair)
+	submission, _ := latestSubmissionByAgent(&before, "coder-1")
+	result, err := handleVerdictResult(bb, &before, "coder-1", nil, projectRoot, resolver, before.RolePair, submission.index)
 
 	// THEN it does not reclaim, and tells the doer to stop because of the pause
 	if err != nil {

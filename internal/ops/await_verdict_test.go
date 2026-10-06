@@ -761,6 +761,7 @@ func TestAwaitVerdict_DelayedWatcherErrorUsesOriginalDeadline(t *testing.T) {
 		_ *pipeline.Resolver,
 		_, _ string,
 		pollInterval time.Duration,
+		_ int,
 	) (*AwaitVerdictResult, error) {
 		deadlineObserved = deadline
 		pollIntervalObserved = pollInterval
@@ -1516,7 +1517,8 @@ func TestHandleVerdictResult_NonAwaitableStatusRecoversVerdict(t *testing.T) {
 		t.Fatalf("loadResolver error: %v", err)
 	}
 	bb := db.For(stateFile)
-	result, err := handleVerdictResult(bb, &task, "coder-1", nil, tmpDir, resolver, task.RolePair)
+	submission, _ := latestSubmissionByAgent(&task, "coder-1")
+	result, err := handleVerdictResult(bb, &task, "coder-1", nil, tmpDir, resolver, task.RolePair, submission.index)
 	if err != nil {
 		t.Fatalf("handleVerdictResult error: %v", err)
 	}

@@ -226,9 +226,11 @@ type LegacyArtifactReference struct {
 // Fields not relevant to a particular role remain at their zero value.
 type RoleContextData struct {
 	// Identity
-	Role     string // canonical role name (e.g., "coder", "code-reviewer")
-	AgentID  string // agent instance ID (e.g., "coder-1")
-	RoleType string // "doer", "reviewer", or "orchestrator"
+	Role                 string // canonical role name (e.g., "coder", "code-reviewer")
+	AgentID              string // agent instance ID (e.g., "coder-1")
+	RoleType             string // "doer", "reviewer", or "orchestrator"
+	CLIName              string // exact tool identity, independent of shared backend/contract
+	AwaitIntervalSeconds int
 
 	// Task (populated for doer and reviewer roles)
 	TaskID             string

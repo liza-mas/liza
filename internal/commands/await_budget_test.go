@@ -212,7 +212,15 @@ func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 			resubmissionResult.Verdict, resubmissionResult.TimeoutSeconds, ops.ResubmissionPoll)
 	}
 	assertBoundedAwaitOwnershipReleased(t, verdictFixture, false)
-	assertBoundedAwaitOwnershipReleased(t, resubmissionFixture, true)
+	state, err := resubmissionFixture.bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, reviewer := state.FindTask(boundedAwaitTaskID), state.Agents[boundedAwaitReviewerID]
+	if task.ReviewingBy == nil || *task.ReviewingBy != boundedAwaitReviewerID ||
+		task.ReviewLeaseExpires == nil || reviewer.CurrentTask == nil || *reviewer.CurrentTask != boundedAwaitTaskID {
+		t.Fatal("POLL must retain reviewer ownership until the final expiry")
+	}
 
 	verdictCall = startAsyncAwait(func() (*AwaitVerdictResult, error) {
 		return awaitVerdictWithInterval(

@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -462,4 +463,145 @@ func TestAwaitResubmission_EarlyReclaimFailureReleasesNothing(t *testing.T) {
 		t.Fatal("reclaim of a task claimed meanwhile succeeded")
 	}
 	requireSameAgentClaimIntact(t, bb)
+}
+
+func TestD42RetainedReviewReservationSafety(t *testing.T) {
+	for _, exit := range []string{"cancellation", "expired", "stale-generation", "newer-claim", "paused", "stopped", "final-timeout"} {
+		t.Run(exit, func(t *testing.T) {
+			root, bb := setupReservationFixture(t)
+			authority := reservationAuthority(t, bb)
+			opts := AwaitResubmissionOptions{PollOnTimeout: true, AbortPollInterval: time.Millisecond}
+			result, err := AwaitResubmissionWithAuthorityOptions(context.Background(), root, "task-1", *authority, 20*time.Millisecond, opts)
+			if err != nil || result.Verdict != ResubmissionPoll {
+				t.Fatalf("first interval = %+v, %v; want retained POLL", result, err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			switch exit {
+			case "cancellation":
+				cancel()
+			case "expired":
+				if err := bb.Modify(func(s *models.State) error {
+					past := time.Now().Add(-time.Minute)
+					s.FindTask("task-1").ReviewLeaseExpires = &past
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+			case "stale-generation":
+				setLifecycleAgentGeneration(t, bb, authority.ID, lifecycleGenerationB)
+			case "newer-claim":
+				replaceWithSameAgentClaim(t, bb)
+			case "paused", "stopped":
+				if err := bb.Modify(func(s *models.State) error {
+					s.Config.Mode = models.SystemModePaused
+					if exit == "stopped" {
+						s.Config.Mode = models.SystemModeStopped
+					}
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+			case "final-timeout":
+				opts.PollOnTimeout = false
+			}
+			before, err := bb.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err = AwaitResubmissionWithAuthorityOptions(ctx, root, "task-1", *authority, 20*time.Millisecond, opts)
+			unchanged := false
+			switch exit {
+			case "expired":
+				requireOwnershipLost(t, result, err)
+				unchanged = true
+			case "stale-generation":
+				var fence *AgentAuthorityError
+				if !errors.As(err, &fence) {
+					t.Fatalf("stale retry error = %T; want authority fence", err)
+				}
+				unchanged = true
+			case "newer-claim":
+				if err == nil {
+					t.Fatal("retry adopted a newer review claim")
+				}
+				unchanged = true
+			case "cancellation":
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("cancelled retry error = %v", err)
+				}
+			default:
+				want := ResubmissionTimeout
+				if exit == "paused" {
+					want = ResubmissionPaused
+				} else if exit == "stopped" {
+					want = ResubmissionAborted
+				}
+				if err != nil || result.Verdict != want {
+					t.Fatalf("retry = %+v, %v; want %s", result, err, want)
+				}
+			}
+			after, err := bb.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if unchanged {
+				if !reflect.DeepEqual(before, after) {
+					t.Fatal("refused retry changed the expired, fenced, or newer claim")
+				}
+			} else if after.FindTask("task-1").ReviewingBy != nil || after.Agents[authority.ID].CurrentTask != nil {
+				t.Fatal("final exit retained the previous POLL reservation")
+			}
+		})
+	}
+}
+
+func TestD42PausedRetainedCleanupCannotReleaseLaterClaim(t *testing.T) {
+	root, bb := setupReservationFixture(t)
+	authority := reservationAuthority(t, bb)
+	result, err := AwaitResubmissionWithAuthorityOptions(context.Background(), root, "task-1", *authority,
+		20*time.Millisecond, AwaitResubmissionOptions{PollOnTimeout: true})
+	if err != nil || result.Verdict != ResubmissionPoll {
+		t.Fatalf("first interval = %+v, %v; want POLL", result, err)
+	}
+	if err := bb.Modify(func(s *models.State) error { s.Config.Mode = models.SystemModePaused; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	armBeforeReclaim(t, func() { replaceWithSameAgentClaim(t, bb) })
+	result, err = AwaitResubmissionWithAuthorityOptions(context.Background(), root, "task-1", *authority,
+		time.Second, AwaitResubmissionOptions{PollOnTimeout: true})
+	requireOwnershipLost(t, result, err)
+	requireSameAgentClaimIntact(t, bb)
+}
+
+func TestD42PollRetentionChecksGenerationAtDeadline(t *testing.T) {
+	root, bb := setupReservationFixture(t)
+	authority := reservationAuthority(t, bb)
+	var afterReplacement *models.State
+	previous := newAwaitResubmissionWatcher
+	t.Cleanup(func() { newAwaitResubmissionWatcher = previous })
+	newAwaitResubmissionWatcher = func(*db.Blackboard) (awaitResubmissionWatcher, error) {
+		armBeforeReclaim(t, func() {
+			setLifecycleAgentGeneration(t, bb, authority.ID, lifecycleGenerationB)
+			var err error
+			afterReplacement, err = bb.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+		return silentAwaitVerdictWatcher{}, nil
+	}
+	_, err := AwaitResubmissionWithAuthorityOptions(context.Background(), root, "task-1", *authority,
+		20*time.Millisecond, AwaitResubmissionOptions{PollOnTimeout: true, AbortPollInterval: time.Hour})
+	var fence *AgentAuthorityError
+	if !errors.As(err, &fence) || afterReplacement == nil {
+		t.Fatalf("deadline error = %T; want a fenced POLL after replacement", err)
+	}
+	after, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(afterReplacement, after) {
+		t.Fatal("stale POLL validation changed the replacement registration's reservation")
+	}
 }

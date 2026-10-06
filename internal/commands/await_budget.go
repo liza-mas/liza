@@ -1,8 +1,22 @@
 package commands
 
-import "time"
+import (
+	"time"
+
+	"github.com/liza-mas/liza/internal/db"
+	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providers"
+)
 
 const maxAwaitInterval = 100 * time.Second
+
+func agentAwaitInterval(projectRoot, agentID string) time.Duration {
+	state, err := db.For(paths.New(projectRoot).StatePath()).ReadCached()
+	if err != nil {
+		return maxAwaitInterval
+	}
+	return providers.AwaitInterval(state.Agents[agentID].Provider)
+}
 
 func awaitWithBudget[T any](
 	remaining time.Duration,
