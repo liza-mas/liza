@@ -4,6 +4,11 @@
 
 ACCEPTED — 2026-10-05.
 
+Amended 2026-10-06 (D-56): the acceptance batch maximum is 14400 s
+(`referencecontract.AcceptanceMaxTimeoutSeconds`), because real-database suites
+under multi-agent load exceed one hour. `MaxInflightSubmitGrace` derives from it,
+so the 3600 s batch and 70 minute cap below now read 14400 s and 4 h 10 min.
+
 ## Context
 
 `submit-for-review` runs a strict task's canonical acceptance commands

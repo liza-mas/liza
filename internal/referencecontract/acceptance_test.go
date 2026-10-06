@@ -92,7 +92,7 @@ func TestParseAcceptanceRejectsInvalidDeclarations(t *testing.T) {
 		{"blank command", `project-test --acceptance`, ` `, "validation"},
 		{"NUL command", `project-test --acceptance`, `test\u0000`, "validation"},
 		{"zero timeout", `"version":1`, `"version":1,"timeout_seconds":0`, "timeout_seconds"},
-		{"excess timeout", `"version":1`, `"version":1,"timeout_seconds":3601`, "timeout_seconds"},
+		{"excess timeout", `"version":1`, `"version":1,"timeout_seconds":14401`, "timeout_seconds"},
 		{"wrong path extension", `acceptance/task.json`, `acceptance/task.yaml`, "manifest"},
 		{"manifest traversal", `acceptance/task.json`, `../task.json`, "manifest"},
 		{"unallocated proof", `"version":1`, `"version":1,"approved_proofs":[{"obligation_id":"AC-other","reference_id":"source","rationale":"reviewed"}]`, "obligation_id"},
@@ -185,6 +185,17 @@ func TestParseAcceptanceManifestRejectsMalformedMappings(t *testing.T) {
 }
 
 func TestAcceptanceBounds(t *testing.T) {
+	for _, timeout := range []int{AcceptanceMaxTimeoutSeconds, AcceptanceMaxTimeoutSeconds + 1} {
+		contract := AcceptanceContract{Version: 1, Manifest: "acceptance/task.json", Obligations: []string{"AC-identity"}, Validation: []string{"test"}, TimeoutSeconds: timeout}
+		data, err := json.Marshal(contract)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = ParseAcceptance(acceptanceDocument(string(data)), "Task One")
+		if (err == nil) != (timeout == AcceptanceMaxTimeoutSeconds) {
+			t.Fatalf("timeout %d: %v", timeout, err)
+		}
+	}
 	contract := AcceptanceContract{Version: 1, Manifest: "acceptance/task.json", Obligations: []string{"AC-identity"}, Validation: []string{"test"}, TimeoutSeconds: 3600}
 	for _, count := range []int{64, 65} {
 		contract.Validation = make([]string, count)

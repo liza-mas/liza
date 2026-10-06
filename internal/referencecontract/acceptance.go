@@ -11,10 +11,13 @@ import (
 
 const (
 	// AcceptanceMaxBytes bounds each source carrier and submitted manifest.
-	AcceptanceMaxBytes       = 256 * 1024
-	acceptanceHeading        = "Acceptance Contract"
-	acceptanceMaxObligations = 256
-	acceptanceMaxCommands    = 64
+	AcceptanceMaxBytes = 256 * 1024
+	// AcceptanceMaxTimeoutSeconds bounds a reviewed acceptance batch. Real-database
+	// suites under multi-agent load exceed one hour (D-56); the default stays 600 s.
+	AcceptanceMaxTimeoutSeconds = 4 * 3600
+	acceptanceHeading           = "Acceptance Contract"
+	acceptanceMaxObligations    = 256
+	acceptanceMaxCommands       = 64
 )
 
 // AcceptanceContract allocates existing source obligations to one coding task.
@@ -187,8 +190,8 @@ func validateAcceptanceContract(contract *AcceptanceContract, sources *Contract)
 			return fmt.Errorf("acceptance.validation[%d]: command must be non-empty and contain no NUL", i)
 		}
 	}
-	if contract.TimeoutSeconds < 1 || contract.TimeoutSeconds > 3600 {
-		return fmt.Errorf("acceptance.timeout_seconds: must be 1..3600")
+	if contract.TimeoutSeconds < 1 || contract.TimeoutSeconds > AcceptanceMaxTimeoutSeconds {
+		return fmt.Errorf("acceptance.timeout_seconds: must be 1..%d", AcceptanceMaxTimeoutSeconds)
 	}
 	references := make(map[string]bool, len(sources.DirectReferences))
 	for _, reference := range sources.DirectReferences {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/referencecontract"
 	"github.com/liza-mas/liza/internal/secretmask"
 )
 
@@ -59,8 +60,8 @@ func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string,
 	fail := func(index int, reason string) error {
 		return fmt.Errorf("acceptance.execution[%d] for task %s: %s", index, mask(taskID), mask(reason))
 	}
-	if timeoutSeconds < 0 || timeoutSeconds > 3600 {
-		return nil, fail(0, "timeout_seconds must be between 1 and 3600")
+	if timeoutSeconds < 0 || timeoutSeconds > referencecontract.AcceptanceMaxTimeoutSeconds {
+		return nil, fail(0, fmt.Sprintf("timeout_seconds must be between 1 and %d", referencecontract.AcceptanceMaxTimeoutSeconds))
 	}
 	ctx, cancel := context.WithTimeout(ctx, acceptanceBatchTimeout(timeoutSeconds))
 	defer cancel()

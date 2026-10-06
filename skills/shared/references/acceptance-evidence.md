@@ -119,7 +119,7 @@ unchanged HEAD. Failure leaves the prior review state intact.
   canonical commands. Strict JSON rejects unknown/duplicate keys and unsupported
   versions. Paths must be clean repository-relative non-credential paths, with
   no symlink/submodule proof files.
-- Total execution timeout: 600 seconds by default, configurable from 1 to 3600
+- Total execution timeout: 600 seconds by default, configurable from 1 to 14400
   seconds in the reviewed declaration. Aggregate captured output: 1 MiB;
   overflow fails admission instead of reporting truncated success.
 - Commands must emit sanitized output and contain no inline secrets. Known

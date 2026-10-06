@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/atomicfile"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/referencecontract"
 )
 
 // submitGraceMargin covers the rebase, index refresh and final transaction
@@ -22,7 +23,7 @@ const submitGraceMargin = 10 * time.Minute
 // MaxInflightSubmitGrace bounds the time any in-flight submit marker can keep
 // a session alive past its execution timeout: the largest acceptance batch
 // plus the margin.
-const MaxInflightSubmitGrace = time.Hour + submitGraceMargin
+const MaxInflightSubmitGrace = referencecontract.AcceptanceMaxTimeoutSeconds*time.Second + submitGraceMargin
 
 // inflightSubmitMarker tells the submitting agent's supervisor that this
 // agent's own submit is running and until when it may legitimately run. Its
