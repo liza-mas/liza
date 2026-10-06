@@ -39,7 +39,12 @@ submit that commit with `{{binaryName}} submit-for-review --json`.
 Invoke `systemic-thinking` on the draft decomposition before `{{binaryName}} set-task-output` or submission and record the result in an artifact section named `Systemic Decomposition Review`.
 
 Every output[] entry MUST include `{{.MasterOutputRefField}}` pointing to this
-master artifact and typed decomposition metadata{{if eq .Role "code-planner"}}, plus an explicit `rca_required` classification{{end}}:
+master artifact and typed decomposition metadata{{if eq .Role "code-planner"}}, plus an explicit `rca_required` classification{{end}}.
+{{- if eq .Role "architect"}}
+Architecture outputs use `<doc>.md#<exact Scope heading>`. Each Scope declares
+`**Direct references:** ["product-id", "shared-id"]` outside fences, naming its complete
+product and shared-architecture read set from Source References (`[]` selects none).
+{{- end}}
 
 ```yaml
 {{- if eq .Role "code-planner"}}

@@ -17,10 +17,17 @@ import (
 // prompts will (ADR-0133). A fragment into a strict carrier present at the
 // submitted commit must select exactly one eligible heading; rejecting it here
 // keeps an unresolvable anchor, typically a slug, from blocking every child
-// after merge.
+// after merge. New architecture output assignments also require exact headings
+// in marker-free artifacts; stored scalar refs keep their legacy read behavior.
 func validateOutputRefFragments(root string, task *models.Task, commit string) error {
 	g := git.New(root)
 	for i, output := range task.Output {
+		if task.EffectiveType() == models.TaskTypeArchitecture && output.ArchRef == "" {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s: output[%d].arch_ref is required; name the architecture artifact and exact Scope heading", task.ID, i)}
+		}
+		if task.EffectiveType() == models.TaskTypeArchitecture && paths.SplitRefFragment(output.ArchRef) == "" {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s: output[%d].arch_ref requires an exact Scope heading fragment; use %s#<exact Scope heading>", task.ID, i, output.ArchRef)}
+		}
 		for _, ref := range []struct {
 			field string
 			value string
@@ -30,7 +37,15 @@ func validateOutputRefFragments(root string, task *models.Task, commit string) e
 			{field: "plan_ref", value: output.PlanRef},
 			{field: "arch_ref", value: output.ArchRef},
 		} {
-			if err := ResolveRefFragmentAt(g, commit, ref.value); err != nil {
+			err := ResolveRefFragmentAt(g, commit, ref.value)
+			if err == nil && task.EffectiveType() == models.TaskTypeArchitecture && ref.field == "arch_ref" {
+				var content string
+				content, err = g.ReadBlob(commit, paths.SplitRefFile(ref.value))
+				if err == nil {
+					_, err = referencecontract.ExtractSection(content, paths.SplitRefFragment(ref.value))
+				}
+			}
+			if err != nil {
 				reason := err.Error()
 				var headingErr *referencecontract.HeadingMatchError
 				if errors.As(err, &headingErr) {
@@ -175,14 +190,15 @@ func validatePlanningOutputRuntimeInputs(root string, state *models.State, task 
 	return runtimeInputAdmissionError(integrationOperationSubmitForReview, task, append(diagnostics, checked...), err)
 }
 
-// checkPlanningOutputSnapshot prevents publishing an allocation other than the
-// one whose candidate declarations were checked outside the state transaction.
+// checkPlanningOutputSnapshot prevents publishing a planning or architecture
+// allocation other than the one checked outside the state transaction.
 func checkPlanningOutputSnapshot(expected, current *models.Task) error {
-	if expected.EffectiveType() != models.TaskTypePlanning && current.EffectiveType() != models.TaskTypePlanning {
+	if expected.EffectiveType() != models.TaskTypePlanning && current.EffectiveType() != models.TaskTypePlanning &&
+		expected.EffectiveType() != models.TaskTypeArchitecture && current.EffectiveType() != models.TaskTypeArchitecture {
 		return nil
 	}
 	if expected.EffectiveType() != current.EffectiveType() || !reflect.DeepEqual(expected.Output, current.Output) {
-		return &PreconditionError{Reason: fmt.Sprintf("task %s: planning output changed during submission", expected.ID)}
+		return &PreconditionError{Reason: fmt.Sprintf("task %s: %s output changed during submission", expected.ID, expected.EffectiveType())}
 	}
 	return nil
 }

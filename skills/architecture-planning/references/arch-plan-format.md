@@ -81,16 +81,24 @@ Annotate transformations at each stage.
 
 ## Decomposition
 
-Each scope becomes a code-planning child task.
+Each scope becomes a specialized-architecture or code-planning child, according to the
+transition. Every Scope declares its complete read set on one line outside code fences:
+`**Direct references:** ["product-id", "shared-architecture-id"]`. IDs name entries in
+`Source References`; `[]` explicitly selects none. Include every inherited product obligation
+and shared decision, constraint, interface, or hold needed by this scope. Shared sections may
+use same-file direct references, pinned to a Git revision where that content already exists;
+never infer this read set from prose or the coverage table.
 
 ### Scope 1: <title>
 
+**Direct references:** ["<product-reference-id>", "<shared-reference-id>"]
 **Component(s):** <which components>
 **Boundary:** <in scope / out of scope>
 **Done when:** <falsifiable criterion>
 **Depends on:** <scope numbers, if any>
 
 ### Scope 2: <title>
+**Direct references:** ["<reference-id>"]
 ...
 
 ### Spec Coverage
@@ -106,7 +114,10 @@ Unmapped obligations are gaps.
 ## Output
 
 For each downstream `output[]` entry, record its scope ID, concise intent, boundary, dependencies,
-validation observation, and anchored architecture reference. If `desc` exceeds 160 characters or
+validation observation, and `arch_ref` as `<doc>.md#<exact Scope heading>`. Both master and
+specialized architects must assign an existing unique Scope heading to every output; bare paths
+are refused on new submissions. The child sees only that Scope and its selected direct references;
+other sections and inherited carriers remain pinned navigation pointers. If `desc` exceeds 160 characters or
 `done_when`/`scope` exceeds 400 characters, explain why the longer value is executable at dispatch
 and has no authoritative home behind a reference.
 

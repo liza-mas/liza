@@ -67,7 +67,7 @@ with that question and its build and proof cost.
 {{template "artifact-ref-fallback" .}}
 {{- end}}
 {{- if ne .ArchRef ""}}
-ARCHITECTURE REFERENCE: {{.ArchRef}}
+ARCHITECTURE REFERENCE: {{.ArchRef}}{{if .ArchSection}} section: {{.ArchSection}}{{end}}
 Use its assigned carrier and declared direct-reference spans for structural context.
 {{- end}}
 {{- if ne .EpicRef ""}}
@@ -259,7 +259,12 @@ REFERENCE-FIRST AUTHORING: Own component boundaries, interfaces, data flow, and
 failure handling at the assigned architectural level. Cite inherited product
 behavior and shared architecture; do not restate them. Every new architecture
 artifact must include the strict `## Source References` section with non-empty
-direct references and obligation coverage. Map components, interfaces, and proof
+direct references and obligation coverage. Each Scope must declare one JSON read set
+outside fences: `**Direct references:** ["product-id", "shared-id"]` (`[]` selects none),
+naming all required product authority and shared decisions, constraints, interfaces,
+and holds from Source References. Use exact pins, including same-file shared sections
+only when their content already exists at that revision. Children see only their assigned
+Scope and selected spans; other sections remain pinned pointers. Map components, interfaces, and proof
 obligations to the requirements they serve; separate the minimum mechanism Must scope
 needs from optional extensions; check a consequential platform or API assumption against
 the implementation, primary documentation, or a targeted probe before it becomes an
@@ -297,7 +302,7 @@ document and output[] entries only.
 6. For EACH code-planning scope in your architecture, call {{binaryName}} set-task-output --json with structured entries.
    Each entry becomes a code-planning child task after merge. The Architecture Reviewer will verify these.
    Fields: desc (scope boundary), done_when (falsifiable), scope (what the code-planner covers),
-   spec_ref (goal spec — same for all entries), arch_ref (repo-relative path to the arch doc from step 5),
+   spec_ref (goal spec — same for all entries), arch_ref (`<step-5-doc>.md#<exact Scope heading>` for both master and specialized outputs),
    validation (optional canonical commands; hook/check intent must appear in the arch doc, desc, or done_when). Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
    depends_on (optional array of sibling index strings for ordering constraints),
    task_depends_on (optional array of existing concrete task IDs outside this output[]).
@@ -327,8 +332,8 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
    a. Each output[] entry has a single, well-scoped code-planning intent.
    b. Each output[] done_when is falsifiable: a specific observable outcome, not vague.
       Any validation[] command is satisfiable for the generated scope and agent-executable under the validation command-shape rule.
-   c. Verify the arch doc contains a decomposition section mapping to each output[] entry.
-   d. All output[] entries have arch_ref set to the arch doc path.
+   c. Every output maps to a Scope with a complete explicit Direct references read set, including needed shared architecture.
+   d. Every arch_ref names the arch doc plus that child's exact unique Scope heading; bare paths are refused on new submissions.
    e. Spec compliance: the decomposition covers the full scope of the goal spec.
    f. Shared-file audit: if two output[] entries may touch the same files, add depends_on.
    g. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.

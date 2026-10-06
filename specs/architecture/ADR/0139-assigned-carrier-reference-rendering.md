@@ -4,6 +4,12 @@
 
 ACCEPTED
 
+Presentation amendment: [ADR-0179](0179-scope-assigned-planner-context.md)
+lets explicit Scope read sets narrow architect/code-planner doer context to
+the assigned section and selected spans, with pinned pointers for other
+carriers. The rendering below remains the compatibility fallback; complete
+discovery and validation remain unchanged.
+
 ## Context
 
 ADR-0133 bounds a task's read set to "the assigned section, its declared

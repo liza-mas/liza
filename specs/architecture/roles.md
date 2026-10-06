@@ -191,11 +191,24 @@ carriers, complete direct-parent reviewed ranges, and the current review range a
 integration HEAD. It validates declared revision/path/anchor spans and rejects an inherited
 section whose text changed at that HEAD; an unrelated edit elsewhere in the same file is not
 staleness, and a parent carrier a later merge changed is adopted at that HEAD (only deletion
-blocks). Every carrier is inlined, but only the assigned carriers' declared references are inlined
-with it: parent and review carriers, plus the most specific scalar ref (`plan_ref` > `arch_ref` >
-`epic_ref` > `spec_ref`). References declared by the remaining ancestor carriers render as one-line
-pointers to their pinned revision (ADR-0139). Marker-free artifacts and slug-like scalar fragments
-retain the legacy behavior above; no state-schema migration is implied.
+blocks). Normally every carrier is inlined, with full references only for assigned carriers:
+parent/review carriers and the most specific scalar ref (`plan_ref` > `arch_ref` > `epic_ref` >
+`spec_ref`); ancestor references are pinned pointers (ADR-0139). Architect/code-planner doers
+with an exact assigned Scope and explicit `**Direct references:** ["product-id", "shared-id"]` read set render
+only that section and selected spans; other carrier bodies/sections remain pinned navigation
+(ADR-0179). Full discovery, freshness, drift and proof checks still apply to every reference.
+New master and specialized architecture outputs require exact Scope-heading fragments.
+Bare refs, missing declarations, marker-free artifacts and other roles retain existing rendering;
+existing child adoption requires reviewed owner correction and authorized retargeting/recreation.
+No state-schema migration or heuristic relevance inference is implied.
+
+Both planner doers also receive provider pointers from dependencies, read-only dependencies,
+consumed-interface owners and sibling Scope 0 tasks (including the architecture parent's cohort
+for code-planners). These retain both merged arch/plan artifacts with each producer's reviewed
+SHA, every generated coding-unit ID/status and exact plan heading, and missing/ambiguous states.
+They report the prompt snapshot, not new edges or commitments. A pinned same-role-pair precedent
+is a format example only. Iteration >=2 may point to rejection-cited sections at the retained
+rejected commit as a reading start; complete rejection obligations remain authoritative.
 
 **`done_when` Guidelines:**
 - State the observable behavior, not the implementation approach

@@ -13,6 +13,21 @@ Only the unresolved findings and closure conditions below remain authoritative.
 REQUIRED: blockers, overreach, and rejection-worthy concerns.
 ADVISORY: suggestions and nits.
 {{.PriorRejection}}
+{{- if .PlannerReworkSections}}
+
+REJECTION-CITED SECTIONS:
+Start with these cited sections of the rejected snapshot. Full findings and document-wide obligations still apply.
+{{- range .PlannerReworkSections}}
+- {{.File}}#{{.Heading}} @ {{.Commit}}, lines {{.StartLine}}-{{.EndLine}} (cited: {{range $i, $line := .CitedLines}}{{if $i}}, {{end}}{{$line}}{{end}})
+  Read: `git -C {{$.ShellIntegrationWorktree}} show {{.ShellSnapshot}} | sed -n {{.ShellRange}}`
+{{- end}}
+{{- end}}
+{{- if .PlannerReworkUnresolved}}
+Unresolved section navigation (use the full rejection above):
+{{- range .PlannerReworkUnresolved}}
+- {{.}}
+{{- end}}
+{{- end}}
 {{- if eq .Role "coder"}}
 
 If the rejection cites an out-of-scope file modification that is genuinely required

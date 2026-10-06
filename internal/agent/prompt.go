@@ -384,6 +384,9 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 	if task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null" {
 		data.PriorRejection = *task.RejectionReason
 	}
+	if err := populatePlannerContext(task, state, config, data); err != nil {
+		return nil, fmt.Errorf("planner navigation context: %w", err)
+	}
 
 	// Prior attempt outcome (attempt 2 only)
 	if data.AttemptNum == 2 {

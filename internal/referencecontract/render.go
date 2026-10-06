@@ -27,7 +27,8 @@ const (
 //
 // AssignedHeading is the section of this carrier the task was assigned, when
 // its ref declared one. It narrows the span by eliding that section's peers,
-// never the context they share. Empty renders the span whole.
+// retaining shared context by default. SectionOnly retains only the assigned
+// section; Empty renders the span whole.
 type Carrier struct {
 	Path            string
 	Span            string
@@ -37,6 +38,10 @@ type Carrier struct {
 	Refs            []Reference
 	ElideRefs       bool
 	AssignedHeading string
+	// Explicit section read sets opt in; zero values retain legacy rendering.
+	SectionOnly        bool
+	PointerOnly        bool
+	InlineReferenceIDs map[string]bool
 }
 
 // Reference is one resolved direct reference: a section of a pinned file.
@@ -48,6 +53,7 @@ type Carrier struct {
 // from — integration HEAD, or the pin itself when Unresolved gives why the
 // section no longer resolves at HEAD.
 type Reference struct {
+	ID             string
 	Path           string
 	Heading        string
 	Revision       string
@@ -68,8 +74,9 @@ type Reference struct {
 // reference pinned at an older revision of a file edited elsewhere still
 // elides; if the section is not present, the reference is emitted in full.
 //
-// A carrier naming an AssignedHeading renders that section and everything it
-// shares with the rest of the file, and one pointer line per peer section.
+// By default, a carrier naming an AssignedHeading renders that section and
+// shared context, with one pointer per peer. SectionOnly instead renders only
+// that section and its selected references; PointerOnly renders a carrier pointer.
 // Narrowing happens before duplicate detection, so a reference whose text
 // survived only inside an elided peer is emitted in full rather than pointing
 // at a section no longer present.
@@ -105,10 +112,21 @@ func RenderCarriers(observations []Carrier) (string, error) {
 		winners[observation.Path] = observation
 	}
 	for path, carrier := range winners {
+		if carrier.PointerOnly {
+			continue
+		}
 		if carrier.AssignedHeading == "" {
 			continue
 		}
-		carrier.Span = elideAssignedPeers(carrier)
+		if carrier.SectionOnly {
+			span, err := ExtractSection(carrier.Span, carrier.AssignedHeading)
+			if err != nil {
+				return "", err
+			}
+			carrier.Span = span
+		} else {
+			carrier.Span = elideAssignedPeers(carrier)
+		}
 		winners[path] = carrier
 	}
 	paths := make([]string, 0, len(winners))
@@ -121,17 +139,20 @@ func RenderCarriers(observations []Carrier) (string, error) {
 	// (ADR-0133), so blob equality would miss real duplicates.
 	containedIn := func(ref Reference) bool {
 		inlined, ok := winners[ref.Path]
-		return ok && strings.Contains(inlined.Span, ref.Span)
+		return ok && !inlined.PointerOnly && strings.Contains(inlined.Span, ref.Span)
 	}
 	// Which carrier emits each reference in full, decided before rendering so
 	// an elided carrier that sorts earlier can point at it.
 	emittedBy := make(map[string]string)
 	for _, path := range paths {
 		carrier := winners[path]
-		if carrier.ElideRefs {
+		if carrier.PointerOnly || carrier.ElideRefs {
 			continue
 		}
 		for _, ref := range carrier.Refs {
+			if carrier.InlineReferenceIDs != nil && !carrier.InlineReferenceIDs[ref.ID] {
+				continue
+			}
 			key := refKey(ref)
 			if _, done := emittedBy[key]; done {
 				continue
@@ -152,15 +173,41 @@ func RenderCarriers(observations []Carrier) (string, error) {
 	seenNotes := make(map[string]bool)
 	for _, path := range paths {
 		carrier := winners[path]
-		fmt.Fprintf(&out, "CARRIER %s @ %s\n%s", strconv.Quote(path), carrier.Revision, carrier.Span)
-		if !strings.HasSuffix(carrier.Span, "\n") {
-			out.WriteByte('\n')
+		if carrier.PointerOnly {
+			fmt.Fprintf(&out, "CARRIER %s @ %s — inherited context; not inlined; read with git show %s if needed\n",
+				strconv.Quote(path), carrier.Revision, shellQuote(carrier.Revision+":"+path))
+		} else {
+			fmt.Fprintf(&out, "CARRIER %s @ %s\n%s", strconv.Quote(path), carrier.Revision, carrier.Span)
+			if !strings.HasSuffix(carrier.Span, "\n") {
+				out.WriteByte('\n')
+			}
 		}
+		if carrier.SectionOnly {
+			fmt.Fprintf(&out, "OTHER SECTIONS AND REFERENCES %s @ %s — shared and sibling context; read Source References and exact headings with git show %s if needed\n",
+				strconv.Quote(path), carrier.Revision, shellQuote(carrier.Revision+":"+path))
+		}
+		var unselectedIDs []string
 		for _, ref := range carrier.Refs {
 			key := refKey(ref)
 			note := driftNote(ref)
 			noteKey := key + "\x00" + ref.PinnedRevision
 			target := strconv.Quote(ref.Path + "#" + ref.Heading)
+			// Compact navigation routes unselected spans through their carrier's
+			// declaration. It does not consume a full-emission slot, and each
+			// freshness disclosure still names the reference and its real pin.
+			if carrier.PointerOnly || carrier.InlineReferenceIDs != nil && !carrier.InlineReferenceIDs[ref.ID] {
+				if carrier.SectionOnly {
+					unselectedIDs = append(unselectedIDs, strconv.Quote(ref.ID))
+				}
+				if note != "" && !seenNotes[noteKey] {
+					pointerNote := strings.Replace(note, "pinned text shown", "pinned section available via pointer", 1)
+					pointerNote = strings.Replace(pointerNote, "current text shown", "current section available via pointer", 1)
+					fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — not inlined; read with git show %s if needed; %s\n",
+						target, ref.Revision, shellQuote(ref.Revision+":"+ref.Path), pointerNote)
+					seenNotes[noteKey] = true
+				}
+				continue
+			}
 			if seenRefs[key] {
 				if note != "" && !seenNotes[noteKey] {
 					seenNotes[noteKey] = true
@@ -206,6 +253,9 @@ func RenderCarriers(observations []Carrier) (string, error) {
 			if !strings.HasSuffix(ref.Span, "\n") {
 				out.WriteByte('\n')
 			}
+		}
+		if len(unselectedIDs) > 0 {
+			fmt.Fprintf(&out, "UNSELECTED DIRECT REFERENCE IDS: %s — pointers via this carrier's Source References above\n", strings.Join(unselectedIDs, ", "))
 		}
 	}
 	return strings.TrimRight(out.String(), "\n"), nil

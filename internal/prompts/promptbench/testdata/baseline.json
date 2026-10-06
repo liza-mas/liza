@@ -54,6 +54,14 @@
       "bytes": 0,
       "longest_run_bytes": 0,
       "note": "bounded by maxTaskGraphChildDeps within maxTaskGraphEntries=16; not separately extracted"
+    },
+    {
+      "site": "site6_provider_artifacts_and_units",
+      "source": "blocks/provider_tasks.tmpl",
+      "occurrences": 0,
+      "bytes": 0,
+      "longest_run_bytes": 0,
+      "note": "complete provider navigation block; occurrences count providers; all artifact/unit mappings retained"
     }
   ],
   "depends_on_total_bytes": 5812,

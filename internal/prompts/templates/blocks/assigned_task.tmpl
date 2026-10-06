@@ -39,6 +39,7 @@ SCOPE:
 {{.Scope}}
 {{template "task-decomposition-metadata" .}}
 {{template "resolved-reference-context" .}}
+{{template "provider-tasks" .}}
 {{- if eq .Role "coder"}}
 {{template "acceptance-source" .}}
 {{- if .AcceptanceSource}}

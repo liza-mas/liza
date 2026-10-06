@@ -242,7 +242,7 @@ func (m *SmartMockCLIAgent) executeDoer(ctx context.Context, projectRoot, agentI
 		if err := os.MkdirAll(filepath.Dir(archDoc), 0755); err != nil {
 			return fmt.Errorf("create architecture doc directory: %w", err)
 		}
-		if err := os.WriteFile(archDoc, []byte("# Full Sprint Architecture\n"), 0644); err != nil {
+		if err := os.WriteFile(archDoc, []byte("# Full Sprint Architecture\n\n## Scope 0: Authentication\nAuthentication request handling.\n\n## Scope 1: Authorization\nAuthorization policy decisions.\n"), 0644); err != nil {
 			return fmt.Errorf("write architecture doc: %w", err)
 		}
 		filesToAdd = append(filesToAdd, filepath.ToSlash(archDocRel))
@@ -314,7 +314,7 @@ func fullSprintMasterArchitectureOutput() []models.OutputEntry {
 			DoneWhen: "Authentication architecture is approved",
 			Scope:    "internal/auth",
 			SpecRef:  "specs/feature.md",
-			ArchRef:  "specs/arch-plan/full-sprint-architecture.md",
+			ArchRef:  "specs/arch-plan/full-sprint-architecture.md#Scope 0: Authentication",
 			Decomposition: &models.DecompositionManifest{
 				OwnedFiles:         []string{"internal/auth/handler.go"},
 				OwnedModules:       []string{"internal/auth"},
@@ -328,7 +328,7 @@ func fullSprintMasterArchitectureOutput() []models.OutputEntry {
 			DoneWhen: "Authorization architecture is approved",
 			Scope:    "internal/authz",
 			SpecRef:  "specs/feature.md",
-			ArchRef:  "specs/arch-plan/full-sprint-architecture.md",
+			ArchRef:  "specs/arch-plan/full-sprint-architecture.md#Scope 1: Authorization",
 			Decomposition: &models.DecompositionManifest{
 				OwnedFiles:      []string{"internal/authz/policy.go"},
 				OwnedModules:    []string{"internal/authz"},
@@ -710,8 +710,8 @@ func TestFullSprintSequence(t *testing.T) {
 	}
 
 	// Verify EpicRef and ArchRef propagate to specialized architecture, code-planning, and coding tasks.
-	wantArchRef := "specs/arch-plan/full-sprint-architecture.md"
-	for _, suffix := range []string{"0", "1"} {
+	for i, suffix := range []string{"0", "1"} {
+		wantArchRef := fullSprintMasterArchitectureOutput()[i].ArchRef
 		archTaskID := archMasterTaskID + "-ar-" + suffix
 		archTask := state.FindTask(archTaskID)
 		if archTask != nil {

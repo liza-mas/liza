@@ -1,8 +1,62 @@
 package prompts
 
 import (
+	"fmt"
+
 	"github.com/liza-mas/liza/internal/models"
 )
+
+// PlannerArtifactPointer binds navigation to the task that produced an artifact.
+// Commit is empty when that producer has no merged, reviewed attribution.
+type PlannerArtifactPointer struct {
+	Kind       string
+	Ref        string
+	Refs       []string
+	File       string
+	ProducerID string
+	Commit     string
+	Unresolved string
+	Units      []PlannerUnitPointer
+}
+
+// ShellSnapshot formats one immutable git object without interpolating shell code.
+func (p PlannerArtifactPointer) ShellSnapshot() string {
+	return shellQuote(p.Commit + ":" + p.File)
+}
+
+// PlannerUnitPointer preserves actual task identity and its assigned plan heading.
+type PlannerUnitPointer struct {
+	ID      string
+	Status  string
+	PlanRef string
+}
+
+// PlannerProviderSummary is advisory existing-state context, never a new edge.
+type PlannerProviderSummary struct {
+	ID          string
+	Status      string
+	Reasons     []string
+	Artifacts   []PlannerArtifactPointer
+	Unavailable string
+}
+
+// PlannerReworkPointer is a cited section of the retained rejected snapshot.
+type PlannerReworkPointer struct {
+	File       string
+	Heading    string
+	Commit     string
+	StartLine  int
+	EndLine    int
+	CitedLines []int
+}
+
+func (p PlannerReworkPointer) ShellSnapshot() string {
+	return shellQuote(p.Commit + ":" + p.File)
+}
+
+func (p PlannerReworkPointer) ShellRange() string {
+	return shellQuote(fmt.Sprintf("%d,%dp", p.StartLine, p.EndLine))
+}
 
 // CompletedTaskSummary provides context about completed tasks for integration analysis.
 type CompletedTaskSummary struct {
@@ -188,6 +242,7 @@ type RoleContextData struct {
 	PlanRef            string // coding plan path only (no fragment)
 	PlanSection        string // coding plan anchor fragment, empty if none
 	ArchRef            string // path to architecture document, empty if none
+	ArchSection        string // exact architecture anchor fragment, empty if none
 	RCARequired        bool   // objective is a defect fix: plan must carry a reviewed RCA
 	ValidationCommands []string
 	// DeclareValidationPrerequisites: every role consuming this task's output[]
@@ -221,14 +276,19 @@ type RoleContextData struct {
 	ScopeExtensions []map[string]string
 
 	// Plan scoping (populated for task-aware roles)
-	GoalSpecRef          string
-	TotalPlanTasks       int
-	TaskOrdinal          int // 1-based position in visible sprint plan
-	TaskRolePair         string
-	DecompositionRoot    bool
-	MasterOutputRefField string
-	PhaseDependencyTasks []SiblingTaskSummary
-	TaskGraph            TaskGraphDigest
+	GoalSpecRef             string
+	TotalPlanTasks          int
+	TaskOrdinal             int // 1-based position in visible sprint plan
+	TaskRolePair            string
+	DecompositionRoot       bool
+	MasterOutputRefField    string
+	PhaseDependencyTasks    []SiblingTaskSummary
+	TaskGraph               TaskGraphDigest
+	PlannerProviders        []PlannerProviderSummary
+	PlannerProviderIssues   []string
+	PlannerFormatPrecedent  *PlannerArtifactPointer
+	PlannerReworkSections   []PlannerReworkPointer
+	PlannerReworkUnresolved []string
 
 	// Architecture-specific (populated for architect role)
 	ParentTaskContexts         []ParentTaskContext

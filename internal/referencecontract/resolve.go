@@ -74,6 +74,11 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 		if contract == nil {
 			continue
 		}
+		if class == CarrierReview {
+			if err := ValidateSectionReferences(content, contract); err != nil {
+				return nil, invalidCarrier(fmt.Errorf("reviewed carrier %q: %w", path, err))
+			}
+		}
 		oid, oidErr := repo.BlobOID(review, path)
 		if oidErr != nil {
 			return nil, oidErr
@@ -161,7 +166,7 @@ func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview
 		if err != nil {
 			return nil, err
 		}
-		pinned := Reference{Path: ref.Path, Heading: ref.Heading, Revision: revision, BlobOID: pinnedOID}
+		pinned := Reference{ID: ref.ID, Path: ref.Path, Heading: ref.Heading, Revision: revision, BlobOID: pinnedOID}
 		// unresolvable keeps the pinned text when the section cannot be read
 		// at the fresh revision, or refuses with err.
 		unresolvable := func(reason string, err error) error {
@@ -218,7 +223,7 @@ func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview
 					return nil, invalidCarrier(fmt.Errorf("direct reference %q is stale at %s", ref.ID, where))
 				}
 				refs = append(refs, Reference{
-					Path: ref.Path, Heading: ref.Heading, Revision: freshRevision, BlobOID: freshOID,
+					ID: ref.ID, Path: ref.Path, Heading: ref.Heading, Revision: freshRevision, BlobOID: freshOID,
 					Span: freshSpan, PinnedRevision: revision,
 				})
 				continue

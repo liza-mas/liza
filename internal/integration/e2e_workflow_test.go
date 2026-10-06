@@ -755,12 +755,14 @@ func TestArchitecturePairWorkflow(t *testing.T) {
 				DoneWhen: "Auth module complete",
 				Scope:    "internal/auth/",
 				SpecRef:  "specs/arch-feature.md",
+				ArchRef:  "arch-plan.md#Scope 0: Authentication",
 			},
 			{
 				Desc:     "Implement storage layer",
 				DoneWhen: "Storage layer complete",
 				Scope:    "internal/storage/",
 				SpecRef:  "specs/arch-feature.md",
+				ArchRef:  "arch-plan.md#Scope 1: Storage",
 			},
 		},
 	}); err != nil {
@@ -772,14 +774,14 @@ func TestArchitecturePairWorkflow(t *testing.T) {
 	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
 		TaskID: taskID, AgentID: architectID,
 		Intent: "Architecture definition", ValidationPlan: "Review architecture",
-		FilesToModify: []string{"specs/arch-plan/feature.md"},
+		FilesToModify: []string{"arch-plan.md"},
 	}); err != nil {
 		t.Fatalf("WriteCheckpoint failed: %v", err)
 	}
 
 	worktreePath := filepath.Join(projectDir, *task.Worktree)
 	archDoc := filepath.Join(worktreePath, "arch-plan.md")
-	if err := os.WriteFile(archDoc, []byte("# Architecture Plan\n"), 0644); err != nil {
+	if err := os.WriteFile(archDoc, []byte("# Architecture Plan\n\n## Scope 0: Authentication\nAuthentication boundary.\n\n## Scope 1: Storage\nStorage boundary.\n"), 0644); err != nil {
 		t.Fatalf("Failed to create arch doc: %v", err)
 	}
 	if err := exec.Command("git", "-C", worktreePath, "add", "arch-plan.md").Run(); err != nil {
@@ -874,14 +876,14 @@ func TestArchitecturePairWorkflow(t *testing.T) {
 	if err := ops.WriteCheckpoint(projectDir, &ops.WriteCheckpointInput{
 		TaskID: taskID, AgentID: architectID,
 		Intent: "Revised architecture with interface details", ValidationPlan: "Review architecture",
-		FilesToModify: []string{"specs/arch-plan/feature.md"},
+		FilesToModify: []string{"arch-plan.md"},
 	}); err != nil {
 		t.Fatalf("WriteCheckpoint (round 2) failed: %v", err)
 	}
 
 	// Make another commit in the worktree
 	revisedDoc := filepath.Join(worktreePath, "arch-plan.md")
-	if err := os.WriteFile(revisedDoc, []byte("# Architecture Plan\n\n## Interfaces\n"), 0644); err != nil {
+	if err := os.WriteFile(revisedDoc, []byte("# Architecture Plan\n\n## Scope 0: Authentication\nAuthentication boundary.\n\n## Scope 1: Storage\nStorage boundary.\n\n## Interfaces\nInterface details.\n"), 0644); err != nil {
 		t.Fatalf("Failed to update arch doc: %v", err)
 	}
 	if err := exec.Command("git", "-C", worktreePath, "add", "arch-plan.md").Run(); err != nil {
@@ -1190,7 +1192,7 @@ func TestMasterPlanningLifecycleAcceptance(t *testing.T) {
 		t.Fatalf("WriteCheckpoint master failed: %v", err)
 	}
 
-	reviewCommit := commitTaskWorktreeFile(t, projectDir, bb, masterID, filepath.Join("specs", "arch-plan", "master-architecture.md"), "# Master Architecture\n")
+	reviewCommit := commitTaskWorktreeFile(t, projectDir, bb, masterID, filepath.Join("specs", "arch-plan", "master-architecture.md"), "# Master Architecture\n\n## Scope 0: API\nAPI boundary.\n\n## Scope 1: Storage\nStorage boundary.\n")
 	if err := commands.SubmitForReviewCommand(projectDir, masterID, reviewCommit, architectID); err != nil {
 		t.Fatalf("SubmitForReview master failed: %v", err)
 	}
@@ -1283,8 +1285,9 @@ func TestMasterPlanningLifecycleAcceptance(t *testing.T) {
 		if child.Status != models.TaskStatus("DRAFT_ARCHITECTURE") {
 			t.Errorf("child %s status = %s, want DRAFT_ARCHITECTURE", childID, child.Status)
 		}
-		if child.ArchRef != archRef {
-			t.Errorf("child %s arch_ref = %q, want %q", childID, child.ArchRef, archRef)
+		wantArchRef := masterArchitectureOutput(archRef)[i].ArchRef
+		if child.ArchRef != wantArchRef {
+			t.Errorf("child %s arch_ref = %q, want %q", childID, child.ArchRef, wantArchRef)
 		}
 		if child.Decomposition == nil {
 			t.Fatalf("child %s decomposition is nil", childID)
@@ -1680,12 +1683,12 @@ func TestArchRefPropagation(t *testing.T) {
 		t.Fatalf("Failed to create arch-plan dir: %v", err)
 	}
 	archDocPath := filepath.Join(archPlanDir, "feature.md")
-	if err := os.WriteFile(archDocPath, []byte("# Architecture Plan\n\n## Components\n"), 0644); err != nil {
+	if err := os.WriteFile(archDocPath, []byte("# Architecture Plan\n\n## Scope 0: Feature\nFeature components.\n"), 0644); err != nil {
 		t.Fatalf("Failed to create arch doc: %v", err)
 	}
 
 	// Set output entries with arch_ref pointing to the architecture document
-	archRef := "specs/arch-plan/feature.md"
+	archRef := "specs/arch-plan/feature.md#Scope 0: Feature"
 	if err := ops.SetTaskOutput(projectDir, &ops.SetTaskOutputInput{
 		TaskID:  archTaskID,
 		AgentID: architectID,
@@ -1992,7 +1995,7 @@ func masterArchitectureOutput(archRef string) []models.OutputEntry {
 			DoneWhen: "API boundary architecture is approved",
 			Scope:    "internal/api",
 			SpecRef:  "specs/master.md",
-			ArchRef:  archRef,
+			ArchRef:  archRef + "#Scope 0: API",
 			Decomposition: &models.DecompositionManifest{
 				OwnedFiles:         []string{"internal/api/handler.go"},
 				OwnedModules:       []string{"internal/api"},
@@ -2006,7 +2009,7 @@ func masterArchitectureOutput(archRef string) []models.OutputEntry {
 			DoneWhen:  "Storage boundary architecture is approved",
 			Scope:     "internal/storage",
 			SpecRef:   "specs/master.md",
-			ArchRef:   archRef,
+			ArchRef:   archRef + "#Scope 1: Storage",
 			DependsOn: []string{"0"},
 			Decomposition: &models.DecompositionManifest{
 				OwnedFiles:        []string{"internal/storage/repository.go"},

@@ -101,6 +101,15 @@ blocks. A strict scalar ref with an empty fragment assigns the whole file. The
 compositor resolves declared references at their revision, checks
 them against integration HEAD, and renders the assigned carrier with its
 deduplicated reference spans (ADR-0133 has the discovery and precedence rules).
+Architect/code-planner doers opt in at an exact assigned Scope with one JSON
+line before its first nested heading, outside fences:
+`**Direct references:** ["product", "shared"]`. IDs must be distinct entries in
+its Direct References; `[]` selects none. Include all needed product/shared
+authority (decisions, constraints, interfaces, holds) at exact pins; same-file
+sections must exist at the pin. Inline only the assigned Scope and selected
+spans; pin the rest as pointers. Missing declarations/bare refs keep legacy
+rendering. Malformed/duplicate/unknown IDs are correctable submission errors.
+Discovery, freshness, drift and proof checks still cover all refs (ADR-0179).
 Read that rendered context once; do not recursively read every ancestor.
 Missing, stale, ambiguous, structurally invalid, contradictory, or
 obligation-incomplete references block; consumers do not reconstruct authority
@@ -120,6 +129,8 @@ reviewers reject omission; marker-free artifacts keep legacy behavior.
 Markdown owns semantic requirements, rationale, architecture, and detailed task
 contracts. `output[]` owns the concise orchestration projection: intent, scope,
 dependencies, validation commands, and anchored artifact references.
+Master/specialized architects emit every `arch_ref` as `<doc>.md#<exact Scope
+heading>`; new submissions refuse bare paths/unresolved fragments.
 
 - `desc`: one intent, normally at most 160 characters.
 - `done_when`: one falsifiable completion observation, normally at most 400 characters.

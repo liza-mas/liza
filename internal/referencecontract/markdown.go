@@ -69,6 +69,7 @@ func hasReferenceMarker(markdown string) bool {
 type markdownScan struct {
 	lines    []sourceLine
 	headings []atxHeading
+	eligible []bool // prose outside fences and indented code
 }
 
 type sourceLine struct {
@@ -92,6 +93,7 @@ type fence struct {
 func scanMarkdown(markdown string) markdownScan {
 	lines := splitSourceLines(markdown)
 	headings := make([]atxHeading, 0)
+	eligible := make([]bool, len(lines))
 	var openFence *fence
 
 	for lineIndex, line := range lines {
@@ -106,6 +108,8 @@ func scanMarkdown(markdown string) markdownScan {
 			openFence = &opened
 			continue
 		}
+		content, prose := afterFenceIndent(text)
+		eligible[lineIndex] = prose && !strings.HasPrefix(content, ">")
 		level, headingText, ok := parseATXHeading(text)
 		if !ok {
 			continue
@@ -118,7 +122,7 @@ func scanMarkdown(markdown string) markdownScan {
 		})
 	}
 
-	return markdownScan{lines: lines, headings: headings}
+	return markdownScan{lines: lines, headings: headings, eligible: eligible}
 }
 
 func splitSourceLines(source string) []sourceLine {

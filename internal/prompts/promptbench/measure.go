@@ -102,9 +102,11 @@ func MeasureRendered(rendered string) Report {
 
 		inCarrierBlock bool
 		inSite3        bool
+		inSite6        bool
 
 		site2Occ, site2Bytes, site2Longest int
 		site3Occ, site3Bytes, site3Longest int
+		site6Occ, site6Bytes, site6Longest int
 	)
 
 	scan := bufio.NewScanner(strings.NewReader(rendered))
@@ -120,11 +122,23 @@ func MeasureRendered(rendered string) Report {
 			}
 			inCarrierBlock = currentSection == "RESOLVED REFERENCE CONTEXT"
 			inSite3 = false
+			inSite6 = currentSection == "PROVIDER ARTIFACTS AND GENERATED UNITS"
+			if inSite6 {
+				site6Bytes += n
+				site6Longest = max(site6Longest, n)
+			}
 			sectionBytes[currentSection] += n
 			continue
 		}
 		if currentSection != "" {
 			sectionBytes[currentSection] += n
+		}
+		if inSite6 {
+			site6Bytes += n
+			site6Longest = max(site6Longest, n)
+			if strings.HasPrefix(line, "Provider ") {
+				site6Occ++
+			}
 		}
 
 		if inCarrierBlock && mdHeading.MatchString(line) {
@@ -180,6 +194,11 @@ func MeasureRendered(rendered string) Report {
 		{
 			Site: "site5_task_graph_digest", Source: "blocks/collective_plan_scoping.tmpl:78",
 			Note: "bounded by maxTaskGraphChildDeps within maxTaskGraphEntries=16; not separately extracted",
+		},
+		{
+			Site: "site6_provider_artifacts_and_units", Source: "blocks/provider_tasks.tmpl",
+			Occurrences: site6Occ, Bytes: site6Bytes, LongestRun: site6Longest,
+			Note: "complete provider navigation block; occurrences count providers; all artifact/unit mappings retained",
 		},
 	}
 	for _, s := range r.DependsOnSites {

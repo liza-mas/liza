@@ -12,9 +12,9 @@ ARCHITECT TOOLS:
   Preflight the same --output file first: {{binaryName}} validate-payload set-task-output --payload <output-file> --json
   Create <path.json> with a file-writing tool, not a Bash heredoc (heredoc with JSON triggers a shell safety block).
   JSON file contains: [
-    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "arch_ref": "specs/arch-plan/{{.GoalSlug}}/<doc>.md", "validation": ["<canonical command>"], "depends_on": ["0", "2"], "task_depends_on": ["existing-task-id"], "kind": "<optional typed marker — see BOOTSTRAP-PRECOMMIT REQUIREMENTS in IMPLEMENTATION PHASE>"}
+    {"desc": "...", "done_when": "...", "scope": "...", "spec_ref": "...", "arch_ref": "specs/arch-plan/{{.GoalSlug}}/<doc>.md#Scope N: <exact title>", "validation": ["<canonical command>"], "depends_on": ["0", "2"], "task_depends_on": ["existing-task-id"], "kind": "<optional typed marker — see BOOTSTRAP-PRECOMMIT REQUIREMENTS in IMPLEMENTATION PHASE>"}
   ]
-  arch_ref: path to the architecture document (this task's primary artifact).
+  arch_ref: this task's architecture document plus the exact unique Scope heading assigned to this child; required for both master and specialized outputs. New submissions refuse bare paths or unresolved fragments.
   validation: optional ordered array of canonical commands the child task should run; each must be satisfiable for the child scope. Commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree.
   depends_on: optional array of sibling index strings. "0" means "depends on output[0]".
   Indices are resolved to child task IDs at transition time.

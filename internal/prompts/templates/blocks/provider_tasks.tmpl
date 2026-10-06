@@ -1,0 +1,41 @@
+{{- define "provider-tasks" -}}
+{{- if or .PlannerProviders .PlannerProviderIssues}}
+
+=== PROVIDER ARTIFACTS AND GENERATED UNITS ===
+Existing-state navigation only; these rows create no dependency edges or provider commitments. Unpinned artifacts are unavailable as merged authority.
+{{- range .PlannerProviderIssues}}
+- {{.}}
+{{- end}}
+{{- range .PlannerProviders}}
+{{- $hasUnits := false}}
+
+Provider {{.ID}} [{{.Status}}] — {{range $i, $reason := .Reasons}}{{if $i}}; {{end}}{{$reason}}{{end}}
+{{- if .Unavailable}}
+  {{.Unavailable}}
+{{- end}}
+{{- range .Artifacts}}
+{{- if .Units}}{{- $hasUnits = true}}{{- end}}
+  {{.Kind}} — {{if .Units}}{{.File}}{{else}}{{range $i, $ref := .Refs}}{{if $i}}, {{end}}{{$ref}}{{end}}{{end}} (producer {{if .ProducerID}}{{.ProducerID}}{{else}}unattributed{{end}}){{if .Commit}} @ {{.Commit}}
+  Read: `git -C {{$.ShellIntegrationWorktree}} show {{.ShellSnapshot}}`{{else}} — {{.Unresolved}}{{end}}
+{{- if eq .Kind "plan"}}
+{{- if .Units}}
+{{- range .Units}}
+    {{.ID}} [{{.Status}}] → {{if .PlanRef}}{{.PlanRef}}{{else}}missing plan_ref{{end}}
+{{- end}}
+{{- else}}
+    No generated coding units recorded.
+{{- end}}
+{{- end}}
+{{- end}}
+{{- if not $hasUnits}}
+  No generated coding units recorded for this provider.
+{{- end}}
+{{- end}}
+{{- end}}
+{{- with .PlannerFormatPrecedent}}
+
+=== FORMAT PRECEDENT ONLY ===
+{{.ProducerID}}: {{.Ref}} @ {{.Commit}}. Formatting example only; neither a dependency nor authority for this task.
+Read: `git -C {{$.ShellIntegrationWorktree}} show {{.ShellSnapshot}}`
+{{- end}}
+{{- end -}}

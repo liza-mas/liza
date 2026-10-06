@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 
 	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -165,11 +166,50 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 	// The assigned ref's fragment narrows whichever observation of that path
 	// wins: a parent range that rediscovers the same artifact would otherwise
 	// inline the whole file and drop the section the task was pointed at.
+	presentationNotice := ""
 	if assignedIndex >= 0 && assignedHeading != "" {
 		assignedPath := observations[assignedIndex].Path
+		winner := observations[assignedIndex]
 		for index := range observations {
 			if observations[index].Path == assignedPath {
 				observations[index].AssignedHeading = assignedHeading
+				if observations[index].Class > winner.Class {
+					winner = observations[index]
+				}
+			}
+		}
+		if roleType == "doer" && (config.Role == models.RoleArchitect || config.Role == models.RoleCodePlanner) {
+			ids, present, err := referencecontract.SectionReferenceIDs(winner.Span, assignedHeading)
+			if err != nil {
+				// Historical merged declarations cannot be repaired at launch;
+				// retain full context rather than guessing an empty read set.
+				presentationNotice = fmt.Sprintf("SECTION READ SET NOTICE: %v; legacy full context retained.\n", err)
+			} else if present {
+				selected := make(map[string]bool, len(ids))
+				known := make(map[string]bool, len(winner.Refs))
+				for _, ref := range winner.Refs {
+					known[ref.ID] = true
+				}
+				var unknown []string
+				for _, id := range ids {
+					selected[id] = true
+					if !known[id] {
+						unknown = append(unknown, id)
+					}
+				}
+				if len(unknown) > 0 {
+					presentationNotice = fmt.Sprintf("SECTION READ SET NOTICE: undeclared IDs %q; inspect the pinned carrier's Source References.\n", strings.Join(unknown, ", "))
+				}
+				for index := range observations {
+					if observations[index].Path == assignedPath {
+						observations[index].SectionOnly = true
+						observations[index].InlineReferenceIDs = selected
+						observations[index].ElideRefs = false
+					} else {
+						observations[index].PointerOnly = true
+						observations[index].ElideRefs = true
+					}
+				}
 			}
 		}
 	}
@@ -178,6 +218,7 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 	if err != nil {
 		return "", nil, err
 	}
+	context = presentationNotice + context
 	strictCarrierPaths := make(map[string]struct{}, len(observations))
 	for _, observation := range observations {
 		strictCarrierPaths[observation.Path] = struct{}{}

@@ -103,6 +103,7 @@ func TestSitesAreEnumerated(t *testing.T) {
 		"site3_sibling_consistency_rule",
 		"site4_active_task_digest",
 		"site5_task_graph_digest",
+		"site6_provider_artifacts_and_units",
 	}
 	if len(report.DependsOnSites) != len(want) {
 		t.Fatalf("got %d sites, want %d", len(report.DependsOnSites), len(want))
@@ -122,6 +123,9 @@ func TestSitesAreEnumerated(t *testing.T) {
 		if s.Bytes == 0 {
 			t.Errorf("site %q measured zero in the fixture; it cannot validate a reduction there", s.Site)
 		}
+	}
+	if site := report.DependsOnSites[4]; site.Bytes != 0 || site.Occurrences != 0 {
+		t.Fatalf("reviewer fixture unexpectedly rendered planner-only provider navigation: %+v", site)
 	}
 }
 

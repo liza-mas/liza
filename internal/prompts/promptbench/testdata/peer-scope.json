@@ -5,11 +5,11 @@
     {
       "role": "architect",
       "variant": "architecture-main-pair",
-      "before_bytes": 291934,
-      "after_bytes": 287158,
+      "before_bytes": 292935,
+      "after_bytes": 288159,
       "delta_bytes": -4776,
-      "reference_before_bytes": 278861,
-      "reference_after_bytes": 274085
+      "reference_before_bytes": 279609,
+      "reference_after_bytes": 274833
     },
     {
       "role": "architecture-reviewer",
@@ -23,11 +23,11 @@
     {
       "role": "architect",
       "variant": "architecture-pair",
-      "before_bytes": 289390,
-      "after_bytes": 284614,
+      "before_bytes": 290138,
+      "after_bytes": 285362,
       "delta_bytes": -4776,
-      "reference_before_bytes": 278861,
-      "reference_after_bytes": 274085
+      "reference_before_bytes": 279609,
+      "reference_after_bytes": 274833
     },
     {
       "role": "architecture-reviewer",
@@ -77,11 +77,11 @@
     {
       "role": "coder",
       "variant": "coding-pair",
-      "before_bytes": 290527,
-      "after_bytes": 285751,
+      "before_bytes": 290528,
+      "after_bytes": 285752,
       "delta_bytes": -4776,
-      "reference_before_bytes": 266436,
-      "reference_after_bytes": 261660
+      "reference_before_bytes": 266437,
+      "reference_after_bytes": 261661
     },
     {
       "role": "code-reviewer",

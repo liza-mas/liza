@@ -4,6 +4,10 @@
 
 ACCEPTED — prospective adoption approved 2026-09-10.
 
+Presentation amendment: [ADR-0179](0179-scope-assigned-planner-context.md) adds
+explicit Scope read sets and exact architecture output fragments for planner
+doers; discovery, authority, freshness, drift and proof checks remain unchanged.
+
 ## Context
 
 Successive planning stages currently repeat upstream requirements, rationale,
