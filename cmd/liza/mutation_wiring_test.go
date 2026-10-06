@@ -699,6 +699,21 @@ func TestMutationCommandWiring(t *testing.T) {
 		}
 	})
 
+	t.Run("set-task-output help defines provider prerequisite rules", func(t *testing.T) {
+		help := strings.Join(strings.Fields(setTaskOutputCmd.Long), " ")
+		for _, want := range []string{
+			"children may be unborn",
+			"Claim waits for the provider MERGED, its transition executed, and every selected child MERGED",
+			"Only this typed field permits explicit cross-stage prerequisites",
+			"ordinary downstream task_depends_on remains invalid",
+			"Cycles through future child production/inheritance are refused",
+		} {
+			if !strings.Contains(help, want) {
+				t.Errorf("provider authoring help missing %q: %s", want, help)
+			}
+		}
+	})
+
 	t.Run("set-task-output help documents decomposition root RCA classification", func(t *testing.T) {
 		for _, want := range []string{
 			"rca_required",

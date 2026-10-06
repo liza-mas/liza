@@ -64,7 +64,6 @@ func TestProviderDependencyGuidanceBrandedRolePrompts(t *testing.T) {
 			for _, want := range []string{
 				"Scope task/code-plan",
 				"provider_dependencies",
-				"ordinary downstream edges",
 				"acme-cli",
 			} {
 				if !strings.Contains(output, want) {
@@ -72,19 +71,28 @@ func TestProviderDependencyGuidanceBrandedRolePrompts(t *testing.T) {
 				}
 			}
 			if tc.roleType == "doer" {
-				for _, want := range []string{
+				wants := []string{
 					"acme-cli set-task-output consumer",
 					"Encode Scope task/code-plan waits in task_depends_on or provider_dependencies (unborn/cross-stage)",
 					"Before provider declarations, read acme-cli set-task-output --help for schema/readiness",
 					"Only typed waits permit cross-stage",
 					"reject ordinary downstream edges and future production/inheritance cycles",
-				} {
+				}
+				if tc.role == "architect" {
+					wants = []string{
+						"acme-cli set-task-output consumer",
+						"Encode Scope task/code-plan waits: task_depends_on/provider_dependencies",
+						"Provider waits: first read acme-cli set-task-output --help (schema/readiness/cross-stage/cycles)",
+					}
+				}
+				for _, want := range wants {
 					if !strings.Contains(output, want) {
 						t.Errorf("%s authoring prompt missing %q", name, want)
 					}
 				}
 			} else {
 				for _, want := range []string{
+					"ordinary downstream edges",
 					"Reject prose-only waits",
 					"Reconcile Scope task/code-plan preconditions with output[] task_depends_on or provider_dependencies",
 					"MERGED provider",
