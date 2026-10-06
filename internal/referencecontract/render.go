@@ -20,8 +20,8 @@ const (
 // Carrier is one strict carrier resolved for a prompt: its pinned span and
 // the direct references it declares.
 //
-// ElideRefs marks a carrier inherited from further up the lineage than the
-// task's assigned artifacts: its declared references are rendered as one-line
+// ElideRefs marks ancestor or decomposition-root second-hop context:
+// its declared references are rendered as one-line
 // pointers rather than spans. The zero value renders every reference in full,
 // so a caller that does not classify carriers gets the complete context.
 //

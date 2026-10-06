@@ -10,6 +10,11 @@ the assigned section and selected spans, with pinned pointers for other
 carriers. The rendering below remains the compatibility fallback; complete
 discovery and validation remain unchanged.
 
+[ADR-0180](0180-master-decomposition-reference-pointers.md) also renders a
+decomposition root's parent-carrier references as second-hop pointers, except
+on the most-specific scalar assignment's path. Current-review declarations
+remain full authority; ordinary tasks retain the classification below.
+
 ## Context
 
 ADR-0133 bounds a task's read set to "the assigned section, its declared

@@ -124,7 +124,7 @@ func TestResolvedReferenceContextKeepsMissingScalarCarrierOnLegacyPath(t *testin
 	task := models.Task{ID: "missing", SpecRef: "specs/missing.md"}
 	state := referenceTestState(task)
 
-	context, legacy, err := buildReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer")
+	context, legacy, err := buildReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "doer", false)
 	if err != nil || context != "" {
 		t.Fatalf("missing scalar carrier = (%q, %v), want empty strict context on legacy path", context, err)
 	}

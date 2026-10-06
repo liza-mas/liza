@@ -16,21 +16,21 @@ type referenceContextRepository = referencecontract.ReviewRepository
 
 func buildResolvedReferenceContext(task *models.Task, state *models.State, config SupervisorConfig, roleType string) (string, error) {
 	repo := gitpkg.New(config.ProjectRoot)
-	context, _, err := buildReferenceContextWithRepository(repo, task, state, config, roleType)
+	context, _, err := buildReferenceContextWithRepository(repo, task, state, config, roleType, false)
 	return context, err
 }
 
 func buildResolvedReferenceContextWithRepository(repo referenceContextRepository, task *models.Task, state *models.State, config SupervisorConfig, roleType string) (string, error) {
-	context, _, err := buildReferenceContextWithRepository(repo, task, state, config, roleType)
+	context, _, err := buildReferenceContextWithRepository(repo, task, state, config, roleType, false)
 	return context, err
 }
 
-func buildReferenceContext(task *models.Task, state *models.State, config SupervisorConfig, roleType string) (string, []prompts.LegacyArtifactReference, error) {
+func buildReferenceContext(task *models.Task, state *models.State, config SupervisorConfig, roleType string, decompositionRoot bool) (string, []prompts.LegacyArtifactReference, error) {
 	repo := gitpkg.New(config.ProjectRoot)
-	return buildReferenceContextWithRepository(repo, task, state, config, roleType)
+	return buildReferenceContextWithRepository(repo, task, state, config, roleType, decompositionRoot)
 }
 
-func buildReferenceContextWithRepository(repo referenceContextRepository, task *models.Task, state *models.State, config SupervisorConfig, roleType string) (string, []prompts.LegacyArtifactReference, error) {
+func buildReferenceContextWithRepository(repo referenceContextRepository, task *models.Task, state *models.State, config SupervisorConfig, roleType string, decompositionRoot bool) (string, []prompts.LegacyArtifactReference, error) {
 	var head string
 	resolveHead := func() (string, error) {
 		if head != "" {
@@ -51,7 +51,8 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 	// The most specific strict scalar carrier is the task's assigned artifact
 	// and keeps its declared references inlined; the other scalar carriers
 	// are ancestors whose references render as pointers. Parent and review
-	// carriers are always assigned. When the assigned artifact also arrives
+	// carriers are assigned, with the decomposition-root exception below.
+	// When the assigned artifact also arrives
 	// through a parent range, that observation wins the path and is assigned
 	// anyway, so the scalar route is the fallback for a parent that is not
 	// merged or has no reviewed range.
@@ -161,6 +162,20 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 			return "", nil, discoverErr
 		}
 		observations = append(observations, found...)
+	}
+
+	// A decomposition root needs its parent's child carrier bodies, but their
+	// declared references are second-hop context. Classify only after all
+	// observations have been validated. The assigned scalar path retains full
+	// references even when a parent observation wins it; current-review master
+	// declarations likewise retain full authority and once-only emission.
+	if decompositionRoot {
+		for index := range observations {
+			if observations[index].Class == referencecontract.CarrierParent &&
+				(assignedIndex < 0 || observations[index].Path != observations[assignedIndex].Path) {
+				observations[index].ElideRefs = true
+			}
+		}
 	}
 
 	// The assigned ref's fragment narrows whichever observation of that path

@@ -474,7 +474,15 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		data.PreCommitKind = precommit.Kind
 	}
 
-	resolvedContext, legacyReferences, err := buildReferenceContext(task, state, config, roleType)
+	decompositionRoot := false
+	if task.RolePair != "" {
+		var err error
+		decompositionRoot, err = resolver.IsDecompositionRoot(task.RolePair)
+		if err != nil {
+			return nil, fmt.Errorf("reference context topology for task %q: %w", task.ID, err)
+		}
+	}
+	resolvedContext, legacyReferences, err := buildReferenceContext(task, state, config, roleType, decompositionRoot)
 	if err != nil {
 		return nil, fmt.Errorf("reference context for task %q: %w: %w", task.ID, precommit.ErrContextBuild, err)
 	}

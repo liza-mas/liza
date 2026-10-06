@@ -2,6 +2,22 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Unattributed agent-suite failure during D-45 validation
+
+**What:** On 2026-10-06, one `make test` run failed in `internal/agent` after
+the related package suite passed. The tool truncated the test-level failure
+details. One diagnostic full-suite run with complete output capture passed;
+the first failure's cause and attribution remain unknown. No test expectations
+or timeout limits were changed to obtain that result.
+
+**Why deferred:** The diagnostic run did not reproduce the failure, leaving
+no specific failing test to qualify. This does not establish a pre-existing
+failure or a load-related cause; the validation record retains both outcomes.
+
+**Payback trigger:** The next agent-suite failure in a full or race run.
+Retain complete output before further execution, identify the failing test,
+then qualify its cause against the reviewed change and unchanged baseline.
+
 ## Status changes invisible to history-derived time in status
 
 **What:** `models.TimeInStatus` derives time in status from the most recent

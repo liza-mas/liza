@@ -193,12 +193,14 @@ section whose text changed at that HEAD; an unrelated edit elsewhere in the same
 staleness, and a parent carrier a later merge changed is adopted at that HEAD (only deletion
 blocks). Normally every carrier is inlined, with full references only for assigned carriers:
 parent/review carriers and the most specific scalar ref (`plan_ref` > `arch_ref` > `epic_ref` >
-`spec_ref`); ancestor references are pinned pointers (ADR-0139). Architect/code-planner doers
+`spec_ref`); ancestor references are pinned pointers (ADR-0139). For configured decomposition
+roots, parent-carrier references are also pointers except on the most-specific scalar path;
+current-review declarations retain full spans (ADR-0180). Architect/code-planner doers
 with an exact assigned Scope and explicit `**Direct references:** ["product-id", "shared-id"]` read set render
 only that section and selected spans; other carrier bodies/sections remain pinned navigation
 (ADR-0179). Full discovery, freshness, drift and proof checks still apply to every reference.
 New master and specialized architecture outputs require exact Scope-heading fragments.
-Bare refs, missing declarations, marker-free artifacts and other roles retain existing rendering;
+Bare refs, missing declarations, marker-free artifacts and other roles retain the above rendering;
 existing child adoption requires reviewed owner correction and authorized retargeting/recreation.
 No state-schema migration or heuristic relevance inference is implied.
 
