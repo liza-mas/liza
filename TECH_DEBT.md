@@ -298,6 +298,18 @@ before `-p 2` is raised for wall-time reasons, convert these assertions to poll
 until a package-level deadline instead of a fixed budget. Whoever raises `-p`
 owns the evidence that the tolerances survive the contention.
 
+**Additional submit boundary (D-51 validation):**
+`TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks` failed under a full
+parallel run with successful submission (`submit error: nil`). The in-flight
+marker ends inside `submission_lifecycle.go` before outer lifecycle telemetry
+finishes; `execution_deadline.go` can then cancel before the caller receives
+the successful return. Those paths and the fixture are unchanged by D-51.
+This separate lifecycle defect is deferred to keep the provider-dependency fix
+atomic. Lower-concurrency validation is a scheduling counterfactual, not a fix.
+**Payback trigger:** next occurrence, or a change to submit markers/telemetry:
+reconcile marker lifetime with caller-visible completion and test progress;
+do not increase timeout assertions to hide the race.
+
 ## CI does not yet enforce the split test targets
 
 **What:** Routine `make test` no longer enables the race detector or writes a

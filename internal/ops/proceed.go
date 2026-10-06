@@ -50,76 +50,13 @@ func manyToOneChildID(cohortParentID, transitionName string) string {
 // Status.IsTerminal() returns true (MERGED | ABANDONED | SUPERSEDED) are
 // ignored; BLOCKED is non-terminal and counts as in-flight.
 func collectNonTerminalByKind(s *models.State, retiring map[string]bool) map[string]string {
-	byKind := map[string][]string{}
-	for i := range s.Tasks {
-		t := &s.Tasks[i]
-		// A task the generating outputs supersede is not an incumbent: its
-		// replacement must be generated, not remapped onto it.
-		if t.Kind == "" || retiring[t.ID] {
-			continue
-		}
-		if t.Status.IsTerminal() {
-			continue
-		}
-		byKind[t.Kind] = append(byKind[t.Kind], t.ID)
-	}
-	out := map[string]string{}
-	for k, ids := range byKind {
-		slices.Sort(ids)
-		out[k] = ids[0]
-	}
-	return out
-}
-
-// resolveKindDedup walks output entries in order and classifies each by Kind:
-//   - empty Kind                    -> no effect.
-//   - Kind in inFlight              -> skipped; remap[i] points at the in-flight task.
-//   - Kind seen earlier in batch    -> skipped; remap[i] points at the first
-//     occurrence's deterministic child ID.
-//
-// taskID and taskSlug let the helper synthesize the first-occurrence
-// sibling ID via perSubtaskChildID, so within-batch duplicates remap to the
-// child that WILL be created this batch (not yet in s.Tasks when this runs).
-// Return keys in skip and remap always match: every skipped entry is remapped.
-func resolveKindDedup(
-	entries []models.OutputEntry,
-	inFlight map[string]string,
-	taskID, taskSlug string,
-) (skip map[int]string, remap map[int]string) {
-	skip = map[int]string{}
-	remap = map[int]string{}
-	emittedThisBatch := map[string]string{}
-	for i, e := range entries {
-		if e.Kind == "" {
-			continue
-		}
-		if existingID, hit := inFlight[e.Kind]; hit {
-			skip[i] = fmt.Sprintf("kind %q already in flight on task %s", e.Kind, existingID)
-			remap[i] = existingID
-			continue
-		}
-		if firstID, dup := emittedThisBatch[e.Kind]; dup {
-			skip[i] = fmt.Sprintf("kind %q emitted earlier in same output[] at sibling %s", e.Kind, firstID)
-			remap[i] = firstID
-			continue
-		}
-		emittedThisBatch[e.Kind] = perSubtaskChildID(taskID, taskSlug, i)
-	}
-	return
+	return models.NonTerminalTasksByKind(s, retiring)
 }
 
 // resolvePerSubtaskSiblings returns the effective sibling ID for each output
 // entry after applying kind-based deduplication.
 func resolvePerSubtaskSiblings(entries []models.OutputEntry, inFlightByKind map[string]string, taskID, taskSlug string) ([]string, map[int]string, map[int]string) {
-	siblingIDs := make([]string, len(entries))
-	for i := range entries {
-		siblingIDs[i] = perSubtaskChildID(taskID, taskSlug, i)
-	}
-	skipEntry, remapSibling := resolveKindDedup(entries, inFlightByKind, taskID, taskSlug)
-	for i, reID := range remapSibling {
-		siblingIDs[i] = reID
-	}
-	return siblingIDs, skipEntry, remapSibling
+	return models.ResolveOutputSiblings(entries, inFlightByKind, taskID, taskSlug)
 }
 
 // ProceedResult contains the outcome of executing a manual inter-pair transition.
@@ -707,12 +644,18 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		allowedMissingDeps := stringSet(siblingIDs)
 		var missingChildren []int
 		var patches []dependencyPatch
+		providerMetadataRecovered := false
 		for i := range canonicalOutput {
-			// (1) SKIPPED — short-circuit BEFORE any FindTask / dep patching.
-			//     siblingIDs[i] points at a FOREIGN incumbent for skipped entries.
-			//     Touching its DependsOn would corrupt a cross-goal task.
+			// Foreign Kind incumbents remain untouched. Dedup can also point
+			// at our own child; recover a missing declaration on that child.
 			if _, skipped := skipEntry[i]; skipped {
-				continue
+				if siblingIDs[i] != perSubtaskChildID(taskID, tDef.taskSlug, i) {
+					continue
+				}
+				own := s.FindTask(siblingIDs[i])
+				if own == nil || own.Status.IsTerminal() || models.ProviderDependenciesEqual(own.ProviderDependencies, canonicalOutput[i].ProviderDependencies) {
+					continue
+				}
 			}
 			// (2) EXISTING — patch our OWN child's inherited deps.
 			existing := s.FindTask(siblingIDs[i])
@@ -742,14 +685,31 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 				if err := validateDependencyDirection(s, resolver, existing.ID, existing.RolePair, mergedDeps); err != nil {
 					return err
 				}
-				patches = append(patches, dependencyPatch{taskID: existing.ID, dependsOn: mergedDeps})
+				wanted := canonicalOutput[i].ProviderDependencies
+				if len(wanted) > 0 || len(existing.ProviderDependencies) > 0 {
+					parents := existing.EffectiveParentTasks()
+					if existing.RolePair != tDef.targetRolePair || len(parents) != 1 || parents[0] != taskID {
+						return fmt.Errorf("cannot recover provider_dependencies on child %s with incorrect transition provenance", existing.ID)
+					}
+				}
+				equal := models.ProviderDependenciesEqual(existing.ProviderDependencies, wanted)
+				unclaimedInitial := existing.Status == tDef.targetStatus && existing.AssignedTo == nil && existing.LeaseExpires == nil
+				if !equal && (len(existing.ProviderDependencies) > 0 || !unclaimedInitial) {
+					return fmt.Errorf("cannot recover provider_dependencies on conflicting or claimed child %s", existing.ID)
+				}
+				providerMetadataRecovered = providerMetadataRecovered || !equal
+				patches = append(patches, dependencyPatch{taskID: existing.ID, dependsOn: mergedDeps, providerDependencies: models.CloneProviderDependencies(wanted)})
 			}
 		}
 		if len(missingChildren) == 0 {
 			for _, patch := range patches {
 				if existing := s.FindTask(patch.taskID); existing != nil {
 					existing.DependsOn = patch.dependsOn
+					existing.ProviderDependencies = patch.providerDependencies
 				}
+			}
+			if providerMetadataRecovered {
+				return nil
 			}
 			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
 		}
@@ -780,6 +740,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		for _, patch := range patches {
 			if existing := s.FindTask(patch.taskID); existing != nil {
 				existing.DependsOn = patch.dependsOn
+				existing.ProviderDependencies = patch.providerDependencies
 			}
 		}
 		for _, child := range children {
@@ -904,8 +865,9 @@ type pendingTx struct {
 }
 
 type dependencyPatch struct {
-	taskID    string
-	dependsOn []string
+	taskID               string
+	dependsOn            []string
+	providerDependencies []models.ProviderDependency
 }
 
 // isTransitionIncomplete checks if an executed transition has missing children.
@@ -922,7 +884,8 @@ func isTransitionIncomplete(s *models.State, task *models.Task, transName string
 	switch td.Cardinality {
 	case "per-subtask":
 		for i := 0; i < len(task.Output); i++ {
-			if s.FindTask(perSubtaskChildID(task.ID, slug, i)) == nil {
+			child := s.FindTask(perSubtaskChildID(task.ID, slug, i))
+			if child == nil || (!child.Status.IsTerminal() && !models.ProviderDependenciesEqual(child.ProviderDependencies, task.Output[i].ProviderDependencies)) {
 				return true
 			}
 		}
@@ -1586,6 +1549,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		DestructiveDB:           entry.DestructiveDB,
 		Scope:                   entry.Scope,
 		DependsOn:               deps,
+		ProviderDependencies:    models.CloneProviderDependencies(entry.ProviderDependencies),
 		Supersedes:              supersedes,
 		Created:                 now,
 		History:                 []models.TaskHistoryEntry{},

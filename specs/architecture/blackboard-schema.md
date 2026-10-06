@@ -378,6 +378,7 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | Field | Type | Set By | Purpose |
 |-------|------|--------|---------|
 | `output` | `[]OutputEntry` | Doer agent | Structured subtask definitions for next role pair |
+| `provider_dependencies` | `[]ProviderDependency` | Task author / transition | Explicit selected-provider output prerequisites, retained before children exist; see [Provider dependencies](#provider-dependencies) |
 | `arch_ref` | `string` | `liza proceed` | Path to architecture document (repo-relative). Set on child tasks during transition: first hop copies from parent's `output[]` entry, second hop inherits from parent task field. Validated via `checkSpecFileExists` (same pattern as `plan_ref`). |
 | `rca_required` | `bool` | Orchestrator (`add-tasks`) / `liza proceed` | Specialized objective requires defect diagnosis. Defaults to false. For per-subtask children, an explicit `output[].rca_required` overrides this parent default; omission inherits it. One-to-one children inherit it, many-to-one children OR parent values, and `liza replan` preserves it. When true, the specialized code-planner produces a `## Root Cause Analysis` section and the code-plan-reviewer gates on it. Not the same strength as the `adversarial-pairing` field, which gates a separate analysis phase. |
 | `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task (deprecated: use `parent_tasks`) |
@@ -420,6 +421,7 @@ Optional:
 - `destructive_db` (`bool`): Optional safety marker for validation commands that may reset, drop, or otherwise destroy DB state. Defaults to false and is inert when omitted. When true, `validation` must be non-empty and every command must start with `LIZA_ALLOW_DESTRUCTIVE_DB=1 ` or `env LIZA_ALLOW_DESTRUCTIVE_DB=1 `. The marker is part of the canonical command and must not be translated away.
 - `rca_required` (`*bool`): Per-child RCA classification. Explicit true or false overrides the parent task default during per-subtask construction; omission inherits the parent value. It is mandatory on every output from a decomposition root when any configured output consumer's doer role is `code-planner`.
 - `task_depends_on` (`[]string`): Existing concrete task IDs outside this `output[]`. Set by doer via `set-task-output`; copied to generated child tasks as scheduler-facing `depends_on`.
+- `provider_dependencies` (`[]ProviderDependency`): Explicit prerequisites on selected outputs of an existing provider's configured per-subtask transition. Deep-copied to the child without converting to ordinary `depends_on`; see [Provider dependencies](#provider-dependencies).
 - `supersedes` (`string`): One existing task this output replaces. Set by doer via `set-task-output`, which refuses a missing, terminal, self, wrong-role-pair or self-depended target. The generating per-subtask transition copies it to the child's `supersedes` and supersedes the original with every child naming it, retargeting its consumers, in the same validated state mutation; the plan's `transition_executed` event records `superseded`. See [Plan-declared replacement](../protocols/replacement-transactions.md#plan-declared-replacement).
 - `decomposition` (`DecompositionManifest`): Typed decomposition metadata. Required on `output[]` entries produced by `decomposition-root` role-pairs and optional elsewhere.
 
@@ -582,7 +584,7 @@ additional `depends_on` entries. Dependency composition order is:
 2. Concrete task deps from `output[].task_depends_on`
 3. Inherited phase-gate deps from upstream parents' children
 
-Before creating or crash-recovery patching a child task, the final composed `depends_on` set is canonicalized and validated against pipeline direction. Superseded inherited children are rewritten to replacements when the replacements can be legally encoded; downstream replacements that are already MERGED are treated as satisfied and omitted; pending downstream replacements fail the affected transition. The dependency task's `role_pair` must not be reachable downstream from the child task's `role_pair` through sub-pipeline transitions or top-level `pipeline-transitions`.
+Before creating or crash-recovery patching a child task, the final composed `depends_on` set is canonicalized and validated against pipeline direction. Superseded inherited children are rewritten to replacements when the replacements can be legally encoded; downstream replacements that are already MERGED are treated as satisfied and omitted; pending downstream replacements fail the affected transition. The dependency task's `role_pair` must not be reachable downstream from the child task's `role_pair` through sub-pipeline transitions or top-level `pipeline-transitions`. Separately copied `provider_dependencies` are validated in the combined projected graph; crash recovery preserves the exact declaration and refuses conflicting or claimed-child changes.
 
 **`transition_cycle_blocked` history event:** Added by `ExecuteAvailableTransitions` when
 circular `depends_on` prevents topological ordering. Semantics:
@@ -811,9 +813,56 @@ The `depends_on` field declares explicit dependencies between tasks:
 - `depends_on` must not point to a downstream pipeline role-pair. Same-role-pair and upstream dependencies are valid.
 - Active tasks must not depend on terminal non-MERGED tasks. When a task is superseded, active downstream `depends_on` entries are rewritten to its replacements and the retiring task's own illegal downstream dependencies are pruned in the same transaction; legal historical edges remain. When a task is cancelled, active downstream `depends_on` entries pointing at it are removed.
 - Explicit `output[].task_depends_on` writes reject terminal non-MERGED task IDs. Operational output and generated child `depends_on` follow the canonical dependency rule before they can mint or patch child tasks: superseded entries are rewritten to legal replacements, cancelled or unreplaced retired entries are removed, downstream replacements that are already MERGED are treated as satisfied and omitted from child dependencies, and illegal pending replacements fail the affected mutation or transition instead of being silently dropped. `SUPERSEDED` and `ABANDONED` task output remains audit history unless crash recovery can still consume it.
-- Empty array or missing field means no dependencies — task is immediately claimable
+- Empty/missing `depends_on` means no direct dependencies; declared `provider_dependencies` still hold admission
 - Coders can only claim tasks where ALL dependencies are satisfied
 - Orchestrator sets dependencies during task creation based on logical ordering
+
+#### Provider Dependencies
+
+Task, OutputEntry and AddTaskInput accept the same optional JSON/YAML field:
+
+```yaml
+provider_dependencies:
+  - provider_task: provider-architecture
+    transition: architecture-to-code-plan
+    outputs: [0, 2]
+```
+
+Names above are examples; transitions and child-ID slugs come from the configured
+pipeline. Each declaration requires an existing provider, a per-subtask transition
+whose source is that provider's role-pair, and a nonempty set of distinct nonnegative
+output indexes. Duplicate declarations are refused. Provider output may be unborn:
+bounds are checked when output is known, including later output writes. Selecting
+an output with nonempty `kind` is refused because deduplication can remap identity.
+
+Admission requires the provider `MERGED`, its transition marked executed, and
+every selected child present with the correct parent/target role-pair and
+`MERGED`. `APPROVED`, partial generation, missing markers/children, invalid
+bounds, malformed declarations, absent resolver capability and retired providers
+fail closed. Unselected outputs do not hold the consumer. Declarations remain
+visible after satisfaction and are preserved on consumer replan and direct-edge
+repair. Missing generated declaration copies keep affected children held and
+producer output live until recovery restores them, even with an executed marker.
+
+This field is the narrow explicit cross-stage exception; ordinary downstream
+`depends_on`/`task_depends_on` remain invalid. It neither replaces sibling
+ordering nor narrows inherited phase barriers. Cycle checks include concrete
+and provider edges, pending-provider production, and projected future children
+with sibling, concrete, inherited and provider prerequisites. Later authoring
+or generation that closes a latent cycle is refused before persistence.
+
+An active task or live output declaration prevents retiring/replanning its
+provider or selected child; historical terminal consumers do not impose a live
+hold. Refusal never guesses equivalent output positions on a replacement.
+Cancel or replace the referencing consumer through authorized lifecycle
+operations before retrying a provider change; a reviewed replacement must omit
+that reference or name another intended provider. Retaining the same reference
+retains the refusal. Retire any live producer declaration likewise.
+Concrete `retarget-dependency` does not rewrite provider declarations. Missing legacy edges
+require this reviewed correction before restoring the consumer: unblocking
+against a merged architecture alone does not repair a provider-plan prerequisite.
+No automatic prose migration or direct state edits are supported. See
+[ADR-0181](ADR/0181-provider-output-dependencies.md).
 
 Dependency direction remains valid for terminal tasks. To recover legacy
 corruption on one `SUPERSEDED` task, the orchestrator runs

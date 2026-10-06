@@ -34,6 +34,7 @@ type claimContext struct {
 	continuation        bool   // the claim resumes the current iteration instead of starting one
 	leaseExpires        time.Time
 	pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+	resolver            models.PipelineResolver
 }
 
 type claimStrategy interface {
@@ -52,7 +53,7 @@ func (freshClaimStrategy) validate(task *models.Task, state *models.State, runti
 	if runtimeRole != doerRole {
 		return fmt.Errorf("task %s is %s (not claimable by %s)", task.ID, task.Status, runtimeRole)
 	}
-	if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+	if unmet := unmetDependencies(task, state, ctx.resolver); len(unmet) > 0 {
 		return fmt.Errorf("task has unmet dependencies: %s", formatDependencyResults(unmet))
 	}
 	return nil
@@ -132,7 +133,7 @@ func (preservedInitialClaimStrategy) validate(task *models.Task, state *models.S
 	if task.BaseCommit == nil || *task.BaseCommit == "" {
 		return &PreconditionError{Reason: fmt.Sprintf("task %s preserved claim requires base_commit", task.ID)}
 	}
-	if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+	if unmet := unmetDependencies(task, state, ctx.resolver); len(unmet) > 0 {
 		return fmt.Errorf("task has unmet dependencies: %s", formatDependencyResults(unmet))
 	}
 	return nil

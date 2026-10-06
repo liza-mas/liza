@@ -75,6 +75,11 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 	result := &PlanCheckResult{TaskID: input.TaskID, Action: input.Action}
 	mutate := func(state *models.State) error {
 		*result = PlanCheckResult{TaskID: input.TaskID, Action: input.Action}
+		if input.Action == PlanCheckActionPass {
+			if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {
+				return &PreconditionError{Reason: fmt.Sprintf("plan-check provider dependencies: %v", err)}
+			}
+		}
 		task := state.FindTask(input.TaskID)
 		if task == nil {
 			return &PreconditionError{Reason: fmt.Sprintf("task %q not found", input.TaskID)}
@@ -86,6 +91,9 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 		var next planCheckChange
 		var changeErr error
 		if input.Action == PlanCheckActionReplace {
+			if err := rejectReferencedProviderRetirement(state, resolver, task.ID); err != nil {
+				return err
+			}
 			next, changeErr = retirePlanHandoff(state, domain, task, input, actor)
 		} else {
 			switch class {

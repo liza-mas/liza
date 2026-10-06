@@ -34,6 +34,7 @@ func validateDependencies(v *violations, state *models.State, resolver *pipeline
 	}
 
 	validateDependencyCycles(v, state)
+	validateProviderDependencies(v, state, resolver)
 }
 
 // validateDependencyCycles reports every depends_on edge that lies on a cycle,

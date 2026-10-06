@@ -23,6 +23,13 @@ ATTEMPT: {{.AttemptNum}}
 FINAL ATTEMPT — task will be BLOCKED if limits are reached.
 {{- end}}
 DESCRIPTION: {{.Description}}
+{{- if .ProviderDependencies}}
+
+PROVIDER DEPENDENCIES (claim requires provider and selected children MERGED):
+{{- range .ProviderDependencies}}
+- {{.ProviderTask}} / {{.Transition}} / output indexes {{.Outputs}}
+{{- end}}
+{{- end}}
 
 DONE WHEN:
 {{.DoneWhen}}

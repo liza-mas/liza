@@ -250,7 +250,7 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 			return err
 		}
 		var unmet []string
-		for _, dep := range unmetDependencies(task, state) {
+		for _, dep := range unmetDependencies(task, state, resolver) {
 			if dep.Invalid() {
 				return &PreconditionError{Reason: fmt.Sprintf("task %s has invalid dependency: %s", taskID, dep.Summary())}
 			}

@@ -17,6 +17,8 @@ b. Each behavior-changing coding child owns a test path matching a submission te
 c. Each plan_ref anchor names exactly one ATX heading in its plan file.
 d. Each validation_prerequisites entry and operator-provisioned input the plan names has a producer (a task, a committed generator, or an explicit human step); a human-produced input is present now. Each runtime_inputs recipe is in the registry; its instances are recorded after the children exist, so do not hold for them. A live input a validation command needs but the plan leaves in prose is a defect: replan it into runtime_inputs when `{{binaryName}} get config.runtime_input_registry` is set, otherwise hold naming the human step.
 
+e. Reconcile every Scope task/code-plan precondition with legal task_depends_on or explicit provider_dependencies (existing provider, configured per-subtask transition, selected outputs), including unborn children and cross-stage waits. Missing fields require reviewed reauthoring/replacement before restoring a legacy blocked consumer; merely unblocking against a merged architecture or APPROVED plan is insufficient. Check future production/inheritance cycles; runtime does not parse prose.
+
 DISPOSITION each plan:
 - Defect its planner can fix: {{binaryName}} replan <task-id> --reason "<check>: <evidence> → <required correction>" --changed-by {{.AgentID}}
 - Needs a human action not yet done: {{binaryName}} plan-check <task-id> --hold "<exact human action>" --agent-id {{.AgentID}} --json

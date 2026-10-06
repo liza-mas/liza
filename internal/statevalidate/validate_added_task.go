@@ -60,6 +60,19 @@ func ValidateAddedTask(state *models.State, projectRoot, taskID string, skipSpec
 		validateTaskInvariants(v, taskState, projectRoot, skipSpecFileCheck, resolver, cfg)
 		validateDependenciesForTask(v, state, resolver, cfg, warnWriter, &task)
 		v.add(checkCircular(task.ID, task.ID, map[string]bool{}, state))
+		if models.HasProviderDependencies(state) {
+			if resolver == nil {
+				v.add(fmt.Errorf("provider dependency validation requires a pipeline"))
+				return
+			}
+			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies)
+			graph := projectedProviderGraph(state, resolver)
+			for _, dependency := range graph.edges[task.ID] {
+				if path := shortestDependencyPath(graph.edges, dependency, task.ID); path != nil {
+					v.add(&DependencyCycleError{CyclePath: append([]string{task.ID}, path...)})
+				}
+			}
+		}
 	})
 }
 

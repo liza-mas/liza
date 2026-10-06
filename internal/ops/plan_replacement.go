@@ -140,7 +140,7 @@ func retiredByChildren(task *models.Task, children []string) bool {
 // artifact files the transition does not touch.
 func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
 	plan := s.FindTask(taskID)
-	if plan == nil || tDef.cardinality != "per-subtask" || len(declaredOriginals(plan.Output)) == 0 {
+	if plan == nil || ((tDef.cardinality != "per-subtask" || len(declaredOriginals(plan.Output)) == 0) && !models.HasProviderDependencies(s)) {
 		return proceedInner(s, taskID, transitionName, tDef, inheritedDeps, resolver, now, result)
 	}
 	candidate := db.CloneState(s)
@@ -160,7 +160,7 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 		}
 	}
 	if validateErr := statevalidate.ValidateCandidate(candidate, func() (*models.State, error) { return s, nil }, projectRoot, true, os.Stderr); validateErr != nil {
-		return discard(fmt.Errorf("plan replacement leaves an invalid state: %w", validateErr))
+		return discard(fmt.Errorf("plan transition leaves an invalid state: %w", validateErr))
 	}
 	*s = *candidate
 	return err

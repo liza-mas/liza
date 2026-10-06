@@ -127,7 +127,7 @@ func StrandedDoerClaimReason(state *State, task *Task, pr PipelineResolver, now 
 	if task.Worktree == nil || *task.Worktree == "" || task.BaseCommit == nil || *task.BaseCommit == "" {
 		return ""
 	}
-	if !checkDependencies(task, state.Tasks) {
+	if !checkDependencies(task, state.Tasks, pr) {
 		return ""
 	}
 	holder := *task.AssignedTo
@@ -203,6 +203,9 @@ func DoerClaimBlockedReason(state *State, task *Task, role, agentID string, pr P
 	if !task.IsClaimable(role, state.Tasks, pr) {
 		if strandedForRole(state, task, role, pr, now) {
 			return ""
+		}
+		if unmet := UnmetProviderDependencies(task, state.Tasks, pr); len(unmet) > 0 {
+			return fmt.Sprintf("task %s has unmet provider dependency: %s", task.ID, unmet[0].Summary())
 		}
 		return fmt.Sprintf("task %s is %s (not claimable by %s)", task.ID, task.Status, role)
 	}
@@ -380,7 +383,7 @@ func BlockedByDependencies(task *Task, pr PipelineResolver, depResolver *Depende
 		task.Status != TaskStatusIntegrationFailed {
 		return false
 	}
-	return !checkDependencies(task, depResolver.state.Tasks)
+	return !checkDependencies(task, depResolver.state.Tasks, pr)
 }
 
 // isBlockedByDepsPipeline checks if a pipeline task is in an initial/rejected status
@@ -397,7 +400,7 @@ func isBlockedByDepsPipeline(task *Task, pr PipelineResolver, depResolver *Depen
 	if task.Status != initial && task.Status != rejected && task.Status != TaskStatusIntegrationFailed {
 		return false
 	}
-	return !checkDependencies(task, depResolver.state.Tasks)
+	return !checkDependencies(task, depResolver.state.Tasks, pr)
 }
 
 // isInProgressPipeline checks if a pipeline task is in a pipeline-defined in-progress state.

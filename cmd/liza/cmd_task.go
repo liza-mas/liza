@@ -91,6 +91,10 @@ var addTaskCmd = &cobra.Command{
 
 Task details can be provided via CLI flags or loaded from a YAML file using --file.
 When using --file, CLI flags can override specific fields from the file.
+provider_dependencies is a YAML-file field for selected provider outputs,
+including unborn children. It requires an existing provider and its configured
+per-subtask transition; claim waits for that provider and selected children
+MERGED plus the executed transition. Ordinary downstream depends_on stays invalid.
 
 Updates sprint.scope.planned, goal.alignment_history, and logs the action.
 Validates the added task and reports a warning if unrelated existing state
@@ -108,7 +112,11 @@ Example YAML file format:
   role_pair: coding-pair
   priority: 1
   depends_on:
-    - task-0`,
+    - task-0
+  provider_dependencies:
+    - provider_task: provider-architecture
+      transition: architecture-to-code-plan
+      outputs: [0, 2]`,
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
 			log.SetOutput(io.Discard)
@@ -218,6 +226,7 @@ Example YAML file format:
 				Validation:              input.Validation,
 				ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
 				RuntimeInputs:           models.CloneRuntimeInputs(input.RuntimeInputs),
+				ProviderDependencies:    models.CloneProviderDependencies(input.ProviderDependencies),
 				DestructiveDB:           input.DestructiveDB,
 				Scope:                   input.Scope,
 				Priority:                input.Priority,
@@ -1336,11 +1345,25 @@ var setTaskOutputCmd = &cobra.Command{
 
 Reads output entries from a JSON file. Each entry must have desc, done_when,
 scope, and spec_ref. Optional fields: epic_ref, plan_ref, arch_ref, validation,
-destructive_db, rca_required, depends_on, task_depends_on, decomposition.
+destructive_db, rca_required, depends_on, task_depends_on, provider_dependencies,
+decomposition.
 
 depends_on contains sibling output indexes, e.g. "0" for output[0].
 task_depends_on contains existing concrete task IDs to copy onto generated
 child tasks.
+provider_dependencies retains an explicit wait for selected provider outputs:
+  [{"provider_task":"provider-architecture","transition":"architecture-to-code-plan","outputs":[0,2]}]
+Names are configured examples, not fixed pipeline roles. The provider must
+exist and the transition must be per-subtask from its role-pair. Select a
+nonempty set of distinct nonnegative output indexes; children may be unborn.
+Claim waits for the provider MERGED, its transition executed, and every selected
+child MERGED with the expected parent/target role-pair. APPROVED is insufficient.
+Bounds are checked once output is known; selected nonempty kind outputs are
+refused because deduplication can change child identity. Only this typed field
+permits explicit cross-stage prerequisites; ordinary downstream task_depends_on
+remains invalid. Cycles through future child production/inheritance are refused.
+Every scope task/code-plan precondition must agree with structured fields;
+runtime does not parse prose. Legacy adoption requires reviewed reauthoring.
 inherit_inputs declares whether this child waits for a whole upstream phase or
 only for selected upstream outputs. Omitting it inherits every child of every
 upstream dependency, which is the default. To narrow it:
@@ -1469,7 +1492,15 @@ var addTasksCmd = &cobra.Command{
 
 Reads task definitions from a JSON file. Each task must have id, desc, spec,
 done, and scope. Optional fields: priority, depends, type, role_pair, plan_ref,
-validation, destructive_db, rca_required.
+validation, destructive_db, rca_required, provider_dependencies.
+
+provider_dependencies uses the same shape as output declarations:
+  [{"provider_task":"provider-architecture","transition":"architecture-to-code-plan","outputs":[0,2]}]
+The provider must exist; transition names come from its configured per-subtask
+transitions. Selected children may be unborn, but claim requires the provider
+MERGED, transition executed, and every selected child MERGED. Ordinary downstream
+depends stays invalid. Use reviewed replacement/reauthoring for legacy prose-only
+preconditions; unblocking alone does not repair their missing declaration.
 
 Set task-level rca_required when a direct planning objective is a defect fix.
 It is the default inherited by generated children only when an output entry does

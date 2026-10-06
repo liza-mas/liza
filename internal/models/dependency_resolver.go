@@ -17,6 +17,7 @@ const (
 	DependencyUnsatisfiedSuperseded         DependencySatisfactionKind = "unsatisfied_superseded"
 	DependencyInvalidMissing                DependencySatisfactionKind = "invalid_missing"
 	DependencyInvalidCycle                  DependencySatisfactionKind = "invalid_cycle"
+	DependencyInvalidProvider               DependencySatisfactionKind = "invalid_provider"
 )
 
 // DependencySatisfaction describes the resolved state of one depends_on target.
@@ -27,6 +28,7 @@ type DependencySatisfaction struct {
 	Kind         DependencySatisfactionKind
 	Path         []string
 	BlockingIDs  []string
+	Reason       string
 }
 
 // Satisfied reports whether this dependency is safe for downstream work to run.
@@ -36,7 +38,7 @@ func (d DependencySatisfaction) Satisfied() bool {
 
 // Invalid reports whether the dependency graph itself is malformed.
 func (d DependencySatisfaction) Invalid() bool {
-	return d.Kind == DependencyInvalidMissing || d.Kind == DependencyInvalidCycle
+	return d.Kind == DependencyInvalidMissing || d.Kind == DependencyInvalidCycle || d.Kind == DependencyInvalidProvider
 }
 
 // ViaSupersession reports whether this result was affected by a superseded task.
@@ -50,11 +52,17 @@ func (d DependencySatisfaction) ViaSupersession() bool {
 // Summary returns a compact human-readable description for diagnostics.
 func (d DependencySatisfaction) Summary() string {
 	if len(d.Path) == 0 {
+		if d.Reason != "" {
+			return fmt.Sprintf("%s (%s): %s", d.DependencyID, d.Kind, d.Reason)
+		}
 		return fmt.Sprintf("%s (%s)", d.DependencyID, d.Kind)
 	}
 	summary := fmt.Sprintf("%s (%s via %s)", d.DependencyID, d.Kind, strings.Join(d.Path, " -> "))
 	if len(d.BlockingIDs) > 0 {
 		summary += fmt.Sprintf("; blocking: %s", strings.Join(d.BlockingIDs, ", "))
+	}
+	if d.Reason != "" {
+		summary += "; " + d.Reason
 	}
 	return summary
 }
@@ -86,7 +94,7 @@ func (r *DependencyResolver) Resolve(depID string) DependencySatisfaction {
 }
 
 // UnmetDependencies returns every dependency that is not satisfied.
-func (r *DependencyResolver) UnmetDependencies(task *Task) []DependencySatisfaction {
+func (r *DependencyResolver) UnmetDependencies(task *Task, resolvers ...PipelineResolver) []DependencySatisfaction {
 	if task == nil {
 		return nil
 	}
@@ -97,6 +105,15 @@ func (r *DependencyResolver) UnmetDependencies(task *Task) []DependencySatisfact
 			unmet = append(unmet, result)
 		}
 	}
+	var pr PipelineResolver
+	if len(resolvers) > 0 {
+		pr = resolvers[0]
+	}
+	var tasks []Task
+	if r != nil && r.state != nil {
+		tasks = r.state.Tasks
+	}
+	unmet = append(unmet, UnmetProviderDependencies(task, tasks, pr)...)
 	return unmet
 }
 

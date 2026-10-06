@@ -569,15 +569,16 @@ type Task struct {
 	IntegrationAnalysis *IntegrationAnalysisMetadata `yaml:"integration_analysis,omitempty" json:"integration_analysis,omitempty"`
 	Lifecycle           *TaskLifecycle               `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
 
-	Attempt        int                `yaml:"attempt,omitempty"`
-	DependsOn      []string           `yaml:"depends_on,omitempty"`
-	IntegrationFix bool               `yaml:"integration_fix,omitempty"`
-	HandoffPending bool               `yaml:"handoff_pending,omitempty"`
-	HandoffEvents  []HandoffEvent     `yaml:"handoff_events,omitempty"`
-	MaxIterations  int                `yaml:"max_iterations,omitempty"`
-	Created        time.Time          `yaml:"created"`
-	History        []TaskHistoryEntry `yaml:"history"`
-	Extra          map[string]any     `yaml:",inline"`
+	Attempt              int                  `yaml:"attempt,omitempty"`
+	DependsOn            []string             `yaml:"depends_on,omitempty"`
+	ProviderDependencies []ProviderDependency `yaml:"provider_dependencies,omitempty" json:"provider_dependencies,omitempty"`
+	IntegrationFix       bool                 `yaml:"integration_fix,omitempty"`
+	HandoffPending       bool                 `yaml:"handoff_pending,omitempty"`
+	HandoffEvents        []HandoffEvent       `yaml:"handoff_events,omitempty"`
+	MaxIterations        int                  `yaml:"max_iterations,omitempty"`
+	Created              time.Time            `yaml:"created"`
+	History              []TaskHistoryEntry   `yaml:"history"`
+	Extra                map[string]any       `yaml:",inline"`
 }
 
 // EffectiveParentTasks returns the list of parent task IDs.
@@ -635,7 +636,8 @@ type OutputEntry struct {
 	DependsOn               []string                 `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 	Decomposition           *DecompositionManifest   `yaml:"decomposition,omitempty" json:"decomposition,omitempty"`
 	// TaskDependsOn names existing concrete task IDs to copy onto generated child tasks.
-	TaskDependsOn []string `yaml:"task_depends_on,omitempty" json:"task_depends_on,omitempty"`
+	TaskDependsOn        []string             `yaml:"task_depends_on,omitempty" json:"task_depends_on,omitempty"`
+	ProviderDependencies []ProviderDependency `yaml:"provider_dependencies,omitempty" json:"provider_dependencies,omitempty"`
 	// Supersedes names one existing task this output replaces. Generating the
 	// child retires that task and retargets its consumers in the same state
 	// transaction; several outputs may name one task to split it.
@@ -1079,7 +1081,7 @@ func (t *Task) IsClaimable(role string, allTasks []Task, pr PipelineResolver) bo
 	if !t.isClaimablePipeline(role, pr) {
 		return false
 	}
-	return checkDependencies(t, allTasks)
+	return checkDependencies(t, allTasks, pr)
 }
 
 // isClaimablePipeline checks claimability using pipeline-resolved states.
@@ -1296,9 +1298,16 @@ func ResumableOwnedTaskReason(state *State, task *Task, agentID string, pr Pipel
 }
 
 // checkDependencies returns true if all dependencies of the task are satisfied.
-// Dependency edges are canonicalized by state-mutating operations, so readers
-// only need direct MERGED checks.
-func checkDependencies(t *Task, allTasks []Task) bool {
+// Ordinary edges are canonicalized at mutation boundaries and need direct
+// MERGED checks; provider declarations resolve their selected future children.
+func checkDependencies(t *Task, allTasks []Task, resolvers ...PipelineResolver) bool {
+	var pr PipelineResolver
+	if len(resolvers) > 0 {
+		pr = resolvers[0]
+	}
+	if len(UnmetProviderDependencies(t, allTasks, pr)) > 0 {
+		return false
+	}
 	if allTasks == nil || len(t.DependsOn) == 0 {
 		return true
 	}

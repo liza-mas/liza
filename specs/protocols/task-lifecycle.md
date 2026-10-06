@@ -45,6 +45,47 @@ Planners in later phases see a PHASE CONSISTENCY RULE requiring them to mark BLO
 (via `liza_mark_blocked`) if their plan cannot reconcile with prior phases' plans.
 This blocking path is orthogonal to attempt exhaustion — it does not increment the task's attempt counter.
 
+## Provider Output Prerequisites
+
+Authors encode every Scope task/code-plan precondition in legal concrete task
+dependencies or typed `provider_dependencies`; reviewers and the orchestrator's
+`plan-check` reconcile those fields with the plan before handoff. Runtime
+scheduling enforces structured data, not arbitrary prose. A dependency on a merged
+architecture does not imply a wait for its future code plans.
+
+`provider_dependencies` names an existing provider, its configured per-subtask
+transition and selected output indexes. Children may be unborn. The consumer stays
+held until the provider is `MERGED`, the transition is executed, and every selected
+child exists with the expected parent/target role-pair and is `MERGED`;
+`APPROVED` alone is insufficient. Discovery and under-lock claim/reclaim checks
+agree. Unassigned unblock may restore a dependency-held task; assignment remains
+refused while a prerequisite is unmet.
+
+This is an explicit cross-stage exception, leaving ordinary downstream
+`depends_on`/`task_depends_on` invalid. Authoring, handoff and crash recovery
+validate the combined graph, including future production and inherited/sibling
+edges. Invalid, missing, partial or retired provider evidence fails closed.
+Selected outputs with nonempty `kind` are unsupported because deduplication
+can change child identity.
+
+Missing generated declaration copies keep affected children held and producer
+output live until recovery restores them, even with an executed transition marker.
+
+Consumer replan and direct-edge repairs preserve declarations. A referenced
+provider or selected child cannot be retired/replanned while live declarations
+name it. Before retrying a provider change, cancel or replace the referencing
+consumer through authorized lifecycle operations; a reviewed replacement must
+omit that reference or name another intended provider. Retaining the same reference
+retains the refusal. Retire any live producer declaration likewise; concrete
+`retarget-dependency` does not rewrite provider declarations. Never blindly
+retarget output positions. Legacy prose-only blocks require
+reviewed structured correction before restoration; merely unblocking repeats
+the missing-edge failure. Omitted fields retain legacy runtime behavior; no
+automatic migration or promotion of architecture dependencies occurs.
+
+See [Provider Dependencies](../architecture/blackboard-schema.md#provider-dependencies)
+and [ADR-0181](../architecture/ADR/0181-provider-output-dependencies.md).
+
 ## Iteration Protocol
 
 **Assignment ownership:** An agent may be assigned to only one non-terminal task.

@@ -288,9 +288,13 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 		worktreeRel:         worktreeRel,
 		integrationBranch:   integrationBranch,
 		pipelineTransitions: pipelineTransitions,
+		resolver:            resolver,
 	}
 	if err := strategy.validate(task, state, runtimeRole, doerRole, &claimCtx); err != nil {
 		return nil, err
+	}
+	if unmet := models.UnmetProviderDependencies(task, state.Tasks, resolver); len(unmet) > 0 {
+		return nil, &PreconditionError{Reason: "task has unmet provider dependencies: " + formatDependencyResults(unmet)}
 	}
 	if reason := models.DoerClaimBlockedReason(state, task, runtimeRole, agentID, resolver, time.Now().UTC()); reason != "" {
 		return nil, &PreconditionError{Reason: reason}
@@ -610,8 +614,8 @@ func completeClaimTaskAfterValidation(
 		}
 
 		// Re-check dependencies under lock for strategies that require it
-		if strategy.requiresDependencyRecheck() {
-			if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+		if strategy.requiresDependencyRecheck() || len(task.ProviderDependencies) > 0 {
+			if unmet := unmetDependencies(task, state, resolver); len(unmet) > 0 {
 				return fmt.Errorf("race condition: dependencies changed: %s", formatDependencyResults(unmet))
 			}
 		}
@@ -800,8 +804,8 @@ func recheckClaimTaskBeforeWorktree(
 	if reason := models.DoerClaimBlockedReason(state, task, runtimeRole, agentID, resolver, time.Now().UTC()); reason != "" {
 		return nil, &PreconditionError{Reason: reason}
 	}
-	if strategy.requiresDependencyRecheck() {
-		if unmet := unmetDependencies(task, state); len(unmet) > 0 {
+	if strategy.requiresDependencyRecheck() || len(task.ProviderDependencies) > 0 {
+		if unmet := unmetDependencies(task, state, resolver); len(unmet) > 0 {
 			return nil, fmt.Errorf("race condition: dependencies changed: %s", formatDependencyResults(unmet))
 		}
 	}
@@ -822,7 +826,7 @@ func replayClaimResult(task *models.Task, receipt *models.LifecycleReceipt, acto
 		LeaseExpires: lease, IntegrationFix: receipt.Projection.SourceStatus == models.TaskStatusIntegrationFailed}
 }
 
-func unmetDependencies(task *models.Task, state *models.State) []models.DependencySatisfaction {
+func unmetDependencies(task *models.Task, state *models.State, resolvers ...models.PipelineResolver) []models.DependencySatisfaction {
 	if task == nil || state == nil {
 		return nil
 	}
@@ -852,7 +856,11 @@ func unmetDependencies(task *models.Task, state *models.State) []models.Dependen
 			BlockingIDs:  []string{depID},
 		})
 	}
-	return unmet
+	var resolver models.PipelineResolver
+	if len(resolvers) > 0 {
+		resolver = resolvers[0]
+	}
+	return append(unmet, models.UnmetProviderDependencies(task, state.Tasks, resolver)...)
 }
 
 func formatDependencyResults(results []models.DependencySatisfaction) string {

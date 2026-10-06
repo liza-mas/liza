@@ -3,6 +3,7 @@ package ops
 import (
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -245,6 +246,13 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 
 		previousCount := len(task.Output)
 		task.Output = input.Output
+		// Provider output may become known after its consumers were authored.
+		// Validate that prospective graph before publishing either side.
+		if models.HasProviderDependencies(state) {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
+				return &PreconditionError{Reason: fmt.Sprintf("task output leaves an invalid state: %v", err)}
+			}
+		}
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time: time.Now().UTC(), Event: models.TaskEventOutputSet, Agent: &input.AgentID,
 			Extra: map[string]any{"previous_output_count": previousCount, "output_count": len(input.Output)},

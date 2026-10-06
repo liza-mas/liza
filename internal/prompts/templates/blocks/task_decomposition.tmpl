@@ -9,7 +9,7 @@ When a spec step is too large for one task, split it. When two spec steps are sm
 tightly coupled, combining them is acceptable — but the intent must still be singular.
 Keep closely related changes together — splitting cohesive work adds overhead without
 reducing risk. Split at natural seams between independent concerns.
-Declare dependency order between tasks — no circular or missing dependencies.
+Encode every Scope task/code-plan wait: sibling depends_on, legal task_depends_on, or provider_dependencies (existing provider/configured per-subtask transition/selected outputs, even unborn). Only typed provider waits cross stages; ordinary downstream edges remain invalid. No missing edges/cycles, including future child production/inheritance; prose/merged architecture alone cannot schedule plan waits.
 Shared-file rule: when two tasks modify the same file, they MUST have a depends_on
 relationship. Parallel coders work in isolated worktrees — shared files without
 dependency ordering cause merge conflicts. Audit scope overlaps before finalizing.

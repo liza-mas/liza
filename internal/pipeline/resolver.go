@@ -702,6 +702,32 @@ func (r *Resolver) Transition(name string) (*TransitionDef, error) {
 	return nil, fmt.Errorf("unknown transition %q", name)
 }
 
+// ProviderTransition projects configured child identity without importing
+// pipeline definitions into the task model's readiness checks.
+func (r *Resolver) ProviderTransition(name string) (models.ProviderTransition, error) {
+	if r == nil || r.config == nil {
+		return models.ProviderTransition{}, fmt.Errorf("provider transition configuration is unavailable")
+	}
+	td, err := r.Transition(name)
+	if err != nil {
+		return models.ProviderTransition{}, err
+	}
+	source, err := r.TransitionSourceRolePair(name)
+	if err != nil {
+		return models.ProviderTransition{}, err
+	}
+	target, err := r.TransitionTargetRolePair(name)
+	if err != nil {
+		return models.ProviderTransition{}, err
+	}
+	return models.ProviderTransition{
+		SourceRolePair: source,
+		TargetRolePair: target,
+		TaskSlug:       td.TaskSlugOrName(),
+		Cardinality:    td.Cardinality,
+	}, nil
+}
+
 // IsPipelineTransition reports whether name is a top-level pipeline-transition.
 func (r *Resolver) IsPipelineTransition(name string) bool {
 	for i := range r.config.Pipeline.PipelineTransitions {

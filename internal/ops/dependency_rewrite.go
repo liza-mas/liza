@@ -10,6 +10,9 @@ import (
 )
 
 func rewriteActiveDependents(state *models.State, resolver *pipeline.Resolver, targetID string, replacements []string, agentID string, now time.Time) error {
+	if err := rejectReferencedProviderRetirement(state, resolver, targetID); err != nil {
+		return err
+	}
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if task.ID == targetID {
@@ -357,8 +360,12 @@ func operationalOutputMayBeConsumed(state *models.State, resolver *pipeline.Reso
 			return true
 		}
 		slug := transition.TaskSlugOrName()
-		for i := range task.Output {
-			if state.FindTask(perSubtaskChildID(task.ID, slug, i)) == nil {
+		ids, skipped, _ := models.ResolveOutputSiblings(task.Output, collectNonTerminalByKind(state, declaredOriginals(task.Output)), task.ID, slug)
+		for i, id := range ids {
+			child := state.FindTask(id)
+			_, dedup := skipped[i]
+			own := id == perSubtaskChildID(task.ID, slug, i)
+			if child == nil || ((!dedup || own) && !child.Status.IsTerminal() && !models.ProviderDependenciesEqual(child.ProviderDependencies, task.Output[i].ProviderDependencies)) {
 				return true
 			}
 		}

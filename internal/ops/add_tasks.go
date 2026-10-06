@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -35,6 +36,7 @@ type AddTaskInput struct {
 	Priority                int                             `json:"priority"`
 	RCARequired             bool                            `json:"rca_required,omitempty"`
 	DependsOn               []string                        `json:"depends,omitempty"`
+	ProviderDependencies    []models.ProviderDependency     `json:"provider_dependencies,omitempty"`
 }
 
 // AddTaskResult contains the outcome of adding a task.
@@ -109,6 +111,11 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		if err := insertTaskInState(state, projectRoot, newTask, input, resolver); err != nil {
 			return err
+		}
+		if models.HasProviderDependencies(state) {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
+				return &PreconditionError{Reason: fmt.Sprintf("add-task provider dependencies: %v", err)}
+			}
 		}
 		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
 			postValidationErr = err
@@ -251,6 +258,7 @@ func buildReplacementTask(input *AddTaskInput, resolver *pipeline.Resolver) (mod
 		RCARequired:             input.RCARequired,
 		Scope:                   input.Scope,
 		DependsOn:               normalizedDeps,
+		ProviderDependencies:    models.CloneProviderDependencies(input.ProviderDependencies),
 		Created:                 time.Now().UTC(),
 		History:                 []models.TaskHistoryEntry{},
 	}, nil

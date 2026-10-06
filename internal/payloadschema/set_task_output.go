@@ -131,6 +131,9 @@ func validateOutputEntryScalars(index int, entry models.OutputEntry, total int) 
 	if err := models.ValidateInheritInputs(entry.InheritInputs, index); err != nil {
 		diagnostics = append(diagnostics, outputDiagnostic(index, "inherit_inputs", "mode must be all, selected or none; only selected carries selections, each naming one upstream task and at least one distinct output index", models.FieldValueClassMalformed))
 	}
+	if err := models.ValidateProviderDependencies(entry.ProviderDependencies); err != nil {
+		diagnostics = append(diagnostics, outputDiagnostic(index, "provider_dependencies", "must name distinct provider tasks and per-subtask transitions with nonempty distinct nonnegative output indexes", models.FieldValueClassMalformed))
+	}
 	return diagnostics
 }
 

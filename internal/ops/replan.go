@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -105,6 +106,9 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		}
 
 		// Compute new task ID: <original-id>-replan-N
+		if err := rejectReferencedProviderRetirement(state, resolver, task.ID); err != nil {
+			return err
+		}
 		newTaskID := computeReplanID(state, task.ID)
 
 		// Resolve initial status for the role pair
@@ -148,26 +152,27 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		// Create new task inheriting fields from original
 		originalID := task.ID
 		newTask := models.Task{
-			ID:          newTaskID,
-			Type:        task.Type,
-			RolePair:    task.RolePair,
-			Description: replanDescription(task.Description, input.ChangedBy, reason),
-			Status:      initialStatus,
-			Priority:    task.Priority,
-			ParentTask:  task.ParentTask,
-			ParentTasks: slices.Clone(task.ParentTasks),
-			SpecRef:     task.SpecRef,
-			EpicRef:     task.EpicRef,
-			PlanRef:     task.PlanRef,
-			ArchRef:     task.ArchRef,
-			Kind:        task.Kind,
-			RCARequired: task.RCARequired,
-			DoneWhen:    task.DoneWhen,
-			Scope:       task.Scope,
-			DependsOn:   slices.Clone(task.DependsOn),
-			Supersedes:  &originalID,
-			Created:     now,
-			History:     []models.TaskHistoryEntry{},
+			ID:                   newTaskID,
+			Type:                 task.Type,
+			RolePair:             task.RolePair,
+			Description:          replanDescription(task.Description, input.ChangedBy, reason),
+			Status:               initialStatus,
+			Priority:             task.Priority,
+			ParentTask:           task.ParentTask,
+			ParentTasks:          slices.Clone(task.ParentTasks),
+			SpecRef:              task.SpecRef,
+			EpicRef:              task.EpicRef,
+			PlanRef:              task.PlanRef,
+			ArchRef:              task.ArchRef,
+			Kind:                 task.Kind,
+			RCARequired:          task.RCARequired,
+			DoneWhen:             task.DoneWhen,
+			Scope:                task.Scope,
+			DependsOn:            slices.Clone(task.DependsOn),
+			ProviderDependencies: models.CloneProviderDependencies(task.ProviderDependencies),
+			Supersedes:           &originalID,
+			Created:              now,
+			History:              []models.TaskHistoryEntry{},
 		}
 		state.Tasks = append(state.Tasks, newTask)
 
@@ -285,6 +290,11 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			SpecRef:        task.SpecRef,
 			Resumed:        atCheckpoint,
 			Warnings:       warnings,
+		}
+		if models.HasProviderDependencies(state) {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
+				return &PreconditionError{Reason: fmt.Sprintf("replan provider dependencies: %v", err)}
+			}
 		}
 
 		return nil
