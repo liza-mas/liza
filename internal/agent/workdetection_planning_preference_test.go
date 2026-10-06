@@ -170,6 +170,43 @@ func TestDetectOrchestratorWakeTriggers_MergeAfterAttemptKeepsPreference(t *test
 	}
 }
 
+// D-58: a planner held during the last pass was never attempted. Releasing it
+// by plan-check after that pass restores the preference.
+func TestDetectOrchestratorWakeTriggers_ReleaseAfterAttemptKeepsPreference(t *testing.T) {
+	planner := mergedPlanner("provider-plan")
+	operator := "operator"
+	planner.History = append(planner.History,
+		models.TaskHistoryEntry{Time: planningPreferenceMergedAt.Add(time.Minute), Event: models.TaskEventPlanCheck, Agent: &operator},
+		models.TaskHistoryEntry{Time: planningPreferenceMergedAt.Add(time.Hour), Event: models.TaskEventPlanCheck, Agent: &operator})
+	state := planningPreferenceState(planner, blockedConsumer("consumer", "provider-plan"))
+	attemptedAt := planningPreferenceMergedAt.Add(5 * time.Minute)
+	state.Sprint.Timeline.TransitionsAttemptedAt = &attemptedAt
+
+	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
+
+	if result.Trigger != WakeTriggerPlanningComplete {
+		t.Fatalf("wake = %s, want PLANNING_COMPLETE for a planner released after the last attempt", result.Trigger)
+	}
+}
+
+// Counterfactual: a plan-check before the last attempt does not renew the
+// preference; that pass did attempt the planner.
+func TestDetectOrchestratorWakeTriggers_PlanCheckBeforeAttemptYieldsToBlockedTriage(t *testing.T) {
+	planner := mergedPlanner("provider-plan")
+	operator := "operator"
+	planner.History = append(planner.History,
+		models.TaskHistoryEntry{Time: planningPreferenceMergedAt.Add(time.Minute), Event: models.TaskEventPlanCheck, Agent: &operator})
+	state := planningPreferenceState(planner, blockedConsumer("consumer", "provider-plan"))
+	attemptedAt := planningPreferenceMergedAt.Add(5 * time.Minute)
+	state.Sprint.Timeline.TransitionsAttemptedAt = &attemptedAt
+
+	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
+
+	if result.Trigger != WakeTriggerBlocked {
+		t.Fatalf("wake = %s, want BLOCKED_TASKS when the last plan-check preceded the attempt", result.Trigger)
+	}
+}
+
 // A dependency on a superseded task resolves to its replacement planner.
 func TestDetectOrchestratorWakeTriggers_SupersededDependencyReachesPlanner(t *testing.T) {
 	old := testhelpers.BuildTaskByStatus("old-plan", models.TaskStatusSuperseded, planningPreferenceMergedAt.Add(-3*time.Hour))

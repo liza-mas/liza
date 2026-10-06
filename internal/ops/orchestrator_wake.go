@@ -128,8 +128,9 @@ func currentBlockerCandidate(state *models.State, task *models.Task) AssessmentF
 // BlockedTasksAwaitPlanningHandoff reports whether an actionable BLOCKED task
 // waits on planning output that only a PLANNING_COMPLETE checkpoint can
 // materialize: a dependency or awaited task (either followed through
-// supersession) that is a planned, PLANNING_COMPLETE-eligible planner merged after the last
-// transition attempt. A BLOCKED_TASKS turn cannot checkpoint, so such a wake
+// supersession) that is a planned, PLANNING_COMPLETE-eligible planner that
+// merged, or was released by a plan-check, after the last transition attempt.
+// A BLOCKED_TASKS turn cannot checkpoint, so such a wake
 // is wasted. The attempt bound keeps a planner whose transition already failed
 // from outranking blocked triage again in this sprint.
 func BlockedTasksAwaitPlanningHandoff(state *models.State, handoff PlanHandoffDomain) bool {
@@ -170,8 +171,12 @@ func awaitsPlanningTransition(state *models.State, plannerID string, handoff Pla
 	if attempted == nil {
 		return true
 	}
+	// Eligibility starts at the merge or at a later plan-check (hold cleared,
+	// plan passed). A plan held during the last pass was never attempted, so
+	// the latest of these events is compared, not the merge alone (D-58).
 	for i := len(planner.History) - 1; i >= 0; i-- {
-		if planner.History[i].Event == models.TaskEventMerged {
+		switch planner.History[i].Event {
+		case models.TaskEventMerged, models.TaskEventPlanCheck:
 			return planner.History[i].Time.After(*attempted)
 		}
 	}
