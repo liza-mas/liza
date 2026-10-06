@@ -164,7 +164,7 @@ func prepareTaskWorktreeFunctionalClustersFile(targetRoot string) error {
 		}
 		return nil
 	}
-	return worktreeexclude.EnsurePrivateExclude(targetRoot, outputArtifactName)
+	return worktreeexclude.EnsureRepoExclude(targetRoot, "/"+outputArtifactName)
 }
 
 func functionalClustersTracked(targetRoot string) (bool, error) {

@@ -1521,7 +1521,7 @@ func runRuntimeCommandPlan(plan RuntimeCommandPlan) (string, error) {
 }
 
 func ensureTaskWorktreeScipExclude(targetRoot string) error {
-	if err := worktreeexclude.EnsurePrivateExclude(targetRoot, paths.ProjectDirName()+"/scip/"); err != nil {
+	if err := worktreeexclude.EnsureRepoExclude(targetRoot, "/"+paths.ProjectDirName()+"/scip/"); err != nil {
 		return fmt.Errorf("ensure task worktree scip-search exclude: %w", err)
 	}
 	return nil

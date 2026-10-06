@@ -29,11 +29,20 @@ copy would send agents to the repo-root checkout.
    with `scip-search reroot --project-root <worktree>`, which rewrites only the
    project root.
 2. Copies are published atomically, never wait on the repo-root refresh lock,
-   replace any previous copy, and keep the existing git isolation
-   (skip-worktree or private exclude), so they never dirty task diffs.
+   replace any previous copy, and isolate generated artifacts from task diffs.
+   Tracked artifacts retain skip-worktree handling; untracked SCIP, Functional
+   Clusters and generated `.sembleignore` use anchored patterns in Git's shared
+   `info/exclude`, serialized across processes. User `core.excludesFile`
+   configuration and content remain unchanged; private excludes for copied
+   environment files retain their separate policy.
 3. A missing repo-root artifact, a failed reroot, or a scip-search without
    `reroot` is a per-artifact warning; the worktree runs without that index.
    The existing environment gates still select which artifacts are provisioned.
+4. MAS SessionStart context publishes existing, gated paths for the agent's
+   actual checkout, resolved from its cwd rather than a parent project setting.
+   Linked-worktree SCIP paths name only rerooted runtime copies; main-checkout
+   agents may use hook-published root indexes. Startup never generates indexes
+   or runs Semble prewarm, and states that copies may lag and omit task edits.
 
 ## Consequences
 
@@ -47,6 +56,8 @@ copy would send agents to the repo-root checkout.
 - A project has no worktree indexes until its first commit or merge produces
   repo-root indexes.
 - Re-rooting requires a scip-search release with `reroot`.
+- Shared generated-artifact exclusions apply to every checkout, including the
+  main checkout, without hiding tracked changes or replacing user ignore rules.
 
 ## Alternatives Considered
 

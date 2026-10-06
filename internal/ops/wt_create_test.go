@@ -379,7 +379,7 @@ func TestCreateWorktreePreparesSembleIgnoreForFreshWorktree(t *testing.T) {
 	}
 
 	assertPrepareSembleIgnorePayload(t, result.WorktreeDir)
-	assertPrepareSemblePrivateExcludeCount(t, result.WorktreeDir, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, result.WorktreeDir, ".sembleignore", 1)
 	assertGitStatusClean(t, result.WorktreeDir)
 }
 
@@ -411,7 +411,7 @@ func TestCreateWorktreePreparesSembleIgnoreForExistingWorktree(t *testing.T) {
 	}
 
 	assertPrepareSembleIgnorePayload(t, result.WorktreeDir)
-	assertPrepareSemblePrivateExcludeCount(t, result.WorktreeDir, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, result.WorktreeDir, ".sembleignore", 1)
 	assertGitStatusClean(t, result.WorktreeDir)
 }
 
@@ -526,7 +526,7 @@ func TestCreateWorktree_ScipExistingWorktreeRefreshesIdempotently(t *testing.T) 
 	if string(content) != wantContent {
 		t.Fatalf("index content = %q, want %q", content, wantContent)
 	}
-	assertCreateWorktreeScipExcludeCount(t, first.WorktreeDir, 1)
+	assertPrepareSembleRepoExcludeCount(t, first.WorktreeDir, paths.ProjectDirName()+"/scip/", 1)
 	assertGitStatusClean(t, first.WorktreeDir)
 }
 
@@ -1312,21 +1312,6 @@ func availableCreateWorktreeScipIndexes(t *testing.T, worktreeDir string, langua
 		t.Fatalf("AvailableIndexes() error: %v", err)
 	}
 	return indexes
-}
-
-func assertCreateWorktreeScipExcludeCount(t *testing.T, worktreeDir string, want int) {
-	t.Helper()
-	gitDir := runGitInDir(t, worktreeDir, "rev-parse", "--git-dir")
-	if !filepath.IsAbs(gitDir) {
-		gitDir = filepath.Join(worktreeDir, gitDir)
-	}
-	content, err := os.ReadFile(filepath.Join(gitDir, "info", "exclude"))
-	if err != nil {
-		t.Fatalf("ReadFile(worktree exclude) error: %v", err)
-	}
-	if got := strings.Count(string(content), paths.ProjectDirName()+"/scip/"); got != want {
-		t.Fatalf("worktree exclude contains %s/scip/ %d times, want %d; content: %q", paths.ProjectDirName(), got, want, content)
-	}
 }
 
 func commitEnvIgnoreForWorktreeTest(t *testing.T, projectRoot string) {

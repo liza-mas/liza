@@ -99,6 +99,36 @@ func TestRefreshIndexTaskWorktreeCopiesRepoRootArtifactAndStaysClean(t *testing.
 	}
 }
 
+func TestD47RefreshClustersPreservesUserExcludes(t *testing.T) {
+	projectRoot, worktreeRoot := newIndexedWorktree(t)
+	enableFunctionalClusters(t)
+	userExclude := filepath.Join(t.TempDir(), "user-exclude")
+	writeFile(t, userExclude, "user-owned/\n")
+	testhelpers.MustGit(t, worktreeRoot, "config", "core.excludesFile", userExclude)
+	writeFile(t, filepath.Join(projectRoot, "functional-clusters.json"), "repo-root clusters\n")
+
+	result, err := RefreshIndex(RefreshOptions{
+		ProjectRoot: projectRoot, TargetRoot: worktreeRoot, ConfiguredLanguages: []string{"go"},
+	})
+	if err != nil || len(result.Successes) != 1 || len(result.Failures) != 0 {
+		t.Fatalf("RefreshIndex = %#v, %v, want successful copy", result, err)
+	}
+	if got := string(readFile(t, filepath.Join(worktreeRoot, "functional-clusters.json"))); got != "repo-root clusters\n" {
+		t.Fatalf("worktree artifact = %q", got)
+	}
+	if got := gitOutput(t, worktreeRoot, "config", "--get", "core.excludesFile"); got != userExclude {
+		t.Fatalf("user config changed: %q", got)
+	}
+	if got := string(readFile(t, userExclude)); got != "user-owned/\n" {
+		t.Fatalf("user exclude changed: %q", got)
+	}
+	testhelpers.MustGit(t, worktreeRoot, "check-ignore", "-q", "user-owned/data")
+	testhelpers.MustGit(t, worktreeRoot, "check-ignore", "-q", "functional-clusters.json")
+	if got := gitOutput(t, worktreeRoot, "status", "--porcelain"); got != "" {
+		t.Fatalf("generated artifact dirtied worktree: %q", got)
+	}
+}
+
 func TestRefreshIndexTaskWorktreeMissingRepoRootArtifactRemovesStaleCopy(t *testing.T) {
 	projectRoot, worktreeRoot := newIndexedWorktree(t)
 	stalePath := filepath.Join(worktreeRoot, "functional-clusters.json")

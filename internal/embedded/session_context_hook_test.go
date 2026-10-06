@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -462,7 +463,7 @@ func TestSessionContextHook_UsesGlobalDirNameWhenItDiffersFromNameLower(t *testi
 	}
 }
 
-func TestSessionContextHook_SuppressesRepoIndexesForLizaAgentSessions(t *testing.T) {
+func TestSessionContextHook_OmitsDisabledIndexesForAgentSessions(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
 	}
@@ -476,7 +477,9 @@ func TestSessionContextHook_SuppressesRepoIndexesForLizaAgentSessions(t *testing
 
 	output := runSessionContextHook(t, hookPath, sessionStartPayload(t, projectRoot), []string{
 		"LIZA_AGENT_ID=coder-1",
-		"LIZA_ENABLE_FUNCTIONAL_CLUSTERS=true",
+		"LIZA_ENABLE_STACKLIT=false",
+		"LIZA_ENABLE_SCIP_SEARCH=false",
+		"LIZA_ENABLE_FUNCTIONAL_CLUSTERS=false",
 	}, 0)
 	context := sessionStartAdditionalContext(t, output)
 	if !strings.Contains(context, "MANDATORY: Read CORE.md") {
@@ -606,7 +609,7 @@ func TestSessionContextHook_OmitsSembleWhenOfflineValidationFails(t *testing.T) 
 	}
 }
 
-func TestSessionContextHook_SuppressesSembleForLizaAgentSessions(t *testing.T) {
+func TestSessionContextHook_EmitsSembleForAgentSessions(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
 	}
@@ -622,8 +625,136 @@ func TestSessionContextHook_SuppressesSembleForLizaAgentSessions(t *testing.T) {
 		"LIZA_AGENT_ID=coder-1",
 	}, 0)
 	context := sessionStartAdditionalContext(t, output)
-	if strings.Contains(context, "Semble semantic search is available") {
-		t.Fatalf("Liza agent context should not include Pairing Semble guidance, got:\n%s", context)
+	if !strings.Contains(context, "Semble semantic search is available for this repo root: "+emitted(projectRoot)) {
+		t.Fatalf("agent context should name its Semble checkout, got:\n%s", context)
+	}
+}
+
+func TestD47SessionContextUsesTaskCheckout(t *testing.T) {
+	for _, alternate := range []bool{false, true} {
+		name := "default brand"
+		if alternate {
+			name = "alternate brand"
+		}
+		t.Run(name, func(t *testing.T) {
+			if alternate {
+				previous := []string{brand.NameLower, brand.NameTitle, brand.BinaryName, brand.EnvPrefix, brand.GlobalDirName, brand.ProjectDirName}
+				brand.NameLower, brand.NameTitle, brand.BinaryName = "acme", "Acme", "acme"
+				brand.EnvPrefix, brand.GlobalDirName, brand.ProjectDirName = "ACME_AGENT", ".acme-global", ".acme-project"
+				t.Cleanup(func() {
+					brand.NameLower, brand.NameTitle, brand.BinaryName = previous[0], previous[1], previous[2]
+					brand.EnvPrefix, brand.GlobalDirName, brand.ProjectDirName = previous[3], previous[4], previous[5]
+				})
+			}
+			for _, scenario := range []string{"nested cwd", "absent cwd", "main checkout", "disabled gates", "empty branded gates", "missing artifacts"} {
+				t.Run(scenario, func(t *testing.T) {
+					hook := writeSessionContextHook(t)
+					root := t.TempDir()
+					worktree := filepath.Join(root, ".worktrees", "task-1")
+					for _, args := range [][]string{
+						{"init"}, {"config", "user.email", "test@example.invalid"}, {"config", "user.name", "Test"},
+						{"commit", "--allow-empty", "-m", "test: initialize fixture"}, {"worktree", "add", "-b", "task-1", worktree},
+					} {
+						cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+						if output, err := cmd.CombinedOutput(); err != nil {
+							t.Fatalf("git %v: %v\n%s", args, err, output)
+						}
+					}
+					target := worktree
+					if scenario == "main checkout" {
+						target = root
+					}
+					nested := filepath.Join(target, "src")
+					if err := os.MkdirAll(nested, 0o755); err != nil {
+						t.Fatal(err)
+					}
+					for _, dir := range []string{root, worktree} {
+						for _, filename := range []string{"stacklit.json", "functional-clusters.json", "go.scip"} {
+							if err := os.WriteFile(filepath.Join(dir, filename), []byte("{}\n"), 0o644); err != nil {
+								t.Fatal(err)
+							}
+						}
+						writeRootSembleIgnore(t, dir)
+					}
+					index := filepath.Join(worktree, paths.ProjectDirName(), "scip", "go.scip")
+					if err := os.MkdirAll(filepath.Dir(index), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(index, []byte("worktree index\n"), 0o644); err != nil {
+						t.Fatal(err)
+					}
+					bin := t.TempDir()
+					marker := filepath.Join(bin, "called")
+					// Presence is sufficient for MAS: startup must never invoke a search/prewarm.
+					if err := os.WriteFile(filepath.Join(bin, "semble"), []byte("#!/bin/sh\ntouch '"+emitted(marker)+"'\nexit 42\n"), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					extra := []string{"CLAUDE_PROJECT_DIR=" + root, brand.EnvName("AGENT_ID") + "=coder-1", "PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}
+					for _, suffix := range []string{"STACKLIT", "SCIP_SEARCH", "SEMBLE", "FUNCTIONAL_CLUSTERS"} {
+						value := "true"
+						if scenario == "disabled gates" {
+							value = "false"
+						}
+						if scenario == "empty branded gates" {
+							value = ""
+						}
+						extra = append(extra, "LIZA_ENABLE_"+suffix+"=true", brand.EnvName("ENABLE_"+suffix)+"="+value)
+					}
+					if scenario == "missing artifacts" {
+						for _, path := range []string{index, filepath.Join(worktree, "stacklit.json"), filepath.Join(worktree, "functional-clusters.json"), filepath.Join(worktree, ".sembleignore")} {
+							if err := os.Remove(path); err != nil {
+								t.Fatal(err)
+							}
+						}
+					}
+					payload := sessionStartPayload(t, nested)
+					if scenario == "absent cwd" {
+						payload = `{}`
+					}
+					cmd := exec.Command("bash", hook)
+					cmd.Dir, cmd.Env, cmd.Stdin = nested, sessionContextHookEnv(extra), strings.NewReader(payload)
+					output, err := cmd.CombinedOutput()
+					if err != nil {
+						t.Fatalf("hook failed: %v\n%s", err, output)
+					}
+					context := sessionStartAdditionalContext(t, string(output))
+					available := scenario == "nested cwd" || scenario == "absent cwd" || scenario == "main checkout"
+					for _, snippet := range []string{"Stacklit index:", "SCIP indexes:", "Functional clusters artifact:", "Semble semantic search is available"} {
+						if strings.Contains(context, snippet) != available {
+							t.Fatalf("availability of %q = %v, want %v:\n%s", snippet, strings.Contains(context, snippet), available, context)
+						}
+					}
+					if available {
+						wantIndex := index
+						if scenario == "main checkout" {
+							wantIndex = filepath.Join(root, "go.scip")
+						}
+						for _, snippet := range []string{"Stacklit index: " + emitted(filepath.Join(target, "stacklit.json")), "Go index: " + emitted(wantIndex), "Functional clusters artifact: " + emitted(filepath.Join(target, "functional-clusters.json")), "Semble semantic search is available for this repo root: " + emitted(target), "exclude the task's own edits", "verify against source files"} {
+							if !strings.Contains(context, snippet) {
+								t.Fatalf("missing worktree guidance %q:\n%s", snippet, context)
+							}
+						}
+						for _, path := range []string{filepath.Join(root, "stacklit.json"), filepath.Join(root, "functional-clusters.json"), filepath.Join(root, "go.scip"), filepath.Join(worktree, "go.scip")} {
+							if scenario == "main checkout" {
+								break
+							}
+							if strings.Contains(context, emitted(path)) {
+								t.Fatalf("unsafe root index path leaked: %s", path)
+							}
+						}
+					}
+					if strings.Contains(context, "PAIRING_MODE") || !strings.Contains(context, "MULTI_AGENT_MODE") {
+						t.Fatalf("wrong initialization mode:\n%s", context)
+					}
+					if alternate && regexp.MustCompile(`(?i)\bliza\b|LIZA_`).MatchString(context) {
+						t.Fatalf("default branding leaked:\n%s", context)
+					}
+					if _, err := os.Stat(marker); !os.IsNotExist(err) {
+						t.Fatalf("MAS startup invoked Semble: %v", err)
+					}
+				})
+			}
+		})
 	}
 }
 
@@ -739,6 +870,8 @@ func sessionContextHookEnv(extraEnv []string) []string {
 		case strings.HasPrefix(item, "LIZA_AGENT_ID="):
 			continue
 		case strings.HasPrefix(item, "LIZA_ENABLE_FUNCTIONAL_CLUSTERS="):
+			continue
+		case strings.HasPrefix(item, "LIZA_ENABLE_STACKLIT="), strings.HasPrefix(item, "LIZA_ENABLE_SCIP_SEARCH="):
 			continue
 		case strings.HasPrefix(item, "LIZA_ENABLE_SEMBLE="):
 			continue

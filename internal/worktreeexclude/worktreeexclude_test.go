@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -186,6 +187,46 @@ func TestEnsureRepoExcludeFromLinkedWorktreeWritesSharedExclude(t *testing.T) {
 	assertPrivateExcludeNotWritten(t, privateExclude)
 	for _, dir := range []string{repo.root, worktree} {
 		gitRun(t, dir, "check-ignore", "-q", paths.ProjectDirName()+"/state.yaml")
+	}
+}
+
+func TestD47RepoExcludeSerializesAcrossProcesses(t *testing.T) {
+	repo := newGitRepoWithWorktrees(t, "task-one", "task-two")
+	exclude := filepath.Join(repo.root, ".git", "info", "exclude")
+	before := readFileString(t, exclude)
+	err := filelock.New(exclude).WithLock(func() error {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestD47RepoExcludeLockHelper$")
+		cmd.Env = append(os.Environ(), "D47_EXCLUDE_ROOT="+repo.worktrees["task-one"])
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("child must time out on the parent's common exclude lock: %v\n%s", err, output)
+		}
+		if got := readFileString(t, exclude); got != before {
+			t.Fatalf("exclude changed while parent held lock: %q", got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, worktree := range repo.worktrees {
+		if err := EnsureRepoExclude(worktree, "/"+name+"/"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name := range repo.worktrees {
+		assertLineCount(t, readFileString(t, exclude), "/"+name+"/", 1)
+	}
+}
+
+func TestD47RepoExcludeLockHelper(t *testing.T) {
+	root := os.Getenv("D47_EXCLUDE_ROOT")
+	if root == "" {
+		return
+	}
+	err := EnsureRepoExclude(root, "/child/")
+	if !filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
+		t.Fatalf("EnsureRepoExclude error = %v, want common exclude lock timeout", err)
 	}
 }
 

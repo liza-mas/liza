@@ -188,8 +188,13 @@ if is_windows_shell; then
   cwd="${cwd//\\//}"
 fi
 
+brand_agent_id_var="__BRAND_ENV_PREFIX__""_AGENT_ID"
+agent_id_value="${!brand_agent_id_var:-${LIZA_AGENT_ID:-}}"
+
 project_dir="${CLAUDE_PROJECT_DIR:-}"
-if [[ -z "$project_dir" ]]; then
+# MAS sessions run in the task checkout; CLAUDE_PROJECT_DIR may still name
+# the parent checkout. Resolve from the event cwd (or actual cwd if absent).
+if [[ -n "$agent_id_value" || -z "$project_dir" ]]; then
   if [[ -n "$cwd" ]]; then
     project_dir=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$cwd")
   else
@@ -204,9 +209,6 @@ fi
 if is_windows_shell; then
   project_dir="${project_dir//\\//}"
 fi
-
-brand_agent_id_var="__BRAND_ENV_PREFIX__""_AGENT_ID"
-agent_id_value="${!brand_agent_id_var:-${LIZA_AGENT_ID:-}}"
 
 context="MANDATORY: Read CORE.md and the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
 if [[ -n "$agent_id_value" ]]; then
@@ -233,13 +235,32 @@ context+=". Only after those reads, answer the user."
 
 hook_path=$(repo_brand_index_hook_path)
 
-if [[ -n "$agent_id_value" ]]; then
-  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$context")"
-  exit 0
-fi
-
 scip_files=()
-if [[ -f "$hook_path" ]] && grep -q '__BRAND_BINARY_NAME__-index' "$hook_path" 2>/dev/null; then
+if [[ -n "$agent_id_value" ]]; then
+  brand_stacklit_gate_var="__BRAND_ENV_PREFIX__""_ENABLE_STACKLIT"
+  stacklit_gate=$(branded_env_gate "$brand_stacklit_gate_var" "LIZA_ENABLE_STACKLIT")
+  stacklit_path="$project_dir/stacklit.json"
+  if truthy_env "$stacklit_gate" && [[ -f "$stacklit_path" ]]; then
+    shell_stacklit_path=$(quote_for_shell "$stacklit_path")
+  fi
+
+  brand_scip_gate_var="__BRAND_ENV_PREFIX__""_ENABLE_SCIP_SEARCH"
+  scip_gate=$(branded_env_gate "$brand_scip_gate_var" "LIZA_ENABLE_SCIP_SEARCH")
+  if truthy_env "$scip_gate"; then
+    scip_dir="$project_dir/__BRAND_PROJECT_DIRNAME__/scip"
+    git_dir=$(git -C "$project_dir" rev-parse --path-format=absolute --git-dir 2>/dev/null || true)
+    common_dir=$(git -C "$project_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+    # Main-checkout agents (e.g. the orchestrator) use hook-published indexes.
+    # Linked worktrees only use rerooted runtime copies, never root *.scip.
+    if [[ -n "$git_dir" && "$git_dir" == "$common_dir" ]]; then
+      scip_dir="$project_dir"
+    fi
+    for scip_path in "$scip_dir"/*.scip; do
+      [[ -f "$scip_path" ]] || continue
+      scip_files+=("$scip_path")
+    done
+  fi
+elif [[ -f "$hook_path" ]] && grep -q '__BRAND_BINARY_NAME__-index' "$hook_path" 2>/dev/null; then
   stacklit_path="$project_dir/stacklit.json"
   if [[ -f "$stacklit_path" ]]; then
     shell_stacklit_path=$(quote_for_shell "$stacklit_path")
@@ -254,9 +275,12 @@ fi
 semble_enabled=false
 brand_semble_gate_var="__BRAND_ENV_PREFIX__""_ENABLE_SEMBLE"
 semble_gate=$(branded_env_gate "$brand_semble_gate_var" "LIZA_ENABLE_SEMBLE")
-if truthy_env "$semble_gate" && root_sembleignore_safe && semble_offline_ready; then
-  semble_enabled=true
-  shell_project_dir=$(quote_for_shell "$project_dir")
+if truthy_env "$semble_gate" && root_sembleignore_safe; then
+  if { [[ -n "$agent_id_value" ]] && command -v semble >/dev/null 2>&1; } ||
+    { [[ -z "$agent_id_value" ]] && semble_offline_ready; }; then
+    semble_enabled=true
+    shell_project_dir=$(quote_for_shell "$project_dir")
+  fi
 fi
 
 functional_clusters_enabled=false
@@ -283,7 +307,10 @@ if [[ "$adr_dir_available" == "true" ]]; then
  // ADRs: specs/architecture/ADR"
 fi
 
-if [[ -n "${shell_stacklit_path:-}" || "${#scip_files[@]}" -gt 0 ]]; then
+if [[ -n "$agent_id_value" ]] && [[ -n "${shell_stacklit_path:-}" || "${#scip_files[@]}" -gt 0 || "$semble_enabled" == "true" || "$functional_clusters_enabled" == "true" ]]; then
+  context+="
+ __BRAND_NAME_TITLE__ repository indexes detected. Multi-agent sessions can use these explicit paths for the current checkout. Worktree copies can lag a repo-root refresh and exclude the task's own edits; verify against source files before editing. Do not refresh indexes."
+elif [[ -n "${shell_stacklit_path:-}" || "${#scip_files[@]}" -gt 0 ]]; then
   context+="
  __BRAND_NAME_TITLE__ repository indexes detected. Pairing mode can use these explicit repo-root index paths. They are refreshed after commits and do not reflect uncommitted changes; verify against source files before editing."
 fi

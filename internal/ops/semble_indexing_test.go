@@ -22,7 +22,7 @@ func TestPrepareSembleWorktreeIgnoreWritesDefaultGeneratedPayload(t *testing.T) 
 
 	assertNoPrepareSembleWorktreeIgnoreWarnings(t, warnings)
 	assertPrepareSembleIgnorePayload(t, fixture.worktree)
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, ".sembleignore", 1)
 	assertGitStatusClean(t, fixture.worktree)
 }
 
@@ -35,26 +35,22 @@ func TestPrepareSembleWorktreeIgnoreAppendsMissingGeneratedPatterns(t *testing.T
 
 	assertNoPrepareSembleWorktreeIgnoreWarnings(t, warnings)
 	assertPrepareSembleIgnorePayload(t, fixture.worktree)
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, ".sembleignore", 1)
 	assertGitStatusClean(t, fixture.worktree)
 }
 
-func TestPrepareSembleWorktreeIgnoreUsesSharedPrivateExcludeWithScip(t *testing.T) {
+func TestPrepareSembleWorktreeIgnoreUsesSharedRepoExcludeWithScip(t *testing.T) {
 	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
-	if err := worktreeexclude.EnsurePrivateExclude(fixture.worktree, paths.ProjectDirName()+"/scip/"); err != nil {
-		t.Fatalf("EnsurePrivateExclude(%s/scip/) error = %v", paths.ProjectDirName(), err)
+	if err := worktreeexclude.EnsureRepoExclude(fixture.worktree, "/"+paths.ProjectDirName()+"/scip/"); err != nil {
+		t.Fatalf("EnsureRepoExclude(%s/scip/) error = %v", paths.ProjectDirName(), err)
 	}
 
 	warnings := PrepareSembleWorktreeIgnore(fixture.worktree)
 
 	assertNoPrepareSembleWorktreeIgnoreWarnings(t, warnings)
-	privateExclude := prepareSemblePrivateExcludePath(t, fixture.worktree)
-	if got := runGitInDir(t, fixture.worktree, "config", "--worktree", "--get", "core.excludesFile"); filepath.Clean(got) != filepath.Clean(privateExclude) {
-		t.Fatalf("core.excludesFile = %q, want shared private exclude %q", got, privateExclude)
-	}
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, paths.ProjectDirName()+"/scip/", 1)
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, paths.ProjectDirName()+"/scip/", 1)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, ".sembleignore", 1)
 	assertGitStatusClean(t, fixture.worktree)
 }
 
@@ -68,7 +64,7 @@ func TestPrepareSembleWorktreeIgnoreRepeatedCallsIdempotent(t *testing.T) {
 	}
 
 	assertPrepareSembleIgnorePayload(t, fixture.worktree)
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, ".sembleignore", 1)
 	assertGitStatusClean(t, fixture.worktree)
 }
 
@@ -93,7 +89,7 @@ func TestPrepareSembleWorktreeIgnoreConcurrentCallsIdempotent(t *testing.T) {
 		assertNoPrepareSembleWorktreeIgnoreWarnings(t, got)
 	}
 	assertPrepareSembleIgnorePayload(t, fixture.worktree)
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, ".sembleignore", 1)
 	assertGitStatusClean(t, fixture.worktree)
 }
 
@@ -111,7 +107,7 @@ func TestPrepareSembleWorktreeIgnoreLeavesTrackedCompleteFileVisible(t *testing.
 	if got := readPrepareSembleIgnoreFile(t, fixture.worktree); got != before {
 		t.Fatalf("tracked complete .sembleignore mutated: got %q, want %q", got, before)
 	}
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 0)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, ".sembleignore", 0)
 	assertGitStatusClean(t, fixture.worktree)
 }
 
@@ -143,7 +139,7 @@ func TestPrepareSembleWorktreeIgnoreReportsTrackedIncompleteWithoutMutation(t *t
 	if got := readPrepareSembleIgnoreFile(t, fixture.worktree); got != before {
 		t.Fatalf("tracked incomplete .sembleignore mutated: got %q, want %q", got, before)
 	}
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 0)
+	assertPrepareSembleRepoExcludeCount(t, fixture.worktree, ".sembleignore", 0)
 	assertGitStatusClean(t, fixture.worktree)
 }
 
@@ -175,27 +171,27 @@ func TestPrepareSembleWorktreeIgnoreWarningPreventsPromptMetadata(t *testing.T) 
 	}
 }
 
-func TestPrepareSembleWorktreeIgnoreConflictingPrivateExcludeDoesNotWriteGeneratedFile(t *testing.T) {
+func TestD47PrepareSembleIgnorePreservesUserExcludes(t *testing.T) {
 	t.Parallel()
 	fixture := newPrepareSembleWorktreeIgnoreFixture(t)
 	conflictingExclude := filepath.Join(t.TempDir(), "operator-exclude")
+	if err := os.WriteFile(conflictingExclude, []byte("user-owned/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	runGitInDir(t, fixture.worktree, "config", "core.excludesFile", conflictingExclude)
 
 	warnings := PrepareSembleWorktreeIgnore(fixture.worktree)
 
-	if len(warnings) != 1 {
-		t.Fatalf("PrepareSembleWorktreeIgnore() warnings = %#v, want exactly one", warnings)
+	assertNoPrepareSembleWorktreeIgnoreWarnings(t, warnings)
+	assertPrepareSembleIgnorePayload(t, fixture.worktree)
+	if got := runGitInDir(t, fixture.worktree, "config", "--get", "core.excludesFile"); got != conflictingExclude {
+		t.Fatalf("user config changed: %q", got)
 	}
-	warning := warnings[0]
-	for _, want := range []string{"ensure private exclude", "core.excludesFile"} {
-		if !strings.Contains(warning, want) {
-			t.Fatalf("warning = %q, want to contain %q", warning, want)
-		}
+	if got, err := os.ReadFile(conflictingExclude); err != nil || string(got) != "user-owned/\n" {
+		t.Fatalf("user exclude changed: %q, %v", got, err)
 	}
-	if _, err := os.Stat(filepath.Join(fixture.worktree, ".sembleignore")); !os.IsNotExist(err) {
-		t.Fatalf("generated .sembleignore stat error = %v, want not exist", err)
-	}
-	assertPrepareSemblePrivateExcludeCount(t, fixture.worktree, ".sembleignore", 0)
+	runGitInDir(t, fixture.worktree, "check-ignore", "-q", "user-owned/data")
+	runGitInDir(t, fixture.worktree, "check-ignore", "-q", ".sembleignore")
 	assertGitStatusClean(t, fixture.worktree)
 }
 
@@ -234,33 +230,33 @@ func assertPrepareSembleIgnorePayload(t *testing.T, worktree string) {
 	}
 }
 
-func assertPrepareSemblePrivateExcludeCount(t *testing.T, worktree, entry string, want int) {
+func assertPrepareSembleRepoExcludeCount(t *testing.T, worktree, entry string, want int) {
 	t.Helper()
-	content, err := os.ReadFile(prepareSemblePrivateExcludePath(t, worktree))
+	content, err := os.ReadFile(prepareSembleRepoExcludePath(t, worktree))
 	if err != nil {
 		if os.IsNotExist(err) && want == 0 {
 			return
 		}
-		t.Fatalf("read private exclude: %v", err)
+		t.Fatalf("read repository exclude: %v", err)
 	}
 	got := 0
 	for _, line := range strings.Split(string(content), "\n") {
-		if strings.TrimSpace(line) == entry {
+		if strings.TrimSpace(line) == "/"+entry {
 			got++
 		}
 	}
 	if got != want {
-		t.Fatalf("private exclude entry %q count = %d, want %d in:\n%s", entry, got, want, content)
+		t.Fatalf("repository exclude entry %q count = %d, want %d in:\n%s", entry, got, want, content)
 	}
 }
 
-func prepareSemblePrivateExcludePath(t *testing.T, worktree string) string {
+func prepareSembleRepoExcludePath(t *testing.T, worktree string) string {
 	t.Helper()
-	gitDir := runGitInDir(t, worktree, "rev-parse", "--git-dir")
-	if !filepath.IsAbs(gitDir) {
-		gitDir = filepath.Join(worktree, gitDir)
+	exclude := runGitInDir(t, worktree, "rev-parse", "--git-path", "info/exclude")
+	if !filepath.IsAbs(exclude) {
+		exclude = filepath.Join(worktree, exclude)
 	}
-	return filepath.Join(filepath.Clean(gitDir), "info", "exclude")
+	return filepath.Clean(exclude)
 }
 
 func writePrepareSembleIgnoreLines(t *testing.T, worktree string, lines []string) {

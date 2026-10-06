@@ -1765,7 +1765,7 @@ func TestClaimTaskPreparesSembleIgnoreForFreshClaim(t *testing.T) {
 		t.Fatalf("WorktreeRel = %q, want task worktree", result.WorktreeRel)
 	}
 	assertPrepareSembleIgnorePayload(t, worktreeDir)
-	assertPrepareSemblePrivateExcludeCount(t, worktreeDir, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, worktreeDir, ".sembleignore", 1)
 	assertGitStatusClean(t, worktreeDir)
 }
 
@@ -1794,7 +1794,7 @@ func TestClaimTaskPreparesSembleIgnoreForRejectedReclaim(t *testing.T) {
 
 	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
 	assertPrepareSembleIgnorePayload(t, worktreeDir)
-	assertPrepareSemblePrivateExcludeCount(t, worktreeDir, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, worktreeDir, ".sembleignore", 1)
 	assertGitStatusClean(t, worktreeDir)
 }
 
@@ -1892,8 +1892,8 @@ func TestClaimTaskSembleIgnorePreparationRunsAfterPostWorktreeBeforeIndexRefresh
 	}
 	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
 	assertPrepareSembleIgnorePayload(t, worktreeDir)
-	assertPrepareSemblePrivateExcludeCount(t, worktreeDir, paths.ProjectDirName()+"/scip/", 1)
-	assertPrepareSemblePrivateExcludeCount(t, worktreeDir, ".sembleignore", 1)
+	assertPrepareSembleRepoExcludeCount(t, worktreeDir, paths.ProjectDirName()+"/scip/", 1)
+	assertPrepareSembleRepoExcludeCount(t, worktreeDir, ".sembleignore", 1)
 	assertGitStatusClean(t, worktreeDir)
 }
 
@@ -2124,7 +2124,7 @@ func TestClaimTaskSembleIgnorePreparationWarningsAreBounded(t *testing.T) {
 	if got := readPrepareSembleIgnoreFile(t, worktreeDir); got != "operator-owned marker\n"+paths.ProjectDirName()+"/\n" {
 		t.Fatalf("tracked .sembleignore mutated: got %q", got)
 	}
-	assertPrepareSemblePrivateExcludeCount(t, worktreeDir, ".sembleignore", 0)
+	assertPrepareSembleRepoExcludeCount(t, worktreeDir, ".sembleignore", 0)
 	assertGitStatusClean(t, worktreeDir)
 }
 
@@ -2267,7 +2267,7 @@ func TestClaimTaskSembleIgnorePreparationConcurrentCallsCleanStatus(t *testing.T
 	for _, taskID := range []string{"task-1", "task-2"} {
 		worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, taskID)
 		assertPrepareSembleIgnorePayload(t, worktreeDir)
-		assertPrepareSemblePrivateExcludeCount(t, worktreeDir, ".sembleignore", 1)
+		assertPrepareSembleRepoExcludeCount(t, worktreeDir, ".sembleignore", 1)
 		assertGitStatusClean(t, worktreeDir)
 	}
 }

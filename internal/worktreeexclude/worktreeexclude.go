@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/gitenv"
 )
 
@@ -64,7 +65,8 @@ func EnsurePrivateExclude(worktreeRoot string, entries ...string) error {
 // shared info/exclude, which Git reads natively in the main checkout and in
 // every linked worktree. Unlike EnsurePrivateExclude it never touches Git
 // config, so a user's core.excludesFile keeps applying. Patterns may be
-// root-anchored ("/dir/").
+// root-anchored ("/dir/"). Updates serialize across processes on the common
+// exclude path so concurrent worktree setup cannot lose another task's rules.
 func EnsureRepoExclude(repoRoot string, patterns ...string) error {
 	trimmed := make([]string, 0, len(patterns))
 	for _, pattern := range patterns {
@@ -95,10 +97,16 @@ func EnsureRepoExclude(repoRoot string, patterns ...string) error {
 	if !filepath.IsAbs(excludePath) {
 		excludePath = filepath.Join(root, excludePath)
 	}
+	excludePath = filepath.Clean(excludePath)
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return fmt.Errorf("create repository exclude directory: %w", err)
+	}
 
 	privateExcludeMu.Lock()
 	defer privateExcludeMu.Unlock()
-	return appendMissingEntries(filepath.Clean(excludePath), trimmed)
+	return filelock.New(excludePath).WithLockOperation("repository-exclude", func() error {
+		return appendMissingEntries(excludePath, trimmed)
+	})
 }
 
 func normalizeEntries(entries []string) ([]string, error) {

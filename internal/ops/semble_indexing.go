@@ -24,7 +24,7 @@ var prepareSembleWorktreeIgnoreMu sync.Mutex
 
 // PrepareSembleWorktreeIgnore creates or updates the generated task-worktree
 // .sembleignore file and hides generated untracked files through the shared
-// worktree private exclude.
+// repository exclude, preserving user excludesFile configuration.
 func PrepareSembleWorktreeIgnore(worktreeDir string) []string {
 	prepareSembleWorktreeIgnoreMu.Lock()
 	defer prepareSembleWorktreeIgnoreMu.Unlock()
@@ -54,8 +54,8 @@ func prepareSembleWorktreeIgnore(worktreeDir string) string {
 		return ""
 	}
 
-	if err := worktreeexclude.EnsurePrivateExclude(worktreeDir, sembleWorktreeIgnoreFile); err != nil {
-		return boundedSemblePreparationWarning(fmt.Sprintf("semble .sembleignore: ensure private exclude: %v", err))
+	if err := worktreeexclude.EnsureRepoExclude(worktreeDir, "/"+sembleWorktreeIgnoreFile); err != nil {
+		return boundedSemblePreparationWarning(fmt.Sprintf("semble .sembleignore: ensure repository exclude: %v", err))
 	}
 	if err := ensureGeneratedSembleIgnore(ignorePath); err != nil {
 		return boundedSemblePreparationWarning(fmt.Sprintf("semble .sembleignore: prepare generated file: %v", err))

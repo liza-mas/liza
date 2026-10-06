@@ -1599,10 +1599,10 @@ func TestRefreshTaskWorktreeScipUsesSharedExclude(t *testing.T) {
 		TargetRoot:          worktree,
 		ConfiguredLanguages: []string{"go"},
 		Runner: func(plan RuntimeCommandPlan) (string, error) {
-			assertIgnoreEntryInstalled(t, privateExclude)
+			assertIgnoreEntryInstalled(t, commonExclude)
 			assertExcludeEntry(t, privateExclude, ".sembleignore")
-			if got := readFileString(t, commonExclude); got != commonBefore {
-				t.Fatalf("common exclude changed before index write: %q, want %q", got, commonBefore)
+			if got := readFileString(t, commonExclude); !strings.HasPrefix(got, commonBefore) {
+				t.Fatalf("existing common exclude lost before index write: %q", got)
 			}
 			if err := os.WriteFile(plan.OutputPath, []byte("go"), 0o644); err != nil {
 				t.Fatalf("WriteFile(%q) error = %v", plan.OutputPath, err)
@@ -1627,10 +1627,10 @@ func TestRefreshTaskWorktreeScipUsesSharedExclude(t *testing.T) {
 	if got := gitOutput(t, worktree, "config", "--worktree", "--get", "core.excludesFile"); filepath.Clean(got) != filepath.Clean(privateExclude) {
 		t.Fatalf("core.excludesFile = %q, want %q", got, privateExclude)
 	}
-	assertIgnoreEntryInstalled(t, privateExclude)
+	assertIgnoreEntryInstalled(t, commonExclude)
 	assertExcludeEntry(t, privateExclude, ".sembleignore")
-	if got := readFileString(t, commonExclude); got != commonBefore {
-		t.Fatalf("common exclude = %q, want unchanged %q", got, commonBefore)
+	if got := readFileString(t, commonExclude); !strings.HasPrefix(got, commonBefore) {
+		t.Fatalf("existing common exclude lost: %q", got)
 	}
 	if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
@@ -1700,9 +1700,9 @@ func TestRefreshTaskWorktreeScipHidesGeneratedIndexesWithBrandedProjectDir(t *te
 	if !reflect.DeepEqual(result.Successes, []IndexRef{{Language: "go", Path: wantPath}}) {
 		t.Fatalf("successes = %#v, want go index at %q", result.Successes, wantPath)
 	}
-	privateExclude := gitOutput(t, worktree, "config", "--worktree", "--get", "core.excludesFile")
-	assertExcludeEntry(t, privateExclude, ".acme-agent/scip/")
-	assertNoExcludeEntry(t, privateExclude, ".liza/scip/")
+	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
+	assertExcludeEntry(t, commonExclude, "/.acme-agent/scip/")
+	assertNoExcludeEntry(t, commonExclude, "/.liza/scip/")
 	if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
 	}
@@ -1713,7 +1713,7 @@ func TestRefreshTaskWorktreeScipRepeatedRefreshIdempotent(t *testing.T) {
 	repo := newGitRepoWithWorktrees(t, "task-one")
 	writeTestFile(t, repo.root, "go.scip", "root go")
 	worktree := repo.worktrees["task-one"]
-	privateExclude := filepath.Join(revParseGitDir(t, worktree), "info", "exclude")
+	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
 	var runnerCalls int
 
 	for i := 0; i < 2; i++ {
@@ -1743,7 +1743,7 @@ func TestRefreshTaskWorktreeScipRepeatedRefreshIdempotent(t *testing.T) {
 	if runnerCalls != 2 {
 		t.Fatalf("runner calls = %d, want 2", runnerCalls)
 	}
-	assertIgnoreEntryInstalled(t, privateExclude)
+	assertIgnoreEntryInstalled(t, commonExclude)
 	if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
 		t.Fatalf("git status --porcelain = %q, want clean", status)
 	}
@@ -1755,10 +1755,6 @@ func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 	writeTestFile(t, repo.root, "go.scip", "root go")
 	commonExclude := filepath.Join(repo.root, ".git", "info", "exclude")
 	commonBefore := readFileString(t, commonExclude)
-	privateExcludes := map[string]string{
-		"task-one": filepath.Join(revParseGitDir(t, repo.worktrees["task-one"]), "info", "exclude"),
-		"task-two": filepath.Join(revParseGitDir(t, repo.worktrees["task-two"]), "info", "exclude"),
-	}
 	var (
 		mu      sync.Mutex
 		outputs []string
@@ -1784,7 +1780,7 @@ func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 					if plan.Name == "scip-search" && !strings.HasPrefix(plan.OutputPath, filepath.Join(worktree, paths.ProjectDirName(), "scip")+string(os.PathSeparator)) {
 						return "", errors.New("output path is outside task worktree scip directory")
 					}
-					if err := ignoreEntryError(privateExcludes[name]); err != nil {
+					if err := ignoreEntryError(commonExclude); err != nil {
 						return "", err
 					}
 					if err := os.WriteFile(plan.OutputPath, []byte(name), 0o644); err != nil {
@@ -1818,9 +1814,6 @@ func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 	if len(outputs) != 2 || outputs[0] == outputs[1] {
 		t.Fatalf("outputs = %v, want two distinct output paths", outputs)
 	}
-	if privateExcludes["task-one"] == privateExcludes["task-two"] {
-		t.Fatalf("private excludes share path %q", privateExcludes["task-one"])
-	}
 	for name, worktree := range repo.worktrees {
 		wantPath := filepath.Join(worktree, paths.ProjectDirName(), "scip", "go.scip")
 		if !reflect.DeepEqual(results[name].Successes, []IndexRef{{Language: "go", Path: wantPath}}) {
@@ -1829,50 +1822,56 @@ func TestRefreshTaskWorktreeScipConcurrentExcludeSetup(t *testing.T) {
 		if len(results[name].Failures) != 0 {
 			t.Fatalf("%s failures = %#v, want none", name, results[name].Failures)
 		}
-		assertIgnoreEntryInstalled(t, privateExcludes[name])
+		assertIgnoreEntryInstalled(t, commonExclude)
 		if status := gitOutput(t, worktree, "status", "--porcelain"); status != "" {
 			t.Fatalf("%s git status --porcelain = %q, want clean", name, status)
 		}
 	}
-	if got := readFileString(t, commonExclude); got != commonBefore {
-		t.Fatalf("common exclude = %q, want unchanged %q", got, commonBefore)
+	if got := readFileString(t, commonExclude); !strings.HasPrefix(got, commonBefore) {
+		t.Fatalf("existing common exclude lost: %q", got)
 	}
 }
 
-func TestRefreshTaskWorktreeScipReportsConflictingCoreExcludesFile(t *testing.T) {
-	t.Setenv(EnvEnableScipSearch, "true")
-	repo := newGitRepoWithWorktrees(t, "task-one")
-	writeTestFile(t, repo.root, "go.scip", "root go")
-	worktree := repo.worktrees["task-one"]
-	privateExclude := filepath.Join(revParseGitDir(t, worktree), "info", "exclude")
-	conflictingExclude := filepath.Join(t.TempDir(), "other-exclude")
-
-	runGit(t, worktree, "config", "core.excludesFile", conflictingExclude)
-
-	_, err := RefreshIndexes(RefreshOptions{
-		ProjectRoot:         repo.root,
-		TargetRoot:          worktree,
-		ConfiguredLanguages: []string{"go"},
-		Runner: func(RuntimeCommandPlan) (string, error) {
-			t.Fatal("runner must not execute when core.excludesFile conflicts")
-			return "", nil
-		},
-	})
-	if err == nil {
-		t.Fatal("RefreshIndexes() error = nil, want core.excludesFile conflict")
-	}
-	for _, want := range []string{"core.excludesFile", conflictingExclude, privateExclude} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("RefreshIndexes() error = %q, want to contain %q", err, want)
-		}
-	}
-	if got := gitOutput(t, worktree, "config", "--get", "core.excludesFile"); got != conflictingExclude {
-		t.Fatalf("core.excludesFile = %q, want preserved conflict %q", got, conflictingExclude)
-	}
-	if _, statErr := os.Stat(privateExclude); statErr == nil {
-		t.Fatalf("private exclude %q exists after conflict, want no write", privateExclude)
-	} else if !os.IsNotExist(statErr) {
-		t.Fatalf("Stat(%q) error = %v", privateExclude, statErr)
+func TestD47RefreshScipPreservesUserExcludes(t *testing.T) {
+	for _, scope := range []string{"--local", "--global", "--worktree"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Setenv(EnvEnableScipSearch, "true")
+			t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
+			repo := newGitRepoWithWorktrees(t, "task-one")
+			worktree := repo.worktrees["task-one"]
+			userExclude := filepath.Join(t.TempDir(), "user-exclude")
+			writeTestFile(t, filepath.Dir(userExclude), filepath.Base(userExclude), "user-owned/\n")
+			if scope == "--worktree" {
+				runGit(t, worktree, "config", "extensions.worktreeConfig", "true")
+			}
+			runGit(t, worktree, "config", scope, "core.excludesFile", userExclude)
+			writeTestFile(t, repo.root, "go.scip", "root index")
+			result, err := RefreshIndexes(RefreshOptions{
+				ProjectRoot: repo.root, TargetRoot: worktree, ConfiguredLanguages: []string{"go"},
+				Runner: func(plan RuntimeCommandPlan) (string, error) {
+					wantPath := filepath.Join(worktree, paths.ProjectDirName(), "scip", "go.scip")
+					wantArgs := []string{"reroot", "--index", filepath.Join(repo.root, "go.scip"), "--project-root", worktree, "--out", wantPath}
+					if !reflect.DeepEqual(plan.Args, wantArgs) || plan.Dir != worktree {
+						t.Fatalf("reroot plan = %#v, want task-rooted args %v", plan, wantArgs)
+					}
+					return "", os.WriteFile(plan.OutputPath, []byte("rerooted index"), 0o644)
+				},
+			})
+			if err != nil || len(result.Successes) != 1 || len(result.Failures) != 0 {
+				t.Fatalf("RefreshIndexes = %#v, %v, want successful worktree copy", result, err)
+			}
+			if got := gitOutput(t, worktree, "config", "--get", "core.excludesFile"); got != userExclude {
+				t.Fatalf("user excludes config changed: %q", got)
+			}
+			if got := readFileString(t, userExclude); got != "user-owned/\n" {
+				t.Fatalf("user excludes content changed: %q", got)
+			}
+			runGit(t, worktree, "check-ignore", "-q", "user-owned/data")
+			runGit(t, worktree, "check-ignore", "-q", filepath.Join(paths.ProjectDirName(), "scip", "go.scip"))
+			if got := gitOutput(t, worktree, "status", "--porcelain"); got != "" {
+				t.Fatalf("generated index dirtied worktree: %q", got)
+			}
+		})
 	}
 }
 
