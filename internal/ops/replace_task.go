@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -98,7 +97,7 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 	}
 	input.Changed = secretmask.New().MaskText(strings.TrimSpace(input.Changed))
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), &authority, opts)
 	state, source, err := readTaskState(bb, input.SourceTaskID)
 	if err != nil {
 		return nil, err

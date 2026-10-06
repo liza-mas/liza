@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
@@ -227,7 +226,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 	// Capturing the telemetry sprint reads state under lock, so structural
 	// refusals must return before initializing the invocation too.
 	invocation = NewLifecycleInvocation(projectRoot)
-	bb := db.For(paths.New(projectRoot).StatePath())
+	bb := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts.Request)
 	now := time.Now().UTC()
 	result := RejectionRCAResult{}
 

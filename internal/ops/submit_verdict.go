@@ -151,7 +151,7 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 	}
 	retErr = WithProjectLifecycleSharedLock(projectRoot, "submit-verdict", func() error {
 		err := withTaskReviewLock(projectRoot, taskID, "submit-verdict", func() error {
-			bb := db.For(paths.New(projectRoot).StatePath())
+			bb := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts)
 			safeReason := reason
 			if authority != nil {
 				state, _, err := readTaskState(bb, taskID)
@@ -179,8 +179,8 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 		// Review lock is released before taking the ownership lock. The verdict
 		// completion token prevents this follow-up from ending a newer claim.
 		result.NewAttemptTriggered = false
-		_, err = transitionToNewAttemptAfterVerdict(projectRoot, taskID, result.pendingAttemptReason, authority, result.CompletedTransitionID)
-		state, readErr := db.For(paths.New(projectRoot).StatePath()).Read()
+		_, err = transitionToNewAttemptAfterVerdict(projectRoot, taskID, result.pendingAttemptReason, authority, result.CompletedTransitionID, opts)
+		state, readErr := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts).Read()
 		var task *models.Task
 		if readErr == nil && authority != nil {
 			readErr = RequireAgentAuthority(state, *authority)
@@ -196,7 +196,7 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 			// The verdict already committed. Record the follow-up failure here,
 			// after the review lock is released, without treating it as success.
 			lp := paths.New(projectRoot)
-			recordSubmitVerdictFailure(db.For(lp.StatePath()), lp.LogPath(), taskID, agentID, authority, verdict, failure)
+			recordSubmitVerdictFailure(RequestBlackboard(lp.StatePath(), authority, opts), lp.LogPath(), taskID, agentID, authority, verdict, failure)
 			failureKind, action := models.LifecycleStateChanged, "requery"
 			if IsAgentAuthorityError(err) {
 				task = nil
@@ -290,7 +290,7 @@ func validateVerdictInput(taskID, verdict, reason, agentID, impact string) error
 
 func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit, requestReason string, completionLinearized bool, opts LifecycleRequestOptions) (result *VerdictResult, retErr error) {
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts)
 	recordFailure := true
 	defer func() {
 		// Invalid requests and lifecycle recovery responses carry their own

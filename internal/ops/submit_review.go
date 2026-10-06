@@ -95,7 +95,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts)
 
 	runtimeRole, err := identity.ExtractRole(agentID)
 	if err != nil {

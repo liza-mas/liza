@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/liza-mas/liza/internal/commands"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
@@ -12,6 +16,50 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/spf13/cobra"
 )
+
+// lifecycleExecutionContext defers signal interception until the shared authority
+// resolver admits a complete lifecycle request. Earlier captured request options
+// share its cancellation; unrelated and operator commands keep default signals.
+func lifecycleExecutionContext(parent context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(parent)
+	signals := make(chan os.Signal, 1)
+	var started sync.Once
+	start := func() {
+		if ctx.Err() != nil {
+			return
+		}
+		started.Do(func() {
+			signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+			go func() {
+				select {
+				case <-signals:
+					// Restore default handling before exposing cancellation, so a
+					// subsequent interrupt can terminate a stubborn operation.
+					signal.Stop(signals)
+					cancel()
+				case <-ctx.Done():
+					signal.Stop(signals)
+				}
+			}()
+		})
+	}
+	return context.WithValue(ctx, lifecycleSignalStarterKey{}, start), func() {
+		signal.Stop(signals)
+		cancel()
+	}
+}
+
+type lifecycleSignalStarterKey struct{}
+
+func startLifecycleSignalHandling(cmd *cobra.Command) {
+	opts, err := lifecycleRequestOptions(cmd)
+	if err != nil || opts.RequestID == "" || opts.ExpectedTransition == "" || cmd.Context() == nil {
+		return
+	}
+	if start, ok := cmd.Context().Value(lifecycleSignalStarterKey{}).(func()); ok {
+		start()
+	}
+}
 
 func addLifecycleFlags(cmd *cobra.Command) {
 	cmd.Flags().String("request-id", "", "logical request ID; preserve with its original --expected-transition across retries")
@@ -39,6 +87,9 @@ func lifecycleRequestOptions(cmd *cobra.Command) (ops.LifecycleRequestOptions, e
 	}
 	if err := ops.ValidateLifecycleRequestOptions(opts); err != nil {
 		return opts, cliValidationWrap("lifecycle request", err)
+	}
+	if request != "" && expected != "" {
+		opts.RetryContext = cmd.Context()
 	}
 	return opts, nil
 }

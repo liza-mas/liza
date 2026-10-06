@@ -392,6 +392,11 @@ func TestPlanHandoffFailurePersistsWithoutPartialMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	publishedSequence := after.MutationSequence
+	if publishedSequence != before.MutationSequence+1 {
+		t.Fatalf("failure observation published sequence %d, want %d", publishedSequence, before.MutationSequence+1)
+	}
+	after.MutationSequence = before.MutationSequence
 	plan := after.FindTask("failed-plan")
 	growth := len(plan.History) - len(before.FindTask(plan.ID).History)
 	if growth == 1 {
@@ -416,6 +421,9 @@ func TestPlanHandoffFailurePersistsWithoutPartialMutation(t *testing.T) {
 	reloaded, err := db.For(stateFile).Read()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if reloaded.MutationSequence != publishedSequence {
+		t.Fatalf("unchanged pass published sequence %d, want %d", reloaded.MutationSequence, publishedSequence)
 	}
 	if len(reloaded.FindTask(plan.ID).History) != len(before.FindTask(plan.ID).History)+1 {
 		t.Fatal("unchanged pass duplicated failure history")

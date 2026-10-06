@@ -90,10 +90,17 @@ func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 	if object["clear_human_action"] != nil && !clearHumanOK {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/clear_human_action", "must be a boolean", models.FieldValueClassWrongType))
 	}
+	stateLockTimeout, stateLockOK := object["state_lock_timeout"].(bool)
+	if object["state_lock_timeout"] != nil && !stateLockOK {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/state_lock_timeout", "must be a boolean", models.FieldValueClassWrongType))
+	}
 	if len(diagnostics) > 0 {
 		return diagnostics
 	}
 	humanAction, _ := object["human_action"].(string)
+	if stateLockTimeout && (humanAction != "" || object["repair_request"] != nil || len(awaited) > 0) {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/state_lock_timeout", "state lock holds cannot include a human action, repair request or awaited task", models.FieldValueClassConflict))
+	}
 	diagnostics = append(diagnostics, ValidateHumanAction("/human_action", humanAction)...)
 	if clearHuman && humanAction != "" {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/clear_human_action", "cannot be combined with human_action", models.FieldValueClassConflict))

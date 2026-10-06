@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -292,7 +291,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, invocation.opts)
 
 	releasedReviewer := false
 	releasedDoer := false

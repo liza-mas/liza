@@ -158,6 +158,11 @@ Key command groups:
 
 **Metrics:** `liza update-sprint-metrics`
 
+**Terminal storage:** `§BRAND_BINARY_NAME§ archive-terminal-tasks` enables
+bounded whole-record archival; `--restore-inline` restores complete records
+before a binary rollback. Logical task queries hydrate immutable archive
+objects; save `archive/` alongside physical state snapshots.
+
 Locking is internal to the binary — no external `flock` wrapper needed.
 
 ## docs/

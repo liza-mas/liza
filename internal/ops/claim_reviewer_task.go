@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
-	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/identity"
@@ -180,7 +179,7 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 	}
 
 	lp := paths.New(input.ProjectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), input.Authority, input.RequestOptions)
 
 	now := time.Now().UTC()
 	leaseExpires := now.Add(time.Duration(input.LeaseDuration) * time.Second)

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -240,6 +241,17 @@ func (fl *FileLock) withLockOperationContext(ctx context.Context, operation stri
 	}
 }
 
+// acquisitionTimeoutTestHooks observes real acquisition deadlines for one lock
+// path. Fixtures can release a holder after a timeout without startup timers.
+var acquisitionTimeoutTestHooks sync.Map
+
+// SetAcquisitionTimeoutHookForTest installs an observer for protectedPath only.
+func SetAcquisitionTimeoutHookForTest(protectedPath string, observer func()) func() {
+	lockPath := protectedPath + ".lock"
+	acquisitionTimeoutTestHooks.Store(lockPath, observer)
+	return func() { acquisitionTimeoutTestHooks.Delete(lockPath) }
+}
+
 func (fl *FileLock) withLockAttempt(ctx context.Context, operation string, shared bool, fn func() error) error {
 	var lock *flock.Flock
 	var err error
@@ -282,6 +294,9 @@ func (fl *FileLock) withLockAttempt(ctx context.Context, operation string, share
 	if !locked {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
+		}
+		if observer, ok := acquisitionTimeoutTestHooks.Load(fl.lockPath); ok {
+			observer.(func())()
 		}
 		return NewLockTimeout(fmt.Errorf("lock unavailable after %v", fl.lockTimeout))
 	}

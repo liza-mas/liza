@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/payloadschema"
@@ -158,7 +157,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, input.Request)
 
 	// Collect pipeline executing statuses
 	phase = "load-pipeline"

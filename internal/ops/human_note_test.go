@@ -83,6 +83,10 @@ func TestAddHumanNoteWakesOnlyTargetsAndPreservesState(t *testing.T) {
 			if note.Extra["source"] != "operator_cli" || note.Extra["operation"] != "add-human-note" {
 				t.Fatal("missing operator provenance")
 			}
+			if after.MutationSequence != before.MutationSequence+1 {
+				t.Fatalf("human note published sequence %d, want %d", after.MutationSequence, before.MutationSequence+1)
+			}
+			after.MutationSequence = before.MutationSequence
 			after.HumanNotes = after.HumanNotes[:len(after.HumanNotes)-1]
 			if !reflect.DeepEqual(before, after) {
 				t.Fatal("note changed unrelated state, task metadata or prior notes")

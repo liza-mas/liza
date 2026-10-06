@@ -42,7 +42,7 @@ func (i *ownershipInvocation) finish(projectRoot string, err error) error {
 		}
 		var observed *models.Task
 		if i.task != nil {
-			observed = readLifecycleTask(projectRoot, i.task.ID, i.authority)
+			observed = readLifecycleTask(projectRoot, i.task.ID, i.authority, i.opts)
 		}
 		err = WrapLifecycleError(i.operation, observed, err, outcome, action, effects)
 	}

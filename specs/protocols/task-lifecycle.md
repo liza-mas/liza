@@ -412,6 +412,20 @@ satisfied dependencies. A task with `validation_prerequisites` refuses
 `--assign-to`, so it restores unassigned and its supervisor claims it after a
 fresh target-session preflight.
 
+#### Infrastructure-only contention holds
+
+`mark-blocked --state-lock-timeout` or explicit assessment adoption records a
+`state_lock_hold` bound to the current BLOCKED episode and canonical reason/
+questions. The tag's publication sequence is insufficient for recovery: only a
+strictly later successful state mutation signals restored acquisition.
+The orchestrator uses the existing unassigned unblock path as a continuation
+after rechecking authority, original transition/tag, RUNNING mode, sprint
+admission, fully satisfied direct/provider dependencies and worktree health.
+Human asks, repairs, any rejection-RCA obligation and unresolved lifecycle
+preparation exclude automatic recovery. A changed block cannot inherit the tag.
+Refused holds stay BLOCKED; unchanged refusals neither republish metadata nor
+repeatedly wake a provider. Physical worktree health is rechecked while waiting.
+
 #### Durable event details and backstops
 
 The inline `TaskHistoryEntry.Extra` keys form the telemetry contract:

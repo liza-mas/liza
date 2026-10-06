@@ -4,7 +4,7 @@
     {
       "variant": "architect",
       "role": "architect",
-      "rendered_bytes": 24000,
+      "rendered_bytes": 25351,
       "base_prompt_bytes": 9672,
       "mandatory_read_bytes": 21847,
       "reads": [
@@ -15,7 +15,7 @@
     {
       "variant": "architect (decomposition root)",
       "role": "architect",
-      "rendered_bytes": 26544,
+      "rendered_bytes": 28148,
       "base_prompt_bytes": 9672,
       "mandatory_read_bytes": 21847,
       "reads": [

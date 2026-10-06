@@ -71,8 +71,11 @@ outcome and safe action.
    and `result.safe_action` even when `ok:false`.
 4. Follow the safe action. `requery` means inspect and reevaluate possible
    effects; it does not permit blindly refreshing the token and retrying.
-   `retry` preserves the original arguments under the existing bounded retry
-   policy. `stop` ends work on that task, including worktree commands.
+   `retry` preserves the original arguments. Authenticated CLI calls supplying
+   both identity flags wait through state-lock acquisition timeouts with capped
+   backoff until cancellation. Calls without that pair and ordinary operator
+   commands retain bounded acquisition. `stop` ends work on that task, including
+   worktree commands.
 
 Keep the original request ID, expected transition and normalized payload
 together across retries and process restart. Logical identity is task,
@@ -81,6 +84,13 @@ Changing the payload within that key is an invalid conflict. Refreshing the
 expected token creates a **new logical invocation**, which requires reevaluation.
 The system does not promise permanent uniqueness of arbitrary request IDs.
 Current authority is checked before any receipt replay.
+
+The patient path retries only acquisition of the state lock. Each transaction
+callback runs once; callback errors, other operation locks, Git, indexing and
+prerequisite commands are not replayed. Cancellation interrupts the wait.
+After acquisition, ordinary authority, original-boundary and admission checks
+still apply; a changed boundary requires requery rather than a fresh token
+silently replacing the original request.
 
 For submission, first create the intended commit and verify a clean worktree.
 Run `git -C <worktree> rev-parse HEAD` once and retain its full output as the

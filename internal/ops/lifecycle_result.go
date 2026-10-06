@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -13,8 +12,12 @@ import (
 // readLifecycleTask observes committed state after an operation fails. A failed
 // transaction's in-memory task may contain mutations that were never written.
 // Unreadable state or lost authority cannot expose an authoritative boundary.
-func readLifecycleTask(projectRoot, taskID string, authority *models.AgentAuthority) *models.Task {
-	state, err := db.For(paths.New(projectRoot).StatePath()).Read()
+func readLifecycleTask(projectRoot, taskID string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) *models.Task {
+	var opts LifecycleRequestOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	state, err := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts).Read()
 	if err != nil || (authority != nil && RequireAgentAuthority(state, *authority) != nil) {
 		return nil
 	}

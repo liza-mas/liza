@@ -3,7 +3,6 @@ package ops
 import (
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -59,8 +58,12 @@ func ArchiveTerminalAcceptanceReceipts(projectRoot string, authority *models.Age
 // archiveTerminalAcceptanceReceipts is the transaction itself, for callers
 // already holding the project lifecycle lock. It must never run inside
 // another operation's state transaction.
-func archiveTerminalAcceptanceReceipts(projectRoot string, authority *models.AgentAuthority, limit ArchiveLimit) (ArchiveResult, error) {
-	bb := db.For(paths.New(projectRoot).StatePath())
+func archiveTerminalAcceptanceReceipts(projectRoot string, authority *models.AgentAuthority, limit ArchiveLimit, requests ...LifecycleRequestOptions) (ArchiveResult, error) {
+	var opts LifecycleRequestOptions
+	if len(requests) > 0 {
+		opts = requests[0]
+	}
+	bb := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts)
 	// A stale snapshot is safe: eligibility is re-evaluated under the lock.
 	// With nothing eligible the state lock is never taken.
 	snapshot, err := bb.ReadSnapshot()

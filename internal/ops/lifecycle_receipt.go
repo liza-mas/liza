@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,9 @@ import (
 type LifecycleRequestOptions struct {
 	RequestID          string
 	ExpectedTransition string
+	// RetryContext bounds acquisition-only retry for explicitly fenced agent
+	// requests. It is execution context, never persisted or part of identity.
+	RetryContext context.Context `json:"-" yaml:"-"`
 	// A private verdict outbox retains the original digest while storing only
 	// sanitized prose. Replaying it must preserve the caller's exact identity.
 	verdictPayloadDigest string

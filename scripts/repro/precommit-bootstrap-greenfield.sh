@@ -9,7 +9,7 @@
 # agent commits.
 #
 # This script never installs anything host-level. It uses only git, mkdir,
-# cp, find, date, test, printf, and shell builtins. All writes land under
+# cp, find, date, dirname, test, printf, and shell builtins. All writes land under
 # $REPRO_ROOT.
 
 set -euo pipefail
@@ -26,7 +26,8 @@ Phases:
   setup     Seed REPRO_ROOT/<cycle> with README.md + specs/vision/greenfield.md,
             git init + initial commit, liza init (if liza is on PATH).
   snapshot  Copy REPRO_ROOT/<cycle>/.liza/state.yaml to a timestamped file
-            under REPRO_ROOT/observations/<cycle>/state-snapshots/.
+            under REPRO_ROOT/observations/<cycle>/state-snapshots/, with
+            immutable archive objects alongside it for logical task evidence.
   capture   Collect agent outputs, prompts, supervisor log, worktree git logs,
             and the integration-branch presence of .pre-commit-config.yaml
             under REPRO_ROOT/observations/<cycle>/.
@@ -123,9 +124,12 @@ phase_snapshot() {
     snap_dir="$observations_dir/state-snapshots"
     mkdir -p "$snap_dir"
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-    dst="$snap_dir/state-${stamp}.yaml"
-    cp "$src_state" "$dst"
-    printf 'snapshot: %s\n' "$dst"
+    snapshot_path="$snap_dir/state-${stamp}.yaml"
+    cp "$src_state" "$snapshot_path"
+    # Copy after state: every published reference already has a durable object.
+    # Objects are immutable and retained, so later snapshots can share this tree.
+    copy_tree_if_present "state archive" "$(dirname "$src_state")/archive" "$snap_dir/archive"
+    printf 'snapshot: %s\n' "$snapshot_path"
 }
 
 copy_tree_if_present() {

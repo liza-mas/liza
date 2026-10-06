@@ -32,7 +32,8 @@ type MarkBlockedPayload struct {
 	DependsOn     []string              `json:"depends_on,omitempty"`
 	RepairRequest *models.RepairRequest `json:"repair_request,omitempty"`
 	// HumanAction is the ask when only a human can clear the block.
-	HumanAction string `json:"human_action,omitempty"`
+	HumanAction      string `json:"human_action,omitempty"`
+	StateLockTimeout bool   `json:"state_lock_timeout,omitempty"`
 }
 
 func init() {
@@ -62,6 +63,9 @@ func validateMarkBlocked(payload any) []models.FieldDiagnostic {
 	}
 	diagnostics = append(diagnostics, ValidateMarkBlockedDependsOn(decoded.DependsOn)...)
 	diagnostics = append(diagnostics, ValidateHumanAction("/human_action", decoded.HumanAction)...)
+	if decoded.StateLockTimeout && (decoded.HumanAction != "" || decoded.RepairRequest != nil) {
+		diagnostics = append(diagnostics, markBlockedDiagnostic("/state_lock_timeout", "state lock holds cannot include a human action or repair request", models.FieldValueClassConflict))
+	}
 	return append(diagnostics, ValidateMarkBlockedRepairRequest(decoded.RepairRequest, taskID)...)
 }
 

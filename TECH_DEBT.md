@@ -60,6 +60,20 @@ tasks predating the field.
 
 ## Terminal task history stays in live state
 
+**Resolved for terminal records by
+[ADR-0183](specs/architecture/ADR/0183-terminal-archive-and-contention-recovery.md):**
+operator-enabled whole-task archival moves history, lifecycle and output into
+immutable objects. All ordinary database readers/mutations restore complete
+logical tasks, preserving counts, transition identities and downstream outputs.
+Physical rows retain identity/status/created and a reference. Active-state
+partitioning remains deferred: revisit if active records or archive hydration
+still dominate measured full transaction latency. General discoveries, anomalies
+and notes retention also remains open. Synthetic cold/warm transaction
+measurements belong in the adversarial-pairing validation record; this resolution
+does not claim a live-pilot speedup.
+
+The original debt and its trigger follow for provenance:
+
 **What:** Archival moves only terminal tasks' `acceptance_receipt` out of live
 `state.yaml` ([Archived Task Fields](specs/architecture/blackboard-schema.md#archived-task-fields)).
 Terminal task history stays live, including `orchestrator_assessment` (about

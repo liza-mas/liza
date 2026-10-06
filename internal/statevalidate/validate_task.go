@@ -183,6 +183,19 @@ func validateTaskInvariants(v *violations, state *models.State, projectRoot stri
 
 	for _, task := range state.Tasks {
 		validateTaskLifecycle(v, &task)
+		if ref := task.TerminalArchive; ref != nil {
+			if raw, err := hex.DecodeString(ref.SHA256); err != nil || len(raw) != 32 || strings.ToLower(ref.SHA256) != ref.SHA256 || ref.ArchivedAt.IsZero() {
+				v.add(fmt.Errorf("task %s terminal_archive requires a lowercase SHA-256 digest and archived_at", task.ID))
+			}
+		}
+		if hold := task.StateLockHold; hold != nil {
+			if raw, err := hex.DecodeString(hold.BlockerDigest); err != nil || len(raw) != 32 || strings.ToLower(hold.BlockerDigest) != hold.BlockerDigest || hold.EpisodeAt.IsZero() || hold.AfterSequence == 0 {
+				v.add(fmt.Errorf("task %s state_lock_hold requires an episode, lowercase blocker digest and nonzero publication sequence", task.ID))
+			}
+			if (hold.RefusedFingerprint == "") != (hold.RefusedReason == "") {
+				v.add(fmt.Errorf("task %s state_lock_hold refusal requires both fingerprint and reason", task.ID))
+			}
+		}
 		validateStatusFields(v, &task, &sc)
 		for _, err := range models.ValidationSafetyViolations("validation", task.Validation, task.DestructiveDB) {
 			v.add(fmt.Errorf("task %s %w", task.ID, err))

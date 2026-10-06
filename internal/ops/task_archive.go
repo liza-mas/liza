@@ -9,9 +9,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"runtime"
 
+	"github.com/liza-mas/liza/internal/archiveobject"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -26,7 +25,7 @@ const archiveObjectFormatVersion = 1
 
 // ErrArchiveObjectConflict reports an existing archive object whose bytes
 // differ from the object being written under the same digest name.
-var ErrArchiveObjectConflict = errors.New("archive object conflict: existing object differs")
+var ErrArchiveObjectConflict = archiveobject.ErrConflict
 
 // ArchiveObjectError reports an archived field that cannot be restored. It is
 // never downgraded to an absent field.
@@ -48,44 +47,12 @@ type archiveObject struct {
 	Value         *models.AcceptanceReceipt `json:"value"`
 }
 
-// syncArchiveDir is the directory fsync primitive; tests replace it to record
-// or fail the durability barrier.
-var syncArchiveDir = syncDir
+// syncArchiveDir remains caller-local so receipt durability fault injection
+// does not affect other archive users.
+var syncArchiveDir = archiveobject.SyncDir
 
-func syncDir(dir string) error {
-	// Windows cannot open a directory for fsync; crash ordering there is
-	// best-effort, as for state publication itself.
-	if runtime.GOOS == "windows" {
-		return nil
-	}
-	f, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	syncErr := f.Sync()
-	closeErr := f.Close()
-	return errors.Join(syncErr, closeErr)
-}
-
-func isArchiveDigest(sha string) bool {
-	if len(sha) != sha256.Size*2 {
-		return false
-	}
-	for _, ch := range sha {
-		if !('0' <= ch && ch <= '9') && !('a' <= ch && ch <= 'f') {
-			return false
-		}
-	}
-	return true
-}
-
-// archiveObjectPath derives an object's path from its digest. Only a
-// lowercase SHA-256 is accepted, so state cannot direct I/O elsewhere.
 func archiveObjectPath(projectRoot, sha string) (string, error) {
-	if !isArchiveDigest(sha) {
-		return "", fmt.Errorf("invalid archive object digest %q", sha)
-	}
-	return filepath.Join(paths.New(projectRoot).ArchiveDir(), "objects", sha[:2], sha+".json"), nil
+	return archiveobject.Path(paths.New(projectRoot).ArchiveDir(), sha)
 }
 
 // encodeArchiveObject returns the deterministic bytes of a receipt object.
@@ -105,105 +72,14 @@ func encodeArchiveObject(taskID string, receipt *models.AcceptanceReceipt) ([]by
 	return append(data, '\n'), nil
 }
 
-// writeArchiveObject installs data under its digest and completes the
-// durability barrier before returning, including when the object already
-// existed: a retry must not skip a barrier an earlier attempt failed.
+// writeArchiveObject completes durability on every install/reuse attempt.
 func writeArchiveObject(projectRoot string, data []byte) (string, error) {
-	sum := sha256.Sum256(data)
-	sha := hex.EncodeToString(sum[:])
-	path, err := archiveObjectPath(projectRoot, sha)
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Dir(path)
-	existing, err := os.ReadFile(path)
-	switch {
-	case err == nil:
-		if !bytes.Equal(existing, data) {
-			return "", fmt.Errorf("%w: %s", ErrArchiveObjectConflict, path)
-		}
-	case errors.Is(err, os.ErrNotExist):
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return "", fmt.Errorf("create archive directory: %w", err)
-		}
-		if err := installArchiveObject(dir, path, data); err != nil {
-			return "", err
-		}
-	default:
-		return "", fmt.Errorf("read archive object: %w", err)
-	}
-	if err := syncArchiveFile(path); err != nil {
-		return "", fmt.Errorf("sync archive object: %w", err)
-	}
-	// Every directory the object or its new parents may have been created in
-	// lies on this chain; the runtime directory already holds the state.
-	archiveDir := paths.New(projectRoot).ArchiveDir()
-	for _, d := range []string{dir, filepath.Dir(dir), archiveDir, filepath.Dir(archiveDir)} {
-		if err := syncArchiveDir(d); err != nil {
-			return "", fmt.Errorf("sync archive directory %s: %w", d, err)
-		}
-	}
-	return sha, nil
+	return archiveobject.Write(paths.New(projectRoot).ArchiveDir(), data, syncArchiveDir)
 }
 
-// installArchiveObject writes a temp file and links it into place, so an
-// existing object is never replaced. A concurrent identical install is
-// benign because names are content-derived.
-func installArchiveObject(dir, path string, data []byte) error {
-	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")
-	if err != nil {
-		return fmt.Errorf("create archive temp file: %w", err)
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
-	if err := f.Chmod(0o644); err != nil {
-		f.Close()
-		return fmt.Errorf("set archive object permissions: %w", err)
-	}
-	_, writeErr := f.Write(data)
-	syncErr := f.Sync()
-	closeErr := f.Close()
-	if err := errors.Join(writeErr, syncErr, closeErr); err != nil {
-		return fmt.Errorf("write archive object: %w", err)
-	}
-	if err := linkArchiveObject(tmp, path); err != nil {
-		if !errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("install archive object: %w", err)
-		}
-		existing, readErr := os.ReadFile(path)
-		if readErr != nil || !bytes.Equal(existing, data) {
-			return fmt.Errorf("%w: %s", ErrArchiveObjectConflict, path)
-		}
-	}
-	return nil
-}
-
-func linkArchiveObject(tmp, path string) error {
-	if runtime.GOOS == "windows" {
-		// No hard-link guarantee; the caller holds the state lock and
-		// checked absence, and names are content-derived.
-		if _, err := os.Stat(path); err == nil {
-			return os.ErrExist
-		}
-		return os.Rename(tmp, path)
-	}
-	return os.Link(tmp, path)
-}
-
+// The verdict outbox uses the same file flush primitive.
 func syncArchiveFile(path string) error {
-	// Windows FlushFileBuffers requires a write-capable handle; O_RDWR without
-	// O_TRUNC leaves the immutable object's bytes untouched.
-	flag := os.O_RDONLY
-	if runtime.GOOS == "windows" {
-		flag = os.O_RDWR
-	}
-	f, err := os.OpenFile(path, flag, 0)
-	if err != nil {
-		return err
-	}
-	syncErr := f.Sync()
-	closeErr := f.Close()
-	return errors.Join(syncErr, closeErr)
+	return archiveobject.SyncFile(path)
 }
 
 // readArchivedReceipt loads and verifies the object ref names for task.

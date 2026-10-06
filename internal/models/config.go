@@ -158,9 +158,12 @@ func EffectiveMaxInstances(roleMax, configured int) int {
 
 // Config holds system configuration parameters
 type Config struct {
-	MaxCoderIterations              int `yaml:"max_coder_iterations"`
-	MaxReviewCycles                 int `yaml:"max_review_cycles"`
-	MaxGlobalIntegrationGenerations int `yaml:"max_global_integration_generations"`
+	// TerminalTaskArchival is explicitly enabled by operator maintenance after
+	// all processes understand the cold terminal-record format (ADR-0183).
+	TerminalTaskArchival            bool `yaml:"terminal_task_archival,omitempty" json:"terminal_task_archival,omitempty"`
+	MaxCoderIterations              int  `yaml:"max_coder_iterations"`
+	MaxReviewCycles                 int  `yaml:"max_review_cycles"`
+	MaxGlobalIntegrationGenerations int  `yaml:"max_global_integration_generations"`
 	// HighChurnRejectionThreshold is the per-project durable rejection count
 	// that gates a task on a classified RCA. Non-positive means the default.
 	HighChurnRejectionThreshold int `yaml:"high_churn_rejection_threshold,omitempty"`

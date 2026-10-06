@@ -13,7 +13,7 @@
 | `lifecycle-metrics/` | Fixed operation/outcome counters per sprint, with observation-window metadata; a non-empty subset of the known counts matrix is available with missing cells at zero, and the next recording materializes the full matrix; missing files are unavailable, while existing empty, truncated, malformed, bad-identity or unknown-key files remain unavailable and are never overwritten | Locked atomic replacement per sprint |
 | `usage/` | Durable provider-turn usage outside `state.yaml`; day-rolled `records-YYYY-MM-DD.jsonl` and numbered size-rotation parts; a missing directory means unavailable, not zero | Append-only JSONL under a leaf day lock; no retention pruning |
 | `alerts.log` | Persistent watcher alerts | Append-only |
-| `archive/` | `sprint-N.yaml` sprint records written at sprint advance; `objects/<sha[0:2]>/<sha>.json` immutable task-field objects (see [Archived Task Fields](#archived-task-fields)) | Write-once; never rewritten or pruned |
+| `archive/` | `sprint-N.yaml` sprint records written at sprint advance; `objects/<sha[0:2]>/<sha>.json` immutable receipt-field and terminal-record objects (see [Archived Task Fields](#archived-task-fields) and [Terminal Task Records](#terminal-task-records)) | Write-once; never rewritten or pruned |
 | `circuit_breaker_report.md` | Latest qualifying circuit-breaker response report | Rewritten by `analyze` for each qualifying response |
 | `ESCALATION` | Stale checkpoint notification | Overwrite by watcher |
 
@@ -660,8 +660,9 @@ archived:
 - **Eligibility.** The task status is terminal (MERGED, ABANDONED, SUPERSEDED)
   and it carries a live receipt. Terminal statuses have no outgoing
   transitions, and every non-inspection reader of the receipt serves an active
-  task. History is never archived: history counts feed transition IDs, wake
-  detection and sprint metrics.
+  task. Receipt-field archival leaves history untouched. Whole-record physical
+  archival below preserves complete logical history, because history counts and
+  contents feed transition IDs, wake detection, repair and sprint metrics.
 - **Object.** `archive/objects/<sha[0:2]>/<sha>.json` is the JSON envelope
   `{format_version: 1, task_id, field, value}` with the receipt verbatim. It is
   named by the SHA-256 of its exact bytes, installed without replacing an
@@ -692,7 +693,100 @@ archived:
   `archived` reference stays visible. A missing or corrupt object is an
   explicit error naming task, digest and path, never an absent receipt. Table
   and value output, summaries, other fields and computed queries do no archive
-  I/O. Other readers (status, TUI, watch, usage, prompts) show compact state.
+  I/O for receipt restoration. Other readers (status, TUI, watch, usage, prompts)
+  retain the compact receipt representation even when the surrounding terminal
+  record is restored through the database.
+
+### Terminal Task Records
+
+[ADR-0183](ADR/0183-terminal-archive-and-contention-recovery.md) defines opt-in
+whole-record physical archival. Complete logical task state remains available
+to ordinary readers and transactions; no task ID or audit entry is removed.
+The physical row is:
+
+```yaml
+tasks:
+  - id: task-1
+    status: MERGED
+    created: 2026-10-06T08:00:00Z
+    terminal_archive:
+      sha256: <lowercase SHA-256 of object bytes>
+      archived_at: 2026-10-06T08:03:00Z
+```
+
+- **Object and identity.** The strict JSON envelope is
+  `{format_version: 2, task_id, field: "terminal_task", value_yaml}`.
+  `value_yaml` is a string containing the complete task YAML, excluding its own
+  terminal reference/restoration bookkeeping. Inline fields and scalar types
+  retain their meaning through the existing safe scalar emission rules.
+  Digest, version, field, task ID, status and created timestamp must match the
+  physical row. Only MERGED, ABANDONED and SUPERSEDED records qualify; digest
+  validation derives the object path, never a path supplied by state.
+- **Logical restoration.** Locked reads, snapshots, cached reads, mutation
+  callbacks and task-sensitive pre-image comparisons see full history, output
+  and lifecycle metadata. History counts/latest event, assessment counts,
+  transition identities, dependencies, repair evidence and retained replay
+  receipts are unchanged by physical archival. Existing receipt archives remain
+  inspection-only; their reference and compact receipt form are part of the
+  terminal payload. Full candidate and hygiene validation use logical records.
+- **Cache and errors.** A per-blackboard decoded-object cache is bounded by
+  bytes. Verify current object bytes/digest on every read, including cache hits,
+  and clone mutable returned data. Missing, corrupt, mismatched or unsupported
+  objects fail explicitly with task, digest and path; eviction never discards
+  evidence or changes results.
+- **Publication.** Serialization projects a separate physical state view,
+  leaving the caller's task complete. Modified terminal evidence receives a new
+  immutable object/reference, while old objects remain available to old
+  snapshots. Changed/new object files and their parent-directory chain become
+  durable before state publication. Already-published unchanged references
+  need no new barrier; a failed unpublished installation repeats its barrier on
+  retry even when identical bytes exist. Windows directory durability remains
+  best-effort. Object storage is shared with receipt archives without changing
+  their format-version-1 envelopes or public operations. No archive sweep.
+- **Enablement and maintenance.** `config.terminal_task_archival` defaults off.
+  Operator-only `archive-terminal-tasks` enables it explicitly and drains
+  bounded transactions: eight tasks, soft 4 MiB, first-object progress.
+  Recheck eligibility under the state lock. Enabled post-merge maintenance
+  handles newly terminal records/backlog, and later terminal mutations remain
+  cold. An enabled zero-work check takes a snapshot only; enabling a previously
+  disabled capability is a config publication even without a backlog.
+- **Compatibility.** Upgrade/restart every supervisor, watch and TUI together
+  before enablement; old binaries cannot interpret these stubs. Migration uses
+  archive-aware unnormalized logical records. Offline analyzers restore from
+  the runtime archive directory or an explicit archive directory and fail on
+  unreadable evidence. Portable snapshots copy objects alongside state. Use
+  hydrated `get tasks` for task evidence; physical YAML is a storage/control
+  representation. Stop run processes and use `archive-terminal-tasks
+  --restore-inline` to disable archival and restore complete logical state
+  atomically before an older-binary rollback. Keep objects for old snapshots.
+  Complete cold and warmed transaction measurements, rather than
+  reduced YAML bytes alone, establish any contention improvement.
+
+### State-lock contention holds
+
+Top-level `mutation_sequence` is an unsigned publication counter. Legacy
+states begin at zero; a successful `Modify` publication records the previous
+value plus one. Unchanged callbacks preserve bytes and sequence; a pending
+liveness fold remains a real publication. Failed callbacks/publications do not
+advance it, and callbacks cannot replace its value. It is not part of task
+transition IDs or assessment digests.
+
+Optional task `state_lock_hold` contains:
+
+| Field | Meaning |
+|-------|---------|
+| `episode_at` | Timestamp identifying the current BLOCKED episode |
+| `blocker_digest` | SHA-256 of canonical JSON reason and ordered questions |
+| `after_sequence` | Sequence installing this tag; recovery needs a strictly later publication |
+| `refused_fingerprint`, `refused_reason` | Optional material identity and static gate reason suppressing unchanged recovery refusals |
+
+Only explicit `state_lock_timeout` mark/assessment payloads install tags.
+Current episode and reason/questions must still match. Human asks, repairs,
+any RCA recovery obligation, preparation and unmet dependencies are incompatible.
+Mechanical recovery also checks authority, mode/sprint admission and preserved
+worktree health, then restores an unassigned continuation and clears the tag.
+Refusal identity excludes unrelated publication sequence changes; physical
+health is still rechecked while waiting. No prose-derived authorization.
 
 ### Iteration Field Lifecycle
 

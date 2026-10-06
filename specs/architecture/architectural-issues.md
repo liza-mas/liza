@@ -888,7 +888,8 @@ Long-term concerns about system evolution.
 Recording a new orchestrator assessment drops the dependency-descendant wake
 snapshots from that task's earlier assessments. Wake detection reads only the
 latest assessment, so this bounds one append-only payload without a retention
-window. Assessment notes and terminal task records are still unbounded.
+window. Assessment notes remain unbounded; operator-enabled whole terminal
+record archival now keeps their payload outside physical live state.
 
 **Traceability (#157, mitigated):** [Blocked-Assessment Idempotency](../protocols/blocked-assessment-idempotency.md#persistence-and-no-change-result) suppresses content-equivalent appends at the source with `NO_CHANGE`. Existing entries are not pruned; general retention remains open.
 
@@ -900,9 +901,11 @@ tracked in [Quarantined verdict retention](../../TECH_DEBT.md#quarantined-verdic
 values (about 12% of a measured 5 MB run state) now leave live state for
 immutable archive objects after each merge or on operator request; see
 [Archived Task Fields](blackboard-schema.md#archived-task-fields). Terminal task
-history, assessments, checkpoints, lifecycle receipts, discoveries, anomalies
-and notes remain in live state; history compaction first needs history counts
-that survive archival ([TECH_DEBT](../../TECH_DEBT.md#terminal-task-history-stays-in-live-state)).
+history, assessments, checkpoints, lifecycle receipts and output additionally
+leave physical live state through whole-record archival
+([ADR-0183](ADR/0183-terminal-archive-and-contention-recovery.md)). Database
+boundaries restore complete logical records and preserve history counts;
+discoveries, anomalies, notes and active records remain in live state.
 
 **Future options:**
 - Archive or compact terminal task history and associated audit entries after a retention window

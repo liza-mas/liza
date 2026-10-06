@@ -8,6 +8,7 @@ import (
 type State struct {
 	Version             int                                       `yaml:"version"`
 	PipelineVersion     int                                       `yaml:"pipeline_version,omitempty"`
+	MutationSequence    uint64                                    `yaml:"mutation_sequence,omitempty" json:"mutation_sequence,omitempty"`
 	Goal                Goal                                      `yaml:"goal"`
 	Tasks               []Task                                    `yaml:"tasks"`
 	Agents              map[string]Agent                          `yaml:"agents"`

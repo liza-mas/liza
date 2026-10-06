@@ -56,8 +56,12 @@ func requireAcceptancePreparationRetired(t *testing.T, bb *db.Blackboard, before
 	if current.CompletionSequence != previous.CompletionSequence || len(current.Receipts) != 0 {
 		t.Fatalf("source refusal recorded a completion: %+v", current)
 	}
-	// Normalize only the two retirement fields; preserve every concurrent
-	// allocation change and every other lifecycle/domain field for comparison.
+	if after.MutationSequence != before.MutationSequence+1 {
+		t.Fatalf("retirement published sequence %d, want %d", after.MutationSequence, before.MutationSequence+1)
+	}
+	// Normalize the publication counter and two retirement fields only;
+	// preserve every concurrent allocation change and other domain field.
+	after.MutationSequence = before.MutationSequence
 	current.Revision = previous.Revision
 	current.Preparation = previous.Preparation
 	if !reflect.DeepEqual(before, after) {
@@ -392,6 +396,10 @@ func TestAcceptanceProvenance_ExecutionCannotChangeCandidate(t *testing.T) {
 			if task.Lifecycle.Revision == 0 || task.Lifecycle.CompletionSequence != 0 || len(task.Lifecycle.Receipts) != 0 {
 				t.Fatalf("rejected admission recorded a lifecycle completion: %+v", task.Lifecycle)
 			}
+			if after.MutationSequence != before.MutationSequence+2 {
+				t.Fatalf("preparation and retirement published sequence %d, want %d", after.MutationSequence, before.MutationSequence+2)
+			}
+			after.MutationSequence = before.MutationSequence
 			task.Lifecycle = before.FindTask(taskID).Lifecycle
 			if !reflect.DeepEqual(before, after) {
 				t.Fatal("rejected admission changed state beyond its retirement revision")

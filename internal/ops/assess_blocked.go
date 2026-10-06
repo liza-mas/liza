@@ -12,7 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/liza-mas/liza/internal/alerts"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
@@ -201,6 +200,7 @@ type AssessBlockedOptions struct {
 	ClearAwaited     bool
 	HumanAction      string
 	ClearHumanAction bool
+	StateLockTimeout bool
 }
 
 // AssessBlocked records that the orchestrator has assessed a BLOCKED task.
@@ -258,6 +258,9 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 	payload := payloadschema.WithAssessBlockedHumanAction(
 		payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest, opts.AwaitedTasks, opts.ClearAwaited),
 		opts.HumanAction, opts.ClearHumanAction)
+	if opts.StateLockTimeout {
+		payload["state_lock_timeout"] = true
+	}
 	if err := rejectInvalidLifecyclePayload(operation, payload); err != nil {
 		return nil, err
 	}
@@ -297,7 +300,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
 	now := time.Now().UTC()
 	result := AssessBlockedResult{TaskID: taskID}
 
@@ -322,7 +325,8 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			ClearAwaited     bool     `json:",omitempty"`
 			HumanAction      string   `json:",omitempty"`
 			ClearHumanAction bool     `json:",omitempty"`
-		}{note, opts.Reason, opts.Questions, repairRequest, awaited, opts.ClearAwaited, opts.HumanAction, opts.ClearHumanAction})
+			StateLockTimeout bool     `json:",omitempty"`
+		}{note, opts.Reason, opts.Questions, repairRequest, awaited, opts.ClearAwaited, opts.HumanAction, opts.ClearHumanAction, opts.StateLockTimeout})
 		if err != nil {
 			return err
 		}
@@ -404,8 +408,23 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			entry.Extra["blocked_questions"] = append([]string(nil), opts.Questions...)
 			entry.Extra["repair_request"] = repairRequest
 		}
+		preview := *task
+		preview.BlockedReason = &candidate.Reason
+		preview.BlockedQuestions = candidate.Questions
+		preview.RepairRequest = candidate.RepairRequest
+		preview.History = append(append([]models.TaskHistoryEntry(nil), task.History...), entry)
+		adoptHold := opts.StateLockTimeout && !models.CurrentStateLockHold(&preview)
+		if opts.StateLockTimeout {
+			resolver, _, err := loadResolver(projectRoot)
+			if err != nil {
+				return err
+			}
+			if reason := stateLockHoldGate(state, &preview, resolver); reason != "" {
+				return &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + reason}
+			}
+		}
 		if previous := lastOrchestratorAssessment(task); previous != nil {
-			if recorded, valid := IsAssessmentFingerprint(previous.Extra[AssessmentFingerprintExtraKey]); valid && recorded == fingerprint {
+			if recorded, valid := IsAssessmentFingerprint(previous.Extra[AssessmentFingerprintExtraKey]); valid && recorded == fingerprint && !adoptHold {
 				encoded, err := yaml.Marshal(entry)
 				if err != nil {
 					return fmt.Errorf("encode suppressed assessment: %w", err)
@@ -427,6 +446,12 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 
 		dropSupersededWakeSnapshots(task)
 		task.History = append(task.History, entry)
+		if !models.CurrentStateLockHold(task) || humanAction != "" || task.RepairRequest != nil || len(effective) > 0 {
+			task.StateLockHold = nil
+		}
+		if adoptHold {
+			installStateLockHold(state, task)
+		}
 		if reconcile {
 			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
 				return err

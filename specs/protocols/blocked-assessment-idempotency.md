@@ -190,6 +190,15 @@ write cursors.
 This contract applies to `BLOCKED`; hypothesis-exhaustion wake behavior remains
 separate.
 
+Typed `state_lock_hold` readiness is a separate mechanical signal: its own
+publication does not wake, but a strictly later mutation can restore an otherwise
+unchanged infrastructure-only episode. `mutation_sequence` stays outside the
+normal assessment fingerprint. The current tag, human/RCA/preparation gates,
+dependencies, mode and worktree are revalidated before unassigned continuation.
+Refused holds remember blocker material, excluding the publication sequence, so
+unrelated writes cannot create an endless assessment/provider loop. Legacy
+prose-only blocks require explicit `--state-lock-timeout` adoption.
+
 The registered `assess-blocked` v1 payload schema validates structural input,
 including `awaited_tasks` as a list of non-blank strings and `human_action` as a
 non-blank single-line string exclusive of `clear_human_action`, before state

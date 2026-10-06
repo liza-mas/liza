@@ -15,6 +15,18 @@ import (
 func CountActionableBlockedTasks(state *models.State) int {
 	count := 0
 	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if models.CurrentStateLockHold(task) {
+			// Mechanical wait handling retries health checks; an unchanged
+			// refusal must never spend another provider turn on old evidence.
+			if task.StateLockHold.RefusedFingerprint == stateLockHoldMaterial(state, task, task.StateLockHold.RefusedReason) {
+				continue
+			}
+			if stateLockHoldReady(state, task, nil) {
+				count++
+			}
+			continue
+		}
 		if state.Tasks[i].Status == models.TaskStatusBlocked && isTaskActionableSinceAssessment(&state.Tasks[i], state) {
 			count++
 		}

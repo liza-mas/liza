@@ -6,7 +6,7 @@ Evidence map for a run under `§BRAND_PROJECT_DIRNAME§/`. Read-only. Query larg
 
 | Source | Gives | Caveat |
 |--------|-------|--------|
-| `state.yaml` `tasks[].history[]` (`event`, `agent`, `time`, `reason`) | Per-task lifecycle: blocks, repairs, reviews, merges | Agent status is a snapshot, not a history |
+| `§BRAND_BINARY_NAME§ get tasks --field id,status,history --json` (`event`, `agent`, `time`, `reason`) | Complete per-task lifecycle, including terminal archives | Default task queries are overviews; physical YAML may contain only terminal references |
 | `state.yaml` `anomalies[]` | Typed anomalies with timestamps | |
 | `agent-sessions.csv` | Every session: start, role, provider, duration | No task id |
 | `usage/records-*.jsonl` | Tokens per session, task, role | Check for non-zero values first: zeros with `provenance: unknown` mean missing telemetry, not zero cost |
@@ -17,7 +17,10 @@ Evidence map for a run under `§BRAND_PROJECT_DIRNAME§/`. Read-only. Query larg
 | `agent-prompts/`, `agent-outputs/` | Prompt size by role and time; tool use per session | Hint text echoed in a transcript is not an invocation |
 | Earlier reports (`context-engineering.md`, `log-analysis.md`, `circuit_breaker_report.md`, …) | Prior findings | Reuse, don't re-derive |
 
-Tooling: the `§BRAND_BINARY_NAME§-logs` skill scripts — `analyze-state.py` (rejection and supersede churn), `analyze-log.py` (per-role session friction).
+Tooling: the `§BRAND_BINARY_NAME§-logs` skill scripts — `analyze-state.py`
+(rejection and supersede churn; restores terminal objects), `analyze-log.py`
+(per-role session friction). Save the runtime `archive/` tree beside detached
+state snapshots, or pass the analyzer `--archive-dir <archive-directory>`.
 
 ## Repair Actions
 

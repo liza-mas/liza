@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -142,12 +144,53 @@ def analyze_state(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_state(path: str) -> dict[str, Any]:
+def load_state(path: str, archive_dir: str | None = None) -> dict[str, Any]:
+    """Read logical tasks, including immutable terminal evidence in snapshots."""
     with Path(path).open(encoding="utf-8") as f:
         loaded = yaml.safe_load(f) or {}
     if not isinstance(loaded, dict):
         raise ValueError(f"{path} must contain a YAML mapping")
+    objects = Path(archive_dir) if archive_dir else Path(path).parent / "archive"
+    tasks = loaded.get("tasks", [])
+    entries = tasks.items() if isinstance(tasks, dict) else enumerate(tasks)
+    for key, task in list(entries):
+        if isinstance(task, dict) and "terminal_archive" in task:
+            tasks[key] = _restore_terminal_task(task, objects)
     return loaded
+
+
+def _restore_terminal_task(stub: dict[str, Any], archive_dir: Path) -> dict[str, Any]:
+    ref = stub["terminal_archive"]
+    digest = ref.get("sha256") if isinstance(ref, dict) else None
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ValueError("terminal archive reference requires a lowercase SHA-256")
+    object_path = archive_dir / "objects" / digest[:2] / f"{digest}.json"
+    raw = object_path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError(f"terminal archive digest mismatch: {object_path}")
+    envelope = json.loads(raw)
+    expected_fields = {"format_version", "task_id", "field", "value_yaml"}
+    if (
+        not isinstance(envelope, dict)
+        or set(envelope) != expected_fields
+        or type(envelope["format_version"]) is not int
+        or envelope["format_version"] != 2
+        or envelope["field"] != "terminal_task"
+        or envelope["task_id"] != stub.get("id")
+        or not isinstance(envelope["value_yaml"], str)
+    ):
+        raise ValueError(f"invalid terminal archive envelope: {object_path}")
+    task = yaml.safe_load(envelope["value_yaml"])
+    if (
+        not isinstance(task, dict)
+        or "terminal_archive" in task
+        or set(stub) != {"id", "status", "created", "terminal_archive"}
+        or task.get("status") not in {"MERGED", "ABANDONED", "SUPERSEDED"}
+        or any(task.get(field) != stub[field] for field in ("id", "status", "created"))
+    ):
+        raise ValueError(f"terminal archive identity/status/created mismatch: {object_path}")
+    task["terminal_archive"] = ref
+    return task
 
 
 def render_report(analysis: dict[str, Any], source: str) -> str:
@@ -217,11 +260,12 @@ def main() -> None:
         description="Analyze §BRAND_NAME_TITLE§ §BRAND_PROJECT_DIRNAME§/state.yaml task friction."
     )
     parser.add_argument("state_file", help="path to §BRAND_PROJECT_DIRNAME§/state.yaml")
+    parser.add_argument("--archive-dir", help="archive directory for a detached state snapshot")
     parser.add_argument("--json", action="store_true", help="emit structured JSON instead of text")
     args = parser.parse_args()
 
     try:
-        analysis = analyze_state(load_state(args.state_file))
+        analysis = analyze_state(load_state(args.state_file, args.archive_dir))
     except (OSError, ValueError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)

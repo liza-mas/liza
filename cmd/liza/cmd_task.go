@@ -813,7 +813,8 @@ func markBlockedOptionsFromFlags(cmd *cobra.Command) (ops.MarkBlockedOptions, er
 	if err != nil {
 		return ops.MarkBlockedOptions{}, err
 	}
-	return ops.MarkBlockedOptions{DependsOn: dependsOn, RepairRequest: repairRequest, HumanAction: humanAction}, nil
+	stateLockTimeout, _ := cmd.Flags().GetBool("state-lock-timeout")
+	return ops.MarkBlockedOptions{DependsOn: dependsOn, RepairRequest: repairRequest, HumanAction: humanAction, StateLockTimeout: stateLockTimeout}, nil
 }
 
 // humanActionFromFlag reads --human-action; given but empty is an input error
@@ -1007,6 +1008,7 @@ func assessBlockedOptionsFromFlags(cmd *cobra.Command) (ops.AssessBlockedOptions
 		return ops.AssessBlockedOptions{}, err
 	}
 	clearHumanAction, _ := cmd.Flags().GetBool("clear-human-action")
+	stateLockTimeout, _ := cmd.Flags().GetBool("state-lock-timeout")
 	if clearHumanAction && humanAction != "" {
 		return ops.AssessBlockedOptions{}, cliValidationError("--clear-human-action cannot be combined with --human-action")
 	}
@@ -1016,7 +1018,7 @@ func assessBlockedOptionsFromFlags(cmd *cobra.Command) (ops.AssessBlockedOptions
 	}
 	reconcile := cmd.Flags().Changed("reason") || cmd.Flags().Changed("question") || repairRequest != nil
 	if !reconcile {
-		return ops.AssessBlockedOptions{AwaitedTasks: awaited, ClearAwaited: clearAwaits, HumanAction: humanAction, ClearHumanAction: clearHumanAction}, nil
+		return ops.AssessBlockedOptions{AwaitedTasks: awaited, ClearAwaited: clearAwaits, HumanAction: humanAction, ClearHumanAction: clearHumanAction, StateLockTimeout: stateLockTimeout}, nil
 	}
 	if strings.TrimSpace(reason) == "" {
 		return ops.AssessBlockedOptions{}, cliValidationError("--reason is required for canonical metadata reconciliation")
@@ -1032,7 +1034,7 @@ func assessBlockedOptionsFromFlags(cmd *cobra.Command) (ops.AssessBlockedOptions
 			return ops.AssessBlockedOptions{}, cliValidationError("--question values must not be empty")
 		}
 	}
-	return ops.AssessBlockedOptions{Reason: reason, Questions: questions, RepairRequest: repairRequest, AwaitedTasks: awaited, ClearAwaited: clearAwaits, HumanAction: humanAction, ClearHumanAction: clearHumanAction}, nil
+	return ops.AssessBlockedOptions{Reason: reason, Questions: questions, RepairRequest: repairRequest, AwaitedTasks: awaited, ClearAwaited: clearAwaits, HumanAction: humanAction, ClearHumanAction: clearHumanAction, StateLockTimeout: stateLockTimeout}, nil
 }
 
 var assessHypothesisExhaustedCmd = &cobra.Command{
@@ -1723,6 +1725,7 @@ func init() {
 	markBlockedCmd.Flags().String("repair-request-file", "", "path to a complete JSON repair request; mutually exclusive with --repair-* fields")
 	markBlockedCmd.Flags().StringSlice("depends-on", nil, "task IDs blocking this task; also used as the orchestrator re-wake signal")
 	markBlockedCmd.Flags().String("human-action", "", "one-line action only a human can take to clear this block, and how to signal it is done; raises AWAITING HUMAN")
+	markBlockedCmd.Flags().Bool("state-lock-timeout", false, "tag an infrastructure-only state-lock timeout for automatic continuation after a later successful publication")
 	markBlockedCmd.Flags().String("agent-id", "", "agent ID marking the task as blocked")
 	markBlockedCmd.MarkFlagRequired("reason")
 	markBlockedCmd.MarkFlagRequired("questions")
@@ -1755,6 +1758,7 @@ func init() {
 	assessBlockedCmd.Flags().Bool("clear-awaits", false, "drop the awaited set instead of carrying it forward; not with --awaits")
 	assessBlockedCmd.Flags().String("human-action", "", "one-line action only a human can take to clear this block; sets or replaces the ask and raises AWAITING HUMAN")
 	assessBlockedCmd.Flags().Bool("clear-human-action", false, "drop the human ask once agents own the repair; not with --human-action")
+	assessBlockedCmd.Flags().Bool("state-lock-timeout", false, "explicitly adopt an infrastructure-only state-lock hold for automatic continuation")
 	registerCompletion(assessBlockedCmd, "agent-id", completeAgentIDs)
 
 	// Assess-hypothesis-exhausted command flags

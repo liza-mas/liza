@@ -154,8 +154,11 @@ cat §BRAND_PROJECT_DIRNAME§/state.yaml.lock.owner.json   # Best-effort diagnos
 **Supervisor contention:** Observation and launch-input discovery read complete
 atomic snapshots. Supervisor-owned state writes retry acquisition timeouts with
 capped backoff until cancellation; shutdown cleanup has its own 60s budget.
-Filesystem and authority errors remain failures. Command locks still return
-classified retryable timeouts. Reduce load while the queue drains; adding agents
+Filesystem and authority errors remain failures. Authenticated lifecycle CLI
+calls with both `--request-id` and `--expected-transition` also wait through
+state-lock acquisition timeouts until cancellation, preserving that original
+pair. Other command locks and unfenced calls still return classified retryable
+timeouts. Reduce load while the queue drains; adding agents
 does not help. Auto-repair suppression after three unregistered starts expires
 after five minutes and permits another bounded batch without restarting the TUI.
 

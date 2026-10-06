@@ -41,6 +41,8 @@ type UnblockTaskOptions struct {
 	RebaseOn     string
 	AllowDirty   bool
 	NewIteration bool
+	// Only mechanical contention recovery supplies this captured episode.
+	stateLockHold *models.StateLockHold
 }
 
 // UnblockTaskRebaseResult contains the outcome of a successful unblock rebase.
@@ -171,7 +173,7 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 	pipelineTransitions := BuildPipelineTransitions(resolver)
 
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
 	now := time.Now().UTC()
 	preflight, err := bb.Read()
 	if err != nil {
@@ -225,6 +227,14 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 		}
 		if task.Status != models.TaskStatusBlocked {
 			return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+		}
+		if opts.stateLockHold != nil {
+			if opts.AssignTo != "" || opts.RebaseOn != "" || opts.NewIteration || authority == nil {
+				return &PreconditionError{Reason: "automatic state lock continuation cannot assign, rebase or consume an iteration"}
+			}
+			if reason := automaticStateLockHoldGate(state, task, projectRoot, resolver, opts.stateLockHold); reason != "" {
+				return &PreconditionError{Reason: "state lock hold recovery refused: " + reason}
+			}
 		}
 		if err := checkUnblockRejectionRCAGate(task, opts.NewIteration); err != nil {
 			return err
@@ -347,6 +357,7 @@ func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts Unbl
 		task.BlockedReason = nil
 		task.BlockedQuestions = nil
 		task.RepairRequest = nil
+		task.StateLockHold = nil
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
 			Event:  models.TaskEventUnblocked,

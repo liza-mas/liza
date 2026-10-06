@@ -95,13 +95,22 @@ func (s *orchestratorStrategy) WaitConfig(state *models.State) (pollInterval, ma
 	return time.Duration(poll) * time.Second, time.Duration(max) * time.Second
 }
 
-func (s *orchestratorStrategy) PreWork(_ context.Context, bb *db.Blackboard, config SupervisorConfig) (bool, error) {
+func (s *orchestratorStrategy) PreWork(ctx context.Context, bb *db.Blackboard, config SupervisorConfig) (bool, error) {
 	logger := GetLogger()
 
 	state, err := bb.ReadSnapshot()
 	if err != nil {
 		logger.Warn("Failed to read state for transition check", "error", err)
 		return false, nil
+	}
+	if ops.HasStateLockHoldCandidates(state) {
+		if _, err := ops.RecoverStateLockHolds(ctx, bb, config.ProjectRoot, config.Authority); err != nil {
+			return false, fmt.Errorf("recover state lock holds: %w", err)
+		}
+		state, err = bb.ReadSnapshot()
+		if err != nil {
+			return false, err
+		}
 	}
 
 	// Gate: checkpoint was for a pipeline transition AND sprint has been resumed.
@@ -162,6 +171,20 @@ func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboar
 
 	return waitForWorkEventDriven(ctx, bb, config.ProjectRoot, pollInterval, maxWait,
 		func(state *models.State) (bool, string) {
+			if ops.HasStateLockHoldCandidates(state) {
+				if _, err := ops.RecoverStateLockHolds(ctx, bb, config.ProjectRoot, config.Authority); err != nil {
+					logger := GetLogger()
+					logger.Warn("State lock hold recovery refused", "error", err)
+					return false, ""
+				}
+				// Recovery may have changed BLOCKED to claimable or recorded a
+				// refusal. Wake selection must not use the preceding snapshot.
+				fresh, err := bb.ReadSnapshot()
+				if err != nil {
+					return false, ""
+				}
+				state = fresh
+			}
 			// This closure is the orchestrator's only look at fresh state
 			// while it waits, and a checkpoint suppresses the wake triggers
 			// below — so without this the wait runs to timeout and the

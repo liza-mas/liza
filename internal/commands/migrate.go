@@ -4,10 +4,8 @@ import (
 	"fmt"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/statehygiene"
-	"gopkg.in/yaml.v3"
 )
 
 // MigrateCommand normalizes legacy state.yaml records written by an older
@@ -16,8 +14,8 @@ import (
 // incomplete retry_loop records, and oversized or raw transcript text. Returns
 // (changed, error) where changed indicates whether any modifications were made.
 //
-// Uses ReadRaw + manual unmarshal to bypass db.Read()'s read-path
-// normalization, which would hide the underscore roles we need to detect.
+// Uses ReadRaw + archive-aware unnormalized decode so legacy normalization
+// remains detectable without treating physical terminal stubs as whole tasks.
 func MigrateCommand(statePath string) (bool, error) {
 	bb := db.For(statePath)
 	raw, err := bb.ReadRaw()
@@ -25,8 +23,8 @@ func MigrateCommand(statePath string) (bool, error) {
 		return false, fmt.Errorf("failed to read state file: %w", err)
 	}
 
-	var state models.State
-	if err := yaml.Unmarshal(raw, &state); err != nil {
+	state, err := bb.DecodeUnnormalized(raw)
+	if err != nil {
 		return false, fmt.Errorf("failed to parse state file: %w", err)
 	}
 
@@ -68,7 +66,7 @@ func MigrateCommand(statePath string) (bool, error) {
 			changed = true
 		}
 	}
-	if statehygiene.ScrubStateForMigration(&state) {
+	if statehygiene.ScrubStateForMigration(state) {
 		changed = true
 	}
 
@@ -76,7 +74,7 @@ func MigrateCommand(statePath string) (bool, error) {
 		return false, nil
 	}
 
-	if err := bb.Write(&state); err != nil {
+	if err := bb.Write(state); err != nil {
 		return false, fmt.Errorf("failed to write migrated state: %w", err)
 	}
 

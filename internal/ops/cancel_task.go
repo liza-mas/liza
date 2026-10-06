@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -74,7 +73,7 @@ func cancelTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID string
 
 func cancelTaskLifecycle(projectRoot, taskID, reason, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, observed **models.Task) (*CancelResult, error) {
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts)
 
 	pb, err := loadPipelineBundle(projectRoot)
 	if err != nil {

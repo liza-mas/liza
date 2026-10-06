@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -40,9 +41,12 @@ type Blackboard struct {
 	// megabyte-scale YAML per call starves the CPU the lock holders need.
 	// The cached value is never handed out directly — ReadCached returns a
 	// deep copy so callers keep a state they may mutate freely.
-	cacheMu     sync.RWMutex
-	cachedState *models.State
-	cachedMtime time.Time
+	cacheMu           sync.RWMutex
+	cachedState       *models.State
+	cachedMtime       time.Time
+	archiveMu         sync.Mutex
+	archiveCache      map[string]terminalArchiveCacheEntry
+	archiveCacheBytes int
 }
 
 // defaultLockTimeoutNanos overrides the lock wait of Blackboards created by
@@ -231,9 +235,10 @@ func (bb *Blackboard) ReadSnapshot() (*models.State, error) {
 }
 
 // decodeLiveState decodes a published state and overlays pending liveness
-// records (ADR-0177). Pre-image decodes for write checks use decodeState.
+// records (ADR-0177). Task-sensitive pre-image checks use decodeLogicalState;
+// top-level ledger checks use decodeState.
 func (bb *Blackboard) decodeLiveState(data []byte, operation string) (*models.State, error) {
-	state, err := decodeState(data, operation)
+	state, err := bb.decodeLogicalState(data, operation)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +292,7 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	bb.cacheMu.RUnlock()
 
 	if cachedState != nil && currentMtime.Equal(cachedMtime) {
-		return bb.withLiveness(CloneState(cachedState)), nil
+		return bb.cachedLogicalState(cachedState)
 	}
 
 	data, err := readStateFile(bb.statePath)
@@ -306,7 +311,16 @@ func (bb *Blackboard) ReadCached() (*models.State, error) {
 	bb.cachedMtime = currentMtime
 	bb.cacheMu.Unlock()
 
-	return bb.withLiveness(CloneState(state)), nil
+	return bb.cachedLogicalState(state)
+}
+
+func (bb *Blackboard) cachedLogicalState(physical *models.State) (*models.State, error) {
+	state := CloneState(physical)
+	if err := bb.restoreTerminalTasks(state); err != nil {
+		return nil, err
+	}
+	normalizeTaskAttempts(state)
+	return bb.withLiveness(state), nil
 }
 
 // withLiveness overlays liveness records on a copy handed to a caller. The
@@ -431,8 +445,12 @@ func marshalStateForWrite(state *models.State) ([]byte, error) {
 	if err := statehygiene.ValidateState(state); err != nil {
 		return nil, fmt.Errorf("state hygiene validation failed: %w", err)
 	}
+	return marshalWriteValue(reflect.ValueOf(state))
+}
+
+func marshalWriteValue(value reflect.Value) ([]byte, error) {
 	needsParse := false
-	view := projectWriteValue(reflect.ValueOf(state), &needsParse)
+	view := projectWriteValue(value, &needsParse)
 	data, err := yaml.Marshal(view.Interface())
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state: %w", err)
@@ -520,12 +538,12 @@ func checkRuntimeInputTransitions(preImage []byte, state *models.State) error {
 // fence behind the admission diagnostics, covering every writer and any
 // concurrent pair of declarations. Only collisions absent from the locked
 // pre-image are refused, so legacy states stay writable (ADR-0165).
-func checkRuntimeInputNameCollisions(preImage []byte, state *models.State) error {
+func (bb *Blackboard) checkRuntimeInputNameCollisions(preImage []byte, state *models.State) error {
 	collisions := models.RuntimeInputNameCollisions(state)
 	if len(collisions) == 0 {
 		return nil
 	}
-	before, err := decodeState(preImage, "runtime-input name pre-image")
+	before, err := bb.decodeLogicalState(preImage, "runtime-input name pre-image")
 	if err != nil {
 		return fmt.Errorf("runtime-input write refused: pre-image unreadable: %w", err)
 	}
@@ -550,7 +568,7 @@ func checkRuntimeInputNameCollisions(preImage []byte, state *models.State) error
 // write a state that holds others. Runtime writers go through Modify.
 func (bb *Blackboard) Write(state *models.State) error {
 	err := bb.fileLock.WithLockOperation("write", func() error {
-		data, err := marshalStateForWrite(state)
+		data, err := bb.marshalLogicalState(state)
 		if err != nil {
 			return err
 		}
@@ -566,22 +584,35 @@ func (bb *Blackboard) Write(state *models.State) error {
 
 // Modify performs an atomic read-modify-write operation
 func (bb *Blackboard) Modify(fn func(*models.State) error) error {
+	published := false
 	err := bb.fileLock.WithLockOperation("modify", func() error {
 		data, err := readStateFile(bb.statePath)
 		if err != nil {
 			return fmt.Errorf("failed to read state: %w", err)
 		}
 
-		// The overlay is persisted with the write, folding the liveness
-		// records read here under the lock before fn runs (ADR-0177).
-		state, err := bb.decodeLiveState(data, "state modify")
+		state, err := bb.decodeLogicalState(data, "state modify")
 		if err != nil {
 			return err
 		}
+		sequence := state.MutationSequence
+		if sequence == math.MaxUint64 {
+			return fmt.Errorf("state mutation sequence exhausted")
+		}
+		// Capture the stored logical state before overlay. A callback that
+		// changes nothing still publishes a pending liveness fold (ADR-0177),
+		// while stale/refused observations cannot manufacture recovery signals.
+		before := CloneState(state)
+		applyLiveness(state, bb.statePath)
 
 		preImage := data
 		if err := fn(state); err != nil {
 			return fmt.Errorf("modification function failed: %w", err)
+		}
+		// The counter belongs to publication, not to the mutation callback.
+		state.MutationSequence = sequence
+		if reflect.DeepEqual(before, state) {
+			return nil
 		}
 		if err := checkWrittenAnomalies(preImage, state); err != nil {
 			return err
@@ -589,18 +620,24 @@ func (bb *Blackboard) Modify(fn func(*models.State) error) error {
 		if err := checkRuntimeInputTransitions(preImage, state); err != nil {
 			return err
 		}
-		if err := checkRuntimeInputNameCollisions(preImage, state); err != nil {
+		if err := bb.checkRuntimeInputNameCollisions(preImage, state); err != nil {
 			return err
 		}
 
-		data, err = marshalStateForWrite(state)
+		// Publication owns this counter; callbacks cannot reset or advance it.
+		state.MutationSequence = sequence + 1
+		data, err = bb.marshalLogicalState(state)
 		if err != nil {
 			return err
 		}
-		return bb.writeStateData(data)
+		if err := bb.writeStateData(data); err != nil {
+			return err
+		}
+		published = true
+		return nil
 	})
 
-	if err == nil {
+	if err == nil && published {
 		bb.InvalidateCache()
 	}
 

@@ -36,7 +36,9 @@ error, and skill-invocation totals. Its `Usage Sources` and `Partial` columns
 show aggregate provenance, while `OPERATIONAL FRICTION` groups events by
 category and role and includes example source logs.
 
-3. Inspect `§BRAND_PROJECT_DIRNAME§/state.yaml` for task-level frictions before drawing conclusions:
+3. Inspect complete task evidence before drawing conclusions. The analyzer
+restores terminal archive objects; a portable snapshot needs its sibling
+`archive/` tree, or `--archive-dir <archive-directory>`:
 ```bash
 python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_BINARY_NAME§-logs/scripts/analyze-state.py §BRAND_PROJECT_DIRNAME§/state.yaml
 ```

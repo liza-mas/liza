@@ -144,7 +144,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	worktreeRel := path.Join(paths.WorktreesDirName, taskID)
 	worktreeDir := filepath.Join(lp.ProjectRoot(), worktreeRel)
 
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, invocation.opts)
 
 	// --- Phase 1: Validate Under Lock ---
 	var taskStatus models.TaskStatus
@@ -321,7 +321,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 		if shouldEscalate {
 			switch escalation.action {
 			case LimitActionNewAttempt:
-				result, taErr := transitionToNewAttemptForClaim(projectRoot, taskID, escalation.reason, authority)
+				result, taErr := transitionToNewAttemptForClaim(projectRoot, taskID, escalation.reason, authority, invocation.opts)
 				if taErr != nil {
 					return nil, fmt.Errorf("failed to transition to new attempt: %w", taErr)
 				}

@@ -30,9 +30,15 @@ Use this skill when:
 
 ## Inputs
 
-The single entry point is **`§BRAND_PROJECT_DIRNAME§/state.yaml`** — the source of truth for all §BRAND_NAME_TITLE§ state.
+Read top-level control state from **`§BRAND_PROJECT_DIRNAME§/state.yaml`**
+and task evidence through explicit field queries. `get tasks` is an overview:
+```bash
+§BRAND_BINARY_NAME§ get tasks --field id,type,role_pair,status,description,scope,done_when,spec_ref,plan_ref,arch_ref,output,approvals,approved_by,history --json
+```
+Terminal rows may be archive references; raw YAML alone omits their history,
+output and approvals.
 
-From `state.yaml`, the skill reads:
+From control state and hydrated task queries, the skill reads:
 - **`goal.spec_ref`**: the upstream source document the agents worked from
 - **`tasks[]`**: each task with its scope, status, output capabilities, approvals, and history
 - **Artifact refs** (read all that exist, in priority order):
@@ -45,14 +51,15 @@ From `state.yaml`, the skill reads:
 - **`sprint.status`** and **`sprint.checkpoint_trigger`**: why the checkpoint was triggered
 
 No other discovery is needed. Read every artifact file referenced by the ref fields above.
-Read the upstream source (`goal.spec_ref`). Everything else is in the state file itself.
+Read the upstream source (`goal.spec_ref`). Task evidence comes from the
+hydrated query, including archived terminal records.
 
 ## Protocol
 
 ### Phase 1: Inventory
 
-1. **Read `§BRAND_PROJECT_DIRNAME§/state.yaml`** to understand the full pipeline state: goal, tasks, agents,
-   sprint status, and checkpoint trigger.
+1. **Read `§BRAND_PROJECT_DIRNAME§/state.yaml` and run the task field query
+   above** for goal, task evidence, agents, sprint status and checkpoint trigger.
 
 2. **Read the upstream source** (`goal.spec_ref`) to understand what the agents were working
    from — entities, decisions, constraints, interactions, scope boundaries.

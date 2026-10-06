@@ -29,6 +29,37 @@ reads and repairs. Process
 and filesystem diagnostics are separate observations. Do not edit state in place
 while agents are running.
 
+### Terminal task storage
+
+`§BRAND_BINARY_NAME§ archive-terminal-tasks --json` is operator maintenance:
+it enables `config.terminal_task_archival` and drains bounded batches. Upgrade
+every process before enabling it. Terminal rows in physical `state.yaml`
+then contain identity/status/created plus a `terminal_archive` reference;
+complete history, lifecycle receipts and output remain in immutable objects.
+`get tasks`, inspection, validation and ordinary mutations restore them.
+The default task list is an overview; use
+`get tasks --field id,status,history,lifecycle,output --json` for audit evidence.
+Missing or corrupt objects fail explicitly. Save the runtime `archive/` tree
+alongside snapshots; raw YAML alone is insufficient task evidence.
+
+For rollback, stop every supervisor and run
+`§BRAND_BINARY_NAME§ archive-terminal-tasks --restore-inline --json` with the
+upgraded binary before starting an older binary. This restores complete task
+records and disables archival in one state publication. Keep archive objects;
+old snapshots still reference them. The restoring transaction rewrites the
+full logical state and can take the original large-state lock budget.
+
+### State-lock timeout holds
+
+`mark-blocked --state-lock-timeout` and `assess-blocked --state-lock-timeout`
+explicitly tag an infrastructure-only BLOCKED episode. Do not use the tag for
+human asks, repairs, rejection RCA, unresolved preparation or unmet dependencies.
+The orchestrator mechanically restores an eligible hold as an unassigned
+continuation after a strictly later successful state mutation. Pause/checkpoint,
+authority, dependencies and preserved worktree health are checked again.
+Prose-only legacy blocks require explicit assessment tagging; they never
+auto-unblock merely because the reason mentions a lock.
+
 `get-tasks [task-id]` is equivalent to `get tasks [task-id]`. Both accept repeated
 or comma-separated `--field` values: lists return one object per task containing
 only the requested keys; selecting one task returns one object. Optional values

@@ -852,7 +852,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	statePath := paths.New(projectRoot).StatePath()
 
 	// Read state
-	bb := db.For(statePath)
+	bb := RequestBlackboard(statePath, authority, opts)
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
 		return nil, err
@@ -906,7 +906,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	effects := "none"
 	defer func() {
 		if retErr != nil {
-			task = readLifecycleTask(projectRoot, taskID, authority)
+			task = readLifecycleTask(projectRoot, taskID, authority, opts)
 			outcome, action := models.LifecycleStateChanged, "requery"
 			var invalid *PreconditionError
 			if effects == "none" && errors.As(retErr, &invalid) {
@@ -1373,8 +1373,11 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		if postMergeArchiveTestHook != nil {
 			postMergeArchiveTestHook()
 		}
-		if _, err := archiveTerminalAcceptanceReceipts(projectRoot, authority, DefaultArchiveLimit); err != nil {
+		if _, err := archiveTerminalAcceptanceReceipts(projectRoot, authority, DefaultArchiveLimit, opts); err != nil {
 			warnings = append(warnings, fmt.Sprintf("failed to archive terminal acceptance receipts: %v", err))
+		}
+		if _, err := archiveTerminalTasks(projectRoot, authority, DefaultArchiveLimit, opts); err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to archive terminal tasks: %v", err))
 		}
 	}
 

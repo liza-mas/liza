@@ -32,5 +32,10 @@ func requireAgentAuthorityForID(cmd *cobra.Command, agentID string) (models.Agen
 			brand.LegacyEnvName("AGENT_GENERATION"),
 		))
 	}
+	if agentID != "" {
+		// Shared by flag/env identities and positional claim-task actors. The
+		// parent context also cancels request options captured before this call.
+		startLifecycleSignalHandling(cmd)
+	}
 	return models.AgentAuthority{ID: agentID, Generation: lookup.Value}, nil
 }

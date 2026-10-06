@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/alerts"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
@@ -39,7 +38,8 @@ type MarkBlockedOptions struct {
 	DependsOn     []string
 	// HumanAction, when set, is the action only a human can take to clear the
 	// block; it raises AWAITING HUMAN (ADR-0172).
-	HumanAction string
+	HumanAction      string
+	StateLockTimeout bool
 }
 
 // MarkBlocked transitions a task from an executing status to BLOCKED. Only the
@@ -77,7 +77,7 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 			if IsAgentAuthorityError(retErr) || filelock.IsLockErrorType(retErr, filelock.LockErrorTimeout) {
 				effects = "none"
 			}
-			observed = readLifecycleTask(projectRoot, taskID, authority)
+			observed = readLifecycleTask(projectRoot, taskID, authority, opts.Request)
 			retErr = WrapLifecycleError("mark-blocked", observed, retErr, outcome, action, effects)
 		}
 		var outcome models.LifecycleOutcome
@@ -108,7 +108,7 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 	}
 
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
 	now := time.Now().UTC()
 	var resultDependsOn []string
 	var outcome models.LifecycleOutcome
@@ -139,8 +139,9 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 			Repair       *models.RepairRequest
 			Dependencies []string
 			// Omitted when empty so earlier requests keep their identity.
-			HumanAction string `json:",omitempty"`
-		}{reason, questions, repairRequest, dependsOn, opts.HumanAction})
+			HumanAction      string `json:",omitempty"`
+			StateLockTimeout bool   `json:",omitempty"`
+		}{reason, questions, repairRequest, dependsOn, opts.HumanAction, opts.StateLockTimeout})
 		if err != nil {
 			return err
 		}
@@ -166,6 +167,14 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 		// Validate added edges without preventing emergency blocking to repair existing metadata.
 		if err := validateDependencyDirection(state, resolver, task.ID, task.RolePair, dependsOn); err != nil {
 			return err
+		}
+		if opts.StateLockTimeout {
+			candidate := *task
+			candidate.DependsOn = append(append([]string(nil), task.DependsOn...), dependsOn...)
+			candidate.RepairRequest = repairRequest
+			if reason := stateLockHoldGate(state, &candidate, resolver); reason != "" {
+				return &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + reason}
+			}
 		}
 
 		// Blocking ends the authorized owner's work and retires its unfinished preparation.
@@ -195,6 +204,10 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 			entry.Extra = map[string]any{models.AwaitingHumanExtraKey: opts.HumanAction}
 		}
 		task.History = append(task.History, entry)
+		task.StateLockHold = nil
+		if opts.StateLockTimeout {
+			installStateLockHold(state, task)
+		}
 
 		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		return err
@@ -239,12 +252,13 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 // it, so it stays at this boundary rather than entering the payload.
 func MarkBlockedPayload(taskID, reason string, questions []string, opts MarkBlockedOptions) payloadschema.MarkBlockedPayload {
 	return payloadschema.MarkBlockedPayload{
-		TaskID:        taskID,
-		Reason:        reason,
-		Questions:     questions,
-		DependsOn:     opts.DependsOn,
-		RepairRequest: opts.RepairRequest,
-		HumanAction:   opts.HumanAction,
+		TaskID:           taskID,
+		Reason:           reason,
+		Questions:        questions,
+		DependsOn:        opts.DependsOn,
+		RepairRequest:    opts.RepairRequest,
+		HumanAction:      opts.HumanAction,
+		StateLockTimeout: opts.StateLockTimeout,
 	}
 }
 

@@ -537,6 +537,8 @@ type Task struct {
 	AcceptanceSource        *AcceptanceSource        `yaml:"acceptance_source,omitempty" json:"acceptance_source,omitempty"`
 	AcceptanceReceipt       *AcceptanceReceipt       `yaml:"acceptance_receipt,omitempty" json:"acceptance_receipt,omitempty"`
 	Archived                []ArchivedFieldRef       `yaml:"archived,omitempty" json:"archived,omitempty"`
+	TerminalArchive         *TerminalArchiveRef      `yaml:"terminal_archive,omitempty" json:"terminal_archive,omitempty"`
+	TerminalArchiveRestored bool                     `yaml:"-" json:"-"`
 	ReviewingBy             *string                  `yaml:"reviewing_by,omitempty"`
 	ReviewLeaseExpires      *time.Time               `yaml:"review_lease_expires,omitempty"`
 	ApprovedBy              *string                  `yaml:"approved_by,omitempty"`
@@ -558,6 +560,7 @@ type Task struct {
 	RejectionReason         *string                  `yaml:"rejection_reason,omitempty"`
 	BlockedReason           *string                  `yaml:"blocked_reason,omitempty"`
 	BlockedQuestions        []string                 `yaml:"blocked_questions,omitempty"`
+	StateLockHold           *StateLockHold           `yaml:"state_lock_hold,omitempty" json:"state_lock_hold,omitempty"`
 	RepairRequest           *RepairRequest           `yaml:"repair_request,omitempty" json:"repair_request,omitempty"`
 	RejectionRCA            *RejectionRCARecord      `yaml:"rejection_rca,omitempty" json:"rejection_rca,omitempty"`
 	SupersededBy            []string                 `yaml:"superseded_by,omitempty"`

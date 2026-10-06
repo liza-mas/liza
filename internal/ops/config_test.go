@@ -56,6 +56,14 @@ func TestSetPostWorktreeCmd(t *testing.T) {
 			if after.Config.PostWorktreeCmd == nil || *after.Config.PostWorktreeCmd != tc.input.Command {
 				t.Fatal("command was not persisted")
 			}
+			wantSequence := before.MutationSequence
+			if tc.outcome == "set" || tc.outcome == "replaced" {
+				wantSequence++
+			}
+			if after.MutationSequence != wantSequence {
+				t.Fatalf("config outcome %s published sequence %d, want %d", tc.outcome, after.MutationSequence, wantSequence)
+			}
+			after.MutationSequence = before.MutationSequence
 			after.Config.PostWorktreeCmd = before.Config.PostWorktreeCmd
 			if !reflect.DeepEqual(before, after) {
 				t.Fatal("write changed unrelated state")

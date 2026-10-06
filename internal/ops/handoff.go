@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
@@ -78,7 +77,7 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 	}
 
 	lp := paths.New(input.ProjectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), input.Authority, input.Request)
 	now := time.Now().UTC()
 
 	runtimeRole, err := identity.ExtractRole(agentID)

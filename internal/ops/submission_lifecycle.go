@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -43,7 +42,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		if err != nil {
 			// Finalization may lose a race after Git or indexing. Report a fresh
 			// authorized observation, never a callback's uncommitted candidate.
-			invocation.task = readLifecycleTask(projectRoot, taskID, authority)
+			invocation.task = readLifecycleTask(projectRoot, taskID, authority, opts)
 			outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
 			var invalid *PreconditionError
 			if !invocation.effects && errors.As(err, &invalid) {
@@ -77,7 +76,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
 		// Retirement usually follows a state-lock timeout, so it waits the
 		// patient budget; this short-lived CLI process cannot retry it later.
-		retirementBB := db.For(paths.New(projectRoot).StatePath()).Patient()
+		retirementBB := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts).Patient()
 		var prepared *preparedSubmission
 		if prepareErr := lock.WithLockOperation(integrationOperationSubmitForReview, func() error {
 			var inner error

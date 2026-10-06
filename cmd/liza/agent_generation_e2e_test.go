@@ -485,6 +485,10 @@ func runStaleGenerationCLI(t *testing.T, projectRoot, statePath, agentID string,
 		if len(after.QuarantinedVerdicts) != 1 || after.QuarantinedVerdicts[0].ReviewCommit != quarantinedVerdictTestCommit {
 			t.Fatal("stale verdict did not retain immutable evidence")
 		}
+		if after.MutationSequence != before.MutationSequence+1 {
+			t.Fatalf("quarantine published sequence %d, want %d", after.MutationSequence, before.MutationSequence+1)
+		}
+		after.MutationSequence = before.MutationSequence
 		after.QuarantinedVerdicts = nil
 		if !reflect.DeepEqual(&before, after) {
 			t.Fatal("stale verdict changed state beyond quarantined evidence")

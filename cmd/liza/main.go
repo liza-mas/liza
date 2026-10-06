@@ -359,7 +359,10 @@ func main() {
 		fmt.Fprint(os.Stdout, updater.SavedUpdateSettingsSummary())
 		return
 	}
-	if err := rootCmd.Execute(); err != nil {
+	ctx, stopSignals := lifecycleExecutionContext(context.Background())
+	err := rootCmd.ExecuteContext(ctx)
+	stopSignals()
+	if err != nil {
 		var toolExit *toolResultExit
 		if errors.As(err, &toolExit) {
 			os.Exit(toolExit.code)

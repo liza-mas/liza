@@ -69,7 +69,7 @@ func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority
 	if err != nil {
 		return nil, fmt.Errorf("reached verdict not saved: %w", err)
 	}
-	result, err := entry.submit(projectRoot)
+	result, err := entry.submit(projectRoot, opts.RetryContext)
 	if entry.settled(result, err) {
 		if removeErr := removePendingVerdictFile(filename); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 			// Keep success truthful: the receipt makes a later drain idempotent.
@@ -79,7 +79,7 @@ func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority
 	return result, err
 }
 
-func (p pendingVerdict) submit(projectRoot string) (*VerdictResult, error) {
+func (p pendingVerdict) submit(projectRoot string, retryContexts ...context.Context) (*VerdictResult, error) {
 	state, err := db.For(paths.New(projectRoot).StatePath()).ReadSnapshot()
 	if err != nil {
 		return nil, fmt.Errorf("read pending verdict boundary: %w", err)
@@ -90,6 +90,9 @@ func (p pendingVerdict) submit(projectRoot string) (*VerdictResult, error) {
 	}
 	opts := LifecycleRequestOptions{RequestID: p.Request.RequestID, ExpectedTransition: p.Request.ExpectedTransition,
 		verdictPayloadDigest: p.Request.PayloadDigest}
+	if len(retryContexts) > 0 {
+		opts.RetryContext = retryContexts[0]
+	}
 	return submitVerdictLifecycle(projectRoot, p.TaskID, p.Verdict, p.Reason, p.Authority.ID, &p.Authority, p.Impact, p.ReviewCommit, opts)
 }
 

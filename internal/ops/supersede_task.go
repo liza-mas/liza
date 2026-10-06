@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -102,7 +101,7 @@ func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementI
 
 func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string, reason, agentID, recoverabilityCommand string, opts SupersedeTaskOptions, authority *models.AgentAuthority, observed **models.Task) (*SupersedeResult, error) {
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
 	gw := git.New(projectRoot)
 
 	pb, err := loadPipelineBundle(projectRoot)

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
@@ -84,7 +83,7 @@ func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, a
 		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess hypothesis-exhausted tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
 	}
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	bb := RequestBlackboard(lp.StatePath(), authority, opts)
 	now := time.Now().UTC()
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {

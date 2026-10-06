@@ -38,6 +38,20 @@ func lifecycleAgentID(agentID string, authority *models.AgentAuthority) (string,
 	return authority.ID, nil
 }
 
+// RequestBlackboard selects acquisition-only retry for an authenticated request
+// whose explicit identity and original transition are preserved by its caller.
+// Operator and legacy calls retain the ordinary bounded lock wait. The protected
+// transaction runs once; callback failures and nested timeouts are not replayed.
+func RequestBlackboard(statePath string, authority *models.AgentAuthority, opts LifecycleRequestOptions) *db.Blackboard {
+	bb := db.For(statePath)
+	if authority != nil && authority.ID != "" && authority.Generation != "" &&
+		opts.RetryContext != nil && opts.RequestID != "" && opts.ExpectedTransition != "" &&
+		ValidateLifecycleRequestOptions(opts) == nil {
+		return bb.WithLockRetryContext(opts.RetryContext)
+	}
+	return bb
+}
+
 type stateMutation func(func(*models.State) error) error
 
 var lifecycleMutationTestHooks sync.Map

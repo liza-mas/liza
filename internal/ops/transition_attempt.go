@@ -5,7 +5,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/git"
@@ -75,36 +74,40 @@ func transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason str
 // transitionToNewAttemptForClaim is the claim-triggered rollover: like the
 // claim, it is new work and is refused in a halt mode. Only phase 1 checks;
 // once the sentinel is set the rollover must finish or the task stays stranded.
-func transitionToNewAttemptForClaim(projectRoot, taskID, reason string, authority *models.AgentAuthority) (*TransitionAttemptResult, error) {
-	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, "", true)
+func transitionToNewAttemptForClaim(projectRoot, taskID, reason string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) (*TransitionAttemptResult, error) {
+	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, "", true, options...)
 }
 
 // transitionToNewAttemptAfterVerdict runs only after the outer verdict review
 // lock is released, while its project lifecycle lock remains held. The token
 // prevents a delayed rejection follow-up from resetting an intervening claim.
-func transitionToNewAttemptAfterVerdict(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string) (*TransitionAttemptResult, error) {
+func transitionToNewAttemptAfterVerdict(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string, options ...LifecycleRequestOptions) (*TransitionAttemptResult, error) {
 	if !lifecycleDigestValid(expectedCompletionToken) {
 		return nil, &PreconditionError{Reason: "attempt rollover requires the completed verdict transition token"}
 	}
-	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, expectedCompletionToken, false)
+	return transitionToNewAttemptAtBoundary(projectRoot, taskID, reason, authority, expectedCompletionToken, false, options...)
 }
 
-func transitionToNewAttemptAtBoundary(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string, requireAdmitted bool) (*TransitionAttemptResult, error) {
+func transitionToNewAttemptAtBoundary(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string, requireAdmitted bool, options ...LifecycleRequestOptions) (*TransitionAttemptResult, error) {
 	// Claim invokes rollover before taking this same task lock; verdict invokes
 	// it only after releasing its final state transaction.
 	lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
 	var result *TransitionAttemptResult
 	err := lock.WithLockOperation("transition-attempt", func() error {
 		var inner error
-		result, inner = transitionToNewAttemptLocked(projectRoot, taskID, reason, authority, expectedCompletionToken, requireAdmitted)
+		result, inner = transitionToNewAttemptLocked(projectRoot, taskID, reason, authority, expectedCompletionToken, requireAdmitted, options...)
 		return inner
 	})
 	return result, err
 }
 
-func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string, requireAdmitted bool) (*TransitionAttemptResult, error) {
+func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority *models.AgentAuthority, expectedCompletionToken string, requireAdmitted bool, options ...LifecycleRequestOptions) (*TransitionAttemptResult, error) {
 	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	var opts LifecycleRequestOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	bb := RequestBlackboard(lp.StatePath(), authority, opts)
 
 	pb, err := loadPipelineBundle(projectRoot)
 	if err != nil {
