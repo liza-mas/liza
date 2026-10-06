@@ -99,6 +99,30 @@ prewarmed and offline validation succeeds, operators may add:
 export HF_HUB_OFFLINE=1
 ```
 
+With `§BRAND_ENV_PREFIX§_ENABLE_SEMBLE=1`, init prepares the safe project-root
+corpus offline after the model prewarm. Preparation may take several minutes
+(ten-minute limit); missing models, unsafe ignore coverage, or failed preparation
+leave this optional discovery capability unavailable. Lifecycle hooks refresh it
+after commits/merges, and orchestrator startup also requests preparation for
+existing installations. Expensive preparation runs outside state/integration locks.
+
+Task agents discover candidates on the shared root with `--content all` for
+both `search` and `find-related`. Semble uses one cache slot per root: changing
+content modes replaces it. Resolve returned relative paths in the assigned
+worktree and verify there; task-added/deleted/diverged files require worktree
+text or symbol searches. Root results may lag integration.
+
+Availability requires a successful actual-corpus query within 30 seconds,
+not just model readiness or a started refresh. This is point-in-time readiness:
+later file changes, cache eviction, or external different-mode queries can make
+the next search cold again. Measure first-query latency on the prepared root;
+mocked tests do not establish a latency guarantee.
+
+Pairing SessionStart calls the engine's hidden `semble-ready` backend, sharing
+the preparation lock. Its 40-second provider timeout contains the 30-second
+offline query; a busy or failed probe omits Semble and preserves other context.
+Preparation waits for a live probe within the same ten-minute total budget.
+
 The `balanced` and `full` profiles install `bash-policy` and export
 `§BRAND_ENV_PREFIX§_ENABLE_BASH_POLICY=1`. Source that env file before
 `§BRAND_BINARY_NAME§ init` when the project should receive `.bash-policy.yaml`

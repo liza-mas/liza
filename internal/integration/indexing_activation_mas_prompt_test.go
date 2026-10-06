@@ -95,7 +95,9 @@ func TestIndexingActivationMASPromptsRenderEnabledMetadataFromRoleTargetRoots(t 
 				"Functional Clusters artifact: "+shellQuoteForIndexingActivationTest(functionalClustersArtifact),
 				"Use `~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md` for Functional Clusters command syntax, routing rules, and freshness caveats.",
 				"=== SEMBLE SEARCH ===",
-				shellQuoteForIndexingActivationTest(tt.targetRoot),
+				shellQuoteForIndexingActivationTest(projectRoot),
+				"--content all",
+				"assigned worktree",
 				"Use `~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md` for Semble command syntax, content modes, routing rules, and proof requirements.",
 			)
 			assertIndexingActivationContainsNone(t, prompt, append(tt.forbiddenPaths, otherLayoutScipIndex)...)

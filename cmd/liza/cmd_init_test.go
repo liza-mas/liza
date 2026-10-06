@@ -615,13 +615,17 @@ func TestInitDispatch_SembleEnabledFullInitThroughCobraHasNoDurableSurface(t *te
 		t.Fatalf("read fake Semble log: %v", err)
 	}
 	logText := string(logContent)
-	if got := strings.Count(logText, "__semble_prewarm__"); got != 2 {
-		t.Fatalf("Semble invocation count = %d, want prewarm and offline validation; log:\n%s", got, logText)
+	if got := strings.Count(logText, "__semble_prewarm__"); got != 3 {
+		t.Fatalf("Semble invocation count = %d, want model prewarm, offline validation, and actual corpus preparation; log:\n%s", got, logText)
 	}
 	for _, want := range []string{"search __semble_prewarm__", "--top-k 1", "--content code", "HF_HUB_OFFLINE=1"} {
 		if !strings.Contains(logText, want) {
 			t.Fatalf("fake Semble log missing %q:\n%s", want, logText)
 		}
+	}
+	corpusCommand := "search __semble_prewarm__ " + projectRoot + " --top-k 1 --content all\nHF_HUB_OFFLINE=1"
+	if !strings.Contains(logText, corpusCommand) || strings.Count(logText, "--content all") != 1 {
+		t.Fatalf("actual-root offline corpus preparation missing or repeated; log:\n%s", logText)
 	}
 
 	statePath := filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml")

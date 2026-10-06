@@ -1,18 +1,24 @@
 package pairingindex
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/filelock"
+	"github.com/liza-mas/liza/internal/semble"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // installRefreshFixture installs an index script that appends one line to
 // $LIZA_TEST_RUNS per run, and returns the repository and the runs file.
 func installRefreshFixture(t *testing.T, extra string) (repo, runs string) {
 	t.Helper()
+	t.Setenv(semble.EnvEnableSemble, "false")
 
 	repo = initGitRepo(t)
 	runs = filepath.Join(t.TempDir(), "runs.log")
@@ -27,6 +33,116 @@ func installRefreshFixture(t *testing.T, extra string) (repo, runs string) {
 	script := "#!/bin/sh\nset -eu\n" + extra + "printf 'run\\n' >> \"$LIZA_TEST_RUNS\"\n"
 	writeFile(t, filepath.Join(hooksDir, scriptName()), script, 0o755)
 	return repo, runs
+}
+
+func TestRefreshPreparesSembleCorpusAndKeepsFailuresIndependent(t *testing.T) {
+	for _, tt := range []struct {
+		name, sembleExit, scriptExtra string
+		wantError                     bool
+	}{
+		{"success", "0", "", false},
+		{"optional corpus failure", "1", "", false},
+		{"other index failure", "0", "exit 7\n", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, runs := installRefreshFixture(t, tt.scriptExtra)
+			t.Setenv(semble.EnvEnableSemble, "true")
+			if !semble.EnsureProjectRootIgnore(repo).Safe {
+				t.Fatal("root ignore safety failed")
+			}
+			bin := t.TempDir()
+			argsPath := filepath.Join(t.TempDir(), "semble-args")
+			t.Setenv("SEMBLE_TEST_ARGS", filepath.ToSlash(argsPath))
+			testhelpers.WriteShellStub(t, filepath.Join(bin, "semble"), "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$SEMBLE_TEST_ARGS\"\nprintf 'offline=%s\\n' \"$HF_HUB_OFFLINE\" >> \"$SEMBLE_TEST_ARGS\"\nprintf 'UNTRUSTED_CORPUS_OUTPUT\\n'\nexit "+tt.sembleExit+"\n")
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			var output bytes.Buffer
+			err := RunRefresh(RefreshOptions{RepoRoot: repo, Trigger: "merge", Echo: &output})
+			if (err != nil) != tt.wantError {
+				t.Fatalf("refresh error = %v, want error %v", err, tt.wantError)
+			}
+			args := readFile(t, argsPath)
+			want := "search\n__semble_prewarm__\n" + repo + "\n--top-k\n1\n--content\nall\noffline=1\n"
+			if args != want {
+				t.Fatalf("actual corpus command = %q, want %q", args, want)
+			}
+			if !tt.wantError && refreshRunCount(t, runs) != 1 {
+				t.Fatal("optional Semble failure blocked the index script")
+			}
+			if strings.Contains(output.String(), "UNTRUSTED_CORPUS_OUTPUT") {
+				t.Fatal("repository chunks leaked into refresh diagnostics")
+			}
+			if tt.sembleExit != "0" && !strings.Contains(output.String(), "semble repository: query failed") {
+				t.Fatalf("optional corpus failure missing from log: %s", output.String())
+			}
+		})
+	}
+}
+
+func TestRefreshWaitsForUnsuccessfulReadinessProbe(t *testing.T) {
+	repo, runs := installRefreshFixture(t, "")
+	t.Setenv(semble.EnvEnableSemble, "true")
+	if !semble.EnsureProjectRootIgnore(repo).Safe {
+		t.Fatal("root ignore safety failed")
+	}
+	bin := t.TempDir()
+	prepared := filepath.Join(t.TempDir(), "prepared")
+	t.Setenv("SEMBLE_TEST_PREPARED", filepath.ToSlash(prepared))
+	testhelpers.WriteShellStub(t, filepath.Join(bin, "semble"), "#!/bin/sh\nprintf ready > \"$SEMBLE_TEST_PREPARED\"\n")
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	started, release := make(chan struct{}), make(chan struct{})
+	probeDone := make(chan semble.ValidationResult, 1)
+	go func() {
+		probeDone <- semble.CheckRepositoryReadiness(semble.ValidationOptions{
+			TargetRoot: repo, Runner: func(semble.CommandPlan) (semble.CommandResult, error) {
+				close(started)
+				<-release
+				return semble.CommandResult{ExitCode: 1}, errors.New("changed corpus probe failed")
+			},
+		})
+	}()
+	<-started
+	refreshDone := make(chan error, 1)
+	go func() { refreshDone <- RunRefresh(RefreshOptions{RepoRoot: repo, Trigger: "merge"}) }()
+	paths := refreshPathsForTest(t, repo)
+	deadline := time.Now().Add(3 * time.Second)
+	// Observe request consumption while the unsuccessful probe still holds
+	// the corpus lock. Old code completes here without ever preparing it.
+	for {
+		_, requestErr := os.Stat(paths.request)
+		_, logErr := os.Stat(paths.log)
+		if os.IsNotExist(requestErr) && logErr == nil {
+			select {
+			case err := <-refreshDone:
+				close(release)
+				<-probeDone
+				t.Fatalf("refresh discarded preparation during readiness: %v", err)
+			case <-time.After(100 * time.Millisecond):
+				close(release)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			close(release)
+			<-probeDone
+			t.Fatal("refresh did not consume its request")
+		}
+		select {
+		case err := <-refreshDone:
+			close(release)
+			<-probeDone
+			t.Fatalf("refresh completed before readiness released: %v", err)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if result := <-probeDone; result.Ready {
+		t.Fatal("unsuccessful readiness advertised corpus")
+	}
+	if err := <-refreshDone; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(prepared); err != nil || refreshRunCount(t, runs) != 1 {
+		t.Fatalf("overlapping preparation never completed: %v", err)
+	}
 }
 
 func refreshRunCount(t *testing.T, runs string) int {

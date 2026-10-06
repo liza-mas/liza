@@ -165,6 +165,9 @@ Use `~/{{globalDirName}}/AGENT_TOOLS.md` for Functional Clusters command syntax,
 Semble is available for semantic repository search in this target root:
 {{ .SembleSearch.ShellTargetRoot }}
 
+Use `--content all` for every search and find-related query; other content modes replace the prepared cache.
+For task work, resolve each candidate's root-relative path under the assigned worktree and read it there. Use worktree text/symbol searches for added, deleted, or diverged files. Root results may lag integration and are only discovery hints.
+
 Use `~/{{globalDirName}}/AGENT_TOOLS.md` for Semble command syntax, content modes, routing rules, and proof requirements.
 {{- end }}
 {{- end -}}

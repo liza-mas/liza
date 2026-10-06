@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/gitbash"
 	"github.com/liza-mas/liza/internal/gitenv"
+	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/subprocess"
 )
 
@@ -186,6 +187,13 @@ func runIndexScript(repoRoot, commonDir, scriptPath string, paths refreshPaths, 
 			brand.RuntimeValues().BinaryName, commonDir, repoRoot)
 	}
 
+	// The coordinator owns preparation, including Semble-only installations.
+	// This is outside state/integration locks, and runs even if another index
+	// tool subsequently fails. A start request never establishes readiness.
+	corpus := semble.PrepareRepository(semble.ValidationOptions{TargetRoot: repoRoot})
+	if corpus.Diagnostic != (semble.Diagnostic{}) {
+		fmt.Fprintln(out, corpus.Diagnostic.Message)
+	}
 	cmd, err := indexScriptCommand(scriptPath)
 	if err != nil {
 		return err

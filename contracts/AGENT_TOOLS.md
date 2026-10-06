@@ -92,7 +92,7 @@ For any MCP-backed default row in the tables below, if the tool is unavailable i
 | Multi-file structural analysis | Stacklit module/dependency commands + `scip-search`/`ast-grep` as needed | `rg` + direct reads | Supplied indexes unavailable or insufficient |
 
 **Additional caveats:**
-- **Semble**: use only an explicit target root supplied by §BRAND_NAME_TITLE§ or current session context that says Semble is available. Do not infer target roots, initialize Semble, or treat semantic results as proof.
+- **Semble**: use only the supplied discovery root and `--content all` for search/find-related; other modes replace its prepared cache. For task work, resolve root-relative candidates under the assigned worktree and read there; use worktree text/symbol searches for added, deleted, or diverged files. Root results may lag integration and are not review evidence. Do not infer roots, initialize Semble, or treat results as proof.
 - **stacklit**: use only explicit `-i <path>` values supplied in the prompt or SessionStart context. Do not infer index locations, regenerate Stacklit indexes, run `stacklit view`, or mutate `stacklit-insights.json` / `.stacklitrc.json` from an agent task. Stacklit is for orientation and impact analysis; verify behavior against source files before editing.
 - **scip-search**: use only explicit `--index <path>` values supplied in the prompt or SessionStart context. Do not search for default SCIP indexes or rely on daemon/global/cache behavior.
 - **functional-clusters**: use only explicit `--clusters <path>` values supplied in the prompt or SessionStart context. Do not infer artifact locations, generate exports, run `functional-clusters build`, or treat cluster membership as ground truth. Functional clusters are advisory and may be stale; verify behavior against source files before editing.
@@ -122,9 +122,9 @@ stacklit get-hints -i <index-path>
 stacklit get-hot-files -i <index-path>
 functional-clusters list --clusters <clusters-path>
 functional-clusters explain --clusters <clusters-path> '<exact-member-symbol>'
-semble search "where is review submission validated?" <target-root>
-semble search "default CLI config" <target-root> --content config
-semble find-related <file_path> <line> <target-root>
+semble search "where is review submission validated?" <target-root> --content all
+semble search "default CLI config" <target-root> --content all
+semble find-related <file_path> <line> <target-root> --content all
 ```
 
 `scip-search --name` matches symbol substrings; `--symbol` matches exact SCIP symbols from prior results. `--location-only` is only valid with exact `--symbol` queries for references and implementations. Use `impact` first for pre-edit blast-radius checks, `graph` when both incoming and outgoing local context matter, and `references`, `callers`, or `callees` when only one direction is needed. `graph`, `callers`, `callees`, and `impact` are static SCIP-derived hints, not complete runtime call graphs. For large functions or Python indexes, graph/impact output may include local symbols, builtins, and type references; prefer exact `--symbol`, `--one-line`, and direct source verification. Supported SCIP languages are Go, Python, and TypeScript; implementation rows are language/indexer-dependent and may be absent for Python indexes. Semble `--content` accepts `code`, `docs`, `config`, and `all`; `code` is the default.
@@ -247,7 +247,7 @@ rtk git status
 rtk cargo test
 rtk npm run build
 rtk pytest -q
-rtk semble search "where is review submission validated?" <target-root>
+rtk semble search "where is review submission validated?" <target-root> --content all
 ```
 
 Temporary upstream bug workarounds, until rtk-ai/rtk#1922 and rtk-ai/rtk#925 merge:

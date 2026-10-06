@@ -3265,7 +3265,12 @@ func TestInitCommandWithConfig_SembleEnabledPrewarmsBeforeStateWrite(t *testing.
 			if _, err := os.Stat(filepath.Join(tmpDir, paths.ProjectDirName(), "state.yaml")); !os.IsNotExist(err) {
 				t.Fatalf("Semble runner observed state.yaml before returning: %v", err)
 			}
-			if len(plan.Env) == 0 {
+			if len(plan.Args) > 2 && plan.Args[2] == tmpDir {
+				if plan.Args[len(plan.Args)-1] != "all" || plan.Timeout != semble.RepositoryPreparationTimeout || !slices.Equal(plan.Env, []semble.EnvVar{{Name: "HF_HUB_OFFLINE", Value: "1"}}) {
+					t.Fatalf("repository preparation is not bounded/offline/all: %+v", plan)
+				}
+				calls = append(calls, "repository")
+			} else if len(plan.Env) == 0 {
 				calls = append(calls, "prewarm")
 			} else {
 				calls = append(calls, "offline")
@@ -3287,7 +3292,7 @@ func TestInitCommandWithConfig_SembleEnabledPrewarmsBeforeStateWrite(t *testing.
 	if strings.Contains(strings.ToLower(stderr), "semble") {
 		t.Fatalf("stderr = %q, want no Semble diagnostics", stderr)
 	}
-	wantCalls := []string{"lookup:semble", "prewarm", "lookup:semble", "offline"}
+	wantCalls := []string{"lookup:semble", "prewarm", "lookup:semble", "offline", "lookup:semble", "repository"}
 	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("Semble calls = %v, want %v", calls, wantCalls)
 	}
@@ -3346,6 +3351,19 @@ func TestInitCommandWithConfig_SembleReadinessDiagnosticsNonFatal(t *testing.T) 
 			wantStderr: "semble: execution failed",
 			notStderr:  "UNBOUNDED_TAIL",
 			wantRuns:   1,
+		},
+		{
+			name:     "repository preparation failure",
+			lookPath: func(name string) (string, error) { return "/tmp/fake-," + name, nil },
+			runner: func(plan semble.CommandPlan) (semble.CommandResult, error) {
+				if plan.Fixture.FileName != "" {
+					return semble.CommandResult{ExitCode: 0}, nil
+				}
+				return semble.CommandResult{ExitCode: 1, Stdout: "UNTRUSTED_CORPUS_OUTPUT"}, errors.New("UNTRUSTED_CORPUS_OUTPUT")
+			},
+			wantStderr: "semble repository: query failed",
+			notStderr:  "UNTRUSTED_CORPUS_OUTPUT",
+			wantRuns:   3,
 		},
 	}
 
@@ -4434,6 +4452,8 @@ func TestInitPairingCommand_SembleEnabledEnsuresProjectRootIgnore(t *testing.T) 
 	defer os.RemoveAll(gitDir)
 	setupGlobalLiza(t)
 	t.Setenv(semble.EnvEnableSemble, "true")
+	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	t.Setenv(scipsearch.EnvEnableScipSearch, "false")
 
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
@@ -4458,6 +4478,10 @@ func TestInitPairingCommand_SembleEnabledEnsuresProjectRootIgnore(t *testing.T) 
 		if !strings.Contains(ignore, want) {
 			t.Fatalf(".sembleignore missing %q:\n%s", want, ignore)
 		}
+	}
+	status, err := pairingindex.CheckActivation(pairingindex.InstallActivationOptions{RepoRoot: gitDir, EnableSemble: true})
+	if err != nil || status != pairingindex.ActivationCurrent {
+		t.Fatalf("Semble-only Pairing hooks = %s/%v", status, err)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/functionalclusters"
 	"github.com/liza-mas/liza/internal/scipsearch"
+	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
 )
 
@@ -19,6 +20,7 @@ type ActivationPlanOptions struct {
 	RepoRoot                 string
 	EnableStacklit           bool
 	EnableScip               bool
+	EnableSemble             bool
 	EnableFunctionalClusters bool
 	// ScipLanguages restricts SCIP planning to explicit languages. A listed
 	// language without an indexable root is then an error. Pairing passes
@@ -43,6 +45,7 @@ func MASActivationOptions(repoRoot string, scipLanguages []string) ActivationPla
 		RepoRoot:                 repoRoot,
 		EnableStacklit:           stacklit.RuntimeEnabled(),
 		EnableScip:               scipsearch.RuntimeEnabled(scipLanguages),
+		EnableSemble:             semble.RuntimeEnabled(),
 		EnableFunctionalClusters: functionalclusters.RuntimeEnabled(),
 		ScipLanguageFilter:       scipLanguages,
 	}
@@ -60,7 +63,7 @@ type ActivationPlan struct {
 
 // Active reports whether the plan refreshes any index.
 func (p ActivationPlan) Active() bool {
-	return p.Install.EnableStacklit || len(p.Install.ScipPlans) > 0
+	return p.Install.EnableStacklit || p.Install.EnableSemble || len(p.Install.ScipPlans) > 0
 }
 
 // PlanActivation resolves the repo-root index script inputs shared by Pairing
@@ -69,6 +72,7 @@ func PlanActivation(opts ActivationPlanOptions) (ActivationPlan, error) {
 	plan := ActivationPlan{Install: InstallActivationOptions{
 		RepoRoot:                 opts.RepoRoot,
 		EnableStacklit:           opts.EnableStacklit,
+		EnableSemble:             opts.EnableSemble,
 		EnableFunctionalClusters: opts.EnableFunctionalClusters && opts.EnableStacklit,
 	}}
 	if !opts.EnableScip {

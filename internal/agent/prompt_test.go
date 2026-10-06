@@ -614,7 +614,42 @@ func TestBuildPromptWithContextFunctionalClustersUsesTaskWorktree(t *testing.T) 
 	}
 }
 
-func TestBuildPromptWithContextSembleSearchUsesRoleWorktreeRoot(t *testing.T) {
+func TestD48TaskSembleDiscoveryUsesSharedRoot(t *testing.T) {
+	for _, role := range []string{"coder", "code-reviewer"} {
+		t.Run(role, func(t *testing.T) {
+			root := t.TempDir()
+			testhelpers.SetupPipelineConfig(t, root)
+			worktree := ".worktrees/task-1"
+			var target semble.PromptMetadataOptions
+			restore := replaceSemblePromptMetadataForTest(t, func(opts semble.PromptMetadataOptions) (semble.PromptMetadata, bool) {
+				target = opts
+				return fakeSemblePromptMetadata(opts.TargetRoot), true
+			})
+			defer restore()
+			state := &models.State{
+				Goal:   models.Goal{Description: "Test goal", SpecRef: "specs/goal.md"},
+				Tasks:  []models.Task{{ID: "task-1", Description: "Test task", Status: models.TaskStatusImplementing, DoneWhen: "Task complete", Worktree: &worktree}},
+				Config: models.Config{IntegrationBranch: "main"},
+			}
+			config := SupervisorConfig{Role: role, AgentID: role + "-1", ProjectRoot: root, SpecsDir: filepath.Join(root, "specs"), StatePath: filepath.Join(root, paths.ProjectDirName(), "state.yaml")}
+			prompt, err := testBuildPromptWithContext(t, state, config, "task-1", testResolver(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if target.Kind != semble.TargetKindProjectRoot || target.TargetRoot != root {
+				t.Fatalf("Semble discovery target = (%s, %q), want prepared project root %q", target.Kind, target.TargetRoot, root)
+			}
+			if !strings.Contains(prompt, "=== SEMBLE SEARCH ===") {
+				t.Fatal("prepared-root discovery missing from task prompt")
+			}
+			if !strings.Contains(prompt, "--content all") || !strings.Contains(prompt, "assigned worktree") {
+				t.Fatal("prompt must preserve the prepared corpus mode and require assigned worktree verification")
+			}
+		})
+	}
+}
+
+func TestBuildPromptWithContextSembleSearchUsesSharedProjectRoot(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		role string
@@ -625,16 +660,15 @@ func TestBuildPromptWithContextSembleSearchUsesRoleWorktreeRoot(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			projectRoot := t.TempDir()
 			testhelpers.SetupPipelineConfig(t, projectRoot)
-			taskWorktree := filepath.Join(projectRoot, ".worktrees", "task-1")
 			projectRootCommand := "semble search \"where is review submission validated?\" " + shellQuoteForTest(projectRoot)
 			worktree := ".worktrees/task-1"
 			var calls []semble.PromptMetadataOptions
 			restore := replaceSemblePromptMetadataForTest(t, func(opts semble.PromptMetadataOptions) (semble.PromptMetadata, bool) {
 				calls = append(calls, opts)
-				if opts.Kind != semble.TargetKindTaskWorktree {
+				if opts.Kind != semble.TargetKindProjectRoot {
 					return semble.PromptMetadata{}, false
 				}
-				if opts.TargetRoot != taskWorktree || opts.ExpectedWorktreeRoot != taskWorktree {
+				if opts.TargetRoot != projectRoot || opts.ExpectedWorktreeRoot != "" {
 					return semble.PromptMetadata{}, false
 				}
 				return fakeSemblePromptMetadata(opts.TargetRoot), true
@@ -676,8 +710,8 @@ func TestBuildPromptWithContextSembleSearchUsesRoleWorktreeRoot(t *testing.T) {
 			if !strings.Contains(prompt, "=== SEMBLE SEARCH ===") {
 				t.Fatalf("prompt missing Semble section")
 			}
-			if !strings.Contains(prompt, shellQuoteForTest(taskWorktree)) {
-				t.Fatalf("prompt missing shell-quoted role worktree Semble target root for %q", taskWorktree)
+			if !strings.Contains(prompt, shellQuoteForTest(projectRoot)) {
+				t.Fatalf("prompt missing shell-quoted shared Semble target root for %q", projectRoot)
 			}
 			if !strings.Contains(prompt, "Use `~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md` for Semble command syntax, content modes, routing rules, and proof requirements.") {
 				t.Fatalf("prompt missing AGENT_TOOLS Semble usage pointer")
@@ -741,7 +775,7 @@ func TestBuildPromptWithContextSembleSearchOmittedWhenPromptMetadataUnavailable(
 	}
 }
 
-func TestBuildPromptWithContextSembleSearchRequiresCompleteTaskIgnore(t *testing.T) {
+func TestBuildPromptWithContextSembleSearchRequiresCompleteProjectRootIgnore(t *testing.T) {
 	t.Setenv(semble.EnvEnableSemble, "true")
 	for _, tt := range []struct {
 		name       string
@@ -764,7 +798,7 @@ func TestBuildPromptWithContextSembleSearchRequiresCompleteTaskIgnore(t *testing
 				t.Fatalf("create task worktree: %v", err)
 			}
 			if tt.ignoreFile != "" {
-				if err := os.WriteFile(filepath.Join(taskWorktree, ".sembleignore"), []byte(tt.ignoreFile), 0o644); err != nil {
+				if err := os.WriteFile(filepath.Join(projectRoot, ".sembleignore"), []byte(tt.ignoreFile), 0o644); err != nil {
 					t.Fatalf("write .sembleignore: %v", err)
 				}
 			}

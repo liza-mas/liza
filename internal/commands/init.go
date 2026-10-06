@@ -183,11 +183,12 @@ func InitPairingCommand(params InitPairingParams) error {
 		runSembleInitPrewarm(projectRoot)
 	}
 
-	if projectRoot != "" && (stacklitEnabled || scipEnabled) {
+	if projectRoot != "" && (stacklitEnabled || scipEnabled || sembleEnabled) {
 		if err := activateProjectRootIndexing(pairingindex.ActivationPlanOptions{
 			RepoRoot:                 projectRoot,
 			EnableStacklit:           stacklitEnabled,
 			EnableScip:               scipEnabled,
+			EnableSemble:             sembleEnabled,
 			EnableFunctionalClusters: functionalClustersEnabled,
 			ScipLanguages:            params.ScipSearch,
 			ScipPlanOverrides:        params.ScipSearchPlans,
@@ -753,6 +754,13 @@ func InitCommand(description string, specRef string, stdin io.Reader) error {
 }
 
 func runSembleInitPrewarm(projectRoot string) {
+	if !semble.RuntimeEnabled() {
+		return
+	}
+	if safety := semble.EnsureProjectRootIgnore(projectRoot); !safety.Safe {
+		writeSembleDiagnostic(safety.Diagnostic)
+		return
+	}
 	opts := semble.ValidationOptions{
 		TargetRoot: projectRoot,
 		LookPath:   initSembleLookPath,
@@ -772,6 +780,14 @@ func runSembleInitPrewarm(projectRoot string) {
 	offline := semble.CheckOfflineReadiness(opts)
 	if offline.Diagnostic != (semble.Diagnostic{}) {
 		writeSembleDiagnostic(offline.Diagnostic)
+		return
+	}
+	if !offline.Ready {
+		return
+	}
+	corpus := semble.PrepareRepository(opts)
+	if corpus.Diagnostic != (semble.Diagnostic{}) {
+		writeSembleDiagnostic(corpus.Diagnostic)
 	}
 }
 

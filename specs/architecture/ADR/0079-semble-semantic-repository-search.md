@@ -30,6 +30,38 @@ Semble is positioned as candidate discovery, not evidence. Agents must still ver
 
 Liza creates or verifies Semble-visible ignore rules so repository searches do not index `.liza/`, `.worktrees/`, generated indexes, runtime artifacts, or credential files. Generated task-worktree `.sembleignore` files are hidden from task diffs using the shared private-exclude helper used for other generated worktree artifacts.
 
+### Decision revision — 2026-10-05 (D-48)
+
+Task and reviewer semantic discovery now uses the safe project-root corpus.
+The original per-worktree targets required a cold build on every new task,
+while the model-fixture readiness check did not prepare any repository corpus.
+Init and the serialized lifecycle refresh coordinator prepare one `all` corpus
+offline, including Semble-only installations; orchestrator startup requests
+preparation for existing installations. Preparation is bounded to ten minutes
+and runs outside state/integration locks. Engine corpus queries share a
+cross-process lock separate from refresh coordination, so a busy readiness
+probe omits guidance instead of starting a competing build. Preparation waits
+for a live probe within its ten-minute budget, then uses the remaining time
+for its query. Pairing SessionStart uses the same engine probe via the hidden
+`semble-ready` backend; its 40-second provider budget contains the 30-second
+query and retains other startup context on optional failure.
+
+Every advertised search/find-related query uses `--content all`: the external
+cache is one slot per root with exact content-mode matching. A live actual-root
+query within 30 seconds is required before advertisement, across restarts and
+partial preparation failures. Its success is point-in-time evidence, not a
+guarantee against subsequent source/cache changes or external mode changes.
+
+The project root supplies candidate paths only. Agents resolve each root-relative
+candidate in their assigned worktree and read there; added, deleted, and diverged
+task files require worktree text/symbol searches. Review evidence and all edits
+stay tied to the candidate worktree. Strict opt-in, offline-model behavior,
+physical ignore coverage, and optional failure behavior remain required.
+
+This supersedes the worktree-root discovery choice above without changing
+worktree isolation for implementation or review. Cold/warm performance still
+requires representative measurements; tests establish routing/readiness behavior.
+
 ## Consequences
 
 Positive:

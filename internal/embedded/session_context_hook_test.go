@@ -511,8 +511,9 @@ func TestSessionContextHook_EmitsSembleWhenEnabledSafeAndOfflineReady(t *testing
 	for _, want := range []string{
 		"Semble semantic search is available for this repo root: " + emitted(projectRoot),
 		"semble search \"where is review submission validated?\" '" + emitted(projectRoot) + "'",
-		"semble search \"where is task superseding specified?\" '" + emitted(projectRoot) + "' --content docs",
-		"Use --content with one of: code, docs, config, all; code is the default.",
+		"semble search \"where is task superseding specified?\" '" + emitted(projectRoot) + "' --content all",
+		"semble find-related <file_path> <line> '" + emitted(projectRoot) + "' --content all",
+		"Use --content all to reuse the prepared corpus; other modes replace it.",
 		"Semble returns candidate chunks, not proof",
 		"Do not use rg for broad-scope or common-word conceptual queries.",
 	} {
@@ -929,9 +930,17 @@ func writeFakeSembleTools(t *testing.T, validationSucceeds bool) string {
 	sembleScript := "#!/bin/sh\n" +
 		"test \"${HF_HUB_OFFLINE:-}\" = \"1\" || exit 17\n" +
 		"test \"$1\" = \"search\" || exit 18\n" +
+		"test \"$7\" = \"all\" || exit 19\n" +
+		"test -f \"$3/.sembleignore\" || exit 20\n" +
 		"exit " + exitCode + "\n"
 	if err := os.WriteFile(filepath.Join(binDir, "semble"), []byte(sembleScript), 0755); err != nil {
 		t.Fatalf("write fake semble: %v", err)
+	}
+	// Hook-only fixtures stub the CLI boundary; native corpus locking and the
+	// installed provider timeout are exercised by cmd/liza's integration test.
+	backend := "#!/bin/sh\ntest \"$1\" = semble-ready || exit 21\nHF_HUB_OFFLINE=1 exec semble search __semble_prewarm__ \"$2\" --top-k 1 --content all\n"
+	if err := os.WriteFile(filepath.Join(binDir, brand.BinaryName), []byte(backend), 0755); err != nil {
+		t.Fatalf("write fake readiness backend: %v", err)
 	}
 	return binDir
 }

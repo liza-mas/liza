@@ -119,21 +119,10 @@ branded_env_gate() {
 }
 
 semble_offline_ready() {
-  local tmpdir status
-
-  command -v semble >/dev/null 2>&1 || return 1
-  command -v timeout >/dev/null 2>&1 || return 1
-
-  tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/__BRAND_BINARY_NAME__-semble.XXXXXX") || return 1
-  if ! printf 'def brand_semble_prewarm(): pass\n' >"$tmpdir/prewarm.py"; then
-    rm -rf "$tmpdir"
-    return 1
-  fi
-
-  HF_HUB_OFFLINE=1 timeout 30s semble search "__brand_semble_prewarm__" "$tmpdir" --top-k 1 --content code >/dev/null 2>&1
-  status=$?
-  rm -rf "$tmpdir"
-  return "$status"
+  command -v __BRAND_BINARY_NAME__ >/dev/null 2>&1 || return 1
+  # The engine bounds the offline query to 30 seconds and shares preparation's
+  # corpus lock. A busy/failed probe omits only Semble, preserving other context.
+  __BRAND_BINARY_NAME__ semble-ready "$project_dir" >/dev/null 2>&1
 }
 
 root_sembleignore_safe() {
@@ -364,12 +353,12 @@ fi
 if [[ "$semble_enabled" == "true" ]]; then
   context+="
  // Semble semantic search is available for this repo root: $project_dir
- // semble search \"where is review submission validated?\" $shell_project_dir
- // semble search \"agent CLI defaults\" $shell_project_dir --top-k 10
- // semble search \"where is task superseding specified?\" $shell_project_dir --content docs
- // semble search \"default CLI config\" $shell_project_dir --content config
- // semble find-related <file_path> <line> $shell_project_dir
- // Use --content with one of: code, docs, config, all; code is the default.
+ // semble search \"where is review submission validated?\" $shell_project_dir --content all
+ // semble search \"agent CLI defaults\" $shell_project_dir --top-k 10 --content all
+ // semble search \"where is task superseding specified?\" $shell_project_dir --content all
+ // semble search \"default CLI config\" $shell_project_dir --content all
+ // semble find-related <file_path> <line> $shell_project_dir --content all
+ // Use --content all to reuse the prepared corpus; other modes replace it.
  // Semble returns candidate chunks, not proof; verify source files before editing.
  // Do not use rg for broad-scope or common-word conceptual queries."
 fi

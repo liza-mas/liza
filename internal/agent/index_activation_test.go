@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/scipsearch"
+	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -30,7 +33,56 @@ func newIndexActivationTestProject(t *testing.T) (string, func()) {
 	t.Setenv(stacklit.EnvEnableStacklit, "false")
 	t.Setenv(scipsearch.EnvEnableScipSearch, "false")
 	t.Setenv(functionalclusters.EnvEnableFunctionalClusters, "false")
+	t.Setenv(semble.EnvEnableSemble, "false")
 	return projectRoot, func() { ensureProjectRootIndexActivation(bb, projectRoot) }
+}
+
+func TestSembleStartupRequestsPreparationOnMissingAndCurrentInstallations(t *testing.T) {
+	for _, current := range []bool{false, true} {
+		t.Run(fmt.Sprint(current), func(t *testing.T) {
+			root, ensure := newIndexActivationTestProject(t)
+			t.Setenv(semble.EnvEnableSemble, "true")
+			plan, err := pairingindex.PlanActivation(pairingindex.MASActivationOptions(root, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if current {
+				if _, err := pairingindex.InstallActivation(plan.Install); err != nil {
+					t.Fatal(err)
+				}
+			}
+			original := startProjectRootIndexRefresh
+			t.Cleanup(func() { startProjectRootIndexRefresh = original })
+			calls := 0
+			startProjectRootIndexRefresh = func(target, trigger string) error {
+				calls++
+				if target != root || trigger != "startup" {
+					t.Fatalf("refresh target/trigger = %q/%q", target, trigger)
+				}
+				return nil
+			}
+			ensure()
+			if calls != 1 || !semble.ValidateTargetSafety(semble.TargetSafetyOptions{Kind: semble.TargetKindProjectRoot, TargetRoot: root}).Safe {
+				t.Fatalf("startup requests = %d or root unsafe", calls)
+			}
+			if status, err := pairingindex.CheckActivation(plan.Install); err != nil || status != pairingindex.ActivationCurrent {
+				t.Fatalf("startup activation = %s/%v", status, err)
+			}
+		})
+	}
+}
+
+func TestSembleStartupPreparationFailureIsOptionalAndAlerted(t *testing.T) {
+	root, ensure := newIndexActivationTestProject(t)
+	t.Setenv(semble.EnvEnableSemble, "true")
+	original := startProjectRootIndexRefresh
+	t.Cleanup(func() { startProjectRootIndexRefresh = original })
+	startProjectRootIndexRefresh = func(string, string) error { return errors.New("cannot start preparation") }
+	ensure()
+	log, err := os.ReadFile(paths.New(root).AlertsLogPath())
+	if err != nil || !strings.Contains(string(log), "cannot start preparation") {
+		t.Fatalf("optional preparation failure not alerted: %s / %v", log, err)
+	}
 }
 
 func TestEnsureProjectRootIndexActivationInstallsMissingHooks(t *testing.T) {

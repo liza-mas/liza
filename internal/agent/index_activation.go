@@ -8,7 +8,10 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/semble"
 )
+
+var startProjectRootIndexRefresh = pairingindex.StartRefresh
 
 // ensureProjectRootIndexActivation installs or updates the lifecycle hooks
 // that refresh project-root indexes when they are missing or no longer match
@@ -42,14 +45,25 @@ func ensureProjectRootIndexActivation(bb *db.Blackboard, projectRoot string) {
 		alertIndexActivationFailure(projectRoot, err)
 		return
 	}
-	if status == pairingindex.ActivationCurrent {
-		return
+	if status != pairingindex.ActivationCurrent {
+		if _, err := pairingindex.InstallActivation(plan.Install); err != nil {
+			alertIndexActivationFailure(projectRoot, err)
+			return
+		}
+		logger.Info("Repaired project-root index hooks", "previous_status", string(status))
 	}
-	if _, err := pairingindex.InstallActivation(plan.Install); err != nil {
-		alertIndexActivationFailure(projectRoot, err)
-		return
+	if plan.Install.EnableSemble {
+		safety := semble.EnsureProjectRootIgnore(projectRoot)
+		if !safety.Safe {
+			alertIndexActivationFailure(projectRoot, fmt.Errorf("%s", safety.Diagnostic.Message))
+			return
+		}
+		// Existing installations also need an initial corpus preparation after
+		// upgrade/cache loss; prompt metadata still verifies actual readiness.
+		if err := startProjectRootIndexRefresh(projectRoot, "startup"); err != nil {
+			alertIndexActivationFailure(projectRoot, err)
+		}
 	}
-	logger.Info("Repaired project-root index hooks", "previous_status", string(status))
 }
 
 func alertIndexActivationFailure(projectRoot string, err error) {

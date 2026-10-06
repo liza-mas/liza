@@ -71,11 +71,13 @@ type InstallHooksOptions struct {
 }
 
 // InstallActivationOptions configures the combined pairing index activation hook
-// setup for Stacklit and SCIP project-root refresh.
+// setup for project-root refresh, including Semble-only installations.
 type InstallActivationOptions struct {
-	RepoRoot                 string
-	Hooks                    []string
-	EnableStacklit           bool
+	RepoRoot       string
+	Hooks          []string
+	EnableStacklit bool
+	// Semble preparation runs in the Go coordinator under its runtime gate.
+	EnableSemble             bool
 	EnableFunctionalClusters bool
 	ScipPlans                []scipsearch.LanguageAggregatePlan
 }
@@ -1098,7 +1100,8 @@ if [ ! -x "$script" ]; then
 fi
 
 cd "$repo_root"
-if [ "$hook_name" = "post-commit" ]; then
+semble_gate=$(printf '%%s' "${%s-${LIZA_ENABLE_SEMBLE:-}}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+if [ "$hook_name" = "post-commit" ] && [ "$semble_gate" != "1" ] && [ "$semble_gate" != "true" ]; then
 	# Inspect root commits and every merge parent. Disabling rename detection
 	# keeps code renamed to documentation visible as a code deletion.
 	# --quiet does not reliably report merge differences. Check the path list;
@@ -1123,7 +1126,7 @@ if [ -z "$index_binary" ]; then
 	exit 0
 fi
 exec "$index_binary" %s --trigger "$hook_name"
-`, ManagedHookMarker, hookNameEnvVar, hookNameEnvVar, scriptName(),
+`, ManagedHookMarker, hookNameEnvVar, hookNameEnvVar, scriptName(), brand.EnvName("ENABLE_SEMBLE"),
 		indexBinaryAssignment, shellQuote(indexBinary),
 		shellWord(brand.RuntimeValues().BinaryName),
 		hookDispatcherName(), brand.RuntimeValues().BinaryName,

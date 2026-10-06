@@ -71,7 +71,7 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 		toBasePromptScipSearchIndexes(data.ScipIndexes),
 		toBasePromptStacklitIndexes(data.StacklitIndexes),
 		toBasePromptFunctionalClusterIndexes(data.FunctionalClusters),
-		availablePromptSembleSearchMetadata(data.Worktree, semble.TargetKindTaskWorktree),
+		availablePromptSembleSearchMetadata(config.ProjectRoot, semble.TargetKindProjectRoot),
 	))
 	if err != nil {
 		return "", fmt.Errorf("building base prompt: %w", err)

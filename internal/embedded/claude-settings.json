@@ -5,7 +5,7 @@
         "hooks": [
           {
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-context.sh\"",
-            "timeout": 5,
+            "timeout": 40,
             "type": "command"
           }
         ]

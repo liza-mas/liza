@@ -13,6 +13,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/scipsearch"
+	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -244,11 +245,15 @@ func TestManagedHookDispatcherPostCommitChangeFilter(t *testing.T) {
 		merge           bool
 		laterParentCode bool
 		wrapper         bool
+		sembleGate      string
 		wantRun         bool
 	}{
 		{name: "empty", before: []string{"main.py"}},
 		{name: "root empty", root: true},
 		{name: "documentation", before: []string{"main.py"}, changed: []string{"README.md", "docs/guide.rst", "docs/guide.adoc", "docs/UPPER.MD", "docs/spaces in name.md"}},
+		{name: "Semble documentation", changed: []string{"README.md"}, sembleGate: "1", wantRun: true},
+		{name: "Semble padded mixed-case gate", changed: []string{"guide.md"}, sembleGate: " TrUe ", wantRun: true},
+		{name: "Semble disabled documentation", changed: []string{"guide.md"}, sembleGate: "false"},
 		{name: "code planning artifacts", before: []string{"main.py"}, changed: []string{"specs/plans/goal/task.md", "specs/plans/goal/task-output.json"}},
 		{name: "epic planning artifacts", before: []string{"main.py"}, changed: []string{"specs/epics/goal/task.md", "specs/epics/goal/task-output.json"}},
 		{name: "architecture planning artifacts", before: []string{"main.py"}, changed: []string{"specs/arch-plan/goal/task.md", "specs/arch-plan/goal/task-output.json"}},
@@ -284,6 +289,7 @@ func TestManagedHookDispatcherPostCommitChangeFilter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(semble.EnvEnableSemble, tc.sembleGate)
 			repo := initGitRepo(t)
 			runGit(t, repo, "config", "user.email", "test@example.invalid")
 			runGit(t, repo, "config", "user.name", "Index Hook Test")

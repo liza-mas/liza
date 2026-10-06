@@ -8,7 +8,27 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/scipsearch"
+	"github.com/liza-mas/liza/internal/semble"
+	"github.com/liza-mas/liza/internal/stacklit"
 )
+
+func TestD48SembleOnlyMASActivationInstallsLifecycleRefresh(t *testing.T) {
+	t.Setenv(semble.EnvEnableSemble, "true")
+	t.Setenv(stacklit.EnvEnableStacklit, "false")
+	t.Setenv(scipsearch.EnvEnableScipSearch, "false")
+	repo := initGitRepo(t)
+	plan, err := PlanActivation(MASActivationOptions(repo, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Active() {
+		t.Fatal("Semble-only activation is inactive, so corpus preparation cannot refresh after merges")
+	}
+	if _, err := InstallActivation(plan.Install); err != nil {
+		t.Fatal(err)
+	}
+	assertActivationStatus(t, plan.Install, ActivationCurrent)
+}
 
 func TestPlanActivationLanguageFilterKeepsConfiguredAndReportsUnindexable(t *testing.T) {
 	repo := initGitRepo(t)

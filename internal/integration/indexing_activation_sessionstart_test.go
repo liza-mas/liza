@@ -305,5 +305,12 @@ func writeIndexingActivationFakeSembleTools(t *testing.T, validationSucceeds boo
 	if err := os.Chmod(filepath.Join(binDir, "semble"), 0o755); err != nil {
 		t.Fatalf("Chmod(semble): %v", err)
 	}
+	// Stub the shipped hook's CLI boundary, never an ambient installed binary.
+	// Native readiness locking/timeout is exercised by cmd/liza's hook test.
+	backendPath := filepath.Join(binDir, brand.BinaryName)
+	writeIndexingActivationFile(t, backendPath, "#!/bin/sh\ntest \"$1\" = semble-ready || exit 21\nHF_HUB_OFFLINE=1 exec semble search __semble_prewarm__ \"$2\" --top-k 1 --content all\n")
+	if err := os.Chmod(backendPath, 0o755); err != nil {
+		t.Fatalf("Chmod(readiness backend): %v", err)
+	}
 	return binDir
 }

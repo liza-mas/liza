@@ -15,6 +15,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
+	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 var EnvEnableSemble = brand.EnvName("ENABLE_SEMBLE")
@@ -450,7 +451,7 @@ func ValidateTargetSafety(opts TargetSafetyOptions) TargetSafetyResult {
 }
 
 // BuildPromptMetadata returns prompt-safe Semble context only when activation,
-// target safety, and offline readiness all pass.
+// target safety, model readiness, and actual repository readiness all pass.
 func BuildPromptMetadata(opts PromptMetadataOptions) (PromptMetadata, bool) {
 	if !RuntimeEnabled() {
 		return PromptMetadata{}, false
@@ -471,6 +472,15 @@ func BuildPromptMetadata(opts PromptMetadataOptions) (PromptMetadata, bool) {
 		Fixture:    opts.Fixture,
 	})
 	if !readiness.Ready {
+		return PromptMetadata{}, false
+	}
+	corpus := CheckRepositoryReadiness(ValidationOptions{
+		TargetRoot: safety.TargetRoot,
+		LookPath:   opts.LookPath,
+		Runner:     opts.Runner,
+		Timeout:    opts.Timeout,
+	})
+	if !corpus.Ready {
 		return PromptMetadata{}, false
 	}
 
@@ -595,6 +605,10 @@ func readinessCacheKeyFor(planResult PlanResult) validationCacheKey {
 }
 
 func runCommandPlan(plan CommandPlan) (CommandResult, error) {
+	return runCommandPlanWithFiles(plan, nil)
+}
+
+func runCommandPlanWithFiles(plan CommandPlan, files []*os.File) (CommandResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), plan.Timeout)
 	defer cancel()
 
@@ -603,8 +617,10 @@ func runCommandPlan(plan CommandPlan) (CommandResult, error) {
 		name = plan.Name
 	}
 	cmd := exec.CommandContext(ctx, name, plan.Args...)
+	subprocess.ConfigureCancellation(cmd)
 	cmd.Dir = plan.Dir
 	cmd.Env = append(os.Environ(), envVars(plan.Env)...)
+	cmd.ExtraFiles = files
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -616,6 +632,9 @@ func runCommandPlan(plan CommandPlan) (CommandResult, error) {
 	}
 	if err == nil {
 		result.ExitCode = 0
+	}
+	if ctx.Err() != nil {
+		err = ctx.Err()
 	}
 	return result, err
 }
