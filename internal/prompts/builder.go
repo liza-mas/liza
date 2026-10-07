@@ -3,6 +3,7 @@ package prompts
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -12,14 +13,15 @@ import (
 
 // BasePromptConfig contains configuration for building the base prompt
 type BasePromptConfig struct {
-	Role        string
-	AgentID     string
-	TaskID      string // empty for orchestrator
-	SpecsDir    string
-	ProjectRoot string
-	StatePath   string
-	GoalDesc    string
-	GoalSpecRef string
+	Role             string
+	AgentID          string
+	TaskID           string // empty for orchestrator
+	SpecsDir         string
+	ProjectRoot      string
+	StatePath        string
+	GoalDesc         string
+	GoalSpecRef      string
+	HasMandatoryDocs bool
 
 	ScipSearchIndexes  []ScipSearchIndex
 	StacklitIndexes    []StacklitIndex
@@ -510,6 +512,23 @@ func hasIntegrationTaskInSprint(state *models.State) bool {
 // control ({{- -}} trimming), which is fragile and linter-hostile. Each non-empty
 // block is TrimSpace'd and joined with a blank-line separator.
 func BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error) {
+	if data != nil && len(data.MandatoryDocs) > 0 {
+		// Mandatory reads cannot be omitted or delayed by context-section configuration.
+		root := data.ProjectRoot
+		if data.Worktree != "" {
+			root = data.Worktree
+		}
+		copy := *data
+		copy.MandatoryDocs = make([]string, len(data.MandatoryDocs))
+		for i, doc := range data.MandatoryDocs {
+			if !filepath.IsAbs(doc) {
+				doc = filepath.Join(root, doc)
+			}
+			copy.MandatoryDocs[i] = doc
+		}
+		data = &copy
+		sectionNames = append([]string{"mandatory-docs"}, sectionNames...)
+	}
 	missingReviewBoundary := data != nil && data.RoleType == "reviewer" && data.ReviewCommit == ""
 	if missingReviewBoundary {
 		// Keep the absent boundary explicit without changing the caller's task data.
@@ -518,7 +537,14 @@ func BuildRoleContext(role string, sectionNames []string, data *RoleContextData)
 		data = &copy
 	}
 	var blocks []string
+	mandatoryDocsRendered := false
 	for _, section := range sectionNames {
+		if section == "mandatory-docs" {
+			if mandatoryDocsRendered {
+				continue
+			}
+			mandatoryDocsRendered = true
+		}
 		var sectionBuf bytes.Buffer
 		if err := blockTmpl.ExecuteTemplate(&sectionBuf, section, data); err != nil {
 			return "", fmt.Errorf("block template %q for role %q: %w", section, role, err)

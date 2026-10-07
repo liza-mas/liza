@@ -1051,3 +1051,21 @@ See [ADR-0178](specs/architecture/ADR/0178-claude-capture-preserves-permissions.
 **Payback trigger:** Claude exposes a supported execution-output boundary that
 keeps original-command permissions intact and covers failed/background output;
 enable it only after installed-client permission-parity and lifecycle tests pass.
+
+## Role mandatory-document read enforcement
+
+**What:** Role `mandatory-docs` now supply explicit startup reading instructions
+and resolved paths, but actual reads are not mechanically enforced. Reviewers
+read the doer's worktree version of a document, including its own edits, as with
+existing task spec references.
+
+**Why deferred:** A consistent gate needs trusted per-session transport of the
+resolved role list and root, full-read tracking in the separate Bash and pi
+hooks, and a policy for providers without those hook surfaces. A provider-specific
+gate would leave the same requirement unenforced elsewhere. The instruction fix
+addresses issue #170's omission and placement without claiming guaranteed reads.
+
+**Payback trigger:** Any observed skipped configured document after this fix, or
+introduction of a common provider-independent initialization/read gate. At that
+point design the list transport, read-event coverage and reviewed-document trust
+boundary together.

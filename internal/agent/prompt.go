@@ -34,7 +34,7 @@ var (
 )
 
 // baseConfigFrom constructs the BasePromptConfig shared by all roles.
-func baseConfigFrom(state *models.State, config SupervisorConfig, taskID string, scipIndexes []prompts.ScipSearchIndex, stacklitIndexes []prompts.StacklitIndex, functionalClusterIndexes []prompts.FunctionalClusterIndex, sembleSearch prompts.SembleSearchMetadata) prompts.BasePromptConfig {
+func baseConfigFrom(state *models.State, config SupervisorConfig, taskID string, scipIndexes []prompts.ScipSearchIndex, stacklitIndexes []prompts.StacklitIndex, functionalClusterIndexes []prompts.FunctionalClusterIndex, sembleSearch prompts.SembleSearchMetadata, hasMandatoryDocs bool) prompts.BasePromptConfig {
 	return prompts.BasePromptConfig{
 		Role:               config.Role,
 		AgentID:            config.AgentID,
@@ -44,6 +44,7 @@ func baseConfigFrom(state *models.State, config SupervisorConfig, taskID string,
 		StatePath:          config.StatePath,
 		GoalDesc:           state.Goal.Description,
 		GoalSpecRef:        state.Goal.SpecRef,
+		HasMandatoryDocs:   hasMandatoryDocs,
 		ScipSearchIndexes:  scipIndexes,
 		StacklitIndexes:    stacklitIndexes,
 		FunctionalClusters: functionalClusterIndexes,
@@ -72,6 +73,7 @@ func buildPromptWithContext(state *models.State, config SupervisorConfig, taskID
 		toBasePromptStacklitIndexes(data.StacklitIndexes),
 		toBasePromptFunctionalClusterIndexes(data.FunctionalClusters),
 		availablePromptSembleSearchMetadata(config.ProjectRoot, semble.TargetKindProjectRoot),
+		len(data.MandatoryDocs) > 0,
 	))
 	if err != nil {
 		return "", fmt.Errorf("building base prompt: %w", err)
@@ -120,6 +122,7 @@ func buildOrchestratorPromptForWake(state *models.State, config SupervisorConfig
 		toBasePromptStacklitIndexes(data.StacklitIndexes),
 		toBasePromptFunctionalClusterIndexes(data.FunctionalClusters),
 		availablePromptSembleSearchMetadata(config.ProjectRoot, semble.TargetKindProjectRoot),
+		len(data.MandatoryDocs) > 0,
 	))
 	if err != nil {
 		return "", fmt.Errorf("building base prompt: %w", err)

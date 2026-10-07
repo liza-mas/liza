@@ -106,6 +106,18 @@ Depending on selected providers and options, `§BRAND_BINARY_NAME§ init` writes
 - standalone `.bash-policy.yaml` defaults and selected provider hooks when
   `§BRAND_ENV_PREFIX§_ENABLE_BASH_POLICY` is enabled
 
+### Role mandatory documents
+
+Set `roles.<role>.mandatory-docs` in the pipeline to a list of files the role
+must read in full every session before role work. Populated lists render ahead
+of role instructions, independently of `context-sections`; empty lists add no
+read step. Relative paths resolve against the assigned task worktree, otherwise
+the project root. Absolute paths are preserved. An unreadable file requires
+stopping and reporting its path and error through the role's failure protocol.
+Reviewers read the doer's worktree version, including edits to the mandatory
+document itself, consistent with task spec references. These instructions do
+not mechanically enforce reads.
+
 ### Task ID slugs
 
 Task IDs use compact, configurable segments so complete IDs remain readable in

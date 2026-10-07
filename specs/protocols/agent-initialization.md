@@ -80,7 +80,15 @@ agents:
    - Planner: task-lifecycle.md, circuit-breaker.md
    - Coder: task-lifecycle.md, worktree-management.md
    - Code Reviewer: task-lifecycle.md, worktree-management.md
+4. Read every role mandatory-docs file in full before role work, every session.
 ```
+
+Populated role document lists render ahead of role instructions even when
+`context-sections` omits `mandatory-docs`. Relative paths resolve against the
+task worktree when assigned, otherwise the project root; absolute paths are
+preserved. If a listed file cannot be read, stop and report its path and error
+through the role's failure protocol. Never silently skip it. Empty lists add no
+document block or startup read step.
 
 ### Phase 3: State Assessment
 

@@ -120,7 +120,12 @@ FIRST ACTIONS:
 {{- else}}
    Run `{{binaryName}} get goal.spec_ref --json`, then read the returned ref from the project root.
 {{- end}}
+{{- if .HasMandatoryDocs}}
+4. Read every file listed under MANDATORY DOCUMENTS below in full before role work.
+5. Execute your role's protocol
+{{- else}}
 4. Execute your role's protocol
+{{- end}}
 
 {{- if .ScipSearchIndexes }}
 
