@@ -966,15 +966,17 @@ func TestReplaceTask_PostCommitCleanup(t *testing.T) {
 
 func TestReplaceTask_SamePairReplacementKeepsParentLineage(t *testing.T) {
 	parentID := "planning-parent"
+	archRef := "README.md#Scope 0"
 	for _, tc := range []struct {
 		name            string
 		lineage         func(source *models.Task)
 		replacementPair string
 		wantParent      *string
 		wantParents     []string
+		wantArch        string
 	}{
-		{name: "singular parent", lineage: func(source *models.Task) { source.ParentTask = &parentID }, replacementPair: "coding-pair", wantParent: &parentID},
-		{name: "plural parents", lineage: func(source *models.Task) { source.ParentTasks = []string{parentID, "other-parent"} }, replacementPair: "coding-pair", wantParents: []string{parentID, "other-parent"}},
+		{name: "singular parent", lineage: func(source *models.Task) { source.ParentTask = &parentID }, replacementPair: "coding-pair", wantParent: &parentID, wantArch: archRef},
+		{name: "plural parents", lineage: func(source *models.Task) { source.ParentTasks = []string{parentID, "other-parent"} }, replacementPair: "coding-pair", wantParents: []string{parentID, "other-parent"}, wantArch: archRef},
 		{name: "cross-pair replacement", lineage: func(source *models.Task) { source.ParentTasks = []string{parentID} }, replacementPair: "code-planning-pair"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -986,6 +988,7 @@ func TestReplaceTask_SamePairReplacementKeepsParentLineage(t *testing.T) {
 				}
 				source := s.FindTask("source")
 				source.RolePair = "coding-pair"
+				source.ArchRef = archRef
 				tc.lineage(source)
 				f.opts.ExpectedTransition = models.TaskTransitionID(source)
 				return nil
@@ -1000,9 +1003,13 @@ func TestReplaceTask_SamePairReplacementKeepsParentLineage(t *testing.T) {
 			}
 
 			// THEN only a same-pair replacement continues the parent lineage
+			// and the architecture scope the payload cannot restate (D-67)
 			replacement := replacementState(t, f).FindTask("replacement")
 			if !reflect.DeepEqual(replacement.ParentTask, tc.wantParent) || !slices.Equal(replacement.ParentTasks, tc.wantParents) {
 				t.Fatalf("replacement lineage = %v / %v, want %v / %v", replacement.ParentTask, replacement.ParentTasks, tc.wantParent, tc.wantParents)
+			}
+			if replacement.ArchRef != tc.wantArch {
+				t.Fatalf("replacement arch_ref = %q, want %q", replacement.ArchRef, tc.wantArch)
 			}
 			if replacement.EpicRef != "" {
 				t.Fatalf("replacement inherited epic_ref %q", replacement.EpicRef)

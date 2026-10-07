@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -861,4 +863,65 @@ func TestReplanRefusesCopyingStaleTaskLevelDeclaration(t *testing.T) {
 	before := replacementBytes(t, statePath)
 	_, err := Replan(root, &ReplanInput{TaskID: "consumer", ChangedBy: "human"})
 	requireProviderOpsAtomicRefusal(t, statePath, before, err, "provider_dependencies[0] names retired provider", "replan would copy that stale declaration")
+}
+
+// replaceCodePlanForTest replaces source with a same-pair code plan as the
+// orchestrator does; deps become the replacement's depends_on.
+func replaceCodePlanForTest(root, statePath, source, replacement, changed string, deps ...string) error {
+	state, err := db.New(statePath).Read()
+	if err != nil {
+		return err
+	}
+	input := ReplaceTaskInput{SourceTaskID: source, Reason: "reviewed re-authoring", Changed: changed,
+		Replacement: AddTaskInput{ID: replacement, RolePair: "code-planning-pair", Description: "re-authored code plan", SpecRef: "README.md", DoneWhen: "plan reviewed", Scope: "contract", Priority: 1, DependsOn: deps}}
+	_, err = ReplaceTaskWithAuthorityAndOptions(root, input,
+		models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration},
+		LifecycleRequestOptions{RequestID: "replace-" + source, ExpectedTransition: models.TaskTransitionID(state.FindTask(source))})
+	return err
+}
+
+// D-67 (I-445 shape): replace-task is how D-65 re-authors a stale draft
+// consumer, and how a generated code plan is replaced. Each same-pair
+// replacement must keep the architecture scope the payload cannot restate.
+func TestReplaceTask_ReplacedCodePlanKeepsArchRef_I445(t *testing.T) {
+	t.Parallel()
+	// GIVEN a generated code plan and an unstarted draft consumer declaring
+	// its provider's output 0, each carrying its architecture scope
+	provider, child := transitionedLineagePlan("provider")
+	child.ArchRef = "README.md#Scope 0"
+	reader := generatedDraftConsumer("provider") // reader, reader-cp-0
+	reader[1].ArchRef = "README.md#Scope 1"
+	root, statePath, _ := setupProviderOpsTest(t, append([]models.Task{provider, child}, reader...)...)
+
+	// WHEN the code plan is replaced
+	if err := replaceCodePlanForTest(root, statePath, "provider-cp-0", "provider-cp-0-r1", ""); err != nil {
+		t.Fatalf("replace-task of the code plan: %v", err)
+	}
+
+	// THEN the successor keeps the architecture scope
+	if got := mustReadTask(t, statePath, "provider-cp-0-r1").ArchRef; got != "README.md#Scope 0" {
+		t.Fatalf("replaced code plan arch_ref = %q, want README.md#Scope 0", got)
+	}
+	// AND the stale draft consumer is blocked for re-authoring (D-65)
+	if consumer := mustReadTask(t, statePath, "reader-cp-0"); consumer.Status != models.TaskStatusBlocked {
+		t.Fatalf("stale draft consumer status = %s, want BLOCKED", consumer.Status)
+	}
+
+	// WHEN the blocked consumer is re-authored by replace-task, ordered after
+	// the successor without the stale typed declaration
+	if err := replaceCodePlanForTest(root, statePath, "reader-cp-0", "reader-cp-0-r1", "provider-cp-0 was replaced by provider-cp-0-r1", "provider-cp-0-r1"); err != nil {
+		t.Fatalf("replace-task of the stale consumer: %v", err)
+	}
+
+	// THEN the consumer's successor keeps its own architecture scope and edge
+	successor := mustReadTask(t, statePath, "reader-cp-0-r1")
+	if successor.ArchRef != "README.md#Scope 1" {
+		t.Fatalf("re-authored consumer arch_ref = %q, want README.md#Scope 1", successor.ArchRef)
+	}
+	if !slices.Equal(successor.DependsOn, []string{"provider-cp-0-r1"}) {
+		t.Fatalf("re-authored consumer depends_on = %v, want [provider-cp-0-r1]", successor.DependsOn)
+	}
+	if source := mustReadTask(t, statePath, "reader-cp-0"); source.Status != models.TaskStatusSuperseded {
+		t.Fatalf("stale consumer status = %s, want SUPERSEDED", source.Status)
+	}
 }

@@ -37,6 +37,14 @@ failure or a load-related cause; the validation record retains both outcomes.
 Retain complete output before further execution, identify the failing test,
 then qualify its cause against the reviewed change and unchanged baseline.
 
+**Recurrence (D-67 validation, 2026-10-07):** one `make test` run failed with
+its failing package cut from the captured tail, and RTK's single `make_test`
+tee log was overwritten by a later run. The next nine full runs passed (six
+consecutive, ~55s each). Run 1 was under heavy load (`internal/toolresult`
+39.5s vs 17-20s). The human accepted the limitation. Capturing every full
+run's complete output to a file closes this gap; it applies to the trigger
+above for any package.
+
 ## Status changes invisible to history-derived time in status
 
 **What:** `models.TimeInStatus` derives time in status from the most recent

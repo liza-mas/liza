@@ -268,15 +268,16 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 	return result, nil
 }
 
-// inheritReplacementLineage applies the replacement's parent lineage. A
+// inheritReplacementLineage applies the replacement's allocation lineage. A
 // same-pair replacement continues the source's allocation: keep its parent
-// lineage so fan-in cohorts and parent-scoped checks still see the work.
-// epic_ref is not inherited; the payload cannot restate it, and replacement is
-// how a broken one is dropped.
+// lineage so fan-in cohorts and parent-scoped checks still see the work, and
+// its arch_ref, the architecture scope the payload cannot restate (D-67).
+// epic_ref is not inherited; replacement is how a broken one is dropped.
 func inheritReplacementLineage(replacement, source *models.Task) {
 	if replacement.RolePair == source.RolePair {
 		replacement.ParentTask = cloneStringPtr(source.ParentTask)
 		replacement.ParentTasks = slices.Clone(source.ParentTasks)
+		replacement.ArchRef = source.ArchRef
 	}
 }
 

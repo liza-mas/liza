@@ -49,6 +49,10 @@ cohorts and parent-scoped checks therefore still see the work; acceptance
 adoption still requires an exact match with the parent's reviewed allocation,
 which creation already checks at the current integration commit
 ([Acceptance Evidence](acceptance-evidence.md)).
+It also inherits the source's `arch_ref`, the architecture scope the payload
+cannot restate. The inherited ref is validated like any other, so while the
+source's architecture artifact is missing, a same-pair replacement is refused
+naming that `arch_ref`; restore the artifact to proceed.
 `epic_ref` is not inherited, because the payload cannot restate it and
 replacement is how a broken one is dropped. A many-to-one cohort represents
 each SUPERSEDED member by its successors. Every supersession chain must stay
