@@ -129,14 +129,7 @@ func (s *orchestratorStrategy) PreWork(ctx context.Context, bb *db.Blackboard, c
 
 	planningReady := countMergedPlanningTasksWithOutput(state, detCtx.PlanHandoff) > 0
 	m2oReady := countReadyManyToOneCohorts(state, detCtx.ManyToOneTransitions) > 0
-	var planningAttemptedAt *time.Time
 	if planningReady || m2oReady {
-		// Stamped before the pass starts: a planner merged during it was not
-		// attempted, so it must stay eligible for the blocked-wake preference.
-		if planningReady {
-			now := time.Now().UTC()
-			planningAttemptedAt = &now
-		}
 		if err := handleAvailableTransitions(config.ProjectRoot); err != nil {
 			logger.Warn("Transition handler error", "error", err)
 		}
@@ -145,9 +138,8 @@ func (s *orchestratorStrategy) PreWork(ctx context.Context, bb *db.Blackboard, c
 	// Clear trigger even if transitions failed — the human approved, so don't
 	// re-checkpoint. Transition errors are logged; retry is manual.
 	if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(s *models.State) error {
-		s.Sprint.CheckpointTrigger = ""
-		if planningAttemptedAt != nil {
-			s.Sprint.Timeline.TransitionsAttemptedAt = planningAttemptedAt
+		if ops.SameResumedTransitionCheckpoint(s.Sprint, state.Sprint) {
+			s.Sprint.CheckpointTrigger = ""
 		}
 		return nil
 	}); err != nil {

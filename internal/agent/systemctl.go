@@ -97,6 +97,14 @@ func autoResumeAction(state *models.State) models.SprintStatus {
 	return ""
 }
 
+func logAutoResumeResult(result *ops.ResumeResult) {
+	if result.TransitionError != "" {
+		GetLogger().Warn("Auto-resume transition failures", "transitions_executed", result.TransitionsExecuted, "error", result.TransitionError)
+	} else {
+		GetLogger().Info("Auto-resume completed", "transitions_executed", result.TransitionsExecuted)
+	}
+}
+
 // waitWhilePaused blocks while system is PAUSED, CIRCUIT_BREAKER_TRIPPED,
 // or the current sprint checkpoint blocks this role type. Transition
 // checkpoints gate orchestrator transition execution, but doer/reviewer roles
@@ -153,11 +161,12 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 					// orchestrator is idle is seen here even though no
 					// orchestrator turn follows it.
 					maybeEmitCheckpointSummary(ctx, bb, projectRoot, roleType, state)
-					if state.Config.AutoResume {
+					if state.Config.AutoResume && (!models.IsTransitionCheckpointTrigger(state.Sprint.CheckpointTrigger) || roleType == "orchestrator") {
 						logger.Info("Auto-resuming from CHECKPOINT")
-						if _, resumeErr := resumeCheckpoint(projectRoot, "auto-resume"); resumeErr != nil {
+						if result, resumeErr := resumeCheckpoint(projectRoot, "auto-resume"); resumeErr != nil {
 							logger.Warn("Auto-resume failed, waiting for next poll", "error", resumeErr)
 						} else {
+							logAutoResumeResult(result)
 							continue // state changed, re-read immediately
 						}
 					}
@@ -167,6 +176,7 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 					if resumeErr != nil {
 						logger.Warn("Auto-resume from COMPLETED failed, waiting", "error", resumeErr)
 					} else {
+						logAutoResumeResult(result)
 						if completionErr := stopAfterCompletedResume(projectRoot, result, stopCompletedGoal); completionErr != nil {
 							if errors.Is(completionErr, errGoalComplete) {
 								logger.Info("Goal complete — clean integration evidence stopped the system.")

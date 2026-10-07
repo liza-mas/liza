@@ -489,6 +489,7 @@ func resume(projectRoot, changedBy string, origin resumeOrigin) (*ResumeResult, 
 	var resumedFrom string
 	var systemRemainsStopped bool
 	var advanceResult *AdvanceSprintResult
+	var resumedCheckpoint models.Sprint
 	runTransitionsAfterResume := false
 
 	resumeMutation := func(completionAuthorization *effectiveIntegrationCompletionAuthorization) error {
@@ -530,6 +531,7 @@ func resume(projectRoot, changedBy string, origin resumeOrigin) (*ResumeResult, 
 
 			wasTransitionCheckpoint := s.Sprint.Status == models.SprintStatusCheckpoint &&
 				models.IsTransitionCheckpointTrigger(s.Sprint.CheckpointTrigger)
+			resumedCheckpoint = s.Sprint
 
 			if stoppedWithActiveHalt {
 				resumedFrom = "active HALT response"
@@ -598,7 +600,7 @@ func resume(projectRoot, changedBy string, origin resumeOrigin) (*ResumeResult, 
 			for _, failure := range report.Failures {
 				failures = append(failures, failure.String())
 			}
-			if err := clearTransitionCheckpointTrigger(projectRoot); err != nil {
+			if err := clearTransitionCheckpointTrigger(projectRoot, resumedCheckpoint); err != nil {
 				failures = append(failures, err.Error())
 			}
 			transitionError = strings.Join(failures, "; ")
@@ -615,11 +617,22 @@ func resume(projectRoot, changedBy string, origin resumeOrigin) (*ResumeResult, 
 	}, nil
 }
 
-func clearTransitionCheckpointTrigger(projectRoot string) error {
+// SameResumedTransitionCheckpoint protects a newer checkpoint or sprint from
+// cleanup by an earlier resume/PreWork pass. Compare inside the write callback.
+func SameResumedTransitionCheckpoint(current, expected models.Sprint) bool {
+	if current.Status != models.SprintStatusInProgress || current.ID != expected.ID || current.Number != expected.Number ||
+		!models.IsTransitionCheckpointTrigger(expected.CheckpointTrigger) || current.CheckpointTrigger != expected.CheckpointTrigger {
+		return false
+	}
+	a, b := current.Timeline.CheckpointAt, expected.Timeline.CheckpointAt
+	return (a == nil && b == nil) || (a != nil && b != nil && a.Equal(*b))
+}
+
+func clearTransitionCheckpointTrigger(projectRoot string, expected models.Sprint) error {
 	statePath := paths.New(projectRoot).StatePath()
 	blackboard := db.For(statePath)
 	return blackboard.Modify(func(s *models.State) error {
-		if models.IsTransitionCheckpointTrigger(s.Sprint.CheckpointTrigger) {
+		if SameResumedTransitionCheckpoint(s.Sprint, expected) {
 			s.Sprint.CheckpointTrigger = ""
 		}
 		return nil

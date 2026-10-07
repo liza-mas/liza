@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	handoffFailureVersion = 1
-	handoffOutputRefusal  = "output_validation"
-	handoffInputRefusal   = "selective_inheritance"
+	handoffFailureVersion  = 1
+	handoffOutputRefusal   = "output_validation"
+	handoffInputRefusal    = "selective_inheritance"
+	handoffProviderRefusal = "provider_retirement"
 )
 
 // Only initial pure refusals use this type. Recovery and graph/configuration
@@ -46,7 +47,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 	if d.resolver == nil || !d.GatesTransition(task, failure.Transition) || failure.OutputIndex < 0 || failure.OutputIndex >= len(task.Output) {
 		return ""
 	}
-	if failure.Class != handoffOutputRefusal && failure.Class != handoffInputRefusal {
+	if failure.Class != handoffOutputRefusal && failure.Class != handoffInputRefusal && failure.Class != handoffProviderRefusal {
 		return ""
 	}
 	td, err := d.resolver.Transition(failure.Transition)
@@ -103,6 +104,20 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 		"transition": td, "output": task.Output, "depends_on": deps,
 		"resolved_target": resolved.targetRolePair, "target_status": resolved.targetStatus, "task_type": resolved.taskType,
 		"upstreams": upstreams, "incumbents": relevantKinds,
+	}
+	if failure.Class == handoffProviderRefusal {
+		originalID := task.Output[failure.OutputIndex].Supersedes
+		original := state.FindTask(originalID)
+		if original == nil {
+			return ""
+		}
+		barrier := ""
+		if err := rejectReferencedProviderRetirement(state, d.resolver, originalID); err != nil {
+			barrier = err.Error()
+		}
+		material["provider_retirement"] = map[string]any{
+			"original": originalID, "status": original.Status, "role_pair": original.RolePair, "barrier": barrier,
+		}
 	}
 	encoded, err := json.Marshal(material)
 	if err != nil {

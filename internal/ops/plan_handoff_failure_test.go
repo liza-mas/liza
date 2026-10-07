@@ -397,6 +397,10 @@ func TestPlanHandoffFailurePersistsWithoutPartialMutation(t *testing.T) {
 		t.Fatalf("failure observation published sequence %d, want %d", publishedSequence, before.MutationSequence+1)
 	}
 	after.MutationSequence = before.MutationSequence
+	if after.Sprint.Timeline.TransitionsAttemptedAt == nil {
+		t.Fatal("refused planning attempt was not accounted for")
+	}
+	after.Sprint.Timeline.TransitionsAttemptedAt = before.Sprint.Timeline.TransitionsAttemptedAt
 	plan := after.FindTask("failed-plan")
 	growth := len(plan.History) - len(before.FindTask(plan.ID).History)
 	if growth == 1 {
@@ -407,7 +411,7 @@ func TestPlanHandoffFailurePersistsWithoutPartialMutation(t *testing.T) {
 		plan.History = plan.History[:len(plan.History)-1]
 	}
 	if !reflect.DeepEqual(after, before) {
-		t.Fatal("refused transition changed state beyond the failure event")
+		t.Fatal("refused transition changed state beyond failure evidence and attempt accounting")
 	}
 	if growth != 1 {
 		t.Fatalf("history grew by %d, want one persisted failure event", growth)

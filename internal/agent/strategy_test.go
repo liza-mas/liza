@@ -1030,6 +1030,7 @@ func resumedPlanningPreWork(t *testing.T, trigger string, output []models.Output
 	t.Helper()
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
 	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: "test-generation"}
 
 	state := testhelpers.CreateValidState()
@@ -1038,6 +1039,7 @@ func resumedPlanningPreWork(t *testing.T, trigger string, output []models.Output
 	state.Agents[authority.ID] = models.Agent{Role: "orchestrator", Generation: authority.Generation}
 	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusMerged, time.Now().UTC())
 	task.RolePair = "code-planning-pair"
+	task.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckPassed, By: authority.ID, At: time.Now().UTC()}
 	task.Output = output
 	state.Sprint.Scope.Planned = []string{"task-1"}
 	state.Tasks = []models.Task{task}

@@ -156,6 +156,15 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 	}
 	if result.replacements != nil {
 		if applyErr := applyPlanReplacements(bb, candidate, taskID, resolver, result, now); applyErr != nil {
+			var refusal *handoffInputError
+			if errors.As(applyErr, &refusal) && refusal.class == handoffProviderRefusal {
+				// Only pre-existing holders have reproducible input material.
+				// A holder created by this discarded candidate is a graph fault.
+				originalID := plan.Output[refusal.index].Supersedes
+				if prior := rejectReferencedProviderRetirement(s, resolver, originalID); prior == nil || prior.Error() != refusal.Error() {
+					return discard(refusal.err)
+				}
+			}
 			return discard(applyErr)
 		}
 	}
@@ -194,6 +203,13 @@ func applyPlanReplacements(bb *db.Blackboard, s *models.State, planID string, re
 		child := s.FindTask(children[0])
 		if !replacementEligible(original, resolver) || child == nil || original.RolePair != child.RolePair {
 			return fmt.Errorf("output supersedes %s (%s, role pair %s), which cannot be retired by a %s replacement", originalID, original.Status, original.RolePair, rolePairOf(child))
+		}
+		if err := rejectReferencedProviderRetirement(s, resolver, originalID); err != nil {
+			for index, entry := range s.FindTask(planID).Output {
+				if entry.Supersedes == originalID {
+					return &handoffInputError{class: handoffProviderRefusal, index: index, err: err}
+				}
+			}
 		}
 		if original.Worktree != nil {
 			result.retiredWorktrees = append(result.retiredWorktrees, originalID)

@@ -119,12 +119,15 @@ human action is still missing — so no path overrides it.
 - If no orchestrator dispositions a plan, automatic expansion stalls for it;
   the `PLANNING_COMPLETE` wake re-fires, and an operator resume or `proceed`
   still expands it.
-- Initial gated per-subtask output validation and selective-inheritance
-  refusals persist `transition_failed` with a versioned material-input digest
-  under the attempt's state lock, before any child/output mutation. Equal inputs
+- Initial gated per-subtask output validation, selective-inheritance and
+  pre-existing live-provider retirement refusals persist `transition_failed`
+  with a versioned material-input digest under the attempt's state lock,
+  without publishing child/output mutations. Equal inputs
   suppress automatic retries and planning wakes across restarts; repaired
   source, selected upstream, transition or matching kind incumbent re-admits
-  the hand-off. History, heartbeat, sprint and unrelated work do not. Unknown
+  the hand-off. Releasing a provider holder changes its retirement barrier
+  material; holders introduced by a discarded candidate remain graph faults.
+  History, heartbeat, sprint and unrelated work do not. Unknown
   observations fail open; cycles, configuration/graph failures, crash recovery
   and live waits retain their existing handling.
 - A matching failure remains outstanding: status lists it as repair-required,

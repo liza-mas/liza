@@ -1227,6 +1227,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 	}
 
 	err = blackboard.Modify(func(s *models.State) error {
+		now = time.Now().UTC()
 		var pending []pendingTx
 		origIdx := 0
 
@@ -1366,11 +1367,17 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 		}
 
 		// Phase 3: Execute in sorted order
+		planningAttemptStamped := false
 		for _, p := range sorted {
 			task := s.FindTask(p.taskID)
 			// Earlier transitions in this pass may have repaired selected inputs.
 			if admission == AdmitReviewed && handoff.TransitionFailure(s, task, p.name) != nil {
 				continue
+			}
+			if !planningAttemptStamped && handoff.Pending(task) && !task.TransitionsExecuted[p.name] {
+				// Use the pass start, so plans arriving after this attempt stay fresh.
+				s.Sprint.Timeline.TransitionsAttemptedAt = &now
+				planningAttemptStamped = true
 			}
 			var originalDeps []string
 			var inheritedDeps inheritedDepSet
@@ -1396,7 +1403,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 			if err := proceedTransaction(blackboard, s, projectRoot, p.taskID, p.name, p.tDef, inheritedDeps, resolver, now, &result); err != nil {
 				var refusal *handoffInputError
 				if task != nil && errors.As(err, &refusal) && handoff.GatesTransition(task, p.name) && !task.TransitionsExecuted[p.name] {
-					// These two initial refusals precede all child/output mutations.
+					// Initial pure refusals leave no child/output mutations published.
 					// Undo the earlier source-dependency normalization as well.
 					task.DependsOn = originalDeps
 					if observation := handoff.recordFailure(s, task, p.name, refusal, now); observation != nil {

@@ -93,7 +93,7 @@ func TestCheckpointBlocksRole(t *testing.T) {
 	}
 }
 
-func TestWaitWhilePausedAutoResumePrecedesTransitionCheckpointRoleException(t *testing.T) {
+func TestWaitWhilePausedD63PeerPreservesTransitionCheckpoint(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	testhelpers.SetupPipelineConfig(t, tmpDir)
@@ -119,8 +119,8 @@ func TestWaitWhilePausedAutoResumePrecedesTransitionCheckpointRoleException(t *t
 	if err != nil {
 		t.Fatalf("read state: %v", err)
 	}
-	if updated.Sprint.Status != models.SprintStatusInProgress {
-		t.Fatalf("sprint status = %s, want %s", updated.Sprint.Status, models.SprintStatusInProgress)
+	if updated.Sprint.Status != models.SprintStatusCheckpoint || updated.Sprint.CheckpointTrigger != models.CheckpointTriggerPlanningComplete {
+		t.Fatalf("peer consumed transition checkpoint: %s, %q", updated.Sprint.Status, updated.Sprint.CheckpointTrigger)
 	}
 }
 
