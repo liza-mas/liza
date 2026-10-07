@@ -176,6 +176,9 @@ The reader supplies current canonical blocker metadata, the note from the
 assessment that carries the digest, that assessment's valid awaited set
 while it belongs to the current episode, and the episode's human ask. Missing/invalid
 baselines are actionable; otherwise a differing digest is actionable.
+The `BLOCKED_TASKS` prompt names exactly this actionable set (with ready
+state-lock holds) and scopes assessment to it; an empty set at render time
+instructs no assessment rather than a sweep of unchanged holds.
 
 The writer's material-change predicate is a **superset** of the reader's wake
 predicate: every durable change that wakes a blocked task is visible to the

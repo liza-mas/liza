@@ -52,6 +52,14 @@ type wakeTemplateData struct {
 	ResolvedFanOutTaskType     string
 	EntryPoints                []wakeEntryPointData // available entry-points for LLM classification
 	Integration                EffectiveIntegrationCompletion
+	// BlockedScope is the BLOCKED_TASKS wake's actionable set, computed from
+	// state. Nil only on the stateless RenderWakeInstructions path; an empty
+	// computed set means no assessment, never every BLOCKED task.
+	BlockedScope *blockedScopeData
+}
+
+type blockedScopeData struct {
+	TaskIDs []string
 }
 
 // EffectiveIntegrationCompletion is the read-only wake projection of the
@@ -459,6 +467,7 @@ func buildInstructionsForWakeTrigger(wakeTrigger, agentID string, wakeData wakeT
 		wakeData.AgentID = agentID
 		return executeTemplate("wake_initial_planning", wakeData)
 	case "BLOCKED_TASKS":
+		agentData.BlockedScope = wakeData.BlockedScope
 		return executeTemplate("wake_blocked_tasks", agentData)
 	case "HYPOTHESIS_EXHAUSTED":
 		return executeTemplate("wake_hypothesis_exhausted", agentData)

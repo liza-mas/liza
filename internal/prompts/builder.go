@@ -306,6 +306,9 @@ func renderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 		return "", "", fmt.Errorf("building wake template data: %w", wakeErr)
 	}
 	wakeData.Integration = integrationProjection
+	if wakeTrigger == "BLOCKED_TASKS" {
+		wakeData.BlockedScope = &blockedScopeData{TaskIDs: ops.ActionableBlockedTaskIDs(state)}
+	}
 
 	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeData, planningTasks, unseenNotes)
 	if instrErr != nil {

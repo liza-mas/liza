@@ -10,10 +10,17 @@ import (
 )
 
 // CountActionableBlockedTasks counts BLOCKED tasks that the orchestrator should
-// wake up for. A blocked task is actionable when its current assessment
-// fingerprint differs from the recorded one, or no valid baseline exists.
+// wake up for.
 func CountActionableBlockedTasks(state *models.State) int {
-	count := 0
+	return len(ActionableBlockedTaskIDs(state))
+}
+
+// ActionableBlockedTaskIDs returns, in state order, the BLOCKED tasks that the
+// orchestrator should wake up for. A blocked task is actionable when its
+// current assessment fingerprint differs from the recorded one, or no valid
+// baseline exists. The BLOCKED_TASKS wake names exactly these tasks (D-66).
+func ActionableBlockedTaskIDs(state *models.State) []string {
+	var ids []string
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if models.CurrentStateLockHold(task) {
@@ -23,15 +30,15 @@ func CountActionableBlockedTasks(state *models.State) int {
 				continue
 			}
 			if stateLockHoldReady(state, task, nil) {
-				count++
+				ids = append(ids, task.ID)
 			}
 			continue
 		}
-		if state.Tasks[i].Status == models.TaskStatusBlocked && isTaskActionableSinceAssessment(&state.Tasks[i], state) {
-			count++
+		if task.Status == models.TaskStatusBlocked && isTaskActionableSinceAssessment(task, state) {
+			ids = append(ids, task.ID)
 		}
 	}
-	return count
+	return ids
 }
 
 // isTaskActionableSinceAssessment determines whether a task should trigger an

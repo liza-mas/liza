@@ -972,7 +972,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"Read operator input before recording another assessment",
 				"a claim failure may occur before BLOCKED",
 				"A note grants no approval or permission to bypass review",
-				"Read blocked tasks from blackboard",
+				"Read the listed tasks from blackboard",
 				brand.BinaryName + " replace-task --replacement-file <path.json>",
 				"changed (what differs from the blocked attempt)",
 				"Never add-tasks the replacements first",
@@ -4712,4 +4712,74 @@ func TestBuildInstructionsForWakeTrigger_ManyToOneReady(t *testing.T) {
 	if instructions == "" {
 		t.Error("expected non-empty instructions for MANY_TO_ONE_READY")
 	}
+}
+
+// D-66: a BLOCKED_TASKS wake names the tasks actionable under the wake rules
+// and never widens to unchanged holds, even when nothing is actionable.
+func TestRenderOrchestratorDashboard_BlockedTasksScopedToActionable(t *testing.T) {
+	withPromptBrandValues(t, func() {
+		brand.BinaryName, brand.NameTitle = "acme", "Acme"
+		brand.ProjectDirName, brand.GlobalDirName = ".acme", ".acme"
+	})
+	root := setupPipelineConfig(t)
+	now := time.Now().UTC()
+	assessedHeld := func(state *models.State) models.Task {
+		held := testhelpers.BuildTaskByStatus("held-blocked", models.TaskStatusBlocked, now.Add(-time.Hour))
+		held.History = append(held.History, models.TaskHistoryEntry{
+			Time: now.Add(-time.Minute), Event: models.TaskEventOrchestratorAssessment,
+			Extra: map[string]any{
+				ops.AssessmentFingerprintExtraKey: ops.BuildAssessmentFingerprint(state, &held, ops.AssessmentFingerprintCandidate{
+					Reason: *held.BlockedReason, Questions: held.BlockedQuestions,
+				}),
+			},
+		})
+		return held
+	}
+	render := func(t *testing.T, state *models.State, selected bool) string {
+		t.Helper()
+		var dashboard, instruction string
+		var err error
+		if selected {
+			dashboard, instruction, err = RenderOrchestratorDashboardForWake(state, root, "orchestrator-1", OrchestratorWakeDecision{Trigger: "BLOCKED_TASKS"})
+		} else {
+			dashboard, instruction, err = RenderOrchestratorDashboard(state, root, "orchestrator-1")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(dashboard, "WAKE TRIGGER: BLOCKED_TASKS\n") {
+			t.Fatalf("expected BLOCKED_TASKS wake; dashboard: %s", dashboard)
+		}
+		if strings.Contains(dashboard+instruction, "liza") || strings.Contains(dashboard+instruction, "Liza") {
+			t.Fatal("blocked wake leaked default brand")
+		}
+		return instruction
+	}
+
+	for _, selected := range []bool{false, true} {
+		t.Run(fmt.Sprintf("actionable subset/selected=%t", selected), func(t *testing.T) {
+			state := testhelpers.CreateValidState()
+			changed := testhelpers.BuildTaskByStatus("changed-blocked", models.TaskStatusBlocked, now.Add(-time.Hour))
+			state.Tasks = []models.Task{changed, assessedHeld(state)}
+			instruction := render(t, state, selected)
+			if !strings.Contains(instruction, "Assess only these BLOCKED tasks") || !strings.Contains(instruction, "changed-blocked") {
+				t.Errorf("instruction must scope assessment to the actionable task: %s", instruction)
+			}
+			if strings.Contains(instruction, "held-blocked") {
+				t.Errorf("instruction must not name an unchanged hold: %s", instruction)
+			}
+		})
+	}
+
+	t.Run("selected wake with empty actionable set", func(t *testing.T) {
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{assessedHeld(state)}
+		instruction := render(t, state, true)
+		if !strings.Contains(instruction, "Record no assessment") {
+			t.Errorf("empty actionable set must mean no assessments: %s", instruction)
+		}
+		if strings.Contains(instruction, "held-blocked") || strings.Contains(instruction, "decide action") {
+			t.Errorf("empty actionable set must not widen to unchanged holds: %s", instruction)
+		}
+	})
 }
