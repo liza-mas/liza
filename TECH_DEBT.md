@@ -7,8 +7,9 @@ Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 **What:** `replan` copies the original plan's task-level `provider_dependencies`
 verbatim to its replacement. When a provider is retired under a stale consumer
 plan (ADR-0185) and that plan's own task-level declarations also name the
-retired provider, the replacement is a non-terminal task naming a retired
-provider, and state validation refuses the replan. The plan then cannot be
+retired provider, the replacement would be a new task naming a retired
+provider, and replan refuses it (an explicit check since ADR-0187 lets
+unstarted tasks keep stale declarations). The plan then cannot be
 re-authored without manual repair. This also blocks the older consumer-first
 order.
 

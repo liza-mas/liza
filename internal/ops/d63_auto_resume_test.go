@@ -51,7 +51,8 @@ func TestD63ProviderRefusalRequiresRepair(t *testing.T) {
 	original := testhelpers.BuildTaskByStatus("original", models.TaskStatusDraftCodingPlan, time.Now().UTC())
 	original.RolePair = "code-planning-pair"
 	original.Output = []models.OutputEntry{providerOpsOutput()}
-	consumer := codingTask("consumer", models.TaskStatusReady)
+	// A started consumer: an unstarted one would go stale instead (ADR-0187).
+	consumer := claimedOnce(codingTask("consumer", models.TaskStatusReady))
 	consumer.ProviderDependencies = []models.ProviderDependency{{ProviderTask: "original", Transition: "code-plan-to-coding", Outputs: []int{0}}}
 	root, statePath := setupPlanCheckTest(t, plan, original, consumer)
 	bb := db.For(statePath)
@@ -124,7 +125,7 @@ func TestD63SelectedProviderChildRefusalRepairs(t *testing.T) {
 	original.Output = []models.OutputEntry{providerOpsOutput()}
 	plan := withPlanCheck(handoffPlan("plan", "architecture-pair"), models.PlanCheckPassed, "")
 	plan.Output = []models.OutputEntry{replacingOutput(original.ID)}
-	consumer := codingTask("consumer", models.TaskStatusReady)
+	consumer := claimedOnce(codingTask("consumer", models.TaskStatusReady))
 	consumer.ProviderDependencies = providerOpsDependency(provider.ID, 0)
 	root, statePath := setupPlanCheckTest(t, provider, original, plan, consumer)
 	report, err := ExecuteTransitionsReportWith(root, "manual", AdmitReviewed)

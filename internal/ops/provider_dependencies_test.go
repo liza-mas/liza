@@ -248,7 +248,8 @@ func TestProviderDependenciesMetadataOnlyRecoveryKeepsProducerOutputLive(t *test
 	output.ProviderDependencies = providerOpsDependency(provider.ID, 0)
 	owner.Output = []models.OutputEntry{output}
 	owner.TransitionsExecuted = map[string]bool{providerOpsTransition: true}
-	child := providerOpsTask("owner-cp-0", "code-planning-pair", models.TaskStatusDraftCodingPlan)
+	// Started once, so its recovered declaration holds (ADR-0187).
+	child := claimedOnce(providerOpsTask("owner-cp-0", "code-planning-pair", models.TaskStatusDraftCodingPlan))
 	child.ParentTasks = []string{owner.ID}
 	root, statePath, bb := setupProviderOpsTest(t, provider, owner, child)
 	before := replacementBytes(t, statePath)
@@ -526,7 +527,7 @@ func TestProviderDependenciesConsumedForeignKindOutputDoesNotHoldProvider(t *tes
 	incumbent := providerOpsTask("foreign-cp-0", "code-planning-pair", models.TaskStatusDraftCodingPlan)
 	incumbent.Kind = output.Kind
 	incumbent.ProviderDependencies = providerOpsDependency(otherProvider.ID, 1)
-	consumer := providerOpsTask("live-consumer", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
+	consumer := claimedOnce(providerOpsTask("live-consumer", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE")))
 	consumer.ProviderDependencies = providerOpsDependency(provider.ID, 0)
 	root, statePath, bb := setupProviderOpsTest(t, owner, provider, otherProvider, incumbent, consumer)
 	if err := bb.Modify(func(s *models.State) error { s.Sprint.Status = models.SprintStatusCompleted; return nil }); err != nil {
@@ -635,7 +636,8 @@ func TestProviderDependenciesRetirementRequiresRetiringConsumerFirst(t *testing.
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			provider := providerOpsTask("provider", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
-			consumer := providerOpsTask("consumer", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
+			// A started consumer: an unstarted one would go stale instead (ADR-0187).
+			consumer := claimedOnce(providerOpsTask("consumer", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE")))
 			consumer.ProviderDependencies = providerOpsDependency(provider.ID, 0)
 			targetID := provider.ID
 			tasks := []models.Task{provider, consumer}

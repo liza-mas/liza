@@ -96,6 +96,9 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 				return err
 			}
 			next, changeErr = retirePlanHandoff(state, domain, task, input, actor)
+			if changeErr == nil && next.changed {
+				changeErr = blockStaleProviderConsumers(state, resolver, task.ID, actor, time.Now().UTC())
+			}
 		} else {
 			switch class {
 			case PlanHandoffNotSource:

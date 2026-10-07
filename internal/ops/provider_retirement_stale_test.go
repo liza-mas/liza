@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -367,13 +368,46 @@ func TestStaleProviderExceptionKeepsOtherDeclarationsLive(t *testing.T) {
 			retire: cancelProvider, holder: "consumer output[0]",
 		},
 		{
-			name: "non-terminal task-level declaration",
+			// D-65: only an unstarted consumer's task-level declaration goes stale.
+			name: "task-level declaration of an assigned draft",
 			tasks: func() []models.Task {
-				consumer := providerOpsTask("consumer", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
-				consumer.ProviderDependencies = providerOpsDependency("provider", 0)
+				consumer := unstartedDraftConsumer("provider")
+				consumer.AssignedTo = testhelpers.StringPtr("code-planner-1")
 				return []models.Task{draftProvider, consumer}
 			},
 			retire: cancelProvider, holder: "consumer",
+		},
+		{
+			name: "task-level declaration of a draft released after a claim",
+			tasks: func() []models.Task {
+				return []models.Task{draftProvider, claimedOnce(unstartedDraftConsumer("provider"))}
+			},
+			retire: cancelProvider, holder: "consumer",
+		},
+		{
+			name: "unstarted draft whose provider is replanned",
+			tasks: func() []models.Task {
+				return []models.Task{mergedProviderPlan(), unstartedDraftConsumer("provider")}
+			},
+			retire: func(root string) error {
+				_, err := Replan(root, &ReplanInput{TaskID: "provider", ChangedBy: "human"})
+				return err
+			},
+			holder: "consumer",
+		},
+		{
+			name: "unstarted draft under a child replan",
+			tasks: func() []models.Task {
+				provider, child := transitionedLineagePlan("provider")
+				child.Status = models.TaskStatusMerged
+				child.Output = []models.OutputEntry{providerOpsOutput()}
+				return []models.Task{provider, child, unstartedDraftConsumer("provider")}
+			},
+			retire: func(root string) error {
+				_, err := Replan(root, &ReplanInput{TaskID: "provider-cp-0", ChangedBy: "human"})
+				return err
+			},
+			holder: "consumer",
 		},
 		{
 			// D-64: replan lineage would resolve the slot to the successor.
@@ -615,4 +649,214 @@ func TestStaleSelectedChildRefusesOperatorAndManualGeneration(t *testing.T) {
 	before := replacementBytes(t, statePath)
 	_, err = Proceed(root, consumer.ID, providerOpsTransition)
 	requireProviderOpsAtomicRefusal(t, statePath, before, err, wantRefusal)
+}
+
+// D-65: a task-level declaration of a consumer nobody has started does not
+// hold a provider, or selected child, that is retired permanently. The
+// consumer must be re-authored either way; it is blocked so the orchestrator
+// is woken to do it, and it can neither be claimed nor unblocked meanwhile.
+
+// unstartedDraftConsumer is an unclaimed code-plan draft whose task-level
+// declaration selects provider's output 0.
+func unstartedDraftConsumer(provider string) models.Task {
+	consumer := providerOpsTask("consumer", "code-planning-pair", models.TaskStatusDraftCodingPlan)
+	consumer.ProviderDependencies = providerOpsDependency(provider, 0)
+	return consumer
+}
+
+// claimedOnce records a past claim: the task was started, then released.
+func claimedOnce(task models.Task) models.Task {
+	task.History = append(task.History, models.TaskHistoryEntry{Time: time.Now().UTC(), Event: models.TaskEventClaimed, Agent: testhelpers.StringPtr("code-planner-1")})
+	return task
+}
+
+// generatedDraftConsumer is the I-421 shape: the draft is the generated child
+// of an expanded architecture plan whose output carries the same declaration.
+func generatedDraftConsumer(provider string) []models.Task {
+	parent := providerOpsTask("reader", "architecture-pair", models.TaskStatusMerged)
+	output := providerOpsOutput()
+	output.ProviderDependencies = providerOpsDependency(provider, 0)
+	parent.Output = []models.OutputEntry{output}
+	parent.TransitionsExecuted = map[string]bool{providerOpsTransition: true}
+	consumer := unstartedDraftConsumer(provider)
+	consumer.ID = "reader-cp-0"
+	consumer.ParentTasks = []string{parent.ID}
+	return []models.Task{parent, consumer}
+}
+
+type staleDraftRetirement struct {
+	name    string
+	retired string // the task whose retirement the draft must not hold
+	tasks   func() []models.Task
+	retire  func(root string) error
+}
+
+func staleDraftRetirements() []staleDraftRetirement {
+	slot := func(extra ...models.Task) []models.Task {
+		provider, child := transitionedLineagePlan("provider")
+		return append(append([]models.Task{provider, child}, extra...), generatedDraftConsumer("provider")...)
+	}
+	return []staleDraftRetirement{
+		{
+			// I-421: a corrective plan's hand-off supersedes the selected child.
+			name: "plan-declared replacement of the selected child", retired: "provider-cp-0",
+			tasks:  func() []models.Task { return slot(fixPlan("provider-cp-0")) },
+			retire: admitFixPlan,
+		},
+		{
+			name: "cancel the selected child", retired: "provider-cp-0",
+			tasks: func() []models.Task { return slot() },
+			retire: func(root string) error {
+				_, err := CancelTask(root, "provider-cp-0", "reviewed retirement", "orchestrator-1")
+				return err
+			},
+		},
+		{
+			name: "supersede the selected child", retired: "provider-cp-0",
+			tasks: func() []models.Task {
+				replacement := providerOpsTask("replacement", "code-planning-pair", models.TaskStatusDraftCodingPlan)
+				replacement.ParentTasks = []string{"provider"}
+				return slot(replacement)
+			},
+			retire: func(root string) error {
+				_, err := SupersedeTask(root, "provider-cp-0", []string{"replacement"}, "reviewed replacement", "orchestrator-1")
+				return err
+			},
+		},
+		{
+			name: "cancel the declared provider", retired: "provider",
+			tasks: func() []models.Task {
+				provider := providerOpsTask("provider", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
+				return append([]models.Task{provider}, generatedDraftConsumer("provider")...)
+			},
+			retire: func(root string) error {
+				_, err := CancelTask(root, "provider", "reviewed retirement", "orchestrator-1")
+				return err
+			},
+		},
+		{
+			name: "plan-check replace the declared provider", retired: "provider",
+			tasks: func() []models.Task {
+				correction := providerOpsTask("correction", "architecture-pair", models.TaskStatusMerged)
+				correction.Output = []models.OutputEntry{providerOpsOutput()}
+				return append([]models.Task{mergedProviderPlan(), correction}, generatedDraftConsumer("provider")...)
+			},
+			retire: func(root string) error {
+				_, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "provider", Action: PlanCheckActionReplace, ReplacedBy: "correction", ChangedBy: "human"})
+				return err
+			},
+		},
+	}
+}
+
+func TestStaleTaskLevelDeclarationOnUnstartedDraftDoesNotBlockPermanentRetirement(t *testing.T) {
+	for _, scenario := range staleDraftRetirements() {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			// GIVEN an unstarted draft whose task-level declaration names the retired task
+			root, statePath, _ := setupProviderOpsTest(t, scenario.tasks()...)
+			declared := mustReadTask(t, statePath, "reader-cp-0").ProviderDependencies
+
+			// WHEN the provider or its selected child is retired permanently
+			if err := scenario.retire(root); err != nil {
+				t.Fatalf("unstarted draft blocked the permanent retirement: %v", err)
+			}
+
+			// THEN the retirement persisted and the declaration is kept for audit
+			state := readClaimStateForTest(t, statePath)
+			if retired := state.FindTask(scenario.retired); retired == nil || !models.ProviderRetired(retired) {
+				t.Fatalf("retirement of %s not persisted: %+v", scenario.retired, retired)
+			}
+			consumer := state.FindTask("reader-cp-0")
+			if !reflect.DeepEqual(consumer.ProviderDependencies, declared) {
+				t.Fatalf("retirement rewrote the stale declaration: %+v", consumer.ProviderDependencies)
+			}
+
+			// AND the draft is blocked for re-authoring, naming the retired task
+			if consumer.Status != models.TaskStatusBlocked || consumer.BlockedReason == nil || !strings.Contains(*consumer.BlockedReason, scenario.retired) {
+				t.Fatalf("stale draft not blocked for re-authoring: status %s, reason %v", consumer.Status, consumer.BlockedReason)
+			}
+			last := consumer.History[len(consumer.History)-1]
+			if last.Event != models.TaskEventBlocked || last.Extra["provider_retirement"] != scenario.retired {
+				t.Fatalf("block not recorded with its provider retirement: %+v", last)
+			}
+
+			// AND the orchestrator is woken for it
+			if CountActionableBlockedTasks(state) < 1 || !isTaskActionableSinceAssessment(consumer, state) {
+				t.Fatal("stale draft block does not wake the orchestrator")
+			}
+
+			// AND the state stays valid while the draft cannot be restored to claimable
+			resolver, _, err := loadResolver(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {
+				t.Fatalf("stale unstarted draft left the state invalid: %v", err)
+			}
+			before := replacementBytes(t, statePath)
+			_, err = UnblockTask(root, "reader-cp-0", "", "provider replaced", "orchestrator-1")
+			requireProviderOpsAtomicRefusal(t, statePath, before, err, "invalid dependency", scenario.retired)
+		})
+	}
+}
+
+func TestProviderRetirementRefusalNamesEveryHolder(t *testing.T) {
+	draftProvider := providerOpsTask("provider", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
+	released := claimedOnce(unstartedDraftConsumer("provider"))
+	released.ID = "released"
+	expanded := staleConsumerPlan(false)
+	expanded.ID = "expanded"
+	expandedChild := providerOpsTask("expanded-cp-0", "code-planning-pair", models.TaskStatusMerged)
+	expandedChild.ParentTasks = []string{"expanded"}
+	unstarted := unstartedDraftConsumer("provider")
+	unstarted.ID = "unstarted"
+	for _, tc := range []struct {
+		name     string
+		tasks    []models.Task
+		want     []string
+		released string // an unstarted holder the refused transaction must not touch
+	}{
+		{
+			name:  "every live holder is named",
+			tasks: []models.Task{draftProvider, released, expanded, expandedChild},
+			want:  []string{"released", "expanded output[0]", "have live provider_dependencies declarations"},
+		},
+		{
+			name:     "an unstarted draft is neither named nor blocked",
+			tasks:    []models.Task{draftProvider, unstarted, released},
+			want:     []string{"released has a live provider_dependencies declaration"},
+			released: "unstarted",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root, statePath, _ := setupProviderOpsTest(t, tc.tasks...)
+			before := replacementBytes(t, statePath)
+			_, err := CancelTask(root, "provider", "reviewed retirement", "orchestrator-1")
+			requireProviderOpsAtomicRefusal(t, statePath, before, err, tc.want...)
+			if tc.released != "" && strings.Contains(err.Error(), tc.released) {
+				t.Fatalf("refusal names unstarted draft %s: %v", tc.released, err)
+			}
+		})
+	}
+}
+
+// Unstarted tasks may keep stale task-level declarations, but replan must not
+// mint new work carrying one (it would be unclaimable with no wake).
+func TestReplanRefusesCopyingStaleTaskLevelDeclaration(t *testing.T) {
+	t.Parallel()
+	// GIVEN a stale consumer plan whose own task-level declaration names the provider
+	provider := providerOpsTask("provider", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
+	consumer := staleConsumerPlan(false)
+	consumer.ProviderDependencies = providerOpsDependency("provider", 0)
+	root, statePath, _ := setupProviderOpsTest(t, provider, consumer)
+	if _, err := CancelTask(root, "provider", "reviewed retirement", "orchestrator-1"); err != nil {
+		t.Fatalf("stale consumer plan blocked the provider's cancellation: %v", err)
+	}
+
+	// WHEN the consumer is replanned THEN the stale declaration is not copied
+	before := replacementBytes(t, statePath)
+	_, err := Replan(root, &ReplanInput{TaskID: "consumer", ChangedBy: "human"})
+	requireProviderOpsAtomicRefusal(t, statePath, before, err, "provider_dependencies[0] names retired provider", "replan would copy that stale declaration")
 }

@@ -214,6 +214,26 @@ func PlanUnexpanded(state *State, task *Task) bool {
 	return true
 }
 
+// UnstartedProviderConsumer reports a task nobody has worked on: in its role
+// pair's initial status or BLOCKED, never claimed, with no assignee, lease,
+// worktree or pending hand-off. Its task-level declarations consume nothing
+// yet, so a provider retired permanently under them leaves the task stale
+// rather than the state invalid (ADR-0187).
+func UnstartedProviderConsumer(task *Task, pr PipelineResolver) bool {
+	if task == nil || pr == nil || (task.AssignedTo != nil && *task.AssignedTo != "") || task.LeaseExpires != nil ||
+		(task.Worktree != nil && *task.Worktree != "") || task.HandoffPending {
+		return false
+	}
+	if task.Status != TaskStatusBlocked {
+		if initial, err := pr.InitialStatus(task.RolePair); err != nil || task.Status != initial {
+			return false
+		}
+	}
+	return !slices.ContainsFunc(task.History, func(entry TaskHistoryEntry) bool {
+		return entry.Event == TaskEventClaimed || entry.Event == TaskEventClaimedForIntegrationFix
+	})
+}
+
 // UnmetProviderDependencies applies the same fail-closed interpretation used by
 // readiness and committing claims. Retired/malformed references are invalid;
 // legitimate future children and unmerged work are pending, never satisfied.

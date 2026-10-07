@@ -958,6 +958,11 @@ than by replan; the declaration stays as stale evidence, blocks the plan's
 hand-off and is refused by generation until the plan is replanned
 ([ADR-0185](ADR/0185-stale-provider-declarations-on-unexpanded-plans.md),
 [ADR-0186](ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md)).
+Likewise an unstarted consumer's task-level declaration (initial or BLOCKED,
+never claimed, no assignee, lease, worktree or pending hand-off); the
+retirement blocks that consumer for re-authoring
+([ADR-0187](ADR/0187-stale-provider-declarations-on-unstarted-consumers.md)).
+A refusal names every holder.
 Concrete `retarget-dependency` does not rewrite provider declarations. Missing legacy edges
 require this reviewed correction before restoring the consumer: unblocking
 against a merged architecture alone does not repair a provider-plan prerequisite.

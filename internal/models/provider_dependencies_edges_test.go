@@ -99,9 +99,17 @@ func TestProviderDependencyPendingStateDoesNotHideInvalidMetadata(t *testing.T) 
 		{"known invalid Kind", func(s *models.State) { s.Tasks[0].Output[2].Kind = "bootstrap-precommit" }, true},
 		{"known wrong child role", func(s *models.State) { s.Tasks[3].RolePair = "architecture-pair" }, true},
 		{"known multiple parents", func(s *models.State) { s.Tasks[3].ParentTasks = []string{"provider", "other"} }, true},
-		{"known retired child", func(s *models.State) { s.Tasks[3].Status = models.TaskStatusSuperseded }, true},
-		{"known replanned child", func(s *models.State) { s.Tasks[3].TransitionsExecuted = map[string]bool{"replanned": true} }, true},
-		{"known retired child handoff", func(s *models.State) { s.Tasks[3].PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced} }, true},
+		// A retired child is stale evidence on an unstarted consumer (ADR-0187),
+		// so these rows use a started one.
+		{"known retired child", func(s *models.State) { startedConsumer(s); s.Tasks[3].Status = models.TaskStatusSuperseded }, true},
+		{"known replanned child", func(s *models.State) {
+			startedConsumer(s)
+			s.Tasks[3].TransitionsExecuted = map[string]bool{"replanned": true}
+		}, true},
+		{"known retired child handoff", func(s *models.State) {
+			startedConsumer(s)
+			s.Tasks[3].PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced}
+		}, true},
 		{"unknown outputs with invalid existing child", func(s *models.State) { s.Tasks[0].Output = nil; s.Tasks[3].ParentTasks = []string{"other"} }, true},
 		{"earlier pending child cannot hide later invalid child", func(s *models.State) {
 			s.Tasks[0].Status = models.TaskStatusMerged
@@ -135,6 +143,12 @@ func TestProviderDependencyPendingStateDoesNotHideInvalidMetadata(t *testing.T) 
 			}
 		})
 	}
+}
+
+// startedConsumer records a past claim on the fixture consumer.
+func startedConsumer(s *models.State) {
+	consumer := s.FindTask("consumer")
+	consumer.History = append(consumer.History, models.TaskHistoryEntry{Event: models.TaskEventClaimed})
 }
 
 type legacyProviderResolver struct{ models.PipelineResolver }

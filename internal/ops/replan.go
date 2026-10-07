@@ -109,6 +109,15 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		if err := rejectReferencedProviderRetirement(state, resolver, task.ID, retireByReplan); err != nil {
 			return err
 		}
+		// An unstarted task may keep a stale declaration (ADR-0187), but new
+		// work never inherits one: the replacement would be unclaimable with
+		// nothing to wake on it (see TECH_DEBT.md).
+		for index, dep := range task.ProviderDependencies {
+			if retired, _ := staleProviderReference(state, resolver, dep); retired != "" {
+				return &PreconditionError{Reason: fmt.Sprintf(
+					"task %s provider_dependencies[%d] names retired %s; replan would copy that stale declaration to the replacement", task.ID, index, retired)}
+			}
+		}
 		newTaskID := computeReplanID(state, task.ID)
 
 		// Resolve initial status for the role pair

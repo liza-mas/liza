@@ -13,6 +13,9 @@ func rewriteActiveDependents(state *models.State, resolver *pipeline.Resolver, t
 	if err := rejectReferencedProviderRetirement(state, resolver, targetID, retirePermanently); err != nil {
 		return err
 	}
+	if err := blockStaleProviderConsumers(state, resolver, targetID, agentID, now); err != nil {
+		return err
+	}
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if task.ID == targetID {

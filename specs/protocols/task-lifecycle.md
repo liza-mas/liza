@@ -91,6 +91,13 @@ but retained: plan-check refuses to pass
 the plan (or reports it as needing reconciliation once passed), every hand-off
 refuses the entry, and `replan` warns. Replan the plan to re-author it.
 
+Exception (ADR-0187): the task-level declaration of an unstarted consumer
+(initial status or BLOCKED, never claimed, no assignee, lease, worktree or
+pending hand-off) does not hold them either. The retirement blocks the consumer,
+naming the declaration; replace or cancel it. Unblock, claim and `replan`
+refuse to carry the stale declaration forward. A refused retirement names
+every holder.
+
 A replanned selected child resolves to its replan successor (same slot, same
 parent); without a unique live successor it stays retired. A replanned provider
 is never remapped. Replan clones dependencies through live successors. A MERGED,
@@ -102,8 +109,9 @@ otherwise replan it.
 See [Provider Dependencies](../architecture/blackboard-schema.md#provider-dependencies),
 [ADR-0181](../architecture/ADR/0181-provider-output-dependencies.md),
 [ADR-0184](../architecture/ADR/0184-replan-lineage-dependency-repair.md),
-[ADR-0185](../architecture/ADR/0185-stale-provider-declarations-on-unexpanded-plans.md) and
-[ADR-0186](../architecture/ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md).
+[ADR-0185](../architecture/ADR/0185-stale-provider-declarations-on-unexpanded-plans.md),
+[ADR-0186](../architecture/ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md) and
+[ADR-0187](../architecture/ADR/0187-stale-provider-declarations-on-unstarted-consumers.md).
 
 ## Iteration Protocol
 

@@ -101,10 +101,16 @@ func TestValidateProviderDependenciesRejectsInvalidReferences(t *testing.T) {
 		}, "outside"},
 		{"merged missing outputs", func(s *models.State) { s.Tasks[0].Output = nil }, "outside"},
 		{"selected Kind", func(s *models.State) { s.Tasks[0].Output[0].Kind = "bootstrap-precommit" }, "Kind"},
-		{"abandoned provider", func(s *models.State) { s.Tasks[0].Status = models.TaskStatusAbandoned }, "retired provider"},
-		{"superseded provider", func(s *models.State) { s.Tasks[0].Status = models.TaskStatusSuperseded }, "retired provider"},
-		{"replanned provider", func(s *models.State) { s.Tasks[0].TransitionsExecuted = map[string]bool{"replanned": true} }, "retired provider"},
-		{"retired handoff", func(s *models.State) { s.Tasks[0].PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced} }, "retired provider"},
+		{"abandoned provider", func(s *models.State) { startConsumer(s); s.Tasks[0].Status = models.TaskStatusAbandoned }, "retired provider"},
+		{"superseded provider", func(s *models.State) { startConsumer(s); s.Tasks[0].Status = models.TaskStatusSuperseded }, "retired provider"},
+		{"replanned provider", func(s *models.State) {
+			startConsumer(s)
+			s.Tasks[0].TransitionsExecuted = map[string]bool{"replanned": true}
+		}, "retired provider"},
+		{"retired handoff", func(s *models.State) {
+			startConsumer(s)
+			s.Tasks[0].PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced}
+		}, "retired provider"},
 		{"wrong child role", func(s *models.State) {
 			s.Tasks = append(s.Tasks, models.Task{ID: "provider-cp-0", RolePair: "architecture-pair", Status: models.TaskStatusMerged, ParentTasks: []string{"provider"}})
 		}, "provenance"},
@@ -115,12 +121,15 @@ func TestValidateProviderDependenciesRejectsInvalidReferences(t *testing.T) {
 			s.Tasks = append(s.Tasks, models.Task{ID: "provider-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusMerged, ParentTasks: []string{"provider", "other"}})
 		}, "provenance"},
 		{"superseded child", func(s *models.State) {
+			startConsumer(s)
 			s.Tasks = append(s.Tasks, models.Task{ID: "provider-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusSuperseded, ParentTasks: []string{"provider"}})
 		}, "retired provider child"},
 		{"replanned child", func(s *models.State) {
+			startConsumer(s)
 			s.Tasks = append(s.Tasks, models.Task{ID: "provider-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusMerged, ParentTasks: []string{"provider"}, TransitionsExecuted: map[string]bool{"replanned": true}})
 		}, "retired provider child"},
 		{"retired child handoff", func(s *models.State) {
+			startConsumer(s)
 			s.Tasks = append(s.Tasks, models.Task{ID: "provider-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusMerged, ParentTasks: []string{"provider"}, PlanCheck: &models.PlanCheck{Verdict: models.PlanCheckReplaced}})
 		}, "retired provider child"},
 	} {
@@ -497,11 +506,12 @@ func TestProviderValidationStaleDeclarationOnlyOnUnexpandedPlan(t *testing.T) {
 			s.FindTask("consumer").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
 		}, false},
 		{"in-flight producer", func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, false},
-		{"non-terminal task-level declaration", func(s *models.State) {
+		{"task-level declaration of a started draft", func(s *models.State) {
 			consumer := s.FindTask("consumer")
 			consumer.Status = models.TaskStatus("DRAFT_ARCHITECTURE")
 			consumer.Output = nil
 			consumer.ProviderDependencies = []models.ProviderDependency{providerPlanDependency("provider", 0)}
+			startConsumer(s)
 		}, false},
 	}
 	for retirement, retire := range retirements {
@@ -548,11 +558,12 @@ func TestProviderValidationStaleSelectedChildOnlyOnUnexpandedPlan(t *testing.T) 
 			s.FindTask("consumer").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
 		}, false},
 		"in-flight producer": {func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, false},
-		"non-terminal task-level declaration": {func(s *models.State) {
+		"task-level declaration of a started draft": {func(s *models.State) {
 			consumer := s.FindTask("consumer")
 			consumer.Status = models.TaskStatus("DRAFT_ARCHITECTURE")
 			consumer.ProviderDependencies = consumer.Output[0].ProviderDependencies
 			consumer.Output = nil
+			startConsumer(s)
 		}, false},
 	}
 	for retirement, retire := range retirements {
@@ -585,4 +596,87 @@ func TestProviderValidationStaleSelectedChildOnlyOnUnexpandedPlan(t *testing.T) 
 			})
 		}
 	}
+}
+
+// startConsumer records a past claim on the fixture consumer: it was started,
+// so its task-level declarations can never go stale.
+func startConsumer(s *models.State) {
+	consumer := s.FindTask("consumer")
+	agent := "architect-1"
+	consumer.History = append(consumer.History, models.TaskHistoryEntry{Event: models.TaskEventClaimed, Agent: &agent})
+}
+
+// D-65: an unstarted consumer may keep a task-level declaration on a retired
+// provider or selected child; any sign of work makes it invalid again. Bounds
+// and provenance are still validated under the retired provider.
+func TestProviderValidationStaleDeclarationOnUnstartedConsumer(t *testing.T) {
+	retirements := map[string]func(*models.State){
+		"superseded provider": func(s *models.State) { s.FindTask("provider").Status = models.TaskStatusSuperseded },
+		"superseded selected child": func(s *models.State) {
+			s.FindTask("provider").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
+			s.Tasks = append(s.Tasks, models.Task{ID: "provider-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusSuperseded, ParentTasks: []string{"provider"}})
+		},
+	}
+	worktree := "worktrees/consumer"
+	holders := map[string]struct {
+		shape func(*models.Task)
+		valid bool
+	}{
+		"unstarted draft":         {func(*models.Task) {}, true},
+		"unstarted blocked draft": {func(c *models.Task) { c.Status = models.TaskStatusBlocked }, true},
+		"draft released after a claim": {func(c *models.Task) {
+			agent := "architect-1"
+			c.History = append(c.History, models.TaskHistoryEntry{Event: models.TaskEventClaimed, Agent: &agent})
+		}, false},
+		"assigned draft":          {func(c *models.Task) { agent := "architect-1"; c.AssignedTo = &agent }, false},
+		"draft with a worktree":   {func(c *models.Task) { c.Worktree = &worktree }, false},
+		"draft pending a handoff": {func(c *models.Task) { c.HandoffPending = true }, false},
+		"executing consumer":      {func(c *models.Task) { c.Status = models.TaskStatus("ARCHITECTING") }, false},
+	}
+	for retirement, retire := range retirements {
+		for name, holder := range holders {
+			t.Run(retirement+"/"+name, func(t *testing.T) {
+				// GIVEN a consumer whose task-level declaration names a retired task
+				state, pr, _ := providerValidationFixture(t)
+				retire(state)
+				holder.shape(state.FindTask("consumer"))
+
+				// THEN only an unstarted consumer keeps it as stale evidence
+				err := ValidateProviderDependencies(state, pr)
+				if holder.valid && err != nil {
+					t.Fatalf("stale declaration on an unstarted consumer rejected: %v", err)
+				}
+				// AND readiness never offers it for claim
+				if state.FindTask("consumer").IsClaimable("architect", state.Tasks, pr) {
+					t.Fatal("consumer with a stale provider declaration advertised as claimable")
+				}
+				if !holder.valid && (err == nil || !strings.Contains(err.Error(), "references retired provider")) {
+					t.Fatalf("validation = %v, want retired provider refusal", err)
+				}
+			})
+		}
+	}
+
+	t.Run("bounds still checked under a retired provider", func(t *testing.T) {
+		for _, owner := range []string{"unstarted draft", "unexpanded plan"} {
+			state, pr, _ := providerValidationFixture(t)
+			state.FindTask("provider").Status = models.TaskStatusSuperseded
+			consumer := state.FindTask("consumer")
+			if owner == "unexpanded plan" {
+				output := providerPlanOutput()
+				output.ProviderDependencies = consumer.ProviderDependencies
+				consumer.ProviderDependencies = nil
+				consumer.Status = models.TaskStatusMerged
+				consumer.Output = []models.OutputEntry{output}
+			}
+			deps := consumer.ProviderDependencies
+			if owner == "unexpanded plan" {
+				deps = consumer.Output[0].ProviderDependencies
+			}
+			deps[0].Outputs = []int{1}
+			if err := ValidateProviderDependencies(state, pr); err == nil || !strings.Contains(err.Error(), "outside provider provider output range") {
+				t.Fatalf("%s: validation = %v, want out-of-range refusal", owner, err)
+			}
+		}
+	})
 }

@@ -29,7 +29,8 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if !task.Status.IsTerminal() {
-			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies, nil)
+			unstarted := func() bool { return models.UnstartedProviderConsumer(task, resolver) }
+			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies, unstarted)
 			if executing, err := resolver.ExecutingStatus(task.RolePair); err == nil && task.Status == executing {
 				for _, unmet := range models.UnmetProviderDependencies(task, state.Tasks, resolver) {
 					v.addID("executing provider prerequisite "+task.ID+" "+unmet.DependencyID,
@@ -65,9 +66,10 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 }
 
 // mayGoStale, when non-nil and true, marks reviewed output of a plan that has
-// generated nothing: a retired provider or selected child there is reconcile
-// evidence, refused by hand-off classification and generation instead
-// (ADR-0185, ADR-0186). Provenance, bounds and cycles are still validated.
+// generated nothing, or a task-level declaration of a task nobody has started:
+// a retired provider or selected child there is reconcile evidence, refused by
+// hand-off classification, generation, claim and unblock instead (ADR-0185,
+// ADR-0186, ADR-0187). Provenance, bounds and cycles are still validated.
 func validateProviderOwner(v *violations, state *models.State, resolver *pipeline.Resolver, owner string, deps []models.ProviderDependency, mayGoStale func() bool) {
 	if err := models.ValidateProviderDependencies(deps); err != nil {
 		v.add(fmt.Errorf("task %s: %w", owner, err))
@@ -89,10 +91,7 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 		if provider.RolePair != transition.SourceRolePair {
 			v.add(fmt.Errorf("%s transition %s does not originate from provider role_pair %s", label, dep.Transition, provider.RolePair))
 		}
-		if models.ProviderRetired(provider) {
-			if stale() {
-				continue
-			}
+		if models.ProviderRetired(provider) && !stale() {
 			v.add(fmt.Errorf("%s references retired provider %s", label, provider.ID))
 		}
 		for position, output := range dep.Outputs {
