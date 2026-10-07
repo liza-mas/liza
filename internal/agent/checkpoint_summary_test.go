@@ -62,7 +62,16 @@ func withFakeCheckpointSummaryRunner(t *testing.T, fn func(projectRoot, cliName,
 	t.Cleanup(func() { checkpointSummaryRunner = prev })
 }
 
+// clearCLIDefaultsEnv isolates CLI resolution from the developer's shell.
+func clearCLIDefaultsEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("LIZA_DEFAULT_CLI", "")
+	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
+	t.Setenv("LIZA_DEFAULT_REVIEWER_CLI", "")
+}
+
 func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
+	clearCLIDefaultsEnv(t)
 	tmp := t.TempDir()
 	var called bool
 	var gotCLI, gotPrompt string
@@ -163,6 +172,7 @@ func TestEmitCheckpointSummary_RunnerErrorIsSwallowed(t *testing.T) {
 }
 
 func TestEmitCheckpointSummary_HonoursConfiguredCLI(t *testing.T) {
+	clearCLIDefaultsEnv(t)
 	tmp := t.TempDir()
 	var gotCLI string
 	withFakeCheckpointSummaryRunner(t, func(_, cliName, _ string, _ models.Config) error {
@@ -173,6 +183,22 @@ func TestEmitCheckpointSummary_HonoursConfiguredCLI(t *testing.T) {
 	emitCheckpointSummary(tmp, "task-cli", models.Config{DefaultCLI: "codex"})
 	if gotCLI != "codex" {
 		t.Errorf("cli = %q, want %q (config override)", gotCLI, "codex")
+	}
+}
+
+func TestEmitCheckpointSummary_FollowsOrchestratorCLI(t *testing.T) {
+	clearCLIDefaultsEnv(t)
+	t.Setenv("LIZA_DEFAULT_DOER_CLI", "codex")
+	tmp := t.TempDir()
+	var gotCLI string
+	withFakeCheckpointSummaryRunner(t, func(_, cliName, _ string, _ models.Config) error {
+		gotCLI = cliName
+		return nil
+	})
+
+	emitCheckpointSummary(tmp, "task-cli", models.Config{})
+	if gotCLI != "codex" {
+		t.Errorf("cli = %q, want %q (orchestrator role default)", gotCLI, "codex")
 	}
 }
 
@@ -236,6 +262,7 @@ func TestCheckpointSummaryLaunchPlan_RejectsPromptFileTransport(t *testing.T) {
 }
 
 func TestEmitCheckpointSummary_FailureWritesAlert(t *testing.T) {
+	clearCLIDefaultsEnv(t)
 	tmp := t.TempDir()
 	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
 		return errors.New("boom")
@@ -441,6 +468,61 @@ func TestRunCheckpointSummaryCLI_NonZeroExitReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exit status 7") {
 		t.Fatalf("error = %q, want exit status 7", err.Error())
+	}
+}
+
+func TestRunCheckpointSummaryCLI_FailureIncludesOutputTail(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"echo 'API Error: 401 invalid credentials' >&2",
+		"exit 1",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err == nil {
+		t.Fatal("expected non-zero exit error, got nil")
+	}
+	for _, want := range []string{"exit status 1", "API Error: 401 invalid credentials"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to contain %q", err.Error(), want)
+		}
+	}
+}
+
+func TestRunCheckpointSummaryCLI_FailureMasksSecrets(t *testing.T) {
+	const secret = "sk-test-secret-value-123"
+	t.Setenv("SUMMARY_TEST_API_KEY", secret)
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"echo \"bad key $SUMMARY_TEST_API_KEY\" >&2",
+		"exit 1",
+	})
+
+	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	if err == nil {
+		t.Fatal("expected non-zero exit error, got nil")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("error leaks the secret: %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "bad key") {
+		t.Errorf("error = %q, want the masked output tail", err.Error())
+	}
+}
+
+func TestOutputTail_KeepsLastBytes(t *testing.T) {
+	tail := &outputTail{limit: checkpointSummaryOutputTailBytes}
+	data := []byte(strings.Repeat("a", 5000-1) + "z")
+	if n, err := tail.Write(data); n != len(data) || err != nil {
+		t.Fatalf("Write = %d, %v; want %d, nil", n, err, len(data))
+	}
+	if len(tail.buf) != checkpointSummaryOutputTailBytes || !tail.truncated {
+		t.Fatalf("len = %d, truncated = %v; want %d, true", len(tail.buf), tail.truncated, checkpointSummaryOutputTailBytes)
+	}
+	if tail.buf[len(tail.buf)-1] != 'z' {
+		t.Fatal("tail did not keep the last byte written")
 	}
 }
 

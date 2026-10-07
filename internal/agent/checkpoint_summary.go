@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +32,13 @@ func checkpointSummaryStateRelPath() string {
 // to run before being terminated. Checkpoint summaries are short reads + a
 // single Markdown emission — generous but bounded.
 const checkpointSummaryDefaultTimeout = 5 * time.Minute
+
+// checkpointSummaryOutputTailBytes bounds the CLI output kept for a failure
+// message; checkpointSummaryDetailBytes bounds what reaches the alert.
+const (
+	checkpointSummaryOutputTailBytes = 4096
+	checkpointSummaryDetailBytes     = 512
+)
 
 // checkpointSummaryRunner is the function used to actually invoke a CLI for
 // the checkpoint-summary skill. It is a package var so tests can substitute
@@ -107,7 +113,9 @@ func maybeEmitCheckpointSummary(bb *db.Blackboard, projectRoot, roleType string,
 // Behavior:
 //   - opt-out via Config.AutoCheckpointSummary == false
 //   - report is written under the branded project runtime directory
-//   - CLI is resolved through ResolveDefaultCLI (state.yaml > env > const)
+//   - CLI is the orchestrator's, resolved through ResolveDefaultCLIForRole
+//     (doer config > doer env > global config > env > const), so the summary
+//     runs on the provider the run already uses (D-57)
 func emitCheckpointSummary(projectRoot string, trigger string, cfg models.Config) {
 	logger := GetLogger()
 
@@ -116,7 +124,7 @@ func emitCheckpointSummary(projectRoot string, trigger string, cfg models.Config
 		return
 	}
 
-	cliName := ResolveDefaultCLI(cfg.DefaultCLI)
+	cliName := ResolveDefaultCLIForRole("orchestrator", cliResolutionConfig(cfg))
 	prompt := buildCheckpointSummaryPrompt(trigger)
 
 	if err := checkpointSummaryRunner(projectRoot, cliName, prompt, cfg); err != nil {
@@ -169,9 +177,10 @@ file. Do not ask follow-up questions.
 // stdin, captures combined output for the logger, and lets the CLI write
 // the markdown report itself (the skill knows where to put it).
 //
-// The runner resolves argv from the provider catalog like normal agent runs,
-// but keeps output discarded because this is a best-effort side effect rather
-// than a supervised agent session.
+// The runner resolves argv from the provider catalog like normal agent runs.
+// Output is not persisted, because this is a best-effort side effect rather
+// than a supervised agent session, but its tail is kept so a failure names
+// its cause instead of only an exit status.
 func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Config) error {
 	reportRelPath := checkpointSummaryRelPath()
 	reportPath := filepath.Join(projectRoot, filepath.FromSlash(reportRelPath))
@@ -197,16 +206,19 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 		cmd.Stdin = nil
 	}
 
-	// Discard subprocess output. Auto-summary is best-effort, and persisted
-	// agent output handling belongs to the normal supervised agent pipeline.
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	// One writer for both streams: exec serializes writes to it.
+	tail := &outputTail{limit: checkpointSummaryOutputTailBytes}
+	cmd.Stdout = tail
+	cmd.Stderr = tail
 
 	if runErr := cmd.Run(); runErr != nil {
+		// Mask against the unfiltered env: filterAPIKeyEnv drops the very key
+		// most likely to be echoed.
+		detail := checkpointSummaryFailureDetail(tail, os.Environ())
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("checkpoint-summary CLI %q timed out after %s", cliName, checkpointSummaryDefaultTimeout)
+			return fmt.Errorf("checkpoint-summary CLI %q timed out after %s%s", cliName, checkpointSummaryDefaultTimeout, detail)
 		}
-		return fmt.Errorf("checkpoint-summary CLI %q failed: %w", cliName, runErr)
+		return fmt.Errorf("checkpoint-summary CLI %q failed: %w%s", cliName, runErr, detail)
 	}
 
 	// Sanity: confirm the report was actually written. If the CLI exited 0
@@ -219,6 +231,42 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 		return fmt.Errorf("checkpoint-summary CLI exited 0 but report is empty at %s", reportPath)
 	}
 	return nil
+}
+
+// outputTail keeps the last limit bytes written to it.
+type outputTail struct {
+	limit     int
+	buf       []byte
+	truncated bool
+}
+
+func (t *outputTail) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if over := len(t.buf) - t.limit; over > 0 {
+		t.buf = t.buf[over:]
+		t.truncated = true
+	}
+	return len(p), nil
+}
+
+// checkpointSummaryFailureDetail renders the output tail as one line for an
+// error: secrets masked, whitespace collapsed, at most
+// checkpointSummaryDetailBytes kept from the end. When the tail was cut, its
+// first word may be a fragment of a secret the masker cannot recognize, so
+// that word is dropped.
+func checkpointSummaryFailureDetail(tail *outputTail, environ []string) string {
+	fields := strings.Fields(newSecretMaskerFromEnv(environ).MaskText(string(tail.buf)))
+	if tail.truncated && len(fields) > 0 {
+		fields = fields[1:]
+	}
+	text := strings.Join(fields, " ")
+	if text == "" {
+		return ""
+	}
+	if len(text) > checkpointSummaryDetailBytes {
+		text = "…" + strings.ToValidUTF8(text[len(text)-checkpointSummaryDetailBytes:], "")
+	}
+	return ": " + text
 }
 
 func checkpointSummaryCLICommand(
