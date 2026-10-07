@@ -676,7 +676,7 @@ printf 'stderr with no log\n' >&2
 	}
 }
 
-func TestCLIAgentRunsOpenCodePromptAsArgument(t *testing.T) {
+func TestCLIAgentRunsOpenCodePromptViaStdin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake CLI shell script test requires /bin/sh")
 	}
@@ -718,18 +718,17 @@ fi
 	}
 	for _, want := range []string{
 		"arg:run",
-		"arg:prompt body",
 		"arg:--dangerously-skip-permissions",
 		"arg:--format",
 		"arg:json",
-		"stdin-empty",
+		"stdin:prompt body",
 	} {
 		if !strings.Contains(result.Output, want) {
 			t.Fatalf("Output missing %q:\n%s", want, result.Output)
 		}
 	}
-	if strings.Contains(result.Output, "stdin:prompt body") {
-		t.Fatalf("prompt should not be passed via stdin: %q", result.Output)
+	if strings.Contains(result.Output, "arg:prompt body") {
+		t.Fatalf("prompt should not be passed via argv: %q", result.Output)
 	}
 }
 
@@ -2114,7 +2113,7 @@ func TestCLISupportsStdin(t *testing.T) {
 		{"codex", true},
 		{"gemini", true},
 		{"vibe", false},
-		{"opencode", false},
+		{"opencode", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.cli, func(t *testing.T) {
@@ -2305,8 +2304,17 @@ func TestBuildCodexArgs(t *testing.T) {
 }
 
 func TestBuildOpenCodeArgs(t *testing.T) {
-	t.Run("prompt argument with permissions bypass", func(t *testing.T) {
-		args := buildOpenCodeArgs("do the thing", "")
+	t.Run("stdin prompt with permissions bypass", func(t *testing.T) {
+		args := buildOpenCodeArgs("do the thing", true, "")
+
+		want := []string{"run", "--dangerously-skip-permissions"}
+		if !slices.Equal(args, want) {
+			t.Fatalf("args = %v, want %v", args, want)
+		}
+	})
+
+	t.Run("prompt argument fallback without stdin", func(t *testing.T) {
+		args := buildOpenCodeArgs("do the thing", false, "")
 
 		want := []string{"run", "do the thing", "--dangerously-skip-permissions"}
 		if !slices.Equal(args, want) {
@@ -2315,7 +2323,7 @@ func TestBuildOpenCodeArgs(t *testing.T) {
 	})
 
 	t.Run("logging requests json format", func(t *testing.T) {
-		args := buildOpenCodeArgs("do the thing", "/tmp/logs")
+		args := buildOpenCodeArgs("do the thing", true, "/tmp/logs")
 
 		if !containsAdjacent(args, "--format", "json") {
 			t.Fatalf("args = %v, want json format flags", args)
