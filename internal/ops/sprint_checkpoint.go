@@ -107,13 +107,14 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 			if err := os.Rename(stagedReportPath, reportPath); err != nil {
 				return fmt.Errorf("failed to write sprint summary: %w", err)
 			}
+			since := s.Sprint.Timeline.CheckpointAt
 			s.Sprint.Status = models.SprintStatusCheckpoint
 			s.Sprint.Timeline.CheckpointAt = &timestamp
 			s.Sprint.CheckpointTrigger = trigger
 			// Record the steering-report obligation in the same transaction
 			// that creates the checkpoint, so it cannot be lost to whatever
 			// happens to the sprint before the orchestrator next looks.
-			s.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp, Trigger: trigger}
+			s.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp, Trigger: trigger, Since: since}
 			return nil
 		})
 	}

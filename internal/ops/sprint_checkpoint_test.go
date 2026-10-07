@@ -365,3 +365,62 @@ func TestGenerateSprintSummary_CircuitBreakerTriggered(t *testing.T) {
 		t.Error("Report should contain trigger pattern")
 	}
 }
+
+// The steering-report obligation records the previous checkpoint, so the
+// automatic summary covers only work merged since then (#171).
+func TestSprintCheckpoint_ObligationRecordsThePreviousCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	previous := time.Now().UTC().Add(-30 * time.Minute).Truncate(time.Second)
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Timeline.Started = time.Now().UTC().Add(-2 * time.Hour)
+	state.Sprint.Timeline.CheckpointAt = &previous
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := SprintCheckpoint(tmpDir, "PLANNING_COMPLETE")
+	if err != nil {
+		t.Fatalf("SprintCheckpoint() error: %v", err)
+	}
+
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	pending := readState.PendingCheckpointSummary
+	if pending == nil || !pending.At.Equal(result.CheckpointAt) {
+		t.Fatalf("obligation = %+v, want one at %v", pending, result.CheckpointAt)
+	}
+	if pending.Since == nil || !pending.Since.Equal(previous) {
+		t.Errorf("Since = %v, want the previous checkpoint %v", pending.Since, previous)
+	}
+}
+
+// A first checkpoint has no previous one; the summary falls back to the sprint
+// start.
+func TestSprintCheckpoint_FirstObligationHasNoSince(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	state := testhelpers.CreateValidState()
+	state.Sprint.Status = models.SprintStatusInProgress
+	state.Sprint.Timeline.Started = time.Now().UTC().Add(-2 * time.Hour)
+	state.Sprint.Timeline.CheckpointAt = nil
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	if _, err := SprintCheckpoint(tmpDir, ""); err != nil {
+		t.Fatalf("SprintCheckpoint() error: %v", err)
+	}
+	readState, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if readState.PendingCheckpointSummary == nil || readState.PendingCheckpointSummary.Since != nil {
+		t.Errorf("obligation = %+v, want one without Since", readState.PendingCheckpointSummary)
+	}
+}

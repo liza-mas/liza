@@ -249,4 +249,9 @@ func (s *State) SprintStalled() bool {
 type PendingCheckpointSummary struct {
 	At      time.Time `yaml:"at"`
 	Trigger string    `yaml:"trigger,omitempty"`
+	// Since is the previous checkpoint, or nil when there was none in this
+	// sprint: the automatic summary covers only work merged after it, so its
+	// reading does not grow with the whole run (#171). Obligations recorded
+	// before the field existed lack it and fall back to the sprint start.
+	Since *time.Time `yaml:"since,omitempty"`
 }

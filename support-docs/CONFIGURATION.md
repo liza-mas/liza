@@ -1192,11 +1192,21 @@ sprint transition and does not merge planning output.
 
 ## Checkpoint Summary
 
-When the sprint reaches a checkpoint, §BRAND_NAME_TITLE§ auto-invokes the configured default CLI
+When the sprint reaches a checkpoint, §BRAND_NAME_TITLE§ auto-invokes the orchestrator's CLI
+(its role default: `default_doer_cli` or `§BRAND_ENV_PREFIX§DEFAULT_DOER_CLI`, then `default_cli`)
 with the `checkpoint-summary` skill and writes the latest report to
 `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md`. The operation is best-effort: nothing depends on
 the report being created. Set `auto_checkpoint_summary: false` in
 `§BRAND_PROJECT_DIRNAME§/state.yaml` to disable it and produce summaries manually instead.
+
+The CLI runs in the background of the orchestrator supervisor, one summary at a time, so the
+orchestrator keeps working while it runs. A checkpoint raised meanwhile keeps its obligation, and the
+next poll after the running summary ends claims it. Each summary covers only the tasks merged since
+the previous checkpoint (or the sprint start), newest first and at most 25; the report says how many
+earlier tasks in that window it leaves out. The prompt limits reading to those tasks' own plan,
+architecture and spec artifacts, and asks for the report within one turn, without subagents, wakeups or
+background work; Claude also runs it with `--disallowedTools Task`. A full review of everything the
+run produced remains a manual `checkpoint-summary` skill run.
 
 The orchestrator emits the report once per checkpoint, whichever route created it — its own
 `checkpoint` call, the self-heal path, the circuit breaker, the TUI, or a human running the
@@ -1208,19 +1218,23 @@ checkpoint created while it is already waiting. Because the obligation is durabl
 outside the sprint, it survives another supervisor auto-resuming the checkpoint — including all
 the way through sprint completion into a new sprint — and survives a supervisor restart.
 Each obligation is claimed once, so a failing CLI is retried no further; the failure is written
-to `§BRAND_PROJECT_DIRNAME§/alerts.log` as `CHECKPOINT SUMMARY FAILED`. Any catalog CLI can emit
+to `§BRAND_PROJECT_DIRNAME§/alerts.log` as `CHECKPOINT SUMMARY FAILED`, with the tail of the CLI's output
+(secrets masked) when it failed, timed out, or exited without writing the report. Any catalog CLI can emit
 the report, launched with its catalog run arguments; an ACP tool (`<cli>-acp`) runs through its CLI
 counterpart. The summary does not load the tool's catalog `env_files` (such as `claude.env`); it
 inherits the supervisor environment minus `ANTHROPIC_API_KEY`, so settings that exist only in an env file do
 not reach it.
 
-The orchestrator also drains any outstanding obligation as its supervisor exits. This covers the
+The orchestrator also drains any outstanding obligation as its supervisor exits, after waiting for
+a summary already running. This covers the
 run's last checkpoint: another role can auto-resume a terminal checkpoint through sprint
 completion and stop the goal, after which no orchestrator would run again to write the report.
 The drain is skipped when the supervisor is shutting down on a signal, so an interrupt is not
-delayed by report generation; the obligation simply stays outstanding and is honoured by the
-next orchestrator, or by running the `checkpoint-summary` skill manually.
-No state lock is held while the CLI runs, and no reviewer or human terminal waits for it.
+delayed by report generation: the signal stops a running CLI, and the obligation simply stays
+outstanding and is honoured by the next orchestrator, or by running the `checkpoint-summary` skill
+manually.
+No state lock is held while the CLI runs, and neither the orchestrator nor any reviewer or human
+terminal waits for it.
 
 The summary emitter snapshots git status paths and filesystem metadata before
 and after the CLI run. Changes outside `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` are logged

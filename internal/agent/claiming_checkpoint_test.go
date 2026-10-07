@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path"
@@ -24,7 +25,7 @@ func TestHandleApprovedMerges_DoesNotEmitCheckpointSummary(t *testing.T) {
 	tmpDir, stateFile, taskID := setupAgentMergeRepo(t)
 
 	called := false
-	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(context.Context, string, string, string, models.Config) error {
 		called = true
 		return nil
 	})

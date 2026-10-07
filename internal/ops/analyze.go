@@ -319,8 +319,9 @@ func applyCircuitBreakerResponse(state *models.State, result analysis.PatternRes
 		// left alone: it may still carry a transition the orchestrator's
 		// PreWork has not executed yet, and overwriting it here would drop
 		// that pending transition.
+		since := state.Sprint.Timeline.CheckpointAt
 		state.Sprint.Timeline.CheckpointAt = &timestamp
-		state.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp}
+		state.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp, Since: since}
 		state.CircuitBreaker.CurrentResponse = circuitBreakerResponse(result, timestamp, reportPath)
 	case models.CircuitBreakerResponseHalt:
 		historyResult = "TRIGGERED"

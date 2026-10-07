@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,11 +57,14 @@ func withAgentBrandValues(t *testing.T, mutate func()) {
 
 // withFakeCheckpointSummaryRunner swaps in a deterministic runner for the
 // duration of a sub-test and restores the previous one on cleanup.
-func withFakeCheckpointSummaryRunner(t *testing.T, fn func(projectRoot, cliName, prompt string, cfg models.Config) error) {
+func withFakeCheckpointSummaryRunner(t *testing.T, fn func(ctx context.Context, projectRoot, cliName, prompt string, cfg models.Config) error) {
 	t.Helper()
 	prev := checkpointSummaryRunner
 	checkpointSummaryRunner = fn
 	t.Cleanup(func() { checkpointSummaryRunner = prev })
+	// Registered last so it runs first: a background summary must not outlive
+	// the test and occupy the slot for the next one.
+	t.Cleanup(waitForCheckpointSummary)
 }
 
 // clearCLIDefaultsEnv isolates CLI resolution from the developer's shell.
@@ -76,7 +81,7 @@ func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
 	var called bool
 	var gotCLI, gotPrompt string
 
-	withFakeCheckpointSummaryRunner(t, func(projectRoot, cliName, prompt string, _ models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(_ context.Context, projectRoot, cliName, prompt string, _ models.Config) error {
 		called = true
 		gotCLI = cliName
 		gotPrompt = prompt
@@ -87,7 +92,7 @@ func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
 	})
 
 	// Empty config — default is ON.
-	emitCheckpointSummary(tmp, "task-1", models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-1", checkpointSummaryScope{}, models.Config{})
 
 	if !called {
 		t.Fatal("expected checkpoint summary runner to be called for default config")
@@ -113,12 +118,12 @@ func TestEmitCheckpointSummary_UsesBrandedProjectPathsInPrompt(t *testing.T) {
 	})
 	tmp := t.TempDir()
 	var gotPrompt string
-	withFakeCheckpointSummaryRunner(t, func(_, _, prompt string, _ models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(_ context.Context, _, _, prompt string, _ models.Config) error {
 		gotPrompt = prompt
 		return nil
 	})
 
-	emitCheckpointSummary(tmp, "task-branded", models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-branded", checkpointSummaryScope{}, models.Config{})
 
 	for _, want := range []string{".acme/state.yaml", ".acme/checkpoint-summary.md"} {
 		if !strings.Contains(gotPrompt, want) {
@@ -133,13 +138,13 @@ func TestEmitCheckpointSummary_UsesBrandedProjectPathsInPrompt(t *testing.T) {
 func TestEmitCheckpointSummary_OptOut(t *testing.T) {
 	tmp := t.TempDir()
 	called := false
-	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(context.Context, string, string, string, models.Config) error {
 		called = true
 		return nil
 	})
 
 	off := false
-	emitCheckpointSummary(tmp, "task-2", models.Config{AutoCheckpointSummary: &off})
+	emitCheckpointSummary(context.Background(), tmp, "task-2", checkpointSummaryScope{}, models.Config{AutoCheckpointSummary: &off})
 
 	if called {
 		t.Fatal("expected runner to be skipped when AutoCheckpointSummary is false")
@@ -149,13 +154,13 @@ func TestEmitCheckpointSummary_OptOut(t *testing.T) {
 func TestEmitCheckpointSummary_ExplicitOn(t *testing.T) {
 	tmp := t.TempDir()
 	called := false
-	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(context.Context, string, string, string, models.Config) error {
 		called = true
 		return nil
 	})
 
 	on := true
-	emitCheckpointSummary(tmp, "task-3", models.Config{AutoCheckpointSummary: &on})
+	emitCheckpointSummary(context.Background(), tmp, "task-3", checkpointSummaryScope{}, models.Config{AutoCheckpointSummary: &on})
 	if !called {
 		t.Fatal("expected runner to fire when AutoCheckpointSummary is explicitly true")
 	}
@@ -163,24 +168,24 @@ func TestEmitCheckpointSummary_ExplicitOn(t *testing.T) {
 
 func TestEmitCheckpointSummary_RunnerErrorIsSwallowed(t *testing.T) {
 	tmp := t.TempDir()
-	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(context.Context, string, string, string, models.Config) error {
 		return os.ErrNotExist
 	})
 
 	// Must not panic / must not propagate — runner errors are best-effort.
-	emitCheckpointSummary(tmp, "task-4", models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-4", checkpointSummaryScope{}, models.Config{})
 }
 
 func TestEmitCheckpointSummary_HonoursConfiguredCLI(t *testing.T) {
 	clearCLIDefaultsEnv(t)
 	tmp := t.TempDir()
 	var gotCLI string
-	withFakeCheckpointSummaryRunner(t, func(_, cliName, _ string, _ models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(_ context.Context, _, cliName, _ string, _ models.Config) error {
 		gotCLI = cliName
 		return nil
 	})
 
-	emitCheckpointSummary(tmp, "task-cli", models.Config{DefaultCLI: "codex"})
+	emitCheckpointSummary(context.Background(), tmp, "task-cli", checkpointSummaryScope{}, models.Config{DefaultCLI: "codex"})
 	if gotCLI != "codex" {
 		t.Errorf("cli = %q, want %q (config override)", gotCLI, "codex")
 	}
@@ -191,12 +196,12 @@ func TestEmitCheckpointSummary_FollowsOrchestratorCLI(t *testing.T) {
 	t.Setenv("LIZA_DEFAULT_DOER_CLI", "codex")
 	tmp := t.TempDir()
 	var gotCLI string
-	withFakeCheckpointSummaryRunner(t, func(_, cliName, _ string, _ models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(_ context.Context, _, cliName, _ string, _ models.Config) error {
 		gotCLI = cliName
 		return nil
 	})
 
-	emitCheckpointSummary(tmp, "task-cli", models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-cli", checkpointSummaryScope{}, models.Config{})
 	if gotCLI != "codex" {
 		t.Errorf("cli = %q, want %q (orchestrator role default)", gotCLI, "codex")
 	}
@@ -217,7 +222,7 @@ func TestCheckpointSummaryLaunchPlan_Supported(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		plan, err := checkpointSummaryLaunchPlan(t.TempDir(), c.cli, "prompt", models.Config{}, nil)
+		plan, err := checkpointSummaryLaunchPlan(t.TempDir(), c.cli, "prompt", models.Config{})
 		if err != nil {
 			t.Errorf("%s: unexpected error: %v", c.cli, err)
 			continue
@@ -234,7 +239,7 @@ func TestCheckpointSummaryLaunchPlan_Supported(t *testing.T) {
 }
 
 func TestCheckpointSummaryLaunchPlan_ACPToolUsesCLICounterpart(t *testing.T) {
-	plan, err := checkpointSummaryLaunchPlan(t.TempDir(), "opencode-acp", "prompt", models.Config{}, nil)
+	plan, err := checkpointSummaryLaunchPlan(t.TempDir(), "opencode-acp", "prompt", models.Config{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -247,7 +252,7 @@ func TestCheckpointSummaryLaunchPlan_ACPToolUsesCLICounterpart(t *testing.T) {
 }
 
 func TestCheckpointSummaryLaunchPlan_Unsupported(t *testing.T) {
-	if _, err := checkpointSummaryLaunchPlan(t.TempDir(), "not-a-cli", "x", models.Config{}, nil); err == nil {
+	if _, err := checkpointSummaryLaunchPlan(t.TempDir(), "not-a-cli", "x", models.Config{}); err == nil {
 		t.Fatal("expected error for unknown CLI")
 	}
 }
@@ -256,7 +261,7 @@ func TestCheckpointSummaryLaunchPlan_RejectsPromptFileTransport(t *testing.T) {
 	cfg := models.Config{AgentTools: map[string]models.AgentToolConfig{
 		"filetool": {Backend: ToolBackendCLI, Executable: "filetool", PromptTransport: PromptTransportFile},
 	}}
-	if _, err := checkpointSummaryLaunchPlan(t.TempDir(), "filetool", "x", cfg, nil); err == nil {
+	if _, err := checkpointSummaryLaunchPlan(t.TempDir(), "filetool", "x", cfg); err == nil {
 		t.Fatal("expected error for prompt-file transport")
 	}
 }
@@ -264,14 +269,14 @@ func TestCheckpointSummaryLaunchPlan_RejectsPromptFileTransport(t *testing.T) {
 func TestEmitCheckpointSummary_FailureWritesAlert(t *testing.T) {
 	clearCLIDefaultsEnv(t)
 	tmp := t.TempDir()
-	withFakeCheckpointSummaryRunner(t, func(string, string, string, models.Config) error {
+	withFakeCheckpointSummaryRunner(t, func(context.Context, string, string, string, models.Config) error {
 		return errors.New("boom")
 	})
 
 	if err := os.MkdirAll(filepath.Join(tmp, paths.ProjectDirName()), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	emitCheckpointSummary(tmp, "SPRINT_COMPLETE", models.Config{DefaultCLI: "opencode"})
+	emitCheckpointSummary(context.Background(), tmp, "SPRINT_COMPLETE", checkpointSummaryScope{}, models.Config{DefaultCLI: "opencode"})
 
 	data, err := os.ReadFile(paths.New(tmp).AlertsLogPath())
 	if err != nil {
@@ -310,9 +315,9 @@ func TestRunCheckpointSummaryCLI_WritesLizaOwnedReport(t *testing.T) {
 		"printf '# checkpoint summary\\n' > " + paths.ProjectDirName() + "/checkpoint-summary.md",
 	})
 
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	if err != nil {
-		t.Fatalf("runCheckpointSummaryCLI() error = %v", err)
+		t.Fatalf("runCheckpointSummaryCLI(context.Background(), ) error = %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(tmp, filepath.FromSlash(checkpointSummaryRelPath()))); statErr != nil {
 		t.Errorf("expected report at %s: %v", checkpointSummaryRelPath(), statErr)
@@ -330,9 +335,9 @@ func TestRunCheckpointSummaryCLI_WritesBrandedReport(t *testing.T) {
 		"printf '# checkpoint summary\\n' > .acme/checkpoint-summary.md",
 	})
 
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	if err != nil {
-		t.Fatalf("runCheckpointSummaryCLI() error = %v", err)
+		t.Fatalf("runCheckpointSummaryCLI(context.Background(), ) error = %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(tmp, ".acme", "checkpoint-summary.md")); statErr != nil {
 		t.Errorf("expected branded report: %v", statErr)
@@ -347,7 +352,7 @@ func TestRunCheckpointSummaryCLI_ReportMissing(t *testing.T) {
 	testhelpers.SetupTestGitRepo(t, tmp)
 	installFakeCLI(t, "claude", nil)
 
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	if err == nil {
 		t.Fatal("expected report missing error, got nil")
 	}
@@ -382,7 +387,7 @@ func TestRunCheckpointSummaryCLI_ToleratesConcurrentWrites(t *testing.T) {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		result <- runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+		result <- runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	}()
 	opened := make(chan *os.File, 1)
 	go func() {
@@ -423,7 +428,7 @@ func TestRunCheckpointSummaryCLI_ToleratesConcurrentWrites(t *testing.T) {
 		}
 		writer = f
 	case err := <-result:
-		t.Fatalf("runCheckpointSummaryCLI() returned before the CLI started: %v", err)
+		t.Fatalf("runCheckpointSummaryCLI(context.Background(), ) returned before the CLI started: %v", err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("fake CLI never opened the release FIFO")
 	}
@@ -443,10 +448,10 @@ func TestRunCheckpointSummaryCLI_ToleratesConcurrentWrites(t *testing.T) {
 	select {
 	case err := <-result:
 		if err != nil {
-			t.Fatalf("runCheckpointSummaryCLI() error = %v", err)
+			t.Fatalf("runCheckpointSummaryCLI(context.Background(), ) error = %v", err)
 		}
 	case <-time.After(15 * time.Second):
-		t.Fatal("runCheckpointSummaryCLI() did not return")
+		t.Fatal("runCheckpointSummaryCLI(context.Background(), ) did not return")
 	}
 	if _, err := os.Stat(filepath.Join(tmp, filepath.FromSlash(checkpointSummaryRelPath()))); err != nil {
 		t.Errorf("expected report at %s: %v", checkpointSummaryRelPath(), err)
@@ -462,7 +467,7 @@ func TestRunCheckpointSummaryCLI_NonZeroExitReturnsError(t *testing.T) {
 		"exit 7",
 	})
 
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	if err == nil {
 		t.Fatal("expected non-zero exit error, got nil")
 	}
@@ -479,7 +484,7 @@ func TestRunCheckpointSummaryCLI_FailureIncludesOutputTail(t *testing.T) {
 		"exit 1",
 	})
 
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	if err == nil {
 		t.Fatal("expected non-zero exit error, got nil")
 	}
@@ -500,7 +505,7 @@ func TestRunCheckpointSummaryCLI_FailureMasksSecrets(t *testing.T) {
 		"exit 1",
 	})
 
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	if err == nil {
 		t.Fatal("expected non-zero exit error, got nil")
 	}
@@ -534,7 +539,7 @@ func TestRunCheckpointSummaryCLI_ReportEmpty(t *testing.T) {
 		": > " + paths.ProjectDirName() + "/checkpoint-summary.md",
 	})
 
-	err := runCheckpointSummaryCLI(tmp, "claude", "prompt", models.Config{})
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
 	if err == nil {
 		t.Fatal("expected empty report error, got nil")
 	}
@@ -557,4 +562,135 @@ func installFakeCLI(t *testing.T, name string, body []string) {
 		t.Fatalf("write fake CLI: %v", err)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func mergedTask(id string, at time.Time) models.Task {
+	return models.Task{ID: id, History: []models.TaskHistoryEntry{{Event: models.TaskEventMerged, Time: at}}}
+}
+
+// #171: a summary told to read the whole run outgrew its bound. The scope is
+// the work merged since the previous checkpoint, newest first.
+func TestBuildCheckpointSummaryScope_MergesSinceThePreviousCheckpoint(t *testing.T) {
+	base := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	since := base
+	state := &models.State{Tasks: []models.Task{
+		mergedTask("before", base.Add(-time.Minute)),
+		mergedTask("at-since", base),
+		mergedTask("older", base.Add(time.Minute)),
+		mergedTask("newer", base.Add(2*time.Minute)),
+		mergedTask("after", base.Add(4*time.Minute)),
+		{ID: "unmerged"},
+	}}
+	scope := buildCheckpointSummaryScope(state, &models.PendingCheckpointSummary{At: base.Add(3 * time.Minute), Since: &since})
+
+	if want := []string{"newer", "older"}; !slices.Equal(scope.TaskIDs, want) {
+		t.Errorf("TaskIDs = %v, want %v", scope.TaskIDs, want)
+	}
+	if !scope.Since.Equal(since) || scope.Omitted != 0 {
+		t.Errorf("Since = %v, Omitted = %d; want %v, 0", scope.Since, scope.Omitted, since)
+	}
+}
+
+// Without a previous checkpoint (or on an obligation recorded before Since
+// existed) the window opens at the sprint start.
+func TestBuildCheckpointSummaryScope_FallsBackToTheSprintStart(t *testing.T) {
+	start := time.Date(2026, 10, 7, 8, 0, 0, 0, time.UTC)
+	state := &models.State{Tasks: []models.Task{
+		mergedTask("previous-sprint", start.Add(-time.Hour)),
+		mergedTask("this-sprint", start.Add(time.Hour)),
+	}}
+	state.Sprint.Timeline.Started = start
+
+	scope := buildCheckpointSummaryScope(state, &models.PendingCheckpointSummary{At: start.Add(2 * time.Hour)})
+	if !slices.Equal(scope.TaskIDs, []string{"this-sprint"}) || !scope.Since.Equal(start) {
+		t.Errorf("scope = %+v, want only this-sprint since %v", scope, start)
+	}
+}
+
+// The scope is capped; the remainder is counted so the report can say what
+// it does not cover.
+func TestBuildCheckpointSummaryScope_CapsTheTaskList(t *testing.T) {
+	base := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	state := &models.State{}
+	for i := range checkpointSummaryScopeLimit + 3 {
+		state.Tasks = append(state.Tasks, mergedTask(fmt.Sprintf("task-%02d", i), base.Add(time.Duration(i+1)*time.Second)))
+	}
+	scope := buildCheckpointSummaryScope(state, &models.PendingCheckpointSummary{At: base.Add(time.Hour), Since: &base})
+
+	if len(scope.TaskIDs) != checkpointSummaryScopeLimit || scope.Omitted != 3 {
+		t.Fatalf("len = %d, Omitted = %d; want %d, 3", len(scope.TaskIDs), scope.Omitted, checkpointSummaryScopeLimit)
+	}
+	if want := fmt.Sprintf("task-%02d", checkpointSummaryScopeLimit+2); scope.TaskIDs[0] != want {
+		t.Errorf("first = %q, want the newest %q", scope.TaskIDs[0], want)
+	}
+}
+
+func TestBuildCheckpointSummaryPrompt_NamesTheScopeAndTheOneTurnRule(t *testing.T) {
+	since := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	prompt := buildCheckpointSummaryPrompt("PLANNING_COMPLETE", checkpointSummaryScope{Since: since, TaskIDs: []string{"task-a", "task-b"}, Omitted: 4})
+	for _, want := range []string{
+		"since 2026-10-07T09:00:00Z", "- task-a\n", "- task-b\n",
+		"4 earlier tasks merged in this window are not covered",
+		"do not delegate to subagents", "write the report before ending your",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt lacks %q:\n%s", want, prompt)
+		}
+	}
+
+	empty := buildCheckpointSummaryPrompt("", checkpointSummaryScope{Since: since})
+	if !strings.Contains(empty, "(no task merged in this window)") || strings.Contains(empty, "not covered") {
+		t.Errorf("empty-scope prompt:\n%s", empty)
+	}
+}
+
+// The one-shot summary always runs Claude without subagents: a delegated read
+// let the session end its turn before writing (#171).
+func TestCheckpointSummaryLaunchPlan_ClaudeDisallowsSubagents(t *testing.T) {
+	plan, err := checkpointSummaryLaunchPlan(t.TempDir(), "claude", "prompt", models.Config{})
+	if err != nil {
+		t.Fatalf("launch plan: %v", err)
+	}
+	i := slices.Index(plan.Args, "--disallowedTools")
+	if i < 0 || i+1 >= len(plan.Args) || plan.Args[i+1] != "Task" {
+		t.Errorf("args = %v, want --disallowedTools Task", plan.Args)
+	}
+}
+
+// A session that ends its turn without writing the report must say what it
+// did instead.
+func TestRunCheckpointSummaryCLI_ReportMissingIncludesOutputTail(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{
+		"echo \"I'll write the report once the subagent digests arrive\"",
+	})
+
+	err := runCheckpointSummaryCLI(context.Background(), tmp, "claude", "prompt", models.Config{})
+	if err == nil {
+		t.Fatal("expected report missing error, got nil")
+	}
+	for _, want := range []string{"report missing", "once the subagent digests arrive"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to contain %q", err.Error(), want)
+		}
+	}
+}
+
+// A stopping supervisor kills the CLI instead of leaving it to run on.
+func TestRunCheckpointSummaryCLI_ParentCancellationStopsTheCLI(t *testing.T) {
+	tmp := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmp)
+	installFakeCLI(t, "claude", []string{"exec sleep 30"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(200*time.Millisecond, cancel)
+	start := time.Now()
+	err := runCheckpointSummaryCLI(ctx, tmp, "claude", "prompt", models.Config{})
+	if err == nil || !strings.Contains(err.Error(), "cancelled: supervisor stopping") {
+		t.Fatalf("error = %v, want a cancellation error", err)
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Errorf("returned after %s; the CLI outlived the cancellation", elapsed)
+	}
 }

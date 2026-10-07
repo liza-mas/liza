@@ -144,14 +144,15 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 					// System pause takes precedence over automatic sprint resume.
 				case state.Sprint.Status == models.SprintStatusCheckpoint:
 					// Before anything moves the sprint on — including
-					// auto-resume below — give the checkpoint its report.
-					// This gate is the only place every checkpoint is
+					// auto-resume below — claim the checkpoint's report. The
+					// claim fixes its scope; the CLI then runs in the
+					// background, so auto-resume does not wait for it. This gate is the only place every checkpoint is
 					// observed: it polls on a timer, re-reads state each
 					// poll, and blocks every role, so a checkpoint made from
 					// the TUI, the CLI or the circuit breaker while the
 					// orchestrator is idle is seen here even though no
 					// orchestrator turn follows it.
-					maybeEmitCheckpointSummary(bb, projectRoot, roleType, state)
+					maybeEmitCheckpointSummary(ctx, bb, projectRoot, roleType, state)
 					if state.Config.AutoResume {
 						logger.Info("Auto-resuming from CHECKPOINT")
 						if _, resumeErr := resumeCheckpoint(projectRoot, "auto-resume"); resumeErr != nil {

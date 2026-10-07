@@ -1243,6 +1243,7 @@ sprint:
 pending_checkpoint_summary:
   at: 2025-01-18T17:30:00Z
   trigger: SPRINT_COMPLETE  # empty for a circuit-breaker checkpoint
+  since: 2025-01-18T15:10:00Z  # previous checkpoint; absent for the sprint's first (summary covers merges in (since, at])
 
 circuit_breaker:
   last_check: 2025-01-18T17:30:00Z

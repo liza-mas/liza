@@ -54,6 +54,11 @@ No other discovery is needed. Read every artifact file referenced by the ref fie
 Read the upstream source (`goal.spec_ref`). Task evidence comes from the
 hydrated query, including archived terminal records.
 
+**Scoped run:** when the prompt names a task scope (the automatic checkpoint summary does), read
+only those tasks' own artifacts and the upstream sections they cite, take everything else from
+state fields, and write the report in the same turn without delegating. The scope rule takes
+precedence over "read every artifact" above.
+
 ## Protocol
 
 ### Phase 1: Inventory

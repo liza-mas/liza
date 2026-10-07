@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/liza-mas/liza/internal/alerts"
@@ -40,11 +42,26 @@ const (
 	checkpointSummaryDetailBytes     = 512
 )
 
+// checkpointSummaryScopeLimit bounds the tasks one automatic summary covers.
+// A one-shot summary that reads everything the run produced outgrows any
+// fixed bound (#171).
+const checkpointSummaryScopeLimit = 25
+
+// checkpointSummaryScope is the slice of the run one automatic summary covers:
+// the tasks merged after Since and up to the checkpoint, newest first.
+type checkpointSummaryScope struct {
+	Since   time.Time
+	TaskIDs []string
+	// Omitted counts the tasks merged in the window beyond the limit.
+	Omitted int
+}
+
 // checkpointSummaryRunner is the function used to actually invoke a CLI for
 // the checkpoint-summary skill. It is a package var so tests can substitute
 // a deterministic fake without spawning a real LLM subprocess.
 //
 // Contract:
+//   - ctx: the supervisor's context; cancelling it stops the CLI
 //   - projectRoot: working directory for the spawn (state.yaml lives in the
 //     branded project runtime directory)
 //   - cliName: resolved default CLI (claude, codex, gemini, ...)
@@ -56,6 +73,42 @@ const (
 // Returns nil on a successful spawn that wrote the report. Any error is
 // non-fatal at the call site — the merge itself has already succeeded.
 var checkpointSummaryRunner = runCheckpointSummaryCLI
+
+// checkpointSummaryInFlight tracks the one summary a supervisor runs in the
+// background at a time. A checkpoint raised while it runs keeps its
+// obligation, which a later poll claims once this one ends.
+var checkpointSummaryInFlight struct {
+	sync.Mutex
+	done chan struct{}
+}
+
+// beginCheckpointSummary reserves the background slot; ok is false while
+// another summary runs. finish releases the slot.
+func beginCheckpointSummary() (finish func(), ok bool) {
+	checkpointSummaryInFlight.Lock()
+	defer checkpointSummaryInFlight.Unlock()
+	if checkpointSummaryInFlight.done != nil {
+		return nil, false
+	}
+	done := make(chan struct{})
+	checkpointSummaryInFlight.done = done
+	return func() {
+		checkpointSummaryInFlight.Lock()
+		checkpointSummaryInFlight.done = nil
+		checkpointSummaryInFlight.Unlock()
+		close(done)
+	}, true
+}
+
+// waitForCheckpointSummary blocks until the background summary, if any, ends.
+func waitForCheckpointSummary() {
+	checkpointSummaryInFlight.Lock()
+	done := checkpointSummaryInFlight.done
+	checkpointSummaryInFlight.Unlock()
+	if done != nil {
+		<-done
+	}
+}
 
 // maybeEmitCheckpointSummary writes the steering report for a checkpoint whose
 // obligation is still outstanding, then clears it.
@@ -76,29 +129,83 @@ var checkpointSummaryRunner = runCheckpointSummaryCLI
 //
 // Only the orchestrator emits; otherwise every supervisor role would spawn its
 // own CLI for the same checkpoint.
-func maybeEmitCheckpointSummary(bb *db.Blackboard, projectRoot, roleType string, state *models.State) {
+//
+// The CLI runs in the background: a summary takes minutes, and running it in
+// the caller held the orchestrator for the whole run at every checkpoint
+// (#171). One runs at a time; while it does, a newer obligation is left
+// unclaimed for a later poll.
+func maybeEmitCheckpointSummary(ctx context.Context, bb *db.Blackboard, projectRoot, roleType string, state *models.State) {
 	if roleType != "orchestrator" || state == nil || state.PendingCheckpointSummary == nil || bb == nil {
+		return
+	}
+	finish, ok := beginCheckpointSummary()
+	if !ok {
 		return
 	}
 
 	var claimed *models.PendingCheckpointSummary
+	var scope checkpointSummaryScope
 	if err := bb.Modify(func(s *models.State) error {
 		// Re-read under the lock: another observation may have claimed it.
 		if s.PendingCheckpointSummary == nil {
 			return nil
 		}
 		claimed = s.PendingCheckpointSummary
+		scope = buildCheckpointSummaryScope(s, claimed)
 		s.PendingCheckpointSummary = nil
 		return nil
 	}); err != nil {
+		finish()
 		GetLogger().Warn("Failed to claim the checkpoint-summary obligation", "error", err)
 		return
 	}
 	if claimed == nil {
+		finish()
 		return
 	}
 
-	emitCheckpointSummary(projectRoot, claimed.Trigger, state.Config)
+	cfg := state.Config
+	go func() {
+		defer finish()
+		emitCheckpointSummary(ctx, projectRoot, claimed.Trigger, scope, cfg)
+	}()
+}
+
+// buildCheckpointSummaryScope selects the tasks whose latest merge falls after
+// the previous checkpoint and no later than this one, newest first. Without a
+// previous checkpoint the window starts at the sprint start.
+func buildCheckpointSummaryScope(state *models.State, pending *models.PendingCheckpointSummary) checkpointSummaryScope {
+	scope := checkpointSummaryScope{Since: state.Sprint.Timeline.Started}
+	if pending.Since != nil {
+		scope.Since = *pending.Since
+	}
+	type merge struct {
+		id string
+		at time.Time
+	}
+	var merges []merge
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		for j := len(task.History) - 1; j >= 0; j-- {
+			entry := task.History[j]
+			if entry.Event != models.TaskEventMerged {
+				continue
+			}
+			if entry.Time.After(scope.Since) && !entry.Time.After(pending.At) {
+				merges = append(merges, merge{id: task.ID, at: entry.Time})
+			}
+			break
+		}
+	}
+	sort.SliceStable(merges, func(a, b int) bool { return merges[a].at.After(merges[b].at) })
+	for i, m := range merges {
+		if i == checkpointSummaryScopeLimit {
+			scope.Omitted = len(merges) - i
+			break
+		}
+		scope.TaskIDs = append(scope.TaskIDs, m.id)
+	}
+	return scope
 }
 
 // emitCheckpointSummary runs the checkpoint-summary skill against the project
@@ -107,8 +214,8 @@ func maybeEmitCheckpointSummary(bb *db.Blackboard, projectRoot, roleType string,
 // that already happened.
 //
 // The caller is responsible for invoking this exactly once per checkpoint and
-// for doing so outside the state lock: the spawned CLI reads state.yaml itself
-// and may run for minutes.
+// for doing so outside the state lock and off the supervisor loop: the spawned
+// CLI reads state.yaml itself and may run for minutes.
 //
 // Behavior:
 //   - opt-out via Config.AutoCheckpointSummary == false
@@ -116,7 +223,7 @@ func maybeEmitCheckpointSummary(bb *db.Blackboard, projectRoot, roleType string,
 //   - CLI is the orchestrator's, resolved through ResolveDefaultCLIForRole
 //     (doer config > doer env > global config > env > const), so the summary
 //     runs on the provider the run already uses (D-57)
-func emitCheckpointSummary(projectRoot string, trigger string, cfg models.Config) {
+func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger string, scope checkpointSummaryScope, cfg models.Config) {
 	logger := GetLogger()
 
 	if cfg.AutoCheckpointSummary != nil && !*cfg.AutoCheckpointSummary {
@@ -125,9 +232,9 @@ func emitCheckpointSummary(projectRoot string, trigger string, cfg models.Config
 	}
 
 	cliName := ResolveDefaultCLIForRole("orchestrator", cliResolutionConfig(cfg))
-	prompt := buildCheckpointSummaryPrompt(trigger)
+	prompt := buildCheckpointSummaryPrompt(trigger, scope)
 
-	if err := checkpointSummaryRunner(projectRoot, cliName, prompt, cfg); err != nil {
+	if err := checkpointSummaryRunner(ctx, projectRoot, cliName, prompt, cfg); err != nil {
 		logger.Warn("Auto checkpoint-summary failed",
 			"trigger", trigger,
 			"cli", cliName,
@@ -158,18 +265,42 @@ func emitCheckpointSummary(projectRoot string, trigger string, cfg models.Config
 //
 // The trigger is the checkpoint's own trigger and may be empty for a
 // checkpoint taken without one; the sentence stays readable either way.
-func buildCheckpointSummaryPrompt(trigger string) string {
+//
+// The scope and the one-turn rule bound the run: a summary told to read every
+// artifact of the run delegated the reading to subagents and ended its turn
+// before writing (#171).
+func buildCheckpointSummaryPrompt(trigger string, scope checkpointSummaryScope) string {
 	occasion := "the sprint just reached a checkpoint"
 	if trigger != "" {
 		occasion = fmt.Sprintf("the sprint just reached a checkpoint (trigger: %s)", trigger)
+	}
+	var tasks strings.Builder
+	for _, id := range scope.TaskIDs {
+		fmt.Fprintf(&tasks, "- %s\n", id)
+	}
+	if len(scope.TaskIDs) == 0 {
+		tasks.WriteString("(no task merged in this window)\n")
+	}
+	if scope.Omitted > 0 {
+		fmt.Fprintf(&tasks, "(%d earlier tasks merged in this window are not covered; say so in the report.)\n", scope.Omitted)
 	}
 	return fmt.Sprintf(`Use the checkpoint-summary skill.
 
 Context: %s. Read %s,
 apply the checkpoint-summary skill protocol, and write the report to
-%s (overwrite if it already exists). Do not create, edit, or delete any other
-file. Do not ask follow-up questions.
-`, occasion, checkpointSummaryStateRelPath(), checkpointSummaryRelPath())
+%s (overwrite if it already exists).
+
+Scope: this report covers only the tasks merged since %s:
+%sRead only these tasks' own plan_ref, arch_ref and spec_ref artifacts and the
+goal spec sections they cite; take everything else from state fields. If no
+task is listed, report only the current blocked tasks and holds from state.
+
+Work alone and finish in this turn: do not delegate to subagents, schedule
+wakeups or start background work, and write the report before ending your
+turn. Do not create, edit, or delete any other file. Do not ask follow-up
+questions.
+`, occasion, checkpointSummaryStateRelPath(), checkpointSummaryRelPath(),
+		scope.Since.UTC().Format(time.RFC3339), tasks.String())
 }
 
 // runCheckpointSummaryCLI is the production implementation of
@@ -181,7 +312,7 @@ file. Do not ask follow-up questions.
 // Output is not persisted, because this is a best-effort side effect rather
 // than a supervised agent session, but its tail is kept so a failure names
 // its cause instead of only an exit status.
-func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Config) error {
+func runCheckpointSummaryCLI(parent context.Context, projectRoot, cliName, prompt string, cfg models.Config) error {
 	reportRelPath := checkpointSummaryRelPath()
 	reportPath := filepath.Join(projectRoot, filepath.FromSlash(reportRelPath))
 	if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
@@ -190,7 +321,9 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 
 	env := filterAPIKeyEnv(os.Environ())
 
-	ctx, cancel := context.WithTimeout(context.Background(), checkpointSummaryDefaultTimeout)
+	// Derived from the supervisor's context so a stopping supervisor kills the
+	// CLI instead of orphaning it without its timeout.
+	ctx, cancel := context.WithTimeout(parent, checkpointSummaryDefaultTimeout)
 	defer cancel()
 
 	cmd, useStdin, err := checkpointSummaryCLICommand(ctx, projectRoot, cliName, prompt, cfg, env)
@@ -211,10 +344,14 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 	cmd.Stdout = tail
 	cmd.Stderr = tail
 
-	if runErr := cmd.Run(); runErr != nil {
-		// Mask against the unfiltered env: filterAPIKeyEnv drops the very key
-		// most likely to be echoed.
-		detail := checkpointSummaryFailureDetail(tail, os.Environ())
+	runErr := cmd.Run()
+	// Mask against the unfiltered env: filterAPIKeyEnv drops the very key
+	// most likely to be echoed.
+	detail := checkpointSummaryFailureDetail(tail, os.Environ())
+	if runErr != nil {
+		if parent.Err() != nil {
+			return fmt.Errorf("checkpoint-summary CLI %q cancelled: supervisor stopping%s", cliName, detail)
+		}
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("checkpoint-summary CLI %q timed out after %s%s", cliName, checkpointSummaryDefaultTimeout, detail)
 		}
@@ -222,13 +359,14 @@ func runCheckpointSummaryCLI(projectRoot, cliName, prompt string, cfg models.Con
 	}
 
 	// Sanity: confirm the report was actually written. If the CLI exited 0
-	// but never wrote the file, surface that as an error so callers can warn.
+	// but never wrote the file, surface that as an error so callers can warn;
+	// the output tail shows what the session did instead.
 	info, statErr := os.Stat(reportPath)
 	if statErr != nil {
-		return fmt.Errorf("checkpoint-summary CLI exited 0 but report missing at %s: %w", reportPath, statErr)
+		return fmt.Errorf("checkpoint-summary CLI exited 0 but report missing at %s: %w%s", reportPath, statErr, detail)
 	}
 	if info.Size() == 0 {
-		return fmt.Errorf("checkpoint-summary CLI exited 0 but report is empty at %s", reportPath)
+		return fmt.Errorf("checkpoint-summary CLI exited 0 but report is empty at %s%s", reportPath, detail)
 	}
 	return nil
 }
@@ -275,7 +413,7 @@ func checkpointSummaryCLICommand(
 	cfg models.Config,
 	env []string,
 ) (*exec.Cmd, bool, error) {
-	plan, err := checkpointSummaryLaunchPlan(projectRoot, cliName, prompt, cfg, env)
+	plan, err := checkpointSummaryLaunchPlan(projectRoot, cliName, prompt, cfg)
 	if err != nil {
 		return nil, false, err
 	}
@@ -294,7 +432,7 @@ func checkpointSummaryCLICommand(
 // catalog, the same source normal agent runs use, so every configured CLI can
 // emit a summary. An ACP tool runs through its CLI counterpart: a summary is a
 // single prompt and needs no ACP session.
-func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models.Config, env []string) (LaunchPlan, error) {
+func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models.Config) (LaunchPlan, error) {
 	if cliName == "vibe" {
 		cliName = "mistral"
 	}
@@ -307,11 +445,13 @@ func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models
 		cliName = counterpart
 	}
 	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
-		ToolName:         cliName,
-		Prompt:           prompt,
-		ProjectRoot:      projectRoot,
-		RuntimeConfig:    cfg,
-		DisableSubagents: brandedEnvListGateValue(env, "DISABLE_CLAUDE_SUBAGENTS") == "1",
+		ToolName:      cliName,
+		Prompt:        prompt,
+		ProjectRoot:   projectRoot,
+		RuntimeConfig: cfg,
+		// A one-shot summary must finish in its own turn; a subagent let it end
+		// the turn before writing the report (#171).
+		DisableSubagents: true,
 	})
 	if err != nil {
 		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: %w", err)
@@ -351,15 +491,20 @@ func filterAPIKeyEnv(env []string) []string {
 // up, so the run's last and most useful steering report would never be
 // written.
 //
-// Skipped when the context is already cancelled: a signalled shutdown should
-// not wait minutes for a report.
+// A summary already running in the background is waited for first, so the
+// process does not exit under it. A cancelled context skips the drain: a
+// signalled shutdown should not wait minutes for a report. The cancellation
+// kills a running CLI, which is still waited for so it is not orphaned.
 func drainPendingCheckpointSummary(ctx context.Context, bb *db.Blackboard, projectRoot string) {
 	if ctx.Err() != nil || bb == nil {
+		waitForCheckpointSummary()
 		return
 	}
+	waitForCheckpointSummary()
 	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return
 	}
-	maybeEmitCheckpointSummary(bb, projectRoot, "orchestrator", state)
+	maybeEmitCheckpointSummary(ctx, bb, projectRoot, "orchestrator", state)
+	waitForCheckpointSummary()
 }

@@ -310,6 +310,11 @@ func TestAnalyzeProviderAuditResponsesAtCommitBoundary(t *testing.T) {
 				if readState.Sprint.Timeline.CheckpointAt == nil {
 					t.Error("CHECKPOINT left Sprint.Timeline.CheckpointAt unset, so the checkpoint has no identity")
 				}
+				// The fixture has no earlier checkpoint, so the obligation's
+				// summary window opens at the sprint start (#171).
+				if pending := readState.PendingCheckpointSummary; pending == nil || pending.Since != nil {
+					t.Errorf("CHECKPOINT obligation = %+v, want one without Since", pending)
+				}
 				assertActiveAnalyzeResponse(t, readState, result)
 			case models.CircuitBreakerResponseHalt:
 				if readState.CircuitBreaker.Status != "TRIGGERED" || readState.CircuitBreaker.CurrentTrigger == nil {

@@ -189,7 +189,7 @@ func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboar
 			// while it waits, and a checkpoint suppresses the wake triggers
 			// below — so without this the wait runs to timeout and the
 			// supervisor exits having never observed the checkpoint.
-			maybeEmitCheckpointSummary(bb, config.ProjectRoot, "orchestrator", state)
+			maybeEmitCheckpointSummary(ctx, bb, config.ProjectRoot, "orchestrator", state)
 
 			result := orchestratorWaitForWorkDetector(config.ProjectRoot, state, pipelineTerminals, planningPairs, m2oTransitions)
 			if result.ShouldWake() {
