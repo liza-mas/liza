@@ -527,3 +527,62 @@ func TestProviderValidationStaleDeclarationOnlyOnUnexpandedPlan(t *testing.T) {
 		}
 	}
 }
+
+// D-64: an unexpanded MERGED plan may also keep a declaration whose selected
+// child was retired permanently; every other holder of it stays invalid.
+func TestProviderValidationStaleSelectedChildOnlyOnUnexpandedPlan(t *testing.T) {
+	retirements := map[string]func(*models.Task){
+		"abandoned":       func(c *models.Task) { c.Status = models.TaskStatusAbandoned },
+		"superseded":      func(c *models.Task) { c.Status = models.TaskStatusSuperseded },
+		"retired handoff": func(c *models.Task) { c.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced} },
+	}
+	holders := map[string]struct {
+		shape func(*models.State)
+		valid bool
+	}{
+		"unexpanded plan": {func(*models.State) {}, true},
+		"markerless plan with a child": {func(s *models.State) {
+			s.Tasks = append(s.Tasks, models.Task{ID: "consumer-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusMerged, ParentTasks: []string{"consumer"}})
+		}, false},
+		"plan with an executed marker": {func(s *models.State) {
+			s.FindTask("consumer").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
+		}, false},
+		"in-flight producer": {func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, false},
+		"non-terminal task-level declaration": {func(s *models.State) {
+			consumer := s.FindTask("consumer")
+			consumer.Status = models.TaskStatus("DRAFT_ARCHITECTURE")
+			consumer.ProviderDependencies = consumer.Output[0].ProviderDependencies
+			consumer.Output = nil
+		}, false},
+	}
+	for retirement, retire := range retirements {
+		for name, holder := range holders {
+			t.Run(retirement+"/"+name, func(t *testing.T) {
+				// GIVEN an expanded provider and an unexpanded consumer plan
+				// declaring its selected child slot provider-cp-0
+				state, pr, _ := providerValidationFixture(t)
+				state.FindTask("provider").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
+				state.Tasks = append(state.Tasks, models.Task{ID: "provider-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusDraftCodingPlan, ParentTasks: []string{"provider"}})
+				consumer := state.FindTask("consumer")
+				consumer.ProviderDependencies = nil
+				consumer.Status = models.TaskStatusMerged
+				output := providerPlanOutput()
+				output.ProviderDependencies = []models.ProviderDependency{providerPlanDependency("provider", 0)}
+				consumer.Output = []models.OutputEntry{output}
+
+				// WHEN the selected child is retired permanently
+				retire(state.FindTask("provider-cp-0"))
+				holder.shape(state)
+
+				// THEN only the unexpanded plan keeps it as stale evidence
+				err := ValidateProviderDependencies(state, pr)
+				if holder.valid && err != nil {
+					t.Fatalf("stale selected child on an unexpanded plan rejected: %v", err)
+				}
+				if !holder.valid && (err == nil || !strings.Contains(err.Error(), "retired provider child provider-cp-0")) {
+					t.Fatalf("validation = %v, want retired provider child refusal", err)
+				}
+			})
+		}
+	}
+}

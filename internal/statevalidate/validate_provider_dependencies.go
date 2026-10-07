@@ -65,13 +65,15 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 }
 
 // mayGoStale, when non-nil and true, marks reviewed output of a plan that has
-// generated nothing: a retired provider there is reconcile evidence, refused
-// by hand-off classification and generation instead (ADR-0185).
+// generated nothing: a retired provider or selected child there is reconcile
+// evidence, refused by hand-off classification and generation instead
+// (ADR-0185, ADR-0186). Provenance, bounds and cycles are still validated.
 func validateProviderOwner(v *violations, state *models.State, resolver *pipeline.Resolver, owner string, deps []models.ProviderDependency, mayGoStale func() bool) {
 	if err := models.ValidateProviderDependencies(deps); err != nil {
 		v.add(fmt.Errorf("task %s: %w", owner, err))
 		return
 	}
+	stale := func() bool { return mayGoStale != nil && mayGoStale() }
 	for index, dep := range deps {
 		label := fmt.Sprintf("task %s provider_dependencies[%d]", owner, index)
 		provider := state.FindTask(dep.ProviderTask)
@@ -88,7 +90,7 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 			v.add(fmt.Errorf("%s transition %s does not originate from provider role_pair %s", label, dep.Transition, provider.RolePair))
 		}
 		if models.ProviderRetired(provider) {
-			if mayGoStale != nil && mayGoStale() {
+			if stale() {
 				continue
 			}
 			v.add(fmt.Errorf("%s references retired provider %s", label, provider.ID))
@@ -106,7 +108,7 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 				if child.RolePair != transition.TargetRolePair || len(parents) != 1 || parents[0] != provider.ID {
 					v.add(fmt.Errorf("%s child %s has incorrect provider provenance or role_pair", label, child.ID))
 				}
-				if child.TransitionsExecuted["replanned"] || child.PlanHandoffRetired() || (child.Status.IsTerminal() && child.Status != models.TaskStatusMerged) {
+				if models.ProviderRetired(child) && !stale() {
 					v.add(fmt.Errorf("%s references retired provider child %s", label, child.ID))
 				}
 			}

@@ -112,7 +112,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 			return ""
 		}
 		barrier := ""
-		if err := rejectReferencedProviderRetirement(state, d.resolver, originalID); err != nil {
+		if err := rejectReferencedProviderRetirement(state, d.resolver, originalID, retirePermanently); err != nil {
 			barrier = err.Error()
 		}
 		material["provider_retirement"] = map[string]any{

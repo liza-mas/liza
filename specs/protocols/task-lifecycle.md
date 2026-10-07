@@ -83,9 +83,11 @@ reviewed structured correction before restoration; merely unblocking repeats
 the missing-edge failure. Omitted fields retain legacy runtime behavior; no
 automatic migration or promotion of architecture dependencies occurs.
 
-Exception (ADR-0185): the output of an unexpanded plan (MERGED, no transition
-marker, no child) naming a provider directly does not hold it. Retiring the
-provider leaves that declaration stale but retained: plan-check refuses to pass
+Exception (ADR-0185, ADR-0186): the output of an unexpanded plan (MERGED, no
+transition marker, no child) holds neither a provider it names directly nor a
+selected child retired other than by replan (a child replan still holds, since
+lineage would hide the change). Such a retirement leaves that declaration stale
+but retained: plan-check refuses to pass
 the plan (or reports it as needing reconciliation once passed), every hand-off
 refuses the entry, and `replan` warns. Replan the plan to re-author it.
 
@@ -99,8 +101,9 @@ otherwise replan it.
 
 See [Provider Dependencies](../architecture/blackboard-schema.md#provider-dependencies),
 [ADR-0181](../architecture/ADR/0181-provider-output-dependencies.md),
-[ADR-0184](../architecture/ADR/0184-replan-lineage-dependency-repair.md) and
-[ADR-0185](../architecture/ADR/0185-stale-provider-declarations-on-unexpanded-plans.md).
+[ADR-0184](../architecture/ADR/0184-replan-lineage-dependency-repair.md),
+[ADR-0185](../architecture/ADR/0185-stale-provider-declarations-on-unexpanded-plans.md) and
+[ADR-0186](../architecture/ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md).
 
 ## Iteration Protocol
 

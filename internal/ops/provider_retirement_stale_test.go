@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -323,7 +325,7 @@ func TestHeldStaleConsumerKeepsItsHold(t *testing.T) {
 }
 
 // Guards: the exception covers only a MERGED plan that provably generated
-// nothing, and only direct provider references.
+// nothing, and a selected child slot only when no replan lineage follows it.
 func TestStaleProviderExceptionKeepsOtherDeclarationsLive(t *testing.T) {
 	draftProvider := providerOpsTask("provider", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
 	cancelProvider := func(root string) error {
@@ -374,13 +376,27 @@ func TestStaleProviderExceptionKeepsOtherDeclarationsLive(t *testing.T) {
 			retire: cancelProvider, holder: "consumer",
 		},
 		{
-			name: "selected child slot",
+			// D-64: replan lineage would resolve the slot to the successor.
+			name: "selected child slot retired by replan",
 			tasks: func() []models.Task {
-				provider := mergedProviderPlan()
-				provider.TransitionsExecuted = map[string]bool{providerOpsTransition: true}
-				child := providerOpsTask("provider-cp-0", "code-planning-pair", models.TaskStatusDraftCodingPlan)
-				child.ParentTasks = []string{"provider"}
+				provider, child := transitionedLineagePlan("provider")
+				child.Status = models.TaskStatusMerged
+				child.Output = []models.OutputEntry{providerOpsOutput()}
 				return []models.Task{provider, child, staleConsumerPlan(false)}
+			},
+			retire: func(root string) error {
+				_, err := Replan(root, &ReplanInput{TaskID: "provider-cp-0", ChangedBy: "human"})
+				return err
+			},
+			holder: "consumer output[0]",
+		},
+		{
+			name: "selected child slot under an expanded plan",
+			tasks: func() []models.Task {
+				provider, child := transitionedLineagePlan("provider")
+				consumerChild := providerOpsTask("consumer-cp-0", "code-planning-pair", models.TaskStatusMerged)
+				consumerChild.ParentTasks = []string{"consumer"}
+				return []models.Task{provider, child, staleConsumerPlan(false), consumerChild}
 			},
 			retire: func(root string) error {
 				_, err := CancelTask(root, "provider-cp-0", "reviewed retirement", "orchestrator-1")
@@ -396,4 +412,207 @@ func TestStaleProviderExceptionKeepsOtherDeclarationsLive(t *testing.T) {
 			requireProviderOpsAtomicRefusal(t, statePath, before, tc.retire(root), "live provider_dependencies", tc.holder)
 		})
 	}
+}
+
+// D-64: retiring the selected child an unexpanded plan's output declares by
+// anything but replan is permanent. No replan lineage can resolve the slot to
+// a successor, so the declaration goes stale instead of holding the child and
+// classification and generation keep seeing the retired child.
+
+type staleSlotRetirement struct {
+	name     string
+	provider string // declared provider; its output 0 selects child
+	child    string
+	tasks    func(passed bool) []models.Task
+	retire   func(root string) error
+}
+
+// fixPlan is a passed corrective plan whose output supersedes original: its
+// reviewed hand-off retires original (plan-declared replacement, ADR-0161).
+func fixPlan(original string) models.Task {
+	fix := withPlanCheck(handoffPlan("fix", "architecture-pair"), models.PlanCheckPassed, "")
+	fix.Output = []models.OutputEntry{replacingOutput(original)}
+	return fix
+}
+
+// admitFixPlan runs reviewed admission and reports fixPlan's own failure.
+func admitFixPlan(root string) error {
+	report, err := ExecuteTransitionsReportWith(root, "manual", AdmitReviewed)
+	if err != nil {
+		return err
+	}
+	for _, failure := range report.Failures {
+		if failure.SourceTaskID == "fix" {
+			return errors.New(failure.Error)
+		}
+	}
+	return nil
+}
+
+// staleSlotConsumer declares provider's output 0, i.e. its selected child
+// slot. A passed consumer waits on an unreviewed upstream so that reviewed
+// admission cannot expand it before the retirement under test.
+func staleSlotConsumer(provider string, passed bool) []models.Task {
+	consumer := staleConsumerPlan(passed)
+	consumer.Output[0].ProviderDependencies = providerOpsDependency(provider, 0)
+	if !passed {
+		return []models.Task{consumer}
+	}
+	gate := providerOpsTask("gate", "architecture-pair", models.TaskStatusMerged)
+	gate.Output = []models.OutputEntry{providerOpsOutput()}
+	consumer.DependsOn = []string{gate.ID}
+	return []models.Task{gate, consumer}
+}
+
+func staleSlotRetirements() []staleSlotRetirement {
+	expanded := func(passed bool, extra ...models.Task) []models.Task {
+		provider, child := transitionedLineagePlan("provider")
+		return append(append([]models.Task{provider, child}, extra...), staleSlotConsumer("provider", passed)...)
+	}
+	return []staleSlotRetirement{
+		{
+			// I-409: a corrective plan's hand-off supersedes the child.
+			name: "plan-declared replacement", provider: "provider", child: "provider-cp-0",
+			tasks:  func(passed bool) []models.Task { return expanded(passed, fixPlan("provider-cp-0")) },
+			retire: admitFixPlan,
+		},
+		{
+			name: "cancel", provider: "provider", child: "provider-cp-0",
+			tasks: func(passed bool) []models.Task { return expanded(passed) },
+			retire: func(root string) error {
+				_, err := CancelTask(root, "provider-cp-0", "reviewed retirement", "orchestrator-1")
+				return err
+			},
+		},
+		{
+			name: "supersede-task", provider: "provider", child: "provider-cp-0",
+			tasks: func(passed bool) []models.Task {
+				replacement := providerOpsTask("replacement", "code-planning-pair", models.TaskStatusDraftCodingPlan)
+				replacement.ParentTasks = []string{"provider"}
+				return expanded(passed, replacement)
+			},
+			retire: func(root string) error {
+				_, err := SupersedeTask(root, "provider-cp-0", []string{"replacement"}, "reviewed replacement", "orchestrator-1")
+				return err
+			},
+		},
+		{
+			// The slot already resolves through lineage to its successor.
+			name: "plan-declared replacement of the effective successor", provider: "arm", child: "arm-cp-0-replan-1",
+			tasks: func(passed bool) []models.Task {
+				tasks := append(replannedProviderChildTasks(models.TaskStatusDraftCodingPlan), fixPlan("arm-cp-0-replan-1"))
+				return append(tasks, staleSlotConsumer("arm", passed)...)
+			},
+			retire: admitFixPlan,
+		},
+	}
+}
+
+func TestStaleSelectedChildOnUnexpandedPlanDoesNotBlockPermanentRetirement(t *testing.T) {
+	for _, scenario := range staleSlotRetirements() {
+		for _, passed := range []bool{false, true} {
+			name := scenario.name + "/unreviewed consumer"
+			if passed {
+				name = scenario.name + "/passed consumer"
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				// GIVEN an unexpanded consumer plan declaring the child's slot
+				tasks := scenario.tasks(passed)
+				root, statePath, _ := setupProviderOpsTest(t, tasks...)
+				var declared []models.OutputEntry
+				for _, task := range tasks {
+					if task.ID == "consumer" {
+						declared = task.Output
+					}
+				}
+
+				// WHEN the selected child is retired permanently
+				if err := scenario.retire(root); err != nil {
+					t.Fatalf("unexpanded consumer plan blocked the selected child's retirement: %v", err)
+				}
+
+				// THEN the retirement persisted and the declaration is kept for audit
+				after := readClaimStateForTest(t, statePath)
+				if child := after.FindTask(scenario.child); child == nil || !models.ProviderRetired(child) {
+					t.Fatalf("selected child retirement not persisted: %+v", child)
+				}
+				if got := after.FindTask("consumer").Output; !reflect.DeepEqual(got, declared) {
+					t.Fatalf("retirement rewrote the stale consumer output: %+v", got)
+				}
+
+				// AND the consumer is a visible reconcile blocker naming the child
+				wantBlocker := fmt.Sprintf("output[0] declares provider %s whose selected child %s was retired", scenario.provider, scenario.child)
+				wantClass := PlanHandoffNeedsReview
+				if passed {
+					wantClass = PlanHandoffNeedsReconciliation
+				}
+				class, blocker := classifyForTest(t, root, statePath, "consumer")
+				if class != wantClass || !strings.Contains(blocker, wantBlocker) {
+					t.Fatalf("Classify = (%q, %q), want (%q, containing %q)", class, blocker, wantClass, wantBlocker)
+				}
+
+				// AND an orchestrator pass is refused without effects
+				if !passed {
+					before := replacementBytes(t, statePath)
+					_, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "consumer", Action: PlanCheckActionPass, Authority: orchestratorAuthority()})
+					requireProviderOpsAtomicRefusal(t, statePath, before, err, "selected child "+scenario.child+" was retired", "replan or hold")
+				}
+
+				// AND automatic reviewed admission generates nothing from it
+				if _, err := ExecuteTransitionsReportWith(root, "manual", AdmitReviewed); err != nil {
+					t.Fatal(err)
+				}
+				if child := readClaimStateForTest(t, statePath).FindTask("consumer-cp-0"); child != nil {
+					t.Fatalf("reviewed admission generated a child from a stale selected child: %+v", child)
+				}
+			})
+		}
+	}
+}
+
+func TestStaleSelectedChildRefusesOperatorAndManualGeneration(t *testing.T) {
+	t.Parallel()
+	// GIVEN a passed consumer left stale by its selected child's cancellation
+	provider, child := transitionedLineagePlan("provider")
+	consumer := staleConsumerPlan(true)
+	root, statePath, bb := setupProviderOpsTest(t, provider, child, consumer)
+	if _, err := CancelTask(root, child.ID, "reviewed retirement", "orchestrator-1"); err != nil {
+		t.Fatalf("unexpanded consumer plan blocked the selected child's cancellation: %v", err)
+	}
+	wantRefusal := "output[0] declares retired provider child provider-cp-0; replan consumer to re-author it"
+
+	// WHEN an operator-admitted transition pass runs
+	report, err := ExecuteTransitionsReportWith(root, "manual", AdmitOperator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// THEN nothing is generated and the refusal is recorded against the plan
+	if readClaimStateForTest(t, statePath).FindTask("consumer-cp-0") != nil {
+		t.Fatal("operator admission generated a child from a stale selected child")
+	}
+	refused := false
+	for _, failure := range report.Failures {
+		refused = refused || (failure.SourceTaskID == consumer.ID && strings.Contains(failure.Error, wantRefusal))
+	}
+	if !refused {
+		t.Fatalf("operator pass did not report the stale selected child: %+v", report)
+	}
+	domain, err := LoadPlanHandoffDomain(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := readClaimStateForTest(t, statePath)
+	if failures := domain.Failures(state, state.FindTask(consumer.ID)); len(failures) != 1 || failures[0].Class != handoffOutputRefusal {
+		t.Fatalf("stale selected child refusal not persisted as an output_validation failure: %+v", failures)
+	}
+
+	// AND a manual proceed is refused without effects
+	if err := bb.Modify(func(s *models.State) error { s.Sprint.Status = models.SprintStatusCompleted; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	before := replacementBytes(t, statePath)
+	_, err = Proceed(root, consumer.ID, providerOpsTransition)
+	requireProviderOpsAtomicRefusal(t, statePath, before, err, wantRefusal)
 }

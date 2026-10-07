@@ -10,7 +10,7 @@ import (
 )
 
 func rewriteActiveDependents(state *models.State, resolver *pipeline.Resolver, targetID string, replacements []string, agentID string, now time.Time) error {
-	if err := rejectReferencedProviderRetirement(state, resolver, targetID); err != nil {
+	if err := rejectReferencedProviderRetirement(state, resolver, targetID, retirePermanently); err != nil {
 		return err
 	}
 	for i := range state.Tasks {

@@ -92,7 +92,7 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 		var next planCheckChange
 		var changeErr error
 		if input.Action == PlanCheckActionReplace {
-			if err := rejectReferencedProviderRetirement(state, resolver, task.ID); err != nil {
+			if err := rejectReferencedProviderRetirement(state, resolver, task.ID, retirePermanently); err != nil {
 				return err
 			}
 			next, changeErr = retirePlanHandoff(state, domain, task, input, actor)

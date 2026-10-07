@@ -106,7 +106,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		}
 
 		// Compute new task ID: <original-id>-replan-N
-		if err := rejectReferencedProviderRetirement(state, resolver, task.ID); err != nil {
+		if err := rejectReferencedProviderRetirement(state, resolver, task.ID, retireByReplan); err != nil {
 			return err
 		}
 		newTaskID := computeReplanID(state, task.ID)

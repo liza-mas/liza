@@ -42,7 +42,8 @@ type PlanHandoffDomain struct {
 	planningPairs    map[string]bool
 	gatedTransitions map[string]bool
 	gatedByPair      map[string][]string
-	// resolver judges declared replacement originals; nil skips that check.
+	// resolver judges declared replacement originals and selected provider
+	// children; nil skips those checks.
 	resolver *pipeline.Resolver
 }
 
@@ -176,7 +177,7 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 		if replaced, replacedBlocker := d.replacementBlocker(state, task); replaced > kind {
 			kind, blocker = replaced, replacedBlocker
 		}
-		if stale, staleBlocker := providerBlocker(state, task); stale > kind {
+		if stale, staleBlocker := d.providerBlocker(state, task); stale > kind {
 			kind, blocker = stale, staleBlocker
 		}
 		switch kind {
@@ -195,23 +196,27 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 			blocker = replacedBlocker
 		}
 		if blocker == "" {
-			_, blocker = providerBlocker(state, task)
+			_, blocker = d.providerBlocker(state, task)
 		}
 		return PlanHandoffNeedsReview, blocker
 	}
 }
 
-// providerBlocker judges the providers the plan's outputs declare directly.
-// Indexes do not transfer to a replacement (ADR-0181), so a retired or missing
-// provider leaves the reviewed content stale: the plan must be replanned
-// (ADR-0185). The first such declaration is reported.
-func providerBlocker(state *models.State, task *models.Task) (upstreamKind, string) {
+// providerBlocker judges the providers the plan's outputs declare and their
+// selected children. Indexes do not transfer to a replacement (ADR-0181), so a
+// missing or retired provider, or a selected child retired permanently, leaves
+// the reviewed content stale: the plan must be replanned (ADR-0185, ADR-0186).
+// The first such declaration is reported.
+func (d PlanHandoffDomain) providerBlocker(state *models.State, task *models.Task) (upstreamKind, string) {
 	for i, entry := range task.Output {
 		for _, dep := range entry.ProviderDependencies {
-			switch provider := state.FindTask(dep.ProviderTask); {
-			case provider == nil:
+			if state.FindTask(dep.ProviderTask) == nil {
 				return upstreamReconcile, fmt.Sprintf("output[%d] declares provider %s, which does not exist", i, dep.ProviderTask)
-			case models.ProviderRetired(provider):
+			}
+			switch id, child := staleProviderReference(state, d.resolver, dep); {
+			case child:
+				return upstreamReconcile, fmt.Sprintf("output[%d] declares provider %s whose selected child %s was retired", i, dep.ProviderTask, id)
+			case id != "":
 				return upstreamReconcile, fmt.Sprintf("output[%d] declares retired provider %s", i, dep.ProviderTask)
 			}
 		}
@@ -292,7 +297,7 @@ func (d PlanHandoffDomain) upstreamBlocker(state *models.State, task *models.Tas
 			delete(visiting, depID)
 			// A stale provider declaration keeps the upstream childless, so
 			// this plan would inherit no barrier from it (ADR-0185).
-			if stale, staleText := providerBlocker(state, dep); stale > kind {
+			if stale, staleText := d.providerBlocker(state, dep); stale > kind {
 				kind, inner = stale, staleText
 			}
 			if kind != upstreamAdmissible {
