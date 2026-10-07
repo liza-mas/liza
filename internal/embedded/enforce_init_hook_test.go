@@ -16,6 +16,42 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+func TestEnforceInitHook_RequiresCoreRead(t *testing.T) {
+	for _, native := range []bool{false, true} {
+		t.Run(map[bool]string{false: "bash", true: "native"}[native], func(t *testing.T) {
+			hook := writeEnforceInitHook(t)
+			projectRoot := t.TempDir()
+			sessionID := "core-required-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
+			stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
+			t.Cleanup(func() { os.RemoveAll(stateDir) })
+			read := func(name string) {
+				path := "~/" + paths.GlobalDirName() + "/" + name
+				payload := bashPayload(t, sessionID, projectRoot, "cat "+path)
+				if native {
+					data, err := json.Marshal(map[string]any{"session_id": sessionID, "cwd": projectRoot, "tool_name": "Read", "tool_input": map[string]any{"file_path": path}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					payload = string(data)
+				}
+				runHook(t, hook, payload, 0)
+			}
+			read("AGENT_TOOLS.md")
+			read("PAIRING_MODE.md")
+			read("COLLABORATION_CONTINUITY.md")
+			if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); !os.IsNotExist(err) {
+				t.Fatalf("gate cleared without CORE read: %v", err)
+			}
+			output := runHook(t, hook, bashPayload(t, sessionID, projectRoot, "git status --short"), 2)
+			if !strings.Contains(output, "~/"+paths.GlobalDirName()+"/CORE.md") {
+				t.Fatalf("missing CORE diagnostic: %s", output)
+			}
+			read("CORE.md")
+			runHook(t, hook, bashPayload(t, sessionID, projectRoot, "git status --short"), 0)
+		})
+	}
+}
+
 func TestEnforceInitHook_AllowsCodexBashDocReads(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
@@ -83,6 +119,7 @@ func TestEnforceInitHook_NativeReadsClearPairingGate(t *testing.T) {
 			stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 			defer os.RemoveAll(stateDir)
 			for _, path := range []string{
+				filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md"),
 				filepath.Join(homeDir, paths.GlobalDirName(), "AGENT_TOOLS.md"),
 				filepath.Join(homeDir, paths.GlobalDirName(), "PAIRING_MODE.md"),
 				filepath.Join(projectRoot, "GUARDRAILS.md"),
@@ -213,6 +250,7 @@ func TestEnforceInitHook_AllowsConditionalGuardrailsRead(t *testing.T) {
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
 
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/CORE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,120p' ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "if [ -f "+bashProjectRoot+"/GUARDRAILS.md ]; then sed -n '1,260p' "+bashProjectRoot+"/GUARDRAILS.md; fi"), 0)
@@ -553,6 +591,7 @@ func TestEnforceInitHook_GuardrailsWrapperClearsAfterRequiredDocs(t *testing.T) 
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
 
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/CORE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, `test -f `+bashProjectRoot+`/GUARDRAILS.md && cat `+bashProjectRoot+`/GUARDRAILS.md || echo ABSENT`), 0)
@@ -645,6 +684,7 @@ func TestEnforceInitHook_PairingModeOmitsAbsentProjectCompanionDocs(t *testing.T
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
 
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/CORE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
 
@@ -674,6 +714,7 @@ func TestEnforceInitHook_SubagentModeDoesNotRequirePairingCompanionDocs(t *testi
 	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 	defer os.RemoveAll(stateDir)
 
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/CORE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/SUBAGENT_MODE.md"), 0)
 
@@ -836,6 +877,7 @@ func completePairingInit(t *testing.T, hookPath, sessionID, projectRoot string) 
 	t.Helper()
 	bashProjectRoot := filepath.ToSlash(projectRoot)
 
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/CORE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "sed -n '1,260p' "+bashProjectRoot+"/REPOSITORY.md"), 0)

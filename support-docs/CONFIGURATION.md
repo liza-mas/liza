@@ -75,6 +75,16 @@ placement still requires a decision, the wizard asks once per shared repo path,
 identifies the affected providers, and offers only destinations that are
 currently available to all of them.
 
+Without an explicit conflict action, unavailable repo/global contract locations
+fall back to the catalog's local file when supported (for Claude,
+`CLAUDE.local.md`). Managed local fallback files are privately excluded from
+Git status; existing user files are preserved. If any selected provider remains
+inactive, init exits nonzero before deploying new provider hooks/settings and
+leaves existing activation metadata unchanged. Skipping placement succeeds only
+when a supported contract link is already active. Session startup names
+`~/§BRAND_GLOBAL_DIRNAME§/CORE.md`, and the init gate requires its read alongside
+the other mandatory documents.
+
 Depending on selected providers and options, `§BRAND_BINARY_NAME§ init` writes or updates:
 
 - provider contract discovery links to `~/§BRAND_GLOBAL_DIRNAME§/CORE.md`.

@@ -22,6 +22,32 @@ import (
 	"github.com/spf13/pflag"
 )
 
+func TestInitDispatch_UnplacedContractHasNoSuccessBanner(t *testing.T) {
+	home := testhelpers.SetupGlobalLiza(t)
+	t.Cleanup(testhelpers.DisableIndexEnvGates())
+	t.Setenv(brand.EnvName("ENABLE_BASH_POLICY"), "false")
+	t.Setenv(brand.EnvName("ENABLE_SEMBLE"), "false")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	projectRoot := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, projectRoot)
+	global := filepath.Join(home, ".claude", "CLAUDE.md")
+	if err := os.MkdirAll(filepath.Dir(global), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{global, filepath.Join(projectRoot, "CLAUDE.md"), filepath.Join(projectRoot, "CLAUDE.local.md")} {
+		if err := os.WriteFile(path, []byte("user-owned\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stdout, err := executeRootCommandCapture(t, projectRoot, "init", "--claude", "--yes")
+	if err == nil || !strings.Contains(err.Error(), "not active") {
+		t.Errorf("want inactive-contract command failure, got %v", err)
+	}
+	if strings.Contains(stdout, "contract is now active") || strings.Contains(stdout, "pairing mode enabled") {
+		t.Errorf("failed init printed success banner: %s", stdout)
+	}
+}
+
 func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 	tests := []struct {
 		name    string

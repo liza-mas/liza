@@ -70,7 +70,10 @@ func activateProviderContracts(projectRoot, contractTarget string, agents []prov
 			options.PreserveRepoPaths[path] = true
 		}
 	}
-	repoActivations := createContractSymlinksForProviders(projectRoot, contractTarget, agents, options)
+	repoActivations, err := createContractSymlinksForProviders(projectRoot, contractTarget, agents, options)
+	if err != nil {
+		return err
+	}
 
 	if !stateTrusted {
 		return nil

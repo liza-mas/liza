@@ -180,7 +180,9 @@ providers:
 		}
 	}
 
-	createContractSymlinksForProviders(projectRoot, contractTarget, selected, contractSymlinkOptions{})
+	if _, err := createContractSymlinksForProviders(projectRoot, contractTarget, selected, contractSymlinkOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	for _, link := range links {
 		repoPath := filepath.Join(projectRoot, link.repoFile)
 		if _, err := os.Lstat(repoPath); !os.IsNotExist(err) {
@@ -446,8 +448,8 @@ func TestDuplicateNonPreferGlobalSymlinksWarnsAndRetainsBoth(t *testing.T) {
 	}
 
 	stderr, err := captureStderrForTest(func() error {
-		createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{})
-		return nil
+		_, err := createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{})
+		return err
 	})
 	if err != nil {
 		t.Fatalf("capture stderr: %v", err)
@@ -467,7 +469,8 @@ func TestProviderScopedWizardActionOverridesManagedGlobalForNonPreferProvider(t 
 		t.Run(action, func(t *testing.T) {
 			homeDir := t.TempDir()
 			t.Setenv("HOME", homeDir)
-			projectRoot := t.TempDir()
+			projectRoot := setupGitRepo(t)
+			t.Cleanup(func() { os.RemoveAll(projectRoot) })
 			contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), "CORE.md")
 			repoPath := filepath.Join(projectRoot, "CUSTOM.md")
 			globalPath := filepath.Join(homeDir, ".custom", "CUSTOM.md")
@@ -489,9 +492,11 @@ func TestProviderScopedWizardActionOverridesManagedGlobalForNonPreferProvider(t 
 				}},
 			}
 
-			createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{
+			if _, err := createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{
 				ProviderActions: map[string]string{"custom": action},
-			})
+			}); err != nil {
+				t.Fatal(err)
+			}
 
 			if target, err := os.Readlink(globalPath); err != nil || target != contractTarget {
 				t.Fatalf("managed global target = %q, err = %v; want %q", target, err, contractTarget)

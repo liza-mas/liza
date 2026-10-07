@@ -60,6 +60,16 @@ Initialization follows a safety-ordered transition:
 3. Only after step 2 succeeds, remove a redundant managed repo symlink.
 4. If resolution, creation, or verification fails, retain or create the repo
    activation instead.
+5. If ordinary repo/global placement remains unavailable, use the catalog's
+   local fallback when supported. Privately exclude managed local fallback
+   files, including existing correct links.
+
+Placement reports an error when any selected file-based provider has no active
+supported link. Both init paths check this result before deploying new hooks or
+settings; failed placement leaves prior activation metadata and recorded links
+intact. An explicit skip is successful only with an already-active contract.
+Startup context names the canonical global CORE path, and the init gate requires
+its read before clearing, independently of provider instruction discovery.
 
 User-owned files and unrelated symlinks are never overwritten. A custom provider
 that declares both locations without `prefer_global` retains both managed links

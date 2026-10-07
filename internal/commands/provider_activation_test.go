@@ -192,7 +192,8 @@ func TestRepoContractActivationStatePrunesMissingManagedLinks(t *testing.T) {
 }
 
 func TestCreateContractSymlinksRecordsGlobalFirstLocalFallbackActivation(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := setupGitRepo(t)
+	t.Cleanup(func() { os.RemoveAll(projectRoot) })
 	contractTarget := filepath.Join(t.TempDir(), "CORE.md")
 	if err := os.WriteFile(filepath.Join(projectRoot, "CUSTOM.md"), []byte("user-owned\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -207,9 +208,12 @@ func TestCreateContractSymlinksRecordsGlobalFirstLocalFallbackActivation(t *test
 		}},
 	}
 
-	activations := createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{
+	activations, err := createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{
 		ProviderActions: map[string]string{provider.ID: "local"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if got := activations["custom"]; got != "CUSTOM.local.md" {
 		t.Fatalf("local fallback activations = %+v, want custom owner at CUSTOM.local.md", activations)

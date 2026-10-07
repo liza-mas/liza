@@ -1765,7 +1765,7 @@ func TestInitCommand_BrownfieldExistingLizaAtGlobalSkipsCreation(t *testing.T) {
 	}
 }
 
-func TestInitCommand_BrownfieldBothOccupiedWarns(t *testing.T) {
+func TestInitCommand_BrownfieldBothOccupiedUsesLocalFallback(t *testing.T) {
 	gitDir := setupGitRepo(t)
 	defer os.RemoveAll(gitDir)
 
@@ -1808,6 +1808,9 @@ func TestInitCommand_BrownfieldBothOccupiedWarns(t *testing.T) {
 	stderr := string(stderrBytes)
 	if !strings.Contains(stderr, "CLAUDE.md exists at both repo root and") {
 		t.Errorf("Expected 'both occupied' warning in stderr, got: %s", stderr)
+	}
+	if !isLizaSymlink(filepath.Join(gitDir, "CLAUDE.local.md"), filepath.Join(fakeHome, paths.GlobalDirName(), "CORE.md")) {
+		t.Error("successful init must activate the local fallback")
 	}
 
 	// Neither file should be modified
@@ -2032,8 +2035,8 @@ func TestPreferredGlobalOccupiedRetainsManagedRepoContract(t *testing.T) {
 	}
 
 	stderr, err := captureStderrForTest(func() error {
-		createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{})
-		return nil
+		_, err := createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{})
+		return err
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -3825,7 +3828,9 @@ func TestCreateContractSymlinksForProviders_NormalizesSharedRepoPaths(t *testing
 		},
 	}
 
-	createContractSymlinksForProviders(projectRoot, contractTarget, agents, contractSymlinkOptions{})
+	if _, err := createContractSymlinksForProviders(projectRoot, contractTarget, agents, contractSymlinkOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	repoPath := filepath.Join(projectRoot, "AGENTS.md")
 	if target, err := os.Readlink(repoPath); err != nil || target != contractTarget {
 		t.Fatalf("normalized shared repo target = %q, err = %v; want %q", target, err, contractTarget)

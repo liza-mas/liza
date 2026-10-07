@@ -85,7 +85,7 @@ func TestIndexingActivationDisabledSessionStartOmitsOptionalCommandBlocksWithSta
 
 	assertIndexingActivationContainsAll(t, output,
 		"SessionStart",
-		"MANDATORY: Read CORE.md",
+		"MANDATORY: Read ~/"+paths.GlobalDirName()+"/CORE.md",
 	)
 	assertIndexingActivationContainsNone(t, output, optionalIndexCommandBlocks()...)
 }

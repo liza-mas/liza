@@ -199,7 +199,7 @@ if is_windows_shell; then
   project_dir="${project_dir//\\//}"
 fi
 
-context="MANDATORY: Read CORE.md and the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
+context="MANDATORY: Read ~/__BRAND_GLOBAL_DIRNAME__/CORE.md and the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
 if [[ -n "$agent_id_value" ]]; then
   context+="~/__BRAND_GLOBAL_DIRNAME__/MULTI_AGENT_MODE.md"
 else

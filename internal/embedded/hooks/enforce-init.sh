@@ -4,6 +4,7 @@
 # initialization docs so harmless compatibility reads do not trip the gate.
 #
 # Required reads:
+#   - ~/__BRAND_GLOBAL_DIRNAME__/CORE.md
 #   - AGENT_TOOLS.md
 #   - GUARDRAILS.md (or verified absent)
 #   - One mode contract from the Mode Selection Gate
@@ -183,7 +184,8 @@ requires_pairing_companion_docs() {
 clear_if_ready() {
   mark_absent_project_docs_if_needed
 
-  if [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] || \
+  if [[ ! -f "$STATE_DIR/CORE.done" ]] || \
+     [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] || \
      [[ ! -f "$STATE_DIR/MODE.done" ]] || \
      [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]]; then
     return 0
@@ -224,7 +226,7 @@ mark_session_init_doc_path() {
   is_session_init_doc_path "$file_path" || return 1
   base=$(basename "$file_path")
   case "$base" in
-    CORE.md)          ;;
+    CORE.md)          touch "$STATE_DIR/CORE.done" ;;
     AGENT_TOOLS.md)   touch "$STATE_DIR/AGENT_TOOLS.done" ;;
     PAIRING_MODE.md)  touch "$STATE_DIR/MODE.done" "$STATE_DIR/MODE_PAIRING.done" ;;
     MULTI_AGENT_MODE.md)
@@ -461,6 +463,8 @@ fi
 # Stderr is shown to the agent as the block reason (exit 2 protocol).
 mark_absent_project_docs_if_needed
 missing=""
+[[ ! -f "$STATE_DIR/CORE.done" ]] && missing="$missing
+  - ~/__BRAND_GLOBAL_DIRNAME__/CORE.md"
 [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
   - ~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"
 [[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing

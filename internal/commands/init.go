@@ -110,8 +110,11 @@ func InitPairingCommand(params InitPairingParams) error {
 		return fmt.Errorf("failed to determine global config path: %w", err)
 	}
 	coreFile := filepath.Join(globalDir, "CORE.md")
-	if _, err := os.Stat(coreFile); os.IsNotExist(err) {
-		return fmt.Errorf("global config not found at %s\nRun '%s setup' first", globalDir, brand.BinaryName)
+	if _, err := os.Stat(coreFile); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("global config not found at %s\nRun '%s setup' first", globalDir, brand.BinaryName)
+		}
+		return fmt.Errorf("cannot access global contract at %s: %w\nRun '%s setup' first", coreFile, err, brand.BinaryName)
 	}
 	catalog := loadProviderCatalog("")
 	selectedProviders, err := resolveCatalogProviders(catalog, canonicalInitProviderIDs(params.Agents))
@@ -417,8 +420,9 @@ func contractActionAllowsPreferredGlobal(action string) bool {
 // createContractSymlinksForProviders returns canonical provider ID → normalized
 // repo-relative path effectively used after placement. Every repo or local
 // outcome must be recorded, including idempotent no-op branches; successful
-// global outcomes record nothing.
-func createContractSymlinksForProviders(projectRoot, contractTarget string, agents []providers.Provider, options contractSymlinkOptions) map[string]string {
+// global outcomes record nothing. Unplaced providers return an error so callers
+// cannot publish activation metadata or deploy hooks for an inactive contract.
+func createContractSymlinksForProviders(projectRoot, contractTarget string, agents []providers.Provider, options contractSymlinkOptions) (map[string]string, error) {
 	repoActivations := make(map[string]string)
 	recordRepoActivation := func(providerID, candidate string) {
 		cleaned, err := normalizeRepoContractPath(candidate)
@@ -431,8 +435,7 @@ func createContractSymlinksForProviders(projectRoot, contractTarget string, agen
 	// the developer's real profile.
 	homeDir, err := paths.UserHomeDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: cannot determine home directory: %v\n", err)
-		return repoActivations
+		return repoActivations, fmt.Errorf("cannot determine home directory: %w", err)
 	}
 
 	repoPathSelectionCount := make(map[string]int)
@@ -484,6 +487,10 @@ func createContractSymlinksForProviders(projectRoot, contractTarget string, agen
 			fmt.Printf("%s: skipping; %s symlink already exists at %s\n", name, brand.NameTitle, globalPath)
 			continue
 		}
+		if contractAction == "skip" {
+			fmt.Printf("%s: skipped (user choice)\n", name)
+			continue
+		}
 
 		// Step 2: create the repo activation when global preference is absent
 		// or could not be established safely.
@@ -508,32 +515,11 @@ func createContractSymlinksForProviders(projectRoot, contractTarget string, agen
 		}
 
 		// Step 3: repo root occupied by non-product file; apply contract action
-		if contractAction == "skip" {
-			fmt.Printf("%s: skipped (user choice)\n", name)
-			continue
-		}
-
 		if contractAction == "local" && agent.Setup.Contract.LocalFallback != "" {
-			localPath := filepath.Join(projectRoot, agent.Setup.Contract.LocalFallback)
-			if _, err := os.Lstat(localPath); err == nil {
-				if isLizaSymlink(localPath, contractTarget) {
-					recordRepoActivation(agent.ID, agent.Setup.Contract.LocalFallback)
-					fmt.Printf("%s: already correct\n", agent.Setup.Contract.LocalFallback)
-				} else {
-					fmt.Fprintf(os.Stderr, "Warning: %s already exists and is not a %s symlink.\n", agent.Setup.Contract.LocalFallback, brand.NameTitle)
-				}
-				continue
+			if err := placeLocalContract(projectRoot, contractTarget, agent.Setup.Contract.LocalFallback); err != nil {
+				return repoActivations, fmt.Errorf("activate local contract for %s: %w", agent.ID, err)
 			}
-			if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to create parent directory for %s: %v\n", agent.Setup.Contract.LocalFallback, err)
-				continue
-			}
-			if err := os.Symlink(contractTarget, localPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to create %s symlink: %v\n", agent.Setup.Contract.LocalFallback, err)
-			} else {
-				recordRepoActivation(agent.ID, agent.Setup.Contract.LocalFallback)
-				fmt.Printf("%s → %s\n", agent.Setup.Contract.LocalFallback, contractTarget)
-			}
+			recordRepoActivation(agent.ID, agent.Setup.Contract.LocalFallback)
 			continue
 		}
 
@@ -589,9 +575,71 @@ func createContractSymlinksForProviders(projectRoot, contractTarget string, agen
 		}
 
 		// Both locations occupied by non-product files.
-		fmt.Fprintf(os.Stderr, "Warning: %s exists at both repo root and %s; cannot place %s contract. Remove or rename one, then re-run.\n", name, globalPath, brand.NameTitle)
+		fmt.Fprintf(os.Stderr, "Warning: %s exists at both repo root and %s; repo and global contract locations are unavailable.\n", name, globalPath)
 	}
-	return repoActivations
+
+	// Verify all selected providers before reconciliation can remove previous
+	// links. Empty repo metadata alone cannot distinguish global success from
+	// failure. Existing local links also count, including after a skip action.
+	var unplaced []string
+	for _, provider := range agents {
+		contract := provider.Setup.Contract
+		if contract.RepoFile == "" {
+			continue
+		}
+		if _, recorded := repoActivations[provider.ID]; recorded {
+			continue
+		}
+		globalPath, err := contract.GlobalPath(homeDir)
+		if err == nil && globalPath != "" && isLizaSymlink(globalPath, contractTarget) {
+			continue
+		}
+		localActive := contract.LocalFallback != "" && isLizaSymlink(filepath.Join(projectRoot, contract.LocalFallback), contractTarget)
+		action := options.DefaultAction
+		if selected, ok := options.ProviderActions[provider.ID]; ok {
+			action = selected
+		}
+		if contract.LocalFallback != "" && (localActive || action == "") {
+			if err := placeLocalContract(projectRoot, contractTarget, contract.LocalFallback); err == nil {
+				recordRepoActivation(provider.ID, contract.LocalFallback)
+				continue
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+			}
+		}
+		unplaced = append(unplaced, provider.ID)
+	}
+	if len(unplaced) > 0 {
+		return repoActivations, fmt.Errorf("%s contract is not active for providers: %s; free a supported contract location and re-run %s", brand.NameTitle, strings.Join(unplaced, ", "), brand.Command("init"))
+	}
+	return repoActivations, nil
+}
+
+func placeLocalContract(projectRoot, contractTarget, name string) error {
+	cleaned, err := normalizeRepoContractPath(name)
+	if err != nil {
+		return err
+	}
+	localPath := filepath.Join(projectRoot, cleaned)
+	if !isLizaSymlink(localPath, contractTarget) {
+		if _, err := os.Lstat(localPath); !os.IsNotExist(err) {
+			if err != nil {
+				return fmt.Errorf("cannot stat %s: %w", localPath, err)
+			}
+			return fmt.Errorf("%s already exists and is not a %s symlink", localPath, brand.NameTitle)
+		}
+		if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
+			return fmt.Errorf("create local contract directory: %w", err)
+		}
+		if err := os.Symlink(contractTarget, localPath); err != nil {
+			return fmt.Errorf("create %s symlink: %w", localPath, err)
+		}
+		fmt.Printf("%s → %s\n", name, contractTarget)
+	}
+	if err := worktreeexclude.EnsureRepoExclude(projectRoot, "/"+filepath.ToSlash(cleaned)); err != nil {
+		return fmt.Errorf("exclude local contract %s: %w", name, err)
+	}
+	return nil
 }
 
 // ensurePreferredGlobalContract makes the active global link authoritative. It
@@ -1038,6 +1086,22 @@ func InitCommandWithConfig(params InitParams) error {
 		return err
 	}
 
+	// Activate every explicitly selected contract before deploying init hooks or
+	// creating the runtime workspace. Failure leaves previous metadata intact.
+	var contractProviders []providers.Provider
+	for _, provider := range selectedProviders {
+		if provider.Setup.Contract.RepoFile != "" {
+			contractProviders = append(contractProviders, provider)
+		}
+	}
+	if len(contractProviders) > 0 {
+		if err := activateProviderContracts(lizaPaths.ProjectRoot(), globalCoreFile, contractProviders, catalog, contractSymlinkOptions{
+			ProviderActions: params.ContractActions,
+		}); err != nil {
+			return fmt.Errorf("activate provider contracts: %w", err)
+		}
+	}
+
 	if _, err := CleanupProjectCommand(CleanupParams{
 		ProjectRoot: lizaPaths.ProjectRoot(),
 		Stdin:       stdin,
@@ -1132,23 +1196,6 @@ func InitCommandWithConfig(params InitParams) error {
 	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
 	if err := embedded.CleanStaleMCPEntry(lizaPaths.ProjectRoot()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to clean stale .mcp.json entry: %v\n", err)
-	}
-
-	// Create contract symlinks only for explicitly requested providers
-	if len(selectedProviders) > 0 {
-		var agents []providers.Provider
-		for _, provider := range selectedProviders {
-			if provider.Setup.Contract.RepoFile != "" {
-				agents = append(agents, provider)
-			}
-		}
-		if len(agents) > 0 {
-			if err := activateProviderContracts(lizaPaths.ProjectRoot(), filepath.Join(globalDir, "CORE.md"), agents, catalog, contractSymlinkOptions{
-				ProviderActions: params.ContractActions,
-			}); err != nil {
-				return fmt.Errorf("activate provider contracts: %w", err)
-			}
-		}
 	}
 
 	// Write GUARDRAILS.md template to project root (non-fatal, like claude-settings)

@@ -119,7 +119,7 @@ func TestSessionHookSembleProviderBudgetAndCorpusLock(t *testing.T) {
 				t.Fatalf("invalid startup output: %v\n%s", err, out)
 			}
 			text := result.HookSpecificOutput.AdditionalContext
-			if !strings.Contains(text, "MANDATORY: Read CORE.md") || strings.Contains(text, "Semble semantic search is available") != tt.wantReady {
+			if !strings.Contains(text, "MANDATORY: Read ~/"+values.GlobalDirName+"/CORE.md") || strings.Contains(text, "Semble semantic search is available") != tt.wantReady {
 				t.Fatalf("startup context readiness/fallback incorrect: %s", text)
 			}
 			assertNoDefaultBrandLeaks(t, "session context", text)
