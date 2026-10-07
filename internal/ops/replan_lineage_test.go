@@ -334,7 +334,7 @@ func TestProviderDependencies_ReplannedChildRefusals(t *testing.T) {
 	t.Run("retired successor", func(t *testing.T) {
 		t.Parallel()
 		statePath, before, err := declare(t, replannedProviderChildTasks(models.TaskStatusAbandoned))
-		requireProviderOpsAtomicRefusal(t, statePath, before, err, "retired provider child arm-cp-0-replan-1")
+		requireProviderOpsAtomicRefusal(t, statePath, before, err, "selected child arm-cp-0-replan-1 was retired")
 	})
 	t.Run("replanned provider is not remapped", func(t *testing.T) {
 		t.Parallel()

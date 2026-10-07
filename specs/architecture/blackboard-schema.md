@@ -286,6 +286,7 @@ History metadata is `TaskHistoryEntry.Extra`, inlined into the YAML entry.
 | `blocked` | `awaiting_human`: a non-blank, single-line ask when only a human can clear the block, from `mark-blocked --human-action` or a runtime-input refusal. The latest assessment of the same episode overrides it; a new episode never inherits it. Absent (including all legacy entries) means not human-owned. |
 | `replacement_committed` (source task) | `source_task_id`, `replacement_task_id`, `source_prior_transition_id`, `source_new_transition_id`, `retargeted_consumers`, `request_id`, and `preserved_base_commit` when declared. Identifiers only, never the replacement payload. |
 | `acceptance_commits_remapped` (merged parent task) | `replaced` (old-to-new commit identifiers), `integration` (integration commit identifier), and `history_entries` (updated history-entry count). Identifiers and count only, never commit content. |
+| `provider_declaration_stale` (BLOCKED consumer) | `provider_retirement` (the retired provider or selected child) and `output_indexes` (one per stale draft output declaration); `reason` names each declaration. Appended with a re-authoring question by the retiring transaction ([ADR-0188](ADR/0188-stale-provider-declarations-in-draft-output.md)). |
 
 Replacement replay uses the source's existing lifecycle receipts and
 `superseded_by`; it adds no task/state field. See [Blocked-Assessment Idempotency](../protocols/blocked-assessment-idempotency.md)
@@ -962,6 +963,10 @@ Likewise an unstarted consumer's task-level declaration (initial or BLOCKED,
 never claimed, no assignee, lease, worktree or pending hand-off); the
 retirement blocks that consumer for re-authoring
 ([ADR-0187](ADR/0187-stale-provider-declarations-on-unstarted-consumers.md)).
+Likewise draft output (owner not MERGED and not in its approved status); the
+consumer re-authors it in place, since authoring, submission and approval
+refuse the stale declaration
+([ADR-0188](ADR/0188-stale-provider-declarations-in-draft-output.md)).
 A refusal names every holder.
 Concrete `retarget-dependency` does not rewrite provider declarations. Missing legacy edges
 require this reviewed correction before restoring the consumer: unblocking

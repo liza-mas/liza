@@ -243,6 +243,11 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			return err
 		}
 
+		// Draft output may keep a stale declaration (ADR-0188), so validation
+		// accepts it; new output must never author one.
+		if stale := staleOutputDeclaration(state, resolver, input.Output); stale != "" {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s %s; select the replacement's output instead", input.TaskID, stale)}
+		}
 		previousCount := len(task.Output)
 		task.Output = input.Output
 		// Provider output may become known after its consumers were authored.

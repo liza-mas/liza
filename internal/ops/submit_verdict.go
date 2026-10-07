@@ -494,6 +494,11 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		}
 
 		if verdict == "APPROVED" {
+			// Approved output reaches MERGED without another verdict (ADR-0188).
+			if stale := staleOutputDeclaration(state, resolver, task.Output); stale != "" {
+				recordFailure = false
+				return &PreconditionError{Reason: fmt.Sprintf("task %s %s; it must be re-authored before approval: submit REJECTED citing the stale declaration", taskID, stale)}
+			}
 			// A fresh approval supersedes any stale integration attempt metadata
 			// from an earlier failed merge/submission path. Keep review_commit:
 			// wt-merge still needs the approved commit boundary.

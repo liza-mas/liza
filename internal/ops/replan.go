@@ -147,6 +147,9 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		}
 
 		now := time.Now().UTC()
+		if err := routeStaleProviderConsumers(state, resolver, task.ID, retireByReplan, input.ChangedBy, now); err != nil {
+			return err
+		}
 		reason := strings.TrimSpace(input.Reason)
 		note := fmt.Sprintf("replaced by %s", newTaskID)
 		if reason != "" {
@@ -295,7 +298,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 						state.Tasks[i].ID, state.Tasks[i].Status, task.ID, state.Tasks[i].ID))
 			}
 		}
-		warnings = append(warnings, staleProviderConsumerWarnings(state, task.ID)...)
+		warnings = append(warnings, staleProviderConsumerWarnings(state, resolver, task.ID)...)
 
 		// Add to sprint scope
 		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, newTaskID)

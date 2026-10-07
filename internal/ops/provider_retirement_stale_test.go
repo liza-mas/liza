@@ -325,8 +325,9 @@ func TestHeldStaleConsumerKeepsItsHold(t *testing.T) {
 	}
 }
 
-// Guards: the exception covers only a MERGED plan that provably generated
-// nothing, and a selected child slot only when no replan lineage follows it.
+// Guards: the exception covers only output that provably generated nothing
+// and cannot without a fresh verdict, and a selected child slot only when no
+// replan lineage follows it.
 func TestStaleProviderExceptionKeepsOtherDeclarationsLive(t *testing.T) {
 	draftProvider := providerOpsTask("provider", "architecture-pair", models.TaskStatus("DRAFT_ARCHITECTURE"))
 	cancelProvider := func(root string) error {
@@ -358,11 +359,12 @@ func TestStaleProviderExceptionKeepsOtherDeclarationsLive(t *testing.T) {
 			retire: cancelProvider, holder: "consumer output[0]",
 		},
 		{
-			name: "in-flight producer output",
+			// D-69: draft output goes stale (TestStaleDeclarationInDraftOutput…);
+			// approved output reaches MERGED without a new verdict and holds.
+			name: "approved producer output",
 			tasks: func() []models.Task {
 				consumer := staleConsumerPlan(false)
-				consumer.Status = models.TaskStatus("ARCHITECTING")
-				consumer.AssignedTo = testhelpers.StringPtr("architect-1")
+				consumer.Status = models.TaskStatus("ARCHITECTURE_APPROVED")
 				return []models.Task{draftProvider, consumer}
 			},
 			retire: cancelProvider, holder: "consumer output[0]",

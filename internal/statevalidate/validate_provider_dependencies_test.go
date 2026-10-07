@@ -505,7 +505,9 @@ func TestProviderValidationStaleDeclarationOnlyOnUnexpandedPlan(t *testing.T) {
 		{"plan with an executed marker", func(s *models.State) {
 			s.FindTask("consumer").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
 		}, false},
-		{"in-flight producer", func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, false},
+		// D-69: draft output may keep it; approved output reaches MERGED without a new verdict.
+		{"in-flight producer", func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, true},
+		{"approved producer", func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTURE_APPROVED") }, false},
 		{"task-level declaration of a started draft", func(s *models.State) {
 			consumer := s.FindTask("consumer")
 			consumer.Status = models.TaskStatus("DRAFT_ARCHITECTURE")
@@ -557,7 +559,9 @@ func TestProviderValidationStaleSelectedChildOnlyOnUnexpandedPlan(t *testing.T) 
 		"plan with an executed marker": {func(s *models.State) {
 			s.FindTask("consumer").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
 		}, false},
-		"in-flight producer": {func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, false},
+		// D-69: draft output may keep it; approved output reaches MERGED without a new verdict.
+		"in-flight producer": {func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, true},
+		"approved producer":  {func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTURE_APPROVED") }, false},
 		"task-level declaration of a started draft": {func(s *models.State) {
 			consumer := s.FindTask("consumer")
 			consumer.Status = models.TaskStatus("DRAFT_ARCHITECTURE")
@@ -679,4 +683,60 @@ func TestProviderValidationStaleDeclarationOnUnstartedConsumer(t *testing.T) {
 			}
 		}
 	})
+}
+
+// D-69: unmerged output that must pass a fresh approval (or external
+// reconciliation into ADR-0185's stale plan) keeps a retired provider or
+// selected child as stale evidence; bounds are still checked.
+func TestProviderValidationStaleDeclarationInDraftOutput(t *testing.T) {
+	retirements := map[string]func(*models.State){
+		"replanned provider": func(s *models.State) {
+			s.FindTask("provider").TransitionsExecuted = map[string]bool{"replanned": true}
+		},
+		"superseded selected child": func(s *models.State) {
+			s.FindTask("provider").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
+			s.Tasks = append(s.Tasks, models.Task{ID: "provider-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusSuperseded, ParentTasks: []string{"provider"}})
+		},
+	}
+	statuses := map[models.TaskStatus]bool{
+		"DRAFT_ARCHITECTURE":               true,
+		"ARCHITECTING":                     true,
+		"ARCHITECTURE_TO_REVIEW":           true,
+		"REVIEWING_ARCHITECTURE":           true,
+		"ARCHITECTURE_REJECTED":            true,
+		models.TaskStatusBlocked:           true,
+		models.TaskStatusIntegrationFailed: true,
+		"ARCHITECTURE_APPROVED":            false,
+	}
+	for retirement, retire := range retirements {
+		for status, valid := range statuses {
+			t.Run(retirement+"/"+string(status), func(t *testing.T) {
+				// GIVEN a started consumer whose unmerged output names a retired task
+				state, pr, _ := providerValidationFixture(t)
+				consumer := state.FindTask("consumer")
+				consumer.ProviderDependencies = nil
+				consumer.Status = status
+				output := providerPlanOutput()
+				output.ProviderDependencies = []models.ProviderDependency{providerPlanDependency("provider", 0)}
+				consumer.Output = []models.OutputEntry{output}
+				startConsumer(state)
+				retire(state)
+
+				// THEN only draft output keeps it as stale evidence
+				err := ValidateProviderDependencies(state, pr)
+				if valid && err != nil {
+					t.Fatalf("stale declaration in draft output rejected: %v", err)
+				}
+				if !valid && (err == nil || !strings.Contains(err.Error(), "retired provider")) {
+					t.Fatalf("validation = %v, want retired provider refusal", err)
+				}
+
+				// AND bounds are still checked there
+				consumer.Output[0].ProviderDependencies[0].Outputs = []int{1}
+				if err := ValidateProviderDependencies(state, pr); err == nil || !strings.Contains(err.Error(), "outside provider provider output range") {
+					t.Fatalf("validation = %v, want out-of-range refusal", err)
+				}
+			})
+		}
+	}
 }

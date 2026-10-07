@@ -98,6 +98,16 @@ naming the declaration; replace or cancel it. Unblock, claim and `replan`
 refuse to carry the stale declaration forward. A refused retirement names
 every holder.
 
+Exception (ADR-0188): draft output, whose owner is in its initial, executing,
+rejected, submitted, reviewing or quorum status, BLOCKED or
+INTEGRATION_FAILED (not approved), follows the unexpanded-plan rule above. The
+consumer re-authors it in place: `set-task-output` refuses a stale declaration,
+submission refuses stored output still carrying one, and an approving verdict
+is refused so the reviewer rejects. A BLOCKED consumer gains a re-authoring
+question and a `provider_declaration_stale` history entry, which wake its
+triage. An externally reconciled INTEGRATION_FAILED draft becomes a stale
+unexpanded plan (ADR-0185).
+
 A replanned selected child resolves to its replan successor (same slot, same
 parent); without a unique live successor it stays retired. A replanned provider
 is never remapped. Replan clones dependencies through live successors. A MERGED,
@@ -110,8 +120,9 @@ See [Provider Dependencies](../architecture/blackboard-schema.md#provider-depend
 [ADR-0181](../architecture/ADR/0181-provider-output-dependencies.md),
 [ADR-0184](../architecture/ADR/0184-replan-lineage-dependency-repair.md),
 [ADR-0185](../architecture/ADR/0185-stale-provider-declarations-on-unexpanded-plans.md),
-[ADR-0186](../architecture/ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md) and
-[ADR-0187](../architecture/ADR/0187-stale-provider-declarations-on-unstarted-consumers.md).
+[ADR-0186](../architecture/ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md),
+[ADR-0187](../architecture/ADR/0187-stale-provider-declarations-on-unstarted-consumers.md) and
+[ADR-0188](../architecture/ADR/0188-stale-provider-declarations-in-draft-output.md).
 
 ## Iteration Protocol
 

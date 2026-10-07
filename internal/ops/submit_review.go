@@ -168,6 +168,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	if err := validateOutputArtifactRefScalars(taskID, task.Output); err != nil {
 		return nil, err
 	}
+	if err := rejectStaleDraftOutput(state, resolver, task); err != nil {
+		return nil, err
+	}
 
 	// Git work holds the task lock, never the blackboard lock.
 	g := submitReviewNewGit(projectRoot)
@@ -338,6 +341,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		if err := validateOutputArtifactRefScalars(taskID, live.Output); err != nil {
 			return err
 		}
+		if err := rejectStaleDraftOutput(current, resolver, live); err != nil {
+			return err
+		}
 		if err := checkPlanningOutputSnapshot(task, live); err != nil {
 			return err
 		}
@@ -502,6 +508,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 					return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", taskID, agentID, currentAgent)}
 				}
 				if err := validateOutputArtifactRefScalars(taskID, task.Output); err != nil {
+					return err
+				}
+				if err := rejectStaleDraftOutput(state, resolver, task); err != nil {
 					return err
 				}
 				if err := checkPlanningOutputSnapshot(&reviewBoundaryTask, task); err != nil {

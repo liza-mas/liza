@@ -214,6 +214,39 @@ func PlanUnexpanded(state *State, task *Task) bool {
 	return true
 }
 
+// DraftOutput reports output nothing has been generated from, and nothing can
+// be until it passes a fresh approval: its owner is in its role pair's
+// initial, executing, rejected, submitted, reviewing or quorum status,
+// BLOCKED, or INTEGRATION_FAILED. The approved status reaches MERGED without a
+// new verdict, so its output is not a draft; neither is any status the
+// pipeline does not name. INTEGRATION_FAILED can also reach MERGED by external
+// reconciliation, which leaves an unexpanded plan whose stale declarations
+// hand-off refuses (ADR-0185, ADR-0188).
+func DraftOutput(task *Task, pr PipelineResolver) bool {
+	if task == nil || pr == nil || len(task.Output) == 0 {
+		return false
+	}
+	if task.Status == TaskStatusBlocked || task.Status == TaskStatusIntegrationFailed {
+		return true
+	}
+	for _, status := range []func(string) (TaskStatus, error){
+		pr.InitialStatus, pr.ExecutingStatus, pr.RejectedStatus, pr.SubmittedStatus,
+		pr.ReviewingStatus, pr.Reviewing2Status, pr.PartiallyApprovedStatus,
+	} {
+		if draft, err := status(task.RolePair); err == nil && draft == task.Status {
+			return true
+		}
+	}
+	return false
+}
+
+// OutputMayGoStale reports output whose declarations a retired provider leaves
+// stale rather than the state invalid: an unexpanded plan (ADR-0185) or draft
+// output (ADR-0188).
+func OutputMayGoStale(state *State, task *Task, pr PipelineResolver) bool {
+	return PlanUnexpanded(state, task) || DraftOutput(task, pr)
+}
+
 // UnstartedProviderConsumer reports a task nobody has worked on: in its role
 // pair's initial status or BLOCKED, never claimed, with no assignee, lease,
 // worktree or pending hand-off. Its task-level declarations consume nothing

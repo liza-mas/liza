@@ -41,9 +41,9 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 		if !providerOutputIsLive(state, resolver, task) {
 			continue
 		}
-		unexpanded := func() bool { return models.PlanUnexpanded(state, task) }
+		mayGoStale := func() bool { return models.OutputMayGoStale(state, task, resolver) }
 		for index, output := range task.Output {
-			validateProviderOwner(v, state, resolver, fmt.Sprintf("%s output[%d]", task.ID, index), output.ProviderDependencies, unexpanded)
+			validateProviderOwner(v, state, resolver, fmt.Sprintf("%s output[%d]", task.ID, index), output.ProviderDependencies, mayGoStale)
 		}
 	}
 	// Identify each cyclic effective edge, as ordinary dependency validation
@@ -66,10 +66,11 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 }
 
 // mayGoStale, when non-nil and true, marks reviewed output of a plan that has
-// generated nothing, or a task-level declaration of a task nobody has started:
-// a retired provider or selected child there is reconcile evidence, refused by
-// hand-off classification, generation, claim and unblock instead (ADR-0185,
-// ADR-0186, ADR-0187). Provenance, bounds and cycles are still validated.
+// generated nothing, draft output, or a task-level declaration of a task
+// nobody has started: a retired provider or selected child there is reconcile
+// evidence, refused by hand-off classification, generation, claim and unblock,
+// or by draft authoring, submission and approval, instead (ADR-0185, ADR-0186,
+// ADR-0187, ADR-0188). Provenance, bounds and cycles are still validated.
 func validateProviderOwner(v *violations, state *models.State, resolver *pipeline.Resolver, owner string, deps []models.ProviderDependency, mayGoStale func() bool) {
 	if err := models.ValidateProviderDependencies(deps); err != nil {
 		v.add(fmt.Errorf("task %s: %w", owner, err))
