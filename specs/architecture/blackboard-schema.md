@@ -952,6 +952,10 @@ Cancel or replace the referencing consumer through authorized lifecycle
 operations before retrying a provider change; a reviewed replacement must omit
 that reference or name another intended provider. Retaining the same reference
 retains the refusal. Retire any live producer declaration likewise.
+Exception: an unexpanded plan's output (MERGED, no transition marker, no child)
+naming the provider directly does not hold it; the declaration stays as stale
+evidence, blocks the plan's hand-off and is refused by generation until the plan
+is replanned ([ADR-0185](ADR/0185-stale-provider-declarations-on-unexpanded-plans.md)).
 Concrete `retarget-dependency` does not rewrite provider declarations. Missing legacy edges
 require this reviewed correction before restoring the consumer: unblocking
 against a merged architecture alone does not repair a provider-plan prerequisite.

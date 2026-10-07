@@ -29,7 +29,7 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if !task.Status.IsTerminal() {
-			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies)
+			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies, nil)
 			if executing, err := resolver.ExecutingStatus(task.RolePair); err == nil && task.Status == executing {
 				for _, unmet := range models.UnmetProviderDependencies(task, state.Tasks, resolver) {
 					v.addID("executing provider prerequisite "+task.ID+" "+unmet.DependencyID,
@@ -40,8 +40,9 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 		if !providerOutputIsLive(state, resolver, task) {
 			continue
 		}
+		unexpanded := func() bool { return models.PlanUnexpanded(state, task) }
 		for index, output := range task.Output {
-			validateProviderOwner(v, state, resolver, fmt.Sprintf("%s output[%d]", task.ID, index), output.ProviderDependencies)
+			validateProviderOwner(v, state, resolver, fmt.Sprintf("%s output[%d]", task.ID, index), output.ProviderDependencies, unexpanded)
 		}
 	}
 	// Identify each cyclic effective edge, as ordinary dependency validation
@@ -63,7 +64,10 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 	}
 }
 
-func validateProviderOwner(v *violations, state *models.State, resolver *pipeline.Resolver, owner string, deps []models.ProviderDependency) {
+// mayGoStale, when non-nil and true, marks reviewed output of a plan that has
+// generated nothing: a retired provider there is reconcile evidence, refused
+// by hand-off classification and generation instead (ADR-0185).
+func validateProviderOwner(v *violations, state *models.State, resolver *pipeline.Resolver, owner string, deps []models.ProviderDependency, mayGoStale func() bool) {
 	if err := models.ValidateProviderDependencies(deps); err != nil {
 		v.add(fmt.Errorf("task %s: %w", owner, err))
 		return
@@ -83,8 +87,10 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 		if provider.RolePair != transition.SourceRolePair {
 			v.add(fmt.Errorf("%s transition %s does not originate from provider role_pair %s", label, dep.Transition, provider.RolePair))
 		}
-		if provider.Status.IsTerminal() && provider.Status != models.TaskStatusMerged ||
-			provider.TransitionsExecuted["replanned"] || provider.PlanHandoffRetired() {
+		if models.ProviderRetired(provider) {
+			if mayGoStale != nil && mayGoStale() {
+				continue
+			}
 			v.add(fmt.Errorf("%s references retired provider %s", label, provider.ID))
 		}
 		for position, output := range dep.Outputs {

@@ -176,6 +176,9 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 		if replaced, replacedBlocker := d.replacementBlocker(state, task); replaced > kind {
 			kind, blocker = replaced, replacedBlocker
 		}
+		if stale, staleBlocker := providerBlocker(state, task); stale > kind {
+			kind, blocker = stale, staleBlocker
+		}
 		switch kind {
 		case upstreamReconcile:
 			return PlanHandoffNeedsReconciliation, blocker
@@ -191,8 +194,29 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 		if replaced, replacedBlocker := d.replacementBlocker(state, task); blocker == "" && replaced == upstreamReconcile {
 			blocker = replacedBlocker
 		}
+		if blocker == "" {
+			_, blocker = providerBlocker(state, task)
+		}
 		return PlanHandoffNeedsReview, blocker
 	}
+}
+
+// providerBlocker judges the providers the plan's outputs declare directly.
+// Indexes do not transfer to a replacement (ADR-0181), so a retired or missing
+// provider leaves the reviewed content stale: the plan must be replanned
+// (ADR-0185). The first such declaration is reported.
+func providerBlocker(state *models.State, task *models.Task) (upstreamKind, string) {
+	for i, entry := range task.Output {
+		for _, dep := range entry.ProviderDependencies {
+			switch provider := state.FindTask(dep.ProviderTask); {
+			case provider == nil:
+				return upstreamReconcile, fmt.Sprintf("output[%d] declares provider %s, which does not exist", i, dep.ProviderTask)
+			case models.ProviderRetired(provider):
+				return upstreamReconcile, fmt.Sprintf("output[%d] declares retired provider %s", i, dep.ProviderTask)
+			}
+		}
+	}
+	return upstreamAdmissible, ""
 }
 
 // replacementBlocker judges the tasks the plan's outputs supersede (ADR-0161).
@@ -234,7 +258,8 @@ const (
 )
 
 // upstreamBlocker walks task's in-domain planning dependencies. A replanned
-// or held upstream, or a passed one blocked by either, needs reconciliation;
+// or held upstream, or a passed one blocked by either or by a stale provider
+// declaration, needs reconciliation;
 // an upstream awaiting review makes the task wait. Dependencies outside the
 // domain, non-merged ones and already-transitioned ones are admissible, as
 // before D73; so is one whose gated hand-off already ran. The worst finding
@@ -265,6 +290,11 @@ func (d PlanHandoffDomain) upstreamBlocker(state *models.State, task *models.Tas
 			visiting[depID] = true
 			kind, inner := d.upstreamBlocker(state, dep, visiting)
 			delete(visiting, depID)
+			// A stale provider declaration keeps the upstream childless, so
+			// this plan would inherit no barrier from it (ADR-0185).
+			if stale, staleText := providerBlocker(state, dep); stale > kind {
+				kind, inner = stale, staleText
+			}
 			if kind != upstreamAdmissible {
 				note(kind, fmt.Sprintf("upstream %s: %s", depID, inner))
 			}

@@ -286,6 +286,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 						state.Tasks[i].ID, state.Tasks[i].Status, task.ID, state.Tasks[i].ID))
 			}
 		}
+		warnings = append(warnings, staleProviderConsumerWarnings(state, task.ID)...)
 
 		// Add to sprint scope
 		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, newTaskID)

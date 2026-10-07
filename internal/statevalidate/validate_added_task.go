@@ -65,7 +65,7 @@ func ValidateAddedTask(state *models.State, projectRoot, taskID string, skipSpec
 				v.add(fmt.Errorf("provider dependency validation requires a pipeline"))
 				return
 			}
-			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies)
+			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies, nil)
 			graph := projectedProviderGraph(state, resolver)
 			for _, dependency := range graph.edges[task.ID] {
 				if path := shortestDependencyPath(graph.edges, dependency, task.ID); path != nil {

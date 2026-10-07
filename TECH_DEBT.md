@@ -2,6 +2,24 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Replan clones a stale consumer's task-level provider declarations
+
+**What:** `replan` copies the original plan's task-level `provider_dependencies`
+verbatim to its replacement. When a provider is retired under a stale consumer
+plan (ADR-0185) and that plan's own task-level declarations also name the
+retired provider, the replacement is a non-terminal task naming a retired
+provider, and state validation refuses the replan. The plan then cannot be
+re-authored without manual repair. This also blocks the older consumer-first
+order.
+
+**Why deferred:** D-61 concerns output declarations on unexpanded plans; every
+observed incident used output declarations only. Rewriting task-level
+declarations on replan needs its own rule (drop, keep, or require reviewed
+replacement) and is a separate intent.
+
+**Payback trigger:** the first refused replan of a stale consumer in a run, or
+the next change to replan cloning of provider declarations.
+
 ## Unattributed agent-suite failure during D-45 validation
 
 **What:** On 2026-10-06, one `make test` run failed in `internal/agent` after

@@ -474,3 +474,56 @@ func TestProviderValidationKindDedupRetainsOwnedMetadataLiveness(t *testing.T) {
 		})
 	}
 }
+
+// D-61: an unexpanded MERGED plan may keep a declaration on a retired provider
+// as reconcile evidence; every other holder of that declaration stays invalid.
+func TestProviderValidationStaleDeclarationOnlyOnUnexpandedPlan(t *testing.T) {
+	retirements := map[string]func(*models.Task){
+		"replanned":       func(p *models.Task) { p.TransitionsExecuted = map[string]bool{"replanned": true} },
+		"abandoned":       func(p *models.Task) { p.Status = models.TaskStatusAbandoned },
+		"superseded":      func(p *models.Task) { p.Status = models.TaskStatusSuperseded },
+		"retired handoff": func(p *models.Task) { p.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced} },
+	}
+	holders := []struct {
+		name  string
+		shape func(*models.State)
+		valid bool
+	}{
+		{"unexpanded plan", func(*models.State) {}, true},
+		{"markerless plan with a child", func(s *models.State) {
+			s.Tasks = append(s.Tasks, models.Task{ID: "consumer-cp-0", RolePair: "code-planning-pair", Status: models.TaskStatusMerged, ParentTasks: []string{"consumer"}})
+		}, false},
+		{"plan with an executed marker", func(s *models.State) {
+			s.FindTask("consumer").TransitionsExecuted = map[string]bool{"architecture-to-code-plan": true}
+		}, false},
+		{"in-flight producer", func(s *models.State) { s.FindTask("consumer").Status = models.TaskStatus("ARCHITECTING") }, false},
+		{"non-terminal task-level declaration", func(s *models.State) {
+			consumer := s.FindTask("consumer")
+			consumer.Status = models.TaskStatus("DRAFT_ARCHITECTURE")
+			consumer.Output = nil
+			consumer.ProviderDependencies = []models.ProviderDependency{providerPlanDependency("provider", 0)}
+		}, false},
+	}
+	for retirement, retire := range retirements {
+		for _, holder := range holders {
+			t.Run(retirement+"/"+holder.name, func(t *testing.T) {
+				state, pr, _ := providerValidationFixture(t)
+				consumer := state.FindTask("consumer")
+				consumer.ProviderDependencies = nil
+				consumer.Status = models.TaskStatusMerged
+				output := providerPlanOutput()
+				output.ProviderDependencies = []models.ProviderDependency{providerPlanDependency("provider", 0)}
+				consumer.Output = []models.OutputEntry{output}
+				retire(state.FindTask("provider"))
+				holder.shape(state)
+				err := ValidateProviderDependencies(state, pr)
+				if holder.valid && err != nil {
+					t.Fatalf("stale declaration on an unexpanded plan rejected: %v", err)
+				}
+				if !holder.valid && (err == nil || !strings.Contains(err.Error(), "retired provider provider")) {
+					t.Fatalf("validation = %v, want retired provider refusal", err)
+				}
+			})
+		}
+	}
+}

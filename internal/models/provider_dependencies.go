@@ -190,6 +190,30 @@ func EffectiveProviderChildren(dep ProviderDependency, state *State, pr Pipeline
 	return td, children, nil
 }
 
+// ProviderRetired reports a provider whose reviewed output can never be
+// generated: replanned, hand-off retired, or terminal other than MERGED.
+func ProviderRetired(provider *Task) bool {
+	return provider.TransitionsExecuted["replanned"] || provider.PlanHandoffRetired() ||
+		(provider.Status.IsTerminal() && provider.Status != TaskStatusMerged)
+}
+
+// PlanUnexpanded reports a MERGED plan whose output has generated nothing: no
+// transition marker and no task naming it as parent. Its output declarations
+// are reviewed content awaiting hand-off, not generated prerequisites, so a
+// provider retired under them leaves the plan stale rather than the state
+// invalid (ADR-0185).
+func PlanUnexpanded(state *State, task *Task) bool {
+	if task.Status != TaskStatusMerged || len(task.Output) == 0 || len(task.TransitionsExecuted) > 0 || task.PlanHandoffRetired() {
+		return false
+	}
+	for i := range state.Tasks {
+		if slices.Contains(state.Tasks[i].EffectiveParentTasks(), task.ID) {
+			return false
+		}
+	}
+	return true
+}
+
 // UnmetProviderDependencies applies the same fail-closed interpretation used by
 // readiness and committing claims. Retired/malformed references are invalid;
 // legitimate future children and unmerged work are pending, never satisfied.
@@ -272,7 +296,7 @@ func resolveProviderDependency(dep ProviderDependency, state *State, pr Pipeline
 	if provider.RolePair != td.SourceRolePair {
 		return invalid("provider role_pair does not match transition source")
 	}
-	if provider.TransitionsExecuted["replanned"] || provider.PlanHandoffRetired() || (provider.Status.IsTerminal() && provider.Status != TaskStatusMerged) {
+	if ProviderRetired(provider) {
 		return invalid("provider task or handoff was retired")
 	}
 	for position, output := range dep.Outputs {

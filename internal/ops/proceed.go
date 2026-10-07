@@ -495,6 +495,13 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			if err := validateOutputEntry(entry, i, len(task.Output)); err != nil {
 				return &handoffInputError{class: handoffOutputRefusal, index: i, err: err}
 			}
+			// A stale declaration (ADR-0185) must never reach a generated child.
+			for _, dep := range entry.ProviderDependencies {
+				if provider := s.FindTask(dep.ProviderTask); provider != nil && models.ProviderRetired(provider) {
+					return &handoffInputError{class: handoffOutputRefusal, index: i, err: fmt.Errorf(
+						"output[%d] declares retired provider %s; replan %s to re-author it", i, dep.ProviderTask, taskID)}
+				}
+			}
 		}
 		if resolver != nil {
 			if err := validateDecompositionRootRCAClassification(resolver, task.RolePair, canonicalOutput); err != nil {
