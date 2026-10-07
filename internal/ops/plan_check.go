@@ -1,6 +1,7 @@
 package ops
 
 import (
+	stderrors "errors"
 	"fmt"
 	"io"
 	"slices"
@@ -105,6 +106,10 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 					"task %s has no reviewed hand-off (its transitions are automatic, many-to-one, or it has no output); it transitions without a plan-check", task.ID)}
 			}
 			next, changeErr = planCheckTransition(task, class, blocker, input, actor)
+			var refusal *PreconditionError
+			if input.Action == PlanCheckActionPass && stderrors.As(changeErr, &refusal) {
+				refusal.Reason += lineageRepairHint(state, resolver, task)
+			}
 		}
 		if changeErr != nil {
 			return changeErr
@@ -309,6 +314,23 @@ func planCheckTransition(task *models.Task, class PlanHandoffClass, blocker stri
 		}
 		return planCheckChange{note: "cleared " + string(current), changed: true}, nil
 	}
+}
+
+// lineageRepairHint names the retarget-dependency repair for each direct edge
+// to a replanned upstream that mergedPlanLineageRepair would admit, so a
+// refused pass points at the metadata repair instead of a replan.
+func lineageRepairHint(state *models.State, resolver *pipeline.Resolver, task *models.Task) string {
+	var hints []string
+	for _, dep := range task.DependsOn {
+		successor, ok := liveReplanSuccessor(state, dep)
+		if ok && mergedPlanLineageRepair(state, resolver, task, dep, []string{successor.ID}) == nil {
+			hints = append(hints, fmt.Sprintf("retarget-dependency %s %s %s", task.ID, dep, successor.ID))
+		}
+	}
+	if len(hints) == 0 {
+		return ""
+	}
+	return "; its output already targets the replan successor, so repair the stale edge instead: " + strings.Join(hints, " and ")
 }
 
 func planCheckVerdictLabel(verdict models.PlanCheckVerdict) string {

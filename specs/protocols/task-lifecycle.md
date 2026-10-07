@@ -83,8 +83,17 @@ reviewed structured correction before restoration; merely unblocking repeats
 the missing-edge failure. Omitted fields retain legacy runtime behavior; no
 automatic migration or promotion of architecture dependencies occurs.
 
-See [Provider Dependencies](../architecture/blackboard-schema.md#provider-dependencies)
-and [ADR-0181](../architecture/ADR/0181-provider-output-dependencies.md).
+A replanned selected child resolves to its replan successor (same slot, same
+parent); without a unique live successor it stays retired. A replanned provider
+is never remapped. Replan clones dependencies through live successors. A MERGED,
+untransitioned plan still naming a replanned upstream is repaired with
+`retarget-dependency` only toward that upstream's MERGED successor, and only when
+its output already names the successor and no longer names the retired lineage;
+otherwise replan it.
+
+See [Provider Dependencies](../architecture/blackboard-schema.md#provider-dependencies),
+[ADR-0181](../architecture/ADR/0181-provider-output-dependencies.md) and
+[ADR-0184](../architecture/ADR/0184-replan-lineage-dependency-repair.md).
 
 ## Iteration Protocol
 

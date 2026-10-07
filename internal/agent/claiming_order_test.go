@@ -147,6 +147,22 @@ func TestDoerDependencyImpact_AllSelectedBornChildrenContribute(t *testing.T) {
 	}
 }
 
+// D-60: a replanned selected child's successor carries the declared demand.
+func TestDoerDependencyImpact_ReplannedChildSuccessorContributes(t *testing.T) {
+	pr := testPipelineResolver(t)
+	state := schedulingProviderState()
+	state.Tasks[1].Status = models.TaskStatusMerged
+	state.Tasks[1].TransitionsExecuted = map[string]bool{"replanned": true}
+	successor := schedulingTask("provider-cp-0-replan-1")
+	successor.RolePair, successor.Status, successor.ParentTasks = "code-planning-pair", "DRAFT_CODING_PLAN", []string{"provider"}
+	successor.Supersedes = &state.Tasks[1].ID
+	state.Tasks = append(state.Tasks, successor)
+	impact := doerDependencyImpact(state, pr, []*models.Task{&state.Tasks[len(state.Tasks)-1], &state.Tasks[3]})
+	if impact["provider-cp-0-replan-1"] != 2 || impact["provider-cp-2"] != 2 {
+		t.Fatalf("impact = %v, want the replan successor to carry both consumers", impact)
+	}
+}
+
 func TestDoerDependencyImpact_InvalidProviderDeclarationsDoNotBoost(t *testing.T) {
 	pr := testPipelineResolver(t)
 	for _, tc := range []struct {

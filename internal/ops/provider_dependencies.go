@@ -15,7 +15,7 @@ func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.
 		for _, dep := range deps {
 			referenced := targetID == dep.ProviderTask
 			if !referenced {
-				_, children, err := models.ProviderDependencyChildren(dep, resolver)
+				_, children, err := models.EffectiveProviderChildren(dep, state, resolver)
 				referenced = err == nil && slices.Contains(children, targetID)
 			}
 			if referenced {

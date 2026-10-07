@@ -149,6 +149,13 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			Note:  &note,
 		})
 
+		// The replacement is new work to be re-authored. An edge to an upstream
+		// replanned while this task was MERGED (the retarget loop below skips
+		// terminal tasks) follows that upstream's live successor, as it would
+		// have had the replacement existed then. Without one the edge is kept,
+		// so the reconcile signal stays visible.
+		dependsOn, successorEdges := replanSuccessorDependencies(state, task.DependsOn)
+
 		// Create new task inheriting fields from original
 		originalID := task.ID
 		newTask := models.Task{
@@ -168,11 +175,27 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			RCARequired:          task.RCARequired,
 			DoneWhen:             task.DoneWhen,
 			Scope:                task.Scope,
-			DependsOn:            slices.Clone(task.DependsOn),
+			DependsOn:            dependsOn,
 			ProviderDependencies: models.CloneProviderDependencies(task.ProviderDependencies),
 			Supersedes:           &originalID,
 			Created:              now,
 			History:              []models.TaskHistoryEntry{},
+		}
+		var warnings []string
+		for _, edge := range successorEdges {
+			note := fmt.Sprintf("dependency on replanned %s follows its successor %s", edge[0], edge[1])
+			newTask.History = append(newTask.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: models.TaskEventDependenciesRewritten,
+				Agent: &input.ChangedBy,
+				Note:  &note,
+				Extra: map[string]any{
+					"operation":              "replan",
+					"replanned_dependency":   edge[0],
+					"replacement_dependency": edge[1],
+				},
+			})
+			warnings = append(warnings, fmt.Sprintf("task %s: %s", newTaskID, note))
 		}
 		state.Tasks = append(state.Tasks, newTask)
 
@@ -192,8 +215,6 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 				state.Tasks[i].DependsOn = dedupeStrings(state.Tasks[i].DependsOn)
 			}
 		}
-
-		var warnings []string
 
 		// Retire selective inherit_inputs that name the replanned task.
 		//
@@ -374,6 +395,34 @@ func replanReasonSuffix(reason string) string {
 		return ""
 	}
 	return ": " + reason
+}
+
+// liveReplanSuccessor is the replan successor of id unless that successor was
+// itself retired (superseded, abandoned or its hand-off replaced).
+func liveReplanSuccessor(state *models.State, id string) (*models.Task, bool) {
+	successor, ok := models.ReplanSuccessor(state, id)
+	if !ok || successor.PlanHandoffRetired() || (successor.Status.IsTerminal() && successor.Status != models.TaskStatusMerged) {
+		return nil, false
+	}
+	return successor, true
+}
+
+// replanSuccessorDependencies maps each dependency with a live replan
+// successor to that successor and reports the rewritten {old, new} edges.
+// Unchanged lists are returned as-is.
+func replanSuccessorDependencies(state *models.State, deps []string) ([]string, [][2]string) {
+	resolved := slices.Clone(deps)
+	var edges [][2]string
+	for i, dep := range deps {
+		if successor, ok := liveReplanSuccessor(state, dep); ok {
+			resolved[i] = successor.ID
+			edges = append(edges, [2]string{dep, successor.ID})
+		}
+	}
+	if len(edges) == 0 {
+		return resolved, nil
+	}
+	return dedupeStrings(resolved), edges
 }
 
 // dedupeStrings returns a new slice with duplicates removed, preserving order.

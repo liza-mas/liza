@@ -75,7 +75,7 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 			v.add(fmt.Errorf("%s references non-existent provider %s", label, dep.ProviderTask))
 			continue
 		}
-		transition, children, err := models.ProviderDependencyChildren(dep, resolver)
+		transition, children, err := models.EffectiveProviderChildren(dep, state, resolver)
 		if err != nil {
 			v.add(fmt.Errorf("%s: %w", label, err))
 			continue
@@ -155,7 +155,7 @@ func (g *providerGraph) add(from, to string) {
 
 func (g *providerGraph) declare(state *models.State, resolver *pipeline.Resolver, owner string, deps []models.ProviderDependency) {
 	for _, dep := range deps {
-		_, children, err := models.ProviderDependencyChildren(dep, resolver)
+		_, children, err := models.EffectiveProviderChildren(dep, state, resolver)
 		if err != nil {
 			continue // The declaration validator reports this malformed edge.
 		}

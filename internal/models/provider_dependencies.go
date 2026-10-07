@@ -173,6 +173,23 @@ func ProviderDependencyChildren(dep ProviderDependency, pr PipelineResolver) (Pr
 	return td, children, nil
 }
 
+// EffectiveProviderChildren is the projection with each replanned child
+// resolved to its ReplanSuccessor, which keeps the provider's output slot and
+// parent. An unresolvable replanned child keeps its projected ID, so the
+// retirement checks on it still fail closed. Output indexes are never mapped.
+func EffectiveProviderChildren(dep ProviderDependency, state *State, pr PipelineResolver) (ProviderTransition, []string, error) {
+	td, children, err := ProviderDependencyChildren(dep, pr)
+	if err != nil {
+		return td, nil, err
+	}
+	for i, id := range children {
+		if successor, ok := ReplanSuccessor(state, id); ok {
+			children[i] = successor.ID
+		}
+	}
+	return td, children, nil
+}
+
 // UnmetProviderDependencies applies the same fail-closed interpretation used by
 // readiness and committing claims. Retired/malformed references are invalid;
 // legitimate future children and unmerged work are pending, never satisfied.
@@ -244,7 +261,7 @@ func resolveProviderDependency(dep ProviderDependency, state *State, pr Pipeline
 		result.Reason = reason
 		return result
 	}
-	td, children, err := ProviderDependencyChildren(dep, pr)
+	td, children, err := EffectiveProviderChildren(dep, state, pr)
 	if err != nil {
 		return invalid(err.Error())
 	}

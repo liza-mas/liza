@@ -89,7 +89,7 @@ func doerDependencyImpact(state *models.State, pr models.PipelineResolver, candi
 			if !pending[declaration.ProviderTask] {
 				continue
 			}
-			_, children, err := models.ProviderDependencyChildren(declaration, pr)
+			_, children, err := models.EffectiveProviderChildren(declaration, state, pr)
 			if err != nil {
 				continue
 			}

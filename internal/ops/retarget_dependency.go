@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -139,8 +140,12 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 			result = RetargetDependencyResult{TaskID: taskID, LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID)}
 			return errLifecycleReplay
 		}
+		lineageRepair := false
 		if task.Status.IsTerminal() {
-			return WrapLifecycleError(retargetDependencyOperation, task, &PreconditionError{Reason: fmt.Sprintf("cannot retarget dependencies on terminal task %s (%s)", taskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+			if repairErr := mergedPlanLineageRepair(state, resolver, task, oldDependency, normalizedNewDeps); repairErr != nil {
+				return WrapLifecycleError(retargetDependencyOperation, task, &PreconditionError{Reason: fmt.Sprintf("cannot retarget dependencies on terminal task %s (%s): %v", taskID, task.Status, repairErr)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+			}
+			lineageRepair = true
 		}
 		if !slices.Contains(task.DependsOn, oldDependency) {
 			return WrapLifecycleError(retargetDependencyOperation, task, &PreconditionError{Reason: fmt.Sprintf("task %s does not depend on %s", taskID, oldDependency)}, models.LifecycleStateChanged, "requery", "none")
@@ -180,6 +185,9 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 			"new_dependencies":       append([]string(nil), normalizedNewDeps...),
 			"canonical_dependencies": append([]string(nil), canonical...),
 			"repair_request_cleared": repairRequestCleared,
+		}
+		if lineageRepair {
+			extra["merged_plan_lineage_repair"] = true
 		}
 		for key, value := range repairExtra {
 			extra[key] = value
@@ -302,6 +310,60 @@ func normalizeRetargetNewDependencies(values []string) ([]string, error) {
 		return nil, &PreconditionError{Reason: "at least one new dependency is required"}
 	}
 	return normalized, nil
+}
+
+// mergedPlanLineageRepair admits the one terminal retarget that repairs replan
+// lineage (D-60): a MERGED plan whose hand-off has not started keeps an edge to
+// an upstream replanned while it was MERGED (Replan skips terminal consumers).
+// The edge moves only to that upstream's MERGED successor, and only when the
+// reviewed output already targets the successor and no longer names the
+// retired lineage — otherwise the plan predates the replan and must be
+// reconciled by replan, not by metadata. Plan-check state is left untouched.
+func mergedPlanLineageRepair(state *models.State, resolver *pipeline.Resolver, task *models.Task, oldDependency string, newDependencies []string) error {
+	if task.Status != models.TaskStatusMerged || !IsPlanningPair(task.RolePair, resolver.TransitionSourcePairs()) || len(task.Output) == 0 {
+		return fmt.Errorf("only a MERGED planning task with output can have a replan lineage edge repaired")
+	}
+	if len(task.TransitionsExecuted) > 0 || task.PlanHandoffRetired() {
+		return fmt.Errorf("its hand-off already ran, was replanned or was retired")
+	}
+	successor, ok := liveReplanSuccessor(state, oldDependency)
+	if !ok {
+		return fmt.Errorf("%s has no live replan successor", oldDependency)
+	}
+	if !slices.Equal(newDependencies, []string{successor.ID}) {
+		return fmt.Errorf("a replanned dependency can only be retargeted to its replan successor %s", successor.ID)
+	}
+	if successor.Status != models.TaskStatusMerged {
+		return fmt.Errorf("replan successor %s is %s, not MERGED", successor.ID, successor.Status)
+	}
+	targetsSuccessor := false
+	for index, entry := range task.Output {
+		for _, ref := range outputDependencyReferences(entry) {
+			if ref == successor.ID {
+				targetsSuccessor = true
+			} else if lineage, ok := liveReplanSuccessor(state, ref); ok && lineage.ID == successor.ID {
+				return fmt.Errorf("output[%d] still names %s, replanned into %s; replan the plan instead", index, ref, successor.ID)
+			}
+		}
+	}
+	if !targetsSuccessor {
+		return fmt.Errorf("no output names replan successor %s; replan the plan instead", successor.ID)
+	}
+	return nil
+}
+
+// outputDependencyReferences lists the upstream tasks an output entry names.
+func outputDependencyReferences(entry models.OutputEntry) []string {
+	refs := slices.Clone(entry.TaskDependsOn)
+	for _, dep := range entry.ProviderDependencies {
+		refs = append(refs, dep.ProviderTask)
+	}
+	if entry.InheritInputs != nil {
+		for _, selection := range entry.InheritInputs.Selections {
+			refs = append(refs, selection.UpstreamTask)
+		}
+	}
+	return refs
 }
 
 func replaceDependency(deps []string, oldDependency string, newDependencies []string) []string {
