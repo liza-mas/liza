@@ -60,6 +60,7 @@ var nonStatusTransitionEvents = map[TaskEventName]struct{}{
 	TaskEventReplacementCommitted:      {},
 	TaskEventAcceptanceCommitsRemapped: {},
 	TaskEventPlanCheck:                 {},
+	TaskEventArchRefRepaired:           {},
 	TaskEventProviderDeclarationStale:  {},
 }
 

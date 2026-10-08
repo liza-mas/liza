@@ -109,6 +109,14 @@ func TestNonDefaultBrandPauseHelp(t *testing.T) {
 	assertNoDefaultBrandLeaks(t, "pause help", help)
 }
 
+func TestNonDefaultBrandRepairArchRefHelp(t *testing.T) {
+	bin := buildNonDefaultBrandBinary(t)
+	help := runBrandSmokeCommand(t, bin, "repair-arch-ref", "--help")
+	assertContains(t, help, "acme-agent repair-arch-ref <task-id>")
+	assertContains(t, help, "Identified agent sessions cannot use this command")
+	assertNoDefaultBrandLeaks(t, "repair-arch-ref help", help)
+}
+
 func buildNonDefaultBrandBinary(t *testing.T) string {
 	t.Helper()
 

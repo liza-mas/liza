@@ -95,6 +95,9 @@ const (
 	TaskEventRecoveredFresh            TaskEventName = "task_recovered_fresh"
 	TaskEventRecoveryFreshFailed       TaskEventName = "task_recovery_fresh_failed"
 	TaskEventPlanCheck                 TaskEventName = "plan_check"
+	// TaskEventArchRefRepaired records an operator setting the empty arch_ref of
+	// an unstarted task (repair-arch-ref, D-76).
+	TaskEventArchRefRepaired TaskEventName = "arch_ref_repaired"
 	// TaskEventProviderDeclarationStale records a BLOCKED task's draft output
 	// declaration left stale by a provider retirement (ADR-0188).
 	TaskEventProviderDeclarationStale TaskEventName = "provider_declaration_stale"

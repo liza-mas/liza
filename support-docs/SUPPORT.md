@@ -106,6 +106,7 @@ a stale authoritative reference.
 §BRAND_BINARY_NAME§ clear-stale-review-claims     # Clear all expired review leases
 §BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason <reason> # Repair illegal terminal dependency edges
 §BRAND_BINARY_NAME§ repair-acceptance-commits [--dry-run] # Restore evidence orphaned by an integration-branch rewrite
+§BRAND_BINARY_NAME§ repair-arch-ref <task-id> --arch-ref <path#heading> --reason <reason> # Fill an unstarted task's empty arch_ref
 §BRAND_BINARY_NAME§ delete agent <id>             # Remove agent from state
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```
@@ -120,6 +121,16 @@ run it without `--dry-run` to write that mapping. It derives replacements by
 content identity and takes no commit arguments, refusing any parent whose
 commits lack an identical replacement. Prevent the cause instead: once anything
 has merged, merge into the integration branch rather than rebasing it.
+
+If a consumer stays blocked because its provider task has an empty `arch_ref`
+(typically a replacement created before replacements inherited it), no
+lifecycle path restores it. `§BRAND_BINARY_NAME§ repair-arch-ref <task-id>
+--arch-ref "<path>#<exact Scope heading>" --reason "..."` sets it on a task in
+its role pair's initial status that was never claimed, refusing a non-empty
+`arch_ref`. The artifact must be on the integration branch and the heading must
+match exactly, as for an architecture output; take both from the superseded
+original's `arch_ref`. The repair is recorded as `arch_ref_repaired` history and
+wakes no one: follow it with `add-human-note` on the blocked consumer.
 
 If every mutation fails with `lease_expires without assigned_to: <task-id>`,
 that task carries half an ownership tuple written by an older binary. Global
