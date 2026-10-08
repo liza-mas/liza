@@ -125,6 +125,14 @@ func TestNonDefaultBrandDeferProviderDependencyHelp(t *testing.T) {
 	assertNoDefaultBrandLeaks(t, "defer-provider-dependency help", help)
 }
 
+func TestNonDefaultBrandReserveProviderHelp(t *testing.T) {
+	bin := buildNonDefaultBrandBinary(t)
+	help := runBrandSmokeCommand(t, bin, "reserve-provider", "--help")
+	assertContains(t, help, "acme-agent reserve-provider <task-id> <provider-task-id>")
+	assertContains(t, help, "acme-agent reserve-provider vb-cp-0 corr")
+	assertNoDefaultBrandLeaks(t, "reserve-provider help", help)
+}
+
 func buildNonDefaultBrandBinary(t *testing.T) string {
 	t.Helper()
 

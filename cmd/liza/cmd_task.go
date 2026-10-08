@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -231,6 +232,8 @@ Example YAML file format:
 				Scope:                   input.Scope,
 				Priority:                input.Priority,
 				DependsOn:               input.DependsOn,
+				ReserveSuccessors:       slices.Clone(input.ReserveSuccessors),
+				MaxOutputs:              input.MaxOutputs,
 			}
 			result, err := ops.AddTaskWithAuthority(statePath, logPath, opsInput, authority)
 			return jsonout.WriteResult(os.Stdout, result, nil, err)

@@ -107,7 +107,7 @@ func TestReasonCommandsInheritRootValidationHook(t *testing.T) {
 		t.Fatal("root command has no persistent CLI validation hook")
 	}
 
-	const wantReasonCommands = 26
+	const wantReasonCommands = 27
 	reasonCommands := 0
 	reconcileVerdictIncluded := false
 	recoverIntegrationIncluded := false

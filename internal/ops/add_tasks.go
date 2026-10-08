@@ -38,6 +38,12 @@ type AddTaskInput struct {
 	DependsOn               []string                        `json:"depends,omitempty"`
 	ProviderDependencies    []models.ProviderDependency     `json:"provider_dependencies,omitempty"`
 	DescendantDependencies  []models.DescendantDependency   `json:"descendant_dependencies,omitempty"`
+	// ReserveSuccessors are existing unstarted writers placed after this task
+	// in the same transaction that creates it (D-80): each waits for every
+	// child this task generates. add-task and add-tasks only.
+	ReserveSuccessors []string `json:"reserve_successors,omitempty"`
+	// MaxOutputs caps this task's output entries (D-80); 0 is unbounded.
+	MaxOutputs int `json:"max_outputs,omitempty"`
 }
 
 // AddTaskResult contains the outcome of adding a task.
@@ -111,6 +117,9 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 	var postValidationErr error
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		if err := insertTaskInState(state, projectRoot, newTask, input, resolver); err != nil {
+			return err
+		}
+		if err := reserveSuccessorsInState(state, resolver, &newTask, input.ReserveSuccessors, orchestratorID); err != nil {
 			return err
 		}
 		if models.HasProviderDependencies(state) {
@@ -189,6 +198,17 @@ func validateAddTaskInput(input *AddTaskInput) error {
 		return &PreconditionError{Reason: fmt.Sprintf("unknown task type %q; valid types: %s",
 			input.Type, strings.Join(models.ValidTaskTypeNames(), ", "))}
 	}
+	if input.MaxOutputs < 0 {
+		return &PreconditionError{Reason: fmt.Sprintf("max_outputs must be nonnegative (0 is unbounded), got %d", input.MaxOutputs)}
+	}
+	for i, successor := range input.ReserveSuccessors {
+		if err := paths.ValidateTaskID(successor); err != nil {
+			return &PreconditionError{Reason: fmt.Sprintf("reserve_successors[%d]: %v", i, err)}
+		}
+		if successor == input.ID || slices.Contains(input.ReserveSuccessors[:i], successor) {
+			return &PreconditionError{Reason: "reserve_successors must name distinct existing tasks other than the new task"}
+		}
+	}
 	return nil
 }
 
@@ -261,6 +281,7 @@ func buildReplacementTask(input *AddTaskInput, resolver *pipeline.Resolver) (mod
 		DependsOn:               normalizedDeps,
 		ProviderDependencies:    models.CloneProviderDependencies(input.ProviderDependencies),
 		DescendantDependencies:  models.CloneDescendantDependencies(input.DescendantDependencies),
+		MaxOutputs:              input.MaxOutputs,
 		Created:                 time.Now().UTC(),
 		History:                 []models.TaskHistoryEntry{},
 	}, nil
@@ -399,6 +420,15 @@ func addTasksWithOptionalAuthority(statePath, logPath string, input *AddTasksInp
 	}
 	if orchestratorID == "" {
 		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
+	}
+	// Items commit one by one, so a placed writer must be commissioned alone:
+	// its creation and its successors' reservations share one transaction.
+	if len(input.Tasks) > 1 {
+		for _, item := range input.Tasks {
+			if len(item.ReserveSuccessors) > 0 || item.MaxOutputs != 0 {
+				return nil, &PreconditionError{Reason: fmt.Sprintf("task %s carries reserve_successors or max_outputs; commission placed writers one per add-tasks request", item.ID)}
+			}
+		}
 	}
 	result := &AddTasksResult{Results: make([]AddTaskItemResult, 0, len(input.Tasks))}
 	for i := range input.Tasks {

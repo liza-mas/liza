@@ -578,13 +578,18 @@ type Task struct {
 	// DescendantDependencies are applied to every output this task writes for
 	// the named transition (D-79); they never hold this task's own claim.
 	DescendantDependencies []DescendantDependency `yaml:"descendant_dependencies,omitempty" json:"descendant_dependencies,omitempty"`
-	IntegrationFix         bool                   `yaml:"integration_fix,omitempty"`
-	HandoffPending         bool                   `yaml:"handoff_pending,omitempty"`
-	HandoffEvents          []HandoffEvent         `yaml:"handoff_events,omitempty"`
-	MaxIterations          int                    `yaml:"max_iterations,omitempty"`
-	Created                time.Time              `yaml:"created"`
-	History                []TaskHistoryEntry     `yaml:"history"`
-	Extra                  map[string]any         `yaml:",inline"`
+	// ProviderReservations hold this writer until every child each named
+	// provider generates has merged (D-80); never copied from a parent output.
+	ProviderReservations []ProviderReservation `yaml:"provider_reservations,omitempty" json:"provider_reservations,omitempty"`
+	// MaxOutputs caps this task's output entries; 0 is unbounded (D-80).
+	MaxOutputs     int                `yaml:"max_outputs,omitempty" json:"max_outputs,omitempty"`
+	IntegrationFix bool               `yaml:"integration_fix,omitempty"`
+	HandoffPending bool               `yaml:"handoff_pending,omitempty"`
+	HandoffEvents  []HandoffEvent     `yaml:"handoff_events,omitempty"`
+	MaxIterations  int                `yaml:"max_iterations,omitempty"`
+	Created        time.Time          `yaml:"created"`
+	History        []TaskHistoryEntry `yaml:"history"`
+	Extra          map[string]any     `yaml:",inline"`
 }
 
 // EffectiveParentTasks returns the list of parent task IDs.

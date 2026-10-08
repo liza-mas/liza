@@ -207,6 +207,9 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 		if err := validateDecompositionRootOutput(state, resolver, task.RolePair, input.Output); err != nil {
 			return err
 		}
+		if task.MaxOutputs > 0 && len(input.Output) > task.MaxOutputs {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s max_outputs is %d, so %d output entries are refused: writers selecting its outputs by index would miss the extra ones (D-80)", task.ID, task.MaxOutputs, len(input.Output))}
+		}
 
 		for i, entry := range input.Output {
 			for _, depID := range entry.TaskDependsOn {

@@ -190,6 +190,8 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			DependsOn:              dependsOn,
 			ProviderDependencies:   models.CloneProviderDependencies(task.ProviderDependencies),
 			DescendantDependencies: models.CloneDescendantDependencies(task.DescendantDependencies),
+			ProviderReservations:   slices.Clone(task.ProviderReservations),
+			MaxOutputs:             task.MaxOutputs,
 			Supersedes:             &originalID,
 			Created:                now,
 			History:                []models.TaskHistoryEntry{},

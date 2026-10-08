@@ -277,11 +277,18 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 // lineage so fan-in cohorts and parent-scoped checks still see the work, and
 // its arch_ref, the architecture scope the payload cannot restate (D-67).
 // epic_ref is not inherited; replacement is how a broken one is dropped.
+// The successor takes over the source's writer placement (D-80): its
+// provider_reservations, so it cannot race the writers placed before it, and,
+// for the same pair, a max_outputs the payload omits.
 func inheritReplacementLineage(replacement, source *models.Task) {
+	replacement.ProviderReservations = slices.Clone(source.ProviderReservations)
 	if replacement.RolePair == source.RolePair {
 		replacement.ParentTask = cloneStringPtr(source.ParentTask)
 		replacement.ParentTasks = slices.Clone(source.ParentTasks)
 		replacement.ArchRef = source.ArchRef
+		if replacement.MaxOutputs == 0 {
+			replacement.MaxOutputs = source.MaxOutputs
+		}
 	}
 }
 
@@ -338,6 +345,9 @@ func validateReplaceTaskInput(input ReplaceTaskInput) error {
 	}
 	if strings.TrimSpace(input.Reason) == "" {
 		return &PreconditionError{Reason: "replacement reason is required"}
+	}
+	if len(input.Replacement.ReserveSuccessors) > 0 {
+		return &PreconditionError{Reason: "replacement.reserve_successors is add-tasks only: the replacement inherits the source's provider_reservations; place other writers with reserve-provider"}
 	}
 	if err := validateAddTaskInput(&input.Replacement); err != nil {
 		return err

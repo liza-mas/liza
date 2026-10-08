@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -27,6 +28,8 @@ type TaskInput struct {
 	DependsOn               []string                        `yaml:"depends_on,omitempty"`
 	ProviderDependencies    []models.ProviderDependency     `yaml:"provider_dependencies,omitempty"`
 	DescendantDependencies  []models.DescendantDependency   `yaml:"descendant_dependencies,omitempty"`
+	ReserveSuccessors       []string                        `yaml:"reserve_successors,omitempty"`
+	MaxOutputs              int                             `yaml:"max_outputs,omitempty"`
 }
 
 // LoadTaskInputFromFile loads task input from a YAML file.
@@ -76,6 +79,8 @@ func addTaskCommand(statePath, logPath string, input *TaskInput, add func(*ops.A
 		Scope:                   input.Scope,
 		Priority:                input.Priority,
 		DependsOn:               input.DependsOn,
+		ReserveSuccessors:       slices.Clone(input.ReserveSuccessors),
+		MaxOutputs:              input.MaxOutputs,
 	}
 
 	result, err := add(opsInput)

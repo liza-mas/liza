@@ -273,6 +273,9 @@ func supersedeTaskInState(state *models.State, pb *pipelineBundle, task *models.
 	if err := validateDependencyDirection(state, pb.resolver, task.ID, task.RolePair, replacementIDs); err != nil {
 		return nil, err
 	}
+	if err := rejectDroppedReservations(state, pb.resolver, task, replacementIDs); err != nil {
+		return nil, err
+	}
 	retainedDependencies, removedDependencies, err := pruneDownstreamDependencies(state, pb.resolver, task)
 	if err != nil {
 		return nil, err

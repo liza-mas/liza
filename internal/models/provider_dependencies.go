@@ -91,7 +91,7 @@ func HasProviderDependencies(state *State) bool {
 		return false
 	}
 	for _, task := range state.Tasks {
-		if len(task.ProviderDependencies) > 0 || len(task.DescendantDependencies) > 0 {
+		if len(task.ProviderDependencies) > 0 || len(task.DescendantDependencies) > 0 || len(task.ProviderReservations) > 0 {
 			return true
 		}
 		for _, output := range task.Output {
@@ -375,13 +375,13 @@ func UnmetProviderDependencies(task *Task, allTasks []Task, pr PipelineResolver)
 	if mismatch := generatedProviderDeclarationMismatch(task, state, pr); mismatch != "" {
 		return []DependencySatisfaction{{DependencyID: task.ID, Kind: DependencyInvalidProvider, Reason: mismatch}}
 	}
+	unmet := UnmetProviderReservations(task, state, pr)
 	if len(task.ProviderDependencies) == 0 {
-		return nil
+		return unmet
 	}
 	if err := ValidateProviderDependencies(task.ProviderDependencies); err != nil {
-		return []DependencySatisfaction{{DependencyID: task.ID, Kind: DependencyInvalidProvider, Reason: err.Error()}}
+		return append(unmet, DependencySatisfaction{DependencyID: task.ID, Kind: DependencyInvalidProvider, Reason: err.Error()})
 	}
-	var unmet []DependencySatisfaction
 	for _, dep := range task.ProviderDependencies {
 		result := resolveProviderDependency(dep, state, pr)
 		if !result.Satisfied() {

@@ -18,6 +18,21 @@ fails closed, reporting the holder before any mutation.
 **Payback trigger:** the first provider retirement refused by a descendant
 holder where stale routing would have avoided a replacement.
 
+## Provider reservations block permanent provider retirement
+
+**What:** An unsatisfied `provider_reservations` entry (ADR-0195) refuses the
+provider's cancel, supersede or plan-check replacement. A correction replaced
+permanently needs `reserve-provider` on its successor and `--release` of the
+old reservation first; placed writers are also commissioned one per
+`add-tasks` request.
+
+**Why deferred:** carrying a reservation through permanent retirement needs a
+successor-selection rule per retirement path; refusing fails closed and names
+the holder.
+
+**Payback trigger:** the first permanent retirement refused by a reservation
+holder in a run, or the first multi-writer commissioning split for this rule.
+
 ## Replace-task drops a code plan's decomposition
 
 **What:** `replace-task` builds the replacement from `AddTaskInput`, which has

@@ -56,6 +56,7 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 			v.add(fmt.Errorf("task %s %s", task.ID, conflict))
 		}
 	}
+	validateProviderReservations(v, state, resolver)
 	// Identify each cyclic effective edge, as ordinary dependency validation
 	// does. A new edge can close another cycle through an already-cyclic provider
 	// declaration; identifying only that declaration would hide the new damage.
@@ -193,6 +194,18 @@ func (g *providerGraph) declare(state *models.State, resolver *pipeline.Resolver
 	}
 }
 
+// reserve adds a reservation's edges: to its effective provider until it
+// merges, then to every child its outputs project.
+func (g *providerGraph) reserve(state *models.State, resolver *pipeline.Resolver, owner string, res models.ProviderReservation) {
+	if dep, ok := models.ReservationDependency(res, state); ok {
+		g.declare(state, resolver, owner, []models.ProviderDependency{dep})
+		return
+	}
+	if provider := state.FindTask(models.EffectiveReservationProvider(state, res.ProviderTask)); provider != nil && provider.Status != models.TaskStatusMerged {
+		g.add(owner, provider.ID)
+	}
+}
+
 func projectedProviderGraph(state *models.State, resolver *pipeline.Resolver) providerGraph {
 	g := providerGraph{edges: map[string][]string{}}
 	for i := range state.Tasks {
@@ -204,6 +217,9 @@ func projectedProviderGraph(state *models.State, resolver *pipeline.Resolver) pr
 			g.add(task.ID, id)
 		}
 		g.declare(state, resolver, task.ID, task.ProviderDependencies)
+		for _, res := range task.ProviderReservations {
+			g.reserve(state, resolver, task.ID, res)
+		}
 	}
 	for i := range state.Tasks {
 		parent := &state.Tasks[i]

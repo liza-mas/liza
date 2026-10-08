@@ -3,7 +3,9 @@ package payloadschema
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -31,6 +33,8 @@ type addTaskPayload struct {
 	DependsOn               []string                        `json:"depends"`
 	ProviderDependencies    []models.ProviderDependency     `json:"provider_dependencies"`
 	DescendantDependencies  []models.DescendantDependency   `json:"descendant_dependencies"`
+	ReserveSuccessors       []string                        `json:"reserve_successors"`
+	MaxOutputs              int                             `json:"max_outputs"`
 }
 
 func init() {
@@ -80,6 +84,16 @@ func validateAddTaskPayload(payload any) []models.FieldDiagnostic {
 	}
 	if err := models.ValidateDescendantDependencies(input.DescendantDependencies); err != nil {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/descendant_dependencies", "must name distinct at_transition values, each with nonempty valid provider_dependencies", models.FieldValueClassMalformed))
+	}
+	for i, successor := range input.ReserveSuccessors {
+		if slices.Contains(input.ReserveSuccessors[:i], successor) || successor == input.ID {
+			diagnostics = append(diagnostics, scalarPayloadDiagnostic("/reserve_successors", "must name distinct existing tasks other than the new task", models.FieldValueClassMalformed))
+			break
+		}
+		diagnostics = append(diagnostics, taskIDDiagnostics(fmt.Sprintf("/reserve_successors/%d", i), successor)...)
+	}
+	if input.MaxOutputs < 0 {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/max_outputs", "max_outputs must be nonnegative (0 is unbounded)", models.FieldValueClassOutOfRange))
 	}
 	if input.RolePair == "" {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/role_pair", "role_pair is required", models.FieldValueClassMissing))

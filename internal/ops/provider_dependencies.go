@@ -43,6 +43,16 @@ const (
 //
 // A live descendant declaration holds without exception (ADR-0193): it never
 // goes stale, so its holder is reported before any mutation.
+// holdsUnsatisfiedReservation reports a reservation of task whose effective
+// provider is providerID and which does not yet admit task. Replan and
+// same-pair replace-task keep it on the successor (D-80); only a permanent
+// retirement would strand the writer it places.
+func holdsUnsatisfiedReservation(state *models.State, resolver *pipeline.Resolver, task *models.Task, providerID string) bool {
+	return slices.ContainsFunc(task.ProviderReservations, func(res models.ProviderReservation) bool {
+		return models.EffectiveReservationProvider(state, res.ProviderTask) == providerID && !models.ResolveReservation(res, state, resolver).Satisfied()
+	})
+}
+
 func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.Resolver, targetID string, retirement providerRetirement) error {
 	permanent := retirement == retirePermanently
 	holds := func(deps []models.ProviderDependency, released func(direct bool) bool) bool {
@@ -62,6 +72,9 @@ func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.
 			return (direct || permanent) && unstartedProviderConsumer(task, resolver)
 		}) {
 			holders = append(holders, task.ID)
+		}
+		if permanent && !task.Status.IsTerminal() && holdsUnsatisfiedReservation(state, resolver, task, targetID) {
+			holders = append(holders, task.ID+" provider_reservations")
 		}
 		outputLive := !task.TransitionsExecuted["replanned"] && !task.PlanHandoffRetired() && operationalOutputMayBeConsumed(state, resolver, task)
 		// A terminal owner still applies its descendant waits until its output

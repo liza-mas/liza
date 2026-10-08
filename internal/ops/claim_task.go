@@ -614,7 +614,7 @@ func completeClaimTaskAfterValidation(
 		}
 
 		// Re-check dependencies under lock for strategies that require it
-		if strategy.requiresDependencyRecheck() || len(task.ProviderDependencies) > 0 {
+		if strategy.requiresDependencyRecheck() || len(task.ProviderDependencies) > 0 || len(task.ProviderReservations) > 0 {
 			if unmet := unmetDependencies(task, state, resolver); len(unmet) > 0 {
 				return fmt.Errorf("race condition: dependencies changed: %s", formatDependencyResults(unmet))
 			}
@@ -804,7 +804,7 @@ func recheckClaimTaskBeforeWorktree(
 	if reason := models.DoerClaimBlockedReason(state, task, runtimeRole, agentID, resolver, time.Now().UTC()); reason != "" {
 		return nil, &PreconditionError{Reason: reason}
 	}
-	if strategy.requiresDependencyRecheck() || len(task.ProviderDependencies) > 0 {
+	if strategy.requiresDependencyRecheck() || len(task.ProviderDependencies) > 0 || len(task.ProviderReservations) > 0 {
 		if unmet := unmetDependencies(task, state, resolver); len(unmet) > 0 {
 			return nil, fmt.Errorf("race condition: dependencies changed: %s", formatDependencyResults(unmet))
 		}

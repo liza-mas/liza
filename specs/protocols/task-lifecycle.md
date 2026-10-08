@@ -66,6 +66,12 @@ A wait that orders the generated plan's writers rather than the plan goes in
 receives the wait as an ordinary declaration, so its writers keep their order
 ([ADR-0193](../architecture/ADR/0193-descendant-provider-dependencies.md)).
 
+A writer inserted ahead of an existing one is placed with `provider_reservations`
+(single-item `add-tasks` with `reserve_successors`, or `reserve-provider`): the
+reserved writer stays unclaimable until every child the provider generates at
+the transition has merged, however many outputs it authors
+([ADR-0195](../architecture/ADR/0195-provider-reservations-for-inserted-writers.md)).
+
 This is an explicit cross-stage exception, leaving ordinary downstream
 `depends_on`/`task_depends_on` invalid. Authoring, handoff and crash recovery
 validate the combined graph, including future production and inherited/sibling

@@ -108,6 +108,7 @@ a stale authoritative reference.
 §BRAND_BINARY_NAME§ repair-acceptance-commits [--dry-run] # Restore evidence orphaned by an integration-branch rewrite
 §BRAND_BINARY_NAME§ repair-arch-ref <task-id> --arch-ref <path#heading> --reason <reason> # Fill an unstarted task's empty arch_ref
 §BRAND_BINARY_NAME§ defer-provider-dependency <task-id> --provider-task <id> --transition <name> --reason <reason> # Move an unstarted plan's writer-order wait to its outputs
+§BRAND_BINARY_NAME§ reserve-provider <task-id> <provider-task-id> --transition <name> --reason <reason> # Hold an unstarted writer until every child a provider generates merges
 §BRAND_BINARY_NAME§ delete agent <id>             # Remove agent from state
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```
@@ -143,6 +144,15 @@ that was never claimed. The plan becomes claimable, keeps its decomposition and
 unchanged. A wait selecting tasks of another stage than the plan's writers is
 refused. The move is recorded as `provider_dependency_deferred` history and
 wakes no one.
+
+If a correction must land between two writers of an ordered chain and the
+later writer has not started, `§BRAND_BINARY_NAME§ reserve-provider <writer-id>
+<correction-id> --transition <name> --reason "..."` holds the writer until
+every child the correction generates there has merged. When other writers
+already select the correction's outputs by index, add
+`--provider-max-outputs <n>` so those selections cover every output. Cancelling
+or superseding a reserved correction is refused; `--release` withdraws the
+placement first. A writer that has started cannot be placed.
 
 If every mutation fails with `lease_expires without assigned_to: <task-id>`,
 that task carries half an ownership tuple written by an older binary. Global
