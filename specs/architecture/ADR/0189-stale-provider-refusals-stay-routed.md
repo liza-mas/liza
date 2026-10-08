@@ -47,7 +47,9 @@ state, so nothing re-admits the plan short of the replan nobody was asked for.
   task-level declaration, D-72), the orchestrator holds the plan, which raises
   an `AWAITING HUMAN` alert instead of a silent strand.
 - The wake re-fires on unchanged inputs until the plan is replanned or held,
-  the same contract as any plan needing reconciliation.
+  or until a turn leaves it undecided: from then on it waits for new input like
+  any undecided plan ([ADR-0159](0159-orchestrator-plan-handoff-disposition.md),
+  D-49).
 - The alert text still offers input repair and plan-check replacement; it does
   not name the replan.
 

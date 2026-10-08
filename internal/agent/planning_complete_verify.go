@@ -15,16 +15,17 @@ import (
 //   - a plan passed (before or during the turn) or out of the reviewed domain
 //     needs a checkpoint made during the turn, unless its hand-off already ran.
 //
-// Plans merged during the turn are not judged; they get their own wake. A
-// failure leads to the self-heal checkpoint, which cannot expand an
-// undispositioned plan because automatic transitions require a pass.
+// Plans merged during the turn are not judged; they get their own wake.
+// Undecided plans are reported as *undecidedPlansError so the caller can record
+// them; a missing checkpoint leads to the self-heal checkpoint, which cannot
+// expand an undispositioned plan because automatic transitions require a pass.
 func verifyPlanningCompleteTurn(projectRoot string, before, after *models.State) error {
 	domain, err := ops.LoadPlanHandoffDomain(projectRoot)
 	if err != nil {
 		return fmt.Errorf("load plan hand-off domain: %w", err)
 	}
 
-	var undecided []string
+	var undecided, undecidedIDs []string
 	needsCheckpoint := false
 	for _, id := range before.Sprint.Scope.Planned {
 		task := before.FindTask(id)
@@ -44,10 +45,12 @@ func verifyPlanningCompleteTurn(projectRoot string, before, after *models.State)
 				needsCheckpoint = true
 			default:
 				undecided = append(undecided, id+" (no disposition)")
+				undecidedIDs = append(undecidedIDs, id)
 			}
 		case ops.PlanHandoffNeedsReconciliation:
 			if !replanned && verdict != models.PlanCheckHeld {
 				undecided = append(undecided, id+" (upstream changed; replan or hold it)")
+				undecidedIDs = append(undecidedIDs, id)
 			}
 		case ops.PlanHandoffPassed, ops.PlanHandoffOutOfDomain:
 			if !replanned && !transitioned {
@@ -55,14 +58,29 @@ func verifyPlanningCompleteTurn(projectRoot string, before, after *models.State)
 			}
 		}
 	}
+	checkpointMissing := needsCheckpoint && !checkpointedDuringTurn(before, after)
 	if len(undecided) > 0 {
-		return fmt.Errorf("orchestrator completed with PLANNING_COMPLETE trigger but left plans undecided: %s", strings.Join(undecided, ", "))
+		return &undecidedPlansError{
+			message:           "orchestrator completed with PLANNING_COMPLETE trigger but left plans undecided: " + strings.Join(undecided, ", "),
+			Plans:             undecidedIDs,
+			CheckpointMissing: checkpointMissing,
+		}
 	}
-	if needsCheckpoint && !checkpointedDuringTurn(before, after) {
+	if checkpointMissing {
 		return fmt.Errorf("orchestrator completed with PLANNING_COMPLETE trigger and admissible plans but no checkpoint was made (sprint status %s)", after.Sprint.Status)
 	}
 	return nil
 }
+
+// undecidedPlansError reports the wake-time plans a PLANNING_COMPLETE turn
+// left undecided, and whether it also left admissible plans uncheckpointed.
+type undecidedPlansError struct {
+	message           string
+	Plans             []string
+	CheckpointMissing bool
+}
+
+func (e *undecidedPlansError) Error() string { return e.message }
 
 // checkpointedDuringTurn reports a checkpoint made during the turn. Auto-resume
 // may already have moved the sprint back to IN_PROGRESS by the time the turn

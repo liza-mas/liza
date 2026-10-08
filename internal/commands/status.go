@@ -52,9 +52,12 @@ type phaseHandoffStatus struct {
 	Explanation         string                   `json:"explanation" yaml:"explanation"`
 	ReadyPlanningTasks  []string                 `json:"ready_planning_tasks" yaml:"ready_planning_tasks"`
 	FailedPlanningTasks []ops.PlanHandoffFailure `json:"failed_planning_tasks,omitempty" yaml:"failed_planning_tasks,omitempty"`
-	MergeRequired       []phaseMergeRequired     `json:"merge_required,omitempty" yaml:"merge_required,omitempty"`
-	BlockingTasks       []phaseHandoffTask       `json:"blocking_tasks,omitempty" yaml:"blocking_tasks,omitempty"`
-	StaleAssignedAgents []phaseHandoffTask       `json:"stale_assigned_agents,omitempty" yaml:"stale_assigned_agents,omitempty"`
+	// UndecidedPlanningTasks are plans an orchestrator turn left without a
+	// disposition; they wait for new input (D-49).
+	UndecidedPlanningTasks []ops.PlanHandoffUndecided `json:"undecided_planning_tasks,omitempty" yaml:"undecided_planning_tasks,omitempty"`
+	MergeRequired          []phaseMergeRequired       `json:"merge_required,omitempty" yaml:"merge_required,omitempty"`
+	BlockingTasks          []phaseHandoffTask         `json:"blocking_tasks,omitempty" yaml:"blocking_tasks,omitempty"`
+	StaleAssignedAgents    []phaseHandoffTask         `json:"stale_assigned_agents,omitempty" yaml:"stale_assigned_agents,omitempty"`
 }
 
 type phaseMergeRequired struct {
@@ -341,6 +344,7 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 
 	var ready []string
 	var failed []ops.PlanHandoffFailure
+	var undecided []ops.PlanHandoffUndecided
 	var blockers []phaseHandoffTask
 	var stale []phaseHandoffTask
 	seenStale := make(map[string]bool)
@@ -358,6 +362,9 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 		}
 
 		failed = append(failed, detCtx.PlanHandoff.Failures(state, task)...)
+		if observation := detCtx.PlanHandoff.UndecidedHandoff(state, task); observation != nil {
+			undecided = append(undecided, *observation)
+		}
 		// A refused stale-provider plan is eligible only for its replan
 		// (ADR-0189): repair work, not ready work.
 		if detCtx.PlanHandoff.PlanningCompleteEligible(state, task) && detCtx.PlanHandoff.HasUnfailedHandoff(state, task) {
@@ -416,7 +423,7 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 		}
 	}
 
-	if len(ready) == 0 && len(failed) == 0 {
+	if len(ready) == 0 && len(failed) == 0 && len(undecided) == 0 {
 		return nil
 	}
 
@@ -434,18 +441,24 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 		stateName = "COMPLETED"
 		explanation = fmt.Sprintf("%d merged planning task(s) are waiting in a completed sprint; resume/advance to execute their pipeline transitions.", len(ready))
 	}
+	if len(undecided) > 0 {
+		stateName = "DISPOSITION_REQUIRED"
+		explanation = fmt.Sprintf("%d plan(s) were left undecided by the orchestrator and will not re-wake it until their inputs change; ask for a disposition with %s or expand them with %s. %d other plan(s) are ready.",
+			len(undecided), brand.Command("add-human-note", "<task-id>", "--note-file", "<path>"), brand.Command("proceed", "<task-id>", "<transition>"), len(ready))
+	}
 	if len(failed) > 0 {
 		stateName = "REPAIR_REQUIRED"
-		explanation = fmt.Sprintf("%d planning hand-off(s) failed with unchanged inputs; repair inputs or explicitly retire unused hand-offs by a merged correction. %d other plan(s) are ready.", len(failed), len(ready))
+		explanation = fmt.Sprintf("%d planning hand-off(s) failed with unchanged inputs; repair inputs or explicitly retire unused hand-offs by a merged correction. %d plan(s) await a disposition; %d other plan(s) are ready.", len(failed), len(undecided), len(ready))
 	}
 
 	return &phaseHandoffStatus{
-		State:               stateName,
-		Explanation:         explanation,
-		ReadyPlanningTasks:  ready,
-		FailedPlanningTasks: failed,
-		BlockingTasks:       blockers,
-		StaleAssignedAgents: stale,
+		State:                  stateName,
+		Explanation:            explanation,
+		ReadyPlanningTasks:     ready,
+		FailedPlanningTasks:    failed,
+		UndecidedPlanningTasks: undecided,
+		BlockingTasks:          blockers,
+		StaleAssignedAgents:    stale,
 	}
 }
 
@@ -833,6 +846,16 @@ func writePhaseHandoffSection(b *strings.Builder, handoff *phaseHandoffStatus) {
 		b.WriteString("Planning hand-offs requiring repair:\n")
 		for _, failure := range handoff.FailedPlanningTasks {
 			fmt.Fprintf(b, "  %s (%s): %s\n", failure.TaskID, failure.Transition, failure.Error)
+		}
+	}
+	if len(handoff.UndecidedPlanningTasks) > 0 {
+		b.WriteString("Plans awaiting a disposition:\n")
+		for _, observation := range handoff.UndecidedPlanningTasks {
+			fmt.Fprintf(b, "  %s (%s)", observation.TaskID, observation.Class)
+			if observation.Blocker != "" {
+				fmt.Fprintf(b, ": %s", observation.Blocker)
+			}
+			b.WriteString("\n")
 		}
 	}
 	if len(handoff.BlockingTasks) > 0 {

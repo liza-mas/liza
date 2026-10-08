@@ -133,8 +133,13 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 				}
 				return
 			}
-			if after.Sprint.Status != models.SprintStatusCheckpoint || after.Sprint.CheckpointTrigger != models.CheckpointTriggerPlanningComplete {
-				t.Errorf("missing planning self-heal: sprint=%s trigger=%s", after.Sprint.Status, after.Sprint.CheckpointTrigger)
+			// The turn left the plan undecided: it is recorded instead of
+			// self-healed, since a checkpoint cannot expand it (D-49).
+			if after.Sprint.Status != models.SprintStatusInProgress {
+				t.Errorf("undecided-only turn self-healed: sprint=%s trigger=%s", after.Sprint.Status, after.Sprint.CheckpointTrigger)
+			}
+			if det.PlanHandoff.UndecidedHandoff(after, after.FindTask("plan")) == nil {
+				t.Error("undecided plan was not recorded")
 			}
 			if len(after.Tasks) != 2 || len(after.FindTask("plan").TransitionsExecuted) != 0 {
 				t.Error("downstream tasks must wait for checkpoint resume")

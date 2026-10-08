@@ -342,6 +342,16 @@ the retirement action above rather than creating another replan; its
 preconditions are listed in
 [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md).
 
+### Missing Disposition
+
+`PLAN DISPOSITION MISSING` and status `DISPOSITION_REQUIRED` mean an
+orchestrator `PLANNING_COMPLETE` turn left a plan without a pass, hold or
+replan. The unchanged plan no longer wakes the orchestrator and keeps the sprint
+open. Ask for a disposition with
+`§BRAND_BINARY_NAME§ add-human-note <task-id> --note-file <path>`, which
+re-admits it for one turn, or expand it yourself with
+`§BRAND_BINARY_NAME§ proceed <task-id> <transition>`.
+
 ### Auto-Resume
 
 By default, checkpoints require manual `§BRAND_BINARY_NAME§ resume`. Auto-resume skips these gates:

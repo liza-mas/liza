@@ -101,6 +101,9 @@ const (
 	// TaskEventProviderDeclarationStale records a BLOCKED task's draft output
 	// declaration left stale by a provider retirement (ADR-0188).
 	TaskEventProviderDeclarationStale TaskEventName = "provider_declaration_stale"
+	// TaskEventPlanHandoffUndecided records a PLANNING_COMPLETE turn that left
+	// a merged plan without a disposition (D-49).
+	TaskEventPlanHandoffUndecided TaskEventName = "plan_handoff_undecided"
 )
 
 // TaskHistoryEntry represents a single event in a task's history

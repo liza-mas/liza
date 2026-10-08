@@ -400,6 +400,16 @@ still wakes `PLANNING_COMPLETE` for its replan or hold
 permits retry; malformed or unknown observations fail open. Identical operator retries append no duplicate
 event. No children or executed marker are written on refusal.
 
+`plan_handoff_undecided` history records a `PLANNING_COMPLETE` turn that left a
+wake-time plan without a disposition. `extra` contains `version: 1`, `task_id`,
+`class` (`needs_review` or `needs_reconciliation`), sanitized `blocker` and
+`fingerprint` (SHA256 of class, blocker, `plan_check`, output, canonical
+dependencies, other history count and the timestamps of notes addressed to the
+plan or `all`). A matching observation suppresses the plan's
+`PLANNING_COMPLETE` wake but keeps it outstanding for completion and
+integration; any change re-admits it, and malformed or unknown observations
+fail open.
+
 `set-task-output --json` returns a write receipt with `task_id`, `output_count`,
 and `state_path`. The same transaction appends a `task_output_set` history event
 with the agent, timestamp, `previous_output_count`, and `output_count`, including

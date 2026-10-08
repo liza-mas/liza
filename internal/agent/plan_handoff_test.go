@@ -113,8 +113,9 @@ func TestVerifyPlanningCompleteTurn(t *testing.T) {
 	}
 }
 
-// R2: a turn that decides nothing fails verification; the self-heal
-// checkpoint, auto-resume and the next PreWork must still create no children.
+// R2: a turn that decides nothing fails verification and gets no self-heal
+// checkpoint, which could not expand the plan (D-49); a checkpoint made anyway,
+// auto-resume and the next PreWork must still create no children.
 func TestPlanningCompleteUndecidedTurnCreatesNoChildren(t *testing.T) {
 	root := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, root)
@@ -136,9 +137,12 @@ func TestPlanningCompleteUndecidedTurnCreatesNoChildren(t *testing.T) {
 	if err := strategy.PostExecution(bb, config, "", "", before); err != nil {
 		t.Fatalf("PostExecution: %v", err)
 	}
-	healed, _ := bb.Read()
-	if healed.Sprint.Status != models.SprintStatusCheckpoint {
-		t.Fatalf("sprint = %s after failed verification, want the self-heal checkpoint", healed.Sprint.Status)
+	unhealed, _ := bb.Read()
+	if unhealed.Sprint.Status != models.SprintStatusInProgress {
+		t.Fatalf("sprint = %s after an undecided-only turn, want no self-heal checkpoint", unhealed.Sprint.Status)
+	}
+	if _, err := ops.SprintCheckpoint(root, models.CheckpointTriggerPlanningComplete); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := ops.AutoResume(root, "auto-resume"); err != nil {
 		t.Fatalf("AutoResume: %v", err)
@@ -154,8 +158,40 @@ func TestPlanningCompleteUndecidedTurnCreatesNoChildren(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if countMergedPlanningTasksWithOutput(after, detCtx.PlanHandoff) != 1 {
-		t.Error("undecided plan must stay eligible for its own review")
+	if countMergedPlanningTasksWithOutput(after, detCtx.PlanHandoff) != 0 || !detCtx.PlanHandoff.Pending(after.FindTask("a")) {
+		t.Error("unchanged undecided plan must stay outstanding without re-waking")
+	}
+}
+
+// D-49: a turn that leaves one plan undecided and another passed but
+// uncheckpointed still self-heals; the passed plan expands, the undecided one
+// neither expands nor re-wakes.
+func TestMixedUndecidedTurnStillCheckpointsPassedPlan(t *testing.T) {
+	// GIVEN an undecided plan and a passed plan, neither checkpointed
+	root := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, root)
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# README\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state := handoffState(handoffPlanTask("a"), withDisposition(handoffPlanTask("b"), models.PlanCheckPassed, ""))
+	state.Config.AutoResume = true
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	// WHEN the turn decides nothing and the self-heal checkpoint is resumed
+	undecidedTurn(t, root, bb)
+	healed, _ := bb.Read()
+	if healed.Sprint.Status != models.SprintStatusCheckpoint {
+		t.Fatalf("sprint = %s, want the self-heal checkpoint for the passed plan", healed.Sprint.Status)
+	}
+	autoResumeCheckpoint(t, root, bb)
+
+	// THEN b expanded, a did not and does not re-wake
+	after, _ := bb.Read()
+	if !after.FindTask("b").TransitionsExecuted["code-plan-to-coding"] || len(after.FindTask("a").TransitionsExecuted) != 0 {
+		t.Fatalf("transitions: a %v, b %v", after.FindTask("a").TransitionsExecuted, after.FindTask("b").TransitionsExecuted)
+	}
+	if result := persistedWake(t, root, bb); result.Trigger == WakeTriggerPlanningComplete {
+		t.Fatalf("unchanged undecided plan re-woke %+v", result)
 	}
 }
 

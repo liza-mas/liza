@@ -575,7 +575,7 @@ Under auto-resume nobody reviews a `PLANNING_COMPLETE` checkpoint, so the orches
 - `plan-check <task-id> --hold "<ask>"` — a human action is needed first; an `AWAITING HUMAN` alert names it
 - `plan-check <task-id> --pass` — ready
 
-Automatic paths (auto-resume, supervisor transition passes) create children only from passed plans. When you resume a checkpoint yourself, undispositioned plans are expanded too — your resume is the review — but a held plan never is, and the sprint does not complete while one is held. After doing the held plan's ask, run `§BRAND_BINARY_NAME§ plan-check <task-id> --clear`; the orchestrator then reviews it again. Many-to-one cohorts and automatic transitions need no disposition.
+Automatic paths (auto-resume, supervisor transition passes) create children only from passed plans. When you resume a checkpoint yourself, undispositioned plans are expanded too — your resume is the review — but a held plan never is, and the sprint does not complete while one is held. After doing the held plan's ask, run `§BRAND_BINARY_NAME§ plan-check <task-id> --clear`; the orchestrator then reviews it again. Many-to-one cohorts and automatic transitions need no disposition. If a `PLANNING_COMPLETE` turn leaves a plan undecided, the unchanged plan stops waking the orchestrator, keeps the sprint open and raises `PLAN DISPOSITION MISSING`; an operator note to the plan re-admits it for one turn, or `§BRAND_BINARY_NAME§ proceed` expands it directly.
 
 An initial output-validation or selective-inheritance refusal raises
 `PLAN HANDOFF FAILED` and remains visible in status. Unchanged inputs stop

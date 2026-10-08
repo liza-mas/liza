@@ -117,8 +117,15 @@ human action is still missing — so no path overrides it.
 - Architecture and epic plans with a manual per-subtask hand-off are also
   dispositioned; the review checks for coding children pass trivially there.
 - If no orchestrator dispositions a plan, automatic expansion stalls for it;
-  the `PLANNING_COMPLETE` wake re-fires, and an operator resume or `proceed`
-  still expands it.
+  an operator resume or `proceed` still expands it. A `PLANNING_COMPLETE` turn
+  that leaves a wake-time plan undecided records `plan_handoff_undecided` with
+  a digest of the plan's class, blocker, disposition, output, dependencies,
+  other history and the operator notes addressed to it (D-49). While the digest
+  matches, the plan neither wakes `PLANNING_COMPLETE` nor gets a self-heal
+  checkpoint; it stays outstanding, blocks completion, and is named by a
+  once-key `PLAN DISPOSITION MISSING` alert and status `DISPOSITION_REQUIRED`.
+  Any change, such as an operator note to it, re-admits it for one turn. Input
+  that arrived during the turn is never recorded over.
 - Initial gated per-subtask output validation, selective-inheritance and
   pre-existing live-provider retirement refusals persist `transition_failed`
   with a versioned material-input digest under the attempt's state lock,

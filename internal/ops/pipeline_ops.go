@@ -453,7 +453,7 @@ func allPlannedTasksTerminalForProject(s *models.State, projectRoot string) (boo
 	if err != nil {
 		return false, err
 	}
-	if context.PlanHandoff.HasFailedPlan(s) {
+	if context.PlanHandoff.HasStalledHandoff(s) {
 		return false, nil
 	}
 	return s.AllPlannedTasksTerminalWith(context.SprintTerminals), nil

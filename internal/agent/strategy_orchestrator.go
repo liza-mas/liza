@@ -303,11 +303,23 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 			"error", err,
 			"hint", "Agent may not have executed required commands - attempting self-heal")
 
+		// An undecided plan is recorded so the unchanged plan does not re-wake
+		// (D-49); a checkpoint cannot expand it, so self-heal only checkpoints
+		// admissible plans the turn left behind.
+		var undecided *undecidedPlansError
+		heal := true
+		if errors.As(err, &undecided) {
+			recordUndecidedPlans(bb, config, stateBefore, undecided.Plans)
+			heal = undecided.CheckpointMissing
+		}
+
 		// Self-healing: for mechanical checkpoint operations, perform the
 		// expected state change directly instead of relying on the LLM.
 		// This breaks the re-wake loop where the orchestrator keeps
 		// executing without calling sprint_checkpoint.
-		if healed := selfHealCheckpoint(config.ProjectRoot, result.Trigger); healed {
+		if !heal {
+			GetLogger().Info("Self-heal skipped: no admissible plan awaits a checkpoint", "trigger", result.Trigger)
+		} else if healed := selfHealCheckpoint(config.ProjectRoot, result.Trigger); healed {
 			GetLogger().Info("Self-healed: checkpoint created after agent failed to do so",
 				"trigger", result.Trigger)
 		}
@@ -348,6 +360,41 @@ func (s *orchestratorStrategy) observeBlockedTurn(bb *db.Blackboard, projectRoot
 		}
 	}
 	s.unresolvedBlocked = identity
+}
+
+// recordUndecidedPlans persists the plans a PLANNING_COMPLETE turn left
+// undecided, judged against the wake-time state, then alerts once per
+// recorded observation. Failures only warn: the turn already completed.
+func recordUndecidedPlans(bb *db.Blackboard, config SupervisorConfig, stateBefore *models.State, planIDs []string) {
+	domain, err := ops.LoadPlanHandoffDomain(config.ProjectRoot)
+	if err != nil {
+		GetLogger().Warn("Failed to load plan hand-off domain for undecided plans", "error", err)
+		return
+	}
+	type recorded struct {
+		task        models.Task
+		observation ops.PlanHandoffUndecided
+	}
+	var observations []recorded
+	now := time.Now().UTC()
+	if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
+		observations = nil
+		for _, id := range planIDs {
+			if observation := domain.RecordUndecided(stateBefore, state, id, now); observation != nil {
+				observations = append(observations, recorded{task: *state.FindTask(id), observation: *observation})
+			}
+		}
+		return nil
+	}); err != nil {
+		GetLogger().Warn("Failed to record undecided plans", "error", err, "plans", planIDs)
+		return
+	}
+	for _, r := range observations {
+		GetLogger().Warn("Plan left undecided; PLANNING_COMPLETE waits for new input", "task_id", r.observation.TaskID, "class", r.observation.Class)
+		if err := domain.WriteUndecidedAlert(config.ProjectRoot, &r.task, r.observation, now); err != nil {
+			GetLogger().Warn("Failed to write undecided-plan alert", "error", err, "task_id", r.observation.TaskID)
+		}
+	}
 }
 
 func blockedTaskIDs(state *models.State) []string {

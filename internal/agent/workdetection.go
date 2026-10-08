@@ -198,11 +198,12 @@ func detectOrchestratorWakeTriggers(state *models.State, pipelineTerminals []mod
 	// the re-wake loop (supervisor sets COMPLETED → state change fires detection
 	// → orchestrator wakes → calls sprint_checkpoint → rejected).
 	if (only == WakeTriggerNone || only == WakeTriggerCodingComplete || only == WakeTriggerSprintComplete) && state.AllPlannedTasksTerminalWith(pipelineTerminals) {
-		// A held plan is merged, hence terminal, but its children do not exist
-		// yet: the sprint waits for the human action, not for the orchestrator.
+		// A held, failed or undecided plan is merged, hence terminal, but its
+		// children do not exist yet: the sprint waits for new input, not for
+		// the orchestrator.
 		if state.Sprint.Status == models.SprintStatusCheckpoint ||
 			state.Sprint.Status == models.SprintStatusCompleted ||
-			ops.HasHeldPlan(state) || handoff.HasFailedPlan(state) {
+			ops.HasHeldPlan(state) || handoff.HasStalledHandoff(state) {
 			return OrchestratorWakeResult{Trigger: WakeTriggerNone}
 		}
 		if integrationProjection != nil && (state.Goal.BaseCommit != nil || state.Goal.Integration != nil) {
