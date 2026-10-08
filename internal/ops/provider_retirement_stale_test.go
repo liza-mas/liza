@@ -925,3 +925,150 @@ func TestReplaceTask_ReplacedCodePlanKeepsArchRef_I445(t *testing.T) {
 		t.Fatalf("stale consumer status = %s, want SUPERSEDED", source.Status)
 	}
 }
+
+// D-71: a persisted stale-provider refusal must not hide the plan from the
+// orchestrator. Only its replan (or a hold) disposes of it, so it stays
+// PLANNING_COMPLETE-eligible while the failure's other effects are unchanged.
+
+type staleRefusalScenario struct {
+	name    string
+	blocker string
+	setup   func(t *testing.T, passed bool) (root, statePath string)
+}
+
+func staleRefusalScenarios() []staleRefusalScenario {
+	return []staleRefusalScenario{
+		{
+			name:    "replanned provider",
+			blocker: staleProviderBlocker,
+			setup: func(t *testing.T, passed bool) (string, string) {
+				root, statePath, _ := setupProviderOpsTest(t, mergedProviderPlan(), staleConsumerPlan(passed))
+				if _, err := Replan(root, &ReplanInput{TaskID: "provider", ChangedBy: "human"}); err != nil {
+					t.Fatal(err)
+				}
+				return root, statePath
+			},
+		},
+		{
+			name:    "cancelled selected child",
+			blocker: "output[0] declares provider provider whose selected child provider-cp-0 was retired",
+			setup: func(t *testing.T, passed bool) (string, string) {
+				provider, child := transitionedLineagePlan("provider")
+				root, statePath, _ := setupProviderOpsTest(t, provider, child, staleConsumerPlan(passed))
+				if _, err := CancelTask(root, child.ID, "reviewed retirement", "orchestrator-1"); err != nil {
+					t.Fatal(err)
+				}
+				return root, statePath
+			},
+		},
+	}
+}
+
+func transitionFailedEvents(task *models.Task) int {
+	count := 0
+	for _, entry := range task.History {
+		if entry.Event == models.TaskEventTransitionFailed {
+			count++
+		}
+	}
+	return count
+}
+
+func TestStaleProviderRefusalStaysRoutedToOrchestrator(t *testing.T) {
+	for _, scenario := range staleRefusalScenarios() {
+		for _, passed := range []bool{false, true} {
+			name, wantClass := scenario.name+"/unreviewed consumer", PlanHandoffNeedsReview
+			if passed {
+				name, wantClass = scenario.name+"/passed consumer", PlanHandoffNeedsReconciliation
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				// GIVEN a stale consumer whose hand-off an operator pass refused
+				root, statePath := scenario.setup(t, passed)
+				if _, err := ExecuteTransitionsReportWith(root, "manual", AdmitOperator); err != nil {
+					t.Fatal(err)
+				}
+				domain, err := LoadPlanHandoffDomain(root)
+				if err != nil {
+					t.Fatal(err)
+				}
+				state := readClaimStateForTest(t, statePath)
+				if failures := domain.Failures(state, state.FindTask("consumer")); len(failures) != 1 || failures[0].Class != handoffOutputRefusal {
+					t.Fatalf("precondition: stale refusal not persisted as output_validation: %+v", failures)
+				}
+
+				// THEN the plan still routes to the orchestrator for its replan
+				if !domain.PlanningCompleteEligible(state, state.FindTask("consumer")) {
+					t.Fatal("persisted stale-provider refusal hid the plan from PLANNING_COMPLETE")
+				}
+				if class, blocker := domain.Classify(state, state.FindTask("consumer")); class != wantClass || !strings.Contains(blocker, scenario.blocker) {
+					t.Fatalf("Classify = (%q, %q), want (%q, containing %q)", class, blocker, wantClass, scenario.blocker)
+				}
+
+				// AND automatic reviewed admission neither retries nor generates
+				if _, err := ExecuteTransitionsReportWith(root, "manual", AdmitReviewed); err != nil {
+					t.Fatal(err)
+				}
+				state = readClaimStateForTest(t, statePath)
+				if n := transitionFailedEvents(state.FindTask("consumer")); n != 1 {
+					t.Fatalf("reviewed pass retried the refused hand-off: %d transition_failed events, want 1", n)
+				}
+				if state.FindTask("consumer-cp-0") != nil {
+					t.Fatal("reviewed pass generated a child from a stale declaration")
+				}
+
+				// WHEN the orchestrator holds it, THEN routing ends until the hold is cleared
+				if _, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "consumer", Action: PlanCheckActionHold, Ask: "confirm the provider successor", Authority: orchestratorAuthority()}); err != nil {
+					t.Fatal(err)
+				}
+				state = readClaimStateForTest(t, statePath)
+				if domain.PlanningCompleteEligible(state, state.FindTask("consumer")) {
+					t.Fatal("held stale consumer still wakes PLANNING_COMPLETE")
+				}
+				if _, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "consumer", Action: PlanCheckActionClear, ChangedBy: "human"}); err != nil {
+					t.Fatal(err)
+				}
+
+				// WHEN the orchestrator replans it, THEN routing ends for good
+				if _, err := Replan(root, &ReplanInput{TaskID: "consumer", ChangedBy: "orchestrator-1", Reason: "re-author against the provider successor"}); err != nil {
+					t.Fatalf("stale consumer could not be replanned: %v", err)
+				}
+				state = readClaimStateForTest(t, statePath)
+				if domain.PlanningCompleteEligible(state, state.FindTask("consumer")) {
+					t.Fatal("replanned stale consumer still wakes PLANNING_COMPLETE")
+				}
+			})
+		}
+	}
+}
+
+// Guard: a refusal with no stale provider still suppresses the wake, as
+// before D-71; only input repair re-admits it.
+func TestOrdinaryHandoffRefusalStillSuppressesPlanningComplete(t *testing.T) {
+	t.Parallel()
+	// GIVEN a passed plan whose selected inputs name a missing upstream
+	plan := providerOpsTask("plan", "code-planning-pair", models.TaskStatusMerged)
+	plan.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckPassed, By: "orchestrator-1", At: time.Now().UTC()}
+	output := providerOpsOutput()
+	output.InheritInputs = &models.InheritInputs{Mode: models.InheritModeSelected, Selections: []models.InputSelection{{UpstreamTask: "absent", Outputs: []int{0}}}}
+	plan.Output = []models.OutputEntry{output}
+	root, statePath, _ := setupProviderOpsTest(t, plan)
+
+	// WHEN a reviewed pass refuses it
+	if _, err := ExecuteTransitionsReportWith(root, "manual", AdmitReviewed); err != nil {
+		t.Fatal(err)
+	}
+
+	// THEN the refusal is outstanding and the plan does not wake PLANNING_COMPLETE
+	domain, err := LoadPlanHandoffDomain(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := readClaimStateForTest(t, statePath)
+	if failures := domain.Failures(state, state.FindTask("plan")); len(failures) != 1 || failures[0].Class != handoffInputRefusal {
+		t.Fatalf("precondition: selective-inheritance refusal not persisted: %+v", failures)
+	}
+	if domain.PlanningCompleteEligible(state, state.FindTask("plan")) {
+		t.Fatal("an ordinary refusal with unchanged inputs re-woke PLANNING_COMPLETE")
+	}
+}

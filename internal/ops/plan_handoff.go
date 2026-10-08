@@ -115,11 +115,24 @@ func (d PlanHandoffDomain) Pending(task *models.Task) bool {
 // directly or through an upstream. A passed task stays eligible until it
 // transitions, so a crash between its pass and the checkpoint re-wakes it.
 func (d PlanHandoffDomain) PlanningCompleteEligible(state *models.State, task *models.Task) bool {
-	if !d.HasUnfailedHandoff(state, task) || task.PlanCheckVerdictOf() == models.PlanCheckHeld ||
+	if !(d.HasUnfailedHandoff(state, task) || d.needsStaleProviderReplan(state, task)) ||
+		task.PlanCheckVerdictOf() == models.PlanCheckHeld ||
 		IsTransitionCycleBlocked(task) || HasCycleBlockedDependency(task, state) {
 		return false
 	}
 	return true
+}
+
+// needsStaleProviderReplan reports a pending reviewed hand-off whose output
+// declares a stale provider. Retrying inputs cannot repair its recorded
+// refusal; only the orchestrator's replan or hold disposes of it, so it stays
+// routed despite the failure (ADR-0189).
+func (d PlanHandoffDomain) needsStaleProviderReplan(state *models.State, task *models.Task) bool {
+	if !d.InDomain(task) || !d.Pending(task) {
+		return false
+	}
+	kind, _ := d.providerBlocker(state, task)
+	return kind == upstreamReconcile
 }
 
 // HasUnfailedHandoff distinguishes work that can be retried from outstanding

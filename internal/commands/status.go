@@ -358,7 +358,9 @@ func buildPhaseHandoffStatus(state *models.State, projectRoot string) *phaseHand
 		}
 
 		failed = append(failed, detCtx.PlanHandoff.Failures(state, task)...)
-		if detCtx.PlanHandoff.PlanningCompleteEligible(state, task) {
+		// A refused stale-provider plan is eligible only for its replan
+		// (ADR-0189): repair work, not ready work.
+		if detCtx.PlanHandoff.PlanningCompleteEligible(state, task) && detCtx.PlanHandoff.HasUnfailedHandoff(state, task) {
 			ready = append(ready, task.ID)
 		}
 

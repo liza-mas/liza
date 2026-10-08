@@ -392,8 +392,10 @@ or selective-inheritance refusals. `extra` contains `version: 1`, `task_id`,
 `transition`, `failure_class` (`output_validation` or `selective_inheritance`),
 `output_index`, `input_fingerprint` (SHA256) and sanitized `error`. A current
 matching observation suppresses automatic retries/wakes but remains outstanding
-for completion and integration. Material repair permits retry; malformed or
-unknown observations fail open. Identical operator retries append no duplicate
+for completion and integration; a plan whose output declares a stale provider
+still wakes `PLANNING_COMPLETE` for its replan or hold
+([ADR-0189](ADR/0189-stale-provider-refusals-stay-routed.md)). Material repair
+permits retry; malformed or unknown observations fail open. Identical operator retries append no duplicate
 event. No children or executed marker are written on refusal.
 
 `set-task-output --json` returns a write receipt with `task_id`, `output_count`,

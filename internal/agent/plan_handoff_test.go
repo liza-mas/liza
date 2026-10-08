@@ -281,3 +281,113 @@ func TestHeldPlanWaitsForHumanAcrossAutoResume(t *testing.T) {
 		t.Fatalf("after clear: wake = %s, want PLANNING_COMPLETE", result.Trigger)
 	}
 }
+
+// staleRefusedConsumerProject persists the D-71 trigger: consumer's output
+// declares provider, the provider is replanned, and an operator-admitted pass
+// refuses the now-stale hand-off and records it as transition_failed.
+func staleRefusedConsumerProject(t *testing.T, passed bool) (string, *db.Blackboard) {
+	t.Helper()
+	root := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, root)
+	statePath, _ := testhelpers.SetupLizaDir(t, root)
+	plan := func(id string) models.Task {
+		task := testhelpers.BuildTaskByStatus(id, models.TaskStatusMerged, time.Now().UTC())
+		task.RolePair = "architecture-pair"
+		task.Output = []models.OutputEntry{{Desc: "Plan the shared contract", DoneWhen: "Contract reviewed", Scope: "contract", SpecRef: "README.md"}}
+		return task
+	}
+	consumer := plan("consumer")
+	consumer.Output[0].ProviderDependencies = []models.ProviderDependency{{ProviderTask: "provider", Transition: "architecture-to-code-plan", Outputs: []int{0}}}
+	if passed {
+		consumer = withDisposition(consumer, models.PlanCheckPassed, "")
+	}
+	state := handoffState(plan("provider"), consumer)
+	state.Goal.SpecRef = "README.md"
+	for _, role := range []string{"architect", "code-planner"} {
+		state.Agents[role+"-1"] = testhelpers.RegisteredTestAgent(role)
+	}
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	if _, err := ops.Replan(root, &ops.ReplanInput{TaskID: "provider", ChangedBy: "human"}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := ops.ExecuteTransitionsReportWith(root, "manual", ops.AdmitOperator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Failures) == 0 || !strings.Contains(report.Failures[0].Error, "declares retired provider provider") {
+		t.Fatalf("precondition: operator pass did not refuse the stale consumer: %+v", report)
+	}
+	return root, bb
+}
+
+// D-71: a stale consumer whose hand-off was refused and persisted still wakes
+// PLANNING_COMPLETE and renders for the orchestrator's replan or hold.
+func TestStaleProviderRefusalWakesPlanningCompleteForReplan(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		passed  bool
+		section string
+		line    string
+	}{
+		{"unreviewed consumer", false, "PLANS TO REVIEW:", "- consumer: (a pass is refused while output[0] declares retired provider provider)"},
+		{"passed consumer", true, "PLANS TO RECONCILE", "- consumer: output[0] declares retired provider provider"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN a refused, persisted stale-provider hand-off
+			root, bb := staleRefusedConsumerProject(t, tc.passed)
+			state, err := bb.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// WHEN the orchestrator's work is detected and its prompt rendered
+			detCtx, err := ops.LoadDetectionContext(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := DetectOrchestratorWakeTriggersForProject(root, state, detCtx.SprintTerminals, detCtx.PlanningPairs, detCtx.ManyToOneTransitions)
+			_, instruction, err := prompts.RenderOrchestratorDashboard(state, root, "orchestrator-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// THEN it wakes PLANNING_COMPLETE and lists the consumer with its blocker
+			if result.Trigger != WakeTriggerPlanningComplete || result.Count != 1 {
+				t.Fatalf("wake = %+v, want PLANNING_COMPLETE for the stale consumer", result)
+			}
+			if !strings.Contains(instruction, tc.section) || !strings.Contains(instruction, tc.line) {
+				t.Fatalf("stale consumer must render under %q as %q:\n%s", tc.section, tc.line, instruction)
+			}
+		})
+	}
+}
+
+// Guard: an ordinary persisted refusal (no stale provider) still does not wake
+// PLANNING_COMPLETE.
+func TestOrdinaryHandoffRefusalDoesNotWakePlanningComplete(t *testing.T) {
+	// GIVEN a passed plan refused for a missing selected upstream
+	root := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, root)
+	plan := withDisposition(handoffPlanTask("a"), models.PlanCheckPassed, "")
+	plan.Output[0].InheritInputs = &models.InheritInputs{Mode: models.InheritModeSelected, Selections: []models.InputSelection{{UpstreamTask: "absent", Outputs: []int{0}}}}
+	bb := testhelpers.WriteInitialState(t, statePath, handoffState(plan))
+	if report, err := ops.ExecuteTransitionsReportWith(root, "manual", ops.AdmitReviewed); err != nil || len(report.Failures) != 1 {
+		t.Fatalf("precondition: refusal = %+v, %v", report, err)
+	}
+	state, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// WHEN the orchestrator's work is detected
+	detCtx, err := ops.LoadDetectionContext(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := DetectOrchestratorWakeTriggersForProject(root, state, detCtx.SprintTerminals, detCtx.PlanningPairs, detCtx.ManyToOneTransitions)
+
+	// THEN the unchanged refusal does not wake PLANNING_COMPLETE
+	if result.Trigger == WakeTriggerPlanningComplete {
+		t.Fatalf("ordinary refusal woke %+v", result)
+	}
+}

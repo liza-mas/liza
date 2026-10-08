@@ -350,6 +350,10 @@ atomic. Lower-concurrency validation is a scheduling counterfactual, not a fix.
 **Payback trigger:** next occurrence, or a change to submit markers/telemetry:
 reconcile marker lifetime with caller-visible completion and test progress;
 do not increase timeout assertions to hide the race.
+**Recurrence (D-71 validation, 2026-10-08):** the same failure and symptom in
+`make test`; the D-71 diff does not touch these paths. The human accepted it
+for D-71 and kept the repair a separate task, so the trigger has fired and
+this payback is due.
 
 ## CI does not yet enforce the split test targets
 
