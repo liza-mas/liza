@@ -420,6 +420,21 @@ reproduction, so the coder's failing test exercises the real path. And the
 code-plan-reviewer gates on that section first: an unsound root cause is rejected on
 its own, without reviewing the task breakdown.
 
+When reads cannot establish the cause, the code-planner blocks and names the minimum
+missing observations. If an agent can capture them within authorized scope, the
+block names that capture and its bound, and the orchestrator commissions a
+separately reviewed capture task. The owner then waits on that task, by a dependency
+edge where pipeline direction allows it, otherwise with `assess-blocked --awaits`.
+Once the capture merges with the observations, the same owner resumes and judges
+the cause. Otherwise (the evidence is lost, capture needs authority the task lacks,
+or the capture failed or exhausted its bound), the task goes to AWAITING HUMAN with
+two options: authorize capture, or waive attribution for a defensive repair. Under a
+recorded waiver the plan cites it, states the waived cause as not established and
+proves its observed symptom path; the reviewer rejects any attribution of the waived
+cause. Causes established by evidence in the same plan stay established and pass
+every normal RCA gate. See
+[ADR-0194](../specs/architecture/ADR/0194-rca-evidence-unavailable-route.md).
+
 For a master code-planning task, the planner may inspect source far enough to identify
 safe boundaries, ownership, interfaces, shared files, dependencies, and coverage. It
 must not establish root cause or write detailed implementation plans. If unresolved

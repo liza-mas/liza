@@ -4515,6 +4515,20 @@ func TestBuildRoleContext_RCARequired(t *testing.T) {
 		if !strings.Contains(output, "checkable artifact") {
 			t.Error("code-planner output missing the runtime-evidence taxonomy")
 		}
+		// D-81: an unestablishable cause is routed (named capture or a human ask),
+		// not left as a bare block, and a recorded waiver keeps only the waived cause
+		// unknown: an evidence-backed cause in the same plan stays established.
+		for _, phrase := range []string{"minimum missing observations", "waive attribution for a defensive repair", "state the waived cause as not established", "causes established by evidence stay established"} {
+			if !strings.Contains(output, phrase) {
+				t.Errorf("code-planner output missing evidence-unavailable route phrase %q", phrase)
+			}
+		}
+		if strings.Contains(output, "state the cause as not established") {
+			t.Error("code-planner waiver form must be scoped to the waived cause, not every cause")
+		}
+		if strings.Contains(output, "If no cause can be established from evidence, mark BLOCKED") {
+			t.Error("code-planner output still carries the bare BLOCKED exit for an unestablished cause")
+		}
 	})
 
 	t.Run("code-planner without RCARequired renders no RCA text", func(t *testing.T) {
@@ -4534,6 +4548,14 @@ func TestBuildRoleContext_RCARequired(t *testing.T) {
 		}
 		if !strings.Contains(output, "checkable artifact") {
 			t.Error("code-plan-reviewer gate missing the runtime-evidence taxonomy the planner is held to")
+		}
+		for _, phrase := range []string{"Unestablished cause", "recorded human attribution waiver", "states the waived cause as established", "causes established by evidence keep every gate above"} {
+			if !strings.Contains(output, phrase) {
+				t.Errorf("code-plan-reviewer output missing waiver gate phrase %q", phrase)
+			}
+		}
+		if strings.Contains(output, "a waiver plan states a cause as established") {
+			t.Error("code-plan-reviewer waiver gate must reject only the waived cause's attribution, not evidence-backed causes")
 		}
 	})
 

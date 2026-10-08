@@ -99,8 +99,18 @@ The plan file MUST contain "## Root Cause Analysis" before the task breakdown:
     path remains, name it.
  f. Adjacent findings — defects found outside scope: recorded, NOT planned.
 If the spec already states a cause, verify it against source and cite — do not
-restate. If no cause can be established from evidence, mark BLOCKED rather than
-planning against a hypothesis.
+restate. Never plan a repair against a hypothesis. If reads cannot establish the
+cause, mark BLOCKED naming the minimum missing observations and why reads cannot
+supply them, then either:
+ - a capture an agent can run within authorized scope (reproduction or diagnostic
+   capture on the failing path): name it, its target and its bound (runs or time);
+   the orchestrator allocates it and holds this task on its result;
+ - otherwise (evidence lost, capture outside your authority, or a bound exhausted
+   without attribution): add --human-action asking the human to authorize capture
+   or to waive attribution for a defensive repair.
+Under a recorded human attribution waiver, cite it and state the waived cause as not established;
+causes established by evidence stay established under a. to f. For the waived cause,
+b. and c. apply to the observed symptom path; e. names what the repair leaves open.
 {{- end}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Plan file location:
