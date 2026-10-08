@@ -4694,7 +4694,7 @@ func TestBuildPromptWithContext_Architect(t *testing.T) {
 		"ASSIGNED ARCHITECTURE TASK",
 		"Submission requires a new worktree commit for this task",
 		"Do NOT submit the pre-change HEAD",
-		"Submission proof: `" + brand.BinaryName + " submit-for-review` must actually run successfully after step 9g",
+		"Submission proof: `" + brand.BinaryName + " submit-for-review` must actually run successfully after step 9h",
 		"BOOTSTRAP-PRECOMMIT REQUIREMENTS",
 		`Set "kind": "bootstrap-precommit"`,
 		`"kind": "<optional typed marker — see BOOTSTRAP-PRECOMMIT REQUIREMENTS in IMPLEMENTATION PHASE>"`,

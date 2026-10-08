@@ -35,7 +35,8 @@ Reject a strict planning artifact for any of these contract violations:
    added past its source (Reference-First Authoring, *Bounds*), Must coverage is missing, or
    Won't scope is included;
 10. the next role cannot act from the assigned scope and references without inventing policy or
-    waiting on an unallocated prerequisite, or evidence is demanded at the wrong stage; or
+    waiting on an unallocated prerequisite, evidence is demanded at the wrong stage, or a frozen
+    scope, preservation directive, or unchecked existing-source premise blocks a binding obligation; or
 11. a consequential guarantee has no owner and evidence.
 
 A finding cannot create a commitment: before blocking, name the binding requirement, exclusion,

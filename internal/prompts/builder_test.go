@@ -2985,7 +2985,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 			"Update only architecture artifacts required by DONE WHEN",
 			"Any validation[] command is satisfiable for the generated scope",
 			"Submission requires a new worktree commit for this task",
-			"Submission proof: `" + brand.BinaryName + " submit-for-review` must actually run successfully after step 9g",
+			"Submission proof: `" + brand.BinaryName + " submit-for-review` must actually run successfully after step 9h",
 		} {
 			if !strings.Contains(output, key) {
 				t.Errorf("output missing key string %q", key)

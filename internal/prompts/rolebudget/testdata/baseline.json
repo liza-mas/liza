@@ -4,9 +4,9 @@
     {
       "variant": "architect",
       "role": "architect",
-      "rendered_bytes": 25351,
+      "rendered_bytes": 25996,
       "base_prompt_bytes": 9672,
-      "mandatory_read_bytes": 21847,
+      "mandatory_read_bytes": 23159,
       "reads": [
         "skills/architecture-planning/SKILL.md",
         "skills/shared/references/reference-first-authoring.md"
@@ -15,9 +15,9 @@
     {
       "variant": "architect (decomposition root)",
       "role": "architect",
-      "rendered_bytes": 28148,
+      "rendered_bytes": 28793,
       "base_prompt_bytes": 9672,
-      "mandatory_read_bytes": 21847,
+      "mandatory_read_bytes": 23159,
       "reads": [
         "skills/architecture-planning/SKILL.md",
         "skills/shared/references/reference-first-authoring.md"
@@ -26,9 +26,9 @@
     {
       "variant": "architecture-reviewer",
       "role": "architecture-reviewer",
-      "rendered_bytes": 21595,
+      "rendered_bytes": 22623,
       "base_prompt_bytes": 9708,
-      "mandatory_read_bytes": 28939,
+      "mandatory_read_bytes": 30361,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -38,9 +38,9 @@
     {
       "variant": "architecture-reviewer (decomposition root)",
       "role": "architecture-reviewer",
-      "rendered_bytes": 23829,
+      "rendered_bytes": 25165,
       "base_prompt_bytes": 9708,
-      "mandatory_read_bytes": 28939,
+      "mandatory_read_bytes": 30361,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -50,9 +50,9 @@
     {
       "variant": "code-plan-reviewer",
       "role": "code-plan-reviewer",
-      "rendered_bytes": 25368,
+      "rendered_bytes": 26396,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 60247,
+      "mandatory_read_bytes": 61669,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/software-architecture-review/SKILL.md",
@@ -63,9 +63,9 @@
     {
       "variant": "code-plan-reviewer (decomposition root)",
       "role": "code-plan-reviewer",
-      "rendered_bytes": 21414,
+      "rendered_bytes": 22287,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 60247,
+      "mandatory_read_bytes": 61669,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/software-architecture-review/SKILL.md",
@@ -76,7 +76,7 @@
     {
       "variant": "code-planner",
       "role": "code-planner",
-      "rendered_bytes": 29391,
+      "rendered_bytes": 31429,
       "base_prompt_bytes": 9681,
       "mandatory_read_bytes": 31308,
       "reads": [
@@ -86,7 +86,7 @@
     {
       "variant": "code-planner (decomposition root)",
       "role": "code-planner",
-      "rendered_bytes": 23012,
+      "rendered_bytes": 23801,
       "base_prompt_bytes": 9681,
       "mandatory_read_bytes": 31308,
       "reads": [
@@ -96,7 +96,7 @@
     {
       "variant": "code-reviewer",
       "role": "code-reviewer",
-      "rendered_bytes": 24663,
+      "rendered_bytes": 25033,
       "base_prompt_bytes": 9684,
       "mandatory_read_bytes": 65542,
       "reads": [
@@ -108,7 +108,7 @@
     {
       "variant": "coder",
       "role": "coder",
-      "rendered_bytes": 24291,
+      "rendered_bytes": 25282,
       "base_prompt_bytes": 9660,
       "mandatory_read_bytes": 27712,
       "reads": [
@@ -120,9 +120,9 @@
     {
       "variant": "epic-plan-reviewer",
       "role": "epic-plan-reviewer",
-      "rendered_bytes": 22859,
+      "rendered_bytes": 23559,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 28939,
+      "mandatory_read_bytes": 30361,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -132,9 +132,9 @@
     {
       "variant": "epic-plan-reviewer (decomposition root)",
       "role": "epic-plan-reviewer",
-      "rendered_bytes": 25093,
+      "rendered_bytes": 26101,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 28939,
+      "mandatory_read_bytes": 30361,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -144,9 +144,9 @@
     {
       "variant": "epic-planner",
       "role": "epic-planner",
-      "rendered_bytes": 23732,
+      "rendered_bytes": 24165,
       "base_prompt_bytes": 9681,
-      "mandatory_read_bytes": 38982,
+      "mandatory_read_bytes": 40294,
       "reads": [
         "skills/epic-writing/SKILL.md",
         "skills/shared/references/reference-first-authoring.md",
@@ -156,9 +156,9 @@
     {
       "variant": "epic-planner (decomposition root)",
       "role": "epic-planner",
-      "rendered_bytes": 26276,
+      "rendered_bytes": 26709,
       "base_prompt_bytes": 9681,
-      "mandatory_read_bytes": 38982,
+      "mandatory_read_bytes": 40294,
       "reads": [
         "skills/epic-writing/SKILL.md",
         "skills/shared/references/reference-first-authoring.md",
@@ -168,7 +168,7 @@
     {
       "variant": "integration-analyst",
       "role": "integration-analyst",
-      "rendered_bytes": 25267,
+      "rendered_bytes": 26006,
       "base_prompt_bytes": 9702,
       "mandatory_read_bytes": 40721,
       "reads": [
@@ -179,7 +179,7 @@
     {
       "variant": "integration-reviewer",
       "role": "integration-reviewer",
-      "rendered_bytes": 23831,
+      "rendered_bytes": 24201,
       "base_prompt_bytes": 9705,
       "mandatory_read_bytes": 40419,
       "reads": [
@@ -200,7 +200,7 @@
     {
       "variant": "orchestrator (wake BLOCKED_TASKS)",
       "role": "orchestrator",
-      "rendered_bytes": 20598,
+      "rendered_bytes": 21201,
       "base_prompt_bytes": 9640,
       "mandatory_read_bytes": 9111,
       "reads": [
@@ -210,7 +210,7 @@
     {
       "variant": "orchestrator (wake HYPOTHESIS_EXHAUSTED)",
       "role": "orchestrator",
-      "rendered_bytes": 13532,
+      "rendered_bytes": 13734,
       "base_prompt_bytes": 9640,
       "mandatory_read_bytes": 9111,
       "reads": [
@@ -220,7 +220,7 @@
     {
       "variant": "orchestrator (wake IMMEDIATE_DISCOVERY)",
       "role": "orchestrator",
-      "rendered_bytes": 12009,
+      "rendered_bytes": 12304,
       "base_prompt_bytes": 9640,
       "mandatory_read_bytes": 9111,
       "reads": [
@@ -280,9 +280,9 @@
     {
       "variant": "us-reviewer",
       "role": "us-reviewer",
-      "rendered_bytes": 22002,
+      "rendered_bytes": 22239,
       "base_prompt_bytes": 9678,
-      "mandatory_read_bytes": 19828,
+      "mandatory_read_bytes": 21250,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md"
@@ -291,9 +291,9 @@
     {
       "variant": "us-writer",
       "role": "us-writer",
-      "rendered_bytes": 19591,
+      "rendered_bytes": 20024,
       "base_prompt_bytes": 9672,
-      "mandatory_read_bytes": 25920,
+      "mandatory_read_bytes": 27232,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/user-story-writing/SKILL.md"

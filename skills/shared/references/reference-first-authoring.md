@@ -26,6 +26,10 @@ which maps these existing obligation IDs to proofs and execution receipts.
 Only an owner may redefine its information class. Route a needed change to that
 owner or block. A later human decision becomes effective only after an owner
 correction or decision record gives it an explicit revision override.
+An owner of a shared interface reconciles it with consumer artifacts already
+merged; a need it cannot settle yet is a design prerequisite (allocated
+correction or investigation plus a hold on affected work, per Proof Stage),
+never a gap note on a frozen contract. Later consumers route gaps to it.
 
 ## Priority, Commitments and Proof Stage
 
@@ -165,7 +169,8 @@ Reject:
    or Won't scope included;
 10. a handoff the next role cannot act on without inventing policy,
     reconstructing stale authority, or waiting on an unallocated prerequisite,
-    or evidence demanded at the wrong stage; or
+    or evidence demanded at the wrong stage, or whose frozen scope, preservation
+    directive, or unchecked existing-source premise blocks a binding obligation; or
 11. a consequential guarantee with no owner and evidence — an unsupported
     assumption presented as established.
 

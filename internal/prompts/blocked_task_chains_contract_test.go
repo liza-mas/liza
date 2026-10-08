@@ -28,7 +28,15 @@ func TestBlockedTaskChainsPlannerAndReviewerDuties(t *testing.T) {
 
 	const findingRule = "A finding cannot create a commitment"
 	rawDefaultBrand := regexp.MustCompile(`(?i)(^|[^A-Za-z])liza($|[^A-Za-z0-9])|\{\{binaryName\}\}`)
-	handoffRows := []string{"| Handoff usable |", "| Priority propagation |", "| Consequential commitment |", "| Proof stage |"}
+	// D78: the feasibility and known-consumer rows keep their refusal semantics,
+	// not just their labels — an unchecked existing-source premise and a gap note
+	// on a frozen contract are not admissible.
+	handoffRows := []string{"| Handoff usable |", "| Priority propagation |", "| Consequential commitment |", "| Proof stage |",
+		"| Child feasibility |", "only an unfinished provider's delivery is deferrable",
+		"| Known consumers |", "no allocated correction or investigation holds the affected scope", "a gap note alone does not suffice"}
+	const childFeasibility = "Child feasibility"
+	const knownConsumers = "never freeze the incompatible contract with only a gap note"
+	const knownConsumersHold = "hold the affected scope on the corrected contract"
 	const verificationHold = "every consumer of the client's behavior depends on"
 	architectCriticalPath := []string{"earliest artifact that suffices", verificationHold, "split a consumed fixture from a later proof", "weigh a per-scope split"}
 	const edgeMeaning = "earliest artifact that supplies the input"
@@ -42,8 +50,10 @@ func TestBlockedTaskChainsPlannerAndReviewerDuties(t *testing.T) {
 	}{
 		{"epic-planner", "doer", false, []string{"keep their priority at item level", "expose a missing product policy"}},
 		{"us-writer", "doer", false, []string{"Carry each story's inherited priority", "cannot fail a Must story"}},
-		{"architect", "doer", false, append([]string{"minimum mechanism Must scope", "targeted probe", "never a pre-coding gate without a concrete dependency reason"}, architectCriticalPath...)},
-		{"code-planner", "doer", false, []string{"effective priority", edgeMeaning, "must not inherit its whole barrier"}},
+		{"architect", "doer", false, append([]string{"minimum mechanism Must scope", "targeted probe", "never a pre-coding gate without a concrete dependency reason",
+			childFeasibility, "acceptance manifest", "checked before it restricts a child", knownConsumers, knownConsumersHold}, architectCriticalPath...)},
+		{"code-planner", "doer", false, []string{"effective priority", edgeMeaning, "must not inherit its whole barrier",
+			childFeasibility, "acceptance manifest", "only an unfinished provider's delivery is deferred", knownConsumers, knownConsumersHold}},
 		{"architect", "doer", true, append([]string{"group a shared uncertainty", masterEdge}, architectCriticalPath...)},
 		{"code-planner", "doer", true, []string{"group a shared uncertainty", masterEdge}},
 		{"epic-plan-reviewer", "reviewer", false, append([]string{findingRule}, handoffRows...)},

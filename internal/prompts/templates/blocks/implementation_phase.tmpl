@@ -63,6 +63,7 @@ decision from a demonstrated implementation bug (contract: Priority, Commitments
 Leave out any guarantee or supporting machinery (recovery, telemetry, canaries, evidence
 frameworks) your sources do not name; if a required outcome fails without it, mark BLOCKED
 with that question and its build and proof cost.
+{{template "known-consumers-duty"}}
 {{- if or .ArchRef .EpicRef}}
 {{template "artifact-ref-fallback" .}}
 {{- end}}
@@ -171,8 +172,11 @@ planning against a hypothesis.
       and confirm the referenced task explicitly states that responsibility,
       dependency, or exclusion. If any reference points to a task that does not claim it,
       fix the plan before submitting.
-   h. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
-   i. Submission proof: `{{binaryName}} submit-for-review` is not optional bookkeeping. It must actually run successfully after step h; do not treat plan/output artifacts alone as submission.
+   h. Child feasibility: each child's scope holds every file it must commit (tests, acceptance manifest, fixtures); a
+      preserve directive allows the minimal correction an allocated obligation needs; check an existing-source premise
+      before it binds a child — only an unfinished provider's delivery is deferred.
+   i. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
+   j. Submission proof: `{{binaryName}} submit-for-review` is not optional bookkeeping. It must actually run successfully after step i; do not treat plan/output artifacts alone as submission.
 7. Submit using {{binaryName}} submit-for-review --json only after all checks in step 6 pass, using the captured full SHA.
 {{- else if eq .Role "epic-planner"}}
 
@@ -276,6 +280,7 @@ before a provider implementation, and add a verification task that depends on cl
 and that every consumer of the client's behavior depends on;
 split a consumed fixture from a later proof; and weigh a per-scope split before routing
 several scopes through one shared file.
+{{template "known-consumers-duty"}}
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Use the assigned goal carrier and declared direct-reference spans for inherited product behavior.
 {{- if gt (len .ParentTaskContexts) 0}}
@@ -336,8 +341,18 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
    d. Every arch_ref names the arch doc plus that child's exact unique Scope heading; bare paths are refused on new submissions.
    e. Spec compliance: the decomposition covers the full scope of the goal spec.
    f. Shared-file audit: if two output[] entries may touch the same files, add depends_on.
-   g. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
-   h. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9g; do not treat the arch doc plus `{{binaryName}} set-task-output` as sufficient.
+   g. Child feasibility: scope files and preserve directives leave room for what coding children must commit (tests,
+      each acceptance manifest) and for corrections allocated obligations need; a premise about existing source is
+      checked before it restricts a child.
+   h. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
+   i. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9h; do not treat the arch doc plus `{{binaryName}} set-task-output` as sufficient.
 10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA.
 {{- end}}
+{{- end -}}
+
+{{- define "known-consumers-duty" -}}
+For each shared interface you own, search merged specs by its ID for consumers citing it and cover
+each need. One you cannot settle yet is a design prerequisite: allocate its correction or bounded
+investigation and hold the affected scope on the corrected contract (task_depends_on or
+provider_dependencies); never freeze the incompatible contract with only a gap note.
 {{- end -}}
