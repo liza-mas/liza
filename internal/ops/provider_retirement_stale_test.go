@@ -886,12 +886,22 @@ func TestReplanRefusesCopyingStaleTaskLevelDeclaration(t *testing.T) {
 // replaceCodePlanForTest replaces source with a same-pair code plan as the
 // orchestrator does; deps become the replacement's depends_on.
 func replaceCodePlanForTest(root, statePath, source, replacement, changed string, deps ...string) error {
+	input := codePlanReplacementInput(replacement)
+	input.DependsOn = deps
+	return replaceTaskForTest(root, statePath, source, input, changed)
+}
+
+func codePlanReplacementInput(id string) AddTaskInput {
+	return AddTaskInput{ID: id, RolePair: "code-planning-pair", Description: "re-authored code plan", SpecRef: "README.md", DoneWhen: "plan reviewed", Scope: "contract", Priority: 1}
+}
+
+// replaceTaskForTest replaces source with replacement as the orchestrator does.
+func replaceTaskForTest(root, statePath, source string, replacement AddTaskInput, changed string) error {
 	state, err := db.New(statePath).Read()
 	if err != nil {
 		return err
 	}
-	input := ReplaceTaskInput{SourceTaskID: source, Reason: "reviewed re-authoring", Changed: changed,
-		Replacement: AddTaskInput{ID: replacement, RolePair: "code-planning-pair", Description: "re-authored code plan", SpecRef: "README.md", DoneWhen: "plan reviewed", Scope: "contract", Priority: 1, DependsOn: deps}}
+	input := ReplaceTaskInput{SourceTaskID: source, Reason: "reviewed re-authoring", Changed: changed, Replacement: replacement}
 	_, err = ReplaceTaskWithAuthorityAndOptions(root, input,
 		models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration},
 		LifecycleRequestOptions{RequestID: "replace-" + source, ExpectedTransition: models.TaskTransitionID(state.FindTask(source))})
@@ -920,15 +930,16 @@ func TestReplaceTask_ReplacedCodePlanKeepsArchRef_I445(t *testing.T) {
 	if got := mustReadTask(t, statePath, "provider-cp-0-r1").ArchRef; got != "README.md#Scope 0" {
 		t.Fatalf("replaced code plan arch_ref = %q, want README.md#Scope 0", got)
 	}
-	// AND the stale draft consumer is blocked for re-authoring (D-65)
-	if consumer := mustReadTask(t, statePath, "reader-cp-0"); consumer.Status != models.TaskStatusBlocked {
-		t.Fatalf("stale draft consumer status = %s, want BLOCKED", consumer.Status)
+	// AND the draft consumer's slot follows the successor instead of blocking
+	// it for re-authoring (D-70; D-65 blocked it)
+	if consumer := mustReadTask(t, statePath, "reader-cp-0"); consumer.Status != models.TaskStatusDraftCodingPlan {
+		t.Fatalf("draft consumer status = %s, want DRAFT_CODING_PLAN", consumer.Status)
 	}
 
-	// WHEN the blocked consumer is re-authored by replace-task, ordered after
-	// the successor without the stale typed declaration
+	// WHEN the consumer is re-authored by replace-task, ordered after the
+	// successor by a plain edge
 	if err := replaceCodePlanForTest(root, statePath, "reader-cp-0", "reader-cp-0-r1", "provider-cp-0 was replaced by provider-cp-0-r1", "provider-cp-0-r1"); err != nil {
-		t.Fatalf("replace-task of the stale consumer: %v", err)
+		t.Fatalf("replace-task of the consumer: %v", err)
 	}
 
 	// THEN the consumer's successor keeps its own architecture scope and edge

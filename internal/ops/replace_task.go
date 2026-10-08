@@ -220,11 +220,15 @@ func ReplaceTaskWithAuthorityAndOptions(projectRoot string, input ReplaceTaskInp
 			}
 			hadWorktree = source.Worktree != nil
 			originalStatus := source.Status
-			if _, err := supersedeTaskInState(candidate, pb, source, []string{input.Replacement.ID}, input.Reason, input.Changed, authority.ID, nil, now); err != nil {
+			// Recording the successor on the supersession itself lets the
+			// retirement barrier and consumer routing inside it see the
+			// selected-child slot follow the replacement (D-70).
+			replacedBy := map[string]any{models.ReplacementTaskIDExtra: replacement.ID}
+			if _, err := supersedeTaskInState(candidate, pb, source, []string{input.Replacement.ID}, input.Reason, input.Changed, authority.ID, replacedBy, now); err != nil {
 				return err
 			}
 			consumers := replacementRewrittenConsumers(candidate, source.ID, historyStarts)
-			extra := map[string]any{"source_task_id": source.ID, "replacement_task_id": replacement.ID, "source_prior_transition_id": request.ExpectedTransition, "retargeted_consumers": consumers, "request_id": request.RequestID}
+			extra := map[string]any{"source_task_id": source.ID, models.ReplacementTaskIDExtra: replacement.ID, "source_prior_transition_id": request.ExpectedTransition, "retargeted_consumers": consumers, "request_id": request.RequestID}
 			if base != nil {
 				extra["preserved_base_commit"] = base.BaseCommit
 			}

@@ -284,6 +284,7 @@ History metadata is `TaskHistoryEntry.Extra`, inlined into the YAML entry.
 |-------|-----------------------------|
 | `orchestrator_assessment` | `assessment_fingerprint_v2`: one 64-character lowercase hex SHA-256 digest; `awaited_tasks`: sorted task IDs the hold waits for (all of them), present when declared with `--awaits` or carried forward from the previous assessment of the same blocked episode. Only the latest assessment retains them; a new assessment removes both, plus the retired `assessment_fingerprint_v1` and `dependency_descendant_wake_snapshot_v1`, from earlier assessments, preserving their notes and other audit fields. `awaiting_human`: the episode's human ask ([ADR-0172](ADR/0172-human-owned-blocks.md)), set or replaced by `--human-action`, carried forward when neither `--human-action` nor `--clear-human-action` is given, absent after `--clear-human-action`. Equivalent input appends nothing. |
 | `blocked` | `awaiting_human`: a non-blank, single-line ask when only a human can clear the block, from `mark-blocked --human-action` or a runtime-input refusal. The latest assessment of the same episode overrides it; a new episode never inherits it. Absent (including all legacy entries) means not human-owned. |
+| `superseded` (replace-task source) | `replacement_task_id`, written by the supersession itself so retirement checks in the same transaction see the selected-child slot follow the replacement ([ADR-0191](ADR/0191-replace-task-successors-carry-selected-child-slots.md)). Other supersessions carry none. |
 | `replacement_committed` (source task) | `source_task_id`, `replacement_task_id`, `source_prior_transition_id`, `source_new_transition_id`, `retargeted_consumers`, `request_id`, and `preserved_base_commit` when declared. Identifiers only, never the replacement payload. |
 | `acceptance_commits_remapped` (merged parent task) | `replaced` (old-to-new commit identifiers), `integration` (integration commit identifier), and `history_entries` (updated history-entry count). Identifiers and count only, never commit content. |
 | `arch_ref_repaired` (unstarted task) | `operation` (`repair-arch-ref`), `source` (`operator_cli`), `arch_ref` (the ref set) and `integration` (the integration commit it was validated at); `reason` is the operator's. |
@@ -949,9 +950,14 @@ and provider edges, pending-provider production, and projected future children
 with sibling, concrete, inherited and provider prerequisites. Later authoring
 or generation that closes a latent cycle is refused before persistence.
 
-An active task or live output declaration prevents retiring/replanning its
-provider or selected child; historical terminal consumers do not impose a live
-hold. Refusal never guesses equivalent output positions on a replacement.
+A selected child resolves to its replan successor or same-pair `replace-task`
+replacement, chained in any order
+([ADR-0184](ADR/0184-replan-lineage-dependency-repair.md),
+[ADR-0191](ADR/0191-replace-task-successors-carry-selected-child-slots.md)); a
+child so replaced is no longer named, so its replacement neither holds on nor
+blocks consumers. An active task or live output declaration prevents
+retiring/replanning its provider or selected child; historical terminal
+consumers do not impose a live hold. Refusal never guesses equivalent output positions on a replacement.
 Cancel or replace the referencing consumer through authorized lifecycle
 operations before retrying a provider change; a reviewed replacement must omit
 that reference or name another intended provider. Retaining the same reference

@@ -14,6 +14,9 @@ import (
 // providerRetirement says whether retiring a task mints a replan successor.
 // Only replan does; every other retirement (supersession, cancellation,
 // plan-check replacement) is permanent: the task can never be replanned.
+// A same-pair replace-task of a selected child is permanent too, but the
+// child's slot already resolves to the successor (ADR-0191), so no
+// declaration names the retired child any more.
 type providerRetirement bool
 
 const (
@@ -35,7 +38,8 @@ const (
 // routeStaleProviderConsumers then sends the consumers to re-authoring. A
 // direct declaration never follows replan lineage, but a child retired by
 // replan still holds: lineage would silently resolve the slot to the
-// successor, hiding the staleness.
+// successor, hiding the staleness. A child replaced by same-pair replace-task
+// is not held at all: its slot follows the successor (ADR-0191).
 func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.Resolver, targetID string, retirement providerRetirement) error {
 	permanent := retirement == retirePermanently
 	holds := func(deps []models.ProviderDependency, released func(direct bool) bool) bool {
