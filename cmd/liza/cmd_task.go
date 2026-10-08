@@ -1348,7 +1348,7 @@ var setTaskOutputCmd = &cobra.Command{
 Reads output entries from a JSON file. Each entry must have desc, done_when,
 scope, and spec_ref. Optional fields: epic_ref, plan_ref, arch_ref, validation,
 destructive_db, rca_required, depends_on, task_depends_on, provider_dependencies,
-decomposition.
+descendant_dependencies, decomposition.
 
 depends_on contains sibling output indexes, e.g. "0" for output[0].
 task_depends_on contains existing concrete task IDs to copy onto generated
@@ -1366,6 +1366,14 @@ permits explicit cross-stage prerequisites; ordinary downstream task_depends_on
 remains invalid. Cycles through future child production/inheritance are refused.
 Every scope task/code-plan precondition must agree with structured fields;
 runtime does not parse prose. Legacy adoption requires reviewed reauthoring.
+A wait that orders the generated plan's writers, not the plan itself, goes in
+descendant_dependencies, applied at that plan's per-subtask transition:
+  [{"at_transition":"code-plan-to-coding","provider_dependencies":[...]}]
+The generated plan does not wait on it; every output it writes receives it in
+provider_dependencies. One intermediate plan on a single per-subtask path
+only; such outputs cannot set kind, and a provider named there cannot be
+retired while the declaration is live. A provider wait that would hold a
+generated plan until a provider's non-planning children merge is warned.
 inherit_inputs declares whether this child waits for a whole upstream phase or
 only for selected upstream outputs. Omitting it inherits every child of every
 upstream dependency, which is the default. To narrow it:
@@ -1494,7 +1502,8 @@ var addTasksCmd = &cobra.Command{
 
 Reads task definitions from a JSON file. Each task must have id, desc, spec,
 done, and scope. Optional fields: priority, depends, type, role_pair, plan_ref,
-validation, destructive_db, rca_required, provider_dependencies.
+validation, destructive_db, rca_required, provider_dependencies,
+descendant_dependencies.
 
 provider_dependencies uses the same shape as output declarations:
   [{"provider_task":"provider-architecture","transition":"architecture-to-code-plan","outputs":[0,2]}]
@@ -1503,6 +1512,8 @@ transitions. Selected children may be unborn, but claim requires the provider
 MERGED, transition executed, and every selected child MERGED. Ordinary downstream
 depends stays invalid. Use reviewed replacement/reauthoring for legacy prose-only
 preconditions; unblocking alone does not repair their missing declaration.
+descendant_dependencies uses the set-task-output shape; the task does not wait
+on them but adds them to every output it writes at its per-subtask transition.
 
 Set task-level rca_required when a direct planning objective is a defect fix.
 It is the default inherited by generated children only when an output entry does

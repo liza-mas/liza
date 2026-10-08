@@ -40,6 +40,7 @@ var usefulEvents = map[string]struct{}{
 	models.TaskEventHandoffInitiated:         {},
 	models.TaskEventProviderDeclarationStale: {},
 	models.TaskEventArchRefRepaired:          {},
+	models.TaskEventDependencyDeferred:       {},
 }
 
 // notUsefulEvents are polling, release, re-entry and recovery bookkeeping.

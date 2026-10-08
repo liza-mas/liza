@@ -507,6 +507,9 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 				}
 			}
 		}
+		if err := descendantOutputRefusal(resolver, task, canonicalOutput, transitionName); err != nil {
+			return err
+		}
 		if resolver != nil {
 			if err := validateDecompositionRootRCAClassification(resolver, task.RolePair, canonicalOutput); err != nil {
 				return err
@@ -636,6 +639,9 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 		if err != nil {
 			return err
 		}
+		if err := descendantOutputRefusal(resolver, task, canonicalOutput, transitionName); err != nil {
+			return err
+		}
 		if resolver != nil {
 			if err := validateDecompositionRootRCAClassification(resolver, task.RolePair, canonicalOutput); err != nil {
 				return err
@@ -664,7 +670,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 					continue
 				}
 				own := s.FindTask(siblingIDs[i])
-				if own == nil || own.Status.IsTerminal() || models.ProviderDependenciesEqual(own.ProviderDependencies, canonicalOutput[i].ProviderDependencies) {
+				if own == nil || own.Status.IsTerminal() || models.GeneratedDeclarationsMatch(own, canonicalOutput[i]) {
 					continue
 				}
 			}
@@ -696,20 +702,29 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 				if err := validateDependencyDirection(s, resolver, existing.ID, existing.RolePair, mergedDeps); err != nil {
 					return err
 				}
-				wanted := canonicalOutput[i].ProviderDependencies
-				if len(wanted) > 0 || len(existing.ProviderDependencies) > 0 {
+				wanted := canonicalOutput[i]
+				declared := len(existing.ProviderDependencies) > 0 || len(existing.DescendantDependencies) > 0
+				if len(wanted.ProviderDependencies) > 0 || len(wanted.DescendantDependencies) > 0 || declared {
 					parents := existing.EffectiveParentTasks()
 					if existing.RolePair != tDef.targetRolePair || len(parents) != 1 || parents[0] != taskID {
 						return fmt.Errorf("cannot recover provider_dependencies on child %s with incorrect transition provenance", existing.ID)
 					}
 				}
-				equal := models.ProviderDependenciesEqual(existing.ProviderDependencies, wanted)
-				unclaimedInitial := existing.Status == tDef.targetStatus && existing.AssignedTo == nil && existing.LeaseExpires == nil
-				if !equal && (len(existing.ProviderDependencies) > 0 || !unclaimedInitial) {
-					return fmt.Errorf("cannot recover provider_dependencies on conflicting or claimed child %s", existing.ID)
+				// A matching child keeps its own declarations: an authorized
+				// deferral (ADR-0193) must not be re-imposed, claimed or not.
+				patch := dependencyPatch{taskID: existing.ID, dependsOn: mergedDeps,
+					providerDependencies:   models.CloneProviderDependencies(existing.ProviderDependencies),
+					descendantDependencies: models.CloneDescendantDependencies(existing.DescendantDependencies)}
+				if !models.GeneratedDeclarationsMatch(existing, wanted) {
+					unclaimedInitial := existing.Status == tDef.targetStatus && existing.AssignedTo == nil && existing.LeaseExpires == nil
+					if declared || !unclaimedInitial {
+						return fmt.Errorf("cannot recover provider_dependencies on conflicting or claimed child %s", existing.ID)
+					}
+					providerMetadataRecovered = true
+					patch.providerDependencies = models.CloneProviderDependencies(wanted.ProviderDependencies)
+					patch.descendantDependencies = models.CloneDescendantDependencies(wanted.DescendantDependencies)
 				}
-				providerMetadataRecovered = providerMetadataRecovered || !equal
-				patches = append(patches, dependencyPatch{taskID: existing.ID, dependsOn: mergedDeps, providerDependencies: models.CloneProviderDependencies(wanted)})
+				patches = append(patches, patch)
 			}
 		}
 		if len(missingChildren) == 0 {
@@ -717,6 +732,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 				if existing := s.FindTask(patch.taskID); existing != nil {
 					existing.DependsOn = patch.dependsOn
 					existing.ProviderDependencies = patch.providerDependencies
+					existing.DescendantDependencies = patch.descendantDependencies
 				}
 			}
 			if providerMetadataRecovered {
@@ -752,6 +768,7 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			if existing := s.FindTask(patch.taskID); existing != nil {
 				existing.DependsOn = patch.dependsOn
 				existing.ProviderDependencies = patch.providerDependencies
+				existing.DescendantDependencies = patch.descendantDependencies
 			}
 		}
 		for _, child := range children {
@@ -876,9 +893,10 @@ type pendingTx struct {
 }
 
 type dependencyPatch struct {
-	taskID               string
-	dependsOn            []string
-	providerDependencies []models.ProviderDependency
+	taskID                 string
+	dependsOn              []string
+	providerDependencies   []models.ProviderDependency
+	descendantDependencies []models.DescendantDependency
 }
 
 // isTransitionIncomplete checks if an executed transition has missing children.
@@ -896,7 +914,7 @@ func isTransitionIncomplete(s *models.State, task *models.Task, transName string
 	case "per-subtask":
 		for i := 0; i < len(task.Output); i++ {
 			child := s.FindTask(perSubtaskChildID(task.ID, slug, i))
-			if child == nil || (!child.Status.IsTerminal() && !models.ProviderDependenciesEqual(child.ProviderDependencies, task.Output[i].ProviderDependencies)) {
+			if child == nil || (!child.Status.IsTerminal() && !models.GeneratedDeclarationsMatch(child, task.Output[i])) {
 				return true
 			}
 		}
@@ -1568,6 +1586,7 @@ func buildChildTask(childID, parentID string, entry models.OutputEntry, targetSt
 		Scope:                   entry.Scope,
 		DependsOn:               deps,
 		ProviderDependencies:    models.CloneProviderDependencies(entry.ProviderDependencies),
+		DescendantDependencies:  models.CloneDescendantDependencies(entry.DescendantDependencies),
 		Supersedes:              supersedes,
 		Created:                 now,
 		History:                 []models.TaskHistoryEntry{},

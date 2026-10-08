@@ -693,7 +693,7 @@ func TestMutationCommandWiring(t *testing.T) {
 			t.Fatal("set-task-output help must list optional fields")
 		}
 		optional, _, _ = strings.Cut(optional, ".")
-		want := "epic_ref, plan_ref, arch_ref, validation, destructive_db, rca_required, depends_on, task_depends_on, provider_dependencies, decomposition"
+		want := "epic_ref, plan_ref, arch_ref, validation, destructive_db, rca_required, depends_on, task_depends_on, provider_dependencies, descendant_dependencies, decomposition"
 		if strings.TrimSpace(optional) != want {
 			t.Errorf("optional fields = %q, want %q (spec_ref is required)", optional, want)
 		}

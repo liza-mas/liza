@@ -5,38 +5,38 @@
     {
       "role": "architect",
       "variant": "architecture-main-pair",
-      "before_bytes": 294183,
-      "after_bytes": 289407,
+      "before_bytes": 294279,
+      "after_bytes": 289503,
       "delta_bytes": -4776,
-      "reference_before_bytes": 280573,
-      "reference_after_bytes": 275797
+      "reference_before_bytes": 280669,
+      "reference_after_bytes": 275893
     },
     {
       "role": "architecture-reviewer",
       "variant": "architecture-main-pair",
-      "before_bytes": 290564,
-      "after_bytes": 285788,
+      "before_bytes": 290640,
+      "after_bytes": 285864,
       "delta_bytes": -4776,
-      "reference_before_bytes": 277088,
-      "reference_after_bytes": 272312
+      "reference_before_bytes": 277164,
+      "reference_after_bytes": 272388
     },
     {
       "role": "architect",
       "variant": "architecture-pair",
-      "before_bytes": 291386,
-      "after_bytes": 286610,
+      "before_bytes": 291482,
+      "after_bytes": 286706,
       "delta_bytes": -4776,
-      "reference_before_bytes": 280573,
-      "reference_after_bytes": 275797
+      "reference_before_bytes": 280669,
+      "reference_after_bytes": 275893
     },
     {
       "role": "architecture-reviewer",
       "variant": "architecture-pair",
-      "before_bytes": 288022,
-      "after_bytes": 283246,
+      "before_bytes": 288098,
+      "after_bytes": 283322,
       "delta_bytes": -4776,
-      "reference_before_bytes": 277088,
-      "reference_after_bytes": 272312
+      "reference_before_bytes": 277164,
+      "reference_after_bytes": 272388
     },
     {
       "role": "code-planner",

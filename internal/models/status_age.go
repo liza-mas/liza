@@ -61,6 +61,7 @@ var nonStatusTransitionEvents = map[TaskEventName]struct{}{
 	TaskEventAcceptanceCommitsRemapped: {},
 	TaskEventPlanCheck:                 {},
 	TaskEventArchRefRepaired:           {},
+	TaskEventDependencyDeferred:        {},
 	TaskEventProviderDeclarationStale:  {},
 	TaskEventPlanHandoffUndecided:      {},
 }

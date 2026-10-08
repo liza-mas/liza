@@ -107,6 +107,7 @@ a stale authoritative reference.
 §BRAND_BINARY_NAME§ repair-superseded-dependencies <task-id> --reason <reason> # Repair illegal terminal dependency edges
 §BRAND_BINARY_NAME§ repair-acceptance-commits [--dry-run] # Restore evidence orphaned by an integration-branch rewrite
 §BRAND_BINARY_NAME§ repair-arch-ref <task-id> --arch-ref <path#heading> --reason <reason> # Fill an unstarted task's empty arch_ref
+§BRAND_BINARY_NAME§ defer-provider-dependency <task-id> --provider-task <id> --transition <name> --reason <reason> # Move an unstarted plan's writer-order wait to its outputs
 §BRAND_BINARY_NAME§ delete agent <id>             # Remove agent from state
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```
@@ -131,6 +132,17 @@ its role pair's initial status that was never claimed, refusing a non-empty
 match exactly, as for an architecture output; take both from the superseded
 original's `arch_ref`. The repair is recorded as `arch_ref_repaired` history and
 wakes no one: follow it with `add-human-note` on the blocked consumer.
+
+If a generated code plan cannot be claimed because it waits on another plan's
+coding output (a writer-order wait its architecture placed one level too
+high), `§BRAND_BINARY_NAME§ defer-provider-dependency <task-id> --provider-task
+<id> --transition <name> --reason "..."` moves that declaration into the plan's
+`descendant_dependencies` in place, on a task in its initial status or BLOCKED
+that was never claimed. The plan becomes claimable, keeps its decomposition and
+`arch_ref`, and every output it writes carries the wait, so coding order is
+unchanged. A wait selecting tasks of another stage than the plan's writers is
+refused. The move is recorded as `provider_dependency_deferred` history and
+wakes no one.
 
 If every mutation fails with `lease_expires without assigned_to: <task-id>`,
 that task carries half an ownership tuple written by an older binary. Global

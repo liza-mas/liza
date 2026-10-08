@@ -38,12 +38,22 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 				}
 			}
 		}
-		if !providerOutputIsLive(state, resolver, task) {
+		live := providerOutputIsLive(state, resolver, task)
+		// A terminal owner still applies its descendant waits while its output
+		// is generation input (ADR-0193).
+		if !task.Status.IsTerminal() || live {
+			validateDescendantOwner(v, state, resolver, task.ID+" descendant_dependencies", task.RolePair, task.DescendantDependencies, false)
+		}
+		if !live {
 			continue
 		}
 		mayGoStale := func() bool { return models.OutputMayGoStale(state, task, resolver) }
 		for index, output := range task.Output {
 			validateProviderOwner(v, state, resolver, fmt.Sprintf("%s output[%d]", task.ID, index), output.ProviderDependencies, mayGoStale)
+			validateDescendantOwner(v, state, resolver, fmt.Sprintf("%s output[%d].descendant_dependencies", task.ID, index), task.RolePair, output.DescendantDependencies, true)
+		}
+		if _, conflict := DescendantKindConflict(task, task.Output); conflict != "" {
+			v.add(fmt.Errorf("task %s %s", task.ID, conflict))
 		}
 	}
 	// Identify each cyclic effective edge, as ordinary dependency validation
@@ -143,7 +153,7 @@ func providerOutputIsLive(state *models.State, resolver *pipeline.Resolver, task
 			if _, dedup := skipped[index]; dedup && id != fmt.Sprintf("%s-%s-%d", task.ID, transition.TaskSlugOrName(), index) {
 				continue
 			}
-			if !child.Status.IsTerminal() && !models.ProviderDependenciesEqual(child.ProviderDependencies, task.Output[index].ProviderDependencies) {
+			if !child.Status.IsTerminal() && !models.GeneratedDeclarationsMatch(child, task.Output[index]) {
 				return true
 			}
 		}

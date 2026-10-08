@@ -37,6 +37,7 @@ type AddTaskInput struct {
 	RCARequired             bool                            `json:"rca_required,omitempty"`
 	DependsOn               []string                        `json:"depends,omitempty"`
 	ProviderDependencies    []models.ProviderDependency     `json:"provider_dependencies,omitempty"`
+	DescendantDependencies  []models.DescendantDependency   `json:"descendant_dependencies,omitempty"`
 }
 
 // AddTaskResult contains the outcome of adding a task.
@@ -259,6 +260,7 @@ func buildReplacementTask(input *AddTaskInput, resolver *pipeline.Resolver) (mod
 		Scope:                   input.Scope,
 		DependsOn:               normalizedDeps,
 		ProviderDependencies:    models.CloneProviderDependencies(input.ProviderDependencies),
+		DescendantDependencies:  models.CloneDescendantDependencies(input.DescendantDependencies),
 		Created:                 time.Now().UTC(),
 		History:                 []models.TaskHistoryEntry{},
 	}, nil

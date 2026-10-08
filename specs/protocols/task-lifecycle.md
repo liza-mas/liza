@@ -61,6 +61,11 @@ child exists with the expected parent/target role-pair and is `MERGED`;
 agree. Unassigned unblock may restore a dependency-held task; assignment remains
 refused while a prerequisite is unmet.
 
+A wait that orders the generated plan's writers rather than the plan goes in
+`descendant_dependencies`: the plan stays claimable, and every output it writes
+receives the wait as an ordinary declaration, so its writers keep their order
+([ADR-0193](../architecture/ADR/0193-descendant-provider-dependencies.md)).
+
 This is an explicit cross-stage exception, leaving ordinary downstream
 `depends_on`/`task_depends_on` invalid. Authoring, handoff and crash recovery
 validate the combined graph, including future production and inherited/sibling

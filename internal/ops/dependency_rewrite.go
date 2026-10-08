@@ -368,7 +368,7 @@ func operationalOutputMayBeConsumed(state *models.State, resolver *pipeline.Reso
 			child := state.FindTask(id)
 			_, dedup := skipped[i]
 			own := id == perSubtaskChildID(task.ID, slug, i)
-			if child == nil || ((!dedup || own) && !child.Status.IsTerminal() && !models.ProviderDependenciesEqual(child.ProviderDependencies, task.Output[i].ProviderDependencies)) {
+			if child == nil || ((!dedup || own) && !child.Status.IsTerminal() && !models.GeneratedDeclarationsMatch(child, task.Output[i])) {
 				return true
 			}
 		}

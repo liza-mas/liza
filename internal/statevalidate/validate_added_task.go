@@ -66,6 +66,7 @@ func ValidateAddedTask(state *models.State, projectRoot, taskID string, skipSpec
 				return
 			}
 			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies, nil)
+			validateDescendantOwner(v, state, resolver, task.ID+" descendant_dependencies", task.RolePair, task.DescendantDependencies, false)
 			graph := projectedProviderGraph(state, resolver)
 			for _, dependency := range graph.edges[task.ID] {
 				if path := shortestDependencyPath(graph.edges, dependency, task.ID); path != nil {

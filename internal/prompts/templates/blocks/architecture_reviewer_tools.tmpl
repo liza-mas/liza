@@ -1,7 +1,7 @@
 {{- define "architecture-reviewer-tools" -}}
 
 ARCHITECTURE REVIEWER TOOLS:
-Reconcile Scope task/code-plan preconditions with output[] task_depends_on or provider_dependencies, including unborn provider children. Reject prose-only waits, ordinary downstream edges and latent cycles. Provider waits require a MERGED provider, executed transition and every selected child MERGED; APPROVED is insufficient.
+Reconcile Scope task/code-plan preconditions with output[] task_depends_on or provider_dependencies, including unborn provider children; writer-order waits belong in descendant_dependencies, not on the code plan. Reject prose-only waits, ordinary downstream edges and latent cycles. Provider waits require a MERGED provider, executed transition and every selected child MERGED; APPROVED is insufficient.
 - {{binaryName}} get — Query task state to inspect output[] entries
   {{binaryName}} get {{.TaskID}} --json
 - {{binaryName}} submit-verdict — Submit review verdict (use the single VERDICT SUBMISSION recipe below)

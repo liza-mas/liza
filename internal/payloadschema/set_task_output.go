@@ -134,6 +134,9 @@ func validateOutputEntryScalars(index int, entry models.OutputEntry, total int) 
 	if err := models.ValidateProviderDependencies(entry.ProviderDependencies); err != nil {
 		diagnostics = append(diagnostics, outputDiagnostic(index, "provider_dependencies", "must name distinct provider tasks and per-subtask transitions with nonempty distinct nonnegative output indexes", models.FieldValueClassMalformed))
 	}
+	if err := models.ValidateDescendantDependencies(entry.DescendantDependencies); err != nil {
+		diagnostics = append(diagnostics, outputDiagnostic(index, "descendant_dependencies", "must name distinct at_transition values, each with nonempty valid provider_dependencies", models.FieldValueClassMalformed))
+	}
 	return diagnostics
 }
 

@@ -91,11 +91,11 @@ func HasProviderDependencies(state *State) bool {
 		return false
 	}
 	for _, task := range state.Tasks {
-		if len(task.ProviderDependencies) > 0 {
+		if len(task.ProviderDependencies) > 0 || len(task.DescendantDependencies) > 0 {
 			return true
 		}
 		for _, output := range task.Output {
-			if len(output.ProviderDependencies) > 0 {
+			if len(output.ProviderDependencies) > 0 || len(output.DescendantDependencies) > 0 {
 				return true
 			}
 		}
@@ -142,10 +142,105 @@ func CloneProviderDependencies(deps []ProviderDependency) []ProviderDependency {
 	return cloned
 }
 
-// ProviderDependenciesEqual compares a generated declaration to its source,
-// treating omitted and empty legacy declarations identically.
-func ProviderDependenciesEqual(a, b []ProviderDependency) bool {
-	return len(a) == 0 && len(b) == 0 || reflect.DeepEqual(a, b)
+// DescendantDependency defers typed provider waits by one generation (D-79,
+// ADR-0193): the task carrying it applies them to every output it writes for
+// AtTransition, so a writer-order wait holds the writers, not their planner.
+type DescendantDependency struct {
+	AtTransition         string               `yaml:"at_transition" json:"at_transition"`
+	ProviderDependencies []ProviderDependency `yaml:"provider_dependencies" json:"provider_dependencies"`
+}
+
+// ValidateDescendantDependencies validates declaration shape; the transition
+// topology and provider references need the pipeline and state.
+func ValidateDescendantDependencies(deps []DescendantDependency) error {
+	seen := make(map[string]bool, len(deps))
+	for i, dep := range deps {
+		if dep.AtTransition == "" || strings.TrimSpace(dep.AtTransition) != dep.AtTransition {
+			return fmt.Errorf("descendant_dependencies[%d].at_transition must be non-empty and trimmed", i)
+		}
+		if seen[dep.AtTransition] {
+			return fmt.Errorf("descendant_dependencies[%d] duplicates at_transition %q", i, dep.AtTransition)
+		}
+		seen[dep.AtTransition] = true
+		if len(dep.ProviderDependencies) == 0 {
+			return fmt.Errorf("descendant_dependencies[%d].provider_dependencies must declare at least one wait", i)
+		}
+		if err := ValidateProviderDependencies(dep.ProviderDependencies); err != nil {
+			return fmt.Errorf("descendant_dependencies[%d].%w", i, err)
+		}
+	}
+	return nil
+}
+
+// CloneDescendantDependencies deep-copies descendant declarations.
+func CloneDescendantDependencies(deps []DescendantDependency) []DescendantDependency {
+	cloned := slices.Clone(deps)
+	for i := range cloned {
+		cloned[i].ProviderDependencies = CloneProviderDependencies(deps[i].ProviderDependencies)
+	}
+	return cloned
+}
+
+// DescendantProviderDependencies flattens the waits of every descendant entry.
+func DescendantProviderDependencies(deps []DescendantDependency) []ProviderDependency {
+	var flat []ProviderDependency
+	for _, dep := range deps {
+		flat = append(flat, dep.ProviderDependencies...)
+	}
+	return flat
+}
+
+// AppliedDescendantDependencies returns the waits task applies to its output
+// for transition.
+func AppliedDescendantDependencies(task *Task, transition string) []ProviderDependency {
+	for _, dep := range task.DescendantDependencies {
+		if dep.AtTransition == transition {
+			return dep.ProviderDependencies
+		}
+	}
+	return nil
+}
+
+// MissingProviderDependencies names each wait in required that deps does not
+// carry: a declaration for the same provider and transition selecting every
+// required output.
+func MissingProviderDependencies(deps, required []ProviderDependency) []ProviderDependency {
+	var missing []ProviderDependency
+	for _, want := range required {
+		if !slices.ContainsFunc(deps, func(dep ProviderDependency) bool {
+			return dep.ProviderTask == want.ProviderTask && dep.Transition == want.Transition &&
+				!slices.ContainsFunc(want.Outputs, func(output int) bool { return !slices.Contains(dep.Outputs, output) })
+		}) {
+			missing = append(missing, want)
+		}
+	}
+	return missing
+}
+
+// GeneratedDeclarationsMatch reports whether a generated child carries its
+// source output's declarations: the descendant ones, and the provider ones
+// except any an operator deferred to the child's descendants
+// (defer-provider-dependency). Nothing is dropped, invented or moved back.
+func GeneratedDeclarationsMatch(child *Task, output OutputEntry) bool {
+	if !containsAllProviderDependencies(output.ProviderDependencies, child.ProviderDependencies) {
+		return false // invented
+	}
+	expected := DescendantProviderDependencies(output.DescendantDependencies)
+	for _, dep := range output.ProviderDependencies {
+		if !containsProviderDependency(child.ProviderDependencies, dep) {
+			expected = append(expected, dep) // deferred
+		}
+	}
+	actual := DescendantProviderDependencies(child.DescendantDependencies)
+	return containsAllProviderDependencies(actual, expected) && containsAllProviderDependencies(expected, actual)
+}
+
+func containsProviderDependency(deps []ProviderDependency, want ProviderDependency) bool {
+	return slices.ContainsFunc(deps, func(dep ProviderDependency) bool { return reflect.DeepEqual(dep, want) })
+}
+
+func containsAllProviderDependencies(deps, wanted []ProviderDependency) bool {
+	return !slices.ContainsFunc(wanted, func(dep ProviderDependency) bool { return !containsProviderDependency(deps, dep) })
 }
 
 // ProviderDependencyChildren projects configured child IDs without requiring
@@ -308,7 +403,7 @@ func generatedProviderDeclarationMismatch(task *Task, state *State, pr PipelineR
 			continue
 		}
 		for index, output := range parent.Output {
-			if len(output.ProviderDependencies) == 0 {
+			if len(output.ProviderDependencies) == 0 && len(output.DescendantDependencies) == 0 {
 				continue
 			}
 			if _, available := pr.(ProviderTransitionResolver); !available {
@@ -319,7 +414,7 @@ func generatedProviderDeclarationMismatch(task *Task, state *State, pr PipelineR
 				if err != nil || td.SourceRolePair != parent.RolePair || ids[0] != task.ID {
 					continue
 				}
-				if td.TargetRolePair != task.RolePair || len(task.EffectiveParentTasks()) != 1 || !ProviderDependenciesEqual(task.ProviderDependencies, output.ProviderDependencies) {
+				if td.TargetRolePair != task.RolePair || len(task.EffectiveParentTasks()) != 1 || !GeneratedDeclarationsMatch(task, output) {
 					return fmt.Sprintf("generated provider_dependencies do not match %s output[%d]; recover transition %s before claiming", parentID, index, name)
 				}
 			}

@@ -257,6 +257,7 @@ type RoleContextData struct {
 	// RuntimeInputs are this task's declared live inputs (ADR-0169).
 	RuntimeInputs            []models.RuntimeInput
 	ProviderDependencies     []models.ProviderDependency
+	DescendantDependencies   []models.DescendantDependency
 	AcceptanceSource         *models.AcceptanceSource
 	AcceptanceReceipt        *models.AcceptanceReceipt
 	DestructiveDB            bool

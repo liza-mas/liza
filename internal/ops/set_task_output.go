@@ -90,13 +90,14 @@ func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authorit
 	if err := ValidateLifecycleRequestOptions(input.Request); err != nil {
 		return nil, &PreconditionError{Reason: err.Error()}
 	}
-	if err := setTaskOutputWithOptionalAuthority(projectRoot, input, authority, &outcome); err != nil {
+	var warnings []string
+	if err := setTaskOutputWithOptionalAuthority(projectRoot, input, authority, &outcome, &warnings); err != nil {
 		return nil, err
 	}
-	return &SetTaskOutputResult{LifecycleOutcome: outcome, TaskID: input.TaskID, OutputCount: len(input.Output), StatePath: paths.New(projectRoot).StatePath()}, nil
+	return &SetTaskOutputResult{LifecycleOutcome: outcome, TaskID: input.TaskID, OutputCount: len(input.Output), StatePath: paths.New(projectRoot).StatePath(), Warnings: warnings}, nil
 }
 
-func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority, outcome *models.LifecycleOutcome) (retErr error) {
+func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority, outcome *models.LifecycleOutcome, warnings *[]string) (retErr error) {
 	phase := "validate-output"
 	defer func() {
 		if retErr == nil {
@@ -243,13 +244,17 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			return err
 		}
 
+		output, gateWarnings, err := prepareDescendantOutput(resolver, task, input.Output)
+		if err != nil {
+			return err
+		}
 		// Draft output may keep a stale declaration (ADR-0188), so validation
 		// accepts it; new output must never author one.
-		if stale := staleOutputDeclaration(state, resolver, input.Output); stale != "" {
+		if stale := staleOutputDeclaration(state, resolver, output); stale != "" {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s %s; select the replacement's output instead", input.TaskID, stale)}
 		}
 		previousCount := len(task.Output)
-		task.Output = input.Output
+		task.Output = output
 		// Provider output may become known after its consumers were authored.
 		// Validate that prospective graph before publishing either side.
 		if models.HasProviderDependencies(state) {
@@ -262,12 +267,31 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			Extra: map[string]any{"previous_output_count": previousCount, "output_count": len(input.Output)},
 		})
 		*outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
+		*warnings = gateWarnings
 		return err
 	})
 	if isLifecycleReplay(err) {
 		return nil
 	}
 	return err
+}
+
+// prepareDescendantOutput checks output-level descendant declarations and
+// applies the owner's (ADR-0193), returning the output to store and any
+// misplaced-gate warnings. The caller's output is left as submitted.
+func prepareDescendantOutput(resolver *pipeline.Resolver, task *models.Task, output []models.OutputEntry) ([]models.OutputEntry, []string, error) {
+	for i, entry := range output {
+		if err := statevalidate.ValidateDescendantPlacement(resolver, task.RolePair, entry.DescendantDependencies, true); err != nil {
+			return nil, nil, &PreconditionError{Reason: fmt.Sprintf("output[%d].%v", i, err)}
+		}
+	}
+	if err := statevalidate.ValidateDescendantPlacement(resolver, task.RolePair, task.DescendantDependencies, false); err != nil {
+		return nil, nil, &PreconditionError{Reason: fmt.Sprintf("task %s: %v", task.ID, err)}
+	}
+	if _, conflict := statevalidate.DescendantKindConflict(task, output); conflict != "" {
+		return nil, nil, &PreconditionError{Reason: fmt.Sprintf("task %s %s", task.ID, conflict)}
+	}
+	return applyDescendantDependencies(task, output), planningWaitWarnings(resolver, task, output), nil
 }
 
 // validateOutputArtifactRefScalars keeps the artifact-ref syntax rule available

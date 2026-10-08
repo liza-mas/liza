@@ -40,6 +40,9 @@ const (
 // replan still holds: lineage would silently resolve the slot to the
 // successor, hiding the staleness. A child replaced by same-pair replace-task
 // is not held at all: its slot follows the successor (ADR-0191).
+//
+// A live descendant declaration holds without exception (ADR-0193): it never
+// goes stale, so its holder is reported before any mutation.
 func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.Resolver, targetID string, retirement providerRetirement) error {
 	permanent := retirement == retirePermanently
 	holds := func(deps []models.ProviderDependency, released func(direct bool) bool) bool {
@@ -48,6 +51,7 @@ func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.
 			return named && !released(direct)
 		})
 	}
+	never := func(bool) bool { return false }
 	var holders []string
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
@@ -59,11 +63,20 @@ func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.
 		}) {
 			holders = append(holders, task.ID)
 		}
-		if !task.TransitionsExecuted["replanned"] && !task.PlanHandoffRetired() && operationalOutputMayBeConsumed(state, resolver, task) {
+		outputLive := !task.TransitionsExecuted["replanned"] && !task.PlanHandoffRetired() && operationalOutputMayBeConsumed(state, resolver, task)
+		// A terminal owner still applies its descendant waits until its output
+		// has generated the writers that carry them.
+		if (!task.Status.IsTerminal() || outputLive) && holds(models.DescendantProviderDependencies(task.DescendantDependencies), never) {
+			holders = append(holders, task.ID+" descendant_dependencies")
+		}
+		if outputLive {
 			released := func(direct bool) bool { return outputDeclarationReleased(state, resolver, task, direct, permanent) }
 			for index, output := range task.Output {
 				if holds(output.ProviderDependencies, released) {
 					holders = append(holders, fmt.Sprintf("%s output[%d]", task.ID, index))
+				}
+				if holds(models.DescendantProviderDependencies(output.DescendantDependencies), never) {
+					holders = append(holders, fmt.Sprintf("%s output[%d].descendant_dependencies", task.ID, index))
 				}
 			}
 		}

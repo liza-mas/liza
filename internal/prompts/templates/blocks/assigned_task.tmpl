@@ -30,6 +30,15 @@ PROVIDER DEPENDENCIES (claim requires provider and selected children MERGED):
 - {{.ProviderTask}} / {{.Transition}} / output indexes {{.Outputs}}
 {{- end}}
 {{- end}}
+{{- if .DescendantDependencies}}
+
+DESCENDANT DEPENDENCIES (added to every output you write; they do not hold this task):
+{{- range .DescendantDependencies}}{{$at := .AtTransition}}
+{{- range .ProviderDependencies}}
+- at {{$at}}: {{.ProviderTask}} / {{.Transition}} / output indexes {{.Outputs}}
+{{- end}}
+{{- end}}
+{{- end}}
 
 DONE WHEN:
 {{.DoneWhen}}

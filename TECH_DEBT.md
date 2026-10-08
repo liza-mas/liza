@@ -2,6 +2,37 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Descendant declarations hold provider retirement strictly
+
+**What:** A live `descendant_dependencies` declaration (ADR-0193) refuses the
+retirement of the provider or selected child it names, with none of the stale
+exceptions ordinary declarations have (ADR-0185 to ADR-0190). A provider replan
+therefore waits until the holder is re-authored: the owner's output, a replan of
+an unexpanded plan, or `replace-task` of an unstarted or BLOCKED code plan.
+
+**Why deferred:** stale routing for descendant declarations needs its own
+claim, unblock, generation and re-authoring refusals at every site that
+handles ordinary stale declarations; the strict rule is one predicate and
+fails closed, reporting the holder before any mutation.
+
+**Payback trigger:** the first provider retirement refused by a descendant
+holder where stale routing would have avoided a replacement.
+
+## Replace-task drops a code plan's decomposition
+
+**What:** `replace-task` builds the replacement from `AddTaskInput`, which has
+no `decomposition` field; a same-pair replacement inherits only parents and
+`arch_ref` (D-67). Re-authoring a decomposed code plan's provider or descendant
+declaration through `replace-task` loses its owned files, read-only
+dependencies and interfaces. `defer-provider-dependency` covers the D-79 move
+in place; other re-authoring still goes through `replace-task`.
+
+**Why deferred:** pre-existing for every replacement; carrying decomposition is
+a replacement-payload change outside D-79.
+
+**Payback trigger:** the first `replace-task` of a decomposed code plan to
+re-author a provider or descendant declaration.
+
 ## Replan clones a stale consumer's task-level provider declarations
 
 **What:** `replan` copies the original plan's task-level `provider_dependencies`

@@ -98,6 +98,10 @@ const (
 	// TaskEventArchRefRepaired records an operator setting the empty arch_ref of
 	// an unstarted task (repair-arch-ref, D-76).
 	TaskEventArchRefRepaired TaskEventName = "arch_ref_repaired"
+	// TaskEventDependencyDeferred records an operator moving an
+	// unstarted task's provider declaration to its descendant declarations
+	// (defer-provider-dependency, D-79).
+	TaskEventDependencyDeferred TaskEventName = "provider_dependency_deferred"
 	// TaskEventProviderDeclarationStale records a BLOCKED task's draft output
 	// declaration left stale by a provider retirement (ADR-0188).
 	TaskEventProviderDeclarationStale TaskEventName = "provider_declaration_stale"

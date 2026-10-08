@@ -30,6 +30,7 @@ type addTaskPayload struct {
 	RCARequired             bool                            `json:"rca_required"`
 	DependsOn               []string                        `json:"depends"`
 	ProviderDependencies    []models.ProviderDependency     `json:"provider_dependencies"`
+	DescendantDependencies  []models.DescendantDependency   `json:"descendant_dependencies"`
 }
 
 func init() {
@@ -76,6 +77,9 @@ func validateAddTaskPayload(payload any) []models.FieldDiagnostic {
 	diagnostics = append(diagnostics, runtimeInputPayloadDiagnostics("", object["runtime_inputs"], input.Validation, input.RuntimeInputs)...)
 	if err := models.ValidateProviderDependencies(input.ProviderDependencies); err != nil {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/provider_dependencies", "must name distinct provider tasks and per-subtask transitions with nonempty distinct nonnegative output indexes", models.FieldValueClassMalformed))
+	}
+	if err := models.ValidateDescendantDependencies(input.DescendantDependencies); err != nil {
+		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/descendant_dependencies", "must name distinct at_transition values, each with nonempty valid provider_dependencies", models.FieldValueClassMalformed))
 	}
 	if input.RolePair == "" {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/role_pair", "role_pair is required", models.FieldValueClassMissing))

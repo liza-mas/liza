@@ -575,13 +575,16 @@ type Task struct {
 	Attempt              int                  `yaml:"attempt,omitempty"`
 	DependsOn            []string             `yaml:"depends_on,omitempty"`
 	ProviderDependencies []ProviderDependency `yaml:"provider_dependencies,omitempty" json:"provider_dependencies,omitempty"`
-	IntegrationFix       bool                 `yaml:"integration_fix,omitempty"`
-	HandoffPending       bool                 `yaml:"handoff_pending,omitempty"`
-	HandoffEvents        []HandoffEvent       `yaml:"handoff_events,omitempty"`
-	MaxIterations        int                  `yaml:"max_iterations,omitempty"`
-	Created              time.Time            `yaml:"created"`
-	History              []TaskHistoryEntry   `yaml:"history"`
-	Extra                map[string]any       `yaml:",inline"`
+	// DescendantDependencies are applied to every output this task writes for
+	// the named transition (D-79); they never hold this task's own claim.
+	DescendantDependencies []DescendantDependency `yaml:"descendant_dependencies,omitempty" json:"descendant_dependencies,omitempty"`
+	IntegrationFix         bool                   `yaml:"integration_fix,omitempty"`
+	HandoffPending         bool                   `yaml:"handoff_pending,omitempty"`
+	HandoffEvents          []HandoffEvent         `yaml:"handoff_events,omitempty"`
+	MaxIterations          int                    `yaml:"max_iterations,omitempty"`
+	Created                time.Time              `yaml:"created"`
+	History                []TaskHistoryEntry     `yaml:"history"`
+	Extra                  map[string]any         `yaml:",inline"`
 }
 
 // EffectiveParentTasks returns the list of parent task IDs.
@@ -641,6 +644,9 @@ type OutputEntry struct {
 	// TaskDependsOn names existing concrete task IDs to copy onto generated child tasks.
 	TaskDependsOn        []string             `yaml:"task_depends_on,omitempty" json:"task_depends_on,omitempty"`
 	ProviderDependencies []ProviderDependency `yaml:"provider_dependencies,omitempty" json:"provider_dependencies,omitempty"`
+	// DescendantDependencies are copied onto the generated child, which applies
+	// them to its own outputs: waits for the tasks it generates (D-79).
+	DescendantDependencies []DescendantDependency `yaml:"descendant_dependencies,omitempty" json:"descendant_dependencies,omitempty"`
 	// Supersedes names one existing task this output replaces. Generating the
 	// child retires that task and retargets its consumers in the same state
 	// transaction; several outputs may name one task to split it.

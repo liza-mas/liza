@@ -26,6 +26,7 @@ type TaskInput struct {
 	Priority                int                             `yaml:"priority"`
 	DependsOn               []string                        `yaml:"depends_on,omitempty"`
 	ProviderDependencies    []models.ProviderDependency     `yaml:"provider_dependencies,omitempty"`
+	DescendantDependencies  []models.DescendantDependency   `yaml:"descendant_dependencies,omitempty"`
 }
 
 // LoadTaskInputFromFile loads task input from a YAML file.
@@ -70,6 +71,7 @@ func addTaskCommand(statePath, logPath string, input *TaskInput, add func(*ops.A
 		ValidationPrerequisites: models.CloneValidationPrerequisites(input.ValidationPrerequisites),
 		RuntimeInputs:           models.CloneRuntimeInputs(input.RuntimeInputs),
 		ProviderDependencies:    models.CloneProviderDependencies(input.ProviderDependencies),
+		DescendantDependencies:  models.CloneDescendantDependencies(input.DescendantDependencies),
 		DestructiveDB:           input.DestructiveDB,
 		Scope:                   input.Scope,
 		Priority:                input.Priority,
