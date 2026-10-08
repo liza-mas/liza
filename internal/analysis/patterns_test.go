@@ -1282,3 +1282,111 @@ func TestDetectBlockedReplacementChain(t *testing.T) {
 		t.Fatalf("one blocked recovery reported %+v", result)
 	}
 }
+
+// cappedChainTasks returns a -> b -> c where a and b were each replaced while
+// BLOCKED and c has been BLOCKED at the cap since blockedAt.
+func cappedChainTasks(blockedAt time.Time) []models.Task {
+	superseded := func(id, successor string) models.Task {
+		reason := id + " blocked"
+		task := models.Task{ID: id, Status: models.TaskStatusSuperseded, BlockedReason: &reason, SupersededBy: []string{successor},
+			History: []models.TaskHistoryEntry{{Time: blockedAt.Add(-time.Hour), Event: models.TaskEventBlocked}}}
+		task.History = append(task.History, models.TaskHistoryEntry{Time: blockedAt.Add(-time.Minute), Event: models.TaskEventSuperseded,
+			Extra: map[string]any{models.BlockedRecoveryKey: models.BlockedRecoveryRecord(&task, "retry "+id)}})
+		return task
+	}
+	headReason := "c blocked again"
+	head := models.Task{ID: "c", Status: models.TaskStatusBlocked, BlockedReason: &headReason,
+		History: []models.TaskHistoryEntry{{Time: blockedAt, Event: models.TaskEventBlocked}}}
+	return []models.Task{superseded("a", "b"), superseded("b", "c"), head}
+}
+
+// TestTaskHaltOutranksNonHaltProviderAudit pins D-86: a provider-audit WARNING
+// or CHECKPOINT must not end detection before the task-scoped HALTs, otherwise
+// a capped lineage never gets a resolvable response and cannot be released.
+func TestTaskHaltOutranksNonHaltProviderAudit(t *testing.T) {
+	boundary := time.Date(2026, 10, 8, 20, 0, 0, 0, time.UTC)
+	resolvedAt := boundary.Add(time.Minute)
+	registeredAt := boundary.Add(-time.Hour)
+	blockedAt := boundary.Add(-3 * time.Hour)
+	resolvedBoundary := models.CircuitBreaker{Status: "OK", History: []models.CircuitBreakerHistory{{
+		Timestamp: boundary, Result: "CHECKPOINT", Response: models.CircuitBreakerResponseCheckpoint,
+		Classification: models.CircuitBreakerEvidenceNew, ResolvedAt: &resolvedAt,
+	}}}
+	// A non-qualifying generic anomaly tells the generic considered set apart
+	// from the two-anomaly provider evidence slice.
+	unrelated := models.Anomaly{Timestamp: boundary.Add(-time.Hour), Reporter: "coder-3", Type: "workaround",
+		Details: map[string]any{"root_cause": "flaky fixture"}}
+	historical := []models.Anomaly{unrelated, providerAuditAnomaly(boundary.Add(-2*time.Minute), "coder-1"), providerAuditAnomaly(boundary.Add(-time.Minute), "coder-2")}
+	fresh := []models.Anomaly{unrelated, providerAuditAnomaly(boundary.Add(time.Minute), "coder-1"), providerAuditAnomaly(boundary.Add(2*time.Minute), "coder-2")}
+	continuing := append(append([]models.Anomaly{}, historical...), providerAuditAnomaly(boundary.Add(time.Minute), "coder-1"))
+	retryCluster := []models.Anomaly{
+		{Timestamp: boundary.Add(time.Minute), Type: "retry_loop", Details: map[string]any{"error_pattern": "timeout"}},
+		{Timestamp: boundary.Add(2 * time.Minute), Type: "retry_loop", Details: map[string]any{"error_pattern": "timeout"}},
+		{Timestamp: boundary.Add(3 * time.Minute), Type: "retry_loop", Details: map[string]any{"error_pattern": "timeout"}},
+	}
+	chain := cappedChainTasks(blockedAt)
+	churn := models.Task{ID: "plan-churn", Type: models.TaskTypePlanning, Status: models.TaskStatusMerged, ReviewCyclesTotal: 4}
+	degradedCodex := func(s *models.State) {
+		s.Agents = map[string]models.Agent{"coder-1": providerAgent("codex", 101, registeredAt), "coder-2": providerAgent("codex", 102, registeredAt)}
+		s.AgentHealth = map[string]models.AgentHealth{
+			"coder-1": degradedProviderHealth("codex", 101, registeredAt), "coder-2": degradedProviderHealth("codex", 102, registeredAt),
+		}
+	}
+
+	cases := []struct {
+		name           string
+		anomalies      []models.Anomaly
+		breaker        models.CircuitBreaker
+		tasks          []models.Task
+		setup          func(*models.State)
+		wantPattern    string
+		wantResponse   models.CircuitBreakerResponseType
+		wantConsidered int
+	}{
+		// D-86 reproductions: a task HALT hidden behind a non-HALT provider result.
+		{name: "acknowledged provider warning does not hide blocked chain", anomalies: historical, breaker: resolvedBoundary, tasks: chain,
+			wantPattern: models.BlockedReplacementChainPattern, wantResponse: models.CircuitBreakerResponseHalt, wantConsidered: len(historical)},
+		{name: "new provider checkpoint does not hide blocked chain", anomalies: fresh, tasks: chain,
+			wantPattern: models.BlockedReplacementChainPattern, wantResponse: models.CircuitBreakerResponseHalt, wantConsidered: len(fresh)},
+		{name: "continuing provider checkpoint does not hide blocked chain", anomalies: continuing, breaker: resolvedBoundary, tasks: chain,
+			wantPattern: models.BlockedReplacementChainPattern, wantResponse: models.CircuitBreakerResponseHalt, wantConsidered: len(continuing)},
+		{name: "acknowledged provider warning does not hide planning churn", anomalies: historical, breaker: resolvedBoundary, tasks: []models.Task{churn},
+			wantPattern: "planning_review_churn", wantResponse: models.CircuitBreakerResponseHalt, wantConsidered: len(historical)},
+		{name: "planning churn keeps priority over blocked chain", anomalies: historical, breaker: resolvedBoundary, tasks: append([]models.Task{churn}, chain...),
+			wantPattern: "planning_review_churn", wantResponse: models.CircuitBreakerResponseHalt, wantConsidered: len(historical)},
+		// Controls: existing priority and the provider-only fallback are unchanged.
+		{name: "generic halt keeps priority over provider and task", anomalies: append(append([]models.Anomaly{}, historical...), retryCluster...), breaker: resolvedBoundary, tasks: chain,
+			wantPattern: "retry_cluster", wantResponse: models.CircuitBreakerResponseHalt, wantConsidered: len(historical) + len(retryCluster)},
+		{name: "provider halt keeps priority over blocked chain", anomalies: fresh, tasks: chain, setup: degradedCodex,
+			wantPattern: "provider_audit_degradation", wantResponse: models.CircuitBreakerResponseHalt, wantConsidered: 2},
+		{name: "provider warning is reported when no task halt matches", anomalies: historical, breaker: resolvedBoundary,
+			wantPattern: "provider_audit_degradation", wantResponse: models.CircuitBreakerResponseWarning, wantConsidered: 2},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			// GIVEN
+			state := &models.State{Anomalies: tt.anomalies, CircuitBreaker: tt.breaker, Tasks: tt.tasks}
+			if tt.setup != nil {
+				tt.setup(state)
+			}
+
+			// WHEN
+			result, considered, suppressedCount := DetectUnacknowledgedPatterns(state)
+
+			// THEN
+			if result.Pattern != tt.wantPattern || result.Response != tt.wantResponse {
+				t.Fatalf("result = {pattern:%q response:%q class:%q}, want {%q %q}", result.Pattern, result.Response, result.Classification, tt.wantPattern, tt.wantResponse)
+			}
+			if wantTriggered := tt.wantResponse == models.CircuitBreakerResponseHalt; result.Triggered != wantTriggered {
+				t.Errorf("Triggered = %v, want %v", result.Triggered, wantTriggered)
+			}
+			if len(considered) != tt.wantConsidered || suppressedCount != 0 {
+				t.Errorf("considered = %d, suppressed = %d, want %d and 0", len(considered), suppressedCount, tt.wantConsidered)
+			}
+			if tt.wantPattern == models.BlockedReplacementChainPattern &&
+				(result.Subject == nil || result.Subject.TaskID != "c" || !result.Subject.BlockedAt.Equal(blockedAt)) {
+				t.Errorf("subject = %+v, want c at %s", result.Subject, blockedAt)
+			}
+		})
+	}
+}

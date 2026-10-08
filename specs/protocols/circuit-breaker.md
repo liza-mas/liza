@@ -206,6 +206,13 @@ with `resume` releases one further replacement of exactly that task and blocked
 episode. Other capped chains, and later blocks, stay capped, and the next one
 is reported on the following check.
 
+Detection reports one candidate, selected in this order: generic anomaly
+patterns (all `HALT`), a provider-audit `HALT`, `planning_review_churn`,
+`blocked_replacement_chain`, then a provider-audit `WARNING` or `CHECKPOINT`.
+A non-`HALT` provider result never hides a `HALT` candidate; otherwise
+acknowledged provider evidence would leave a capped chain without the response
+whose resolution releases it.
+
 ### Pattern Matching Functions
 
 The pattern conditions use pseudo-functions for matching:

@@ -192,3 +192,74 @@ func TestBlockedReplacementChain_ReleaseCoversOnlyReportedEpisode(t *testing.T) 
 		analyzeReports(t, f, "one-c")
 	})
 }
+
+func (f *blockedChainFixture) addProviderAuditEvidence(at time.Time) {
+	f.modify(func(s *models.State) {
+		for i, agentID := range []string{"coder-1", "coder-2"} {
+			s.Anomalies = append(s.Anomalies, models.Anomaly{
+				Timestamp: at.Add(time.Duration(i) * time.Second), Reporter: agentID, Type: "provider_audit_degraded",
+				Details: map[string]any{"provider": "codex", "agent_id": agentID, "message": "failed to record rollout items"},
+			})
+		}
+	})
+}
+
+// D-86 regression: provider-audit evidence that selects WARNING or CHECKPOINT
+// must not hide a capped chain, so analyze then resume still releases exactly
+// the reported episode.
+func TestBlockedReplacementChain_ProviderAuditDoesNotMaskRelease(t *testing.T) {
+	t.Run("acknowledged provider evidence", func(t *testing.T) {
+		f := newBlockedChainFixture(t)
+		boundary := f.clock
+		resolvedAt := boundary.Add(30 * time.Second)
+		pattern := "provider_audit_degradation"
+		f.addProviderAuditEvidence(boundary.Add(-2 * time.Minute))
+		f.modify(func(s *models.State) {
+			s.CircuitBreaker.Status = "OK"
+			s.CircuitBreaker.History = append(s.CircuitBreaker.History, models.CircuitBreakerHistory{
+				Timestamp: boundary, Pattern: &pattern, Result: "CHECKPOINT", Response: models.CircuitBreakerResponseCheckpoint,
+				Classification: models.CircuitBreakerEvidenceNew, ResolvedAt: &resolvedAt,
+			})
+		})
+		f.cappedChain("one", "one-c")
+		f.cappedChain("two", "two-c")
+
+		analyzeReports(t, f, "one-c")
+		if mode := f.read().Config.Mode; mode != models.SystemModeCircuitBreakerTripped {
+			t.Fatalf("mode = %s, want %s", mode, models.SystemModeCircuitBreakerTripped)
+		}
+		resume(t, f)
+
+		if err := f.supersede("one-c", "one-d"); err != nil {
+			t.Fatalf("released replacement refused: %v", err)
+		}
+		requireCapRefusal(t, f.supersede("two-c", "two-d"), f, "two-c")
+		analyzeReports(t, f, "two-c")
+	})
+
+	t.Run("active provider checkpoint is superseded by the chain halt", func(t *testing.T) {
+		f := newBlockedChainFixture(t)
+		f.addProviderAuditEvidence(f.clock)
+		checkpoint, err := ops.Analyze(f.root)
+		if err != nil || checkpoint.Pattern != "provider_audit_degradation" || checkpoint.Response != models.CircuitBreakerResponseCheckpoint {
+			t.Fatalf("Analyze() = %+v, %v; want provider CHECKPOINT", checkpoint, err)
+		}
+		f.cappedChain("one", "one-c")
+
+		analyzeReports(t, f, "one-c")
+		superseded := false
+		for _, entry := range f.read().CircuitBreaker.History {
+			if entry.Pattern != nil && *entry.Pattern == "provider_audit_degradation" && entry.Response == models.CircuitBreakerResponseCheckpoint {
+				superseded = entry.SupersededByResponse == models.CircuitBreakerResponseHalt && entry.ResolvedAt == nil
+			}
+		}
+		if !superseded {
+			t.Fatalf("provider checkpoint history = %+v, want it superseded by HALT and unresolved", f.read().CircuitBreaker.History)
+		}
+		resume(t, f)
+
+		if err := f.supersede("one-c", "one-d"); err != nil {
+			t.Fatalf("released replacement refused: %v", err)
+		}
+	})
+}

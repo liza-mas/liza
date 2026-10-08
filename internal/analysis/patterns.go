@@ -62,6 +62,11 @@ func detectPatterns(anomalies []models.Anomaly, includeProviderAudit bool) Patte
 // Legacy cleared triggers remain generic acknowledgement boundaries. A provider
 // response boundary applies only to provider-audit classification and only after
 // the active response is resolved.
+//
+// Selection order: generic anomaly HALTs, provider-audit HALT, task-scoped
+// HALTs (planning churn, then blocked replacement chain), then a provider
+// WARNING or CHECKPOINT. A non-HALT provider result never hides a task HALT:
+// the blocked-recovery cap is released only by resolving its HALT (ADR-0171).
 func DetectUnacknowledgedPatterns(state *models.State) (PatternResult, []models.Anomaly, int) {
 	if state == nil {
 		return DetectPatterns(nil), nil, 0
@@ -73,8 +78,9 @@ func DetectUnacknowledgedPatterns(state *models.State) (PatternResult, []models.
 	}
 
 	watermark, hasWatermark := latestResolvedResponseWatermark(state)
-	if result, evidence := checkProviderAuditEvidence(state, watermark, hasWatermark); result.Pattern != "" {
-		return result, evidence, suppressedCount
+	provider, providerEvidence := checkProviderAuditEvidence(state, watermark, hasWatermark)
+	if provider.Response == models.CircuitBreakerResponseHalt {
+		return provider, providerEvidence, suppressedCount
 	}
 
 	result := checkPlanningReviewChurn(state)
@@ -83,6 +89,10 @@ func DetectUnacknowledgedPatterns(state *models.State) (PatternResult, []models.
 	}
 	if result.Pattern != "" {
 		result.Response = models.CircuitBreakerResponseHalt
+		return result, considered, suppressedCount
+	}
+	if provider.Pattern != "" {
+		return provider, providerEvidence, suppressedCount
 	}
 	return result, considered, suppressedCount
 }
