@@ -288,6 +288,88 @@ func TestRetargetDependency_MergedPlanRepairKeepsHold(t *testing.T) {
 	}
 }
 
+// D-77 shape (I-525): the reviewed output names the successor's child, never
+// the successor itself, so it was written after the successor's hand-off.
+// depends_on keeps the replanned upstream, alone or beside the successor.
+func TestRetargetDependency_RepairsMergedPlanNamingSuccessorChildren(t *testing.T) {
+	t.Parallel()
+	for name, deps := range map[string][]string{
+		"stale edge only":             {"a"},
+		"stale edge beside successor": {"a", "a-replan-1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			successor, successorChild := transitionedLineagePlan("a-replan-1")
+			successor = lineageSuccessor(successor, "a")
+			stale := lineageSuccessor(lineagePlan("b-replan-1", deps...), "b")
+			stale.Output[0].TaskDependsOn = []string{successorChild.ID}
+			root, statePath, _ := setupProviderOpsTest(t,
+				replannedLineagePlan("a"), successor, successorChild,
+				replannedLineagePlan("b", "a"), stale,
+			)
+
+			_, err := RecordPlanCheck(root, PlanCheckInput{TaskID: stale.ID, Action: PlanCheckActionPass, Authority: orchestratorAuthority()})
+			testhelpers.RequireErrorContains(t, err, "retarget-dependency b-replan-1 a a-replan-1")
+
+			if _, err := RetargetDependency(root, stale.ID, "a", []string{successor.ID}, "repair stale replan lineage edge", "orchestrator-1"); err != nil {
+				t.Fatalf("lineage repair of a plan naming the successor's child refused: %v", err)
+			}
+			repaired := mustReadTask(t, statePath, stale.ID)
+			if !slices.Equal(repaired.DependsOn, []string{successor.ID}) {
+				t.Fatalf("depends_on = %v, want [%s]", repaired.DependsOn, successor.ID)
+			}
+			if !reflect.DeepEqual(repaired.Output, stale.Output) {
+				t.Fatalf("repair rewrote reviewed output: %+v, want %+v", repaired.Output, stale.Output)
+			}
+			if _, err := RecordPlanCheck(root, PlanCheckInput{TaskID: stale.ID, Action: PlanCheckActionPass, Authority: orchestratorAuthority()}); err != nil {
+				t.Fatalf("repaired plan still refused: %v", err)
+			}
+		})
+	}
+}
+
+// A child of the retired lineage is as stale as the replanned task itself,
+// even when the output also names the successor's child, or when that child
+// also has the replanned task as a parent.
+func TestRetargetDependency_RefusesOutputNamingRetiredLineageChild(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		mutate func(retiredChild, successorChild, stale *models.Task)
+		want   string
+	}{
+		"child of the replanned upstream beside the successor's child": {
+			mutate: func(retiredChild, successorChild, stale *models.Task) {
+				stale.Output[0].TaskDependsOn = []string{successorChild.ID, retiredChild.ID}
+			},
+			want: "output[0] still names a-cp-0",
+		},
+		"successor's child also parented by the replanned upstream": {
+			mutate: func(_, successorChild, stale *models.Task) {
+				successorChild.ParentTasks = []string{"a-replan-1", "a"}
+				stale.Output[0].TaskDependsOn = []string{successorChild.ID}
+			},
+			want: "output[0] still names a-replan-1-cp-0",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			successor, successorChild := transitionedLineagePlan("a-replan-1")
+			successor = lineageSuccessor(successor, "a")
+			retiredChild := providerOpsTask("a-cp-0", "code-planning-pair", models.TaskStatusDraftCodingPlan)
+			retiredChild.ParentTasks = []string{"a"}
+			stale := lineageSuccessor(lineagePlan("b-replan-1", "a"), "b")
+			tc.mutate(&retiredChild, &successorChild, &stale)
+			root, statePath, _ := setupProviderOpsTest(t,
+				replannedLineagePlan("a"), retiredChild, successor, successorChild,
+				replannedLineagePlan("b", "a"), stale,
+			)
+			before := replacementBytes(t, statePath)
+			_, err := RetargetDependency(root, stale.ID, "a", []string{successor.ID}, "repair stale replan lineage edge", "orchestrator-1")
+			requireProviderOpsAtomicRefusal(t, statePath, before, err, "terminal task b-replan-1", tc.want)
+		})
+	}
+}
+
 // An upstream whose successor was retired keeps the stale edge: its reconcile
 // signal must stay visible.
 func TestReplan_KeepsDependencyWithoutLiveSuccessor(t *testing.T) {

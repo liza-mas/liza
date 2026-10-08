@@ -318,7 +318,8 @@ func normalizeRetargetNewDependencies(values []string) ([]string, error) {
 // The edge moves only to that upstream's MERGED successor, and only when the
 // reviewed output already targets the successor and no longer names the
 // retired lineage — otherwise the plan predates the replan and must be
-// reconciled by replan, not by metadata. Plan-check state is left untouched.
+// reconciled by replan, not by metadata. Naming a direct child counts as
+// naming its parent plan (D-77). Plan-check state is left untouched.
 func mergedPlanLineageRepair(state *models.State, resolver *pipeline.Resolver, task *models.Task, oldDependency string, newDependencies []string) error {
 	if task.Status != models.TaskStatusMerged || !IsPlanningPair(task.RolePair, resolver.TransitionSourcePairs()) || len(task.Output) == 0 {
 		return fmt.Errorf("only a MERGED planning task with output can have a replan lineage edge repaired")
@@ -339,10 +340,24 @@ func mergedPlanLineageRepair(state *models.State, resolver *pipeline.Resolver, t
 	targetsSuccessor := false
 	for index, entry := range task.Output {
 		for _, ref := range outputDependencyReferences(entry) {
-			if ref == successor.ID {
+			// A reference targets itself and, for a generated child, each of
+			// its parents. A child exists only once its parent's hand-off ran,
+			// so naming the successor's child postdates the replan; every parent
+			// is checked first, since one may be the retired lineage.
+			referenced := []string{ref}
+			if refTask := state.FindTask(ref); refTask != nil {
+				referenced = append(referenced, refTask.EffectiveParentTasks()...)
+			}
+			for i, id := range referenced {
+				if lineage, ok := liveReplanSuccessor(state, id); ok && lineage.ID == successor.ID {
+					if i == 0 {
+						return fmt.Errorf("output[%d] still names %s, replanned into %s; replan the plan instead", index, ref, successor.ID)
+					}
+					return fmt.Errorf("output[%d] still names %s, a child of %s replanned into %s; replan the plan instead", index, ref, id, successor.ID)
+				}
+			}
+			if slices.Contains(referenced, successor.ID) {
 				targetsSuccessor = true
-			} else if lineage, ok := liveReplanSuccessor(state, ref); ok && lineage.ID == successor.ID {
-				return fmt.Errorf("output[%d] still names %s, replanned into %s; replan the plan instead", index, ref, successor.ID)
 			}
 		}
 	}

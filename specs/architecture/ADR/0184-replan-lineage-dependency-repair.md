@@ -53,6 +53,17 @@ nothing.
    ID and stays retired. Output indexes remain provider-scoped: a replanned
    provider is still refused.
 
+**Amended 2026-10-08: a direct child counts as its parent plan (decision 2).**
+A plan authored after its upstream's successor ran its hand-off may name only
+the successor's children (operator defect D-77). The repair refused it as
+predating the replan, which left a re-authoring cycle as the only route for
+reviewed content. An output reference now counts as naming the reference
+itself and each of its parents. Naming a direct child of the successor
+therefore targets the successor; a child exists only once that hand-off ran.
+A reference that is, or is a child of, a task of the retired lineage is
+refused, and every parent is checked before acceptance. Hand-off admission is
+unchanged (Alternative 1 still applies).
+
 ## Consequences
 
 - Stale edges are no longer minted by replan, and existing ones on MERGED plans
