@@ -25,16 +25,17 @@ const (
 // positions in a replacement. Retire live consumer declarations first. The
 // refusal names every holder, so all of them can be handled at once.
 //
-// Exceptions (ADR-0185, ADR-0186, ADR-0187, ADR-0188): an unexpanded plan's or
-// draft output holds neither the provider it names directly nor a selected
-// child retired permanently. That declaration goes stale; hand-off
-// classification then requires the plan's replan, and generation refuses it
+// Exceptions (ADR-0185 to ADR-0188, ADR-0190): an unexpanded plan's output,
+// draft output and an unstarted consumer's task-level declaration hold neither
+// the provider they name directly, however retired, nor a selected child
+// retired permanently. That declaration goes stale; hand-off classification
+// then requires the plan's replan, and generation refuses it
 // (staleProviderReference); a draft is refused authoring, submission and
-// approval until re-authored (staleOutputDeclaration). An unstarted consumer's
-// task-level declaration holds nothing retired permanently either.
-// routeStaleProviderConsumers then sends the consumers to re-authoring. A child
-// retired by replan still holds: lineage would silently resolve the slot to
-// the successor, hiding the staleness.
+// approval until re-authored (staleOutputDeclaration).
+// routeStaleProviderConsumers then sends the consumers to re-authoring. A
+// direct declaration never follows replan lineage, but a child retired by
+// replan still holds: lineage would silently resolve the slot to the
+// successor, hiding the staleness.
 func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.Resolver, targetID string, retirement providerRetirement) error {
 	permanent := retirement == retirePermanently
 	holds := func(deps []models.ProviderDependency, released func(direct bool) bool) bool {
@@ -49,8 +50,8 @@ func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.
 		if task.ID == targetID {
 			continue
 		}
-		if !task.Status.IsTerminal() && holds(task.ProviderDependencies, func(bool) bool {
-			return permanent && unstartedProviderConsumer(task, resolver)
+		if !task.Status.IsTerminal() && holds(task.ProviderDependencies, func(direct bool) bool {
+			return (direct || permanent) && unstartedProviderConsumer(task, resolver)
 		}) {
 			holders = append(holders, task.ID)
 		}
@@ -112,8 +113,8 @@ func staleDeclaration(dep models.ProviderDependency, targetID string, direct boo
 //     it even without an ordinary edge on targetID (ADR-0188). Every other
 //     draft owner meets the set-task-output, submission or approval refusal on
 //     its own path.
-//   - On permanent retirement, unstarted task-level consumers are blocked
-//     (blockStaleProviderConsumers, ADR-0187).
+//   - Unstarted task-level consumers are blocked (blockStaleProviderConsumers,
+//     ADR-0187, ADR-0190).
 func routeStaleProviderConsumers(state *models.State, resolver *pipeline.Resolver, targetID string, retirement providerRetirement, actor string, now time.Time) error {
 	permanent := retirement == retirePermanently
 	for i := range state.Tasks {
@@ -151,10 +152,7 @@ func routeStaleProviderConsumers(state *models.State, resolver *pipeline.Resolve
 			Extra:  map[string]any{"provider_retirement": targetID, "output_indexes": indexes},
 		})
 	}
-	if !permanent {
-		return nil
-	}
-	return blockStaleProviderConsumers(state, resolver, targetID, actor, now)
+	return blockStaleProviderConsumers(state, resolver, targetID, permanent, actor, now)
 }
 
 // staleOutputDeclaration names the first declaration in output that names a
@@ -182,11 +180,12 @@ func rejectStaleDraftOutput(state *models.State, resolver *pipeline.Resolver, ta
 }
 
 // blockStaleProviderConsumers blocks each unstarted consumer in its initial
-// status whose task-level declaration names targetID, which is being retired
-// permanently, so the orchestrator is woken to re-author it (ADR-0187). An
-// already BLOCKED one is in triage already, and unblocking it is refused while
-// the declaration is stale.
-func blockStaleProviderConsumers(state *models.State, resolver *pipeline.Resolver, targetID, actor string, now time.Time) error {
+// status whose task-level declaration names targetID, which is being retired,
+// directly or (permanent retirement only) as a selected child, so the
+// orchestrator is woken to re-author it (ADR-0187, ADR-0190). An already
+// BLOCKED one is in triage already, and unblocking it is refused while the
+// declaration is stale.
+func blockStaleProviderConsumers(state *models.State, resolver *pipeline.Resolver, targetID string, permanent bool, actor string, now time.Time) error {
 	transitions := BuildPipelineTransitions(resolver)
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
@@ -196,7 +195,7 @@ func blockStaleProviderConsumers(state *models.State, resolver *pipeline.Resolve
 		index := -1
 		var reason string
 		for position, dep := range task.ProviderDependencies {
-			if direct, named := declaresProvider(state, resolver, dep, targetID); named {
+			if direct, named := declaresProvider(state, resolver, dep, targetID); named && (direct || permanent) {
 				index = position
 				reason = fmt.Sprintf("provider_dependencies[%d] declares %s", position, staleDeclaration(dep, targetID, direct))
 				break

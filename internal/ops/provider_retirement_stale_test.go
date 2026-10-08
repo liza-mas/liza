@@ -389,9 +389,12 @@ func TestStaleProviderExceptionKeepsOtherDeclarationsLive(t *testing.T) {
 			retire: cancelProvider, holder: "consumer",
 		},
 		{
-			name: "unstarted draft whose provider is replanned",
+			// D-72: an unstarted draft releases a directly declared provider's
+			// replan (TestStaleTaskLevelDeclarationOnUnstartedDraft…); a started
+			// one still holds it.
+			name: "task-level declaration of a started draft whose provider is replanned",
 			tasks: func() []models.Task {
-				return []models.Task{mergedProviderPlan(), unstartedDraftConsumer("provider")}
+				return []models.Task{mergedProviderPlan(), claimedOnce(unstartedDraftConsumer("provider"))}
 			},
 			retire: func(root string) error {
 				_, err := Replan(root, &ReplanInput{TaskID: "provider", ChangedBy: "human"})
@@ -750,10 +753,22 @@ func staleDraftRetirements() []staleDraftRetirement {
 				return err
 			},
 		},
+		{
+			// D-72: a direct declaration never follows replan lineage, so it is
+			// as stale after a replan as after a permanent retirement.
+			name: "replan the declared provider", retired: "provider",
+			tasks: func() []models.Task {
+				return append([]models.Task{mergedProviderPlan()}, generatedDraftConsumer("provider")...)
+			},
+			retire: func(root string) error {
+				_, err := Replan(root, &ReplanInput{TaskID: "provider", ChangedBy: "human"})
+				return err
+			},
+		},
 	}
 }
 
-func TestStaleTaskLevelDeclarationOnUnstartedDraftDoesNotBlockPermanentRetirement(t *testing.T) {
+func TestStaleTaskLevelDeclarationOnUnstartedDraftDoesNotBlockRetirement(t *testing.T) {
 	for _, scenario := range staleDraftRetirements() {
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
@@ -761,9 +776,10 @@ func TestStaleTaskLevelDeclarationOnUnstartedDraftDoesNotBlockPermanentRetiremen
 			root, statePath, _ := setupProviderOpsTest(t, scenario.tasks()...)
 			declared := mustReadTask(t, statePath, "reader-cp-0").ProviderDependencies
 
-			// WHEN the provider or its selected child is retired permanently
+			// WHEN the provider or its selected child is retired permanently, or
+			// the provider it names directly is replanned
 			if err := scenario.retire(root); err != nil {
-				t.Fatalf("unstarted draft blocked the permanent retirement: %v", err)
+				t.Fatalf("unstarted draft blocked the retirement: %v", err)
 			}
 
 			// THEN the retirement persisted and the declaration is kept for audit
@@ -801,6 +817,8 @@ func TestStaleTaskLevelDeclarationOnUnstartedDraftDoesNotBlockPermanentRetiremen
 			before := replacementBytes(t, statePath)
 			_, err = UnblockTask(root, "reader-cp-0", "", "provider replaced", "orchestrator-1")
 			requireProviderOpsAtomicRefusal(t, statePath, before, err, "invalid dependency", scenario.retired)
+			_, err = ClaimTask(root, "reader-cp-0", "code-planner-1")
+			requireProviderOpsAtomicRefusal(t, statePath, before, err)
 		})
 	}
 }

@@ -250,8 +250,9 @@ func OutputMayGoStale(state *State, task *Task, pr PipelineResolver) bool {
 // UnstartedProviderConsumer reports a task nobody has worked on: in its role
 // pair's initial status or BLOCKED, never claimed, with no assignee, lease,
 // worktree or pending hand-off. Its task-level declarations consume nothing
-// yet, so a provider retired permanently under them leaves the task stale
-// rather than the state invalid (ADR-0187).
+// yet, so a provider they name directly retired, or a selected child retired
+// permanently, leaves the task stale rather than the state invalid (ADR-0187,
+// ADR-0190).
 func UnstartedProviderConsumer(task *Task, pr PipelineResolver) bool {
 	if task == nil || pr == nil || (task.AssignedTo != nil && *task.AssignedTo != "") || task.LeaseExpires != nil ||
 		(task.Worktree != nil && *task.Worktree != "") || task.HandoffPending {

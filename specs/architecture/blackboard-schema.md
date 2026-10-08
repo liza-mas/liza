@@ -963,8 +963,10 @@ hand-off and is refused by generation until the plan is replanned
 [ADR-0186](ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md)).
 Likewise an unstarted consumer's task-level declaration (initial or BLOCKED,
 never claimed, no assignee, lease, worktree or pending hand-off); the
-retirement blocks that consumer for re-authoring
-([ADR-0187](ADR/0187-stale-provider-declarations-on-unstarted-consumers.md)).
+retirement, or the replan of a directly named provider, blocks that consumer
+for re-authoring
+([ADR-0187](ADR/0187-stale-provider-declarations-on-unstarted-consumers.md),
+[ADR-0190](ADR/0190-replanned-providers-release-unstarted-direct-declarations.md)).
 Likewise draft output (owner not MERGED and not in its approved status); the
 consumer re-authors it in place, since authoring, submission and approval
 refuse the stale declaration

@@ -91,9 +91,10 @@ but retained: plan-check refuses to pass
 the plan (or reports it as needing reconciliation once passed), every hand-off
 refuses the entry, and `replan` warns. Replan the plan to re-author it.
 
-Exception (ADR-0187): the task-level declaration of an unstarted consumer
-(initial status or BLOCKED, never claimed, no assignee, lease, worktree or
-pending hand-off) does not hold them either. The retirement blocks the consumer,
+Exception (ADR-0187, ADR-0190): the task-level declaration of an unstarted
+consumer (initial status or BLOCKED, never claimed, no assignee, lease, worktree
+or pending hand-off) does not hold them either. The retirement, or the replan of
+a directly named provider, blocks the consumer,
 naming the declaration; replace or cancel it. Unblock, claim and `replan`
 refuse to carry the stale declaration forward. A refused retirement names
 every holder.
@@ -121,8 +122,9 @@ See [Provider Dependencies](../architecture/blackboard-schema.md#provider-depend
 [ADR-0184](../architecture/ADR/0184-replan-lineage-dependency-repair.md),
 [ADR-0185](../architecture/ADR/0185-stale-provider-declarations-on-unexpanded-plans.md),
 [ADR-0186](../architecture/ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md),
-[ADR-0187](../architecture/ADR/0187-stale-provider-declarations-on-unstarted-consumers.md) and
-[ADR-0188](../architecture/ADR/0188-stale-provider-declarations-in-draft-output.md).
+[ADR-0187](../architecture/ADR/0187-stale-provider-declarations-on-unstarted-consumers.md),
+[ADR-0188](../architecture/ADR/0188-stale-provider-declarations-in-draft-output.md) and
+[ADR-0190](../architecture/ADR/0190-replanned-providers-release-unstarted-direct-declarations.md).
 
 ## Iteration Protocol
 
