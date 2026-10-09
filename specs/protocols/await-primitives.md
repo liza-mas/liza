@@ -42,6 +42,30 @@ text wrapped around identical code, because no document described the mechanism.
 
 ---
 
+## Periodic check policy
+
+Both operations use the shared waiting-layer policy in `internal/ops/await_policy.go`.
+`config.await_poll_interval` is seconds, defaulting to 10 when absent or zero.
+The same value drives periodic checks while a watcher is active and polling
+fallback when the watcher fails. Positive per-call options override either
+interval independently, allowing short deterministic test waits. Invalid
+negative or overflowing project values fail before ownership acquisition with
+a named configuration error and repair command; operator writes require positive
+values. Existing read and ownership contracts remain intact.
+
+The interval is captured from the entry state of each invocation, including
+each new foreground slice. Running calls keep it. Notifications trigger checks
+immediately; a missed notification or event-triggered cached read that lags the
+write can defer detection to a later check. The reviewer's periodic fresh read
+backs up stale event observations; the doer's existing mtime-cache behavior is
+unchanged. Liveness can change independently of state.yaml, so periodic checks
+remain necessary. Processing time adds to detection latency.
+
+Cancellation and absolute deadline timers stay independent. If the configured
+interval is at least the foreground slice duration, there may be no tick before
+slice expiry; the next invocation performs a new entry read. The setting does
+not control the `POLL` slice length or the total history-anchored wait budget.
+
 ## Budget mechanics
 
 `--timeout-seconds` is the **total** wait allowance, not a wait duration and not a

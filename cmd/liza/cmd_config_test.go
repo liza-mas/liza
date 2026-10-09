@@ -246,6 +246,51 @@ func TestConfigPoolKeys(t *testing.T) {
 	}
 }
 
+func TestConfigAwaitPollInterval(t *testing.T) {
+	root, statePath := setupMutationTestProject(t, nil)
+	run := func(args ...string) (string, error) {
+		t.Helper()
+		return executeRootCommandCapture(t, root, append([]string{"config"}, args...)...)
+	}
+	key := ops.AwaitPollIntervalConfigKey
+	stdout, err := run("set", key, "12", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true {
+		t.Fatalf("first set failed: %v %s", err, stdout)
+	}
+	stdout, err = run("get", key, "--json")
+	if err != nil || parseEnvelope(t, stdout)["result"] != float64(12) {
+		t.Fatalf("get stored interval = %s (%v), want 12", stdout, err)
+	}
+	stdout, err = run("set", key, "12", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true {
+		t.Fatalf("identical write failed: %v %s", err, stdout)
+	}
+	stdout, err = run("set", key, "20", "--json")
+	if err == nil {
+		t.Fatal("unguarded replacement accepted")
+	}
+	assertJSONError(t, stdout, "validation", "already set to 12", "--replace")
+	for _, value := range []string{"0", "-1", "ten", "9223372036854775807"} {
+		stdout, err = run("set", "--replace", "--reason", "invalid interval", "--json", "--", key, value)
+		if err == nil {
+			t.Fatalf("invalid interval %s accepted: %s", value, stdout)
+		}
+		assertJSONError(t, stdout, "validation", key)
+		if got := readState(t, statePath).Config.AwaitPollInterval; got != 12 {
+			t.Fatalf("refused write stored interval %d, want 12", got)
+		}
+	}
+	stdout, err = run("set", key, "20", "--agent-id", "orchestrator-1", "--replace", "--reason", "agent", "--json")
+	if err == nil {
+		t.Fatal("agent changed await cadence")
+	}
+	assertJSONError(t, stdout, "validation", "operator-only")
+	stdout, err = run("set", key, "20", "--replace", "--reason", "less frequent checks", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true || readState(t, statePath).Config.AwaitPollInterval != 20 {
+		t.Fatalf("operator replacement failed: %v %s", err, stdout)
+	}
+}
+
 func TestConfigRuntimeInputRegistry(t *testing.T) {
 	root, statePath := setupMutationTestProject(t, nil)
 	run := func(args ...string) (string, error) {

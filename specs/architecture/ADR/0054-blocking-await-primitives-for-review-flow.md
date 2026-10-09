@@ -133,3 +133,22 @@ resume capability or lifecycle-validation relaxation is introduced.
 
 ---
 *Reconstructed from commits 3f49344..ce6469a (2026-03-30 to 2026-03-31)*
+
+## Amendment (2026-10-09): shared periodic check policy
+
+Both awaits resolve `config.await_poll_interval` once at invocation entry through
+one waiting-layer policy. Seconds default to 10 when omitted or zero, replacing
+the separate 1-second periodic and 5-second fallback defaults. Positive explicit
+options override either interval independently for tests. Operator configuration
+requires positive representable seconds; invalid persisted values fail with a
+named precondition error before ownership acquisition rather than overflowing a
+ticker duration or hiding a malformed setting.
+
+Notifications continue to trigger immediate checks. Missed events or cached
+observations lagging a write can defer detection to a later check; the reviewer's
+fresh periodic backstop now uses the configured cadence. The doer's existing
+mtime-cache behavior is unchanged. Existing calls keep their captured interval;
+changes apply to the next foreground slice/invocation. An interval longer than a
+slice need not tick before that slice ends. Cancellation, absolute deadlines,
+history-anchored budgets, foreground `POLL` caps and ownership fences remain
+independent. No state-read, archival or observation-API change is included.

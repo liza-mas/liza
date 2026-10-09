@@ -134,8 +134,30 @@ func poolConfigField(config *models.Config, key string) (*int, int, bool) {
 // a different set value requires --replace with --reason. Zero means unset.
 // Running supervisors keep the wait they read at start.
 func SetPoolConfig(projectRoot string, input SetPoolConfigInput) (*ConfigSetResult, error) {
+	return setIntegerConfig(projectRoot, input, poolConfigField)
+}
+
+// SetAwaitPollInterval stores the shared await interval on the operator path.
+// Existing awaits keep their entry value; the next invocation reads the change.
+func SetAwaitPollInterval(projectRoot string, value int, replace bool, reason string) (*ConfigSetResult, error) {
+	if value < 1 {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("%s must be at least 1", AwaitPollIntervalConfigKey)}
+	}
+	if _, err := awaitPollInterval(value); err != nil {
+		return nil, err
+	}
+	return setIntegerConfig(projectRoot, SetPoolConfigInput{
+		Key: AwaitPollIntervalConfigKey, Value: value, Replace: replace, Reason: reason,
+	}, func(config *models.Config, key string) (*int, int, bool) {
+		return &config.AwaitPollInterval, 1, key == AwaitPollIntervalConfigKey
+	})
+}
+
+// setIntegerConfig shares compare/write/audit semantics without widening the
+// supported keys of the existing pool configuration API.
+func setIntegerConfig(projectRoot string, input SetPoolConfigInput, fieldFor func(*models.Config, string) (*int, int, bool)) (*ConfigSetResult, error) {
 	var probe models.Config
-	if _, minimum, ok := poolConfigField(&probe, input.Key); !ok {
+	if _, minimum, ok := fieldFor(&probe, input.Key); !ok {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("unsupported agent-pool config key %q", input.Key)}
 	} else if input.Value < minimum {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("%s must be at least %d", input.Key, minimum)}
@@ -148,7 +170,7 @@ func SetPoolConfig(projectRoot string, input SetPoolConfigInput) (*ConfigSetResu
 	result := &ConfigSetResult{Key: input.Key}
 	previous := 0
 	err := bb.Modify(func(state *models.State) error {
-		field, _, _ := poolConfigField(&state.Config, input.Key)
+		field, _, _ := fieldFor(&state.Config, input.Key)
 		previous = *field
 		switch {
 		case previous == input.Value:

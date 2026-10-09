@@ -54,13 +54,8 @@ var newAwaitResubmissionWatcher = func(bb *db.Blackboard) (awaitResubmissionWatc
 	return bb.WatchForChanges()
 }
 
-const (
-	defaultAwaitResubmissionAbortPollInterval    = time.Second
-	defaultAwaitResubmissionFallbackPollInterval = 5 * time.Second
-)
-
 // AwaitResubmissionOptions controls the periodic checks used while waiting.
-// The zero value preserves the production defaults.
+// The zero value uses the project's shared await polling policy.
 type AwaitResubmissionOptions struct {
 	AbortPollInterval    time.Duration
 	FallbackPollInterval time.Duration
@@ -69,10 +64,10 @@ type AwaitResubmissionOptions struct {
 	PollOnTimeout bool
 }
 
-func (opts AwaitResubmissionOptions) normalized() AwaitResubmissionOptions {
-	opts.AbortPollInterval = normalizedAwaitInterval(opts.AbortPollInterval, defaultAwaitResubmissionAbortPollInterval)
-	opts.FallbackPollInterval = normalizedAwaitInterval(opts.FallbackPollInterval, defaultAwaitResubmissionFallbackPollInterval)
-	return opts
+func (opts AwaitResubmissionOptions) normalized(config models.Config) (AwaitResubmissionOptions, error) {
+	var err error
+	opts.AbortPollInterval, opts.FallbackPollInterval, err = normalizeAwaitPolling(config, opts.AbortPollInterval, opts.FallbackPollInterval)
+	return opts, err
 }
 
 // AwaitResubmission blocks until a doer resubmits after a rejection.
@@ -100,7 +95,6 @@ func AwaitResubmissionWithAuthorityOptions(ctx context.Context, projectRoot, tas
 }
 
 func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agentID string, authority *models.AgentAuthority, timeout time.Duration, opts AwaitResubmissionOptions) (result *AwaitResubmissionResult, resultErr error) {
-	opts = opts.normalized()
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -113,6 +107,10 @@ func awaitResubmissionWithOptions(ctx context.Context, projectRoot, taskID, agen
 
 	// Read state and find task.
 	state, task, err := readTaskState(bb, taskID)
+	if err != nil {
+		return nil, err
+	}
+	opts, err = opts.normalized(state.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -757,7 +755,7 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 }
 
 // awaitResubmissionPolling is the polling fallback for when fsnotify is unavailable.
-// It checks state every 5 seconds until a resubmission arrives or the deadline expires.
+// It checks state at the resolved interval until a resubmission or the deadline.
 func awaitResubmissionPolling(ctx context.Context, projectRoot string, bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, reservation *reviewReservation, deadline time.Time, taskStatus models.TaskStatus, resolver *pipeline.Resolver, rolePair string, pollInterval time.Duration, pollOnTimeout bool) (*AwaitResubmissionResult, error) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()

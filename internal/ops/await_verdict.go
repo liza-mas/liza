@@ -61,22 +61,17 @@ var newAwaitVerdictWatcher = func(bb *db.Blackboard) (awaitVerdictWatcher, error
 	return bb.WatchForChanges()
 }
 
-const (
-	defaultAwaitVerdictAbortPollInterval    = time.Second
-	defaultAwaitVerdictFallbackPollInterval = 5 * time.Second
-)
-
 // AwaitVerdictOptions controls the periodic checks used while waiting. The
-// zero value preserves the production defaults.
+// zero value uses the project's shared await polling policy.
 type AwaitVerdictOptions struct {
 	AbortPollInterval    time.Duration
 	FallbackPollInterval time.Duration
 }
 
-func (opts AwaitVerdictOptions) normalized() AwaitVerdictOptions {
-	opts.AbortPollInterval = normalizedAwaitInterval(opts.AbortPollInterval, defaultAwaitVerdictAbortPollInterval)
-	opts.FallbackPollInterval = normalizedAwaitInterval(opts.FallbackPollInterval, defaultAwaitVerdictFallbackPollInterval)
-	return opts
+func (opts AwaitVerdictOptions) normalized(config models.Config) (AwaitVerdictOptions, error) {
+	var err error
+	opts.AbortPollInterval, opts.FallbackPollInterval, err = normalizeAwaitPolling(config, opts.AbortPollInterval, opts.FallbackPollInterval)
+	return opts, err
 }
 
 var awaitVerdictNow = time.Now
@@ -108,7 +103,6 @@ func AwaitVerdictWithAuthorityOptions(ctx context.Context, projectRoot, taskID s
 }
 
 func awaitVerdictWithOptions(ctx context.Context, projectRoot, taskID, agentID string, authority *models.AgentAuthority, timeout time.Duration, opts AwaitVerdictOptions) (*AwaitVerdictResult, error) {
-	opts = opts.normalized()
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
@@ -121,6 +115,10 @@ func awaitVerdictWithOptions(ctx context.Context, projectRoot, taskID, agentID s
 
 	// Read state and find task.
 	state, task, err := readTaskState(bb, taskID)
+	if err != nil {
+		return nil, err
+	}
+	opts, err = opts.normalized(state.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -542,7 +540,7 @@ func handleVerdictResult(bb *db.Blackboard, task *models.Task, agentID string, a
 }
 
 // awaitVerdictPolling is the polling fallback for when fsnotify is unavailable.
-// It checks state every 5 seconds until a verdict arrives or the deadline expires.
+// It checks state at the resolved interval until a verdict or the deadline.
 func awaitVerdictPolling(ctx context.Context, bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, deadline time.Time, taskStatus models.TaskStatus, resolver *pipeline.Resolver, rolePair, projectRoot string, pollInterval time.Duration, submissionIndex int) (*AwaitVerdictResult, error) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -798,13 +796,6 @@ func cappedAwaitBudget(total time.Duration) time.Duration {
 		return 0
 	}
 	return min(total, DefaultAwaitBudget)
-}
-
-func normalizedAwaitInterval(interval, fallback time.Duration) time.Duration {
-	if interval <= 0 {
-		return fallback
-	}
-	return interval
 }
 
 // AwaitVerdictRemainingBudget reports how much of total is left for this wait,

@@ -20,7 +20,8 @@ var configCmd = &cobra.Command{
 	Short: "Read and update supported runtime configuration",
 	Long: fmt.Sprintf(`Read and update runtime configuration using the same dotted keys as %s.
 Supported keys: config.post_worktree_cmd, config.max_instances,
-config.doer_max_wait, config.reviewer_max_wait and config.runtime_input_registry.
+config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval
+and config.runtime_input_registry.
 The general state query remains available: %s config.post_worktree_cmd --json`, brand.Command("get"), brand.Command("get")),
 }
 
@@ -66,6 +67,12 @@ agent is refused):
 Replacing a different value needs --replace and --reason, as above. A changed
 wait applies to agents started afterwards; running ones keep theirs.
 
+config.await_poll_interval takes positive seconds (default 10 when unset)
+and is operator-only. It controls periodic checks and fallback polling for
+await-verdict and await-resubmission, not the foreground POLL slice or total
+wait budget. Notifications still trigger checks immediately. Changes apply
+at the next invocation (including the next foreground slice).
+
 config.runtime_input_registry is the repository-relative path of the
 runtime-input recipe registry, read at the integration commit. Operator-only.
 
@@ -91,7 +98,7 @@ Examples:
 			return setRuntimeInputRegistry(cmd, projectRoot, agentID, args, replace, reason)
 		}
 		if args[0] != ops.PostWorktreeConfigKey {
-			return setPoolConfig(cmd, projectRoot, agentID, args, replace, reason)
+			return setIntegerConfig(cmd, projectRoot, agentID, args, replace, reason)
 		}
 		input := ops.SetPostWorktreeCmdInput{Command: args[1], Replace: replace, Reason: reason}
 		if agentID != "" {
@@ -133,8 +140,8 @@ func configRun(run func(*cobra.Command, []string) error) func(*cobra.Command, []
 	}
 }
 
-// setPoolConfig writes an agent-pool key on the operator path only.
-func setPoolConfig(cmd *cobra.Command, projectRoot, agentID string, args []string, replace bool, reason string) error {
+// setIntegerConfig writes a supported integer key on the operator path only.
+func setIntegerConfig(cmd *cobra.Command, projectRoot, agentID string, args []string, replace bool, reason string) error {
 	if agentID != "" {
 		return cliValidationError(fmt.Sprintf("%s is operator-only; agent %s cannot set it", args[0], agentID))
 	}
@@ -142,7 +149,12 @@ func setPoolConfig(cmd *cobra.Command, projectRoot, agentID string, args []strin
 	if err != nil {
 		return cliValidationError(fmt.Sprintf("%s takes an integer value, got %q", args[0], args[1]))
 	}
-	result, err := ops.SetPoolConfig(projectRoot, ops.SetPoolConfigInput{Key: args[0], Value: value, Replace: replace, Reason: reason})
+	var result *ops.ConfigSetResult
+	if args[0] == ops.AwaitPollIntervalConfigKey {
+		result, err = ops.SetAwaitPollInterval(projectRoot, value, replace, reason)
+	} else {
+		result, err = ops.SetPoolConfig(projectRoot, ops.SetPoolConfigInput{Key: args[0], Value: value, Replace: replace, Reason: reason})
+	}
 	if isJSON(cmd) {
 		return jsonout.WriteResult(os.Stdout, result, nil, err)
 	}
@@ -172,7 +184,7 @@ func setRuntimeInputRegistry(cmd *cobra.Command, projectRoot, agentID string, ar
 
 func supportedConfigKeys() []string {
 	keys := append([]string{ops.PostWorktreeConfigKey}, ops.PoolConfigKeys...)
-	return append(keys, ops.RuntimeInputRegistryConfigKey)
+	return append(keys, ops.AwaitPollIntervalConfigKey, ops.RuntimeInputRegistryConfigKey)
 }
 
 func validateConfigArgs(args []string, count int) error {

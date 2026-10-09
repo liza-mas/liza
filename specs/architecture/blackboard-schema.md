@@ -1386,6 +1386,7 @@ config:
   orchestrator_max_wait: 18000  # Max seconds orchestrator waits for work
   reviewer_poll_interval: 30    # Seconds between reviewer work checks
   reviewer_max_wait: 600        # Max idle seconds before a reviewer supervisor exits the pool
+  await_poll_interval: 10       # Seconds between await periodic/fallback checks; omitted/zero uses 10; not the POLL slice
   exit42_restart_threshold: 5   # Consecutive exit-42 restarts without progress before BLOCKED (default: 5)
   exit42_max_backoff_seconds: 60 # Max backoff delay between exit-42 restarts (default: 60)
   default_cli: claude           # Optional global default agent CLI

@@ -91,6 +91,7 @@ const (
 	DefaultOrchestratorPollInterval        = 60
 	DefaultOrchestratorMaxWait             = 18000 // 5 hours
 	DefaultReviewerPollInterval            = 30
+	DefaultAwaitPollInterval               = 10
 	DefaultReviewerMaxWait                 = 600 // 10 minutes; idle reviewers leave the pool
 	DefaultExit42MaxBackoffSec             = 60
 	DefaultExit42RestartLimit              = 5
@@ -173,6 +174,10 @@ type Config struct {
 	HeartbeatInterval int `yaml:"heartbeat_interval"`
 	LeaseDuration     int `yaml:"lease_duration"`
 	CoderPollInterval int `yaml:"coder_poll_interval"`
+	// AwaitPollInterval controls periodic checks and fallback polling in both
+	// awaits, in seconds. Zero uses DefaultAwaitPollInterval; it is not the
+	// foreground POLL slice or total wait budget.
+	AwaitPollInterval int `yaml:"await_poll_interval,omitempty"`
 	DoerMaxWait       int `yaml:"doer_max_wait"`
 	// DeprecatedCoderMaxWait preserves read compatibility for state files that
 	// still use coder_max_wait. New state files should write doer_max_wait.

@@ -466,6 +466,7 @@ are loaded at runtime from the provider catalog.
 | `heartbeat_interval` | 60 | 1 | 300 | seconds | Heartbeat frequency |
 | `lease_duration` | 1800 | 300 | 7200 | seconds | Task lease duration |
 | `coder_poll_interval` | 30 | 5 | 120 | seconds | Check interval (legacy, now event-driven) |
+| `await_poll_interval` | 10 | 1 | duration limit | seconds | Shared periodic checks and fallback polling for `await-verdict` and `await-resubmission`; independent of foreground POLL slices and total wait budgets |
 | `doer_max_wait` | 600 | 300 | — | seconds | Max idle before doer-role supervisors exit and leave the pool |
 | `orchestrator_poll_interval` | 60 | — | — | seconds | Orchestrator polling interval |
 | `orchestrator_max_wait` | 18000 | — | — | seconds | Max orchestrator idle before exit |
@@ -493,6 +494,26 @@ preserved. Each value bounds the number of independent aggregate scans. If the
 current integration HEAD still lacks clean evidence after that many global
 generations, integration is blocked with a generation-exhausted result rather
 than reported as complete.
+
+`await_poll_interval` is read once at each await invocation, including each new
+foreground slice. An absent or zero stored value uses 10 seconds; `config get`
+reports the stored value, not the effective default. Negative values and values
+that overflow Go's duration representation are invalid. Operator writes require
+a positive integer:
+
+```bash
+§BRAND_BINARY_NAME§ config get config.await_poll_interval --json
+§BRAND_BINARY_NAME§ config set config.await_poll_interval 10
+§BRAND_BINARY_NAME§ config set config.await_poll_interval 20 --replace --reason "reduce periodic state reads"
+```
+
+Existing invocations keep their captured interval. Filesystem notifications
+still trigger checks immediately, while missed notifications or a cached read
+lagging a write can delay detection until a later check. The reviewer's fresh
+periodic read remains its cache-staleness backstop; the doer's mtime-based cache
+behavior is unchanged. Cancellation and absolute deadlines do not wait for a
+polling tick. This setting does not alter the foreground `POLL` slice length or
+the history-anchored total wait budget.
 
 ## Optional Tool Activation
 
