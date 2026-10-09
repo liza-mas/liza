@@ -4,6 +4,8 @@
 
 ACCEPTED. Extends [ADR-0181](0181-provider-output-dependencies.md) and
 [ADR-0193](0193-descendant-provider-dependencies.md).
+Amended by [ADR-0196](0196-plan-replacement-reservation-placement.md) for
+atomic plan-declared placement transfer.
 
 ## Context
 
@@ -31,7 +33,10 @@ order at claim time.
    reservation is unsatisfied. Replan and `replace-task` of the holder carry the
    reservation; superseding a holder requires every successor to hold the same
    one, checked when the supersession happens, so a later release on the
-   successor remains an explicit decision.
+   successor remains an explicit decision. A unique same-pair plan-generated
+   successor instead receives outgoing placement and the cap, and live incoming
+   reservations are explicitly retargeted before retirement, in the validated
+   candidate (ADR-0196); placed splits are refused.
 3. **Placed-writer invariant.** A provider held by an unsatisfied reservation
    is a placed writer. Every typed selection of its outputs needs its
    `max_outputs` cap and must select exactly `[0..max_outputs)`. Selections are
@@ -64,8 +69,8 @@ order at claim time.
 - A writer that has started cannot be placed, and that needs a human decision.
 - Placing a provider that is already selected by index needs a cap covering
   those selections. A cap cannot rise while such a selection exists.
-- A permanently replaced correction needs its successor reserved, or the
-  holder's reservation released, before the retirement is accepted.
+- Permanent retirement still refuses unresolved placement; a plan-declared
+  unique successor transfers it atomically under ADR-0196.
 
 ## Alternatives Considered
 

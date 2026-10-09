@@ -161,7 +161,20 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 				// Only pre-existing holders have reproducible input material.
 				// A holder created by this discarded candidate is a graph fault.
 				originalID := plan.Output[refusal.index].Supersedes
-				if prior := rejectReferencedProviderRetirement(s, resolver, originalID, retirePermanently); prior == nil || prior.Error() != refusal.Error() {
+				priorState := s
+				if len(result.replacements.children[originalID]) == 1 {
+					// Compare the remaining barrier after accounting for the
+					// reservations transferred in this candidate. Normalize only
+					// an observation copy; never release persisted placement.
+					priorState = db.CloneState(s)
+					for i := range priorState.Tasks {
+						holder := &priorState.Tasks[i]
+						holder.ProviderReservations = slices.DeleteFunc(holder.ProviderReservations, func(res models.ProviderReservation) bool {
+							return models.EffectiveReservationProvider(s, res.ProviderTask) == originalID
+						})
+					}
+				}
+				if prior := rejectReferencedProviderRetirement(priorState, resolver, originalID, retirePermanently); prior == nil || prior.Error() != refusal.Error() {
 					return discard(refusal.err)
 				}
 			}
@@ -188,21 +201,14 @@ func applyPlanReplacements(bb *db.Blackboard, s *models.State, planID string, re
 	}
 	pb := &pipelineBundle{pr: resolver, resolver: resolver, transitions: BuildPipelineTransitions(resolver)}
 	set := result.replacements
+	if err := transferPlanReplacementPlacement(s, planID, resolver, result, now); err != nil {
+		return err
+	}
 	for _, originalID := range set.originals {
 		children := set.children[originalID]
 		original := s.FindTask(originalID)
-		if original == nil {
-			return fmt.Errorf("output supersedes %s, which does not exist", originalID)
-		}
 		if retiredByChildren(original, children) {
 			continue
-		}
-		if result.recovering {
-			return fmt.Errorf("output supersedes %s (%s), but the transition already executed without retiring it; the state was edited by hand", originalID, original.Status)
-		}
-		child := s.FindTask(children[0])
-		if !replacementEligible(original, resolver) || child == nil || original.RolePair != child.RolePair {
-			return fmt.Errorf("output supersedes %s (%s, role pair %s), which cannot be retired by a %s replacement", originalID, original.Status, original.RolePair, rolePairOf(child))
 		}
 		if err := rejectReferencedProviderRetirement(s, resolver, originalID, retirePermanently); err != nil {
 			for index, entry := range s.FindTask(planID).Output {
@@ -227,6 +233,91 @@ func applyPlanReplacements(bb *db.Blackboard, s *models.State, planID string, re
 		}
 	}
 	recordPlanReplacements(s.FindTask(planID), set, result.RetiredTaskIDs)
+	return nil
+}
+
+// transferPlanReplacementPlacement prepares all writer placements before any
+// retirement (D-89). Retiring holders and their successors must see the same
+// targets, so the ordinary retirement and reservation-drop barriers still hold
+// when several originals replace one another in a writer chain. The caller's
+// candidate transaction owns rollback; previous targets remain in audit history.
+func transferPlanReplacementPlacement(s *models.State, planID string, resolver *pipeline.Resolver, result *ProceedResult, now time.Time) error {
+	set := result.replacements
+	successors := make(map[string]string, len(set.originals))
+	for _, id := range set.originals {
+		original := s.FindTask(id)
+		children := set.children[id]
+		if original == nil {
+			return fmt.Errorf("output supersedes %s, which does not exist", id)
+		}
+		if !retiredByChildren(original, children) {
+			if result.recovering {
+				return fmt.Errorf("output supersedes %s (%s), but the transition already executed without retiring it; the state was edited by hand", id, original.Status)
+			}
+			if !replacementEligible(original, resolver) {
+				return fmt.Errorf("output supersedes %s (%s, role pair %s), which cannot be retired by a %s replacement", id, original.Status, original.RolePair, rolePairOf(s.FindTask(children[0])))
+			}
+		}
+		for _, childID := range children {
+			child := s.FindTask(childID)
+			if child == nil || child.RolePair != original.RolePair || child.Supersedes == nil || *child.Supersedes != id || !slices.Equal(child.EffectiveParentTasks(), []string{planID}) {
+				return fmt.Errorf("output supersedes %s with child %s lacking same-pair transition provenance", id, childID)
+			}
+		}
+		if len(children) != 1 {
+			placed := len(original.ProviderReservations) > 0 || original.MaxOutputs > 0
+			for i := range s.Tasks {
+				holder := &s.Tasks[i]
+				placed = placed || !holder.Status.IsTerminal() && holdsUnsatisfiedReservation(s, resolver, holder, id)
+			}
+			if placed {
+				return &PreconditionError{Reason: fmt.Sprintf("cannot split placed provider %s: plan replacement must have one successor to preserve provider_reservations and max_outputs", id)}
+			}
+			continue
+		}
+		successors[id] = children[0]
+	}
+	// Copy before mapping any reservation: an original's outgoing placement may
+	// name another original, in either output order. Never reset surviving
+	// children on recovery: an operator may have released a wait or changed a cap.
+	for id, successorID := range successors {
+		if result.recovering && !slices.Contains(result.ChildTaskIDs, successorID) {
+			continue
+		}
+		original, child := s.FindTask(id), s.FindTask(successorID)
+		child.ProviderReservations = slices.Clone(original.ProviderReservations)
+		child.MaxOutputs = original.MaxOutputs
+	}
+	for i := range s.Tasks {
+		holder := &s.Tasks[i]
+		if holder.Status.IsTerminal() || result.recovering && !slices.Contains(result.ChildTaskIDs, holder.ID) {
+			continue
+		}
+		var reservations []models.ProviderReservation
+		changed := false
+		for _, res := range holder.ProviderReservations {
+			provider := models.EffectiveReservationProvider(s, res.ProviderTask)
+			if successorID, ok := successors[provider]; ok && !models.ResolveReservation(res, s, resolver).Satisfied() {
+				previous := res.ProviderTask
+				res.ProviderTask = successorID
+				changed = true
+				reason := fmt.Sprintf("preserved writer placement in plan %s", planID)
+				actor := planReplacementActor
+				holder.History = append(holder.History, models.TaskHistoryEntry{
+					Time: now, Event: models.TaskEventDependenciesRewritten, Agent: &actor, Reason: &reason,
+					Extra: map[string]any{"operation": "plan-declared-replacement", "provider_reservation_retargeted": map[string]any{
+						"previous_provider_task": previous, "provider_task": successorID, "transition": res.Transition,
+					}, "rewrote_depends_on": false},
+				})
+			}
+			if !slices.Contains(reservations, res) {
+				reservations = append(reservations, res)
+			}
+		}
+		if changed {
+			holder.ProviderReservations = reservations
+		}
+	}
 	return nil
 }
 

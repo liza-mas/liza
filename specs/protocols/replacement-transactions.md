@@ -251,6 +251,25 @@ in the transition pass's failures; other transitions in the pass still commit.
 Kind deduplication ignores the named originals, so a replacement is generated
 rather than remapped onto the task it retires.
 
+Writer placement transfers before any retirement
+([ADR-0196](../architecture/ADR/0196-plan-replacement-reservation-placement.md)).
+A unique same-pair child inherits the original's `provider_reservations` and
+`max_outputs`, retaining the generating plan as its parent. Live unsatisfied
+incoming reservations resolve replan/replace-task aliases and retarget to that
+child. This includes other retiring originals and their fresh successors; all
+must see the same mapping before the ordinary retirement barriers run.
+Duplicate reservation keys collapse. Each retarget records
+`dependencies_rewritten`, operation `plan-declared-replacement`, actor `system`,
+and `provider_reservation_retargeted: {previous_provider_task, provider_task,
+transition}`, with `rewrote_depends_on: false`. Terminal originals retain the
+transaction-final reservation and its prior value in history.
+
+An original with incoming unsatisfied placement, outgoing reservations, or a
+nonzero cap cannot be split. Ordinary unplaced splits remain legal. Typed
+positional provider/descendant declarations keep their existing retirement
+barriers; they are never transferred by this operation. A failure discards
+placement, cap and history changes with the rest of the candidate.
+
 Eligibility is `replace-task`'s source rule: role-pair initial or rejected,
 `BLOCKED`, or `INTEGRATION_FAILED`, in the child's role pair. It is judged
 three times:
@@ -277,6 +296,11 @@ rules under the lock. A legacy output without `changed` whose original is now
 Crash recovery recreates missing children with their `supersedes` and leaves an
 original already retired by those children alone. A live original under an
 executed marker can only come from a hand-edited state and is refused.
+Only children recreated during recovery inherit placement again; surviving
+children keep later authorized releases and cap changes. Completed replay adds
+no placement history. Provider-retirement failure fingerprints include the
+placement-policy version, so pre-fix refusals can retry under the corrected
+semantics while unchanged new-policy refusals remain suppressed.
 
 A replacing output's inherited phase-gate dependencies exclude the originals
 being retired: a corrective plan usually depends on the plan whose children it
