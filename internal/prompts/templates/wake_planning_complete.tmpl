@@ -4,6 +4,19 @@ Planning tasks have been merged with output[]. You own their hand-off: automatic
 You have FULL autonomy to run CLI commands immediately; do not wait for permission.
 
 --- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
+{{- if .Amendments}}
+
+COMPLETE PENDING AMENDMENTS FIRST (generation remains fenced):
+{{- range .Amendments}}
+- {{.TaskID}}: pending {{.CorrectionID}} is {{.CorrectionStatus}}.
+{{- if eq .CorrectionStatus "MERGED"}}
+  Run {{binaryName}} amend-plan {{.TaskID}} --apply {{.CorrectionID}} --agent-id {{$.AgentID}} --json. If admission refuses because reviewed inputs drifted, obtain fresh review with {{binaryName}} amend-plan {{.TaskID}} --replace-pending {{.CorrectionID}} --reason "<evidence and correction>" --agent-id {{$.AgentID}} --json.
+{{- else}}
+  Recover the canceled review with {{binaryName}} amend-plan {{.TaskID}} --replace-pending {{.CorrectionID}} --reason "<evidence and correction>" --agent-id {{$.AgentID}} --json.
+{{- end}}
+{{- end}}
+After apply, re-read the original and review its adopted output below. Preserve every human hold; apply never clears one. Starting fresh review disposes this wake without a checkpoint.
+{{- end}}
 {{- if .ToReview}}
 
 PLANS TO REVIEW:
@@ -15,19 +28,20 @@ REVIEW each plan's output[] entries against its plan file and the repository (re
 a. Each validation command runs its declared check: for a hook-runner command (e.g. `pre-commit run --files <paths>`), the paths match each intended hook's file filters in the project's hook config, so it does not report Skipped.
 b. Each behavior-changing coding child owns a test path matching a submission test-file pattern ({{testFilePatterns}}).
 c. Each plan_ref anchor names exactly one ATX heading in its plan file.
-d. Each validation_prerequisites entry and operator-provisioned input the plan names has a producer (a task, a committed generator, or an explicit human step); a human-produced input is present now. Each runtime_inputs recipe is in the registry; its instances are recorded after the children exist, so do not hold for them. A live input a validation command needs but the plan leaves in prose is a defect: replan it into runtime_inputs when `{{binaryName}} get config.runtime_input_registry` is set, otherwise hold naming the human step.
+d. Each validation_prerequisites entry and operator-provisioned input the plan names has a producer (a task, a committed generator, or an explicit human step); a human-produced input is present now. Each runtime_inputs recipe is in the registry; its instances are recorded after the children exist, so do not hold for them. A live input a validation command needs but the plan leaves in prose is material: use reviewed amend-plan or replan to declare runtime_inputs when `{{binaryName}} get config.runtime_input_registry` is set, otherwise hold naming the human step.
 
 e. Reconcile every Scope task/code-plan precondition with legal task_depends_on or explicit provider_dependencies (existing provider, configured per-subtask transition, selected outputs), including unborn children and cross-stage waits. Missing fields require reviewed reauthoring/replacement before restoring a legacy blocked consumer; merely unblocking against a merged architecture or APPROVED plan is insufficient. Check future production/inheritance cycles; runtime does not parse prose.
 
 DISPOSITION each plan:
-- Defect its planner can fix: {{binaryName}} replan <task-id> --reason "<check>: <evidence> → <required correction>" --changed-by {{.AgentID}}
+- Supplemental prerequisite/probe or hook-list guidance that leaves canonical acceptance, scope, contracts and ordering unchanged: {{binaryName}} plan-check <task-id> --pass --notes-file <file> --agent-id {{.AgentID}} --json. The file is a bounded JSON array [{"output_index":0,"message":"<guidance>"}]; select only affected children. Notes never excuse missing DB/venv/container producers, durable runtime_inputs or human provisioning.
+- Material planner correction preserving existing output identities: {{binaryName}} amend-plan <task-id> --reason "<check>: <evidence> → <required correction>" --agent-id {{.AgentID}} --json; let the correction pass ordinary planner/reviewer merge, then {{binaryName}} amend-plan <task-id> --apply <correction-id> --agent-id {{.AgentID}} --json. Re-review the original hand-off after apply. Outside that identity boundary: {{binaryName}} replan <task-id> --reason "<check>: <evidence> → <required correction>" --changed-by {{.AgentID}}; do not bypass live provider retirement refusals.
 - Needs a human action not yet done: {{binaryName}} plan-check <task-id> --hold "<exact human action>" --agent-id {{.AgentID}} --json
 - Otherwise: {{binaryName}} plan-check <task-id> --pass --agent-id {{.AgentID}} --json
-A plan whose upstream you replan or hold must be replanned (the reason names the upstream) or held too: act on every replan warning and pass refusal.
+A plan whose upstream you replan or hold needs a reviewed amendment, replan (the reason names the upstream), or hold too: act on every replan warning and pass refusal.
 {{- end}}
 {{- if .Reconcile}}
 
-PLANS TO RECONCILE (passed, then an upstream changed) — replan each (the reason names the upstream) or hold it for the upstream's human action:
+PLANS TO RECONCILE (passed, then an upstream changed) — amend/replan each (the reason names the upstream) or hold it for the upstream's human action:
 {{- range .Reconcile}}
 - {{.TaskID}}: {{.Blocker}}
 {{- end}}
@@ -43,15 +57,15 @@ READY — already passed or outside your review; do not re-review, checkpoint on
 THEN:
 1. Run: {{binaryName}} update-sprint-metrics --json
 2. If any plan is passed or ready: {{binaryName}} sprint-checkpoint --json
-   The checkpoint gates downstream task creation and generates a sprint summary. If every plan was replanned or held, do not checkpoint.
+   The checkpoint gates downstream task creation and generates a sprint summary. If every plan awaits amendment, was replanned or held, do not checkpoint.
 
 SUCCESS CRITERIA:
-- Every listed plan is passed, held or replanned; passed and ready plans are checkpointed.
+- Every listed plan is passed, held, replanned or awaiting reviewed amendment; passed and ready plans are checkpointed.
 
 {{template "delivery_report" .}}
 
 ❌ INCORRECT (DO NOT DO THIS):
-1. Create tasks or edit plan files — replan routes corrections to the planner.
+1. Create child tasks directly or edit merged plan files yourself — amend-plan/replan route material corrections to ordinary planner/reviewer review.
 2. Pass a plan whose checks you did not run, or a held plan; clearing a hold is operator-only.
 3. Exit with a listed plan undecided.
 {{- end -}}

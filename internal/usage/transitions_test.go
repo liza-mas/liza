@@ -49,6 +49,7 @@ func TestUsefulTransitionRule(t *testing.T) {
 		models.TaskEventReplacementCommitted,
 		models.TaskEventRejectionRCARecorded, models.TaskEventRejectionRCAResumed,
 		models.TaskEventHandoffInitiated,
+		models.TaskEventPlanAmendment,
 	}
 	notUseful := []string{
 		models.TaskEventOrchestratorAssessment, models.TaskEventClaimReleased,
@@ -61,8 +62,8 @@ func TestUsefulTransitionRule(t *testing.T) {
 		models.TaskEventInitialization, models.TaskEventReplanned,
 		models.TaskEventAcceptanceCommitsRemapped,
 	}
-	if len(useful) != 23 || len(notUseful) != 17 {
-		t.Fatalf("documented lists have %d useful and %d not-useful names; want 23 and 17", len(useful), len(notUseful))
+	if len(useful) != 24 || len(notUseful) != 17 {
+		t.Fatalf("documented lists have %d useful and %d not-useful names; want 24 and 17", len(useful), len(notUseful))
 	}
 
 	t.Run("documented lists classify as documented", func(t *testing.T) {

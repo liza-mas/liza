@@ -156,7 +156,7 @@ over prose volume.
 
 | Classification | Events |
 |---|---|
-| **Useful** | `created`, `claimed`, `pre_execution_checkpoint`, `task_output_set`, `submitted_for_review`, `review_commit_updated`, `approved`, `rejected`, `review_verdict_approved`, `review_verdict_rejected`, `merged`, `superseded`, `abandoned`, `blocked`, `unblocked`, `integration_failed`, `transition_executed`, `dependencies_rewritten`, `dependency_repair_applied`, `replacement_committed`, `rejection_rca_recorded`, `rejection_rca_resumed`, `handoff_initiated`, `provider_declaration_stale`, `arch_ref_repaired`, `provider_dependency_deferred` |
+| **Useful** | `created`, `claimed`, `pre_execution_checkpoint`, `task_output_set`, `submitted_for_review`, `review_commit_updated`, `approved`, `rejected`, `review_verdict_approved`, `review_verdict_rejected`, `merged`, `superseded`, `abandoned`, `blocked`, `unblocked`, `integration_failed`, `transition_executed`, `dependencies_rewritten`, `dependency_repair_applied`, `replacement_committed`, `rejection_rca_recorded`, `rejection_rca_resumed`, `handoff_initiated`, `plan_amendment`, `provider_declaration_stale`, `arch_ref_repaired`, `provider_dependency_deferred` |
 | **Not useful** | `orchestrator_assessment`, `claim_released`, `doer_claim_released`, `review_claim_released`, `reclaimed_after_rejection`, `reassigned_after_rejection`, `new_attempt`, `owned_task_resumed`, `handoff_resumed`, `worktree_recovered`, `claimed_for_integration_fix`, `transition_cycle_blocked`, `transition_crash_recovery`, `planning`, `initialization`, `replanned`, `acceptance_commits_remapped` |
 | **Unclassified** | Any event name in neither list |
 

@@ -231,6 +231,9 @@ func collectNonTerminalTaskIDs(state *models.State, pipelineTerminals []models.T
 // with output that has not yet been expanded into child tasks. Used by both
 // sprint advance (carry-forward) and orchestrator wake detection (PLANNING_COMPLETE).
 func IsUnconsumedPlanningOutput(task *models.Task, planningPairs map[string]bool) bool {
+	if task != nil && task.AmendsPlan != "" {
+		return false
+	}
 	if task == nil || task.Status != models.TaskStatusMerged || len(task.Output) == 0 || task.PlanHandoffRetired() {
 		return false
 	}
@@ -364,7 +367,7 @@ type advanceDetectionContext struct {
 // and wake detection. A cohort is complete when all siblings (same parent, same
 // role_pair) are MERGED with no transitions_executed for the transition name.
 func IsManyToOneReady(task *models.Task, state *models.State, m2oTransitions []ManyToOneTransitionInfo) bool {
-	if task == nil || task.Status != models.TaskStatusMerged {
+	if task == nil || task.Status != models.TaskStatusMerged || task.PlanGenerationFenced() {
 		return false
 	}
 	sharedParentID := task.CohortParentID()
@@ -387,7 +390,7 @@ func IsManyToOneReady(task *models.Task, state *models.State, m2oTransitions []M
 		}
 		allReady := true
 		for _, sibling := range siblings {
-			if sibling.Status != models.TaskStatusMerged {
+			if sibling.Status != models.TaskStatusMerged || sibling.PlanGenerationFenced() {
 				allReady = false
 				break
 			}

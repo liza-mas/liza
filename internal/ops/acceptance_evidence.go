@@ -197,7 +197,8 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 	var driftedReference string
 	for _, parentID := range task.EffectiveParentTasks() {
 		parent := state.FindTask(parentID)
-		if !parentAllocatesTask(g, root, task, parent, path, heading, integrationSpan, integrationCommit) {
+		review := parentAllocationReview(g, root, state, task, parent, path, heading, integrationSpan, integrationCommit)
+		if review == nil {
 			continue
 		}
 		// The span excludes Source References, which is where the contract's
@@ -205,7 +206,7 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 		// would let an edit there redirect an approved reference at content no
 		// reviewer saw, so every reference the reviewed contract depends on is
 		// compared by what it resolves to, not by its declared ID.
-		if alike, drifted := compareReviewedReferences(state, parent.ID, root, *parent.ReviewCommit, integrationCommit, path, heading, contract); !alike {
+		if alike, drifted := compareReviewedReferences(state, parent.ID, root, *review.ReviewCommit, integrationCommit, path, heading, contract); !alike {
 			if drifted != "" {
 				driftedReference = drifted
 			}
@@ -214,7 +215,7 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 		if source != nil {
 			return content("multiple reviewed parents claim the same allocation")
 		}
-		source = &models.AcceptanceSource{Ref: ref, Commit: integrationCommit, Blob: spanIdentity, ParentTask: parent.ID, ParentReviewCommit: *parent.ReviewCommit}
+		source = &models.AcceptanceSource{Ref: ref, Commit: integrationCommit, Blob: spanIdentity, ParentTask: parent.ID, ParentReviewCommit: *review.ReviewCommit}
 	}
 	if source == nil {
 		if driftedReference != "" {
@@ -244,7 +245,7 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 	}, nil
 }
 
-// parentAllocatesTask reports whether this parent authorizes the task's
+// parentAllocationReview returns the effective reviewed authority for the task's
 // allocation on every ground except the approved-proof comparison.
 //
 // That comparison is deliberately left to the caller, because the two callers
@@ -254,8 +255,43 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 // selecting "the first merged parent" instead would let a multi-parent child be
 // re-affirmed against a parent that never allocated it, leaving the real one
 // unauthorized and the task still refused.
-func parentAllocatesTask(g *git.Git, root string, task, parent *models.Task, path, heading, integrationSpan, integrationCommit string) bool {
-	if parent == nil || parent.EffectiveType() != models.TaskTypePlanning || parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil {
+func parentAllocationReview(g *git.Git, root string, state *models.State, task, parent *models.Task, path, heading, integrationSpan, integrationCommit string) *models.Task {
+	if parent == nil || parent.EffectiveType() != models.TaskTypePlanning || parent.Status != models.TaskStatusMerged || !manifestAllocatesTask(parent.Output, task) {
+		return nil
+	}
+	revisions, err := planReviewHistory(state, parent)
+	if err != nil || validatePlanReviewAncestry(g, revisions, integrationCommit) != nil {
+		return nil
+	}
+	latest := revisions[len(revisions)-1]
+	if !manifestAllocatesTask(latest.Output, task) {
+		return nil
+	}
+	// The latest applied review governs current content and proofs. The origin
+	// may be an earlier reviewed revision that authored this exact allocation;
+	// each comparison uses that revision's own manifest and Git range.
+	reviewedSpan, reviewedOK := acceptanceCarrierSpan(root, *latest.ReviewCommit, path, heading)
+	if !reviewedOK || reviewedSpan != integrationSpan {
+		return nil
+	}
+	for _, origin := range revisions {
+		if !manifestAllocatesTask(origin.Output, task) {
+			continue
+		}
+		span, ok := acceptanceCarrierSpan(root, *origin.ReviewCommit, path, heading)
+		if !ok || span != reviewedSpan {
+			continue
+		}
+		baseSpan, _ := acceptanceCarrierSpan(root, *origin.BaseCommit, path, heading)
+		if baseSpan != span {
+			return latest
+		}
+	}
+	return nil
+}
+
+func independentlyApprovedPlan(parent *models.Task) bool {
+	if (parent.EffectiveType() != models.TaskTypePlanning && parent.EffectiveType() != models.TaskTypeArchitecture) || parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil {
 		return false
 	}
 	author := acceptanceParentAuthor(parent)
@@ -266,39 +302,17 @@ func parentAllocatesTask(g *git.Git, root string, task, parent *models.Task, pat
 	for _, approval := range parent.Approvals {
 		approved = approved || (approval.Agent != "" && approval.Agent != author)
 	}
-	if !approved {
-		return false
-	}
-	if !validAcceptanceParentHistory(g, parent) {
-		return false
-	}
-	allocated := false
-	for _, output := range parent.Output {
+	return approved
+}
+
+func manifestAllocatesTask(output []models.OutputEntry, task *models.Task) bool {
+	for _, output := range output {
 		if output.PlanRef == task.PlanRef && output.SpecRef == task.SpecRef && reflect.DeepEqual(output.Validation, task.Validation) && output.DestructiveDB == task.DestructiveDB &&
 			models.RuntimeInputsEqual(output.RuntimeInputs, task.RuntimeInputs) {
-			allocated = true
+			return true
 		}
 	}
-	if !allocated {
-		return false
-	}
-	ancestor, ancestorErr := g.IsAncestor(*parent.MergeCommit, integrationCommit)
-	if ancestorErr != nil || !ancestor {
-		return false
-	}
-	// The reviewer approved this carrier's allocation section. An edit to an
-	// unrelated section of the same file — a repin of another reference, a
-	// note appended elsewhere — does not unapprove it, and treating it as a
-	// change strands every child of the plan until the plan is re-reviewed.
-	// ADR-0133 section 4 already judges the reference path this way.
-	reviewedSpan, reviewedOK := acceptanceCarrierSpan(root, *parent.ReviewCommit, path, heading)
-	if !reviewedOK || reviewedSpan != integrationSpan {
-		return false
-	}
-	// Inherited shape: a carrier absent at base and one identical at base both
-	// fall through here, deliberately — only "unchanged" disqualifies.
-	baseSpan, _ := acceptanceCarrierSpan(root, *parent.BaseCommit, path, heading)
-	return baseSpan != reviewedSpan // Approval of unchanged content authorizes nothing.
+	return false
 }
 
 // acceptanceAllocationRef is the reference acceptance allocates against:

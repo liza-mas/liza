@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -73,6 +74,9 @@ func repairAcceptanceCommits(bb *db.Blackboard, projectRoot, integrationRef stri
 	if err != nil {
 		return result, fmt.Errorf("read state: %w", err)
 	}
+	if err := refuseAmendedAcceptanceCommitRepair(state); err != nil {
+		return result, err
+	}
 
 	candidates := orphanedAcceptanceParents(g, state, integration)
 	if len(candidates) == 0 {
@@ -113,6 +117,9 @@ func repairAcceptanceCommits(bb *db.Blackboard, projectRoot, integrationRef stri
 
 	now := time.Now().UTC()
 	err = bb.Modify(func(s *models.State) error {
+		if err := refuseAmendedAcceptanceCommitRepair(s); err != nil {
+			return err
+		}
 		for taskID, mapping := range plans {
 			task := s.FindTask(taskID)
 			if task == nil {
@@ -131,6 +138,23 @@ func repairAcceptanceCommits(bb *db.Blackboard, projectRoot, integrationRef stri
 
 	sort.Slice(result.Repaired, func(i, j int) bool { return result.Repaired[i].TaskID < result.Repaired[j].TaskID })
 	return result, nil
+}
+
+// Rewriting only the original commits would leave amendment origins and current
+// authority pointing at different histories. Refuse before any repair write.
+func refuseAmendedAcceptanceCommitRepair(state *models.State) error {
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.Status == models.TaskStatusMerged {
+			continue
+		}
+		for _, id := range task.EffectiveParentTasks() {
+			if parent := state.FindTask(id); parent != nil && parent.PlanAmendment != nil {
+				return &PreconditionError{Reason: fmt.Sprintf("task %s has amended planning parent %s; acceptance commit repair cannot rewrite amendment evidence. Restore the recorded reviewed commits to integration ancestry or obtain a fresh reviewed correction with %s", task.ID, id, brand.Command("amend-plan", id))}
+			}
+		}
+	}
+	return nil
 }
 
 // orphanedAcceptanceParents finds merged planning parents of non-merged tasks

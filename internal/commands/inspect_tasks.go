@@ -49,6 +49,9 @@ type taskInfo struct {
 	Worktree          *string                   `json:"worktree,omitempty" yaml:"worktree,omitempty"`
 	DoneWhen          string                    `json:"done_when,omitempty" yaml:"done_when,omitempty"`
 	Validation        []string                  `json:"validation,omitempty" yaml:"validation,omitempty"`
+	ValidationNotes   []models.ValidationNote   `json:"validation_notes,omitempty" yaml:"validation_notes,omitempty"`
+	AmendsPlan        string                    `json:"amends_plan,omitempty" yaml:"amends_plan,omitempty"`
+	PlanAmendment     *models.PlanAmendment     `json:"plan_amendment,omitempty" yaml:"plan_amendment,omitempty"`
 	AcceptanceSource  *models.AcceptanceSource  `json:"acceptance_source,omitempty" yaml:"acceptance_source,omitempty"`
 	AcceptanceReceipt *models.AcceptanceReceipt `json:"acceptance_receipt,omitempty" yaml:"acceptance_receipt,omitempty"`
 	Archived          []models.ArchivedFieldRef `json:"archived,omitempty" yaml:"archived,omitempty"`
@@ -292,6 +295,9 @@ func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 		Worktree:           task.Worktree,
 		DoneWhen:           task.DoneWhen,
 		Validation:         task.Validation,
+		ValidationNotes:    task.ValidationNotes,
+		AmendsPlan:         task.AmendsPlan,
+		PlanAmendment:      task.PlanAmendment,
 		AcceptanceSource:   task.AcceptanceSource,
 		AcceptanceReceipt:  task.AcceptanceReceipt,
 		Archived:           task.Archived,

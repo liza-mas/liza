@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/jsonout"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +31,10 @@ expanded by no path until an operator clears the hold.
   --pass         orchestrator: the plan's declared checks can run; refused
                  while an upstream plan is replanned, held or unreviewed, and
                  on a held plan
+  --notes-file <file>
+                 pass only: JSON [{"output_index":0,"message":"guidance"}];
+                 advisory child validation guidance, never contract changes;
+                 at most 4096 bytes per message and 16384 bytes per file
   --hold <ask>   orchestrator: the plan needs a human action first (the ask);
                  raises an AWAITING HUMAN alert
   --clear        operator only: remove the disposition after the human action;
@@ -35,7 +43,7 @@ expanded by no path until an operator clears the hold.
                  operator only: retire an unused hand-off by an existing
                  merged correction; preserves status and ordinary dependencies
 
-A plan the planner must correct is replanned instead (replan --reason).`,
+Material corrections require reviewed amend-plan work or replan --reason.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		if isJSON(cmd) {
@@ -125,7 +133,57 @@ func planCheckInputFromFlags(cmd *cobra.Command, taskID string) (ops.PlanCheckIn
 		input.Action = ops.PlanCheckActionHold
 		input.Ask = ask
 	}
+	if cmd.Flags().Changed("notes-file") {
+		if !pass {
+			return ops.PlanCheckInput{}, cliValidationError("--notes-file requires --pass")
+		}
+		path, _ := cmd.Flags().GetString("notes-file")
+		var err error
+		input.Notes, err = readPlanValidationNotes(path)
+		if err != nil {
+			return ops.PlanCheckInput{}, err
+		}
+	}
 	return input, nil
+}
+
+func readPlanValidationNotes(path string) ([]models.PlanValidationNote, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, cliValidationWrap("opening --notes-file", err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, models.MaxValidationNotesBytes+1))
+	if err != nil {
+		return nil, cliValidationWrap("reading --notes-file", err)
+	}
+	if len(data) > models.MaxValidationNotesBytes || !utf8.Valid(data) {
+		return nil, cliValidationError("--notes-file must be UTF-8 and at most 16384 bytes")
+	}
+	var records []struct {
+		OutputIndex *int    `json:"output_index"`
+		Message     *string `json:"message"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&records); err != nil {
+		return nil, cliValidationWrap("decoding --notes-file", err)
+	}
+	if len(records) == 0 {
+		return nil, cliValidationError("--notes-file requires a nonempty JSON array")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, cliValidationError("--notes-file must contain exactly one JSON array")
+	}
+	notes := make([]models.PlanValidationNote, len(records))
+	for i, record := range records {
+		if record.OutputIndex == nil || record.Message == nil {
+			return nil, cliValidationError("each validation note requires output_index and message")
+		}
+		notes[i] = models.PlanValidationNote{OutputIndex: *record.OutputIndex, Message: *record.Message}
+	}
+	return notes, nil
 }
 
 func printPlanCheckResult(result *ops.PlanCheckResult) {
@@ -155,6 +213,7 @@ func init() {
 	addJSONFlag(planCheckCmd)
 	addChangedByFlag(planCheckCmd)
 	planCheckCmd.Flags().Bool("pass", false, "orchestrator: admit the plan's hand-off")
+	planCheckCmd.Flags().String("notes-file", "", "pass only: bounded JSON advisory notes selected by output_index")
 	planCheckCmd.Flags().String("hold", "", "orchestrator: hold the plan for the given human action")
 	planCheckCmd.Flags().Bool("clear", false, "operator: remove the disposition after the human action")
 	planCheckCmd.Flags().String("replaced-by", "", "operator: retire an unused hand-off by a merged correction")

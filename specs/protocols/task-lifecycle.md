@@ -89,7 +89,9 @@ consumer through authorized lifecycle operations; a reviewed replacement must
 omit that reference or name another intended provider. Retaining the same reference
 retains the refusal. Retire any live producer declaration likewise; concrete
 `retarget-dependency` does not rewrite provider declarations. Never blindly
-retarget output positions. Legacy prose-only blocks require
+retarget output positions. An unexpanded MERGED provider may instead receive a
+bounded independently reviewed amendment under its existing identity; see
+[Reviewed plan corrections](#reviewed-plan-corrections). Legacy prose-only blocks require
 reviewed structured correction before restoration; merely unblocking repeats
 the missing-edge failure. Omitted fields retain legacy runtime behavior; no
 automatic migration or promotion of architecture dependencies occurs.
@@ -100,7 +102,9 @@ selected child retired other than by replan (a child replan still holds, since
 lineage would hide the change). Such a retirement leaves that declaration stale
 but retained: plan-check refuses to pass
 the plan (or reports it as needing reconciliation once passed), every hand-off
-refuses the entry, and `replan` warns. Replan the plan to re-author it.
+refuses the entry, and `replan` warns. Re-author through reviewed amendment when
+existing slot identities can remain fixed, otherwise replan with authorized
+consumer retirement.
 
 Exception (ADR-0187, ADR-0190): the task-level declaration of an unstarted
 consumer (initial status or BLOCKED, never claimed, no assignee, lease, worktree
@@ -140,6 +144,57 @@ See [Provider Dependencies](../architecture/blackboard-schema.md#provider-depend
 [ADR-0188](../architecture/ADR/0188-stale-provider-declarations-in-draft-output.md),
 [ADR-0190](../architecture/ADR/0190-replanned-providers-release-unstarted-direct-declarations.md) and
 [ADR-0191](../architecture/ADR/0191-replace-task-successors-carry-selected-child-slots.md).
+
+## Reviewed Plan Corrections
+
+`amend-plan ORIGINAL --reason TEXT` creates a separate initial same-pair
+correction with `amends_plan: ORIGINAL`; it follows ordinary claim, submission,
+independent review and merge. ORIGINAL remains MERGED with its review metadata,
+provider identity and satisfied ordinary dependencies. Begin requires planning
+output, no children/executed transition/retirement/human hold and installs a
+pending fence atomically. Every generation path, including operator proceed,
+many-to-one and crash recovery, respects that fence. Correction tasks never
+generate ordinary children or serve as providers.
+
+After review and merge, `amend-plan ORIGINAL --apply CORRECTION` adopts its
+output under ORIGINAL only after independent review/ancestry, unchanged existing
+slot identity and prospective-graph checks. Dependencies, inherited inputs,
+validation/prerequisites and runtime inputs may change; producer slots may
+append. Description, completion criteria, scope, refs, kind, supersession,
+decomposition and permission/classification fields stay fixed. Other material
+changes require a reviewed replan and authorized consumer retirement. Apply
+retains original attribution, appends provenance, clears pending and old
+pass/notes, preserves a later human hold, and retires only the correction's
+handoff. The original then requires fresh handoff review. Repeated apply is a
+no-op, never a hold release.
+
+A merged correction can fail apply after provider retirement or integration
+drift. `amend-plan ORIGINAL --replace-pending CORRECTION --reason TEXT`
+quarantines the exact unapplied MERGED or normally cancelled ABANDONED
+correction and creates fresh same-pair review work while preserving the original
+fence and hold. Active or applied corrections refuse. Reconcile already merged
+artifact changes in the new review; no terminal task reopens and no abort drops
+the fence over unreviewed evidence.
+
+The original output manifest and ordered correction history preserve allocation
+authorship. Latest applied independent review controls current authority;
+earlier independently reviewed merged manifests, including reconciled
+quarantined predecessors, may establish unchanged allocation origins. Validate
+matching spans, allocations, proofs and review/merge ancestry; do not overwrite
+original review facts or use a discarded draft as authority. Children retain
+the original parent ID and actual effective review commit, and reference context
+retains relevant original/correction carriers.
+
+For harmless supplemental hook/probe guidance, `plan-check ORIGINAL --pass
+--notes-file FILE` selects output indexes through strict JSON records
+`{output_index, message}`. Unique non-dedup slots receive bounded advisory notes
+with original parent/output provenance during normal generation and recovery;
+both doer and reviewer see them. Notes cannot replace missing producers,
+provisioning or durable runtime-input declarations, or change canonical
+acceptance, scope, contracts or order. Identical passed replay is a no-op;
+changed notes require clear/recheck before generation. See
+[ADR-0197](../architecture/ADR/0197-reviewed-plan-amendments-and-validation-notes.md)
+and [schema](../architecture/blackboard-schema.md#reviewed-plan-amendments).
 
 ## Iteration Protocol
 

@@ -292,6 +292,8 @@ func validateTaskInvariants(v *violations, state *models.State, projectRoot stri
 		validateTaskOutput(v, &task, !artifactRefsRetired(task))
 		validateAcceptanceState(v, &task)
 		validatePlanCheck(v, &task, state, resolver)
+		validatePlanAmendment(v, &task, state, resolver)
+		validateValidationNotes(v, &task, state, resolver)
 
 		// Attempt must be 0 (unset/legacy), 1, or 2
 		if task.Attempt < 0 || task.Attempt > 2 {

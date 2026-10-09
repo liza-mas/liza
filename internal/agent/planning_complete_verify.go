@@ -34,6 +34,16 @@ func verifyPlanningCompleteTurn(projectRoot string, before, after *models.State)
 		}
 		class, _ := domain.Classify(before, task)
 		current := after.FindTask(id)
+		if current != nil && current.PlanAmendment != nil && current.PlanAmendment.Pending != "" {
+			if class == ops.PlanHandoffAmendmentReady && current.PlanAmendment.Pending == task.PlanAmendment.Pending {
+				undecided = append(undecided, id+" (terminal reviewed amendment needs apply or pending replacement)")
+				undecidedIDs = append(undecidedIDs, id)
+			}
+			continue
+		}
+		if class == ops.PlanHandoffAmendmentReady {
+			class = ops.PlanHandoffNeedsReview
+		}
 		replanned := current != nil && current.TransitionsExecuted["replanned"]
 		transitioned := current != nil && !replanned && !domain.Pending(current)
 		verdict := current.PlanCheckVerdictOf()

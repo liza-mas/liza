@@ -274,7 +274,7 @@ func TestRetargetDependency_MergedPlanRepairKeepsHold(t *testing.T) {
 		t.Fatal(err)
 	}
 	repaired := mustReadTask(t, statePath, "b-replan-1")
-	if !slices.Equal(repaired.DependsOn, []string{"a-replan-1", "x"}) || *repaired.PlanCheck != before {
+	if !slices.Equal(repaired.DependsOn, []string{"a-replan-1", "x"}) || !reflect.DeepEqual(*repaired.PlanCheck, before) {
 		t.Fatalf("repair changed more than the edge: depends_on=%v plan_check=%+v", repaired.DependsOn, repaired.PlanCheck)
 	}
 	last := repaired.History[len(repaired.History)-1]

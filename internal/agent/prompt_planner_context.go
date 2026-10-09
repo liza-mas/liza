@@ -11,6 +11,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/referencecontract"
@@ -216,6 +217,9 @@ func plannerLineage(provider *models.Task, state *models.State) []*models.Task {
 }
 
 func plannerProducedRefs(task *models.Task, kind string) []string {
+	if task.AmendsPlan != "" {
+		return nil // Corrections amend the original owner's authority.
+	}
 	var refs []string
 	taskKind := plannerTaskKind(task)
 	for _, output := range task.Output {
@@ -294,8 +298,16 @@ func plannerArtifactOwnersForTask(state *models.State, consumer *models.Task, ki
 	return plannerArtifactOwners(state, kind, ref)
 }
 
-func plannerArtifactPointer(producer *models.Task, kind, ref string) prompts.PlannerArtifactPointer {
+func plannerArtifactPointer(producer *models.Task, kind, ref string, states ...*models.State) prompts.PlannerArtifactPointer {
 	pointer := prompts.PlannerArtifactPointer{Kind: kind, Ref: ref, Refs: []string{ref}, File: paths.SplitRefFile(ref), ProducerID: producer.ID}
+	if len(states) > 0 {
+		effective, err := ops.EffectivePlanReview(states[0], producer)
+		if err != nil {
+			pointer.Unresolved = err.Error()
+			return pointer
+		}
+		producer = effective
+	}
 	if producer.Status != models.TaskStatusMerged {
 		pointer.Unresolved = "producer is " + string(producer.Status) + "; unavailable as merged authority"
 	} else if producer.ReviewCommit == nil || *producer.ReviewCommit == "" {
@@ -335,7 +347,7 @@ func plannerProviderArtifacts(provider *models.Task, state *models.State) ([]pro
 		}
 		pointer := prompts.PlannerArtifactPointer{Kind: kind, Ref: ref, Refs: []string{ref}, File: paths.SplitRefFile(ref), Unresolved: "no producing task attribution"}
 		if producer != nil {
-			pointer = plannerArtifactPointer(producer, kind, ref)
+			pointer = plannerArtifactPointer(producer, kind, ref, state)
 		} else if len(owners) > 1 {
 			var ids []string
 			for _, owner := range owners {
@@ -417,7 +429,7 @@ func plannerFormatPrecedent(task *models.Task, state *models.State, role string)
 		return nil
 	}
 	producer := candidates[0]
-	pointer := plannerArtifactPointer(producer, kind, plannerProducedRefs(producer, kind)[0])
+	pointer := plannerArtifactPointer(producer, kind, plannerProducedRefs(producer, kind)[0], state)
 	return &pointer
 }
 

@@ -257,10 +257,19 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			return &PreconditionError{Reason: fmt.Sprintf("task %s %s; select the replacement's output instead", input.TaskID, stale)}
 		}
 		previousCount := len(task.Output)
+		if task.AmendsPlan != "" {
+			original := state.FindTask(task.AmendsPlan)
+			if original == nil || original.PlanAmendment == nil || original.PlanAmendment.Pending != task.ID {
+				return &PreconditionError{Reason: "correction is not the original's pending amendment"}
+			}
+			if err := models.ValidateAmendmentOutput(original.Output, output); err != nil {
+				return &PreconditionError{Reason: err.Error()}
+			}
+		}
 		task.Output = output
 		// Provider output may become known after its consumers were authored.
 		// Validate that prospective graph before publishing either side.
-		if models.HasProviderDependencies(state) {
+		if models.HasProviderDependencies(state) || task.AmendsPlan != "" {
 			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
 				return &PreconditionError{Reason: fmt.Sprintf("task output leaves an invalid state: %v", err)}
 			}

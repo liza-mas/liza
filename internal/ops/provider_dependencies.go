@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
 // providerRetirement says whether retiring a task mints a replan successor.
@@ -54,6 +55,9 @@ func holdsUnsatisfiedReservation(state *models.State, resolver *pipeline.Resolve
 }
 
 func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.Resolver, targetID string, retirement providerRetirement) error {
+	if target := state.FindTask(targetID); target != nil && target.PlanAmendment != nil && target.PlanAmendment.Pending != "" {
+		return &PreconditionError{Reason: "cannot retire an original with a pending reviewed amendment"}
+	}
 	permanent := retirement == retirePermanently
 	holds := func(deps []models.ProviderDependency, released func(direct bool) bool) bool {
 		return slices.ContainsFunc(deps, func(dep models.ProviderDependency) bool {
@@ -203,6 +207,18 @@ func staleOutputDeclaration(state *models.State, resolver *pipeline.Resolver, ou
 // rejectStaleDraftOutput refuses submitting output that still declares a
 // retired provider or selected child (ADR-0188).
 func rejectStaleDraftOutput(state *models.State, resolver *pipeline.Resolver, task *models.Task) error {
+	if task.AmendsPlan != "" {
+		original := state.FindTask(task.AmendsPlan)
+		if original == nil || original.PlanAmendment == nil || original.PlanAmendment.Pending != task.ID {
+			return &PreconditionError{Reason: "correction is not the original's pending amendment"}
+		}
+		if err := models.ValidateAmendmentOutput(original.Output, task.Output); err != nil {
+			return &PreconditionError{Reason: err.Error()}
+		}
+		if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {
+			return &PreconditionError{Reason: fmt.Sprintf("prospective amendment graph: %v", err)}
+		}
+	}
 	if stale := staleOutputDeclaration(state, resolver, task.Output); stale != "" {
 		return &PreconditionError{Reason: fmt.Sprintf("task %s %s; re-author it with %s before submitting", task.ID, stale, brand.Command("set-task-output", task.ID))}
 	}

@@ -42,6 +42,7 @@ PROVIDER DEPENDENCIES (claim requires provider and selected children MERGED):
 
 DONE WHEN:
 {{.DoneWhen}}
+{{- if .ValidationNotes }}{{template "validation-notes" .}}{{- end}}
 {{- if .ValidationCommands }}
 
 CANONICAL VALIDATION:

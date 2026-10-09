@@ -31,6 +31,9 @@ const (
 	PlanHandoffNeedsReconciliation PlanHandoffClass = "needs_reconciliation"
 	// PlanHandoffHeld: held for a human action.
 	PlanHandoffHeld PlanHandoffClass = "held"
+	// A terminal pending correction needs adoption or replacement, while the
+	// original remains fenced against generation.
+	PlanHandoffAmendmentReady PlanHandoffClass = "amendment_ready"
 )
 
 // PlanHandoffDomain identifies the reviewed hand-off: manual per-subtask or
@@ -88,7 +91,7 @@ func LoadPlanHandoffDomain(projectRoot string) (PlanHandoffDomain, error) {
 // disposition. A replanned task stays in domain so its consumers still see it
 // as an inadmissible upstream.
 func (d PlanHandoffDomain) InDomain(task *models.Task) bool {
-	return task != nil && len(task.Output) > 0 && len(d.gatedByPair[task.RolePair]) > 0
+	return task != nil && task.AmendsPlan == "" && len(task.Output) > 0 && len(d.gatedByPair[task.RolePair]) > 0
 }
 
 // Pending reports whether task still has a hand-off to run. In the domain,
@@ -117,6 +120,12 @@ func (d PlanHandoffDomain) Pending(task *models.Task) bool {
 // A plan a turn left undecided waits for new input instead, the stale-provider
 // route included (D-49).
 func (d PlanHandoffDomain) PlanningCompleteEligible(state *models.State, task *models.Task) bool {
+	if task != nil && task.PlanGenerationFenced() {
+		if d.ReadyPlanCorrection(state, task) != nil {
+			return d.UndecidedHandoff(state, task) == nil
+		}
+		return false
+	}
 	if !(d.HasUnfailedHandoff(state, task) || d.needsStaleProviderReplan(state, task)) ||
 		task.PlanCheckVerdictOf() == models.PlanCheckHeld ||
 		IsTransitionCycleBlocked(task) || HasCycleBlockedDependency(task, state) {
@@ -178,6 +187,15 @@ func (d PlanHandoffDomain) GatesTransition(task *models.Task, transitionName str
 // A needs_review task also reports the upstream blocker that would refuse a
 // pass.
 func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (PlanHandoffClass, string) {
+	if task != nil && task.AmendsPlan == "" && task.PlanAmendment != nil && task.PlanAmendment.Pending != "" {
+		if correction := d.ReadyPlanCorrection(state, task); correction != nil {
+			return PlanHandoffAmendmentReady, "pending correction ready for adoption/replacement: " + correction.ID
+		}
+		if task.PlanCheckVerdictOf() == models.PlanCheckHeld {
+			return PlanHandoffHeld, task.PlanCheck.Ask
+		}
+		return PlanHandoffWaitingUpstream, "reviewed correction pending: " + task.PlanAmendment.Pending
+	}
 	if !d.Pending(task) {
 		return PlanHandoffNotSource, ""
 	}
@@ -215,6 +233,20 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 		}
 		return PlanHandoffNeedsReview, blocker
 	}
+}
+
+// ReadyPlanCorrection routes terminal review work back to the orchestrator.
+// It never authorizes generation or releases a hold; apply/recovery still
+// revalidate their full admission boundaries under the state lock.
+func (d PlanHandoffDomain) ReadyPlanCorrection(state *models.State, task *models.Task) *models.Task {
+	if state == nil || task == nil || task.AmendsPlan != "" || task.PlanAmendment == nil || task.PlanAmendment.Pending == "" || !d.Pending(task) {
+		return nil
+	}
+	correction := state.FindTask(task.PlanAmendment.Pending)
+	if correction != nil && correction.AmendsPlan == task.ID && correction.RolePair == task.RolePair && (correction.Status == models.TaskStatusMerged || correction.Status == models.TaskStatusAbandoned) {
+		return correction
+	}
+	return nil
 }
 
 // providerBlocker judges the providers the plan's outputs declare and their

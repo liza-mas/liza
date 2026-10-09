@@ -356,6 +356,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		ArchRef:                paths.SplitRefFile(task.ArchRef),
 		RCARequired:            task.RCARequired,
 		ValidationCommands:     slices.Clone(task.Validation),
+		ValidationNotes:        slices.Clone(task.ValidationNotes),
 		AcceptanceSource:       task.AcceptanceSource,
 		AcceptanceReceipt:      task.AcceptanceReceipt,
 		DestructiveDB:          task.DestructiveDB,

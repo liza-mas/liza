@@ -123,6 +123,9 @@ run it without `--dry-run` to write that mapping. It derives replacements by
 content identity and takes no commit arguments, refusing any parent whose
 commits lack an identical replacement. Prevent the cause instead: once anything
 has merged, merge into the integration branch rather than rebasing it.
+Amendment-backed allocation also depends on its ordered correction evidence;
+repair must account for that authority or refuse before writing. Do not repair
+only the original parent commits or hand-edit the correction provenance.
 
 If a consumer stays blocked because its provider task has an empty `arch_ref`
 (typically a replacement created before replacements inherited it), no
@@ -353,14 +356,79 @@ git add -A && git commit -m "amend plan"
 
 Replan invalidates the old task's output (preserved for audit, marked superseded) and creates a new planning task with the same role-pair and spec; at CHECKPOINT it returns the sprint to IN_PROGRESS, at IN_PROGRESS it leaves the sprint alone. It needs a plan without children and without a human hold. `--reason` is appended to the new task's description. Multiple replans increment: `<task-id>-replan-1`, `<task-id>-replan-2`, etc.
 
+### Reviewed Plan Amendments
+
+If replan refuses because a started consumer still references a MERGED planning
+provider, preserve that identity. Before its children or any transition exist,
+request bounded same-pair reviewed correction work:
+
+```bash
+§BRAND_BINARY_NAME§ amend-plan ORIGINAL --reason "Correct reviewed prerequisite ordering"
+# Planner and independent reviewer submit, review and merge the returned correction.
+§BRAND_BINARY_NAME§ amend-plan ORIGINAL --apply CORRECTION
+# The orchestrator reviews the adopted handoff again, then passes or holds it.
+§BRAND_BINARY_NAME§ plan-check ORIGINAL --pass --agent-id orchestrator-1
+```
+
+Begin needs an unheld, unused planning output and installs a pending fence in
+the same transaction that creates the correction. ORIGINAL stays MERGED with
+unchanged review attribution, ID and existing output identities. The correction
+never generates children or becomes a provider. Apply allows reviewed
+dependency/inheritance/validation/prerequisite/runtime-input corrections and
+appended producer slots; existing descriptions, completion criteria, scope,
+refs, kind, supersession, decomposition and permission/classification fields
+remain fixed. Broader changes still require reviewed replan and authorized
+consumer retirement. Do not clear provider safeguards or remap indexes.
+
+If a merged correction cannot apply after provider retirement or integration
+drift, retain the fence and commission fresh reviewed reconciliation:
+
+```bash
+§BRAND_BINARY_NAME§ amend-plan ORIGINAL --replace-pending CORRECTION --reason "Reconcile changed provider evidence"
+```
+
+Replacement accepts only the exact pending unapplied MERGED correction or one
+normally cancelled to ABANDONED. It quarantines that predecessor and creates
+fresh review work atomically. Active/applied corrections refuse; already merged
+artifact changes must be reconciled by the new review. No terminal task reopens
+and there is no abort that drops the fence. A human hold installed after begin
+survives replacement and apply: only an operator `plan-check ORIGINAL --clear`
+releases it. Identical apply/replacement replay creates no duplicate work or
+history. Inspect `amends_plan`, `plan_amendment`, `output`, `plan_check` and
+`history` to distinguish pending, applied and quarantined provenance.
+
+For harmless supplemental hook/probe guidance, pass with a JSON notes file:
+
+```json
+[{"output_index": 0, "message": "Confirm the hook filter covers the changed source path."}]
+```
+
+```bash
+§BRAND_BINARY_NAME§ plan-check ORIGINAL --pass --notes-file child-notes.json --agent-id orchestrator-1
+```
+
+Only unique existing non-dedup output slots may be selected. Messages are
+nonblank UTF-8, at most 4096 bytes each; file input is at most 16384 bytes and
+rejects unknown fields. Selected children retain notes with original
+parent/output provenance, including missing-child recovery, for both doer and
+reviewer. Identical passed replay is a no-op; changed notes require operator
+clear/recheck before generation. These notes cannot change canonical validation
+or acceptance, satisfy a missing producer/provisioning/runtime-input requirement,
+or authorize scope, contract or ordering changes. Such defects require reviewed
+amendment/replan or a human hold. See
+[ADR-0197](../specs/architecture/ADR/0197-reviewed-plan-amendments-and-validation-notes.md).
+
 ### Failed Hand-off
 
 `PLAN HANDOFF FAILED` and status `REPAIR_REQUIRED` mean an initial output or
 selected-input refusal is still unresolved. Equal material inputs stop automatic
 retries and planning wakes, while keeping completion/integration open. Repair the
 named source/selected upstream or retry explicitly; repeated identical failures
-produce no duplicate history/alerts. If a merged correction already exists, use
-the retirement action above rather than creating another replan; its
+produce no duplicate history/alerts. For a pending reviewed amendment, apply its
+merged correction or replace pending work as above; an unrelated merged
+correction does not authorize in-place adoption. If retiring an unused original
+in favor of an unrelated merged correction is intended, use the retirement
+action rather than another replan; its
 preconditions are listed in
 [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md).
 

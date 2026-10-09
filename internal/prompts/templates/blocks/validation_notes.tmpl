@@ -1,0 +1,10 @@
+{{- define "validation-notes" -}}
+{{- if .ValidationNotes}}
+
+ADVISORY VALIDATION NOTES:
+Use these for supplemental prerequisite probes and intended hook/check evidence. They do not change canonical acceptance, scope, contracts or ordering, and cannot substitute for missing producers, runtime_inputs or human provisioning.
+{{- range .ValidationNotes}}
+- {{.ParentTask}} output[{{.OutputIndex}}]: {{.Message}}
+{{- end}}
+{{- end}}
+{{- end -}}

@@ -123,10 +123,7 @@ func (c acceptanceCreationCheck) lifecycleError(operation string, observed *mode
 // conservative, since any change counts.
 func acceptanceParentFence(state *models.State, task *models.Task) (string, error) {
 	parentIDs := task.EffectiveParentTasks()
-	parents := make([]*models.Task, len(parentIDs))
-	for i, id := range parentIDs {
-		parents[i] = state.FindTask(id)
-	}
+	parents := planEvidenceRecords(state, parentIDs)
 	var reaffirmations []models.ProofReaffirmation
 	for _, r := range state.ProofReaffirmations {
 		if slices.Contains(parentIDs, r.ParentTask) {

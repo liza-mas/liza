@@ -42,6 +42,7 @@ DESCENDANT DEPENDENCIES (added to every output you write; they do not hold this 
 
 DONE WHEN:
 {{.DoneWhen}}
+{{- if .ValidationNotes }}{{template "validation-notes" .}}{{- end}}
 {{- if .ValidationCommands }}
 
 CANONICAL VALIDATION:

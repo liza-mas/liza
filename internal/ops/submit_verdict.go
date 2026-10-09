@@ -494,6 +494,12 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 		}
 
 		if verdict == "APPROVED" {
+			if task.AmendsPlan != "" {
+				if err := rejectStaleDraftOutput(state, resolver, task); err != nil {
+					recordFailure = false
+					return err
+				}
+			}
 			// Approved output reaches MERGED without another verdict (ADR-0188).
 			if stale := staleOutputDeclaration(state, resolver, task.Output); stale != "" {
 				recordFailure = false

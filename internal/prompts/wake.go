@@ -14,11 +14,13 @@ import (
 
 // planningTaskData holds a merged planning task's output for the PLANNING_COMPLETE template.
 type planningTaskData struct {
-	TaskID   string
-	Output   []models.OutputEntry
-	Class    ops.PlanHandoffClass
-	Blocker  string
-	PlanRefs []string // distinct plan files named by output[].plan_ref
+	TaskID           string
+	Output           []models.OutputEntry
+	Class            ops.PlanHandoffClass
+	Blocker          string
+	PlanRefs         []string // distinct plan files named by output[].plan_ref
+	CorrectionID     string
+	CorrectionStatus models.TaskStatus
 }
 
 // wakeEntryPointData describes an available entry-point for the orchestrator template.
@@ -209,16 +211,20 @@ func integrationOutcomeInstructions(projection EffectiveIntegrationCompletion) s
 // wakePlanningCompleteData is used by the PLANNING_COMPLETE wake template.
 // Plans are split by hand-off class so a decided plan is never re-reviewed.
 type wakePlanningCompleteData struct {
-	AgentID   string
-	ToReview  []planningTaskData // needs_review
-	Reconcile []planningTaskData // needs_reconciliation
-	Ready     []planningTaskData // passed, or outside the reviewed hand-off
+	AgentID    string
+	ToReview   []planningTaskData // needs_review
+	Reconcile  []planningTaskData // needs_reconciliation
+	Ready      []planningTaskData // passed, or outside the reviewed hand-off
+	Amendments []planningTaskData // terminal pending correction, generation fenced
 }
 
 func buildWakePlanningCompleteData(agentID string, planningTasks []planningTaskData) wakePlanningCompleteData {
 	data := wakePlanningCompleteData{AgentID: agentID}
 	for _, task := range planningTasks {
 		switch task.Class {
+		case ops.PlanHandoffAmendmentReady:
+			data.Amendments = append(data.Amendments, task)
+			data.ToReview = append(data.ToReview, task)
 		case ops.PlanHandoffNeedsReview:
 			data.ToReview = append(data.ToReview, task)
 		case ops.PlanHandoffNeedsReconciliation:
@@ -242,13 +248,19 @@ func collectMergedPlanningTasks(state *models.State, domain ops.PlanHandoffDomai
 			continue
 		}
 		class, blocker := domain.Classify(state, task)
-		result = append(result, planningTaskData{
+		entry := planningTaskData{
 			TaskID:   task.ID,
 			Output:   task.Output,
 			Class:    class,
 			Blocker:  blocker,
 			PlanRefs: distinctPlanFiles(task.Output),
-		})
+		}
+		if correction := domain.ReadyPlanCorrection(state, task); correction != nil {
+			entry.CorrectionID = correction.ID
+			entry.CorrectionStatus = correction.Status
+			entry.PlanRefs = distinctPlanFiles(correction.Output)
+		}
+		result = append(result, entry)
 	}
 	return result
 }

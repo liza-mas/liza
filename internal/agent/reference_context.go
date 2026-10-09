@@ -131,22 +131,29 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 		if parent.Status != models.TaskStatusMerged {
 			continue
 		}
-		base, review, present, rangeErr := ops.MergedReviewedRange(parent)
+		ranges, rangeErr := ops.PlanReviewedRanges(state, parent)
 		if rangeErr != nil {
 			return "", nil, rangeErr
 		}
-		if !present {
+		if len(ranges) == 0 {
 			continue
 		}
 		head, err := resolveHead()
 		if err != nil {
 			return "", nil, err
 		}
-		found, discoverErr := referencecontract.LoadDiffCarriers(repo, config.ProjectRoot, base, review, head, referencecontract.CarrierParent, true, proofs)
-		if discoverErr != nil {
-			return "", nil, fmt.Errorf("direct parent %q: %w", parentID, discoverErr)
+		if parent.PlanAmendment != nil && len(parent.PlanAmendment.Applied) > 0 {
+			if err := ops.ValidatePlanReviewHistory(config.ProjectRoot, state, parent, head); err != nil {
+				return "", nil, err
+			}
 		}
-		observations = append(observations, found...)
+		for _, reviewed := range ranges {
+			found, discoverErr := referencecontract.LoadDiffCarriers(repo, config.ProjectRoot, reviewed.BaseCommit, reviewed.ReviewCommit, head, referencecontract.CarrierParent, true, proofs)
+			if discoverErr != nil {
+				return "", nil, fmt.Errorf("direct parent %q revision %q: %w", parentID, reviewed.TaskID, discoverErr)
+			}
+			observations = append(observations, found...)
+		}
 	}
 
 	if roleType == "reviewer" {

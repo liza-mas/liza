@@ -37,6 +37,7 @@ type PlanCheckInput struct {
 	ReplacedBy string
 	Authority  *models.AgentAuthority
 	ChangedBy  string
+	Notes      []models.PlanValidationNote
 }
 
 // PlanCheckResult reports the disposition after the request.
@@ -84,6 +85,12 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 		task := state.FindTask(input.TaskID)
 		if task == nil {
 			return &PreconditionError{Reason: fmt.Sprintf("task %q not found", input.TaskID)}
+		}
+		if task.AmendsPlan != "" || task.PlanGenerationFenced() && (input.Action == PlanCheckActionPass || input.Action == PlanCheckActionReplace) {
+			return &PreconditionError{Reason: "plan-check cannot pass/retire a pending amendment or disposition a correction task"}
+		}
+		if err := validatePlanNoteSelection(state, resolver, domain, task, input.Notes); err != nil {
+			return &PreconditionError{Reason: err.Error()}
 		}
 		class, blocker := domain.Classify(state, task)
 		if task.PlanHandoffRetired() && input.Action != PlanCheckActionReplace {
@@ -163,10 +170,39 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 	return result, nil
 }
 
+// validatePlanNoteSelection uses the same kind deduplication as generation.
+func validatePlanNoteSelection(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, task *models.Task, notes []models.PlanValidationNote) error {
+	if err := models.ValidatePlanValidationNotes(notes, len(task.Output)); err != nil {
+		return err
+	}
+	if len(notes) == 0 {
+		return nil
+	}
+	for _, name := range domain.gatedByPair[task.RolePair] {
+		definition, err := buildTransitionDefFromPipeline(resolver, name)
+		if err != nil {
+			return err
+		}
+		if definition.cardinality != "per-subtask" {
+			return fmt.Errorf("validation notes require a per-subtask hand-off")
+		}
+		_, _, remap := resolvePerSubtaskSiblings(task.Output, collectNonTerminalByKind(state, declaredOriginals(task.Output)), task.ID, definition.taskSlug)
+		for _, note := range notes {
+			if _, deduped := remap[note.OutputIndex]; deduped {
+				return fmt.Errorf("notes select deduplicated output[%d]; no new child would receive them", note.OutputIndex)
+			}
+		}
+	}
+	return nil
+}
+
 // planCheckActor authorizes the request shape: pass and hold are decisions of
 // a role configured with the orchestrator type; clear releases a human hold
 // and so is an operator action.
 func planCheckActor(resolver *pipeline.Resolver, input PlanCheckInput) (string, error) {
+	if len(input.Notes) > 0 && input.Action != PlanCheckActionPass {
+		return "", &PreconditionError{Reason: "validation notes require plan-check --pass"}
+	}
 	switch input.Action {
 	case PlanCheckActionPass, PlanCheckActionHold:
 		if input.Authority == nil || input.Authority.ID == "" {
@@ -287,13 +323,16 @@ func planCheckTransition(task *models.Task, class PlanHandoffClass, blocker stri
 			return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
 				"task %s is held for human action (%s); only an operator plan-check %s --clear releases it", task.ID, task.PlanCheck.Ask, task.ID)}
 		case current == models.PlanCheckPassed:
+			if !slices.Equal(task.PlanCheck.Notes, input.Notes) {
+				return planCheckChange{}, &PreconditionError{Reason: "passed plan has different validation notes; an operator must clear and recheck it before generation"}
+			}
 			return planCheckChange{}, nil
 		case class == PlanHandoffNeedsReview && blocker != "":
 			return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
 				"task %s cannot pass while %s; replan or hold it instead", task.ID, blocker)}
 		}
 		return planCheckChange{
-			check:   &models.PlanCheck{Verdict: models.PlanCheckPassed, By: actor, At: now},
+			check:   &models.PlanCheck{Verdict: models.PlanCheckPassed, By: actor, At: now, Notes: slices.Clone(input.Notes)},
 			note:    "passed",
 			changed: true,
 		}, nil

@@ -61,14 +61,7 @@ func AcceptanceObservation(state *models.State, task *models.Task) string {
 		return ""
 	}
 	parentIDs := task.EffectiveParentTasks()
-	parents := make([]any, 0, len(parentIDs))
-	for _, id := range parentIDs {
-		if parent := state.FindTask(id); parent != nil {
-			parents = append(parents, parent)
-		} else {
-			parents = append(parents, "missing:"+id)
-		}
-	}
+	parents := planEvidenceRecords(state, parentIDs)
 	var reaffirmations []models.ProofReaffirmation
 	for _, reaffirmation := range state.ProofReaffirmations {
 		if slices.Contains(parentIDs, reaffirmation.ParentTask) {
@@ -88,7 +81,7 @@ func AcceptanceObservation(state *models.State, task *models.Task) string {
 	}
 	payload, err := json.Marshal(struct {
 		Task           *models.Task
-		Parents        []any
+		Parents        []*models.Task
 		Reaffirmations []models.ProofReaffirmation
 		RuntimeInputs  map[string]models.RuntimeInputInstance `json:",omitempty"`
 	}{task, parents, reaffirmations, instances})

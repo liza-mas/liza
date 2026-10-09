@@ -186,13 +186,14 @@ func acceptanceReviewParent(projectRoot string, state *models.State, task *model
 	var parentID, reviewCommit string
 	for _, candidateID := range task.EffectiveParentTasks() {
 		candidate := state.FindTask(candidateID)
-		if !parentAllocatesTask(g, projectRoot, task, candidate, path, heading, integrationSpan, integrationCommit) {
+		review := parentAllocationReview(g, projectRoot, state, task, candidate, path, heading, integrationSpan, integrationCommit)
+		if review == nil {
 			continue
 		}
 		if parentID != "" {
 			return "", "", &PreconditionError{Reason: fmt.Sprintf("task %s has multiple parents claiming the same allocation; acceptance refuses that state and re-affirmation cannot choose between them", task.ID)}
 		}
-		parentID, reviewCommit = candidate.ID, *candidate.ReviewCommit
+		parentID, reviewCommit = candidate.ID, *review.ReviewCommit
 	}
 	if parentID == "" {
 		return "", "", &PreconditionError{Reason: fmt.Sprintf("task %s has no merged planning parent that allocates it; the refusal is not an approved-proof drift and re-affirmation cannot clear it", task.ID)}

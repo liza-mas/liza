@@ -224,7 +224,7 @@ func manyToOneCohortMembers(s *models.State, parentID, rolePair string) ([]*mode
 	lineage := make(map[string]*models.Task)
 	for i := range s.Tasks {
 		task := &s.Tasks[i]
-		if task.RolePair != rolePair || !slices.Contains(task.EffectiveParentTasks(), parentID) {
+		if task.AmendsPlan != "" || task.RolePair != rolePair || !slices.Contains(task.EffectiveParentTasks(), parentID) {
 			continue
 		}
 		lineage[task.ID] = task
@@ -348,6 +348,9 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 	// failure wherever it sorts; only live members make this a normal wait.
 	var pending *models.Task
 	for _, member := range cohort {
+		if member.PlanGenerationFenced() {
+			return fmt.Errorf("task %q is fenced by a reviewed plan amendment", member.ID)
+		}
 		if member.Status == tDef.requiredStatus || member.Status == models.TaskStatusMerged {
 			continue
 		}
@@ -450,6 +453,17 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 //
 // The result.ChildTaskIDs slice is appended to with created child task IDs.
 func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
+	if task := s.FindTask(taskID); task != nil && task.PlanCheck != nil && resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName) {
+		if err := models.ValidatePlanValidationNotes(task.PlanCheck.Notes, len(task.Output)); err != nil {
+			return fmt.Errorf("task %s validation notes: %w", taskID, err)
+		}
+		if len(task.PlanCheck.Notes) > 0 && (task.PlanCheck.Verdict != models.PlanCheckPassed || tDef.cardinality != "per-subtask") {
+			return fmt.Errorf("validation notes require a passed per-subtask hand-off")
+		}
+	}
+	if task := s.FindTask(taskID); task != nil && task.PlanGenerationFenced() {
+		return fmt.Errorf("task %q is fenced by a reviewed plan amendment", task.ID)
+	}
 	if task := s.FindTask(taskID); task != nil && task.PlanHandoffRetired() {
 		return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.PlanCheck.ReplacedBy)
 	}
@@ -479,6 +493,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 	}
 
 	outputEntries := task.Output
+	selectedNotes := resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName)
 	outputChanged := false
 	switch tDef.cardinality {
 	case "per-subtask":
@@ -547,6 +562,9 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		allowedMissingDeps := stringSet(siblingIDs)
 		for i, entry := range outputEntries {
 			if _, dedupd := remapSibling[i]; dedupd {
+				if selectedNotes && len(task.ValidationNotesForOutput(i)) > 0 {
+					return fmt.Errorf("validation notes select deduplicated output[%d]; no new child would receive them", i)
+				}
 				// Dep resolution still needs an ID; point at the incumbent so
 				// that downstream siblings with depends_on: [i] resolve to the
 				// real in-flight (or first-of-batch) task. Do NOT append a
@@ -559,6 +577,9 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 			}
 			entryInherited = excludeRetiring(entryInherited, entry, retiring)
 			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, entryInherited, task.EpicRef, task.ArchRef, task.RCARequired, now)
+			if selectedNotes {
+				child.ValidationNotes = task.ValidationNotesForOutput(i)
+			}
 			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn, allowedMissingDeps)
 			if err != nil {
 				return err
@@ -633,6 +654,10 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 // marked as executed but some child tasks are missing. Returns
 // errTransitionAlreadyExecuted if all children already exist.
 func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
+	selectedNotes := resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName)
+	if task.PlanGenerationFenced() {
+		return fmt.Errorf("task %q is fenced by a reviewed plan amendment", task.ID)
+	}
 	switch tDef.cardinality {
 	case "per-subtask":
 		canonicalOutput, outputChanged, err := canonicalizedOutputTaskDependsOnForTarget(s, resolver, task, tDef.targetRolePair)
@@ -667,6 +692,9 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			// at our own child; recover a missing declaration on that child.
 			if _, skipped := skipEntry[i]; skipped {
 				if siblingIDs[i] != perSubtaskChildID(taskID, tDef.taskSlug, i) {
+					if selectedNotes && len(task.ValidationNotesForOutput(i)) > 0 {
+						return fmt.Errorf("validation notes select deduplicated output[%d]; no new child would receive them", i)
+					}
 					continue
 				}
 				own := s.FindTask(siblingIDs[i])
@@ -751,6 +779,9 @@ func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transi
 			}
 			entryInherited = excludeRetiring(entryInherited, canonicalOutput[idx], retiring)
 			child := buildChildTask(siblingIDs[idx], taskID, canonicalOutput[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, entryInherited, task.EpicRef, task.ArchRef, task.RCARequired, now)
+			if selectedNotes {
+				child.ValidationNotes = task.ValidationNotesForOutput(idx)
+			}
 			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn, allowedMissingDeps)
 			if err != nil {
 				return err
@@ -1271,7 +1302,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 			// Replanned tasks must not spawn children — the replan replacement
 			// owns the downstream pipeline. Replan.go marks real transitions as
 			// executed (preventive), but this is a defensive second layer.
-			if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
+			if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() || task.PlanGenerationFenced() {
 				continue
 			}
 
@@ -1324,7 +1355,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 				continue
 			}
 			// Replanned tasks must not spawn children (same guard as Phase 1a).
-			if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
+			if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() || task.PlanGenerationFenced() {
 				continue
 			}
 			for transName := range task.TransitionsExecuted {

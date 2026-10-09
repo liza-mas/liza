@@ -274,6 +274,11 @@ func ProviderDependencyChildren(dep ProviderDependency, pr PipelineResolver) (Pr
 // projected ID, so the retirement checks on it still fail closed. Output
 // indexes are never mapped.
 func EffectiveProviderChildren(dep ProviderDependency, state *State, pr PipelineResolver) (ProviderTransition, []string, error) {
+	if state != nil {
+		if provider := state.FindTask(dep.ProviderTask); provider != nil && provider.AmendsPlan != "" {
+			return ProviderTransition{}, nil, fmt.Errorf("correction %s cannot be selected as a provider", provider.ID)
+		}
+	}
 	td, children, err := ProviderDependencyChildren(dep, pr)
 	if err != nil {
 		return td, nil, err
@@ -289,7 +294,7 @@ func EffectiveProviderChildren(dep ProviderDependency, state *State, pr Pipeline
 // ProviderRetired reports a provider whose reviewed output can never be
 // generated: replanned, hand-off retired, or terminal other than MERGED.
 func ProviderRetired(provider *Task) bool {
-	return provider.TransitionsExecuted["replanned"] || provider.PlanHandoffRetired() ||
+	return provider.AmendsPlan != "" || provider.TransitionsExecuted["replanned"] || provider.PlanHandoffRetired() ||
 		(provider.Status.IsTerminal() && provider.Status != TaskStatusMerged)
 }
 

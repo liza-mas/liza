@@ -345,6 +345,9 @@ func canonicalizeDependencyID(state *models.State, depID string, visiting map[st
 }
 
 func operationalOutputMayBeConsumed(state *models.State, resolver *pipeline.Resolver, task *models.Task) bool {
+	if task != nil && task.AmendsPlan != "" {
+		return false
+	}
 	if task == nil || len(task.Output) == 0 || task.Status == models.TaskStatusSuperseded || task.Status == models.TaskStatusAbandoned {
 		return false
 	}

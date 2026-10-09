@@ -18,6 +18,7 @@ func ValidateProviderDependencies(state *models.State, resolver *pipeline.Resolv
 }
 
 func validateProviderDependencies(v *violations, state *models.State, resolver *pipeline.Resolver) {
+	state = amendmentProviderProjection(state)
 	if state != nil && !models.HasProviderDependencies(state) {
 		return
 	}
@@ -95,6 +96,10 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 			v.add(fmt.Errorf("%s references non-existent provider %s", label, dep.ProviderTask))
 			continue
 		}
+		if provider.AmendsPlan != "" {
+			v.add(fmt.Errorf("%s cannot select correction %s as a provider", label, provider.ID))
+			continue
+		}
 		transition, children, err := models.EffectiveProviderChildren(dep, state, resolver)
 		if err != nil {
 			v.add(fmt.Errorf("%s: %w", label, err))
@@ -130,6 +135,9 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 // Live output is generation input, including a partially recovered MERGED
 // producer. Retired output and fully materialized output are audit records.
 func providerOutputIsLive(state *models.State, resolver *pipeline.Resolver, task *models.Task) bool {
+	if task.AmendsPlan != "" {
+		return false
+	}
 	if len(task.Output) == 0 || task.Status == models.TaskStatusSuperseded || task.Status == models.TaskStatusAbandoned ||
 		task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
 		return false

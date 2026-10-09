@@ -37,7 +37,7 @@ func (d PlanHandoffDomain) undecidedFingerprint(state *models.State, task *model
 		return ""
 	}
 	class, blocker := d.Classify(state, task)
-	if class != PlanHandoffNeedsReview && class != PlanHandoffNeedsReconciliation {
+	if class != PlanHandoffNeedsReview && class != PlanHandoffNeedsReconciliation && class != PlanHandoffAmendmentReady {
 		return ""
 	}
 	deps, _, err := canonicalizeConcreteDependencyList(state, d.resolver, task.ID, task.RolePair, task.DependsOn)
@@ -62,11 +62,16 @@ func (d PlanHandoffDomain) undecidedFingerprint(state *models.State, task *model
 			notes = append(notes, note.Timestamp.UTC())
 		}
 	}
-	encoded, err := json.Marshal(map[string]any{
+	inputs := map[string]any{
 		"version": handoffUndecidedVersion, "class": class, "blocker": blocker,
 		"plan_check": task.PlanCheck, "output": task.Output, "depends_on": deps,
 		"history": history, "notes": notes,
-	})
+	}
+	if task.PlanAmendment != nil {
+		inputs["plan_amendment"] = task.PlanAmendment
+		inputs["pending_correction"] = d.ReadyPlanCorrection(state, task)
+	}
+	encoded, err := json.Marshal(inputs)
 	if err != nil {
 		return ""
 	}
@@ -76,7 +81,7 @@ func (d PlanHandoffDomain) undecidedFingerprint(state *models.State, task *model
 // UndecidedHandoff returns the plan's latest undecided observation while it
 // matches current inputs. Malformed or unknown observations fail open.
 func (d PlanHandoffDomain) UndecidedHandoff(state *models.State, task *models.Task) *PlanHandoffUndecided {
-	if task == nil || !d.InDomain(task) || !d.Pending(task) {
+	if task == nil || !d.Pending(task) || !d.InDomain(task) && d.ReadyPlanCorrection(state, task) == nil {
 		return nil
 	}
 	for i := len(task.History) - 1; i >= 0; i-- {

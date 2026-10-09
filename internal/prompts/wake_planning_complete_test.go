@@ -43,11 +43,14 @@ func TestPlanningCompleteInstructionsReviewDispositions(t *testing.T) {
 		"plan_ref anchor names exactly one ATX heading",
 		"has a producer (a task, a committed generator, or an explicit human step)",
 		"its instances are recorded after the children exist, so do not hold for them",
-		"replan it into runtime_inputs when",
+		"use reviewed amend-plan or replan to declare runtime_inputs when",
+		"Notes never excuse missing DB/venv/container producers, durable runtime_inputs or human provisioning",
+		brand.Command("plan-check") + " <task-id> --pass --notes-file <file>",
+		brand.Command("amend-plan") + " <task-id> --apply <correction-id>",
 		brand.Command("replan") + ` <task-id> --reason "<check>: <evidence> → <required correction>" --changed-by orchestrator-1`,
 		brand.Command("plan-check") + ` <task-id> --hold "<exact human action>" --agent-id orchestrator-1 --json`,
 		brand.Command("plan-check") + " <task-id> --pass --agent-id orchestrator-1 --json",
-		"If every plan was replanned or held, do not checkpoint.",
+		"If every plan awaits amendment, was replanned or held, do not checkpoint.",
 	} {
 		if !strings.Contains(instruction, want) {
 			t.Errorf("instruction missing %q:\n%s", want, instruction)

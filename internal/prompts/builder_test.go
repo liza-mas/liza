@@ -1101,7 +1101,7 @@ func TestRenderOrchestratorDashboard(t *testing.T) {
 				"- Merged: 1",
 				"Planning tasks have been merged with output[]. You own their hand-off",
 				"PLANS TO REVIEW:",
-				"Create tasks or edit plan files — replan routes corrections to the planner.",
+				"Create child tasks directly or edit merged plan files yourself — amend-plan/replan route material corrections to ordinary planner/reviewer review.",
 			},
 			wantNotContain: []string{
 				"WAKE TRIGGER: UNKNOWN",

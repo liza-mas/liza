@@ -394,6 +394,9 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
 | `plan_check` | `*PlanCheck` | Orchestrator (`plan-check --pass/--hold`) / operator (`plan-check --clear/--replaced-by`) | Disposition of a merged planning task whose manual `per-subtask`/`one-to-one` hand-off has not run. `passed` admits automatic expansion; `held` (with `ask`) blocks every expansion path until operator clear; `replaced` (with `replaced_by`) irrevocably retires an unused hand-off by a distinct merged correction in the same role-pair. Preserves MERGED and ordinary dependencies. See [ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md) |
+| `amends_plan` | `string` | `amend-plan` | Original planning task ID on a separate same-pair correction; the correction cannot generate children or become a provider |
+| `plan_amendment` | `*PlanAmendment` | `amend-plan` | Original manifest and pending/created/applied/quarantined correction provenance; see [Reviewed plan amendments](#reviewed-plan-amendments) |
+| `validation_notes` | `[]ValidationNote` | Child generation/recovery | Selected advisory messages with original `parent_task` and `output_index`; separate from canonical `validation` and acceptance evidence |
 
 `transition_failed` history records initial gated per-subtask output validation
 or selective-inheritance refusals. `extra` contains `version: 1`, `task_id`,
@@ -618,6 +621,81 @@ circular `depends_on` prevents topological ordering. Semantics:
 - Checkpoint auto-trigger (`sprint_checkpoint.go`) still uses `IsUnconsumedPlanningOutput` today
 - Idempotent per (taskID, transitionName, sorted cycle member IDs)
 - Cycle members stored in `Extra["cycle_members"]` (sorted task ID list)
+
+### Reviewed plan amendments
+
+A MERGED planning task may gain a non-retiring correction before any child or
+executed transition exists ([ADR-0197](ADR/0197-reviewed-plan-amendments-and-validation-notes.md)).
+The original retains its ID, terminal status and immutable base/review/merge and
+approval attribution. Separate same-pair tasks carry `amends_plan` and use the
+ordinary independent review lifecycle.
+
+```yaml
+plan_amendment:                    # on the original, engine-owned
+  pending: plan-1-amend-2          # blocks every generation path until applied
+  original_output: []              # retained full initial OutputEntry manifest
+  corrections: [plan-1-amend-1, plan-1-amend-2]
+  applied: []                      # ordered adopted correction IDs
+  quarantined: [plan-1-amend-1]     # retained predecessors, never current authority
+```
+
+`amend-plan ORIGINAL --reason TEXT` installs the pending fence and creates review
+work atomically. Begin, adoption and pending replacement append `plan_amendment`
+history on the original; this changes durable plan content and counts as a useful
+usage transition without changing task status. `--apply CORRECTION` requires the exact pending independently
+approved MERGED correction, ordered immutable review ancestry, unchanged existing
+slot identities and a valid prospective graph under the original identity.
+Existing `desc`, `done_when`, `scope`, all artifact refs, `kind`, `supersedes`,
+`changed`, `decomposition`, RCA and destructive-DB classification stay fixed.
+Dependency/inheritance, validation/prerequisite and runtime-input fields may
+change under fresh review, and new slots may append; existing slots never move,
+disappear or gain a different identity. Apply appends provenance, clears pending
+and old pass/notes, preserves a later human hold and retires only the correction
+handoff. A same-target replay changes neither state nor history.
+
+Active correction review suppresses repeated planning wakes. A MERGED or
+ABANDONED pending correction has derived handoff class `amendment_ready` and
+wakes PLANNING_COMPLETE for apply or pending replacement, including under a
+later hold. The wake authorizes neither generation nor hold release. Its
+verifier requires disposition of that exact pending ID; an unchanged unhandled
+amendment is observed and suppressed until new input.
+
+`--replace-pending CORRECTION --reason TEXT` quarantines an exact unapplied
+MERGED or ABANDONED correction and creates new same-pair review work, retaining
+the original fence and any hold. Active or applied corrections cannot be
+replaced. Quarantined merged records retain immutable evidence; their already
+merged artifact changes require reconciliation in the fresh review. No abort
+clears an unsafe fence and no terminal record reopens.
+
+Crosslinks, role pairs, unique ordered provenance and historical manifests are
+validated. Latest applied review supplies current acceptance/provider-reference
+authority; original and earlier independently reviewed merged manifests may
+establish unchanged allocation authorship, including reconciled quarantined
+predecessors, but not current authority. Match current reviewed spans, child
+allocation, proof references and ancestry. Acceptance sources retain the original
+parent ID and actual effective review commit; creation/claim digests cover the
+referenced correction rows. Child reference context includes original and relevant
+merged correction carriers, excluding draft/future pending authority.
+
+### Advisory validation notes
+
+`plan-check ORIGINAL --pass --notes-file FILE` accepts a strict JSON array:
+
+```json
+[{"output_index": 0, "message": "Check that the hook path filter covers the changed file."}]
+```
+
+Persisted `plan_check` notes select unique existing non-dedup output indexes.
+Messages must be nonblank UTF-8, at most 4096 bytes each; input is bounded to
+16384 bytes and rejects unknown fields. Identical passed replay is a no-op;
+changed notes require clear/recheck before generation. Other disposition actions
+do not accept notes, and authority/human-hold checks remain in force.
+
+Only selected children receive `validation_notes`, with `parent_task`,
+`output_index` and `message`, in normal generation and missing-child recovery.
+Both doer and reviewer see the advisory block. It cannot change canonical
+validation, acceptance proofs/receipts, provider declarations, runtime inputs,
+scope/order/contracts or missing producer/provisioning requirements.
 
 ### Lifecycle Receipt Metadata
 

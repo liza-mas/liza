@@ -174,6 +174,9 @@ func awaitsPlanningTransition(state *models.State, plannerID string, handoff Pla
 	if !handoff.PlanningCompleteEligible(state, planner) {
 		return false
 	}
+	if handoff.ReadyPlanCorrection(state, planner) != nil {
+		return true
+	}
 	attempted := state.Sprint.Timeline.TransitionsAttemptedAt
 	if attempted == nil {
 		return true
@@ -183,7 +186,7 @@ func awaitsPlanningTransition(state *models.State, plannerID string, handoff Pla
 	// the latest of these events is compared, not the merge alone (D-58).
 	for i := len(planner.History) - 1; i >= 0; i-- {
 		switch planner.History[i].Event {
-		case models.TaskEventMerged, models.TaskEventPlanCheck:
+		case models.TaskEventMerged, models.TaskEventPlanCheck, models.TaskEventPlanAmendment:
 			return planner.History[i].Time.After(*attempted)
 		}
 	}

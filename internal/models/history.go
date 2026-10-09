@@ -95,6 +95,7 @@ const (
 	TaskEventRecoveredFresh            TaskEventName = "task_recovered_fresh"
 	TaskEventRecoveryFreshFailed       TaskEventName = "task_recovery_fresh_failed"
 	TaskEventPlanCheck                 TaskEventName = "plan_check"
+	TaskEventPlanAmendment             TaskEventName = "plan_amendment"
 	// TaskEventArchRefRepaired records an operator setting the empty arch_ref of
 	// an unstarted task (repair-arch-ref, D-76).
 	TaskEventArchRefRepaired TaskEventName = "arch_ref_repaired"

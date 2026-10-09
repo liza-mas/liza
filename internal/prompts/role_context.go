@@ -247,6 +247,7 @@ type RoleContextData struct {
 	ArchSection        string // exact architecture anchor fragment, empty if none
 	RCARequired        bool   // objective is a defect fix: plan must carry a reviewed RCA
 	ValidationCommands []string
+	ValidationNotes    []models.ValidationNote
 	// DeclareValidationPrerequisites: every role consuming this task's output[]
 	// launches on a CLI asserting validation_execution: local, so planners
 	// declare validation_prerequisites and reviewers check them.
