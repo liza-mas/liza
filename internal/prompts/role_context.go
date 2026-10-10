@@ -221,6 +221,30 @@ type LegacyArtifactReference struct {
 	File  string
 }
 
+// TaskCorrectiveContext carries bounded evidence, never lifecycle or review authority.
+type TaskCorrectiveContext struct {
+	Unblock      *TaskUnblockResolution
+	Notes        []TaskHumanNote
+	OmittedNotes int
+}
+
+type TaskUnblockResolution struct {
+	Timestamp string
+	Agent     string
+	Reason    string
+	Truncated bool
+}
+
+type TaskHumanNote struct {
+	Timestamp     string
+	Target        string
+	Message       string
+	Source        string
+	Operation     string
+	OperatorInput bool // recorded CLI provenance, not authenticated authority
+	Truncated     bool
+}
+
 // RoleContextData is the unified template data type for all role template blocks.
 // Each field group is populated as appropriate for the role being rendered.
 // Fields not relevant to a particular role remain at their zero value.
@@ -248,6 +272,7 @@ type RoleContextData struct {
 	RCARequired        bool   // objective is a defect fix: plan must carry a reviewed RCA
 	ValidationCommands []string
 	ValidationNotes    []models.ValidationNote
+	CorrectiveContext  *TaskCorrectiveContext
 	// DeclareValidationPrerequisites: every role consuming this task's output[]
 	// launches on a CLI asserting validation_execution: local, so planners
 	// declare validation_prerequisites and reviewers check them.

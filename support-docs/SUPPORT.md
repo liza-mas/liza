@@ -845,7 +845,7 @@ An assessed task remains visible in total blocked counts, but unchanged blockers
 
 To deliver new operator input after an assessment, write a concise UTF-8 note and
 run `§BRAND_BINARY_NAME§ add-human-note <task-id|all> --note-file <path> --json`.
-The target must exist unless it is `all`. Notes are limited to4096 bytes and must
+The target must exist unless it is `all`. Notes are limited to 4096 bytes and must
 pass state hygiene; reference larger evidence by path instead of pasting logs.
 A newer note makes its assessed target actionable for the next orchestrator poll;
 it does not resume a paused run, clear a block, change task status or grant an
@@ -866,6 +866,22 @@ The orchestrator prompt requires this read before reassessment, including checks
 of newly referenced recovery tasks whose claim failed before they became BLOCKED.
 Restart a resident orchestrator after installing this prompt change; replacing
 the executable alone does not reload its prompt builder.
+
+Task doer and reviewer launch prompts also carry the latest nonempty unblock
+reason and the newest eight nonempty notes addressed to the task or `all`, in
+append order. Orchestrator consumption does not suppress this evidence. The block
+precedes prior rejection even with custom role section lists, after mandatory
+documents. Messages retain at most 4096 runes; timestamps and recorded provenance
+are shown, with labels capped at 128 runes. Shortening appends `...` and requires
+retrieval via `§BRAND_BINARY_NAME§ get <task-id> --json` for history or
+`§BRAND_BINARY_NAME§ get human_notes --json` for notes before deciding; overflow
+reports the number of earlier matching notes and requires the same note read.
+Omission does not supersede evidence. Recorded operator CLI provenance is labeled
+as input, other notes as legacy/audit context; neither authenticates authority.
+Verify cited evidence and closure conditions before repeating an old block or
+rejection. Notes cannot change scope, acceptance, review boundaries or lifecycle
+gates, and audit records are not fresh requests. Restart resident doer/reviewer
+supervisors after installing this prompt change; existing prompts are snapshots.
 
 **Fix**: If the blocker was another task, the blocked task should list it in `depends_on` so the orchestrator wakes when that task changes. If one direct edge is wrong, use `§BRAND_BINARY_NAME§ retarget-dependency <id> <old-dep-id> <new-dep-id[,new-dep-id]> --reason "..."`. For multiple tasks or complete lists, the blocked agent stores the command-free request through `§BRAND_BINARY_NAME§ mark-blocked --repair-request-file <path>` and the orchestrator runs `§BRAND_BINARY_NAME§ apply-dependency-repair <blocked-task-id> --reason "..."`; stale or invalid batches leave every dependency, audit entry, and request unchanged. The task remains BLOCKED until its repair validation passes and it is explicitly unblocked or assessed. Unassigned `§BRAND_BINARY_NAME§ unblock-task <id> --reason "..."` may restore a repaired task with valid pending dependencies to its role-pair initial status, but that task remains dependency-held and unclaimable until every direct dependency is `MERGED`. Adding `--assign-to <doer-agent-id>` is a direct-resume path and remains rejected while any dependency is unmet.
 If the task has a preserved worktree and integration moved while it was blocked, use `§BRAND_BINARY_NAME§ unblock-task <id> --rebase-on <integration-branch> --reason "..."`. Tracked worktree changes require `--allow-dirty`, which rebases with Git autostash; untracked files that would be overwritten are refused. Submit/merge conflicts move tasks to `INTEGRATION_FAILED`; unblock-time rebase conflicts remain `BLOCKED` with fresh repair metadata so the preserved worktree can be repaired and unblocked again. Once dependencies merge, claim-time recovery rebases and validates the preserved branch on one captured integration SHA, then uses the completion lock to order the final ref equality check and assignment against cooperating integration movement, without holding the integration mutation lock across the blackboard write.

@@ -91,6 +91,24 @@ consecutive, ~55s each). Run 1 was under heavy load (`internal/toolresult`
 run's complete output to a file closes this gap; it applies to the trigger
 above for any package.
 
+**Recurrence (D-10 validation, 2026-10-10):** the first `make test` failed
+only in `internal/agent` (264.210s; make exit 2). Its retained session output
+also contains the tool's truncation marker and no failing-test assertion;
+the original diagnostic could not be recovered from available session/RTK
+output artifacts. With no source or expectation changes, an agent-only JSON
+run passed, scoped agent/prompts race tests passed (agent 387.109s), and a
+saved full `make test` passed all 66 packages (agent 196.966s). Complete
+follow-up output was captured at `/tmp/d10-agent-validation.jsonl` and
+`/tmp/d10-full-validation.log`; the uncommitted local review record is
+`specs/adversarial-pairing/20261008-D10-reach-doers-and-reviewers.md`.
+Cause and attribution remain unknown; neither timing nor a pre-existing
+failure is established. Resolution is deferred because the diagnostic is
+lost and the failure did not reproduce in those follow-ups; unrelated test
+repairs or repeated green runs would not qualify it. The payback trigger
+remains the next agent-suite failure in a full or race run: capture complete
+output to a unique file before any rerun, identify its test/assertion, and
+compare the reviewed change against the unchanged baseline before repair.
+
 ## Status changes invisible to history-derived time in status
 
 **What:** `models.TimeInStatus` derives time in status from the most recent

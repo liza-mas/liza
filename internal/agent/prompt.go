@@ -389,6 +389,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 	data.ScipIndexes = availablePromptScipIndexRefs(state, data.Worktree, scipAvailableIndexes)
 	data.StacklitIndexes = availablePromptStacklitIndexRefs(data.Worktree)
 	data.FunctionalClusters = availablePromptFunctionalClusterIndexRefs(data.Worktree)
+	data.CorrectiveContext = buildTaskCorrectiveContext(task, state)
 
 	// Prior rejection
 	if task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != "null" {

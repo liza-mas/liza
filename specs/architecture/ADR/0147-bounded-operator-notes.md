@@ -69,6 +69,27 @@ Audit notes written by `delete-task`, `recover-task`, `delete-agent` and
 `recover-agent` are stamped at creation: they are records, not requests, and those
 commands never woke the orchestrator before.
 
+### Task-delivery extension — 2026-10-10 (D-10)
+
+Orchestrator delivery did not deliver recovery evidence to task doers or reviewers:
+resumed prompts retained rejection without the recorded resolution. Every task
+role now receives a corrective block ahead of configured sections, after mandatory
+documents, independent of role name and section configuration. The agent projects
+the latest nonempty unblock reason and newest eight matching task/`all` notes;
+rendering deduplicates the block. Orchestrator seen flags do not filter this
+read-only projection or change on task rendering.
+
+Messages are capped at 4096 runes and displayed provenance labels at 128, plus
+`...` on truncation. Earlier matching-note counts and truncation warnings require
+complete CLI retrieval before decisions. Current operator writes cap messages at
+4096 bytes, so valid notes render verbatim. Unknown provenance remains legacy/audit
+context, never an authenticated request; no message text or seen flag determines
+authority. Corrective evidence must be verified against unresolved findings and
+their closure conditions. Scope, canonical inputs, review boundaries and lifecycle
+gates remain authoritative. This avoids both stale re-blocking and automatic
+finding closure. Deployment requires resident supervisor restart; regression
+proof of delivery does not prove a live agent consumed the correction.
+
 ## Rationale
 
 Option 1 preserves the defect the user hit — the channel exists but only for tasks

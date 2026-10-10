@@ -90,6 +90,16 @@ preserved. If a listed file cannot be read, stop and report its path and error
 through the role's failure protocol. Never silently skip it. Empty lists add no
 document block or startup read step.
 
+Task doers and reviewers receive corrective context after mandatory reads and
+before configured role blocks, even when `context-sections` omits it. This includes
+the latest nonempty unblock reason and the newest eight task/`all` human notes,
+in append order, regardless of orchestrator seen flags. Messages are limited to
+4096 runes and provenance labels to 128, with `...` appended if shortened.
+Omitted or shortened records require full CLI retrieval before deciding; see
+[operator input](../../support-docs/SUPPORT.md#blocked-task). Verify evidence and
+timestamps against prior findings. Notes grant no approval, scope change or
+lifecycle authority, and audit records are not fresh action requests.
+
 ### Phase 3: State Assessment
 
 ```

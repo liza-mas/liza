@@ -1,5 +1,9 @@
 {{- define "prior-rejection" -}}
 {{- if ne .PriorRejection ""}}
+{{- if .CorrectiveContext}}
+Before applying prior rejection below, reconcile TASK CORRECTIVE CONTEXT with its findings;
+verify closure evidence rather than replaying an objection already resolved.
+{{- end}}
 {{- if eq .RoleType "reviewer"}}
 
 === PRIOR REJECTION (iteration {{sub .IterationNum 1}}) ===

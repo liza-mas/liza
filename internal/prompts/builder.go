@@ -515,6 +515,11 @@ func hasIntegrationTaskInSprint(state *models.State) bool {
 // control ({{- -}} trimming), which is fragile and linter-hostile. Each non-empty
 // block is TrimSpace'd and joined with a blank-line separator.
 func BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error) {
+	if data != nil && data.CorrectiveContext != nil && (data.RoleType == "doer" || data.RoleType == "reviewer") {
+		// Recovery evidence must reach custom task roles even when their section
+		// configuration omits it. Mandatory reads still render first below.
+		sectionNames = append([]string{"task-corrective-context"}, sectionNames...)
+	}
 	if data != nil && len(data.MandatoryDocs) > 0 {
 		// Mandatory reads cannot be omitted or delayed by context-section configuration.
 		root := data.ProjectRoot
@@ -541,7 +546,14 @@ func BuildRoleContext(role string, sectionNames []string, data *RoleContextData)
 	}
 	var blocks []string
 	mandatoryDocsRendered := false
+	correctiveContextRendered := false
 	for _, section := range sectionNames {
+		if section == "task-corrective-context" {
+			if correctiveContextRendered {
+				continue
+			}
+			correctiveContextRendered = true
+		}
 		if section == "mandatory-docs" {
 			if mandatoryDocsRendered {
 				continue
