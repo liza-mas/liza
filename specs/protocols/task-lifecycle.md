@@ -152,7 +152,8 @@ correction with `amends_plan: ORIGINAL`; it follows ordinary claim, submission,
 independent review and merge. ORIGINAL remains MERGED with its review metadata,
 provider identity and satisfied ordinary dependencies. Begin requires planning
 output, no children/executed transition/retirement/human hold and installs a
-pending fence atomically. Every generation path, including operator proceed,
+pending fence atomically. This is the legacy empty-mode amendment; explicit modes below
+may also correct expanded architecture. Every generation path, including operator proceed,
 many-to-one and crash recovery, respects that fence. Correction tasks never
 generate ordinary children or serve as providers.
 
@@ -183,7 +184,41 @@ quarantined predecessors, may establish unchanged allocation origins. Validate
 matching spans, allocations, proofs and review/merge ancestry; do not overwrite
 original review facts or use a discarded draft as authority. Children retain
 the original parent ID and actual effective review commit, and reference context
-retains relevant original/correction carriers.
+retains relevant original/correction carriers. An already-started child may keep its adopted
+historical review SHA only while that independent review remains in ancestry and its
+allocation and resolved proofs match current authority; stored receipts are not rewritten.
+Fresh children adopt the latest applied review.
+
+`amend-plan ORIGINAL --contract --reason TEXT` commissions existing referenced
+architecture contract-prose correction. `replan ORIGINAL --preserve-output-identity`
+commissions same-pair `ORIGINAL-replan-N` through `amends_plan`, leaving ORIGINAL
+MERGED and provider selectors unchanged. Both adopt with `amend-plan ORIGINAL
+--apply CORRECTION`, preserve the complete ordered manifest (refs, ownership,
+classifications, commands, provider/runtime declarations, prerequisites and fanout),
+and refuse changed acceptance allocations or approved resolved proofs. Architecture edits
+are limited to the referenced Scope's exact nested `#### CONTRACT` subsection;
+surrounding Scope metadata/other subsections stay byte-identical, and bare refs refuse
+edits. Unused nonarchitecture planning originals may preserve referenced plan prose
+outside frozen strict acceptance allocations. New files and implementation edits refuse.
+Expanded originals must be architecture tasks; preserving an unused planning output is
+also supported. Pending corrections fence applicable consumer admission/submission along
+declared ancestry while correction work remains runnable. Incompatible apply retains the
+fence for `--replace-pending` review. Ordinary destructive replan and legacy scheduling
+amendments keep their earlier semantics. `--trigger` records explicit repair attribution;
+omission is unknown, never inferred from the reason or task ID.
+
+Architecture may generate coding children directly only through an explicitly configured
+exclusive `coding-allocation` route. Flat output entries all set `coding_allocation: true`
+and share one exact `arch_ref` Scope; each distinct exact `plan_ref` names an allocation
+heading inside it with strict Acceptance Contract, future coder-authored manifest path,
+`decomposition.owned_files` and nonempty matching canonical validation. Architecture review
+covers design and allocation; manual handoff disposition and quorum remain. Specialized
+`architecture-to-coding` omits code-planning; master `architecture-main-to-coding` also
+omits specialized architecture. Fanout, RCA-required work, kind markers and
+`descendant_dependencies` retain ordinary stages; direct allocation refuses those markers
+rather than dropping writer waits. Immediate provider dependencies remain supported.
+Legacy unmarked output and frozen topologies keep their prior routes; marked output on
+an unsupported topology refuses. See [ADR-0198](../architecture/ADR/0198-frozen-interface-corrections-and-direct-coding-allocation.md).
 
 For harmless supplemental hook/probe guidance, `plan-check ORIGINAL --pass
 --notes-file FILE` selects output indexes through strict JSON records

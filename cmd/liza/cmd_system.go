@@ -383,6 +383,12 @@ example the orchestrator's plan review, or after an automatic resume) the
 sprint status is left alone. --reason is appended to the new task's
 description so the planner and plan reviewer see what must change.
 
+--preserve-output-identity commissions an independently reviewed replacement
+through the amendment fence. The original provider identity remains MERGED;
+adopt compatible output with amend-plan <original> --apply <replacement>.
+Expanded architectures may use this mode; their allocation remains unchanged.
+--trigger records the cause for UTC creation-day planning-change metrics.
+
 Preconditions:
   - Sprint must be at CHECKPOINT or IN_PROGRESS
   - Target task must be MERGED with output[]
@@ -409,7 +415,9 @@ Example workflow:
 		}
 
 		reason, _ := cmd.Flags().GetString("reason")
-		return commands.ReplanCommand(projectRoot, taskID, changedBy, reason)
+		preserve, _ := cmd.Flags().GetBool("preserve-output-identity")
+		trigger, _ := cmd.Flags().GetString("trigger")
+		return commands.ReplanCommandWithIdentity(projectRoot, taskID, changedBy, reason, preserve, trigger)
 	},
 }
 
@@ -509,7 +517,7 @@ Query Types:
     <task-id>.rejection_reason      - Task rejection text (null when absent)
 
   Entity queries:
-    tasks                          - List all tasks
+    tasks                          - List active work and unfinished handoffs (--all for history)
     tasks <task-id>                - Show specific task
     tasks.<task-id>                - Same task using dotted syntax
     agents                         - List all agents
@@ -533,6 +541,7 @@ Examples:
   %[2]s config.mode
   %[2]s sprint.elapsed
   %[2]s tasks --format table
+  %[2]s tasks --all --format json
   %[2]s tasks --active --summary --json
   %[2]s tasks task-1 --output-summary --json
   %[2]s tasks task-1 --format json
@@ -570,6 +579,17 @@ Unknown fields, array/map traversal and surplus positional arguments are errors.
 		format, _ := cmd.Flags().GetString("format")
 		summary, _ := cmd.Flags().GetBool("summary")
 		active, _ := cmd.Flags().GetBool("active")
+		all, _ := cmd.Flags().GetBool("all")
+		if all && active {
+			return &ops.PreconditionError{Reason: "--all and --active are mutually exclusive"}
+		}
+		taskList := len(args) == 1 && args[0] == "tasks"
+		if all && !taskList {
+			return &ops.PreconditionError{Reason: "--all is only supported for task listings"}
+		}
+		if taskList && !all {
+			active = true
+		}
 		zombies, _ := cmd.Flags().GetBool("zombies")
 		outputSummary, _ := cmd.Flags().GetBool("output-summary")
 		fields, _ := cmd.Flags().GetStringArray("field")
@@ -756,6 +776,8 @@ func init() {
 	addChangedByFlag(startCmd)
 	addChangedByFlag(replanCmd)
 	replanCmd.Flags().String("reason", "", "why the plan must change; appended to the new planning task's description")
+	replanCmd.Flags().Bool("preserve-output-identity", false, "commission a reviewed replacement without retiring provider/output identity")
+	replanCmd.Flags().String("trigger", "", "planning-change trigger for UTC creation-day metrics (omitted: unknown)")
 	addChangedByFlag(resumeCmd)
 
 	// JSON output flags
@@ -771,7 +793,8 @@ func init() {
 		cmd.Flags().String("format", "", "output format: json, yaml, table, value (default varies by query type)")
 		cmd.Flags().Bool("summary", false, "return compact task summaries")
 		cmd.Flags().Bool("output-summary", false, "return compact task output summaries")
-		cmd.Flags().Bool("active", false, "return only non-terminal tasks")
+		cmd.Flags().Bool("active", false, "return active work and unfinished handoffs")
+		cmd.Flags().Bool("all", false, "include terminal task history (task listings default to active work)")
 		cmd.Flags().StringArray("field", nil, "project task fields (repeat or comma-separate; e.g. id,rejection_reason,rejection_rca)")
 		registerCompletion(cmd, "format", completeValues("json", "yaml", "table", "value"))
 	}

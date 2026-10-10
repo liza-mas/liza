@@ -117,6 +117,9 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 		return nil, nil
 	}
 	ref := acceptanceAllocationRef(task)
+	if original := models.PendingPlanAmendment(state, task); original != "" {
+		return nil, &AcceptanceEvidenceError{TaskID: task.ID, Field: "acceptance.source", Reason: "reviewed plan amendment pending for " + original, Class: AcceptanceFaultAllocation}
+	}
 	failAs := func(class AcceptanceFault, reason string) (*acceptanceInput, error) {
 		return nil, &AcceptanceEvidenceError{TaskID: task.ID, Field: "acceptance.source", Reason: reason, Class: class}
 	}
@@ -245,10 +248,11 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 	}, nil
 }
 
-// parentAllocationReview returns the effective reviewed authority for the task's
-// allocation on every ground except the approved-proof comparison.
+// parentAllocationReview returns current reviewed authority, or the unchanged
+// historical authority already adopted by this task. Adopted evidence must keep
+// exactly the same resolved proofs; it cannot follow a new recovery grant.
 //
-// That comparison is deliberately left to the caller, because the two callers
+// For a fresh allocation the proof comparison is left to the caller, because the two callers
 // do different things with the same answer: acceptance refuses, and
 // re-affirmation decides. Sharing everything up to that point is what keeps a
 // recovery grant bound to the parent that actually allocates the task —
@@ -256,7 +260,7 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 // re-affirmed against a parent that never allocated it, leaving the real one
 // unauthorized and the task still refused.
 func parentAllocationReview(g *git.Git, root string, state *models.State, task, parent *models.Task, path, heading, integrationSpan, integrationCommit string) *models.Task {
-	if parent == nil || parent.EffectiveType() != models.TaskTypePlanning || parent.Status != models.TaskStatusMerged || !manifestAllocatesTask(parent.Output, task) {
+	if parent == nil || (parent.EffectiveType() != models.TaskTypePlanning && (parent.EffectiveType() != models.TaskTypeArchitecture || !models.DirectCodingAllocation(parent.Output))) || parent.Status != models.TaskStatusMerged || !manifestAllocatesTask(parent.Output, task) {
 		return nil
 	}
 	revisions, err := planReviewHistory(state, parent)
@@ -272,6 +276,38 @@ func parentAllocationReview(g *git.Git, root string, state *models.State, task, 
 	// each comparison uses that revision's own manifest and Git range.
 	reviewedSpan, reviewedOK := acceptanceCarrierSpan(root, *latest.ReviewCommit, path, heading)
 	if !reviewedOK || reviewedSpan != integrationSpan {
+		return nil
+	}
+	// A started child keeps its adopted immutable receipt authority only when
+	// that exact independently reviewed revision still covers the unchanged
+	// allocation and its resolved proofs. Never rewrite evidence to follow a
+	// later parent review merely because the selector stayed in position.
+	if adopted := task.AcceptanceSource; adopted != nil && adopted.ParentTask == parent.ID {
+		for _, revision := range revisions {
+			if revision.ReviewCommit == nil || *revision.ReviewCommit != adopted.ParentReviewCommit || !manifestAllocatesTask(revision.Output, task) {
+				continue
+			}
+			span, ok := acceptanceCarrierSpan(root, *revision.ReviewCommit, path, heading)
+			if !ok || span != reviewedSpan || adopted.Blob != spanObjectID(span) {
+				return nil
+			}
+			content, _, err := readAcceptanceBlob(root, integrationCommit, path)
+			if err != nil {
+				return nil
+			}
+			contract, err := referencecontract.ParseAcceptance(content, heading)
+			if err != nil {
+				return nil
+			}
+			// Adoption may already include an authorized proof reaffirmation.
+			// Its immutable integration commit is the no-change baseline; the
+			// caller still checks parent review authority with the real grants.
+			// A grant created later cannot authorize drift since adoption here.
+			if alike, _ := compareReviewedReferences(&models.State{}, parent.ID, root, adopted.Commit, integrationCommit, path, heading, contract); !alike {
+				return nil
+			}
+			return revision
+		}
 		return nil
 	}
 	for _, origin := range revisions {

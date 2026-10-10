@@ -25,6 +25,8 @@ type inspectTasksOptions struct {
 	Fields           []string // Requested task fields
 	ProjectRoot      string   // Project root, used for filesystem-aware diagnostics
 	PipelineResolver models.PipelineResolver
+	State            *models.State
+	HandoffDomain    *ops.PlanHandoffDomain
 }
 
 // taskInfo represents task information with computed fields
@@ -51,7 +53,9 @@ type taskInfo struct {
 	Validation        []string                  `json:"validation,omitempty" yaml:"validation,omitempty"`
 	ValidationNotes   []models.ValidationNote   `json:"validation_notes,omitempty" yaml:"validation_notes,omitempty"`
 	AmendsPlan        string                    `json:"amends_plan,omitempty" yaml:"amends_plan,omitempty"`
+	AmendmentMode     models.PlanAmendmentMode  `json:"amendment_mode,omitempty" yaml:"amendment_mode,omitempty"`
 	PlanAmendment     *models.PlanAmendment     `json:"plan_amendment,omitempty" yaml:"plan_amendment,omitempty"`
+	PlanningChange    *models.PlanningChange    `json:"planning_change,omitempty" yaml:"planning_change,omitempty"`
 	AcceptanceSource  *models.AcceptanceSource  `json:"acceptance_source,omitempty" yaml:"acceptance_source,omitempty"`
 	AcceptanceReceipt *models.AcceptanceReceipt `json:"acceptance_receipt,omitempty" yaml:"acceptance_receipt,omitempty"`
 	Archived          []models.ArchivedFieldRef `json:"archived,omitempty" yaml:"archived,omitempty"`
@@ -110,22 +114,24 @@ type taskOutputSummaryInfo struct {
 }
 
 type outputEntrySummaryInfo struct {
-	Index         int                           `json:"index" yaml:"index"`
-	Desc          string                        `json:"desc,omitempty" yaml:"desc,omitempty"`
-	Kind          string                        `json:"kind,omitempty" yaml:"kind,omitempty"`
-	SpecRef       string                        `json:"spec_ref,omitempty" yaml:"spec_ref,omitempty"`
-	EpicRef       string                        `json:"epic_ref,omitempty" yaml:"epic_ref,omitempty"`
-	PlanRef       string                        `json:"plan_ref,omitempty" yaml:"plan_ref,omitempty"`
-	ArchRef       string                        `json:"arch_ref,omitempty" yaml:"arch_ref,omitempty"`
-	Validation    []string                      `json:"validation,omitempty" yaml:"validation,omitempty"`
-	DestructiveDB bool                          `json:"destructive_db,omitempty" yaml:"destructive_db,omitempty"`
-	DependsOn     []string                      `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	TaskDependsOn []string                      `json:"task_depends_on,omitempty" yaml:"task_depends_on,omitempty"`
-	Decomposition *models.DecompositionManifest `json:"decomposition,omitempty" yaml:"decomposition,omitempty"`
+	CodingAllocation bool                          `json:"coding_allocation,omitempty" yaml:"coding_allocation,omitempty"`
+	Index            int                           `json:"index" yaml:"index"`
+	Desc             string                        `json:"desc,omitempty" yaml:"desc,omitempty"`
+	Kind             string                        `json:"kind,omitempty" yaml:"kind,omitempty"`
+	SpecRef          string                        `json:"spec_ref,omitempty" yaml:"spec_ref,omitempty"`
+	EpicRef          string                        `json:"epic_ref,omitempty" yaml:"epic_ref,omitempty"`
+	PlanRef          string                        `json:"plan_ref,omitempty" yaml:"plan_ref,omitempty"`
+	ArchRef          string                        `json:"arch_ref,omitempty" yaml:"arch_ref,omitempty"`
+	Validation       []string                      `json:"validation,omitempty" yaml:"validation,omitempty"`
+	DestructiveDB    bool                          `json:"destructive_db,omitempty" yaml:"destructive_db,omitempty"`
+	DependsOn        []string                      `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	TaskDependsOn    []string                      `json:"task_depends_on,omitempty" yaml:"task_depends_on,omitempty"`
+	Decomposition    *models.DecompositionManifest `json:"decomposition,omitempty" yaml:"decomposition,omitempty"`
 }
 
 // inspectTasks lists all tasks or filters by criteria
 func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
+	opts.State = state
 	filtered, err := filterInspectionTasks(state.Tasks, opts)
 	if err != nil {
 		return nil, err
@@ -246,6 +252,12 @@ func filterInspectionTasks(tasks []models.Task, opts inspectTasksOptions) ([]mod
 		}
 		opts.PipelineResolver = pipeline.NewResolver(cfg)
 	}
+	if opts.Active {
+		if resolver, ok := opts.PipelineResolver.(*pipeline.Resolver); ok {
+			domain := ops.NewPlanHandoffDomain(resolver)
+			opts.HandoffDomain = &domain
+		}
+	}
 	return filterTasks(tasks, opts), nil
 }
 
@@ -297,7 +309,9 @@ func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 		Validation:         task.Validation,
 		ValidationNotes:    task.ValidationNotes,
 		AmendsPlan:         task.AmendsPlan,
+		AmendmentMode:      task.AmendmentMode,
 		PlanAmendment:      task.PlanAmendment,
+		PlanningChange:     task.PlanningChange,
 		AcceptanceSource:   task.AcceptanceSource,
 		AcceptanceReceipt:  task.AcceptanceReceipt,
 		Archived:           task.Archived,
@@ -417,18 +431,19 @@ func buildTaskOutputSummaryInfo(task *models.Task) taskOutputSummaryInfo {
 
 	for i, entry := range task.Output {
 		info.Output = append(info.Output, outputEntrySummaryInfo{
-			Index:         i,
-			Desc:          entry.Desc,
-			Kind:          entry.Kind,
-			SpecRef:       entry.SpecRef,
-			EpicRef:       entry.EpicRef,
-			PlanRef:       entry.PlanRef,
-			ArchRef:       entry.ArchRef,
-			Validation:    entry.Validation,
-			DestructiveDB: entry.DestructiveDB,
-			DependsOn:     entry.DependsOn,
-			TaskDependsOn: entry.TaskDependsOn,
-			Decomposition: entry.Decomposition,
+			Index:            i,
+			CodingAllocation: entry.CodingAllocation,
+			Desc:             entry.Desc,
+			Kind:             entry.Kind,
+			SpecRef:          entry.SpecRef,
+			EpicRef:          entry.EpicRef,
+			PlanRef:          entry.PlanRef,
+			ArchRef:          entry.ArchRef,
+			Validation:       entry.Validation,
+			DestructiveDB:    entry.DestructiveDB,
+			DependsOn:        entry.DependsOn,
+			TaskDependsOn:    entry.TaskDependsOn,
+			Decomposition:    entry.Decomposition,
 		})
 	}
 
@@ -453,7 +468,7 @@ func filterTasks(tasks []models.Task, opts inspectTasksOptions) []models.Task {
 	var filtered []models.Task
 
 	for _, task := range tasks {
-		if opts.Active && models.IsOperationallyTerminal(&task, opts.PipelineResolver) {
+		if opts.Active && !taskVisibleInActiveList(&task, opts) {
 			continue
 		}
 		if opts.StatusFilter != "" && string(task.Status) != opts.StatusFilter {
@@ -474,6 +489,30 @@ func filterTasks(tasks []models.Task, opts inspectTasksOptions) []models.Task {
 	}
 
 	return filtered
+}
+
+// Inspection visibility includes repairable handoffs, even when an operator
+// hold or an undecided disposition prevents waking work. Claim semantics stay
+// with IsOperationallyTerminal; this policy never makes a task assignable.
+func taskVisibleInActiveList(task *models.Task, opts inspectTasksOptions) bool {
+	if !models.IsOperationallyTerminal(task, opts.PipelineResolver) {
+		return true
+	}
+	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
+		return false
+	}
+	if task.AmendsPlan != "" {
+		if opts.State == nil {
+			return false
+		}
+		original := opts.State.FindTask(task.AmendsPlan)
+		return original != nil && original.PlanAmendment != nil && original.PlanAmendment.Pending == task.ID &&
+			original.Status == models.TaskStatusMerged && !original.TransitionsExecuted["replanned"] && !original.PlanHandoffRetired()
+	}
+	if task.PlanAmendment != nil && task.PlanAmendment.Pending != "" {
+		return true
+	}
+	return opts.HandoffDomain != nil && opts.HandoffDomain.Pending(task)
 }
 
 func formatTasksSummaryOutput(tasks []taskSummaryInfo, format string) (string, error) {

@@ -157,6 +157,13 @@ we correctly interpret Y as Z?", "Is this the right ownership boundary between E
 
 ## 4. Write the Execution Contract
 
+**Provider Ask Inventory:** Before downstream decomposition, record each consumed interface
+ID, consumer epic/ref, and source-backed required operations, fields and statuses; explicitly
+record none when no provider is consumed. This is the early consumer requirement inventory,
+not a provider design. Include declared asks even when the consumer stories do not exist yet.
+Architecture owners reconcile the inventory and answer or concretely defer each ask before
+freezing affected interfaces. Interface strings do not create executable dependency edges.
+
 **Completion Criteria** replace vague success metrics. They are the falsifiable condition that
 closes the epic: when all story ACs pass, the completion criteria must be satisfied. Write them
 as observable outcomes, not directions. "Users can create, edit, and delete tasks without data
@@ -217,6 +224,7 @@ Before submitting for review, verify:
 - [ ] Story document titles are scoped correctly — a Story Writer can own each one independently
 - [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
 - [ ] Local decisions do not silently redefine inherited authority
+- [ ] Provider Ask Inventory covers every source-backed consumer need, or explicitly records none
 - [ ] Sibling ambiguities from the same source gap treated consistently across capabilities
 
 If self-review reveals issues, fix before submitting.

@@ -586,6 +586,7 @@ pipeline:
         - architecture-pair
       transitions:
         - name: arch-decompose
+          when: scope-decomposition
           task-slug: ar
           from: architecture-main-pair.approved
           to: architecture-pair.initial
@@ -638,10 +639,26 @@ pipeline:
       trigger: manual
       cardinality: many-to-one  # N approved US → 1 architecture task
     - name: architecture-to-code-plan
+      when: scope-decomposition
       task-slug: cp
       from: architecture-subpipeline.architecture-pair.approved
       to: coding-subpipeline.code-planning-pair.initial
       trigger: manual  # human validates architectural decomposition
+      cardinality: per-subtask
+
+    - name: architecture-to-coding
+      task-slug: code
+      when: coding-allocation
+      from: architecture-subpipeline.architecture-pair.approved
+      to: coding-subpipeline.coding-pair.initial
+      trigger: manual
+      cardinality: per-subtask
+    - name: architecture-main-to-coding
+      task-slug: code
+      when: coding-allocation
+      from: architecture-subpipeline.architecture-main-pair.approved
+      to: coding-subpipeline.coding-pair.initial
+      trigger: manual
       cardinality: per-subtask
 
   # Orchestrator is implicit — mandatory, unique, not part of any pipeline.

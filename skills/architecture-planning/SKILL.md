@@ -97,6 +97,17 @@ Define structural decisions. Each decision must have a rationale.
 4. **Cross-cutting concerns** — error handling, observability, configuration, security
 5. **Structural decisions** — explicit choices with rationale
 
+**Provider freeze:** Obtain early epic `Provider Ask Inventory`; reconcile assigned
+epics/source obligations and merged consumers. Answer or concretely defer each
+interface ID, consumer epic/ref, operations, fields and statuses. Unavailable asks
+block affected freeze; unresolved needs require allocated investigation/correction
+and legal corrected-contract waits, never gap notes. Child scope/preserve rules allow
+tests, acceptance manifests and repairs; verify existing-source premises
+before binding. Inventory strings create no executable dependency edges.
+Scope `#### CONTRACT` owns interface prose; keep allocations/acceptance/executable
+metadata outside. Edit only its preexisting unique subsection; freeze complete output
+manifest, allocation and approved resolved proofs.
+
 **Decision altitude:**
 
 | Too low (code-planner territory) | Right level | Too high (spec territory) |
@@ -144,6 +155,7 @@ Before submitting:
 - [ ] Cross-cutting concerns addressed for all components
 - [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
 - [ ] Structural decisions do not silently redefine inherited behavior
+- [ ] Provider Ask Inventory and freeze duty satisfied
 
 Fix issues before submitting.
 

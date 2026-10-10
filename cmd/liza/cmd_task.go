@@ -101,6 +101,10 @@ Updates sprint.scope.planned, goal.alignment_history, and logs the action.
 Validates the added task and reports a warning if unrelated existing state
 corruption keeps full-state validation degraded after the add.
 
+For explicitly commissioned corrective planning work, supply planning_change
+with kind (correction or replan), trigger, and original_task_id. CLI overrides
+are --planning-change-kind, --trigger, and --planning-change-original.
+
 Example YAML file format:
   id: task-1
   description: Implement feature X
@@ -198,6 +202,20 @@ Example YAML file format:
 		if cmd.Flags().Changed("role-pair") {
 			input.RolePair, _ = cmd.Flags().GetString("role-pair")
 		}
+		if cmd.Flags().Changed("planning-change-kind") || cmd.Flags().Changed("planning-change-original") || cmd.Flags().Changed("trigger") {
+			if input.PlanningChange == nil {
+				input.PlanningChange = &models.PlanningChange{}
+			}
+			if cmd.Flags().Changed("planning-change-kind") {
+				input.PlanningChange.Kind, _ = cmd.Flags().GetString("planning-change-kind")
+			}
+			if cmd.Flags().Changed("planning-change-original") {
+				input.PlanningChange.OriginalTaskID, _ = cmd.Flags().GetString("planning-change-original")
+			}
+			if cmd.Flags().Changed("trigger") {
+				input.PlanningChange.Trigger, _ = cmd.Flags().GetString("trigger")
+			}
+		}
 
 		if input.Priority == 0 {
 			input.Priority = 1
@@ -218,6 +236,7 @@ Example YAML file format:
 
 		if isJSON(cmd) {
 			opsInput := &ops.AddTaskInput{
+				PlanningChange:          input.PlanningChange,
 				ID:                      input.ID,
 				Type:                    input.Type,
 				RolePair:                input.RolePair,
@@ -1793,6 +1812,9 @@ func init() {
 	addTaskCmd.Flags().String("depends", "", "comma-separated list of task IDs this task depends on (overrides file value)")
 	addTaskCmd.Flags().String("type", "", "optional task type override (default: derived from --role-pair or file role_pair)")
 	addTaskCmd.Flags().String("role-pair", "", "task role-pair used for pipeline state and default type (required unless provided by --file)")
+	addTaskCmd.Flags().String("planning-change-kind", "", "corrective planning work kind: correction or replan")
+	addTaskCmd.Flags().String("planning-change-original", "", "existing original plan for corrective planning metrics")
+	addTaskCmd.Flags().String("trigger", "", "explicit cause of corrective planning work")
 	addTaskCmd.Flags().String("state", "", fmt.Sprintf("path to state.yaml (default: %s/state.yaml)", paths.ProjectDirName()))
 	addTaskCmd.Flags().String("log", "", fmt.Sprintf("path to log.yaml (default: %s/log.yaml)", paths.ProjectDirName()))
 	registerCompletion(addTaskCmd, "depends", completeTaskIDs)

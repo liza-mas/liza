@@ -41,9 +41,22 @@ Invoke `systemic-thinking` on the draft decomposition before `{{binaryName}} set
 Every output[] entry MUST include `{{.MasterOutputRefField}}` pointing to this
 master artifact and typed decomposition metadata{{if eq .Role "code-planner"}}, plus an explicit `rca_required` classification{{end}}.
 {{- if eq .Role "architect"}}
+Before decomposition freezes shared interfaces, reconcile the early epic Provider Ask
+Inventory against all assigned consumer epics and source obligations; record provider
+answers or concrete deferrals with allocated investigation/correction and legal scope waits.
+Unavailable declared asks block only the affected scope. Do not infer executable edges
+from interface strings. Preserve the child-feasibility checks.
 Architecture outputs use `<doc>.md#<exact Scope heading>`. Each Scope declares
 `**Direct references:** ["product-id", "shared-id"]` outside fences, naming its complete
 product and shared-architecture read set from Source References (`[]` selects none).
+{{- if .DirectCodingAllocationAvailable}}
+For one fully designed and allocated Scope, the direct coding route may omit specialized
+architecture and code-planning: flat entries all `coding_allocation: true`, one exact
+`arch_ref`, and exact per-unit `plan_ref` with strict Acceptance Contract, future
+coder-authored manifest path, owned_files and nonempty canonical validation. Preserve
+writer waits and manual handoff disposition; fanout and RCA-required defects use the
+ordinary downstream stages.
+{{- end}}
 {{- end}}
 
 ```yaml

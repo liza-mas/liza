@@ -212,7 +212,7 @@ func rejectStaleDraftOutput(state *models.State, resolver *pipeline.Resolver, ta
 		if original == nil || original.PlanAmendment == nil || original.PlanAmendment.Pending != task.ID {
 			return &PreconditionError{Reason: "correction is not the original's pending amendment"}
 		}
-		if err := models.ValidateAmendmentOutput(original.Output, task.Output); err != nil {
+		if err := models.ValidateAmendmentOutputForMode(original.Output, task.Output, task.AmendmentMode); err != nil {
 			return &PreconditionError{Reason: err.Error()}
 		}
 		if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {

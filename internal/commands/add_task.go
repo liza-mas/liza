@@ -13,6 +13,7 @@ import (
 // TaskInput represents the input parameters for adding a task.
 // Can be loaded from a YAML file or constructed from CLI flags.
 type TaskInput struct {
+	PlanningChange          *models.PlanningChange          `yaml:"planning_change,omitempty"`
 	ID                      string                          `yaml:"id"`
 	Type                    string                          `yaml:"type,omitempty"`
 	RolePair                string                          `yaml:"role_pair,omitempty"`
@@ -64,6 +65,7 @@ func AddTaskWithAuthorityCommand(statePath, logPath string, input *TaskInput, au
 
 func addTaskCommand(statePath, logPath string, input *TaskInput, add func(*ops.AddTaskInput) (*ops.AddTaskResult, error)) error {
 	opsInput := &ops.AddTaskInput{
+		PlanningChange:          input.PlanningChange,
 		ID:                      input.ID,
 		Type:                    input.Type,
 		RolePair:                input.RolePair,

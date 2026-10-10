@@ -8,6 +8,21 @@ tasks need to respect the master framework.
 Invoke `spec-review` and apply the Reference-First Authoring contract. Reject copied
 inherited prose, undeclared authority, incomplete obligation-to-reference coverage,
 or `output[]` used as a second detailed specification.
+{{- if eq .Role "architecture-reviewer"}}
+Reject provider freeze without early epic Provider Ask Inventory coverage against all
+assigned consumer epics and source obligations, or with unavailable declared asks or
+unanswered needs lacking allocated investigation/correction and a legal affected-scope wait.
+Interface strings do not establish executable edges; preserve child-feasibility checks.
+{{- if .DirectCodingAllocationAvailable}}
+For direct coding, review design and allocation together: one exact Scope, flat entries
+all `coding_allocation: true` sharing `arch_ref`, exact per-unit `plan_ref` containing
+strict Acceptance Contract, future coder-authored manifest path, owned_files and nonempty
+canonical validation. Reject dropped writer waits, RCA-required defects skipping ordinary
+code-planning, or bypassed manual handoff disposition; fanout retains ordinary stages.
+{{- else}}
+Reject `coding_allocation` output: this frozen topology has no direct coding route.
+{{- end}}
+{{- end}}
 {{- if eq .Role "code-plan-reviewer"}}
 
 MASTER CODE-PLANNING REVIEW BOUNDARY:

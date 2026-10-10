@@ -20,6 +20,7 @@ type inspectMetricsOptions struct {
 
 // metricsInfo represents sprint metrics information
 type metricsInfo struct {
+	PlanningChanges                  models.PlanningChangeMetrics    `json:"planning_changes" yaml:"planning_changes"`
 	LifecycleOutcomes                *models.LifecycleOutcomeMetrics `json:"lifecycle_outcomes,omitempty" yaml:"lifecycle_outcomes,omitempty"`
 	TasksDone                        int                             `json:"tasks_done" yaml:"tasks_done"`
 	TasksInProgress                  int                             `json:"tasks_in_progress" yaml:"tasks_in_progress"`
@@ -71,6 +72,7 @@ func inspectMetrics(state *models.State, opts inspectMetricsOptions) (any, error
 
 	// Get sprint metrics
 	metricsInfo := buildMetricsInfo(state.Sprint.Metrics)
+	metricsInfo.PlanningChanges = state.ComputePlanningChanges()
 	metricsInfo.Usage, metricsInfo.UsageWarnings = usageSummary(state, opts.ProjectRoot)
 
 	// If called internally, return structured data
@@ -84,7 +86,12 @@ func inspectMetrics(state *models.State, opts inspectMetricsOptions) (any, error
 
 // buildMetricsInfo converts SprintMetrics to metricsInfo
 func buildMetricsInfo(metrics models.SprintMetrics) metricsInfo {
+	planningChanges := metrics.PlanningChanges
+	if planningChanges.Daily == nil {
+		planningChanges.Daily = []models.PlanningChangeDay{}
+	}
 	return metricsInfo{
+		PlanningChanges:                  planningChanges,
 		LifecycleOutcomes:                metrics.LifecycleOutcomes,
 		TasksDone:                        metrics.TasksDone,
 		TasksInProgress:                  metrics.TasksInProgress,
@@ -248,7 +255,17 @@ func formatMetricsValue(metrics metricsInfo) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return text + "\n" + formatLifecycleMetrics(metrics.LifecycleOutcomes) + formatUsageSummary(metrics.Usage, metrics.UsageWarnings), nil
+	return text + "\n" + formatPlanningChanges(metrics.PlanningChanges) + formatLifecycleMetrics(metrics.LifecycleOutcomes) + formatUsageSummary(metrics.Usage, metrics.UsageWarnings), nil
+}
+
+func formatPlanningChanges(metrics models.PlanningChangeMetrics) string {
+	var text strings.Builder
+	text.WriteString("Planning changes (UTC creation day):\n")
+	for _, row := range metrics.Daily {
+		fmt.Fprintf(&text, "  %s %s trigger=%s architecture=%t: %d\n", row.Date, row.Kind, row.Trigger, row.Architecture, row.Count)
+	}
+	fmt.Fprintf(&text, "  Unknown attribution: %d; missing creation date: %d\n", metrics.UnknownAttribution, metrics.MissingCreated)
+	return text.String()
 }
 
 // formatUsageSummary renders the usage block, or its absence with the recorded

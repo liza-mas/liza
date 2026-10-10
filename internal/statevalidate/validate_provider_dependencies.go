@@ -33,7 +33,7 @@ func validateProviderDependencies(v *violations, state *models.State, resolver *
 			unstarted := func() bool { return models.UnstartedProviderConsumer(task, resolver) }
 			validateProviderOwner(v, state, resolver, task.ID, task.ProviderDependencies, unstarted)
 			if executing, err := resolver.ExecutingStatus(task.RolePair); err == nil && task.Status == executing {
-				for _, unmet := range models.UnmetProviderDependencies(task, state.Tasks, resolver) {
+				for _, unmet := range models.UnmetProviderPrerequisites(task, state.Tasks, resolver) {
 					v.addID("executing provider prerequisite "+task.ID+" "+unmet.DependencyID,
 						fmt.Errorf("executing task %s has unmet provider dependency: %s", task.ID, unmet.Summary()))
 				}
@@ -147,7 +147,7 @@ func providerOutputIsLive(state *models.State, resolver *pipeline.Resolver, task
 	}
 	for _, transition := range resolver.AllTransitions() {
 		source, err := resolver.TransitionSourceRolePair(transition.Name)
-		if err != nil || source != task.RolePair || transition.Cardinality != "per-subtask" {
+		if err != nil || source != task.RolePair || transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, task.Output) {
 			continue
 		}
 		if !task.TransitionsExecuted[transition.Name] {
@@ -240,7 +240,7 @@ func projectedProviderGraph(state *models.State, resolver *pipeline.Resolver) pr
 		}
 		for _, transition := range resolver.AllTransitions() {
 			source, err := resolver.TransitionSourceRolePair(transition.Name)
-			if err != nil || source != parent.RolePair || transition.Cardinality != "per-subtask" {
+			if err != nil || source != parent.RolePair || transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, parent.Output) {
 				continue
 			}
 			ids, skipped, _ := models.ResolveOutputSiblings(parent.Output, models.NonTerminalTasksByKind(state, retiring), parent.ID, transition.TaskSlugOrName())

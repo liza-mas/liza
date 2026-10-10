@@ -429,6 +429,15 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		data.DeclareValidationPrerequisites = consumersValidateLocally(task.RolePair, state.Config, config.ProjectRoot, resolver)
 		data.DeclareRuntimeInputs = state.Config.RuntimeInputRegistry != ""
 	}
+	if task.EffectiveType() == models.TaskTypeArchitecture {
+		directOutput := []models.OutputEntry{{CodingAllocation: true}}
+		consumers, err := resolver.OutputConsumerRolePairsForOutput(task.RolePair, directOutput)
+		data.DirectCodingAllocationAvailable = err == nil && len(consumers) > 0
+		if data.DirectCodingAllocationAvailable {
+			data.DeclareValidationPrerequisites = consumersValidateLocally(task.RolePair, state.Config, config.ProjectRoot, resolver, directOutput)
+			data.DeclareRuntimeInputs = state.Config.RuntimeInputRegistry != ""
+		}
+	}
 
 	// Reviewer-specific fields
 	if roleType == "reviewer" {
@@ -805,8 +814,11 @@ func cloneDecompositionManifest(manifest *models.DecompositionManifest) *models.
 // pairs consuming rolePair's output[] launches by default on a CLI asserting
 // validation_execution: local. Declarations under any other policy fail closed
 // at claim, so an unresolved or mixed selection is not local.
-func consumersValidateLocally(rolePair string, config models.Config, projectRoot string, resolver *pipeline.Resolver) bool {
+func consumersValidateLocally(rolePair string, config models.Config, projectRoot string, resolver *pipeline.Resolver, output ...[]models.OutputEntry) bool {
 	pairs, err := resolver.OutputConsumerRolePairs(rolePair)
+	if len(output) > 0 {
+		pairs, err = resolver.OutputConsumerRolePairsForOutput(rolePair, output[0])
+	}
 	if err != nil || len(pairs) == 0 {
 		return false
 	}

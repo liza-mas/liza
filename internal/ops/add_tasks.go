@@ -21,6 +21,7 @@ import (
 
 // AddTaskInput represents the input parameters for adding a task.
 type AddTaskInput struct {
+	PlanningChange          *models.PlanningChange          `json:"planning_change,omitempty"`
 	ID                      string                          `json:"id"`
 	Type                    string                          `json:"type,omitempty"`
 	RolePair                string                          `json:"role_pair,omitempty"`
@@ -263,6 +264,7 @@ func buildReplacementTask(input *AddTaskInput, resolver *pipeline.Resolver) (mod
 	}
 
 	return models.Task{
+		PlanningChange:          input.PlanningChange,
 		ID:                      input.ID,
 		Type:                    taskType,
 		RolePair:                input.RolePair,
@@ -297,6 +299,19 @@ func insertTaskInState(state *models.State, projectRoot string, task models.Task
 	}
 	if err := rejectManualPipelineChildTask(state, input, resolver); err != nil {
 		return err
+	}
+	if task.PlanningChange != nil {
+		original := state.FindTask(task.PlanningChange.OriginalTaskID)
+		if original == nil || !IsPlanningPair(original.RolePair, resolver.TransitionSourcePairs()) || !IsPlanningPair(task.RolePair, resolver.TransitionSourcePairs()) {
+			return &PreconditionError{Reason: "planning_change requires an existing original plan and a planning correction task"}
+		}
+		for _, carrier := range []*models.Task{original, &task} {
+			switch carrier.EffectiveType() {
+			case models.TaskTypePlanning, models.TaskTypeArchitecture, models.TaskTypeEpicPlanning, models.TaskTypeUSWriting:
+			default:
+				return &PreconditionError{Reason: "planning_change is reserved for corrective planning work"}
+			}
+		}
 	}
 	state.Tasks = append(state.Tasks, task)
 

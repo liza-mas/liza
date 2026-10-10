@@ -660,7 +660,7 @@ func prepareCompletionReportTransition(t *testing.T, root string) {
 		t.Fatal(err)
 	}
 	cfg.Pipeline.PipelineTransitions = slices.DeleteFunc(cfg.Pipeline.PipelineTransitions, func(transition pipeline.TransitionDef) bool {
-		return transition.Name == "architecture-to-code-plan"
+		return transition.Name == "architecture-to-code-plan" || transition.Name == "architecture-to-coding"
 	})
 	coding := cfg.Pipeline.SubPipelines["coding-subpipeline"]
 	coding.Steps = append(coding.Steps, "architecture-pair")

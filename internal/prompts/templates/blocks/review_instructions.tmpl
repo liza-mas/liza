@@ -215,6 +215,7 @@ REVIEW CHECKLIST:
 | Persona coherence | Epic mixes unrelated persona clusters — US Writer would need to context-switch |
 | Independence | Epic has unnecessary coupling to other epics — verify cross-epic dependencies are true ordering constraints |
 | Vision coverage | Epics collectively miss or exceed vision scope — reject with gap/scope-absorption note |
+| Provider ask inventory | Before decomposition, the epic omits its Provider Ask Inventory (or explicit none), source-backed interface ID, consumer epic/ref, operations, fields or statuses, or misses an inherited consumer obligation |
 {{template "handoff-review-rows"}}
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}
@@ -334,6 +335,12 @@ REVIEW CHECKLIST:
 | Critical path | A client waits on its provider's implementation where the frozen contract and contract-derived fixtures suffice; a contract-first client lacks a verification task that depends on client and provider and that every consumer of the client's behavior depends on; a consumed fixture is bundled with a later proof; or several scopes write one shared file (migration, test file, registry) in series without weighing a per-scope split |
 | arch_ref set | Output[] entries missing arch_ref pointing to the architecture document |
 | Spec alignment | Architecture decisions contradict or ignore spec requirements |
+| Provider freeze | Early epic Provider Ask Inventory coverage is not reconciled against assigned epics and source obligations; declared asks are unavailable, or an ask lacks a provider answer or concrete deferral with allocated investigation/correction and a legal affected-scope wait |
+{{- if .DirectCodingAllocationAvailable}}
+| Direct coding allocation | Direct output does not use one exact Scope, flat entries all coding_allocation: true sharing arch_ref, or each exact plan_ref lacks a strict Acceptance Contract, future coder-authored manifest path, owned_files or nonempty canonical validation; design/allocation or writer waits are unreviewed, RCA-required defects skip code-planning, or manual handoff disposition is bypassed |
+{{- else}}
+| Direct coding unavailable | Output uses coding_allocation despite this frozen topology having no direct coding route |
+{{- end}}
 {{template "handoff-review-rows"}}
 | Minimal Must mechanism | Must mechanism not separated from optional extensions, or optional features sharing a component promoted with it |
 {{- if .ValidationCommands }}

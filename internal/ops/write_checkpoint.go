@@ -97,6 +97,9 @@ func writeCheckpointWithOptionalAuthority(projectRoot string, input *WriteCheckp
 			}
 			return &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}
 		}
+		if original := models.PendingPlanAmendment(state, task); original != "" {
+			return &PreconditionError{Reason: "reviewed plan amendment pending for " + original}
+		}
 
 		extra := map[string]any{
 			"intent":          input.Intent,

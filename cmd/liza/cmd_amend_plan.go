@@ -9,6 +9,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/jsonout"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -39,6 +40,11 @@ var amendPlanCmd = &cobra.Command{
 			return cliValidationError("select --reason, --apply <correction>, or --replace-pending <correction> --reason")
 		}
 		input := ops.AmendPlanInput{TaskID: args[0], Reason: reason, Apply: apply, ReplacePending: replace}
+		contract, _ := cmd.Flags().GetBool("contract")
+		if contract {
+			input.Mode = models.PlanAmendmentContract
+		}
+		input.Trigger, _ = cmd.Flags().GetString("trigger")
 		if brand.LookupEnv(os.Getenv, "AGENT_ID").Value != "" || cmd.Flags().Changed("agent-id") {
 			authority, err := resolveOrchestratorAuthority(cmd)
 			if err != nil {
@@ -70,7 +76,9 @@ var amendPlanCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(amendPlanCmd)
 	amendPlanCmd.ValidArgsFunction = completeTaskIDArgs(1)
-	amendPlanCmd.Flags().String("reason", "", "Bounded scheduling or prerequisite correction")
+	amendPlanCmd.Flags().String("reason", "", "Reason for the bounded reviewed correction")
+	amendPlanCmd.Flags().Bool("contract", false, "Review CONTRACT prose in referenced architecture Scopes with the complete output manifest unchanged, including expanded originals")
+	amendPlanCmd.Flags().String("trigger", "", "Explicit correction trigger for daily planning metrics")
 	amendPlanCmd.Flags().String("apply", "", "Adopt the exact independently reviewed MERGED pending correction")
 	amendPlanCmd.Flags().String("replace-pending", "", "Replace an unapplied MERGED or canceled pending correction")
 	amendPlanCmd.Flags().String("agent-id", "", "Orchestrator identity")

@@ -151,7 +151,7 @@ func reserveSuccessorsInState(state *models.State, resolver *pipeline.Resolver, 
 	if len(successors) == 0 {
 		return nil
 	}
-	transition, err := soleOutgoingSubtaskTransition(resolver, provider.RolePair)
+	transition, err := soleOutgoingSubtaskTransition(resolver, provider.RolePair, provider.Output)
 	if err != nil {
 		return err
 	}
@@ -279,11 +279,11 @@ func rejectDroppedReservations(state *models.State, resolver *pipeline.Resolver,
 
 // soleOutgoingSubtaskTransition names the one per-subtask transition from
 // rolePair: the transition whose children a reservation covers.
-func soleOutgoingSubtaskTransition(resolver *pipeline.Resolver, rolePair string) (string, error) {
+func soleOutgoingSubtaskTransition(resolver *pipeline.Resolver, rolePair string, output []models.OutputEntry) (string, error) {
 	var found []string
 	for _, transition := range resolver.AllTransitions() {
 		source, err := resolver.TransitionSourceRolePair(transition.Name)
-		if err == nil && source == rolePair && transition.Cardinality == "per-subtask" {
+		if err == nil && source == rolePair && transition.Cardinality == "per-subtask" && resolver.TransitionApplies(transition.Name, output) {
 			found = append(found, transition.Name)
 		}
 	}

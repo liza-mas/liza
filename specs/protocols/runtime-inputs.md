@@ -48,12 +48,13 @@ Admission refuses, as field-attributed `INVALID_INPUT`:
 
 - runtime inputs on a task that is not a strict acceptance task: only its gate
   runs the canonical commands that consume them. `add-task` cannot create one;
-  a planning output allocates them and a same-pair `replace-task` must keep
+  a planning or authorized direct-architecture output allocates them and a same-pair `replace-task` must keep
   them equal (they are part of the allocation predicate);
-- an output unless its producer is a planning task and its consuming pairs
-  generate coding tasks: architecture and main-plan outputs generate plans,
-  and integration outputs generate coding tasks but only a planning parent can
-  allocate a strict contract. A planning output whose child would not adopt a
+- an output unless its producer is a planning task or authorized direct-allocation
+  architecture, and its selected consuming pairs generate coding tasks. Ordinary
+  architecture outputs generate plans; marked one-Scope architecture allocation must
+  select an explicit direct coding route and satisfy the same independent strict
+  acceptance boundary. Integration output cannot allocate a strict contract. An output whose child would not adopt a
   strict contract is refused as well;
 - a recipe missing from the registry at integration, or no registry configured;
 - a runtime-input `env` name that is also a `validation_prerequisites.env` name

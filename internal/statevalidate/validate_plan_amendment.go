@@ -10,6 +10,9 @@ import (
 )
 
 func validatePlanAmendment(v *violations, task *models.Task, state *models.State, resolver *pipeline.Resolver) {
+	if !task.AmendmentMode.IsValid() || task.AmendmentMode != "" && task.AmendsPlan == "" {
+		v.add(fmt.Errorf("task %s has invalid amendment mode", task.ID))
+	}
 	if task.AmendsPlan != "" {
 		original := state.FindTask(task.AmendsPlan)
 		if original == nil || original.ID == task.ID || original.PlanAmendment == nil || !slices.Contains(original.PlanAmendment.Corrections, task.ID) || original.RolePair != task.RolePair || task.PlanAmendment != nil {
@@ -52,7 +55,7 @@ func validatePlanAmendment(v *violations, task *models.Task, state *models.State
 			v.add(fmt.Errorf("task %s correction %s must have exactly one disposition", task.ID, id))
 		}
 		if len(correction.Output) > 0 {
-			if err := models.ValidateAmendmentOutput(previous, correction.Output); err != nil {
+			if err := models.ValidateAmendmentOutputForMode(previous, correction.Output, correction.AmendmentMode); err != nil {
 				v.add(fmt.Errorf("correction %s: %w", id, err))
 			}
 		}
@@ -80,7 +83,12 @@ func validatePlanAmendment(v *violations, task *models.Task, state *models.State
 		if len(record.Corrections) == 0 || record.Corrections[len(record.Corrections)-1] != record.Pending || !seen[record.Pending] {
 			v.add(fmt.Errorf("task %s pending amendment must be its newest correction", task.ID))
 		}
-		if len(task.TransitionsExecuted) > 0 || amendmentHasChildren(state, task.ID) || task.PlanHandoffRetired() || task.PlanCheckVerdictOf() == models.PlanCheckPassed {
+		pending := state.FindTask(record.Pending)
+		expanded := len(task.TransitionsExecuted) > 0 || amendmentHasChildren(state, task.ID)
+		if pending != nil && (pending.AmendmentMode == models.PlanAmendmentContract || expanded && pending.AmendmentMode != "") && task.EffectiveType() != models.TaskTypeArchitecture {
+			v.add(fmt.Errorf("task %s expanded contract amendment requires architecture type", task.ID))
+		}
+		if pending != nil && pending.AmendmentMode == "" && expanded || task.PlanHandoffRetired() || task.TransitionsExecuted["replanned"] || task.PlanCheckVerdictOf() == models.PlanCheckPassed {
 			v.add(fmt.Errorf("task %s pending amendment requires an unused original without a pass or retirement", task.ID))
 		}
 	}

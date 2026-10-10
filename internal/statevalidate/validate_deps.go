@@ -30,6 +30,9 @@ func (e *DependencyCycleError) Error() string {
 // deadlock the scheduler.
 func validateDependencies(v *violations, state *models.State, resolver *pipeline.Resolver, cfg *pipeline.PipelineConfig, warnWriter io.Writer) {
 	for _, task := range state.Tasks {
+		if err := models.ValidateCodingAllocationOutput(&task, task.Output); err != nil {
+			v.add(fmt.Errorf("task %s: %w", task.ID, err))
+		}
 		validateDependenciesForTask(v, state, resolver, cfg, warnWriter, &task)
 	}
 

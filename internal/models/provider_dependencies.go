@@ -283,6 +283,15 @@ func EffectiveProviderChildren(dep ProviderDependency, state *State, pr Pipeline
 	if err != nil {
 		return td, nil, err
 	}
+	if state != nil {
+		if provider := state.FindTask(dep.ProviderTask); provider != nil && len(provider.Output) > 0 {
+			if selected, ok := pr.(interface {
+				TransitionApplies(string, []OutputEntry) bool
+			}); ok && !selected.TransitionApplies(dep.Transition, provider.Output) {
+				return ProviderTransition{}, nil, fmt.Errorf("provider transition %q is not selected by its reviewed allocation mode", dep.Transition)
+			}
+		}
+	}
 	for i, id := range children {
 		if successor, ok := ProviderChildSuccessor(state, id); ok {
 			children[i] = successor.ID
@@ -373,6 +382,20 @@ func UnstartedProviderConsumer(task *Task, pr PipelineResolver) bool {
 // readiness and committing claims. Retired/malformed references are invalid;
 // legitimate future children and unmerged work are pending, never satisfied.
 func UnmetProviderDependencies(task *Task, allTasks []Task, pr PipelineResolver) []DependencySatisfaction {
+	if task == nil {
+		return nil
+	}
+	if original := PendingPlanAmendment(&State{Tasks: allTasks}, task); original != "" {
+		return []DependencySatisfaction{{DependencyID: original, Kind: DependencyUnsatisfiedPending, BlockingIDs: []string{original}, Reason: "reviewed plan amendment is pending"}}
+	}
+	return UnmetProviderPrerequisites(task, allTasks, pr)
+}
+
+// UnmetProviderPrerequisites checks enduring provider obligations separately
+// from temporary admission fences. Existing execution remains valid while a
+// reviewed correction is pending, but missing, retired or unmerged provider
+// work remains invalid. Claims use UnmetProviderDependencies instead.
+func UnmetProviderPrerequisites(task *Task, allTasks []Task, pr PipelineResolver) []DependencySatisfaction {
 	if task == nil {
 		return nil
 	}

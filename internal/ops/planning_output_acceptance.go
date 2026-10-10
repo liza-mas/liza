@@ -114,8 +114,18 @@ func ResolveRefFragmentAt(g *git.Git, commit, ref string) error {
 // planner's committed candidate, without adopting parent authority or requiring
 // the manifests, proof files, or runners that those coding tasks will create.
 func validatePlanningOutputAcceptance(root string, task *models.Task, commit string) error {
-	if task.EffectiveType() != models.TaskTypePlanning {
+	direct := models.HasCodingAllocation(task.Output)
+	if task.EffectiveType() != models.TaskTypePlanning && !direct {
 		return nil
+	}
+	if direct {
+		resolver, _, err := loadResolver(root)
+		if err != nil {
+			return err
+		}
+		if err := validateDirectCodingAllocation(resolver, task, task.Output); err != nil {
+			return err
+		}
 	}
 	g := git.New(root)
 	for i, output := range task.Output {
@@ -127,6 +137,9 @@ func validatePlanningOutputAcceptance(root string, task *models.Task, commit str
 		// Runtime inputs are admitted only on an output its coding child will
 		// adopt as a strict acceptance contract (ADR-0169).
 		notStrict := func() error {
+			if direct {
+				return acceptanceError(task.ID, fmt.Sprintf("output[%d].acceptance", i), "direct coding allocation requires a committed strict Acceptance Contract")
+			}
 			if len(output.RuntimeInputs) == 0 {
 				return nil
 			}
@@ -154,6 +167,18 @@ func validatePlanningOutputAcceptance(root string, task *models.Task, commit str
 		content, _, err := readAcceptanceBlob(root, commit, path)
 		if err != nil {
 			return fail(err.Error())
+		}
+		if direct {
+			if path != paths.SplitRefFile(output.ArchRef) {
+				return fail("coding-unit plan_ref must be inside the reviewed architecture carrier")
+			}
+			scope, err := referencecontract.ExtractSection(content, paths.SplitRefFragment(output.ArchRef))
+			if err != nil {
+				return fail(err.Error())
+			}
+			if _, err := referencecontract.ExtractSection(scope, heading); err != nil {
+				return fail("coding-unit plan_ref must select a heading inside the shared Scope")
+			}
 		}
 		contract, err := referencecontract.ParseAcceptance(content, heading)
 		if err != nil {

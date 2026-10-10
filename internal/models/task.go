@@ -531,6 +531,8 @@ type Task struct {
 	TransitionsExecuted     map[string]bool          `yaml:"transitions_executed,omitempty"`
 	PlanCheck               *PlanCheck               `yaml:"plan_check,omitempty" json:"plan_check,omitempty"`
 	AmendsPlan              string                   `yaml:"amends_plan,omitempty" json:"amends_plan,omitempty"`
+	AmendmentMode           PlanAmendmentMode        `yaml:"amendment_mode,omitempty" json:"amendment_mode,omitempty"`
+	PlanningChange          *PlanningChange          `yaml:"planning_change,omitempty" json:"planning_change,omitempty"`
 	PlanAmendment           *PlanAmendment           `yaml:"plan_amendment,omitempty" json:"plan_amendment,omitempty"`
 	ValidationNotes         []ValidationNote         `yaml:"validation_notes,omitempty" json:"validation_notes,omitempty"`
 	Exit42RestartCount      int                      `yaml:"exit42_restart_count,omitempty"`
@@ -634,6 +636,7 @@ type DecompositionManifest struct {
 // OutputEntry represents a structured subtask definition produced by a doer role.
 // When a task completes with output[], each entry defines a downstream child task.
 type OutputEntry struct {
+	CodingAllocation        bool                     `yaml:"coding_allocation,omitempty" json:"coding_allocation,omitempty"`
 	Desc                    string                   `yaml:"desc" json:"desc"`
 	DoneWhen                string                   `yaml:"done_when" json:"done_when"`
 	Scope                   string                   `yaml:"scope" json:"scope"`

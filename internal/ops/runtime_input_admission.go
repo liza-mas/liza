@@ -220,8 +220,9 @@ func runtimeInputConsumerDiagnostics(resolver *pipeline.Resolver, producer *mode
 	if len(declaring) == 0 {
 		return nil
 	}
-	consumers, err := resolver.OutputConsumerRolePairs(producer.RolePair)
-	coding := producer.EffectiveType() == models.TaskTypePlanning && err == nil && len(consumers) > 0
+	consumers, err := resolver.OutputConsumerRolePairsForOutput(producer.RolePair, output)
+	coding := (producer.EffectiveType() == models.TaskTypePlanning ||
+		(producer.EffectiveType() == models.TaskTypeArchitecture && models.DirectCodingAllocation(output))) && err == nil && len(consumers) > 0
 	for _, consumer := range consumers {
 		pair, pairErr := resolver.RolePair(consumer)
 		coding = coding && pairErr == nil && models.TaskTypeForRole(pair.Doer) == models.TaskTypeCoding

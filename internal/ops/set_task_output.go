@@ -204,6 +204,9 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			return WrapLifecycleError("set-task-output", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}, models.LifecycleStaleCaller, "stop", "none")
 		}
 
+		if err := validateDirectCodingAllocation(resolver, task, input.Output); err != nil {
+			return err
+		}
 		if err := validateDecompositionRootOutput(state, resolver, task.RolePair, input.Output); err != nil {
 			return err
 		}
@@ -227,7 +230,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			return err
 		}
 
-		consumerRolePairs, err := resolver.OutputConsumerRolePairs(task.RolePair)
+		consumerRolePairs, err := resolver.OutputConsumerRolePairsForOutput(task.RolePair, input.Output)
 		if err != nil {
 			return err
 		}
@@ -262,7 +265,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			if original == nil || original.PlanAmendment == nil || original.PlanAmendment.Pending != task.ID {
 				return &PreconditionError{Reason: "correction is not the original's pending amendment"}
 			}
-			if err := models.ValidateAmendmentOutput(original.Output, output); err != nil {
+			if err := models.ValidateAmendmentOutputForMode(original.Output, output, task.AmendmentMode); err != nil {
 				return &PreconditionError{Reason: err.Error()}
 			}
 		}
@@ -567,7 +570,7 @@ func validateInheritInputsAgainstState(resolver *pipeline.Resolver, task *models
 	// OutputConsumerRolePairs only reports per-subtask consumers. No consumer
 	// means no transition from this task fans out, so there is nothing for a
 	// selection to narrow and the planner has misunderstood the topology.
-	consumers, err := resolver.OutputConsumerRolePairs(task.RolePair)
+	consumers, err := resolver.OutputConsumerRolePairsForOutput(task.RolePair, entries)
 	if err != nil {
 		return err
 	}

@@ -320,7 +320,7 @@ Once all tasks reach MERGED status:
 
 ```bash
 # Check task states
-liza get tasks --format table
+liza get tasks --all --format table
 
 # Switch to integration branch
 git checkout integration
@@ -356,7 +356,7 @@ Unregistering agent: orchestrator-1
 
 **Final Task States:**
 ```bash
-liza get tasks --format table
+liza get tasks --all --format table
 ```
 
 ```yaml

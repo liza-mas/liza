@@ -6,7 +6,7 @@ Evidence map for a run under `§BRAND_PROJECT_DIRNAME§/`. Read-only. Query larg
 
 | Source | Gives | Caveat |
 |--------|-------|--------|
-| `§BRAND_BINARY_NAME§ get tasks --field id,status,history --json` (`event`, `agent`, `time`, `reason`) | Complete per-task lifecycle, including terminal archives | Default task queries are overviews; physical YAML may contain only terminal references |
+| `§BRAND_BINARY_NAME§ get tasks --all --field id,status,history --json` (`event`, `agent`, `time`, `reason`) | Complete per-task lifecycle, including terminal archives | Default task queries are overviews; physical YAML may contain only terminal references |
 | `state.yaml` `anomalies[]` | Typed anomalies with timestamps | |
 | `agent-sessions.csv` | Every session: start, role, provider, duration | No task id |
 | `usage/records-*.jsonl` | Tokens per session, task, role | Check for non-zero values first: zeros with `provenance: unknown` mean missing telemetry, not zero cost |

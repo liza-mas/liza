@@ -190,7 +190,7 @@ When planning tasks (epic-planner, code-planner) are merged, the orchestrator ch
 3. **Resume:** The resume operation runs available transitions (reviewed admission for automatic resume, operator admission for explicit resume) → child tasks created → doers can claim. Orchestrator PreWork handles a remaining resumed transition trigger. Cleanup compares sprint ID/number, checkpoint time, trigger and IN_PROGRESS status under the write lock, so an older pass cannot clear a newer checkpoint.
 
 **Plan hand-off disposition ([ADR-0159](../architecture/ADR/0159-orchestrator-plan-handoff-disposition.md)):**
-- Domain: `manual` transitions with `per-subtask` or `one-to-one` cardinality out of a planning pair whose task has `output[]`. Auto-only, many-to-one and empty-output sources are outside it and behave as before. A gated transition stays pending, and needs its disposition, even after an auto transition from the same plan has run.
+- Domain: selected `manual` transitions with `per-subtask` or `one-to-one` cardinality out of a planning pair whose task has `output[]`. Auto-only, many-to-one and empty-output sources are outside it and behave as before. A selected gated transition stays pending, and needs its disposition, even after an auto transition from the same plan has run; an unselected exclusive route never creates a hypothetical pending handoff.
 - The orchestrator records `plan_check`: `plan-check <id> --pass`, optionally with selected advisory hook/probe notes via `--notes-file`, or `--hold <ask>` for a human action not yet done. Material scheduling/prerequisite corrections use independently reviewed `amend-plan` when existing output identities remain fixed; broader changes use `replan <id> --reason` with authorized consumer retirement. Only an operator `plan-check <id> --clear` releases a hold; pass, amendment begin and replan refuse a held plan. Notes cannot excuse missing producers/provisioning/runtime inputs or alter acceptance, scope, contracts or order.
 - Automatic creation (auto-resume, orchestrator and reviewer PreWork) expands an in-domain plan only when it is `passed` and every in-domain planning dependency has transitioned or is itself admissibly passed. An operator resume or `proceed` expands undispositioned plans too, but never a held one.
 - Wake classes: undispositioned plans render for review; passed ones render checkpoint-only until they transition (crash recovery without re-review); a passed plan whose upstream was replanned or held renders for reconciliation; held plans do not wake and raise `AWAITING HUMAN`, and keep the sprint open: no sprint- or coding-complete wake while one is held.
@@ -198,6 +198,32 @@ When planning tasks (epic-planner, code-planner) are merged, the orchestrator ch
 - Initial gated per-subtask output-validation/selective-inheritance failures and plan replacements refused by a pre-existing live provider declaration persist a material-input observation. Unchanged failures do not re-wake planning, auto-select a planning checkpoint or automatically retry; status and a once-key `PLAN HANDOFF FAILED` alert retain the repair evidence. They keep completion/integration unsettled and remain in carry-forward even if another outgoing transition ran. Relevant input repair, including releasing the provider holder, permits retry; an operator retry still validates and reports refusal without duplicating diagnostics. Other errors, cycles and crash recovery keep their existing handling.
 - If a separately merged correction replaces an unused original, an operator may run `plan-check ORIGINAL --replaced-by MERGED_CORRECTION`. Both must have output in the same reviewed role-pair; original holds must be cleared first, and delivered children/executed transitions forbid retirement. Retarget/review pending `inherit_inputs` selectors naming the original, and pending same-role-pair plans other than the correction that depend on it, first. The audited `replaced` disposition preserves MERGED and ordinary dependencies, removes only the original hand-off/completion barrier and cannot be cleared or revived. Correction review and expansion continue normally; no automatic correction detection occurs.
 - A pending `amend-plan` fences its original on every generation path, including explicit resume/proceed and crash recovery, and keeps completion/integration unsettled. The original remains MERGED; the correction follows ordinary independent review and never expands itself. Apply validates the exact merged correction, stable existing slots (new slots may append), current prospective graph and immutable ancestry, then preserves original attribution/provider identity, clears pending and old pass/notes and retires only the correction's handoff. A later human hold survives. Fresh disposition is required before original handoff. If apply refuses after drift, `--replace-pending CORRECTION --reason TEXT` quarantines an unapplied MERGED or ABANDONED correction and creates fresh review work without releasing the fence or hold. Active/applied corrections refuse; terminal tasks never reopen. See [ADR-0197](../architecture/ADR/0197-reviewed-plan-amendments-and-validation-notes.md).
+
+Single-Scope architecture direct coding retains this gate and architecture quorum;
+`when: coding-allocation` selects flat fully reviewed coding units and the exclusive
+`scope-decomposition` route retains ordinary stages. Unmarked output and old frozen
+configurations retain their earlier topology. RCA-required work and intermediate
+descendant writer waits refuse direct allocation rather than losing their review/ordering.
+
+Explicit `amend-plan --contract` and `replan --preserve-output-identity` extend correction
+to expanded architecture while preserving the complete ordered manifest, children,
+transition markers, selectors and immutable review attribution. Existing referenced
+Scope `#### CONTRACT` subsection alone may change, leaving surrounding metadata/subsections
+unchanged; bare architecture refs refuse edits. Unused nonarchitecture planning prose may
+preserve identity outside its frozen strict acceptance allocation. Approved resolved
+proofs remain unchanged. Pending fences include applicable consumer admission/submission; correction work
+remains runnable. Apply adopts under ORIGINAL, retains human holds and refuses incompatible
+evidence without dropping the fence. Legacy scheduling amendments and destructive replan
+retain their prior semantics ([ADR-0198](../architecture/ADR/0198-frozen-interface-corrections-and-direct-coding-allocation.md)).
+
+Inspection `get tasks`/`get-tasks` defaults to active work, including held/refused/undecided
+selected handoffs, pending originals and exact MERGED pending corrections. `--all` provides
+history; explicit task/field queries remain complete. This is visibility, not claimability.
+Typed `planning_change` records explicit correction/replan trigger and original task;
+`get metrics` groups logical creations once by UTC date, kind, trigger and original
+architecture classification, including archives, and discloses unknown attribution and
+missing creation times. Applying/retrying is not another creation; comparable-run rates
+still require subsequent observation.
 
 **Gate correctness:**
 - Fresh sprint (trigger empty) → gate does not fire

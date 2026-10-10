@@ -425,6 +425,12 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	// still contains the pre-submit claim base.
 	reviewBoundaryTask := *task
 	reviewBoundaryTask.BaseCommit = &rebaseBase
+	if original := models.PendingPlanAmendment(state, task); original != "" {
+		return nil, &PreconditionError{Reason: "reviewed plan amendment pending for " + original}
+	}
+	if err := validateBoundedContractCorrection(projectRoot, state, state.FindTask(task.AmendsPlan), &reviewBoundaryTask, postRebaseCommit); err != nil {
+		return nil, err
+	}
 	if err := validateReviewBoundaryCommit(projectRoot, &reviewBoundaryTask, postRebaseCommit, rebaseBase); err != nil {
 		return nil, err
 	}
@@ -511,6 +517,14 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 					return err
 				}
 				if err := rejectStaleDraftOutput(state, resolver, task); err != nil {
+					return err
+				}
+				if original := models.PendingPlanAmendment(state, task); original != "" {
+					return &PreconditionError{Reason: "reviewed plan amendment pending for " + original}
+				}
+				bounded := *task
+				bounded.BaseCommit = &rebaseBase
+				if err := validateBoundedContractCorrection(projectRoot, state, state.FindTask(task.AmendsPlan), &bounded, postRebaseCommit); err != nil {
 					return err
 				}
 				if err := checkPlanningOutputSnapshot(&reviewBoundaryTask, task); err != nil {

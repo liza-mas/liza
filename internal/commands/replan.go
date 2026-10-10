@@ -10,10 +10,16 @@ import (
 // ReplanCommand re-invokes a planner after the human amends a plan file.
 // Delegates business logic to ops.Replan.
 func ReplanCommand(projectRoot, taskID, changedBy, reason string) error {
+	return ReplanCommandWithIdentity(projectRoot, taskID, changedBy, reason, false, "")
+}
+
+func ReplanCommandWithIdentity(projectRoot, taskID, changedBy, reason string, preserve bool, trigger string) error {
 	result, err := ops.Replan(projectRoot, &ops.ReplanInput{
-		TaskID:    taskID,
-		ChangedBy: changedBy,
-		Reason:    reason,
+		TaskID:                 taskID,
+		ChangedBy:              changedBy,
+		Reason:                 reason,
+		PreserveOutputIdentity: preserve,
+		Trigger:                trigger,
 	})
 	if err != nil {
 		return err

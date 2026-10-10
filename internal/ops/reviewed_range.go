@@ -69,7 +69,7 @@ func planReviewHistory(state *models.State, parent *models.Task) ([]*models.Task
 	positions := map[string]int{}
 	for i, id := range amendment.Corrections {
 		correction := state.FindTask(id)
-		if id == parent.ID || correction == nil || correction.AmendsPlan != parent.ID || correction.RolePair != parent.RolePair || correction.PlanAmendment != nil {
+		if id == parent.ID || correction == nil || correction.AmendsPlan != parent.ID || correction.RolePair != parent.RolePair || correction.PlanAmendment != nil || !correction.AmendmentMode.IsValid() {
 			return invalid()
 		}
 		if _, duplicate := positions[id]; duplicate {
@@ -102,12 +102,19 @@ func planReviewHistory(state *models.State, parent *models.Task) ([]*models.Task
 	original := *parent
 	original.Output = amendment.OriginalOutput
 	revisions[0] = &original
+	adoptedOutput := original.Output
 	for _, id := range amendment.Corrections[:last+1] {
 		correction := state.FindTask(id)
 		if !slices.Contains(amendment.Applied, id) && !slices.Contains(amendment.Quarantined, id) {
 			return invalid()
 		}
 		if correction.Status == models.TaskStatusMerged {
+			if slices.Contains(amendment.Applied, id) {
+				if models.ValidateAmendmentOutputForMode(adoptedOutput, correction.Output, correction.AmendmentMode) != nil {
+					return invalid()
+				}
+				adoptedOutput = correction.Output
+			}
 			if !recordedIndependentPlanReview(correction) {
 				return invalid()
 			}
@@ -143,29 +150,48 @@ func ValidatePlanAmendmentArtifacts(root string, state *models.State, parent *mo
 	}
 	g := git.New(root)
 	seen := map[string]bool{}
+	checkArtifact := func(ref, label string) error {
+		if ref == "" || seen[ref] {
+			return nil
+		}
+		seen[ref] = true
+		path, heading := paths.SplitRefFile(ref), paths.SplitRefFragment(ref)
+		var reviewedContent string
+		for _, commit := range []string{*latest.ReviewCommit, integrationCommit} {
+			entry, present, readErr := g.TreeEntryAt(commit, path)
+			content, _, readErr := readAcceptanceEntry(g, path, entry, present, readErr)
+			if readErr != nil {
+				return fmt.Errorf("amendment %s artifact %q: %w", label, ref, readErr)
+			}
+			span, ok := carrierSpan(content, heading)
+			if !ok {
+				return fmt.Errorf("amendment %s artifact %q has no unique reviewed section", label, ref)
+			}
+			if commit == *latest.ReviewCommit {
+				reviewedContent = span
+			} else if span != reviewedContent {
+				return fmt.Errorf("amendment %s artifact %q drifted after correction review; obtain a fresh reviewed correction", label, ref)
+			}
+		}
+		return nil
+	}
+	// Bounded modes may edit original scalar refs even when no output names
+	// them. Validate the same mutable authority at current integration before
+	// releasing pending, rather than checking only its reviewed candidate.
+	if latest.AmendmentMode != "" {
+		if err := checkArtifact(parent.ArchRef, "arch_ref"); err != nil {
+			return err
+		}
+		if latest.AmendmentMode == models.PlanAmendmentPreserveIdentity && parent.EffectiveType() != models.TaskTypeArchitecture {
+			if err := checkArtifact(parent.PlanRef, "plan_ref"); err != nil {
+				return err
+			}
+		}
+	}
 	for index, output := range latest.Output {
 		for _, ref := range []string{output.SpecRef, output.PlanRef, output.ArchRef, output.EpicRef} {
-			if ref == "" || seen[ref] {
-				continue
-			}
-			seen[ref] = true
-			path, heading := paths.SplitRefFile(ref), paths.SplitRefFragment(ref)
-			var reviewedContent string
-			for _, commit := range []string{*latest.ReviewCommit, integrationCommit} {
-				entry, present, readErr := g.TreeEntryAt(commit, path)
-				content, _, readErr := readAcceptanceEntry(g, path, entry, present, readErr)
-				if readErr != nil {
-					return fmt.Errorf("amendment output[%d] artifact %q: %w", index, ref, readErr)
-				}
-				span, ok := carrierSpan(content, heading)
-				if !ok {
-					return fmt.Errorf("amendment output[%d] artifact %q has no unique reviewed section", index, ref)
-				}
-				if commit == *latest.ReviewCommit {
-					reviewedContent = span
-				} else if span != reviewedContent {
-					return fmt.Errorf("amendment output[%d] artifact %q drifted after correction review; obtain a fresh reviewed correction", index, ref)
-				}
+			if err := checkArtifact(ref, fmt.Sprintf("output[%d]", index)); err != nil {
+				return err
 			}
 		}
 		ref := output.PlanRef

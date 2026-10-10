@@ -1145,6 +1145,41 @@ func TestBuildStatusData_NoFollowUpHidesPipelineTransitions(t *testing.T) {
 	}
 }
 
+func TestBuildStatusDataAdvertisesOnlySelectedArchitectureRoute(t *testing.T) {
+	root := setupPipelineRoot(t)
+	cfg, err := pipeline.LoadFrozen(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+	for _, tc := range []struct {
+		pair   string
+		direct bool
+		want   []string
+	}{
+		{"architecture-pair", false, []string{"architecture-to-code-plan"}},
+		{"architecture-pair", true, []string{"architecture-to-coding"}},
+		{"architecture-main-pair", false, nil},
+		{"architecture-main-pair", true, []string{"architecture-main-to-coding"}},
+	} {
+		status, err := resolver.ApprovedStatus(tc.pair)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{{ID: "architecture", Type: models.TaskTypeArchitecture, RolePair: tc.pair,
+			Status: status, Output: []models.OutputEntry{{CodingAllocation: tc.direct}}}}
+		data := BuildStatusData(state, false, root, resolver, nil)
+		var got []string
+		for _, pending := range data.PendingTransitions {
+			got = append(got, pending.Transitions...)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("%s direct=%v transitions=%v, want %v", tc.pair, tc.direct, got, tc.want)
+		}
+	}
+}
+
 func TestBuildStatusData_ByStatusMap(t *testing.T) {
 	now := time.Now().UTC()
 

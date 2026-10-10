@@ -384,6 +384,7 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | Field | Type | Set By | Purpose |
 |-------|------|--------|---------|
 | `output` | `[]OutputEntry` | Doer agent | Structured subtask definitions for next role pair |
+| `output[].coding_allocation` | `bool` | Architect | Opt-in flat coding units for one exact Scope on a configured exclusive direct route; see below |
 | `provider_dependencies` | `[]ProviderDependency` | Task author / transition | Explicit selected-provider output prerequisites, retained before children exist; see [Provider dependencies](#provider-dependencies) |
 | `descendant_dependencies` | `[]DescendantDependency` | Task author / transition / `defer-provider-dependency` | `{at_transition, provider_dependencies}` waits the task adds to every output it writes for its sole per-subtask transition; never its own admission waits ([ADR-0193](ADR/0193-descendant-provider-dependencies.md)) |
 | `provider_reservations` | `[]ProviderReservation` | `add-tasks` (`reserve_successors`) / `reserve-provider` / replan, `replace-task`, unique plan replacement | `{provider_task, transition}`: holds the task until every child its effective provider generates there has merged; never copied from a parent output. Unique same-pair plan replacement inherits outgoing placement and explicitly retargets incoming placement before retirement ([ADR-0195](ADR/0195-provider-reservations-for-inserted-writers.md), [ADR-0196](ADR/0196-plan-replacement-reservation-placement.md)) |
@@ -395,6 +396,8 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
 | `plan_check` | `*PlanCheck` | Orchestrator (`plan-check --pass/--hold`) / operator (`plan-check --clear/--replaced-by`) | Disposition of a merged planning task whose manual `per-subtask`/`one-to-one` hand-off has not run. `passed` admits automatic expansion; `held` (with `ask`) blocks every expansion path until operator clear; `replaced` (with `replaced_by`) irrevocably retires an unused hand-off by a distinct merged correction in the same role-pair. Preserves MERGED and ordinary dependencies. See [ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md) |
 | `amends_plan` | `string` | `amend-plan` | Original planning task ID on a separate same-pair correction; the correction cannot generate children or become a provider |
+| `amendment_mode` | `PlanAmendmentMode` | `amend-plan --contract` / `replan --preserve-output-identity` | Empty retains legacy unused-plan scheduling semantics; `contract` or `preserve-output-identity` freezes the complete output manifest and permits only existing referenced contract-prose correction |
+| `planning_change` | `*PlanningChange` | `amend-plan`, `replan`, explicit task authoring | `{kind: correction\|replan, trigger, original_task_id}` records creation attribution; omitted trigger is unknown, not inferred from reason/ID |
 | `plan_amendment` | `*PlanAmendment` | `amend-plan` | Original manifest and pending/created/applied/quarantined correction provenance; see [Reviewed plan amendments](#reviewed-plan-amendments) |
 | `validation_notes` | `[]ValidationNote` | Child generation/recovery | Selected advisory messages with original `parent_task` and `output_index`; separate from canonical `validation` and acceptance evidence |
 
@@ -624,7 +627,7 @@ circular `depends_on` prevents topological ordering. Semantics:
 
 ### Reviewed plan amendments
 
-A MERGED planning task may gain a non-retiring correction before any child or
+A MERGED planning task may gain a legacy non-retiring correction before any child or
 executed transition exists ([ADR-0197](ADR/0197-reviewed-plan-amendments-and-validation-notes.md)).
 The original retains its ID, terminal status and immutable base/review/merge and
 approval attribution. Separate same-pair tasks carry `amends_plan` and use the
@@ -676,6 +679,42 @@ allocation, proof references and ancestry. Acceptance sources retain the origina
 parent ID and actual effective review commit; creation/claim digests cover the
 referenced correction rows. Child reference context includes original and relevant
 merged correction carriers, excluding draft/future pending authority.
+
+Explicit `amendment_mode: contract` commissions architecture-prose correction with
+`amend-plan ORIGINAL --contract --reason TEXT`; `preserve-output-identity` commissions
+`ORIGINAL-replan-N` via `replan ORIGINAL --preserve-output-identity` and adopts through
+the same `--apply`. Expanded originals must be architecture; unused planning originals
+may also preserve identity. Both require the complete ordered OutputEntry manifest to
+remain equal, including every ref, classification, dependency, ownership, validation,
+prerequisite, provider/runtime declaration and fanout field. Architecture edits are limited
+to an existing referenced Scope's exact nested `#### CONTRACT` subsection; surrounding
+Scope metadata/other subsections remain byte-identical and bare refs refuse edits.
+Unused nonarchitecture planning originals may preserve referenced plan prose outside frozen
+strict acceptance allocations. Acceptance allocation and approved resolved proof
+changes, new files and implementation edits refuse. Pending fences also cover applicable
+consumer admission/submission, with correction work exempt. Historical adopted review
+SHAs remain valid only with independent ordered ancestry and allocation/resolved proofs
+matching effective current authority; fresh children use the latest applied review,
+without rewriting successful receipts. See [ADR-0198](ADR/0198-frozen-interface-corrections-and-direct-coding-allocation.md).
+
+Flat architecture outputs marked `coding_allocation: true` must all share one exact
+`arch_ref` Scope and each declare a distinct exact `plan_ref` unit heading within that
+Scope, strict Acceptance Contract, future coder-authored manifest path,
+`decomposition.owned_files` and nonempty matching canonical validation. A configured
+per-subtask `when: coding-allocation` route targets coding manually; its exclusive
+`when: scope-decomposition` alternative retains ordinary planning. Embedded direct names
+are `architecture-to-coding` and `architecture-main-to-coding`; legacy transition names
+and target identities stay fixed. RCA-required scopes, kind markers and task/output
+`descendant_dependencies` refuse direct allocation; use immediate provider waits or keep
+ordinary stages. Manual handoff disposition and quorum still bind. Unmarked output and
+old frozen topology keep legacy routes; unsupported marked output refuses.
+
+`get metrics` derives `planning_changes` from complete logical task records, including
+archived records: `daily` rows contain `{date, kind, trigger, architecture, count}`,
+sorted by UTC `created` day and attribution, and count each typed creation once.
+`architecture` follows the original task's type. `unknown_attribution` and
+`missing_created` disclose incomplete historical evidence. Applying/retrying a correction
+does not create another count; inspection does not require an update-metrics mutation.
 
 ### Advisory validation notes
 

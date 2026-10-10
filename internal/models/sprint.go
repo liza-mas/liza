@@ -85,6 +85,7 @@ type SprintTimeline struct {
 
 // SprintMetrics tracks sprint progress and quality
 type SprintMetrics struct {
+	PlanningChanges                  PlanningChangeMetrics    `yaml:"planning_changes" json:"planning_changes"`
 	LifecycleOutcomes                *LifecycleOutcomeMetrics `yaml:"lifecycle_outcomes,omitempty" json:"lifecycle_outcomes,omitempty"`
 	TasksDone                        int                      `yaml:"tasks_done" json:"tasks_done"`
 	TasksInProgress                  int                      `yaml:"tasks_in_progress" json:"tasks_in_progress"`
@@ -122,7 +123,7 @@ func (s *State) ComputeSprintMetricsWithTerminalStates(terminalStates []TaskStat
 		return SprintMetrics{}
 	}
 
-	metrics := SprintMetrics{}
+	metrics := SprintMetrics{PlanningChanges: s.ComputePlanningChanges()}
 	approvedOrMerged := 0
 
 	for _, task := range s.Tasks {

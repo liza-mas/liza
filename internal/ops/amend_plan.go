@@ -20,6 +20,8 @@ import (
 type AmendPlanInput struct {
 	TaskID, Reason, Apply, ReplacePending, ChangedBy string
 	Authority                                        *models.AgentAuthority
+	Mode                                             models.PlanAmendmentMode
+	Trigger                                          string
 }
 
 type AmendPlanResult struct {
@@ -28,8 +30,9 @@ type AmendPlanResult struct {
 	Changed      bool   `json:"changed"`
 }
 
-// AmendPlan fences an unused source, requests normal independent review, and
-// adopts only that reviewed correction. It never retires the provider identity.
+// AmendPlan fences a live source, requests normal independent review, and
+// adopts only that reviewed correction. Expanded sources require an explicit
+// bounded architecture mode; provider and output identities remain unchanged.
 func AmendPlan(root string, input AmendPlanInput) (*AmendPlanResult, error) {
 	resolver, _, err := loadResolver(root)
 	if err != nil {
@@ -45,6 +48,9 @@ func AmendPlan(root string, input AmendPlanInput) (*AmendPlanResult, error) {
 	if actor == "" || input.TaskID == "" || input.Apply != "" && input.ReplacePending != "" {
 		return nil, &PreconditionError{Reason: "amend-plan requires a task, actor and one action"}
 	}
+	if !input.Mode.IsValid() || input.Apply != "" && input.Mode != "" {
+		return nil, &PreconditionError{Reason: "select a valid amendment mode only when beginning a correction"}
+	}
 	if input.Apply == "" && (strings.TrimSpace(input.Reason) == "" || len(input.Reason) > 4096) {
 		return nil, &PreconditionError{Reason: "amend-plan requires a nonempty reason of at most 4096 bytes"}
 	}
@@ -56,7 +62,21 @@ func AmendPlan(root string, input AmendPlanInput) (*AmendPlanResult, error) {
 		if input.Apply != "" {
 			return applyPlanAmendment(root, state, resolver, original, input.Apply, actor, result, bb)
 		}
-		if err := unusedAmendmentSource(state, resolver, original); err != nil {
+		mode := input.Mode
+		if input.ReplacePending != "" {
+			if old := state.FindTask(input.ReplacePending); old != nil {
+				if mode == "" {
+					mode = old.AmendmentMode
+				}
+				if mode != old.AmendmentMode {
+					return &PreconditionError{Reason: "replacement must preserve pending amendment mode"}
+				}
+			}
+		}
+		if mode == models.PlanAmendmentPreserveIdentity && state.Sprint.Status != models.SprintStatusCheckpoint && state.Sprint.Status != models.SprintStatusInProgress {
+			return &PreconditionError{Reason: "sprint must be at CHECKPOINT or IN_PROGRESS"}
+		}
+		if err := amendmentSource(state, resolver, original, mode); err != nil {
 			return err
 		}
 		if input.ReplacePending == "" {
@@ -87,20 +107,36 @@ func AmendPlan(root string, input AmendPlanInput) (*AmendPlanResult, error) {
 			original.PlanAmendment = &models.PlanAmendment{OriginalOutput: cloneAmendmentOutput(original.Output)}
 		}
 		id := ""
+		suffix := "amend"
+		kind := models.PlanningChangeCorrection
+		if mode == models.PlanAmendmentPreserveIdentity {
+			suffix, kind = "replan", models.PlanningChangeReplan
+		}
 		for n := 1; id == ""; n++ {
-			candidate := fmt.Sprintf("%s-amend-%d", original.ID, n)
+			candidate := fmt.Sprintf("%s-%s-%d", original.ID, suffix, n)
 			if state.FindTask(candidate) == nil {
 				id = candidate
 			}
 		}
 		now := time.Now().UTC()
-		correction := models.Task{ID: id, Type: models.TaskTypePlanning, RolePair: original.RolePair, Status: initial, Priority: original.Priority,
+		correctionType := models.TaskTypePlanning
+		if mode != "" {
+			correctionType = original.EffectiveType()
+		}
+		correction := models.Task{ID: id, Type: correctionType, RolePair: original.RolePair, Status: initial, Priority: original.Priority,
+			AmendmentMode: mode, PlanningChange: models.NewPlanningChange(kind, input.Trigger, original.ID),
 			AmendsPlan: original.ID, Description: fmt.Sprintf("%s\n\nReviewed amendment of %s: %s. Read its current output manifest. Preserve every existing output slot identity; append new producers only. Reconcile prior merged correction artifacts. After independent review/merge run %s.", original.Description, original.ID, strings.TrimSpace(input.Reason), brand.Command("amend-plan", original.ID, "--apply", id)),
 			SpecRef: original.SpecRef, EpicRef: original.EpicRef, PlanRef: original.PlanRef, ArchRef: original.ArchRef, DoneWhen: original.DoneWhen, Scope: original.Scope,
 			ParentTask: original.ParentTask, ParentTasks: slices.Clone(original.ParentTasks), DependsOn: slices.Clone(original.DependsOn),
 			Validation: slices.Clone(original.Validation), ValidationPrerequisites: models.CloneValidationPrerequisites(original.ValidationPrerequisites), RuntimeInputs: models.CloneRuntimeInputs(original.RuntimeInputs), DestructiveDB: original.DestructiveDB, RCARequired: original.RCARequired,
 			ProviderDependencies: models.CloneProviderDependencies(original.ProviderDependencies), DescendantDependencies: models.CloneDescendantDependencies(original.DescendantDependencies), ProviderReservations: slices.Clone(original.ProviderReservations), MaxOutputs: original.MaxOutputs,
 			Created: now, History: []models.TaskHistoryEntry{}}
+		if mode != "" {
+			correction.Description = fmt.Sprintf("%s\n\nReviewed replacement of %s: %s. Mode %s: retain the complete existing output manifest, including allocation/proof and permission boundaries. Change only referenced contract prose; do not change accepted allocations or resolved proofs. Original provider/output identities remain authoritative. After independent review and merge apply with %s.", original.Description, original.ID, strings.TrimSpace(input.Reason), mode, brand.Command("amend-plan", original.ID, "--apply", id))
+			if correctionType == models.TaskTypeArchitecture {
+				correction.Description += " Architecture changes must stay inside existing exact CONTRACT subsections of anchored Scope references; scope ownership, read sets and acceptance remain unchanged."
+			}
+		}
 		original.PlanAmendment.Pending = id
 		original.PlanAmendment.Corrections = append(original.PlanAmendment.Corrections, id)
 		if original.PlanCheckVerdictOf() != models.PlanCheckHeld {
@@ -132,8 +168,18 @@ func AmendPlan(root string, input AmendPlanInput) (*AmendPlanResult, error) {
 }
 
 func unusedAmendmentSource(state *models.State, resolver *pipeline.Resolver, task *models.Task) error {
-	if task == nil || task.Status != models.TaskStatusMerged || task.AmendsPlan != "" || len(task.Output) == 0 || task.PlanHandoffRetired() || len(task.TransitionsExecuted) > 0 || hasPlanChildren(state, task) {
+	return amendmentSource(state, resolver, task, "")
+}
+
+func amendmentSource(state *models.State, resolver *pipeline.Resolver, task *models.Task, mode models.PlanAmendmentMode) error {
+	if task == nil || task.Status != models.TaskStatusMerged || task.AmendsPlan != "" || len(task.Output) == 0 || task.PlanHandoffRetired() || task.TransitionsExecuted["replanned"] {
+		return &PreconditionError{Reason: "amendment requires a live MERGED planning original"}
+	}
+	if mode == "" && (len(task.TransitionsExecuted) > 0 || hasPlanChildren(state, task)) {
 		return &PreconditionError{Reason: "amendment requires an unused MERGED planning original without children or executed transitions"}
+	}
+	if mode == models.PlanAmendmentContract && task.EffectiveType() != models.TaskTypeArchitecture || mode != "" && (len(task.TransitionsExecuted) > 0 || hasPlanChildren(state, task)) && task.EffectiveType() != models.TaskTypeArchitecture {
+		return &PreconditionError{Reason: "expanded contract correction requires an architecture original"}
 	}
 	if !resolver.TransitionSourcePairs()[task.RolePair] {
 		return &PreconditionError{Reason: "amendment requires a planning role-pair"}
@@ -174,9 +220,6 @@ func applyPlanAmendment(root string, state *models.State, resolver *pipeline.Res
 		result.CorrectionID = id
 		return nil
 	}
-	if err := unusedAmendmentSource(state, resolver, original); err != nil {
-		return err
-	}
 	if record == nil || record.Pending != id {
 		return &PreconditionError{Reason: "apply must name the exact pending correction"}
 	}
@@ -184,7 +227,10 @@ func applyPlanAmendment(root string, state *models.State, resolver *pipeline.Res
 	if correction == nil || correction.Status != models.TaskStatusMerged || correction.AmendsPlan != original.ID || correction.RolePair != original.RolePair || correction.PlanHandoffRetired() || correction.PlanCheckVerdictOf() == models.PlanCheckHeld || len(correction.TransitionsExecuted) > 0 || hasPlanChildren(state, correction) {
 		return &PreconditionError{Reason: "apply requires the independent MERGED pending correction without children, retirement or hold"}
 	}
-	if err := models.ValidateAmendmentOutput(original.Output, correction.Output); err != nil {
+	if err := amendmentSource(state, resolver, original, correction.AmendmentMode); err != nil {
+		return err
+	}
+	if err := models.ValidateAmendmentOutputForMode(original.Output, correction.Output, correction.AmendmentMode); err != nil {
 		return &PreconditionError{Reason: err.Error()}
 	}
 	if correction.MaxOutputs != original.MaxOutputs || original.MaxOutputs > 0 && len(correction.Output) > original.MaxOutputs {
@@ -214,6 +260,9 @@ func applyPlanAmendment(root string, state *models.State, resolver *pipeline.Res
 		return &PreconditionError{Reason: stale}
 	}
 	if err := checkOutputRuntimeInputs(state, resolver, original, correction.Output); err != nil {
+		return err
+	}
+	if err := validateBoundedContractCorrection(root, state, original, correction, *correction.ReviewCommit); err != nil {
 		return err
 	}
 	original.Output = cloneAmendmentOutput(correction.Output)

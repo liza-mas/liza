@@ -42,6 +42,7 @@ func TestConfigGetDelegatedFlagContract(t *testing.T) {
 		"json":           {"bool", "false"},
 		"summary":        {"bool", "false"},
 		"active":         {"bool", "false"},
+		"all":            {"bool", "false"},
 		"zombies":        {"bool", "false"},
 		"output-summary": {"bool", "false"},
 	}

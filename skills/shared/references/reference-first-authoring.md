@@ -26,10 +26,14 @@ which maps these existing obligation IDs to proofs and execution receipts.
 Only an owner may redefine its information class. Route a needed change to that
 owner or block. A later human decision becomes effective only after an owner
 correction or decision record gives it an explicit revision override.
-An owner of a shared interface reconciles it with consumer artifacts already
-merged; a need it cannot settle yet is a design prerequisite (allocated
-correction or investigation plus a hold on affected work, per Proof Stage),
-never a gap note on a frozen contract. Later consumers route gaps to it.
+Epics record `Provider Ask Inventory` before decomposition: interface ID, consumer
+epic/ref, source-backed operations, fields and statuses (or explicit none). Interface
+owners reconcile it with assigned epics/source obligations and merged consumers,
+answering or concretely deferring each ask. Missing asks block affected freeze. Unsettled
+needs are design prerequisites: allocate correction/investigation and legal
+corrected-contract hold (per Proof Stage), never a frozen gap note. Later consumers
+route gaps to owners.
+Interface strings create no executable dependency edges.
 
 ## Priority, Commitments and Proof Stage
 

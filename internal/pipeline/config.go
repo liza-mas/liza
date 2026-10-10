@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"gopkg.in/yaml.v3"
 )
@@ -161,6 +162,7 @@ type SubPipeline struct {
 
 // TransitionDef describes a cross-pair transition within a sub-pipeline.
 type TransitionDef struct {
+	When        string `yaml:"when,omitempty"` // empty (legacy), scope-decomposition, or coding-allocation
 	Name        string `yaml:"name"`
 	TaskSlug    string `yaml:"task-slug,omitempty"` // segment used in child task IDs (falls back to Name)
 	From        string `yaml:"from"`                // e.g., "code-planning-pair.approved"
@@ -351,6 +353,9 @@ func validate(cfg *PipelineConfig) error {
 	if err := validateDecompositionRoots(p); err != nil {
 		return err
 	}
+	if err := validateAllocationRoutes(p); err != nil {
+		return err
+	}
 
 	for epName, epValue := range p.EntryPoints {
 		if err := validateEntryPoint(epName, epValue, p); err != nil {
@@ -532,6 +537,12 @@ var kebabCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 // validateTransitionHeader checks the common fields shared by all transition types:
 // non-empty name, valid trigger, and valid cardinality.
 func validateTransitionHeader(t TransitionDef) error {
+	if t.When != "" && t.When != "scope-decomposition" && t.When != "coding-allocation" {
+		return fmt.Errorf("when must be scope-decomposition or coding-allocation, got %q", t.When)
+	}
+	if t.When != "" && t.Cardinality != "per-subtask" {
+		return fmt.Errorf("conditional allocation routes require per-subtask cardinality")
+	}
 	if t.Name == "" {
 		return fmt.Errorf("transition name is empty")
 	}
@@ -543,6 +554,50 @@ func validateTransitionHeader(t TransitionDef) error {
 	}
 	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" && t.Cardinality != "many-to-one" {
 		return fmt.Errorf("cardinality must be %q, %q, or %q, got %q", "per-subtask", "one-to-one", "many-to-one", t.Cardinality)
+	}
+	return nil
+}
+
+// validateAllocationRoutes permits only explicit exclusive architecture routes;
+// it never adds or alters topology in an existing frozen pipeline.
+func validateAllocationRoutes(p *Pipeline) error {
+	groups := make(map[string][]TransitionDef)
+	for _, sp := range p.SubPipelines {
+		for _, t := range sp.Transitions {
+			pair, _ := transitionFromRolePair(t)
+			groups[pair] = append(groups[pair], t)
+		}
+	}
+	for _, t := range p.PipelineTransitions {
+		pair, _ := transitionFromRolePair(t)
+		groups[pair] = append(groups[pair], t)
+	}
+	for source, transitions := range groups {
+		conditional := slices.ContainsFunc(transitions, func(t TransitionDef) bool { return t.When != "" })
+		if !conditional {
+			continue
+		}
+		if len(transitions) != 2 || models.TaskTypeForRole(p.RolePairs[source].Doer) != models.TaskTypeArchitecture {
+			return fmt.Errorf("role-pair %q requires exactly two exclusive architecture allocation routes", source)
+		}
+		seen := make(map[string]bool)
+		for _, t := range transitions {
+			if t.When == "" || seen[t.When] {
+				return fmt.Errorf("role-pair %q requires one scope-decomposition and one coding-allocation route", source)
+			}
+			seen[t.When] = true
+			target, _ := transitionToRolePair(t)
+			if t.When == "coding-allocation" && (t.Trigger != "manual" || models.TaskTypeForRole(p.RolePairs[target].Doer) != models.TaskTypeCoding) {
+				return fmt.Errorf("transition %q coding-allocation must be a manual route to coding", t.Name)
+			}
+			if targetType := models.TaskTypeForRole(p.RolePairs[target].Doer); t.When == "scope-decomposition" && targetType != models.TaskTypeArchitecture && targetType != models.TaskTypePlanning {
+				return fmt.Errorf("transition %q scope-decomposition must retain architecture or code planning", t.Name)
+			}
+			fromParts, toParts := strings.Split(t.From, "."), strings.Split(t.To, ".")
+			if fromParts[len(fromParts)-1] != "approved" || toParts[len(toParts)-1] != "initial" {
+				return fmt.Errorf("transition %q allocation routes require approved to initial", t.Name)
+			}
+		}
 	}
 	return nil
 }

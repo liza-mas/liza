@@ -198,6 +198,10 @@ with non-empty direct references and obligation coverage. Map each capability to
 source requirements and keep their priority at item level; expose a missing product policy
 before binding a capability rather than strengthening the requirement (contract: Priority,
 Commitments and Proof Stage).
+Before downstream decomposition, record a `Provider Ask Inventory` in the epic:
+interface ID, consumer epic/ref, required operations, fields and statuses, with source
+anchors (explicitly record none when no provider is consumed). Inventory needs are
+consumer requirements, not invented provider designs or executable dependency edges.
 1. Work ONLY in the worktree directory. Use git -C {{.Worktree}} for all git commands.
 2. Invoke skill: epic-writing FIRST.
 3. Use the assigned source carrier and its declared direct-reference spans.
@@ -277,7 +281,10 @@ direct references and obligation coverage. Each Scope must declare one JSON read
 outside fences: `**Direct references:** ["product-id", "shared-id"]` (`[]` selects none),
 naming all required product authority and shared decisions, constraints, interfaces,
 and holds from Source References. Use exact pins, including same-file shared sections
-only when their content already exists at that revision. Children see only their assigned
+only when their content already exists at that revision. Each Scope places locally owned
+interface prose in exact nested `#### CONTRACT`, with allocations/acceptance/executable
+metadata outside it; future bounded correction cannot change the surrounding Scope or
+output manifest. Children see only their assigned
 Scope and selected spans; other sections remain pinned pointers. Map components, interfaces, and proof
 obligations to the requirements they serve; separate the minimum mechanism Must scope
 needs from optional extensions; check a consequential platform or API assumption against
@@ -303,6 +310,15 @@ If DESCRIPTION, DONE WHEN, SCOPE, or validation names implementation, documentat
 configuration, test, or support files, treat those as downstream code-planning scope.
 As architect, do not modify those files. Encode the required changes in the architecture
 document and output[] entries only.
+{{- if .DirectCodingAllocationAvailable}}
+DIRECT CODING ALLOCATION: Opt in only for one exact Scope with fully reviewed design
+and allocation. Emit flat entries all marked `coding_allocation: true`, sharing the
+same exact `arch_ref`; each `plan_ref` names an exact coding-unit heading with a strict
+Acceptance Contract, future coder-authored manifest path, owned_files and nonempty
+canonical validation. Preserve dependencies and writer waits. Defects needing
+`rca_required` retain code-planning; fanout retains specialized architecture/code-planning.
+The named direct route still requires manual orchestrator handoff disposition.
+{{- end}}
 5. Architecture document:
    Run: mkdir -p {{.Worktree}}/specs/arch-plan/{{.GoalSlug}}
    Capture a timestamp by running: date -u +'%Y%m%d-%H%M%S'
@@ -361,8 +377,13 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
 {{- end -}}
 
 {{- define "known-consumers-duty" -}}
-For each shared interface you own, search merged specs by its ID for consumers citing it and cover
-each need. One you cannot settle yet is a design prerequisite: allocate its correction or bounded
+Before freezing a shared interface, obtain the early epic `Provider Ask Inventory` and
+reconcile its coverage with the assigned epics and inherited source obligations. For each
+interface ID, consumer epic/ref, operations, fields and statuses, record the provider answer
+or concrete deferral. Also search merged specs by its ID for consumers citing it and cover
+each need. Missing declared consumer asks block the affected scope's freeze. A need you
+cannot settle yet is a design prerequisite: allocate its correction or bounded
 investigation and hold the affected scope on the corrected contract (task_depends_on or
 provider_dependencies); never freeze the incompatible contract with only a gap note.
+Inventory strings are semantic evidence, not executable dependency edges.
 {{- end -}}

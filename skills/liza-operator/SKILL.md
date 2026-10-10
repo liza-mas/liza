@@ -92,7 +92,7 @@ round shows the symptom:
 Quiet round → one line: *"Steady: no changes, no forks, no frictions."*
 
 **Instruments.** Read-only: `§BRAND_BINARY_NAME§ get tasks --json` for the
-overview; `get tasks --field id,status,history,lifecycle,output --json` for
+overview; `get tasks --all --field id,status,history,lifecycle,output --json` for
 task evidence (including terminal archives). Under `§BRAND_PROJECT_DIRNAME§/`,
 `state.yaml` for control state and archive references, `log.yaml` (history;
 the watcher daemon parses it — a YAML-corrupting char blinds drift/breaker detection), `alerts.log`

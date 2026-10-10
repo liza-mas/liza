@@ -705,12 +705,29 @@ func fanOutPipeline(t *testing.T) []byte {
 	root := t.TempDir()
 	testhelpers.SetupPipelineConfig(t, root)
 	raw := replacementBytes(t, filepath.Join(root, paths.ProjectDirName(), "pipeline.yaml"))
-	anchor := "\n    - name: architecture-to-code-plan\n"
-	if !strings.Contains(string(raw), anchor) {
-		t.Fatalf("pipeline fixture anchor %q not found", anchor)
+	cfg, err := pipeline.LoadFromBytes(raw)
+	if err != nil {
+		t.Fatal(err)
 	}
-	extra := "\n    - name: architecture-to-coding\n      task-slug: direct\n      from: architecture-subpipeline.architecture-pair.approved\n      to: coding-subpipeline.coding-pair.initial\n      trigger: manual\n      cardinality: per-subtask"
-	fanOut := []byte(strings.Replace(string(raw), anchor, extra+anchor, 1))
+	// This fixture exercises legacy simultaneous fanout, independently of the
+	// new exclusive direct-allocation capability.
+	cfg.Pipeline.PipelineTransitions = slices.DeleteFunc(cfg.Pipeline.PipelineTransitions, func(transition pipeline.TransitionDef) bool {
+		return transition.Name == "architecture-to-coding"
+	})
+	for i := range cfg.Pipeline.PipelineTransitions {
+		if cfg.Pipeline.PipelineTransitions[i].Name == "architecture-to-code-plan" {
+			cfg.Pipeline.PipelineTransitions[i].When = ""
+		}
+	}
+	cfg.Pipeline.PipelineTransitions = append(cfg.Pipeline.PipelineTransitions, pipeline.TransitionDef{
+		Name: "architecture-to-coding", TaskSlug: "direct",
+		From: "architecture-subpipeline.architecture-pair.approved", To: "coding-subpipeline.coding-pair.initial",
+		Trigger: "manual", Cardinality: "per-subtask",
+	})
+	fanOut, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pipeline.LoadFromBytes(fanOut); err != nil {
 		t.Fatalf("fan-out pipeline fixture is invalid: %v", err)
 	}

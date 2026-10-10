@@ -162,6 +162,16 @@ Configured embedded states:
 
 Quorum 2 means two approval events. The first approved verdict records the approval and transitions `reviewing` to `partially-approved`. A reviewer can then claim the partially approved task; claim moves it to `reviewing-2`. The second approved verdict transitions to `approved`, which unlocks the master-to-specialized auto transition. Rejection from either review pass returns to the configured rejected state for the same role-pair.
 
+Architecture's optional exclusive `when: coding-allocation` route changes downstream
+generation, not this review lifecycle or quorum. One fully reviewed exact Scope with flat
+`coding_allocation: true` units can use manual `architecture-main-to-coding`, omitting
+specialized architecture/code-planning, or specialized `architecture-to-coding`, omitting
+code-planning. Design and strict acceptance allocation are reviewed together; orchestrator
+handoff disposition still binds. `when: scope-decomposition` retains ordinary fanout,
+and unmarked output/old frozen configurations retain their routes. RCA-required work and
+one-intermediate-layer descendant waits refuse direct allocation. See
+[ADR-0198](ADR/0198-frozen-interface-corrections-and-direct-coding-allocation.md).
+
 ### Code-Planning Pair State Machine
 
 The code-planning pair introduces a parallel state cycle for plan creation and review,

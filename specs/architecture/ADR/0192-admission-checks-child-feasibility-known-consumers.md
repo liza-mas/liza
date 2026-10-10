@@ -4,6 +4,8 @@
 
 ACCEPTED. Amends [ADR-0150](0150-shared-authoring-vocabulary.md) (W2 handoff
 duties).
+Extended by [ADR-0198](0198-frozen-interface-corrections-and-direct-coding-allocation.md)
+with early epic consumer inventories at the existing author/reviewer checkpoints.
 
 ## Context
 
@@ -33,8 +35,13 @@ owner amendment plus supersession (D-78). Traced examples:
    acceptance manifest, a correction an allocated obligation requires). A
    premise about existing source is checked before it restricts a child; only
    an unfinished provider's delivery is deferred as readiness.
-2. **Known consumers.** An owner of a shared interface searches merged specs by
-   the interface ID and covers each consumer need. A need it cannot settle yet
+2. **Consumer asks before freeze.** Epics record a Provider Ask Inventory before
+   downstream decomposition: interface ID, consumer epic/ref, source-backed
+   required operations, fields and statuses (or explicit none). A shared-interface
+   owner obtains the inventory, reconciles coverage against assigned epics and
+   inherited obligations, answers or concretely defers every ask, and also searches
+   merged specs by interface ID for additional consumers. Unavailable declared asks
+   block the affected scope's freeze. A need it cannot settle yet
    is a design prerequisite: an allocated correction or bounded investigation
    plus a hold on the affected scope through existing dependency declarations,
    on the corrected contract rather than an implementation. A gap note on a
@@ -49,7 +56,9 @@ owner amendment plus supersession (D-78). Traced examples:
 - Conflicts visible at admission are refusable by author and reviewer before
   descendant generation.
 - This is a mitigation: consumers written after the provider freezes still
-  route gaps late (that needs scheduling), latent defects in preserved code
+   route gaps late; the early epic inventory mitigates this without proving its
+   semantic completeness or coordinating new undeclared consumers automatically.
+   Latent defects in preserved code
   are still found at code review, and adoption remains reviewer judgment.
   Rendered-template tests prove only that the guidance is present.
 - The role-budget baseline was re-anchored: the change adds about 0.7 KB to the
@@ -61,8 +70,9 @@ owner amendment plus supersession (D-78). Traced examples:
 1. Engine check that each coding child's manifest path lies in its scope.
    Rejected for now: architect and code-planner `scope` is free text; only
    decomposition roots carry typed `owned_files`.
-2. A consumer-inventory review stage before every provider freeze. Rejected:
-   a new phase barrier on the critical path; the owner can search merged specs
-   at its existing checkpoint.
+2. A consumer-inventory review stage before every provider freeze. A new global
+   phase barrier remains rejected. ADR-0198 adopts an early epic inventory checked
+   at existing checkpoints; it does not add an engine stage or infer executable
+   dependency edges from interface strings.
 3. Accept a recorded gap with an owner as sufficient. Rejected: it admits the
    incompatible contract the examples froze.

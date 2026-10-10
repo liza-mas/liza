@@ -61,7 +61,7 @@ QUERY TOOLS (all roles):
 - Or select fields: `{{binaryName}} get-tasks --active --field id,status,rejection_reason --json`.
 {{- end}}
 - For downstream references lacking full parent context: `{{binaryName}} get <id> --output-summary --json`.
-- Read all tasks (`{{binaryName}} get tasks --json`) only if targeted reads and active summaries are insufficient; state why.
+- Read all (`{{binaryName}} get tasks --all --json`) only if targeted reads and active summaries are insufficient; state why.
 - {{binaryName}} status --json — Dashboard overview
 - {{binaryName}} validate --json — Validate state consistency (--skip-spec-check)
 

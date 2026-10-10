@@ -30,7 +30,7 @@ func soleSubtaskTransition(resolver *pipeline.Resolver, rolePair string) (pipeli
 	var found []pipeline.TransitionDef
 	for _, transition := range resolver.AllTransitions() {
 		source, err := resolver.TransitionSourceRolePair(transition.Name)
-		if err == nil && source == rolePair && transition.Cardinality == "per-subtask" {
+		if err == nil && source == rolePair && transition.Cardinality == "per-subtask" && transition.When != "coding-allocation" {
 			found = append(found, transition)
 		}
 	}

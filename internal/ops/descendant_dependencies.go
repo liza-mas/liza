@@ -75,7 +75,7 @@ func descendantOutputRefusal(resolver *pipeline.Resolver, task *models.Task, out
 // so this is a warning.
 func planningWaitWarnings(resolver *pipeline.Resolver, task *models.Task, output []models.OutputEntry) []string {
 	planning := resolver.TransitionSourcePairs()
-	consumers, err := resolver.OutputConsumerRolePairs(task.RolePair)
+	consumers, err := resolver.OutputConsumerRolePairsForOutput(task.RolePair, output)
 	if err != nil || !slices.ContainsFunc(consumers, func(rolePair string) bool { return planning[rolePair] }) {
 		return nil
 	}

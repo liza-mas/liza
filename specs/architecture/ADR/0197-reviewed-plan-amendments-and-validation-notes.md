@@ -4,6 +4,10 @@
 
 ACCEPTED. Extends [ADR-0159](0159-orchestrator-plan-handoff-disposition.md)
 and [ADR-0181](0181-provider-output-dependencies.md).
+Extended by [ADR-0198](0198-frozen-interface-corrections-and-direct-coding-allocation.md):
+explicit contract/identity-preserving modes support expanded architecture with a fully
+unchanged manifest, referenced-prose-only edits and unchanged acceptance allocations/proofs.
+The unused-plan scheduling amendment described here remains the empty-mode behavior.
 
 ## Context
 

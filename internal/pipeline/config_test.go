@@ -800,7 +800,7 @@ func TestLoadFrozen_BackfillsLegacyMasterDecompositionOutputRefs(t *testing.T) {
 		"epic-decompose":      "epic-planning",
 		"arch-decompose":      "architecture",
 		"code-plan-decompose": "code-planning",
-	})
+	}, nil)
 }
 
 func TestSlicedIntegrationPipelineLegacyFrozenUpgrade(t *testing.T) {
@@ -1352,7 +1352,7 @@ func TestLoad_Phase2ValidConfig(t *testing.T) {
 		"epic-decompose":      "epic-planning",
 		"arch-decompose":      "architecture",
 		"code-plan-decompose": "code-planning",
-	})
+	}, nil)
 
 	// Verify 11 roles (10 agent roles + orchestrator).
 	if len(cfg.Pipeline.Roles) != 11 {
@@ -1419,7 +1419,7 @@ func requirePipelineTransition(t *testing.T, cfg *PipelineConfig, name string) T
 	return TransitionDef{}
 }
 
-func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig, decompositionSlugs map[string]string) {
+func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig, decompositionSlugs, decompositionModes map[string]string) {
 	t.Helper()
 	type masterPair struct {
 		name       string
@@ -1466,6 +1466,7 @@ func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig, decompositi
 			steps: []string{"architecture-main-pair", "architecture-pair"},
 			transition: TransitionDef{
 				Name: "arch-decompose", TaskSlug: decompositionSlugs["arch-decompose"],
+				When: decompositionModes["arch-decompose"],
 				From: "architecture-main-pair.approved", To: "architecture-pair.initial",
 				Trigger: "auto", Cardinality: "per-subtask",
 			},
@@ -2238,7 +2239,7 @@ func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
 		"epic-decompose":      "ep",
 		"arch-decompose":      "ar",
 		"code-plan-decompose": "cp",
-	})
+	}, map[string]string{"arch-decompose": "scope-decomposition"})
 	assertEmbeddedTaskSlugs(t, cfg)
 
 	expectedRoles := map[string]string{

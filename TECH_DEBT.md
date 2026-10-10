@@ -429,6 +429,20 @@ before `-p 2` is raised for wall-time reasons, convert these assertions to poll
 until a package-level deadline instead of a fixed budget. Whoever raises `-p`
 owns the evidence that the tolerances survive the contention.
 
+**Recurrence (issue 18 validation, 2026-10-10):** the affected-package race run
+with `-p 2` failed `TestAwaitVerdict_Rejected_SameAttempt` after 10.52s:
+TIMEOUT with the task still CODE_REJECTED. Its unchanged fixture sleeps 200ms
+instead of synchronizing watcher readiness; the default 10s polling interval
+equals its 10s deadline, and the timeout path does not consume an arrived verdict.
+The inferred missed-notification/deadline path remains to be reproduced with
+controlled ordering; isolation passed under race in 2.006s.
+`TestHeartbeatRenewsTaskLease` and `TestHeartbeatRenewsReviewLease` also failed:
+their unchanged 200ms contexts start before authentication setup, allowing
+cancellation before the first heartbeat. Both passed in an isolated race run.
+No expectations, deadlines, await or heartbeat code were changed. These are
+separate timing repairs, deferred to preserve this feature's bounded corrective
+review scope; the existing payback trigger has fired and repair is due.
+
 **Additional submit boundary (D-51 validation):**
 `TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks` failed under a full
 parallel run with successful submission (`submit error: nil`). The in-flight

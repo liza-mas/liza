@@ -117,7 +117,7 @@ cat .liza/sprint_summary.md
 # Shows: task distribution, sprint metrics, active agents, anomalies
 
 # 3. Analyze progress
-liza get tasks --format table
+liza get tasks --all --format table
 liza get metrics
 
 # 4. Make decisions and resume
@@ -213,7 +213,7 @@ liza get sprint.elapsed     # 2d 5h 30m (computed)
 ### Task and Agent Queries
 
 ```bash
-liza get tasks --format table         # All tasks
+liza get tasks --all --format table   # All tasks
 liza get tasks task-1                 # Single task detail
 liza get agents --format table        # All agents
 liza get metrics --format json        # Sprint metrics

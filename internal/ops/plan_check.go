@@ -178,7 +178,7 @@ func validatePlanNoteSelection(state *models.State, resolver *pipeline.Resolver,
 	if len(notes) == 0 {
 		return nil
 	}
-	for _, name := range domain.gatedByPair[task.RolePair] {
+	for _, name := range domain.selectedGatedTransitions(task) {
 		definition, err := buildTransitionDefFromPipeline(resolver, name)
 		if err != nil {
 			return err

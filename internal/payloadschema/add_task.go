@@ -16,6 +16,7 @@ import (
 // consumes this package. Both typed callers and decoded preflight JSON cross
 // the same JSON boundary; pipeline-dependent role/type checks stay in ops.
 type addTaskPayload struct {
+	PlanningChange          *models.PlanningChange          `json:"planning_change"`
 	ID                      string                          `json:"id"`
 	Type                    string                          `json:"type"`
 	RolePair                string                          `json:"role_pair"`
@@ -97,6 +98,18 @@ func validateAddTaskPayload(payload any) []models.FieldDiagnostic {
 	}
 	if input.RolePair == "" {
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/role_pair", "role_pair is required", models.FieldValueClassMissing))
+	}
+	if change := input.PlanningChange; change != nil {
+		if change.Kind != models.PlanningChangeCorrection && change.Kind != models.PlanningChangeReplan {
+			diagnostics = append(diagnostics, scalarPayloadDiagnostic("/planning_change/kind", "must be correction or replan", models.FieldValueClassUnknownEnum))
+		}
+		if strings.TrimSpace(change.Trigger) == "" {
+			diagnostics = append(diagnostics, scalarPayloadDiagnostic("/planning_change/trigger", "explicit corrective task requires a trigger", models.FieldValueClassMissing))
+		}
+		diagnostics = append(diagnostics, taskIDDiagnostics("/planning_change/original_task_id", change.OriginalTaskID)...)
+		if change.OriginalTaskID == input.ID {
+			diagnostics = append(diagnostics, scalarPayloadDiagnostic("/planning_change/original_task_id", "must name another task", models.FieldValueClassMalformed))
+		}
 	}
 	return diagnostics
 }

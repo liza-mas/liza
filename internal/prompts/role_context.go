@@ -280,6 +280,9 @@ type RoleContextData struct {
 	// DeclareRuntimeInputs: the project configures a runtime-input registry,
 	// so planners declare live validation inputs and reviewers check them.
 	DeclareRuntimeInputs bool
+	// DirectCodingAllocationAvailable is supplied by the frozen pipeline route,
+	// so legacy architecture prompts cannot opt into an unavailable handoff.
+	DirectCodingAllocationAvailable bool
 	// RuntimeInputs are this task's declared live inputs (ADR-0169).
 	RuntimeInputs            []models.RuntimeInput
 	ProviderDependencies     []models.ProviderDependency

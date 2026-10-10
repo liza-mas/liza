@@ -522,7 +522,7 @@ func TestSlicedIntegrationFinalizationRace(t *testing.T) {
 			t.Fatal(err)
 		}
 		config.Pipeline.PipelineTransitions = slices.DeleteFunc(config.Pipeline.PipelineTransitions, func(transition pipeline.TransitionDef) bool {
-			return transition.Name == "architecture-to-code-plan"
+			return transition.Name == "architecture-to-code-plan" || transition.Name == "architecture-to-coding"
 		})
 		data, err := yaml.Marshal(config)
 		if err != nil {

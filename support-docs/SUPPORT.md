@@ -7,7 +7,8 @@ This file is written to `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` during `§BRAND_B
 
 ```bash
 §BRAND_BINARY_NAME§ status                        # Dashboard: goal, sprint, agents, task summary
-§BRAND_BINARY_NAME§ get tasks                     # All tasks with current state
+§BRAND_BINARY_NAME§ get tasks                     # Active work and unfinished handoffs
+§BRAND_BINARY_NAME§ get tasks --all               # Complete task history
 §BRAND_BINARY_NAME§ get tasks --format table      # Tabular view
 §BRAND_BINARY_NAME§ get tasks.task-1.history --json # Task history
 §BRAND_BINARY_NAME§ get task-1.rejection_reason --json # Rejection text, or null
@@ -36,9 +37,9 @@ it enables `config.terminal_task_archival` and drains bounded batches. Upgrade
 every process before enabling it. Terminal rows in physical `state.yaml`
 then contain identity/status/created plus a `terminal_archive` reference;
 complete history, lifecycle receipts and output remain in immutable objects.
-`get tasks`, inspection, validation and ordinary mutations restore them.
+`get tasks --all`, inspection, validation and ordinary mutations restore them.
 The default task list is an overview; use
-`get tasks --field id,status,history,lifecycle,output --json` for audit evidence.
+`get tasks --all --field id,status,history,lifecycle,output --json` for audit evidence.
 Missing or corrupt objects fail explicitly. Save the runtime `archive/` tree
 alongside snapshots; raw YAML alone is insufficient task evidence.
 
@@ -64,8 +65,13 @@ auto-unblock merely because the reason mentions a lock.
 or comma-separated `--field` values: lists return one object per task containing
 only the requested keys; selecting one task returns one object. Optional values
 are explicit nulls. `rejection_reason` is free text; `rejection_rca` is the structured
-RCA record. `--active` filters before projection (a filtered single task returns
-null). Projections support JSON, YAML and value output, and cannot combine with
+RCA record. Lists default to active work; `--all` includes history, and `--active`
+retains explicit active selection. Combining `--all` and `--active` refuses.
+Active inspection includes outstanding selected handoffs even when held, refused or
+undecided, pending amendment originals and their exact MERGED pending corrections.
+Completed selected routes, retired/replanned originals and applied/quarantined corrections
+are hidden. This policy does not change assignment/claim terminal semantics; explicit
+task IDs and dotted fields remain complete. Projections support JSON, YAML and value output, and cannot combine with
 `--summary`, `--output-summary`, `--zombies` or `--format table`.
 
 `get tasks.<id>` selects a whole task; `get tasks.<id>.<field>` and `get <id>.<field>`
@@ -223,6 +229,18 @@ The source task may be either at the transition's configured source state or alr
 
 Transition names appear under `transitions:` within each sub-pipeline and under the top-level `pipeline-transitions:` (for cross-subpipeline transitions) in `§BRAND_PROJECT_DIRNAME§/pipeline.yaml`.
 
+A topology may offer exclusive `when: scope-decomposition` and `when: coding-allocation`
+per-subtask routes. For one fully reviewed architecture Scope, flat entries all marked
+`coding_allocation: true` share an exact `arch_ref`; each exact distinct unit `plan_ref`
+inside it must declare strict Acceptance Contract, future coder-authored manifest path,
+`decomposition.owned_files` and nonempty canonical validation. The embedded manual direct
+routes are `architecture-to-coding` and `architecture-main-to-coding`; architecture review
+also reviews allocation, and normal quorum/plan-check disposition remains. Fanout,
+RCA-required work, kind markers and one-intermediate-layer `descendant_dependencies`
+retain ordinary stages. Direct writer waits use immediate provider declarations. Existing
+unmarked output and old frozen configurations keep their routes; no automatic migration
+occurs, and unsupported marked output refuses.
+
 ## Task State Machines
 
 Every role-pair in `§BRAND_PROJECT_DIRNAME§/pipeline.yaml` defines its own state names under `states:`. The generic flow is:
@@ -379,6 +397,42 @@ appended producer slots; existing descriptions, completion criteria, scope,
 refs, kind, supersession, decomposition and permission/classification fields
 remain fixed. Broader changes still require reviewed replan and authorized
 consumer retirement. Do not clear provider safeguards or remap indexes.
+
+For an expanded architecture whose contract prose needs correction without changing any
+output/allocation identity, use an explicit strict mode:
+
+```bash
+§BRAND_BINARY_NAME§ amend-plan ORIGINAL --contract --reason "Complete unchanged provider contract" --trigger consumer-interface-gap
+# Or commission reviewed replacement prose while retaining ORIGINAL's identity:
+§BRAND_BINARY_NAME§ replan ORIGINAL --preserve-output-identity --reason "Reconcile contract prose" --trigger consumer-interface-gap
+# After ordinary independent review and merge of the returned same-pair task:
+§BRAND_BINARY_NAME§ amend-plan ORIGINAL --apply CORRECTION
+```
+
+These modes freeze the complete ordered manifest, including refs, scope, ownership,
+classification, commands, prerequisites, provider/runtime declarations and fanout. Only
+the existing referenced architecture Scope's exact nested `#### CONTRACT` subsection
+may change; surrounding Scope metadata/other subsections stay byte-identical and bare
+refs refuse edits. Unused nonarchitecture planning originals may preserve referenced
+plan prose outside frozen strict acceptance allocations. Changes to acceptance allocation
+or approved resolved proofs, new files and implementation edits refuse. CONTRACT must
+already exist at the reviewed base; missing or duplicate subsections refuse. Expanded originals must be
+architecture tasks; identity preservation also supports unused planning output. ORIGINAL
+remains MERGED with its children, selectors and review history. Pending review/apply fences
+applicable consumer admission/submission, with correction work exempt. Historical adopted
+acceptance sources survive only with independent ancestry and matching current allocation
+and resolved proofs; successful receipts are not rewritten. Ordinary replan retains its
+destructive retirement behavior.
+
+`--trigger` on amendment/replan explicitly names the cause; omission is unknown. Explicit
+corrective task authoring uses `planning_change: {kind: correction, trigger: ...,
+original_task_id: ...}` in task payloads, or `--planning-change-kind`,
+`--planning-change-original` and `--trigger` for `add-task`. `get metrics` recomputes
+`planning_changes.daily` from complete logical tasks, including archives: one count per
+creation, grouped by UTC date, kind, trigger and original architecture classification.
+`unknown_attribution` and `missing_created` disclose incomplete evidence; apply/retry does
+not add a count. Reason prose and task-ID suffixes are not attribution. Comparable-run
+reopening rates and planning/coding ratios still require a later run measurement.
 
 If a merged correction cannot apply after provider retirement or integration
 drift, retain the fence and commission fresh reviewed reconciliation:

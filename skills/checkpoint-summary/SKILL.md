@@ -33,7 +33,7 @@ Use this skill when:
 Read top-level control state from **`§BRAND_PROJECT_DIRNAME§/state.yaml`**
 and task evidence through explicit field queries. `get tasks` is an overview:
 ```bash
-§BRAND_BINARY_NAME§ get tasks --field id,type,role_pair,status,description,scope,done_when,spec_ref,plan_ref,arch_ref,output,approvals,approved_by,history --json
+§BRAND_BINARY_NAME§ get tasks --all --field id,type,role_pair,status,description,scope,done_when,spec_ref,plan_ref,arch_ref,output,approvals,approved_by,history --json
 ```
 Terminal rows may be archive references; raw YAML alone omits their history,
 output and approvals.

@@ -97,9 +97,17 @@ never infer this read set from prose or the coverage table.
 **Done when:** <falsifiable criterion>
 **Depends on:** <scope numbers, if any>
 
+#### CONTRACT
+
+Scope-local interface prose: provider answers to the early Provider Ask Inventory,
+operations, fields, statuses, direction and invariants. Cite inherited authority.
+This exact subsection is the bounded writable region for future reviewed contract
+corrections; do not place allocations, acceptance declarations, proof mappings or
+executable output metadata inside it. Those stay outside this subsection and frozen.
+
 ### Scope 2: <title>
 **Direct references:** ["<reference-id>"]
-...
+... Repeat the exact nested `#### CONTRACT` subsection within each Scope.
 
 ### Spec Coverage
 

@@ -139,7 +139,7 @@ func canonicalizedOutputTaskDependsOnForTarget(state *models.State, resolver *pi
 }
 
 func canonicalizeOutputTaskDependsOnForConsumers(state *models.State, resolver *pipeline.Resolver, task *models.Task) (bool, error) {
-	consumerRolePairs, err := resolver.OutputConsumerRolePairs(task.RolePair)
+	consumerRolePairs, err := resolver.OutputConsumerRolePairsForOutput(task.RolePair, task.Output)
 	if err != nil {
 		return false, err
 	}
@@ -355,7 +355,7 @@ func operationalOutputMayBeConsumed(state *models.State, resolver *pipeline.Reso
 		return true
 	}
 	for _, transition := range resolver.AllTransitions() {
-		if transition.Cardinality != "per-subtask" {
+		if transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, task.Output) {
 			continue
 		}
 		sourceRolePair, err := resolver.TransitionSourceRolePair(transition.Name)

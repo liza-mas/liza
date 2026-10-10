@@ -762,7 +762,7 @@ Large task list or complex dependency graph. **Fix:** Archive old tasks, `§BRAN
 ### Inspect state
 
 ```bash
-§BRAND_BINARY_NAME§ get tasks --format table   # All task statuses
+§BRAND_BINARY_NAME§ get tasks --all --format table # All task statuses
 §BRAND_BINARY_NAME§ get tasks task-1           # Single task detail
 §BRAND_BINARY_NAME§ get agents --format table  # All agents
 §BRAND_BINARY_NAME§ get metrics                # Sprint metrics
@@ -802,7 +802,7 @@ cat > debug-report.txt <<EOF
 === §BRAND_NAME_TITLE§ Debug Report ===
 Version: $(§BRAND_BINARY_NAME§ version)
 State Validation: $(§BRAND_BINARY_NAME§ validate 2>&1)
-Tasks: $(§BRAND_BINARY_NAME§ get tasks --format table 2>&1)
+Tasks: $(§BRAND_BINARY_NAME§ get tasks --all --format table 2>&1)
 Agents: $(§BRAND_BINARY_NAME§ get agents --format table 2>&1)
 Worktrees: $(git worktree list)
 Recent Alerts: $(tail -50 §BRAND_PROJECT_DIRNAME§/alerts.log 2>/dev/null)

@@ -10,7 +10,7 @@ This protocol implements [ADR-0134](../architecture/ADR/0134-acceptance-evidence
 
 Select the task's `plan_ref`, otherwise `spec_ref`, at a captured integration
 commit. A strict declaration is authoritative only when a direct, independently
-approved MERGED planning parent reviewed that file and allocated this child's refs and
+approved MERGED planning or authorized direct-allocation architecture parent reviewed that file and allocated this child's refs and
 ordered validation commands in `output[]`. The reviewed blob must match the
 integration blob. Existing strict Source References continue to own requirement
 meaning; the acceptance declaration allocates those IDs rather than creating a
@@ -28,6 +28,11 @@ commit. Claim/reclaim checks parent evidence and allocation again in the final
 transaction. Reviewed upstream corrections can refresh this snapshot and clear
 the receipt; an adopted source cannot lose its marker to become legacy. Strict
 sources discovered on an already executing task undergo the same checks at submit.
+An unchanged independently reviewed historical parent source may remain adopted after a
+strict contract correction only when ordered ancestry, the allocation and resolved proofs
+still match effective current authority. Fresh children use the latest applied review;
+successful stored receipts never gain authority by being rewritten. A pending amendment
+fences applicable consumer admission/submission while its correction remains runnable.
 Marker-free and reference-first-only legacy sources keep existing admission and
 are identified as not machine acceptance-evidenced. A carrier with neither a
 Source References nor an Acceptance Contract heading keeps its ref fragment as a
@@ -41,7 +46,11 @@ Planning submission preflights each prospective child's selected `plan_ref`
 parser as coding admission and must match the output's ordered validation commands.
 Validation runs before submission preparation/rebase and again after rebase;
 the final transaction requires the output allocation to remain unchanged. Regular
-marker-free sources retain their existing behavior. Present nonregular or oversized
+marker-free sources retain their existing behavior. Direct architecture allocation additionally
+requires flat `coding_allocation: true` entries sharing one exact Scope, distinct exact
+unit refs within that Scope, declared owned files and nonempty canonical commands; it
+does not skip architecture's independent allocation review or the future coder's manifest.
+Present nonregular or oversized
 sources fail here using the same limits already enforced by coding admission.
 This gate checks the declared
 contract, not future implementation: it does not require the child's manifest,

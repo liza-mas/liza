@@ -21,7 +21,9 @@ type ReplanInput struct {
 	ChangedBy string // required — actor metadata for history/logs
 	// Reason is optional. When set it is appended to the replacement's
 	// description, so the planner and plan reviewer see what must change.
-	Reason string
+	Reason                 string
+	PreserveOutputIdentity bool
+	Trigger                string
 }
 
 // ReplanResult contains the outcome of a replan operation.
@@ -60,6 +62,28 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 	}
 
 	bb := db.For(statePath)
+	if input.PreserveOutputIdentity {
+		state, err := bb.Read()
+		if err != nil {
+			return nil, err
+		}
+		if state.Sprint.Status != models.SprintStatusCheckpoint && state.Sprint.Status != models.SprintStatusInProgress {
+			return nil, &PreconditionError{Reason: "sprint must be at CHECKPOINT or IN_PROGRESS"}
+		}
+		original, err := resolveReplanTarget(state, input.TaskID, planningPairs)
+		if err != nil {
+			return nil, err
+		}
+		reason := input.Reason
+		if strings.TrimSpace(reason) == "" {
+			reason = "Review replacement while retaining the existing output selectors"
+		}
+		correction, err := AmendPlan(projectRoot, AmendPlanInput{TaskID: original.ID, ChangedBy: input.ChangedBy, Reason: reason, Mode: models.PlanAmendmentPreserveIdentity, Trigger: input.Trigger})
+		if err != nil {
+			return nil, err
+		}
+		return &ReplanResult{OriginalTaskID: original.ID, NewTaskID: correction.CorrectionID, RolePair: original.RolePair, SpecRef: original.SpecRef, Resumed: state.Sprint.Status == models.SprintStatusCheckpoint}, nil
+	}
 
 	var result ReplanResult
 
@@ -174,6 +198,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 		// Create new task inheriting fields from original
 		originalID := task.ID
 		newTask := models.Task{
+			PlanningChange:         models.NewPlanningChange(models.PlanningChangeReplan, input.Trigger, task.ID),
 			ID:                     newTaskID,
 			Type:                   task.Type,
 			RolePair:               task.RolePair,

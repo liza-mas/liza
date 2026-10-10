@@ -817,12 +817,44 @@ func (r *Resolver) TransitionTargetRolePair(transitionName string) (string, erro
 // OutputConsumerRolePairs returns role-pairs that can consume output[] entries
 // from sourceRolePair through an outgoing per-subtask transition.
 func (r *Resolver) OutputConsumerRolePairs(sourceRolePair string) ([]string, error) {
+	return r.outputConsumerRolePairs(sourceRolePair, nil, false)
+}
+
+// OutputConsumerRolePairsForOutput returns only consumers of the explicit
+// allocation mode. Static provider transition identities remain unchanged.
+func (r *Resolver) OutputConsumerRolePairsForOutput(sourceRolePair string, output []models.OutputEntry) ([]string, error) {
+	return r.outputConsumerRolePairs(sourceRolePair, output, true)
+}
+
+// TransitionApplies selects an exclusive route by the reviewed output marker.
+// A marked manifest in a legacy topology is refused rather than routed to a
+// planner that would never adopt its coding acceptance contract.
+func (r *Resolver) TransitionApplies(name string, output []models.OutputEntry) bool {
+	t, err := r.Transition(name)
+	if err != nil {
+		return false
+	}
+	direct := models.HasCodingAllocation(output)
+	switch t.When {
+	case "coding-allocation":
+		return direct
+	case "scope-decomposition", "":
+		return !direct
+	default:
+		return false
+	}
+}
+
+func (r *Resolver) outputConsumerRolePairs(sourceRolePair string, output []models.OutputEntry, selected bool) ([]string, error) {
 	if _, ok := r.config.Pipeline.RolePairs[sourceRolePair]; !ok {
 		return nil, fmt.Errorf("unknown role-pair %q", sourceRolePair)
 	}
 	var consumers []string
 	for _, t := range r.AllTransitions() {
 		if t.Cardinality != "per-subtask" {
+			continue
+		}
+		if selected && !r.TransitionApplies(t.Name, output) {
 			continue
 		}
 		fromPair, err := transitionFromRolePair(t)

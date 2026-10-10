@@ -91,7 +91,17 @@ func LoadPlanHandoffDomain(projectRoot string) (PlanHandoffDomain, error) {
 // disposition. A replanned task stays in domain so its consumers still see it
 // as an inadmissible upstream.
 func (d PlanHandoffDomain) InDomain(task *models.Task) bool {
-	return task != nil && task.AmendsPlan == "" && len(task.Output) > 0 && len(d.gatedByPair[task.RolePair]) > 0
+	return task != nil && task.AmendsPlan == "" && len(task.Output) > 0 && len(d.selectedGatedTransitions(task)) > 0
+}
+
+func (d PlanHandoffDomain) selectedGatedTransitions(task *models.Task) []string {
+	var selected []string
+	for _, name := range d.gatedByPair[task.RolePair] {
+		if d.resolver == nil || d.resolver.TransitionApplies(name, task.Output) {
+			selected = append(selected, name)
+		}
+	}
+	return selected
 }
 
 // Pending reports whether task still has a hand-off to run. In the domain,
@@ -105,7 +115,7 @@ func (d PlanHandoffDomain) Pending(task *models.Task) bool {
 	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
 		return false
 	}
-	for _, name := range d.gatedByPair[task.RolePair] {
+	for _, name := range d.selectedGatedTransitions(task) {
 		if !task.TransitionsExecuted[name] {
 			return true
 		}
@@ -155,7 +165,7 @@ func (d PlanHandoffDomain) HasUnfailedHandoff(state *models.State, task *models.
 	if !d.InDomain(task) {
 		return true
 	}
-	for _, name := range d.gatedByPair[task.RolePair] {
+	for _, name := range d.selectedGatedTransitions(task) {
 		if !task.TransitionsExecuted[name] && d.TransitionFailure(state, task, name) == nil {
 			return true
 		}
@@ -179,7 +189,8 @@ func HasHeldPlan(state *models.State) bool {
 // GatesTransition reports whether running transitionName from task needs an
 // orchestrator disposition.
 func (d PlanHandoffDomain) GatesTransition(task *models.Task, transitionName string) bool {
-	return d.InDomain(task) && d.gatedTransitions[transitionName]
+	return d.InDomain(task) && d.gatedTransitions[transitionName] &&
+		(d.resolver == nil || d.resolver.TransitionApplies(transitionName, task.Output))
 }
 
 // Classify returns task's hand-off class and, for classes that name one, the
@@ -239,7 +250,7 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 // It never authorizes generation or releases a hold; apply/recovery still
 // revalidate their full admission boundaries under the state lock.
 func (d PlanHandoffDomain) ReadyPlanCorrection(state *models.State, task *models.Task) *models.Task {
-	if state == nil || task == nil || task.AmendsPlan != "" || task.PlanAmendment == nil || task.PlanAmendment.Pending == "" || !d.Pending(task) {
+	if state == nil || task == nil || task.Status != models.TaskStatusMerged || task.AmendsPlan != "" || task.PlanAmendment == nil || task.PlanAmendment.Pending == "" || task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
 		return nil
 	}
 	correction := state.FindTask(task.PlanAmendment.Pending)

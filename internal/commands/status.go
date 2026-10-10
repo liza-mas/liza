@@ -250,6 +250,9 @@ func BuildStatusData(state *models.State, detailed bool, projectRoot string, pr 
 		for i := range state.Tasks {
 			task := &state.Tasks[i]
 			avail := resolver.AvailableManualTransitions(task.Status, task.TransitionsExecuted)
+			avail = slices.DeleteFunc(avail, func(name string) bool {
+				return !resolver.TransitionApplies(name, task.Output)
+			})
 			if len(avail) > 0 {
 				data.PendingTransitions = append(data.PendingTransitions, pendingTransition{
 					TaskID: task.ID, Transitions: avail,
