@@ -201,6 +201,32 @@ The current fix changes interrupted claims, not direct operator assignment.
 or any change making direct unblock assignment share normal claim enforcement.
 Add the same escalation check without inventing a budget reset.
 
+## Terminal archive cache sized to working set
+
+**What:** Every database read restores every archived terminal task
+([ADR-0183](specs/architecture/ADR/0183-terminal-archive-and-contention-recovery.md)),
+so per-read cost grows with history. A live run (615 archived tasks, 32 MiB of
+cache cost, about 53 KiB per row) overflowed the former 16 MiB decoded-object
+cache: random eviction churned it on every read, and `readTerminalTask` took 52%
+of sampled agent CPU in a perf profile. The cache limit is now 128 MiB and a full cache stops
+admitting instead of evicting, so hits degrade to about limit/working set.
+Each `Blackboard` instance holds its own cache: a supervisor has two, and each
+`Patient()` instance starts cold. Entries for terminal tasks rewritten after
+archival stay cached for the supervisor's lifetime.
+
+**Why deferred:** Restoring archived rows only for readers that need them, or
+caching the restored state between publications, requires auditing which database
+read sites may observe stubs and amending ADR-0183's complete-logical-read
+rule. Sizing the cache keeps the ADR intact and removed most of the cost
+(warm `ReadSnapshot` on the live state: 1.85 s to 0.33-0.43 s CPU, 237 MB to
+55 MB allocated per read).
+
+**Payback trigger:** about 1,200 archived rows in `state.yaml` (half the limit
+at 53 KiB per row; row size varies, so the count only approximates cache cost),
+or `readTerminalTask` above 20% of an agent CPU profile. Then restore archived
+rows on demand or cache restored state per publication, and let short-lived
+instances share the singleton's cache.
+
 ## Archive objects have no sweep; Windows directory durability
 
 **What:** An archive transaction that fails after writing an object (state

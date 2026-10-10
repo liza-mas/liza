@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,14 +27,13 @@ type coldTerminalTaskFixture struct {
 	digest     string
 }
 
-func newColdTerminalTaskFixture(t *testing.T, status models.TaskStatus, archived bool) coldTerminalTaskFixture {
-	t.Helper()
-	root := t.TempDir()
-	p := paths.New(root)
+// coldTerminalTask is an evidence-rich terminal task whose archive must restore it
+// without loss.
+func coldTerminalTask(status models.TaskStatus) models.Task {
 	created := time.Date(2026, 10, 6, 8, 0, 0, 0, time.UTC)
 	reviewCommit := strings.Repeat("a", 40)
 	reason := "review evidence survives physical archival"
-	task := models.Task{
+	return models.Task{
 		ID: "terminal-evidence", Type: models.TaskTypeCoding, RolePair: "coding-pair",
 		Status: status, Created: created, Description: "retain a complete logical task",
 		DoneWhen: "the downstream output and audit evidence remain readable",
@@ -58,37 +58,57 @@ func newColdTerminalTaskFixture(t *testing.T, status models.TaskStatus, archived
 		},
 		Extra: map[string]any{"audit_number": "001", "audit_flag": "false"},
 	}
+}
+
+func newColdTerminalTaskFixture(t *testing.T, status models.TaskStatus, archived bool) coldTerminalTaskFixture {
+	t.Helper()
+	p := paths.New(t.TempDir())
+	task := coldTerminalTask(status)
+	var physical any = task
+	fixture := coldTerminalTaskFixture{bb: New(p.StatePath()), task: task}
+	if archived {
+		fixture.digest, fixture.objectPath, physical = writeColdTerminalTaskObject(t, p, task)
+	}
+	fixture.stateBytes = writeColdTerminalTaskState(t, p, []any{physical}, archived)
+	return fixture
+}
+
+// writeColdTerminalTaskObject installs task's archive object and returns its
+// digest, object path and the physical stub row that references it.
+func writeColdTerminalTaskObject(t *testing.T, p paths.LizaPaths, task models.Task) (string, string, map[string]any) {
+	t.Helper()
 	taskYAML, err := yaml.Marshal(task)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var physical any = task
-	fixture := coldTerminalTaskFixture{bb: New(p.StatePath()), task: task}
-	if archived {
-		object, err := json.Marshal(map[string]any{
-			"format_version": 2, "task_id": task.ID, "field": "terminal_task", "value_yaml": string(taskYAML),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		object = append(object, '\n')
-		sum := sha256.Sum256(object)
-		fixture.digest = hex.EncodeToString(sum[:])
-		fixture.objectPath = filepath.Join(p.ArchiveDir(), "objects", fixture.digest[:2], fixture.digest+".json")
-		if err := os.MkdirAll(filepath.Dir(fixture.objectPath), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(fixture.objectPath, object, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		physical = map[string]any{
-			"id": task.ID, "status": task.Status, "created": task.Created,
-			"terminal_archive": map[string]any{"sha256": fixture.digest, "archived_at": created.Add(3 * time.Minute)},
-		}
+	object, err := json.Marshal(map[string]any{
+		"format_version": 2, "task_id": task.ID, "field": "terminal_task", "value_yaml": string(taskYAML),
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	fixture.stateBytes, err = yaml.Marshal(map[string]any{
+	object = append(object, '\n')
+	sum := sha256.Sum256(object)
+	digest := hex.EncodeToString(sum[:])
+	objectPath := filepath.Join(p.ArchiveDir(), "objects", digest[:2], digest+".json")
+	if err := os.MkdirAll(filepath.Dir(objectPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(objectPath, object, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stub := map[string]any{
+		"id": task.ID, "status": task.Status, "created": task.Created,
+		"terminal_archive": map[string]any{"sha256": digest, "archived_at": task.Created.Add(3 * time.Minute)},
+	}
+	return digest, objectPath, stub
+}
+
+func writeColdTerminalTaskState(t *testing.T, p paths.LizaPaths, tasks []any, archived bool) []byte {
+	t.Helper()
+	stateBytes, err := yaml.Marshal(map[string]any{
 		"version": 1, "goal": models.Goal{ID: "archive-goal"}, "agents": map[string]any{},
-		"tasks": []any{physical}, "config": map[string]any{"terminal_task_archival": archived},
+		"tasks": tasks, "config": map[string]any{"terminal_task_archival": archived},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -96,10 +116,10 @@ func newColdTerminalTaskFixture(t *testing.T, status models.TaskStatus, archived
 	if err := os.MkdirAll(filepath.Dir(p.StatePath()), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p.StatePath(), fixture.stateBytes, 0o644); err != nil {
+	if err := os.WriteFile(p.StatePath(), stateBytes, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return fixture
+	return stateBytes
 }
 
 func assertColdTerminalTaskRestored(t *testing.T, state *models.State, want models.Task) {
@@ -160,6 +180,78 @@ func TestTerminalArchiveCachedTasksAreIndependent(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertColdTerminalTaskRestored(t, second, fixture.task)
+}
+
+// Every read restores every archived row, so the cache must keep what it
+// admitted: eviction on a working set above the limit churns it on each read.
+func TestTerminalArchiveCacheKeepsAdmittedEntries(t *testing.T) {
+	p := paths.New(t.TempDir())
+	template := coldTerminalTask(models.TaskStatusMerged)
+	const archivedTasks = 16
+	rows := make([]any, 0, archivedTasks)
+	for i := range archivedTasks {
+		task := template
+		task.ID = fmt.Sprintf("terminal-evidence-%02d", i)
+		_, _, stub := writeColdTerminalTaskObject(t, p, task)
+		rows = append(rows, stub)
+	}
+	writeColdTerminalTaskState(t, p, rows, true)
+
+	cachedDigests := func(bb *Blackboard) (map[string]bool, int) {
+		bb.archiveMu.Lock()
+		defer bb.archiveMu.Unlock()
+		digests := make(map[string]bool, len(bb.archiveCache))
+		for digest := range bb.archiveCache {
+			digests[digest] = true
+		}
+		return digests, bb.archiveCacheBytes
+	}
+	read := func(t *testing.T, bb *Blackboard) (map[string]bool, int) {
+		t.Helper()
+		if _, err := bb.ReadSnapshot(); err != nil {
+			t.Fatal(err)
+		}
+		return cachedDigests(bb)
+	}
+
+	full, workingSet := read(t, New(p.StatePath()))
+	if len(full) != archivedTasks {
+		t.Fatalf("working set did not fit the default limit: cached %d of %d", len(full), archivedTasks)
+	}
+
+	t.Run("working set fits", func(t *testing.T) {
+		t.Cleanup(setTerminalArchiveCacheMaxBytesForTest(workingSet))
+		digests, _ := read(t, New(p.StatePath()))
+		if len(digests) != archivedTasks {
+			t.Fatalf("cached %d of %d archived tasks at a limit equal to the working set", len(digests), archivedTasks)
+		}
+	})
+
+	t.Run("working set exceeds limit", func(t *testing.T) {
+		limit := workingSet / 2
+		t.Cleanup(setTerminalArchiveCacheMaxBytesForTest(limit))
+		bb := New(p.StatePath())
+		first, _ := read(t, bb)
+		for range 3 {
+			again, used := read(t, bb)
+			if used > limit {
+				t.Fatalf("cache cost %d exceeds limit %d", used, limit)
+			}
+			if !reflect.DeepEqual(again, first) {
+				t.Fatalf("cache churned between reads: %d entries after first read, %d after next, %d shared", len(first), len(again), sharedKeys(first, again))
+			}
+		}
+	})
+}
+
+func sharedKeys(a, b map[string]bool) int {
+	n := 0
+	for key := range a {
+		if b[key] {
+			n++
+		}
+	}
+	return n
 }
 
 func TestTerminalArchiveMissingOrCorruptEvidenceFailsIncludingWarmCache(t *testing.T) {

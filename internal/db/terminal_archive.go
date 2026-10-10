@@ -19,7 +19,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const terminalArchiveCacheMaxBytes = 16 << 20
+// Every read restores every archived row, so the cache must hold the whole
+// working set to avoid re-decoding. 128 MiB is ~4x the 32 MiB measured for 615
+// archived tasks (TECH_DEBT: terminal archive cache sized to working set).
+var terminalArchiveCacheMaxBytes = 128 << 20
+
+func setTerminalArchiveCacheMaxBytesForTest(limit int) func() {
+	previous := terminalArchiveCacheMaxBytes
+	terminalArchiveCacheMaxBytes = limit
+	return func() {
+		terminalArchiveCacheMaxBytes = previous
+	}
+}
 
 type terminalArchiveObject struct {
 	FormatVersion int    `json:"format_version"`
@@ -108,7 +119,8 @@ func (bb *Blackboard) ArchiveTerminalTask(task *models.Task, archivedAt time.Tim
 }
 
 // Cache budgeting counts the retained decoded representation and its encoded
-// size. Very large objects bypass the cache; eviction never removes evidence.
+// size. Very large objects bypass the cache; a full cache admits nothing more.
+// Admission never affects evidence checks, which run before the cache lookup.
 func terminalRetainedBytes(value reflect.Value) int {
 	if !value.IsValid() {
 		return 0
@@ -156,12 +168,11 @@ func (bb *Blackboard) rememberTerminalTask(digest string, task *models.Task, enc
 	if _, present := bb.archiveCache[digest]; present {
 		return
 	}
-	for key, entry := range bb.archiveCache {
-		if bb.archiveCacheBytes+cost <= terminalArchiveCacheMaxBytes {
-			break
-		}
-		delete(bb.archiveCache, key)
-		bb.archiveCacheBytes -= entry.bytes
+	// Every read scans all archived rows: evicting to admit would churn a
+	// partial fit into near-zero hits, while refusing keeps ~limit/working set.
+	// Entries for terminal tasks rewritten after archival stay until exit.
+	if bb.archiveCacheBytes+cost > terminalArchiveCacheMaxBytes {
+		return
 	}
 	bb.archiveCache[digest] = terminalArchiveCacheEntry{task: &copy, bytes: cost}
 	bb.archiveCacheBytes += cost

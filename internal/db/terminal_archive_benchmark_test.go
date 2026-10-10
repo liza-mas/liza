@@ -14,12 +14,12 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-func terminalArchiveTransactionState() *models.State {
+func terminalArchiveTransactionState(tasks int) *models.State {
 	state := testhelpers.CreateValidState()
 	created := time.Date(2026, 10, 6, 8, 0, 0, 0, time.UTC)
 	reason := strings.Repeat("reviewed terminal evidence ", 40)
 	commit := strings.Repeat("a", 40)
-	for i := range 64 {
+	for i := range tasks {
 		task := models.Task{
 			ID: fmt.Sprintf("fixture-%03d", i), Type: models.TaskTypeCoding, RolePair: "coding-pair",
 			Status: models.TaskStatusMerged, Created: created, ReviewCommit: &commit,
@@ -42,7 +42,7 @@ func terminalArchiveTransactionState() *models.State {
 				Sequence:          uint64(j + 1), TransitionID: strings.Repeat("d", 64),
 			})
 		}
-		if i >= 48 {
+		if i >= tasks*3/4 {
 			task.Status = models.TaskStatusReady
 			task.History = task.History[:1]
 			task.Lifecycle = nil
@@ -93,7 +93,7 @@ func TestTerminalArchiveBenchmarkFixtures(t *testing.T) {
 	if root == "" {
 		t.Skip("set D41C_BENCH_FIXTURE_ROOT to provision actual CLI benchmark fixtures")
 	}
-	original := terminalArchiveTransactionState()
+	original := terminalArchiveTransactionState(64)
 	for _, layout := range []string{"inline", "cold"} {
 		path := writeTerminalArchiveTransactionFixture(t, filepath.Join(root, layout), original, layout == "cold")
 		data, err := os.ReadFile(path)
@@ -107,13 +107,20 @@ func TestTerminalArchiveBenchmarkFixtures(t *testing.T) {
 // BenchmarkTerminalArchiveTransaction measures the complete read-modify-fsync-
 // publish transaction, not a serializer or state-size proxy. Cold instances
 // include object parsing; warm instances retain only the bounded object cache.
+// The 256-task layout's archived objects cost more than the former 16 MiB
+// cache limit, which every warm read used to re-decode in full.
 // This in-process benchmark is supplemented by the actual CLI fixtures above.
 func BenchmarkTerminalArchiveTransaction(b *testing.B) {
-	original := terminalArchiveTransactionState()
-	for _, layout := range []string{"inline", "archived"} {
+	layouts := []struct {
+		name     string
+		tasks    int
+		archived bool
+	}{{"inline", 64, false}, {"archived", 64, true}, {"archived-256", 256, true}}
+	for _, layout := range layouts {
+		original := terminalArchiveTransactionState(layout.tasks)
 		for _, cache := range []string{"cold-instance", "warm"} {
-			b.Run(layout+"/"+cache, func(b *testing.B) {
-				path := writeTerminalArchiveTransactionFixture(b, b.TempDir(), original, layout == "archived")
+			b.Run(layout.name+"/"+cache, func(b *testing.B) {
+				path := writeTerminalArchiveTransactionFixture(b, b.TempDir(), original, layout.archived)
 				data, err := os.ReadFile(path)
 				if err != nil {
 					b.Fatal(err)
