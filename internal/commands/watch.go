@@ -1008,7 +1008,7 @@ func checkRegisteredAgentsWithoutLiveProcess(state *models.State) []Alert {
 				continue
 			}
 		}
-		observation := ops.AgentProcessOwnership(agentID, agent, now)
+		observation := ops.AgentProcessOwnership(agentID, agent, now, models.AgentLivenessWindow(state.Config))
 		if observation.Raw.IsLiveOrUnknown() {
 			continue
 		}
@@ -1981,7 +1981,7 @@ func evaluateOrchestratorPresence(state *models.State, pr models.PipelineResolve
 		if !slices.Contains(presence.Roles, agent.Role) {
 			continue
 		}
-		observation := ops.AgentProcessOwnership(agentID, agent, now)
+		observation := ops.AgentProcessOwnership(agentID, agent, now, models.AgentLivenessWindow(state.Config))
 		if observation.Occupied() {
 			presence.Present = true
 			return presence

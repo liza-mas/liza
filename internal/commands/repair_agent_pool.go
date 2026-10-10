@@ -564,7 +564,7 @@ func FindRoleCapacity(state *models.State, pr models.PipelineResolver, repairCLI
 	usable := make(map[string][]string)
 	for _, agentID := range slices.Sorted(maps.Keys(state.Agents)) {
 		agentState := state.Agents[agentID]
-		if ops.AgentProcessOwnership(agentID, agentState, now).Occupied() {
+		if ops.AgentProcessOwnership(agentID, agentState, now, window).Occupied() {
 			occupied[agentState.Role]++
 		}
 		if !agentHasLiveRegistration(agentState, now, window) ||
@@ -818,11 +818,12 @@ func newReviewerStartPlanner(state *models.State, pr models.PipelineResolver, re
 	if err != nil {
 		return nil
 	}
-	// Same occupancy as the launch-side allocator: IDs with an unexpired
-	// lease, plus IDs of started agents still registering.
+	// Same occupancy as the launch-side allocator: IDs of live registrations,
+	// plus IDs of started agents still registering.
 	taken := make(map[string]bool, len(state.Agents)+len(reservedIDs))
+	window := agentLivenessWindow(state.Config)
 	for id, agentState := range state.Agents {
-		if agentState.LeaseExpires != nil && agentState.LeaseExpires.After(now) {
+		if agentHasLiveRegistration(agentState, now, window) {
 			taken[id] = true
 		}
 	}

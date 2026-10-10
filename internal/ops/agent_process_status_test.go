@@ -16,6 +16,7 @@ import (
 
 func TestAgentProcessStatusOwnership(t *testing.T) {
 	now := time.Now().UTC()
+	window := models.AgentLivenessWindow(models.Config{})
 
 	// The two "no procfs" cases below exercise the real native liveness
 	// probe (procscan.ProcessAlive), not a stub, so the source label it
@@ -117,7 +118,7 @@ func TestAgentProcessStatusOwnership(t *testing.T) {
 				PID:          tt.recordedPID,
 			}
 
-			got := AgentProcessOwnership("orchestrator-1", agent, now)
+			got := AgentProcessOwnership("orchestrator-1", agent, now, window)
 			if got.Raw.State != tt.wantRawState || got.Raw.Source != tt.wantRawSource || !strings.Contains(got.Raw.Detail, tt.wantRawDetailContains) {
 				t.Fatalf("raw status = %+v, want state=%s source=%q detail containing %q", got.Raw, tt.wantRawState, tt.wantRawSource, tt.wantRawDetailContains)
 			}
@@ -137,12 +138,30 @@ func TestAgentProcessStatusOwnership(t *testing.T) {
 
 			expired := now.Add(-time.Minute)
 			agent.LeaseExpires = &expired
-			expiredObservation := AgentProcessOwnership("orchestrator-1", agent, now)
+			expiredObservation := AgentProcessOwnership("orchestrator-1", agent, now, window)
 			if expiredObservation.Raw != got.Raw {
 				t.Fatalf("expired raw status = %+v, want preserved %+v", expiredObservation.Raw, got.Raw)
 			}
 			if expiredObservation.Effective != AgentOwnershipLeaseExpiredOrStale || expiredObservation.Occupied() {
 				t.Fatalf("expired effective ownership = %q occupied=%v, want lease_expired_or_stale and unoccupied", expiredObservation.Effective, expiredObservation.Occupied())
+			}
+
+			// A lease a submit or release cleared until the next beat keeps
+			// ownership while the heartbeat is inside the liveness window,
+			// with the same process-derived effective state.
+			agent.LeaseExpires = nil
+			leaseLess := AgentProcessOwnership("orchestrator-1", agent, now, window)
+			if leaseLess.Effective != got.Effective || !leaseLess.Occupied() {
+				t.Fatalf("lease-less fresh ownership = %q occupied=%v, want %q occupied", leaseLess.Effective, leaseLess.Occupied(), got.Effective)
+			}
+			for name, heartbeat := range map[string]time.Time{
+				"lapsed heartbeat": now.Add(-window - time.Second),
+				"no heartbeat":     {},
+			} {
+				agent.Heartbeat = heartbeat
+				if stale := AgentProcessOwnership("orchestrator-1", agent, now, window); stale.Effective != AgentOwnershipLeaseExpiredOrStale || stale.Occupied() {
+					t.Fatalf("lease-less %s ownership = %q occupied=%v, want lease_expired_or_stale and unoccupied", name, stale.Effective, stale.Occupied())
+				}
 			}
 		})
 	}

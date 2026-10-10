@@ -142,6 +142,34 @@ func TestFindRoleCapacityDeficits_WrongSlotReviewerDoesNotCover(t *testing.T) {
 	}
 }
 
+// A live reviewer whose agent lease a verdict or release cleared until its
+// next heartbeat (operator note D-17 part B) holds its slot and its ID: the
+// start planner neither exceeds the role limit nor reuses that ID.
+func TestFindRoleCapacityDeficits_LiveLeaseLessReviewerKeepsSlotAndID(t *testing.T) {
+	now := time.Now().UTC()
+	leaseLess := repairReviewerAgent("code-reviewer", "codex")
+	leaseLess.Model = "m2"
+	leaseLess.LeaseExpires = nil
+	leaseLess.Heartbeat = now.Add(-10 * time.Second)
+	state := testhelpers.CreateValidState()
+	state.Agents = map[string]models.Agent{"code-reviewer-1": leaseLess}
+	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("review-fresh", models.TaskStatusReadyForReview, now)}
+	repairCLI := RepairCLI{RoleModels: slotReviewerFile(t)}
+
+	t.Run("role limit full", func(t *testing.T) {
+		missing, unservable := FindRoleCapacityDeficits(state, loadSlotResolver(t, 1), repairCLI, nil, now)
+		if len(missing) != 0 || len(unservable) != 0 {
+			t.Fatalf("missing = %+v, unservable = %+v; want nothing started", missing, unservable)
+		}
+	})
+	t.Run("headroom left", func(t *testing.T) {
+		missing, _ := FindRoleCapacityDeficits(state, loadSlotResolver(t, 2), repairCLI, nil, now)
+		if len(missing) != 1 || !slices.Equal(missing[0].AgentIDs, []string{"code-reviewer-2"}) {
+			t.Fatalf("missing = %+v, want one start as code-reviewer-2", missing)
+		}
+	})
+}
+
 // An idle reviewer running the task's slot entry covers it.
 func TestFindRoleCapacityDeficits_MatchingSlotReviewerCovers(t *testing.T) {
 	now := time.Now().UTC()

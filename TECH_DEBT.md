@@ -2,6 +2,27 @@
 
 Deliberate debt with payback triggers. See CORE.md Rule 3 (DoD) for policy.
 
+## Agent deletion and reviewer diversity read a lease-less registration as gone
+
+**What:** Two agent-liveness readers still use the lease alone, not
+`models.AgentRegistrationLive` (ADR-0130 2026-10-10 amendment, D-17):
+- `validateAgentDeletion` (`internal/ops/delete_agent.go`) lets `delete`
+  without `--force` remove a live agent whose lease a submit or release just
+  cleared. Only the caller's PID check remains, and an observer in another
+  PID namespace cannot see that PID.
+- `reviewerCapacityInvalidReasons` (`internal/ops/claim_agent.go`) does not
+  count a reviewer that has just released its review as diverse capacity
+  for up to one heartbeat, so a same-provider claim may not defer to it.
+
+**Why deferred:** neither path takes over a live registration or reallocates
+its ID. Deletion is an explicit operator removal, and the diversity reader
+affects only a provider preference. Both rules are separate from the D-17
+takeover fix.
+
+**Payback trigger:** an operator deletes a live agent this way, or a review
+skips provider diversity while a released reviewer of another provider was
+live.
+
 ## Descendant declarations hold provider retirement strictly
 
 **What:** A live `descendant_dependencies` declaration (ADR-0193) refuses the
@@ -458,6 +479,13 @@ do not increase timeout assertions to hide the race.
 `make test`; the D-71 diff does not touch these paths. The human accepted it
 for D-71 and kept the repair a separate task, so the trigger has fired and
 this payback is due.
+**Recurrence (D-17 validation, 2026-10-10):** under host load average 12–19,
+the full suite failed this submit test and
+`TestAwaitResubmission_DelayedWatcherErrorUsesOriginalDeadline` (1.45 s
+against 800 ms). The heartbeat pair also failed, in the agent package run on
+its own. With `-count=5` and only those tests selected, the unchanged base
+`21cc25d` failed the heartbeat pair 3 times in 10 runs. The D-17 diff does not
+touch these paths.
 
 ## CI does not yet enforce the split test targets
 

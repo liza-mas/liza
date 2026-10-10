@@ -490,6 +490,103 @@ func TestRegisterAgentCollisionIsTyped(t *testing.T) {
 	}
 }
 
+// leaseLessAgent is a live registration that submit, a verdict, release or a
+// block left without its agent lease until its next heartbeat renews it
+// (operator note D-17 part B).
+func leaseLessAgent(role string, heartbeat time.Time) models.Agent {
+	return models.Agent{
+		Role:      role,
+		Status:    models.AgentStatusWaiting,
+		Heartbeat: heartbeat,
+		Provider:  "claude",
+		PID:       os.Getpid(),
+	}
+}
+
+// A lease-less registration stays owned while its heartbeat is inside the
+// liveness window, so a second supervisor for the same ID cannot take it over
+// and fence the live one; once the heartbeat lapses, or was never recorded,
+// takeover proceeds.
+func TestRegisterAgentLeaseLessRegistrationOwnedForLivenessWindow(t *testing.T) {
+	t.Cleanup(ops.SetAgentProcessProcRootForTest(filepath.Join(t.TempDir(), "missing-proc")))
+	window := models.AgentLivenessWindow(testhelpers.CreateValidState().Config)
+	tests := []struct {
+		name          string
+		heartbeatAge  time.Duration
+		zeroHeartbeat bool
+		wantCollision bool
+	}{
+		{name: "fresh heartbeat keeps the registration", heartbeatAge: 10 * time.Second, wantCollision: true},
+		{name: "heartbeat just past the window frees it", heartbeatAge: window + time.Second},
+		{name: "heartbeat long past the window frees it", heartbeatAge: 10 * time.Minute},
+		{name: "no recorded heartbeat frees it", zeroHeartbeat: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.SetupPipelineConfig(t, tmpDir)
+			heartbeat := time.Now().UTC().Add(-tt.heartbeatAge)
+			if tt.zeroHeartbeat {
+				heartbeat = time.Time{}
+			}
+			state := testhelpers.CreateValidState()
+			state.Agents["code-planner-1"] = leaseLessAgent("code-planner", heartbeat)
+			bb := testhelpers.WriteInitialState(t, statePath, state)
+
+			err := registerAgent(bb, tmpDir, "code-planner-1", "code-planner", "terminal-2", 1800, "claude", testResolver(t))
+
+			if tt.wantCollision {
+				if !errors.IsAgentCollision(err) {
+					t.Fatalf("registerAgent() error = %v, want AgentCollisionError for a live lease-less registration", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("registerAgent() error = %v, want takeover of a lapsed lease-less registration", err)
+			}
+		})
+	}
+}
+
+// A live lease-less registration counts toward the role's max-instances.
+func TestRegisterAgentLeaseLessRegistrationOccupiesRoleCapacity(t *testing.T) {
+	t.Cleanup(ops.SetAgentProcessProcRootForTest(filepath.Join(t.TempDir(), "missing-proc")))
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Config.MaxInstances = 1
+	state.Agents["code-planner-1"] = leaseLessAgent("code-planner", time.Now().UTC().Add(-10*time.Second))
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	err := registerAgent(bb, tmpDir, "code-planner-2", "code-planner", "terminal-2", 1800, "claude", testResolver(t))
+
+	if err == nil || !strings.Contains(err.Error(), "already has 1 live agent(s)") {
+		t.Fatalf("registerAgent() error = %v, want the role limit to count the live lease-less registration", err)
+	}
+}
+
+// The ID allocator skips a live lease-less registration instead of handing a
+// new supervisor the live agent's ID.
+func TestAutoAssignAgentIDSkipsLiveLeaseLessRegistration(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Agents["code-planner-1"] = leaseLessAgent("code-planner", time.Now().UTC().Add(-10*time.Second))
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+
+	assignedID, err := AutoAssignAgentID(bb, "code-planner", 1, func(string) error { return nil })
+
+	if err != nil {
+		t.Fatalf("AutoAssignAgentID() error = %v", err)
+	}
+	if assignedID != "code-planner-2" {
+		t.Fatalf("AutoAssignAgentID() = %s, want code-planner-2", assignedID)
+	}
+}
+
 // TestAutoAssignAgentID_RetryOnCollision verifies the retry loop picks the next
 // available ID when the first candidate collides with a concurrent registration.
 func TestAutoAssignAgentID_RetryOnCollision(t *testing.T) {

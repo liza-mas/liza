@@ -32,6 +32,16 @@ func poolDoer(now time.Time, pid int, currentTask string) models.Agent {
 	return agent
 }
 
+// leaseLessPoolDoer is an idle doer whose agent lease a submit or release
+// cleared until its next heartbeat (operator note D-17 part B).
+func leaseLessPoolDoer(now, heartbeat time.Time) models.Agent {
+	agent := poolDoer(now, os.Getpid(), "")
+	agent.Status = models.AgentStatusWaiting
+	agent.Heartbeat = heartbeat
+	agent.LeaseExpires = nil
+	return agent
+}
+
 func readyTasks(now time.Time, ids ...string) []models.Task {
 	tasks := make([]models.Task, 0, len(ids))
 	for _, id := range ids {
@@ -115,6 +125,19 @@ func TestFindRoleCapacityDeficits_DoerDemandWithinCap(t *testing.T) {
 			tasks:     []string{"t1"},
 			agents:    map[string]models.Agent{"coder-1": poolDoer(now, deadPID, "")},
 			wantSpawn: 1, wantTasks: 1,
+		},
+		{
+			name:         "live lease-less doer covers one task and occupies the only slot",
+			tasks:        []string{"t1", "t2"},
+			agents:       map[string]models.Agent{"coder-1": leaseLessPoolDoer(now, now.Add(-10*time.Second))},
+			maxInstances: 1,
+		},
+		{
+			name:         "lapsed lease-less doer frees its slot",
+			tasks:        []string{"t1", "t2"},
+			agents:       map[string]models.Agent{"coder-1": leaseLessPoolDoer(now, now.Add(-10*time.Minute))},
+			maxInstances: 1,
+			wantSpawn:    1, wantTasks: 2,
 		},
 		{
 			name:         "project default below the built-in cap",

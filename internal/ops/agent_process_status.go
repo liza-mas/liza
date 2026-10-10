@@ -67,13 +67,16 @@ func (o AgentProcessObservation) Diagnostic(recordedPID int) string {
 }
 
 // AgentProcessOwnership projects a lease-first decision while preserving raw
-// process evidence. Correlated PIDs are diagnostic only and never affect
-// Occupied.
-func AgentProcessOwnership(agentID string, agent models.Agent, now time.Time) AgentProcessObservation {
+// process evidence. A recorded heartbeat plus a live registration in the
+// models.AgentRegistrationLive sense is ownership: an unexpired lease or, for a
+// registration whose lease a submit or release cleared until its next beat, a
+// heartbeat inside livenessWindow. Correlated PIDs are diagnostic only and
+// never affect Occupied.
+func AgentProcessOwnership(agentID string, agent models.Agent, now time.Time, livenessWindow time.Duration) AgentProcessObservation {
 	raw := AgentProcessStatus(agentID, agent)
 	effective := AgentOwnershipLeaseExpiredOrStale
-	freshLease := agent.LeaseExpires != nil && agent.LeaseExpires.After(now) && !agent.Heartbeat.IsZero()
-	if freshLease {
+	liveRegistration := !agent.Heartbeat.IsZero() && models.AgentRegistrationLive(agent, now, livenessWindow)
+	if liveRegistration {
 		effective = AgentOwnershipUnknownDegraded
 		if raw.IsLiveMatching() {
 			effective = AgentOwnershipLive
@@ -81,7 +84,7 @@ func AgentProcessOwnership(agentID string, agent models.Agent, now time.Time) Ag
 	}
 
 	var differentCandidates []int
-	if freshLease && !raw.IsLiveMatching() {
+	if liveRegistration && !raw.IsLiveMatching() {
 		candidates := procscan.FindExplicitAgentIdentityPIDs(agent.Role, agentID, agentProcessProcRoot)
 		for _, pid := range candidates {
 			if pid != agent.PID {

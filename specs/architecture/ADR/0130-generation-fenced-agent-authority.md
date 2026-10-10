@@ -98,6 +98,27 @@ effect, not identity:
 Exactly-once still rests on the locked approved-status recheck. The inheriting
 reviewer also wakes from its wait when the set of merges it owns changes.
 
+## 2026-10-10 Amendment: Lease-less Registrations Stay Owned for One Liveness Window
+
+Submit, verdicts, release and block clear the agent lease of a live
+registration until its next heartbeat renews it. Registration ownership and the
+agent-ID allocators read a nil lease as expired. So a pool-repair start inside
+that window received the live agent's ID and took it over, and the fenced
+supervisor lost its work context (operator note D-17 part B).
+
+Ownership stays lease-first under the shared `models.AgentRegistrationLive`
+rule. A recorded heartbeat with an unexpired lease is ownership, as before.
+Without a lease, a heartbeat inside the liveness window (heartbeat interval +
+grace) is ownership too. Registration collision, singularity and role-capacity
+counts, pool-repair headroom, the watcher and both ID allocators apply it.
+Process evidence stays diagnostic only. Rejected alternatives:
+- release paths keep the agent lease: a recovered dead agent would then hold
+  its ID and capacity for up to the full lease;
+- a live matching PID wins: that contradicts the namespace rule above.
+
+Cost: a dead agent that a recovery path released stays occupied until its
+last heartbeat leaves the window, at most 180 s with the default interval.
+
 ## Related Decisions
 
 Extends [ADR-0062](0062-ghost-agent-claim-prevention-and-ownership-reconciliation.md)

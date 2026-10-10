@@ -80,9 +80,10 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 
 	// Single atomic registration - skip STARTING state, go directly to IDLE
 	err := bb.Modify(func(state *models.State) error {
+		livenessWindow := models.AgentLivenessWindow(state.Config)
 		// Check for collision
 		if existing, exists := state.Agents[agentID]; exists {
-			observation := ops.AgentProcessOwnership(agentID, existing, now)
+			observation := ops.AgentProcessOwnership(agentID, existing, now, livenessWindow)
 			if observation.Occupied() {
 				return fmt.Errorf("%w; %s", &errors.AgentCollisionError{AgentID: agentID}, observation.Diagnostic(existing.PID))
 			} else {
@@ -122,7 +123,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 						continue
 					}
 					if roleType == "orchestrator" {
-						observation := ops.AgentProcessOwnership(id, agent, now)
+						observation := ops.AgentProcessOwnership(id, agent, now, livenessWindow)
 						if !observation.Occupied() {
 							continue
 						}
@@ -130,7 +131,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 						occupiedDetails = append(occupiedDetails, fmt.Sprintf("%s: %s", id, observation.Diagnostic(agent.PID)))
 						continue
 					}
-					observation := ops.AgentProcessOwnership(id, agent, now)
+					observation := ops.AgentProcessOwnership(id, agent, now, livenessWindow)
 					if !observation.Occupied() {
 						continue
 					}
@@ -205,9 +206,12 @@ func AutoAssignAgentID(bb *db.Blackboard, role string, maxRetries int, tryFn fun
 			return "", fmt.Errorf("failed to read state for agent ID auto-generation: %w", err)
 		}
 		now := time.Now()
+		// A superset of registration's Occupied, so no candidate is one the
+		// collision check would refuse.
+		livenessWindow := models.AgentLivenessWindow(state.Config)
 		var activeIDs []string
 		for id, a := range state.Agents {
-			if a.LeaseExpires != nil && a.LeaseExpires.After(now) {
+			if models.AgentRegistrationLive(a, now, livenessWindow) {
 				activeIDs = append(activeIDs, id)
 			}
 		}
