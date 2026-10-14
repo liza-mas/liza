@@ -25,7 +25,7 @@ func TestEmbeddedCatalogResolvesBuiltInsAndAliases(t *testing.T) {
 		t.Fatalf("EmbeddedCatalog().Version = %d, want 2", cat.Version)
 	}
 
-	for _, id := range []string{"claude", "codex", "codex-acp", "cursor", "cursor-acp", "opencode", "opencode-acp", "gemini", "mistral", "kimi"} {
+	for _, id := range []string{"claude", "codex", "codex-acp", "cursor", "cursor-acp", "opencode", "opencode-acp", "gemini", "mistral", "kimi", "copilot"} {
 		if _, ok := cat.Resolve(id); !ok {
 			t.Fatalf("EmbeddedCatalog().Resolve(%q) = false", id)
 		}
@@ -51,7 +51,7 @@ func TestEmbeddedCatalogResolvesBuiltInsAndAliases(t *testing.T) {
 	if !slices.Equal(cursor.Runtime.RunArgs, []string{"-p"}) {
 		t.Fatalf("cursor run_args = %v, want [-p]", cursor.Runtime.RunArgs)
 	}
-	for _, id := range []string{"claude", "codex", "opencode", "gemini", "qwen"} {
+	for _, id := range []string{"claude", "codex", "opencode", "gemini", "qwen", "copilot"} {
 		provider, ok := cat.Resolve(id)
 		if !ok || !provider.Setup.Contract.PrefersGlobal() {
 			t.Fatalf("embedded %s contract = %+v, %v; want prefer_global", id, provider.Setup.Contract, ok)

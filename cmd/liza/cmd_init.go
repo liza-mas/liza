@@ -122,7 +122,8 @@ symlinks needed for pairing (no %[2]s/ workspace):
   %[4]s init --claude           # activates Claude's global contract
   %[4]s init --claude --codex   # activates both global contracts and repo hooks
   %[4]s init --cursor           # creates repo AGENTS.md plus dependent setup
-  %[4]s init --opencode         # activates OpenCode's global contract`, brand.NameTitle, brand.ProjectDirName, brand.GlobalDirName, brand.BinaryName),
+  %[4]s init --opencode         # activates OpenCode's global contract
+  %[4]s init --copilot          # activates Copilot's global instructions`, brand.NameTitle, brand.ProjectDirName, brand.GlobalDirName, brand.BinaryName),
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agents := collectAgentFlags(cmd)
@@ -152,7 +153,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		// Interactive wizard: no args, no agent flags, no explicit workspace flags, TTY
 		if len(args) == 0 && len(agents) == 0 && !hasExplicitInitFlags(cmd) && !cmd.Flags().Changed("scip-search") && !cmd.Flags().Changed("scip-search-plan") {
 			if !interactive.IsInteractive() {
-				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
+				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral, --pi, --copilot)\nSee: %s init --help", brand.BinaryName)
 			}
 
 			// Resolve project root for conflict detection
@@ -227,7 +228,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		// Pairing mode: agent flags without description
 		if len(args) == 0 {
 			if len(agents) == 0 {
-				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral)\nSee: %s init --help", brand.BinaryName)
+				return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral, --pi, --copilot)\nSee: %s init --help", brand.BinaryName)
 			}
 			if autoResume {
 				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
@@ -489,7 +490,7 @@ Reports whether any changes were made.`,
 }
 
 // agentFlagNames is the canonical list of supported agent flag names.
-var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini", "mistral", "pi"}
+var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini", "mistral", "pi", "copilot"}
 
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
@@ -690,6 +691,7 @@ func init() {
 	setupCmd.Flags().Bool("gemini", false, "create skill symlinks in ~/.gemini/")
 	setupCmd.Flags().Bool("mistral", false, "create skill symlinks in ~/.vibe/")
 	setupCmd.Flags().Bool("pi", false, "create skill symlinks in ~/.pi/agent/ and install the pi init-gate extension")
+	setupCmd.Flags().Bool("copilot", false, "create skill symlinks in ~/.copilot/")
 
 	// Init command flags
 	initCmd.Flags().String("spec", "specs/vision.md", "path to goal spec file")
@@ -716,6 +718,7 @@ func init() {
 	initCmd.Flags().Bool("gemini", false, fmt.Sprintf("activate the global Gemini contract from ~/%s/CORE.md", brand.GlobalDirName))
 	initCmd.Flags().Bool("mistral", false, fmt.Sprintf("set up ~/.vibe/ for %s contract", brand.NameTitle))
 	initCmd.Flags().Bool("pi", false, fmt.Sprintf("activate the global Pi contract from ~/%s/CORE.md and install the pi init-gate extension", brand.GlobalDirName))
+	initCmd.Flags().Bool("copilot", false, fmt.Sprintf("activate the global GitHub Copilot CLI contract from ~/%s/CORE.md", brand.GlobalDirName))
 	registerCompletion(initCmd, "entry-point", completeValues("general-objective", "functional-spec", "technical-spec", "detailed-spec"))
 	registerCompletion(initCmd, "default-cli", completeCLINames)
 	registerCompletion(initCmd, "default-doer-cli", completeCLINames)

@@ -54,6 +54,7 @@ func RunInitWizard(projectRoot string) (*InitWizardResult, error) {
 			huh.NewOption("OpenCode (creates AGENTS.md)", "opencode"),
 			huh.NewOption("Gemini  (creates GEMINI.md)", "gemini"),
 			huh.NewOption("Mistral (sets up ~/.vibe/)", "mistral"),
+			huh.NewOption("Copilot (creates ~/.copilot/copilot-instructions.md)", "copilot"),
 		).
 		Value(&result.Agents).
 		Validate(func(agents []string) error {

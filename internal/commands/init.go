@@ -73,7 +73,7 @@ type InitParams struct {
 	DefaultReviewerCLI              string   // --default-reviewer-cli: default CLI for reviewer agent spawning
 	ScipSearch                      []string // --scip-search: enabled SCIP languages
 	ScipSearchPlans                 []string // --scip-search-plan: pairing SCIP root overrides
-	Agents                          []string // --claude, --codex, --cursor, --opencode, --gemini, --mistral
+	Agents                          []string // --claude, --codex, --cursor, --opencode, --gemini, --mistral, --pi, --copilot
 	Stdin                           io.Reader
 	ForceInteractive                bool              // bypass TTY check (for testing)
 	ContractActions                 map[string]string // provider-scoped wizard actions keyed by canonical provider ID
