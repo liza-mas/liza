@@ -123,16 +123,9 @@ func (s *admissionSlots) release() {
 }
 
 // abandon closes this process's descriptors without unlocking, leaving each
-// slot with the commands that inherited it. Where locks cannot pass to a
-// child (Windows, where Held.File is nil) there is nothing to leave them
-// with, so they are released rather than leaked until process exit.
+// slot with the commands that inherited it.
 func (s *admissionSlots) abandon() {
-	files := s.files()
-	if len(files) == 0 {
-		s.release()
-		return
-	}
-	for _, file := range files {
+	for _, file := range s.files() {
 		_ = file.Close()
 	}
 	s.classes, s.held = nil, nil
