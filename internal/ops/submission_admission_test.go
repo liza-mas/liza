@@ -19,7 +19,9 @@ var suiteAdmissionLimit = models.AdmissionLimit{Class: "suite", MaxConcurrent: 1
 // markerCopyScript is a canonical command that copies the submit's in-flight
 // marker beside the project, so a test can read the window it was given.
 func markerCopyScript() string {
-	dir := filepath.Join("..", "..", paths.ProjectDirName(), "inflight-submit")
+	// Shell path, not filepath.Join: Windows separators would be eaten as
+	// escapes by the POSIX shell this runs under (Git Bash on Windows).
+	dir := "../../" + paths.ProjectDirName() + "/inflight-submit"
 	return fmt.Sprintf("cat %s/*.json > ../../marker-copy.json\n", dir)
 }
 
