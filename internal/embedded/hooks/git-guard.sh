@@ -24,7 +24,12 @@ if echo "$command" | grep -qE '\bgit\s'; then
 fi
 
 if [[ -n "$blocked" ]]; then
-  cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Destructive git operation ($blocked) requires manual execution"}}
+  deny_reason="Destructive git operation ($blocked) requires manual execution"
+  if [[ "${1:-}" == "copilot" ]]; then
+    printf '{"permissionDecision":"deny","permissionDecisionReason":"%s"}\n' "$deny_reason"
+  else
+    cat <<EOF
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"$deny_reason"}}
 EOF
+  fi
 fi

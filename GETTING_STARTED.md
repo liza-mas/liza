@@ -201,12 +201,15 @@ for selected providers, and creates Liza project state when a goal is supplied.
 For Claude, this writes project-local `.claude/settings.json` and `.claude/hooks/`.
 For Codex, it writes project-local `.codex/` hooks and updates global
 `~/.codex/config.toml` with the project and `.git` writable roots. Cursor init
-includes the Claude and Codex project setup Cursor relies on. Claude, Codex,
-OpenCode, Gemini, and Qwen prefer their documented global instruction files,
-including `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_CONFIG_HOME`, and `QWEN_HOME`
-overrides. Because Qwen resolves relative `QWEN_HOME` values from each process's
-current working directory, Liza retains the repo `QWEN.md` for those values;
-absolute and `~`-based values use global-first activation.
+includes the Claude and Codex project setup Cursor relies on. For GitHub
+Copilot CLI, it writes `.github/hooks/liza.json` plus shared hook scripts under
+`.copilot/hooks/`. Claude, Codex,
+OpenCode, Gemini, Qwen, and GitHub Copilot CLI prefer their documented global
+instruction files, including `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+`XDG_CONFIG_HOME`, `QWEN_HOME`, and `COPILOT_HOME` overrides. Because Qwen
+resolves relative `QWEN_HOME` values from each process's current working
+directory, Liza retains the repo `QWEN.md` for those values; absolute and
+`~`-based values use global-first activation.
 Cursor remains repo-local through `AGENTS.md`; Kimi and Devin also retain
 repo-local activation because no supported global instruction file is declared.
 OpenCode activation does not install Codex hooks or settings.

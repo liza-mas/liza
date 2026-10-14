@@ -245,6 +245,34 @@ providers:
       acpx_prompt_args: [--cwd, "{{projectRoot}}", --format, json, --approve-all, "{{acpxAgent}}", prompt, -s, "{{sessionName}}", --file, "-"]
       acpx_event_mode: json
 
+  - id: copilot
+    display_name: GitHub Copilot CLI
+    aliases: [github-copilot]
+    backend: cli
+    detection:
+      binaries: [copilot]
+      version_args: [--version]
+    setup:
+      config_dir: .copilot
+      skills_dir: skills
+      activation_assets:
+        copilot_hooks: true
+      contract:
+        repo_file: AGENTS.md
+        global_fallback: .copilot/copilot-instructions.md
+        global_fallback_env: COPILOT_HOME
+        global_fallback_env_suffix: copilot-instructions.md
+        global_fallback_env_expand_home: true
+        prefer_global: true
+    runtime:
+      provider_key: copilot
+      executable: copilot
+      prompt_transport: arg
+      run_args: [--allow-all, -p, "{{prompt}}"]
+      logged_run_args: [--allow-all, -p, "{{prompt}}", --output-format, json]
+      env_files: [copilot.env]
+      contract_key: copilot
+
   - id: devin
     display_name: Devin
     backend: cli
