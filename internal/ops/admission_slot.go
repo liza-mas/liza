@@ -123,9 +123,16 @@ func (s *admissionSlots) release() {
 }
 
 // abandon closes this process's descriptors without unlocking, leaving each
-// slot with the commands that inherited it.
+// slot with the commands that inherited it. Where locks cannot pass to a
+// child (Windows, where Held.File is nil) there is nothing to leave them
+// with, so they are released rather than leaked until process exit.
 func (s *admissionSlots) abandon() {
-	for _, file := range s.files() {
+	files := s.files()
+	if len(files) == 0 {
+		s.release()
+		return
+	}
+	for _, file := range files {
 		_ = file.Close()
 	}
 	s.classes, s.held = nil, nil
@@ -232,10 +239,12 @@ func admissionQueueHead(queueLock *filelock.FileLock, queue, ticketPath string) 
 }
 
 func removeAdmissionTicket(path string, held *filelock.Held) {
+	// Release before removing: Windows refuses to unlink an open file, and
+	// releasing first also avoids a re-creator flocking a different inode.
+	_ = held.Release()
 	for _, file := range []string{path + ".lock", path + ".lock.owner.json"} {
 		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 			log.Printf("WARNING: admission slot ticket not removed: %v", err)
 		}
 	}
-	_ = held.Release()
 }

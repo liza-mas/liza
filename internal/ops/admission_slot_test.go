@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -272,6 +273,9 @@ func TestOrphanedBaseHealRetriesAFullAdmissionClass(t *testing.T) {
 }
 
 func TestAdmissionSlotFollowsTheCommandThatInheritedIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("lock descriptor inheritance is Unix-only; filelock.Held.File is nil on Windows")
+	}
 	requirePosixShell(t)
 	root := t.TempDir()
 	limit := testAdmissionLimit("inherit", 1)
