@@ -78,3 +78,37 @@ func TestCopilotHookOutputFormat(t *testing.T) {
 		})
 	}
 }
+
+// TestCopilotSessionContextFormat shells out to session-context.sh with a
+// "copilot" positional argument and asserts it emits Copilot's documented
+// top-level additionalContext field instead of the Claude/Codex
+// hookSpecificOutput wrapper.
+func TestCopilotSessionContextFormat(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+
+	projectRoot := t.TempDir()
+	writePairingProjectDocs(t, projectRoot)
+	hookPath := writeSessionContextHook(t)
+
+	cmd := exec.Command("bash", hookPath, "copilot")
+	cmd.Stdin = strings.NewReader(sessionStartPayload(t, projectRoot))
+	cmd.Env = sessionContextHookEnv([]string{"CLAUDE_PROJECT_DIR=" + projectRoot})
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("hook exited non-zero: %v\n%s", err, out)
+	}
+
+	trimmed := strings.TrimSpace(string(out))
+	if strings.Contains(trimmed, "hookSpecificOutput") {
+		t.Fatalf("copilot mode must not emit hookSpecificOutput wrapper: %s", trimmed)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		t.Fatalf("copilot mode output is not a JSON object: %v\n%s", err, trimmed)
+	}
+	if ctx, _ := payload["additionalContext"].(string); ctx == "" {
+		t.Fatalf("output missing top-level additionalContext string: %s", trimmed)
+	}
+}
