@@ -2739,9 +2739,16 @@ func TestCopilotHookConfigReferencesDeployedScripts(t *testing.T) {
 				continue
 			}
 			bashCmd, _ := entry["bash"].(string)
+			psCmd, hasPowershell := entry["powershell"].(string)
+			if !hasPowershell || !strings.Contains(psCmd, "copilot") {
+				t.Errorf("copilot hook entry missing powershell fallback: %#v", entry)
+			}
 			for script := range copilotHookContents {
 				if strings.Contains(bashCmd, "/.copilot/hooks/"+script) {
 					referenced[script] = true
+					if !strings.Contains(psCmd, ".copilot/hooks/"+script) {
+						t.Errorf("powershell fallback does not reference script %s: %s", script, psCmd)
+					}
 				}
 			}
 		}

@@ -4,32 +4,37 @@
     "SessionStart": [
       {
         "type": "command",
-        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/session-context.sh\" copilot",
+        "bash": "common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0; root=$(dirname \"$common\"); script=\"$root/.copilot/hooks/session-context.sh\"; [ -f \"$script\" ] || exit 0; bash \"$script\" copilot",
+        "powershell": "$c = git rev-parse --path-format=absolute --git-common-dir 2>$null; if (-not $c) { exit 0 }; $s = Join-Path (Split-Path $c -Parent) '.copilot/hooks/session-context.sh'; if (-not (Test-Path $s)) { exit 0 }; try { bash ($s -replace '\\\\','/') copilot } catch { exit 0 }",
         "timeoutSec": 40
       }
     ],
     "PreToolUse": [
       {
         "type": "command",
-        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/enforce-init.sh\" copilot",
+        "bash": "common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0; root=$(dirname \"$common\"); script=\"$root/.copilot/hooks/enforce-init.sh\"; [ -f \"$script\" ] || exit 0; bash \"$script\" copilot",
+        "powershell": "$c = git rev-parse --path-format=absolute --git-common-dir 2>$null; if (-not $c) { exit 0 }; $s = Join-Path (Split-Path $c -Parent) '.copilot/hooks/enforce-init.sh'; if (-not (Test-Path $s)) { exit 0 }; try { bash ($s -replace '\\\\','/') copilot } catch { exit 0 }",
         "timeoutSec": 5
       },
       {
         "type": "command",
         "matcher": "Bash",
-        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/git-guard.sh\" copilot",
+        "bash": "common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0; root=$(dirname \"$common\"); script=\"$root/.copilot/hooks/git-guard.sh\"; [ -f \"$script\" ] || exit 0; bash \"$script\" copilot",
+        "powershell": "$c = git rev-parse --path-format=absolute --git-common-dir 2>$null; if (-not $c) { exit 0 }; $s = Join-Path (Split-Path $c -Parent) '.copilot/hooks/git-guard.sh'; if (-not (Test-Path $s)) { exit 0 }; try { bash ($s -replace '\\\\','/') copilot } catch { exit 0 }",
         "timeoutSec": 5
       },
       {
         "type": "command",
         "matcher": "Bash",
-        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/rtk-guard.sh\" copilot",
+        "bash": "common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0; root=$(dirname \"$common\"); script=\"$root/.copilot/hooks/rtk-guard.sh\"; [ -f \"$script\" ] || exit 0; bash \"$script\" copilot",
+        "powershell": "$c = git rev-parse --path-format=absolute --git-common-dir 2>$null; if (-not $c) { exit 0 }; $s = Join-Path (Split-Path $c -Parent) '.copilot/hooks/rtk-guard.sh'; if (-not (Test-Path $s)) { exit 0 }; try { bash ($s -replace '\\\\','/') copilot } catch { exit 0 }",
         "timeoutSec": 5
       },
       {
         "type": "command",
         "matcher": "Read|Write|Edit|MultiEdit",
-        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/worktree-path-guard.sh\" copilot",
+        "bash": "common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0; root=$(dirname \"$common\"); script=\"$root/.copilot/hooks/worktree-path-guard.sh\"; [ -f \"$script\" ] || exit 0; bash \"$script\" copilot",
+        "powershell": "$c = git rev-parse --path-format=absolute --git-common-dir 2>$null; if (-not $c) { exit 0 }; $s = Join-Path (Split-Path $c -Parent) '.copilot/hooks/worktree-path-guard.sh'; if (-not (Test-Path $s)) { exit 0 }; try { bash ($s -replace '\\\\','/') copilot } catch { exit 0 }",
         "timeoutSec": 5
       }
     ]
