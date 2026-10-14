@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/session-context.sh\" copilot",
+        "timeoutSec": 40
+      }
+    ],
+    "PreToolUse": [
+      {
+        "type": "command",
+        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/enforce-init.sh\" copilot",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "matcher": "Bash",
+        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/git-guard.sh\" copilot",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "matcher": "Bash",
+        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/rtk-guard.sh\" copilot",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "matcher": "Read|Write|Edit|MultiEdit",
+        "bash": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0; bash \"$root/.copilot/hooks/worktree-path-guard.sh\" copilot",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}

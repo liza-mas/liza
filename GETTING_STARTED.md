@@ -201,7 +201,9 @@ for selected providers, and creates Liza project state when a goal is supplied.
 For Claude, this writes project-local `.claude/settings.json` and `.claude/hooks/`.
 For Codex, it writes project-local `.codex/` hooks and updates global
 `~/.codex/config.toml` with the project and `.git` writable roots. Cursor init
-includes the Claude and Codex project setup Cursor relies on. Claude, Codex,
+includes the Claude and Codex project setup Cursor relies on. For GitHub
+Copilot CLI, it writes `.github/hooks/liza.json` plus shared hook scripts under
+`.copilot/hooks/`. Claude, Codex,
 OpenCode, Gemini, Qwen, and GitHub Copilot CLI prefer their documented global
 instruction files, including `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
 `XDG_CONFIG_HOME`, `QWEN_HOME`, and `COPILOT_HOME` overrides. Because Qwen

@@ -58,9 +58,14 @@ while IFS= read -r target; do
             first="${BASH_REMATCH[1]}"
             second="${BASH_REMATCH[2]}"
             if [[ "$first" == "$second" ]]; then
-                cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Worktree path duplicates the task id segment (.worktrees/$first/$second). The worktree root already ends in the task id — strip the duplicate segment from your relative path. Path: $candidate"}}
+                deny_reason="Worktree path duplicates the task id segment (.worktrees/$first/$second). The worktree root already ends in the task id — strip the duplicate segment from your relative path. Path: $candidate"
+                if [[ "${1:-}" == "copilot" ]]; then
+                    printf '{"permissionDecision":"deny","permissionDecisionReason":"%s"}\n' "$deny_reason"
+                else
+                    cat <<EOF
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"$deny_reason"}}
 EOF
+                fi
                 exit 0
             fi
         fi

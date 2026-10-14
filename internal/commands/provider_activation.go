@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/embedded"
 	gitpkg "github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
@@ -388,6 +389,9 @@ func hasRepoContractActivationEvidence(projectRoot string, provider providers.Pr
 	}
 	if assets.CursorHooks {
 		candidates = append(candidates, filepath.Join(".cursor", "hooks.json"))
+	}
+	if assets.CopilotHooks {
+		candidates = append(candidates, filepath.Join(".github", "hooks", embedded.CopilotHooksFileName()))
 	}
 	if assets.ClaudeIgnore {
 		candidates = append(candidates, ".claudeignore")

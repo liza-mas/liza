@@ -128,6 +128,7 @@ func InitPairingCommand(params InitPairingParams) error {
 	hasCodex := false
 	hasCursor := false
 	hasOpenCode := false
+	hasCopilot := false
 	hasMistral := false
 	hasBashPolicyClaude := false
 	hasBashPolicyCodex := false
@@ -148,6 +149,9 @@ func InitPairingCommand(params InitPairingParams) error {
 		}
 		if assets.OpenCodeExecTool {
 			hasOpenCode = true
+		}
+		if assets.CopilotHooks {
+			hasCopilot = true
 		}
 		if assets.MistralPromptConfig {
 			hasMistral = true
@@ -238,6 +242,12 @@ func InitPairingCommand(params InitPairingParams) error {
 	if hasOpenCode {
 		if err := embedded.WriteOpenCodeExecTool(projectRoot); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
+		}
+	}
+
+	if hasCopilot && projectRoot != "" {
+		if err := embedded.WriteCopilotProjectHooksWithOptions(projectRoot, stdin, confirmOptions); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write copilot hooks: %v\n", err)
 		}
 	}
 
@@ -1184,6 +1194,12 @@ func InitCommandWithConfig(params InitParams) error {
 	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.OpenCodeExecTool }) {
 		if err := embedded.WriteOpenCodeExecTool(lizaPaths.ProjectRoot()); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
+		}
+	}
+
+	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.CopilotHooks }) {
+		if err := embedded.WriteCopilotProjectHooksWithOptions(lizaPaths.ProjectRoot(), stdin, confirmOptions); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write copilot hooks: %v\n", err)
 		}
 	}
 

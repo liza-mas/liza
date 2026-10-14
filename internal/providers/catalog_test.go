@@ -37,6 +37,13 @@ func TestEmbeddedCatalogResolvesBuiltInsAndAliases(t *testing.T) {
 	if !cursor.Setup.ActivationAssets.CursorHooks {
 		t.Fatal("cursor missing Cursor hook activation asset")
 	}
+	copilot, ok := cat.Resolve("copilot")
+	if !ok {
+		t.Fatal("Resolve(copilot) = false")
+	}
+	if !copilot.Setup.ActivationAssets.CopilotHooks {
+		t.Fatal("copilot missing Copilot hook activation asset")
+	}
 	if cursor.ACPRuntime == nil {
 		t.Fatal("cursor missing acp_runtime")
 	}

@@ -286,8 +286,18 @@ if [[ -d "$project_dir/specs/architecture/ADR" ]]; then
   adr_dir_available=true
 fi
 
+hook_output_format="${1:-}"
+
+emit_context() {
+  if [[ "$hook_output_format" == "copilot" ]]; then
+    printf '{"additionalContext":"%s"}\n' "$(json_escape "$1")"
+  else
+    printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$1")"
+  fi
+}
+
 if [[ -z "${shell_stacklit_path:-}" && "${#scip_files[@]}" -eq 0 && "$semble_enabled" != "true" && "$functional_clusters_enabled" != "true" && "$adr_dir_available" != "true" ]]; then
-  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$context")"
+  emit_context "$context"
   exit 0
 fi
 
@@ -371,4 +381,4 @@ if [[ "$functional_clusters_enabled" == "true" ]]; then
  // Functional clusters are advisory and may be stale; verify against source files before editing."
 fi
 
-printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$context")"
+emit_context "$context"

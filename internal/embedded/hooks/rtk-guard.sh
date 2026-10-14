@@ -24,7 +24,11 @@ elif echo "$command" | grep -qE '\brtk\s+proxy\b' && ! echo "$command" | grep -q
 fi
 
 if [[ -n "$blocked" ]]; then
-  cat <<EOF
+  if [[ "${1:-}" == "copilot" ]]; then
+    printf '{"permissionDecision":"deny","permissionDecisionReason":"%s"}\n' "$reason"
+  else
+    cat <<EOF
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"$reason"}}
 EOF
+  fi
 fi

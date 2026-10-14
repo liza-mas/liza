@@ -112,6 +112,7 @@ func TestRuntimeEmbeddedAssetBrandPlaceholdersAreKnownAndRendered(t *testing.T) 
 		"bash-policy.yaml":                 bashPolicyContent,
 		"claude-settings.json":             claudeSettingsContent,
 		"codex-hooks.json":                 codexHooksContent,
+		"copilot-hooks.json":               copilotHooksContent,
 		"opencode-tools/exec.ts":           opencodeExecToolContent,
 		"hooks/enforce-init.sh":            enforceInitHookContent,
 		"hooks/session-context.sh":         sessionContextHookContent,
@@ -2653,6 +2654,149 @@ func TestGeneratedCodexHookCommandsMatchEmbeddedAsset(t *testing.T) {
 		if !commands[want] {
 			t.Errorf("rendered codex-hooks.json command for %s drifted from reconciliation identity", script)
 		}
+	}
+}
+
+func TestWriteCopilotProjectHooks_WritesScriptsAndConfig(t *testing.T) {
+	projectRoot := t.TempDir()
+	if err := WriteCopilotProjectHooks(projectRoot, bufio.NewReader(strings.NewReader(""))); err != nil {
+		t.Fatalf("WriteCopilotProjectHooks failed: %v", err)
+	}
+
+	for script := range copilotHookContents {
+		path := filepath.Join(projectRoot, ".copilot", "hooks", script)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("expected copilot hook script %s: %v", path, err)
+		}
+		if info.Mode()&0111 == 0 {
+			t.Errorf("copilot hook script %s is not executable", path)
+		}
+	}
+
+	configPath := filepath.Join(projectRoot, ".github", "hooks", CopilotHooksFileName())
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("expected copilot hooks config %s: %v", configPath, err)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse %s: %v", configPath, err)
+	}
+	if cfg["version"] != float64(1) {
+		t.Errorf("copilot hooks config version = %#v, want 1", cfg["version"])
+	}
+	hooks, ok := cfg["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("copilot hooks config has no hooks object: %#v", cfg)
+	}
+	for _, event := range []string{"SessionStart", "PreToolUse"} {
+		if _, ok := hooks[event]; !ok {
+			t.Errorf("copilot hooks config missing %s event entries", event)
+		}
+	}
+	for event, rawEntries := range hooks {
+		entries, ok := rawEntries.([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			bashCmd, _ := entry["bash"].(string)
+			if !strings.HasSuffix(bashCmd, " copilot") {
+				t.Errorf("%s hook command does not pass the copilot output-format arg: %s", event, bashCmd)
+			}
+		}
+	}
+	if strings.Contains(string(data), "__BRAND_") {
+		t.Errorf("copilot hooks config retains unrendered brand placeholders: %s", data)
+	}
+}
+
+func TestCopilotHookConfigReferencesDeployedScripts(t *testing.T) {
+	var cfg map[string]any
+	if err := json.Unmarshal(renderEmbeddedAsset(copilotHooksContent), &cfg); err != nil {
+		t.Fatalf("parse rendered copilot-hooks.json: %v", err)
+	}
+	hooks, ok := cfg["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("rendered copilot-hooks.json has no hooks object: %#v", cfg)
+	}
+
+	referenced := make(map[string]bool)
+	for _, rawEntries := range hooks {
+		entries, ok := rawEntries.([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			bashCmd, _ := entry["bash"].(string)
+			for script := range copilotHookContents {
+				if strings.Contains(bashCmd, "/.copilot/hooks/"+script) {
+					referenced[script] = true
+				}
+			}
+		}
+	}
+
+	for script := range copilotHookContents {
+		if !referenced[script] {
+			t.Errorf("rendered copilot-hooks.json does not reference deployed script %s", script)
+		}
+	}
+}
+
+func TestWriteCopilotProjectHooks_DriftedConfigPromptsOverwrite(t *testing.T) {
+	projectRoot := t.TempDir()
+	hooksDir := filepath.Join(projectRoot, ".github", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(hooksDir, CopilotHooksFileName())
+	if err := os.WriteFile(configPath, []byte(`{"version":1,"hooks":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteCopilotProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("n\n"))); err != nil {
+		t.Fatalf("WriteCopilotProjectHooks failed: %v", err)
+	}
+	data, _ := os.ReadFile(configPath)
+	if string(data) != `{"version":1,"hooks":{}}` {
+		t.Errorf("declined overwrite still rewrote copilot hooks config")
+	}
+
+	if err := WriteCopilotProjectHooks(projectRoot, bufio.NewReader(strings.NewReader("y\n"))); err != nil {
+		t.Fatalf("WriteCopilotProjectHooks failed: %v", err)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("overwritten config does not parse: %v", err)
+	}
+	if _, ok := cfg["hooks"].(map[string]any)["SessionStart"]; !ok {
+		t.Errorf("overwritten config missing SessionStart entries")
+	}
+}
+
+func TestWriteCopilotProjectHooks_IdempotentNoPrompt(t *testing.T) {
+	projectRoot := t.TempDir()
+	reader := bufio.NewReader(strings.NewReader(""))
+	if err := WriteCopilotProjectHooks(projectRoot, reader); err != nil {
+		t.Fatalf("first write failed: %v", err)
+	}
+	if err := WriteCopilotProjectHooks(projectRoot, reader); err != nil {
+		t.Fatalf("second write failed: %v", err)
 	}
 }
 

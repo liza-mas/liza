@@ -259,6 +259,8 @@ providers:
     setup:
       config_dir: .copilot
       skills_dir: skills
+      activation_assets:
+        copilot_hooks: true
       contract:
         repo_file: AGENTS.md
         global_fallback: .copilot/copilot-instructions.md
