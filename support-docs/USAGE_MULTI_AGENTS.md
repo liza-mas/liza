@@ -14,7 +14,7 @@ initialization. For setup/configuration details, see
 
 **Goal** — A §BRAND_NAME_TITLE§ workspace (`§BRAND_PROJECT_DIRNAME§/`) is bound to a single goal. The goal is defined at `§BRAND_BINARY_NAME§ init` with a description and a spec reference. All tasks, sprints, and agent activity within that workspace serve this goal. To pursue a different goal, stop its agents and run `§BRAND_BINARY_NAME§ cleanup` before re-initializing; full init invokes the same cleanup flow when workspace data remains. One project can only have one active goal at a time.
 
-**Checkpoints** — Hard checkpoints halt execution so a human can review before the system continues. Transition checkpoints for planning output gate only downstream task creation: the orchestrator waits for `§BRAND_BINARY_NAME§ resume`, while doer/reviewer agents may continue already-available work in the current sprint. If you want uninterrupted transition execution, enable auto-resume (`§BRAND_BINARY_NAME§ init --auto-resume` or press `y` in the TUI).
+**Checkpoints** — Hard checkpoints halt execution so a human can review before the system continues. Transition checkpoints for planning output gate only downstream task creation: the orchestrator waits for `§BRAND_BINARY_NAME§ resume`, while doer/reviewer agents may continue already-available work in the current sprint. If you want uninterrupted transition execution, enable auto-resume (`§BRAND_BINARY_NAME§ init --auto-resume`, press `y` in the TUI, or run `§BRAND_BINARY_NAME§ config set config.auto_resume true`).
 
 **Worktrees** — Agents don't work directly on your main branch. Each task gets its own [git worktree](https://git-scm.com/docs/git-worktree) (under `.worktrees/task-N/`), giving agents isolated workspaces that can't interfere with each other or with your working copy. Completed work merges into the integration branch, then into main. This means §BRAND_NAME_TITLE§ requires a git repository and only one §BRAND_NAME_TITLE§ context per repository.
 
@@ -342,7 +342,7 @@ When all tasks in a sprint reach sprint-terminal state, `§BRAND_BINARY_NAME§ r
 By default, checkpoints and sprint completions require manual `§BRAND_BINARY_NAME§ resume`. Enable auto-resume to skip these gates and keep the system rolling:
 
 - **At init time:** `§BRAND_BINARY_NAME§ init --auto-resume "Goal"`
-- **At runtime:** Press `y` in the TUI to toggle (shows "Auto-resume: ON/OFF" on the status line)
+- **At runtime:** Press `y` in the TUI to toggle (shows "Auto-resume: ON/OFF" on the status line), or run `§BRAND_BINARY_NAME§ config set config.auto_resume true|false`. Enabling it while a checkpoint or completed sprint is waiting releases that gate at the agents' next poll; pause first if it must hold.
 
 When auto-resume is enabled, agents automatically call `§BRAND_BINARY_NAME§ resume` when they detect CHECKPOINT or COMPLETED sprint status. Use `p` (pause) for a hard stop — pause is never auto-resumed.
 

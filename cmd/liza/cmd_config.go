@@ -19,7 +19,7 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Read and update supported runtime configuration",
 	Long: fmt.Sprintf(`Read and update runtime configuration using the same dotted keys as %s.
-Supported keys: config.post_worktree_cmd, config.max_instances,
+Supported keys: config.post_worktree_cmd, config.auto_resume, config.max_instances,
 config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval
 and config.runtime_input_registry.
 The general state query remains available: %s config.post_worktree_cmd --json`, brand.Command("get"), brand.Command("get")),
@@ -75,6 +75,13 @@ await-verdict and await-resubmission, not the foreground POLL slice or total
 wait budget. Notifications still trigger checks immediately. Changes apply
 at the next invocation (including the next foreground slice).
 
+config.auto_resume takes exactly true or false and is operator-only. The write
+itself changes no mode, sprint or task state, but running agents act on it at
+their next state poll: enabling it at a CHECKPOINT or COMPLETED sprint releases
+that gate (a transition checkpoint only for the orchestrator). Run pause first
+if the current gate must hold; pause is never auto-resumed. Repeating the value
+succeeds with outcome unchanged. This key does not use --replace or --reason.
+
 config.runtime_input_registry is the repository-relative path of the
 runtime-input recipe registry, read at the integration commit. Operator-only.
 
@@ -95,6 +102,9 @@ Examples:
 		agentID, err := identity.Resolve(identity.Config{FlagValue: flagID})
 		if err != nil {
 			return err
+		}
+		if args[0] == ops.AutoResumeConfigKey {
+			return setAutoResumeConfig(cmd, projectRoot, agentID, args)
 		}
 		if args[0] == ops.RuntimeInputRegistryConfigKey {
 			return setRuntimeInputRegistry(cmd, projectRoot, agentID, args, replace, reason)
@@ -142,6 +152,28 @@ func configRun(run func(*cobra.Command, []string) error) func(*cobra.Command, []
 	}
 }
 
+// setAutoResumeConfig exposes the native policy setter on the operator path.
+func setAutoResumeConfig(cmd *cobra.Command, projectRoot, agentID string, args []string) error {
+	if agentID != "" {
+		return cliValidationError("config.auto_resume is operator-only; identified agents cannot set it")
+	}
+	if cmd.Flags().Changed("replace") || cmd.Flags().Changed("reason") {
+		return cliValidationError("config.auto_resume does not use --replace or --reason")
+	}
+	if args[1] != "true" && args[1] != "false" {
+		return cliValidationError("config.auto_resume takes exactly true or false")
+	}
+	result, err := ops.SetAutoResumeWithResult(projectRoot, args[1] == "true")
+	if isJSON(cmd) {
+		return jsonout.WriteResult(os.Stdout, result, nil, err)
+	}
+	if err != nil {
+		return err
+	}
+	cmd.Printf("%s: %t (%s)\n", result.Key, result.Value, result.Outcome)
+	return nil
+}
+
 // setIntegerConfig writes a supported integer key on the operator path only.
 func setIntegerConfig(cmd *cobra.Command, projectRoot, agentID string, args []string, replace bool, reason string) error {
 	if agentID != "" {
@@ -185,7 +217,7 @@ func setRuntimeInputRegistry(cmd *cobra.Command, projectRoot, agentID string, ar
 }
 
 func supportedConfigKeys() []string {
-	keys := append([]string{ops.PostWorktreeConfigKey}, ops.PoolConfigKeys...)
+	keys := append([]string{ops.PostWorktreeConfigKey, ops.AutoResumeConfigKey}, ops.PoolConfigKeys...)
 	return append(keys, ops.AwaitPollIntervalConfigKey, ops.RuntimeInputRegistryConfigKey)
 }
 

@@ -1129,7 +1129,26 @@ threshold does not clear an already-open gate.
 When enabled, agents automatically resume the system at CHECKPOINT and COMPLETED sprint states instead of blocking for manual `§BRAND_BINARY_NAME§ resume`. Defaults to `false`.
 
 - **At init time:** `§BRAND_BINARY_NAME§ init --auto-resume "Goal"`
-- **At runtime:** Press `y` in the TUI to toggle
+- **At runtime:** Press `y` in the TUI to toggle, or use the operator CLI:
+
+```bash
+§BRAND_BINARY_NAME§ config get config.auto_resume --json
+§BRAND_BINARY_NAME§ config set config.auto_resume true --json
+§BRAND_BINARY_NAME§ config set config.auto_resume false --json
+```
+
+The setter accepts exactly `true` or `false`, refuses identified agents, and
+returns the committed Boolean `value` with outcome `set` or `unchanged`.
+Repeating a value succeeds. This key uses neither `--replace` nor `--reason`;
+passing those flags is rejected. Mutation audit metadata goes to stderr, while
+`--json` keeps stdout machine-readable.
+
+The write itself changes no mode, sprint or task state, but running agents act
+on it at their next state poll. Enabling it while the sprint is at CHECKPOINT
+or COMPLETED releases that gate (a transition checkpoint only for the
+orchestrator); at COMPLETED this archives the sprint and starts the next one, or
+stops the system on goal completion. If the current gate must hold, run
+`§BRAND_BINARY_NAME§ pause` before enabling auto-resume.
 
 Use `§BRAND_BINARY_NAME§ pause` (or `p` in TUI) for a hard stop — pause is never auto-resumed.
 
