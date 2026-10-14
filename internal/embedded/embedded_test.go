@@ -2669,7 +2669,7 @@ func TestWriteCopilotProjectHooks_WritesScriptsAndConfig(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected copilot hook script %s: %v", path, err)
 		}
-		if info.Mode()&0111 == 0 {
+		if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
 			t.Errorf("copilot hook script %s is not executable", path)
 		}
 	}
