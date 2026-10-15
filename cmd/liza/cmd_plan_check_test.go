@@ -153,6 +153,38 @@ func TestPlanCheckCLI_RetiresHeldPlanByRuling(t *testing.T) {
 	}
 }
 
+func TestPlanCheckCLI_OperatorActionsRejectExplicitAgentID(t *testing.T) {
+	for _, action := range [][]string{
+		{"--clear"},
+		{"--replaced-by", "correction"},
+		{"--retire", "--ruling", "D83"},
+	} {
+		for _, agentID := range []string{"orchestrator-1", ""} {
+			t.Run(strings.Join(action, " ")+"/agent="+agentID, func(t *testing.T) {
+				root := setupPlanCheckCLI(t)
+				bb := db.For(paths.New(root).StatePath())
+				before, err := bb.Read()
+				if err != nil {
+					t.Fatal(err)
+				}
+				args := append([]string{"plan-check", "plan-1"}, action...)
+				args = append(args, "--agent-id", agentID, "--json")
+				stdout, err := executeRootCommandCapture(t, root, args...)
+				if err == nil || !strings.Contains(stdout, "operator-only") {
+					t.Fatalf("%v: err=%v stdout=%s, want operator-only refusal", args, err, stdout)
+				}
+				after, err := bb.Read()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if after.MutationSequence != before.MutationSequence || after.FindTask("plan-1").PlanCheck != nil {
+					t.Fatal("refused operator action changed state")
+				}
+			})
+		}
+	}
+}
+
 func TestPlanCheckCLI_RetireRequiresRuling(t *testing.T) {
 	for _, args := range [][]string{
 		{"plan-check", "plan-1", "--retire", "--json"},

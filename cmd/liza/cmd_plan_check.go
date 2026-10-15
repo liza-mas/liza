@@ -11,7 +11,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -69,7 +68,7 @@ Material corrections require reviewed amend-plan work or replan --reason.`,
 			return err
 		}
 		if input.Action == ops.PlanCheckActionClear || input.Action == ops.PlanCheckActionReplace || input.Action == ops.PlanCheckActionRetire {
-			if brand.LookupEnv(os.Getenv, "AGENT_ID").Value != "" {
+			if !operatorInvocation(cmd) {
 				return cliValidationError("plan-check --clear/--replaced-by/--retire is operator-only; agent sessions cannot release a hold or retire a hand-off")
 			}
 			input.ChangedBy = resolveChangedBy(cmd)
