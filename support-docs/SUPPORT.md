@@ -123,6 +123,7 @@ a stale authoritative reference.
 §BRAND_BINARY_NAME§ deferred-validation run [--force] # Run the batch at integration HEAD; --force retries a failed or exhausted HEAD
 §BRAND_BINARY_NAME§ deferred-validation status [--json] # Deferred commands, rulings, live runner, last batches
 §BRAND_BINARY_NAME§ admission-limit set <class> --max-concurrent <n> --match=<substring> # Cap how many matching canonical commands run at once
+§BRAND_BINARY_NAME§ admit -- <command>                         # Run a local command inside the slots of the classes it matches
 §BRAND_BINARY_NAME§ delete agent <id>             # Remove agent from state
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```

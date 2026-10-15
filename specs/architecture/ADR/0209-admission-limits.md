@@ -90,3 +90,28 @@ much, and lowering `max_instances`, which caps sessions rather than suites.
   leaves a rebased worktree the same request cannot resubmit (D-147).
 - **Unordered polling.** Fewer lines, but the runner re-acquires between bisect
   probes within microseconds and would starve waiting submits.
+
+## Amendment (2026-10-15)
+
+Agents' own runs of a limited command took no slot, so `max_concurrent` bounded
+only the engine's share of the load (D-191). `admit [--max-wait <s>] --
+<command>` now runs a local command through the same pool: its words, joined
+with spaces, are matched like a canonical command; it waits up to `--max-wait`
+(default 3600 s, at most the acceptance cap) for a slot of every matching
+class, and a command matching none runs at once.
+
+- **Priority.** Ticket names lead with a priority digit (`0` canonical, `1`
+  local), so a local waiter queues behind every canonical waiter of a class.
+  Priority is per class, not a global schedule across held classes. An older
+  binary's tickets sort between the two. A running command is never preempted.
+- **Workload.** The command runs in its own process group holding the slot
+  descriptors; interrupts are forwarded to the group. After the leader exits,
+  the group is reaped as in the deferred runner: slots are released once it is
+  gone, else abandoned to the survivors and `admit` fails naming the slot
+  directories. A descendant that left the group is not seen (shared ceiling).
+  On Windows slots are released when `admit` ends.
+- **Carrier.** Task prompts name the match substrings and the wrapper when
+  limits exist; with runtime inputs, `admit` wraps `run-live`, never the
+  reverse. Using it remains agent compliance (TECH_DEBT: mechanical enforcement).
+  Upgrade trigger for a separate local cap: canonical waits dominated by local
+  holders.

@@ -4,6 +4,9 @@ If a stored validation command violates BASH CONSTRAINTS, do not execute it lite
 {{ if .DestructiveDB }}
 DESTRUCTIVE DB VALIDATION: The {{destructiveDBAllowMarker}} marker is part of each canonical command and must not be translated away. Run only against a disposable target.
 {{- end }}
+{{- if .AdmissionMatches }}
+ADMISSION LIMITS: run any local command containing {{ range $i, $m := .AdmissionMatches }}{{ if $i }}, {{ end }}`{{ $m }}`{{ end }} as `{{binaryName}} admit -- <command>` (shell syntax as `sh -c '…'`; with `run-live`, put `admit` outside it); it waits behind canonical batches for a slot. Prefer targeted subsets; the submission gate runs the full batch.
+{{- end }}
 {{- if .RuntimeInputs }}
 RUNTIME INPUTS: never in this session or its files. The submission gate receives them all; `{{binaryName}} run-live --task {{.TaskID}} -- <command>` receives the reusable ones. Never run a command using a single_use input yourself: the gate spends it, and reviewers rely on its receipt. A missing input is operator work; do not work around it.
 {{- range .RuntimeInputs }}

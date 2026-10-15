@@ -3266,6 +3266,37 @@ func TestBuildRoleContext_AwaitToolGuidance(t *testing.T) {
 	}
 }
 
+func TestNonDefaultBrandAdmissionLimitsNote(t *testing.T) {
+	projectRoot := setupPipelineConfig(t)
+	resolver := testPipelineResolver(t)
+	withPromptBrandValues(t, func() {
+		brand.NameTitle = "Acme"
+		brand.BinaryName = "acme"
+		brand.GlobalDirName = ".acme-home"
+		brand.ProjectDirName = ".acme-state"
+	})
+	sections, _ := resolver.ContextSections("coder")
+	output, err := BuildRoleContext("coder", sections, &RoleContextData{
+		Role: "coder", AgentID: "coder-1", RoleType: "doer",
+		TaskID: "task-db", Description: "Change the model", DoneWhen: "Suite passes", Scope: "internal/model",
+		Worktree: projectRoot + "/.worktrees/task-db", IterationNum: 1, IntegrationBranch: "integration",
+		ValidationCommands: []string{"pytest tests/model --decision-model-db"},
+		AdmissionMatches:   []string{"--decision-model-db"},
+		ProjectRoot:        projectRoot,
+	})
+	if err != nil {
+		t.Fatalf("BuildRoleContext: %v", err)
+	}
+	start := strings.Index(output, "ADMISSION LIMITS:")
+	if start < 0 {
+		t.Fatalf("admission note missing:\n%s", output)
+	}
+	line, _, _ := strings.Cut(output[start:], "\n")
+	if !strings.Contains(line, "`acme admit -- <command>`") || strings.Contains(strings.ToLower(line), "liza") {
+		t.Fatalf("admission note not rendered with the active brand: %q", line)
+	}
+}
+
 func TestBuildRoleContext_PlanRefAndValidationPlan(t *testing.T) {
 	projectRoot := setupPipelineConfig(t)
 	resolver := testPipelineResolver(t)
@@ -3421,6 +3452,47 @@ func TestBuildRoleContext_PlanRefAndValidationPlan(t *testing.T) {
 			}
 			if strings.Contains(output, "MEMBER_CREDENTIAL") || strings.Contains(output, "project.principals") {
 				t.Fatalf("%s note should name input ids only:\n%s", role, output)
+			}
+		}
+	})
+
+	t.Run("admission limits route local matching commands through admit", func(t *testing.T) {
+		for _, role := range []string{"coder", "code-reviewer"} {
+			for _, matches := range [][]string{{"--decision-model-db", "heavy-suite"}, nil} {
+				data := &RoleContextData{
+					Role: role, AgentID: role + "-1", RoleType: "doer",
+					TaskID: "task-db", Description: "Change the model",
+					DoneWhen: "Model suite passes", Scope: "internal/model",
+					Worktree:           projectRoot + "/.worktrees/task-db",
+					IterationNum:       1,
+					IntegrationBranch:  "integration",
+					ValidationCommands: []string{"pytest tests/model --decision-model-db"},
+					AdmissionMatches:   matches,
+					ProjectRoot:        projectRoot,
+				}
+				if role == "code-reviewer" {
+					data.RoleType, data.BaseCommit, data.ReviewCommit, data.AssignedTo = "reviewer", "abc", "def", "coder-1"
+				}
+				sections, _ := resolver.ContextSections(role)
+				output, err := BuildRoleContext(role, sections, data)
+				if err != nil {
+					t.Fatalf("%s BuildRoleContext: %v", role, err)
+				}
+				if matches == nil {
+					if strings.Contains(output, "ADMISSION LIMITS:") {
+						t.Fatalf("%s rendered admission guidance without configured limits:\n%s", role, output)
+					}
+					continue
+				}
+				for _, want := range []string{
+					"ADMISSION LIMITS: run any local command containing `--decision-model-db`, `heavy-suite` as",
+					brand.Command("admit", "--", "<command>"),
+					"with `run-live`, put `admit` outside it",
+				} {
+					if !strings.Contains(output, want) {
+						t.Fatalf("%s output missing %q:\n%s", role, want, output)
+					}
+				}
 			}
 		}
 	})

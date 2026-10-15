@@ -549,6 +549,21 @@ command exits; a command that daemonized keeps it until it exits (find it with
 `fuser §BRAND_PROJECT_DIRNAME§/admission-slots/<class>/slot-*.lock`). On Windows a slot is
 held only while its owner lives.
 
+Local runs of a matching command join the same pool through `admit`, behind
+every canonical waiter of the class; agents' task prompts name the substrings:
+
+```bash
+§BRAND_BINARY_NAME§ admit -- pytest tests/model --decision-model-db
+§BRAND_BINARY_NAME§ admit --max-wait 600 -- sh -c 'cd services/api && make test-db'
+§BRAND_BINARY_NAME§ admit -- §BRAND_BINARY_NAME§ run-live --task <id> -- <command>
+```
+
+`admit` waits up to `--max-wait` (default 3600 s), runs the command in its own
+process group, forwards interrupts to it, and releases its slots once the group
+is gone; if a descendant may survive, the slots stay held until it exits and
+`admit` fails naming the slot directories. Put `admit` outside `run-live`,
+never inside it.
+
 ## Optional Tool Activation
 
 Stacklit,

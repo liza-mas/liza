@@ -4,6 +4,7 @@ package ops
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -17,6 +18,16 @@ func configProcessGroupKill(cmd *exec.Cmd) {
 	cmd.Cancel = func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
+}
+
+// signalProcessGroup delivers sig to every member of the process group pid
+// leads (a configProcessGroupKill command).
+func signalProcessGroup(pid int, sig os.Signal) error {
+	number, ok := sig.(syscall.Signal)
+	if !ok {
+		number = syscall.SIGTERM
+	}
+	return syscall.Kill(-pid, number)
 }
 
 // reapProcessGroup kills what remains of the process group pid led (a

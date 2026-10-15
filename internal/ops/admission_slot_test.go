@@ -178,6 +178,77 @@ func TestAdmissionSlotsServeWaitersInArrivalOrder(t *testing.T) {
 	close(release["late"])
 }
 
+func TestAdmissionSlotsServeCanonicalWaitersBeforeLocalOnes(t *testing.T) {
+	shortAdmissionSlotPoll(t)
+	root := t.TempDir()
+	limit := testAdmissionLimit("priority", 1)
+	first := holdAdmissionSlots(t, root, limit)
+
+	order := make(chan string, 2)
+	release := map[string]chan struct{}{"local": make(chan struct{}), "canonical": make(chan struct{})}
+	waiter := func(name string, local bool) {
+		slots := &admissionSlots{deadline: time.Now().Add(10 * time.Second), local: local}
+		if err := slots.acquire(context.Background(), root, []models.AdmissionLimit{limit}); err != nil {
+			t.Error(err)
+			return
+		}
+		order <- name
+		<-release[name]
+		slots.release()
+	}
+	// GIVEN a local waiter queued before a canonical one
+	go waiter("local", true)
+	waitForTickets(t, root, "priority", 1)
+	go waiter("canonical", false)
+	waitForTickets(t, root, "priority", 2)
+
+	// WHEN the slot frees, THEN the later canonical waiter takes it first
+	first.release()
+	if got := <-order; got != "canonical" {
+		t.Fatalf("freed slot went to the %s waiter ahead of the canonical one", got)
+	}
+	select {
+	case got := <-order:
+		t.Fatalf("%s acquired while the only slot was held", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release["canonical"])
+	if got := <-order; got != "local" {
+		t.Fatalf("second slot holder = %s", got)
+	}
+	close(release["local"])
+}
+
+func TestAdmissionSlotQueueRanksAnOlderBinarysWaiterBetweenPriorities(t *testing.T) {
+	shortAdmissionSlotPoll(t)
+	root := t.TempDir()
+	limit := testAdmissionLimit("mixed", 1)
+	// GIVEN a live waiter of an older binary, whose ticket name has no
+	// priority digit, and a free slot
+	queue := filepath.Join(paths.New(root).AdmissionSlotsDir(), "mixed", "queue")
+	if err := os.MkdirAll(queue, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old, acquired, err := filelock.New(filepath.Join(queue, fmt.Sprintf("%020d-0011223344556677", time.Now().UnixNano()))).TryHold("test-old-waiter")
+	if err != nil || !acquired {
+		t.Fatalf("hold old-format ticket: acquired=%v err=%v", acquired, err)
+	}
+	t.Cleanup(func() { _ = old.Release() })
+
+	// WHEN a local waiter arrives later, THEN it stays behind the old waiter
+	local := &admissionSlots{deadline: time.Now().Add(100 * time.Millisecond), local: true}
+	var wait *AdmissionSlotWaitError
+	if err := local.acquire(context.Background(), root, []models.AdmissionLimit{limit}); !errors.As(err, &wait) {
+		t.Fatalf("local waiter behind a live older-binary ticket: err = %v", err)
+	}
+	// WHEN a canonical waiter arrives later, THEN it goes ahead of the old one
+	canonical := &admissionSlots{deadline: time.Now().Add(100 * time.Millisecond)}
+	if err := canonical.acquire(context.Background(), root, []models.AdmissionLimit{limit}); err != nil {
+		t.Fatalf("canonical waiter must rank ahead of an older-binary ticket: %v", err)
+	}
+	canonical.release()
+}
+
 func TestAdmissionSlotQueueSkipsADeadWaitersTicket(t *testing.T) {
 	shortAdmissionSlotPoll(t)
 	root := t.TempDir()
@@ -186,7 +257,7 @@ func TestAdmissionSlotQueueSkipsADeadWaitersTicket(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An earlier ticket whose waiter died: its file remains, its lock is gone.
-	held, acquired, err := filelock.New(filepath.Join(queue, "00000000000000000001-dead")).TryHold("test")
+	held, acquired, err := filelock.New(filepath.Join(queue, "0-00000000000000000001-dead")).TryHold("test")
 	if err != nil || !acquired {
 		t.Fatalf("seed ticket: %v %v", acquired, err)
 	}

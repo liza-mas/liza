@@ -1358,3 +1358,21 @@ addresses issue #170's omission and placement without claiming guaranteed reads.
 introduction of a common provider-independent initialization/read gate. At that
 point design the list transport, read-event coverage and reviewed-document trust
 boundary together.
+
+## Local admission is agent compliance
+
+**What:** `admit -- <command>` puts a local run of a limited command in the
+admission-limit pool (ADR-0209 amendment, D-191), and task prompts name the
+match substrings, but nothing stops an agent from running the raw command
+unslotted. A descendant that leaves the process group (`setsid`) also
+outlives the slot it inherited.
+
+**Why deferred:** a mechanical gate is a PreToolUse guard denying unwrapped
+matching shell commands, with per-provider hook configs (Claude, Codex,
+Copilot) and deny formats, a Go `hook-*` subcommand reading the classes, and
+no coverage for providers without that hook surface. That doubled the D-191
+scope; the wrapper is the primitive any such gate would rely on.
+
+**Payback trigger:** a matching command observed running outside `admit`
+after deploy (e.g. an unslotted DB suite process mapped to a doer worktree).
+Then add the guard on top of `models.AdmissionLimitsFor`.

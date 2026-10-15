@@ -20,6 +20,12 @@ func configProcessGroupKill(cmd *exec.Cmd) {
 	}
 }
 
+// signalProcessGroup kills the tree pid roots: Windows has no signals to
+// forward.
+func signalProcessGroup(pid int, _ os.Signal) error {
+	return procscan.KillProcessTree(pid)
+}
+
 // reapProcessGroup cannot establish that a tree ended: once the root exited,
 // its PID may be reused, so killing or probing a tree by it could hit an
 // unrelated process. It fails closed; deferred validation refuses to run on

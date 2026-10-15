@@ -302,6 +302,7 @@ type RoleContextData struct {
 	AcceptanceSource         *models.AcceptanceSource
 	AcceptanceReceipt        *models.AcceptanceReceipt
 	DestructiveDB            bool
+	AdmissionMatches         []string // admission-limit substrings; a local match runs through admit (ADR-0209)
 	TaskDecomposition        *models.DecompositionManifest
 	ValidationPlan           string
 	Worktree                 string // resolved absolute path

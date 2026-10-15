@@ -66,9 +66,11 @@ func admissionSlotRefusal(taskID string, err error) error {
 }
 
 // admissionSlots is the set of slots one execution holds, at most one per
-// class, and the single deadline every acquisition for it shares.
+// class, and the single deadline every acquisition for it shares. A local
+// execution (admit) queues behind every canonical waiter of a class.
 type admissionSlots struct {
 	deadline time.Time
+	local    bool
 	classes  []string
 	held     []*filelock.Held
 }
@@ -87,7 +89,7 @@ func (s *admissionSlots) acquire(ctx context.Context, projectRoot string, limits
 		if slices.Contains(s.classes, limit.Class) {
 			continue
 		}
-		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline)
+		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline, s.local)
 		if err != nil {
 			s.release()
 			return err
@@ -134,7 +136,10 @@ func (s *admissionSlots) abandon() {
 // acquireAdmissionSlot queues a ticket in dir and, once the ticket is the
 // earliest live one, takes the first free of limit.MaxConcurrent slots.
 // Tickets and slots are flocks, so a dead waiter or holder releases its own.
-func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time) (*filelock.Held, error) {
+// Ticket names lead with a priority digit, canonical 0 and local 1, so name
+// order serves canonical waiters first. An older binary's names (zero-padded
+// time, no priority) sort between the two.
+func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, local bool) (*filelock.Held, error) {
 	started := time.Now()
 	queue := filepath.Join(dir, "queue")
 	if err := os.MkdirAll(queue, 0o755); err != nil {
@@ -147,7 +152,11 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	ticketPath := filepath.Join(queue, fmt.Sprintf("%020d-%s", time.Now().UnixNano(), hex.EncodeToString(nonce)))
+	priority := 0
+	if local {
+		priority = 1
+	}
+	ticketPath := filepath.Join(queue, fmt.Sprintf("%d-%020d-%s", priority, time.Now().UnixNano(), hex.EncodeToString(nonce)))
 	var ticket *filelock.Held
 	err := queueLock.WithLockOperation("admission-slot-queue", func() error {
 		held, acquired, err := filelock.New(ticketPath).TryHold("admission-slot-wait")

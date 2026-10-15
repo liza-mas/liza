@@ -328,6 +328,23 @@ func availablePromptSembleSearchMetadata(targetRoot string, kind semble.TargetKi
 	}
 }
 
+// admissionMatches lists the distinct match substrings of config's valid
+// admission limits, the ones admit and canonical admission act on.
+func admissionMatches(config models.Config) []string {
+	var matches []string
+	for _, limit := range config.AdmissionLimits {
+		if models.ValidateAdmissionLimit(limit) != nil {
+			continue
+		}
+		for _, match := range limit.Match {
+			if !slices.Contains(matches, match) {
+				matches = append(matches, match)
+			}
+		}
+	}
+	return matches
+}
+
 // buildTaskRoleContextData constructs RoleContextData for task-based roles (doers and reviewers).
 func buildTaskRoleContextData(task *models.Task, state *models.State, config SupervisorConfig, resolver *pipeline.Resolver) (*prompts.RoleContextData, error) {
 	roleType, _ := resolver.RoleType(config.Role)
@@ -360,6 +377,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		AcceptanceSource:       task.AcceptanceSource,
 		AcceptanceReceipt:      task.AcceptanceReceipt,
 		DestructiveDB:          task.DestructiveDB,
+		AdmissionMatches:       admissionMatches(state.Config),
 		RuntimeInputs:          task.RuntimeInputs,
 		ProviderDependencies:   models.CloneProviderDependencies(task.ProviderDependencies),
 		DescendantDependencies: models.CloneDescendantDependencies(task.DescendantDependencies),

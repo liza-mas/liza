@@ -152,7 +152,7 @@ Key command groups:
 
 **Worktree management:** `liza wt-create`, `liza wt-merge`, `liza wt-delete`
 
-**System control:** `liza pause`, `liza resume`, `liza stop`, `liza start`, `liza status`, `liza get`, `liza version`, `§BRAND_BINARY_NAME§ admission-limit`
+**System control:** `liza pause`, `liza resume`, `liza stop`, `liza start`, `liza status`, `liza get`, `liza version`, `§BRAND_BINARY_NAME§ admission-limit`, `§BRAND_BINARY_NAME§ admit`
 
 **Toolchain setup:** `liza toolchain list`, `liza toolchain doctor`, `liza toolchain install`, `liza toolchain configure`
 
