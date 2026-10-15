@@ -540,7 +540,9 @@ matching class first; waiters are served in arrival order. The wait never counts
 against `timeout_seconds`, and the wait plus that budget never exceed the 14400 s
 acceptance cap, so a batch budgeted at the cap gets a single try. A submit waits
 before it prepares or rebases; if the class stays full it returns `RETRYABLE`
-and the same submission is retried. The deferred runner aborts its batch with
+and the same submission is retried. While it waits and runs, a submit prints its
+class, the waiters ahead and its batch budget on stderr every 5 minutes, also
+under `--json`. The deferred runner aborts its batch with
 `admission_slot_wait_exceeded`. Changes apply to the next acquisition.
 
 Slots are flocks under `§BRAND_PROJECT_DIRNAME§/admission-slots/<class>/`, held

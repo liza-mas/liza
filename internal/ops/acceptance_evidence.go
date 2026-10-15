@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/git"
@@ -913,6 +914,8 @@ func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Tas
 	if err != nil {
 		return nil, err
 	}
+	budget := acceptanceBatchTimeout(input.batchTimeoutSeconds)
+	held.progress.set(fmt.Sprintf("running canonical validation, batch budget %s", budget), time.Now().Add(budget))
 	receipt.Commands, err = executeAcceptanceCommandsWith(ctx, task.ID, git.New(root).GetWorktreePath(task.ID), commands, indices, input.batchTimeoutSeconds, grant, held.files())
 	if err != nil {
 		return nil, acceptanceError(task.ID, "acceptance.execution", err.Error())

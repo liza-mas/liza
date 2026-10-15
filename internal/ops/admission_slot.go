@@ -73,6 +73,9 @@ type admissionSlots struct {
 	local    bool
 	classes  []string
 	held     []*filelock.Held
+	// progress, when a submit owns the slots, hears their queue wait and the
+	// batch they admit.
+	progress *submitProgress
 }
 
 // newAdmissionSlots fixes the shared wait deadline for a batch budgeted
@@ -89,7 +92,10 @@ func (s *admissionSlots) acquire(ctx context.Context, projectRoot string, limits
 		if slices.Contains(s.classes, limit.Class) {
 			continue
 		}
-		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline, s.local)
+		queued := func(ahead int) {
+			s.progress.set(fmt.Sprintf("queued for admission class %s, %d waiter(s) ahead; the batch budget has not started", limit.Class, ahead), s.deadline)
+		}
+		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline, s.local, queued)
 		if err != nil {
 			s.release()
 			return err
@@ -138,8 +144,9 @@ func (s *admissionSlots) abandon() {
 // Tickets and slots are flocks, so a dead waiter or holder releases its own.
 // Ticket names lead with a priority digit, canonical 0 and local 1, so name
 // order serves canonical waiters first. An older binary's names (zero-padded
-// time, no priority) sort between the two.
-func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, local bool) (*filelock.Held, error) {
+// time, no priority) sort between the two. queued, when set, hears how many
+// tickets are ahead before each wait.
+func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, local bool, queued func(ahead int)) (*filelock.Held, error) {
 	started := time.Now()
 	queue := filepath.Join(dir, "queue")
 	if err := os.MkdirAll(queue, 0o755); err != nil {
@@ -173,11 +180,11 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 
 	logged := false
 	for {
-		head, err := admissionQueueHead(queueLock, queue, ticketPath)
+		ahead, err := admissionQueueAhead(queueLock, queue, ticketPath)
 		if err != nil {
 			return nil, err
 		}
-		if head {
+		if ahead == 0 {
 			for i := range limit.MaxConcurrent {
 				held, acquired, err := filelock.New(filepath.Join(dir, fmt.Sprintf("slot-%d", i))).TryHold("admission-slot")
 				if err != nil {
@@ -199,6 +206,9 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 			log.Printf("waiting for an admission slot of class %s (max %d at once), at most until %s", limit.Class, limit.MaxConcurrent, deadline.UTC().Format(time.RFC3339))
 			logged = true
 		}
+		if queued != nil {
+			queued(ahead)
+		}
 		select {
 		case <-ctx.Done():
 			return nil, &AdmissionSlotWaitError{Class: limit.Class, Waited: time.Since(started), Dir: dir, Err: context.Cause(ctx)}
@@ -207,10 +217,12 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 	}
 }
 
-// admissionQueueHead reports whether ticketPath is the earliest live ticket,
-// removing earlier tickets whose waiter is gone (their lock is free).
-func admissionQueueHead(queueLock *filelock.FileLock, queue, ticketPath string) (bool, error) {
-	head := false
+// admissionQueueAhead counts the tickets ahead of ticketPath; zero means it is
+// the earliest live ticket. Earlier tickets whose waiter is gone (their lock
+// is free) are removed up to the first live one; later ones are counted
+// unprobed.
+func admissionQueueAhead(queueLock *filelock.FileLock, queue, ticketPath string) (int, error) {
+	ahead := 0
 	err := queueLock.WithLockOperation("admission-slot-queue", func() error {
 		entries, err := os.ReadDir(queue)
 		if err != nil {
@@ -223,21 +235,23 @@ func admissionQueueHead(queueLock *filelock.FileLock, queue, ticketPath string) 
 			}
 			path := filepath.Join(queue, name)
 			if path == ticketPath {
-				head = true
 				return nil
 			}
-			held, acquired, err := filelock.New(path).TryHold("admission-slot-prune")
-			if err != nil {
-				return err
+			if ahead == 0 {
+				held, acquired, err := filelock.New(path).TryHold("admission-slot-prune")
+				if err != nil {
+					return err
+				}
+				if acquired {
+					removeAdmissionTicket(path, held)
+					continue
+				}
 			}
-			if !acquired {
-				return nil // An earlier waiter is live.
-			}
-			removeAdmissionTicket(path, held)
+			ahead++ // An earlier waiter is live, or queued behind one.
 		}
 		return errors.New("admission slot ticket vanished from its queue")
 	})
-	return head, err
+	return ahead, err
 }
 
 func removeAdmissionTicket(path string, held *filelock.Held) {

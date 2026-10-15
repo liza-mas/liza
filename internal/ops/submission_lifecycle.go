@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type submissionInvocation struct {
 	preparation *models.LifecyclePreparation
 	// admission is what pre-admission settled; nil when state was unreadable.
 	admission *submissionAdmission
+	progress  *submitProgress
 }
 
 // SubmitForReviewWithAuthorityAndOptions binds retries to the caller's original
@@ -75,11 +77,23 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 	if agentID == "" {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
 	}
-	invocation.admission, err = preAdmitSubmission(projectRoot, taskID, agentID, authority, opts)
+	invocation.progress = startSubmitProgress(taskID)
+	defer invocation.progress.finish()
+	hold, err := holdSubmitTask(projectRoot, taskID, agentID, authority, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := hold.Release(); err != nil {
+			log.Printf("WARNING: submit hold for task %s not released: %v", taskID, err)
+		}
+	}()
+	invocation.admission, err = preAdmitSubmission(projectRoot, taskID, agentID, authority, opts, invocation.progress)
 	if err != nil {
 		return nil, err
 	}
 	defer invocation.admission.release()
+	invocation.progress.set("preparing the submission (rebase, index refresh)", time.Time{})
 	err = WithProjectLifecycleSharedLock(projectRoot, integrationOperationSubmitForReview, func() error {
 		lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
 		// Retirement usually follows a state-lock timeout, so it waits the

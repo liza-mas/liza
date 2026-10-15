@@ -133,6 +133,12 @@ before preparing or rebasing; a class that stays full refuses
 `acceptance.admission_slot` as `RETRYABLE` with no effects, and the same
 submission is retried ([ADR-0209](../architecture/ADR/0209-admission-limits.md)).
 
+A submit reports its queue position, preparation and batch on stderr, also
+under `--json`, at each change and every 5 minutes; stdout carries only the
+result. While a caller's submit of a task runs, that caller's next submit of
+it queues and prepares nothing and returns `STATE_CHANGED`/`requery` at once
+([ADR-0210](../architecture/ADR/0210-submit-progress-and-same-caller-hold.md)).
+
 Failed execution returns the failing command's combined stdout/stderr in the
 error, masked before an 8 KiB excerpt limit and explicitly marked if truncated.
 Timeout and output-limit errors return no excerpt, since incomplete capture may

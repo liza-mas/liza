@@ -9,6 +9,8 @@ failed commands, dirty files, or stale source/commit evidence block before revie
 Before submitting, run focused tests, not the full canonical list. After an admission failure,
 re-run only the failing command, unless it uses a single_use runtime input: only the gate runs
 that one, so fix and resubmit.
+Submission may queue for admission slots before its batch budget starts, so it can run far past
+timeout_seconds; its stderr reports what it waits for. Never interrupt it or start another submit for this task.
 {{- end}}
 1. Stage the intended files for this task: git -C {{.Worktree}} add <files>
 2. Create the submission commit for this task using the required git commit workflow for this environment.

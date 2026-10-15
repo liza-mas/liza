@@ -38,7 +38,8 @@ func (a *submissionAdmission) release() {
 // stays full refuses with nothing to retire and the same request is retried
 // as is. When the classes cannot be computed here, execution takes them as it
 // does for every other caller. A nil admission means state was unreadable.
-func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions) (*submissionAdmission, error) {
+// The slots report their wait and the batch to progress.
+func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, progress *submitProgress) (*submissionAdmission, error) {
 	bb := db.For(paths.New(projectRoot).StatePath())
 	state, err := bb.ReadSnapshot()
 	if err != nil {
@@ -69,6 +70,7 @@ func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.A
 	commands, _ := input.executedCommands()
 	limits := models.AdmissionLimitsFor(admission.config, commands)
 	admission.slots = newAdmissionSlots(input.batchTimeoutSeconds)
+	admission.slots.progress = progress
 	if len(limits) == 0 {
 		return admission, nil
 	}

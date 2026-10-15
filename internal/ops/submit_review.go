@@ -487,8 +487,18 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 				return nil, err
 			}
 			gate := runtimeInputGate{projectRoot: projectRoot, bb: bb, authority: authority, actor: agentID, operation: integrationOperationSubmitForReview}
+			slots, ownSlots := held, held == nil && acceptance != nil
+			if ownSlots {
+				// Execution would take its slots itself; taken here so they
+				// report to this submit's progress.
+				slots = newAdmissionSlots(acceptance.batchTimeoutSeconds)
+				slots.progress = invocation.progress
+			}
 			fenceCtx, stopFence := startAcceptanceOwnershipFence(bb, taskID, expectedCurrentStatus, agentID, authority)
-			acceptanceReceipt, err := executeAcceptanceReceipt(fenceCtx, projectRoot, task, acceptance, postRebaseCommit, gate, admissionConfig, held)
+			acceptanceReceipt, err := executeAcceptanceReceipt(fenceCtx, projectRoot, task, acceptance, postRebaseCommit, gate, admissionConfig, slots)
+			if ownSlots {
+				slots.release()
+			}
 			if stopFence() {
 				return nil, &LifecycleError{Outcome: NewLifecycleOutcome(request.Operation, invocation.task, models.LifecycleStateChanged, "requery", "unknown"), Err: fmt.Errorf("submission ownership lost during canonical validation; validation stopped")}
 			}

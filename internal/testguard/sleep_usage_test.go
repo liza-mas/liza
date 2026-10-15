@@ -14,8 +14,9 @@ import (
 // replaced with deterministic synchronization. Raise it only when a new sleep
 // is genuinely unavoidable (e.g. testing real wall-clock behavior).
 // +2: admission-slot wall-clock deadline and budget-exclusion tests (ADR-0209);
-// +1: validation-preflight slow-success probe (D-163).
-const maxSleepCallsInTests = 14
+// +1: validation-preflight slow-success probe (D-163);
+// +1: no submit progress written after return, an absence over time (ADR-0210).
+const maxSleepCallsInTests = 15
 
 func TestSleepUsageBudget(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
