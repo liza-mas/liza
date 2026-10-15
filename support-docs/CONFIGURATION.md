@@ -1080,11 +1080,15 @@ initialization.
 
 ### Agent Execution Timeouts
 
-| Role | Timeout | Rationale |
-|------|---------|-----------|
-| Code Reviewer | 30 min | Reviews should complete quickly |
-| Coder | 4 hours | Implementation takes longer |
-| Planner | 4 hours | Complex planning needs time |
+Set per role by `timeouts.execution` in `pipeline.yaml`:
+
+| Role | Timeout |
+|------|---------|
+| Orchestrator | 4 hours |
+| Coder, Code Reviewer | 4 hours |
+| All other roles | 2 hours |
+
+A doer and its reviewer must have the same timeout; otherwise the role with the shorter one hits it first and restarts without its earlier context ([await primitives](../specs/protocols/await-primitives.md#the-six-clocks)).
 
 When exceeded, supervisor kills CLI, resets agent to IDLE, retries after 5s delay.
 
