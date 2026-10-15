@@ -1083,7 +1083,7 @@ initialization.
 | Role | Timeout | Rationale |
 |------|---------|-----------|
 | Code Reviewer | 30 min | Reviews should complete quickly |
-| Coder | 2 hours | Implementation takes longer |
+| Coder | 4 hours | Implementation takes longer |
 | Planner | 4 hours | Complex planning needs time |
 
 When exceeded, supervisor kills CLI, resets agent to IDLE, retries after 5s delay.

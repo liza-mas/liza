@@ -228,7 +228,7 @@ pipeline:
       display-name: "Coder"
       description: "Implements code changes in isolated worktrees"
       timeouts:
-        execution: 2h
+        execution: 4h
         poll-interval: 30s
         max-wait: 10m
       allowed-operations:
@@ -265,7 +265,7 @@ pipeline:
       display-name: "Code Reviewer"
       description: "Reviews code changes, issues binding verdicts"
       timeouts:
-        execution: 2h
+        execution: 4h
         poll-interval: 30s
         max-wait: 10m
       allowed-operations:

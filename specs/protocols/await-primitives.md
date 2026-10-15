@@ -160,7 +160,7 @@ These are coupled. Changing one requires rechecking the others.
 |---|---|---|---|
 | Call interval | Claude 540s; others 100s | `providers.AwaitInterval`, `internal/providers/await.go` | one native await process |
 | Wait budget | 1800s | `--timeout-seconds`, `cmd/liza/cmd_review.go` | one wait, i.e. one peer pass |
-| Session ceiling | 2h | `timeouts.execution` per role, `pipeline.yaml` | one provider session, i.e. one whole attempt |
+| Session ceiling | 2h; coder/code-reviewer 4h | `timeouts.execution` per role, `pipeline.yaml` | one provider session, i.e. one whole attempt |
 | Task lease | 1800s | `DefaultLeaseDurationSeconds` | doer ownership of a rejected task |
 | Review lease | interval + 5m | `reviewOwnershipLeaseMargin` | reviewer exclusivity while awaiting |
 | Progress timeout | 1800s | `DefaultAgentProgressTimeoutSec` | silent stretch within an *executing* task |
@@ -181,7 +181,8 @@ Relationships that must hold:
   passes 5-10m; 1800s covers the worst case with margin.
 - **Session ceiling ≥ rounds × (own pass + wait).** With `DefaultMaxReviewCycles = 5`,
   a first doer pass of ~25m and corrective passes of 5-10m, a full attempt runs ~100
-  minutes. 2h covers it. Doer and reviewer ceilings must be equal, or the shorter side
+  minutes. 2h covers it; coder/code-reviewer get 4h because 2h proved too small for
+  implementation attempts. Doer and reviewer ceilings must be equal, or the shorter side
   loses affinity first. A ceiling breach is worse than a clean TIMEOUT: the context is
   cancelled, it logs `Agent execution timeout` and returns exit 1, which reads as a
   hung provider rather than an expired wait.

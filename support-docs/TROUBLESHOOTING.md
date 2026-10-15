@@ -80,7 +80,7 @@ ERROR: Failed to register agent planner-1 (collision?)
 - Logs show: "Agent execution timeout (CLI may be hung, will retry)"
 - Agent status automatically resets to IDLE after timeout
 
-**Timeouts by role:** Reviewer 30min, Coder 2hr, Planner 4hr. See [CONFIGURATION.md](CONFIGURATION.md#agent-execution-timeouts).
+**Timeouts by role:** Reviewer 30min, Coder 4hr, Planner 4hr. See [CONFIGURATION.md](CONFIGURATION.md#agent-execution-timeouts).
 
 **Expected behavior:** Supervisor kills CLI, resets agent to IDLE, retries after 5s delay. This is self-recovering.
 
