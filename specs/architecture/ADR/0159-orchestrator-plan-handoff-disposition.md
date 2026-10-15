@@ -79,6 +79,9 @@ Chose **Option 3**.
   is expanded by no path either way, and a retired one no longer keeps the
   sprint open. The same ruling replays; anything else, including another
   ruling, a replacement, pass, hold, clear, replan and proceed, is refused.
+  A retirement whose ruling an older binary dropped on rewrite takes the
+  ruling from the next `--retire --ruling`, keeping the original actor and
+  time, without re-running the unused-hand-off checks.
 - **Sticky hold.** Pass, a different hold and replan are refused on a held
   plan; only an operator clear releases it. Clear also releases a hold that
   outlived the hand-off (the plan expanded, or its amendment fence lifted

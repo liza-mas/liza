@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/taskkind"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -604,5 +606,52 @@ func TestPlanCheckClearReleasesHoldOnPlanNoLongerAwaitingHandoff(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPlanHandoffRetireRestoresDroppedRulingOnArchivedTask(t *testing.T) {
+	retiredAt := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
+	original := handoffPlan("original", "code-planning-pair")
+	// A binary predating the ruling field rewrote the retirement without it.
+	original.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckRetired, By: "human", At: retiredAt}
+	root, stateFile := setupPlanCheckTest(t, original)
+	if result, err := EnableAndArchiveTerminalTasks(root, DefaultArchiveLimit); err != nil || !slices.Contains(result.Archived, original.ID) {
+		t.Fatalf("archive = %+v, %v", result, err)
+	}
+	if _, err := RecordPlanCheck(root, PlanCheckInput{TaskID: original.ID, Action: PlanCheckActionRetire, Ruling: "D84", ChangedBy: "operator"}); err != nil {
+		t.Fatalf("restore ruling: %v", err)
+	}
+	for _, request := range []PlanCheckInput{
+		{TaskID: original.ID, Action: PlanCheckActionRetire, Ruling: "D84", ChangedBy: "operator"},
+		{TaskID: original.ID, Action: PlanCheckActionRetire, Ruling: "D83", ChangedBy: "operator"},
+	} {
+		result, err := RecordPlanCheck(root, request)
+		if request.Ruling == "D84" && (err != nil || result.Changed) {
+			t.Fatalf("same-ruling replay = %+v, %v", result, err)
+		}
+		if request.Ruling == "D83" && (err == nil || !strings.Contains(err.Error(), "ruling D84")) {
+			t.Fatalf("different ruling after restore = %v", err)
+		}
+	}
+	state, err := db.New(stateFile).ReadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := state.FindTask(original.ID)
+	if restored.TerminalArchive == nil || restored.Status != models.TaskStatusMerged {
+		t.Fatalf("task left the archive or its terminal status: archive=%v status=%s", restored.TerminalArchive, restored.Status)
+	}
+	if check := restored.PlanCheck; check.Verdict != models.PlanCheckRetired || check.Ruling != "D84" || check.By != "human" || !check.At.Equal(retiredAt) {
+		t.Fatalf("restored plan_check = %+v", check)
+	}
+	if note := restored.History[len(restored.History)-1].Note; note == nil || *note != "retirement ruling restored: D84" {
+		t.Fatalf("history note = %v", note)
+	}
+	if err := statevalidate.ValidateStateFile(stateFile, false, io.Discard); err != nil {
+		t.Fatalf("state after restore: %v", err)
+	}
+	raw, err := db.New(stateFile).ReadRaw()
+	if err != nil || strings.Contains(string(raw), "retirement ruling restored") {
+		t.Fatalf("restored row was written inline instead of re-archived (%v)", err)
 	}
 }

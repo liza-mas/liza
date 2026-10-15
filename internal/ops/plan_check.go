@@ -107,7 +107,17 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 		}
 		var next planCheckChange
 		var changeErr error
-		if retiring {
+		if input.Action == PlanCheckActionRetire && task.PlanCheckVerdictOf() == models.PlanCheckRetired &&
+			strings.TrimSpace(task.PlanCheck.Ruling) == "" {
+			// A binary predating the ruling field dropped it on rewrite. The
+			// hand-off is already retired, so this only restores the ruling and
+			// keeps the retirement's actor and time; the history entry records
+			// who restored it and when.
+			ruling := strings.TrimSpace(input.Ruling)
+			check := *task.PlanCheck
+			check.Ruling = ruling
+			next = planCheckChange{check: &check, note: "retirement ruling restored: " + ruling, changed: true}
+		} else if retiring {
 			if err := rejectReferencedProviderRetirement(state, resolver, task.ID, retirePermanently); err != nil {
 				return err
 			}
