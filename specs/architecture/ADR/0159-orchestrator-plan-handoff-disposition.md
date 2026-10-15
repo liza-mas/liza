@@ -80,7 +80,9 @@ Chose **Option 3**.
   sprint open. The same ruling replays; anything else, including another
   ruling, a replacement, pass, hold, clear, replan and proceed, is refused.
 - **Sticky hold.** Pass, a different hold and replan are refused on a held
-  plan; only an operator clear releases it. Hold replays with the same ask; a
+  plan; only an operator clear releases it. Clear also releases a hold that
+  outlived the hand-off (the plan expanded, or its amendment fence lifted
+  after expansion); it then only drops the disposition (2026-10-15). Hold replays with the same ask; a
   pass may be tightened to a hold before transition.
 - **Classification.** One classifier (`needs_review`, `passed`,
   `waiting_upstream`, `needs_reconciliation`, `held`, `out_of_domain`) feeds

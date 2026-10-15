@@ -64,6 +64,8 @@ type PlanCheckResult struct {
 //   - hold replays with the same ask, is refused with a different one, and may
 //     tighten a passed plan;
 //   - pass on a passed plan and clear without a disposition are no-ops;
+//   - clear releases a hold even on a plan that no longer awaits hand-off
+//     (expanded, or no longer in the domain), which keeps it so;
 //   - replace and retire end an unused hand-off for good; retire cites the
 //     ruling that leaves it with no replacement and, unlike replace, also
 //     ends a hold, since a retired plan is expanded by no path.
@@ -113,6 +115,12 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 			if changeErr == nil && next.changed {
 				changeErr = routeStaleProviderConsumers(state, resolver, task.ID, retirePermanently, actor, time.Now().UTC())
 			}
+		} else if input.Action == PlanCheckActionClear && task.PlanCheckVerdictOf() == models.PlanCheckHeld &&
+			(class == PlanHandoffNotSource || class == PlanHandoffOutOfDomain) {
+			// A hold placed while the plan still awaited hand-off outlives it
+			// once the plan expands or its fence lifts. Clearing only drops the
+			// disposition: a plan that awaits no hand-off generates nothing.
+			next = planCheckChange{note: "hold cleared (plan no longer awaits hand-off)", changed: true}
 		} else {
 			switch class {
 			case PlanHandoffNotSource:

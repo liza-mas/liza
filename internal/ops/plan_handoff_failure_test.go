@@ -548,3 +548,61 @@ func TestPlanHandoffRetireByRulingSettlesIntegration(t *testing.T) {
 		t.Fatalf("retirement by ruling did not settle planning: %+v", decision)
 	}
 }
+
+func TestPlanCheckClearReleasesHoldOnPlanNoLongerAwaitingHandoff(t *testing.T) {
+	for _, scenario := range []string{"expanded", "amendment withdrawn"} {
+		t.Run(scenario, func(t *testing.T) {
+			original := withPlanCheck(handoffPlan("original", "code-planning-pair"), models.PlanCheckHeld, "deploy the engine fix")
+			original.TransitionsExecuted = map[string]bool{selTransition: true}
+			child := testhelpers.BuildTaskByStatus("original-code-0", models.TaskStatusMerged, time.Now().UTC())
+			child.RolePair = "coding-pair"
+			child.ParentTasks = []string{original.ID}
+			tasks := []models.Task{original, child}
+			if scenario == "amendment withdrawn" {
+				correction := handoffPlan("original-amend-1", "code-planning-pair")
+				correction.Output = slices.Clone(original.Output)
+				correction.Status = models.TaskStatusAbandoned
+				correction.AmendsPlan = original.ID
+				tasks[0].PlanAmendment = &models.PlanAmendment{
+					OriginalOutput: tasks[0].Output,
+					Corrections:    []string{correction.ID},
+					Quarantined:    []string{correction.ID},
+				}
+				tasks = append(tasks, correction)
+			}
+			root, stateFile := setupPlanCheckTest(t, tasks...)
+			before, _ := db.For(stateFile).Read()
+			if !HasHeldPlan(before) {
+				t.Fatal("fixture plan is not held")
+			}
+			result, err := RecordPlanCheck(root, PlanCheckInput{TaskID: original.ID, Action: PlanCheckActionClear, ChangedBy: "operator"})
+			if err != nil || !result.Changed || result.Verdict != "" || result.Class != PlanHandoffNotSource {
+				t.Fatalf("clear = %+v, %v", result, err)
+			}
+			state, _ := db.For(stateFile).Read()
+			cleared := state.FindTask(original.ID)
+			if HasHeldPlan(state) || cleared.PlanCheck != nil {
+				t.Fatalf("hold survived clear: %+v", cleared.PlanCheck)
+			}
+			if note := cleared.History[len(cleared.History)-1].Note; note == nil || *note != "hold cleared (plan no longer awaits hand-off)" {
+				t.Fatalf("history note = %v", note)
+			}
+			report, err := ExecuteTransitionsReportWith(root, "manual", AdmitReviewed)
+			if err != nil || len(report.Results) != 0 {
+				t.Fatalf("cleared plan expanded again: %+v, %v", report, err)
+			}
+			after, _ := db.For(stateFile).Read()
+			if len(after.Tasks) != len(tasks) {
+				t.Fatalf("clear generated tasks: %d -> %d", len(tasks), len(after.Tasks))
+			}
+			if result, err := RecordPlanCheck(root, PlanCheckInput{TaskID: original.ID, Action: PlanCheckActionClear, ChangedBy: "operator"}); err == nil || result != nil && result.Changed {
+				t.Fatalf("second clear on a plan awaiting no hand-off = %+v, %v; want the existing refusal", result, err)
+			}
+			for _, action := range []PlanCheckAction{PlanCheckActionPass, PlanCheckActionHold} {
+				if _, err := RecordPlanCheck(root, PlanCheckInput{TaskID: original.ID, Action: action, Ask: "wait", Authority: orchestratorAuthority()}); err == nil || !strings.Contains(err.Error(), "no plan awaiting hand-off") {
+					t.Fatalf("%s on a plan awaiting no hand-off = %v", action, err)
+				}
+			}
+		})
+	}
+}
