@@ -433,3 +433,118 @@ func TestPlanHandoffFailurePersistsWithoutPartialMutation(t *testing.T) {
 		t.Fatal("unchanged pass duplicated failure history")
 	}
 }
+
+func TestPlanHandoffRetireByRulingEndsHoldForGood(t *testing.T) {
+	original := withPlanCheck(handoffPlan("original", "code-planning-pair"), models.PlanCheckHeld, "retire per D83")
+	root, stateFile := setupPlanCheckTest(t, original)
+	before, _ := db.For(stateFile).Read()
+	if !HasHeldPlan(before) {
+		t.Fatal("fixture plan is not held")
+	}
+	input := PlanCheckInput{TaskID: original.ID, Action: PlanCheckActionRetire, Ruling: "D83", ChangedBy: "operator"}
+	result, err := RecordPlanCheck(root, input)
+	if err != nil || !result.Changed || result.Verdict != models.PlanCheckRetired || result.Ruling != "D83" || result.ReplacedBy != "" {
+		t.Fatalf("retire = %+v, %v", result, err)
+	}
+	if result, err = RecordPlanCheck(root, input); err != nil || result.Changed {
+		t.Fatalf("replay = %+v, %v", result, err)
+	}
+	state, _ := db.For(stateFile).Read()
+	retired := state.FindTask(original.ID)
+	if HasHeldPlan(state) || retired.Status != models.TaskStatusMerged || retired.PlanCheck.Ask != "" || !retired.PlanHandoffRetired() || retired.RetiredBy() != "ruling D83" {
+		t.Fatalf("retired plan = %+v", retired.PlanCheck)
+	}
+	if note := retired.History[len(retired.History)-1].Note; note == nil || *note != "unused handoff retired by ruling D83" {
+		t.Fatalf("history note = %v", note)
+	}
+	domain, _ := LoadPlanHandoffDomain(root)
+	if domain.Pending(retired) {
+		t.Fatal("retired handoff remains pending")
+	}
+	for _, request := range []PlanCheckInput{
+		{TaskID: original.ID, Action: PlanCheckActionRetire, Ruling: "D84", ChangedBy: "operator"},
+		{TaskID: original.ID, Action: PlanCheckActionReplace, ReplacedBy: "other", ChangedBy: "operator"},
+		{TaskID: original.ID, Action: PlanCheckActionClear, ChangedBy: "operator"},
+		{TaskID: original.ID, Action: PlanCheckActionPass, Authority: orchestratorAuthority()},
+		{TaskID: original.ID, Action: PlanCheckActionHold, Ask: "wait", Authority: orchestratorAuthority()},
+	} {
+		if _, err := RecordPlanCheck(root, request); err == nil || !strings.Contains(err.Error(), "ruling D83") {
+			t.Fatalf("%s after retire = %v, want a refusal naming the ruling", request.Action, err)
+		}
+	}
+	if _, err := Replan(root, &ReplanInput{TaskID: original.ID, ChangedBy: "operator"}); err == nil || !strings.Contains(err.Error(), "ruling D83") {
+		t.Fatalf("replan retired = %v", err)
+	}
+	if err := db.For(stateFile).Modify(func(s *models.State) error { s.Sprint.Status = models.SprintStatusCompleted; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Proceed(root, original.ID, selTransition); err == nil || !strings.Contains(err.Error(), "ruling D83") {
+		t.Fatalf("proceed retired = %v", err)
+	}
+}
+
+func TestPlanHandoffRetireByRulingRefusals(t *testing.T) {
+	for scenario, want := range map[string]string{
+		"executed":        "unused MERGED reviewed handoff",
+		"children":        "already generated child",
+		"selector":        "inherit_inputs.selections",
+		"dependent":       "once it is retired",
+		"not merged":      "unused MERGED reviewed handoff",
+		"missing ruling":  "--ruling",
+		"agent":           "operator action",
+		"correction task": "pending amendment",
+		"replaced":        "already retired by correction",
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			original := handoffPlan("original", "code-planning-pair")
+			tasks := []models.Task{original}
+			input := PlanCheckInput{TaskID: original.ID, Action: PlanCheckActionRetire, Ruling: "D83", ChangedBy: "operator"}
+			switch scenario {
+			case "executed":
+				tasks[0].TransitionsExecuted = map[string]bool{selTransition: true}
+			case "children":
+				child := testhelpers.BuildTaskByStatus("child", models.TaskStatusReady, time.Now().UTC())
+				child.ParentTasks = []string{original.ID}
+				tasks = append(tasks, child)
+			case "selector":
+				selector := handoffPlan("selector", "code-planning-pair")
+				selector.Output[0].InheritInputs = &models.InheritInputs{Mode: models.InheritModeSelected, Selections: []models.InputSelection{{UpstreamTask: original.ID, Outputs: []int{0}}}}
+				tasks = append(tasks, selector)
+			case "dependent":
+				tasks = append(tasks, handoffPlan("downstream", "code-planning-pair", original.ID))
+			case "not merged":
+				tasks[0].Status = models.TaskStatusCodePlanning
+			case "missing ruling":
+				input.Ruling = " "
+			case "agent":
+				input.Authority = orchestratorAuthority()
+			case "correction task":
+				tasks[0].AmendsPlan = "elsewhere"
+			case "replaced":
+				tasks = append(tasks, handoffPlan("correction", "code-planning-pair"))
+				tasks[0].PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckReplaced, ReplacedBy: "correction", By: "operator", At: time.Now().UTC()}
+			}
+			root, stateFile := setupPlanCheckTest(t, tasks...)
+			before, _ := db.For(stateFile).Read()
+			if _, err := RecordPlanCheck(root, input); err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("retire = %v, want a refusal containing %q", err, want)
+			}
+			after, _ := db.For(stateFile).Read()
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("refused retirement changed state")
+			}
+		})
+	}
+}
+
+func TestPlanHandoffRetireByRulingSettlesIntegration(t *testing.T) {
+	state := integrationProgressState(progressPlan("original", models.TaskStatusMerged, false), progressPlan("other", models.TaskStatusMerged, true), progressCoding("coding", "other"))
+	available := pipeline.SlicedIntegrationCapability{Available: true}
+	if decision := evaluateProgress(t, state, available, "head"); decision.PlanningSettled {
+		t.Fatal("unused original settled integration")
+	}
+	state.FindTask("original").PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckRetired, Ruling: "D83", By: "operator", At: time.Now().UTC()}
+	if decision := evaluateProgress(t, state, available, "head"); !decision.PlanningSettled {
+		t.Fatalf("retirement by ruling did not settle planning: %+v", decision)
+	}
+}

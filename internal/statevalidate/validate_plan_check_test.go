@@ -41,6 +41,17 @@ func TestValidateTaskInvariants_PlanCheckShape(t *testing.T) {
 			task.RolePair, task.PlanCheck = "code-planning-pair", check
 		}), wantErr: "requires MERGED"},
 		{name: "not a planning pair", task: plan(func(task *models.Task) { task.RolePair = "coding-pair" }), wantErr: "non-planning role_pair"},
+		{name: "retired with ruling", task: plan(func(task *models.Task) {
+			task.PlanCheck.Verdict, task.PlanCheck.Ruling = models.PlanCheckRetired, "D83"
+		})},
+		{name: "retired without ruling", task: plan(func(task *models.Task) { task.PlanCheck.Verdict = models.PlanCheckRetired }), wantErr: "retired requires ruling"},
+		{name: "retired with ask", task: plan(func(task *models.Task) {
+			task.PlanCheck.Verdict, task.PlanCheck.Ruling, task.PlanCheck.Ask = models.PlanCheckRetired, "D83", "wait"
+		}), wantErr: "retired cannot carry ask"},
+		{name: "retired with replaced_by", task: plan(func(task *models.Task) {
+			task.PlanCheck.Verdict, task.PlanCheck.Ruling, task.PlanCheck.ReplacedBy = models.PlanCheckRetired, "D83", "correction"
+		}), wantErr: "replaced_by requires replaced verdict"},
+		{name: "ruling without retired", task: plan(func(task *models.Task) { task.PlanCheck.Ruling = "D83" }), wantErr: "ruling requires retired verdict"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

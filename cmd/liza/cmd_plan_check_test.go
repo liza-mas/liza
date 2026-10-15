@@ -119,3 +119,55 @@ func TestPlanCheckCLI_RetiresOriginalByMergedCorrection(t *testing.T) {
 		t.Fatal("retirement changed status, pretended expansion, or rewrote dependencies")
 	}
 }
+
+func TestPlanCheckCLI_RetiresHeldPlanByRuling(t *testing.T) {
+	root := setupPlanCheckCLI(t)
+	t.Setenv(brand.EnvName("AGENT_GENERATION"), testhelpers.TestAgentGeneration)
+	if stdout, err := executeRootCommandCapture(t, root, "plan-check", "plan-1", "--hold", "retire per D83", "--agent-id", "orchestrator-1", "--json"); err != nil {
+		t.Fatalf("hold: %v (%s)", err, stdout)
+	}
+
+	// An agent session cannot retire a hand-off.
+	t.Setenv(brand.EnvName("AGENT_ID"), "orchestrator-1")
+	resetRootCmdForTest(t)
+	if stdout, err := executeRootCommandCapture(t, root, "plan-check", "plan-1", "--retire", "--ruling", "D83", "--json"); err == nil || !strings.Contains(stdout, "operator-only") {
+		t.Fatalf("retire from an agent session = %v (%s), want operator-only refusal", err, stdout)
+	}
+	t.Setenv(brand.EnvName("AGENT_ID"), "")
+	resetRootCmdForTest(t)
+	stdout, err := executeRootCommandCapture(t, root, "plan-check", "plan-1", "--retire", "--ruling", "D83", "--json")
+	if err != nil {
+		t.Fatalf("operator retire: %v (%s)", err, stdout)
+	}
+	result := parseEnvelope(t, stdout)["result"].(map[string]any)
+	if result["verdict"] != "retired" || result["ruling"] != "D83" || result["changed"] != true {
+		t.Fatalf("retire result = %v", result)
+	}
+	state, err := db.For(paths.New(root).StatePath()).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := state.FindTask("plan-1")
+	if plan.Status != models.TaskStatusMerged || len(plan.TransitionsExecuted) != 0 || plan.PlanCheck.Ask != "" {
+		t.Fatalf("retire changed status, pretended expansion, or kept the hold: %+v", plan.PlanCheck)
+	}
+}
+
+func TestPlanCheckCLI_RetireRequiresRuling(t *testing.T) {
+	for _, args := range [][]string{
+		{"plan-check", "plan-1", "--retire", "--json"},
+		{"plan-check", "plan-1", "--retire", "--ruling", " ", "--json"},
+		{"plan-check", "plan-1", "--clear", "--ruling", "D83", "--json"},
+		{"plan-check", "plan-1", "--retire", "--ruling", "D83", "--clear", "--json"},
+	} {
+		root := setupPlanCheckCLI(t)
+		stdout, err := executeRootCommandCapture(t, root, args...)
+		if err == nil || !strings.Contains(stdout, `"code":"validation"`) {
+			t.Errorf("%v: err=%v stdout=%s, want a validation error", args, err, stdout)
+		}
+		state, readErr := db.For(paths.New(root).StatePath()).Read()
+		if readErr != nil || state.FindTask("plan-1").PlanCheck != nil {
+			t.Errorf("%v: plan_check written on invalid input (%v)", args, readErr)
+		}
+	}
+}

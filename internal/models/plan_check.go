@@ -58,16 +58,21 @@ const (
 	PlanCheckHeld PlanCheckVerdict = "held"
 	// PlanCheckReplaced retires an unused hand-off by an operator declaration.
 	PlanCheckReplaced PlanCheckVerdict = "replaced"
+	// PlanCheckRetired retires an unused hand-off by an operator citing the
+	// ruling that leaves it with no replacement.
+	PlanCheckRetired PlanCheckVerdict = "retired"
 )
 
 // PlanCheck records the orchestrator's plan-executability disposition of a
 // merged planning task. The task ID is the plan's identity: a merged plan's
 // output is fixed. An operator can retire its unused hand-off by a separately
-// merged correction without changing its delivered MERGED status.
+// merged correction, or by a ruling that leaves it with no replacement,
+// without changing its delivered MERGED status.
 type PlanCheck struct {
 	Verdict    PlanCheckVerdict     `yaml:"verdict" json:"verdict"`
 	Ask        string               `yaml:"ask,omitempty" json:"ask,omitempty"`
 	ReplacedBy string               `yaml:"replaced_by,omitempty" json:"replaced_by,omitempty"`
+	Ruling     string               `yaml:"ruling,omitempty" json:"ruling,omitempty"`
 	By         string               `yaml:"by" json:"by"`
 	At         time.Time            `yaml:"at" json:"at"`
 	Notes      []PlanValidationNote `yaml:"notes,omitempty" json:"notes,omitempty"`
@@ -75,7 +80,20 @@ type PlanCheck struct {
 
 // PlanHandoffRetired reports an explicit retirement, distinct from replan.
 func (t *Task) PlanHandoffRetired() bool {
-	return t.PlanCheckVerdictOf() == PlanCheckReplaced
+	verdict := t.PlanCheckVerdictOf()
+	return verdict == PlanCheckReplaced || verdict == PlanCheckRetired
+}
+
+// RetiredBy names what retired the hand-off: the replacing correction, or
+// the ruling. It is "" when the hand-off is not retired.
+func (t *Task) RetiredBy() string {
+	switch t.PlanCheckVerdictOf() {
+	case PlanCheckReplaced:
+		return t.PlanCheck.ReplacedBy
+	case PlanCheckRetired:
+		return "ruling " + t.PlanCheck.Ruling
+	}
+	return ""
 }
 
 // PlanCheckVerdictOf returns the task's disposition, or "" when it has none.

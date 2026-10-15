@@ -50,7 +50,8 @@ Chose **Option 3**.
 - **Disposition.** `plan_check` on the merged task: `passed`, or `held` with the
   human action awaited (`ask`). The task ID is the plan's identity: output is
   fixed after merge. Replan mints a new ID without a disposition; an operator
-  may instead retire an unused hand-off by a separately merged correction.
+  may instead retire an unused hand-off by a separately merged correction, or
+  by a ruling that leaves it with no replacement.
 - **Commands.** `plan-check <id> --pass | --hold <ask>` (a role configured
   with the orchestrator type, bound to its registration generation) and
   `plan-check <id> --clear` (operator only, refused from an agent session).
@@ -69,6 +70,15 @@ Chose **Option 3**.
   preserves MERGED status and ordinary dependencies, creates no fake marker,
   and settles the original for carry-forward and integration. Same-target
   replay is unchanged; pass, hold, clear, replan and proceed cannot revive it.
+- **Retirement by ruling** (2026-10-15). Operator-only `plan-check ORIGINAL
+  --retire --ruling DECISION` records `retired` with `ruling`, actor and
+  timestamp, for a ruling that retires the hand-off with no replacement (no
+  correction exists to name). It applies the replacement's unused-hand-off
+  checks, with no correction; any pending same-role-pair plan depending on the
+  original blocks it. Unlike `--replaced-by` it also ends a hold: a held plan
+  is expanded by no path either way, and a retired one no longer keeps the
+  sprint open. The same ruling replays; anything else, including another
+  ruling, a replacement, pass, hold, clear, replan and proceed, is refused.
 - **Sticky hold.** Pass, a different hold and replan are refused on a held
   plan; only an operator clear releases it. Hold replays with the same ask; a
   pass may be tightened to a hold before transition.

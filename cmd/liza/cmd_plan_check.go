@@ -19,7 +19,7 @@ import (
 )
 
 var planCheckCmd = &cobra.Command{
-	Use:   "plan-check <task-id> (--pass | --hold <ask> | --clear | --replaced-by <merged-correction>)",
+	Use:   "plan-check <task-id> (--pass | --hold <ask> | --clear | --replaced-by <merged-correction> | --retire --ruling <decision>)",
 	Short: "Record the orchestrator's disposition of a merged plan before its children exist",
 	Long: `Record whether a merged plan may be expanded into child tasks.
 
@@ -42,6 +42,9 @@ expanded by no path until an operator clears the hold.
   --replaced-by <merged-correction>
                  operator only: retire an unused hand-off by an existing
                  merged correction; preserves status and ordinary dependencies
+  --retire --ruling <decision>
+                 operator only: retire an unused hand-off, held or not, that a
+                 ruling leaves with no replacement; nothing expands it again
 
 Material corrections require reviewed amend-plan work or replan --reason.`,
 	Args: cobra.ExactArgs(1),
@@ -65,9 +68,9 @@ Material corrections require reviewed amend-plan work or replan --reason.`,
 		if err != nil {
 			return err
 		}
-		if input.Action == ops.PlanCheckActionClear || input.Action == ops.PlanCheckActionReplace {
+		if input.Action == ops.PlanCheckActionClear || input.Action == ops.PlanCheckActionReplace || input.Action == ops.PlanCheckActionRetire {
 			if brand.LookupEnv(os.Getenv, "AGENT_ID").Value != "" {
-				return cliValidationError("plan-check --clear/--replaced-by is operator-only; agent sessions cannot release a hold or retire a hand-off")
+				return cliValidationError("plan-check --clear/--replaced-by/--retire is operator-only; agent sessions cannot release a hold or retire a hand-off")
 			}
 			input.ChangedBy = resolveChangedBy(cmd)
 		} else {
@@ -104,15 +107,21 @@ func planCheckInputFromFlags(cmd *cobra.Command, taskID string) (ops.PlanCheckIn
 	ask, _ := cmd.Flags().GetString("hold")
 	replacementSet := cmd.Flags().Changed("replaced-by")
 	replacement, _ := cmd.Flags().GetString("replaced-by")
+	retire, _ := cmd.Flags().GetBool("retire")
+	rulingSet := cmd.Flags().Changed("ruling")
+	ruling, _ := cmd.Flags().GetString("ruling")
 
 	selected := 0
-	for _, set := range []bool{pass, clear, holdSet, replacementSet} {
+	for _, set := range []bool{pass, clear, holdSet, replacementSet, retire} {
 		if set {
 			selected++
 		}
 	}
 	if selected != 1 {
-		return ops.PlanCheckInput{}, cliValidationError("exactly one of --pass, --hold <ask>, --clear, --replaced-by <merged-correction> is required")
+		return ops.PlanCheckInput{}, cliValidationError("exactly one of --pass, --hold <ask>, --clear, --replaced-by <merged-correction>, --retire --ruling <decision> is required")
+	}
+	if rulingSet && !retire {
+		return ops.PlanCheckInput{}, cliValidationError("--ruling requires --retire")
 	}
 	input := ops.PlanCheckInput{TaskID: taskID}
 	switch {
@@ -126,6 +135,12 @@ func planCheckInputFromFlags(cmd *cobra.Command, taskID string) (ops.PlanCheckIn
 		}
 		input.Action = ops.PlanCheckActionReplace
 		input.ReplacedBy = strings.TrimSpace(replacement)
+	case retire:
+		if strings.TrimSpace(ruling) == "" {
+			return ops.PlanCheckInput{}, cliValidationError("--retire requires --ruling <decision>: the ruling that leaves the hand-off with no replacement")
+		}
+		input.Action = ops.PlanCheckActionRetire
+		input.Ruling = strings.TrimSpace(ruling)
 	default:
 		if strings.TrimSpace(ask) == "" {
 			return ops.PlanCheckInput{}, cliValidationError("--hold requires the human action being awaited")
@@ -202,6 +217,9 @@ func printPlanCheckResult(result *ops.PlanCheckResult) {
 	if result.ReplacedBy != "" {
 		fmt.Printf("  Replaced by: %s\n", result.ReplacedBy)
 	}
+	if result.Ruling != "" {
+		fmt.Printf("  Retired by ruling: %s\n", result.Ruling)
+	}
 	for _, w := range result.Warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
@@ -217,5 +235,7 @@ func init() {
 	planCheckCmd.Flags().String("hold", "", "orchestrator: hold the plan for the given human action")
 	planCheckCmd.Flags().Bool("clear", false, "operator: remove the disposition after the human action")
 	planCheckCmd.Flags().String("replaced-by", "", "operator: retire an unused hand-off by a merged correction")
+	planCheckCmd.Flags().Bool("retire", false, "operator: retire an unused hand-off that a ruling leaves with no replacement (requires --ruling)")
+	planCheckCmd.Flags().String("ruling", "", "retire only: the decision that retires the hand-off")
 	planCheckCmd.Flags().String("agent-id", "", "orchestrator agent ID (auto-resolved if not provided)")
 }

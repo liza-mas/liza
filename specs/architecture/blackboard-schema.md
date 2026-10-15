@@ -374,9 +374,10 @@ Tasks support inter-pair transitions via `liza proceed` (manual) or orchestrator
   transitions_executed:            # Tracks which transitions have been applied
     code-plan-to-coding: true
   plan_check:                      # Orchestrator hand-off disposition of a merged plan (ADR-0159)
-    verdict: held                  # passed | held | replaced
+    verdict: held                  # passed | held | replaced | retired
     ask: "Register recipe project.smoke-login, then replan its runtime_inputs"  # held only: the human action awaited
     # replaced_by: merged-correction # replaced only: operator-declared replacement
+    # ruling: D83                    # retired only: the decision retiring it with no replacement
     by: orchestrator-1
     at: 2026-09-24T09:30:00Z
 ```
@@ -396,7 +397,7 @@ Pipeline topology itself is frozen in `.liza/pipeline.yaml` at `liza init`. Role
 | `parent_task` | `*string` | `liza proceed` / orchestrator | Back-reference from child to parent task (deprecated: use `parent_tasks`) |
 | `parent_tasks` | `[]string` | `liza proceed` / orchestrator | Multi-parent back-references (used by many-to-one transitions; supersedes `parent_task`) |
 | `transitions_executed` | `map[string]bool` | `liza proceed` / orchestrator | Idempotency — prevents duplicate transitions. For `many-to-one` transitions, set on **all** cohort members (not just the trigger task) to prevent re-firing from any member |
-| `plan_check` | `*PlanCheck` | Orchestrator (`plan-check --pass/--hold`) / operator (`plan-check --clear/--replaced-by`) | Disposition of a merged planning task whose manual `per-subtask`/`one-to-one` hand-off has not run. `passed` admits automatic expansion; `held` (with `ask`) blocks every expansion path until operator clear; `replaced` (with `replaced_by`) irrevocably retires an unused hand-off by a distinct merged correction in the same role-pair. Preserves MERGED and ordinary dependencies. See [ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md) |
+| `plan_check` | `*PlanCheck` | Orchestrator (`plan-check --pass/--hold`) / operator (`plan-check --clear/--replaced-by/--retire`) | Disposition of a merged planning task whose manual `per-subtask`/`one-to-one` hand-off has not run. `passed` admits automatic expansion; `held` (with `ask`) blocks every expansion path until operator clear; `replaced` (with `replaced_by`) irrevocably retires an unused hand-off by a distinct merged correction in the same role-pair; `retired` (with `ruling`) irrevocably retires it, held or not, by a ruling with no replacement. Preserves MERGED and ordinary dependencies. See [ADR-0159](ADR/0159-orchestrator-plan-handoff-disposition.md) |
 | `amends_plan` | `string` | `amend-plan` | Original planning task ID on a separate same-pair correction; the correction cannot generate children or become a provider |
 | `amendment_mode` | `PlanAmendmentMode` | `amend-plan --contract` / `replan --preserve-output-identity` | Empty retains legacy unused-plan scheduling semantics; `contract` or `preserve-output-identity` freezes the complete output manifest and permits only existing referenced contract-prose correction |
 | `planning_change` | `*PlanningChange` | `amend-plan`, `replan`, explicit task authoring | `{kind: correction\|replan, trigger, original_task_id}` records creation attribution; omitted trigger is unknown, not inferred from reason/ID |

@@ -134,7 +134,7 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 		var inheritedDeps inheritedDepSet
 		if task != nil {
 			if task.PlanHandoffRetired() {
-				return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.PlanCheck.ReplacedBy)
+				return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.RetiredBy())
 			}
 			if err := canonicalizeTaskDependsOnForTransition(s, resolver, task); err != nil {
 				return fmt.Errorf("canonicalize dependencies: %w", err)
@@ -499,7 +499,7 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		return fmt.Errorf("task %q is fenced by a reviewed plan amendment", task.ID)
 	}
 	if task := s.FindTask(taskID); task != nil && task.PlanHandoffRetired() {
-		return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.PlanCheck.ReplacedBy)
+		return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.RetiredBy())
 	}
 	if tDef.cardinality == "many-to-one" {
 		return proceedManyToOneInner(s, taskID, transitionName, tDef, inheritedDeps, resolver, now, result)

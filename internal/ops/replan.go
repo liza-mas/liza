@@ -106,7 +106,7 @@ func Replan(projectRoot string, input *ReplanInput) (*ReplanResult, error) {
 			return &PreconditionError{Reason: "cannot replan a correction or an original with a pending amendment; use amend-plan --replace-pending for recovery"}
 		}
 		if task.PlanHandoffRetired() {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s handoff was retired by %s; it cannot be replanned", task.ID, task.PlanCheck.ReplacedBy)}
+			return &PreconditionError{Reason: fmt.Sprintf("task %s handoff was retired by %s; it cannot be replanned", task.ID, task.RetiredBy())}
 		}
 		if task.Status != models.TaskStatusMerged {
 			return &PreconditionError{Reason: fmt.Sprintf(

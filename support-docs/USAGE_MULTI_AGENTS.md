@@ -599,7 +599,9 @@ allows retry. If a separate correction is already merged, an operator can retire
 the unused original with `§BRAND_BINARY_NAME§ plan-check ORIGINAL --replaced-by
 MERGED_CORRECTION`; see
 [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md)
-for its preconditions. Retirement cannot be cleared or revived.
+for its preconditions. When a ruling retires the hand-off with no replacement,
+use `§BRAND_BINARY_NAME§ plan-check ORIGINAL --retire --ruling DECISION`
+instead; it also ends a hold. Retirement cannot be cleared or revived.
 
 ```bash
 # Typical replan workflow
