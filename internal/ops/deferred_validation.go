@@ -230,11 +230,13 @@ func deferredCulpritTasks(batch *models.DeferredValidationBatch) []string {
 }
 
 // deferredValidationBaseline is the commit periodic due-ness counts merges
-// from: the latest passed batch, otherwise where the earliest effective
-// deferral's merge started.
+// from: the latest batch whatever its outcome, so a batch that ends without
+// passing still spends its period (D-160); otherwise where the earliest
+// effective deferral's merge started. Bisect keeps its own lower bound, the
+// command's latest pass.
 func deferredValidationBaseline(projectRoot string, ledger *models.DeferredValidationLedger, commands []models.DeferredValidationCommand) string {
-	if passed := ledger.LatestPassedBatch(); passed != nil {
-		return passed.Commit
+	if n := len(ledger.Batches); n > 0 {
+		return ledger.Batches[n-1].Commit
 	}
 	var deferrals []models.DeferredValidationDeferral
 	for _, command := range commands {

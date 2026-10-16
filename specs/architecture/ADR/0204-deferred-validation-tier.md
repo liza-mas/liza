@@ -150,3 +150,14 @@ the fence is set. Within a lane no step starts while its previous step's
 descendants may live; an orphaned step in any lane refuses every later start,
 the finishing reads included. Narrowing a bisect to failing test IDs is
 runner-specific and not done.
+
+## Amendment (2026-10-16, D-160)
+
+Periodic due-ness no longer shares the bisect baseline (§6). It counts
+`batch_every_merges` forward merges from the latest batch, whatever its
+outcome, and from the earliest deferral's start only before any batch. Counted
+from the latest pass, a batch that failed or ended without a verdict left the
+count past the interval, so every merge started another batch and the runner
+ran back to back until one passed. Bisect still searches from the command's
+latest pass, the newest known-good commit. The gate's request for a verdict at
+HEAD and the per-HEAD attempt cap are unchanged.

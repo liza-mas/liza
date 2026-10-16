@@ -314,19 +314,6 @@ func (batch DeferredValidationBatch) Covers(commands []DeferredValidationCommand
 	return true
 }
 
-// LatestPassedBatch returns the most recent passed batch, or nil.
-func (ledger *DeferredValidationLedger) LatestPassedBatch() *DeferredValidationBatch {
-	if ledger == nil {
-		return nil
-	}
-	for i := len(ledger.Batches) - 1; i >= 0; i-- {
-		if ledger.Batches[i].Status == DeferredValidationBatchPassed {
-			return &ledger.Batches[i]
-		}
-	}
-	return nil
-}
-
 // LatestPassFor returns the most recent batch in which the command passed.
 func (ledger *DeferredValidationLedger) LatestPassFor(commandSHA string) *DeferredValidationBatch {
 	if ledger == nil {

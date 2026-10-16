@@ -798,6 +798,97 @@ func TestDeferredValidationDueAfterEveryNMergesWithoutNewDeferrals(t *testing.T)
 	}
 }
 
+// A batch spends the periodic interval whatever its outcome: after a failed,
+// infra-failed or aborted batch, the next periodic batch waits for
+// batch_every_merges further merges, with or without an earlier pass (D-160).
+// A gate waiting on a verdict still starts one below the interval.
+func TestDeferredValidationNonPassingBatchSpendsThePeriod(t *testing.T) {
+	t.Parallel()
+	check := dvCommand(dvCheckValue, 60)
+	// setup lands a deferral, optionally a passed batch two merges back, and
+	// a batch ending with status at HEAD, which by then is past the interval
+	// counted from the pass or from the deferral.
+	setup := func(t *testing.T, gateWaits, priorPass bool, status models.DeferredValidationBatchStatus) *dvFixture {
+		f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
+		f.modify(func(state *models.State) {
+			state.Config.DeferredValidation = &models.DeferredValidationConfig{BatchEveryMerges: 2}
+			if !gateWaits {
+				task := testhelpers.BuildTaskByStatus("task-pending", models.TaskStatusReady, time.Now().UTC())
+				state.Tasks = append(state.Tasks, task)
+				state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, task.ID)
+			}
+		})
+		appendBatch := func(commit string, status models.DeferredValidationBatchStatus, result models.DeferredValidationResultStatus) {
+			now := time.Now().UTC()
+			batch := models.DeferredValidationBatch{
+				Commit: commit, StartedAt: now, FinishedAt: now, Status: status,
+				Results: []models.DeferredValidationResult{{Command: check.Command, CommandSHA256: check.CommandSHA256, Status: result, StartedAt: now, FinishedAt: now}},
+			}
+			if status == models.DeferredValidationBatchAborted {
+				batch.Reason = deferredValidationReasonAdmissionSlotWait
+			}
+			f.modify(func(state *models.State) { state.Goal.Integration.DeferredValidation.AppendBatch(batch) })
+		}
+		deferred := f.merge("task-1", map[string]string{"a.txt": "a\n"}, check)
+		if priorPass {
+			appendBatch(deferred, models.DeferredValidationBatchPassed, models.DeferredValidationResultPassed)
+		}
+		f.merge("task-2", map[string]string{"b.txt": "b\n"})
+		head := f.merge("task-3", map[string]string{"c.txt": "c\n"})
+		result := models.DeferredValidationResultNotRun
+		if status == models.DeferredValidationBatchFailed {
+			result = models.DeferredValidationResultFailed
+		}
+		appendBatch(head, status, result)
+		return f
+	}
+	statuses := []models.DeferredValidationBatchStatus{
+		models.DeferredValidationBatchFailed, models.DeferredValidationBatchInfraFailed, models.DeferredValidationBatchAborted,
+	}
+	spawn := func(string) error { return nil }
+
+	for _, status := range statuses {
+		for _, priorPass := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/prior_pass=%v", status, priorPass), func(t *testing.T) {
+				t.Parallel()
+				f := setup(t, false, priorPass, status)
+				f.merge("task-4", map[string]string{"d.txt": "d\n"})
+				state, _ := f.bb.Read()
+				head := testhelpers.MustGit(t, f.root, "rev-parse", "HEAD")
+				if deferredValidationRequired(f.root, state, head) {
+					t.Fatal("fixture: the integration gate must not be waiting")
+				}
+				if wanted, reason, err := deferredValidationWanted(f.root, state, head, false, false); err != nil || wanted || reason != "not_due" {
+					t.Fatalf("one merge after a %s batch must not be due: wanted=%v reason=%q err=%v", status, wanted, reason, err)
+				}
+				if started, err := startDeferredValidationIfDueWith(f.root, spawn); err != nil || started {
+					t.Fatalf("one merge after a %s batch must not start one: started=%v err=%v", status, started, err)
+				}
+				f.merge("task-5", map[string]string{"e.txt": "e\n"})
+				if started, err := startDeferredValidationIfDueWith(f.root, spawn); err != nil || !started {
+					t.Fatalf("two merges after a %s batch must be due: started=%v err=%v", status, started, err)
+				}
+			})
+		}
+	}
+
+	for _, status := range statuses {
+		t.Run(fmt.Sprintf("%s/gate_waits", status), func(t *testing.T) {
+			t.Parallel()
+			f := setup(t, true, false, status)
+			f.merge("task-4", map[string]string{"d.txt": "d\n"})
+			state, _ := f.bb.Read()
+			head := testhelpers.MustGit(t, f.root, "rev-parse", "HEAD")
+			if !deferredValidationRequired(f.root, state, head) {
+				t.Fatal("fixture: the integration gate must be waiting on a verdict at HEAD")
+			}
+			if started, err := startDeferredValidationIfDueWith(f.root, spawn); err != nil || !started {
+				t.Fatalf("the gate must start a batch one merge after a %s batch: started=%v err=%v", status, started, err)
+			}
+		})
+	}
+}
+
 func TestDeferredValidationRunnerCatchesUpBehindHEAD(t *testing.T) {
 	t.Parallel()
 	f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
