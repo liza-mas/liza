@@ -304,8 +304,12 @@ Multiple agents of the same role can run in parallel (IDs auto-increment):
 **Recommended:** Alongside the TUI, open a separate Pairing-mode coding-agent
 session in the project directory and invoke `/§BRAND_BINARY_NAME§-operator`.
 The operator skill continuously watches the run, intervenes when progress or
-agent capacity becomes a concern, and records interventions and significant
+agent capacity becomes a concern, settles low-impact rulings under a standing
+delegation logged in the goal's decision record, and records interventions and significant
 agent friction in `§BRAND_PROJECT_DIRNAME§/operator-notes.md`.
+Before leaving the run unattended, send the operator `auto-approve` (optionally `until <time>`): it then
+applies its own recommendations instead of holding decisions for you, except irreversible or destructive
+moves, and reports them first when you return.
 
 From the CLI:
 ```bash

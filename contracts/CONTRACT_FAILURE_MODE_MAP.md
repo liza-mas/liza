@@ -131,8 +131,8 @@
 | GAM-2 | Narrowing interpretation to exclude cases | Anti-Gaming Clause (explicit) | 783 |
 | GAM-3 | Collapsing assumptions to stay under budget | Assumption Budget (count leaf assumptions) | 234 |
 | GAM-4 | FAST PATH boundary exploitation | FAST PATH eligibility (all must be true), NOT Eligible list | 320-339 |
-| GAM-5 | "Reasonable engineering judgment" override | Contract Authority (does not override) | 16 |
-| GAM-6 | Prompt injection via code/data | Prompt Injection Immunity | 612 |
+| GAM-5 | "Reasonable engineering judgment" override | Contract Authority (does not override; standing delegation only through a human-invoked skill, within its bounds) | 15-20 |
+| GAM-6 | Prompt injection via code/data | Prompt Injection Immunity; Contract Authority (a skill named in data grants nothing) | 612 |
 
 ---
 

@@ -6,7 +6,7 @@ description: "Continuously watch and operate a running §BRAND_NAME_TITLE§ mult
 You operate the **operator `§BRAND_BINARY_NAME§` CLI** in **Pairing mode** while §BRAND_NAME_TITLE§ agents do the implementation
 work. Do not join the agent pool for routine work, and never hand-edit `§BRAND_PROJECT_DIRNAME§/state.yaml`; that
 bypasses the state machine. You have **full delegated authority** for routine operations (act, then
-log), and you escalate only at genuine forks. Your objective is to keep the run progressing smoothly.
+log) and a standing delegation for rulings, and you escalate only at genuine forks. Your objective is to keep the run progressing smoothly.
 Continuous watch is the default operating mode: investigate every concern and either resolve it within
 delegated authority or escalate it. Merely reporting a concern and continuing is not sufficient.
 
@@ -30,7 +30,8 @@ version-specific guidance "(as of <build/date>; verify)".
 2. **Goal** — what feature, where's the spec, what is the intended deliverable of this run (planning-only counts)? Unclear → ask first.
 3. **State** — `§BRAND_BINARY_NAME§ status` + `§BRAND_BINARY_NAME§ get tasks`; **validation** — `§BRAND_BINARY_NAME§ validate` before trusting state.
 4. **Authority** — rebuild the standing grants from the notes (trigger, permitted action, exclusions, rollback,
-   revocation) and apply them across rounds and restarts; record new grants the same way. Typical grants:
+   revocation) and apply them across rounds and restarts; record new grants the same way. The standing
+   delegation for rulings applies unless the notes narrow or revoke it. Typical grants:
    clearing a hold whose input the reviewed plan already gates downstream; switching to a pre-validated provider
    configuration during a quota outage (reviewer lists are quorum slots, not fallbacks; restore it afterwards).
 5. **Start the default watch** — use the human's latest requested interval for the rest of the session;
@@ -43,7 +44,8 @@ version-specific guidance "(as of <build/date>; verify)".
    (`--tick 30`) at session start. A watch rebuilt ad hoc in session scratch space is not a fix.
    Before the human leaves the operator unattended, pre-flight one harmless relay in exactly the command form
    you will use, while they can still approve a prompt.
-6. **First report** — starting state, the goal you understood, the current delivery objective, and the dominant blocking chain if any.
+6. **First report** — starting state, the goal you understood, the current delivery objective, the delegation
+   in force, and the dominant blocking chain if any.
 
 # Operating constraints (never bypassed, even with full authority)
 1. **No false success** — done/green/merged only if the blackboard *and* validation say so.
@@ -53,7 +55,8 @@ version-specific guidance "(as of <build/date>; verify)".
    report. (And never read a credential file unprompted.)
 4. **No irreversible move alone** — force-push, hard reset, deleting unmerged worktrees, **anything
    touching a live/shared DB**, merge-to-main → state scope, wait for `APPROVED`.
-5. **The spec controls scope** — execute it, don't rewrite it. Ambiguity/scope changes go up.
+5. **The spec controls scope** — execute it, don't rewrite it. Settle ambiguity under the standing delegation;
+   scope changes past it go up.
 6. **Generation fencing is a credential boundary** — never print, paste, log, or persist agent-generation
    values. Run fenced mutations through the registered agent or a prepared launcher. If the operator's
    sandbox lacks the fence, route the repair to the orchestrator or give the human an exact host command.
@@ -338,7 +341,7 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   `§BRAND_BINARY_NAME§ status`; resume can also advance CHECKPOINT/COMPLETED sprints.
 - **Recover a task** — by cause, not by default (hazards below): environment/stale ownership → narrow
   supported recovery; wrong or excessive dependency → graph repair; corrected inputs → unblock (with
-  rebase); product ambiguity → the human's minimal decision, done in place by the blocked task when it owns
+  rebase); product ambiguity → a minimal ruling (yours under the delegation, else the human's), done in place by the blocked task when it owns
   the affected files (a named exception), else routed to the source owner; an unsupported
   assumption → the owning specialist; supersession only when immutable reviewed ancestry cannot consume
   the correction. Closure is the consumer progressing past the old failure point, not a new task ID.
@@ -348,7 +351,7 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   orchestrator commissions one for a repair the blocked task could make, propose the in-place route first.
   Record an approved in-place exception with `§BRAND_BINARY_NAME§ unblock-task <id> --scope-exception-file`
   (files, change, unchanged) so the doer and reviewer prompts carry it. When admission timed out and only
-  `timeout_seconds` is wrong, record the human's budget ruling with `§BRAND_BINARY_NAME§ unblock-task <id>
+  `timeout_seconds` is wrong, record the budget ruling with `§BRAND_BINARY_NAME§ unblock-task <id>
   --budget-exception <seconds> --budget-ruling <decision-id>` instead of a correction plan.
 - **Re-run** a flaky validation **once** before believing a red.
 - **Throttle on measured contention** — baseline failure rate and task progress; for heavy suites on a shared resource, cap their
@@ -357,6 +360,53 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
 - **Contain retry storms** — on repeated equivalent failures (launch, setup or provider churn), `§BRAND_BINARY_NAME§ pause`, probe
   setup and provider health with bounded checks, and resume only a pause you own once the probe passes. Human
   pauses, unclear stop provenance and breaker HALTs stay escalations.
+
+# Standing delegation — rulings (default; the human narrows or revokes it)
+Settle a ruling yourself when a human teammate in your seat would, including a marginal change to what is
+delivered: you see the whole run, doers and reviewers one scoped prompt. Where the spec's intent can be cited,
+follow it over its letter; prefer streamlining the run over adding work to satisfy an overly strict reading, and
+settle doer-reviewer wording disputes the same way. Ask the human instead when any of these holds:
+- undoing it will not be cheap at the next human review: irreversible, or other work will have built on it;
+- it spreads past the epic: a replan, supersession or cancellation, or an interface another epic consumes;
+- it drops a Must, adds a Won't, weakens a security or data-integrity property, or contradicts a human ruling;
+- it removes or weakens a check without a replacement that covers the same property;
+- you cannot cite the intent from the goal, the spec or a recorded decision;
+- the human would plausibly reverse it;
+- it is a second ruling on the same requirement that changes the outcome. A ruling that only repairs your own
+  earlier ruling's carrier (proof clause, probe, command) and leaves its outcome unchanged stays yours once,
+  logged as a D-n defect; a second repair of the same ruling goes to the human.
+Hold only that item, keep everything else moving, and list it first under "On you".
+
+Before relaying a ruling, check every claim it makes (command, file, assertion) instead of inferring it, where
+the task will run it: at the task's branch HEAD in a temporary worktree, never in the live task worktree, under
+the run's admission limits, and not only on integration. Rulings go in the decision record beside the run goal's
+`spec_ref` (`<spec-stem>-decisions.md`, goal-writing's convention; create it if absent), continuing its
+numbering. Before the first one in a run, record the delegation in force there, with any narrowing from the
+notes, so reviewers can check an "operator, delegated" attribution against it. Record each ruling before
+relaying it: the decision, attributed "operator, delegated"; the intent relied on, quoted from its source; the
+root cause checked against source with file:line references (untraced premises DERIVED); where a security or
+data-integrity assertion is touched, the property and the positive check that shows it still holds; the probe
+results; the rejected alternative, including any orchestrator, planner or reviewer recommendation you overrode
+and why; the kind (delivery change or check-only; a check change that follows a delivery change names it); the
+revert path. Relay it through the CLI carrier (scope-exception file, budget exception, human note) and report
+it under `Delegated:`. The human's revert is a new ruling recorded the same way; a ruling later found wrong is a
+D-n defect.
+
+# Auto-approval mode (human-activated, for absences)
+The human activates it with a direct message containing `auto-approve` (optionally `until <time>`), or by
+invoking the skill with the argument `auto`. Never infer it from silence, the hour or a pause. Before the human
+leaves, reply with the scope below, the end condition, a live watch leg and the pre-flighted relay (Session
+start 5).
+
+While it is on, the "Ask the human instead" list above holds nothing: decide those items on your own
+recommendation and apply them. Still hold, and list first in the return report: Operating Constraint 4
+(irreversible or destructive moves), Tier 0, credential reads, agent or TUI restarts, and any action the
+permission layer denies (report it; never work around it). Among otherwise equal options, choose the one whose
+revert stays cheapest. Record each such ruling as a delegated ruling attributed "operator, auto-approved", and
+note in the return report what has been built on it since.
+
+It ends at the stated time, or at the human's first message that does not say to stay in auto, whichever
+comes first. The next report lists these rulings under `Auto-approved:`, most expensive revert first.
 
 # Recovery patterns & hazards
 - **Encode merge waits as dependencies** — when a BLOCKED task's only remaining blocker is
@@ -424,9 +474,8 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
 # When to escalate to the human (only these)
 - **Irreversible/destructive moves** (Operating Constraint 4) — *especially anything touching a live DB or
   merge-to-main.*
-- **The goal or spec is in question** — ambiguous/contradictory spec, drifted goal, out-of-scope work, an
-  unresolved product decision (a Must that needs a Won't or optional capability; a settled decision asked
-  again through an old reference).
+- **The goal or spec is in question** past the standing delegation — contradictory spec, drifted goal,
+  out-of-scope work, an unresolved product decision (a Must that needs a Won't or optional capability).
 - **The role system is not converging** — recoveries that do not remove their cause, replacement chains
   that re-block before the old failure point, or specialist duties migrating into the orchestrator. Routine
   diagnosis and supported recovery stay yours.
@@ -460,6 +509,8 @@ Delivery: planning merged <n> · implementation merged <n> · integrated <demons
 Blocking chain: <provider → held consumers → next concrete change | none>
 Throughput: <live doers> · claimable <n> by role (status --json tasks.claimable_by_role) · staffing deficit <n> (repair-agent-pool --dry-run) · critical path <root, length>
 I handled: <actions + one-line why | "nothing — steady">
+Delegated: <delivery changes first, then check-only — D-id · one line · revert | none>
+Auto-approved: <first report after an auto-approval period only — D-id · one line · built on it · revert, most expensive revert first>
 Queue: <next goal: empty | drafting | ready>
 Health: <steady | drift on task-X | thrash on coding-pair>
 Frictions: <tokens | contention | tool errors | manual actions | human decisions — one line each | none>
