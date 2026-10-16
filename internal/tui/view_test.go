@@ -1141,6 +1141,39 @@ func TestRenderTaskPanel_TaskIDShrinksToFitFullTier(t *testing.T) {
 	}
 }
 
+func TestRenderTaskPanel_MultilineDescriptionStaysOnOneRow(t *testing.T) {
+	const width = 200
+	task := makeTask("task-1", models.TaskStatusImplementing, 1)
+	task.Description = "one\ntwo"
+
+	m := Model{
+		width:      width,
+		height:     40,
+		columnTier: ColumnTierFull,
+		styles:     NewStyles(width),
+		state: &models.State{
+			Tasks: []models.Task{task},
+		},
+	}
+
+	out := m.renderTaskPanel(10)
+	var taskRow string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, task.ID) {
+			taskRow = line
+		}
+		if strings.HasPrefix(strings.TrimLeft(line, "│ "), "two") {
+			t.Fatalf("description line break split the task row:\n%s", out)
+		}
+		if got := lipgloss.Width(line); got > width {
+			t.Fatalf("task panel line width = %d, want <= %d; line: %q\nfull output:\n%s", got, width, line, out)
+		}
+	}
+	if !strings.Contains(taskRow, "one two") {
+		t.Fatalf("task row should show the description on one line, got %q\nfull output:\n%s", taskRow, out)
+	}
+}
+
 func TestRenderTaskPanel_SortedByCreatedTime(t *testing.T) {
 	now := time.Now()
 	t1 := makeTask("first-task", models.TaskStatusMerged, 1)

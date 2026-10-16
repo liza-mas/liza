@@ -749,10 +749,12 @@ func (m Model) formatActivityEntry(e ActivityEntry) string {
 }
 
 // truncateVisual truncates s to at most maxWidth visual cells, appending "…" if truncated.
+// Whitespace runs, including line breaks, collapse to one space: callers render single-line cells.
 func truncateVisual(s string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""
 	}
+	s = strings.Join(strings.Fields(s), " ")
 	if runewidth.StringWidth(s) <= maxWidth {
 		return s
 	}
