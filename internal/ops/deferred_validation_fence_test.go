@@ -91,9 +91,13 @@ func TestDeferredValidationUnstoppableDescendantsFailClosed(t *testing.T) {
 	f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
 	trigger := filepath.Join(t.TempDir(), "orphaning-step-ran")
 	later := filepath.Join(t.TempDir(), "later-step-ran")
+	// The later command's lane queues behind a gate slot the test holds until
+	// settlement, and the trigger step runs only once it queued: the orphaned
+	// step must end that wait, and no reap but the trigger lane's follows it.
+	gate := f.holdGate()
 	f.merge("task-1", map[string]string{"a.txt": "a\n"},
-		dvCommand(fmt.Sprintf(": > %q", trigger), 60),
-		dvCommand(fmt.Sprintf(": > %q", later), 60))
+		dvCommand(f.dvAwaitGateQueue()+fmt.Sprintf(": > %q", trigger), 60),
+		dvCommand(fmt.Sprintf(": > %q # gated", later), 60))
 	// Cleanup fails once, for the step that touches the trigger; every later
 	// step would clean up normally, so only the runner's own refusal keeps
 	// them from starting.
@@ -138,7 +142,19 @@ func TestDeferredValidationUnstoppableDescendantsFailClosed(t *testing.T) {
 	if _, err := SettleDeferredValidation(f.root, "operator confirmed no batch process survives"); err != nil {
 		t.Fatal(err)
 	}
-	if batch := onlyBatch(t, f.run(true)); batch.Status != models.DeferredValidationBatchPassed {
+	// The trigger step again waits for the later lane to queue behind the
+	// gate; the gate opens once it ran.
+	if err := os.Remove(trigger); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan *RunDeferredValidationResult, 1)
+	go func() {
+		result, _ := RunDeferredValidation(context.Background(), f.root, RunDeferredValidationOptions{Force: true})
+		done <- result
+	}()
+	waitForFile(t, trigger, time.Minute)
+	gate.release()
+	if batch := onlyBatch(t, <-done); batch.Status != models.DeferredValidationBatchPassed {
 		t.Fatalf("batch after settlement = %#v", batch)
 	}
 }

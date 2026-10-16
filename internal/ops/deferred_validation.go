@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -31,9 +32,11 @@ import (
 // Deferred validation (ADR-0204) runs the canonical commands admission
 // deferred as one batch at integration HEAD, outside any task session and
 // outside the state lock, and bisects a failing command over the merges since
-// it last passed. One runner at a time holds an OS lock that every child it
-// starts inherits where the platform allows, so no successor can touch the
-// batch worktree while a predecessor's process still runs.
+// it last passed. Each command runs in its own lane, a worktree where it is
+// prepared, probed and bisected; lanes run concurrently, bounded only by the
+// admission classes (D-210). One runner at a time holds an OS lock that every
+// child it starts inherits where the platform allows, so no successor can
+// touch a lane worktree while a predecessor's process still runs.
 
 const (
 	deferredValidationOperation      = "deferred-validation"
@@ -65,6 +68,10 @@ var errDeferredValidationHalted = errors.New("deferred validation halted")
 // errDeferredValidationUnstoppable stops every later start once a step's
 // descendants could not be shown to have ended.
 var errDeferredValidationUnstoppable = errors.New("descendants of a batch step outlived it and could not be stopped")
+
+// errDeferredValidationBatchEnded refuses a lane's start once another lane
+// ended the batch; it is a halt like a committed one.
+var errDeferredValidationBatchEnded = fmt.Errorf("%w: another lane ended the batch", errDeferredValidationHalted)
 
 // deferredValidationPlatformSupported reports whether the runner can
 // establish that a step's descendants ended. Windows cannot: its process
@@ -501,7 +508,7 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 
 	r := &deferredValidationRunner{
 		root:     projectRoot,
-		worktree: filepath.Join(dir, "worktree"),
+		dir:      dir,
 		bb:       db.For(paths.New(projectRoot).StatePath()),
 		lockFile: held.File(),
 		outputs:  openDeferredValidationOutputs(projectRoot),
@@ -510,7 +517,7 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 		reap:     hooks.reap,
 	}
 	defer func() {
-		if r.orphaned {
+		if r.isOrphaned() {
 			// Leave the lock with the surviving descendants: close this
 			// process's descriptor without unlocking the description they
 			// share. The unsettled ledger record fences successors even if
@@ -560,7 +567,7 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 		}
 		result.Outcome = "ran"
 		result.Batches = append(result.Batches, published)
-		if r.orphaned {
+		if r.isOrphaned() {
 			result.Reason = published.Reason
 			return result, &PreconditionError{Reason: fmt.Sprintf("a deferred-validation step left processes that could not be stopped; the runner record stays unsettled: confirm none still runs, then run %s", brand.Command(deferredValidationOperation, "settle"))}
 		}
@@ -573,8 +580,9 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 }
 
 type deferredValidationRunner struct {
-	root     string
-	worktree string
+	root string
+	// dir holds the lane worktrees (laneWorktree).
+	dir      string
 	bb       *db.Blackboard
 	lockFile *os.File
 	// outputs keeps failed commands' full masked output; nil when the store
@@ -583,12 +591,69 @@ type deferredValidationRunner struct {
 	mask    func(string) string
 	follows bool
 	reap    func(pid int, wait time.Duration) bool
+
+	// mu serialises the fence below with every process start, so no lane
+	// starts a process once another lane set it.
+	mu sync.Mutex
 	// orphaned is set once a step's descendants could not be shown to have
 	// ended; no further process starts and the lock stays with them.
 	orphaned bool
-	// abortReason names why a probe halted the current batch when that was
+	// ended is set once a lane ended the current batch (halt, orphaned step,
+	// admission slot abort): no lane starts admitted work any more, while a
+	// step already running finishes and keeps its result.
+	ended bool
+	// abortReason names why a probe ended the current batch when that was
 	// its admission slot, not a halt or stop.
 	abortReason string
+	// waits bounds the lanes' admission slot waits; endWaits cancels it
+	// when the batch ends. Running commands never see it.
+	waits    context.Context
+	endWaits context.CancelFunc
+}
+
+func (r *deferredValidationRunner) isOrphaned() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.orphaned
+}
+
+// beginBatch clears the per-batch fence; orphaned survives, so no batch
+// starts after one.
+func (r *deferredValidationRunner) beginBatch(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ended, r.abortReason = false, ""
+	r.waits, r.endWaits = context.WithCancel(ctx)
+}
+
+// endBatch stops every lane from starting admitted work and cancels slot
+// waits. The first non-empty reason is kept.
+func (r *deferredValidationRunner) endBatch(orphaned bool, reason string) {
+	r.mu.Lock()
+	r.ended = true
+	r.orphaned = r.orphaned || orphaned
+	if r.abortReason == "" {
+		r.abortReason = reason
+	}
+	endWaits := r.endWaits
+	r.mu.Unlock()
+	if endWaits != nil {
+		endWaits()
+	}
+}
+
+// startUnlessFenced starts cmd unless the fence refuses it: an orphaned step
+// refuses every start, an ended batch every admitted one.
+func (r *deferredValidationRunner) startUnlessFenced(cmd *exec.Cmd, admit bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.orphaned {
+		return errDeferredValidationUnstoppable
+	}
+	if admit && r.ended {
+		return errDeferredValidationBatchEnded
+	}
+	return cmd.Start()
 }
 
 // claim records this invocation's token. A record left by another token is a
@@ -643,7 +708,7 @@ func (r *deferredValidationRunner) publish(token string, batch models.DeferredVa
 			return &PreconditionError{Reason: "deferred-validation runner no longer owns publication"}
 		}
 		batch = ledger.AppendBatch(batch)
-		if r.orphaned {
+		if r.isOrphaned() {
 			// Keep the record as the fence: a successor refuses until an
 			// operator confirms nothing survives and settles it.
 			ledger.Runner.Unsettled = deferredValidationReasonUnstoppable
@@ -741,25 +806,25 @@ type execResult struct {
 	raw      string
 	err      error
 	halted   bool
+	// orphaned marks the run whose own process group could not be emptied.
+	orphaned bool
 }
 
 // run runs one process. With admit, the halt/stop check and start happen
 // under the shared work-admission lock against a lock-free state snapshot;
-// waiting happens outside it. Without admit, it starts unchecked: only for a
-// read that finishes a step already started, because a halt starts no new
-// work but lets running work finish (D-158). The child inherits the runner
-// lock where possible, runs in its own process group and is killed on timeout
-// or cancellation. Once it exits, what remains of its group is killed and
-// awaited, so no descendant outlives the step that started it: releasing the
-// runner lock unlocks the description the descendants share. A descendant
-// that leaves the group (setsid) escapes this; validation commands must not
-// daemonize. When the group cannot be emptied, the step ends as a halt and no
-// later step starts. The step also inherits extra, a probe's admission slots
-// (ADR-0209).
+// waiting happens outside it. Without admit, it starts unchecked by halt or
+// stop: only for a read that finishes a step already started, because a halt
+// starts no new work but lets running work finish (D-158). Either way the
+// runner's fence is checked atomically with the start (startUnlessFenced).
+// The child inherits the runner lock where possible, runs in its own process
+// group and is killed on timeout or cancellation. Once it exits, what remains
+// of its group is killed and awaited, so no descendant outlives the step that
+// started it: releasing the runner lock unlocks the description the
+// descendants share. A descendant that leaves the group (setsid) escapes
+// this; validation commands must not daemonize. When the group cannot be
+// emptied, the step ends as a halt and no later step starts in any lane. The
+// step also inherits extra, a probe's admission slots (ADR-0209).
 func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duration, admit bool, build func(context.Context) (*exec.Cmd, error), extra ...*os.File) execResult {
-	if r.orphaned {
-		return execResult{exitCode: -1, err: errDeferredValidationUnstoppable, halted: true}
-	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd, err := build(ctx)
@@ -783,13 +848,14 @@ func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duratio
 			if admitErr := deferredValidationAdmitted(state); admitErr != nil {
 				return admitErr
 			}
-			return cmd.Start()
+			return r.startUnlessFenced(cmd, true)
 		})
 	} else {
-		err = cmd.Start()
+		err = r.startUnlessFenced(cmd, false)
 	}
 	if err != nil {
-		return execResult{exitCode: -1, err: err, halted: errors.Is(err, errDeferredValidationHalted)}
+		halted := errors.Is(err, errDeferredValidationHalted) || errors.Is(err, errDeferredValidationUnstoppable)
+		return execResult{exitCode: -1, err: err, halted: halted}
 	}
 	err = cmd.Wait()
 	raw := output.buffer.String()
@@ -798,8 +864,8 @@ func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duratio
 		result.exitCode = cmd.ProcessState.ExitCode()
 	}
 	if !r.reap(cmd.Process.Pid, cmd.WaitDelay) {
-		r.orphaned = true
-		result.err, result.halted = errDeferredValidationUnstoppable, true
+		r.endBatch(true, "")
+		result.err, result.halted, result.orphaned = errDeferredValidationUnstoppable, true, true
 		return result
 	}
 	if output.overflow {
@@ -850,67 +916,102 @@ func (r *deferredValidationRunner) deferralBefore(ctx context.Context, deferral 
 	return strings.TrimSpace(res.raw), res
 }
 
-// resetWorktree recreates the batch worktree from scratch at commit, so
-// nothing a predecessor left survives.
-func (r *deferredValidationRunner) resetWorktree(ctx context.Context, commit string) execResult {
-	if res := r.git(ctx, r.root, "worktree", "prune"); res.err != nil {
-		return res
+// laneWorktree is lane i's worktree. The first keeps the single-lane path,
+// so a worktree an earlier runner left is reused rather than leaked.
+func (r *deferredValidationRunner) laneWorktree(i int) string {
+	if i == 0 {
+		return filepath.Join(r.dir, "worktree")
 	}
-	if _, err := os.Stat(r.worktree); err == nil {
-		if res := r.git(ctx, r.root, "worktree", "remove", "--force", r.worktree); res.err != nil {
-			// A halt may mean a descendant still uses the directory.
-			if res.halted {
-				return res
-			}
-			if removeErr := os.RemoveAll(r.worktree); removeErr != nil {
-				return res
-			}
-			_ = r.git(ctx, r.root, "worktree", "prune")
-		}
-	}
-	return r.git(ctx, r.root, "worktree", "add", "--detach", r.worktree, commit)
+	return filepath.Join(r.dir, fmt.Sprintf("worktree-%d", i))
 }
 
-// prepareProbe checks out rev with no residue (ignored files included, so
-// dependencies installed for another revision cannot leak in), provisions it
-// as task worktrees are, and requires a clean tree at rev.
-func (r *deferredValidationRunner) prepareProbe(ctx context.Context, state *models.State, rev string) execResult {
-	if res := r.git(ctx, r.worktree, "checkout", "--force", "--detach", rev); res.err != nil {
+// resetLanes recreates n lane worktrees from scratch at commit, so nothing a
+// predecessor left survives, and removes lanes a larger batch left. Git's
+// worktree bookkeeping is shared, so this runs before any lane starts, one
+// worktree at a time.
+func (r *deferredValidationRunner) resetLanes(ctx context.Context, commit string, n int) ([]string, execResult) {
+	if res := r.git(ctx, r.root, "worktree", "prune"); res.err != nil {
+		return nil, res
+	}
+	extra, err := filepath.Glob(filepath.Join(r.dir, "worktree-*"))
+	if err != nil {
+		return nil, execResult{exitCode: -1, err: err}
+	}
+	for _, worktree := range append([]string{r.laneWorktree(0)}, extra...) {
+		if res := r.removeWorktree(ctx, worktree); res.err != nil {
+			return nil, res
+		}
+	}
+	worktrees := make([]string, n)
+	for i := range worktrees {
+		worktrees[i] = r.laneWorktree(i)
+		if res := r.git(ctx, r.root, "worktree", "add", "--detach", worktrees[i], commit); res.err != nil {
+			return nil, res
+		}
+	}
+	return worktrees, execResult{}
+}
+
+// removeWorktree removes a lane worktree if it exists.
+func (r *deferredValidationRunner) removeWorktree(ctx context.Context, worktree string) execResult {
+	if _, err := os.Stat(worktree); err != nil {
+		return execResult{}
+	}
+	res := r.git(ctx, r.root, "worktree", "remove", "--force", worktree)
+	if res.err == nil {
 		return res
 	}
-	if res := r.git(ctx, r.worktree, "clean", "-ffdx"); res.err != nil {
+	// A halt may mean a descendant still uses the directory.
+	if res.halted {
+		return res
+	}
+	if removeErr := os.RemoveAll(worktree); removeErr != nil {
+		return res
+	}
+	_ = r.git(ctx, r.root, "worktree", "prune")
+	return execResult{}
+}
+
+// prepareProbe checks out rev in a lane worktree with no residue (ignored
+// files included, so dependencies installed for another revision cannot leak
+// in), provisions it as task worktrees are, and requires a clean tree at rev.
+func (r *deferredValidationRunner) prepareProbe(ctx context.Context, state *models.State, worktree, rev string) execResult {
+	if res := r.git(ctx, worktree, "checkout", "--force", "--detach", rev); res.err != nil {
+		return res
+	}
+	if res := r.git(ctx, worktree, "clean", "-ffdx"); res.err != nil {
 		return res
 	}
 	if state.Config.CopyWorktreeEnvFiles {
-		ProvisionWorktreeEnvFiles(r.root, r.worktree)
+		ProvisionWorktreeEnvFiles(r.root, worktree)
 	}
 	if setup := state.Config.PostWorktreeCmd; setup != nil && strings.TrimSpace(*setup) != "" {
 		res := r.run(ctx, models.EffectiveDeferredValidationSetupTimeout(state.Config), true, func(ctx context.Context) (*exec.Cmd, error) {
-			return shellCommandContext(ctx, *setup, r.worktree)
+			return shellCommandContext(ctx, *setup, worktree)
 		})
 		if res.err != nil {
 			return res
 		}
 	}
-	return r.checkClean(ctx, rev, false)
+	return r.checkClean(ctx, worktree, rev, false)
 }
 
-// checkClean requires the batch worktree clean at rev. afterStep marks the
-// read that finishes a step already run, which a halt does not refuse; the
-// reads never write the worktree, its index included.
-func (r *deferredValidationRunner) checkClean(ctx context.Context, rev string, afterStep bool) execResult {
+// checkClean requires a lane worktree clean at rev. afterStep marks the read
+// that finishes a step already run, which a halt does not refuse; the reads
+// never write the worktree, its index included.
+func (r *deferredValidationRunner) checkClean(ctx context.Context, worktree, rev string, afterStep bool) execResult {
 	git := r.git
 	if afterStep {
 		git = r.finishingGit
 	}
-	head := git(ctx, r.worktree, "rev-parse", "HEAD")
+	head := git(ctx, worktree, "rev-parse", "HEAD")
 	if head.err != nil {
 		return head
 	}
 	if strings.TrimSpace(head.raw) != rev {
 		return execResult{exitCode: -1, err: fmt.Errorf("batch worktree HEAD is not %s", rev)}
 	}
-	status := git(ctx, r.worktree, "--no-optional-locks", "status", "--short")
+	status := git(ctx, worktree, "--no-optional-locks", "status", "--short")
 	if status.err != nil {
 		return status
 	}
@@ -920,30 +1021,33 @@ func (r *deferredValidationRunner) checkClean(ctx context.Context, rev string, a
 	return execResult{exitCode: 0}
 }
 
-// probe runs one command at the prepared worktree and classifies it. With
+// probe runs one command at a prepared lane worktree and classifies it. With
 // keepOutput, a failure's full masked output is stored and referenced; bisect
 // steps keep only their status, so they store nothing. The command first takes
 // the admission slots of config's limits it matches, from the pool canonical
-// admission shares; a class that stays full aborts the batch (ADR-0209).
-func (r *deferredValidationRunner) probe(ctx context.Context, config models.Config, rev string, command models.DeferredValidationCommand, keepOutput bool) (models.DeferredValidationResult, bool) {
+// admission shares; a class that stays full ends the batch (ADR-0209), and an
+// ended batch stops the wait.
+func (r *deferredValidationRunner) probe(ctx context.Context, config models.Config, worktree, rev string, command models.DeferredValidationCommand, keepOutput bool) (models.DeferredValidationResult, bool) {
 	result := models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, ExitCode: -1}
 	slots := newAdmissionSlots(command.TimeoutSeconds)
-	if err := slots.acquire(ctx, r.root, models.AdmissionLimitsFor(config, []string{command.Command})); err != nil {
+	if err := slots.acquire(r.waits, r.root, models.AdmissionLimitsFor(config, []string{command.Command})); err != nil {
+		reason := ""
 		var wait *AdmissionSlotWaitError
 		switch {
 		case !errors.As(err, &wait):
-			r.abortReason = deferredValidationReasonAdmissionSlotError
+			reason = deferredValidationReasonAdmissionSlotError
 		case wait.Err == nil:
-			r.abortReason = deferredValidationReasonAdmissionSlotWait
+			reason = deferredValidationReasonAdmissionSlotWait
 		}
+		r.endBatch(false, reason)
 		result.Status = models.DeferredValidationResultNotRun
 		return result, true
 	}
 	result.StartedAt = time.Now().UTC()
 	res := r.run(ctx, time.Duration(command.TimeoutSeconds)*time.Second, true, func(ctx context.Context) (*exec.Cmd, error) {
-		return shellCommandContext(ctx, command.Command, r.worktree)
+		return shellCommandContext(ctx, command.Command, worktree)
 	}, slots.files()...)
-	if r.orphaned {
+	if res.orphaned {
 		slots.abandon() // The slots stay with the descendants, like the runner lock.
 	} else {
 		slots.release()
@@ -969,7 +1073,7 @@ func (r *deferredValidationRunner) probe(ctx context.Context, config models.Conf
 			}
 		}
 	}
-	clean := r.checkClean(ctx, rev, true)
+	clean := r.checkClean(ctx, worktree, rev, true)
 	if clean.halted {
 		result.Status = models.DeferredValidationResultNotRun
 		return result, true
@@ -1039,79 +1143,121 @@ func (r *deferredValidationRunner) storeOutput(full string) string {
 	return hash
 }
 
-// execute runs one batch at head. It never returns an error: every outcome,
-// including infrastructure failure and halt, is a recorded batch.
+// execute runs one batch at head, one lane per command. It never returns an
+// error: every outcome, including infrastructure failure and halt, is a
+// recorded batch. Results and culprits keep the effective command order.
 func (r *deferredValidationRunner) execute(ctx context.Context, state *models.State, head string, forced bool) models.DeferredValidationBatch {
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()
 	batch := models.DeferredValidationBatch{Commit: head, StartedAt: time.Now().UTC(), Forced: forced}
-	r.abortReason = ""
+	r.beginBatch(ctx)
+	defer r.endWaits()
 	finish := func(status models.DeferredValidationBatchStatus, reason string) models.DeferredValidationBatch {
 		for _, command := range commands[len(batch.Results):] {
-			batch.Results = append(batch.Results, models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultNotRun, ExitCode: -1})
+			batch.Results = append(batch.Results, r.notRun(command))
 		}
-		if r.orphaned {
+		r.mu.Lock()
+		orphaned, abortReason := r.orphaned, r.abortReason
+		r.mu.Unlock()
+		if orphaned {
 			// Nothing a batch observed is certified once a step's processes
 			// may still run.
 			status, reason = models.DeferredValidationBatchAborted, deferredValidationReasonUnstoppable
-		} else if status == models.DeferredValidationBatchAborted && r.abortReason != "" {
-			reason = r.abortReason
+		} else if status == models.DeferredValidationBatchAborted && abortReason != "" {
+			reason = abortReason
 		}
 		batch.Status, batch.Reason, batch.FinishedAt = status, reason, time.Now().UTC()
 		return batch
 	}
-	infra := func(res execResult, what string) models.DeferredValidationBatch {
+	worktrees, res := r.resetLanes(ctx, head, len(commands))
+	if res.err != nil {
 		if res.halted {
 			return finish(models.DeferredValidationBatchAborted, "halted")
 		}
-		return finish(models.DeferredValidationBatchInfraFailed, deferredStateText(r.mask(fmt.Sprintf("%s: %v", what, res.err))))
+		return finish(models.DeferredValidationBatchInfraFailed, deferredStateText(r.mask(fmt.Sprintf("prepare batch worktree: %v", res.err))))
 	}
-	if res := r.resetWorktree(ctx, head); res.err != nil {
-		return infra(res, "prepare batch worktree")
-	}
-	if res := r.prepareProbe(ctx, state, head); res.err != nil {
-		return infra(res, "setup")
-	}
-	var failed []models.DeferredValidationCommand
-	contaminated := false
+	lanes := make([]deferredValidationLane, len(commands))
+	var wg sync.WaitGroup
 	for i, command := range commands {
-		result, halted := r.probe(ctx, state.Config, head, command, true)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lanes[i] = r.runLane(ctx, state, worktrees[i], head, command)
+			if lanes[i].halted {
+				r.endBatch(false, "")
+			}
+		}()
+	}
+	wg.Wait()
+	status, reason, halted := models.DeferredValidationBatchPassed, "", false
+	for _, lane := range lanes {
+		batch.Results = append(batch.Results, lane.result)
+		if lane.culprit != nil {
+			batch.Culprits = append(batch.Culprits, *lane.culprit)
+		}
+		halted = halted || lane.halted
+		switch {
+		case lane.result.Status == models.DeferredValidationResultFailed:
+			status = models.DeferredValidationBatchFailed
+		case lane.result.Status != models.DeferredValidationResultPassed && status == models.DeferredValidationBatchPassed:
+			status = models.DeferredValidationBatchInfraFailed
+		}
+		if reason == "" {
+			reason = lane.infra
+		}
+	}
+	if halted {
+		return finish(models.DeferredValidationBatchAborted, "halted")
+	}
+	if status != models.DeferredValidationBatchInfraFailed {
+		reason = ""
+	}
+	return finish(status, reason)
+}
+
+func (r *deferredValidationRunner) notRun(command models.DeferredValidationCommand) models.DeferredValidationResult {
+	return models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultNotRun, ExitCode: -1}
+}
+
+// deferredValidationLane is what one lane observed: its command's result at
+// head, the culprit when it failed and was bisected, why its preparation
+// failed (infra), and whether a halt ended it.
+type deferredValidationLane struct {
+	result  models.DeferredValidationResult
+	culprit *models.DeferredValidationCulprit
+	infra   string
+	halted  bool
+}
+
+// runLane prepares a lane worktree at head, probes the command there and, if
+// it failed, bisects it in the same worktree. A failed preparation leaves the
+// command not run. A contaminated lane needs no re-preparation: no other
+// command shares it, and each bisect step prepares its own revision.
+func (r *deferredValidationRunner) runLane(ctx context.Context, state *models.State, worktree, head string, command models.DeferredValidationCommand) deferredValidationLane {
+	lane := deferredValidationLane{result: r.notRun(command)}
+	if res := r.prepareProbe(ctx, state, worktree, head); res.err != nil {
+		if res.halted {
+			lane.halted = true
+		} else {
+			lane.infra = deferredStateText(r.mask(fmt.Sprintf("setup: %v", res.err)))
+		}
+		return lane
+	}
+	result, halted := r.probe(ctx, state.Config, worktree, head, command, true)
+	if halted {
+		lane.halted = true
+		return lane
+	}
+	lane.result = result
+	if result.Status == models.DeferredValidationResultFailed {
+		culprit, halted := r.bisect(ctx, state, worktree, head, command)
 		if halted {
-			return finish(models.DeferredValidationBatchAborted, "halted")
+			lane.halted = true
+			return lane
 		}
-		batch.Results = append(batch.Results, result)
-		switch result.Status {
-		case models.DeferredValidationResultFailed:
-			failed = append(failed, command)
-		case models.DeferredValidationResultContaminated:
-			contaminated = true
-		}
-		if result.Status == models.DeferredValidationResultContaminated && i < len(commands)-1 {
-			if res := r.prepareProbe(ctx, state, head); res.err != nil {
-				if len(failed) == 0 {
-					return infra(res, "re-prepare after contamination")
-				}
-				break
-			}
-		}
+		lane.culprit = &culprit
 	}
-	status := models.DeferredValidationBatchPassed
-	switch {
-	case len(failed) > 0:
-		status = models.DeferredValidationBatchFailed
-	case contaminated || len(batch.Results) < len(commands):
-		status = models.DeferredValidationBatchInfraFailed
-	}
-	if status == models.DeferredValidationBatchFailed {
-		for _, command := range failed {
-			culprit, halted := r.bisect(ctx, state, head, command)
-			if halted {
-				return finish(models.DeferredValidationBatchAborted, "halted")
-			}
-			batch.Culprits = append(batch.Culprits, culprit)
-		}
-	}
-	return finish(status, batch.Reason)
+	return lane
 }
 
 type bisectCandidate struct {
@@ -1119,14 +1265,15 @@ type bisectCandidate struct {
 	commit string
 }
 
-// bisect attributes a command that failed at head. The baseline is the
+// bisect attributes a command that failed at head, probing in the command's
+// lane worktree. The baseline is the
 // latest batch that passed it, or where its earliest effective deferral's
 // merge started. Candidates are forward merges between baseline and head in
 // integration ancestry order. A culprit is named only when its predecessor
 // was executed and passed and its own commit was executed and failed; under
 // non-monotonic history the result is a reproduced transition, not
 // necessarily the first.
-func (r *deferredValidationRunner) bisect(ctx context.Context, state *models.State, head string, command models.DeferredValidationCommand) (models.DeferredValidationCulprit, bool) {
+func (r *deferredValidationRunner) bisect(ctx context.Context, state *models.State, worktree, head string, command models.DeferredValidationCommand) (models.DeferredValidationCulprit, bool) {
 	culprit := models.DeferredValidationCulprit{CommandSHA256: command.CommandSHA256}
 	unattributed := func(reason string) (models.DeferredValidationCulprit, bool) {
 		culprit.TaskID, culprit.MergeCommit, culprit.Unattributed, culprit.Reason = "", "", true, reason
@@ -1189,10 +1336,10 @@ func (r *deferredValidationRunner) bisect(ctx context.Context, state *models.Sta
 		}
 		status := models.DeferredValidationResultUnavailable
 		exitCode := -1
-		if res := r.prepareProbe(ctx, state, rev); res.halted {
+		if res := r.prepareProbe(ctx, state, worktree, rev); res.halted {
 			return status, true
 		} else if res.err == nil {
-			result, halted := r.probe(ctx, state.Config, rev, command, false)
+			result, halted := r.probe(ctx, state.Config, worktree, rev, command, false)
 			if halted {
 				return status, true
 			}

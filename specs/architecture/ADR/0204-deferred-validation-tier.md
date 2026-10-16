@@ -124,3 +124,29 @@ runner lock, is reaped, never writes the worktree (`--no-optional-locks`) and
 is refused once the runner is orphaned. Preparation, every step and every
 bisect process stay admitted, so a halt still starts nothing new: the batch
 keeps the finished step's result and records later commands `not_run`.
+
+## Amendment (2026-10-16)
+
+A batch ran its commands, then its bisects, one after another, so the
+integration barrier cost the sum of the suites rather than the slowest one
+(about 3 h 45 against 1 h 40 in one run, D-210). Each effective command now
+runs in its own lane: a worktree (`worktree`, then `worktree-<n>`) where it
+is prepared, probed at HEAD and, if it failed, bisected. Lanes run
+concurrently; admission classes (ADR-0209) remain the only bound on how many
+heavy commands overlap, so an unconfigured project now runs its deferred
+commands in parallel, and suites that cannot share a resource need a class
+with `max_concurrent: 1`. Lane worktrees are recreated one at a time before
+any lane starts, because Git's worktree bookkeeping is shared; lanes a larger
+batch left are removed. Results and culprits keep the effective command
+order. A contaminated command no longer re-prepares a shared tree: no other
+command uses its lane.
+
+The first lane that ends the batch (a halt or stop refusal, an orphaned step,
+an admission class that stays full) stops every lane from starting admitted
+work and cancels the lanes' slot waits. A step already running in another
+lane finishes and keeps its result, as under a halt. The fence check and each
+process start happen under one runner lock, so no lane starts a process after
+the fence is set. Within a lane no step starts while its previous step's
+descendants may live; an orphaned step in any lane refuses every later start,
+the finishing reads included. Narrowing a bisect to failing test IDs is
+runner-specific and not done.

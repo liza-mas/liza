@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -178,6 +179,141 @@ func TestDeferredValidationBatchPassesAndCoversHEAD(t *testing.T) {
 	}
 }
 
+// dvRendezvous announces itself by touching mine, then waits up to 15 s for
+// other to appear and fails without it: two such commands pass only when they
+// run at the same time.
+func dvRendezvous(mine, other string) models.DeferredValidationCommand {
+	return dvCommand(fmt.Sprintf(`touch %q; i=0; while [ ! -f %q ]; do i=$((i+1)); [ $i -gt 300 ] && exit 1; sleep 0.05; done`, mine, other), 60)
+}
+
+// dvGateLimit is a one-slot admission class matching only commands that
+// contain "# gated", so a test holding its slot keeps such a lane from
+// starting its command until the slot is released. The token must not occur
+// in the class's slot paths, which dvAwaitGateQueue embeds in commands.
+var dvGateLimit = models.AdmissionLimit{Class: "dv-gate", MaxConcurrent: 1, Match: []string{"# gated"}}
+
+// holdGate configures dvGateLimit and takes its slot for the test.
+func (f *dvFixture) holdGate() *admissionSlots {
+	f.t.Helper()
+	f.modify(func(state *models.State) { state.Config.AdmissionLimits = []models.AdmissionLimit{dvGateLimit} })
+	return holdAdmissionSlots(f.t, f.root, dvGateLimit)
+}
+
+// dvAwaitGateQueue is a shell prefix that waits until a lane queues for the
+// gate. A lane queues only once prepared, so the gated lane then starts no
+// process until it gets the slot.
+func (f *dvFixture) dvAwaitGateQueue() string {
+	queue := filepath.Join(paths.New(f.root).AdmissionSlotsDir(), dvGateLimit.Class, "queue")
+	return fmt.Sprintf("until ls %q/*.lock >/dev/null 2>&1; do sleep 0.02; done; ", queue)
+}
+
+// A batch runs its commands concurrently, each in its own lane, so the
+// integration barrier costs the slowest command rather than their sum (D-210).
+func TestDeferredValidationBatchRunsCommandsConcurrently(t *testing.T) {
+	t.Parallel()
+	f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
+	signal := t.TempDir()
+	a, b := filepath.Join(signal, "a"), filepath.Join(signal, "b")
+	head := f.merge("task-1", map[string]string{"a.txt": "a\n"}, dvRendezvous(a, b), dvRendezvous(b, a))
+
+	batch := onlyBatch(t, f.run(false))
+	if batch.Status != models.DeferredValidationBatchPassed || batch.Commit != head || !batch.Covers(f.ledger().EffectiveCommands()) {
+		t.Fatalf("batch = %#v, want a passed batch covering HEAD: the commands did not run concurrently", batch)
+	}
+}
+
+// Lanes still take their admission slots: two commands of a one-slot class
+// never overlap, and each ran in its own lane worktree.
+func TestDeferredValidationLanesRespectAdmissionClass(t *testing.T) {
+	shortAdmissionSlotPoll(t)
+	f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
+	busy := filepath.Join(t.TempDir(), "busy")
+	exclusive := func(name string) models.DeferredValidationCommand {
+		return dvCommand(fmt.Sprintf("mkdir %q || exit 1; sleep 0.3; rmdir %q # gated %s", busy, busy, name), 60)
+	}
+	f.merge("task-1", map[string]string{"a.txt": "a\n"}, exclusive("a"), exclusive("b"))
+	f.modify(func(state *models.State) { state.Config.AdmissionLimits = []models.AdmissionLimit{dvGateLimit} })
+
+	if batch := onlyBatch(t, f.run(false)); batch.Status != models.DeferredValidationBatchPassed {
+		t.Fatalf("batch = %#v, want passed: the one-slot class let the commands overlap", batch)
+	}
+	for _, lane := range []string{"worktree", "worktree-1"} {
+		if _, err := os.Stat(filepath.Join(deferredValidationDir(f.root), lane)); err != nil {
+			t.Fatalf("lane worktree %s: %v", lane, err)
+		}
+	}
+}
+
+// Failing commands are bisected concurrently, each in its own lane; results
+// and culprits keep the effective command order whichever lane ends first.
+func TestDeferredValidationConcurrentBisectsNameEachCulprit(t *testing.T) {
+	t.Parallel()
+	f := newDVFixture(t, map[string]string{"value.txt": "ok\n", "other.txt": "ok\n"})
+	slow := dvCommand("sleep 0.5; "+dvCheckValue, 60)
+	other := dvCommand(`test "$(cat other.txt)" = ok`, 60)
+	f.merge("task-1", map[string]string{"a.txt": "a\n"}, slow, other)
+	valueCulprit := f.merge("task-2", map[string]string{"value.txt": "broken\n"})
+	otherCulprit := f.merge("task-3", map[string]string{"other.txt": "broken\n"})
+
+	batch := onlyBatch(t, f.run(false))
+	if batch.Status != models.DeferredValidationBatchFailed || len(batch.Results) != 2 ||
+		batch.Results[0].CommandSHA256 != slow.CommandSHA256 || batch.Results[1].CommandSHA256 != other.CommandSHA256 {
+		t.Fatalf("batch = %#v, want failed with results in command order", batch)
+	}
+	want := []models.DeferredValidationCulprit{
+		{CommandSHA256: slow.CommandSHA256, TaskID: "task-2", MergeCommit: valueCulprit},
+		{CommandSHA256: other.CommandSHA256, TaskID: "task-3", MergeCommit: otherCulprit},
+	}
+	if len(batch.Culprits) != len(want) {
+		t.Fatalf("culprits = %#v", batch.Culprits)
+	}
+	for i, culprit := range batch.Culprits {
+		if culprit.CommandSHA256 != want[i].CommandSHA256 || culprit.TaskID != want[i].TaskID || culprit.MergeCommit != want[i].MergeCommit {
+			t.Fatalf("culprit %d = %#v, want %#v", i, culprit, want[i])
+		}
+	}
+}
+
+// A lane whose admission class stays full ends the batch: a lane still
+// queued stops waiting at once, a running lane keeps the result it observed,
+// and no lane starts admitted work afterwards (its bisect is refused).
+func TestDeferredValidationSlotAbortEndsTheBatch(t *testing.T) {
+	shortAdmissionSlotPoll(t)
+	shortAdmissionSlotCap(t, 60*time.Second+200*time.Millisecond)
+	f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
+	started := filepath.Join(t.TempDir(), "started")
+	queue := filepath.Join(paths.New(f.root).AdmissionSlotsDir(), dvGateLimit.Class, "queue")
+	// Lane 0 runs ungated until a gated lane queued and the queue emptied
+	// again, then fails. Lane 1 (60 s budget) may wait 200 ms; lane 2 (5 s
+	// budget) about 55 s, unless the ended batch cancels its wait. Lane 1's
+	// setup waits for lane 0's start, so lane 0 is running when lane 1 aborts.
+	running := dvCommand(fmt.Sprintf(`touch %q; until ls %q/*.lock >/dev/null 2>&1; do sleep 0.02; done; while ls %q/*.lock >/dev/null 2>&1; do sleep 0.02; done; exit 1`, started, queue, queue), 60)
+	short := dvCommand("true # gated short", 60)
+	long := dvCommand("true # gated long", 5)
+	f.merge("task-1", map[string]string{"a.txt": "a\n"}, running, short, long)
+	setup := fmt.Sprintf(`case "$PWD" in */worktree-1) until [ -f %q ]; do sleep 0.02; done;; esac`, started)
+	f.modify(func(state *models.State) { state.Config.PostWorktreeCmd = &setup })
+	f.holdGate()
+
+	begun := time.Now()
+	batch := onlyBatch(t, f.run(false))
+	if elapsed := time.Since(begun); elapsed > 30*time.Second {
+		t.Fatalf("batch took %s: the queued lane kept waiting after the batch ended", elapsed)
+	}
+	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != deferredValidationReasonAdmissionSlotWait {
+		t.Fatalf("batch = %#v, want aborted %s", batch, deferredValidationReasonAdmissionSlotWait)
+	}
+	if got := batch.Results[0]; got.Status != models.DeferredValidationResultFailed || got.ExitCode != 1 {
+		t.Fatalf("running lane result = %#v, want its observed failure kept", got)
+	}
+	if batch.Results[1].Status != models.DeferredValidationResultNotRun || batch.Results[2].Status != models.DeferredValidationResultNotRun {
+		t.Fatalf("gated results = %#v, want not_run", batch.Results[1:])
+	}
+	if len(batch.Culprits) != 0 {
+		t.Fatalf("culprits = %#v, want none: the ended batch must refuse the bisect", batch.Culprits)
+	}
+}
+
 func TestDeferredValidationBisectNamesCulpritAndRecordsDiscovery(t *testing.T) {
 	t.Parallel()
 	f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
@@ -303,7 +439,7 @@ func TestDeferredValidationContaminatingCommandIsNeverPassed(t *testing.T) {
 		t.Fatalf("batch = %#v", batch)
 	}
 	if batch.Results[0].Status != models.DeferredValidationResultContaminated || batch.Results[1].Status != models.DeferredValidationResultPassed {
-		t.Fatalf("the next command must run on a re-prepared clean probe: %#v", batch.Results)
+		t.Fatalf("the next command must run in its own clean lane: %#v", batch.Results)
 	}
 	state, _ := f.bb.Read()
 	if waiting, blocked := deferredValidationGate(state, head); waiting == nil || blocked != nil {
@@ -489,8 +625,11 @@ func TestDeferredValidationHaltDuringCommandStopsLaterStarts(t *testing.T) {
 			signal := t.TempDir()
 			started, release, second := filepath.Join(signal, "started"), filepath.Join(signal, "release"), filepath.Join(signal, "second")
 			first := dvCommand(fmt.Sprintf("touch %q; while [ ! -f %q ]; do sleep 0.05; done", started, release), 60)
-			next := dvCommand(fmt.Sprintf("touch %q", second), 60)
+			// The next command's lane waits behind the test's gate slot, so
+			// it can start only after the halt commits.
+			next := dvCommand(fmt.Sprintf("touch %q # gated", second), 60)
 			f.merge("task-1", map[string]string{"a.txt": "a\n"}, first, next)
+			gate := f.holdGate()
 
 			done := make(chan *RunDeferredValidationResult, 1)
 			go func() {
@@ -504,6 +643,7 @@ func TestDeferredValidationHaltDuringCommandStopsLaterStarts(t *testing.T) {
 			if err := AwaitWorkAdmissionBarrier(f.root, "pause"); err != nil {
 				t.Fatalf("halt barrier blocked on a running batch command: %v", err)
 			}
+			gate.release()
 			if err := os.WriteFile(release, nil, 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -547,16 +687,29 @@ func TestDeferredValidationHaltKeepsFinishedStepResult(t *testing.T) {
 					f := newDVFixture(t, map[string]string{"value.txt": "ok\n"})
 					signal := t.TempDir()
 					marker, second := filepath.Join(signal, "step"), filepath.Join(signal, "second")
-					commands := []models.DeferredValidationCommand{dvCommand(fmt.Sprintf(tc.step, marker), 60)}
+					step := fmt.Sprintf(tc.step, marker)
+					var gate *admissionSlots
 					if tc.next {
-						commands = append(commands, dvCommand(fmt.Sprintf("touch %q", second), 60))
+						// The next lane queues behind the test's gate slot before
+						// the step starts, so after the marker only the step's
+						// own processes are reaped, and the next lane can start
+						// only once the halt committed.
+						gate = f.holdGate()
+						step = f.dvAwaitGateQueue() + step
+					}
+					commands := []models.DeferredValidationCommand{dvCommand(step, 60)}
+					if tc.next {
+						commands = append(commands, dvCommand(fmt.Sprintf("touch %q # gated", second), 60))
 					}
 					head := f.merge("task-1", map[string]string{"a.txt": "a\n"}, commands...)
-					reaps := -1
+					var reaps atomic.Int32
 					hooks := deferredValidationHooks{platformSupported: true, reap: func(pid int, wait time.Duration) bool {
 						if _, err := os.Stat(marker); err == nil {
-							if reaps++; reaps == haltAt {
+							if reaps.Add(1)-1 == int32(haltAt) {
 								f.modify(func(state *models.State) { state.Config.Mode = mode })
+								if gate != nil {
+									gate.release()
+								}
 							}
 						}
 						return reapProcessGroup(pid, wait)
