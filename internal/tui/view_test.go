@@ -615,7 +615,7 @@ func TestRenderAgentPanel_StandardTierFitsNarrowWidth(t *testing.T) {
 }
 
 func TestRenderAgentPanel_CurrentTaskUsesRemainingWidth(t *testing.T) {
-	const width = 180
+	const width = 194
 	taskID := "task-with-long-name-that-fits-when-current-task-uses-available-width"
 	m := Model{
 		width:      width,
@@ -643,6 +643,27 @@ func TestRenderAgentPanel_CurrentTaskUsesRemainingWidth(t *testing.T) {
 		if got := lipgloss.Width(line); got > width {
 			t.Fatalf("agent panel line width = %d, want <= %d; line: %q\nfull output:\n%s", got, width, line, out)
 		}
+	}
+}
+
+func TestAgentCurrentTaskColumnWidth_FitsLongestTaskID(t *testing.T) {
+	const width = 220
+	newModel := func(tasks ...string) Model {
+		agents := map[string]models.Agent{"idle-1": {Role: "coder", Status: models.AgentStatusIdle}}
+		for i, task := range tasks {
+			agents[fmt.Sprintf("coder-%d", i)] = models.Agent{Role: "coder", Status: models.AgentStatusWorking, CurrentTask: strPtr(task)}
+		}
+		return Model{width: width, height: 40, columnTier: ColumnTierFull, styles: NewStyles(width), state: &models.State{Agents: agents}}
+	}
+
+	// Short IDs: the header sets the floor.
+	if got, want := newModel("task-1").agentCurrentTaskColumnWidth(), len("CURRENT_TASK")+1; got != want {
+		t.Errorf("short task IDs: width = %d, want %d", got, want)
+	}
+	// The longest current task ID sets the width, not the leftover row space.
+	longID := "code-planning-1-code-plan-to-code"
+	if got, want := newModel("task-1", longID).agentCurrentTaskColumnWidth(), len(longID)+1; got != want {
+		t.Errorf("long task ID: width = %d, want %d", got, want)
 	}
 }
 
@@ -695,11 +716,46 @@ func TestRenderAgentPanel_ColumnTierWide(t *testing.T) {
 	}
 
 	colCount := countHeaderColumns(header)
-	if colCount != 7 {
-		t.Errorf("expected 7 columns at wide tier, got %d (header: %q)", colCount, header)
+	if colCount != 8 {
+		t.Errorf("expected 8 columns at wide tier, got %d (header: %q)", colCount, header)
 	}
 
 	assertContains(t, header, "LAST_HEARTBEAT", "header should contain LAST_HEARTBEAT")
+	if strings.Index(header, "TIME_ON_TASK") > strings.Index(header, "LAST_HEARTBEAT") {
+		t.Errorf("TIME_ON_TASK should precede LAST_HEARTBEAT (header: %q)", header)
+	}
+}
+
+func TestRenderAgentPanel_TimeOnTask(t *testing.T) {
+	coder := "coder-1"
+	m := Model{
+		width:      130,
+		height:     40,
+		columnTier: ColumnTierWide,
+		styles:     NewStyles(130),
+		state: &models.State{
+			Agents: map[string]models.Agent{
+				coder:    {Role: "coder", Status: models.AgentStatusWorking, CurrentTask: strPtr("task-1"), Heartbeat: time.Now()},
+				"idle-1": {Role: "coder", Status: models.AgentStatusIdle, Heartbeat: time.Now()},
+			},
+			Tasks: []models.Task{{
+				ID: "task-1",
+				History: []models.TaskHistoryEntry{
+					{Time: time.Now().Add(-5*time.Minute - 10*time.Second), Event: models.TaskEventClaimed, Agent: &coder},
+				},
+			}},
+		},
+	}
+
+	out := m.renderAgentPanel(10)
+	for _, line := range strings.Split(out, "\n") {
+		switch {
+		case strings.Contains(line, coder):
+			assertContains(t, line, " 5m ", "agent on task should show time since its claim")
+		case strings.Contains(line, "idle-1"):
+			assertContains(t, line, "—", "agent without task should show dash")
+		}
+	}
 }
 
 func TestRenderAgentPanel_ColumnTierFull(t *testing.T) {
@@ -722,8 +778,8 @@ func TestRenderAgentPanel_ColumnTierFull(t *testing.T) {
 	}
 
 	colCount := countHeaderColumns(header)
-	if colCount != 8 {
-		t.Errorf("expected 8 columns at full tier, got %d (header: %q)", colCount, header)
+	if colCount != 9 {
+		t.Errorf("expected 9 columns at full tier, got %d (header: %q)", colCount, header)
 	}
 
 	assertContains(t, header, "PID", "header should contain PID")
@@ -1693,7 +1749,7 @@ func findHeaderLine(output string) string {
 }
 
 func countHeaderColumns(header string) int {
-	columns := []string{"ID", "STATUS", "ROLE", "CLI", "HEALTH", "CURRENT_TASK", "LAST_HEARTBEAT", "PID"}
+	columns := []string{"ID", "STATUS", "ROLE", "CLI", "HEALTH", "CURRENT_TASK", "TIME_ON_TASK", "LAST_HEARTBEAT", "PID"}
 	count := 0
 	for _, col := range columns {
 		if strings.Contains(header, col) {

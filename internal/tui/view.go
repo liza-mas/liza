@@ -237,6 +237,21 @@ func (m Model) renderAgentPanel(budget int) string {
 		return render.FormatDuration(time.Since(a.Heartbeat)) + " ago"
 	}
 
+	timeOnTaskVal := func(id string, a models.Agent) string {
+		if a.CurrentTask == nil {
+			return "—"
+		}
+		task := m.state.FindTask(*a.CurrentTask)
+		if task == nil {
+			return "—"
+		}
+		d := commands.AgentTimeOnTask(task, id)
+		if d == 0 {
+			return "—"
+		}
+		return render.FormatDuration(d)
+	}
+
 	pidVal := func(_ string, a models.Agent) string {
 		if a.PID == 0 {
 			return "—"
@@ -263,6 +278,7 @@ func (m Model) renderAgentPanel(budget int) string {
 
 	if m.columnTier >= ColumnTierWide {
 		cols = append(cols,
+			column{"TIME_ON_TASK", 14, timeOnTaskVal},
 			column{"LAST_HEARTBEAT", 16, lastHeartbeatVal},
 		)
 	}
@@ -358,6 +374,7 @@ func (m Model) agentCurrentTaskColumnWidth() int {
 		statusWidth        = 14
 		cliWidth           = 10
 		healthWidth        = 10
+		timeOnTaskWidth    = 14
 		lastHeartbeatWidth = 16
 		pidWidth           = 10
 		rowPrefixWidth     = 2
@@ -368,14 +385,26 @@ func (m Model) agentCurrentTaskColumnWidth() int {
 	idWidth, roleWidth := m.agentIdentityColumnWidths()
 	fixedWidth := idWidth + statusWidth + roleWidth + cliWidth + healthWidth
 	if m.columnTier >= ColumnTierWide {
-		fixedWidth += lastHeartbeatWidth
+		fixedWidth += timeOnTaskWidth + lastHeartbeatWidth
 	}
 	if m.columnTier >= ColumnTierFull {
 		fixedWidth += pidWidth
 	}
 
+	// Fit the longest current task ID (cells truncate at width-1), within the
+	// row width left after the fixed columns.
+	contentWidth := runewidth.StringWidth("CURRENT_TASK")
+	if m.state != nil {
+		for _, a := range m.state.Agents {
+			if a.CurrentTask != nil {
+				contentWidth = max(contentWidth, runewidth.StringWidth(*a.CurrentTask))
+			}
+		}
+	}
+
 	rowBudget := max(m.width-panelBorderWidth-rowPrefixWidth, 0)
-	return max(rowBudget-fixedWidth, minCurrentTask)
+	available := max(rowBudget-fixedWidth, minCurrentTask)
+	return min(contentWidth+1, available)
 }
 
 func currentAgentHealthDetailLineCount(state *models.State) int {

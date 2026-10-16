@@ -34,9 +34,9 @@ func calculateTimeOnTask(task *models.Task) time.Duration {
 	return time.Since(claimedTime)
 }
 
-// calculateAgentTimeOnTask returns how long the agent has been on the current
+// AgentTimeOnTask returns how long the agent has been on the current
 // task by finding its most recent actor-bearing assignment-start event.
-func calculateAgentTimeOnTask(task *models.Task, agentID string) time.Duration {
+func AgentTimeOnTask(task *models.Task, agentID string) time.Duration {
 	var assignmentStart time.Time
 	for _, entry := range task.History {
 		if entry.Agent == nil || *entry.Agent != agentID || !isAssignmentStartEvent(entry.Event) {

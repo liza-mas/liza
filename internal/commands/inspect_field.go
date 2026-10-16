@@ -378,7 +378,7 @@ func getAgentComputedField(state *models.State, agentID, field string) (any, err
 		if task == nil {
 			return "0s", nil
 		}
-		duration := calculateAgentTimeOnTask(task, agentID)
+		duration := AgentTimeOnTask(task, agentID)
 		return render.FormatDuration(duration), nil
 	default:
 		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID, Field: field}

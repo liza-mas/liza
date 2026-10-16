@@ -153,16 +153,16 @@ func TestCalculateAgentTimeOnTask(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			task := &models.Task{ID: "task-b", History: tt.history}
-			got := calculateAgentTimeOnTask(task, currentAgent)
+			got := AgentTimeOnTask(task, currentAgent)
 			if tt.wantStart == 0 {
 				if got != 0 {
-					t.Fatalf("calculateAgentTimeOnTask() = %v, want 0", got)
+					t.Fatalf("AgentTimeOnTask() = %v, want 0", got)
 				}
 				return
 			}
 
 			if got < tt.wantStart || got > tt.wantStart+time.Second {
-				t.Fatalf("calculateAgentTimeOnTask() = %v, want between %v and %v", got, tt.wantStart, tt.wantStart+time.Second)
+				t.Fatalf("AgentTimeOnTask() = %v, want between %v and %v", got, tt.wantStart, tt.wantStart+time.Second)
 			}
 		})
 	}

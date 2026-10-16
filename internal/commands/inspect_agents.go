@@ -189,7 +189,7 @@ func buildAgentInfoWithHealth(agentID string, agent *models.Agent, currentTask *
 
 	// Compute time on task (if agent is working on a task)
 	if currentTask != nil {
-		timeOnTask := calculateAgentTimeOnTask(currentTask, agentID)
+		timeOnTask := AgentTimeOnTask(currentTask, agentID)
 		info.TimeOnTask = render.FormatDuration(timeOnTask)
 	}
 
