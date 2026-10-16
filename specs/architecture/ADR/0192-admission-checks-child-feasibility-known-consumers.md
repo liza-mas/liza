@@ -6,6 +6,8 @@ ACCEPTED. Amends [ADR-0150](0150-shared-authoring-vocabulary.md) (W2 handoff
 duties).
 Extended by [ADR-0198](0198-frozen-interface-corrections-and-direct-coding-allocation.md)
 with early epic consumer inventories at the existing author/reviewer checkpoints.
+Amended by [ADR-0211](0211-reality-probes-for-frozen-plan-assertions.md):
+the existing-source premise check leaves a recorded, reviewable probe.
 
 ## Context
 

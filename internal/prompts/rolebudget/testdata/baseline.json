@@ -4,7 +4,7 @@
     {
       "variant": "architect",
       "role": "architect",
-      "rendered_bytes": 28212,
+      "rendered_bytes": 29177,
       "base_prompt_bytes": 9672,
       "mandatory_read_bytes": 25008,
       "reads": [
@@ -15,7 +15,7 @@
     {
       "variant": "architect (decomposition root)",
       "role": "architect",
-      "rendered_bytes": 31424,
+      "rendered_bytes": 32389,
       "base_prompt_bytes": 9672,
       "mandatory_read_bytes": 25008,
       "reads": [
@@ -26,7 +26,7 @@
     {
       "variant": "architecture-reviewer",
       "role": "architecture-reviewer",
-      "rendered_bytes": 24301,
+      "rendered_bytes": 24863,
       "base_prompt_bytes": 9708,
       "mandatory_read_bytes": 30920,
       "reads": [
@@ -38,7 +38,7 @@
     {
       "variant": "architecture-reviewer (decomposition root)",
       "role": "architecture-reviewer",
-      "rendered_bytes": 27279,
+      "rendered_bytes": 27841,
       "base_prompt_bytes": 9708,
       "mandatory_read_bytes": 30920,
       "reads": [
@@ -50,7 +50,7 @@
     {
       "variant": "code-plan-reviewer",
       "role": "code-plan-reviewer",
-      "rendered_bytes": 28670,
+      "rendered_bytes": 29242,
       "base_prompt_bytes": 9699,
       "mandatory_read_bytes": 62228,
       "reads": [
@@ -76,7 +76,7 @@
     {
       "variant": "code-planner",
       "role": "code-planner",
-      "rendered_bytes": 34350,
+      "rendered_bytes": 35368,
       "base_prompt_bytes": 9681,
       "mandatory_read_bytes": 31308,
       "reads": [
@@ -86,7 +86,7 @@
     {
       "variant": "code-planner (decomposition root)",
       "role": "code-planner",
-      "rendered_bytes": 25200,
+      "rendered_bytes": 25253,
       "base_prompt_bytes": 9681,
       "mandatory_read_bytes": 31308,
       "reads": [
@@ -108,7 +108,7 @@
     {
       "variant": "coder",
       "role": "coder",
-      "rendered_bytes": 25282,
+      "rendered_bytes": 25544,
       "base_prompt_bytes": 9660,
       "mandatory_read_bytes": 27712,
       "reads": [
@@ -200,7 +200,7 @@
     {
       "variant": "orchestrator (wake BLOCKED_TASKS)",
       "role": "orchestrator",
-      "rendered_bytes": 22259,
+      "rendered_bytes": 23315,
       "base_prompt_bytes": 9640,
       "mandatory_read_bytes": 9111,
       "reads": [
@@ -210,7 +210,7 @@
     {
       "variant": "orchestrator (wake HYPOTHESIS_EXHAUSTED)",
       "role": "orchestrator",
-      "rendered_bytes": 13734,
+      "rendered_bytes": 13760,
       "base_prompt_bytes": 9640,
       "mandatory_read_bytes": 9111,
       "reads": [
@@ -220,7 +220,7 @@
     {
       "variant": "orchestrator (wake IMMEDIATE_DISCOVERY)",
       "role": "orchestrator",
-      "rendered_bytes": 12304,
+      "rendered_bytes": 12330,
       "base_prompt_bytes": 9640,
       "mandatory_read_bytes": 9111,
       "reads": [

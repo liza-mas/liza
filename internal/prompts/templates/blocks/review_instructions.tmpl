@@ -121,6 +121,7 @@ REVIEW CHECKLIST:
 | output[] matches plan | Each output[] entry's concise intent, boundary, dependencies, validation, and anchored refs are semantically and referentially consistent with the plan; reject detailed Markdown copied merely for character identity |
 | validation satisfiable | An output[] validation command can exit 0 without exercising its intended check, or hook/check intent is not declared in durable plan/task text. For a hook-runner command (e.g. `pre-commit run --files <paths>`), match its paths against each intended hook's effective filters (global and per-hook files/exclude/types, after any config change an earlier task lands): unless it always runs (e.g. `always_run: true`), a hook matching none reports Skipped; an executing hook must still prove its check ran |
 {{template "validation-scope-row"}}
+{{template "reality-probe-row"}}
 | Test-file admission | A behavior-changing coding child confines its tests to paths matching none of the submission test-file patterns ({{testFilePatterns}}; name patterns match the basename, `__tests__/` and `tests/` that directory at any depth) — submit-for-review refuses its diff |
 | validation command shape | A validation[] command is not single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. |
 {{- if .DeclareValidationPrerequisites}}
@@ -339,6 +340,7 @@ REVIEW CHECKLIST:
 | Critical path | A client waits on its provider's implementation where the frozen contract and contract-derived fixtures suffice; a contract-first client lacks a verification task that depends on client and provider and that every consumer of the client's behavior depends on; a consumed fixture is bundled with a later proof; or writers extend one shared definition (migration, dispatcher, registry, test file) in series without an additive seam weighed against every expected writer |
 | arch_ref set | Output[] entries missing arch_ref pointing to the architecture document |
 | Spec alignment | Architecture decisions contradict or ignore spec requirements |
+{{template "reality-probe-row"}}
 | Provider freeze | Early epic Provider Ask Inventory coverage is not reconciled against assigned epics and source obligations; declared asks are unavailable, or an ask lacks a provider answer or concrete deferral with allocated investigation/correction and a legal affected-scope wait |
 {{- if .DirectCodingAllocationAvailable}}
 {{template "corrective-placement-row"}}
@@ -470,6 +472,10 @@ rejection time, and `timeout_seconds` is reported for visibility only.
 
 {{- define "validation-scope-row" -}}
 | Validation scope | A child's validation lists a long shared suite (whole integration, e2e or eval run) that neither covers named changed code nor is in the contract's `deferred`, or defers a command a proof needs |
+{{- end -}}
+
+{{- define "reality-probe-row" -}}
+| Reality probes | An assertion about delivered behavior or a canonical command has no `## Reality Probes` entry (integration SHA, command, observed excerpt) and is neither PROSPECTIVE nor UNPROBED with its reason and a hold of the affected scope (task_depends_on or provider_dependencies on an allocated investigation or correction, or a block); delivered behavior is labelled PROSPECTIVE; an observation does not support its assertion; or your re-run of one eligible observed probe disagrees (none eligible: say so). Never re-run one needing a runtime input |
 {{- end -}}
 
 {{- define "corrective-placement-row" -}}

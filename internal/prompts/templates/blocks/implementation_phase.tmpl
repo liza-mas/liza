@@ -185,8 +185,9 @@ b. and c. apply to the observed symptom path; e. names what the repair leaves op
    h. Child feasibility: each child's scope holds every file it must commit (tests, acceptance manifest, fixtures); a
       preserve directive allows the minimal correction an allocated obligation needs; check an existing-source premise
       before it binds a child — only an unfinished provider's delivery is deferred.
-   i. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
-   j. Submission proof: `{{binaryName}} submit-for-review` is not optional bookkeeping. It must actually run successfully after step i; do not treat plan/output artifacts alone as submission.
+   i. {{template "reality-probes"}}
+   j. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
+   k. Submission proof: `{{binaryName}} submit-for-review` is not optional bookkeeping. It must actually run successfully after step j; do not treat plan/output artifacts alone as submission.
 7. Submit using {{binaryName}} submit-for-review --json only after all checks in step 6 pass, using the captured full SHA.
 {{- else if eq .Role "epic-planner"}}
 
@@ -374,8 +375,9 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
    g. Child feasibility: scope files and preserve directives leave room for what coding children must commit (tests,
       each acceptance manifest) and for corrections allocated obligations need; a premise about existing source is
       checked before it restricts a child.
-   h. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
-   i. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9h; do not treat the arch doc plus `{{binaryName}} set-task-output` as sufficient.
+   h. {{template "reality-probes"}}
+   i. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
+   j. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9i; do not treat the arch doc plus `{{binaryName}} set-task-output` as sufficient.
 10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA.
 {{- end}}
 {{- end -}}
@@ -390,4 +392,8 @@ cannot settle yet is a design prerequisite: allocate its correction or bounded
 investigation and hold the affected scope on the corrected contract (task_depends_on or
 provider_dependencies); never freeze the incompatible contract with only a gap note.
 Inventory strings are semantic evidence, not executable dependency edges.
+{{- end -}}
+
+{{- define "reality-probes" -}}
+Reality probes: in a `## Reality Probes` table, each assertion binding a child to delivered behavior (existing route, read, store function, migration, refusal text, response shape) and each canonical validation or acceptance command records the integration SHA, the command run there and an excerpt of what it showed. A command need not finish; it must show its selection, flags and setup work as intended. Never run one needing a runtime input or authority you lack: cite an existing gate receipt, probe a bounded part without it, or mark it UNPROBED with the reason and hold the affected scope on an allocated investigation or correction (task_depends_on or provider_dependencies), or mark-blocked; a reason or owner alone is no hold, and missing access is no evidence against delivered behavior. Behavior a child or an unmerged provider builds is PROSPECTIVE with its producer named. Fix the plan where a probe contradicts it; never leave it to the child.
 {{- end -}}
