@@ -144,6 +144,21 @@ the watcher daemon parses it — a YAML-corrupting char blinds drift/breaker det
 MERGED` (+ `BLOCKED`, `SUPERSEDED`, `ABANDONED`, `INTEGRATION_FAILED`). A task past its lease, or
 bouncing `executing ⇄ rejected`, needs you.
 
+**Dependency trees.** Run
+`python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_BINARY_NAME§-operator/scripts/critical-paths.py --project-root <repo>`
+for all nonterminal tasks (everything except MERGED, ABANDONED and SUPERSEDED),
+from prerequisites to consumers. `*` highlights every tied longest chain by task count,
+not duration; shared subtrees reference their expanded occurrence. The helper queries
+`get tasks --all --summary --json`, combining `depends_on` with computed `waiting_on`
+blockers for provider waits. Use `--binary <cli>` to select a binary, or
+`--tasks-file <json|yaml|->` for a saved query, raw state snapshot, or stdin. YAML
+requires PyYAML (`python -m pip install pyyaml`); JSON uses only the standard library.
+Raw state snapshots show `depends_on` and warn about provider declarations that need
+the CLI's computed `waiting_on`; use CLI JSON for resolved provider waits.
+Missing/retired prerequisites and
+unresolved holds are diagnosed, cycles fail explicitly, and lengths cover only the
+known nonterminal graph, excluding future tasks. This view does not establish claimability.
+
 **Review-liveness gate.** Reconcile each submitted, reviewing, or rejected task's owner, commit, status, and
 lease with its reviewer's task, role, status, heartbeat, and log. Ownership agreement establishes the review;
 recent log growth establishes only that some provider turn is active. Growth without a claim is a leaked turn,
