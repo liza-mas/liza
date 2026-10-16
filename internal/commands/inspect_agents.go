@@ -300,13 +300,18 @@ func formatAgentsTable(agents []agentInfo) string {
 		return "No agents found"
 	}
 
-	headers := []string{"ID", "ROLE", "STATUS", "HEALTH", "PID", "CURRENT_TASK", "TIME_ON_TASK", "HEARTBEAT", "CONTEXT"}
+	headers := []string{"ID", "ROLE", "PROVIDER", "STATUS", "HEALTH", "PID", "CURRENT_TASK", "TIME_ON_TASK", "HEARTBEAT", "CONTEXT"}
 	var rows [][]string
 
 	for _, agent := range agents {
 		currentTask := "-"
 		if agent.CurrentTask != nil {
 			currentTask = *agent.CurrentTask
+		}
+
+		provider := "-"
+		if agent.Provider != "" {
+			provider = agent.Provider
 		}
 
 		timeOnTask := "-"
@@ -327,6 +332,7 @@ func formatAgentsTable(agents []agentInfo) string {
 		rows = append(rows, []string{
 			agent.ID,
 			agent.Role,
+			provider,
 			agent.Status,
 			formatAgentHealthForTable(agent),
 			pidDisplay,

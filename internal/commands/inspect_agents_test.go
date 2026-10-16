@@ -793,6 +793,35 @@ func TestFormatAgentsTable_IncludesPID(t *testing.T) {
 	}
 }
 
+// TestFormatAgentsTable_IncludesProvider tests that table format shows each agent's provider
+func TestFormatAgentsTable_IncludesProvider(t *testing.T) {
+	agents := []agentInfo{
+		{ID: "agent-1", Role: "coder", Provider: "codex", Status: "WORKING", TimeSinceHeartbeat: "30s"},
+		{ID: "agent-2", Role: "code-reviewer", Status: "IDLE", TimeSinceHeartbeat: "1m"},
+	}
+
+	lines := strings.Split(formatAgentsTable(agents), "\n")
+	fieldsOf := func(prefix string) []string {
+		for _, line := range lines {
+			if fields := strings.Fields(line); len(fields) > 0 && fields[0] == prefix {
+				return fields
+			}
+		}
+		t.Fatalf("no table line starts with %q:\n%s", prefix, strings.Join(lines, "\n"))
+		return nil
+	}
+
+	if header := fieldsOf("ID"); len(header) < 3 || header[2] != "PROVIDER" {
+		t.Errorf("header = %v, want PROVIDER after ROLE", header)
+	}
+	if row := fieldsOf("agent-1"); len(row) < 3 || row[2] != "codex" {
+		t.Errorf("agent-1 row = %v, want provider codex", row)
+	}
+	if row := fieldsOf("agent-2"); len(row) < 3 || row[2] != "-" {
+		t.Errorf("agent-2 row = %v, want provider -", row)
+	}
+}
+
 // TestFormatAgentValue_IncludesPID tests that value format includes PID and ProcessStatus
 func TestFormatAgentValue_IncludesPID(t *testing.T) {
 	tests := []struct {
