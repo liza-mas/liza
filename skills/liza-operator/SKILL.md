@@ -359,6 +359,13 @@ on a few. At planning/architecture checkpoints, when the goal is "validate again
   pauses, unclear stop provenance and breaker HALTs stay escalations.
 
 # Recovery patterns & hazards
+- **Encode merge waits as dependencies** — when a BLOCKED task's only remaining blocker is
+  another task merging, repair the dependency graph now, then run
+  `§BRAND_BINARY_NAME§ unblock-task <id> --reason "wait encoded as dependency"` without
+  `--assign-to`. The scheduler holds it until prerequisites merge; no later manual unblock
+  or dedicated periodic check is needed. Preserve existing prerequisites when adding an edge:
+  `retarget-dependency <id> <existing-dep> <existing-dep>,<missing-dep> --reason "..."`.
+  Verify the resulting graph and dependency-held state; retain any independent blocker.
 - **Preserve before destructive release** — before cleanup, cancellation, `recover-agent`, supersession, or
   replacement, record the task branch, HEAD, and worktree status, then preserve task-owned changes in a commit
   (copy untracked drafts); pin its SHA with a tag when cleanup removes the branch. If the operator cannot
