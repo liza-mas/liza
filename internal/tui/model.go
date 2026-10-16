@@ -45,9 +45,10 @@ type rolesMsg struct {
 // stopDoneMsg signals that StopCommand completed and the TUI should quit.
 type stopDoneMsg struct{}
 
-// StateMsg carries a fresh state snapshot after a blackboard change.
+// StateMsg carries the result of one state read: a fresh snapshot, or Err.
 type StateMsg struct {
 	State *models.State
+	Err   error
 }
 
 // TickMsg signals a periodic 10s poll tick for anomaly checks and heartbeat refresh.
@@ -234,6 +235,14 @@ type Model struct {
 	// checksInFlight holds back the next anomaly check until the running one
 	// returns its cache; a check started from a stale copy re-emits alerts.
 	checksInFlight bool
+	// checksDue records a tick whose checks wait for the next completed state
+	// read, so they never run against the snapshot that read replaces.
+	checksDue bool
+
+	// One state read at a time: a trigger arriving during a read queues one
+	// more, so decodes never overlap or complete out of order.
+	stateReadInFlight bool
+	stateReadQueued   bool
 
 	// Data layer
 	watcher          StateWatcher   // fsnotify subscription; nil after close
@@ -322,5 +331,8 @@ func New(projectRoot string) (Model, error) {
 		blackboard:    bb,
 		logPath:       p.LogPath(),
 		alertsLogPath: p.AlertsLogPath(),
+
+		// Init issues the first state read.
+		stateReadInFlight: true,
 	}, nil
 }

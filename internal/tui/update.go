@@ -16,15 +16,41 @@ import (
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case stateChangedMsg:
-		return m, tea.Batch(
-			readStateCmd(m.blackboard),
-			readLogCmd(m.logPath, m.logPosition),
-			watchStateCmd(m.watcher),
-		)
+		// Call before the return: Go leaves unspecified whether m is copied
+		// before or after a call in the same return statement mutates it.
+		read := m.requestStateRead()
+		return m, tea.Batch(read, readLogCmd(m.logPath, m.logPosition), watchStateCmd(m.watcher))
 
 	case StateMsg:
+		m.stateReadInFlight = false
+		var cmds []tea.Cmd
+		if m.stateReadQueued {
+			m.stateReadQueued = false
+			cmds = append(cmds, m.requestStateRead())
+		}
+		if msg.Err != nil {
+			m.activities = appendActivity(m.activities, ActivityEntry{
+				Timestamp: time.Now(),
+				Source:    "alert",
+				Action:    "state_read_error",
+				Level:     "⚠️",
+				Detail:    msg.Err.Error(),
+			})
+			// Checks never run against the stale snapshot: they stay due for
+			// the next good read, and meanwhile the unreadable state is reported.
+			if m.checksDue && !m.checksInFlight {
+				m.checksInFlight = true
+				cmds = append(cmds, reportStateReadFailureCmd(m.alertsLogPath, msg.Err, m.stateCache))
+			}
+			return m, tea.Batch(cmds...)
+		}
 		m.state = msg.State
 		m.ready = true
+		if m.checksDue && !m.checksInFlight {
+			m.checksDue = false
+			m.checksInFlight = true
+			cmds = append(cmds, runChecksCmd(m.projectRoot, m.alertsLogPath, m.state, m.stateCache))
+		}
 
 		// Sync new blackboard anomalies to activity feed (incremental).
 		// state.Anomalies is append-only; track count for delta processing.
@@ -43,7 +69,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.lastAnomalyCount = len(m.state.Anomalies)
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
 		// Dismiss alert banner on any keypress (spec §Alert Banner)
@@ -82,12 +108,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cmdResult != nil && time.Now().After(m.cmdExpiry) {
 			m.cmdResult = nil
 		}
-		cmds := []tea.Cmd{readStateCmd(m.blackboard), readLogCmd(m.logPath, m.logPosition), tickCmd()}
-		if !m.checksInFlight {
-			m.checksInFlight = true
-			cmds = append(cmds, runChecksCmd(m.projectRoot, m.alertsLogPath, m.state, m.stateCache))
-		}
-		return m, tea.Batch(cmds...)
+		// Checks run once this tick's read completes, against its result.
+		m.checksDue = true
+		read := m.requestStateRead()
+		return m, tea.Batch(read, readLogCmd(m.logPath, m.logPosition), tickCmd())
 
 	case alertsMsg:
 		// Update state cache with modified copy from check goroutine
@@ -179,6 +203,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
+}
+
+// requestStateRead starts a state read, or queues one behind the read in
+// flight; the queued read starts when that read completes.
+func (m *Model) requestStateRead() tea.Cmd {
+	if m.stateReadInFlight {
+		m.stateReadQueued = true
+		return nil
+	}
+	m.stateReadInFlight = true
+	return readStateCmd(m.blackboard)
 }
 
 // handleNormalKey dispatches key events in normal mode.

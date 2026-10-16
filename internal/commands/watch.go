@@ -802,6 +802,27 @@ func isFreshnessTrackedAlertCategory(category string) bool {
 	}
 }
 
+// StateReadFailureAlerts reports a state that could not be read, for a
+// caller whose checks cannot run without one. The INVALID STATE alert is
+// emitted once per episode, like validation's: suppressed while its identity
+// is cached, which retires on the next clean validation (reconcileStuckAlerts).
+// Other cached identities are left alone, since no check observed them.
+func StateReadFailureAlerts(err error, cache map[string]time.Time) []Alert {
+	now := time.Now().UTC()
+	alert := Alert{
+		Timestamp: now,
+		Level:     AlertLevelCritical,
+		Category:  invalidStateCategory,
+		Message:   err.Error(),
+	}
+	key := stuckAlertCacheKey(alert)
+	if _, seen := cache[key]; seen {
+		return nil
+	}
+	cache[key] = now
+	return []Alert{alert}
+}
+
 // reconcileStuckAlerts emits each condition once while it stays active: an
 // alert whose gate identity was active on the previous check is suppressed, and
 // an identity absent from a check retires, so a condition that resolves and

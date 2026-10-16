@@ -48,13 +48,12 @@ func watchStateCmd(watcher StateWatcher) tea.Cmd {
 }
 
 // readStateCmd reads one published state.yaml snapshot without taking the
-// state lock and returns a StateMsg.
-// Returns errMsg on read failure.
+// state lock and returns a StateMsg, carrying Err on read failure.
 func readStateCmd(bb *db.Blackboard) tea.Cmd {
 	return func() tea.Msg {
 		state, err := bb.ReadSnapshot()
 		if err != nil {
-			return errMsg{err}
+			return StateMsg{Err: err}
 		}
 		return StateMsg{State: state}
 	}
@@ -133,30 +132,7 @@ func runChecksCmd(projectRoot, alertsLogPath string, state *models.State, cache 
 		snapshot.Alerts = commands.FilterAlertsAfterAutoRepair(snapshot.Alerts, repairOutcome)
 		snapshot.Alerts = append(snapshot.Alerts, repairOutcome.Alerts...)
 
-		// Write each alert to alerts.log
-		var writeErr error
-		for _, a := range snapshot.Alerts {
-			if err := alerts.Write(alertsLogPath, a); err != nil && writeErr == nil {
-				writeErr = err
-			}
-		}
-
-		// Convert to TUI AlertMsg types
-		alertMsgs := make([]AlertMsg, len(snapshot.Alerts))
-		for i, a := range snapshot.Alerts {
-			key := alerts.Key(a)
-			if !snapshot.ActiveKeys[key] {
-				key = ""
-			}
-			alertMsgs[i] = AlertMsg{
-				Timestamp: a.Timestamp,
-				Level:     string(a.Level),
-				Category:  a.Category,
-				Message:   a.Message,
-				Key:       key,
-			}
-		}
-
+		alertMsgs, writeErr := deliverAlerts(alertsLogPath, snapshot.Alerts, snapshot.ActiveKeys)
 		return alertsMsg{
 			Alerts:          alertMsgs,
 			ActiveAlertKeys: snapshot.ActiveKeys,
@@ -164,6 +140,52 @@ func runChecksCmd(projectRoot, alertsLogPath string, state *models.State, cache 
 			WriteErr:        writeErr,
 		}
 	}
+}
+
+// reportStateReadFailureCmd stands in for the due checks when the state read
+// failed: it raises the INVALID STATE alert for the read error, as validation
+// did when checks re-read the state themselves. It carries no active-key set,
+// so alerts from earlier checks are neither resolved nor re-announced.
+func reportStateReadFailureCmd(alertsLogPath string, readErr error, cache map[string]time.Time) tea.Cmd {
+	cacheCopy := make(map[string]time.Time, len(cache))
+	maps.Copy(cacheCopy, cache)
+
+	return func() tea.Msg {
+		failure := commands.StateReadFailureAlerts(readErr, cacheCopy)
+		active := make(map[string]bool, len(failure))
+		for _, a := range failure {
+			active[alerts.Key(a)] = true
+		}
+		alertMsgs, writeErr := deliverAlerts(alertsLogPath, failure, active)
+		return alertsMsg{Alerts: alertMsgs, StateCache: cacheCopy, WriteErr: writeErr}
+	}
+}
+
+// deliverAlerts writes each alert to alerts.log and converts it for the TUI,
+// keying the alerts in activeKeys so a later check can resolve them.
+func deliverAlerts(alertsLogPath string, alertsIn []commands.Alert, activeKeys map[string]bool) ([]AlertMsg, error) {
+	var writeErr error
+	for _, a := range alertsIn {
+		if err := alerts.Write(alertsLogPath, a); err != nil && writeErr == nil {
+			writeErr = err
+		}
+	}
+
+	alertMsgs := make([]AlertMsg, len(alertsIn))
+	for i, a := range alertsIn {
+		key := alerts.Key(a)
+		if !activeKeys[key] {
+			key = ""
+		}
+		alertMsgs[i] = AlertMsg{
+			Timestamp: a.Timestamp,
+			Level:     string(a.Level),
+			Category:  a.Category,
+			Message:   a.Message,
+			Key:       key,
+		}
+	}
+	return alertMsgs, writeErr
 }
 
 func recentlySpawnedAgentPIDs(spawned []commands.SpawnedAgent) []int {
