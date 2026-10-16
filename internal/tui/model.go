@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -45,10 +46,14 @@ type rolesMsg struct {
 // stopDoneMsg signals that StopCommand completed and the TUI should quit.
 type stopDoneMsg struct{}
 
-// StateMsg carries the result of one state read: a fresh snapshot, or Err.
+// StateMsg carries the result of one state read: a snapshot and the file it
+// was read from, or Err. Unchanged marks a snapshot refreshed without parsing
+// because the file had not changed.
 type StateMsg struct {
-	State *models.State
-	Err   error
+	State     *models.State
+	File      os.FileInfo
+	Unchanged bool
+	Err       error
 }
 
 // TickMsg signals a periodic 10s poll tick for anomaly checks and heartbeat refresh.
@@ -241,8 +246,10 @@ type Model struct {
 
 	// One state read at a time: a trigger arriving during a read queues one
 	// more, so decodes never overlap or complete out of order.
-	stateReadInFlight bool
-	stateReadQueued   bool
+	stateReadInFlight    bool
+	stateReadQueued      bool
+	stateReadQueuedForce bool        // a queued read must parse (watcher event)
+	stateFile            os.FileInfo // file the current snapshot was read from
 
 	// Data layer
 	watcher          StateWatcher   // fsnotify subscription; nil after close

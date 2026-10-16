@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -424,5 +425,34 @@ func TestSweepLivenessRecordsKeepsCurrentRecordsAndTemporaries(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("%s removed by sweep: %v", filepath.Base(path), err)
 		}
+	}
+}
+
+// RefreshSnapshot overlays records published since prev was read, without
+// parsing state.yaml, and leaves prev exactly as it was.
+func TestRefreshSnapshotOverlaysNewerLivenessWithoutModifyingInput(t *testing.T) {
+	expired := time.Now().UTC().Add(-time.Hour)
+	statePath, bb := writeLivenessState(t, expired, nil)
+	prev, err := bb.ReadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := CloneState(prev)
+
+	beat, lease := time.Now().UTC(), time.Now().UTC().Add(30*time.Minute)
+	publishLiveness(t, statePath, LivenessRecord{Seq: 1, Heartbeat: beat, LeaseExpires: lease})
+	got, err := bb.RefreshSnapshot(prev)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	agent := got.Agents[livenessAgent]
+	if !agent.Heartbeat.Equal(beat) {
+		t.Fatalf("refreshed heartbeat = %v, want %v", agent.Heartbeat, beat)
+	}
+	assertTime(t, "refreshed agent lease", agent.LeaseExpires, lease)
+	assertTime(t, "refreshed task lease", got.FindTask(livenessTask).LeaseExpires, lease)
+	if !reflect.DeepEqual(prev, before) {
+		t.Fatal("RefreshSnapshot modified the snapshot it refreshed")
 	}
 }

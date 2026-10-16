@@ -49,7 +49,8 @@ require these gaps addressed while preserving existing fences and gates.
    fails explicitly with task, digest and path. A byte-bounded per-blackboard
    decoded-object cache avoids repeated payload parsing; cloned returned tasks
    cannot alias its mutable slices, maps or pointers. Eviction changes cost,
-   never correctness.
+   never correctness. `RefreshSnapshot`, which re-observes an unchanged file
+   without reparsing it, verifies every archived task the same way.
 5. Project a separate state view for publication; never replace the caller's
    complete task with its stub. A changed terminal task gets a new immutable
    object/reference. Install and fsync changed/new objects and their directory

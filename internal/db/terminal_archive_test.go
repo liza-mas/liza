@@ -255,7 +255,7 @@ func sharedKeys(a, b map[string]bool) int {
 }
 
 func TestTerminalArchiveMissingOrCorruptEvidenceFailsIncludingWarmCache(t *testing.T) {
-	for _, reader := range []string{"locked", "snapshot", "cached"} {
+	for _, reader := range []string{"locked", "snapshot", "cached", "refresh"} {
 		for _, damage := range []string{"missing", "corrupt"} {
 			for _, warm := range []bool{false, true} {
 				t.Run(reader+"/"+damage+"/warm="+map[bool]string{false: "false", true: "true"}[warm], func(t *testing.T) {
@@ -266,7 +266,20 @@ func TestTerminalArchiveMissingOrCorruptEvidenceFailsIncludingWarmCache(t *testi
 					} else if reader == "cached" {
 						read = fixture.bb.ReadCached
 					}
-					if warm {
+					if reader == "refresh" {
+						// RefreshSnapshot re-observes a snapshot of the unchanged
+						// file; a cold cache takes that snapshot from another
+						// instance, leaving fixture.bb's cache empty.
+						source := fixture.bb
+						if !warm {
+							source = New(fixture.bb.GetStatePath())
+						}
+						prev, err := source.ReadSnapshot()
+						if err != nil {
+							t.Fatalf("snapshot to refresh: %v", err)
+						}
+						read = func() (*models.State, error) { return fixture.bb.RefreshSnapshot(prev) }
+					} else if warm {
 						if _, err := read(); err != nil {
 							t.Fatalf("warm valid object: %v", err)
 						}

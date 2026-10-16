@@ -48,15 +48,36 @@ func watchStateCmd(watcher StateWatcher) tea.Cmd {
 }
 
 // readStateCmd reads one published state.yaml snapshot without taking the
-// state lock and returns a StateMsg, carrying Err on read failure.
-func readStateCmd(bb *db.Blackboard) tea.Cmd {
+// state lock and returns a StateMsg, carrying Err on read failure. Unless
+// forced, a file unchanged since prevFile is not parsed: prev is refreshed
+// instead, which still verifies archive evidence and overlays liveness.
+func readStateCmd(bb *db.Blackboard, prev *models.State, prevFile os.FileInfo, force bool) tea.Cmd {
 	return func() tea.Msg {
+		// Stat before reading: a publication landing in between is read now
+		// and differs from file at the next stat, so it is never skipped.
+		file, err := os.Stat(bb.GetStatePath())
+		if err != nil {
+			return StateMsg{Err: err}
+		}
+		if !force && prev != nil && sameStatePublication(prevFile, file) {
+			state, err := bb.RefreshSnapshot(prev)
+			if err != nil {
+				return StateMsg{Err: err}
+			}
+			return StateMsg{State: state, File: file, Unchanged: true}
+		}
 		state, err := bb.ReadSnapshot()
 		if err != nil {
 			return StateMsg{Err: err}
 		}
-		return StateMsg{State: state}
+		return StateMsg{State: state, File: file}
 	}
+}
+
+// sameStatePublication reports whether two stats observe one publication.
+// Writers publish by atomic rename, so each publication is a new file.
+func sameStatePublication(prev, cur os.FileInfo) bool {
+	return prev != nil && os.SameFile(prev, cur) && prev.ModTime().Equal(cur.ModTime()) && prev.Size() == cur.Size()
 }
 
 // readLogCmd reads new entries from log.yaml starting at the given byte offset.
@@ -382,7 +403,7 @@ func loadRolesCmd(projectRoot string) tea.Cmd {
 // Subscribes to watcher, reads initial state, reads initial log, starts tick timer.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		readStateCmd(m.blackboard),
+		readStateCmd(m.blackboard, nil, nil, true),
 		readLogCmd(m.logPath, m.logPosition),
 		loadRolesCmd(m.projectRoot),
 		tickCmd(),

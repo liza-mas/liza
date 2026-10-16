@@ -185,10 +185,26 @@ func (bb *Blackboard) cachedTerminalTask(digest string) *models.Task {
 }
 
 func (bb *Blackboard) readTerminalTask(stub *models.Task) (models.Task, error) {
+	cached, err := bb.verifiedTerminalTask(stub)
+	if err != nil {
+		return models.Task{}, err
+	}
+	task := cloneTerminalTask(cached)
+	copyRef := *stub.TerminalArchive
+	task.TerminalArchive = &copyRef
+	task.TerminalArchiveRestored = true
+	return task, nil
+}
+
+// verifiedTerminalTask verifies a task's archive object bytes, digest and
+// identity, as every read must (ADR-0183), and returns the decoded object
+// from the cache, decoding it on a miss. The result is shared: clone it
+// before handing it out.
+func (bb *Blackboard) verifiedTerminalTask(stub *models.Task) (*models.Task, error) {
 	ref := stub.TerminalArchive
 	path, pathErr := archiveobject.Path(bb.terminalArchiveDir(), ref.SHA256)
-	fail := func(reason string) (models.Task, error) {
-		return models.Task{}, &TerminalArchiveError{TaskID: stub.ID, SHA256: ref.SHA256, Path: path, Reason: reason}
+	fail := func(reason string) (*models.Task, error) {
+		return nil, &TerminalArchiveError{TaskID: stub.ID, SHA256: ref.SHA256, Path: path, Reason: reason}
 	}
 	if pathErr != nil || ref.ArchivedAt.IsZero() || !stub.Status.IsTerminal() {
 		return fail("invalid reference or non-terminal task")
@@ -243,11 +259,7 @@ func (bb *Blackboard) readTerminalTask(stub *models.Task) (models.Task, error) {
 		// payload matches too, so a failed read cannot authorize another ID.
 		bb.rememberTerminalTask(ref.SHA256, cached, len(data))
 	}
-	task := cloneTerminalTask(cached)
-	copyRef := *ref
-	task.TerminalArchive = &copyRef
-	task.TerminalArchiveRestored = true
-	return task, nil
+	return cached, nil
 }
 
 func (bb *Blackboard) restoreTerminalTasks(state *models.State) error {

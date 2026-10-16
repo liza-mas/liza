@@ -20,7 +20,7 @@ func TestReadStateCmdReadsSnapshotWhileStateLockHeld(t *testing.T) {
 	bb := testhelpers.WriteInitialState(t, statePath, state)
 	testhelpers.HoldFileLock(t, statePath)
 
-	msg := readStateCmd(bb)()
+	msg := readStateCmd(bb, nil, nil, true)()
 	stateMsg, ok := msg.(StateMsg)
 	if !ok {
 		t.Fatalf("readStateCmd while the state lock is held returned %T %+v, want StateMsg", msg, msg)

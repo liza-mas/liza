@@ -18,15 +18,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateChangedMsg:
 		// Call before the return: Go leaves unspecified whether m is copied
 		// before or after a call in the same return statement mutates it.
-		read := m.requestStateRead()
+		read := m.requestStateRead(true)
 		return m, tea.Batch(read, readLogCmd(m.logPath, m.logPosition), watchStateCmd(m.watcher))
 
 	case StateMsg:
 		m.stateReadInFlight = false
+		if msg.Err == nil {
+			// Before starting a queued read, which compares against them.
+			m.state = msg.State
+			m.stateFile = msg.File
+			m.ready = true
+		}
 		var cmds []tea.Cmd
 		if m.stateReadQueued {
-			m.stateReadQueued = false
-			cmds = append(cmds, m.requestStateRead())
+			force := m.stateReadQueuedForce
+			m.stateReadQueued, m.stateReadQueuedForce = false, false
+			cmds = append(cmds, m.requestStateRead(force))
 		}
 		if msg.Err != nil {
 			m.activities = appendActivity(m.activities, ActivityEntry{
@@ -44,8 +51,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(cmds...)
 		}
-		m.state = msg.State
-		m.ready = true
 		if m.checksDue && !m.checksInFlight {
 			m.checksDue = false
 			m.checksInFlight = true
@@ -110,7 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Checks run once this tick's read completes, against its result.
 		m.checksDue = true
-		read := m.requestStateRead()
+		read := m.requestStateRead(false)
 		return m, tea.Batch(read, readLogCmd(m.logPath, m.logPosition), tickCmd())
 
 	case alertsMsg:
@@ -206,14 +211,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // requestStateRead starts a state read, or queues one behind the read in
-// flight; the queued read starts when that read completes.
-func (m *Model) requestStateRead() tea.Cmd {
+// flight; the queued read starts when that read completes. Unless forced, the
+// read skips parsing a file unchanged since the last read (readStateCmd).
+// Watcher events force: they report a write.
+func (m *Model) requestStateRead(force bool) tea.Cmd {
 	if m.stateReadInFlight {
 		m.stateReadQueued = true
+		m.stateReadQueuedForce = m.stateReadQueuedForce || force
 		return nil
 	}
 	m.stateReadInFlight = true
-	return readStateCmd(m.blackboard)
+	return readStateCmd(m.blackboard, m.state, m.stateFile, force)
 }
 
 // handleNormalKey dispatches key events in normal mode.

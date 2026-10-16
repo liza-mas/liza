@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -232,6 +233,29 @@ func (bb *Blackboard) ReadSnapshot() (*models.State, error) {
 		return nil, err
 	}
 	return bb.decodeLiveState(data, "state snapshot")
+}
+
+// RefreshSnapshot re-observes the publication prev was decoded from, for a
+// caller that has established the file is unchanged since: it verifies every
+// archived terminal task's evidence as a read would (ADR-0183), then returns a
+// copy of prev with newer liveness records overlaid (ADR-0177), without
+// parsing state.yaml. Records change without changing the file, so this keeps
+// heartbeats and leases current. prev is not modified: the copy owns its
+// agents map and tasks slice, the only parts the overlay replaces.
+func (bb *Blackboard) RefreshSnapshot(prev *models.State) (*models.State, error) {
+	for i := range prev.Tasks {
+		if prev.Tasks[i].TerminalArchive == nil {
+			continue
+		}
+		if _, err := bb.verifiedTerminalTask(&prev.Tasks[i]); err != nil {
+			return nil, err
+		}
+	}
+	next := *prev
+	next.Agents = maps.Clone(prev.Agents)
+	next.Tasks = slices.Clone(prev.Tasks)
+	applyLiveness(&next, bb.statePath)
+	return &next, nil
 }
 
 // decodeLiveState decodes a published state and overlays pending liveness

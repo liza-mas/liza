@@ -48,6 +48,9 @@ recovery, and validation.
    - the review lease of the renewal's task, if non-nil and while the renewal's
      `seq` is above `liveness_seq`.
 
+   `RefreshSnapshot` re-applies the overlay to a copy of a snapshot whose file
+   is unchanged, without reparsing it.
+
    Pre-image decodes for write checks, and `ReadRaw`, see the stored bytes only.
 3. **Fold by sequence.** `Modify` overlays before its callback and persists the
    result. Every ordinary mutation therefore folds pending records into

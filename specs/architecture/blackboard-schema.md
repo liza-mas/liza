@@ -1768,6 +1768,9 @@ The read itself is lock-free, but the command around it may still take locks. Fo
 example, `watch` and TUI auto-repair take `RepairAgentPool`'s locked read, and
 `validate --repair` repairs under lock. Writers publish closed temporary files by atomic
 rename; inspection sees either publication, never a partially written state.
+The TUI's periodic read skips the parse when `state.yaml` is the publication it
+last read, calling `Blackboard.RefreshSnapshot` instead: archive evidence is
+verified and liveness records are overlaid on a copy, as a read would.
 The file is closed before YAML decoding. Missing files and malformed YAML remain
 errors. In-place external writes are outside this guarantee.
 
