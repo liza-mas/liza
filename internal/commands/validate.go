@@ -85,7 +85,18 @@ func ValidateCommandWithOptions(statePath string, opts ValidateOptions) error {
 		schemaErr := &lizaerrors.StateSchemaError{Operation: "validate", Err: err}
 		return &lizaerrors.ValidationError{Message: schemaErr.Error(), Err: schemaErr}
 	}
+	return ValidateLoadedState(state, projectRoot, opts)
+}
 
+// ValidateLoadedState runs ValidateCommandWithOptions' checks against a state
+// the caller has already read, such as a watcher's snapshot, instead of
+// reading state.yaml again. It does not repair (opts.Repair is ignored) and
+// does not modify state.
+func ValidateLoadedState(state *models.State, projectRoot string, opts ValidateOptions) error {
+	warnings := opts.WarnWriter
+	if warnings == nil {
+		warnings = warnWriter
+	}
 	if err := statevalidate.ValidateState(state, projectRoot, opts.SkipSpecFileCheck, warnings); err != nil {
 		return &lizaerrors.ValidationError{Message: err.Error(), Err: err}
 	}

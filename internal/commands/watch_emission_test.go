@@ -5,10 +5,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -220,9 +222,7 @@ func TestAlertEmission_OrphanedRejectedAnchorsGraceOnVerdictAndIgnoresStatusFlip
 
 func TestAlertEmission_MaskedValidationErrorIsNotResolution(t *testing.T) {
 	config := newEmissionWatchConfig(t)
-	statePath := paths.New(config.ProjectRoot).StatePath()
 	now := time.Now().UTC()
-	checkState := stateWithTask(testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, now))
 
 	zombie := true
 	originalFind := findZombieAgents
@@ -241,9 +241,10 @@ func TestAlertEmission_MaskedValidationErrorIsNotResolution(t *testing.T) {
 		testhelpers.BuildTaskByStatus("dup-1", models.TaskStatusReady, now),
 	}
 
-	tick := func(file *models.State) []Alert {
-		testhelpers.WriteInitialState(t, statePath, file)
-		snapshot := RunChecksWithStateSnapshot(checkState, config)
+	// Validation checks the snapshot it is given, so each tick supplies the
+	// state under validation directly.
+	tick := func(state *models.State) []Alert {
+		snapshot := RunChecksWithStateSnapshot(state, config)
 		var invalid []Alert
 		for _, alert := range snapshot.Alerts {
 			if alert.Category == "INVALID STATE" {
@@ -365,5 +366,27 @@ func TestAlertEmission_LedgerFailureDoesNotDropLaterAlertsOfTheBatch(t *testing.
 		if !strings.Contains(string(data), "BLOCKED: "+task+" — needs spec") {
 			t.Fatalf("alerts log missing %s:\n%s", task, data)
 		}
+	}
+}
+
+// Validation runs against the snapshot the checks were given, not a fresh
+// read of state.yaml: an invalid snapshot is reported while the file on disk
+// is valid, and the snapshot is left unchanged.
+func TestRunChecksValidatesTheSuppliedSnapshot(t *testing.T) {
+	config := newEmissionWatchConfig(t)
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusImplementing, time.Now().UTC().Add(-time.Hour))
+	snapshot := stateWithTask(task)
+	snapshot.Tasks = append(snapshot.Tasks, task) // duplicate task ID
+	before := db.CloneState(snapshot)
+
+	found := false
+	for _, alert := range RunChecksWithStateSnapshot(snapshot, config).Alerts {
+		found = found || alert.Category == invalidStateCategory
+	}
+	if !found {
+		t.Fatal("invalid snapshot was not reported: validation re-read the valid state file")
+	}
+	if !reflect.DeepEqual(snapshot, before) {
+		t.Fatal("validation modified the snapshot it was given")
 	}
 }

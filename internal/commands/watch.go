@@ -722,7 +722,6 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 
 	// Pool repair alerts on an unreadable models.yaml; here it binds nothing.
 	roleModels, _ := rolemodels.Load(config.ProjectRoot)
-	lizaPaths := paths.New(config.ProjectRoot)
 	checks := []func() []Alert{
 		func() []Alert { return checkExpiredLeases(state) },
 		func() []Alert { return checkRegisteredAgentsWithoutLiveProcess(state) },
@@ -749,8 +748,9 @@ func RunChecksWithStateSnapshot(state *models.State, config WatchConfig) AlertSn
 	alerts = append(alerts, checkCircuitBreakerEscalation(state, config.StateCache)...)
 	alerts = append(alerts, checkSprintStalled(state, config.StateCache)...)
 
-	statePath := lizaPaths.StatePath()
-	if err := ValidateCommandWithOptions(statePath, ValidateOptions{
+	// Validate the snapshot the other checks saw, rather than reading and
+	// decoding state.yaml again.
+	if err := ValidateLoadedState(state, config.ProjectRoot, ValidateOptions{
 		SkipSpecFileCheck:        true,
 		WarnWriter:               config.WarnWriter,
 		RecentlySpawnedAgentPIDs: config.RecentlySpawnedAgentPIDs,
