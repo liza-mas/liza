@@ -116,16 +116,32 @@ Conflict between "keep moving" and an operating constraint → the constraint wi
    Before sending, tag every factual claim with the observation from this round that supports it (command
    and output), or mark it INFERRED/UNVERIFIED; run the check instead when it is cheap. Take every timestamp
    from the clock (`date -u`) in the same turn, never from an estimate.
-6. **Frictions → notes** — every round, collect the frictions since the last one and analyze them on three
-   axes — token consumption, errors, workflow contention — plus manual actions you performed and decision
-   requests to the human. Report unmeasurable token usage as unmeasured, never as zero. Record each friction and
-   intervention in `§BRAND_PROJECT_DIRNAME§/operator-notes.md`, including self-recovered ones; name new
-   entries in the report so the human can veto/amend.
+6. **Frictions → ledger** — every round, collect the frictions since the last one and record each friction and
+   intervention in `§BRAND_PROJECT_DIRNAME§/operator-notes.md`, including self-recovered ones, and add it to
+   the friction ledger's running count for its category. Name new entries in the report so the human can
+   veto/amend. Categories:
+   - cost: token consumption (unmeasurable usage is reported as unmeasured, never as zero), errors, workflow
+     contention, manual actions you performed;
+   - flow: tasks created against tasks merged over a trailing window, and merges per window, from
+     `status --json` and task timestamps; tell an expected stall (one long validation) from non-convergence;
+   - rework: corrective, superseded and replanned tasks per plan task, by cause family (D-n);
+   - environment: failures or blocks caused by missing or unstable test infrastructure, such as fixtures, DB
+     targets, seeds, installs, test isolation and admission slots;
+   - execution limits: work near or past a harness limit, such as the background-command ceiling, the agent
+     session timeout and validation budgets;
+   - decisions: rulings and human decisions by class (for example oracle drift, budget, scope, product),
+     delegated or human.
+   **Triggers** (defaults, the notes may override them): in a 6 h window, blocked + superseded + abandoned
+   events reach 1.5× merges and at least 10 (created against merged misfires while planning decomposes work);
+   no merge for 4 h while work is claimable; one root holding most open tasks, or a single lane with at least
+   10 open tasks; the third occurrence of one rework family, environment cause or decision class; a task
+   whose validation scope nears an execution limit. A crossed trigger is a concern for step 3: propose its
+   durable fix (a delegation, a provisioning or isolation task, a spec or template change, a split
+   validation). A report line alone is not enough.
 7. **Queue** — is the next goal ready? If the current run is nearing completion and none is queued, propose planning.
 
 **Points of attention.** Humans repeatedly asked about these during runs; raise them unprompted when a
 round shows the symptom:
-- task count growing faster than scope: corrective, superseded and replanned tasks per plan task, and why;
 - token burn: which agents and sessions consumed it over the period, and on what;
 - a task claimed many times: the cause of each claim;
 - error and refusal tallies across supervisor logs, separating failures from expected diagnostics;
@@ -177,8 +193,9 @@ self-recovered issues, and retain resolved incidents with their outcomes.
 Keep these sections current:
 - run header: goal/spec, operator, exact tool builds, watch interval, timestamps,
   run status, and evidence scope;
-- executive summary: prioritized friction table with evidence, impact, action,
-  recommended durable fix, and status;
+- executive summary: the friction ledger, one row per step 6 category with its running count, trigger state,
+  evidence, impact, action, recommended durable fix and status, prioritized with crossed triggers
+  first;
 - primary lifecycle friction: the highest-churn or highest-impact logical work
   chain first — trace it across supersessions and replacements by cause, not
   by task ID, even if it eventually merged;
@@ -449,7 +466,9 @@ comes first. The next report lists these rulings under `Auto-approved:`, most ex
   foundation chains run near-serially by design, but the engine also inherits every upstream child as a
   barrier unless the plan selected inputs. Identify the blocked provider and what it supplies each held
   consumer; if consumers that need nothing from it are waiting, that is an expanded-barrier finding for the
-  orchestrator (`narrow-inherited-dependencies`, `retarget-dependency`), not healthy metering.
+  orchestrator (`narrow-inherited-dependencies`, `retarget-dependency`), not healthy metering. Serialization
+  by a shared write set gets the same check: count the held tasks that write none of the root's files; those
+  can leave the serial order by ruling.
 - **Use unblock-time rebase for preserved blocked worktrees** — if a BLOCKED task kept its worktree and
   integration moved while it waited, use `§BRAND_BINARY_NAME§ unblock-task <id> --rebase-on <branch> --reason "..."`.
   Add `--allow-dirty` only when tracked worktree changes should be autostashed; untracked overwrite
@@ -507,13 +526,13 @@ WATCH — <time> · Phase: <spec|coding|integration>
 Since last: <merged / advanced / newly blocked>
 Delivery: planning merged <n> · implementation merged <n> · integrated <demonstrated|no> · final evidence <complete|pending|failed|unavailable> · Must coverage <x/y>, Should/Could deferred <n>, Won't preserved
 Blocking chain: <provider → held consumers → next concrete change | none>
-Throughput: <live doers> · claimable <n> by role (status --json tasks.claimable_by_role) · staffing deficit <n> (repair-agent-pool --dry-run) · critical path <root, length>
+Throughput: <live doers> · lanes <tasks in progress> · claimable <n> by role (status --json tasks.claimable_by_role) · staffing deficit <n> (repair-agent-pool --dry-run) · critical path <root, length, tasks behind it of open>
 I handled: <actions + one-line why | "nothing — steady">
 Delegated: <delivery changes first, then check-only — D-id · one line · revert | none>
 Auto-approved: <first report after an auto-approval period only — D-id · one line · built on it · revert, most expensive revert first>
 Queue: <next goal: empty | drafting | ready>
 Health: <steady | drift on task-X | thrash on coding-pair>
-Frictions: <tokens | contention | tool errors | manual actions | human decisions — one line each | none>
+Frictions: <crossed triggers first — category · count · cause · proposed durable fix; then new entries, one line each | none>
 Logged: <operator-notes entry | durable lesson promoted | none>
 
 On you: <every open decision (options · pros/cons · recommendation) and action only the human can do; repeated each report until done | none>
