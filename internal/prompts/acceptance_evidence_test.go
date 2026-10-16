@@ -118,6 +118,7 @@ func TestAcceptanceEvidencePlannerAndReviewerInstructions(t *testing.T) {
 	for _, tc := range []struct{ block, role, want string }{
 		{"code-planner-tools", "code-planner", "emit an Acceptance Contract"},
 		{"review-instructions", "code-plan-reviewer", "reject a missing\nAcceptance Contract"},
+		{"review-instructions", "code-plan-reviewer", "missing from the Reality\nProbes entries of its validation commands"},
 		{"review-instructions", "code-reviewer", "A complete mapping plus exit 0 can still"},
 		{"submission-phase", "coder", "Missing mappings,"},
 	} {

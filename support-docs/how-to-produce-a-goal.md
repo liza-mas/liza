@@ -43,6 +43,7 @@ At `general-objective` altitude:
 - **General Specification** — For each capability, describe the expected behavior: inputs, outputs, rules, edge cases. Business logic should be explicit enough that an agent doesn't have to infer how things work. If a UI is involved, include layouts and interaction patterns.
 - **Success Criteria** — how you know you succeeded
 - **Risks and Assumptions** — what could go wrong
+- **Proof environment** — where the success criteria are proven: for each dependency, the real thing, a disposable copy, a recording or a mock; what proof must never touch; what only you can supply (provisioning, credentials, recorded evidence); and how long proof may take. Readiness blocks without it whenever proof needs something agents cannot supply.
 
 Lower altitudes add resolved requirements, acceptance criteria, and — at `technical-spec` — components, interfaces, migrations, and test strategy.
 

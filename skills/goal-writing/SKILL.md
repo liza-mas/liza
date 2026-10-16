@@ -59,6 +59,16 @@ Where the product's substance is a structure rather than a flow — an ontology,
 
 Non-functional requirements sit outside this table: they are owed at every altitude and are always the human's. Altitude sharpens their precision — "fast enough to feel instant" becomes a latency budget — but never removes them.
 
+**The proof environment is a third dimension, beside the functional and the structural, and it scales with altitude the same way.** The run proves its success criteria somewhere. Agents cannot provision outside their sandbox, hold credentials, or record data from the human's accounts. Whatever proof needs that they cannot supply is therefore the human's to decide at every altitude; only the precision changes:
+
+| Entry point | Environment owed |
+|---|---|
+| `general-objective` | Direction: for each dependency, whether proof runs against the real thing, a disposable copy, a recording or a mock; what proof must never touch (shared or live data, live credentials); what only the human supplies (provisioning, credentials, recorded evidence); the proof time budget |
+| `functional-spec` | Direction, plus the environment constraints the architect must honour: stacks to reuse, tools and versions, CI parity, host capacity. The test topology is the architect's |
+| `technical-spec` | Direction, plus the settled environment design: named instances; the proof topology the skipped architecture stage would record (for each shared or slow proof, its isolation or what serializes it, its runtime basis, and whether it runs per task or at gates); how configuration reaches every agent and test process (names only, never values); the canonical command for each suite; fixture ownership and refresh; the setup command |
+
+The lean test applies unchanged. Environment detail is owed where agents cannot act on it, or where the choice changes what is proven: a fake database and a real one prove different things. It forecloses where an agent could set it up safely inside its own sandbox. An existing local stack or project environment guide is inherited: cite it rather than restating it.
+
 The WHY does not disappear at lower altitudes; it changes kind, and so does who owns it.
 
 At `functional-spec` the run **starts** at architecture, so structural *design* is the architect's to make — `architecture-planning` requires rationale on every structural decision it takes. What the human owns here is only the structural constraint imposed from outside: an existing system to live inside, a contract that cannot change, a boundary the business fixes. Do not push a `functional-spec` author into decisions the architect is about to make; recording a constraint is in scope, designing the solution to it is not.
@@ -171,6 +181,7 @@ Each names a way a decision appears made but is not.
 | **Altitude drift** | HOW appears in a `general-objective` document, or product decisions remain open in a `technical-spec` one. |
 | **Not lean** | A detail is being recorded that downstream agents could infer without guessing, or decide without risking the solution. Ask who still had the choice: if a downstream stage did and this takes it, the detail is foreclosing. If nobody did — the decision was already made elsewhere — recording it is a constraint, however structural it reads. |
 | **Stale unclaimed** | A marker you set survives three exchanges without being resolved. |
+| **Environment by assumption** | The success criteria need real systems, credentials or recorded external data, and the document does not say, at its altitude, where proof runs, who provides it, or what it must never touch. |
 
 ## Binding orderings
 

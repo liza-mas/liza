@@ -36,6 +36,18 @@ obey the existing command-safety contract; the coder's manifest cannot add or
 replace them. Whole-document refs are valid only when exactly one declaration is
 present.
 
+Ground `timeout_seconds` in one of two ways. Either use a measured run of the same
+commands on this project, naming where and when it was measured, plus headroom for
+load. Or use an estimate labelled as one, with its basis. Record the basis on the
+`## Reality Probes` entries of the validation commands, summed for the batch. Never
+record it inside the Acceptance Contract section, which holds only its fence.
+
+Check the budget against the execution envelope the task supplies. Without one, check
+it against the proof topology or time budget that the architecture or goal states.
+Where no bound is stated, the basis alone is enough. A budget that exceeds a stated
+bound is not settled by a guess: mark the task BLOCKED, naming the bound. A shared
+suite that would dominate the budget is a candidate for deferral (above).
+
 The direct planning parent must independently approve and merge this source, with
 retained review range and output entry allocating the child's refs and commands.
 Claim pins source commit/blob and parent review identity. Unreviewed ad-hoc strict

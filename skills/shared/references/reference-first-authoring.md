@@ -13,12 +13,12 @@ which maps these existing obligation IDs to proofs and execution receipts.
 
 | Stage | Owns | References or omits |
 |---|---|---|
-| Goal | Problem, users, scope, behavior, global NFRs, success | External evidence |
+| Goal | Problem, users, scope, behavior, global NFRs, proof environment, success | External evidence |
 | Master decomposition | Coverage partition, ownership, interfaces, cross-child ordering | Goal requirements and rationale |
 | Specialized epic | Capability-local interpretation and story boundaries | Goal and master shared constraints |
 | User story | Story behavior, ACs, edge cases, local exclusions | Epic personas, shared NFRs, inherited contracts |
-| Master architecture | Cross-scope components, interfaces, ownership, dependency direction | Product behavior and AC prose |
-| Specialized architecture | Scope-local structure, interfaces, data flow, failure handling | Inherited behavior and shared architecture |
+| Master architecture | Cross-scope components, interfaces, ownership, dependency direction, cross-scope proof budget | Product behavior, AC prose and proof environment |
+| Specialized architecture | Scope-local structure, interfaces, data flow, failure handling | Inherited behavior, proof environment and shared architecture |
 | Code plan | Change units, file ownership, ordering, tests, requirement-to-task allocation | Requirement and architecture prose |
 | Coder task | Orchestration envelope and executable references | Plan detail, AC text, architecture rationale |
 | Review feedback | Unresolved findings, severity, evidence, closure conditions | Unchanged task contracts and resolved history |

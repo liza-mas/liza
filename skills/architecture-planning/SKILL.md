@@ -96,6 +96,14 @@ Define structural decisions. Each decision must have a rationale.
 3. **Data flow** — trace the primary data paths end-to-end
 4. **Cross-cutting concerns** — error handling, observability, configuration, security
 5. **Structural decisions** — explicit choices with rationale
+6. **Proof topology** — each proof honours the proof environment direction and constraints
+   inherited from the goal; what only a human supplies (provisioning, credentials, recordings) is
+   a prerequisite. For each proof on a shared or slow resource, record its isolation (or what
+   serializes it), its runtime basis (measured, or a labelled estimate) and its stage (per task, at
+   gates, or both). Check it against the execution envelope the task supplies: command limit,
+   admission cap, session timeout, shared slots, concurrent agents. A master architecture also
+   checks the sum across its scopes. A misfit or missing envelope is an Open Question with its
+   cost.
 
 **Provider freeze:** Obtain early epic `Provider Ask Inventory`; reconcile assigned
 epics/source obligations and merged consumers. Answer or concretely defer each
@@ -152,6 +160,7 @@ Before submitting:
 - [ ] Architecture scopes are locally sufficient from their direct references and task envelopes
 - [ ] No decisions prescribe implementation detail below interface level
 - [ ] Cross-cutting concerns addressed for all components
+- [ ] Every proof honours the inherited proof environment; each shared or slow one has isolation, runtime basis and stage, and fits the envelope or is an Open Question
 - [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
 - [ ] Structural decisions do not silently redefine inherited behavior
 - [ ] Provider asks, freeze duty, human-owned prerequisites met
@@ -190,6 +199,7 @@ Fix issues before submitting.
 | **Cathedral Planning** | Pursuing perfect upfront design. Define boundaries and interfaces; implementation detail crystallizes during code-planning. |
 | **Pattern Imposition** | Forcing design patterns onto the problem. Name the problem first; pattern is the solution, not the starting point. |
 | **Boundary Amnesia** | Components without interface contracts. Every boundary needs a contract. |
+| **Unbudgeted Proof** | Proof runtime or shared-resource use never weighed against the envelope; it surfaces at coding as timeouts, budget exceptions and slot contention, settled task by task. |
 
 # Integration
 
