@@ -80,8 +80,8 @@ func TestShortHelp_ReturnsExpectedBindings(t *testing.T) {
 	km := NewKeyMap()
 	bindings := km.ShortHelp()
 
-	// Verify footer order: s, S, t, p, r, c, y, ?, q, Q
-	expectedKeys := []string{"s", "S", "t", "p", "r", "c", "y", "?", "q", "Q"}
+	// Verify footer order: s, S, t, p, r, c, y, f, ?, q, Q
+	expectedKeys := []string{"s", "S", "t", "p", "r", "c", "y", "f", "?", "q", "Q"}
 	if len(bindings) != len(expectedKeys) {
 		t.Fatalf("ShortHelp() returned %d bindings, want %d", len(bindings), len(expectedKeys))
 	}

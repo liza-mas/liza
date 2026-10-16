@@ -92,6 +92,38 @@ func TestView_DegradedHealthDetailsUseNaturalAgentHeight(t *testing.T) {
 	assertContains(t, got, "restart outside sandbox", "View should not clip degraded recovery hint")
 }
 
+func TestView_TaskFilterFreesHiddenTaskRowsForAgents(t *testing.T) {
+	now := time.Now().UTC()
+	m := newTestModel()
+	m.ready = true
+	m.width = 120
+	m.height = 26
+	m.columnTier = ColumnTierStandard
+	m.styles = NewStyles(120)
+	m.taskFilter = TaskFilterActive
+	agents := map[string]models.Agent{}
+	for i := range 8 {
+		agents[fmt.Sprintf("coder-%d", i)] = models.Agent{Role: "coder", Status: models.AgentStatusIdle, Heartbeat: now}
+	}
+	tasks := []models.Task{makeTask("impl-task", models.TaskStatusImplementing, 1)}
+	for i := range 20 {
+		tasks = append(tasks, makeTask(fmt.Sprintf("blocked-%d", i), models.TaskStatusBlocked, 1))
+	}
+	m.state = &models.State{
+		Goal:   models.Goal{Description: "Test Goal"},
+		Sprint: models.Sprint{ID: "sprint-1"},
+		Config: models.Config{Mode: models.SystemModeRunning},
+		Agents: agents,
+		Tasks:  tasks,
+	}
+
+	got := m.View()
+	assertContains(t, got, "impl-task", "filtered task panel should list the active task")
+	for id := range agents {
+		assertContains(t, got, id, "rows of hidden tasks should not crowd out agents")
+	}
+}
+
 func TestRenderHeader_ContainsGoalDescription(t *testing.T) {
 	m := newTestModel()
 	m.width = 120
@@ -1265,6 +1297,73 @@ func TestRenderTaskPanel_SortedByCreatedTime(t *testing.T) {
 	if idx1 > idx3 {
 		t.Error("expected first-task (terminal, oldest) before third-task (terminal, newest)")
 	}
+}
+
+func TestRenderTaskPanel_Filter(t *testing.T) {
+	clean := makeTask("clean-task", "INTEGRATION_ANALYSIS_CLEAN", 1)
+	tasks := []models.Task{
+		makeTask("draft-task", models.TaskStatusReady, 1),
+		makeTask("impl-task", models.TaskStatusImplementing, 1),
+		makeTask("toreview-task", models.TaskStatusReadyForReview, 1),
+		makeTask("blocked-task", models.TaskStatusBlocked, 1),
+		makeTask("merged-task", models.TaskStatusMerged, 1),
+		makeTask("abandoned-task", models.TaskStatusAbandoned, 1),
+		makeTask("superseded-task", models.TaskStatusSuperseded, 1),
+		clean,
+	}
+	nonTerminal := []string{"draft-task", "impl-task", "toreview-task"}
+	terminal := []string{"merged-task", "abandoned-task", "superseded-task", "clean-task"}
+
+	tests := []struct {
+		filter        TaskFilter
+		title         string
+		shown, hidden []string
+	}{
+		{TaskFilterAll, "✔ TASKS ", append(append(append([]string{}, nonTerminal...), "blocked-task"), terminal...), nil},
+		{TaskFilterActive, "✔ TASKS · active ", nonTerminal, append([]string{"blocked-task"}, terminal...)},
+		{TaskFilterActiveBlocked, "✔ TASKS · active+blocked", append(append([]string{}, nonTerminal...), "blocked-task"), terminal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			m := Model{
+				width:      100,
+				height:     40,
+				columnTier: ColumnTierStandard,
+				styles:     NewStyles(100),
+				stateCategories: map[models.TaskStatus]pipeline.StateCategory{
+					"INTEGRATION_ANALYSIS_CLEAN": pipeline.StateCategoryClean,
+				},
+				state:      &models.State{Tasks: tasks},
+				taskFilter: tt.filter,
+			}
+			out := m.renderTaskPanel(30)
+			assertContains(t, out, tt.title, "title should reflect the filter")
+			if tt.filter == TaskFilterAll && strings.Contains(out, "TASKS ·") {
+				t.Errorf("unfiltered title should carry no filter label:\n%s", out)
+			}
+			for _, id := range tt.shown {
+				assertContains(t, out, id, "filter should list task")
+			}
+			for _, id := range tt.hidden {
+				if strings.Contains(out, id) {
+					t.Errorf("filter %d should hide %s:\n%s", tt.filter, id, out)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderTaskPanel_FilterWithNoMatch(t *testing.T) {
+	m := Model{
+		width:      100,
+		height:     40,
+		columnTier: ColumnTierStandard,
+		styles:     NewStyles(100),
+		state:      &models.State{Tasks: []models.Task{makeTask("merged-task", models.TaskStatusMerged, 1)}},
+		taskFilter: TaskFilterActiveBlocked,
+	}
+	out := m.renderTaskPanel(15)
+	assertContains(t, out, "No matching tasks", "empty filter result should say so")
 }
 
 func TestRenderTaskPanel_TerminalTasksDimmed(t *testing.T) {

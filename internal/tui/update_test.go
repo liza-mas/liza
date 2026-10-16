@@ -513,6 +513,22 @@ func TestUpdate_HelpToggle(t *testing.T) {
 	}
 }
 
+func TestUpdate_FilterCyclesThroughThreeStates(t *testing.T) {
+	m := testModel()
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}}
+	want := []TaskFilter{TaskFilterActive, TaskFilterActiveBlocked, TaskFilterAll}
+	if m.taskFilter != TaskFilterAll {
+		t.Fatalf("taskFilter starts at %d, want TaskFilterAll", m.taskFilter)
+	}
+	for i, w := range want {
+		result, _ := m.Update(msg)
+		m = result.(Model)
+		if m.taskFilter != w {
+			t.Fatalf("after %d presses of f: taskFilter = %d, want %d", i+1, m.taskFilter, w)
+		}
+	}
+}
+
 func TestUpdate_QuitReturnsTeaQuit(t *testing.T) {
 	m := testModel()
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}

@@ -155,6 +155,34 @@ func ColumnTierForWidth(width int) ColumnTier {
 	}
 }
 
+// TaskFilter selects which tasks the task panel lists. [f] cycles through
+// the values in declaration order and wraps back to TaskFilterAll.
+type TaskFilter int
+
+const (
+	TaskFilterAll           TaskFilter = iota // every task (default)
+	TaskFilterActive                          // neither terminal nor BLOCKED
+	TaskFilterActiveBlocked                   // not terminal
+	taskFilterCount
+)
+
+// Next returns the filter that follows f in the [f] cycle.
+func (f TaskFilter) Next() TaskFilter {
+	return (f + 1) % taskFilterCount
+}
+
+// Label is the task panel title suffix for f; empty when unfiltered.
+func (f TaskFilter) Label() string {
+	switch f {
+	case TaskFilterActive:
+		return "active"
+	case TaskFilterActiveBlocked:
+		return "active+blocked"
+	default:
+		return ""
+	}
+}
+
 // Model is the main Bubbletea model for the Liza TUI.
 // It holds all state needed to render the dashboard and process input.
 type Model struct {
@@ -197,6 +225,9 @@ type Model struct {
 
 	// Help
 	showHelp bool // help overlay visible
+
+	// Task panel
+	taskFilter TaskFilter // rows listed in the task panel ([f] cycles)
 
 	// Watch state (for anomaly throttling, same as WatchConfig.StateCache)
 	stateCache map[string]time.Time

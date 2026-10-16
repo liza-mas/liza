@@ -248,6 +248,10 @@ func (m Model) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Yolo):
 		return m, toggleAutoResumeCmd(m.blackboard)
 
+	case key.Matches(msg, m.keys.Filter):
+		m.taskFilter = m.taskFilter.Next()
+		return m, nil
+
 	case key.Matches(msg, m.keys.Quit):
 		if m.watcher != nil {
 			m.watcher.Close()

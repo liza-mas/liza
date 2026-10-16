@@ -20,6 +20,18 @@ func (m Model) isOperationallyTerminal(task models.Task) bool {
 	return task.Status.IsTerminal() || m.stateCategories[task.Status] == pipeline.StateCategoryClean
 }
 
+// taskVisible reports whether the current task filter lists task.
+func (m Model) taskVisible(task models.Task) bool {
+	switch m.taskFilter {
+	case TaskFilterActive:
+		return !m.isOperationallyTerminal(task) && task.Status != models.TaskStatusBlocked
+	case TaskFilterActiveBlocked:
+		return !m.isOperationallyTerminal(task)
+	default:
+		return true
+	}
+}
+
 // View renders the complete TUI dashboard.
 // Vertical stack: Header → Alert banner → Agent panel → Task panel → Activity → Footer.
 // When m.ready is false, returns a centered "Loading..." message.
@@ -59,6 +71,9 @@ func (m Model) View() string {
 	if m.state != nil {
 		agentCount = len(m.state.Agents)
 		for _, t := range m.state.Tasks {
+			if !m.taskVisible(t) {
+				continue
+			}
 			if m.isOperationallyTerminal(t) {
 				terminalTaskCount++
 			} else {
@@ -480,6 +495,9 @@ func currentAgentHealthDetails(state *models.State) []currentAgentHealthDetail {
 func (m Model) renderTaskPanel(budget int) string {
 	// Build title with sprint metrics
 	titleText := "✔ TASKS"
+	if label := m.taskFilter.Label(); label != "" {
+		titleText += " · " + label
+	}
 	metrics := ""
 	if m.state != nil {
 		total := len(m.state.Sprint.Scope.Planned)
@@ -523,6 +541,9 @@ func (m Model) renderTaskPanel(budget int) string {
 	// Both partitions preserve Created-ascending order.
 	var active, terminal []models.Task
 	for _, t := range tasks {
+		if !m.taskVisible(t) {
+			continue
+		}
 		if m.isOperationallyTerminal(t) {
 			terminal = append(terminal, t)
 		} else {
@@ -530,6 +551,10 @@ func (m Model) renderTaskPanel(budget int) string {
 		}
 	}
 	tasks = append(active, terminal...)
+	if len(tasks) == 0 {
+		content := title + "\n  No matching tasks"
+		return m.styles.TaskPanel.MaxHeight(budget).Render(content)
+	}
 
 	// Define columns per tier
 	type column struct {
