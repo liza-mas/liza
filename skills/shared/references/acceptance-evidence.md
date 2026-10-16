@@ -26,7 +26,11 @@ must already exist in the document's strict `Source References` → `Obligation
 Coverage`. Allocate the child's complete subset without copying requirement prose.
 The declaration's ordered `validation` must equal the child's `output[].validation`
 and eventual task `validation`. Name the child's own proofs plus shared tests
-covering code it changes. A long shared suite needed for regression only goes in
+covering code it changes. Place each proof at the level the architecture's proof
+topology sets for its scope (at `technical-spec`, the goal's); absent one, at the
+cheapest level that fails on regression, with real resources only where the
+behavior lives in or composes across them. Prove each obligation once; higher
+levels prove composition. A long shared suite needed for regression only goes in
 `validation` once with its zero-based index in `"deferred": [i]` (ascending):
 admission skips it and the engine runs it in a periodic batch on integration,
 bisecting a failure to the merge that caused it. At least one command must stay

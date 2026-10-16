@@ -95,15 +95,17 @@ Define structural decisions. Each decision must have a rationale.
 2. **Interface contracts** — how components communicate; what data crosses boundaries, in what form
 3. **Data flow** — trace the primary data paths end-to-end
 4. **Cross-cutting concerns** — error handling, observability, configuration, security
-5. **Structural decisions** — explicit choices with rationale
-6. **Proof topology** — each proof honours the proof environment direction and constraints
-   inherited from the goal; what only a human supplies (provisioning, credentials, recordings) is
-   a prerequisite. For each proof on a shared or slow resource, record its isolation (or what
-   serializes it), its runtime basis (measured, or a labelled estimate) and its stage (per task, at
-   gates, or both). Check it against the execution envelope the task supplies: command limit,
-   admission cap, session timeout, shared slots, concurrent agents. A master architecture also
-   checks the sum across its scopes. A misfit or missing envelope is an Open Question with its
-   cost.
+5. **Structural decisions** — explicit choices with rationale; logic placed in a resource (e.g.
+   SQL) commits its proof there
+6. **Proof topology** — honour the goal's proof environment direction and constraints; what only a
+   human supplies (provisioning, credentials, recordings) is a prerequisite. Per scope or behavior
+   class, set each proof at the cheapest level that fails on regression (code plans allocate the
+   tests): a real resource only where behavior lives in or composes across it, logic on fakes kept
+   true by contract tests, a few end-to-end tests per flow. For each shared or slow proof, record
+   its isolation (or what serializes it), runtime basis (measured or labelled estimate) and stage
+   (per task, at gates, or both). Check it against the task's execution envelope (command limit,
+   admission cap, session timeout, shared slots, concurrent agents); a master architecture also
+   checks the sum across its scopes. A misfit or missing envelope is an Open Question with its cost.
 
 **Provider freeze:** Obtain early epic `Provider Ask Inventory`; reconcile assigned
 epics/source obligations and merged consumers. Answer or concretely defer each

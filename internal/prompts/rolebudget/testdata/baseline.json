@@ -6,7 +6,7 @@
       "role": "architect",
       "rendered_bytes": 29177,
       "base_prompt_bytes": 9672,
-      "mandatory_read_bytes": 25008,
+      "mandatory_read_bytes": 26407,
       "reads": [
         "skills/architecture-planning/SKILL.md",
         "skills/shared/references/reference-first-authoring.md"
@@ -17,7 +17,7 @@
       "role": "architect",
       "rendered_bytes": 32389,
       "base_prompt_bytes": 9672,
-      "mandatory_read_bytes": 25008,
+      "mandatory_read_bytes": 26407,
       "reads": [
         "skills/architecture-planning/SKILL.md",
         "skills/shared/references/reference-first-authoring.md"
@@ -28,7 +28,7 @@
       "role": "architecture-reviewer",
       "rendered_bytes": 24863,
       "base_prompt_bytes": 9708,
-      "mandatory_read_bytes": 30920,
+      "mandatory_read_bytes": 31003,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -40,7 +40,7 @@
       "role": "architecture-reviewer",
       "rendered_bytes": 27841,
       "base_prompt_bytes": 9708,
-      "mandatory_read_bytes": 30920,
+      "mandatory_read_bytes": 31003,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -50,9 +50,9 @@
     {
       "variant": "code-plan-reviewer",
       "role": "code-plan-reviewer",
-      "rendered_bytes": 29242,
+      "rendered_bytes": 29459,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 62228,
+      "mandatory_read_bytes": 62311,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/software-architecture-review/SKILL.md",
@@ -65,7 +65,7 @@
       "role": "code-plan-reviewer",
       "rendered_bytes": 22793,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 62228,
+      "mandatory_read_bytes": 62311,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/software-architecture-review/SKILL.md",
@@ -110,7 +110,7 @@
       "role": "coder",
       "rendered_bytes": 25544,
       "base_prompt_bytes": 9660,
-      "mandatory_read_bytes": 27712,
+      "mandatory_read_bytes": 28075,
       "reads": [
         "skills/clean-code/SKILL.md",
         "skills/debugging/SKILL.md",
@@ -122,7 +122,7 @@
       "role": "epic-plan-reviewer",
       "rendered_bytes": 24471,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 30920,
+      "mandatory_read_bytes": 31003,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -134,7 +134,7 @@
       "role": "epic-plan-reviewer",
       "rendered_bytes": 27013,
       "base_prompt_bytes": 9699,
-      "mandatory_read_bytes": 30920,
+      "mandatory_read_bytes": 31003,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md",
@@ -146,7 +146,7 @@
       "role": "epic-planner",
       "rendered_bytes": 25074,
       "base_prompt_bytes": 9681,
-      "mandatory_read_bytes": 41506,
+      "mandatory_read_bytes": 41589,
       "reads": [
         "skills/epic-writing/SKILL.md",
         "skills/shared/references/reference-first-authoring.md",
@@ -158,7 +158,7 @@
       "role": "epic-planner",
       "rendered_bytes": 27618,
       "base_prompt_bytes": 9681,
-      "mandatory_read_bytes": 41506,
+      "mandatory_read_bytes": 41589,
       "reads": [
         "skills/epic-writing/SKILL.md",
         "skills/shared/references/reference-first-authoring.md",
@@ -282,7 +282,7 @@
       "role": "us-reviewer",
       "rendered_bytes": 22239,
       "base_prompt_bytes": 9678,
-      "mandatory_read_bytes": 21809,
+      "mandatory_read_bytes": 21892,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/spec-review/SKILL.md"
@@ -293,7 +293,7 @@
       "role": "us-writer",
       "rendered_bytes": 20114,
       "base_prompt_bytes": 9672,
-      "mandatory_read_bytes": 27791,
+      "mandatory_read_bytes": 27874,
       "reads": [
         "skills/shared/references/reference-first-authoring.md",
         "skills/user-story-writing/SKILL.md"

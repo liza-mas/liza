@@ -54,7 +54,12 @@ If yes (tautology, type-only, existence-only, shape-only), strengthen it.
 
 **Mocking Discipline:** Test the code, not the scaffolding.
 Heavy mock setup suggests you're testing assumptions about dependencies, not behavior.
-Mock external boundaries (APIs, DBs, filesystems), not internal logic.
+Mock external boundaries (APIs, DBs, filesystems), not internal logic. A resource holding logic
+under test (SQL functions, migrations) is not a boundary: test that logic against the real resource
+at its contract, unless the proof environment says otherwise, and keep its callers on fakes.
+
+**Pyramid:** Prove each behavior once, at the cheapest level that fails when it is wrong. Higher
+levels prove composition, not the logic below.
 
 **Paired Coverage:** For each positive test, consider a negative counterpart.
 Happy-path-only is a red flag for complex source.

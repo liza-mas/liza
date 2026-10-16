@@ -195,14 +195,18 @@ If an answer names a structure rather than a bound, what to do depends on who is
 Ask these right after the non-functional constraints. Precision follows the environment table in SKILL.md: direction at `general-objective`, imposed constraints at `functional-spec`, settled design at `technical-spec`. Start from one success criterion and follow it to where it is proven.
 
 - At 3 a.m. an agent runs the test for [success criterion]. Does it run against the real thing, a disposable copy, a recording, or a mock? Does that choice still prove the criterion?
+- Does [each mechanic] need its own API-level proof, or is one API path per capability plus cheaper lower-level proof enough? "Through the API" in a success criterion sets the level for every test below it.
+- Roughly how many behaviours need proof, and what does the whole suite cost, summed across parts?
 - What must a test never touch: which databases, accounts or live services? What stops it?
 - Which credentials, if any, may agents or tests hold? Where does each one come from, and who supplies it? Must it exist before the run starts, or can it wait until an agent asks?
 - Who provisions what the run needs before it starts (containers, databases, accounts, tools)? When it is missing, does the test fail loudly or skip?
 - Which recorded external data does proof rely on? Who records it, with which access? How is it sanitized, and who refreshes it when the source changes?
 - Who owns the shared fixtures and seed data, and may a contract change update them?
+- What does the existing test setup assume (fake clients, defaulted keys, shared fixtures), and does this goal's proof fit it?
 - How long may the full proof take, and must it pass for every change or only at gates?
 - (`functional-spec`) Which existing stacks, tool versions or CI setups must the architect reuse? What can the host sustain concurrently?
 - (`functional-spec`, `technical-spec`) What can agents do on this host: start containers, reach the network, install tools, write outside their worktree?
+- (`functional-spec`, `technical-spec`) Does a rule place business logic in database functions or application code? Its proof needs whichever resource holds it.
 - (`technical-spec`) No architect runs after you. For each shared or slow proof: is it isolated or shared, what serializes it, and what is its measured or estimated runtime?
 - (`technical-spec`) Name the instances, the variable names that reach each process, the command and flags for each suite, and the setup command a fresh worktree runs.
 

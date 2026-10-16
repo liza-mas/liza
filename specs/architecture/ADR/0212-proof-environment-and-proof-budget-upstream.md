@@ -72,6 +72,18 @@ execution limits. Planners did not know those limits, so they guessed.
    missing envelope, is an Open Question with its cost. This adds a self-review
    item and the "Unbudgeted Proof" anti-pattern. A master architecture also checks
    the sum across its scopes, which no specialized scope can see.
+
+   Amended (proof levels): architecture sets proof levels per scope or behavior
+   class along a test pyramid; code plans allocate the tests. Each proof sits at
+   the cheapest level that fails on regression: real resources only where
+   behavior lives in or composes across them, logic on fakes kept true by
+   contract tests, a few end-to-end tests per flow. Placing logic in a resource
+   (e.g. SQL) is a structural decision that commits its proof there. The `testing`
+   skill applies the rule to coders: a resource holding logic under test is not a
+   mockable boundary unless the proof environment says otherwise.
+   `acceptance-evidence.md` applies it to code plans, the only planner at
+   `technical-spec`. Goal writing surfaces the cost early: a criterion fixing the proof level, total proof
+   volume, the existing test setup's assumptions, and where logic lives.
 4. **Code plans ground their budgets** (`acceptance-evidence.md`, code-plan review
    template). `timeout_seconds` comes from a measured run of the same commands
    plus load headroom, or from a labelled estimate. The basis is recorded on the
