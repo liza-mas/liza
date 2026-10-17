@@ -788,7 +788,7 @@ When uncertain if action serves actual goal vs stated goal, ask.
 
 ## Operational Instructions
 
-**Temporal Grounding:** Use `date -u +'%Y-%m-%d'` or `date -u +'%Y-%m-%d %H:%M %Z'` for current date/time in workflows.
+**Temporal Grounding:** Calibrate every time reading with its zone; write only zoned timestamps (`date -u +'%Y-%m-%dT%H:%MZ'`).
 
 ---
 

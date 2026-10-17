@@ -75,6 +75,7 @@
 | HAL-2 | Inventing file contents without reading | Source Validation, verify read occurred | 348, 353-354 |
 | HAL-3 | Confabulating error messages | Phantom Fix Prevention (capture and report output) | 357-361 |
 | HAL-4 | False claims about repository state | Source Validation, ASSUMPTION prefix | 351-352 |
+| HAL-5 | Zoneless or mis-zoned timestamps (local date stamped as UTC) | Operational Instructions (Temporal Grounding) | 791 |
 
 ---
 
