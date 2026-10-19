@@ -2907,6 +2907,67 @@ func TestInitCommandWithConfig_CopyWorktreeEnvFilesFromEnv(t *testing.T) {
 	}
 }
 
+func TestInitCommandWithConfig_AgentEnvDenyFromFlagAndEnv(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+	t.Setenv(models.EnvAgentEnvDeny, "NANGO_SECRET_KEY, OPENAI_API_KEY")
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description:  "Goal with withheld variables",
+		SpecRef:      "specs/vision.md",
+		AgentEnvDeny: []string{"OPENAI_API_KEY", "SUPABASE_SERVICE_ROLE_KEY"},
+	})
+	if err != nil {
+		t.Fatalf("InitCommandWithConfig() error = %v", err)
+	}
+
+	state, err := db.New(filepath.Join(tmpDir, paths.ProjectDirName(), "state.yaml")).Read()
+	if err != nil {
+		t.Fatalf("Failed to read state: %v", err)
+	}
+	if want := []string{"OPENAI_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "NANGO_SECRET_KEY"}; !slices.Equal(state.Config.AgentEnvDeny, want) {
+		t.Fatalf("state.Config.AgentEnvDeny = %q, want %q (flag names, then new env names)", state.Config.AgentEnvDeny, want)
+	}
+}
+
+func TestInitCommandWithConfig_AgentEnvDenyRefusesProcessVariables(t *testing.T) {
+	tmpDir := setupGitRepo(t)
+	defer os.RemoveAll(tmpDir)
+	setupGlobalLiza(t)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	testhelpers.CreateCommittedSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+
+	err = InitCommandWithConfig(InitParams{
+		Description:  "Goal with a bad deny list",
+		SpecRef:      "specs/vision.md",
+		AgentEnvDeny: []string{"PATH"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "agent_env_deny") {
+		t.Fatalf("InitCommandWithConfig() error = %v, want the deny list refused", err)
+	}
+}
+
 func TestInitCommandWithConfig_ScipSearchPersistsConfig(t *testing.T) {
 	tmpDir := setupGitRepo(t)
 	defer os.RemoveAll(tmpDir)

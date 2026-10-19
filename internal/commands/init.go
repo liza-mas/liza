@@ -58,14 +58,15 @@ func SetInitPreCommitLookPathForTest(lookPath func(string) (string, error)) func
 type InitParams struct {
 	Description                     string
 	SpecRef                         string
-	ConfigPath                      string // --config: path to pipeline YAML
-	EntryPoint                      string // --entry-point: name of entry-point in config
-	Branch                          string // --branch: integration branch name (default: "integration")
-	PostWorktreeCmd                 string // --post-worktree-cmd: shell command to run after worktree creation
-	ValidationExecution             string // --validation-execution: "local" asserts agent CLIs validate locally
-	CopyWorktreeEnvFiles            bool   // --copy-worktree-env-files: copy ignored root env files into task worktrees
-	AutoResume                      bool   // --auto-resume: automatically resume at checkpoint and sprint completion
-	NoFollowUp                      bool   // --no-follow-up: suppress top-level pipeline-transitions after the entry subpipeline
+	ConfigPath                      string   // --config: path to pipeline YAML
+	EntryPoint                      string   // --entry-point: name of entry-point in config
+	Branch                          string   // --branch: integration branch name (default: "integration")
+	PostWorktreeCmd                 string   // --post-worktree-cmd: shell command to run after worktree creation
+	ValidationExecution             string   // --validation-execution: "local" asserts agent CLIs validate locally
+	CopyWorktreeEnvFiles            bool     // --copy-worktree-env-files: copy ignored root env files into task worktrees
+	AgentEnvDeny                    []string // --agent-env-deny: host variables withheld from agents (ADR-0213)
+	AutoResume                      bool     // --auto-resume: automatically resume at checkpoint and sprint completion
+	NoFollowUp                      bool     // --no-follow-up: suppress top-level pipeline-transitions after the entry subpipeline
 	MaxGlobalIntegrationGenerations int
 	MaxInstances                    int      // --max-instances: default live-agent cap per non-orchestrator role
 	DefaultCLI                      string   // --default-cli: default CLI for agent spawning
@@ -980,6 +981,10 @@ func InitCommandWithConfig(params InitParams) error {
 	if err := validateBranchName(branch); err != nil {
 		return fmt.Errorf("invalid branch name %q: %w", branch, err)
 	}
+	agentEnvDeny := initAgentEnvDeny(params.AgentEnvDeny)
+	if err := models.ValidateAgentEnvDeny(agentEnvDeny); err != nil {
+		return fmt.Errorf("invalid agent_env_deny: %w", err)
+	}
 	if rawStdin == nil {
 		rawStdin = os.Stdin
 	}
@@ -1366,6 +1371,7 @@ func InitCommandWithConfig(params InitParams) error {
 			NoFollowUp:                      params.NoFollowUp,
 			PostWorktreeCmd:                 stringPtrOrNil(postWorktreeCmd),
 			CopyWorktreeEnvFiles:            copyWorktreeEnvFiles,
+			AgentEnvDeny:                    agentEnvDeny,
 			AgentTools:                      validationTools,
 		},
 	}
@@ -1662,4 +1668,16 @@ func initModelsFile(params InitParams) []byte {
 #     - {cli: claude, model: <model>}
 `)
 	return []byte(b.String())
+}
+
+// initAgentEnvDeny merges --agent-env-deny names with the comma-separated
+// environment seed, flag names first, dropping exact repeats.
+func initAgentEnvDeny(flagNames []string) []string {
+	var names []string
+	for _, name := range append(slices.Clone(flagNames), strings.Split(envgate.Value(models.EnvAgentEnvDeny), ",")...) {
+		if name = strings.TrimSpace(name); name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	return names
 }

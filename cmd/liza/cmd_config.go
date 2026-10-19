@@ -20,8 +20,8 @@ var configCmd = &cobra.Command{
 	Short: "Read and update supported runtime configuration",
 	Long: fmt.Sprintf(`Read and update runtime configuration using the same dotted keys as %s.
 Supported keys: config.post_worktree_cmd, config.auto_resume, config.max_instances,
-config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval
-and config.runtime_input_registry.
+config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval,
+config.runtime_input_registry and config.agent_env_deny.
 The general state query remains available: %s config.post_worktree_cmd --json`, brand.Command("get"), brand.Command("get")),
 }
 
@@ -85,6 +85,14 @@ succeeds with outcome unchanged. This key does not use --replace or --reason.
 config.runtime_input_registry is the repository-relative path of the
 runtime-input recipe registry, read at the integration commit. Operator-only.
 
+config.agent_env_deny takes comma-separated variable names withheld from
+supervisors, every process they start, agent sessions, gate commands and
+copied env files. Operator-only. The value replaces the whole list; an empty
+value clears it. Replacing a different list needs --replace and --reason.
+Newly denied names reach the next session at once and other processes at the
+next supervisor start; a name removed from the list returns only in a fresh
+supervisor. Process and engine variables cannot be listed.
+
 Examples:
   %s config.post_worktree_cmd "make setup"
   %s config.max_instances 5 --replace --reason "wider fan-out"`, brand.Command("config", "get"), brand.Command("get"), brand.Command("config", "set"), brand.Command("config", "set")),
@@ -108,6 +116,9 @@ Examples:
 		}
 		if args[0] == ops.RuntimeInputRegistryConfigKey {
 			return setRuntimeInputRegistry(cmd, projectRoot, agentID, args, replace, reason)
+		}
+		if args[0] == ops.AgentEnvDenyConfigKey {
+			return setAgentEnvDeny(cmd, projectRoot, agentID, args, replace, reason)
 		}
 		if args[0] != ops.PostWorktreeConfigKey {
 			return setIntegerConfig(cmd, projectRoot, agentID, args, replace, reason)
@@ -216,9 +227,30 @@ func setRuntimeInputRegistry(cmd *cobra.Command, projectRoot, agentID string, ar
 	return nil
 }
 
+func setAgentEnvDeny(cmd *cobra.Command, projectRoot, agentID string, args []string, replace bool, reason string) error {
+	if agentID != "" {
+		return cliValidationError(fmt.Sprintf("%s is operator-only; agent %s cannot set it", args[0], agentID))
+	}
+	var names []string
+	for _, name := range strings.Split(args[1], ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			names = append(names, name)
+		}
+	}
+	result, err := ops.SetAgentEnvDeny(projectRoot, ops.SetAgentEnvDenyInput{Names: names, Replace: replace, Reason: reason})
+	if isJSON(cmd) {
+		return jsonout.WriteResult(os.Stdout, result, nil, err)
+	}
+	if err != nil {
+		return err
+	}
+	cmd.Printf("%s: %s\n", result.Key, result.Outcome)
+	return nil
+}
+
 func supportedConfigKeys() []string {
 	keys := append([]string{ops.PostWorktreeConfigKey, ops.AutoResumeConfigKey}, ops.PoolConfigKeys...)
-	return append(keys, ops.AwaitPollIntervalConfigKey, ops.RuntimeInputRegistryConfigKey)
+	return append(keys, ops.AwaitPollIntervalConfigKey, ops.RuntimeInputRegistryConfigKey, ops.AgentEnvDenyConfigKey)
 }
 
 func validateConfigArgs(args []string, count int) error {

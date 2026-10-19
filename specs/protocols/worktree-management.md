@@ -107,8 +107,10 @@ only root-level regular files matching `.env`, `.env.*`, `*.env`, or `.envrc`.
 The source path must be ignored by Git, the destination path must be ignored in
 the task worktree before copying, through the private worktree exclude or, when a
 user `core.excludesFile` prevents installing it, through the effective rules
-already in place, and existing destination files are never overwritten. Failures
-produce path-only warnings and do not block worktree creation.
+already in place, and existing destination files are never overwritten. A file
+that mentions a runtime-input name or a `config.agent_env_deny` name is not
+copied (ADR-0169, ADR-0213). Failures produce path-only warnings and do not block
+worktree creation.
 
 ---
 

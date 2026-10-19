@@ -493,6 +493,11 @@ func RunDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 }
 
 func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDeferredValidationOptions, hooks deferredValidationHooks) (*RunDeferredValidationResult, error) {
+	// The runner may be started by an operator as well as by a supervisor, so
+	// it withholds denied host variables itself before any lane runs (ADR-0213).
+	if _, err := WithholdDeniedEnvironment(projectRoot); err != nil {
+		return nil, err
+	}
 	if !hooks.platformSupported {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("deferred-validation batches are not supported on %s: the runner cannot establish that a command's descendants ended; run the batch from a supported host or retire the command", runtime.GOOS)}
 	}

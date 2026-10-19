@@ -73,7 +73,7 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	key, keyErr := loadRuntimeInputKey(state, false)
 	resolutions := resolveRuntimeInputs(projectRoot, state, task.ID, reusable, key, keyErr)
 	var refusals []runtimeInputResolution
-	grant := &runtimeInputGrant{deny: models.RuntimeInputDenyNames(state)}
+	grant := &runtimeInputGrant{deny: models.ReservedEnvNames(state)}
 	var overlay []string
 	for _, resolution := range resolutions {
 		if resolution.code != "" {

@@ -203,8 +203,9 @@ key paths.
 ## Session confinement
 
 The deny set is every runtime-input `env` name declared by any task or output
-entry, in any status, plus the names recorded on ledger instances. It is removed
-at four boundaries:
+entry, in any status, plus the names recorded on ledger instances, plus the
+operator's `config.agent_env_deny` names (ADR-0213). It is read at each call and
+removed at four boundaries:
 
 1. the provider launch environment (names are logged, never values);
 2. every gate command, before its authorized overlay;
@@ -218,7 +219,17 @@ An agent env file (`agent_tools.<cli>.env_files`) configures the agent CLI
 itself. If it sets a runtime-input name, the launch fails with
 `runtime_input_provider_collision:<NAME>` instead of stripping it silently: a
 runtime input must not reuse the agent provider's own variable, such as its API
-key. Remove the entry from the env file, or rename the runtime input.
+key. Remove the entry from the env file, or rename the runtime input. If it
+sets a `config.agent_env_deny` name instead, the launch fails with
+`agent_env_denied:<NAME>`: authenticate the agent CLI another way, or remove the
+name from the list.
+
+The `config.agent_env_deny` names are also removed from supervisors and the
+deferred-validation runner at startup, so the processes they start outside a
+session (integration tests, deferred validation, `post_worktree_cmd`, hooks)
+never inherit them. The overlays above are applied after the scrub: a runtime
+input still reaches its declared commands even under a withheld name. On
+Windows, names in the deny set compare case-insensitively.
 
 A legacy `validation_prerequisites` entry that still requires a reserved name
 fails preflight as `runtime_input_scrubbed`, naming the variable. An unrelated

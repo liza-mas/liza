@@ -922,6 +922,26 @@ Exit 42 with `handoff_pending: true` on the task means context exhaustion — th
 **Diagnosis**: The agent's launch environment lacks something the task declares in `validation_prerequisites` (`executable_missing`, `environment_missing`, `probe_failed`), or its CLI does not assert `validation_execution: local` (`execution_policy_required`). `§BRAND_BINARY_NAME§ repair-agent-pool --dry-run --json` lists the observation per agent.
 **Fix**: Provide the named tool or variable in that agent's environment (or restart its supervisor with the corrected environment); the agent retries on its own. Do not unblock or reassign: the claim was never granted.
 
+### Withheld environment variable refused (`config.agent_env_deny`)
+**Symptom**: One of:
+- an agent launch fails with `agent_env_denied:<NAME>`;
+- worktree creation warns that a root env file was "not copied: it mentions withheld variables";
+- a write is refused because a name "would be both withheld from sessions (config.agent_env_deny) and a validation prerequisite".
+
+**Diagnosis**: `config.agent_env_deny` lists host variables that supervisors, the deferred-validation runner and agent sessions never inherit (ADR-0213). `§BRAND_BINARY_NAME§ config get config.agent_env_deny --json` shows the list. A name on it is refused in each of these places:
+- an agent env file such as `claude.env` that sets it;
+- a root env file copied into worktrees that mentions it;
+- a task's `validation_prerequisites` that requires it.
+
+Messages carry names only, never values.
+
+**Fix**:
+- Launch refusal: authenticate the agent CLI another way, such as a stored login, and remove the name from its env file. Alternatively, drop the name from the list.
+- Env file not copied: move the listed names out of the root env file.
+- Prerequisite collision: remove the name from either the task's prerequisites or the list.
+
+To change the list, run `§BRAND_BINARY_NAME§ config set config.agent_env_deny A,B --replace --reason "..."`; an empty value clears it. Newly listed names apply to the next session at once. A removed name only comes back after you restart the supervisors, because a running supervisor cannot restore a value it removed.
+
 ### BLOCKED task
 **Symptom**: Task in BLOCKED state, agents skip it.
 **Diagnosis**: Read `blocked_reason`, `blocked_questions`, `depends_on`, and optional `repair_request` in state.yaml. A `BLOCKED` alert is raised when a task blocks; if the orchestrator assesses but cannot resolve it, an `UNRESOLVED BLOCKED` alert is raised.

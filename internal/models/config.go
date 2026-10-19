@@ -109,6 +109,9 @@ const (
 
 var EnvEnableCopyWorktreeEnvFiles = brand.EnvName("ENABLE_COPY_ENV_FILES")
 
+// EnvAgentEnvDeny seeds config.agent_env_deny at init: comma-separated names.
+var EnvAgentEnvDeny = brand.EnvName("AGENT_ENV_DENY")
+
 // Bounds for heartbeat interval validation.
 const (
 	MinHeartbeatIntervalSeconds = 1
@@ -218,6 +221,10 @@ type Config struct {
 	// recipe registry, read at the integration commit (ADR-0169). Empty means
 	// no task may declare runtime inputs.
 	RuntimeInputRegistry string `yaml:"runtime_input_registry,omitempty"`
+	// AgentEnvDeny names host variables withheld from supervisors, every
+	// process they start, agent sessions and copied env files (ADR-0213).
+	// Operator-only; empty withholds nothing.
+	AgentEnvDeny []string `yaml:"agent_env_deny,omitempty"`
 	// DeferredValidation configures the deferred-validation batch and holds
 	// operator rulings that defer exact canonical commands (ADR-0204).
 	DeferredValidation *DeferredValidationConfig `yaml:"deferred_validation,omitempty"`

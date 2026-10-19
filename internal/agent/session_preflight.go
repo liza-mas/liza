@@ -31,16 +31,21 @@ func resolveLaunchEnvironment(plan LaunchPlan, root, agentID, generation string,
 	if err != nil {
 		return nil, err
 	}
-	deny, err := runtimeInputDenyNames(root)
+	state, err := withheldNameState(root)
 	if err != nil {
 		return nil, err
 	}
+	deny := models.ReservedEnvNames(state)
 	// An agent env file configures the agent CLI itself. A name it sets that is
-	// also a runtime input would be stripped silently, for example the
-	// provider's own API key reused by the project: refuse the launch instead.
+	// also withheld would be stripped silently, for example the provider's own
+	// API key reused by the project: refuse the launch instead.
 	for _, entry := range overlay {
-		if name, _, _ := strings.Cut(entry, "="); deny[name] {
+		name, _, _ := strings.Cut(entry, "=")
+		if models.EnvNameIn(models.RuntimeInputDenyNames(state), name) {
 			return nil, fmt.Errorf("runtime_input_provider_collision:%s: an agent env file sets %s, which is declared as a runtime input and stripped from sessions; remove it from the env file, or rename the runtime input if the agent CLI needs it", name, name)
+		}
+		if models.EnvNameIn(deny, name) {
+			return nil, fmt.Errorf("agent_env_denied:%s: an agent env file sets %s, which config.agent_env_deny withholds from sessions; authenticate the agent CLI another way, or remove the name from the deny list", name, name)
 		}
 	}
 	env = withClaudeCommandCeiling(plan, env)
@@ -75,10 +80,11 @@ func withClaudeCommandCeiling(plan LaunchPlan, env []string) []string {
 	return append(out, claudeCommandCeilingName+"="+strconv.FormatInt(ceiling, 10))
 }
 
-// runtimeInputDenyNames reads the project's reserved runtime-input names. A
-// project without state has none; an unreadable state fails the attempt
-// rather than launch unscrubbed.
-func runtimeInputDenyNames(root string) (map[string]bool, error) {
+// withheldNameState reads the state that declares withheld names: runtime
+// inputs and config.agent_env_deny. A project without state withholds
+// nothing (nil state); an unreadable state fails the attempt rather than
+// launch unscrubbed.
+func withheldNameState(root string) (*models.State, error) {
 	statePath := paths.New(root).StatePath()
 	if _, err := os.Stat(statePath); errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -88,20 +94,20 @@ func runtimeInputDenyNames(root string) (map[string]bool, error) {
 	// the task and session contract under the state lock before provider start.
 	state, err := db.For(statePath).ReadSnapshot()
 	if err != nil {
-		return nil, fmt.Errorf("read runtime-input declarations before launch: %w", err)
+		return nil, fmt.Errorf("read withheld variable names before launch: %w", err)
 	}
-	return models.RuntimeInputDenyNames(state), nil
+	return state, nil
 }
 
-// scrubRuntimeInputNames removes every runtime-input variable from an agent
-// session environment (ADR-0169), so an ambient value cannot reach a session.
-// It logs names only.
+// scrubRuntimeInputNames removes every withheld variable (runtime inputs,
+// ADR-0169, and config.agent_env_deny, ADR-0213) from an agent session
+// environment, so an ambient value cannot reach a session. It logs names only.
 func scrubRuntimeInputNames(root string, env []string) ([]string, error) {
-	deny, err := runtimeInputDenyNames(root)
+	state, err := withheldNameState(root)
 	if err != nil {
 		return nil, err
 	}
-	return scrubDeniedNames(env, deny), nil
+	return scrubDeniedNames(env, models.ReservedEnvNames(state)), nil
 }
 
 func scrubDeniedNames(env []string, deny map[string]bool) []string {
@@ -109,13 +115,31 @@ func scrubDeniedNames(env []string, deny map[string]bool) []string {
 	if len(scrubbed) != len(env) {
 		var removed []string
 		for _, entry := range env {
-			if name, _, _ := strings.Cut(entry, "="); deny[name] {
+			if name, _, _ := strings.Cut(entry, "="); models.EnvNameIn(deny, name) {
 				removed = append(removed, name)
 			}
 		}
-		GetLogger().Warn("Removed runtime-input variables from the session environment; deliver them through the runtime-input ledger", "names", strings.Join(removed, ","))
+		GetLogger().Warn("Removed withheld variables (runtime inputs or config.agent_env_deny) from the session environment", "names", strings.Join(removed, ","))
 	}
 	return scrubbed
+}
+
+// validateIdentityAndWithholdEnvironment validates the supervisor identity,
+// then removes config.agent_env_deny names from the supervisor's own
+// environment before anything starts a process, so no session, setup command,
+// merge test or index tool inherits them (ADR-0213).
+func validateIdentityAndWithholdEnvironment(agentID, role, root string) error {
+	if err := validateIdentity(agentID, role); err != nil {
+		return err
+	}
+	withheld, err := ops.WithholdDeniedEnvironment(root)
+	if err != nil {
+		return err
+	}
+	if len(withheld) > 0 {
+		GetLogger().Info("Withheld config.agent_env_deny variables from this supervisor", "names", strings.Join(withheld, ","))
+	}
+	return nil
 }
 
 func snapshotCommand(ctx context.Context, executable, cwd string, env []string, args ...string) (*exec.Cmd, error) {

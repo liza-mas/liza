@@ -467,13 +467,14 @@ func SessionPrerequisiteNames(state *State) map[string]bool {
 }
 
 // RuntimeInputNameCollisions returns, sorted, the names that are both
-// runtime-input names (stripped from sessions) and session prerequisites
-// (required in sessions). Any such name makes its prerequisite unsatisfiable.
+// stripped from sessions (runtime inputs or config.agent_env_deny) and
+// session prerequisites (required in sessions). Any such name makes its
+// prerequisite unsatisfiable.
 func RuntimeInputNameCollisions(state *State) []string {
-	deny := RuntimeInputDenyNames(state)
+	deny := ReservedEnvNames(state)
 	var collisions []string
 	for name := range SessionPrerequisiteNames(state) {
-		if deny[name] {
+		if EnvNameIn(deny, name) {
 			collisions = append(collisions, name)
 		}
 	}
@@ -481,7 +482,8 @@ func RuntimeInputNameCollisions(state *State) []string {
 	return collisions
 }
 
-// ScrubEnvironment returns env without entries whose name is denied.
+// ScrubEnvironment returns env without entries whose name is denied, under
+// the platform's case rule.
 func ScrubEnvironment(env []string, deny map[string]bool) []string {
 	if len(deny) == 0 {
 		return slices.Clone(env)
@@ -489,7 +491,7 @@ func ScrubEnvironment(env []string, deny map[string]bool) []string {
 	kept := make([]string, 0, len(env))
 	for _, entry := range env {
 		name, _, _ := strings.Cut(entry, "=")
-		if deny[name] {
+		if EnvNameIn(deny, name) {
 			continue
 		}
 		kept = append(kept, entry)

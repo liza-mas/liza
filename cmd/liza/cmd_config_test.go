@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -325,5 +326,37 @@ func TestConfigRuntimeInputRegistry(t *testing.T) {
 	stdout, err = run("get", ops.RuntimeInputRegistryConfigKey, "--json")
 	if err != nil || parseEnvelope(t, stdout)["result"] != "config/runtime-inputs.yaml" {
 		t.Fatalf("config get = %s (%v)", stdout, err)
+	}
+}
+
+func TestConfigAgentEnvDeny(t *testing.T) {
+	root, statePath := setupMutationTestProject(t, nil)
+	run := func(args ...string) (string, error) {
+		t.Helper()
+		return executeRootCommandCapture(t, root, append([]string{"config"}, args...)...)
+	}
+	stdout, err := run("set", ops.AgentEnvDenyConfigKey, " OPENAI_API_KEY , NANGO_SECRET_KEY ", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true {
+		t.Fatalf("first set failed: %v %s", err, stdout)
+	}
+	if got := readState(t, statePath).Config.AgentEnvDeny; !slices.Equal(got, []string{"OPENAI_API_KEY", "NANGO_SECRET_KEY"}) {
+		t.Fatalf("agent_env_deny = %q", got)
+	}
+	stdout, err = run("set", ops.AgentEnvDenyConfigKey, "OPENAI_API_KEY", "--agent-id", "orchestrator-1", "--replace", "--reason", "agent", "--json")
+	if err == nil {
+		t.Fatal("agent write accepted")
+	}
+	assertJSONError(t, stdout, "validation", "operator-only")
+	stdout, err = run("set", ops.AgentEnvDenyConfigKey, "PATH", "--replace", "--reason", "bad", "--json")
+	if err == nil {
+		t.Fatalf("process variable accepted: %s", stdout)
+	}
+	stdout, err = run("get", ops.AgentEnvDenyConfigKey, "--json")
+	if err != nil || fmt.Sprint(parseEnvelope(t, stdout)["result"]) != "[OPENAI_API_KEY NANGO_SECRET_KEY]" {
+		t.Fatalf("config get = %s (%v)", stdout, err)
+	}
+	stdout, err = run("set", ops.AgentEnvDenyConfigKey, "", "--replace", "--reason", "clear", "--json")
+	if err != nil || len(readState(t, statePath).Config.AgentEnvDeny) != 0 {
+		t.Fatalf("clear failed: %v %s", err, stdout)
 	}
 }

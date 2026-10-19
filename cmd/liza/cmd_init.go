@@ -135,6 +135,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		scipSearch, _ := cmd.Flags().GetStringArray("scip-search")
 		scipSearchPlans, _ := cmd.Flags().GetStringArray("scip-search-plan")
 		copyWorktreeEnvFiles, _ := cmd.Flags().GetBool("copy-worktree-env-files")
+		agentEnvDeny, _ := cmd.Flags().GetStringArray("agent-env-deny")
 		maxInstances, _ := cmd.Flags().GetInt("max-instances")
 		yes, _ := cmd.Flags().GetBool("yes")
 		if maxInstances < 1 {
@@ -206,6 +207,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 				PostWorktreeCmd:      postWorktreeCmd,
 				ValidationExecution:  validationExecution,
 				CopyWorktreeEnvFiles: copyWorktreeEnvFiles,
+				AgentEnvDeny:         agentEnvDeny,
 				AutoResume:           autoResume,
 				NoFollowUp:           noFollowUp,
 				MaxInstances:         maxInstances,
@@ -237,7 +239,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 				return fmt.Errorf("--no-follow-up requires full workspace init (provide a description)")
 			}
 			if hasExplicitInitFlags(cmd) {
-				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --validation-execution, --copy-worktree-env-files, --max-instances, --default-cli, --default-doer-cli, --default-reviewer-cli) require a description argument for full workspace init")
+				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --validation-execution, --copy-worktree-env-files, --agent-env-deny, --max-instances, --default-cli, --default-doer-cli, --default-reviewer-cli) require a description argument for full workspace init")
 			}
 			if err := commands.InitPairingCommand(commands.InitPairingParams{
 				Agents:          agents,
@@ -269,6 +271,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 			PostWorktreeCmd:      postCreateCmd,
 			ValidationExecution:  validationExecution,
 			CopyWorktreeEnvFiles: copyWorktreeEnvFiles,
+			AgentEnvDeny:         agentEnvDeny,
 			AutoResume:           autoResume,
 			NoFollowUp:           noFollowUp,
 			MaxInstances:         maxInstances,
@@ -495,7 +498,7 @@ var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini",
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
 func hasExplicitInitFlags(cmd *cobra.Command) bool {
-	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "validation-execution", "copy-worktree-env-files", "max-instances", "default-cli", "default-doer-cli", "default-reviewer-cli"} {
+	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "validation-execution", "copy-worktree-env-files", "agent-env-deny", "max-instances", "default-cli", "default-doer-cli", "default-reviewer-cli"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}
@@ -701,6 +704,7 @@ func init() {
 	initCmd.Flags().String("post-worktree-cmd", "", "shell command to run after worktree creation (e.g. 'make setup')")
 	initCmd.Flags().String("validation-execution", "", `"local": assert that the agent CLIs run validation commands locally, enabling declared validation prerequisites`)
 	initCmd.Flags().Bool("copy-worktree-env-files", false, "copy ignored root env files into worktrees before setup commands")
+	initCmd.Flags().StringArray("agent-env-deny", nil, "withhold a host variable from agents, their processes and copied env files (repeatable)")
 	initCmd.Flags().Int("max-instances", models.DefaultMaxInstances, "default max live agents per non-orchestrator role without its own max-instances; auto-repair scales each role up to it")
 	initCmd.Flags().Bool("auto-resume", false, "automatically resume at checkpoint and sprint completion")
 	initCmd.Flags().Bool("no-follow-up", false, "run only the entry-point subpipeline by suppressing top-level pipeline transitions")

@@ -485,6 +485,7 @@ are loaded at runtime from the provider catalog.
 | `post_worktree_cmd` | (none) | — | — | shell cmd | Command run after worktree creation (e.g. `npm install`) |
 | `copy_worktree_env_files` | false | — | — | boolean | Explicitly authorize copying ignored root env files into task worktrees |
 | `runtime_input_registry` | (none) | — | — | repo-relative path | Committed recipe registry for `runtime_inputs`; see [Runtime inputs](#runtime-inputs) |
+| `agent_env_deny` | (none) | — | 64 names | variable names | Host variables withheld from supervisors, the deferred-validation runner and agent sessions; operator-only; see [Withheld environment variables](#withheld-environment-variables) |
 | `deferred_validation.batch_every_merges` | 5 | 1 | — | count | Forward merges per periodic deferred-validation batch (ADR-0204); set by editing state.yaml |
 | `deferred_validation.setup_timeout_seconds` | 1800 | 1 | — | seconds | Bound on `post_worktree_cmd` before each batch probe; set by editing state.yaml |
 | `deferred_validation.rulings` | (none) | — | — | list | Exact commands deferred at strict admission on operator authority; written only by `deferred-validation rule`/`unrule` |
@@ -1214,7 +1215,7 @@ a second run must change nothing observable. Git status must stay clean.
 
 **Behavior:** The command runs via `sh -c` in the worktree directory, and it must succeed. A failure fails closed rather than warning: a task claim aborts before the claim is recorded (and the claiming agent is marked degraded with reason `claim_worktree_setup_failed`, so it stops claiming instead of retrying every task), a reviewer session releases its claim back to the task's reviewable status (the task is not blocked, so review-ready work survives), and `§BRAND_BINARY_NAME§ wt-create` exits non-zero. Doer resumes after a handoff or restart enforce it too. The failing worktree is left on disk so the command can be re-run against it. The recorded diagnostic is the masked, truncated command plus the worktree path and exit status. The command's own output is not captured, logged, or stored — a setup command can print secrets §BRAND_NAME_TITLE§ has no way to mask, such as a database URL loaded from a worktree env file. Rerun the command in the named worktree to see why it failed. There is no warn-only mode.
 
-**Ignored env files:** Worktrees are created from committed files, so untracked `.env` files are not present by default. Set `copy_worktree_env_files: true`, initialize with `§BRAND_BINARY_NAME§ init "Goal" --copy-worktree-env-files`, or set `§BRAND_ENV_PREFIX§_ENABLE_COPY_ENV_FILES=true` during init to explicitly authorize §BRAND_NAME_TITLE§ to copy root-level env files before `post_worktree_cmd` runs. Eligible files are regular files only and must match exactly one of these root-level patterns: `.env`, `.env.*`, `*.env`, `.envrc`. The `*.env` pattern includes names such as `secrets.env` when they are ignored. §BRAND_NAME_TITLE§ verifies the source is ignored, configures the task worktree private exclude (or, when your `core.excludesFile` prevents that, requires your rules to ignore the destination already), verifies the destination path is ignored, and then copies only when the destination is missing. A file that mentions a runtime-input variable name is not copied ([Runtime inputs](#runtime-inputs)). Unsafe cases are warning-only and path-only; contents are not logged.
+**Ignored env files:** Worktrees are created from committed files, so untracked `.env` files are not present by default. Set `copy_worktree_env_files: true`, initialize with `§BRAND_BINARY_NAME§ init "Goal" --copy-worktree-env-files`, or set `§BRAND_ENV_PREFIX§_ENABLE_COPY_ENV_FILES=true` during init to explicitly authorize §BRAND_NAME_TITLE§ to copy root-level env files before `post_worktree_cmd` runs. Eligible files are regular files only and must match exactly one of these root-level patterns: `.env`, `.env.*`, `*.env`, `.envrc`. The `*.env` pattern includes names such as `secrets.env` when they are ignored. §BRAND_NAME_TITLE§ verifies the source is ignored, configures the task worktree private exclude (or, when your `core.excludesFile` prevents that, requires your rules to ignore the destination already), verifies the destination path is ignored, and then copies only when the destination is missing. A file that mentions a runtime-input variable name or a `config.agent_env_deny` name is not copied ([Runtime inputs](#runtime-inputs), [Withheld environment variables](#withheld-environment-variables)). Unsafe cases are warning-only and path-only; contents are not logged.
 
 `.envrc` is included because direnv setup is commonly required for build/test commands, but it is shell configuration. Enabling this option authorizes copying local shell environment setup as well as env values. Custom names such as `.flaskenv` are not copied in this v1 behavior.
 
@@ -1580,6 +1581,53 @@ recorded instances exist, a missing or different key fails closed. The key is
 shared by all your projects, so restore it before recording in any of them. See the
 [runtime inputs protocol](../specs/protocols/runtime-inputs.md).
 
+### Withheld environment variables
+
+Agents and the project commands §BRAND_NAME_TITLE§ runs inherit the launching
+host's environment. To keep host variables such as a real provider key away
+from them, list the names in `config.agent_env_deny` (ADR-0213):
+
+```bash
+§BRAND_BINARY_NAME§ init "Goal" --agent-env-deny OPENAI_API_KEY --agent-env-deny NANGO_SECRET_KEY
+§BRAND_BINARY_NAME§ config set config.agent_env_deny OPENAI_API_KEY,NANGO_SECRET_KEY
+§BRAND_BINARY_NAME§ config set config.agent_env_deny OPENAI_API_KEY --replace --reason "drop NANGO"
+§BRAND_BINARY_NAME§ config set config.agent_env_deny "" --replace --reason "stop withholding"
+```
+
+At init, `§BRAND_ENV_PREFIX§_AGENT_ENV_DENY` (comma-separated) adds names after the
+flags. After init the key is operator-only. A write replaces the whole list,
+and changing a non-empty list needs `--replace --reason`. Names must be
+identifiers. Process variables (`PATH`, `HOME`, `LD_*`, ...),
+§BRAND_NAME_TITLE§'s own `§BRAND_ENV_PREFIX§_*` variables and the Windows names
+`USERPROFILE`, `SYSTEMROOT` and `COMSPEC` are refused.
+
+Supervisors and the deferred-validation runner remove the listed names from
+their own environment at startup, so integration tests, deferred validation,
+`post_worktree_cmd`, hooks and every other process they start never see them.
+Agent launches, gate commands and `run-live` strip them too, read at each call.
+A root env file that mentions a listed name is not copied into worktrees.
+Names compare case-insensitively on Windows and case-sensitively elsewhere.
+
+Things to know before listing a name:
+
+- **Restart semantics.** A newly listed name reaches the next session, gate and
+  `run-live` at once, and other processes at the next supervisor start. A
+  removed name returns only in a freshly started supervisor. Running sessions
+  are not cleaned retroactively.
+- **Provider authentication.** A provider CLI that authenticates through a
+  listed variable loses it. Use another mechanism such as a stored login.
+  Setting the name in the agent env file (`claude.env`, ...) fails the launch
+  with `agent_env_denied:<NAME>` rather than being silently dropped.
+- **Prerequisites.** A listed name cannot also be a `validation_prerequisites`
+  variable: the write is refused.
+- **Runtime inputs.** The list controls host inheritance only. A runtime input
+  still delivers its declared value to its declared commands.
+- **Scope.** Commands you run from your own shell keep that shell's
+  environment.
+
+See [Withheld environment variable refused](SUPPORT.md#withheld-environment-variable-refused-configagent_env_deny)
+for the refusals.
+
 ## Provider Catalog
 
 §BRAND_NAME_TITLE§ loads provider definitions through a cache at
@@ -1661,6 +1709,7 @@ project configuration belongs in `§BRAND_PROJECT_DIRNAME§/state.yaml`.
 | `§BRAND_ENV_PREFIX§_ENABLE_STACKLIT` | No | unset | Strict opt-in activation gate for Stacklit. In pairing init, truthy values enable project-local hook setup for repo-root `stacklit.json` refresh. In MAS, truthy values enable target-local `stacklit.json` refresh and prompt guidance when an index is available. Unset, empty, `0`, and `false` disable it. Values are trimmed and parsed case-insensitively. |
 | `§BRAND_ENV_PREFIX§_ENABLE_FUNCTIONAL_CLUSTERS` | No | unset | Strict opt-in activation gate for Functional Clusters. Truthy values enable target-local `functional-clusters.json` refresh and prompt guidance when Stacklit and SCIP prerequisites are also active and an artifact is available. Unset, empty, `0`, and `false` disable it. Values are trimmed and parsed case-insensitively. |
 | `§BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB` | Per marked validation command | unset | Break-glass marker for task or `output[]` validation declared with `destructive_db: true`. It is not a global configuration switch: every destructive DB validation command must start with `§BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 ` or `env §BRAND_ENV_PREFIX§_ALLOW_DESTRUCTIVE_DB=1 `. |
+| `§BRAND_ENV_PREFIX§_AGENT_ENV_DENY` | No | unset | Init-only, comma-separated names added to `config.agent_env_deny` after any `--agent-env-deny` flags. See [Withheld environment variables](#withheld-environment-variables). |
 | `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_URL` | No | GitHub raw catalog | Provider catalog source URL. Must be HTTPS except localhost test URLs. |
 | `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_TTL` | No | `1h` | Cache freshness duration for `~/§BRAND_GLOBAL_DIRNAME§/cache/provider-catalog.yaml`. |
 | `§BRAND_ENV_PREFIX§_PROVIDER_CATALOG_TIMEOUT` | No | `1500ms` | Network timeout for provider catalog refresh attempts. |

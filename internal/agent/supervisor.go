@@ -601,8 +601,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	defer cancelSupervisor()
 	bb := db.For(config.StatePath).WithLockRetryContext(supervisorCtx)
 
-	// Validate identity
-	if err := validateIdentity(config.AgentID, config.Role); err != nil {
+	// Validate identity, then withhold denied host variables (ADR-0213)
+	if err := validateIdentityAndWithholdEnvironment(config.AgentID, config.Role, config.ProjectRoot); err != nil {
 		return err
 	}
 

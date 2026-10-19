@@ -557,8 +557,9 @@ func checkRuntimeInputTransitions(preImage []byte, state *models.State) error {
 }
 
 // checkRuntimeInputNameCollisions refuses a transaction that makes a name
-// both a runtime input and a session prerequisite (ADR-0169): the name is
-// stripped from every session, so the prerequisite could never pass. It is the
+// both stripped from sessions (a runtime input, ADR-0169, or a
+// config.agent_env_deny entry, ADR-0213) and a session prerequisite: the
+// prerequisite could never pass. It is the
 // fence behind the admission diagnostics, covering every writer and any
 // concurrent pair of declarations. Only collisions absent from the locked
 // pre-image are refused, so legacy states stay writable (ADR-0165).
@@ -581,7 +582,10 @@ func (bb *Blackboard) checkRuntimeInputNameCollisions(preImage []byte, state *mo
 	if len(introduced) == 0 {
 		return nil
 	}
-	return fmt.Errorf("runtime-input write refused: %s would be both a runtime input and a validation prerequisite; runtime-input names are stripped from sessions, so deliver the variable one way only", strings.Join(introduced, ", "))
+	if runtimeInputs := models.RuntimeInputDenyNames(state); !slices.ContainsFunc(introduced, func(name string) bool { return !models.EnvNameIn(runtimeInputs, name) }) {
+		return fmt.Errorf("runtime-input write refused: %s would be both a runtime input and a validation prerequisite; runtime-input names are stripped from sessions, so deliver the variable one way only", strings.Join(introduced, ", "))
+	}
+	return fmt.Errorf("write refused: %s would be both withheld from sessions (config.agent_env_deny) and a validation prerequisite; remove it from one of them", strings.Join(introduced, ", "))
 }
 
 // Write writes the state to the state file atomically with fsync.

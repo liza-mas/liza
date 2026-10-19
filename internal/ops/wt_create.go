@@ -220,9 +220,10 @@ func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
 // never follows symlinks; only root-level regular files matching the candidate
 // predicate are eligible. Destination ignore setup is verified before any copy.
 //
-// Lines defining a runtime-input variable are dropped from the copy: those
-// values are delivered only through the runtime-input ledger and never copied
-// into worktrees (ADR-0169).
+// A file mentioning a withheld variable (a runtime input, ADR-0169, or a
+// config.agent_env_deny name, ADR-0213) is not copied at all: runtime-input
+// values reach commands only through the ledger, and withheld names never
+// reach sessions.
 func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 	entries, err := os.ReadDir(projectRoot)
 	if err != nil {
@@ -279,7 +280,7 @@ func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: copy: %v", rel, err))
 		} else if len(reserved) > 0 {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: not copied: it mentions runtime-input variables %s; move them out of the file and deliver them through the runtime-input ledger", rel, strings.Join(reserved, ", ")))
+			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: not copied: it mentions withheld variables %s (runtime inputs or config.agent_env_deny); move them out of the file", rel, strings.Join(reserved, ", ")))
 		}
 	}
 	return warnings
@@ -294,7 +295,7 @@ func worktreeEnvFileDenyNames(projectRoot string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return models.RuntimeInputDenyNames(state), nil
+	return models.ReservedEnvNames(state), nil
 }
 
 // copyEnvFileUnlessReserved copies src to a new dst unless the file mentions
@@ -312,7 +313,7 @@ func copyEnvFileUnlessReserved(src, dst string, mode os.FileMode, deny map[strin
 	for _, word := range strings.FieldsFunc(string(data), func(r rune) bool {
 		return r != '_' && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9')
 	}) {
-		if deny[word] && !slices.Contains(found, word) {
+		if models.EnvNameIn(deny, word) && !slices.Contains(found, word) {
 			found = append(found, word)
 		}
 	}

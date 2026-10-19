@@ -200,7 +200,7 @@ func (gate runtimeInputGate) acquire(task *models.Task) (*runtimeInputGrant, err
 	if err != nil {
 		return nil, err
 	}
-	grant := &runtimeInputGrant{deny: models.RuntimeInputDenyNames(snapshot), overlays: map[string][]string{}}
+	grant := &runtimeInputGrant{deny: models.ReservedEnvNames(snapshot), overlays: map[string][]string{}}
 	if len(task.RuntimeInputs) == 0 {
 		return grant, nil
 	}

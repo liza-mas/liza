@@ -42,7 +42,8 @@ func ValidationConfigDigest(config models.Config) string {
 		Tools    map[string]models.AgentToolConfig
 		Profiles map[string]models.AgentProfileConfig
 		Codex    string
-	}{config.AgentTools, config.AgentProfiles, config.CodexPackageVersion})
+		Deny     []string
+	}{config.AgentTools, config.AgentProfiles, config.CodexPackageVersion, config.AgentEnvDeny})
 	digest := sha256.Sum256(payload)
 	return hex.EncodeToString(digest[:])
 }
