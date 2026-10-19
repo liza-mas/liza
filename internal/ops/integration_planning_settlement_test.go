@@ -2,11 +2,43 @@ package ops
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 )
+
+// D-225: the planning wait names the tasks holding it and the ways out, so an
+// operator reads the cause instead of probing the source.
+func TestIntegrationPlanningWaitNamesPendingTasksAndLever(t *testing.T) {
+	t.Parallel()
+	fixture := newReconcileFixture(t, false)
+	state := fixture.readState(t)
+	state.Tasks = []models.Task{
+		progressTask("story-b", "us-writing-pair", models.TaskStatusMerged),
+		progressTask("story-a", "us-writing-pair", models.TaskStatusMerged),
+	}
+
+	decision, err := EvaluateLiveIntegrationProgress(state, fixture.projectRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	waiting := decision.Waiting
+	if waiting == nil || waiting.Code != integrationProgressWaitingPlanning {
+		t.Fatalf("waiting = %+v, want planning_unsettled", waiting)
+	}
+	if !reflect.DeepEqual(waiting.TaskIDs, []string{"story-a", "story-b"}) {
+		t.Fatalf("waiting task IDs = %v, want the pending stories", waiting.TaskIDs)
+	}
+	for _, want := range []string{brand.Command("plan-check"), "--retire --ruling"} {
+		if !strings.Contains(waiting.Guidance, want) {
+			t.Fatalf("guidance %q does not name %q", waiting.Guidance, want)
+		}
+	}
+}
 
 func TestIntegrationWaitsForUpstreamPlanning(t *testing.T) {
 	t.Parallel()

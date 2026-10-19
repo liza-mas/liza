@@ -372,6 +372,7 @@ unless system mode is `PAUSED` or `CIRCUIT_BREAKER_TRIPPED`. The human decides:
 | Release a held plan | Do the ask, then `§BRAND_BINARY_NAME§ plan-check <task-id> --clear` | The orchestrator held a plan for a human action; an already-expanded plan just drops the hold |
 | Retire unused original | `§BRAND_BINARY_NAME§ plan-check ORIGINAL --replaced-by MERGED_CORRECTION` | A separate merged correction replaces its unused hand-off |
 | Retire by ruling | `§BRAND_BINARY_NAME§ plan-check ORIGINAL --retire --ruling DECISION` | A ruling retires the unused hand-off, held or not, with no replacement; rerun it to restore a ruling an older binary dropped |
+| Settle a delivered cohortless source | `§BRAND_BINARY_NAME§ plan-check TASK --retire --ruling DECISION` | Integration waits on `planning_unsettled` for a merged, outputless many-to-one source added outside any cohort (status INTEGRATION lists it), and a downstream task outside its role-pair merged with none live |
 | Pipeline transition | `§BRAND_BINARY_NAME§ proceed <task-id> <transition>` | Create child tasks from output or a ready cohort (auto-done by `§BRAND_BINARY_NAME§ resume` in batch) |
 | Pause for manual work | (no command) | Make manual changes first |
 | Abort | `§BRAND_BINARY_NAME§ stop` | Stop entirely |

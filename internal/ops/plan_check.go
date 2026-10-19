@@ -302,7 +302,12 @@ func retirePlanHandoff(state *models.State, domain PlanHandoffDomain, original *
 		return refuse(fmt.Sprintf("task %s handoff was already retired by %s", original.ID, original.RetiredBy()))
 	}
 	if !domain.InDomain(original) || !domain.Pending(original) {
-		return refuse(fmt.Sprintf("task %s must have an unused MERGED reviewed handoff", original.ID))
+		if !retire {
+			return refuse(fmt.Sprintf("task %s must have an unused MERGED reviewed handoff", original.ID))
+		}
+		if reason := deliveredCohortlessSourceRefusal(state, domain.resolver, original); reason != "" {
+			return refuse(fmt.Sprintf("task %s must have an unused MERGED reviewed handoff, or be an outputless many-to-one source outside any cohort whose downstream work merged: %s", original.ID, reason))
+		}
 	}
 	if original.PlanCheckVerdictOf() == models.PlanCheckHeld && !retire {
 		return refuse(fmt.Sprintf("task %s is held; operator plan-check %s --clear is required first", original.ID, original.ID))
@@ -357,6 +362,54 @@ func retirePlanHandoff(state *models.State, domain PlanHandoffDomain, original *
 		check: &models.PlanCheck{Verdict: models.PlanCheckReplaced, ReplacedBy: correction.ID, By: actor, At: time.Now().UTC()},
 		note:  "unused handoff replaced by " + correction.ID, changed: true,
 	}, nil
+}
+
+// deliveredCohortlessSourceRefusal admits, for retire only, an outputless
+// source of a many-to-one transition that has no cohort parent: the engine can
+// never run that transition for it (D-225). The ruling judges delivery; its
+// direct downstream tasks in other role-pairs are the evidence it rests on, at
+// least one merged and none live. It returns why task does not qualify, or "".
+func deliveredCohortlessSourceRefusal(state *models.State, resolver *pipeline.Resolver, task *models.Task) string {
+	switch {
+	case task.Status != models.TaskStatusMerged:
+		return "it is not MERGED"
+	case len(task.Output) > 0:
+		return "it has output"
+	case task.CohortParentID() != "":
+		return "it belongs to the cohort of " + task.CohortParentID()
+	case !hasUnexecutedManyToOne(resolver, task):
+		return "no unexecuted many-to-one transition leaves " + task.RolePair
+	}
+	delivered := false
+	for i := range state.Tasks {
+		dependent := &state.Tasks[i]
+		if dependent.RolePair == task.RolePair || !slices.Contains(dependent.DependsOn, task.ID) {
+			continue
+		}
+		if !dependent.Status.IsTerminal() {
+			return fmt.Sprintf("downstream task %s is not terminal", dependent.ID)
+		}
+		delivered = delivered || dependent.Status == models.TaskStatusMerged
+	}
+	if !delivered {
+		return fmt.Sprintf("no MERGED downstream task outside %s depends on it", task.RolePair)
+	}
+	return ""
+}
+
+func hasUnexecutedManyToOne(resolver *pipeline.Resolver, task *models.Task) bool {
+	if resolver == nil {
+		return false
+	}
+	for _, transition := range resolver.AllTransitions() {
+		if transition.Cardinality != "many-to-one" || task.TransitionsExecuted[transition.Name] || !transition.AppliesTo(task.Output) {
+			continue
+		}
+		if source, err := resolver.TransitionSourceRolePair(transition.Name); err == nil && source == task.RolePair {
+			return true
+		}
+	}
+	return false
 }
 
 func planCheckTransition(task *models.Task, class PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {

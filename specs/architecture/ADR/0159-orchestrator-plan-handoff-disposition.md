@@ -82,6 +82,16 @@ Chose **Option 3**.
   A retirement whose ruling an older binary dropped on rewrite takes the
   ruling from the next `--retire --ruling`, keeping the original actor and
   time, without re-running the unused-hand-off checks.
+- **Delivered cohortless many-to-one source** (2026-10-19, D-225). An
+  orchestrator-added source with no cohort parent can never run its
+  many-to-one transition, yet integration settlement requires it. `--retire
+  --ruling` also admits such a MERGED, outputless source while that
+  transition is unexecuted, if its direct dependents outside its role-pair
+  include a MERGED task and no live one. The ruling judges delivery; the
+  dependency edges are its evidence, never an automatic settlement. The
+  reviewed-hand-off domain is unchanged, `--replaced-by` does not apply, and
+  no transition flag is fabricated. The `planning_unsettled` wait names the
+  tasks holding it and this lever.
 - **Sticky hold.** Pass, a different hold and replan are refused on a held
   plan; only an operator clear releases it. Clear also releases a hold that
   outlived the hand-off (the plan expanded, or its amendment fence lifted

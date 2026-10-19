@@ -1303,6 +1303,11 @@ This merge prerequisite is separate from wake-trigger reporting in
 `orchestrator_state.trigger`, so an idle wake trigger does not clear or conceal
 the handoff blocker.
 
+The `integration` section reports the live integration gate whichever wake
+trigger wins: status, reason code, the task IDs holding it and guidance. The
+dashboard shows the first ten IDs of each list with a count of the rest;
+JSON and YAML carry the full lists.
+
 Status is read-only: it reports these diagnostics but performs no task or
 sprint transition and does not merge planning output.
 

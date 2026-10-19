@@ -608,7 +608,11 @@ MERGED_CORRECTION`; see
 [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md)
 for its preconditions. When a ruling retires the hand-off with no replacement,
 use `§BRAND_BINARY_NAME§ plan-check ORIGINAL --retire --ruling DECISION`
-instead; it also ends a hold. Retirement cannot be cleared or revived.
+instead; it also ends a hold. Retirement cannot be cleared or revived. The
+same ruling settles a merged, outputless many-to-one source added outside any
+cohort, which can never run its transition, once a downstream task outside its
+role-pair merged and none is live; status lists such tasks under INTEGRATION
+while integration waits on `planning_unsettled`.
 
 ```bash
 # Typical replan workflow

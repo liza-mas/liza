@@ -27,7 +27,7 @@ Wake Trigger: {{.OrchestratorState.Trigger}}
 {{- if gt .OrchestratorState.TriggerCount 0}} (count: {{.OrchestratorState.TriggerCount}}){{end}}
 Explanation: {{.OrchestratorState.Reason}}
 
-{{.HandoffSection -}}
+{{.IntegrationSection}}{{.HandoffSection -}}
 === WORK QUEUES ===
 Legacy role task readiness:
 Coder: {{.WorkQueues.Coder.Available}} available - {{.WorkQueues.Coder.Reason}}

@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/procscan"
+	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/render"
 )
 
@@ -35,6 +36,7 @@ type statusData struct {
 	AgentHealth        map[string]models.AgentHealth `json:"agent_health,omitempty"`
 	AgentCapacity      agentCapacityStatus           `json:"agent_capacity" yaml:"agent_capacity"`
 	OrchestratorState  orchestratorStatus            `json:"orchestrator_state"`
+	Integration        *integrationLifecycleStatus   `json:"integration,omitempty" yaml:"integration,omitempty"`
 	WorkQueues         workQueuesStatus              `json:"work_queues"`
 	PendingTransitions []pendingTransition           `json:"pending_transitions,omitempty"`
 	PhaseHandoff       *phaseHandoffStatus           `json:"phase_handoff,omitempty" yaml:"phase_handoff,omitempty"`
@@ -236,6 +238,7 @@ func BuildStatusData(state *models.State, detailed bool, projectRoot string, pr 
 	data.AgentHealth = currentAgentHealth(state)
 	data.AgentCapacity = buildAgentCapacityStatus(state, pr)
 	data.OrchestratorState = buildOrchestratorStatus(state, projectRoot)
+	data.Integration = buildIntegrationGateStatus(state, projectRoot)
 	data.WorkQueues = buildWorkQueuesStatus(state, data.Tasks.LegacyCoderClaimable, data.Tasks.LegacyCodeReviewerReviewable, pr)
 	data.PhaseHandoff = buildPhaseHandoffStatus(state, projectRoot)
 
@@ -535,14 +538,7 @@ func buildOrchestratorStatusFromWakeResult(state *models.State, result agent.Orc
 		TriggerCount: count,
 	}
 	if result.Integration.Status != "" {
-		ps.Integration = &integrationLifecycleStatus{
-			Status:         result.Integration.Status,
-			ReasonCode:     result.Integration.ReasonCode,
-			TaskIDs:        append([]string(nil), result.Integration.TaskIDs...),
-			RequestKeys:    append([]string(nil), result.Integration.RequestKeys...),
-			CreatedTaskIDs: append([]string(nil), result.Integration.CreatedTaskIDs...),
-			Guidance:       result.Integration.Guidance,
-		}
+		ps.Integration = integrationStatusFromProjection(result.Integration)
 	}
 
 	switch trigger {
@@ -580,6 +576,24 @@ func buildOrchestratorStatusFromWakeResult(state *models.State, result agent.Orc
 	}
 
 	return ps
+}
+
+// buildIntegrationGateStatus reports the live integration gate whichever
+// orchestrator wake trigger wins, so a planning wait stays visible (D-225).
+func buildIntegrationGateStatus(state *models.State, projectRoot string) *integrationLifecycleStatus {
+	decision, err := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
+	return integrationStatusFromProjection(prompts.ProjectEffectiveIntegrationCompletion(decision, nil, err))
+}
+
+func integrationStatusFromProjection(projection prompts.EffectiveIntegrationCompletion) *integrationLifecycleStatus {
+	return &integrationLifecycleStatus{
+		Status:         projection.Status,
+		ReasonCode:     projection.ReasonCode,
+		TaskIDs:        append([]string(nil), projection.TaskIDs...),
+		RequestKeys:    append([]string(nil), projection.RequestKeys...),
+		CreatedTaskIDs: append([]string(nil), projection.CreatedTaskIDs...),
+		Guidance:       projection.Guidance,
+	}
 }
 
 func formatIntegrationLifecycleReason(status *integrationLifecycleStatus) string {
@@ -880,6 +894,44 @@ func writePhaseHandoffSection(b *strings.Builder, handoff *phaseHandoffStatus) {
 	b.WriteString("\n")
 }
 
+// maxIntegrationSectionIDs bounds each ID list in the dashboard; JSON and YAML
+// carry the full lists.
+const maxIntegrationSectionIDs = 10
+
+func writeIntegrationSection(b *strings.Builder, status *integrationLifecycleStatus) {
+	if status == nil {
+		return
+	}
+	b.WriteString("=== INTEGRATION ===\n")
+	fmt.Fprintf(b, "Status: %s\n", status.Status)
+	if status.ReasonCode != "" {
+		fmt.Fprintf(b, "Reason: %s\n", status.ReasonCode)
+	}
+	for _, list := range []struct {
+		label string
+		ids   []string
+	}{
+		{"Tasks", status.TaskIDs},
+		{"Requested analyses", status.RequestKeys},
+		{"Reconciled tasks", status.CreatedTaskIDs},
+	} {
+		if len(list.ids) > 0 {
+			fmt.Fprintf(b, "%s: %s\n", list.label, boundedIDList(list.ids, maxIntegrationSectionIDs))
+		}
+	}
+	if status.Guidance != "" {
+		fmt.Fprintf(b, "Guidance: %s\n", status.Guidance)
+	}
+	b.WriteString("\n")
+}
+
+func boundedIDList(ids []string, limit int) string {
+	if len(ids) <= limit {
+		return strings.Join(ids, ", ")
+	}
+	return fmt.Sprintf("%s (+%d more)", strings.Join(ids[:limit], ", "), len(ids)-limit)
+}
+
 func phaseHandoffTaskRows(tasks []phaseHandoffTask) [][]string {
 	rows := make([][]string, 0, len(tasks))
 	for _, task := range tasks {
@@ -915,6 +967,7 @@ type statusDashboardData struct {
 	AgentsSection      string
 	CapacitySection    string
 	HandoffSection     string
+	IntegrationSection string
 	AnomalyList        []string
 	TransitionsSection string
 }
@@ -929,6 +982,8 @@ func formatStatusDashboard(data statusData) (string, error) {
 	writeAgentCapacitySection(&capacityBuf, data.AgentCapacity)
 	var handoffBuf strings.Builder
 	writePhaseHandoffSection(&handoffBuf, data.PhaseHandoff)
+	var integrationBuf strings.Builder
+	writeIntegrationSection(&integrationBuf, data.Integration)
 
 	var anomalyList []string
 	if data.Anomalies != nil {
@@ -952,6 +1007,7 @@ func formatStatusDashboard(data statusData) (string, error) {
 		AgentsSection:      agentsBuf.String(),
 		CapacitySection:    capacityBuf.String(),
 		HandoffSection:     handoffBuf.String(),
+		IntegrationSection: integrationBuf.String(),
 		AnomalyList:        anomalyList,
 		TransitionsSection: transitionsBuf.String(),
 	}

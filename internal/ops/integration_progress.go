@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 )
@@ -242,18 +243,19 @@ func (e *integrationProgressEvaluator) evaluate(
 		lifecycle = &models.IntegrationLifecycle{}
 	}
 
-	cohort, freeze, settled, err := e.contributingSet(
+	cohort, freeze, holding, err := e.contributingSet(
 		lifecycle.ContributingSet,
 		capability,
 	)
 	if err != nil {
 		return decision, err
 	}
-	decision.PlanningSettled = settled
+	decision.PlanningSettled = len(holding) == 0
 	decision.FreezeContributingSet = freeze
 	decision.ContributingSet = cloneIntegrationContributingSet(cohort)
-	if !settled {
-		decision.Waiting = progressReason(integrationProgressWaitingPlanning)
+	if !decision.PlanningSettled {
+		decision.Waiting = progressReasonWithTasks(integrationProgressWaitingPlanning, holding...)
+		decision.Waiting.Guidance = planningUnsettledGuidance()
 		return decision, nil
 	}
 
@@ -276,29 +278,31 @@ func (e *integrationProgressEvaluator) evaluate(
 	return e.evaluateGlobal(decision, lifecycle, integrationHEAD)
 }
 
+// contributingSet returns the integration cohort once planning has settled,
+// or the task IDs still holding it.
 func (e *integrationProgressEvaluator) contributingSet(
 	persisted *models.IntegrationContributingSet,
 	capability pipeline.SlicedIntegrationCapability,
-) (*models.IntegrationContributingSet, bool, bool, error) {
+) (*models.IntegrationContributingSet, bool, []string, error) {
 	pending, err := e.unsettledPreIntegrationPlanningTasks(capability)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, nil, err
 	}
 	if len(pending) > 0 {
-		return nil, false, false, nil
+		return nil, false, pending, nil
 	}
 
 	if persisted != nil {
 		cohort := cloneIntegrationContributingSet(persisted)
 		if err := e.validateCohort(cohort); err != nil {
-			return nil, false, false, err
+			return nil, false, nil, err
 		}
-		return cohort, false, true, nil
+		return cohort, false, nil, nil
 	}
 
 	plans, err := e.preIntegrationPlans()
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, nil, err
 	}
 	cohort := &models.IntegrationContributingSet{Scopes: []models.IntegrationScopeSnapshot{}}
 	for _, plan := range plans {
@@ -307,13 +311,13 @@ func (e *integrationProgressEvaluator) contributingSet(
 		}
 		resolution, err := e.resolveLineage(plan.ID, false)
 		if err != nil {
-			return nil, false, false, err
+			return nil, false, nil, err
 		}
 		if !resolution.settled {
-			return nil, false, false, nil
+			return nil, false, []string{plan.ID}, nil
 		}
 		if plan.Status == models.TaskStatusMerged && len(plan.Output) > 0 && !hasExecutedOutputTransition(plan.TransitionsExecuted) {
-			return nil, false, false, nil
+			return nil, false, []string{plan.ID}, nil
 		}
 
 		roots := e.directCodingRoots(plan.ID)
@@ -321,10 +325,10 @@ func (e *integrationProgressEvaluator) contributingSet(
 		for _, rootID := range roots {
 			rootResolution, err := e.resolveLineage(rootID, false)
 			if err != nil {
-				return nil, false, false, err
+				return nil, false, nil, err
 			}
 			if !rootResolution.settled {
-				return nil, false, false, nil
+				return nil, false, []string{rootID}, nil
 			}
 			if rootResolution.merged {
 				mergedRoots = append(mergedRoots, rootID)
@@ -337,7 +341,14 @@ func (e *integrationProgressEvaluator) contributingSet(
 		}
 	}
 	sort.Slice(cohort.Scopes, func(i, j int) bool { return cohort.Scopes[i].PlanTaskID < cohort.Scopes[j].PlanTaskID })
-	return cohort, true, true, nil
+	return cohort, true, nil, nil
+}
+
+// planningUnsettledGuidance names the ways out of a planning wait, including
+// the D-225 lever for a source that can never run its transition.
+func planningUnsettledGuidance() string {
+	return "listed tasks must finish and run their outgoing transitions; for a merged, outputless source that can never run its transition and whose downstream work merged, an operator runs " +
+		brand.Command("plan-check", "TASK", "--retire", "--ruling", "DECISION")
 }
 
 func (e *integrationProgressEvaluator) unsettledPreIntegrationPlanningTasks(capability pipeline.SlicedIntegrationCapability) ([]string, error) {
