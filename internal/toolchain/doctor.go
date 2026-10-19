@@ -1,11 +1,13 @@
 package toolchain
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/semble"
 )
 
 type DoctorOptions struct {
@@ -82,6 +84,16 @@ func doctorOne(tool Tool, runner Runner) DoctorCheck {
 			ToolID: tool.ID, Status: DoctorFailed, Path: path, Output: output,
 			Message: fmt.Sprintf("%s lacks required command %s; upgrade with %s toolchain install %s",
 				tool.Binary, strings.Join(missing, ", "), brand.RuntimeValues().BinaryName, tool.ID),
+		}
+	}
+	if tool.ID == sembleToolID {
+		// Whether or not Semble is activated: an installed Semble whose model is
+		// not cached fails every offline query.
+		if offlineOutput, err := sembleOfflineCheck(runner, path); errors.Is(err, errSembleModelUnavailable) {
+			return DoctorCheck{ToolID: tool.ID, Status: DoctorFailed, Path: path, Output: offlineOutput,
+				Message: "semble model unavailable offline; prewarm it with " + semble.ModelRecoveryCommand()}
+		} else if err != nil {
+			return DoctorCheck{ToolID: tool.ID, Status: DoctorFailed, Path: path, Output: offlineOutput, Message: "semble " + err.Error()}
 		}
 	}
 	return DoctorCheck{ToolID: tool.ID, Status: DoctorOK, Path: path, Output: output}

@@ -22,9 +22,12 @@ func toolEnvName(suffix string) string {
 }
 
 type InstallOptions struct {
-	Profile    Profile
-	Include    []string
-	Exclude    []string
+	Profile Profile
+	Include []string
+	Exclude []string
+	// ToolID, when set and not "all", selects exactly that tool, as in
+	// DoctorOptions.
+	ToolID     string
 	InstallDir string
 	DryRun     bool
 	Runner     Runner
@@ -60,7 +63,11 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, err
 	}
-	selection, err := ResolveSelection(opts.Profile, opts.Include, opts.Exclude)
+	include, exclude := opts.Include, opts.Exclude
+	if opts.ToolID != "" && opts.ToolID != "all" {
+		include, exclude = []string{opts.ToolID}, allCatalogIDsExcept(opts.ToolID)
+	}
+	selection, err := ResolveSelection(opts.Profile, include, exclude)
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -71,6 +78,9 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	result := InstallResult{Profile: selection.Profile, InstallDir: installDir}
 	for _, tool := range selection.Tools {
 		step := installOne(tool, installDir, goos, opts.DryRun, runner)
+		if tool.ID == sembleToolID && !opts.DryRun {
+			step = sembleModelStep(step, tool, installDir, goos, runner)
+		}
 		result.Steps = append(result.Steps, step)
 	}
 	if err := installResultError(result.Steps); err != nil {

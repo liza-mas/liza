@@ -44,7 +44,24 @@ Use `--include` and `--exclude` for repeatable explicit choices:
 
 In an interactive terminal, `§BRAND_BINARY_NAME§ toolchain install` opens a checklist unless
 `--yes` or `--dry-run` is supplied. In non-interactive environments, pass
+`--yes` or `--dry-run`. `--tool <id>` installs exactly one tool and needs
 `--yes` or `--dry-run`.
+
+### Semble model
+
+Semble is pinned (`semble==0.6.2`): a release can change its default model,
+and every offline query fails until that model is downloaded. After installing
+Semble, `install` prewarms the model online and checks it offline. For a Semble
+already installed, `install` checks offline and prewarms only an uncached model,
+so this repairs a model an upgrade left uncached:
+
+```bash
+§BRAND_BINARY_NAME§ toolchain install --tool semble --yes
+```
+
+A failed prewarm or offline check fails the install and says the binary is
+installed. `install` never replaces an installed Semble of another version; to
+move to the pinned one, run `uv tool uninstall semble` first.
 
 ## Check Tools
 
@@ -57,6 +74,8 @@ In an interactive terminal, `§BRAND_BINARY_NAME§ toolchain install` opens a ch
 
 `doctor` reports a tool as failed when its `--help` does not list a command
 §BRAND_NAME_TITLE§ requires, such as `scip-search reroot`, and names the upgrade command.
+For Semble it also runs an offline query on a temporary fixture, whether or not
+Semble is activated, and reports an uncached model with the repair command above.
 `doctor` reports MCP/provider integrations as manual capabilities. Configure
 those in the active agent provider or MCP host; §BRAND_NAME_TITLE§ will not write credentials
 or provider-specific secrets.

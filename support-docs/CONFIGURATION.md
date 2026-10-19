@@ -782,7 +782,9 @@ controlled init-time prewarm when `semble` is available. The prewarm uses a
 temporary one-file fixture outside the project/worktree and may contact
 Hugging Face or the local model cache path to populate the Semble/model2vec/Hugging
 Face cache. After prewarming, §BRAND_NAME_TITLE§ performs offline validation with
-`HF_HUB_OFFLINE=1` against the same fixture shape.
+`HF_HUB_OFFLINE=1` against the same fixture shape. `§BRAND_BINARY_NAME§ toolchain install`
+also prewarms the model, after installing Semble or when an installed Semble's
+model is not cached; see TOOLCHAIN.md.
 
 After installing or prewarming Semble, operators should set `HF_HUB_OFFLINE=1`
 in the shell or service environment that launches §BRAND_NAME_TITLE§ agents when they want to
@@ -790,11 +792,15 @@ guarantee unattended work cannot trigger model downloads. Agent prompt and
 SessionStart command examples remain plain `semble ...` commands; offline mode is
 an operator/runtime environment choice, not agent routing syntax.
 
-The implementation-owned Semble validation timeout constant applies to both
-prewarm and offline validation and defaults to 30 seconds. Semble diagnostics
+The implementation-owned Semble validation timeout constant applies to both the
+init-time prewarm and offline validation and defaults to 30 seconds. The
+`§BRAND_BINARY_NAME§ toolchain install` prewarm and `§BRAND_BINARY_NAME§ toolchain doctor` offline check run without
+that timeout, like the toolchain's other commands. Semble diagnostics
 are bounded diagnostics: §BRAND_NAME_TITLE§ reports concise operator-visible cases such as a
 missing executable, model unavailable offline, or Semble execution failure
-without dumping raw command output, cache contents, or file contents. Semble
+without dumping raw command output, cache contents, or file contents. A model
+unavailable offline, as after a Semble upgrade changes its default model, names
+the repair: `§BRAND_BINARY_NAME§ toolchain install --tool semble --yes`. Semble
 failures are non-blocking for MAS agent spawn; §BRAND_NAME_TITLE§ omits Semble prompt guidance
 when Semble is disabled, unavailable, or not offline-ready.
 
@@ -850,7 +856,7 @@ ignore patterns before enabling Semble.
 
 Explicit non-goals: §BRAND_NAME_TITLE§ does not vendor Semble, implement semantic search
 inside §BRAND_NAME_TITLE§, automatically install Semble or Python dependencies, automatically
-install or download models outside the controlled init prewarm, run `semble init`,
+install or download models outside the controlled init and `toolchain install` prewarms, run `semble init`,
 use Semble MCP in this milestone, rely on remote Git URL indexing for MAS,
 make Semble required, replace Stacklit, SCIP, `rg`, `ast-grep`, or direct
 source reads, or guarantee semantic result relevance. Semble results are

@@ -62,6 +62,35 @@ This supersedes the worktree-root discovery choice above without changing
 worktree isolation for implementation or review. Cold/warm performance still
 requires representative measurements; tests establish routing/readiness behavior.
 
+### Decision revision — 2026-10-19 (model drift)
+
+An unpinned reinstall moved Semble to 0.6.2, whose default model
+(`minishlab/potion-code-16M-v2`) was not cached. Every offline query then
+failed, the lifecycle refresh reported only `query failed`, and readiness
+probes silently withheld Semble for six days. Only init downloaded models.
+
+- The toolchain catalog pins `semble==0.6.2`; moving the pin is a reviewed
+  change.
+- `toolchain install` is a second controlled download point. After a fresh
+  install it prewarms the model online (`HF_HUB_OFFLINE=0`, the operator's
+  deliberate download moment) on the package-owned fixture, then checks
+  offline. For an installed Semble it checks offline and prewarms only an
+  uncached model, so `toolchain install --tool semble --yes` is the repair.
+  It runs the resolved executable, since a fresh install directory may not be
+  on PATH yet, and a failed prewarm or check fails the install. It does not
+  replace an installed Semble of another version.
+- `toolchain doctor` runs the same offline check whether or not Semble is
+  activated.
+- An offline query whose stderr carries huggingface_hub's offline-cache
+  failure (`HF_HUB_OFFLINE`, `LocalEntryNotFoundError`) reports
+  `model unavailable offline` with the repair command, including on the
+  repository corpus, which still never echoes command output. Stdout is not
+  read: it holds the user's source. A reworded library message falls back to
+  the generic diagnostic.
+
+Automatic online fallback in refresh and readiness paths was rejected: it would
+download from git hooks and background refreshes, outside the operator's view.
+
 ## Consequences
 
 Positive:

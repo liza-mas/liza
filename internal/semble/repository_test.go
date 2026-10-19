@@ -3,6 +3,7 @@ package semble
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -110,6 +111,71 @@ func TestRepositoryFailureDiagnosticsExcludeCorpusOutput(t *testing.T) {
 		if errors.Is(failure, context.DeadlineExceeded) && !strings.Contains(result.Diagnostic.Message, "timed out") {
 			t.Fatalf("timeout not reported: %+v", result)
 		}
+	}
+}
+
+// observedOfflineModelStderr is huggingface_hub's message when Semble's default
+// model changed after an upgrade and only the old model is cached.
+const observedOfflineModelStderr = "Cannot find an appropriate cached snapshot folder for the specified revision on the local disk and outgoing traffic has been disabled. To enable repo look-ups and downloads online, set 'HF_HUB_OFFLINE=0' as environment variable."
+
+func TestRepositoryFailureNamesAnUncachedModel(t *testing.T) {
+	t.Setenv(EnvEnableSemble, "true")
+	root := t.TempDir()
+	if !EnsureProjectRootIgnore(root).Safe {
+		t.Fatal("root ignore safety failed")
+	}
+	run := func(result CommandResult) ValidationResult {
+		return PrepareRepository(ValidationOptions{TargetRoot: root, LookPath: fixedLookPath("/opt/bin/semble"), Runner: func(CommandPlan) (CommandResult, error) {
+			return result, errors.New("exit status 1")
+		}})
+	}
+
+	got := run(CommandResult{ExitCode: 1, Stdout: "UNTRUSTED_CORPUS_OUTPUT", Stderr: observedOfflineModelStderr})
+	if got.Diagnostic.Kind != DiagnosticModelUnavailableOffline || !strings.Contains(got.Diagnostic.Message, ModelRecoveryCommand()) {
+		t.Fatalf("diagnostic = %+v, want model unavailable offline naming %q", got.Diagnostic, ModelRecoveryCommand())
+	}
+	if strings.Contains(got.Diagnostic.Message, "UNTRUSTED_CORPUS_OUTPUT") || strings.Contains(got.Diagnostic.Message, "snapshot folder") {
+		t.Fatalf("diagnostic echoes command output: %+v", got.Diagnostic)
+	}
+	assertBoundedDiagnostic(t, got.Diagnostic)
+
+	// Corpus results on stdout may contain the same words; they never classify.
+	got = run(CommandResult{ExitCode: 1, Stdout: observedOfflineModelStderr + " offline from_pretrained"})
+	if got.Diagnostic.Kind == DiagnosticModelUnavailableOffline || !strings.Contains(got.Diagnostic.Message, "query failed") {
+		t.Fatalf("stdout-only words diagnostic = %+v, want generic query failure", got.Diagnostic)
+	}
+}
+
+func TestIsModelUnavailableOffline(t *testing.T) {
+	for stderr, want := range map[string]bool{
+		observedOfflineModelStderr:                          true,
+		"huggingface_hub.errors.LocalEntryNotFoundError: x": true,
+		"running offline":                                   false,
+		"StaticModel.from_pretrained failed":                false,
+		"":                                                  false,
+	} {
+		if got := IsModelUnavailableOffline(stderr); got != want {
+			t.Errorf("IsModelUnavailableOffline(%q) = %v, want %v", stderr, got, want)
+		}
+	}
+}
+
+func TestValidationFixtureCommandQueriesTheControlledFixture(t *testing.T) {
+	dir, args, cleanup, err := ValidationFixtureCommand()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := DefaultValidationFixtureIdentity()
+	want := []string{"search", fixture.Query, dir, "--top-k", "1", "--content", fixture.ContentMode}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("args = %#v, want %#v", args, want)
+	}
+	if content, err := os.ReadFile(filepath.Join(dir, fixture.FileName)); err != nil || string(content) != fixture.FileContent {
+		t.Fatalf("fixture file = %q, %v", content, err)
+	}
+	cleanup()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("fixture dir after cleanup: %v", err)
 	}
 }
 

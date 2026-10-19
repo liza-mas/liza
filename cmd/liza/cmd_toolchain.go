@@ -88,6 +88,11 @@ var toolchainInstallCmd = &cobra.Command{
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		yes, _ := cmd.Flags().GetBool("yes")
 		installDir, _ := cmd.Flags().GetString("install-dir")
+		toolID, _ := cmd.Flags().GetString("tool")
+		if toolID != "" && !dryRun && !yes {
+			// The named tool is the selection, so there is no checklist to confirm.
+			return cliValidationError("toolchain install --tool needs --yes or --dry-run")
+		}
 		if !dryRun && !yes && interactive.IsInteractive() {
 			include, exclude, err = runToolchainChecklist(profile, include, exclude)
 			if err != nil {
@@ -104,6 +109,7 @@ var toolchainInstallCmd = &cobra.Command{
 			Profile:    profile,
 			Include:    include,
 			Exclude:    exclude,
+			ToolID:     toolID,
 			InstallDir: installDir,
 			DryRun:     dryRun,
 		})
@@ -195,6 +201,7 @@ func init() {
 	addToolchainSelectionFlags(toolchainInstallCmd)
 	addToolchainSelectionFlags(toolchainConfigureCmd)
 	toolchainDoctorCmd.Flags().String("tool", "all", "tool id to check, or all")
+	toolchainInstallCmd.Flags().String("tool", "", "install only this tool id (needs --yes or --dry-run)")
 	toolchainInstallCmd.Flags().String("install-dir", "", "directory for managed binaries (default: ~/.local/bin)")
 	toolchainInstallCmd.Flags().Bool("dry-run", false, "print planned install commands without executing them")
 	toolchainInstallCmd.Flags().Bool("yes", false, "run selected installs without interactive confirmation")
@@ -214,6 +221,7 @@ func init() {
 	registerCompletion(toolchainInstallCmd, "exclude", completeToolIDs)
 	registerCompletion(toolchainConfigureCmd, "exclude", completeToolIDs)
 	registerCompletion(toolchainDoctorCmd, "tool", completeToolIDsOrAll)
+	registerCompletion(toolchainInstallCmd, "tool", completeToolIDs)
 	registerCompletion(toolchainConfigureCmd, "agent-tools", completeValues("auto", "skip", "force"))
 
 	addJSONFlag(toolchainListCmd)

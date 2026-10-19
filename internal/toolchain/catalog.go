@@ -141,8 +141,10 @@ func Catalog() []Tool {
 		},
 		{
 			ID: "semble", Name: "Semble", Binary: "semble", Category: CategoryNavigation,
-			Purpose:     "Provides local semantic repository discovery.",
-			InstallKind: InstallUVTool, UVPackage: "semble",
+			Purpose: "Provides local semantic repository discovery.",
+			// Pinned: a Semble release can change its default model, which an
+			// offline host cannot fetch (ADR-0079). Install prewarms the model.
+			InstallKind: InstallUVTool, UVPackage: "semble==0.6.2",
 			VersionArgs: []string{"--help"}, ActivationEnv: []string{brand.EnvName("ENABLE_SEMBLE") + "=1"},
 			BalancedDefault: true, FullDefault: true,
 		},

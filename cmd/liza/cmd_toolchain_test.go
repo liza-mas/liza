@@ -55,6 +55,32 @@ func TestToolchainInstallDryRunPrintsPlannedCommands(t *testing.T) {
 	}
 }
 
+func TestToolchainInstallToolSelectsOnlyThatTool(t *testing.T) {
+	resetRootCmdForTest(t)
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs(toolchainArgs("toolchain", "install", "--dry-run", "--tool", "semble", "--install-dir", filepath.Join(t.TempDir(), "bin")))
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("toolchain install --tool semble --dry-run failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) == 0 || !strings.Contains(lines[0], "semble") || strings.Contains(out.String(), "rtk") {
+		t.Fatalf("output = %q, want only the semble step", out.String())
+	}
+}
+
+func TestToolchainInstallToolNeedsConfirmation(t *testing.T) {
+	resetRootCmdForTest(t)
+	rootCmd.SetOut(&bytes.Buffer{})
+	rootCmd.SetArgs(toolchainArgs("toolchain", "install", "--tool", "semble"))
+
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--tool needs --yes or --dry-run") {
+		t.Fatalf("error = %v, want --tool to require --yes or --dry-run", err)
+	}
+}
+
 func TestToolchainInstallDryRunManualCapability(t *testing.T) {
 	resetRootCmdForTest(t)
 	var out bytes.Buffer

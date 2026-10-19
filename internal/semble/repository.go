@@ -106,9 +106,16 @@ func queryRepository(opts ValidationOptions, waitForLock bool) (result Validatio
 		result.Ready = true
 		return result
 	}
-	result.Diagnostic = repositoryDiagnostic("query failed")
-	if errors.Is(err, context.DeadlineExceeded) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
 		result.Diagnostic = repositoryDiagnostic("query timed out")
+	case IsModelUnavailableOffline(commandResult.Stderr):
+		result.Diagnostic = Diagnostic{
+			Kind:    DiagnosticModelUnavailableOffline,
+			Message: "semble repository: model unavailable offline; prewarm it with " + ModelRecoveryCommand(),
+		}
+	default:
+		result.Diagnostic = repositoryDiagnostic("query failed")
 	}
 	return result
 }
