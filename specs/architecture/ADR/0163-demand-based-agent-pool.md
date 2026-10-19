@@ -4,7 +4,8 @@
 
 ACCEPTED — 2026-09-29. Closes GitHub issue #169.
 Amended by [ADR-0205](0205-surplus-supervisors-self-release.md): a surplus
-supervisor retires itself when the cap drops.
+supervisor retires itself when the cap drops. Amended 2026-10-19 (D-199):
+approved merges without an eligible owner are reviewer demand.
 
 ## Context
 
@@ -99,3 +100,20 @@ drop to zero.
   demand with successful starts, the role would be suppressed as failing.
 - **Global agent cap.** Deferred until a run shows the per-role cap is not
   enough.
+
+## Amendment (2026-10-19, D-199)
+
+Demand counted only claimable tasks. An approved task whose approver stopped
+before merging, with no other live, non-degraded reviewer of the role, had no
+merge owner and was not demand. Nothing started a reviewer and no alert fired,
+so the merge and its dependents waited until something unrelated brought a
+reviewer up (D-93, D-142, D-213, D-199; up to about 2 h, and one deadlock).
+An approved merge without an eligible owner, as elected by
+`models.ApprovedMergeOwner` (the election reviewer merge handling uses), is now
+demand for one reviewer of its role, however many such merges the role has.
+It stays outside review-claim matching, since any reviewer of the role may
+take a merge over. A review start already planned for the role covers it.
+Otherwise it takes one start within headroom, on the role's default
+selection, or is set aside when that CLI is quota-blocked. The missing-role
+alert names such tasks, which is the only signal when the role has no
+headroom.

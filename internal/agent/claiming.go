@@ -548,52 +548,8 @@ func ownedPendingMergeFingerprint(state *models.State, agentID string, pr models
 }
 
 func approvedMergePending(task *models.Task, state *models.State, agentID string, pr models.PipelineResolver) bool {
-	if !models.IsApprovedForMerge(task, pr) || task.LastApprover() == "" {
-		return false
-	}
-	if task.MergeCommit != nil && len(task.IntegrationFailure) == 0 {
-		return false
-	}
-	return approvedMergeOwner(task, state, pr) == agentID
-}
-
-func approvedMergeOwner(task *models.Task, state *models.State, pr models.PipelineResolver) string {
-	reviewerRole, err := pr.ReviewerRole(task.RolePair)
-	if err != nil {
-		return ""
-	}
-
-	eligible := make([]string, 0, len(state.Agents))
-	now := time.Now().UTC()
-	nilLeaseHeartbeatWindow := models.NormalizeHeartbeatInterval(state.Config.HeartbeatInterval) + models.LeaseExpiryGracePeriod
-	for id, agent := range state.Agents {
-		if agent.Role != reviewerRole || agent.Generation == "" {
-			continue
-		}
-		liveRegistration := agent.LeaseExpires != nil && agent.LeaseExpires.After(now)
-		if agent.LeaseExpires == nil {
-			liveRegistration = !agent.Heartbeat.IsZero() && agent.Heartbeat.After(now.Add(-nilLeaseHeartbeatWindow))
-		}
-		if !liveRegistration {
-			continue
-		}
-		if health, ok := state.AgentHealth[id]; ok && health.IsCurrentDegradedFor(agent) {
-			continue
-		}
-		eligible = append(eligible, id)
-	}
-	sort.Strings(eligible)
-
-	lastApprover := task.LastApprover()
-	for _, id := range eligible {
-		if id == lastApprover {
-			return id
-		}
-	}
-	if len(eligible) == 0 {
-		return ""
-	}
-	return eligible[0]
+	return models.ApprovedMergeOutstanding(task, pr) &&
+		models.ApprovedMergeOwner(state, task, pr, time.Now().UTC()) == agentID
 }
 
 // handleAvailableTransitions creates child tasks from pipeline transitions

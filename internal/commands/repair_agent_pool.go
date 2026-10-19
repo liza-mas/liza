@@ -535,7 +535,9 @@ type maxInstancesResolver interface {
 // without covering demand. Reviewer tasks that an agent started with the
 // role's spawn CLI could not claim under any ID it could start with are
 // returned as unservable instead; the others carry the ID to start with.
-// reservedIDs are explicit IDs of started agents not registered yet.
+// Approved merges no eligible reviewer owns need one reviewer of their role,
+// unless a review start is already planned for it. reservedIDs are explicit
+// IDs of started agents not registered yet.
 func FindRoleCapacityDeficits(state *models.State, pr models.PipelineResolver, repairCLI RepairCLI, reservedIDs map[string]bool, now time.Time) ([]MissingRoleWork, []UnservableRoleWork) {
 	capacity := FindRoleCapacity(state, pr, repairCLI, reservedIDs, nil, now)
 	return capacity.Missing, capacity.Unservable
@@ -587,6 +589,7 @@ func FindRoleCapacity(state *models.State, pr models.PipelineResolver, repairCLI
 	matched := make(map[string]bool)
 	idleDoersUsed := make(map[string]int)
 	uncovered := make(map[string][]string)
+	ownerless := make(map[string][]string)
 	type startKind struct {
 		role string
 		item int
@@ -632,6 +635,12 @@ func FindRoleCapacity(state *models.State, pr models.PipelineResolver, repairCLI
 		reviewerRole, err := pr.ReviewerRole(task.RolePair)
 		if err != nil {
 			continue
+		}
+		// An approved merge no eligible reviewer owns is work for any reviewer
+		// of the role, outside review-claim matching: whoever starts first
+		// becomes its owner.
+		if models.ApprovedMergeOutstanding(task, pr) && models.ApprovedMergeOwner(state, task, pr, now) == "" {
+			ownerless[reviewerRole] = append(ownerless[reviewerRole], task.ID)
 		}
 
 		// An agent that failed this task's validation needs repair and
@@ -692,19 +701,44 @@ func FindRoleCapacity(state *models.State, pr models.PipelineResolver, repairCLI
 		}
 	}
 
+	// One reviewer owns every ownerless merge of its role, so they need one
+	// start, and none when a review start is already planned for the role.
+	mergeStart := make(map[string]bool)
+	for _, role := range slices.Sorted(maps.Keys(ownerless)) {
+		if len(uncovered[role]) > 0 {
+			continue
+		}
+		cliBlocked := false
+		for _, taskID := range ownerless[role] {
+			cliBlocked = setAside(startKind{role, 0}, roleCLI(role), taskID)
+		}
+		mergeStart[role] = !cliBlocked
+	}
+
 	maxResolver, _ := pr.(maxInstancesResolver)
 	var missing []MissingRoleWork
-	for _, role := range slices.Sorted(maps.Keys(uncovered)) {
+	demandRoles := slices.Collect(maps.Keys(uncovered))
+	for role, start := range mergeStart {
+		if start {
+			demandRoles = append(demandRoles, role)
+		}
+	}
+	slices.Sort(demandRoles)
+	for _, role := range demandRoles {
 		roleMax := 0
 		if maxResolver != nil {
 			roleMax, _ = maxResolver.MaxInstances(role)
 		}
 		headroom := models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances) - occupied[role]
-		taskIDs := uncovered[role]
-		spawnCount := min(len(taskIDs), headroom)
+		starts, reason := len(uncovered[role]), ""
+		if mergeStart[role] {
+			starts, reason = 1, "approved task(s) with no live, healthy merge owner"
+		}
+		spawnCount := min(starts, headroom)
 		if spawnCount <= 0 {
 			continue
 		}
+		taskIDs := slices.Concat(uncovered[role], ownerless[role])
 		sort.Strings(taskIDs)
 		var agentIDs []string
 		if ids := plannedIDs[role]; len(ids) > 0 {
@@ -721,6 +755,7 @@ func FindRoleCapacity(state *models.State, pr models.PipelineResolver, repairCLI
 			SpawnCount:   spawnCount,
 			AgentIDs:     agentIDs,
 			Items:        items,
+			Reason:       reason,
 			headroom:     headroom,
 			plannedIDs:   plannedIDs[role],
 			plannedItems: plannedItems[role],
@@ -915,7 +950,8 @@ func (p *reviewerStartPlanner) assign(task *models.Task, policy ops.ReviewerClai
 }
 
 // FindMissingRolesWithClaimableWork reports roles whose claimable work no live
-// agent may claim; roleModels supplies the reviewer lists that bind claims.
+// agent may claim, and reviewer roles with approved merges no eligible reviewer
+// owns; roleModels supplies the reviewer lists that bind claims.
 func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineResolver, roleModels rolemodels.File) []MissingRoleWork {
 	if state == nil || pr == nil {
 		return nil
@@ -954,6 +990,9 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 
 		if !registeredRoles[doerRuntime] && models.IsRoleTaskReady(state, task, doerRuntime, pr, now) {
 			missingRoleTasks[doerRuntime] = append(missingRoleTasks[doerRuntime], task.ID)
+		}
+		if models.ApprovedMergeOutstanding(task, pr) && models.ApprovedMergeOwner(state, task, pr, now) == "" {
+			missingRoleTasks[reviewerRuntime] = append(missingRoleTasks[reviewerRuntime], task.ID)
 		}
 		if models.IsRoleTaskReady(state, task, reviewerRuntime, pr, now) {
 			slots, _ := roleModels.ReviewSlots(reviewerRuntime)
@@ -1166,7 +1205,8 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 
 	printedHeading := false
 	for _, roleWork := range result.Missing {
-		if roleWork.Reason != "" {
+		// Only a missing orchestrator is demand without tasks.
+		if len(roleWork.TaskIDs) == 0 && roleWork.Reason != "" {
 			fmt.Printf("Missing orchestrator: %s (%s)\n", roleWork.Role, roleWork.Reason)
 			continue
 		}
@@ -1174,7 +1214,11 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 			fmt.Println("Roles with claimable work not covered by idle agents:")
 			printedHeading = true
 		}
-		fmt.Printf("  %s: %d task(s) (%s); starting %d agent(s)\n", roleWork.Role, roleWork.TaskCount, strings.Join(roleWork.TaskIDs, ", "), roleWork.SpawnCount)
+		line := fmt.Sprintf("  %s: %d task(s) (%s); starting %d agent(s)", roleWork.Role, roleWork.TaskCount, strings.Join(roleWork.TaskIDs, ", "), roleWork.SpawnCount)
+		if roleWork.Reason != "" {
+			line += ": " + roleWork.Reason
+		}
+		fmt.Println(line)
 	}
 
 	if result.DryRun {

@@ -153,6 +153,48 @@ func strandedForRole(state *State, task *Task, role string, pr PipelineResolver,
 	return err == nil && role == doerRole && StrandedDoerClaimReason(state, task, pr, now) != ""
 }
 
+// ApprovedMergeOutstanding reports whether task is approved for merge, carries
+// the approval its merge owner is elected from, and has not merged cleanly.
+func ApprovedMergeOutstanding(task *Task, pr PipelineResolver) bool {
+	if !IsApprovedForMerge(task, pr) || task.LastApprover() == "" {
+		return false
+	}
+	return task.MergeCommit == nil || len(task.IntegrationFailure) > 0
+}
+
+// ApprovedMergeOwner elects the reviewer that merges an approved task: among
+// current-generation reviewers of its role with a live registration and no
+// current degradation, the last approver, else the lowest ID. Empty means no
+// reviewer can merge it until one of the role starts. Reviewer merge handling
+// and pool repair both use it, so the agent that merges and the demand that
+// staffs the merge agree by construction.
+func ApprovedMergeOwner(state *State, task *Task, pr PipelineResolver, now time.Time) string {
+	reviewerRole, err := pr.ReviewerRole(task.RolePair)
+	if err != nil {
+		return ""
+	}
+
+	eligible := make([]string, 0, len(state.Agents))
+	window := AgentLivenessWindow(state.Config)
+	for id, agent := range state.Agents {
+		if agent.Role != reviewerRole || agent.Generation == "" || !AgentRegistrationLive(agent, now, window) {
+			continue
+		}
+		if health, ok := state.AgentHealth[id]; ok && health.IsCurrentDegradedFor(agent) {
+			continue
+		}
+		eligible = append(eligible, id)
+	}
+	if len(eligible) == 0 {
+		return ""
+	}
+	slices.Sort(eligible)
+	if lastApprover := task.LastApprover(); slices.Contains(eligible, lastApprover) {
+		return lastApprover
+	}
+	return eligible[0]
+}
+
 // AgentLivenessWindow is how long a registration without a lease stays live on
 // heartbeat alone.
 func AgentLivenessWindow(config Config) time.Duration {
