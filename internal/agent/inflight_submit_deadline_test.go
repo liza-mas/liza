@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -26,9 +27,11 @@ func TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks(t *testing.T) {
 	t.Cleanup(func() { executionDeadlineRecheckInterval = previous })
 
 	var (
-		cancelledBeforeSubmit bool
-		submitErr             error
-		submitReturned        time.Time
+		cancelledBeforeSubmit      bool
+		cancelledBeforePublication bool
+		cancelAtPublication        string
+		submitErr                  error
+		submitReturned             time.Time
 	)
 	mock := &MockLLMAgent{
 		OnExecute: func(ctx context.Context, _ string, _ string, _ string, _ string, _ []string) error {
@@ -47,8 +50,19 @@ func TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks(t *testing.T) {
 			case submitErr = <-submitted:
 				submitReturned = time.Now()
 			case <-ctx.Done():
-				cancelledBeforeSubmit = true
+				// The supervisor may see the marker gone before the submit
+				// returns; that is legal only once it published (ADR-0176).
+				_, inflight := ops.InflightSubmitDeadline(scenario.Root, scenario.Authority, scenario.TaskID, time.Now())
+				published, readErr := false, error(nil)
+				if snap, err := scenario.BB.ReadSnapshot(); err != nil {
+					readErr = err
+				} else if task := snap.FindTask(scenario.TaskID); task != nil {
+					published = task.AcceptanceReceipt != nil
+				}
+				cancelledBeforePublication = inflight || !published
+				cancelAtPublication = fmt.Sprintf("marker=%v receipt=%v read error=%v", inflight, published, readErr)
 				submitErr = <-submitted
+				submitReturned = time.Now()
 				return ctx.Err()
 			}
 			// The agent is still writing its reply when the session ends.
@@ -76,9 +90,13 @@ func TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks(t *testing.T) {
 	exitCode, _, execErr := executeAgent(context.Background(), config, "prompt", nil, scenario.TaskID, state.Config)
 	returned := time.Now()
 
-	// THEN the session outlived the submit, which published at its candidate
+	// THEN the session was not cancelled before the submit published at its
+	// candidate
 	if cancelledBeforeSubmit {
-		t.Fatalf("supervisor cancelled the session before submit returned (submit error: %v)", submitErr)
+		t.Fatalf("supervisor cancelled the session before the submit started")
+	}
+	if cancelledBeforePublication {
+		t.Fatalf("supervisor cancelled the session before the submit published (%s, submit error: %v)", cancelAtPublication, submitErr)
 	}
 	if submitErr != nil {
 		t.Fatalf("submit error = %v, want publication", submitErr)
