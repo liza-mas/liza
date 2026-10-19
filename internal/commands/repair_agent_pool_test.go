@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -41,6 +42,7 @@ func withFakeRepairSpawnerByRole(t *testing.T, calls *[]spawnedAgentCall, errFor
 	t.Helper()
 
 	original := repairAgentPoolSpawn
+	originalStatus := autoRepairPendingProcessStatus
 	repairAgentPoolSpawn = func(projectRoot, role, cli, agentID string, fromConfig bool, modelsItem int) (int, error) {
 		*calls = append(*calls, spawnedAgentCall{
 			projectRoot: projectRoot,
@@ -56,8 +58,15 @@ func withFakeRepairSpawnerByRole(t *testing.T, calls *[]spawnedAgentCall, errFor
 		}
 		return 12345, nil
 	}
+	// The fake PID names no process this test started. Probing the host can find
+	// an unrelated live one (on macOS, another user's: alive but unidentifiable),
+	// which keeps the start pending; report it exited, as procfs hosts already do.
+	autoRepairPendingProcessStatus = func(int, string) procscan.AgentProcessStatus {
+		return procscan.AgentProcessStatus{State: procscan.AgentProcessDead}
+	}
 	t.Cleanup(func() {
 		repairAgentPoolSpawn = original
+		autoRepairPendingProcessStatus = originalStatus
 	})
 }
 
