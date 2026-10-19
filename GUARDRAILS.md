@@ -57,6 +57,19 @@ build or render and scan applicable outputs for raw default-brand literals
 outside the documented allowlist. Tie every retained literal to an allowed
 category.
 
+### G1.4: Environment-safe tests and diagnostics
+
+Tests and diagnostics that handle process environments never format a real
+environment (`os.Environ()`, a command's `Env`, or a slice or map built from
+either) or a variable's value into failure messages, logs or output. Assert on
+names and booleans, and build fixture environments explicitly instead of
+inheriting the host's. Run environment-sensitive tests under
+`env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp`: a red test's failure output is
+shown to the human and stored by tooling.
+
+**Test:** "If this assertion fails, could its message contain a value from the
+host environment?" If yes, report names only.
+
 ## Tier 2 (Strong Defaults)
 
 ### G2.1: Lessons - Agents
