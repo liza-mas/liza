@@ -4552,6 +4552,17 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 		}
 	})
 
+	t.Run("a wait carries the deferred-validation request whatever its reason", func(t *testing.T) {
+		wait := &ops.IntegrationProgressReason{Code: "global_analysis_pending", TaskIDs: []string{"global-1"}}
+		requested := ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{Waiting: wait, DeferredValidationRequest: "head-1"}, nil, nil)
+		if requested.WakeTrigger != "INTEGRATION_WAITING" || requested.ReasonCode != "global_analysis_pending" || !requested.DeferredValidationRequested {
+			t.Fatalf("projection = %#v, want a global analysis wait carrying the batch request", requested)
+		}
+		if plain := ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{Waiting: wait}, nil, nil); plain.DeferredValidationRequested {
+			t.Fatalf("projection = %#v, want no batch request", plain)
+		}
+	})
+
 	t.Run("only current HEAD clean evidence renders sprint complete", func(t *testing.T) {
 		state := &models.State{
 			Goal: models.Goal{Integration: &models.IntegrationLifecycle{

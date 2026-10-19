@@ -183,9 +183,9 @@ func latestDeferredBatchAt(ledger *models.DeferredValidationLedger, commit strin
 	return &batches[len(batches)-1]
 }
 
-// deferredValidationGate is the integration barrier: global integration
-// neither requests a generation nor completes until a batch at HEAD passed
-// every effective deferred command. It reads no Git.
+// deferredValidationGate is the completion barrier: global integration does
+// not complete until a batch at HEAD passed every effective deferred command.
+// It does not hold a generation request (D-230). It reads no Git.
 func deferredValidationGate(state *models.State, integrationHEAD string) (waiting, blocked *IntegrationProgressReason) {
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()

@@ -74,6 +74,9 @@ type EffectiveIntegrationCompletion struct {
 	RequestKeys    []string
 	CreatedTaskIDs []string
 	Guidance       string
+	// DeferredValidationRequested marks a wait during which integration needs
+	// a deferred-validation batch at HEAD, whatever the wait's reason.
+	DeferredValidationRequested bool
 }
 
 // ProjectEffectiveIntegrationCompletion maps authoritative integration
@@ -133,12 +136,13 @@ func ProjectEffectiveIntegrationCompletion(
 	}
 	if decision.Waiting != nil {
 		return EffectiveIntegrationCompletion{
-			WakeTrigger:    "INTEGRATION_WAITING",
-			Status:         "waiting",
-			ReasonCode:     decision.Waiting.Code,
-			TaskIDs:        sortedStringsCopy(decision.Waiting.TaskIDs),
-			CreatedTaskIDs: createdTaskIDs,
-			Guidance:       decision.Waiting.Guidance,
+			WakeTrigger:                 "INTEGRATION_WAITING",
+			Status:                      "waiting",
+			ReasonCode:                  decision.Waiting.Code,
+			TaskIDs:                     sortedStringsCopy(decision.Waiting.TaskIDs),
+			CreatedTaskIDs:              createdTaskIDs,
+			Guidance:                    decision.Waiting.Guidance,
+			DeferredValidationRequested: decision.DeferredValidationRequest != "",
 		}
 	}
 	return EffectiveIntegrationCompletion{

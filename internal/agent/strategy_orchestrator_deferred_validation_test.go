@@ -14,14 +14,18 @@ import (
 )
 
 // A stable integration wait never wakes the orchestrator, so its poll is the
-// live route that retries a pending deferred-validation batch (ADR-0204).
+// live route that retries a pending deferred-validation batch (ADR-0204),
+// including while a global analysis runs alongside it (D-230).
 func TestOrchestratorWaitForWorkRetriesPendingDeferredValidation(t *testing.T) {
 	for name, tc := range map[string]struct {
-		reason string
-		want   bool
+		reason    string
+		requested bool
+		want      bool
 	}{
-		"deferred validation pending": {reason: ops.IntegrationProgressWaitingDeferredValidation, want: true},
-		"other integration wait":      {reason: "integration_closure_pending"},
+		"deferred validation pending":            {reason: ops.IntegrationProgressWaitingDeferredValidation, requested: true, want: true},
+		"global analysis alongside the batch":    {reason: "global_analysis_pending", requested: true, want: true},
+		"global analysis without a batch":        {reason: "global_analysis_pending"},
+		"other integration wait without a batch": {reason: "integration_closure_pending"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
@@ -32,7 +36,7 @@ func TestOrchestratorWaitForWorkRetriesPendingDeferredValidation(t *testing.T) {
 			t.Cleanup(func() { orchestratorWaitForWorkDetector, orchestratorStartDeferredValidation = prevDetector, prevStart })
 			orchestratorWaitForWorkDetector = func(string, *models.State, []models.TaskStatus, map[string]bool, []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
 				return OrchestratorWakeResult{Trigger: WakeTriggerIntegrationWaiting, Count: 1,
-					Integration: prompts.EffectiveIntegrationCompletion{WakeTrigger: string(WakeTriggerIntegrationWaiting), Status: "waiting", ReasonCode: tc.reason}}
+					Integration: prompts.EffectiveIntegrationCompletion{WakeTrigger: string(WakeTriggerIntegrationWaiting), Status: "waiting", ReasonCode: tc.reason, DeferredValidationRequested: tc.requested}}
 			}
 			var starts atomic.Int32
 			orchestratorStartDeferredValidation = func(projectRoot string) (bool, error) {

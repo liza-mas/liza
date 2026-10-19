@@ -161,3 +161,36 @@ count past the interval, so every merge started another batch and the runner
 ran back to back until one passed. Bisect still searches from the command's
 latest pass, the newest known-good commit. The gate's request for a verdict at
 HEAD and the per-HEAD attempt cap are unchanged.
+
+## Amendment (2026-10-19, D-230)
+
+The gate (§7) held both the generation request and completion, so every HEAD
+move, a docs-only one included, cost a full batch before re-analysis and
+another before completion: 1.3 to 3 h each in one run, up to about 15 h over
+three generations. The gate now binds completion only. A global generation is
+requested whatever the batch state at HEAD; a missing verdict also requests a
+batch there, which merges and reconciliation start alongside the analysis.
+Once the latest generation is clean at HEAD, completion waits
+(`deferred_validation_pending`) or blocks (`deferred_validation_failed`,
+`deferred_validation_infra`, `deferred_validation_unsettled`) as before. A
+failed, exhausted or unsettled state requests no batch: the runner's own fences
+(failed HEAD and attempt cap without `--force`, unsettled refusal) still decide
+every launch. The orchestrator poll retries a batch whenever integration waits
+with a batch requested, whatever the wait's reason, so an aborted batch is
+retried while an analysis runs. The periodic batch (§5) stays an early-detection
+and bisect signal that gates nothing; its failure reaches the orchestrator
+through the culprit discovery.
+
+A batch runs the effective set read when it starts. The gate judges the latest
+batch at HEAD against the effective set when it evaluates: it covers only a
+`passed` batch in which every effective command passed, so a superset pass
+covers. A command retired during or after a batch that failed on it leaves the
+batch `failed`: while another command stays effective the gate still reports
+`deferred_validation_failed` and the trigger treats the HEAD as failed, so
+recovery is `run --force` or a merge that moves HEAD. Retiring the last
+effective command opens the gate.
+
+Consequences: a batch that fails at a HEAD under analysis supersedes that
+generation once its correction merges, spending one of
+`max_global_integration_generations`. A red suite can yield both a culprit
+correction and an analysis finding.

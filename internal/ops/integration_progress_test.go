@@ -458,6 +458,94 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 	})
 }
 
+// The deferred-validation gate binds only completion (D-230): no batch
+// outcome withholds a generation, a missing verdict requests a batch alongside
+// it, and only a covering pass at the final HEAD lets closure count.
+func TestDeferredValidationGateBindsOnlyCompletion(t *testing.T) {
+	t.Parallel()
+	available := pipeline.SlicedIntegrationCapability{Available: true}
+	const head = "head-1"
+	check := dvCommand("make long-suite", 60)
+	batches := map[string]func(*models.DeferredValidationLedger){
+		"no batch": func(*models.DeferredValidationLedger) {},
+		"failed": func(l *models.DeferredValidationLedger) {
+			l.Batches = []models.DeferredValidationBatch{{ID: 1, Commit: head, Status: models.DeferredValidationBatchFailed,
+				Results:  []models.DeferredValidationResult{{CommandSHA256: check.CommandSHA256, Status: models.DeferredValidationResultFailed}},
+				Culprits: []models.DeferredValidationCulprit{{CommandSHA256: check.CommandSHA256, TaskID: "coding-a"}}}}
+		},
+		"attempts exhausted": func(l *models.DeferredValidationLedger) {
+			for i := 1; i <= models.DeferredValidationMaxAttemptsPerCommit; i++ {
+				l.Batches = append(l.Batches, models.DeferredValidationBatch{ID: i, Commit: head, Status: models.DeferredValidationBatchInfraFailed})
+			}
+		},
+		"unsettled runner": func(l *models.DeferredValidationLedger) {
+			l.Runner = &models.DeferredValidationRunner{Token: "t", Commit: head, Unsettled: deferredValidationReasonUnstoppable}
+		},
+		"covering pass": func(l *models.DeferredValidationLedger) {
+			l.Batches = []models.DeferredValidationBatch{{ID: 1, Commit: head, Status: models.DeferredValidationBatchPassed,
+				Results: []models.DeferredValidationResult{{CommandSHA256: check.CommandSHA256, Status: models.DeferredValidationResultPassed}}}}
+		},
+	}
+	completion := map[string]struct{ waiting, blocked string }{
+		"no batch":           {waiting: IntegrationProgressWaitingDeferredValidation},
+		"failed":             {blocked: integrationProgressBlockedDeferredFailed},
+		"attempts exhausted": {blocked: integrationProgressBlockedDeferredInfra},
+		"unsettled runner":   {blocked: integrationProgressBlockedDeferredUnsettled},
+		"covering pass":      {},
+	}
+	withLedger := func(name string) *models.State {
+		state := readyGlobalProgressState(head)
+		ledger := &models.DeferredValidationLedger{Deferrals: []models.DeferredValidationDeferral{{
+			TaskID: "coding-a", MergeCommit: "merge-coding-a", Commands: []models.DeferredValidationCommand{check},
+		}}}
+		batches[name](ledger)
+		state.Goal.Integration.DeferredValidation = ledger
+		return state
+	}
+	for name := range batches {
+		requested := ""
+		if name == "no batch" {
+			requested = head // only a missing verdict asks for a batch
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			decision := evaluateProgress(t, withLedger(name), available, head)
+			if decision.Blocked != nil || decision.GlobalRequest == nil || decision.GlobalRequest.Key != "global:1" || decision.DeferredValidationRequest != requested {
+				t.Fatalf("generation request decision = %#v, want global:1 requested with batch request %q", decision, requested)
+			}
+
+			inFlight := withLedger(name)
+			inFlight.Tasks = append(inFlight.Tasks, progressAnalysis("global-1", "global:1", models.IntegrationAnalysisPhaseGlobal, 1, head))
+			decision = evaluateProgress(t, inFlight, available, head)
+			if decision.Blocked != nil || decision.Waiting == nil || decision.Waiting.Code != integrationProgressWaitingGlobalAnalysis || decision.DeferredValidationRequest != requested {
+				t.Fatalf("in-flight analysis decision = %#v, want global analysis wait with batch request %q", decision, requested)
+			}
+
+			final := withLedger(name)
+			addGlobalClean(final, 1, head)
+			final.Goal.Integration.Closure = &models.IntegrationClosure{
+				Status: models.IntegrationClosureStatusClean, Generation: 1, AnalysisKey: "global:1", SourceCommit: head,
+			}
+			decision = evaluateProgress(t, final, available, head)
+			want := completion[name]
+			switch {
+			case want.waiting != "":
+				if decision.IntegrationComplete || decision.Waiting == nil || decision.Waiting.Code != want.waiting || decision.DeferredValidationRequest != head {
+					t.Fatalf("final decision = %#v, want %s with a batch request", decision, want.waiting)
+				}
+			case want.blocked != "":
+				if decision.IntegrationComplete || decision.Blocked == nil || decision.Blocked.Code != want.blocked || decision.DeferredValidationRequest != "" {
+					t.Fatalf("final decision = %#v, want blocked %s without a batch request", decision, want.blocked)
+				}
+			default:
+				if !decision.IntegrationComplete || decision.Waiting != nil || decision.Blocked != nil {
+					t.Fatalf("final decision = %#v, want complete", decision)
+				}
+			}
+		})
+	}
+}
+
 func TestEvaluateLiveIntegrationProgress(t *testing.T) {
 	t.Parallel()
 

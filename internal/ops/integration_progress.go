@@ -38,8 +38,8 @@ type IntegrationProgressDecision struct {
 	Exhausted             bool
 	Waiting               *IntegrationProgressReason
 	Blocked               *IntegrationProgressReason
-	// DeferredValidationRequest is the integration HEAD at which the gate
-	// waits for a deferred-validation batch (ADR-0204); empty otherwise.
+	// DeferredValidationRequest is the integration HEAD at which integration
+	// needs a deferred-validation batch verdict (ADR-0204); empty otherwise.
 	DeferredValidationRequest string
 }
 
@@ -760,21 +760,26 @@ func (e *integrationProgressEvaluator) evaluateGlobal(
 		}
 	}
 
-	// Deferred commands must pass at this HEAD before a generation is
-	// requested or closure counts (ADR-0204).
-	if waiting, blocked := deferredValidationGate(e.state, integrationHEAD); blocked != nil {
-		decision.Blocked = blocked
-		return decision, nil
-	} else if waiting != nil {
-		decision.Waiting = waiting
+	// Deferred commands bind only completion: they must pass at the final
+	// HEAD before closure counts, while a generation may be requested and the
+	// batch runs alongside it (ADR-0204, D-230).
+	deferredWaiting, deferredBlocked := deferredValidationGate(e.state, integrationHEAD)
+	if deferredWaiting != nil {
 		decision.DeferredValidationRequest = integrationHEAD
-		return decision, nil
 	}
 
 	decision.GlobalReady = true
 	if len(lifecycle.GlobalGenerations) > 0 {
 		latest := lifecycle.GlobalGenerations[len(lifecycle.GlobalGenerations)-1]
 		if latest.Verdict == models.IntegrationAnalysisVerdictClean && latest.SourceCommit == integrationHEAD {
+			if deferredBlocked != nil {
+				decision.Blocked = deferredBlocked
+				return decision, nil
+			}
+			if deferredWaiting != nil {
+				decision.Waiting = deferredWaiting
+				return decision, nil
+			}
 			closure := lifecycle.Closure
 			decision.IntegrationComplete = closure != nil &&
 				closure.Status == models.IntegrationClosureStatusClean &&

@@ -909,10 +909,12 @@ each analysis also carries immutable `integration_analysis` metadata.
    mutation also triggers another global generation while budget remains.
    Slice exhaustion is explicitly blocked; global generation exhaustion is
    explicitly `exhausted`. Neither is successful completion.
-7. **Complete only on current clean evidence.** A global generation is
-   requested, and closure counts, only once a passed deferred-validation batch at
-   integration HEAD covers every effective deferred command; until then progress
-   waits (`deferred_validation_pending`) or
+7. **Complete only on current clean evidence.** Closure counts only once a
+   passed deferred-validation batch at the final integration HEAD covers every
+   effective deferred command. A global generation does not wait for it: a HEAD
+   without a verdict requests a batch that runs alongside the analysis. With the
+   latest generation clean at HEAD, completion then waits
+   (`deferred_validation_pending`) or
    blocks (`deferred_validation_failed` naming culprit tasks, or
    `deferred_validation_infra` after three batches without a verdict, or
    `deferred_validation_unsettled` while a runner record awaits settlement). A merge

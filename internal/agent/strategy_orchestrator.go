@@ -191,11 +191,13 @@ func (s *orchestratorStrategy) WaitForWork(ctx context.Context, bb *db.Blackboar
 				s.wake = &result
 				return true, fmt.Sprintf("Orchestrator wake trigger: %s (count: %d)", result.Trigger, result.Count)
 			}
-			if result.Trigger == WakeTriggerIntegrationWaiting && result.Integration.ReasonCode == ops.IntegrationProgressWaitingDeferredValidation {
+			if result.Trigger == WakeTriggerIntegrationWaiting && result.Integration.DeferredValidationRequested {
 				// A stable wait never wakes the orchestrator, so its poll is
 				// what retries a failed launch or an aborted or infra-failed
 				// batch at unchanged HEAD, within the per-commit attempt cap
-				// (ADR-0204). A live runner or a halt makes it a no-op.
+				// (ADR-0204). The wait may be on the batch itself or on a
+				// global analysis it runs alongside (D-230). A live runner or
+				// a halt makes it a no-op.
 				if _, err := orchestratorStartDeferredValidation(config.ProjectRoot); err != nil {
 					GetLogger().Warn("Deferred validation not started", "error", err)
 				}
