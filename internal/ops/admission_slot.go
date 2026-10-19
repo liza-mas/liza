@@ -66,8 +66,9 @@ func admissionSlotRefusal(taskID string, err error) error {
 }
 
 // admissionSlots is the set of slots one execution holds, at most one per
-// class, and the single deadline every acquisition for it shares. A local
-// execution (admit) queues behind every canonical waiter of a class.
+// class, and the single deadline every acquisition for it shares; a zero
+// deadline waits until a slot frees or the context ends. A local execution
+// (admit) queues behind every canonical waiter of a class.
 type admissionSlots struct {
 	deadline time.Time
 	local    bool
@@ -82,6 +83,12 @@ type admissionSlots struct {
 // budgetSeconds.
 func newAdmissionSlots(budgetSeconds int) *admissionSlots {
 	return &admissionSlots{deadline: time.Now().Add(admissionSlotWait(budgetSeconds))}
+}
+
+// newQueuedAdmissionSlots waits with no deadline: for an execution no
+// in-flight grace bounds, the deferred runner's probes (D-223).
+func newQueuedAdmissionSlots() *admissionSlots {
+	return &admissionSlots{}
 }
 
 // acquire takes a slot of every class in limits not already held, in class
@@ -145,7 +152,7 @@ func (s *admissionSlots) abandon() {
 // Ticket names lead with a priority digit, canonical 0 and local 1, so name
 // order serves canonical waiters first. An older binary's names (zero-padded
 // time, no priority) sort between the two. queued, when set, hears how many
-// tickets are ahead before each wait.
+// tickets are ahead before each wait. A zero deadline never expires.
 func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, local bool, queued func(ahead int)) (*filelock.Held, error) {
 	started := time.Now()
 	queue := filepath.Join(dir, "queue")
@@ -199,11 +206,19 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 			}
 		}
 		now := time.Now()
-		if !now.Before(deadline) {
-			return nil, &AdmissionSlotWaitError{Class: limit.Class, Waited: now.Sub(started), Dir: dir}
+		poll := admissionSlotPollInterval
+		if !deadline.IsZero() {
+			if !now.Before(deadline) {
+				return nil, &AdmissionSlotWaitError{Class: limit.Class, Waited: now.Sub(started), Dir: dir}
+			}
+			poll = min(poll, deadline.Sub(now))
 		}
 		if !logged {
-			log.Printf("waiting for an admission slot of class %s (max %d at once), at most until %s", limit.Class, limit.MaxConcurrent, deadline.UTC().Format(time.RFC3339))
+			until := "until one frees"
+			if !deadline.IsZero() {
+				until = "at most until " + deadline.UTC().Format(time.RFC3339)
+			}
+			log.Printf("waiting for an admission slot of class %s (max %d at once), %s", limit.Class, limit.MaxConcurrent, until)
 			logged = true
 		}
 		if queued != nil {
@@ -212,7 +227,7 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 		select {
 		case <-ctx.Done():
 			return nil, &AdmissionSlotWaitError{Class: limit.Class, Waited: time.Since(started), Dir: dir, Err: context.Cause(ctx)}
-		case <-time.After(min(admissionSlotPollInterval, deadline.Sub(now))):
+		case <-time.After(poll):
 		}
 	}
 }

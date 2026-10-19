@@ -8,8 +8,9 @@ certify a deferral) and adds a gate to final integration closure
 D-97 (a).
 
 Amended 2026-10-14 ([ADR-0209](0209-admission-limits.md)): each probe takes its
-command's admission slots from the pool canonical admission uses; a class that
-stays full aborts the batch with `admission_slot_wait_exceeded`.
+command's admission slots from the pool canonical admission uses. Amended
+2026-10-19 (D-223): a probe waits for them until they free, lanes prepare one
+at a time, and a failed setup is retried once.
 
 ## Context
 
@@ -194,3 +195,32 @@ Consequences: a batch that fails at a HEAD under analysis supersedes that
 generation once its correction merges, spending one of
 `max_global_integration_generations`. A red suite can yield both a culprit
 correction and an analysis finding.
+
+## Amendment (2026-10-19, D-223)
+
+Deferred batches failed overnight on infrastructure alone, never on a test:
+lane setups ran together and raced on shared tool state (concurrent `bun
+install`s), the failure kept only `setup: exit status 1`, and a lane budgeted
+at the 14400 s cap had no admission-slot wait (ADR-0209 §3: cap − budget), so
+losing the slot race to a sibling lane or a submit aborted the whole batch.
+
+- **Setup.** Lanes prepare one at a time: checkout, clean, env-file provisioning
+  and `post_worktree_cmd` hold one runner lock, so setups never overlap; the
+  final cleanliness check and the probes stay concurrent. A failed
+  `post_worktree_cmd` (not halted) is retried once from a tree restored again
+  (forced checkout and clean), so nothing the failed attempt wrote reaches the
+  next. Each failed attempt is written, masked, to the runner's log
+  (`runner.log`); a final failure's `infra_failed` reason carries the masked
+  output (head and tail), an overflowed capture none. Bisect probes prepare the
+  same way.
+- **Slots.** No in-flight grace bounds the detached runner, so a probe waits for
+  its slots until they free, whatever its budget; `admission_slot_wait_exceeded`
+  no longer occurs. While a lane waits, it re-reads the mode every 10 s; a halt
+  or stop ends the batch (`aborted`, `halted`) through the batch fence, so a slot
+  won after that starts nothing even if the system resumed meanwhile.
+
+Consequences: preparation costs the sum of the lanes' setups before the last
+lane starts. A daemonized slot holder now keeps a batch waiting until the holder
+exits or the operator halts, instead of costing one of the per-HEAD attempts.
+A setup racing a task worktree's own setup in another process is not
+serialized; the single retry covers a transient one.

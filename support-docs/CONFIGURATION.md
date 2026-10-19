@@ -538,13 +538,13 @@ A canonical command belongs to a class when its text contains any `--match`
 substring. Canonical admission (`submit-for-review`, `update-review-commit`,
 the orphaned-base heal) and every deferred-validation probe take a slot of each
 matching class first; waiters are served in arrival order. The wait never counts
-against `timeout_seconds`, and the wait plus that budget never exceed the 14400 s
-acceptance cap, so a batch budgeted at the cap gets a single try. A submit waits
+against `timeout_seconds`. For a submit, the wait plus that budget never exceed
+the 14400 s acceptance cap, so a batch budgeted at the cap gets a single try; a
+deferred-validation probe waits until its slots free, or until a halt. A submit waits
 before it prepares or rebases; if the class stays full it returns `RETRYABLE`
 and the same submission is retried. While it waits and runs, a submit prints its
 class, the waiters ahead and its batch budget on stderr every 5 minutes, also
-under `--json`. The deferred runner aborts its batch with
-`admission_slot_wait_exceeded`. Changes apply to the next acquisition.
+under `--json`. Changes apply to the next acquisition.
 
 Slots are flocks under `§BRAND_PROJECT_DIRNAME§/admission-slots/<class>/`, held
 by the running command too. If an owner is killed, the slot frees when its

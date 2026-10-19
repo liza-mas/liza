@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,9 +35,10 @@ import (
 // outside the state lock, and bisects a failing command over the merges since
 // it last passed. Each command runs in its own lane, a worktree where it is
 // prepared, probed and bisected; lanes run concurrently, bounded only by the
-// admission classes (D-210). One runner at a time holds an OS lock that every
-// child it starts inherits where the platform allows, so no successor can
-// touch a lane worktree while a predecessor's process still runs.
+// admission classes (D-210), and prepare one at a time (D-223). One runner at
+// a time holds an OS lock that every child it starts inherits where the
+// platform allows, so no successor can touch a lane worktree while a
+// predecessor's process still runs.
 
 const (
 	deferredValidationOperation      = "deferred-validation"
@@ -54,9 +56,6 @@ const (
 	// deferredValidationReasonUnstoppable ends a batch whose step left
 	// processes the runner could not establish had ended.
 	deferredValidationReasonUnstoppable = "descendants_unstoppable"
-	// deferredValidationReasonAdmissionSlotWait ends a batch whose probe found
-	// its admission class full until its wait bound (ADR-0209).
-	deferredValidationReasonAdmissionSlotWait = "admission_slot_wait_exceeded"
 	// deferredValidationReasonAdmissionSlotError ends a batch whose probe could
 	// not use its admission slot files.
 	deferredValidationReasonAdmissionSlotError = "admission_slot_error"
@@ -83,7 +82,18 @@ func deferredValidationPlatformSupported() bool { return runtime.GOOS != "window
 type deferredValidationHooks struct {
 	reap              func(pid int, wait time.Duration) bool
 	platformSupported bool
+	// log receives the runner's diagnostics; nil means stderr, which is
+	// runner.log when spawned.
+	log io.Writer
 }
+
+// deferredValidationHaltPollInterval is how often a lane waiting for its
+// admission slots re-reads the mode; tests shorten it.
+var deferredValidationHaltPollInterval = 10 * time.Second
+
+// deferredValidationHaltObserved runs once a waiting lane's halt check has
+// ended the batch; tests use it to interleave a release and resume.
+var deferredValidationHaltObserved = func() {}
 
 // deferredValidationLockFollowsChildren reports whether a child started with
 // the runner lock's descriptor keeps the lock held (Unix). Where it does not
@@ -522,6 +532,10 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 		mask:     acceptanceExecutionMask(os.Environ()),
 		follows:  deferredValidationLockFollowsChildren(held),
 		reap:     hooks.reap,
+		log:      hooks.log,
+	}
+	if r.log == nil {
+		r.log = os.Stderr
 	}
 	defer func() {
 		if r.isOrphaned() {
@@ -598,6 +612,12 @@ type deferredValidationRunner struct {
 	mask    func(string) string
 	follows bool
 	reap    func(pid int, wait time.Duration) bool
+	log     io.Writer
+
+	// setupMu makes lanes prepare one at a time: setup commands of one
+	// project share tool state (a package manager's cache or temp files)
+	// and race when run together (D-223).
+	setupMu sync.Mutex
 
 	// mu serialises the fence below with every process start, so no lane
 	// starts a process once another lane set it.
@@ -979,28 +999,64 @@ func (r *deferredValidationRunner) removeWorktree(ctx context.Context, worktree 
 	return execResult{}
 }
 
+// deferredValidationSetupAttempts bounds how often a lane runs a failing
+// post_worktree_cmd: one retry absorbs a transient failure (D-223).
+const deferredValidationSetupAttempts = 2
+
 // prepareProbe checks out rev in a lane worktree with no residue (ignored
 // files included, so dependencies installed for another revision cannot leak
 // in), provisions it as task worktrees are, and requires a clean tree at rev.
+// Lanes prepare one at a time (setupMu).
 func (r *deferredValidationRunner) prepareProbe(ctx context.Context, state *models.State, worktree, rev string) execResult {
-	if res := r.git(ctx, worktree, "checkout", "--force", "--detach", rev); res.err != nil {
+	r.setupMu.Lock()
+	res := r.restoreAndSetUp(ctx, state, worktree, rev)
+	r.setupMu.Unlock()
+	if res.err != nil {
 		return res
 	}
-	if res := r.git(ctx, worktree, "clean", "-ffdx"); res.err != nil {
-		return res
-	}
-	if state.Config.CopyWorktreeEnvFiles {
-		ProvisionWorktreeEnvFiles(r.root, worktree)
-	}
-	if setup := state.Config.PostWorktreeCmd; setup != nil && strings.TrimSpace(*setup) != "" {
+	return r.checkClean(ctx, worktree, rev, false)
+}
+
+// restoreAndSetUp restores rev, tracked files included, and runs the setup
+// command. A failed setup is logged and retried once from a tree restored
+// again, so nothing the failed attempt wrote reaches the next.
+func (r *deferredValidationRunner) restoreAndSetUp(ctx context.Context, state *models.State, worktree, rev string) execResult {
+	for attempt := 1; ; attempt++ {
+		if res := r.git(ctx, worktree, "checkout", "--force", "--detach", rev); res.err != nil {
+			return res
+		}
+		if res := r.git(ctx, worktree, "clean", "-ffdx"); res.err != nil {
+			return res
+		}
+		if state.Config.CopyWorktreeEnvFiles {
+			ProvisionWorktreeEnvFiles(r.root, worktree)
+		}
+		setup := state.Config.PostWorktreeCmd
+		if setup == nil || strings.TrimSpace(*setup) == "" {
+			return execResult{}
+		}
 		res := r.run(ctx, models.EffectiveDeferredValidationSetupTimeout(state.Config), true, func(ctx context.Context) (*exec.Cmd, error) {
 			return shellCommandContext(ctx, *setup, worktree)
 		})
-		if res.err != nil {
+		if res.err == nil || res.halted {
+			return res
+		}
+		fmt.Fprintf(r.log, "deferred-validation: setup at %s in %s failed (attempt %d/%d): %s\n",
+			rev, filepath.Base(worktree), attempt, deferredValidationSetupAttempts, r.mask(deferredFailureText(res)))
+		if attempt == deferredValidationSetupAttempts {
 			return res
 		}
 	}
-	return r.checkClean(ctx, worktree, rev, false)
+}
+
+// deferredFailureText is a failed step's error and output. An overflowed
+// capture keeps none: masking cannot recognize a known secret whose end was
+// never captured.
+func deferredFailureText(res execResult) string {
+	if errors.Is(res.err, errAcceptanceOutputLimit) {
+		return fmt.Sprintf("%v\noutput omitted: capture exceeded the %d MiB limit", res.err, acceptanceOutputLimit>>20)
+	}
+	return fmt.Sprintf("%v\n%s", res.err, res.output)
 }
 
 // checkClean requires a lane worktree clean at rev. afterStep marks the read
@@ -1032,19 +1088,21 @@ func (r *deferredValidationRunner) checkClean(ctx context.Context, worktree, rev
 // keepOutput, a failure's full masked output is stored and referenced; bisect
 // steps keep only their status, so they store nothing. The command first takes
 // the admission slots of config's limits it matches, from the pool canonical
-// admission shares; a class that stays full ends the batch (ADR-0209), and an
-// ended batch stops the wait.
+// admission shares. No grace bounds the runner, so it waits until they free
+// (D-223); an ended batch, or a halt observed meanwhile, stops the wait.
 func (r *deferredValidationRunner) probe(ctx context.Context, config models.Config, worktree, rev string, command models.DeferredValidationCommand, keepOutput bool) (models.DeferredValidationResult, bool) {
 	result := models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, ExitCode: -1}
-	slots := newAdmissionSlots(command.TimeoutSeconds)
-	if err := slots.acquire(r.waits, r.root, models.AdmissionLimitsFor(config, []string{command.Command})); err != nil {
+	slots := newQueuedAdmissionSlots()
+	stopWatching := r.watchHalt()
+	err := slots.acquire(r.waits, r.root, models.AdmissionLimitsFor(config, []string{command.Command}))
+	stopWatching()
+	if err != nil {
+		// A cancelled wait is the batch's end or a halt; anything else is
+		// a slot I/O failure.
 		reason := ""
 		var wait *AdmissionSlotWaitError
-		switch {
-		case !errors.As(err, &wait):
+		if !errors.As(err, &wait) {
 			reason = deferredValidationReasonAdmissionSlotError
-		case wait.Err == nil:
-			reason = deferredValidationReasonAdmissionSlotWait
 		}
 		r.endBatch(false, reason)
 		result.Status = models.DeferredValidationResultNotRun
@@ -1068,16 +1126,10 @@ func (r *deferredValidationRunner) probe(ctx context.Context, config models.Conf
 	result.Status = models.DeferredValidationResultPassed
 	if res.err != nil {
 		result.Status = models.DeferredValidationResultFailed
-		if errors.Is(res.err, errAcceptanceOutputLimit) {
-			// Masking cannot recognize a known secret whose end was never
-			// captured: keep none of an overflowed capture.
-			result.Excerpt = deferredStateText(r.mask(fmt.Sprintf("%v\noutput omitted: capture exceeded the %d MiB limit", res.err, acceptanceOutputLimit>>20)))
-		} else {
-			full := r.mask(fmt.Sprintf("%v\n%s", res.err, res.output))
-			result.Excerpt = deferredStateText(full)
-			if keepOutput {
-				result.OutputSHA256 = r.storeOutput(full)
-			}
+		full := r.mask(deferredFailureText(res))
+		result.Excerpt = deferredStateText(full)
+		if keepOutput && !errors.Is(res.err, errAcceptanceOutputLimit) {
+			result.OutputSHA256 = r.storeOutput(full)
 		}
 	}
 	clean := r.checkClean(ctx, worktree, rev, true)
@@ -1090,6 +1142,36 @@ func (r *deferredValidationRunner) probe(ctx context.Context, config models.Conf
 		result.Excerpt = deferredStateText(r.mask(clean.err.Error()))
 	}
 	return result, false
+}
+
+// watchHalt ends the batch once a lane waiting for its admission slots sees a
+// halt or stop, which no slot release would end. endBatch sets the fence
+// before it cancels the waits, so a slot won after the cancel starts nothing
+// even if the system resumed meanwhile. The returned func stops watching and
+// returns once the watcher has.
+func (r *deferredValidationRunner) watchHalt() (stop func()) {
+	done, exited := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(exited)
+		ticker := time.NewTicker(deferredValidationHaltPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				if state, err := r.bb.ReadSnapshot(); err == nil && deferredValidationAdmitted(state) != nil {
+					r.endBatch(false, "")
+					deferredValidationHaltObserved()
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-exited
+	}
 }
 
 // deferredStateTextMarker replaces the middle of runner text over the state
@@ -1246,7 +1328,7 @@ func (r *deferredValidationRunner) runLane(ctx context.Context, state *models.St
 		if res.halted {
 			lane.halted = true
 		} else {
-			lane.infra = deferredStateText(r.mask(fmt.Sprintf("setup: %v", res.err)))
+			lane.infra = deferredStateText(strings.TrimRight(r.mask("setup: "+deferredFailureText(res)), "\n"))
 		}
 		return lane
 	}

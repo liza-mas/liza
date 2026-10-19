@@ -55,9 +55,9 @@ much, and lowering `max_instances`, which caps sessions rather than suites.
    slot until it exits. On every normal return the owner unlocks, which also
    unlocks inherited descriptors, so a lingering descendant cannot keep it.
 7. **Deferred runner.** Each probe (including bisect steps) takes its command's
-   slots from the same pool with the same bound, re-queuing behind waiting
-   submits between probes. A class that stays full aborts the batch with
-   reason `admission_slot_wait_exceeded`. Git and setup steps take no slot.
+   slots from the same pool, re-queuing behind waiting submits between probes.
+   Amended 2026-10-19 (D-223): its wait has no bound; a halt ends it. Git and
+   setup steps take no slot.
    An orphaned probe leaves its slots with the survivors, like the runner lock.
 
 ## Consequences
@@ -65,7 +65,7 @@ much, and lowering `max_instances`, which caps sessions rather than suites.
 - Heavy suites run at most `max_concurrent` at a time per class, in arrival
   order; budgets no longer absorb contention. Unconfigured projects see no
   change (no slot, same marker window).
-- A batch budgeted at the cap has no queue headroom: one try. Upgrade trigger:
+- A submit budgeted at the cap has no queue headroom: one try. Upgrade trigger:
   admission-slot refusals on large-budget batches; then raise the grace
   (ADR-0176) instead of sharing the cap.
 - Per-batch granularity: a batch holds its slot during its light commands too,
@@ -115,3 +115,13 @@ class, and a command matching none runs at once.
   reverse. Using it remains agent compliance (TECH_DEBT: mechanical enforcement).
   Upgrade trigger for a separate local cap: canonical waits dominated by local
   holders.
+
+## Amendment (2026-10-19, D-223)
+
+The wait bound (§3) protects a submit's in-flight grace; the deferred runner is
+a detached process no grace bounds, yet it applied the same arithmetic, so a
+probe budgeted at the cap got no wait and a full class aborted its whole batch.
+A deferred probe now waits for its slots with no deadline, cancelled only when
+its batch ends or a halt or stop is observed while waiting (ADR-0204 amendment
+2026-10-19). Canonical submits, `update-review-commit`, the heal and `admit`
+keep their bounds.
