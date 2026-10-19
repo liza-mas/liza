@@ -88,7 +88,13 @@ func EnsureRepoExclude(repoRoot string, patterns ...string) error {
 	// --git-dir would miss from a linked worktree.
 	output, err := gitenv.Output(root, "rev-parse", "--git-path", "info/exclude")
 	if err != nil {
-		return fmt.Errorf("resolve repository exclude path: %w", err)
+		// Output() keeps git's stderr only on the exit error.
+		var stderr []byte
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr = exitErr.Stderr
+		}
+		return fmt.Errorf("resolve repository exclude path: %w%s", err, outputSuffix(string(stderr)))
 	}
 	excludePath := strings.TrimSpace(string(output))
 	if excludePath == "" {

@@ -245,6 +245,18 @@ func TestEnsureRepoExcludeRejectsInvalidPatterns(t *testing.T) {
 	}
 }
 
+func TestEnsureRepoExcludeReportsGitStderr(t *testing.T) {
+	root := t.TempDir()
+	// A dangling gitfile makes rev-parse fail deterministically, whatever encloses root.
+	if err := os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: "+filepath.Join(root, "missing")+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(.git) error = %v", err)
+	}
+	err := EnsureRepoExclude(root, "/x/")
+	if err == nil || !strings.Contains(err.Error(), "fatal:") {
+		t.Fatalf("EnsureRepoExclude() error = %v, want git stderr (fatal: ...)", err)
+	}
+}
+
 type gitRepoFixture struct {
 	root      string
 	worktrees map[string]string
