@@ -31,6 +31,12 @@ func TestResetRootCmdForTestResetsIdentityFlags(t *testing.T) {
 	if err := getCmd.Flags().Set("format", "yaml"); err != nil {
 		t.Fatalf("set --format failed: %v", err)
 	}
+	if err := tuiCmd.Flags().Set("headless", "true"); err != nil {
+		t.Fatalf("set --headless failed: %v", err)
+	}
+	if err := markBlockedCmd.Flags().Set("depends-on", "dep-task"); err != nil {
+		t.Fatalf("set --depends-on failed: %v", err)
+	}
 
 	resetRootCmdForTest(t)
 
@@ -64,7 +70,10 @@ func TestResetRootCmdForTestResetsIdentityFlags(t *testing.T) {
 	if projectRoot != "" {
 		t.Fatalf("--project-root = %q, want empty", projectRoot)
 	}
-	for _, flag := range []*pflag.Flag{submitVerdictCmd.Flags().Lookup("review-commit"), getCmd.Flags().Lookup("format")} {
+	for _, flag := range []*pflag.Flag{
+		submitVerdictCmd.Flags().Lookup("review-commit"), getCmd.Flags().Lookup("format"),
+		tuiCmd.Flags().Lookup("headless"), markBlockedCmd.Flags().Lookup("depends-on"),
+	} {
 		if flag.Value.String() != flag.DefValue || flag.Changed {
 			t.Fatalf("--%s retained prior invocation state", flag.Name)
 		}
@@ -175,22 +184,9 @@ func removeGeneratedCompletionCmdForTest(cmd *cobra.Command) {
 func resetCommandFlagsForTest(t *testing.T, cmd *cobra.Command) {
 	t.Helper()
 	resetHelpFlag(t, cmd)
-	for _, name := range []string{
-		"agent-id", "changed-by", "request-id", "expected-transition", "json", "format", "field", "review-commit", "summary", "output-summary", "active", "zombies",
-		"reason", "reason-file", "questions", "repair-operation", "repair-target", "repair-command", "repair-evidence", "repair-validation", "repair-request-file", "recoverability-command", "assign-to", "rebase-on", "allow-dirty", "scope-exception-file", "budget-exception", "budget-ruling",
-		"class", "workspace", "cwd", "dry-run", "preset", "role", "no-tui", "doer-cli", "goal", "reviewer", "prompt-delay", "yolo",
-		"spec", "config", "entry-point", "branch", "post-worktree-cmd", "validation-execution", "copy-worktree-env-files", "max-instances", "auto-resume", "no-follow-up", "default-cli", "default-doer-cli", "default-reviewer-cli", "scip-search", "scip-search-plan", "provider", "cli", "model", "models-item", "profile", "explain-launch", "supervisor-stdout-log", "supervisor-stderr-log", "supervisor-ready-file", "claude", "codex", "opencode", "gemini", "mistral",
-		"state", "log", "file", "id", "desc", "done", "scope", "priority", "role-pair", "output", "tasks-file",
-		"profile", "include", "exclude", "tool", "install-dir", "dry-run", "yes", "global-dir", "agent-tools", "write-shell-profile", "agents", "project",
-		"project-root", "check-update", "update-channel", "replace",
-		"pass", "hold", "clear", "replaced-by", "retire", "ruling", "notes-file", "apply", "replace-pending", "withdraw-pending",
-		"record", "task", "input", "timeout",
-		"arch-ref", "provider-task", "transition",
-		"all", "trigger", "contract", "preserve-output-identity", "planning-change-kind", "planning-change-original",
-		"match", "max-concurrent",
-	} {
-		resetFlagIfPresent(cmd, name)
-	}
+	// Every registered flag, so a newly added one cannot leak between tests.
+	cmd.Flags().VisitAll(resetFlag)
+	cmd.PersistentFlags().VisitAll(resetFlag)
 	for _, child := range cmd.Commands() {
 		resetCommandFlagsForTest(t, child)
 	}
@@ -202,14 +198,18 @@ func resetFlagIfPresent(cmd *cobra.Command, name string) {
 		f = cmd.PersistentFlags().Lookup(name)
 	}
 	if f != nil {
-		if sliceValue, ok := f.Value.(pflag.SliceValue); ok {
-			_ = sliceValue.Replace(nil)
-			f.Changed = false
-			return
-		}
-		_ = f.Value.Set(f.DefValue)
-		f.Changed = false
+		resetFlag(f)
 	}
+}
+
+func resetFlag(f *pflag.Flag) {
+	if sliceValue, ok := f.Value.(pflag.SliceValue); ok {
+		_ = sliceValue.Replace(nil)
+		f.Changed = false
+		return
+	}
+	_ = f.Value.Set(f.DefValue)
+	f.Changed = false
 }
 
 type testingHelper interface {

@@ -728,6 +728,12 @@ func TestInitDispatch_WizardPathForwardsConfigDefault(t *testing.T) {
 	if configFlag == nil {
 		t.Fatal("config flag not registered on init command")
 	}
+	originalDefault := configFlag.DefValue
+	t.Cleanup(func() {
+		configFlag.DefValue = originalDefault
+		_ = configFlag.Value.Set(originalDefault)
+		configFlag.Changed = false
+	})
 	configFlag.DefValue = pipelinePath
 	_ = configFlag.Value.Set(pipelinePath)
 	configFlag.Changed = false
