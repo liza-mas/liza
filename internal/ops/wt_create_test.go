@@ -340,22 +340,58 @@ func TestProvisionWorktreeEnvFilesPrivateExcludeConflictWarningOnly(t *testing.T
 	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
-	commitEnvIgnoreForWorktreeTest(t, tmpDir)
+	// The root ignores .env only through a relative excludesFile, which Git
+	// resolves per checkout: the worktree has no such file, so its .env would
+	// be untracked and the private exclude is the only way to ignore it.
+	writeRootFileForWorktreeTest(t, tmpDir, ".local_gitignore", ".env\n.local_gitignore\n")
+	testhelpers.MustGit(t, tmpDir, "config", "core.excludesFile", ".local_gitignore")
 	writeRootFileForWorktreeTest(t, tmpDir, ".env", "ROOT_ENV=1\n")
 	gitWrapper := git.New(tmpDir)
 	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
 		t.Fatalf("CreateWorktree() setup error: %v", err)
 	}
 	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
-	conflictingExclude := filepath.Join(tmpDir, "other-exclude")
-	testhelpers.MustGit(t, worktreeDir, "config", "core.excludesFile", conflictingExclude)
 
 	warnings := ProvisionWorktreeEnvFiles(tmpDir, worktreeDir)
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "configure worktree ignore") {
 		t.Fatalf("ProvisionWorktreeEnvFiles() warnings = %v, want private exclude conflict warning", warnings)
 	}
 	assertWorktreeFileMissing(t, worktreeDir, ".env")
+	assertWorktreePrivateExcludeMissing(t, worktreeDir, ".env")
 	assertGitStatusClean(t, worktreeDir)
+}
+
+func TestProvisionWorktreeEnvFilesCopiesAlreadyIgnoredDestinationDespiteUserExcludesFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	commitEnvIgnoreForWorktreeTest(t, tmpDir)
+	writeRootFileForWorktreeTest(t, tmpDir, ".env", "ROOT_ENV=1\n")
+	userExclude := filepath.Join(tmpDir, "user-exclude")
+	testhelpers.MustGit(t, tmpDir, "config", "core.excludesFile", userExclude)
+	gitWrapper := git.New(tmpDir)
+	if _, err := gitWrapper.CreateWorktree("task-1", "integration"); err != nil {
+		t.Fatalf("CreateWorktree() setup error: %v", err)
+	}
+	worktreeDir := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
+
+	warnings := ProvisionWorktreeEnvFiles(tmpDir, worktreeDir)
+	if len(warnings) != 0 {
+		t.Fatalf("ProvisionWorktreeEnvFiles() warnings = %v, want none", warnings)
+	}
+	got, err := os.ReadFile(filepath.Join(worktreeDir, ".env"))
+	if err != nil {
+		t.Fatalf("ReadFile(worktree .env) error: %v", err)
+	}
+	if string(got) != "ROOT_ENV=1\n" {
+		t.Fatalf("worktree .env = %q, want root content", got)
+	}
+	assertWorktreePathIgnored(t, worktreeDir, ".env")
+	assertGitStatusClean(t, worktreeDir)
+	assertWorktreePrivateExcludeMissing(t, worktreeDir, ".env")
+	if current := runGitInDir(t, worktreeDir, "config", "--get", "core.excludesFile"); current != userExclude {
+		t.Fatalf("core.excludesFile = %q, want unchanged %q", current, userExclude)
+	}
 }
 
 func TestCreateWorktreePreparesSembleIgnoreForFreshWorktree(t *testing.T) {

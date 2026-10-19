@@ -255,7 +255,9 @@ func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: source is not ignored by git", rel))
 			continue
 		}
-		if err := worktreeexclude.EnsurePrivateExclude(worktreeDir, rel); err != nil {
+		// A user-owned core.excludesFile blocks the private exclude; a destination
+		// the effective rules already ignore is as safe to copy into.
+		if err := worktreeexclude.EnsurePrivateExclude(worktreeDir, rel); err != nil && checkIgnored(worktreeDir, rel) != nil {
 			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: configure worktree ignore: %v", rel, err))
 			continue
 		}

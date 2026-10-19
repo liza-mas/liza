@@ -104,10 +104,11 @@ reference's “Changing worktree setup during a run” section for operational d
 **Ignored env-file provisioning:** Worktree env-file copying is disabled by
 default. When `config.copy_worktree_env_files` is true, worktree setup may copy
 only root-level regular files matching `.env`, `.env.*`, `*.env`, or `.envrc`.
-The source path must be ignored by Git, the destination path must be made and
-verified ignored in the task worktree before copying, and existing destination
-files are never overwritten. Failures produce path-only warnings and do not
-block worktree creation.
+The source path must be ignored by Git, the destination path must be ignored in
+the task worktree before copying, through the private worktree exclude or, when a
+user `core.excludesFile` prevents installing it, through the effective rules
+already in place, and existing destination files are never overwritten. Failures
+produce path-only warnings and do not block worktree creation.
 
 ---
 
