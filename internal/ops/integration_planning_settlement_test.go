@@ -154,6 +154,60 @@ func TestUnsettledPreIntegrationPlanningTasks(t *testing.T) {
 		state.Tasks = append(state.Tasks, epic)
 		assertPending(t, state, []string{"epic"})
 	})
+	for _, route := range []struct {
+		rolePair, decompose, direct string
+		decomposeIsFollowUp         bool
+	}{
+		{"architecture-pair", "architecture-to-code-plan", "architecture-to-coding", true},
+		{"architecture-main-pair", "arch-decompose", "architecture-main-to-coding", false},
+	} {
+		source := func(marked bool, executed ...string) models.Task {
+			task := progressTask("architecture", route.rolePair, models.TaskStatusMerged)
+			task.Output = []models.OutputEntry{{Desc: "scope", CodingAllocation: marked}}
+			task.TransitionsExecuted = map[string]bool{}
+			for _, name := range executed {
+				task.TransitionsExecuted[name] = true
+			}
+			return task
+		}
+		t.Run(route.rolePair+" exclusive routes settle on the selected route only", func(t *testing.T) {
+			state := integrationProgressState(source(false, route.decompose))
+			assertPending(t, state, nil)
+			decision := evaluateProgress(t, state, capability, "head")
+			if !decision.PlanningSettled || decision.GlobalRequest == nil {
+				t.Fatalf("decomposed source did not advance past planning: %+v", decision)
+			}
+			assertPending(t, integrationProgressState(source(true, route.direct)), nil)
+			// The executed route must be the one the output selects.
+			assertPending(t, integrationProgressState(source(false, route.direct)), []string{"architecture"})
+			assertPending(t, integrationProgressState(source(false)), []string{"architecture"})
+		})
+		t.Run(route.rolePair+" no follow up keeps a suppressed selected route settled", func(t *testing.T) {
+			state := integrationProgressState(source(false))
+			state.Config.NoFollowUp = true
+			if route.decomposeIsFollowUp {
+				assertPending(t, state, nil)
+			} else {
+				assertPending(t, state, []string{"architecture"})
+			}
+			state.Tasks[0] = source(true)
+			assertPending(t, state, nil)
+		})
+	}
+	t.Run("output no route supports fails closed", func(t *testing.T) {
+		custom := pipeline.SlicedIntegrationCapability{PreIntegrationPlanningTransitions: map[string][]pipeline.TransitionDef{
+			"custom": {
+				{Name: "legacy", Cardinality: "per-subtask"},
+				{Name: "unknown", When: "future-mode", Cardinality: "per-subtask"},
+			},
+		}}
+		task := progressTask("source", "custom", models.TaskStatusMerged)
+		task.Output = []models.OutputEntry{{Desc: "work", CodingAllocation: true}}
+		pending, err := UnsettledPreIntegrationPlanningTasks(integrationProgressState(task), custom)
+		if err != nil || !reflect.DeepEqual(pending, []string{"source"}) {
+			t.Fatalf("unsupported output mode: pending=%v err=%v", pending, err)
+		}
+	})
 }
 
 func TestRecoveredIntegrationWaitsBeforeGenerationTwo(t *testing.T) {

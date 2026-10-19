@@ -834,6 +834,12 @@ func (r *Resolver) TransitionApplies(name string, output []models.OutputEntry) b
 	if err != nil {
 		return false
 	}
+	return t.AppliesTo(output)
+}
+
+// AppliesTo is TransitionApplies for an already resolved transition, so pure
+// evaluators holding TransitionDefs select routes by the same rule.
+func (t TransitionDef) AppliesTo(output []models.OutputEntry) bool {
 	direct := models.HasCodingAllocation(output)
 	switch t.When {
 	case "coding-allocation":

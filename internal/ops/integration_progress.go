@@ -377,7 +377,14 @@ func (e *integrationProgressEvaluator) unsettledPreIntegrationPlanningTasks(capa
 		if transitions == nil && len(task.Output) > 0 && !hasExecutedOutputTransition(task.TransitionsExecuted) {
 			pending = append(pending, task.ID)
 		}
+		// Exclusive `when` routes: only the route the output selects must run.
+		// A selected route suppressed by policy still counts as supported.
+		supported := false
 		for _, transition := range transitions {
+			if !transition.AppliesTo(task.Output) {
+				continue
+			}
+			supported = true
 			if e.state.Config.NoFollowUp && capability.PreIntegrationFollowUpTransitions[transition.Name] {
 				continue
 			}
@@ -388,6 +395,10 @@ func (e *integrationProgressEvaluator) unsettledPreIntegrationPlanningTasks(capa
 				pending = append(pending, task.ID)
 				break
 			}
+		}
+		if len(transitions) > 0 && !supported && len(task.Output) > 0 {
+			// No route consumes this output mode; fail closed.
+			pending = append(pending, task.ID)
 		}
 	}
 	sort.Strings(pending)
