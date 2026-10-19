@@ -281,7 +281,12 @@ func TestAdmissionSlotsShareOneDeadlineAcrossClasses(t *testing.T) {
 	holdAdmissionSlots(t, root, b)
 	// Wall-clock behavior under test: class a frees after 700ms of a 1s
 	// allowance; a restarted allowance for class b would end near 1.7s.
+	// The join is registered after both holders' cleanups, so it runs first
+	// and heldA's own release follows the goroutine's, also on t.Fatal.
+	released := make(chan struct{})
+	t.Cleanup(func() { <-released })
 	go func() {
+		defer close(released)
 		time.Sleep(700 * time.Millisecond)
 		heldA.release()
 	}()
