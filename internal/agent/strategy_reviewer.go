@@ -442,6 +442,17 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 		return "", "", wtErr
 	}
 
+	// A claimed, prepared worktree proves this epoch can provision again, as a
+	// successful doer claim does; left degraded, it stays out of merge
+	// ownership and pool capacity for the rest of its process (D-213).
+	if clearErr := ops.ClearAgentDegradedWithAuthority(config.ProjectRoot, config.Authority); clearErr != nil {
+		if ops.IsAgentAuthorityError(clearErr) {
+			return "", "", clearErr
+		}
+		logger.Warn("Failed to clear degraded agent health after successful review claim",
+			"agent_id", config.AgentID, "error", clearErr)
+	}
+
 	return taskID, "", nil
 }
 

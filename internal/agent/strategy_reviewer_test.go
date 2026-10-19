@@ -399,6 +399,95 @@ func TestReviewerStrategy_ClaimTask_PostWorktreeCmdFailureReleasesClaimAndDegrad
 	}
 }
 
+// D-213: a reviewer degraded by an earlier setup failure that later claims and
+// prepares a review worktree has proved its capacity, as a doer's successful
+// claim does. Left degraded, it stays excluded from merge ownership and pool
+// capacity for the rest of its process, though it keeps reviewing.
+func TestReviewerStrategy_ClaimTask_SuccessClearsDegradedHealth(t *testing.T) {
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	postCmd := "true"
+	state.Config.PostWorktreeCmd = &postCmd
+	reviewCommit := "abc123"
+	state.Tasks = []models.Task{
+		{
+			ID:           "task-1",
+			Status:       models.TaskStatusReadyForReview,
+			RolePair:     "coding-pair",
+			ReviewCommit: &reviewCommit,
+			Created:      now,
+		},
+	}
+	const (
+		reviewerID = "code-reviewer-1"
+		otherID    = "code-reviewer-2"
+	)
+	reviewer := testhelpers.RegisteredTestAgent("code-reviewer")
+	state.Agents[reviewerID] = reviewer
+	degraded := func(task string) models.AgentHealth {
+		return models.AgentHealth{
+			State:      models.AgentHealthDegraded,
+			Role:       "code-reviewer",
+			Provider:   reviewer.Provider,
+			PID:        reviewer.PID,
+			DegradedAt: now.Add(-time.Minute),
+			Reason:     ops.AgentDegradedWorktreeSetupFailed,
+			LastTask:   task,
+			LastError:  "post-worktree setup command failed",
+		}
+	}
+	state.AgentHealth = map[string]models.AgentHealth{
+		reviewerID: degraded("task-0"),
+		otherID:    degraded("task-0"),
+	}
+	if !state.AgentHealth[reviewerID].IsCurrentDegradedFor(reviewer) {
+		t.Fatal("fixture: reviewer health must describe its current epoch")
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	wtPath := filepath.Join(tmpDir, paths.WorktreesDirName, "task-1")
+	if err := os.MkdirAll(wtPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", wtPath, err)
+	}
+
+	strategy, err := NewRoleStrategy("code-reviewer", testResolver(t))
+	if err != nil {
+		t.Fatalf("NewRoleStrategy() error = %v", err)
+	}
+
+	bb := db.New(stateFile)
+	taskID, _, claimErr := strategy.ClaimTask(SupervisorConfig{
+		ProjectRoot: tmpDir,
+		AgentID:     reviewerID,
+		Role:        "code-reviewer",
+		Authority:   testSupervisorAuthority(t, bb, reviewerID),
+	}, bb)
+	if claimErr != nil {
+		t.Fatalf("ClaimTask() error = %v, want a successful claim", claimErr)
+	}
+	if taskID != "task-1" {
+		t.Fatalf("ClaimTask() task = %q, want task-1", taskID)
+	}
+
+	after, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("Read() error = %v", readErr)
+	}
+	if health, ok := after.AgentHealth[reviewerID]; ok {
+		t.Errorf("AgentHealth[%s] = %s (%s), want cleared after a successful claim and setup",
+			reviewerID, health.State, health.Reason)
+	}
+	// The clear is scoped to the claiming agent.
+	if health, ok := after.AgentHealth[otherID]; !ok || health.State != models.AgentHealthDegraded {
+		t.Errorf("AgentHealth[%s] = %+v (present %v), want its degraded record untouched", otherID, health, ok)
+	}
+}
+
 // reviewClaimProject is the RCA fixture behind the claim breaker: a git repo
 // whose reviewable tasks each own a worktree, with a review_commit that either
 // matches that worktree's HEAD (healthy) or is the stale integration SHA
