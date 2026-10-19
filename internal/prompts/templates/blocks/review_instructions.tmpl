@@ -402,6 +402,9 @@ Each fix-task must be well-formed (single intent, falsifiable done_when, correct
 Review intra-plan composition and shared intent for originating plan {{.IntegrationOriginatingPlan.ID}}. Do not reopen sibling or goal-wide concerns.
 {{- else if eq .IntegrationPhase "global"}}
 Review only the cross-plan seams listed above and suite failures observed at HEAD in code or tests this goal changed. Plan-internal code is out of scope without an observed suite failure; defects confined to code this goal did not change are observations, never fix tasks. Coverage is navigation evidence, not a correctness verdict.
+{{- if .IntegrationPreviousSourceCommit}}
+Fix round: review the delta since generation {{.IntegrationPreviousGeneration}} and the analyst's escalation decision.
+{{- end}}
 {{- else}}
 Enrich with systemic analysis: interaction effects across fixes, architectural drift, emergent risks.
 {{- end}}
@@ -411,6 +414,10 @@ INSTRUCTIONS:
 1. Re-read only the metadata-named descendants, attributed paths, and snapshot reads in the slice context above at {{.IntegrationSourceCommit}}.
 2. Invoke skill: systemic-thinking for intra-plan composition analysis.
 3. Check that the descendants compose and satisfy their shared plan intent; later sibling changes belong to global analysis.
+{{- else if and (eq .IntegrationPhase "global") .IntegrationPreviousSourceCommit}}
+1. Re-read only the fix-round delta above at {{.IntegrationSourceCommit}}; re-read the cross-plan seams with the seam-review commands only if the analyst escalated or you name a concrete gap.
+2. Invoke skill: systemic-thinking for seam interaction analysis.
+3. Check the analyst's delta classification and escalation decision, that each repair resolves its finding, and that each reported suite failure is reproduced at HEAD and attributed to goal-owned or foreign code. Re-run a check the repairs' approval evidence names only to reproduce a reported failure at HEAD, after an escalation, or for a concrete gap you name.
 {{- else if eq .IntegrationPhase "global"}}
 1. Re-read the cross-plan seams above at {{.IntegrationSourceCommit}} with the seam-review commands; read a task's change only for a seam path or a reported suite failure.
 2. Invoke skill: systemic-thinking for seam interaction analysis.
@@ -435,8 +442,12 @@ INSTRUCTIONS:
 {{- if eq .IntegrationPhase "slice"}}
 5. Enrich only within the originating plan: check dependency and interface fit, acceptance-criteria composition, and missing intra-plan findings.
 {{- else if eq .IntegrationPhase "global"}}
-	f. Reject a fix-task unless it repairs a seam finding or a suite failure observed at HEAD, and targets code this goal changed.
+	f. Reject a fix-task unless it repairs a seam finding or a suite failure observed at HEAD, and targets code this goal changed.{{if .IntegrationPreviousSourceCommit}} A fix-task outside the delta also needs a recorded escalation.{{end}}
+{{- if .IntegrationPreviousSourceCommit}}
+5. Enrich only within the delta: could one repair break another or a seam it touches, and did the analyst miss a delta-caused seam disagreement or goal-owned failure? Seams and suites outside the delta stay settled unless the analyst escalated or you name a concrete gap.
+{{- else}}
 5. Enrich only within the seams and observed suite failures: could fixing A break the fix for B, and did the analyst miss a seam disagreement or a goal-owned suite failure?
+{{- end}}
 {{- else}}
 5. Systemic enrichment: after reviewing individual fix-tasks, analyze:
 	a. Interaction effects: could fixing A break the fix for B?

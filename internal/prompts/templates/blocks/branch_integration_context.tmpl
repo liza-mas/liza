@@ -70,6 +70,25 @@ Run the smallest tests covering the attributed descendants, paths, declared vali
 === GLOBAL INTEGRATION CONTEXT ===
 GENERATION: {{.IntegrationGeneration}}
 SOURCE COMMIT: {{.IntegrationSourceCommit}}
+{{- if .IntegrationPreviousSourceCommit}}
+
+FIX-ROUND SCOPE (generation {{.IntegrationPreviousGeneration}} was {{.IntegrationPreviousVerdict}} at {{.IntegrationPreviousSourceCommit}}):
+Delta since that source (the repairs below plus any work merged by others since):
+git -C {{.ShellIntegrationWorktree}} diff --name-only {{.IntegrationPreviousSourceCommit}}..{{.IntegrationSourceCommit}}
+git -C {{.ShellIntegrationWorktree}} diff --stat {{.IntegrationPreviousSourceCommit}}..{{.IntegrationSourceCommit}}
+REPAIRS OF GENERATION {{.IntegrationPreviousGeneration}} (approval evidence: the reviewer accepted each acceptance criterion at the reviewed commit; do not re-prove it):
+{{- range .IntegrationFixRepairs}}
+- {{.ReviewedTaskID}} @ {{.ReviewedCommit}}; merge {{.MergeCommit}}; approver {{.Approver}}
+  Acceptance criteria: {{.AcceptanceCriteria}}
+  Validation: {{if .Validation}}{{range $index, $command := .Validation}}{{if $index}}; {{end}}{{$command}}{{end}}{{else}}(none declared){{end}}
+{{- end}}
+{{- if not .IntegrationFixRepairs}}
+(none: the delta is work merged by others since that source)
+{{- end}}
+Default: review only this delta. Check that each repair resolves its finding without breaking a seam it touches. Approval evidence covers only what a repair's acceptance criteria and validation name; a repair without declared validation, or delta behavior they do not name, needs your own smallest covering command at the source commit.
+Record a clean verdict without broad suites only when the delta touches only tests, test support, fixtures or docs, every repair resolves its finding, approval evidence or your delta commands cover each changed behavior, and no concrete gap remains.
+Escalate to the full review below only when the delta touches production code or contracts (interfaces, schemas, migrations, configuration), or you name a concrete gap. State in your report which case applied and why.
+{{- end}}
 
 COVERAGE MAP (navigation evidence, not proof of aggregate correctness):
 {{- range .IntegrationCoverage}}
@@ -119,16 +138,16 @@ CROSS-PLAN SEAMS:
 - interface {{.Name}}: {{range $index, $value := .PlanTaskIDs}}{{if $index}}, {{end}}{{$value}}{{end}}
 {{- end}}
 {{- else}}
-(no cross-plan seam: no path or declared interface is shared by two plans; only suites at HEAD apply)
+(no cross-plan seam: no path or declared interface is shared by two plans; {{if .IntegrationPreviousSourceCommit}}on escalation {{end}}only suites at HEAD apply)
 {{- end}}
 
-SEAM REVIEW:
+SEAM REVIEW{{if .IntegrationPreviousSourceCommit}} (escalation only){{end}}:
 Check only whether the plans agree at each seam above (shared path, interface, data contract, shared resource) at the source commit. Plan-internal code is out of scope: task code review and slice analysis already covered it; do not audit it.
 git -C {{.ShellIntegrationWorktree}} show {{.ShellIntegrationSnapshot "<path>"}}
 git -C {{.ShellIntegrationWorktree}} diff <base>..<review> -- <path>
 git -C {{.ShellIntegrationWorktree}} diff --name-only <base>..<review>
 
-SUITES AT HEAD:
+SUITES AT HEAD{{if .IntegrationPreviousSourceCommit}} (escalation only){{end}}:
 Run the project's declared test, lint, and type-check suites once from {{.Worktree}} over the whole branch: a merge from other work can break goal code.
 A failure is a finding when it breaks code or tests this goal changed (listed above), seam or not; the fix targets goal-owned code.
 Defects confined to code this goal did not change are observations in your report, never fix tasks.

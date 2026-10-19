@@ -727,7 +727,26 @@ func populateGlobalIntegrationContext(task *models.Task, state *models.State, pr
 	data.IntegrationPriorRepairs = integrationTaskChangeSummaries(surface.PriorRepairs)
 	data.IntegrationSeamPaths = integrationSeamSummaries(surface.SeamPaths)
 	data.IntegrationSeamInterfaces = integrationSeamSummaries(surface.SeamInterfaces)
+	if previous := surface.PreviousGeneration; previous != nil {
+		data.IntegrationPreviousGeneration = previous.Generation
+		data.IntegrationPreviousVerdict = string(previous.Verdict)
+		data.IntegrationPreviousSourceCommit = previous.SourceCommit
+		for _, repair := range previous.Repairs {
+			data.IntegrationFixRepairs = append(data.IntegrationFixRepairs, integrationApprovalSummary(repair))
+		}
+	}
 	return nil
+}
+
+func integrationApprovalSummary(attestation models.IntegrationApprovalAttestation) prompts.IntegrationApprovalSummary {
+	return prompts.IntegrationApprovalSummary{
+		ReviewedTaskID:     attestation.ReviewedTaskID,
+		AcceptanceCriteria: attestation.AcceptanceCriteria,
+		ReviewedCommit:     attestation.ReviewedCommit,
+		Approver:           attestation.Approver,
+		Validation:         slices.Clone(attestation.Validation),
+		MergeCommit:        attestation.MergeCommit,
+	}
 }
 
 func integrationTaskChangeSummaries(changes []ops.GlobalIntegrationTaskChange) []prompts.IntegrationTaskChangeSummary {
@@ -765,14 +784,7 @@ func integrationCoverageSummary(state *models.State, scope models.IntegrationSco
 			if attestation.ReviewedTaskID == "" || state.FindTask(attestation.ReviewedTaskID) == nil {
 				return prompts.IntegrationCoverageSummary{}, fmt.Errorf("approval coverage for plan %q references missing task %q", record.PlanTaskID, attestation.ReviewedTaskID)
 			}
-			summary.ApprovalAttestations = append(summary.ApprovalAttestations, prompts.IntegrationApprovalSummary{
-				ReviewedTaskID:     attestation.ReviewedTaskID,
-				AcceptanceCriteria: attestation.AcceptanceCriteria,
-				ReviewedCommit:     attestation.ReviewedCommit,
-				Approver:           attestation.Approver,
-				Validation:         slices.Clone(attestation.Validation),
-				MergeCommit:        attestation.MergeCommit,
-			})
+			summary.ApprovalAttestations = append(summary.ApprovalAttestations, integrationApprovalSummary(attestation))
 		}
 	case models.IntegrationCoverageSliceReport:
 		if record.SliceReport == nil || len(record.ApprovalAttestations) != 0 {

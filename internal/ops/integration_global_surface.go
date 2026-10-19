@@ -43,6 +43,19 @@ type GlobalIntegrationSurface struct {
 	PriorRepairs   []GlobalIntegrationTaskChange
 	SeamPaths      []GlobalIntegrationSeam
 	SeamInterfaces []GlobalIntegrationSeam
+	// PreviousGeneration is set when an accepted generation precedes this one;
+	// its source commit bounds the fix-round delta (D-231).
+	PreviousGeneration *GlobalIntegrationPreviousGeneration
+}
+
+// GlobalIntegrationPreviousGeneration is the accepted generation immediately
+// before the one being analysed, with the approval evidence of its merged
+// repairs. A clean predecessor has no repairs.
+type GlobalIntegrationPreviousGeneration struct {
+	Generation   int
+	Verdict      models.IntegrationAnalysisVerdict
+	SourceCommit string
+	Repairs      []models.IntegrationApprovalAttestation
 }
 
 // BuildGlobalIntegrationSurface attributes the goal's reviewed changes to the
@@ -117,9 +130,42 @@ func BuildGlobalIntegrationSurface(state *models.State, projectRoot string, gene
 		surface.PriorRepairs = append(surface.PriorRepairs, changes...)
 	}
 
+	previous, err := previousGlobalGeneration(evaluator, state.Goal.Integration.GlobalGenerations, generation)
+	if err != nil {
+		return GlobalIntegrationSurface{}, err
+	}
+	surface.PreviousGeneration = previous
 	surface.SeamPaths = sharedAcrossPlans(pathPlans)
 	surface.SeamInterfaces = sharedAcrossPlans(interfacePlans)
 	return surface, nil
+}
+
+// previousGlobalGeneration returns generation-1 when it was accepted, or nil
+// for the first accepted generation.
+func previousGlobalGeneration(evaluator *integrationProgressEvaluator, generations []models.IntegrationGlobalGeneration, generation int) (*GlobalIntegrationPreviousGeneration, error) {
+	for _, accepted := range generations {
+		if accepted.Generation != generation-1 {
+			continue
+		}
+		repairIDs, err := evaluator.mergedRepairLeaves(accepted.AnalysisKey)
+		if err != nil {
+			return nil, err
+		}
+		previous := &GlobalIntegrationPreviousGeneration{
+			Generation:   accepted.Generation,
+			Verdict:      accepted.Verdict,
+			SourceCommit: accepted.SourceCommit,
+		}
+		for _, repairID := range repairIDs {
+			attestation, attestationErr := approvalAttestationFor(evaluator.tasks[repairID])
+			if attestationErr != nil {
+				return nil, fmt.Errorf("global generation %d repairs: %w", accepted.Generation, attestationErr)
+			}
+			previous.Repairs = append(previous.Repairs, attestation)
+		}
+		return previous, nil
+	}
+	return nil, nil
 }
 
 // mergedRepairLeaves returns the merged repair leaves created by the analysis

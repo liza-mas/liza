@@ -448,6 +448,40 @@ func TestGlobalIntegrationContext(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("fix round renders the previous generation's delta and repair evidence", func(t *testing.T) {
+		fixRound := *state
+		lifecycle := *state.Goal.Integration
+		lifecycle.GlobalGenerations = []models.IntegrationGlobalGeneration{{
+			Generation: 1, AnalysisTaskID: "global-prev", AnalysisKey: "global:1",
+			Verdict: models.IntegrationAnalysisVerdictFindings, SourceCommit: "gen1-source", ReportCommit: "gen1-report",
+		}}
+		fixRound.Goal.Integration = &lifecycle
+		// The repair reuses an existing reviewed range so its diff resolves.
+		right := state.FindTask("coding-right")
+		approver := "code-reviewer-2"
+		fixRound.Tasks = append(append([]models.Task(nil), state.Tasks...),
+			models.Task{
+				ID: "global-prev", Status: models.TaskStatusMerged, Type: models.TaskTypeIntegration, RolePair: "integration-pair", Created: now,
+				IntegrationAnalysis: &models.IntegrationAnalysisMetadata{Key: "global:1", Phase: models.IntegrationAnalysisPhaseGlobal, Generation: 1, SourceCommit: "gen1-source"},
+			},
+			models.Task{
+				ID: "fix-prev", Description: "Stub the harness credential", DoneWhen: "The harness stub returns the credential",
+				Status: models.TaskStatusMerged, RolePair: "coding-pair", ParentTasks: []string{"global-prev"}, Created: now,
+				BaseCommit: right.BaseCommit, ReviewCommit: right.ReviewCommit, MergeCommit: right.ReviewCommit,
+				ApprovedBy: &approver, Validation: []string{"project-test --scope harness"},
+			},
+		)
+
+		reviewer := renderIntegrationRoleContext(t, &fixRound, "global-analysis", roles.IntegrationReviewer, projectRoot)
+		assertContainsAll(t, reviewer,
+			"FIX-ROUND SCOPE (generation 1 was findings at gen1-source):",
+			"diff --name-only gen1-source..global-source-456",
+			"- fix-prev @ "+*right.ReviewCommit+"; merge "+*right.ReviewCommit+"; approver code-reviewer-2\n  Acceptance criteria: The harness stub returns the credential\n  Validation: project-test --scope harness",
+			"SUITES AT HEAD (escalation only):",
+			"Fix round: review the delta since generation 1",
+		)
+	})
 }
 
 func renderIntegrationRoleContext(t *testing.T, state *models.State, taskID, role, projectRoot string) string {

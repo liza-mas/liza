@@ -121,6 +121,9 @@ func TestBuildGlobalIntegrationSurface(t *testing.T) {
 	if len(surface.PriorRepairs) != 1 || surface.PriorRepairs[0].TaskID != "fix-global" || !reflect.DeepEqual(surface.PriorRepairs[0].Paths, []string{"left.go"}) {
 		t.Fatalf("prior repairs = %#v, want fix-global touching left.go", surface.PriorRepairs)
 	}
+	if surface.PreviousGeneration != nil {
+		t.Fatalf("previous generation = %#v, want nil without an accepted generation 1", surface.PreviousGeneration)
+	}
 
 	t.Run("first generation has no prior repairs", func(t *testing.T) {
 		first, err := BuildGlobalIntegrationSurface(state, projectRoot, 1)
@@ -153,6 +156,86 @@ func TestBuildGlobalIntegrationSurface(t *testing.T) {
 		_, err := BuildGlobalIntegrationSurface(&broken, projectRoot, 2)
 		if err == nil || !strings.Contains(err.Error(), `merged goal task "coding-single" lacks reviewed change attribution`) {
 			t.Fatalf("BuildGlobalIntegrationSurface() error = %v, want missing attribution", err)
+		}
+	})
+
+	// withGeneration1 records generation 1 as accepted with the given verdict
+	// and gives its repair approval facts, unless dropRepair removes it.
+	withGeneration1 := func(verdict models.IntegrationAnalysisVerdict, dropRepair bool) *models.State {
+		fixRound := *state
+		integration := *state.Goal.Integration
+		integration.GlobalGenerations = []models.IntegrationGlobalGeneration{{
+			Generation: 1, AnalysisTaskID: "global-1", AnalysisKey: "global:1",
+			Verdict: verdict, SourceCommit: "gen1-source", ReportCommit: "gen1-report",
+		}}
+		fixRound.Goal.Integration = &integration
+		fixRound.Tasks = make([]models.Task, 0, len(state.Tasks))
+		for _, task := range state.Tasks {
+			if task.ID == "fix-global" {
+				if dropRepair {
+					continue
+				}
+				approver := "reviewer-1"
+				task.ApprovedBy = &approver
+				task.DoneWhen = "left.go stub returns the credential"
+				task.Validation = []string{"make test-left"}
+			}
+			fixRound.Tasks = append(fixRound.Tasks, task)
+		}
+		return &fixRound
+	}
+
+	t.Run("fix round carries the previous generation's repair evidence", func(t *testing.T) {
+		fixRound := withGeneration1(models.IntegrationAnalysisVerdictFindings, false)
+		got, err := BuildGlobalIntegrationSurface(fixRound, projectRoot, 2)
+		if err != nil {
+			t.Fatalf("BuildGlobalIntegrationSurface() error = %v", err)
+		}
+		repair := fixRound.FindTask("fix-global")
+		want := &GlobalIntegrationPreviousGeneration{
+			Generation: 1, Verdict: models.IntegrationAnalysisVerdictFindings, SourceCommit: "gen1-source",
+			Repairs: []models.IntegrationApprovalAttestation{{
+				ReviewedTaskID: "fix-global", AcceptanceCriteria: "left.go stub returns the credential",
+				ReviewedCommit: *repair.ReviewCommit, Approver: "reviewer-1",
+				Validation: []string{"make test-left"}, MergeCommit: *repair.MergeCommit,
+			}},
+		}
+		if !reflect.DeepEqual(got.PreviousGeneration, want) {
+			t.Fatalf("previous generation = %#v, want %#v", got.PreviousGeneration, want)
+		}
+	})
+
+	t.Run("clean predecessor has no repairs", func(t *testing.T) {
+		got, err := BuildGlobalIntegrationSurface(withGeneration1(models.IntegrationAnalysisVerdictClean, true), projectRoot, 2)
+		if err != nil {
+			t.Fatalf("BuildGlobalIntegrationSurface() error = %v", err)
+		}
+		previous := got.PreviousGeneration
+		if previous == nil || previous.Generation != 1 || previous.Verdict != models.IntegrationAnalysisVerdictClean || previous.SourceCommit != "gen1-source" || len(previous.Repairs) != 0 {
+			t.Fatalf("previous generation = %#v, want clean generation 1 at gen1-source with no repairs", previous)
+		}
+	})
+
+	t.Run("first accepted generation after premature recovery has no predecessor", func(t *testing.T) {
+		recovered := *state
+		integration := *state.Goal.Integration
+		integration.PrematureRecovery = &models.IntegrationPrematureRecovery{AnalysisTaskID: "global-1"}
+		recovered.Goal.Integration = &integration
+		got, err := BuildGlobalIntegrationSurface(&recovered, projectRoot, 2)
+		if err != nil {
+			t.Fatalf("BuildGlobalIntegrationSurface() error = %v", err)
+		}
+		if got.PreviousGeneration != nil {
+			t.Fatalf("previous generation = %#v, want nil", got.PreviousGeneration)
+		}
+	})
+
+	t.Run("repair without approval facts fails closed", func(t *testing.T) {
+		broken := withGeneration1(models.IntegrationAnalysisVerdictFindings, false)
+		broken.FindTask("fix-global").ApprovedBy = nil
+		_, err := BuildGlobalIntegrationSurface(broken, projectRoot, 2)
+		if err == nil || !strings.Contains(err.Error(), `merged task "fix-global" lacks approval attestation facts`) {
+			t.Fatalf("BuildGlobalIntegrationSurface() error = %v, want missing approval facts", err)
 		}
 	})
 }

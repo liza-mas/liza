@@ -271,7 +271,10 @@ Once coverage is complete and all coding and integration-repair lineages are
 terminal, the global phase creates ordered keys `global:1`, `global:2`, and so
 on. A clean global verdict is effective only when its `source_commit` equals
 live integration HEAD. Findings, promoted repairs, or any later HEAD mutation
-require the next bounded global generation. Global generation exhaustion
+require the next bounded global generation, which reviews by default the delta
+since the previous accepted generation's source and escalates to the full seam
+and HEAD-suite review on production or contract changes or a named gap
+(ADR-0162, D-231). Global generation exhaustion
 projects closure status `exhausted`; slice exhaustion projects `blocked`.
 Neither outcome permits successful sprint or goal completion.
 

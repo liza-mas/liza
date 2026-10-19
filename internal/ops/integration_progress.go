@@ -654,20 +654,28 @@ func (e *integrationProgressEvaluator) approvalAttestations(
 
 	attestations := make([]models.IntegrationApprovalAttestation, 0, len(mergedLeaves))
 	for _, leafID := range mergedLeaves {
-		task := e.tasks[leafID]
-		if task.ReviewCommit == nil || *task.ReviewCommit == "" || task.ApprovedBy == nil || *task.ApprovedBy == "" || task.MergeCommit == nil || *task.MergeCommit == "" || task.DoneWhen == "" {
-			return nil, fmt.Errorf("integration progress: merged task %q lacks approval attestation facts", task.ID)
+		attestation, err := approvalAttestationFor(e.tasks[leafID])
+		if err != nil {
+			return nil, err
 		}
-		attestations = append(attestations, models.IntegrationApprovalAttestation{
-			ReviewedTaskID:     task.ID,
-			AcceptanceCriteria: task.DoneWhen,
-			ReviewedCommit:     *task.ReviewCommit,
-			Approver:           *task.ApprovedBy,
-			Validation:         append([]string(nil), task.Validation...),
-			MergeCommit:        *task.MergeCommit,
-		})
+		attestations = append(attestations, attestation)
 	}
 	return attestations, nil
+}
+
+// approvalAttestationFor reads the immutable approval facts of one merged task.
+func approvalAttestationFor(task *models.Task) (models.IntegrationApprovalAttestation, error) {
+	if task.ReviewCommit == nil || *task.ReviewCommit == "" || task.ApprovedBy == nil || *task.ApprovedBy == "" || task.MergeCommit == nil || *task.MergeCommit == "" || task.DoneWhen == "" {
+		return models.IntegrationApprovalAttestation{}, fmt.Errorf("integration progress: merged task %q lacks approval attestation facts", task.ID)
+	}
+	return models.IntegrationApprovalAttestation{
+		ReviewedTaskID:     task.ID,
+		AcceptanceCriteria: task.DoneWhen,
+		ReviewedCommit:     *task.ReviewCommit,
+		Approver:           *task.ApprovedBy,
+		Validation:         append([]string(nil), task.Validation...),
+		MergeCommit:        *task.MergeCommit,
+	}, nil
 }
 
 func (e *integrationProgressEvaluator) validateSliceReport(

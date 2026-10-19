@@ -506,8 +506,11 @@ resolved. It then checks only the seams between plans (paths or declared
 interfaces two plans share, over the goal's own reviewed changes) and runs the
 suites at integration HEAD. Defects in code the goal did not change are reported
 as observations, never fix tasks. Global fixes or later integration-HEAD
-mutations cause the next global generation to recheck independently while
-budget remains. A blocked
+mutations cause the next global generation while budget remains. That
+generation reviews only the delta since the previous one's source, reusing the
+repairs' approval evidence, and runs the full seam review and suites at HEAD
+only when the delta touches production code or contracts, or a concrete gap is
+named. A blocked
 slice blocks global integration; exhausting the configured global generation
 limit returns `global_generations_exhausted` instead of successful completion.
 

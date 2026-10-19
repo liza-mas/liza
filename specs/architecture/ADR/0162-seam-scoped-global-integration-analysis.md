@@ -6,6 +6,9 @@ ACCEPTED — 2026-09-28. Amends
 [ADR-0113](0113-sliced-integration-analysis-and-final-closure.md)
 (the scope and review surface of the global analysis).
 
+Amended 2026-10-19 (D-231): a generation that follows an accepted generation
+reviews the delta since that generation's source by default.
+
 ## Context
 
 The global analysis reviewed `goal.base_commit..<source commit>` of the
@@ -82,3 +85,50 @@ read before a human stopped it.
 - `internal/ops/integration_global_surface.go`, `internal/agent/prompt.go`,
   `internal/prompts/templates/blocks/branch_integration_context.tmpl`,
   `internal/prompts/templates/blocks/review_instructions.tmpl`.
+
+## Amendment (2026-10-19, D-231)
+
+Every generation after a fix round repeated the full seam review and the
+suites at HEAD, however small the fix. In one run, a generation that followed
+two test-support repairs cost 1 to 2 h to re-prove what the repairs' own
+reviews had just accepted.
+
+A generation that follows an accepted generation (the generation numbered one
+lower in the ledger) now gets a fix-round scope, derived at prompt time like
+the rest of the surface:
+
+- **Delta.** The branch range from the previous generation's source commit to
+  this generation's source commit, so the merged repairs of the previous
+  generation and any work merged by others since are both visible.
+- **Repair evidence.** Each merged repair of the previous generation is listed
+  with its approval facts: acceptance criteria, declared validation, reviewed
+  and merge commits, approver. This is approval evidence, not a record that
+  commands ran. It covers only what it names; a repair without declared
+  validation, or delta behavior it does not name, needs the analyst's own
+  smallest covering command.
+- **Default and close.** The analyst reviews only the delta. A clean verdict
+  without broad suites is allowed only when the delta touches only tests, test
+  support, fixtures or docs, every repair resolves its finding, evidence covers
+  each changed behavior, and no concrete gap remains.
+- **Escalation.** The full seam review and suites at HEAD of this ADR apply
+  when the delta touches production code or contracts (interfaces, schemas,
+  migrations, configuration), or a concrete gap is named. The analyst states
+  which case applied; the reviewer checks that classification and, without an
+  escalation, keeps seams and suites outside the delta settled.
+
+Classification is left to the agents: the engine has no path convention for
+"test" or "production", which would assume a stack. The first accepted
+generation (generation 1, or generation 2 after premature recovery) keeps the
+full review. Completion is unchanged: clean closure still needs a clean
+generation at the live HEAD, and the deferred batch of ADR-0204 still binds the
+final HEAD.
+
+Consequences: a misclassified production change could close a fix round
+without suites at HEAD; the reviewer's check and the final deferred batch are
+the backstops. Alternatives rejected: engine-computed escalation from
+configured path globs (new config surface; revisit if misclassification is
+observed), and closing a test-only round without an analysis task (drops the
+integration reviewer's check).
+
+Evidence: operator notes D-231 and D-230 item 6 (human, 2026-10-17);
+`internal/ops/integration_global_surface.go` (`PreviousGeneration`).

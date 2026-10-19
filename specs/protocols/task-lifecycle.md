@@ -907,6 +907,14 @@ each analysis also carries immutable `integration_analysis` metadata.
    repair work outside the frozen cohort: they create no new slice and, after
    merging, trigger another global generation. Any later integration HEAD
    mutation also triggers another global generation while budget remains.
+   A generation that follows an accepted generation reviews by default only
+   the delta since that generation's source commit, reusing its merged
+   repairs' approval evidence for the checks that evidence names. It may close
+   clean without broad suites when the delta touches only tests, test support,
+   fixtures or docs, every repair resolves its finding, evidence covers each
+   changed behavior and no concrete gap remains; production or contract
+   changes, or a named gap, escalate to the full seam and HEAD-suite review
+   (ADR-0162 amendment, D-231).
    Slice exhaustion is explicitly blocked; global generation exhaustion is
    explicitly `exhausted`. Neither is successful completion.
 7. **Complete only on current clean evidence.** Closure counts only once a

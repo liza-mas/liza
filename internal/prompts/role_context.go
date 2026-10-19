@@ -358,6 +358,12 @@ type RoleContextData struct {
 	IntegrationPriorRepairs    []IntegrationTaskChangeSummary
 	IntegrationSeamPaths       []IntegrationSeamSummary
 	IntegrationSeamInterfaces  []IntegrationSeamSummary
+	// Fix-round scope: set only when an accepted global generation precedes
+	// this one (D-231).
+	IntegrationPreviousGeneration   int
+	IntegrationPreviousVerdict      string
+	IntegrationPreviousSourceCommit string
+	IntegrationFixRepairs           []IntegrationApprovalSummary
 
 	// Task artifact / integration context
 	IntegrationBranch string
