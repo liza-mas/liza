@@ -5,9 +5,9 @@ description: Coach a human through producing the input document that `§BRAND_BI
 
 # Goal Writing
 
-Facilitate production of the document `§BRAND_BINARY_NAME§ init --spec` consumes. The human decides; you elicit, challenge, record, and verify.
+Facilitate production of the document `§BRAND_BINARY_NAME§ init --spec` consumes. The human decides; you elicit, challenge, record, and verify, at a depth sized to the stakes.
 
-Do not draft on invocation. Drafting before the decisions settle is the failure this skill exists to prevent; drafting after them is phase 3.
+Do not draft on invocation: ask for the idea. Drafting before the decisions settle is what this skill exists to prevent; drafting after them is phase 3.
 
 ## The rule this enforces
 
@@ -43,11 +43,13 @@ Lean is about *who still had the choice*, not about how technical the prose look
 
 Any product or structural decision you originate is marked **unclaimed** — questions, summaries, and connective prose are not. It settles only when the human restates it in their own words, explicitly accepts it, or rejects it. An unclaimed marker that survives three exchanges is a fired tell, not a formality.
 
+**Proposal rule.** Every decision you propose, defaults included, carries its pros, its cons and your recommendation, and is marked unclaimed. Detail scales with the stakes: one pro, one con and the recommendation on one line for a low-stakes decision, the full comparison for a consequential one. Accepting a proposal settles it; record it as agent-proposed, human-accepted. Ask for at most one thing per turn.
+
 Human authority may be terse — `p`, `yes`, a one-line ruling — where the referent is clear. Authority cannot supply a decision that was never made. Silence settles nothing.
 
 ## Altitude
 
-Choose the entry point before anything else: it determines which decisions are owed and what kind of rationale each carries.
+Choose the entry point in phase 0, after the idea and the depth, before eliciting anything: it determines which decisions are owed and what kind of rationale each carries.
 
 | Entry point | Starts at | Decisions owed                                                                                       | Rationale owed |
 |---|---|------------------------------------------------------------------------------------------------------|---|
@@ -57,7 +59,7 @@ Choose the entry point before anything else: it determines which decisions are o
 
 Where the product's substance is a structure rather than a flow — an ontology, taxonomy, schema, or lifecycle — that model belongs at `general-objective`, above the epics rather than inside them. It describes the business, not the use cases; epics and stories are the UX and acceptance layer over it. Assume the human arrives with one: surface it and challenge it, never extract it from scratch or treat its absence from the first draft as absence from their thinking.
 
-Non-functional requirements sit outside this table: they are owed at every altitude and are always the human's. Altitude sharpens their precision — "fast enough to feel instant" becomes a latency budget — but never removes them.
+Non-functional requirements sit outside this table: they are owed at every altitude and are always the human's. Altitude sharpens their precision where the human's objective is a target or a bound — "fast enough to feel instant" becomes a latency budget — but never removes them.
 
 **The proof environment is a third dimension, beside the functional and the structural, and it scales with altitude the same way.** The run proves its success criteria somewhere. Agents cannot provision outside their sandbox, hold credentials, or record data from the human's accounts. Whatever proof needs that they cannot supply is therefore the human's to decide at every altitude; only the precision changes:
 
@@ -67,7 +69,7 @@ Non-functional requirements sit outside this table: they are owed at every altit
 | `functional-spec` | Direction, plus the environment constraints the architect must honour: stacks to reuse, tools and versions, CI parity, host capacity. The test topology is the architect's |
 | `technical-spec` | Direction, plus the settled environment design: named instances; the proof topology the skipped architecture stage would record (for each shared or slow proof, its isolation or what serializes it, its runtime basis, and whether it runs per task or at gates); how configuration reaches every agent and test process (names only, never values); the canonical command for each suite; fixture ownership and refresh; the setup command |
 
-The lean test applies unchanged. Environment detail is owed where agents cannot act on it, or where the choice changes what is proven: a fake database and a real one prove different things. It forecloses where an agent could set it up safely inside its own sandbox. An existing local stack or project environment guide is inherited: cite it rather than restating it.
+The lean test applies unchanged. Environment detail is owed where agents cannot act on it, or where the choice changes what is proven: a fake database and a real one prove different things. It forecloses where an agent could set it up safely inside its own sandbox. An existing local stack or project environment guide is inherited: cite it rather than restating it. When proof needs nothing agents cannot supply and no choice changes what is proven, one line saying so discharges this dimension.
 
 The WHY does not disappear at lower altitudes; it changes kind, and so does who owns it.
 
@@ -85,25 +87,38 @@ ADR record. No pipeline role writes documentation — it reaches the repository 
 acceptance criteria — so a surface nobody names here is a surface nothing produces. Elicit it as a
 deliverable with an audience, not as a file to create.
 
+## Depth
+
+Once the idea is on the table, propose a depth in one line with its reason. The stakes decide it: what a wrong decision here costs — reversibility, how many engine agents consume the document, whether it fixes a contract, data or product direction. Propose `light` only when the idea is simple and the stakes low. The human may override in either direction: state the cost in one line, record the override with that cost, and follow it.
+
+| | `light` | `standard` | `full` |
+|---|---|---|---|
+| Phase 0 | One plain line on who decides what; nothing to accept | Same | Contract gate: the ownership split accepted |
+| Orientation | One line per turn | Same | Same, plus the phase header block on phase entry |
+| Phase 2 | Consequential decisions, and every acceptance criterion's proof cost | Every decision | Every decision |
+| Phase 4 | Readiness check alone, from a session that did not coach the document | Cold adversarial review, optional `systemic-thinking`, then the readiness check | Same |
+
+`full` is the process as it stood before depths existed. Depth changes how and when the core rules apply, never whether: at every depth each product decision is the human's, unclaimed markers and the decision record stay, the problem statement settles before any option is ranked, and the gate runs from an independent session.
+
 ## Phases
 
 | Phase | Name | Pairing mode | Done when |
 |---|---|---|---|
-| 0 | Contract | — | Human accepts the ownership split, names the entry point, decision record opened |
-| 1 | Surface | **Coach** | Every decision the altitude requires is either made or explicitly named as open |
-| 2 | Stress-test | **Challenger** | Each made decision has survived a concrete attack, or has been revised |
+| 0 | Idea | — | Idea recorded as a hypothesis, depth and entry point named, decision record opened; at `full`, the ownership split accepted |
+| 1 | Ground and surface | **Coach** | The human has settled the problem statement, and every decision the altitude requires is either made or explicitly named as open |
+| 2 | Stress-test | **Challenger** | Each decision in the depth's scope has survived a concrete attack or been revised, and each acceptance criterion carries a recorded proof-cost decision |
 | 3 | Record | — | Document drafted from the record; every decision traces to a human turn |
-| 4 | Verify | — | Cold review closed, independent gate returns `Ready` or `Ready with notes`, no unclaimed marker left |
+| 4 | Verify | — | The depth's review closed, independent gate returns `Ready` or `Ready with notes`, no unclaimed marker left |
 
-**Phase 0 — Contract.** Present the ownership split, the altitude table, and what you will not do. On acceptance, open the decision record. Offer exactly `learn` (explain the split and the phases without advancing) and `p`. Stay in phase 0 until the human accepts and names the entry point. A generic acknowledgement does not close it.
+**Phase 0 — Idea.** Ask first for the idea, solution or material the human brought — a sentence, use cases, a brief. Record it as a hypothesis, open the decision record, and use it; never ask them to restate it without its solution. Then, one turn each, propose the depth and the entry point. At `light` and `standard`, close the phase with one plain line: the human makes every product decision, you propose and challenge, and what you originate stays unclaimed until they rule. At `full`, present the ownership split, the altitude table, and what you will not do; offer exactly `learn` (explain the split and the phases without advancing) and `p`, and stay in phase 0 until the human accepts and names the entry point. A generic acknowledgement does not close it.
 
-**Phase 1 — Surface.** Announce `Switching to Coach — the decisions this entry point needs are not settled yet`, and hold that posture: question purpose, never propose solutions. The Pairing contract owns the posture (ADR-0013); this skill owns the artifact state. Work through the altitude's decision list conversationally. Cue every question with a concrete instance — a behaviour, a user moment, an event — because an abstract category question often fails to activate domain recall. Record what settles. Do not draft.
+**Phase 1 — Ground and surface.** Announce `Switching to Coach — the decisions this entry point needs are not settled yet`, and hold that posture: question purpose. The solution is the human's hypothesis, not yours to supply; what you propose follows the proposal rule and ranks no option before the problem statement settles. The Pairing contract owns the posture (ADR-0013); this skill owns the artifact state. Ground first: ask for the frictions the idea addresses — what in today's situation gets in the way of what its beneficiary is trying to do — and let the human settle the problem statement from them. Where an upstream document already states it, confirm in one question that it still holds. Then work through the altitude's decision list conversationally. Ask an objective's shape before its metrics: a target (reach a value), a direction (move a measure from its baseline, bounded by effort), or a bound (stay within a limit). A direction is complete without a number; ask for numbers only for targets and bounds. Cue every question with a concrete instance — a behaviour, a user moment, an event — because an abstract category question often fails to activate domain recall. Record what settles. Do not draft.
 
-**Phase 2 — Stress-test.** Announce `Switching to Challenger — the decisions are stated, attack them`. Attack each decision on its merits: what breaks it, what it forecloses, what happens if the opposite were true, what makes the out-of-scope list safe to defer. Revision here is cheap and is the point. Do not draft.
+**Phase 2 — Stress-test.** Announce `Switching to Challenger — the decisions are stated, attack them`. Attack each decision on its merits: what breaks it, what it forecloses, what happens if the opposite were true, what makes the out-of-scope list safe to defer. Then challenge each acceptance criterion's proof: what proving it costs, what it protects, and the proportionate proof you propose ([rubric](references/rubrics.md#challenge-proof-cost)); record the human's decision with the cost as stated to them. At `light`, attack the consequential decisions only; the proof-cost challenge still covers every criterion. Revision here is cheap and is the point. Do not draft.
 
 **Phase 3 — Record.** Draft the document section by section from the decision record, following the altitude's section set. Every product decision must trace to a phase 1 or 2 human turn; mark anything else unclaimed and resolve it before moving on. Present sections for correction as you go, not as a finished document.
 
-**Phase 4 — Verify.** Authoring is complete when the human says the draft says what they mean. Reconcile the decision record first. Then, in this order: hand the document to an independent session for adversarial review (see below), which applies `check-§BRAND_NAME_LOWER§-input-readiness` as the structured half of its pass; optionally run `systemic-thinking`; resolve every finding; then that same session issues the readiness verdict on the document as it now stands. The verdict is the last thing that happens in phase 4, and this session is not what issues it.
+**Phase 4 — Verify.** Authoring is complete when the human says the draft says what they mean. Reconcile the decision record first. At `standard` and `full`, then, in this order: hand the document to an independent session for adversarial review (see below), which applies `check-§BRAND_NAME_LOWER§-input-readiness` as the structured half of its pass; optionally run `systemic-thinking`; resolve every finding; then that same session issues the readiness verdict on the document as it now stands. At `light`, the independent session runs `check-§BRAND_NAME_LOWER§-input-readiness` alone. At every depth the verdict is the last thing that happens in phase 4, and this session is not what issues it.
 
 Resolve does not mean obey. Each finding is fixed, fixed with the objection recorded, or contested naming a concrete harm — the reviewer then Accepts, Counters, Refutes, or Escalates. An escalated finding needs a human disposition before phase 4 closes; without one the run is incomplete, not complete.
 
@@ -111,7 +126,7 @@ Do not run the gate from this session. A judge that coached the document it grad
 
 ## Decision record
 
-Open `<goal-document>-decisions.md` beside the document as soon as phase 0 closes, and write to it as the session runs. Phases 1–2 deliberately produce no document; without this they produce nothing at all, and a stopped or compacted session loses the expensive half of the work.
+Open `<goal-document>-decisions.md` beside the document as soon as the idea is recorded, and write to it as the session runs. Its head carries the idea as a hypothesis, the depth with any override and its stated cost, and the entry point. Phases 1–2 deliberately produce no document; without this they produce nothing at all, and a stopped or compacted session loses the expensive half of the work.
 
 It is a synthesis, not a transcript of turns. Record, per decision:
 
@@ -123,13 +138,13 @@ It is a synthesis, not a transcript of turns. Record, per decision:
 | What was rejected | Alternatives considered and the reason they lost — this is what a cold reviewer most needs and never gets |
 | Still open | Unresolved questions, and every unclaimed marker with its current status |
 
-Regenerate at each phase close: altitude, current phase, decisions open, unclaimed markers unresolved, and the next contribution only the human can make. Reconcile it after the last substantive edit, before handing anything to the cold reviewer — stale reasoning read as current context is worse than no record.
+Regenerate at each phase close: altitude, depth, current phase, decisions open, unclaimed markers unresolved, and the next contribution only the human can make. Reconcile it after the last substantive edit, before handing anything to the cold reviewer — stale reasoning read as current context is worse than no record.
 
 Hand it to the cold reviewer along with the document. It is the human's and the reviewer's, not an input to `§BRAND_BINARY_NAME§`: what ships to `init --spec` is the goal document alone.
 
 ## Adversarial review
 
-Phase 4's cold review is adversarial and two-sided, not a proofread.
+Phase 4's cold review, at `standard` and `full`, is adversarial and two-sided, not a proofread.
 
 **The reviewer's question is whether the document is solid and lean, not whether the product is good.** Reading *as* the consuming agent would is the technique; producing what that agent would produce is not — decomposing the document into epics is the run's work, and asking for it here buys little and costs a lot.
 
@@ -147,7 +162,7 @@ Two questions do the work: where would I have to guess, and where do two defensi
 
 ## Standing obligations
 
-Open each phase entry and re-entry with exactly this block:
+Every turn carries one orientation line: `Phase <n> of 4: <name> · done: <what has settled> · next: <the next move>`. The next move is direction, not a continuation gate: a habitual *shall I continue?* trains the human to answer without reading. At `full`, also open each phase entry and re-entry with this block:
 
     §BRAND_NAME_TITLE§ GOAL WRITING — PHASE <n> of 4: <name>  ·  altitude: <entry-point>
 
@@ -155,17 +170,21 @@ Open each phase entry and re-entry with exactly this block:
     Only you can:  <what only the human can supply here>
     Watch out:     <how this phase is typically misused>
 
-Then, throughout:
+When the human leaves or returns to a partly covered phase, recap its open items, not what has settled. When a phase completes, name what it settled, what it unlocks, and the struggle it took if there was one. Do not praise.
+
+At every depth, because they carry the core rules:
 
 - Mark every decision you originate as unclaimed, and say so in the turn that originates it. Unclaimed markers live in the decision record, not only in the conversation.
 - Write each decision to the record when it settles, not at the end. A decision reconstructed later is a decision whose provenance you are guessing at.
-- Report a tell when it fires, including against yourself. A tell may be harmless — say so and continue.
-- Ask specific, instance-cued questions. When one goes unanswered, raise specificity before insistence.
+- Report a tell when it fires, including against yourself. A tell may be harmless — say so in one line and continue.
+
+Scaled, each with the case where it does not apply:
+
+- Ask specific, instance-cued questions. When one goes unanswered, raise specificity before insistence. Not for what material on disk already answers, nor after a settled framing makes the question moot: a settled framing ends the questions that depend on it.
 - On the second detail-level correction, ask for the frame instead of proposing another wording.
-- Do not accept approval where a decision was owed. Name the missing contribution and stay in the phase.
-- Settle priority with the human, not by default: each outcome and constraint is Must, Should, Could, or Won't this run, and mandatory outcomes are separated from desired enhancements. Must and Won't bind every downstream stage; a missing label is an unclaimed decision, not an implicit Must (shared contract: [Priority, Commitments and Proof Stage](../shared/references/reference-first-authoring.md#priority-commitments-and-proof-stage)).
-- Challenge each want before it gets a label: ask what fails, for whom, without it or with a simpler alternative. One that cannot answer is not grounded — propose dropping it and record the human's answer. What survives is the least that meets the need; Should/Could holds grounded but deferrable wants, not ungrounded ones.
-- Close each turn with the useful next move. This is direction, not a continuation gate: a habitual *shall I continue?* trains the human to answer without reading.
+- Do not accept approval where a decision was owed. Name the missing contribution and stay in the phase. Not when the approval accepts a proposal you stated with its pros, cons and recommendation: that settles it.
+- Settle priority with the human, not by default: each outcome and constraint is Must, Should, Could, or Won't this run, and mandatory outcomes are separated from desired enhancements. Must and Won't bind every downstream stage; a missing label is an unclaimed decision, not an implicit Must (shared contract: [Priority, Commitments and Proof Stage](../shared/references/reference-first-authoring.md#priority-commitments-and-proof-stage)). At `light`, one proposal may label every item at once.
+- Challenge each want before it gets a label: ask what fails, for whom, without it or with a simpler alternative. One that cannot answer is not grounded — propose dropping it and record the human's answer. What survives is the least that meets the need; Should/Could holds grounded but deferrable wants, not ungrounded ones. Not for a want the settled problem statement already grounds.
 
 ## Tells
 
@@ -174,7 +193,7 @@ Each names a way a decision appears made but is not.
 | Tell | Fires when |
 |---|---|
 | **Premature outline** | You offer a section skeleton, template, or document structure before the altitude and decisions settle. The most likely tell to fire, and the one the human cannot be expected to catch — a helpfully-offered outline reads as progress while it converts the human from decision-maker into form-filler. |
-| **Approval instead of answer** | You ask for a decision and receive "sounds good" or "yes, do that". |
+| **Approval instead of answer** | You ask an open question and receive "sounds good" or "yes, do that". Accepting a proposal you stated with its pros, cons and recommendation is an answer. |
 | **Placeholder capability** | A capability is named without behaviour: "improve UX", "add auth", "handle errors". |
 | **Unfalsifiable success** | A success criterion has no observation that could show it was not met. |
 | **Empty out-of-scope** | Nothing is excluded while adjacent features are plainly implied. |
@@ -188,6 +207,7 @@ Each names a way a decision appears made but is not.
 | Ordering | Cost of crossing it |
 |---|---|
 | Altitude before rubric | You elicit the wrong decision set and the document lands at an altitude no entry point consumes. |
+| Problem statement before options | A solution ranked or chosen before the human settles the problem fits the problem to the solution; the human defends their idea instead of stating their need. |
 | Decisions before drafting (phases 1–2 before 3) | The first document-shaped artifact anchors the remaining search; the human edits your framing instead of supplying theirs. |
 | Gate last, and from another session | A verdict from mid-authoring certifies a document that no longer exists, and one from the authoring session certifies its own work. |
 
@@ -195,19 +215,23 @@ Halt only when the human asks for work behind an ordering while its criterion is
 
 ## Completion
 
-- An independent reviewer tested the document against solid and lean, and every finding reached closure — resolved, accepted with rationale, or escalated and disposed of by the human. An open escalation leaves the run incomplete.
+- At `standard` and `full`, an independent reviewer tested the document against solid and lean, and every finding reached closure — resolved, accepted with rationale, or escalated and disposed of by the human. An open escalation leaves the run incomplete.
 - An independent session's gate run returns `Ready` or `Ready with notes` for the chosen entry point.
 - No unclaimed marker is unresolved.
 - No critical-path TBD remains.
 
 Then the human runs `§BRAND_BINARY_NAME§ init --spec <path>`. Commit the document first: worktrees are created from the integration branch, so uncommitted input may be invisible to agents.
 
+## Maintaining this skill
+
+Every obligation here states when it does not apply — by depth, altitude, or trigger — or that it carries a core rule and always applies. An obligation that cannot say which is not ready to add.
+
 ## Integration
 
 | Skill | Relationship |
 |---|---|
 | `check-§BRAND_NAME_LOWER§-input-readiness` | The judge to this producer. Owns the pass/fail rubric; run at the end of phase 4 by an independent session, never by this one. |
-| `systemic-thinking` | Optional final pass at phase 4 for frame-level and dynamic risk. |
+| `systemic-thinking` | Optional final pass at phase 4, at `standard` and `full`, for frame-level and dynamic risk. |
 | `feynman` | Use at phase 2 when a decision resists plain-language statement. |
 | `code-review` | The two-sided protocol the phase-4 adversarial review runs under. Read it completely before reviewing or answering. |
 | `epic-writing`, `user-story-writing`, `architecture-planning` | Downstream agent-side producers that consume this document. Do not run them here. |

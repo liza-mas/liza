@@ -2,9 +2,9 @@
 
 Questions that surface the decisions each entry point requires. Read the section for the chosen altitude before phase 1.
 
-**This file does not judge.** Pass/fail criteria, blockers, and the readiness verdict belong to `check-§BRAND_NAME_LOWER§-input-readiness`. Do not restate them here or paraphrase them in conversation. During phase 4, after cold review and the edits it produces, the document is handed to an independent session that runs that skill and rules.
+**This file does not judge.** Pass/fail criteria, blockers, and the readiness verdict belong to `check-§BRAND_NAME_LOWER§-input-readiness`. Do not restate them here or paraphrase them in conversation. During phase 4, after any cold review and the edits it produces, the document is handed to an independent session that runs that skill and rules.
 
-**Use the questions as seeds, not a script.** Each is written to start from a concrete instance, because an abstract category question often fails to activate domain recall. Replace the bracketed instance with something from the human's own material as soon as you have one. A question that has already been answered is not asked again.
+**Use the questions as seeds, not a script.** Each is written to start from a concrete instance, because an abstract category question often fails to activate domain recall. Replace the bracketed instance with something from the human's own material as soon as you have one. A question that has already been answered, or that a settled framing makes moot, is not asked again.
 
 ---
 
@@ -14,13 +14,16 @@ Sections: Problem Statement · Target Users · Solution Overview · MVP Scope ·
 
 Rationale kind: **product** — why this, for whom, why now.
 
-### Problem and users
+### Frictions and users
 
-- Walk me through the last time someone hit this problem. What did they do instead?
-- Who exactly is that person? What is their job when this happens?
+Start from the idea the human brought: ask what it addresses, never for a restatement without its solution.
+
+- Walk me through the last time this got in someone's way. What did they do instead?
+- Who exactly is that person? What are they trying to do when this happens?
 - What does it cost them today — time, money, errors, abandonment?
 - If we ship nothing, what happens in six months?
 - Who else touches this that we have not mentioned?
+- Which of these frictions does your idea remove, and which does it leave?
 
 ### Domain model
 
@@ -161,9 +164,10 @@ Now ask the [non-functional constraints](#every-altitude--non-functional-constra
 
 Ask these whatever the entry point, once the altitude's functional and structural questions have settled and before its closing success, failure, and risk questions. They bound the solution rather than choosing it, so they are the human's to state at product altitude as much as at technical altitude. Precision scales with the entry point; presence does not.
 
+- First, for the objective and each measurable constraint: is it a value to reach, a measure to move from today's baseline within an effort bound, or a limit to stay within? Numbers follow only for a value or a limit.
 - How many users or requests must this carry at launch? In a year?
 - What response time would make a user abandon it?
-- What would count as breaking each target: under what usage (pause between actions, arrival rate,
+- For each target or bound, what would count as breaking it: under what usage (pause between actions, arrival rate,
   sustained or peak), measured where? Does it gate acceptance, or is it indicative?
 - What availability is expected, and what does an hour of downtime cost?
 - What stack may this use, and what is ruled out — by policy, licensing, or what the team can actually operate?
@@ -211,3 +215,7 @@ Ask these right after the non-functional constraints. Precision follows the envi
 - (`technical-spec`) Name the instances, the variable names that reach each process, the command and flags for each suite, and the setup command a fresh worktree runs.
 
 If a project environment guide or an existing local stack already answers a question, reference it and record only what this goal adds.
+
+### Challenge proof cost
+
+Apply the overkill test to each acceptance criterion, in phase 2 at every depth. What does proving it cost — scripts, fixtures, environments, runtime, code to maintain — and which regression does that proof catch? Propose the cheapest proof that still fails on it; a demonstration, a focused check or before/after evidence is often enough. Record the human's decision with the cost as stated to them; proof machinery larger than the change it proves is the case to name out loud.

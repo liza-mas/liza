@@ -27,9 +27,11 @@ Open the coding CLI in a terminal and invoke:
 /goal-writing
 ```
 
-The skill runs four phases. It switches to **Coach** to surface the decisions your chosen entry point requires — Socratic, questioning purpose rather than proposing solutions — then to **Challenger** to stress-test them, then drafts from what settled, then hands off for verification. It will not make your product decisions for you; anything it originates is marked unclaimed until you accept or reject it.
+The skill opens with your idea — a sentence, a solution, use cases or a brief — and works from it as a hypothesis. It then proposes a depth sized to what a wrong decision would cost: `light` for a simple, low-stakes idea, `standard`, or `full`. You can override it either way; the skill states the cost in one line and records your choice.
 
-You pick the entry point up front. Use `general-objective` for a goal at product altitude. For lower-level inputs, use `functional-spec` when architecture still needs to be produced, or `technical-spec` when the architecture is already specified and §BRAND_BINARY_NAME§ should start at code planning.
+It then switches to **Coach**: it first asks which frictions your idea addresses, so you settle the problem statement before any option is ranked, then surfaces the decisions your chosen entry point requires, questioning purpose rather than supplying solutions. Next it switches to **Challenger** to stress-test them, including what proving each acceptance criterion would cost, then drafts from what settled, then hands off for verification. It will not make your product decisions for you: whatever it proposes comes with pros, cons and its recommendation, one question at a time, and stays unclaimed until you accept or reject it.
+
+You pick the entry point right after the depth. Use `general-objective` for a goal at product altitude. For lower-level inputs, use `functional-spec` when architecture still needs to be produced, or `technical-spec` when the architecture is already specified and §BRAND_BINARY_NAME§ should start at code planning.
 
 ### 2. What the document covers
 
@@ -70,6 +72,9 @@ In practice:
 - Nothing in it is a choice you took only because you could
 
 ### 4. Get reviews from other agents
+
+At `light` depth, skip this cold review: the readiness check at the end of this
+step, run from a fresh session, is the only independent review.
 
 Open a fresh Pairing session in another pane or window. Ask it to review the
 goal document cold — no context from the first session. A good review prompt:
