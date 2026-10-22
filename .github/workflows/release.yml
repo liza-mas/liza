@@ -1,9 +1,20 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      release_tag:
+        description: SemVer tag that passed the caller's CI jobs
+        required: true
+        type: string
+      release_sha:
+        description: Exact commit checked out by the caller's CI jobs
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.release_tag }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -11,21 +22,70 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
-      - name: Sync embedded files
-        run: make sync-embedded
+      - name: Validate and check out release tag
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "release SHA must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          cat > "${RUNNER_TEMP}/validate-semver.go" <<'EOF'
+          package main
 
-      - uses: goreleaser/goreleaser-action@v6
+          import (
+              "fmt"
+              "os"
+              "strings"
+
+              "golang.org/x/mod/semver"
+          )
+
+          func main() {
+              if len(os.Args) != 2 {
+                  fmt.Fprintf(os.Stderr, "release tag must be valid SemVer prefixed with v: %q\n", os.Args[1:])
+                  os.Exit(1)
+              }
+              tag := os.Args[1]
+              core := strings.SplitN(strings.SplitN(strings.TrimPrefix(tag, "v"), "-", 2)[0], "+", 2)[0]
+              if !semver.IsValid(tag) || len(strings.Split(core, ".")) != 3 {
+                  fmt.Fprintf(os.Stderr, "release tag must be valid SemVer prefixed with v: %q\n", tag)
+                  os.Exit(1)
+              }
+          }
+          EOF
+          go run -mod=readonly "${RUNNER_TEMP}/validate-semver.go" "${RELEASE_TAG}"
+          git fetch --no-tags origin \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          release_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          if [[ "${release_commit}" != "${RELEASE_SHA}" ]]; then
+            echo "Release tag does not resolve to the commit verified by CI" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${RELEASE_SHA}" origin/main; then
+            echo "Release commit must be reachable from origin/main" >&2
+            exit 1
+          fi
+          git checkout --detach "${RELEASE_SHA}"
+
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
-          version: '~> v2'
+          version: v2.17.0
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.release_tag }}

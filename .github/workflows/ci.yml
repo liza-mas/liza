@@ -10,64 +10,37 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   pull_request:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
-    name: Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
+  ci:
+    name: Shared CI
+    uses: ./.github/workflows/ci-core.yml
+    with:
+      setup_python: true
+      macos_on_pr: true
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      # Executes the pi init-gate extension (TypeScript) in its tests; node
-      # 24 strips types natively.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-
-      - uses: astral-sh/setup-uv@v10.0.1
-        with:
-          python-version: '3.12'
-
-      - name: Run linters
-        run: make lint
-
-      - name: Run tests
-        run: make test
-
-      - name: Run log analyzer tests
-        run: uv run --frozen python3 -m pytest skills/liza-logs/scripts
-
-      - name: Run e2e tests
-        run: make test-e2e
-
-      - name: Build
-        run: make build
-
-      # Vet the Windows build here rather than on the 2-vCPU Windows runner.
-      # Cross-compiled packages use CGO_ENABLED=0, matching the Windows job,
-      # which has no C toolchain in use.
-      - name: Vet for Windows
-        if: matrix.os == 'ubuntu-latest'
-        run: GOOS=windows go vet ./...
-
-      - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage.out
-          fail_ci_if_error: false
-          # Requires CODECOV_TOKEN secret — configure in repo settings
-          token: ${{ secrets.CODECOV_TOKEN }}
+  release:
+    name: Release verified tag
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ci, test-windows]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+      release_sha: ${{ needs.ci.outputs.verified_sha }}
 
   # Windows tests run as a matrix of shards; the "Test (windows)" job below
   # aggregates them. scripts/ci/testshard partitions the work from

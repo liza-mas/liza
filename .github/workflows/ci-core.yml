@@ -1,0 +1,122 @@
+name: CI core
+
+on:
+  workflow_call:
+    inputs:
+      setup_python:
+        description: Install uv and run the repository's Python test target from its uv.lock
+        required: false
+        default: false
+        type: boolean
+      macos_on_pr:
+        description: Run the macOS compatibility job for pull requests
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      verified_sha:
+        description: Commit checked out and verified by the Linux CI job
+        value: ${{ jobs.linux.outputs.verified_sha }}
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      verified_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Record verified source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Executes the pi init-gate extension (TypeScript) in its tests; node
+      # 24 strips types natively.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: inputs.setup_python
+        with:
+          python-version: "3.12"
+
+      - name: Prepare and verify generated artifacts
+        run: |
+          make ci-prepare
+          if ! git diff --quiet -- . || \
+             [ -n "$(git status --porcelain --untracked-files=all -- .)" ]; then
+            echo "ci-prepare changed tracked files; regenerate and commit them:" >&2
+            git diff --exit-code -- .
+            git status --short --untracked-files=all -- . >&2
+            exit 1
+          fi
+
+      - name: Run linters
+        run: make lint-nosync
+
+      # Vet the Windows build here rather than on the 2-vCPU Windows runner.
+      # Cross-compiled packages use CGO_ENABLED=0, matching the Windows job,
+      # which has no C toolchain in use.
+      - name: Vet for Windows
+        run: GOOS=windows go vet ./...
+
+      - name: Run race and e2e tests in parallel
+        if: ${{ ! inputs.setup_python }}
+        run: make ci-test-go-nosync
+
+      - name: Run race, e2e, and Python tests
+        if: inputs.setup_python
+        run: make ci-test-nosync
+
+      - name: Build
+        run: make build-nosync
+
+  macos:
+    name: macOS compatibility
+    if: github.event_name != 'pull_request' || inputs.macos_on_pr
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: inputs.setup_python
+        with:
+          python-version: "3.12"
+
+      - name: Prepare generated artifacts
+        run: make ci-prepare
+
+      # Race coverage runs on Linux; macOS checks platform compatibility.
+      - name: Run Go and e2e tests in parallel
+        run: make -j2 test-nosync test-e2e-nosync
+
+      - name: Run Python tests
+        if: inputs.setup_python
+        run: make test-python-nosync
+
+      - name: Build
+        run: make build-nosync

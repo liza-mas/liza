@@ -580,25 +580,6 @@ its own. With `-count=5` and only those tests selected, the unchanged base
 `21cc25d` failed the heartbeat pair 3 times in 10 runs. The D-17 diff does not
 touch these paths.
 
-## CI does not yet enforce the split test targets
-
-**What:** Routine `make test` no longer enables the race detector or writes a
-fixed `coverage.out`. The current CI workflow still invokes only `make test` and
-then attempts to upload `coverage.out`, so CI neither runs the new
-`make test-race` concurrency gate nor generates the profile expected by its
-Codecov step. Final local validation is enforced through the worktree build
-prerequisite lesson in the meantime.
-
-**Why deferred:** The test-suite performance goal explicitly excludes CI
-pipeline configuration. Keeping target semantics and CI orchestration as
-separate changes avoids silently expanding a performance implementation into a
-workflow-policy change.
-
-**Payback trigger:** Before the next CI workflow change or release cut, add a
-dedicated `make test-race` step, run `make coverage` where Codecov upload is
-desired, and update the upload step to consume an intentionally retained
-profile rather than the target's self-cleaning temporary file.
-
 ## CLI, commands, and integration tests cache nondeterministically
 
 **What:** Unchanged `make test` runs consistently cache `internal/testguard`

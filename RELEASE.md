@@ -21,7 +21,7 @@ This will automatically:
 4. Create a GitHub release with all artifacts
 5. Make binaries available via the installation script
 
-Note: Tests and linting run via CI on push/PR to `main`. The release workflow assumes `main` is green when tagged.
+Note: The tag push runs the full CI workflow (Linux, macOS, and Windows) on the tagged commit, and the release starts only after it passes. The tag must be valid SemVer (`vMAJOR.MINOR.PATCH`) and point to a commit reachable from `main`.
 
 ## Manual Releases
 
