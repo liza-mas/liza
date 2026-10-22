@@ -448,9 +448,9 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 	if acceptance != nil {
 		acceptanceBatch = acceptanceBatchTimeout(acceptance.batchTimeoutSeconds)
 		// A marker written after preparation must also cover a slot wait still
-		// ahead: wait and batch together stay within the cap.
+		// ahead: wait and batch together stay within the cap plus the floor.
 		if commands, _ := acceptance.executedCommands(); len(models.AdmissionLimitsFor(admissionConfig, commands)) > 0 {
-			acceptanceBatch += admissionSlotWait(acceptance.batchTimeoutSeconds)
+			acceptanceBatch += submitAdmissionSlotWait(acceptance.batchTimeoutSeconds)
 		}
 	}
 	return &preparedSubmission{
@@ -491,7 +491,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 			if ownSlots {
 				// Execution would take its slots itself; taken here so they
 				// report to this submit's progress.
-				slots = newAdmissionSlots(acceptance.batchTimeoutSeconds)
+				slots = newSubmitAdmissionSlots(acceptance.batchTimeoutSeconds)
 				slots.progress = invocation.progress
 			}
 			fenceCtx, stopFence := startAcceptanceOwnershipFence(bb, taskID, expectedCurrentStatus, agentID, authority)

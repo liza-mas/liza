@@ -23,14 +23,15 @@ runner. A command belongs to a class when its text contains any of the
 class's --match substrings.
 
 A command whose class is full waits in arrival order for a slot. The wait
-does not count against its timeout_seconds budget; together they never
-exceed the engine cap of %[1]d s, so a command budgeted at that cap gets a
-single try. A submit waits before it prepares or rebases anything: if the
-class stays full it is refused as RETRYABLE, and the same submission is
-simply retried. The deferred runner aborts its batch instead.
+does not count against its timeout_seconds budget. A submit waits up to the
+engine cap of %[1]d s minus its budget, but at least %[3]g h; other bounded
+callers keep wait plus budget within the cap. A submit waits before it
+prepares or rebases anything: if the class stays full it is refused as
+RETRYABLE, and the same submission is simply retried. The deferred runner
+waits until a slot frees.
 
 Read the current limits with %[2]s config.admission_limits.
-Identified agent sessions cannot use this command.`, referencecontract.AcceptanceMaxTimeoutSeconds, brand.Command("get")),
+Identified agent sessions cannot use this command.`, referencecontract.AcceptanceMaxTimeoutSeconds, brand.Command("get"), ops.SubmitSlotWaitFloor.Hours()),
 }
 
 var admissionLimitSetCmd = &cobra.Command{

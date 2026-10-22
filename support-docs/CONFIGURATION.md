@@ -540,9 +540,10 @@ A canonical command belongs to a class when its text contains any `--match`
 substring. Canonical admission (`submit-for-review`, `update-review-commit`,
 the orphaned-base heal) and every deferred-validation probe take a slot of each
 matching class first; waiters are served in arrival order. The wait never counts
-against `timeout_seconds`. For a submit, the wait plus that budget never exceed
-the 14400 s acceptance cap, so a batch budgeted at the cap gets a single try; a
-deferred-validation probe waits until its slots free, or until a halt. A submit waits
+against `timeout_seconds`. A submit waits up to the 14400 s acceptance cap
+minus that budget, but at least 2 h, so a batch budgeted at the cap still
+queues; `update-review-commit` and the heal keep wait plus budget within the
+cap. A deferred-validation probe waits until its slots free, or until a halt. A submit waits
 before it prepares or rebases; if the class stays full it returns `RETRYABLE`
 and the same submission is retried. While it waits and runs, a submit prints its
 class, the waiters ahead and its batch budget on stderr every 5 minutes, also
@@ -1694,7 +1695,7 @@ Agent identity is auto-assigned by default (`coder-1`, or `coder-2` if `coder-1`
 
 The `--agent-id` flag takes precedence over `§BRAND_ENV_PREFIX§_AGENT_ID`.
 After resolution, `§BRAND_BINARY_NAME§ agent` exports the resolved value as `§BRAND_ENV_PREFIX§_AGENT_ID` to the spawned provider CLI, including `-i` interactive sessions. This environment variable is how SessionStart and guard hooks distinguish §BRAND_NAME_TITLE§ MAS sessions from Pairing sessions. Project env overlays such as `claude.env` cannot override the resolved agent ID.
-Claude sessions also get `BASH_MAX_TIMEOUT_MS` raised to the submit grace (15000000 ms, ADR-0176) unless the ambient environment or `claude.env` sets a higher value, so a `submit-for-review` started in the background is not stopped before its canonical batch can finish. A project that declares `BASH_MAX_TIMEOUT_MS` as a runtime input has it stripped instead.
+Claude sessions also get `BASH_MAX_TIMEOUT_MS` raised to the submit grace (22200000 ms, ADR-0176) unless the ambient environment or `claude.env` sets a higher value, so a `submit-for-review` started in the background is not stopped before its canonical batch can finish. A project that declares `BASH_MAX_TIMEOUT_MS` as a runtime input has it stripped instead.
 
 **Agent ID format**: `{role}-{number}` — e.g. `coder-1`, `code-reviewer-1`, `planner-1`.
 

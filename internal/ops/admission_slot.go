@@ -27,11 +27,26 @@ var admissionSlotPollInterval = time.Second
 // tests shorten it.
 var admissionSlotCap = referencecontract.AcceptanceMaxTimeoutSeconds * time.Second
 
+// SubmitSlotWaitFloor is the least a submit may wait for its slots, whatever
+// its budget; MaxInflightSubmitGrace includes it (D-178).
+const SubmitSlotWaitFloor = 2 * time.Hour
+
+// submitSlotWaitFloor is SubmitSlotWaitFloor; tests shorten it.
+var submitSlotWaitFloor = SubmitSlotWaitFloor
+
 // admissionSlotWait is the longest a command budgeted budgetSeconds may wait
 // for its slots: a wait plus its execution never exceeds the engine's
-// acceptance cap, so the in-flight submit grace still bounds both (ADR-0209).
+// acceptance cap (ADR-0209). It bounds callers no in-flight submit grace
+// covers: update-review-commit and the orphaned-base heal.
 func admissionSlotWait(budgetSeconds int) time.Duration {
 	return max(0, admissionSlotCap-acceptanceBatchTimeout(budgetSeconds))
+}
+
+// submitAdmissionSlotWait is a submit's slot wait: never under the floor, so a
+// batch budgeted at the cap still queues. Wait plus batch stay within the cap
+// plus the floor, which the in-flight submit grace covers (D-178).
+func submitAdmissionSlotWait(budgetSeconds int) time.Duration {
+	return max(submitSlotWaitFloor, admissionSlotWait(budgetSeconds))
 }
 
 // AdmissionSlotWaitError reports that a class had no free slot before the
@@ -83,6 +98,11 @@ type admissionSlots struct {
 // budgetSeconds.
 func newAdmissionSlots(budgetSeconds int) *admissionSlots {
 	return &admissionSlots{deadline: time.Now().Add(admissionSlotWait(budgetSeconds))}
+}
+
+// newSubmitAdmissionSlots fixes a submit's shared wait deadline.
+func newSubmitAdmissionSlots(budgetSeconds int) *admissionSlots {
+	return &admissionSlots{deadline: time.Now().Add(submitAdmissionSlotWait(budgetSeconds))}
 }
 
 // newQueuedAdmissionSlots waits with no deadline: for an execution no

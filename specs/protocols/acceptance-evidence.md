@@ -128,7 +128,8 @@ reviewed value ([ADR-0207](../architecture/ADR/0207-admission-budget-exceptions.
 When an executed command matches a `config.admission_limits` class, the batch
 first waits for that class's slot, before runtime inputs are acquired. The
 budget starts once the slots are held; the wait is at most the cap minus the
-budget, and the marker then covers wait and batch (cap + grace). A submit waits
+budget, but a submit's is never under a 2 h floor; the marker then covers wait
+and batch (at most cap + floor + grace). A submit waits
 before preparing or rebasing; a class that stays full refuses
 `acceptance.admission_slot` as `RETRYABLE` with no effects, and the same
 submission is retried ([ADR-0209](../architecture/ADR/0209-admission-limits.md)).

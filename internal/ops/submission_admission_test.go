@@ -62,6 +62,7 @@ func shortAdmissionSlotCap(t *testing.T, cap time.Duration) {
 func TestSubmitAdmissionSlotRefusalIsRetryableBeforeRebase(t *testing.T) {
 	scenario := admissionSubmitScenario(t, "exit 0\n", 30, suiteAdmissionLimit)
 	shortAdmissionSlotCap(t, 30*time.Second+300*time.Millisecond)
+	shortSubmitSlotWaitFloor(t, 300*time.Millisecond)
 	// Integration moves on, so a rebase would rewrite the submitted candidate.
 	if err := os.WriteFile(filepath.Join(scenario.Root, "unrelated.txt"), []byte("moved\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -107,6 +108,7 @@ func TestSubmitAdmissionSlotRefusalIsRetryableBeforeRebase(t *testing.T) {
 func TestSubmitSlotWaitIsOutsideTheBatchBudgetAndInsideTheMarker(t *testing.T) {
 	scenario := admissionSubmitScenario(t, markerCopyScript(), 1, suiteAdmissionLimit)
 	shortAdmissionSlotCap(t, 20*time.Second)
+	shortSubmitSlotWaitFloor(t, 5*time.Second) // Below cap - budget: the cap governs.
 	held := holdAdmissionSlots(t, scenario.Root, suiteAdmissionLimit)
 
 	type outcome struct {
@@ -134,6 +136,59 @@ func TestSubmitSlotWaitIsOutsideTheBatchBudgetAndInsideTheMarker(t *testing.T) {
 	}
 	if window := copiedMarkerWindow(t, scenario.Root); window != admissionSlotCap+submitGraceMargin {
 		t.Fatalf("marker window = %s, want the cap %s plus grace", window, admissionSlotCap)
+	}
+}
+
+func shortSubmitSlotWaitFloor(t *testing.T, floor time.Duration) {
+	t.Helper()
+	previous := submitSlotWaitFloor
+	submitSlotWaitFloor = floor
+	t.Cleanup(func() { submitSlotWaitFloor = previous })
+}
+
+// TestSubmitBudgetedAtTheCapQueuesForAFreedSlot pins D-178: a batch budgeted
+// at the cap used to get a zero wait, so a full class refused it at once.
+func TestSubmitBudgetedAtTheCapQueuesForAFreedSlot(t *testing.T) {
+	scenario := admissionSubmitScenario(t, markerCopyScript(), 30, suiteAdmissionLimit)
+	shortAdmissionSlotCap(t, 30*time.Second)
+	shortSubmitSlotWaitFloor(t, 20*time.Second)
+	held := holdAdmissionSlots(t, scenario.Root, suiteAdmissionLimit)
+
+	done := make(chan error, 1)
+	started := time.Now()
+	go func() {
+		_, err := SubmitForReviewWithAuthority(scenario.Root, scenario.TaskID, scenario.Commit, scenario.Authority)
+		done <- err
+	}()
+	for queuedTickets(t, scenario.Root, suiteAdmissionLimit.Class) == 0 {
+		select {
+		case err := <-done:
+			t.Fatalf("submit budgeted at the cap returned without queueing: %v", err)
+		case <-time.After(10 * time.Millisecond):
+		}
+		if time.Since(started) > 10*time.Second {
+			t.Fatal("submit budgeted at the cap never queued")
+		}
+	}
+	if deadline, ok := InflightSubmitDeadline(scenario.Root, scenario.Authority, scenario.TaskID, time.Now()); !ok || deadline.Before(started.Add(50*time.Second)) {
+		t.Fatalf("queued submit's marker deadline %v (ok=%v) does not cover the floor and the batch", deadline, ok)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("submit returned while its class was full: %v", err)
+	default:
+	}
+	held.release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("submit after its slot freed: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("submit did not finish after its slot freed")
+	}
+	if window := copiedMarkerWindow(t, scenario.Root); window != 30*time.Second+20*time.Second+submitGraceMargin {
+		t.Fatalf("marker window = %s, want the batch plus the floor plus grace", window)
 	}
 }
 
@@ -192,6 +247,7 @@ func TestSubmitLosingItsClaimWhileWaitingIsNotRetryable(t *testing.T) {
 func TestSubmitFallbackMarkerCoversAResidualSlotWait(t *testing.T) {
 	scenario := admissionSubmitScenario(t, "exit 0\n", 30, suiteAdmissionLimit)
 	shortAdmissionSlotCap(t, 32*time.Second)
+	shortSubmitSlotWaitFloor(t, time.Second) // Below cap - budget: the cap governs.
 	invocation := &submissionInvocation{admission: &submissionAdmission{config: models.Config{AdmissionLimits: []models.AdmissionLimit{suiteAdmissionLimit}}}}
 	prepared, err := prepareSubmitForReview(scenario.Root, scenario.TaskID, scenario.Commit, scenario.AgentID, &scenario.Authority, LifecycleRequestOptions{}, invocation)
 	if err != nil {
@@ -214,7 +270,7 @@ func TestSubmitFallbackMarkerCoversAResidualSlotWait(t *testing.T) {
 	// The residual wait may last until execution start + 2 s, then the 30 s
 	// batch; the marker must not expire before both.
 	deadline, ok := InflightSubmitDeadline(scenario.Root, scenario.Authority, scenario.TaskID, time.Now())
-	if !ok || deadline.Before(time.Now().Add(admissionSlotWait(30)+30*time.Second)) {
+	if !ok || deadline.Before(time.Now().Add(submitAdmissionSlotWait(30)+30*time.Second)) {
 		t.Fatalf("marker deadline %v (ok=%v) expires before the residual wait and batch", deadline, ok)
 	}
 	held.release()

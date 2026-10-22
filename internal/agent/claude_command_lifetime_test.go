@@ -44,10 +44,10 @@ func TestResolveLaunchEnvironmentRaisesClaudeCommandCeiling(t *testing.T) {
 	}{
 		{name: "unset, provider key", plan: LaunchPlan{ProviderKey: "claude"}, want: claudeCeiling},
 		{name: "unset, tool name alias", plan: LaunchPlan{ToolName: "claude"}, want: claudeCeiling},
-		{name: "ambient higher is kept", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "20000000", want: "20000000"},
+		{name: "ambient higher is kept", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "30000000", want: "30000000"},
 		{name: "ambient lower is raised", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "600000", want: claudeCeiling},
 		{name: "env file lower is raised", plan: LaunchPlan{ProviderKey: "claude", EnvFiles: []string{"claude.env"}}, envFile: "BASH_MAX_TIMEOUT_MS=600000\n", want: claudeCeiling},
-		{name: "env file higher is kept", plan: LaunchPlan{ProviderKey: "claude", EnvFiles: []string{"claude.env"}}, envFile: "BASH_MAX_TIMEOUT_MS=20000000\n", want: "20000000"},
+		{name: "env file higher is kept", plan: LaunchPlan{ProviderKey: "claude", EnvFiles: []string{"claude.env"}}, envFile: "BASH_MAX_TIMEOUT_MS=30000000\n", want: "30000000"},
 		{name: "malformed is replaced", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "two-hours", want: claudeCeiling},
 		{name: "negative is replaced", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "-5", want: claudeCeiling},
 	}

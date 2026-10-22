@@ -21,9 +21,9 @@ import (
 const submitGraceMargin = 10 * time.Minute
 
 // MaxInflightSubmitGrace bounds the time any in-flight submit marker can keep
-// a session alive past its execution timeout: the largest acceptance batch
-// plus the margin.
-const MaxInflightSubmitGrace = referencecontract.AcceptanceMaxTimeoutSeconds*time.Second + submitGraceMargin
+// a session alive past its execution timeout: the largest acceptance batch,
+// the submit slot wait floor and the margin.
+const MaxInflightSubmitGrace = referencecontract.AcceptanceMaxTimeoutSeconds*time.Second + SubmitSlotWaitFloor + submitGraceMargin
 
 // inflightSubmitMarker tells the submitting agent's supervisor that this
 // agent's own submit is running and until when it may legitimately run. Its

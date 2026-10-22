@@ -69,15 +69,15 @@ func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.A
 	}
 	commands, _ := input.executedCommands()
 	limits := models.AdmissionLimitsFor(admission.config, commands)
-	admission.slots = newAdmissionSlots(input.batchTimeoutSeconds)
+	admission.slots = newSubmitAdmissionSlots(input.batchTimeoutSeconds)
 	admission.slots.progress = progress
 	if len(limits) == 0 {
 		return admission, nil
 	}
 	if authority != nil {
 		// The marker covers the wait and the batch, which together never
-		// exceed the acceptance cap.
-		window := acceptanceBatchTimeout(input.batchTimeoutSeconds) + admissionSlotWait(input.batchTimeoutSeconds)
+		// exceed the acceptance cap plus the submit wait floor.
+		window := acceptanceBatchTimeout(input.batchTimeoutSeconds) + submitAdmissionSlotWait(input.batchTimeoutSeconds)
 		admission.removeMarker = writeInflightSubmitMarker(projectRoot, *authority, taskID, window, time.Now().UTC())
 	}
 	fenceCtx, stopFence := startAcceptanceOwnershipFence(bb, taskID, task.Status, agentID, authority)

@@ -1357,3 +1357,26 @@ scope; the wrapper is the primitive any such gate would rely on.
 **Payback trigger:** a matching command observed running outside `admit`
 after deploy (e.g. an unslotted DB suite process mapped to a doer worktree).
 Then add the guard on top of `models.AdmissionLimitsFor`.
+
+## D-174 hand-back tests are load-sensitive
+
+**What:** two tests added by `22f7cc1b2` (D-174) in
+`internal/agent/inflight_submit_deadline_test.go` failed under full
+`make test` load during D-178 validation (2026-10-22), one per run:
+`TestExecuteAgentProgressWatchdogStillBlocksDuringHandback` ("the session was
+cancelled before the agent saw its submit's outcome": the 2 s progress
+timeout ran out before the submit returned) and
+`TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback` ("session ended
+330ms after the submit returned, want the 500ms hand-back": the test times the
+hand-back from `SubmitForReview`'s return, while the supervisor starts it once
+the marker is removed, earlier). Both passed 5/5 alone and in the package
+race run; neither configures an admission limit, so D-178 does not reach them.
+Not proven pre-existing on the base commit.
+
+**Why deferred:** a separate intent from D-178; the human accepted a
+validation exception for the D-178 merge. Fixing them needs their own RCA:
+scale the test clocks to scheduling slack or measure from marker removal,
+without weakening what each asserts.
+
+**Payback trigger:** the next failure of either test, or before deploying a
+binary that contains D-174. Capture full output to a unique file first.

@@ -220,7 +220,7 @@ Do NOT mix the check and the reads in the same batch.
 
 #### Background Jobs - Claude only
 
-A background command dies when the headless session ends. In agent sessions a Stop hook refuses the turn end while one runs, until Claude overrides it after 8 consecutive blocks. One moved there by the 600 s foreground timeout is also stopped 30 min later: start any command that may outlast 10 min, `submit-for-review` above all, with `run_in_background: true` and `timeout: 15000000`, the ceiling agent sessions allow.
+A background command dies when the headless session ends. In agent sessions a Stop hook refuses the turn end while one runs, until Claude overrides it after 8 consecutive blocks. One moved there by the 600 s foreground timeout is also stopped 30 min later: start any command that may outlast 10 min, `submit-for-review` above all, with `run_in_background: true` and `timeout: 22200000`, the ceiling agent sessions allow.
 
 Wait in bounded foreground steps: a Bash call with `timeout: 600000` running
 `timeout 570 sh -c 'until tail -n1 "<output-file>" | grep -q "^\[exited with code"; do sleep 10; done'`,

@@ -125,3 +125,18 @@ A deferred probe now waits for its slots with no deadline, cancelled only when
 its batch ends or a halt or stop is observed while waiting (ADR-0204 amendment
 2026-10-19). Canonical submits, `update-review-commit`, the heal and `admit`
 keep their bounds.
+
+## Amendment (2026-10-22, D-178)
+
+The upgrade trigger in Consequences fired: submits budgeted at the cap were
+refused after 0 s, each retry waited 0 s again, and their doers blocked until
+an operator unblocked them. Queue room shrank as the budget grew, so the
+heaviest suites, the ones a class exists for, queued least. A submit now waits
+`max(2 h, cap − budget)`: wait plus batch stay within cap + 2 h, and
+`MaxInflightSubmitGrace` grows by the same 2 h (ADR-0176 amendment), so the
+marker, the session deferral and the Claude command ceiling still cover both.
+Only submits get the floor: `update-review-commit` and the orphaned-base heal
+run under no in-flight grace and keep cap − budget. A class that stays full
+for the whole wait still refuses as `RETRYABLE`; a retry queues again behind
+the waiters already there. Priority order among canonical waiters and queued
+waiters re-reading a raised limit (D-180) are unchanged.

@@ -44,6 +44,12 @@ or moved task is left alone and logged as a normal end. The progress watchdog
 keeps its own clock during the hand-back; if it fires first it blocks the task
 with its own reason. No path releases such a task silently.
 
+Amended 2026-10-22 ([ADR-0209](0209-admission-limits.md), D-178): a submit's
+admission-slot wait is never under a 2 h floor, so `MaxInflightSubmitGrace` is
+`AcceptanceMaxTimeoutSeconds` + 2 h + 10 minutes (6 h 10 min). The session
+then ends no later than timeout + 6 h 10 min + 10 min, and Claude sessions
+launch with `BASH_MAX_TIMEOUT_MS` at 22200000.
+
 ## Context
 
 `submit-for-review` runs a strict task's canonical acceptance commands

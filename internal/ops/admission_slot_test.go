@@ -88,8 +88,31 @@ func TestAdmissionSlotWaitSharesTheAcceptanceCap(t *testing.T) {
 	if got := admissionSlotWait(0); got != admissionSlotCap-10*time.Minute {
 		t.Fatalf("wait for the default budget = %s", got)
 	}
+	// Callers no submit grace covers (update-review-commit, the heal) keep it.
 	if got := admissionSlotWait(int(admissionSlotCap / time.Second)); got != 0 {
 		t.Fatalf("a budget at the cap must get a single try, wait = %s", got)
+	}
+}
+
+func TestSubmitAdmissionSlotWaitHasAFloor(t *testing.T) {
+	cap := int(admissionSlotCap / time.Second)
+	floor := int(submitSlotWaitFloor / time.Second)
+	if got := submitAdmissionSlotWait(cap); got != submitSlotWaitFloor {
+		t.Fatalf("submit budgeted at the cap waits %s, want the floor %s", got, submitSlotWaitFloor)
+	}
+	if got := submitAdmissionSlotWait(cap - floor + 1); got != submitSlotWaitFloor {
+		t.Fatalf("submit budgeted just past cap - floor waits %s, want the floor", got)
+	}
+	if got := submitAdmissionSlotWait(3600); got != admissionSlotCap-time.Hour {
+		t.Fatalf("submit budgeted 3600 s waits %s, want cap - budget", got)
+	}
+	for _, budget := range []int{0, 1, 3600, cap - floor, cap} {
+		if total := submitAdmissionSlotWait(budget) + acceptanceBatchTimeout(budget); total > admissionSlotCap+submitSlotWaitFloor {
+			t.Fatalf("budget %d: wait plus batch %s exceeds cap plus floor", budget, total)
+		}
+	}
+	if MaxInflightSubmitGrace < admissionSlotCap+SubmitSlotWaitFloor+submitGraceMargin {
+		t.Fatalf("submit grace %s does not cover the cap, the floor and the margin", MaxInflightSubmitGrace)
 	}
 }
 
