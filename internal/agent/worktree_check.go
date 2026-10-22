@@ -47,7 +47,7 @@ func ensureReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID string
 		// Still run the configured setup command before the reviewer session: it
 		// is idempotent, and a reviewer that builds and tests needs the same
 		// prepared checkout the doer had.
-		return false, runReviewerWorktreeSetup(bb, taskID, wtPath)
+		return false, runReviewerWorktreeSetup(projectRoot, bb, taskID, wtPath, authority)
 	}
 
 	err = ops.WithProjectLifecycleSharedLock(projectRoot, "reviewer-worktree-recover", func() error {
@@ -64,7 +64,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	if _, statErr := os.Stat(wtPath); statErr == nil {
 		// Raced: a concurrent claim created the worktree between the fast-path
 		// stat above and this lock. Same handling, re-checked under the lock.
-		return false, runReviewerWorktreeSetup(bb, taskID, wtPath)
+		return false, runReviewerWorktreeSetup(projectRoot, bb, taskID, wtPath, authority)
 	}
 
 	logger := GetLogger()
@@ -122,7 +122,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	// error is returned plain — the caller releases the reviewer claim back to
 	// reviewable and degrades this reviewer, preserving the doer's work.
 	if state.Config.PostWorktreeCmd != nil {
-		if postErr := ops.RunPostWorktreeCmd(*state.Config.PostWorktreeCmd, wtPath); postErr != nil {
+		if postErr := ops.RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, wtPath, &authority); postErr != nil {
 			logger.Error("post-worktree-cmd failed after worktree recovery", "task_id", taskID, "error", postErr)
 			return false, postErr
 		}
@@ -201,7 +201,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 // runReviewerWorktreeSetup runs the configured post_worktree_cmd against an
 // intact reviewer worktree. Returns the setup error unchanged; the caller owns
 // claim release and agent degradation.
-func runReviewerWorktreeSetup(bb *db.Blackboard, taskID, wtPath string) error {
+func runReviewerWorktreeSetup(projectRoot string, bb *db.Blackboard, taskID, wtPath string, authority models.AgentAuthority) error {
 	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return fmt.Errorf("read state: %w", err)
@@ -213,7 +213,7 @@ func runReviewerWorktreeSetup(bb *db.Blackboard, taskID, wtPath string) error {
 		// Protected reviewer claims ran setup before preflight and assignment.
 		return nil
 	}
-	postErr := ops.RunPostWorktreeCmd(*state.Config.PostWorktreeCmd, wtPath)
+	postErr := ops.RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, wtPath, &authority)
 	if postErr != nil {
 		GetLogger().Error("post-worktree-cmd failed for reviewer worktree", "task_id", taskID, "error", postErr)
 	}

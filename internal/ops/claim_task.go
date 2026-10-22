@@ -108,7 +108,8 @@ var ErrAgentDegraded = stderrors.New("agent degraded: infrastructure claim failu
 
 // degradeOnPostWorktreeSetupFailure records degraded health for a setup failure
 // and returns the error wrapped with ErrAgentDegraded. Returns nil when the
-// error is not a setup failure, leaving the original error untouched.
+// error is not a setup failure, or a later setup of its worktree passed,
+// leaving the original error untouched.
 func degradeOnPostWorktreeSetupFailure(projectRoot, taskID, agentID string, authority *models.AgentAuthority, err error) error {
 	var setupErr *PostWorktreeSetupError
 	if !stderrors.As(err, &setupErr) {
@@ -131,7 +132,12 @@ func degradeOnPostWorktreeSetupFailure(projectRoot, taskID, agentID string, auth
 		RecoverHint:    classification.RecoverHint,
 		DegradedBy:     "claim_task",
 		Authority:      authority,
+		SetupOutcome:   setupErr,
 	}); markErr != nil {
+		if stderrors.Is(markErr, ErrSetupFailureSuperseded) {
+			log.Printf("claim-task %s: not degrading %s: a later setup of %s passed", taskID, agentID, setupErr.Dir)
+			return nil
+		}
 		log.Printf("WARNING: claim-task %s: failed to record degraded health: %v", taskID, markErr)
 	}
 	return fmt.Errorf("%w: %w", ErrAgentDegraded, err)
@@ -544,7 +550,7 @@ func completeClaimTaskAfterValidation(
 	// treats it as a stale resource. The caller classifies this error as an
 	// infrastructure failure and degrades the agent, which bounds retries.
 	if postWorktreeCmd != nil && strategy.shouldRunPostWorktreeCmd(worktreePhase) {
-		if postErr := RunPostWorktreeCmd(*postWorktreeCmd, claimCtx.worktreeDir); postErr != nil {
+		if postErr := RunPostWorktreeCmd(projectRoot, *postWorktreeCmd, claimCtx.worktreeDir, authority); postErr != nil {
 			log.Printf("ERROR: claim-task %s: %v", taskID, postErr)
 			return nil, postErr
 		}

@@ -4,6 +4,9 @@
 
 ACCEPTED — Supersedes the failure-handling decision of ADR-0031. The configuration
 mechanism, trust model, and stack-agnostic constraint of ADR-0031 remain in force.
+Amended 2026-10-22 (D-74): setup is serialized per worktree and retried once, the
+child's output tail is kept in a private file, and a later passing setup clears
+the setup degradation it disproves. See the amendment at the end.
 
 ## Context and Problem Statement
 
@@ -71,7 +74,8 @@ left that path retrying without one. Resume and reviewer paths bypass
 `ClaimTask`, so they degrade explicitly at their own boundaries.
 
 **The diagnostic is the command, the worktree, and the exit status — nothing
-from the child process.** `RunPostWorktreeCmd` does not capture the command's
+from the child process.** (Amended by D-74: the output tail is kept in a private
+file whose path, never its content, joins the diagnostic.) `RunPostWorktreeCmd` does not capture the command's
 output at all, and `PostWorktreeSetupError` has no field for it.
 
 This is a security decision, not a brevity one. Masking cannot cover the child.
@@ -116,3 +120,57 @@ Implemented in `internal/ops/post_worktree_setup_error.go`,
 `internal/ops/wt_create.go`, `internal/ops/claim_task.go`,
 `internal/ops/agent_health.go`, `internal/agent/claiming.go`,
 `internal/agent/worktree_check.go`, `internal/agent/strategy_reviewer.go`.
+
+## Amendment — 2026-10-22 (D-74): serialized, retried setup with private output
+
+**Context.** In one run, claim-time setup (`bun install`) failed transiently with
+exit 1 more than a dozen times across several days. Each time the next claim
+passed, and an operator rerun reported no changes. The diagnostic said only
+`exit status 1`, so the cause could not be identified. The failures clustered on
+claim races of one task worktree, which is consistent with concurrent setups in a
+single worktree; this was never verified. When another agent finished the task,
+the degraded record stayed until an operator cleared it, and twice that left a
+role at zero capacity.
+
+**Decisions** (all in `RunPostWorktreeCmd`, the single entry point for every
+claim, resume, review, recovery and recreate path):
+
+1. **Serialized per worktree.** A cross-process file lock, keyed by the worktree's
+   resolved path, covers the whole setup. A waiter that does not acquire it within
+   30 minutes fails closed with a setup error.
+2. **Retried once.** A failed run is retried once after 2 s, inside the same lock
+   hold. That makes at most two runs per call, and a run that fails both attempts
+   degrades the agent as before.
+3. **Private output file.** The last 64 KiB of each attempt's combined
+   stdout/stderr goes only to `<runtime>/worktree-setup/<base>-<digest>.log`
+   (file 0600, directory 0700). The file is rewritten whenever any attempt fails,
+   including one the retry absorbs. The error, the degraded record, its anomaly,
+   and the recover hint carry only the file's path. The output never reaches
+   logs, state, anomalies, alerts, or error text. The security rationale above
+   still holds for those surfaces. The file adds no exposure beyond the operator
+   rerunning the command, but one risk is accepted: a process that can read the
+   project runtime directory can read the file, just as it can read a copied
+   `.env`. The human chose this option over a masked tail in state (the ADR-0204
+   approach) and over no capture.
+4. **Outcome record and reconciliation.** Under the lock, each run writes the
+   worktree's latest outcome: `<seq> ok|failed <time>`, where `seq` increases by
+   one per recorded run.
+   - **Skipping a stale degrade.** A failure skips its degrade only when its own
+     run recorded a seq and a run with a higher seq has since recorded `ok`. This
+     check is made under the state lock, inside the degrade mutation.
+   - **No seq, no skip.** A failure that recorded no seq always degrades. That
+     covers a lock timeout, an unreadable record, and a record write that failed.
+   - **Clearing on success.** After a passing run, while its `ok` is still the
+     latest outcome, every `claim_worktree_setup_failed` record for that task
+     degraded before the pass is cleared. The clear uses the caller's authority,
+     so it is generation-fenced; operator and CLI paths pass none. A degrade
+     published after the pass is judged by the skip rule instead.
+
+**Consequences.** A hung holder can stall a second claim of the same worktree for
+up to 30 minutes before it fails closed. A persistent failure takes one extra run
+and 2 s longer to degrade. Output and outcome files accumulate, one pair per
+worktree that ever ran setup, and are not removed.
+Deferred-validation lanes keep their own runner (ADR-0204).
+
+Implemented in `internal/ops/post_worktree_setup.go`, `post_worktree_setup_error.go`,
+`agent_health.go`, `claim_task.go`, and `internal/agent/claiming.go`.

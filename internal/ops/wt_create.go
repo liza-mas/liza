@@ -98,7 +98,7 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 			// Run post-worktree command even on existing worktrees — idempotent, catches prior failures.
 			// Fail closed: an unprepared worktree must not be reported as ready.
 			if postCmd != nil {
-				if err := RunPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
+				if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, nil); err != nil {
 					return nil, err
 				}
 			}
@@ -157,7 +157,7 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	// Fail closed: the worktree stays on disk for inspection, but creation
 	// reports failure rather than handing over an unprepared checkout.
 	if postCmd != nil {
-		if err := RunPostWorktreeCmd(*postCmd, worktreeDir); err != nil {
+		if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -446,30 +446,4 @@ func copyFilePreserveMode(src, dst string) error {
 		err = closeErr
 	}
 	return err
-}
-
-// RunPostWorktreeCmd runs the configured post-worktree shell command in the given directory.
-// It is idempotent and safe to call on both new and existing worktrees.
-//
-// Failure returns *PostWorktreeSetupError. Callers fail closed on it: a worktree
-// whose setup did not succeed is not build-ready, and handing it to a provider
-// session burns agent iterations on environment errors.
-//
-// The command's output is discarded rather than captured. It cannot be logged or
-// persisted safely (see PostWorktreeSetupError), so buffering it would only risk
-// exposure; the operator reruns the command in the worktree to see it.
-//
-// Trust model: the command comes from state.yaml in the project runtime directory in
-// the project root. Write access to state.yaml implies write access to the
-// repo (same trust boundary as Makefile, .github/workflows/, package.json
-// scripts). No additional confirmation gate is needed.
-func RunPostWorktreeCmd(cmdStr, dir string) error {
-	cmd, err := shellCommand(cmdStr, dir)
-	if err != nil {
-		return newPostWorktreeSetupError(cmdStr, dir, err)
-	}
-	if err := cmd.Run(); err != nil {
-		return newPostWorktreeSetupError(cmdStr, dir, err)
-	}
-	return nil
 }

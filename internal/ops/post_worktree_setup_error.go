@@ -17,20 +17,24 @@ const postWorktreeCmdMaxBytes = 256
 // a worktree. The worktree is therefore not build-ready, so callers fail closed
 // rather than hand it to a provider session (ADR-0117).
 //
-// The child process's own output is deliberately absent — not merely unlogged,
-// but never captured. Masking cannot cover it: secretmask is built from this
-// process's environment and recognizes a fixed set of credential-shaped keys,
-// while a setup command can load a worktree env file, read another file, or
-// generate a credential, then print it on failure. A value under a key like
-// DATABASE_URL would pass through unmasked. Since no masking of child output is
-// a guarantee, none is attempted and nothing is captured.
-//
-// The operator reproduces the failure by rerunning the named command in the
-// named worktree, which the recover hint instructs.
+// The child process's own output is deliberately absent: only the path of the
+// private file holding its tail is carried. Masking cannot cover the output:
+// secretmask is built from this process's environment and recognizes a fixed
+// set of credential-shaped keys, while a setup command can load a worktree env
+// file, read another file, or generate a credential, then print it on failure.
+// A value under a key like DATABASE_URL would pass through unmasked. So the
+// output never reaches error text, logs, state, anomalies or alerts; the
+// operator reads the file, or reruns the named command in the named worktree,
+// as the recover hint instructs.
 type PostWorktreeSetupError struct {
-	Cmd string // secret-masked, bounded
-	Dir string
-	Err error
+	Cmd        string // secret-masked, bounded
+	Dir        string
+	Err        error
+	OutputPath string // private output tail file; empty when none was kept
+	// OutcomeSeq is the outcome record this failed run wrote; 0 when it
+	// recorded none, which no later success can supersede.
+	OutcomeSeq  uint64
+	outcomePath string
 }
 
 // newPostWorktreeSetupError masks and bounds at capture, so every consumer —
@@ -45,6 +49,9 @@ func newPostWorktreeSetupError(cmdStr, dir string, err error) *PostWorktreeSetup
 }
 
 func (e *PostWorktreeSetupError) Error() string {
+	if e.OutputPath != "" {
+		return fmt.Sprintf("post-worktree setup command failed in %s: %s: %v (output: %s)", e.Dir, e.Cmd, e.Err, e.OutputPath)
+	}
 	return fmt.Sprintf("post-worktree setup command failed in %s: %s: %v", e.Dir, e.Cmd, e.Err)
 }
 

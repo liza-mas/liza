@@ -71,11 +71,16 @@ must succeed. A failure fails closed: the doer claim aborts before it is
 recorded, a reviewer claim is released back to the task's reviewable status, and
 the affected agent is marked degraded so it stops claiming instead of retrying.
 Reviewer setup failures do not block the task — blocking would return it to the
-doer's executing status and discard review-ready work. The command's output is never captured: a
-setup command can print secrets that cannot be masked from this process, so only
-the masked command, the worktree path, and the exit status are recorded.
-Reproduce a failure by rerunning the command in the named worktree. See
-ADR-0117.
+doer's executing status and discard review-ready work. Setups of one worktree
+are serialized across processes and a failed run is retried once. The command's
+output never reaches logs or state: a setup command can print secrets that
+cannot be masked from this process, so only the masked command, the worktree
+path, the exit status, and the path of a private output file (0600, the last
+64 KiB per failed attempt) are recorded. Read that file or rerun the command in
+the named worktree to diagnose a failure. Each run records the worktree's latest
+outcome with a sequence number; a later recorded passing run clears that task's
+earlier setup degradation and pre-empts a failure published after it. See
+ADR-0117 (D-74 amendment).
 
 **Runtime setup configuration:** Operators read and write `config.post_worktree_cmd`
 with `config get` and `config set`; the general `get` query remains equivalent.

@@ -1106,7 +1106,7 @@
     "TestReviewerValidationPreflightCooldownDoesNotStarveOtherWork": 0.93,
     "TestReviewerValidationPreflightPreservesEarlierBoundaryFailure": 2.461,
     "TestRolledBackMergeDoesNotResume": 0.291,
-    "TestRunPostWorktreeCmd_DoesNotCaptureChildOutput": 0.002,
+    "TestRunPostWorktreeCmd_KeepsChildOutputOutOfDiagnostic": 0.002,
     "TestSelectiveInputs_CrashRecoveryPreservesSelection": 0.601,
     "TestSelectiveInputs_ExplicitAllEqualsOmitted": 0.019,
     "TestSelectiveInputs_InertOnSingleEdgeCardinality": 0.002,

@@ -71,7 +71,7 @@ func TestReviewerWorktreeSetupReadsStateWhileLockHeld(t *testing.T) {
 
 	// WHEN setup runs while a writer holds the state lock
 	testhelpers.HoldFileLock(t, statePath)
-	err := runReviewerWorktreeSetup(bb, "task-1", wtPath)
+	err := runReviewerWorktreeSetup(tmpDir, bb, "task-1", wtPath, models.AgentAuthority{ID: "code-reviewer-1"})
 
 	// THEN the configured command ran in the worktree
 	if err != nil {

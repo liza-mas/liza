@@ -186,7 +186,7 @@ func ensureDoerWorktreeSetup(projectRoot, agentID, role, taskID, worktreeRel str
 		// Protected resumes ran setup before preflight and ownership renewal.
 		return nil
 	}
-	setupErr := ops.RunPostWorktreeCmd(*state.Config.PostWorktreeCmd, filepath.Join(projectRoot, worktreeRel))
+	setupErr := ops.RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, filepath.Join(projectRoot, worktreeRel), authority)
 	if setupErr == nil {
 		return nil
 	}
@@ -218,6 +218,8 @@ func markAgentDegradedForInfraClaim(projectRoot, agentID, role, taskID string, c
 	if !classification.IsInfra {
 		return nil
 	}
+	var setupErr *ops.PostWorktreeSetupError
+	errors.As(err, &setupErr)
 	if markErr := ops.MarkAgentDegraded(ops.MarkAgentDegradedInput{
 		ProjectRoot:    projectRoot,
 		AgentID:        agentID,
@@ -229,7 +231,15 @@ func markAgentDegradedForInfraClaim(projectRoot, agentID, role, taskID string, c
 		RecoverHint:    classification.RecoverHint,
 		DegradedBy:     "claim_loop",
 		Authority:      authority,
+		SetupOutcome:   setupErr,
 	}); markErr != nil {
+		if errors.Is(markErr, ops.ErrSetupFailureSuperseded) {
+			// A later setup of this worktree passed: not an infrastructure
+			// fault of this agent, so its caller handles the plain error.
+			GetLogger().Info("Setup failure superseded by a later passing setup; not degrading",
+				"agent_id", agentID, "task_id", taskID)
+			return nil
+		}
 		return fmt.Errorf("failed to mark agent degraded after claim infrastructure failure: %w", markErr)
 	}
 	// Wrap rather than return the bare sentinel: callers log this error, and the

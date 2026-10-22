@@ -119,10 +119,13 @@ checkout (ADR-0117).
 §BRAND_BINARY_NAME§ get config.post_worktree_cmd --json
 ```
 
-**Fix:** the command's output is not recorded (it can carry secrets §BRAND_NAME_TITLE§
-cannot mask), so run the command named in `recover_hint` inside the worktree it names,
-fix whatever fails, then run `§BRAND_BINARY_NAME§ clear-agent-degraded <agent-id>`
-and restart the agent. Fresh doer claims abort before the claim is recorded, so
+**Fix:** the command's output stays out of logs and state (it can carry secrets
+§BRAND_NAME_TITLE§ cannot mask); its last 64 KiB per failed attempt is kept in the
+private file `recover_hint` names under `§BRAND_PROJECT_DIRNAME§/worktree-setup/`. Read it, or run
+the command named in `recover_hint` inside the worktree it names, fix whatever fails,
+then run `§BRAND_BINARY_NAME§ clear-agent-degraded <agent-id>` and restart the agent.
+A transient failure needs none of this: setup is retried once, and a later passing
+setup of the same worktree clears that task's earlier setup degradation by itself. Fresh doer claims abort before the claim is recorded, so
 the task keeps its prior status; a resumed task stays assigned to its agent and
 is picked up again on restart; reviewer claims are released back to the
 reviewable status, so no review work is lost. Do not work around it by unsetting

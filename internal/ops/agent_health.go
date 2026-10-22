@@ -31,7 +31,14 @@ type MarkAgentDegradedInput struct {
 	RecoverHint    string
 	DegradedBy     string
 	Authority      *models.AgentAuthority
+	// SetupOutcome, for a setup failure, lets the write be skipped when a
+	// later recorded setup of the same worktree passed.
+	SetupOutcome *PostWorktreeSetupError
 }
+
+// ErrSetupFailureSuperseded reports a degrade skipped because a later setup of
+// the failed worktree passed: the failure no longer describes the worktree.
+var ErrSetupFailureSuperseded = stderrors.New("setup failure superseded by a later passing setup")
 
 // InfraClaimErrorClassification describes a claim failure that indicates the
 // agent process cannot provision worktrees/refs for its role.
@@ -65,6 +72,11 @@ func MarkAgentDegraded(input MarkAgentDegradedInput) error {
 	bb := db.For(paths.New(input.ProjectRoot).StatePath())
 	now := time.Now().UTC()
 	return lifecycleMutation(bb, input.Authority)(func(state *models.State) error {
+		// Read under the state lock, so a passing setup's reconcile either
+		// already sees this record or this check already sees its outcome.
+		if setupFailureSuperseded(input.SetupOutcome) {
+			return ErrSetupFailureSuperseded
+		}
 		agent, hasAgent := state.Agents[input.AgentID]
 		if state.AgentHealth == nil {
 			state.AgentHealth = make(map[string]models.AgentHealth)
@@ -152,6 +164,64 @@ func clearAgentDegraded(projectRoot, agentID string, authority *models.AgentAuth
 	})
 }
 
+// clearSupersededSetupDegradation removes setup degradation of any agent on
+// taskID recorded before the passing outcome seq, while that outcome is still
+// the worktree's latest. Both the outcome check and the deletion happen inside
+// the caller's generation-fenced state mutation; a degrade published after the
+// pass is judged by setupFailureSuperseded instead.
+func clearSupersededSetupDegradation(projectRoot, taskID, outcomePath string, seq uint64, authority *models.AgentAuthority) error {
+	bb := db.For(paths.New(projectRoot).StatePath())
+	snapshot, err := bb.ReadSnapshot()
+	if err != nil {
+		return err
+	}
+	if !hasSetupDegradationFor(snapshot.AgentHealth, taskID) {
+		return nil
+	}
+	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
+		latest, exists, err := readWorktreeSetupOutcome(outcomePath)
+		if err != nil || !exists || !latest.OK || latest.Seq < seq {
+			return errNoSetupDegradationCleared
+		}
+		cleared := false
+		for agentID, health := range state.AgentHealth {
+			if isSetupDegradationFor(health, taskID) && health.DegradedAt.Before(latest.Time) {
+				delete(state.AgentHealth, agentID)
+				cleared = true
+			}
+		}
+		if !cleared {
+			return errNoSetupDegradationCleared
+		}
+		if len(state.AgentHealth) == 0 {
+			state.AgentHealth = nil
+		}
+		return nil
+	})
+	if stderrors.Is(err, errNoSetupDegradationCleared) {
+		return nil
+	}
+	return err
+}
+
+// errNoSetupDegradationCleared aborts a reconcile mutation that changes nothing.
+var errNoSetupDegradationCleared = stderrors.New("no setup degradation cleared")
+
+func hasSetupDegradationFor(health map[string]models.AgentHealth, taskID string) bool {
+	for _, record := range health {
+		if isSetupDegradationFor(record, taskID) {
+			return true
+		}
+	}
+	return false
+}
+
+func isSetupDegradationFor(health models.AgentHealth, taskID string) bool {
+	return health.State == models.AgentHealthDegraded &&
+		health.Reason == AgentDegradedWorktreeSetupFailed &&
+		health.LastTask == taskID
+}
+
 // ClassifyInfraClaimError recognizes narrow infrastructure failures that make a
 // doer process unusable for claim capacity. Races and task precondition errors
 // intentionally remain unclassified.
@@ -164,14 +234,18 @@ func ClassifyInfraClaimError(err error) InfraClaimErrorClassification {
 	// wasted capacity — degrade instead, which also bounds the claim retry loop.
 	var setupErr *PostWorktreeSetupError
 	if stderrors.As(err, &setupErr) {
+		hint := fmt.Sprintf(
+			"run the configured post_worktree_cmd (%s) in %s and fix it, then clear agent health",
+			setupErr.Cmd,
+			setupErr.Dir,
+		)
+		if setupErr.OutputPath != "" {
+			hint = fmt.Sprintf("read the failed setup's output in %s, or %s", setupErr.OutputPath, hint)
+		}
 		return InfraClaimErrorClassification{
-			Reason: AgentDegradedWorktreeSetupFailed,
-			RecoverHint: fmt.Sprintf(
-				"run the configured post_worktree_cmd (%s) in %s and fix it, then clear agent health",
-				setupErr.Cmd,
-				setupErr.Dir,
-			),
-			IsInfra: true,
+			Reason:      AgentDegradedWorktreeSetupFailed,
+			RecoverHint: hint,
+			IsInfra:     true,
 		}
 	}
 
