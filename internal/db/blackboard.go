@@ -246,6 +246,26 @@ func (bb *Blackboard) ReadSnapshot() (*models.State, error) {
 	return bb.decodeLiveState(data, "state snapshot")
 }
 
+// ReadAdmissionLimits reads config.admission_limits from one complete
+// published state, like ReadSnapshot without the state lock, decoding nothing
+// else: a queued admission waiter polls it (D-180). Entries are returned as
+// stored, unvalidated.
+func (bb *Blackboard) ReadAdmissionLimits() ([]models.AdmissionLimit, error) {
+	data, err := readStateFile(bb.statePath)
+	if err != nil {
+		return nil, err
+	}
+	var state struct {
+		Config struct {
+			AdmissionLimits []models.AdmissionLimit `yaml:"admission_limits"`
+		} `yaml:"config"`
+	}
+	if err := yaml.Unmarshal(data, &state); err != nil {
+		return nil, &errors.StateSchemaError{Operation: "admission limits read", Err: err}
+	}
+	return state.Config.AdmissionLimits, nil
+}
+
 // RefreshSnapshot re-observes the publication prev was decoded from, for a
 // caller that has established the file is unchanged since: it verifies every
 // archived terminal task's evidence as a read would (ADR-0183), then returns a

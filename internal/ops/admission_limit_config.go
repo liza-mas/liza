@@ -25,8 +25,9 @@ type SetAdmissionLimitInput struct {
 
 // SetAdmissionLimit stores one class under the shared config rule: compare and
 // write in one transaction; replacing a different definition requires
-// --replace with --reason. It applies to the next slot acquisition; current
-// holders keep their slots.
+// --replace with --reason. A new max_concurrent also reaches waiters already
+// queued within about admissionLimitRefreshInterval; current holders keep
+// their slots, and a queued waiter keeps the class it matched.
 func SetAdmissionLimit(projectRoot string, input SetAdmissionLimitInput) (*ConfigSetResult, error) {
 	if err := models.ValidateAdmissionLimit(input.Limit); err != nil {
 		return nil, &PreconditionError{Reason: err.Error()}

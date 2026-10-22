@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -22,6 +23,11 @@ import (
 // admissionSlotPollInterval is how often a waiter re-reads its class queue;
 // tests shorten it.
 var admissionSlotPollInterval = time.Second
+
+// admissionLimitRefreshInterval spaces the re-reads of a full class's limit
+// by its head waiter, so a changed max_concurrent reaches waiters already
+// queued (D-180); tests shorten it.
+var admissionLimitRefreshInterval = 10 * time.Second
 
 // admissionSlotCap bounds a slot wait plus the execution budget behind it;
 // tests shorten it.
@@ -115,6 +121,7 @@ func newQueuedAdmissionSlots() *admissionSlots {
 // order, waiting in each class's FIFO queue until the shared deadline. On
 // failure every slot held, including earlier ones, is released.
 func (s *admissionSlots) acquire(ctx context.Context, projectRoot string, limits []models.AdmissionLimit) error {
+	statePath := paths.New(projectRoot).StatePath()
 	for _, limit := range limits {
 		if slices.Contains(s.classes, limit.Class) {
 			continue
@@ -122,7 +129,8 @@ func (s *admissionSlots) acquire(ctx context.Context, projectRoot string, limits
 		queued := func(ahead int) {
 			s.progress.set(fmt.Sprintf("queued for admission class %s, %d waiter(s) ahead; the batch budget has not started", limit.Class, ahead), s.deadline)
 		}
-		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline, s.local, queued)
+		current := func() (int, bool) { return currentAdmissionMax(statePath, limit.Class) }
+		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline, s.local, queued, current)
 		if err != nil {
 			s.release()
 			return err
@@ -166,14 +174,35 @@ func (s *admissionSlots) abandon() {
 	s.classes, s.held = nil, nil
 }
 
+// currentAdmissionMax reads class's stored max_concurrent without the state
+// lock. It reports none when the state cannot be read or holds no valid entry
+// for class, so the waiter keeps the limit it knew: a removed class's waiters
+// wait for the slots they knew (ADR-0209).
+func currentAdmissionMax(statePath, class string) (int, bool) {
+	limits, err := db.For(statePath).ReadAdmissionLimits()
+	if err != nil {
+		log.Printf("WARNING: admission limit for class %s not re-read, keeping the last known one: %v", class, err)
+		return 0, false
+	}
+	for _, limit := range limits {
+		if limit.Class == class && models.ValidateAdmissionLimit(limit) == nil {
+			return limit.MaxConcurrent, true
+		}
+	}
+	return 0, false
+}
+
 // acquireAdmissionSlot queues a ticket in dir and, once the ticket is the
 // earliest live one, takes the first free of limit.MaxConcurrent slots.
 // Tickets and slots are flocks, so a dead waiter or holder releases its own.
 // Ticket names lead with a priority digit, canonical 0 and local 1, so name
 // order serves canonical waiters first. An older binary's names (zero-padded
 // time, no priority) sort between the two. queued, when set, hears how many
-// tickets are ahead before each wait. A zero deadline never expires.
-func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, local bool, queued func(ahead int)) (*filelock.Held, error) {
+// tickets are ahead before each wait. current, when set, re-reads the class's
+// max_concurrent: once the head waiter has found every slot held, on its next
+// poll and then at most every admissionLimitRefreshInterval, keeping the last
+// known value when it reports none (D-180). A zero deadline never expires.
+func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, local bool, queued func(ahead int), current func() (int, bool)) (*filelock.Held, error) {
 	started := time.Now()
 	queue := filepath.Join(dir, "queue")
 	if err := os.MkdirAll(queue, 0o755); err != nil {
@@ -206,12 +235,22 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 	defer removeAdmissionTicket(ticketPath, ticket)
 
 	logged := false
+	full := false // the head found every slot held
+	var nextRefresh time.Time
 	for {
 		ahead, err := admissionQueueAhead(queueLock, queue, ticketPath)
 		if err != nil {
 			return nil, err
 		}
 		if ahead == 0 {
+			if full && current != nil && !time.Now().Before(nextRefresh) {
+				nextRefresh = time.Now().Add(admissionLimitRefreshInterval)
+				if maxConcurrent, ok := current(); ok && maxConcurrent != limit.MaxConcurrent {
+					log.Printf("admission limit for class %s is now %d at once", limit.Class, maxConcurrent)
+					limit.MaxConcurrent = maxConcurrent
+				}
+			}
+			full = true
 			for i := range limit.MaxConcurrent {
 				held, acquired, err := filelock.New(filepath.Join(dir, fmt.Sprintf("slot-%d", i))).TryHold("admission-slot")
 				if err != nil {

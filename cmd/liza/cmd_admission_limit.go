@@ -39,9 +39,10 @@ var admissionLimitSetCmd = &cobra.Command{
 	Short: "Create or replace one admission limit",
 	Long: fmt.Sprintf(`Store one admission limit. The class name is lowercase letters, digits and
 dashes. An identical definition is a successful no-op; replacing a different
-one requires --replace and --reason. The change applies to the next slot
-acquisition; commands already holding a slot keep it. Write a substring that
-starts with a dash as --match=<substring>.
+one requires --replace and --reason. A new --max-concurrent also reaches
+commands already queued for the class within about 10 s; commands already
+holding a slot keep it. Write a substring that starts with a dash as
+--match=<substring>.
 
 Example:
   %s db-suite --max-concurrent 2 --match=--decision-model-db`, brand.Command("admission-limit", "set")),

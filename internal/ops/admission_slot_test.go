@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -159,6 +160,164 @@ func TestAdmissionSlotsNeverExceedMaxConcurrent(t *testing.T) {
 		}
 		close(proceed)
 		wg.Wait()
+	}
+}
+
+// queueAdmissionWaiters queues n waiters for limit in order, each with a 10 s
+// deadline, and sends each acquisition's result on the returned channel. At
+// cleanup, waiters still queued are cancelled and slots taken are released.
+func queueAdmissionWaiters(t *testing.T, root string, limit models.AdmissionLimit, n int) <-chan error {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	results := make(chan error, n)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var taken []*admissionSlots
+	t.Cleanup(func() {
+		cancel()
+		wg.Wait()
+		for _, slots := range taken {
+			slots.release()
+		}
+	})
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			slots := &admissionSlots{deadline: time.Now().Add(10 * time.Second)}
+			err := slots.acquire(ctx, root, []models.AdmissionLimit{limit})
+			if err == nil {
+				mu.Lock()
+				taken = append(taken, slots)
+				mu.Unlock()
+			}
+			results <- err
+		}()
+		waitForTickets(t, root, limit.Class, i+1)
+	}
+	return results
+}
+
+// requireAdmitted fails unless a waiter acquired within 5 s.
+func requireAdmitted(t *testing.T, results <-chan error, what string) {
+	t.Helper()
+	select {
+	case err := <-results:
+		if err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s: no waiter acquired within 5s", what)
+	}
+}
+
+// requireStillQueued fails if a waiter returns within settle.
+func requireStillQueued(t *testing.T, results <-chan error, settle time.Duration, what string) {
+	t.Helper()
+	select {
+	case err := <-results:
+		t.Fatalf("%s: a waiter returned (err = %v)", what, err)
+	case <-time.After(settle):
+	}
+}
+
+func shortAdmissionLimitRefresh(t *testing.T) {
+	t.Helper()
+	previous := admissionLimitRefreshInterval
+	admissionLimitRefreshInterval = 20 * time.Millisecond
+	t.Cleanup(func() { admissionLimitRefreshInterval = previous })
+}
+
+func TestQueuedAdmissionWaitersSeeARaisedLimit(t *testing.T) {
+	shortAdmissionLimitRefresh(t)
+	limit := testAdmissionLimit("raised", 1)
+	root := setupAdmitProject(t, limit)
+	// GIVEN the class's only slot held and two waiters queued behind it
+	holdAdmissionSlots(t, root, limit)
+	results := queueAdmissionWaiters(t, root, limit, 2)
+
+	// WHEN the operator raises the class to 3
+	limit.MaxConcurrent = 3
+	if _, err := SetAdmissionLimit(root, SetAdmissionLimitInput{Limit: limit, Replace: true, Reason: "test raise"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// THEN both queued waiters take the new slots while slot-0 stays held
+	requireAdmitted(t, results, "first queued waiter after the raise")
+	requireAdmitted(t, results, "second queued waiter after the raise")
+	for i := range 3 {
+		if slotFree(t, root, "raised", i) {
+			t.Fatalf("slot-%d is free; want slot-0 still held and slots 1-2 taken by the queued waiters", i)
+		}
+	}
+}
+
+func TestQueuedAdmissionWaiterSeesALoweredLimit(t *testing.T) {
+	shortAdmissionLimitRefresh(t)
+	limit := testAdmissionLimit("lowered", 2)
+	root := setupAdmitProject(t, limit)
+	// GIVEN both slots of a class at max 2 held and a waiter queued
+	first := holdAdmissionSlots(t, root, limit)
+	second := holdAdmissionSlots(t, root, limit)
+	results := queueAdmissionWaiters(t, root, limit, 1)
+
+	// WHEN the operator lowers the class to 1 and the waiter has re-read it
+	limit.MaxConcurrent = 1
+	if _, err := SetAdmissionLimit(root, SetAdmissionLimitInput{Limit: limit, Replace: true, Reason: "test lower"}); err != nil {
+		t.Fatal(err)
+	}
+	requireStillQueued(t, results, 300*time.Millisecond, "waiter while both slots are held")
+
+	// THEN slot-1, now above the limit, frees without admitting it
+	second.release()
+	requireStillQueued(t, results, 300*time.Millisecond, "waiter after slot-1 above the lowered limit freed")
+	// AND slot-0 admits it
+	first.release()
+	requireAdmitted(t, results, "waiter after slot-0 freed")
+	if !slotFree(t, root, "lowered", 1) {
+		t.Fatal("the waiter took slot-1 above the lowered limit")
+	}
+}
+
+func TestQueuedAdmissionWaiterKeepsItsLimitWhenARefreshFindsNone(t *testing.T) {
+	cases := map[string]func(t *testing.T, root string){
+		"class removed": func(t *testing.T, root string) {
+			if _, err := RemoveAdmissionLimit(root, "kept", "test remove"); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"entry invalid": func(t *testing.T, root string) {
+			err := db.For(paths.New(root).StatePath()).Modify(func(state *models.State) error {
+				state.Config.AdmissionLimits[0].MaxConcurrent = 0
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		},
+		"state unreadable": func(t *testing.T, root string) {
+			if err := os.WriteFile(paths.New(root).StatePath(), []byte("config: ["), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, change := range cases {
+		t.Run(name, func(t *testing.T) {
+			shortAdmissionLimitRefresh(t)
+			limit := testAdmissionLimit("kept", 1)
+			root := setupAdmitProject(t, limit)
+			// GIVEN the class's only slot held and a waiter queued
+			holder := holdAdmissionSlots(t, root, limit)
+			results := queueAdmissionWaiters(t, root, limit, 1)
+
+			// WHEN its refreshes find no valid limit for the class
+			change(t, root)
+
+			// THEN it keeps waiting for the slot it knew, and takes it
+			requireStillQueued(t, results, 300*time.Millisecond, "waiter after the refresh found no limit")
+			holder.release()
+			requireAdmitted(t, results, "waiter after its known slot freed")
+		})
 	}
 }
 

@@ -140,3 +140,19 @@ run under no in-flight grace and keep cap − budget. A class that stays full
 for the whole wait still refuses as `RETRYABLE`; a retry queues again behind
 the waiters already there. Priority order among canonical waiters and queued
 waiters re-reading a raised limit (D-180) are unchanged.
+
+## Amendment (2026-10-22, D-180)
+
+A waiter fixed `max_concurrent` when it queued, so raising a limit admitted no
+one already waiting: the head kept probing the old slot range while newer
+waiters, queued behind it, probed nothing, and the new slots stayed idle until
+every earlier waiter was served. Once the head waiter has found every slot
+held, it now re-reads its class's `max_concurrent` on its next poll and then
+about every 10 s, without the state lock and decoding only
+`config.admission_limits`; uncontended acquisitions and non-head waiters read
+nothing. A raise reaches the queue within about that interval, as a polling
+bound, not a guarantee. A lowered limit applies to the head's next probe; a
+removed class, an invalid entry or an unreadable state keeps the last known
+limit, so removal still leaves current waiters waiting for the slots they
+knew. A waiter keeps the class it matched, deadlines and queue order are
+unchanged, and lowering still converges as current holders finish.

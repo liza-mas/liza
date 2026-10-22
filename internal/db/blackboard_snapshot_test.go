@@ -149,3 +149,42 @@ func TestReadSnapshotConcurrentPublication(t *testing.T) {
 		t.Fatalf("writer failed to progress: revision %d", state.Tasks[0].Iteration)
 	}
 }
+
+func TestReadAdmissionLimitsIsLocklessAndDecodesOnlyTheLimits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.yaml")
+	reader, writer := New(path), New(path)
+	if _, err := reader.ReadAdmissionLimits(); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing state error = %v", err)
+	}
+	limits := []models.AdmissionLimit{{Class: "db-suite", MaxConcurrent: 3, Match: []string{"--db"}}}
+	if err := writer.Write(&models.State{Config: models.Config{AdmissionLimits: limits}}); err != nil {
+		t.Fatal(err)
+	}
+	// A writer holding the state lock must not delay the read.
+	err := writer.Modify(func(*models.State) error {
+		result := make(chan error, 1)
+		go func() {
+			got, err := reader.ReadAdmissionLimits()
+			if err == nil && !reflect.DeepEqual(got, limits) {
+				err = fmt.Errorf("admission limits = %+v, want %+v", got, limits)
+			}
+			result <- err
+		}()
+		select {
+		case err := <-result:
+			return err
+		case <-time.After(5 * time.Second):
+			return errors.New("admission limits read waited for the state lock")
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("config: ["), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var schemaErr *lizaerrors.StateSchemaError
+	if _, err := reader.ReadAdmissionLimits(); !errors.As(err, &schemaErr) {
+		t.Fatalf("malformed state error = %v", err)
+	}
+}
